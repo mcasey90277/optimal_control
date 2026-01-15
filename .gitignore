@@ -1,0 +1,21 @@
+# MATLAB auto-save files
+*.asv
+
+# macOS
+.DS_Store
+
+# PDF course materials (reference only, not source)
+*.pdf
+
+# MATLAB generated files
+*.mex*
+*.mlx
+*.fig
+*.mat
+
+# Simulink
+*.slxc
+slprj/
+
+# Code generation
+codegen/

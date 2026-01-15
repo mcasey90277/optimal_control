@@ -1,0 +1,93 @@
+% block_move_3                                                                                                     
+
+%% set-up and time discretization
+number_of_segments = 10;
+number_of_nodes = number_of_segments + 1;
+t0 = 0; tF = 1;
+t_grid = linspace(t0, tF, number_of_nodes)';
+h = 1/number_of_segments;% distance between evenly spaced nodes
+
+%% intial guess
+x0 = t_grid;
+v0 = ones(length(x0),1);
+u0 = zeros(length(x0),1);
+X0 = [u0;x0;v0];
+
+%% solve nlp
+
+% Options for fmincon
+options = optimoptions('fmincon', ...
+    'Display', 'iter', ...  % Show progress
+    'MaxFunctionEvaluations', 1e5, ...
+    'OptimalityTolerance', 1e-6, ...
+    'ConstraintTolerance', 1e-6);
+
+% lower and upper bounds on X: none
+lb = []; ub = [];
+% Ineqaulity constraints: none
+A = []; b=[];
+% equality constraints: handled in non-linear constraint function
+Aeq = []; beq = [];
+
+[X_opt, J_opt] = fmincon(@objective,X0,A,b,Aeq,beq,lb,ub,@nonlcon,options);
+
+%% nlp functions
+
+function J = objective(X)
+    num_of_nodes = X/3;
+    % extract control profile
+    u = X(1:num_of_nodes);
+    % length of each time-segment
+    h = 1/(num_of_nodes-1);
+    % compute the objective function using trapezoidal approximation
+    u_sq = u.^2;
+    u1 = u_sq(1:num_of_nodes-1);
+    u2 = u_sq(2:num_of_nodes);
+    u_3 = u1+u2;
+    J = sum(u_3,1);
+end
+
+function [c,ceq] = nonlcon(X)
+    num_of_nodes = X/3;
+    h = 1/(num_of_nodes-1);
+    % extract control and state (position and velocity)
+    u = X(1:num_of_nodes);% control profile
+    x = X(num_of_nodes+1:2*num_of_nodes);% position
+    v = X(2*num_of_nodes+1:end);% velocity
+    % inequality constraints
+    c = [];
+    % system dynamics (defects)
+    xkp1 = x(2:end);
+    xk = x(1:end-1);
+    vkp1 = v(2:end);
+    vk = v(1:end-1);
+    ukp1 = u(2:end);
+    uk = u(1:end-1);
+    c1
+
+    % boundary conditions
+
+end
+
+%% plots
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

@@ -1,0 +1,544 @@
+\documentclass[11pt]{article}
+\usepackage[margin=1in]{geometry}
+\usepackage{amsmath, amssymb}
+\usepackage{booktabs}
+\usepackage{listings}
+\usepackage{xcolor}
+\usepackage{hyperref}
+\usepackage{graphicx}
+
+% MATLAB code styling
+\lstdefinestyle{matlab}{
+    language=Matlab,
+    basicstyle=\ttfamily\small,
+    keywordstyle=\color{blue}\bfseries,
+    commentstyle=\color{green!60!black},
+    stringstyle=\color{orange},
+    numbers=left,
+    numberstyle=\tiny\color{gray},
+    numbersep=5pt,
+    frame=single,
+    breaklines=true,
+    breakatwhitespace=true,
+    tabsize=4,
+    showstringspaces=false,
+    backgroundcolor=\color{gray!10}
+}
+
+\lstset{style=matlab}
+
+\title{MPC Cart-Pole Swing-Up Controller\\[0.5em]\large A Step-by-Step Code Explanation}
+\author{}
+\date{January 2026}
+
+\begin{document}
+
+\maketitle
+
+\tableofcontents
+\newpage
+
+%% ============================================================================
+\section{Introduction to Model Predictive Control}
+%% ============================================================================
+
+Model Predictive Control (MPC) is a control strategy that solves an optimization problem at each time step to determine the best control action. The key idea is:
+
+\begin{enumerate}
+    \item \textbf{Predict}: Simulate the system forward over a finite horizon using a model
+    \item \textbf{Optimize}: Find the control sequence that minimizes a cost function
+    \item \textbf{Apply}: Apply only the \emph{first} control action
+    \item \textbf{Repeat}: Shift the horizon forward and repeat
+\end{enumerate}
+
+This ``receding horizon'' approach allows MPC to handle constraints, nonlinear dynamics, and changing conditions naturally.
+
+\subsection{The Cart-Pole Problem}
+
+The cart-pole (inverted pendulum on a cart) is a classic control problem. The goal is to:
+\begin{itemize}
+    \item Start with the pendulum hanging down ($\theta = 0$)
+    \item Swing the pendulum up to the inverted position ($\theta = \pi$)
+    \item Stabilize both the pendulum angle and cart position
+\end{itemize}
+
+The state vector is:
+\[
+\mathbf{x} = \begin{bmatrix} q_1 \\ q_2 \\ \dot{q}_1 \\ \dot{q}_2 \end{bmatrix} = \begin{bmatrix} \text{cart position} \\ \text{pendulum angle} \\ \text{cart velocity} \\ \text{angular velocity} \end{bmatrix}
+\]
+
+The control input $u$ is the horizontal force applied to the cart.
+
+%% ============================================================================
+\section{System Parameters}
+%% ============================================================================
+
+The physical parameters of the cart-pole system are defined in a structure:
+
+\begin{lstlisting}
+%% System Parameters
+params = struct();
+params.m1 = 5.0;    % Cart mass (kg)
+params.m2 = 1.0;    % Pendulum mass (kg)
+params.L = 2.0;     % Pendulum length (m)
+params.g = 9.81;    % Gravity (m/s^2)
+\end{lstlisting}
+
+These values represent a relatively heavy cart (5 kg) with a lighter pendulum bob (1 kg) on a 2-meter rod. The mass ratio $m_2/m_1 = 0.2$ means the cart is heavy enough to swing the pendulum without excessive motion.
+
+%% ============================================================================
+\section{MPC Parameters}
+%% ============================================================================
+
+The MPC controller has several tuning parameters:
+
+\begin{lstlisting}
+%% MPC Parameters
+mpc = struct();
+mpc.N = 15;         % Prediction horizon (steps)
+mpc.dt = 0.05;      % Time step (20 Hz control)
+mpc.u_max = 1000;   % Max force (N)
+
+% Cost weights
+mpc.Q = diag([10, 100, 1, 10]);  % [pos, angle, vel_pos, vel_ang]
+mpc.R = 0.01;                    % Control weight
+mpc.Q_terminal = 2 * mpc.Q;      % Terminal cost weight
+\end{lstlisting}
+
+\subsection{Horizon and Timing}
+
+\begin{itemize}
+    \item \textbf{N = 15}: The MPC looks 15 steps into the future
+    \item \textbf{dt = 0.05}: Each step is 50 ms, so the horizon spans $15 \times 0.05 = 0.75$ seconds
+    \item \textbf{Control rate}: $1/0.05 = 20$ Hz
+\end{itemize}
+
+A longer horizon allows the MPC to ``see'' further ahead and plan better swing-up trajectories, but increases computation time.
+
+\subsection{Cost Weights}
+
+The cost function penalizes deviations from the target state and control effort:
+\[
+J = \sum_{k=0}^{N-1} \left[ (\mathbf{x}_k - \mathbf{x}_{\text{ref}})^T \mathbf{Q} (\mathbf{x}_k - \mathbf{x}_{\text{ref}}) + R \, u_k^2 \right] + (\mathbf{x}_N - \mathbf{x}_{\text{ref}})^T \mathbf{Q}_f (\mathbf{x}_N - \mathbf{x}_{\text{ref}})
+\]
+
+The weight matrix $\mathbf{Q} = \text{diag}([10, 100, 1, 10])$ means:
+\begin{itemize}
+    \item Position error weight: 10
+    \item \textbf{Angle error weight: 100} (highest priority)
+    \item Velocity error weight: 1
+    \item Angular velocity error weight: 10
+\end{itemize}
+
+The angle weight being 10$\times$ larger than position means the MPC prioritizes getting the pendulum upright over keeping the cart at the target position.
+
+%% ============================================================================
+\section{Simulation Setup}
+%% ============================================================================
+
+\begin{lstlisting}
+%% Simulation Setup
+T_sim = 16.0;       % Total simulation time
+t_vec = 0:mpc.dt:T_sim;
+N_sim = length(t_vec);
+
+% Initial and target states
+x0 = [0; 0; 0; 0];              % Start: cart at 0, pendulum down, at rest
+x_target = [3; pi; 0; 0];       % Goal: cart at 3m, pendulum up, at rest
+\end{lstlisting}
+
+\begin{itemize}
+    \item \textbf{Initial state}: Cart at origin, pendulum hanging straight down ($\theta = 0$), everything at rest
+    \item \textbf{Target state}: Cart at $x = 3$ m, pendulum inverted ($\theta = \pi$), at rest
+\end{itemize}
+
+The challenge is that the pendulum starts in the \emph{stable} equilibrium (down) and must reach the \emph{unstable} equilibrium (up).
+
+%% ============================================================================
+\section{The Main MPC Loop}
+%% ============================================================================
+
+The core of MPC is the receding horizon loop:
+
+\begin{lstlisting}
+%% Main MPC Loop
+for k = 1:N_sim-1
+    tic;
+
+    %% Solve MPC Problem
+    [u_opt, x_pred, cost] = solve_mpc_step(x_current, x_target, params, mpc);
+
+    solve_time(k) = toc;
+
+    %% Apply First Control Action
+    u_apply = u_opt(1);
+    u_history(k) = u_apply;
+    cost_history(k) = cost;
+
+    %% Simulate Real System (with disturbance)
+    if k > 100  % Add disturbance after 5 seconds
+        disturbance = [0; 0; 0; 0.2*randn()];
+    else
+        disturbance = zeros(4,1);
+    end
+
+    x_next = simulate_one_step(x_current, u_apply, params, mpc.dt, disturbance);
+
+    %% Update State
+    x_current = x_next;
+    x_history(:,k+1) = x_current;
+end
+\end{lstlisting}
+
+\subsection{Loop Structure}
+
+At each time step $k$:
+
+\begin{enumerate}
+    \item \textbf{Solve}: Call \texttt{solve\_mpc\_step} to find the optimal control sequence $\mathbf{u}^* = [u_0^*, u_1^*, \ldots, u_{N-1}^*]$
+
+    \item \textbf{Apply first}: Only apply $u_0^*$ to the real system (this is the key MPC idea)
+
+    \item \textbf{Simulate}: Advance the real system one time step using RK4 integration
+
+    \item \textbf{Add disturbance}: After 5 seconds, random torque disturbances test the controller's robustness
+
+    \item \textbf{Repeat}: The loop continues with the new state
+\end{enumerate}
+
+\subsection{Why Only Apply the First Control?}
+
+The MPC computes a sequence of $N$ controls, but only applies the first one because:
+\begin{itemize}
+    \item The prediction model isn't perfect
+    \item Disturbances affect the real system
+    \item Re-solving at each step provides feedback correction
+\end{itemize}
+
+%% ============================================================================
+\section{The MPC Optimization Function}
+%% ============================================================================
+
+\begin{lstlisting}
+function [u_opt, x_pred, cost] = solve_mpc_step(x0, x_ref, params, mpc)
+%% Solve single MPC optimization problem
+
+% Decision variables: control sequence u = [u(0), u(1), ..., u(N-1)]
+n_vars = mpc.N;
+
+% Initial guess (warm start with previous solution if available)
+persistent u_prev
+if isempty(u_prev)
+    u_guess = zeros(n_vars, 1);
+else
+    % Shift previous solution and add zero at end
+    u_guess = [u_prev(2:end); 0];
+end
+
+% Bounds on control
+lb = -mpc.u_max * ones(n_vars, 1);
+ub =  mpc.u_max * ones(n_vars, 1);
+
+% Optimization options (fast for real-time)
+options = optimoptions('fmincon', ...
+    'Algorithm', 'sqp', ...
+    'Display', 'off', ...
+    'MaxIterations', 50, ...
+    'MaxFunctionEvaluations', 500, ...
+    'OptimalityTolerance', 1e-4, ...
+    'ConstraintTolerance', 1e-4);
+
+% Solve optimization
+[u_opt, cost] = fmincon(@(u) mpc_cost(u, x0, x_ref, params, mpc), ...
+                        u_guess, [], [], [], [], lb, ub, ...
+                        @(u) mpc_constraints(u, x0, params, mpc), options);
+
+% Store for warm start next time
+u_prev = u_opt;
+\end{lstlisting}
+
+\subsection{Decision Variables}
+
+The optimizer searches over the control sequence:
+\[
+\mathbf{u} = [u_0, u_1, \ldots, u_{N-1}]^T \in \mathbb{R}^N
+\]
+
+This is called ``control parameterization'' or ``single shooting'' -- the states are computed by simulating forward from $\mathbf{x}_0$ using the control sequence.
+
+\subsection{Warm Starting}
+
+The \texttt{persistent} variable \texttt{u\_prev} stores the previous solution. The next optimization is initialized with:
+\[
+\mathbf{u}_{\text{guess}} = [u_1^{\text{prev}}, u_2^{\text{prev}}, \ldots, u_{N-1}^{\text{prev}}, 0]
+\]
+
+This ``shift and append'' warm start helps because:
+\begin{itemize}
+    \item Adjacent MPC problems are similar
+    \item The shifted solution is usually close to optimal
+    \item Reduces solve time significantly
+\end{itemize}
+
+\subsection{Optimization Settings}
+
+\begin{itemize}
+    \item \textbf{Algorithm: SQP} (Sequential Quadratic Programming) -- good for smooth nonlinear problems
+    \item \textbf{MaxIterations: 50} -- limits computation time for real-time feasibility
+    \item \textbf{Tolerances: $10^{-4}$} -- loose tolerances trade accuracy for speed
+\end{itemize}
+
+%% ============================================================================
+\section{The Cost Function}
+%% ============================================================================
+
+\begin{lstlisting}
+function J = mpc_cost(u, x0, x_ref, params, mpc)
+%% MPC Cost Function
+
+% Predict trajectory
+x_traj = predict_trajectory(x0, u, params, mpc);
+
+J = 0;
+
+% Running cost
+for i = 1:mpc.N-1
+    % State cost
+    e = x_traj(:,i) - x_ref;
+    J = J + e' * mpc.Q * e;
+
+    % Control cost
+    J = J + mpc.R * u(i)^2;
+end
+
+% Terminal cost
+e_terminal = x_traj(:,mpc.N) - x_ref;
+J = J + e_terminal' * mpc.Q_terminal * e_terminal;
+end
+\end{lstlisting}
+
+\subsection{Cost Structure}
+
+The total cost has three parts:
+
+\textbf{1. Running State Cost:}
+\[
+\sum_{k=0}^{N-2} (\mathbf{x}_k - \mathbf{x}_{\text{ref}})^T \mathbf{Q} (\mathbf{x}_k - \mathbf{x}_{\text{ref}})
+\]
+
+\textbf{2. Running Control Cost:}
+\[
+\sum_{k=0}^{N-2} R \, u_k^2
+\]
+
+\textbf{3. Terminal Cost:}
+\[
+(\mathbf{x}_{N-1} - \mathbf{x}_{\text{ref}})^T \mathbf{Q}_f (\mathbf{x}_{N-1} - \mathbf{x}_{\text{ref}})
+\]
+
+The terminal cost weight $\mathbf{Q}_f = 2\mathbf{Q}$ encourages the trajectory to end near the target, partially compensating for the finite horizon.
+
+\subsection{Why Quadratic Costs?}
+
+Quadratic costs are standard because:
+\begin{itemize}
+    \item They penalize large errors more than small errors
+    \item The optimization landscape is smooth (good for gradient-based solvers)
+    \item They connect to LQR theory for linear systems
+\end{itemize}
+
+%% ============================================================================
+\section{Trajectory Prediction}
+%% ============================================================================
+
+\begin{lstlisting}
+function x_traj = predict_trajectory(x0, u, params, mpc)
+%% Predict trajectory using control sequence
+
+x_traj = zeros(4, mpc.N);
+x_traj(:,1) = x0;
+
+for i = 1:mpc.N-1
+    % Simulate one step forward
+    x_traj(:,i+1) = rk4_step(@(t,x) cart_pole_dynamics(t, x, u(i), params), ...
+                             0, x_traj(:,i), mpc.dt);
+end
+end
+\end{lstlisting}
+
+This function ``rolls out'' the dynamics: starting from $\mathbf{x}_0$, it simulates forward using the control sequence to produce the predicted state trajectory:
+\[
+\mathbf{x}_0 \xrightarrow{u_0} \mathbf{x}_1 \xrightarrow{u_1} \mathbf{x}_2 \xrightarrow{u_2} \cdots \xrightarrow{u_{N-1}} \mathbf{x}_N
+\]
+
+%% ============================================================================
+\section{Cart-Pole Dynamics}
+%% ============================================================================
+
+\begin{lstlisting}
+function xdot = cart_pole_dynamics(t, x, u, params)
+%% Cart-pole dynamics
+
+q1 = x(1);      % Cart position
+q2 = x(2);      % Pendulum angle
+q1dot = x(3);   % Cart velocity
+q2dot = x(4);   % Pendulum angular velocity
+
+% Extract parameters
+m1 = params.m1; m2 = params.m2; L = params.L; g = params.g;
+
+% Compute accelerations
+q1ddot = cart_accel(q1, q2, q1dot, q2dot, u, m1, m2, L, g);
+q2ddot = pendulum_accel(q1, q2, q1dot, q2dot, u, m1, m2, L, g);
+
+% State derivative
+xdot = [q1dot; q2dot; q1ddot; q2ddot];
+end
+\end{lstlisting}
+
+\subsection{Equations of Motion}
+
+The cart-pole dynamics are derived from the Euler-Lagrange equations. The accelerations are:
+
+\textbf{Cart acceleration:}
+\begin{lstlisting}
+function q1ddot = cart_accel(q1, q2, q1dot, q2dot, u, m1, m2, L, g)
+    den = m1 + m2 - m2*cos(q2)^2;
+    num = u + m2*sin(q2)*(L*q2dot^2 + g*cos(q2));
+    q1ddot = num / den;
+end
+\end{lstlisting}
+
+\[
+\ddot{q}_1 = \frac{u + m_2 \sin(q_2) \left( L \dot{q}_2^2 + g \cos(q_2) \right)}{m_1 + m_2 - m_2 \cos^2(q_2)}
+\]
+
+\textbf{Pendulum acceleration:}
+\begin{lstlisting}
+function q2ddot = pendulum_accel(q1, q2, q1dot, q2dot, u, m1, m2, L, g)
+    den = L*(m1 + m2 - m2*cos(q2)^2);
+    num = -u*cos(q2) - m2*L*q2dot^2*cos(q2)*sin(q2) - (m1+m2)*g*sin(q2);
+    q2ddot = num / den;
+end
+\end{lstlisting}
+
+\[
+\ddot{q}_2 = \frac{-u \cos(q_2) - m_2 L \dot{q}_2^2 \cos(q_2) \sin(q_2) - (m_1 + m_2) g \sin(q_2)}{L (m_1 + m_2 - m_2 \cos^2(q_2))}
+\]
+
+These equations capture the coupling between cart and pendulum motion.
+
+%% ============================================================================
+\section{Numerical Integration (RK4)}
+%% ============================================================================
+
+\begin{lstlisting}
+function x_next = rk4_step(f, t, x, dt)
+%% Single RK4 integration step
+
+k1 = f(t, x);
+k2 = f(t + dt/2, x + dt*k1/2);
+k3 = f(t + dt/2, x + dt*k2/2);
+k4 = f(t + dt, x + dt*k3);
+
+x_next = x + (dt/6) * (k1 + 2*k2 + 2*k3 + k4);
+end
+\end{lstlisting}
+
+The 4th-order Runge-Kutta method provides accurate integration:
+\[
+\mathbf{x}_{k+1} = \mathbf{x}_k + \frac{\Delta t}{6} \left( \mathbf{k}_1 + 2\mathbf{k}_2 + 2\mathbf{k}_3 + \mathbf{k}_4 \right)
+\]
+
+where:
+\begin{align*}
+\mathbf{k}_1 &= f(t_k, \mathbf{x}_k) \\
+\mathbf{k}_2 &= f(t_k + \tfrac{\Delta t}{2}, \mathbf{x}_k + \tfrac{\Delta t}{2} \mathbf{k}_1) \\
+\mathbf{k}_3 &= f(t_k + \tfrac{\Delta t}{2}, \mathbf{x}_k + \tfrac{\Delta t}{2} \mathbf{k}_2) \\
+\mathbf{k}_4 &= f(t_k + \Delta t, \mathbf{x}_k + \Delta t \, \mathbf{k}_3)
+\end{align*}
+
+RK4 has local truncation error $O(\Delta t^5)$, making it accurate for the 50 ms time step used here.
+
+%% ============================================================================
+\section{Constraints}
+%% ============================================================================
+
+\begin{lstlisting}
+function [c, ceq] = mpc_constraints(u, x0, params, mpc)
+%% MPC Constraints
+
+c = [];   % No inequality constraints
+ceq = []; % No equality constraints (dynamics handled in prediction)
+
+% Example of how to add state constraints:
+% x_traj = predict_trajectory(x0, u, params, mpc);
+% c = [x_traj(1,:)' - 5;    % position < 5
+%     -x_traj(1,:)' - 5];   % position > -5
+end
+\end{lstlisting}
+
+Currently, the only constraints are the control bounds ($|u| \leq 1000$ N), which are handled by \texttt{fmincon}'s \texttt{lb} and \texttt{ub} parameters.
+
+State constraints (e.g., cart position limits) could be added as inequality constraints \texttt{c} $\leq 0$.
+
+%% ============================================================================
+\section{Common Issues and Tuning}
+%% ============================================================================
+
+\subsection{Swing-Up Challenges}
+
+The swing-up problem is difficult because:
+\begin{enumerate}
+    \item \textbf{Local minima}: The pendulum hanging down is a stable equilibrium. If position weight is too high, the MPC won't move the cart enough to swing up.
+
+    \item \textbf{Short horizon}: If the horizon is too short, the MPC can't ``see'' that swinging will eventually lead to the upright position.
+
+    \item \textbf{Energy pumping}: Swing-up requires coordinated back-and-forth motion to pump energy into the pendulum.
+\end{enumerate}
+
+\subsection{Tuning Guidelines}
+
+\begin{tabular}{lp{8cm}}
+\toprule
+Parameter & Effect \\
+\midrule
+\texttt{mpc.N} (horizon) & Longer $\rightarrow$ better planning but slower solve \\
+\texttt{mpc.Q(1,1)} (position) & Higher $\rightarrow$ tighter position control but may prevent swing-up \\
+\texttt{mpc.Q(2,2)} (angle) & Higher $\rightarrow$ prioritizes getting pendulum upright \\
+\texttt{mpc.R} (control) & Higher $\rightarrow$ smoother but slower control \\
+\texttt{mpc.Q\_terminal} & Higher $\rightarrow$ encourages reaching target at horizon end \\
+\bottomrule
+\end{tabular}
+
+\subsection{Two-Phase Approach}
+
+A robust solution is to use different controllers for different phases:
+\begin{enumerate}
+    \item \textbf{Swing-up phase}: Low position weight, focus on getting pendulum near upright
+    \item \textbf{Stabilization phase}: Once $|q_2 - \pi| < \epsilon$, switch to higher position weight
+\end{enumerate}
+
+%% ============================================================================
+\section{Summary}
+%% ============================================================================
+
+The MPC cart-pole controller works by:
+\begin{enumerate}
+    \item Measuring the current state $\mathbf{x}_k$
+    \item Solving an optimization problem over the control sequence $[u_0, \ldots, u_{N-1}]$
+    \item Applying only $u_0$ to the real system
+    \item Repeating at 20 Hz
+\end{enumerate}
+
+Key components:
+\begin{itemize}
+    \item \textbf{Cost function}: Quadratic penalties on state error and control effort
+    \item \textbf{Dynamics}: Euler-Lagrange equations for cart-pole
+    \item \textbf{Integration}: RK4 for trajectory prediction
+    \item \textbf{Optimization}: SQP via \texttt{fmincon} with warm starting
+\end{itemize}
+
+The receding horizon approach provides robustness to model errors and disturbances by continuously re-planning based on feedback.
+
+\end{document}

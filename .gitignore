@@ -19,3 +19,6 @@ slprj/
 
 # Code generation
 codegen/
+
+# Video files
+*.mp4

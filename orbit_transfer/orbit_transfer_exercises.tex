@@ -1,0 +1,660 @@
+% ============================================================================
+% Guided MATLAB coding tutorial: the planar min-energy orbit transfer,
+% solved by the indirect method (shooting on the costate BVP) and the
+% direct method (trapezoidal collocation), verified by Lawden's primer.
+% All checkpoint numbers verified headlessly (R2025b) on 2026-07-05 via
+% verify_checkpoints.m in this folder.
+% ============================================================================
+\documentclass[11pt,letterpaper]{article}
+\usepackage[margin=1in]{geometry}
+\usepackage{amsmath,amssymb,bm}
+\usepackage{booktabs}
+\usepackage{enumitem}
+\usepackage{xcolor}
+\usepackage{graphicx}
+\usepackage[colorlinks=true,linkcolor=blue!70!black,urlcolor=blue!70!black]{hyperref}
+\usepackage{fancyhdr}
+\usepackage{titlesec}
+\usepackage{mathtools}
+\usepackage{tcolorbox}
+
+\pagestyle{fancy}
+\fancyhf{}
+\rhead{Orbit Transfer --- Guided Exercises}
+\lhead{}
+\rfoot{Page \thepage}
+\setlength{\headheight}{14pt}
+
+\setlength{\parskip}{5pt}
+\setlength{\parindent}{0pt}
+
+\titlespacing*{\section}{0pt}{14pt}{6pt}
+\titlespacing*{\subsection}{0pt}{10pt}{4pt}
+\titlespacing*{\subsubsection}{0pt}{8pt}{3pt}
+
+% --- convenience macros ---
+\newcommand{\R}{\mathbb{R}}
+\newcommand{\T}{^{\mathsf{T}}}
+\newcommand{\half}{\tfrac12}
+\newcommand{\rvec}{\mathbf{r}}
+\newcommand{\vvec}{\mathbf{v}}
+
+% --- Exercise: what the learner writes (blue) ---
+\newtcolorbox{exercise}[1]{
+  colback=blue!5!white, colframe=blue!50!black, fonttitle=\bfseries,
+  title={Exercise: #1}, sharp corners, boxrule=0.8pt,
+  left=6pt, right=6pt, top=4pt, bottom=4pt}
+
+% --- Hint: partial code / gotcha nudge (yellow) ---
+\newtcolorbox{hint}{
+  colback=yellow!5!white, colframe=yellow!60!black, fonttitle=\bfseries,
+  title={Hint}, sharp corners, boxrule=0.5pt,
+  left=6pt, right=6pt, top=4pt, bottom=4pt}
+
+% --- Checkpoint: a runnable test with VERIFIED expected output (green) ---
+\newtcolorbox{checkpoint}[1]{
+  colback=green!5!white, colframe=green!50!black, fonttitle=\bfseries,
+  title={Checkpoint: #1}, sharp corners, boxrule=0.8pt,
+  left=6pt, right=6pt, top=4pt, bottom=4pt}
+
+\title{\textbf{Solving the Min-Energy Orbit Transfer, Two Ways}\\[8pt]
+\large Guided Coding Exercises\\[4pt]
+\normalsize Indirect shooting on the costate BVP \;$\cdot$\; direct trapezoidal
+collocation \;$\cdot$\; Lawden's primer vector as the cross-check}
+\author{}
+\date{July 2026}
+
+\begin{document}
+\maketitle
+\tableofcontents
+\newpage
+
+% ==========================================================================
+\section{Introduction}
+
+You will build, from scratch in base MATLAB (plus \texttt{fsolve} and
+\texttt{fmincon} from the Optimization Toolbox --- no pumpkyn, no pumpkynPie),
+a complete solution of the planar two-body \emph{minimum-energy low-thrust
+transfer} between two circular orbits, by both of the classical routes:
+
+\begin{itemize}[leftmargin=*,nosep]
+\item the \textbf{indirect method}: use the necessary conditions you derived
+  with Pontryagin (Hamiltonian, costates, $u^* = -\lambda_v$) to reduce the
+  problem to a two-point boundary value problem, and solve it by
+  \emph{shooting} on the unknown initial costate;
+\item the \textbf{direct method}: transcribe the continuous problem into a
+  finite-dimensional nonlinear program by \emph{trapezoidal collocation} and
+  hand it to an NLP solver.
+\end{itemize}
+
+The payoff moment: two solvers that share \emph{no code path} --- one
+integrates ODEs and root-finds, the other never integrates anything and
+optimizes --- land on the same trajectory, the same control history, and costs
+that agree to $10^{-4}$ and converge toward each other at exactly the
+textbook $O(h^2)$ rate as you refine the mesh. And a third, independent
+object --- \textbf{Lawden's primer vector}, propagated under nothing but the
+gravity gradient of the nominal path --- reproduces the optimal control of
+both. The primer is not a third \emph{solution} method here; it is the
+\emph{optimality certificate} both methods must satisfy. (In the impulsive
+world it graduates into a design test --- that is P-OC6's story.)
+
+\subsection{Prerequisites}
+
+\begin{itemize}[leftmargin=*,nosep]
+\item The companion theory note
+  \texttt{myLatex/notes/cov\_pmp\_orbit\_transfer.tex} (kept there, not in
+  this folder) --- everything used here (the Hamiltonian, $u^*=-\lambda_v$,
+  the costate ODEs, the gravity-gradient matrix $G$, transversality and the
+  $2n$ bookkeeping, $\ddot p = Gp$) is derived there. This tutorial
+  \emph{implements} that note. To be plain about the split: \textbf{no
+  astrodynamics is assumed} (\S\ref{sec:astro} covers it), but familiarity
+  with the PMP/costate machinery \emph{is} --- read the companion note first
+  if costates are new.
+\item Comfort with ODEs, Jacobians, and nonlinear programs. \textbf{No
+  astrodynamics background is assumed} --- \S\ref{sec:astro} supplies the
+  four facts you need.
+\item MATLAB R2025b with the Optimization Toolbox
+  (\texttt{fsolve}, \texttt{fmincon}).
+\end{itemize}
+
+\subsection{The astrodynamics you need (ten minutes)}\label{sec:astro}
+
+Four facts carry the whole tutorial.
+
+\textbf{(1) The force law.} A spacecraft at position $\rvec \in \R^2$
+(measured from the central body) feels gravitational acceleration
+\[
+  g(\rvec) = -\,\frac{\mu\,\rvec}{r^{3}},\qquad r = \|\rvec\|,
+\]
+where $\mu$ is the body's \emph{gravitational parameter} ($\mu = GM$). The
+$1/r^2$ magnitude you expect is there: $\|g\| = \mu/r^2$; the extra $r$ in
+the denominator just normalizes the direction vector.
+
+\textbf{(2) Canonical units.} ``DU'' and ``TU'' just mean \emph{distance
+unit} and \emph{time unit}: we rescale variables so that the departure orbit
+has radius $1$ and $\mu = 1$. Every quantity in the tutorial is
+dimensionless; results rescale to any system (Earth, Moon, Sun) afterward. This is exactly the convention the pumpkyn library uses
+(``dimensionless states''), so your code will transplant cleanly later.
+
+\textbf{(3) Circular orbits.} On a circular orbit of radius $r$, gravity
+supplies the centripetal acceleration: $\mu/r^{2} = v^{2}/r$, so the circular
+speed is
+\[
+  v_c(r) = \sqrt{\mu / r},
+\]
+directed tangentially. With $\mu=1$: $v_c(1) = 1$ and
+$v_c(1.5) = 1/\sqrt{1.5} \approx 0.8165$. The orbital period is
+$T = 2\pi\sqrt{r^{3}/\mu}$ (Kepler's third law; for an ellipse, replace $r$
+by the semi-major axis $a$).
+
+\textbf{(4) The Hohmann transfer, as intuition only.} The cheapest two-impulse
+route between circular orbits coasts along a half-ellipse that touches both
+circles; its flight time is half the ellipse's period,
+$t_H = \pi\sqrt{a^{3}/\mu}$, where the \emph{semi-major axis} $a$ (half the
+ellipse's long diameter) is here $a = (r_0 + r_f)/2$. For $r_0=1$,
+$r_f=1.5$: $a = 1.25$ and $t_H = \pi\sqrt{1.25^{3}} \approx 4.39$~TU, arriving
+on the \emph{opposite side} of the central body. We give our low-thrust
+problem a final time just above this ($t_f = 4.4$) and a target at the
+opposite-side point --- so the optimal solution is a gentle, physically
+sensible spiral and every solver is well-conditioned.
+
+\textbf{The tutorial instance} (used by every checkpoint):
+\[
+  \mu = 1,\qquad
+  x_0 = \begin{bmatrix}1\\0\\0\\1\end{bmatrix},\qquad
+  x_f = \begin{bmatrix}-1.5\\[2pt]0\\[2pt]0\\[2pt]-1/\sqrt{1.5}\end{bmatrix},\qquad
+  t_f = 4.4 .
+\]
+Read $x_0$ as: depart at $(1,0)$ moving counter-clockwise at circular speed.
+Read $x_f$ as: arrive at $(-1.5, 0)$ --- the opposite side --- moving
+counter-clockwise at that circle's speed (at angle $\pi$, the CCW tangent
+direction is $(0,-1)$, hence the negative fourth component). Requiring the
+\emph{full} state to match is a \emph{rendezvous} condition (meet a marker
+point on the target orbit); relaxing it to ``arrive anywhere on the orbit''
+is the manifold/transversality variant --- extension~2 in
+\S\ref{sec:next}.
+
+\subsection{What you will build}
+
+\begin{center}
+\begin{tabular}{lp{9.2cm}}
+\toprule
+File & Purpose \\
+\midrule
+\texttt{two\_body\_accel.m}     & Gravitational acceleration $g(\rvec)$ \\
+\texttt{gravity\_gradient.m}    & $G = \partial g/\partial\rvec$ (drives variational + primer eqs.) \\
+\texttt{ocp\_dynamics.m}        & Coupled state--costate flow with $u^*=-\lambda_v$ substituted \\
+\texttt{shoot\_residual.m}      & Terminal miss $\psi(\lambda_0) = x(t_f) - x_f$ \\
+\texttt{solve\_indirect.m}      & \texttt{fsolve} on $\psi$: the indirect solution \\
+\texttt{collocation\_transfer.m}& Trapezoidal transcription + \texttt{fmincon}: the direct solution \\
+\texttt{primer\_check.m}        & Propagate $\ddot p = Gp$ independently; certify both solutions \\
+\texttt{run\_orbit\_transfer.m} & Demo: everything, printed and plotted \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\subsection{Workspace split}
+
+Build your files in \texttt{orbit\_transfer/mytry/}. The parent folder
+contains the reference solutions --- consult them only \emph{after}
+attempting each exercise. Checkpoints are designed to tell you whether your
+version is right without peeking.
+
+\subsection{Notation recap}
+
+State $x = [\rvec; \vvec] \in \R^4$ (position, then velocity --- the pumpkyn
+ordering); costate $\lambda = [\lambda_r; \lambda_v] \in \R^4$. Control $u \in
+\R^2$ is an acceleration. Running cost $L = \half\|u\|^2$ (min-energy).
+Hamiltonian $H = L + \lambda\T f$. The \textbf{primer vector} is
+\emph{defined} as $p \coloneqq u^* = -\lambda_v$; consequently
+$\dot p = -\dot\lambda_v = +\lambda_r$ (used in Phase~E). Gravity gradient
+$G = (\mu/r^5)(3\,\rvec\rvec\T - r^2 I)$, symmetric. All costate/transversality
+sign conventions follow the companion note ($+\lambda\T(f-\dot x)$ adjoined).
+
+% ==========================================================================
+\section{Phase A: the dynamics primitives}
+
+Two tiny functions carry all the physics. Get their derivatives right and
+everything downstream works; get the chain rule wrong and the shooting method
+will fail mysteriously three phases from now. (Ask me how I know --- this
+exact slip is Pitfall~2 of the companion note.)
+
+\begin{exercise}{\texttt{two\_body\_accel.m}}
+Create
+\begin{verbatim}
+function g = two_body_accel(r_vec, mu)
+\end{verbatim}
+returning the $2\times 1$ acceleration $g = -\mu\,\rvec/r^3$ with
+$r = \|\rvec\|$. Two lines. Include the standard header (purpose, INPUTS
+with sizes, OUTPUTS, REFERENCES).
+\end{exercise}
+
+\begin{exercise}{\texttt{gravity\_gradient.m}}
+Create
+\begin{verbatim}
+function G = gravity_gradient(r_vec, mu)
+\end{verbatim}
+returning the $2\times 2$ Jacobian $G = \partial g/\partial \rvec$. Derive it
+by differentiating $-\mu x_1/r^3$ and $-\mu x_2/r^3$ with respect to $x_1$
+and $x_2$ (remember $\partial r/\partial x_1 = x_1/r$), then recognize the
+matrix form
+\[
+  G = \frac{\mu}{r^5}\bigl(3\,\rvec\rvec\T - r^2 I\bigr).
+\]
+Implement the matrix form; the checkpoint verifies it against finite
+differences of your \texttt{two\_body\_accel}.
+\end{exercise}
+
+\begin{hint}
+The derivative trap: $\partial(x_1 r^{-3})/\partial x_1$ is
+$r^{-3} - 3x_1^2 r^{-5}$, \emph{not} $r^{-3} - 3x_1 r^{-4}$. The inner factor
+$\partial r/\partial x_1 = x_1/r$ supplies one extra power of both $x_1$ and
+$1/r$. If your $G$ has $r^4$ anywhere, this is the slip.
+\end{hint}
+
+\begin{checkpoint}{A --- primitives}
+\begin{verbatim}
+mu = 1;
+two_body_accel([1;0], mu)          % expect [-1; 0]
+two_body_accel([0;2], mu)          % expect [0; -0.25]
+G = gravity_gradient([0.8;-0.6], mu)
+norm(G - G')                       % symmetry
+trace(G) * 1^3 / mu                % trace identity, ||r|| = 1 here
+h = 1e-7; Gfd = zeros(2);
+for ci = 1:2
+    e = zeros(2,1); e(ci) = h;
+    Gfd(:,ci) = (two_body_accel([0.8;-0.6]+e,mu) ...
+               - two_body_accel([0.8;-0.6]-e,mu))/(2*h);
+end
+norm(G - Gfd)
+\end{verbatim}
+Verified expected output:
+\begin{verbatim}
+G = [ 0.920000  -1.440000
+     -1.440000   0.080000 ]
+norm(G - G')      = 0            (exactly, by construction)
+trace identity    = 1.0000000000 (trace G = mu/r^3)
+norm(G - Gfd)     = 7.8e-10      (central-difference floor)
+\end{verbatim}
+If the FD check fails but symmetry passes: wrong powers of $r$ (see Hint).
+If $G(1,2) \ne G(2,1)$: you built the matrix element-wise and mistyped a
+cross-term --- use the matrix form.
+\end{checkpoint}
+
+% ==========================================================================
+\section{Phase B: the coupled state--costate flow}
+
+From the companion note, with $u^* = -\lambda_v$ substituted in closed form,
+the optimal trajectory satisfies an $8$-dimensional autonomous ODE:
+\[
+  \dot\rvec = \vvec,\qquad
+  \dot\vvec = g(\rvec) - \lambda_v,\qquad
+  \dot\lambda_r = -G(\rvec)\T\lambda_v,\qquad
+  \dot\lambda_v = -\lambda_r .
+\]
+(One-line reminders of where the costate rows come from:
+$\dot\lambda_v = -\partial H/\partial\vvec$, and $\vvec$ appears in $H$ only
+through the kinetic term $\lambda_r\T\vvec$, hence $-\lambda_r$; likewise
+$\rvec$ appears only through the gravity term $\lambda_v\T g(\rvec)$, whose
+Jacobian is $G$.)
+
+\begin{exercise}{\texttt{ocp\_dynamics.m}}
+Create
+\begin{verbatim}
+function zdot = ocp_dynamics(~, z, mu)
+\end{verbatim}
+with $z = [x; \lambda] \in \R^8$, implementing the four blocks above (call
+your Phase-A functions; do not re-derive gravity inline). The \texttt{\~{}}
+first argument is the ODE-solver time slot --- unused because the system is
+autonomous.
+\end{exercise}
+
+\begin{hint}
+The two costate traps from the companion note, in code form:
+\texttt{lamdot\_v = -lam\_r} (the kinetic coupling --- not zero!), and the
+gravity gradient enters \emph{transposed}: \texttt{lamdot\_r = -G' * lam\_v}.
+Here $G = G\T$ so the transpose is invisible numerically --- write it anyway;
+it is load-bearing the day you add a non-symmetric Jacobian (drag, planetary
+oblateness, three-body).
+\end{hint}
+
+\begin{checkpoint}{B1 --- Hamiltonian conservation}
+The system is autonomous, so $H$ is constant along any flow --- including
+flows from \emph{arbitrary} (non-optimal-BVP) initial costates. This tests
+every sign in your dynamics at once:
+\begin{verbatim}
+mu = 1; x0 = [1;0;0;1]; lam0 = [0.01;-0.02;0.03;0.01];
+opts = odeset('RelTol',1e-12,'AbsTol',1e-12);
+sol  = ode45(@(t,z) ocp_dynamics(t,z,mu), [0 4.4], [x0;lam0], opts);
+tq = linspace(0,4.4,401); zq = deval(sol,tq);
+H = zeros(1,401);
+for k = 1:401
+    z = zq(:,k); u = -z(7:8);
+    f = [z(3:4); two_body_accel(z(1:2),mu) + u];
+    H(k) = 0.5*(u'*u) + z(5:8)'*f;
+end
+[H(1), max(abs(H - H(1)))]
+\end{verbatim}
+Verified expected output: $H(0) = -0.0505000000$ and
+$\max_t |H(t)-H(0)| \approx 1.8\times 10^{-12}$ (integration-tolerance
+floor). If $H$ drifts at $10^{-3}$: a sign error in a costate block ---
+check $\dot\lambda_v = -\lambda_r$ first. If $H$ is constant but wrong at
+$t=0$: your Hamiltonian assembly in the \emph{test}, not the dynamics.
+\end{checkpoint}
+
+\begin{exercise}{\texttt{shoot\_residual.m}}
+Create
+\begin{verbatim}
+function [psi, sol] = shoot_residual(lam0, x0, xf, tf, mu)
+\end{verbatim}
+which integrates \texttt{ocp\_dynamics} from $[x_0; \lambda_0]$ over
+$[0, t_f]$ (use \texttt{ode45} with \texttt{RelTol} and \texttt{AbsTol} of
+$10^{-12}$, and return the \texttt{ode45} solution structure as a second
+output for later post-processing) and returns the rendezvous miss
+$\psi = x(t_f) - x_f \in \R^4$.
+
+Why this is the whole indirect method: $x(t_0)$ pinned gives $4$ boundary
+conditions; $x(t_f)$ pinned gives $4$ more; total $8 = 2n$ for the
+$8$-dimensional flow --- the bookkeeping table of the companion note, row
+one. The $4$ unknowns are $\lambda_0$, and $\psi(\lambda_0) = 0$ is $4$
+equations in $4$ unknowns.
+\end{exercise}
+
+\begin{hint}
+Tight integrator tolerances are not pedantry here: \texttt{fsolve} will
+finite-difference $\psi$ across perturbations of $10^{-7}$ or smaller in
+$\lambda_0$, and integration noise at $10^{-6}$ would drown that signal ---
+the Jacobian comes out garbage and fsolve stalls. $10^{-12}$ buys a clean
+Newton direction.
+\end{hint}
+
+\begin{checkpoint}{B2 --- the coast miss}
+With zero initial costate the control is zero and the spacecraft simply
+coasts around the unit circle for $4.4$ radians:
+\begin{verbatim}
+mu = 1; x0 = [1;0;0;1]; rf = 1.5;
+xf = [-rf; 0; 0; -sqrt(mu/rf)]; tf = 4.4;
+[psi, ~] = shoot_residual(zeros(4,1), x0, xf, tf, mu);
+psi', norm(psi)
+\end{verbatim}
+Verified expected output:
+\begin{verbatim}
+psi   = [ 1.192667  -0.951602   0.951602   0.509164 ]
+||psi|| = 1.868902
+\end{verbatim}
+(Sanity: a coast on the unit circle ends at
+$(\cos 4.4, \sin 4.4) \approx (-0.307, -0.952)$; subtract the target and you
+can reproduce each component by hand.) If your $\psi$ differs: check the
+target-state construction before suspecting the integrator.
+\end{checkpoint}
+
+% ==========================================================================
+\section{Phase C: the indirect method (shooting)}
+
+\begin{exercise}{\texttt{solve\_indirect.m}}
+Create
+\begin{verbatim}
+function [lam0, sol, J, psi_norm] = solve_indirect(x0, xf, tf, mu, lam0_guess)
+\end{verbatim}
+that (1) calls \texttt{fsolve} on your \texttt{shoot\_residual} with
+tolerances around $10^{-12}$ (\texttt{Display 'off'}), (2) re-integrates at
+the converged $\lambda_0$ to get the solution structure and
+$\|\psi\|$, and (3) evaluates the realized cost
+$J = \int_0^{t_f}\half\|u\|^2\,dt$ with $u = -\lambda_v$ by sampling the
+solution densely (\texttt{deval} on \texttt{linspace(0,tf,2001)}) and using
+\texttt{trapz}.
+\end{exercise}
+
+\begin{checkpoint}{C --- the transfer, solved}
+\begin{verbatim}
+mu = 1; x0 = [1;0;0;1]; xf = [-1.5;0;0;-sqrt(1/1.5)]; tf = 4.4;
+[lam0, sol, J, psin] = solve_indirect(x0, xf, tf, mu, zeros(4,1));
+lam0', psin, J
+tq = linspace(0,tf,1001); zq = deval(sol,tq);
+max(vecnorm(-zq(7:8,:)))          % max control magnitude
+\end{verbatim}
+Verified expected output (cold start from $\lambda_0 = 0$ converges in
+$\sim$0.5~s):
+\begin{verbatim}
+lam0    = [-0.1670312747  -0.0671010263  -0.0894000529  -0.1522051008]
+||psi|| ~ 2e-15
+J       = 0.0115973227
+max ||u|| = 0.176518
+\end{verbatim}
+The max thrust acceleration is $\sim$0.18 of surface gravity at $r{=}1$ ---
+a gentle near-Hohmann spiral, as designed. If \texttt{fsolve} stalls with a
+``trust region radius'' message: your integrator tolerances are loose (see
+Phase-B hint). If it converges to a different $\lambda_0$ with the same
+$\|\psi\| \approx 0$ but a different $J$: first verify your dynamics signs
+against Checkpoint~B1 and re-run from the zero guess --- only after those
+pass should you entertain the (real, but advanced) possibility of multiple
+extremals.
+\end{checkpoint}
+
+% ==========================================================================
+\section{Phase D: the direct method (collocation)}
+
+Now forget the costates entirely. Discretize time into $N$ intervals with
+nodes $t_k$, $h = t_f/N$; make the states $X = [x_0, \dots, x_N]$
+($4\times(N{+}1)$) and controls $U$ ($2\times(N{+}1)$) decision variables;
+approximate the dynamics by the \textbf{trapezoidal defect constraints}
+\[
+  d_k \;=\; x_{k+1} - x_k - \frac{h}{2}\bigl(f(x_k,u_k) + f(x_{k+1},u_{k+1})\bigr)
+  \;=\; 0,
+  \qquad k = 1,\dots,N,
+\]
+and the cost by the trapezoidal quadrature of $\half\|u\|^2$. Pin
+$x_0$ and $x_N$; hand everything to \texttt{fmincon}. The infinite-dimensional
+CoV problem has become a mathematical program --- the ``transcription'' your
+study plan calls direct collocation.
+
+\begin{exercise}{\texttt{collocation\_transfer.m}}
+Create
+\begin{verbatim}
+function [Xc, Uc, tc, Jc, out] = collocation_transfer(x0, xf, tf, mu, N)
+\end{verbatim}
+with:
+\begin{enumerate}[leftmargin=1.5em,nosep]
+\item a decision vector $Z = [X(:);\,U(:)]$ and two unpack helpers
+      (\texttt{reshape});
+\item an \textbf{initial guess that interpolates in polar coordinates}:
+      radius $r_0 \to r_f$ and angle swept counter-clockwise
+      $\theta_0 \to \theta_f$, with the velocity guess from differentiating
+      the spiral ($\dot\rvec = \dot r\,\hat r + r\dot\theta\,\hat\theta$) and
+      $U = 0$. Resist the ``simpler'' straight-line-in-Cartesian guess ---
+      the Hint explains how it fails, instructively;
+\item boundary pinning via bounds: set \texttt{lb = ub = x0} on the first
+      state block and \texttt{lb = ub = xf} on the last (cleaner than extra
+      equality constraints);
+\item a nested \texttt{cost} function: \texttt{trapz(tc, 0.5*sum(U.\^{}2,1))};
+\item a nested \texttt{defects} function returning all $4N$ defect equations
+      as \texttt{ceq} (evaluate $f$ at every node once, then form the
+      defects vectorized across columns);
+\item \texttt{fmincon} with \texttt{'interior-point'},
+      \texttt{ConstraintTolerance 1e-10}, \texttt{OptimalityTolerance 1e-10},
+      generous evaluation limits; return a struct \texttt{out} with exactly
+      the fields \texttt{exitflag}, \texttt{max\_defect} (the post-solve
+      $\max|d_k|$), and \texttt{lam\_eq} (\texttt{lambda.eqnonlin} --- you
+      will want those multipliers for extension~5). The checkpoints call
+      these fields by name.
+\end{enumerate}
+\end{exercise}
+
+\begin{hint}
+\textbf{Why the obvious guess crashes.} Straight-line interpolation from
+$x_0$ to $x_f$ with zero control \emph{fails before the first iteration} on
+this problem: \texttt{fmincon} reports
+\begin{verbatim}
+Nonlinear constraint function is undefined at initial point.
+\end{verbatim}
+The segment from $(1,0)$ to $(-1.5,0)$ passes through the origin, and
+$g(\rvec)$ divides by $r^3 = 0$: the guessed trajectory flew through the
+central body. (This is a real captured failure, not a hypothetical.) The
+polar-interpolation guess of the exercise keeps every node at radius
+$\ge 1$. General lesson worth keeping: \emph{initial guesses for trajectory
+NLPs must be physically sane, not just endpoint-consistent} --- if a
+constraint is ever ``undefined at initial point,'' look for a guessed state
+that hits a singularity of the dynamics.
+\end{hint}
+
+\begin{checkpoint}{D1 --- the NLP solves, and agrees}
+\begin{verbatim}
+mu = 1; x0 = [1;0;0;1]; xf = [-1.5;0;0;-sqrt(1/1.5)]; tf = 4.4;
+[Xc, Uc, tc, Jc, out] = collocation_transfer(x0, xf, tf, mu, 40);
+out.exitflag, out.max_defect, Jc
+\end{verbatim}
+Verified expected output ($\sim$1--2~s):
+\begin{verbatim}
+exitflag    = 2          (step tolerance met; feasible -- see below)
+max_defect  = 1.5e-16    (dynamics satisfied to machine precision)
+Jc          = 0.0115212772
+\end{verbatim}
+Note \texttt{Jc} sits \emph{below} the indirect $J = 0.0115973227$ by
+$7.6\times 10^{-5}$: the discretized problem enforces the dynamics only at
+the nodes, so it is a slightly different problem --- for this instance a
+slightly \emph{cheaper} one --- and the gap is the transcription error. D2
+shows it dying at exactly the rate theory predicts. On exitflag: $1$ is ideal, but $2$ with
+$\max|d_k| \sim 10^{-16}$ is a converged, feasible solution ---
+interior-point often ends on the step test here. Exitflag $0$ or $-2$ means
+trouble: check the initial guess first.
+\end{checkpoint}
+
+\begin{checkpoint}{D2 --- the $O(h^2)$ staircase}
+\begin{verbatim}
+mu = 1; x0 = [1;0;0;1]; xf = [-1.5;0;0;-sqrt(1/1.5)]; tf = 4.4;
+for Ns = [10 20 40 80]
+    [~,~,~,Jn] = collocation_transfer(x0, xf, tf, mu, Ns);
+    fprintf('N = %3d   J = %.10f   gap = %+.3e\n', Ns, Jn, Jn - 0.0115973227);
+end
+\end{verbatim}
+Verified expected output:
+\begin{verbatim}
+N =  10   J = 0.0103836079   gap = -1.214e-03
+N =  20   J = 0.0112885645   gap = -3.088e-04
+N =  40   J = 0.0115212772   gap = -7.605e-05
+N =  80   J = 0.0115785568   gap = -1.877e-05
+\end{verbatim}
+Each doubling of $N$ shrinks the gap by a factor of $\approx 4$: trapezoidal
+collocation is a second-order method, and you have just \emph{measured}
+$O(h^2)$ rather than taken it on faith. (This is the same convergence
+experiment your brachistochrone assignment asks for.)
+\end{checkpoint}
+
+% ==========================================================================
+\section{Phase E: the primer certificate, and closing the loop}
+
+The two solvers agree with each other. Now check them against the theory:
+along an optimal min-energy trajectory the control \emph{is} the primer
+vector, and the primer obeys $\ddot p = G(\rvec(t))\,p$ --- a $4$-dimensional
+linear ODE driven only by the \emph{state} trajectory, knowing nothing about
+costates. If an independently propagated $p(t)$ reproduces $-\lambda_v(t)$,
+the entire costate block structure of the companion note is confirmed
+numerically.
+
+\begin{exercise}{\texttt{primer\_check.m}}
+Create
+\begin{verbatim}
+function [err_primer, err_uv] = primer_check(sol, tf, mu)
+\end{verbatim}
+that (1) reads the converged initial conditions from the indirect solution:
+$p(0) = -\lambda_v(0)$ and $\dot p(0) = \lambda_r(0)$; (2) propagates the
+first-order form of $\ddot p = G p$ (a local function; read $\rvec(t)$ from
+the nominal solution via \texttt{deval}); (3) reports
+$\max_t\|p_{\text{ode}}(t) - (-\lambda_v(t))\|$.
+
+Before coding, derive the second initial condition yourself: why is
+$\dot p(0) = +\lambda_r(0)$? (Two lines from $p = -\lambda_v$ and
+$\dot\lambda_v = -\lambda_r$.)
+\end{exercise}
+
+\begin{hint}
+MATLAB rule that bites here: \textbf{local functions go at the end of the
+file}, after the main function --- the primer ODE right-hand side is a local
+function, not nested, because it needs no shared workspace.
+\end{hint}
+
+\begin{checkpoint}{E --- everything agrees with everything}
+\begin{verbatim}
+mu = 1; x0 = [1;0;0;1]; xf = [-1.5;0;0;-sqrt(1/1.5)]; tf = 4.4;
+[lam0, sol] = solve_indirect(x0, xf, tf, mu, zeros(4,1));
+err_p = primer_check(sol, tf, mu)
+[Xc, Uc, tc] = collocation_transfer(x0, xf, tf, mu, 40);
+zn = deval(sol, tc);
+max(vecnorm(Uc + zn(7:8,:)))      % direct control vs indirect primer
+max(vecnorm(Xc - zn(1:4,:)))      % direct states vs indirect states
+\end{verbatim}
+Verified expected output:
+\begin{verbatim}
+err_p                  = 4.9e-13   (primer ODE reproduces -lam_v exactly)
+max control deviation  = 9.9e-03   (discretization-limited, shrinks with N)
+max state deviation    = 1.3e-03   (same)
+\end{verbatim}
+Interpretation, in one breath: the $10^{-13}$ says Lawden's equation holds
+along the optimal path (theory $\leftrightarrow$ indirect); the $10^{-3}$s
+say the NLP found the same optimum to within its mesh (direct
+$\leftrightarrow$ indirect); and both controls \emph{are} the primer ---
+thrust rides the primer vector, exactly as the report-back item claimed.
+\end{checkpoint}
+
+\begin{exercise}{\texttt{run\_orbit\_transfer.m} (demo)}
+Write a script that runs all three phases on the tutorial instance, prints
+every checkpoint quantity with labels, and draws two panels: (left) both
+circles, the indirect trajectory as a line, the collocation states as
+markers; (right) the two control components from the indirect solution as
+lines with the collocation controls as markers --- the ``$u^*(t) = p(t)$''
+picture. Your figure should reproduce
+Fig.~\ref{fig:expected}.
+\end{exercise}
+
+\begin{figure}[h]
+\centering
+\includegraphics[width=0.98\textwidth]{expected_result.png}
+\caption{The expected demo output. Left: the transfer spiral from $r{=}1$ to
+$r{=}1.5$ (indirect line, collocation markers). Right: the optimal control
+components --- the primer vector components --- from both methods.}
+\label{fig:expected}
+\end{figure}
+
+% ==========================================================================
+\section{What comes next}\label{sec:next}
+
+In increasing order of ambition; each reuses everything you just built.
+
+\begin{enumerate}[leftmargin=*]
+\item \textbf{Min-fuel and the switching function (P-OC5).} Replace
+  $L = \half\|u\|^2$ by $L = \|u\|$ with $\|u\| \le u_{\max}$: the
+  Hamiltonian goes linear in throttle, $\partial H/\partial u = 0$ dies, and
+  the control becomes bang-bang gated by a switching function. Solve it by
+  $\rho$-continuation with the smooth \texttt{vapnik2} penalty (P-OC7):
+  your min-energy solution is the natural first warm start.
+\item \textbf{Arrive on the orbit, not at a point.} Replace the rendezvous
+  target by the target \emph{manifold} (the whole set of acceptable terminal
+  states) $\psi(x) = 0$: radius, circular speed, perpendicularity --- $m = 3$
+  conditions --- and implement \emph{transversality} (the endpoint condition
+  on the costate that replaces the missing fixed-endpoint equations):
+  $\lambda(t_f) = \nabla\psi\T\nu$ supplies the remaining $n - m = 1$
+  boundary condition. Verify the $2n$ bookkeeping table of the companion
+  note by literal equation count.
+\item \textbf{Free final time.} Let $t_f$ be an unknown; add the condition
+  $H(t_f) = 0$. One more unknown, one more equation --- shooting dimension
+  grows to $5$.
+\item \textbf{Cross-check against pumpkynPie.} Reproduce the transfer with
+  the library's routines (e.g.\ compare against \texttt{minDeltaV} /
+  \texttt{directLambert}-style entry points for impulsive equivalents) and
+  reconcile conventions --- your canonical units and $[r; v]$ ordering
+  already match, by design.
+\item \textbf{The covector mapping theorem, empirically.} You already return
+  \texttt{lambda.eqnonlin} from \texttt{fmincon}: the NLP multipliers of the
+  defect constraints approximate the continuous costates at the nodes (up to
+  quadrature scaling). Plot them against $\lambda(t_k)$ from the indirect
+  solution and watch the direct method secretly compute your costates ---
+  the two methods were never as different as they looked.
+\end{enumerate}
+
+\bigskip
+\noindent\emph{Checkpoint provenance: every expected number in this document
+was produced by \texttt{verify\_checkpoints.m} in this folder, run headless
+on MATLAB R2025b on 2026-07-05. If you change the tutorial instance
+($x_0$, $x_f$, $t_f$, $\mu$, $N$), re-run it and update the checkpoints.}
+
+\end{document}

@@ -22,3 +22,9 @@ codegen/
 
 # Video files
 *.mp4
+
+# Animated GIFs (regenerable movies, like *.mp4)
+*.gif
+
+# Runtime solver logs
+tf_continuation*.log

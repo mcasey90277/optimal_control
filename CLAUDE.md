@@ -4,19 +4,42 @@ This file provides guidance to Claude Code when working with code in this reposi
 
 ## Project Overview
 
-MATLAB implementations of **direct collocation methods for optimal control**. Educational examples progressing from simple (block move) to complex (cart-pole swing-up). Based on Matthew Kelly's trajectory optimization tutorials.
+Educational implementations of **optimal control and estimation** methods. Core examples use MATLAB direct collocation (block move → cart-pole swing-up), based on Matthew Kelly's trajectory optimization tutorials. Also includes MPC and Lie group filtering (SO(3) error-state EKF) as LaTeX documents with planned MATLAB implementations.
 
 ## Directory Structure
 
 ```
 optimal_control/
-├── ex1_block_move/           # Minimum-energy point-to-point motion
-│   ├── block_main.m          # Basic implementation (10 segments)
-│   ├── block_move_2.m        # Cleaner version with plots (100 segments)
-│   └── block_move_3.m        # Vectorized version (100 segments)
-└── ex2_cart_pole_swing_up/   # Nonlinear underactuated system
-    └── trap_collocation/
-        └── cart_pole_swing_up_trap_1.m  # Full cart-pole swing-up
+├── ex1_block_move/              # Minimum-energy point-to-point motion
+│   ├── block_main.m             # Basic implementation (10 segments)
+│   ├── block_move_2.m           # Cleaner version with plots (100 segments)
+│   └── block_move_3.m           # Vectorized version (100 segments)
+├── ex2_cart_pole_swing_up/      # Nonlinear underactuated system
+│   ├── trap_collocation/
+│   │   └── cart_pole_swing_up_trap_1.m   # Monolithic implementation
+│   └── try2/                    # Modularized refactor
+│       ├── cart_pole_swing_up_trap_2.m   # Main script using helpers
+│       ├── nonlcon_cart_pole.m           # Equality constraints (BCs + defects)
+│       ├── objective.m                   # Cost function (trap quadrature of u²)
+│       ├── cart_accel.m                  # Cart acceleration from Lagrangian EOM
+│       └── pendulum_accel.m             # Pendulum angular acceleration
+├── lowThrust_GTO_tulip/         # CR3BP min-time GTO->tulip: theory note + guided
+│                                #   tutorial + indirect (PMP shooting, complex-step)
+│                                #   for min-time/energy/fuel + mytry/
+├── NLP_lowThrust_GTO_tulip/     # Direct-NLP solvers: min-time/energy/fuel, cone-
+│                                #   elimination, Hermite-Simpson, CasADi+IPOPT.
+│                                #   Min-fuel CAMPAIGN record + next steps in
+│                                #   LOW_THRUST_MINFUEL_CAMPAIGN.md (min-energy is
+│                                #   the homotopy root; many-switch bang-bang open,
+│                                #   needs regularized coords). movie/ has MP4+GIFs.
+├── mpc_cart_pole/               # Model Predictive Control for cart-pole
+│   ├── mpc_cart_pole_demo.m     # MPC controller (N=50 horizon, 20Hz control)
+│   └── mpc_cart_pole_explained.tex  # Step-by-step code walkthrough
+├── lieFiltering/                # Lie group attitude estimation on SO(3)
+│   ├── SO3_Attitude_Filter.tex  # Error-state EKF on SO(3) manifold
+│   └── simulating_IMU_data.tex  # Synthetic IMU data generation
+├── papers/                      # Reference PDFs (Barfoot, Barrau & Bonnabel, etc.)
+└── learning_docs/               # (empty, reserved)
 ```
 
 ## Method: Direct Trapezoidal Collocation
@@ -169,6 +192,28 @@ For better convergence:
 2. Betts, J. "Practical Methods for Optimal Control Using Nonlinear Programming." SIAM, 2010.
 3. Tedrake, R. "Underactuated Robotics" (MIT Course 6.832)
 
+## MPC Cart-Pole
+
+Receding-horizon control for the cart-pole system. Predict-optimize-apply loop at 20 Hz.
+
+- Prediction horizon: N=50 steps
+- Weighted quadratic cost: Q on state error, R on control effort
+- `mpc_cart_pole_explained.tex` walks through the code step by step
+
+## Lie Filtering (lieFiltering/)
+
+SO(3) attitude estimation using error-state EKF on the rotation manifold.
+
+**Key mathematical objects:**
+- SO(3) rotation group, so(3) Lie algebra
+- Exponential map (so(3) → SO(3)) and logarithmic map (SO(3) → so(3))
+- Hat/vee (wedge/vee) operators, skew-symmetric matrices
+- Error-state formulation: small perturbations in the Lie algebra
+
+**Documents:**
+- `SO3_Attitude_Filter.tex` — Full EKF derivation; targeted at engineers who know Kalman filtering but not Lie theory
+- `simulating_IMU_data.tex` — Generating synthetic accelerometer, gyroscope, magnetometer data for filter testing
+
 ## Future Extensions
 
 Potential additions to this repository:
@@ -180,5 +225,6 @@ Potential additions to this repository:
 
 ## Related Projects
 
-- **Lunar navigation (proj7):** `/Users/msc/Desktop/proj7` — uses similar optimization for trajectory design
+- **Navigation** (`~/Desktop/navigation/`) — INS simulation, IMU modeling, SO(3) utilities in `lib/`
+- **proj7** (`~/Desktop/proj7/`) — Tulip constellation GDOP/PDOP, cislunar SDA
 - **Academic goals:** Mastering calculus of variations and optimal control (Goals_2026.tex)

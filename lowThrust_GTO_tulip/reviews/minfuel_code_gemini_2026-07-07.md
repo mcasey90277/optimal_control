@@ -1,0 +1,16 @@
+I have thoroughly reviewed the nine files focusing on the PMP formulation, Jacobian structures, complex-step safety, and algorithmic robustness. 
+
+Here are the findings:
+
+- **[CORRECTNESS]** `lowThrust_GTO_tulip/run_gto_tulip_minfuel.m:52` - Missing `m0` argument in the call to `solve_minfuel_indirect`. The function `solve_minfuel_indirect` explicitly expects 9 arguments starting with `(rv0, m0, rvf, tf, lamGuess, ...)` but the call is `solve_minfuel_indirect(rv0, rvf, tf, lamSeed, ...)`. This silently shifts all subsequent parameters (e.g. `lamSeed` is read as `tf`), completely breaking the TPBVP integration. Fix by inserting `1` (the required initial mass fraction) into the function call: `[lamSol, resNorm] = solve_minfuel_indirect(rv0, 1, rvf, tf, lamSeed, Tmax, c, muStar, [0.03, 0.01, 3e-3, 1e-3]);`.
+
+- **[ROBUSTNESS]** `NLP_lowThrust_GTO_tulip/costate_seed_from_nlp.m:75` - If the arc has absolutely no burns (`s > 0.9` is never true, e.g. for a trivial anomalous transfer), `burnIdx` is empty, causing `k1 = burnIdx(1);` to crash with an index-out-of-bounds error. Recommend wrapping the sign check block in `if ~isempty(burnIdx)`.
+
+- **[ROBUSTNESS]** `NLP_lowThrust_GTO_tulip/costate_seed_from_nlp.m:84` - Edge case where the throttle `s` never switches (e.g. if an arc is a maximum thrust burn the vast majority of the time). `abs(diff(s > 0.5))` will find nothing, and `find` returns empty, causing `min([], numel(tMesh))` to evaluate to `[]` which breaks the index lookup into `tMesh`. Recommend guarding with `if isempty(swIdx), swIdx = 1; end`.
+
+**Verified Correct:**
+*   **PMP Min-Fuel Equations:** `lt_pmp_eom_minfuel.m` (Lines 43-49, 51-53). The switching function `S`, Bertrand-Epenoy smoothed throttle `u(S)`, mass-flow ODE, and costate equations match the necessary conditions for fixed-tf max-mass perfectly. Transversality `lambda_m(tf) = 0` in `shoot_residual_minfuel.m` (Line 42) is correct.
+*   **Complex-Step Safety:** `lt_pmp_eom_minfuel.m` (Lines 34, 43-44) uses `sqrt(sum(.^2))` and non-conjugate `.'` transposition appropriately, avoiding non-analytic functions like `norm()` or `abs()`. `shoot_residual_minfuel.m` (Lines 32-38) properly isolates the imaginary scalar component shift without contaminating it.
+*   **Jacobian Tensors:** `lt_dynamics_throttle.m` (Lines 46-56). The analytic partials $A$ (7x7) and $B$ (7x4) flawlessly encapsulate the analytical dependencies of the slack-throttled ODEs $v\_dot(m, w)$ and $m\_dot(s)$, fully vectorized using 3D implicit expansion.
+*   **Collocation Constraints:** `nlp_constraints_minfuel.m` (Lines 37-56, 70-87). Trapezoidal defect Jacobian logic perfectly matches the identity blocks and scaled analytical partials. The triplet counts (154 entries per segment) are exhaustively accurate. The control slack cone equivalence $w^T w - s^2 = 0$ perfectly removes angular gradient singularities at 0 thrust.
+*   **Costate Reconstruction:** `costate_seed_from_nlp.m` (Lines 63-64, 88-89). The algorithm extracting the base initial state $\lambda(0)$ via stacked matrices built analytically from $\lambda_v \times \alpha = 0$ is outstanding, standardizing the multiplier scale physically without explicitly trusting loosely-converged `fmincon` multipliers.

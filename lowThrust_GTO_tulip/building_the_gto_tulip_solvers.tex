@@ -1,0 +1,737 @@
+% ============================================================================
+% Guided MATLAB coding tutorial: indirect + direct solvers for the
+% minimum-time low-thrust GTO -> tulip transfer (CR3BP).
+% Compile: /Library/TeX/texbin/pdflatex (triple-pass for the TOC).
+% ============================================================================
+\documentclass[11pt,letterpaper]{article}
+\usepackage[margin=1in]{geometry}
+\usepackage{amsmath,amssymb,bm}
+\usepackage{booktabs}
+\usepackage{enumitem}
+\usepackage{xcolor}
+\usepackage[colorlinks=true,linkcolor=blue!70!black,urlcolor=blue!70!black]{hyperref}
+\usepackage{fancyhdr}
+\usepackage{titlesec}
+\usepackage{mathtools}
+\usepackage{tcolorbox}
+
+\pagestyle{fancy}
+\fancyhf{}
+\rhead{GTO $\to$ Tulip Min-Time Solvers --- Guided Exercises}
+\lhead{}
+\rfoot{Page \thepage}
+\setlength{\headheight}{14pt}
+
+\setlength{\parskip}{5pt}
+\setlength{\parindent}{0pt}
+
+\titlespacing*{\section}{0pt}{14pt}{6pt}
+\titlespacing*{\subsection}{0pt}{10pt}{4pt}
+\titlespacing*{\subsubsection}{0pt}{8pt}{3pt}
+
+% --- convenience macros ---
+\newcommand{\R}{\mathbb{R}}
+\newcommand{\T}{^{\mathsf{T}}}
+\newcommand{\half}{\tfrac12}
+\newcommand{\rvec}{\mathbf{r}}
+\newcommand{\vvec}{\mathbf{v}}
+\newcommand{\lamr}{\bm{\lambda}_r}
+\newcommand{\lamv}{\bm{\lambda}_v}
+\newcommand{\lamm}{\lambda_m}
+
+% --- Exercise: what the learner writes (blue) ---
+\newtcolorbox{exercise}[1]{
+  colback=blue!5!white, colframe=blue!50!black, fonttitle=\bfseries,
+  title={Exercise: #1}, sharp corners, boxrule=0.8pt,
+  left=6pt, right=6pt, top=4pt, bottom=4pt}
+
+% --- Hint: partial code / gotcha nudge (yellow) ---
+\newtcolorbox{hint}{
+  colback=yellow!5!white, colframe=yellow!60!black, fonttitle=\bfseries,
+  title={Hint}, sharp corners, boxrule=0.5pt,
+  left=6pt, right=6pt, top=4pt, bottom=4pt}
+
+% --- Checkpoint: a runnable test with VERIFIED expected output (green) ---
+\newtcolorbox{checkpoint}[1]{
+  colback=green!5!white, colframe=green!50!black, fonttitle=\bfseries,
+  title={Checkpoint: #1}, sharp corners, boxrule=0.8pt,
+  left=6pt, right=6pt, top=4pt, bottom=4pt}
+
+\title{\textbf{Building the GTO $\to$ Tulip Minimum-Time Solvers}\\[8pt]
+\large Guided Coding Exercises\\[4pt]
+\normalsize An indirect (PMP shooting) solver and a direct (collocation NLP)
+solver for the low-thrust cislunar transfer behind pumpkynPie's
+\texttt{lowThrust\_GTO\_Tulip.m}}
+\author{}
+\date{July 2026}
+
+\begin{document}
+\maketitle
+\thispagestyle{fancy}
+
+\tableofcontents
+\newpage
+
+% ==========================================================================
+\section{Introduction}
+
+You will build, from scratch, both classical solution machines for a real
+trajectory-optimization problem: the 27.9-day minimum-time low-thrust spiral
+from GTO to a 7-petal southern tulip orbit in the Earth--Moon CR3BP (15\,kg,
+25\,mN, $I_{sp}=2100$\,s). The \textbf{indirect} solver integrates
+Pontryagin's necessary conditions and shoots on the unknown initial
+costates; the \textbf{direct} solver transcribes the trajectory onto a mesh
+and hands up to $10^5$ variables to \texttt{fmincon}. Both must reproduce
+the pumpkyn reference answer:
+\[
+  t_f = 6.290694\ \text{ND} = 27.8845\ \text{days},\qquad
+  m_{\text{prop}} = 2.9247\ \text{kg},\qquad
+  \Delta V = 4.4665\ \text{km/s}.
+\]
+The two ``aha''s you should reach: (i) on a 40-revolution spiral,
+\emph{sensitivity is the whole game} --- it dictates complex-step
+derivatives on the indirect side and density-matched meshes on the direct
+side; (ii) the two methods are one problem wearing two costumes, and they check
+each other to mesh accuracy ($\sim 3\times 10^{-4}$ relative in $t_f$ at
+$N = 12{,}000$, improving under refinement).
+
+\subsection{Prerequisites}
+
+\begin{itemize}[leftmargin=1.6em,nosep]
+  \item The companion theory note \texttt{gto\_tulip\_mintime\_theory.pdf}
+  (this folder): the OCP, the PMP conditions, the transcription. Read it
+  first; this document assumes its notation and derivations.
+  \item \texttt{orbit\_transfer\_exercises.pdf}
+  (\texttt{optimal\_control/orbit\_transfer/}): the two-body min-energy
+  version of exactly this indirect/direct pairing. This tutorial is its
+  CR3BP min-time sequel --- harder in every dimension that matters.
+  \item The CoV/PMP notes \texttt{cov\_pmp\_orbit\_transfer.pdf}
+  (\texttt{myLatex/notes/}) for where the costate ODE and transversality
+  conditions come from.
+  \item A working \texttt{pumpkyn} clone at
+  \texttt{proj7/external/pumpkyn} (used for problem setup and as the
+  reference implementation to test against).
+\end{itemize}
+
+\subsection{What you will build}
+
+Two folders; the min-time build (Phases A--F), then the min-fuel
+extension (Phases G--H):
+
+\begin{center}
+\small
+\begin{tabular}{llp{6.1cm}}
+\toprule
+folder & file & purpose \\
+\midrule
+\texttt{lowThrust\_GTO\_tulip/}
+ & \texttt{lt\_pmp\_eom.m} & 14-state augmented PMP dynamics (state +
+   costate + optimal control law) \\
+ & \texttt{shoot\_residual\_tf.m} & terminal-condition residual + Jacobian
+   (complex step + analytic $t_f$ column) \\
+ & \texttt{solve\_tfmin\_indirect.m} & \texttt{fsolve} shooting driver \\
+ & \texttt{run\_gto\_tulip\_indirect.m} & endpoints via pumpkyn, solve,
+   $\Delta V$ accounting, two-panel figure \\
+\midrule
+\texttt{NLP\_lowThrust\_GTO\_tulip/}
+ & \texttt{lt\_dynamics.m} & 7-state control-explicit dynamics + analytic
+   Jacobians $A, B$ \\
+ & \texttt{unpack\_z.m} & decision-vector bookkeeping \\
+ & \texttt{nlp\_constraints.m} & trapezoidal defects + unit-sphere control
+   equalities, sparse gradient \\
+ & \texttt{build\_guess.m} & density-matched mesh + warm start \\
+ & \texttt{solve\_tfmin\_nlp.m} & \texttt{fmincon} interior-point driver \\
+ & \texttt{NLP\_lowThrust\_GTO\_Tulip.m} & direct-method twin of the
+   pumpkynPie demo \\
+\midrule
+min-fuel (G--H)
+ & \texttt{lt\_pmp\_eom\_minfuel.m} & smoothed min-fuel PMP dynamics \\
+ & \texttt{shoot\_residual\_minfuel.m} & fixed-$t_f$ 7-condition residual \\
+ & \texttt{solve\_minfuel\_indirect.m} & LM + smoothing continuation \\
+ & \texttt{lt\_dynamics\_throttle.m} & 4-control dynamics (throttle) \\
+ & \texttt{nlp\_constraints\_minfuel.m} & fixed-$t_f$ defects + cone \\
+ & \texttt{solve\_minfuel\_nlp.m} & max-$m_f$ NLP, fixed $t_f$ \\
+ & \texttt{NLP\_lowThrust\_GTO\_Tulip\_minfuel.m} & leg-replan driver
+   (direct $\to$ seed $\to$ polish attempt) \\
+ & \texttt{costate\_seed\_from\_nlp.m} & LSQ costate reconstruction \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\subsection{Workspace split}
+
+Build your versions in \texttt{lowThrust\_GTO\_tulip/mytry/} (create an
+\texttt{NLP/} subfolder there for Phase D onward, or a second
+\texttt{mytry/} inside \texttt{NLP\_lowThrust\_GTO\_tulip/}). The parent
+folders hold the reference solutions --- consult them only \emph{after}
+attempting each exercise. Run \texttt{setup\_paths} (in either folder) once
+per session to put pumpkyn on the path.
+
+\subsection{Notation recap}
+
+ND units: length $l^\star = 389{,}703$\,km, time $t^\star = 382{,}981$\,s,
+mass $m_0 = 15$\,kg; $\mu^\star = 0.012150585609624$. State
+$x = (\rvec,\vvec,m) \in \R^7$; costates
+$\lambda = (\lamr,\lamv,\lamm)$. ND thrust acceleration
+$T_{\max} = 0.627292$, exhaust velocity $c = 20.238741$. Hamiltonian
+$H = 1 + \lambda\T f$; primer direction $-\lamv/\|\lamv\|$; switching
+function $S = -\|\lamv\| c/m - \lamm$. NLP decision vector
+$Z = [X(:); W(:); t_f]$ on mesh fractions $\sigma_k$. The demo endpoints
+(GTO departure, tulip arrival) are 6-vectors $rv_0, rv_f$ built by pumpkyn
+calls in the drivers.
+
+\begin{hint}
+Complex-step house rules apply to \emph{every} dynamics file you write
+here, same as \texttt{mlabTools/track\_lib}: magnitudes as
+\texttt{sqrt(sum(x.\^{}2))} never \texttt{norm}, transposes as \texttt{.'}
+never \texttt{'}, no \texttt{abs}, no \texttt{dot}. In Phase B your
+Jacobian will differentiate \emph{through the integrator} with a
+$10^{-20}$ imaginary perturbation --- one \texttt{norm} anywhere in the
+call chain silently zeroes the derivative.
+\end{hint}
+
+% ==========================================================================
+\section{Phase A: the augmented PMP dynamics}
+
+The indirect method needs one workhorse: the 14-dimensional coupled
+state--costate flow with the optimal control law evaluated pointwise from
+the costates (theory note \S3). Everything else is bookkeeping around it.
+
+\begin{exercise}{\texttt{lt\_pmp\_eom.m}}
+Create
+\begin{verbatim}
+function [yDot, Ht, S, aThrust] = lt_pmp_eom(~, y, Tmax, c, muStar)
+\end{verbatim}
+with \texttt{y = [r(3); v(3); m; lambda\_r(3); lambda\_v(3); lambda\_m]}.
+Steps:
+\begin{enumerate}[leftmargin=1.5em,nosep]
+\item Distances to the primaries: $\mathbf d = \rvec + (\mu^\star,0,0)$,
+      $\mathbf s = \rvec - (1{-}\mu^\star,0,0)$; build $g(\rvec)$
+      (centrifugal + two gravity terms) and the Coriolis vector
+      $h(\vvec) = (2\dot y, -2\dot x, 0)$.
+\item The two Jacobians you already know from the theory note: the
+      symmetric $G = \partial g/\partial\rvec$ assembled in matrix form
+      ($\mathrm{diag}(1,1,0)$ minus the two
+      $I/\rho^3 - 3\bm\rho\bm\rho\T/\rho^5$ gravity-gradient blocks) and
+      the constant Coriolis skew $H_c$.
+\item Control law: $\|\lamv\|$, primer direction
+      $\bm\alpha = -\lamv/\|\lamv\|$, switching function
+      $S = -\|\lamv\| c/m - \lamm$, throttle $u = 1$ unless $S > 0$.
+\item Dynamics: $\dot\rvec = \vvec$;
+      $\dot\vvec = g + h + u\,(T_{\max}/m)\,\bm\alpha$;
+      $\dot m = -u\,T_{\max}/c$; costates
+      $\dot\lamr = -G\T\lamv$, $\dot\lamv = -\lamr - H_c\T\lamv$,
+      $\dot\lamm = -\|\lamv\|\,u\,T_{\max}/m^2$.
+\item \texttt{Ht} = $1 + \lamr\T\dot\rvec + \lamv\T\dot\vvec + \lamm\dot m$
+      (guard with \texttt{nargout}); the fourth output is simply the
+      thrust-acceleration vector,
+      \texttt{aThrust} $= u\,(T_{\max}/m)\,\bm\alpha$, handy for plotting.
+\end{enumerate}
+Keep it complex-safe (see the Introduction hint). The reference
+implementation you are re-deriving is \texttt{pumpkyn.cr3bp.tfMinEoM} ---
+do \emph{not} peek at it until Checkpoint A passes; it also carries the
+$14\times14$ analytic STM you are deliberately \emph{not} building
+(Phase B replaces it with ten lines of complex step).
+\end{exercise}
+
+\begin{checkpoint}{A --- EoM agreement with pumpkyn}
+\begin{verbatim}
+setup_paths();
+muStar = 0.012150585609624; tStar = 382981.289129055;
+lStar  = 389703.264829278;
+Tmax = (0.025/15)*tStar^2/(lStar*1000);   % 0.627292100855
+c    = (2100/tStar)*(9.80665*tStar^2/(1000*lStar));
+rv0  = [0.00349629072295 -0.00729625826008 0 ...
+        4.19147893803 8.98865558978 0];
+lam0 = [190.476047002 -79.7060409 -0.4298691 ...
+        0.3011592775 0.5866700046 -0.0071173489 4.329378839]';
+y  = [rv0(:); 1; lam0];
+[yDotMine, HtMine, S] = lt_pmp_eom(0, y, Tmax, c, muStar);
+yDotRef = pumpkyn.cr3bp.tfMinEoM(0, y, Tmax, c, muStar);
+max(abs(yDotMine - yDotRef(1:14)))
+S
+y2 = y; y2(1:3) = [0.5;0.1;0.01]; y2(4:6) = [0.2;0.9;-0.01]; y2(7) = 0.9;
+[yd1] = lt_pmp_eom(0, y2, Tmax, c, muStar);
+yd2 = pumpkyn.cr3bp.tfMinEoM(0, y2, Tmax, c, muStar);
+max(abs(yd1 - yd2(1:14)))
+\end{verbatim}
+Verified expected output:
+\begin{verbatim}
+max|yDot diff| (GTO departure state) ~ 3e-11
+S (departure)                        = -17.6767
+max|yDot diff| (mid-transfer state)  ~ 4.4e-16
+\end{verbatim}
+The departure-state agreement is $10^{-11}$ \emph{absolute}, not
+$10^{-16}$: at 350\,km perigee altitude the gravity-gradient entries reach
+$\sim 10^{9}$ and your matrix-form $G$ rounds differently than pumpkyn's
+expanded scalar polynomials --- relative agreement is still machine-level.
+If instead you see $O(1)$ disagreement in rows 8--13: check the transpose
+and sign in $\dot\lamr = -G\T\lamv$ and the coupling term $-\lamr$ in
+$\dot\lamv$ (the classic ``dropped kinetic coupling'' trap). Row 14 wrong
+$\Rightarrow$ revisit $\dot\lamm$'s $m^2$.
+\end{checkpoint}
+
+% ==========================================================================
+\section{Phase B: the shooting residual and its Jacobian}
+
+The TPBVP (theory note \S3): find $z = [\lambda(0); t_f] \in \R^8$ so that
+integrating the augmented flow from the (fixed) initial state produces
+\[
+  R(z) = \bigl[\rvec(t_f)-\rvec_f;\ \vvec(t_f)-\vvec_f;\ \lamm(t_f);\
+  H(t_f)\bigr] = 0 .
+\]
+
+\begin{exercise}{\texttt{shoot\_residual\_tf.m}}
+Create
+\begin{verbatim}
+function [R, J] = shoot_residual_tf(z, rv0, rvf, Tmax, c, muStar)
+\end{verbatim}
+\begin{enumerate}[leftmargin=1.5em,nosep]
+\item Residual: integrate \texttt{lt\_pmp\_eom} over $[0, z_8]$ from
+      \texttt{[rv0(:); 1; z(1:7)]} with \texttt{ode113} at
+      \texttt{RelTol 1e-12 / AbsTol 1e-14}, evaluate the four blocks above
+      (call the EoM once more at $y_f$ for $H(t_f)$).
+\item Jacobian columns 1--7 by \textbf{complex step}: perturb each costate
+      by $ih\,\max(1,|z_k|)$ with $h = 10^{-20}$, re-integrate, take
+      $\mathrm{imag}(R)/(h\cdot\text{scale})$. (\texttt{ode113} propagates
+      complex states without complaint as long as your EoM is
+      complex-safe.)
+\item Column 8 analytically: the terminal conditions ride the flow, so
+      $\partial R/\partial t_f =
+      [\dot\rvec;\dot\vvec;\dot\lamm;\dot H](t_f)$ --- and $\dot H = 0$
+      exactly (autonomous canonical flow). One EoM call, no integration.
+\end{enumerate}
+\end{exercise}
+
+\begin{hint}
+Why not finite differences? Try it and watch: this arc crosses perigee
+$\sim$40 times and amplifies initial perturbations by $\sim 10^6$, so the
+residual's integration-noise floor sits far above any workable FD step.
+With central FD, \texttt{fsolve}'s dogleg rejects every trial step ---
+first-order optimality frozen at 487, ``locally singular'', zero progress
+from the exact same guess that converges in five iterations with the
+complex-step Jacobian. The theory note's Key Fact box has the full story.
+Also: make the bang-bang branch explicitly complex-step-safe --- write
+\texttt{if real(S) > 0} rather than relying on MATLAB's (real-part, but
+easy-to-misread) complex comparison semantics.
+\end{hint}
+
+\begin{checkpoint}{B --- residual at the pumpkyn solution}
+Rebuild the endpoints in full precision (copy the endpoint-construction
+block from the reference \texttt{run\_gto\_tulip\_indirect.m}, or your own
+Phase-C driver), then evaluate at pumpkyn's converged solution:
+\begin{verbatim}
+zRef = [190.476047002 -79.7060401966 -0.429868646477 ...
+        0.301159276271 0.58667000078 -0.00711734996094 ...
+        4.3293789063 6.2906939607]';
+[R, J] = shoot_residual_tf(zRef, rv0, rvf, Tmax, c, muStar);
+norm(R), R(7), R(8)
+J(:,8)'   % the analytic tf column
+\end{verbatim}
+Verified expected output (endpoints built in full precision --- pasting
+truncated 12-digit endpoint values roughly doubles this floor):
+\begin{verbatim}
+||R||  ~ 4e-5   (sensitivity-limited noise floor)
+R(7)   ~ -3e-7,  R(8) ~ 5e-10
+J(:,8) = [-0.0016 1.155 -0.0027 -25.6 -0.81 -42.8 -0.17 0]
+\end{verbatim}
+Read that last column like an astrodynamicist: rows 1--3 are the arrival
+velocity (it IS $\dot\rvec(t_f) = \vvec_f$), rows 4--6 the $\sim$43-ND
+near-Moon gravity at the tulip point, row 8 exactly 0 ($\dot H = 0$).
+One full \texttt{[R, J]} evaluation costs 8 integrations ($\sim$2\,s).
+If \texttt{J} columns 1--7 come back all zero: something in your call
+chain destroyed the imaginary part --- hunt the \texttt{norm}/\texttt{'}
+/\texttt{abs}.
+\end{checkpoint}
+
+% ==========================================================================
+\section{Phase C: the indirect solve}
+
+\begin{exercise}{\texttt{solve\_tfmin\_indirect.m} and
+\texttt{run\_gto\_tulip\_indirect.m}}
+\begin{enumerate}[leftmargin=1.5em,nosep]
+\item \texttt{solve\_tfmin\_indirect}: wrap \texttt{fsolve}
+      (\texttt{trust-region-dogleg}, \texttt{SpecifyObjectiveGradient
+      true}, \texttt{StepTolerance 1e-12}, $\sim$400 function-evaluation
+      budget) around your residual. Return the solution, $\|R\|$, and the
+      exit flag.
+\item \texttt{run\_gto\_tulip\_indirect}: reproduce the pumpkynPie demo
+      end-to-end --- build the GTO state
+      (\texttt{orb2eci}$\to$\texttt{fromPCI}), the tulip arrival
+      (\texttt{getTulip}$\to$\texttt{prop}, arrival index = max $\dot y$),
+      nondimensionalize the spacecraft, solve from the demo's published
+      \texttt{lambda0\_tf} guess, re-propagate, and report $t_f$,
+      propellant $m_0(1 - m(t_f))$, and
+      $\Delta V = c\,\ln(1/m(t_f))\, l^\star/t^\star$. Add the two-panel
+      (top-down / edge-on) trajectory figure with one coast period of the
+      tulip appended.
+\end{enumerate}
+\end{exercise}
+
+\begin{checkpoint}{C1 --- the transfer, solved}
+\texttt{out = run\_gto\_tulip\_indirect(true);} Verified expected output
+($\sim$25\,s total):
+\begin{verbatim}
+tf         = 6.290694 ND = 27.8845 days
+||R||      ~ 1e-6
+propellant = 2.9247 kg of 15 kg,  dV = 4.4665 km/s
+\end{verbatim}
+$t_f$ agrees with \texttt{pumpkyn.cr3bp.tfMin} (6.2906939607) to
+\emph{eight} significant figures. Expect exit flag $-3$ (``locally
+singular'') \emph{with} a tiny residual: \texttt{fsolve} has hit the
+sensitivity-limited noise floor where no step improves $\|R\|$ --- the
+equation is solved even though the flag sulks. The reference toolbox run
+stalls the same way at $\|f\|^2 = 3\times10^{-17}$.
+\end{checkpoint}
+
+\begin{checkpoint}{C2 --- the basin is tiny (run it, feel it)}
+Perturb the converged solution by 0.1\% on the costates and $+0.05$ on
+$t_f$ and re-solve. Verified result: \texttt{fsolve} exhausts its budget
+at $\|R\| = 0.74$ with $t_f$ wandering past 7.1 --- \emph{divergence from
+a 0.1\% perturbation}. That is single shooting on a $10^6$-sensitivity
+problem: the demo ships converged costates because nothing less converges.
+(Fixes, in increasing effort: continuation in $T_{\max}$ or endpoint,
+multiple shooting, or Phase D's direct method --- which is exactly why it
+exists.)
+\end{checkpoint}
+
+% ==========================================================================
+\section{Phase D: control-explicit dynamics for the NLP}
+
+Move to \texttt{NLP\_lowThrust\_GTO\_tulip/}. The direct method needs the
+dynamics as $f(x, w)$ with the control an \emph{argument} (no costates
+anywhere), plus the Jacobians $A = \partial f/\partial x$,
+$B = \partial f/\partial w$ for the defect gradient. One modeling decision
+is already made for you (theory note \S4): the throttle is \emph{fixed} at
+1 --- Phase A's switching function stays in $[-46.8, -2.5]$, so the
+min-time arc never coasts, and carrying a throttle variable whose warm
+start sits exactly on its bound derails interior-point methods (we
+verified: \texttt{fmincon} shoves the throttle off the wall, coasts
+0.38\,ND, and stalls 2\% suboptimal). Control = unit direction vector
+$\mathbf w$, enforced by $\mathbf w\T\mathbf w = 1$ equalities.
+
+\begin{exercise}{\texttt{lt\_dynamics.m} and \texttt{unpack\_z.m}}
+\begin{verbatim}
+function [F, A, B] = lt_dynamics(X, W, Tmax, c, muStar)   % X 7xM, W 3xM
+function [X, W, tf] = unpack_z(Z, N)
+\end{verbatim}
+\begin{enumerate}[leftmargin=1.5em,nosep]
+\item Vectorize $f$ across nodes (columns): reuse Phase A's $g, h$ math;
+      thrust acceleration $T_{\max}\mathbf w/m$; mass flow constant
+      $-T_{\max}/c$.
+\item Per-node Jacobians in a loop: $A$ gets $I$ (position rows), $G$,
+      $H_c$, and the mass column $-T_{\max}\mathbf w/m^2$; $B$ gets
+      $(T_{\max}/m) I$ in the velocity rows. Return as
+      \texttt{[7x7xM]}, \texttt{[7x3xM]}.
+\item \texttt{unpack\_z}: $Z = [X(:); W(:); t_f]$,
+      $n_Z = 10(N{+}1)+1$.
+\end{enumerate}
+\end{exercise}
+
+\begin{checkpoint}{D --- consistency with Phase A}
+With \texttt{y} the converged departure state from Checkpoint A and
+$\mathbf w$ the primer direction computed from its costates:
+\begin{verbatim}
+lamv = y(11:13); w = -lamv/sqrt(sum(lamv.^2));
+F = lt_dynamics(y(1:7), w, Tmax, c, muStar);
+yDot = lt_pmp_eom(0, y, Tmax, c, muStar);
+max(abs(F - yDot(1:7)))
+\end{verbatim}
+Verified expected output: exactly \texttt{0} (same arithmetic, same
+order; anything visible means your thrust or mass-flow term differs from
+Phase A's).
+\end{checkpoint}
+
+% ==========================================================================
+\section{Phase E: transcription --- defects, sphere, and the mesh that matters}
+
+\begin{exercise}{\texttt{nlp\_constraints.m} and \texttt{build\_guess.m}}
+\begin{enumerate}[leftmargin=1.5em,nosep]
+\item \texttt{nlp\_constraints(Z, sigma, Tmax, c, muStar)}: node times are
+      $t_k = t_f\,\sigma_k$ with \emph{fixed} fractions $\sigma$
+      (so free $t_f$ scales all segment widths $h_k = t_f\,\Delta\sigma_k$
+      smoothly). Equalities: $7N$ trapezoidal defects
+      $x_{k+1}-x_k-\frac{h_k}{2}(f_k+f_{k+1})$ and $N{+}1$ sphere
+      constraints $\mathbf w_k\T\mathbf w_k - 1$. Assemble the sparse
+      gradient from the per-segment blocks
+      ($-I-\frac{h_k}{2}A_k$, $I-\frac{h_k}{2}A_{k+1}$,
+      $-\frac{h_k}{2}B_{(\cdot)}$, and the $t_f$ column
+      $-\frac{\Delta\sigma_k}{2}(f_k+f_{k+1})$) as triplet lists;
+      remember \texttt{fmincon} wants the \emph{transpose} ($n_Z \times
+      n_{ceq}$).
+\item \texttt{build\_guess('indirect', N, ...)}: solve the indirect
+      problem via \texttt{pumpkyn.cr3bp.tfMin}, propagate with
+      \texttt{tfMinProp}, and --- the load-bearing trick --- build
+      $\sigma$ as \textbf{quantiles of the integrator's own adaptive time
+      grid} (equal integrator-steps per segment), so mesh density follows
+      the dynamics. Interpolate states and primer directions onto
+      $\sigma t_f$ (\texttt{pchip}; \texttt{unique} the ode abscissae
+      first).
+\end{enumerate}
+\end{exercise}
+
+\begin{hint}
+Validate the sparse gradient the cheap way before trusting it at
+$N=3000$ --- exactly this recipe:
+\begin{verbatim}
+rng(7); N = 5; nN = N+1; sigma = sort([0; rand(N-1,1); 1]);
+Z = zeros(10*nN+1, 1);
+for k = 1:nN
+  Z((k-1)*7+(1:7)) = [0.4+0.1*randn(3,1); 0.5*randn(3,1); 0.8+0.1*rand];
+  w = randn(3,1);  Z(7*nN+(k-1)*3+(1:3)) = w/norm(w)*0.95;
+end
+Z(end) = 5.5;   % then central FD on ceq with step 1e-7, all 61 columns
+\end{verbatim}
+(the random states sit near $r \approx 0.4$, safely away from both
+primaries). Verified: $n_{ceq} = 41$, $n_Z = 61$, max relative Jacobian
+error \texttt{1.6e-9}, 323 nonzeros. This is the checkpoint that catches
+transposed blocks, wrong $t_f$ columns, and off-by-one node indexing ---
+at $N=5$ you can print the full matrices and \emph{look}.
+\end{hint}
+
+\begin{checkpoint}{E --- the mesh is the message}
+Warm-start defect $\|\cdot\|_\infty$ at the interpolated indirect
+solution, verified:
+\begin{verbatim}
+                     uniform mesh      density-matched mesh
+N = 1500                  --                 4.9e-3
+N = 3000                0.90                 6.4e-4
+N = 6000                  --                 8.1e-5
+N = 12000                 --                 1.6e-5
+\end{verbatim}
+A \emph{uniform} 3000-segment mesh leaves defects of order one --- the
+mesh step (13.4\,min) barely samples the 3.5\,$\times 10^{-3}$-ND perigee
+passes, and \texttt{fmincon} inherits garbage. The density-matched mesh is
+1400$\times$ better at identical cost, and the table drops $\sim 8\times$
+per mesh doubling --- the \emph{local} trapezoidal defect rate $O(h^3)$
+(global trajectory accuracy is $O(h^2)$). If your density-matched numbers
+are much worse: your $\sigma$ probably has equal \emph{time} spacing, not
+equal \emph{integrator-step} spacing.
+\end{checkpoint}
+
+% ==========================================================================
+\section{Phase F: the NLP solve}
+
+\begin{exercise}{\texttt{solve\_tfmin\_nlp.m} and
+\texttt{NLP\_lowThrust\_GTO\_Tulip.m}}
+\begin{enumerate}[leftmargin=1.5em,nosep]
+\item \texttt{solve\_tfmin\_nlp}: objective $J(Z) = Z_{\text{end}}$ with a
+      sparse one-hot gradient; pin $x_1$ and the first six components of
+      $x_{N+1}$ by \texttt{lb = ub}; loose safety bounds everywhere else
+      (states $\pm 3/\pm 12$, mass $[0.3, 1]$, $\mathbf w \in
+      [-1.5,1.5]^3$, $t_f \in [2, 15]$) --- \emph{every} bound strictly
+      inactive at the warm start. \texttt{fmincon} interior-point with
+      \texttt{SpecifyObjectiveGradient}, \texttt{SpecifyConstraintGradient},
+      \texttt{HessianApproximation 'lbfgs'}, and
+      \texttt{InitBarrierParam 1e-6} (the default 0.1 barrier yanks a
+      warm-started iterate far off the solution before pulling it back ---
+      we watched it drive $t_f$ to 4.0 at feasibility 1.1).
+\item \texttt{NLP\_lowThrust\_GTO\_Tulip(N, guessMode, makePlot)}: same
+      endpoint setup as Phase C's driver, then guess $\to$ solve $\to$
+      report $t_f$/propellant/$\Delta V$, max defect, and the node-wise
+      deviation from the indirect arc, plus the demo-style two-panel
+      figure. Do \emph{not} ``validate'' by flying the control open-loop
+      through \texttt{ode113}: on this problem replay diverges ($10^5$\,km)
+      for \emph{any} control including the true optimum --- interpolation
+      error $\times\ 10^6$ amplification. Node-wise trajectory comparison
+      is the honest check.
+\end{enumerate}
+\end{exercise}
+
+\begin{checkpoint}{F --- the direct answer}
+\texttt{out = NLP\_lowThrust\_GTO\_Tulip(12000, 'indirect', true);}
+Verified expected output ($\sim$1\,min; fmincon exit flag 2, step-size
+stall at the solution --- same species as Phase C's flag $-3$):
+\begin{verbatim}
+tf         = 6.288574 ND = 27.8751 days   (indirect: 6.290694 / 27.8845)
+max defect = 1.7e-15
+propellant = 2.9237 kg,  dV = 4.4648 km/s (indirect: 2.9247 / 4.4665)
+max node deviation from indirect arc: 1.0e+03 km, 0.023 km/s
+\end{verbatim}
+And the part worth staring at --- the mesh-refinement convergence of the
+\emph{discrete} optimum toward the continuous one (each $\sim$0.5--1\,min):
+\begin{verbatim}
+N =  3000:  tf ~ 6.2658    (error -2.5e-2, node dev 11,000 km)
+N =  6000:  tf = 6.281802   (error -8.9e-3, node dev  3,970 km)
+N = 12000:  tf = 6.288574   (error -2.1e-3, node dev  1,010 km)
+\end{verbatim}
+(Quote the $N{=}3000$ value loosely: at coarse-mesh accuracy the stall
+point scatters by $\sim 10^{-3}$ across numerically equivalent code
+variants --- the valley is that flat. It sharpens as $N$ grows: the finer
+meshes reproduce to 7 digits.)
+Defects sit at machine zero at EVERY N --- the discrete dynamics are
+solved exactly --- yet $t_f$ is \emph{below} the true optimum and climbs
+back as the mesh refines. The optimizer is (legitimately!) exploiting
+trapezoidal discretization error near perigee: coarse-mesh physics is
+slightly wrong physics, and a minimizer will always find the flaw. This is
+why direct-method answers are quoted \emph{with} a refinement study, never
+from one mesh.
+If \texttt{fmincon} instead wanders off (objective plunging while
+feasibility grows): you are seeing the warm-start/barrier failure modes
+this phase's settings exist to prevent --- check \texttt{InitBarrierParam}
+and that no bound is active at $Z_0$.
+\end{checkpoint}
+
+% ==========================================================================
+\section{Phase G: min-fuel --- the machinery, and the trap}
+
+Everything so far never used the switching function --- min-time burns
+always. Min-fuel (theory note \S6) is posed on the ARRIVAL LEG as a
+mid-transfer replan: start from the min-time arc's state at
+$\tau = 4.0$ (with its remaining mass $m_0 = 0.876$), leg time fixed at
+$1.3\times$ the leg's minimum ($t_f = 2.9779$ ND $= 13.20$ days), arrival
+at the tulip point one ballistic coast downstream. The throttle law
+becomes bang-bang on $S = 1 - \|\lamv\|c/m - \lamm$, smoothed for
+numerics by $u_\varepsilon = (1 - \tanh(S/2\varepsilon))/2$.
+
+\begin{exercise}{\texttt{lt\_pmp\_eom\_minfuel.m}, \texttt{shoot\_residual\_minfuel.m}, \texttt{solve\_minfuel\_indirect.m}}
+\begin{enumerate}[leftmargin=1.5em,nosep]
+\item Copy \texttt{lt\_pmp\_eom.m}; add \texttt{epsSmooth} as a trailing
+      parameter; replace the switching function and throttle with the
+      min-fuel forms above; in \texttt{Ht}, \emph{replace} the min-time
+      running cost $1$ with $\tfrac{T_{\max}}{c}u$ (the bare $1$ belongs
+      to min-time only). Costate ODEs unchanged (envelope theorem ---
+      the smoothed $u$ is an \emph{interior} minimizer of the smoothed
+      $H$).
+\item The residual has SEVEN unknowns and seven conditions:
+      $[\rvec(t_f)-\rvec_f;\ \vvec(t_f)-\vvec_f;\ \lamm(t_f)]$, with
+      $t_f$ fixed and the initial mass a parameter (the leg starts at
+      $m_0 < 1$) --- no $H(t_f)$ row, no $t_f$ column. Jacobian by
+      complex step exactly as in Phase B.
+\item \texttt{solve\_minfuel\_indirect(rv0, m0, rvf, tf, lamGuess,
+      Tmax, c, muStar, epsSchedule)}: wrap \texttt{lsqnonlin}
+      (Levenberg--Marquardt, gradient on) in an
+      $\varepsilon$-continuation loop, re-seeding each solve from the
+      previous converged costates. Use LM rather than \texttt{fsolve}'s
+      trust-region-dogleg: measured on this problem, LM makes $4\times$
+      the residual progress per iteration budget.
+\end{enumerate}
+\end{exercise}
+
+\begin{checkpoint}{G --- the saturation trap (run it, learn it)}
+This diagnostic runs on the FULL transfer (everything is already in
+hand from Phase C: its endpoints, $m_0 = 1$, $t_f = 1.2 \times 6.2907$
+ND, and its converged costates $z(1{:}7)$ as the seed). Seed the
+shooting with the \emph{raw} min-time costates and watch it stall at
+$\|R\| = 1.55$: with $\|\lamv\|c \approx 13$ the switching function sits
+near $-17$, $\tanh$ saturates, $\partial u/\partial S \sim 10^{-8}$, and
+the Jacobian is blind in the throttle channel. Verify the scale anchor:
+the min-fuel ``$+1$'' fixes an absolute costate gauge
+($S(0) = -16.7$ raw; rescaling by $1/\|\lamv(0)\|c$ gives
+$S(0) = -0.32$). Rescaling alone still stalls ($\|R\| = 0.83$) --- the
+min-fuel costate \emph{ratio} $\lamr/\lamv$ differs structurally from
+min-time, which is why Phase H builds the seed from the direct solution
+instead.
+\end{checkpoint}
+
+% ==========================================================================
+\section{Phase H: min-fuel --- direct finds, indirect (tries to) certify}
+
+The throttle returns as a decision variable --- the general 4-control
+transcription the theory note kept alive is now the one you build.
+
+\begin{exercise}{\texttt{lt\_dynamics\_throttle.m}, \texttt{nlp\_constraints\_minfuel.m}, \texttt{solve\_minfuel\_nlp.m}, \texttt{costate\_seed\_from\_nlp.m}, driver}
+\begin{enumerate}[leftmargin=1.5em,nosep]
+\item \texttt{lt\_dynamics\_throttle}: control vector $[\mathbf w;\,s]$
+      (reserving $u$ for the PMP throttle),
+      thrust $T_{\max}\mathbf w/m$, mass flow $-T_{\max}s/c$; $B$ is now
+      $7\times4$ with $\partial\dot m/\partial s = -T_{\max}/c$.
+\item \texttt{nlp\_constraints\_minfuel}: $t_f$ is a \emph{parameter} ---
+      $Z = [X(:); U(:)]$, $n_Z = 11(N{+}1)$, widths
+      $h_k = t_f\Delta\sigma_k$ constants, no $t_f$ column. Cone
+      $\mathbf w\T\mathbf w - s^2 = 0$, gradient $[2\mathbf w; -2s]$.
+\item \texttt{solve\_minfuel\_nlp}: objective $-m_{N+1}$ (linear,
+      one-hot gradient), $s \in [0,1]$, initial mass pinned at the leg's
+      $m_0$.
+\item \texttt{costate\_seed\_from\_nlp(tMesh, X, U, Tmax, c, muStar)}:
+      the covector mapping done properly. Integrate the LINEAR costate
+      ODE $\dot\lambda = -A(t)\T\lambda$ once along the NLP arc as a
+      $7\times7$ transition matrix $\Psi(t)$ (49 stacked ODEs,
+      \texttt{pchip}-interpolated $X, U$); stack the homogeneous rows
+      $\lamv(t_k)\times\bm\alpha_k = \mathbf 0$ at $\sim$120 thinned
+      burn nodes plus $\lamm(t_f) = 0$; take the smallest right
+      singular vector; fix the sign (thrust must \emph{oppose}
+      $\lamv$) and the scale ($S = 0$ at the first throttle switch).
+\item The driver (\texttt{NLP\_lowThrust\_GTO\_Tulip\_minfuel.m})
+      builds the BURN+COAST warm start: the min-time tail
+      (throttle $\to 0.98$) followed by a ballistic coast (throttle
+      $0.02$), targets the coast terminus, meshes density-matched on the
+      concatenated arc, and sets $\mathbf w = s\,\bm\alpha$ so the cone
+      holds exactly. Two constructions that fail instructively first: a
+      time-stretched arc (defects $\sim 0.04$ everywhere, fmincon
+      grinds) and pinning the original $\rvec_f$ (one $O(0.3)$-ND defect
+      cliff; feasibility mode returns flag $-2$).
+\end{enumerate}
+\end{exercise}
+
+\begin{checkpoint}{H1 --- the direct min-fuel answer}
+Gradcheck first (same $N=5$ recipe as Phase E, throttle in $[0.3,0.9]$):
+verified $n_{ceq} = 41$, $n_Z = 66$, max relative error \texttt{1.4e-9},
+304 nonzeros; and \texttt{lt\_dynamics\_throttle} with
+$u = [u_\varepsilon\bm\alpha;\,u_\varepsilon]$ matches
+\texttt{lt\_pmp\_eom\_minfuel} rows 1--7 exactly (diff \texttt{0}). Then
+\texttt{out = NLP\_lowThrust\_GTO\_Tulip\_minfuel(3000, 1.3, 4.0, true);}
+Verified expected output:
+\begin{verbatim}
+warm-start max defect ~ 9.5e-05   (burn+coast: feasible by construction)
+NLP: flag 2 (or 0), max defect ~ 2e-15
+propellant = 1.0622 kg  (burn+coast reference: 1.0650)
+burn fraction = 76.9%, single switch at t = 2.2907 = tfMinLeg
+\end{verbatim}
+The throttle plot is clean bang-bang: $s$ pinned at 1, one switch, then
+pinned at 0 --- structure emerging from \emph{bound-active variables},
+no switching function anywhere. The optimum trims 0.3\% from the
+reference by throttle redistribution; with the phase-shifted target the
+burn-then-coast profile is nearly optimal by construction.
+\end{checkpoint}
+
+\begin{checkpoint}{H2 --- the boss fight, quantified (expected: no convergence)}
+The driver then reconstructs a shooting seed from the NLP solution with
+your \texttt{costate\_seed\_from\_nlp} (exercise item 4) --- the
+covector mapping done properly; by contrast, fmincon's own
+multiplier estimates at an l-BFGS stall are $\sim$100$\times$ off in
+scale (printed by the driver for comparison). Verified seed progression,
+each strategy an order better, none inside the basin:
+\begin{verbatim}
+raw min-time costates (full)      ||R|| stalls at 1.55
+rescaled min-time costates (full) ||R|| stalls at 0.83
+switch-anchored min-time (leg)    ||R|| stalls at 0.33
+LSQ costate reconstruction (leg)  ||R|| stalls at 0.14
+\end{verbatim}
+If your numbers land in this range, your implementation is
+\emph{correct} --- the min-fuel shooting basin on a multi-revolution
+CR3BP leg is simply smaller than the best seed available at this level
+of machinery. Getting inside it takes switch-time (multi-arc) shooting
+with event detection, direct multiple shooting, or a solver with
+converged multipliers --- see What Comes Next.
+\end{checkpoint}
+
+% ==========================================================================
+\section{What comes next}
+
+\begin{enumerate}[leftmargin=1.6em]
+\item \textbf{Close the min-fuel boss fight}: switch-time (multi-arc)
+      shooting --- make the switch instants explicit unknowns with $S=0$
+      interior conditions and event-detected integration between them ---
+      or direct multiple shooting. These are the standard escalations
+      for exactly this failure mode; neither is verified here, and
+      converting Checkpoint H2's $\|R\| = 0.14$ into a converged
+      indirect solution is the open exercise. The impulsive
+      limit and Lawden's conditions (P-OC6) follow.
+\item \textbf{Hermite--Simpson} defects: fourth-order accuracy, midpoint
+      controls; the warm-start defect table of Checkpoint E should drop
+      by orders of magnitude at fixed $N$.
+\item \textbf{Adaptive mesh refinement}: re-mesh from your own solution's
+      defect distribution (Betts Ch.~4) instead of borrowing the
+      integrator's step density.
+\item \textbf{Continuation}: solve at $10\times$ thrust (easy, few revs),
+      walk $T_{\max}$ down to 25\,mN re-warm-starting each step --- the
+      standard cure for Checkpoint C2's tiny basin, no published costates
+      needed.
+\item \textbf{Covector mapping}: extract the KKT multipliers of the defect
+      constraints from \texttt{fmincon}'s \texttt{lambda.eqnonlin} and
+      compare against the indirect costates along the arc --- the two
+      methods' bookkeeping meets in one plot.
+\end{enumerate}
+
+\end{document}

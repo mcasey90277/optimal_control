@@ -1,0 +1,609 @@
+\documentclass[11pt,letterpaper]{article}
+\usepackage[margin=1in]{geometry}
+\usepackage{amsmath,amssymb,amsthm,bm}
+\usepackage{booktabs}
+\usepackage{enumitem}
+\usepackage{xcolor}
+\usepackage[colorlinks=true,linkcolor=blue!70!black,urlcolor=blue!70!black]{hyperref}
+
+\newtheoremstyle{noteplain}{0.6em}{0.6em}{}{}{\bfseries}{.}{ }{}
+\theoremstyle{noteplain}
+\newtheorem*{remark}{Remark}
+\newtheorem*{pitfall}{Pitfall}
+\newtheorem*{keyfact}{Key fact}
+
+\newcommand{\R}{\mathbb{R}}
+\newcommand{\T}{^{\mathsf{T}}}
+\newcommand{\half}{\tfrac12}
+\newcommand{\rvec}{\mathbf{r}}
+\newcommand{\vvec}{\mathbf{v}}
+\newcommand{\lamr}{\bm{\lambda}_r}
+\newcommand{\lamv}{\bm{\lambda}_v}
+\newcommand{\lamm}{\lambda_m}
+\newcommand{\code}[1]{\texttt{#1}}
+
+\setlength{\parskip}{5pt}
+\setlength{\parindent}{0pt}
+
+\title{\textbf{Minimum-Time Low-Thrust Transfer from GTO to a Tulip Orbit}\\[6pt]
+\large The optimal control problem behind \code{lowThrust\_GTO\_Tulip.m},\\
+formulated, and solved two ways (indirect PMP shooting / direct NLP)}
+\author{}
+\date{July 2026}
+
+\begin{document}
+\maketitle
+
+\noindent\textit{Companion documents: the guided coding tutorial
+\code{building\_the\_gto\_tulip\_solvers.tex} (same folder), the min-energy
+CoV/PMP notes \code{cov\_pmp\_orbit\_transfer.tex} (\code{myLatex/notes/}),
+and the two-body guided build \code{orbit\_transfer\_exercises.tex}
+(\code{optimal\_control/orbit\_transfer/}). Reference implementation:
+\code{pumpkyn.cr3bp.\{tfMinEoM,tfMin,tfMinProp\}}; demo being explained:
+pumpkynPie \code{Demos/LunaNet Analysis/lowThrust\_GTO\_Tulip.m}.}
+
+\section{The problem, in words, and its vocabulary}
+
+A 15-kg spacecraft sits in a \textbf{geostationary transfer orbit} around
+Earth. It carries an electric thruster that can push with at most 25\,mN at a
+specific impulse of 2100\,s. We want to steer it, thrusting continuously or
+coasting as it pleases, so that it arrives --- position \emph{and} velocity
+matched, a true rendezvous --- on a 7-petal southern \textbf{tulip orbit} of the
+Earth--Moon system, in the least possible time. The answer produced by the
+reference implementation: about 27.9 days, 2.9\,kg of propellant, 4.47\,km/s
+of delta-V, thrusting the entire way.
+
+\subsection*{Vocabulary}
+
+\begin{description}[leftmargin=1.6em,style=nextline]
+  \item[GTO (geostationary transfer orbit).] The highly eccentric orbit a
+  launcher drops you into on the way to GEO: perigee at low-Earth altitude
+  (here 350\,km), apogee at geostationary altitude (35{,}786\,km). Semi-major
+  axis $a = 24{,}446$\,km, eccentricity $e = 0.7248$, period
+  $P_0 \approx 10.6$\,h. The demo takes argument of perigee
+  $\omega = -25^\circ$, equatorial ($i=0$).
+  \item[CR3BP (circular restricted three-body problem).] Earth and Moon move
+  on circles about their barycenter; the spacecraft has negligible mass. In
+  the frame that \emph{rotates with the pair}, the primaries sit still at
+  $(-\mu^\star,0,0)$ (Earth) and $(1-\mu^\star,0,0)$ (Moon), with
+  $\mu^\star = m_2/(m_1{+}m_2) = 0.01215$ the \textbf{mass ratio}. The price
+  of a still landscape: centrifugal and Coriolis accelerations in the
+  dynamics.
+  \item[Nondimensional (ND) units.] Lengths in units of the Earth--Moon
+  distance $l^\star = 389{,}703$\,km, times in units of
+  $t^\star = 382{,}981$\,s ($\approx 4.43$\,days; one Moon revolution is
+  $2\pi$), masses in units of the initial spacecraft mass $m_0$. In these
+  units the gravitational constant and the primaries' total mass are both 1.
+  Thrust acceleration and exhaust velocity nondimensionalize as
+  $\tilde T_{\max} = (T_{\max}/m_0)\,t^{\star 2}/(1000\,l^\star)$ (the demo's
+  0.627) and $\tilde c = I_{sp}\,g_0\,t^\star/(1000\,l^\star) \approx 20.24$
+  (the dimensional exhaust velocity $I_{sp} g_0 = 20.59$\,km/s, made ND).
+  \item[Tulip orbit.] A sidereal-resonant three-body orbit family (Koblick \&
+  Kelly 2025) whose trace over the Moon's surface draws petals; the target
+  here is the 7-petal, southern-hemisphere family member with ND period
+  $\tau_0 = \tfrac{5}{6}\,2\pi \approx 5.236$ ($\approx 23.2$\,days) --- the
+  same family the lunar-navigation constellation work uses.
+  \item[Specific impulse $I_{sp}$ / exhaust velocity $c$.] Propellant
+  efficiency: $c = I_{sp} g_0$ is the effective exhaust speed, and mass flows
+  at $\dot m = -T/c$ when thrusting at force $T$. High $I_{sp}$ (2100\,s,
+  typical for electric propulsion) means grams per hour, not kilograms per
+  minute --- hence spirals that take weeks.
+  \item[Rendezvous vs.\ intercept.] We must match the target's position
+  \emph{and velocity} at arrival (rendezvous, 6 terminal conditions), not
+  merely cross its path (intercept, 3).
+  \item[Primer vector.] Lawden's name for the object that steers an optimal
+  rocket: (minus) the velocity costate. Optimal thrust points along
+  $-\lamv/\|\lamv\|$.
+  \item[Switching function.] The scalar whose sign gates the throttle in the
+  optimal control law; for min-time, $S = -\|\lamv\|\tilde c/m - \lamm$, with
+  full thrust when $S<0$ and coast when $S>0$.
+  \item[TPBVP (two-point boundary-value problem).] The ODE problem the
+  indirect method produces: conditions at both $t_0$ and $t_f$, so you cannot
+  just integrate forward --- you must \emph{shoot}: guess the missing initial
+  data, integrate, and Newton-correct the terminal mismatch.
+  \item[Transcription / defect.] The direct method's move: replace continuous
+  trajectories by their values on a mesh and the ODE by algebraic
+  \textbf{defect constraints} (the mismatch of a quadrature rule across each
+  mesh interval), turning optimal control into a finite-dimensional NLP.
+\end{description}
+
+\subsection*{Geometry of the transfer}
+
+The GTO state is built dimensionally (orbital elements $\to$ Earth-centered
+inertial via \code{orb2eci}) and mapped into the rotating ND barycentric
+frame (\code{fromPCI}). The tulip arrival point is chosen heuristically as
+the point of maximum $\dot y$ along one tulip period; departure is the GTO
+state at epoch. Both endpoints are then \emph{fixed} 6-vectors
+$(\rvec_0,\vvec_0)$ and $(\rvec_f,\vvec_f)$ --- the transfer-geometry choices
+live entirely outside the optimization. Strictly, then, this is rendezvous
+with a \emph{fixed sampled state} on the tulip, not with the orbit as a set:
+leaving the arrival phase free would add one more decision variable and a
+transversality condition along the target orbit's flow direction.
+
+\section{The optimal control problem}
+
+\textbf{State} $x = (\rvec, \vvec, m) \in \R^7$: position and velocity in the
+rotating ND frame, plus mass fraction $m \in (0,1]$. Because gravity is
+singular at the primaries, the state space is
+$\bigl(\R^3\setminus\{\rvec_E,\rvec_M\}\bigr)\times\R^3\times(0,1]$ with
+$\rvec_E = (-\mu^\star,0,0)$, $\rvec_M = (1-\mu^\star,0,0)$.
+
+\textbf{Control.} Throttle $u \in [0,1]$ and unit thrust direction
+$\bm\alpha$, $\|\bm\alpha\| = 1$: the admissible set is a solid ball scaled
+by $T_{\max}$ --- compact, and crucially the throttle enters \emph{linearly}.
+
+\textbf{Dynamics.} With $g(\rvec)$ collecting gravity + centrifugal terms and
+$h(\vvec)$ the Coriolis term,
+\begin{equation}\label{eq:dyn}
+  \dot\rvec = \vvec,\qquad
+  \dot\vvec = g(\rvec) + h(\vvec) + u\,\frac{T_{\max}}{m}\,\bm\alpha,\qquad
+  \dot m = -u\,\frac{T_{\max}}{c},
+\end{equation}
+where, writing $\mathbf d = \rvec - \rvec_E$, $\mathbf s = \rvec - \rvec_M$,
+$d = \|\mathbf d\|$, $s = \|\mathbf s\|$,
+\[
+  g(\rvec) = \begin{pmatrix} x \\ y \\ 0\end{pmatrix}
+  - (1-\mu^\star)\frac{\mathbf d}{d^3}
+  - \mu^\star\frac{\mathbf s}{s^3},
+  \qquad
+  h(\vvec) = \begin{pmatrix} 2\dot y \\ -2\dot x \\ 0 \end{pmatrix}.
+\]
+($T_{\max}$ and $c$ are the ND values; $T_{\max}/m$ is the instantaneous
+max thrust acceleration --- it \emph{grows} as propellant burns off.)
+
+\textbf{Cost and boundary conditions.} Minimize
+$J = t_f = \int_0^{t_f} 1\,dt$ (Lagrange form with $L \equiv 1$) subject to
+\[
+  x(0) = (\rvec_0, \vvec_0, 1),\qquad
+  \rvec(t_f) = \rvec_f,\quad \vvec(t_f) = \vvec_f,
+  \qquad t_f\ \text{free},\quad m(t_f)\ \text{free}.
+\]
+
+\begin{remark}[the terminal manifold]
+The target set is the one-dimensional submanifold
+\[
+  \mathcal{M} = \{\, x \in \R^7 : \rvec = \rvec_f,\ \vvec = \vvec_f \,\}
+\]
+--- a line in the mass direction (codimension 6). Its tangent space at the
+arrival point is spanned by $\partial/\partial m$ alone. Transversality says
+$\lambda(t_f)$ lies in the \emph{normal} space of $\mathcal M$: the six
+components along the pinned rendezvous directions ($\lamr,\lamv$) remain
+free multipliers, determined by solving the TPBVP, while orthogonality to
+the one free (tangent) direction kills the mass component,
+$\lamm(t_f) = 0$. One free boundary direction $\Leftrightarrow$ one scalar
+costate condition --- the same pinned/free complementarity as the
+$2n$-bookkeeping table in the CoV notes.
+\end{remark}
+
+\section{The indirect route: PMP, all ODEs, all boundary conditions}
+
+\subsection*{Hamiltonian and costates}
+
+With costates $\lambda = (\lamr, \lamv, \lamm) \in \R^7$ adjoined to
+\eqref{eq:dyn} (normal-multiplier convention, $H = L + \lambda\T f$ with
+$\lambda_0 = 1$; abnormal extremals are not an issue for this transfer):
+\begin{equation}\label{eq:ham}
+  H = 1 + \lamr\T\vvec
+      + \lamv\T\Bigl(g + h + u\,\tfrac{T_{\max}}{m}\bm\alpha\Bigr)
+      - \lamm\,u\,\tfrac{T_{\max}}{c}.
+\end{equation}
+
+\subsection*{Minimizing $H$ over the control: primer direction and bang-bang throttle}
+
+$H$ depends on the control through
+$u\,\bigl[\tfrac{T_{\max}}{m}\lamv\T\bm\alpha - \lamm \tfrac{T_{\max}}{c}\bigr]$.
+For fixed $u > 0$ the direction minimizing $\lamv\T\bm\alpha$ over the unit
+sphere is
+\begin{equation}\label{eq:primer}
+  \bm\alpha^* = -\frac{\lamv}{\|\lamv\|}
+\end{equation}
+--- Lawden's \textbf{primer direction} (thrust opposes the velocity costate).
+Substituting back, the $u$-dependent part of $H$ becomes
+$u\,\tfrac{T_{\max}}{c}\,S$ with the \textbf{switching function}
+\begin{equation}\label{eq:switch}
+  S = -\frac{\|\lamv\|\,c}{m} - \lamm ,
+\end{equation}
+and since $H$ is \emph{linear} in $u$ on $[0,1]$, PMP gives the bang-bang law
+\begin{equation}\label{eq:bang}
+  u^* = \begin{cases} 1 & S < 0\\ 0 & S > 0 \end{cases}
+\end{equation}
+(singular arcs would need $S \equiv 0$ over an interval). Note this is
+exactly the seam from the CoV notes: $\partial H/\partial u = 0$ has no
+interior solution; the argmin form of PMP is doing real work here, not
+just relabeling stationarity. On this particular transfer the solution
+never coasts --- $S$ stays negative the whole way (verified numerically:
+$S \in [-46.8, -2.5]$) --- which is typical of min-\emph{time} problems:
+idling never helps you arrive sooner unless geometry says otherwise.
+
+\subsection*{The costate ODEs}
+
+$\dot\lambda = -\partial H/\partial x$ gives, with
+$G(\rvec) = \partial g/\partial \rvec$ (symmetric; the CR3BP
+gravity-gradient-plus-centrifugal matrix) and
+$H_c = \partial h/\partial \vvec$ (the constant Coriolis skew matrix),
+\begin{equation}\label{eq:costates}
+  \dot\lamr = -G\T\lamv,\qquad
+  \dot\lamv = -\lamr - H_c\T\lamv,\qquad
+  \dot\lamm = -\frac{\|\lamv\|\,u\,T_{\max}}{m^2},
+\end{equation}
+\[
+  G = \mathrm{diag}(1,1,0)
+    - (1-\mu^\star)\Bigl(\frac{I}{d^3} - \frac{3\,\mathbf d\mathbf d\T}{d^5}\Bigr)
+    - \mu^\star\Bigl(\frac{I}{s^3} - \frac{3\,\mathbf s\mathbf s\T}{s^5}\Bigr),
+  \qquad
+  H_c = \begin{pmatrix} 0&2&0\\ -2&0&0\\ 0&0&0\end{pmatrix}.
+\]
+The mass costate is driven by the thrust term's $1/m$: burning propellant
+makes future thrust more effective, and $\lamm$ prices that.
+Fourteen ODEs in all: \eqref{eq:dyn} with
+\eqref{eq:primer}--\eqref{eq:bang} substituted, plus \eqref{eq:costates}.
+
+\subsection*{Boundary conditions and the TPBVP}
+
+Unknowns: the seven initial costates $\lambda(0)$ and the transfer time
+$t_f$ --- eight numbers. Conditions: eight.
+\begin{center}
+\begin{tabular}{lll}
+\toprule
+condition & count & origin \\
+\midrule
+$\rvec(t_f) - \rvec_f = 0$ & 3 & rendezvous (state pinned on $\mathcal M$)\\
+$\vvec(t_f) - \vvec_f = 0$ & 3 & rendezvous \\
+$\lamm(t_f) = 0$ & 1 & transversality: $m(t_f)$ free (tangent to $\mathcal M$)\\
+$H(t_f) = 0$ & 1 & transversality: $t_f$ free, autonomous, $L$ paid in $J$\\
+\bottomrule
+\end{tabular}
+\end{center}
+$x(0)$ is fully pinned, so $\lambda(0)$ is fully free (shoot on it);
+initial mass is fixed at 1. The free-time condition is the usual
+$H(t_f) = 0$ for autonomous systems with no terminal cost; since the
+canonical flow conserves $H$, it holds along the whole optimal arc.
+
+\begin{keyfact}[sensitivity, and why finite differences die here]
+The transfer spirals through $\sim$40 perigee passes. Each pass amplifies
+upstream perturbations; end-to-end the flow magnifies initial costate
+perturbations by $\sim 10^6$ (the converged $\lamr(0)$ components are
+$O(100)$ while terminal conditions are $O(10^{-5})$-sensitive). Two
+consequences. (i) Integrate \emph{tight}: RelTol $10^{-12}$; at $10^{-10}$
+the terminal state is only reproducible to $\sim 5\times 10^{-4}$ ND.
+(ii) Finite-difference Jacobians across an adaptive integrator are unusable
+--- the residual's numerical noise floor swamps the difference quotient, and
+\code{fsolve} stalls at the initial point reporting ``locally singular''
+(verified: it rejects every trial step). The fix is an
+\emph{exact-derivative} path: either the analytic $14\times 14$ variational
+system (what \code{pumpkyn.cr3bp.tfMinEoM} carries, propagating the STM
+alongside the states), or \textbf{complex-step differentiation} of the
+residual, which costs seven extra complex integrations and needs only
+complex-safe dynamics code (\code{sqrt(sum(x.\^{}2))} not \code{norm},
+\code{.'} not \code{'} --- the house rules from
+\code{mlabTools}). The $t_f$-column of the Jacobian is free:
+$\partial R/\partial t_f = (\dot\rvec,\dot\vvec,\dot\lamm,\dot H)(t_f)$ with
+$\dot H = 0$ by autonomy.
+\end{keyfact}
+
+\subsection*{What the demo's magic numbers are}
+
+The vector \code{lambda0\_tf} hard-coded in \code{lowThrust\_GTO\_Tulip.m}
+is a \emph{converged} $(\lambda(0), t_f)$ for exactly this problem
+instance --- indirect methods have small convergence basins, and shipping
+the answer as the guess is standard demo practice. Change the endpoints,
+thrust, or $I_{sp}$ and it must be re-found (by continuation: solve an easy
+neighbor, walk the parameter).
+
+\section{The direct route: transcription to an NLP}
+
+Forget costates. Discretize $[0,t_f]$ into $N$ segments with \emph{fixed}
+normalized node fractions $0 = \sigma_1 < \dots < \sigma_{N+1} = 1$, node
+times $t_k = t_f\sigma_k$, segment widths
+$h_k = t_f\,\Delta\sigma_k$ (uniform spacing is the special case
+$\Delta\sigma_k = 1/N$); make decision variables of
+\[
+  Z = \bigl[\,X(:);\ U(:);\ t_f\,\bigr],\qquad
+  X = [x_1,\dots,x_{N+1}] \in \R^{7\times(N+1)},\quad
+  U = [u_1,\dots,u_{N+1}] \in \R^{4\times(N+1)},
+\]
+where each node control is $u_k = (\mathbf w_k, s_k)$: a thrust-direction
+vector $\mathbf w$ and throttle $s$. Impose:
+\begin{itemize}[leftmargin=1.6em]
+  \item \textbf{Trapezoidal defects} (the dynamics, weakly):
+  \[
+    d_k = x_{k+1} - x_k - \frac{h_k}{2}\bigl(f(x_k,u_k) + f(x_{k+1},u_{k+1})\bigr)
+    = 0, \qquad k = 1,\dots,N \quad (7N\ \text{equations}),
+  \]
+  with $f$ from \eqref{eq:dyn} using thrust acceleration
+  $T_{\max}\mathbf w/m$ and mass flow $-T_{\max}s/c$. Note
+  $h_k = t_f\,\Delta\sigma_k$ carries the free final time into every
+  defect.
+  \item \textbf{Throttle cone} $\mathbf w_k\T\mathbf w_k = s_k^2$,
+  $0 \le s_k \le 1$ ($N{+}1$ equations): direction magnitude tied to the
+  throttle that meters mass flow.
+  \item \textbf{Endpoint pinning} via bounds ($lb = ub$): $x_1 = (\rvec_0,
+  \vvec_0, 1)$, and the first six components of $x_{N+1}$ to
+  $(\rvec_f,\vvec_f)$; terminal mass free.
+  \item \textbf{Objective} $J(Z) = t_f$ (linear).
+\end{itemize}
+
+\begin{pitfall}[the ballast exploit]
+It is tempting to relax the cone to
+$\mathbf w\T\mathbf w \le s^2$ (``you may thrust less than the throttle'').
+Do not: mass flow is $-T_{\max}s/c$, so the optimizer can set
+$s > \|\mathbf w\|$ and \emph{dump propellant without thrusting} --- lighter
+spacecraft, larger $T_{\max}/m$, faster transfer, nonphysical. In a
+min-time problem mass is not free to waste \emph{unless wasting it pays};
+here it would. Equality closes the hole. The general rule: a physical model must
+either tie $\|\mathbf w\| = s$ or meter mass flow by the \emph{actual}
+thrust magnitude; the exploit appears exactly when $s$ can exceed
+$\|\mathbf w\|$. (The equality's smooth-at-zero form is also why we don't
+put $\|\mathbf w\|$ itself in the dynamics.)
+\end{pitfall}
+
+\subsection*{The min-time specialization actually implemented}
+
+For \emph{this} problem the throttle variable can be eliminated before the
+solver ever sees it: the indirect solution's switching function stays in
+$[-46.8,\,-2.5]$ --- the min-time arc never coasts --- so $s \equiv 1$ is
+optimal, mass flow is the constant $-T_{\max}/c$, and the control reduces
+to the unit direction vector with the sphere equality
+$\mathbf w_k\T\mathbf w_k = 1$. That drops $nZ$ to $10(N{+}1)+1$ and,
+decisively, leaves \emph{every bound strictly inactive at the warm start}:
+an interior-point method handed a warm start parked on its bounds (the
+throttle at $s = 1$) shoves the iterate off the wall and stalls
+suboptimal --- we measured a 2\% $t_f$ penalty with spurious coasts before
+making this reduction. The full $(\mathbf w, s)$ formulation above is the
+one to reach for when the throttle genuinely varies --- min-fuel being the
+canonical case.
+
+\subsection*{Derivatives and scale}
+
+\code{fmincon} (interior-point) needs gradients to survive at this size.
+In the implemented (3-control) form at $N = 3000$:
+$nZ = 10(N{+}1)+1 = 30{,}011$ variables ($120{,}011$ at the default
+$N = 12{,}000$) and $7N + (N{+}1) = 24{,}001$ equality constraints. The
+defect Jacobian is block-sparse --- each $d_k$ touches only
+$(x_k, x_{k+1}, \mathbf w_k, \mathbf w_{k+1}, t_f)$:
+\[
+  \frac{\partial d_k}{\partial x_k} = -I - \frac{h_k}{2}A_k,\quad
+  \frac{\partial d_k}{\partial x_{k+1}} = I - \frac{h_k}{2}A_{k+1},\quad
+  \frac{\partial d_k}{\partial \mathbf w_{(\cdot)}} = -\frac{h_k}{2}B_{(\cdot)},\quad
+  \frac{\partial d_k}{\partial t_f} = -\frac{\Delta\sigma_k}{2}(f_k + f_{k+1}),
+\]
+with $A = \partial f/\partial x$ (blocks $I$, $G$, $H_c$, and the
+$-T_{\max}\mathbf w/m^2$ mass column) and
+$B = \partial f/\partial \mathbf w$. Assemble as sparse triplets; verify
+against finite differences on a tiny mesh ($N=5$) before trusting it at
+$N=3000$. Use limited-memory BFGS for the Hessian (a dense quasi-Newton
+matrix at $10^4$--$10^5$ variables is not an option).
+
+\subsection*{Mesh and initial guess}
+
+Trapezoidal quadrature is second order globally: the $\sim$40-revolution
+spiral needs $\gtrsim 70$ nodes per revolution to keep defect error from
+distorting the solution --- hence $N$ in the thousands --- and the nodes
+must go \emph{where the dynamics are fast}. A \textbf{density-matched}
+mesh (node fractions $\sigma_k$ taken as quantiles of a reference
+integrator's own adaptive time grid) beats a uniform mesh by three orders
+of magnitude in warm-start defect at equal $N$; a uniform mesh at
+practical $N$ under-resolves the perigee passes fatally. And a cold-started many-rev
+transcription is a hard NLP: a rough guess (e.g.\ tangential-thrust
+steering, $\mathbf w = \vvec/\|\vvec\|$) leaves a large rendezvous gap that
+the optimizer must close through a long, winding, nonconvex landscape ---
+it can converge slowly, stop at a different local minimum (different
+revolution count!), or fail. The standard practice is a \textbf{warm start}:
+interpolate a cheap reference solution (here: the indirect one) onto the
+mesh and let the NLP polish it. Direct methods buy robustness \emph{to
+model changes} (add constraints, change cost: only the transcription
+changes), not freedom from good guesses on long spirals.
+
+\begin{remark}[the two methods meet]
+The KKT multipliers of the defect constraints are the costates in disguise
+--- after the discrete covector mapping, which includes the trapezoidal
+quadrature weights and the nonuniform $\Delta\sigma_k$ scaling: a
+converged direct solution silently carries
+the same primer information the indirect method integrates explicitly. The
+practical duet: indirect for accuracy and optimality certificates, direct
+for flexibility, each checking the other. The numbers below agree to mesh
+accuracy.
+\end{remark}
+
+\section{The minimum-fuel variant}\label{sec:minfuel}
+
+\emph{(Added after the min-time pair was reviewed; solved by the same two
+machines with three genuinely new ingredients: a switching function that
+actually switches, an absolute costate scale, and a smoothing homotopy.)}
+
+\subsection*{The changed problem}
+
+Fix the transfer time and minimize propellant,
+\[
+  J \;=\; \int_0^{t_f} \frac{T_{\max}}{c}\,u\,dt \;=\; m(0) - m(t_f),
+\]
+with $m(t_f)$ free. Extra clock time lets the spacecraft coast where
+thrusting is inefficient and pocket the propellant.
+
+We pose it on the \textbf{arrival leg} as a mid-transfer replan: start
+from the min-time arc's state at $\tau = 4.0$ (position, velocity, and
+the remaining mass $m_0 = 0.876$), with leg time fixed at
+$1.3\times$ the leg's minimum. By the principle of optimality the tail
+of the full min-time solution \emph{is} the leg's min-time solution, so
+the leg's minimum time ($2.2907$ ND) and its optimal costates are known
+exactly. The arrival state is the tulip point \emph{one ballistic coast
+downstream} of the original $\rvec_f,\vvec_f$ --- chosen so that
+``burn the min-time tail, then ride the tulip'' is an exactly feasible
+reference profile. Why a leg and not the full transfer: the full 25-mN
+min-fuel spiral has $\sim$40 revolutions and $\sim$80 burn/coast
+switches --- genuinely research-grade. We measured both methods failing
+on it: the direct NLP grinds in feasibility mode without ever
+optimizing, and covector-seeded shooting breaks the integrator at a
+perigee dive; the seed ladder below quantifies the shooting side.
+
+\subsection*{PMP: the switching function goes to work}
+
+The Hamiltonian gains the running cost,
+$H = \tfrac{T_{\max}}{c}u + \lambda\T f$. The thrust \emph{direction} is
+unchanged --- Lawden's primer $\bm\alpha^* = -\lamv/\|\lamv\|$ --- and
+collecting the $u$-coefficient now gives
+\[
+  H \supset u\,\frac{T_{\max}}{c}\,S,\qquad
+  \boxed{\,S = 1 - \frac{\|\lamv\|\,c}{m} - \lamm\,}
+\]
+--- the min-time switching function \emph{shifted by the cost of
+propellant}. Bang-bang as before ($u^*=1$ for $S<0$, coast for $S>0$),
+but now $S$ crosses zero: burns near perigee where thrust is
+leverage-efficient, coasts elsewhere. The costate ODEs
+\eqref{eq:costates} are unchanged (with the throttle factor $u$ riding
+along in $\dot\lamm$).
+
+Boundary conditions: seven unknowns $\lambda(0)$, seven conditions ---
+the six rendezvous equations plus $\lamm(t_f) = 0$. There is \emph{no}
+$H(t_f) = 0$ condition ($t_f$ is fixed); $H$ is still conserved, just not
+zero.
+
+\begin{keyfact}[the ``$+1$'' anchors the costate scale]
+In min-time, the \emph{control law} is scale-invariant: $\lambda \to
+k\lambda$ ($k>0$) preserves the primer direction and the sign of
+$S = -\|\lamv\|c/m - \lamm$, so the flown trajectory is untouched --- in
+the full TPBVP only the terminal normalization $H(t_f)=0$ (under the
+$\lambda_0 = 1$ convention of \S3) pins the scale, and it does so
+without feeding back into the controls. The min-fuel $S$ contains the
+bare constant $1$: now the \emph{throttle law itself} is
+scale-sensitive, and the costates have a definite magnitude
+($\|\lamv\| c/m \sim 1$ near switches). Practical consequence: seeding min-fuel shooting with raw
+min-time costates ($\|\lamv\|c \approx 13$) buries $S$ near $-17$, the
+smoothed throttle saturates ($\partial u/\partial S \sim 10^{-8}$), the
+Jacobian goes blind in the throttle channel, and \code{fsolve} stalls at
+$\|R\| \sim 1$ (we did this so you don't have to). Divide the seed by
+$\|\lamv(0)\|c$ --- the primer direction, hence the seeded trajectory, is
+unchanged, but $S(0)$ lands at $-0.32$, in the sensitive zone.
+\end{keyfact}
+
+\subsection*{Smoothing and the two-phase homotopy}
+
+A bang-bang law inside a shooting residual is nonsmooth in $\lambda_0$.
+The Bertrand--Epenoy logarithmic-barrier smoothing perturbs the cost so
+the throttle's interior minimizer has the closed form
+\[
+  u_\varepsilon \;=\; \frac{1}{1 + e^{S/\varepsilon}}
+  \;=\; \frac{1 - \tanh\bigl(S/2\varepsilon\bigr)}{2}
+\]
+(implemented in the overflow-proof $\tanh$ form; complex-step safe).
+Because $u_\varepsilon$ minimizes the smoothed Hamiltonian, the envelope
+theorem leaves the costate equations formally unchanged. The shooting
+residual (seven unknowns, Levenberg--Marquardt with a complex-step
+Jacobian) is then smooth, and $\varepsilon$ is walked down
+$0.03 \to 10^{-3}$ by continuation --- \emph{given a seed inside the
+convergence basin}, which proves to be the entire battle here (below).
+
+\subsection*{The direct side: the throttle formulation earns its keep}
+
+The general 4-control transcription of \S4 --- control
+$(\mathbf w, s)$, cone $\mathbf w\T\mathbf w = s^2$, $s \in [0,1]$ ---
+is now used as written (\code{lt\_dynamics\_throttle},
+\code{nlp\_constraints\_minfuel}); the ballast-exploit pitfall is live
+because dumping mass buys acceleration ($T_{\max}\mathbf w/m$) even
+though the objective charges for every gram --- the cone stays an
+equality. Differences from min-time: $t_f$
+is a \emph{parameter} (segment widths $h_k = t_f\Delta\sigma_k$ are
+constants; no $t_f$ column in the Jacobian), and the objective is the
+linear $-m_{N+1}$. Throttle bounds \emph{will} be active at the solution
+(bang-bang) --- harmless for an interior-point method; what matters, as
+before, is that the \emph{warm start} stays strictly interior: clip the
+guess throttle to $[0.02, 0.98]$ and set $\mathbf w = s\,\bm\alpha$ so
+the cone holds exactly.
+
+Two warm-start lessons, both measured. (i) A uniformly \emph{time-
+stretched} min-time arc violates the dynamics everywhere (defects
+$\sim 0.04$) and \code{fmincon} grinds without converging. (ii) A
+burn+coast guess targeting the \emph{original} $\rvec_f$ is perfect
+except one $O(0.3)$-ND defect cliff at the clipped final node --- and
+feasibility restoration cannot heal a cliff (flag $-2$). The phase-shifted
+target repairs exactly this: the burn+coast guess becomes feasible to
+$10^{-4}$, and the NLP's job is pure optimization. It converges to
+machine-zero defects.
+
+\subsection*{Min-fuel results, and an honest accounting}
+
+Direct NLP on the arrival leg ($N = 3000$, density-matched mesh; leg
+$t_f = 2.9779$ ND $= 13.20$ days $= 1.3\times$ minimum):
+
+\begin{center}
+\begin{tabular}{lc}
+\toprule
+ & direct NLP (converged) \\
+\midrule
+max defect            & $2\times10^{-15}$ \\
+propellant (kg)       & 1.0622\quad(burn+coast reference: 1.0650) \\
+$\Delta V$ (km/s)     & 1.736 \\
+burn fraction         & 76.9\% \\
+switch structure      & single burn$\to$coast switch at $t = t_f^{\min,\mathrm{leg}}$ \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+The optimum keeps the burn-then-coast structure of the reference (the
+phase-shifted target makes that profile nearly optimal by construction)
+and trims 0.3\% of propellant by throttle redistribution --- a clean,
+verifiable bang-bang solution with the throttle at its bounds and
+defects at machine zero.
+
+\textbf{The indirect side remains open --- deliberately documented.} The
+min-fuel machinery (smoothed EoM, seven-condition residual, complex-step
+Jacobian, LM continuation) is built and verified, but no seed we
+constructed lands inside the shooting basin. The progression, each seed
+strategy an order better and none sufficient:
+\begin{center}
+\begin{tabular}{lc}
+\toprule
+seed for $\lambda(0)$ & stalled $\|R\|$ \\
+\midrule
+raw min-time costates (full problem)            & 1.55 \\
+rescaled by $1/\|\lamv\|c$ (full problem)      & 0.83 \\
+switch-time-anchored min-time costates (leg)    & 0.33 \\
+linear-LSQ costate reconstruction from the NLP arc (leg) & 0.14 \\
+\bottomrule
+\end{tabular}
+\end{center}
+The reconstruction (integrate the linear costate ODE along the NLP
+trajectory, fit $\lambda(0)$ to the primer directions $+$
+$\lamm(t_f)=0$ by least squares, anchor sign and scale from the switch)
+is the covector mapping done properly --- fmincon's own multiplier
+estimates at an l-BFGS stall are feasibility-accurate but
+optimality-loose ($\sim$100$\times$ off in scale). That even this seed
+stalls at $\|R\| = 0.14$ quantifies how small the min-fuel shooting
+basin is on a multi-revolution CR3BP leg. The standard escalations ---
+switch-time (multi-arc) shooting with event detection, direct multiple
+shooting, or a second-order NLP solver whose multipliers converge --- are
+the natural next steps, and exactly why this problem class is
+publication-grade.
+
+\section{Results: the same answer, twice (min-time)}
+
+Both solvers on the demo instance (GTO with $\omega=-25^\circ$ to the
+7-petal southern tulip; 15\,kg, 25\,mN, $I_{sp} = 2100$\,s):
+
+\begin{center}
+\begin{tabular}{lccc}
+\toprule
+ & \code{pumpkyn.cr3bp.tfMin} & indirect (this folder) & direct NLP ($N{=}12000$)\\
+\midrule
+$t_f$ (ND)        & 6.2906940 & 6.2906940 & 6.2885740 \\
+$t_f$ (days)      & 27.8845   & 27.8845   & 27.8751 \\
+propellant (kg)   & 2.9247    & 2.9247    & 2.9237 \\
+$\Delta V$ (km/s) & 4.4665    & 4.4665    & 4.4648 \\
+solve time        & 5.6 s     & 23 s      & $\sim$1 min \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+The local indirect solution agrees with the toolbox to eight significant
+figures in $t_f$; the NLP reproduces the transfer to mesh accuracy, its
+discrete optimum converging to the continuous one under refinement
+($t_f \approx 6.2658 / 6.281802 / 6.288574$ at $N = 3000/6000/12000$ --- the
+optimizer exploits coarse-mesh discretization error near perigee, then
+loses the loophole as the mesh tightens). Do not validate by open-loop
+replay: control-interpolation error times the $10^6$ sensitivity swamps
+any real signal. Code:
+\code{optimal\_control/lowThrust\_GTO\_tulip/} (indirect + this note + the
+tutorial) and \code{optimal\_control/NLP\_lowThrust\_GTO\_tulip/} (the
+standalone NLP solver).
+
+\end{document}

@@ -1,4 +1,4 @@
-function out = casadi_minfuel_sundman(sigma, tf, rv0, rvf, Tmax, c, muStar, X0, U0, tauf0, pSund, maxIter, epsilon)
+function out = casadi_minfuel_sundman(sigma, tf, rv0, rvf, Tmax, c, muStar, X0, U0, tauf0, pSund, maxIter, epsilon, warmTight)
 % CASADI_MINFUEL_SUNDMAN  Sundman-regularized min-fuel collocation (CasADi+IPOPT).
 %
 % Path A: fix the near-perigee ill-conditioning that stalled the plain
@@ -38,10 +38,20 @@ function out = casadi_minfuel_sundman(sigma, tf, rv0, rvf, Tmax, c, muStar, X0, 
 %   pSund   - Sundman power [scalar, default 1.5]
 %   maxIter - IPOPT max iterations [scalar, default 3000]
 %   epsilon - homotopy parameter in [0,1]: 0=fuel, 1=energy [scalar, default 0]
+%   warmTight - true (default): tight warm start for re-solving AT a
+%           near-bang-bang solution (homotopy sharpening); false: loose
+%           (adaptive barrier, default bound_push) for a genuine continuation
+%           move such as an energy re-solve at a shifted t_f [logical]
 %
 % OUTPUTS:
 %   out - struct: .X [8x(N+1)] .U [4x(N+1)] .tauf .mf .maxDefect .maxUnit
 %         .switches .edge (bang-bang node fraction) .success .ipoptStatus
+%         .lamDef [8xN] discrete costates (defect-constraint KKT multipliers,
+%           [lam_r;lam_v;lam_m;lam_t] per interval, up to a positive mesh-weight
+%           scaling and a global sign), .lamAll (full stacked g-multiplier),
+%         .primerAlignDeg (mean angle between the NLP thrust direction and the
+%           costate primer -lam_v/||lam_v|| on burn arcs; ~0 certifies PMP),
+%         .lamMassEnd (terminal mass-costate proxy; ~0 is the transversality)
 %
 % REFERENCES:
 %   [1] Bertrand & Epenoy, "New smoothing techniques for solving bang-bang
@@ -53,6 +63,7 @@ function out = casadi_minfuel_sundman(sigma, tf, rv0, rvf, Tmax, c, muStar, X0, 
 if nargin < 11 || isempty(pSund),  pSund  = 1.5;  end
 if nargin < 12 || isempty(maxIter), maxIter = 3000; end
 if nargin < 13 || isempty(epsilon), epsilon = 0;   end   % 0=fuel, 1=energy
+if nargin < 14 || isempty(warmTight), warmTight = true; end  % see IPOPT opts
 cpath = getenv('CASADI_PATH');
 if isempty(cpath), cpath = fullfile(getenv('HOME'), 'casadi-3.7.0'); end
 addpath(cpath);
@@ -132,28 +143,49 @@ p.ipopt.mu_strategy = 'monotone';
 p.ipopt.nlp_scaling_method = 'gradient-based';
 p.ipopt.linear_solver = 'mumps';
 p.ipopt.print_level = 5;
-% Warm-start from a bang-bang seed: the throttle is PINNED at its bounds
-% (s = 0 on coasts, s = 1 on burns). IPOPT's default bound_push (0.01) shoves
-% every s off its bound at startup -- a large disruption that immediately
-% triggers the restoration phase and a false "locally infeasible" exit. Keep
-% the initial point hugging its bounds and start from a small barrier so the
-% seed is honored.
-p.ipopt.warm_start_init_point       = 'yes';
-p.ipopt.mu_init                     = 1e-4;
-p.ipopt.warm_start_bound_push       = 1e-9;
-p.ipopt.warm_start_bound_frac       = 1e-9;
-p.ipopt.warm_start_slack_bound_push = 1e-9;
-p.ipopt.warm_start_slack_bound_frac = 1e-9;
-p.ipopt.warm_start_mult_bound_push  = 1e-9;
+if warmTight
+    % TIGHT warm start -- for RE-SOLVING AT a near-bang-bang solution (the
+    % homotopy sharpening steps). The throttle is pinned at its bounds; IPOPT's
+    % default bound_push (0.01) would shove every s off its bound at startup, a
+    % disruption that triggers restoration and a false "locally infeasible"
+    % exit. Hug the bounds and start from a small barrier so the seed is
+    % honored. WRONG for a genuine move (e.g. a t_f-continuation step): these
+    % settings starve IPOPT's ability to explore and inf_du blows up.
+    p.ipopt.mu_strategy                 = 'monotone';
+    p.ipopt.warm_start_init_point       = 'yes';
+    p.ipopt.mu_init                     = 1e-4;
+    p.ipopt.warm_start_bound_push       = 1e-9;
+    p.ipopt.warm_start_bound_frac       = 1e-9;
+    p.ipopt.warm_start_slack_bound_push = 1e-9;
+    p.ipopt.warm_start_slack_bound_frac = 1e-9;
+    p.ipopt.warm_start_mult_bound_push  = 1e-9;
+else
+    % LOOSE warm start -- for a genuine continuation move (e.g. the eps=1 energy
+    % re-solve at a shifted t_f). The wedge under the tight settings came from
+    % warm_start_bound_push=1e-9 pinning variables to their bounds (inf_du then
+    % blew up to ~1e5). Here we keep the monotone barrier (clean, tight
+    % convergence -- adaptive oscillates and stops at "acceptable") but give
+    % IPOPT room to move: honor the primal warm start with the DEFAULT bound
+    % push and a larger initial barrier.
+    p.ipopt.mu_strategy           = 'monotone';
+    p.ipopt.warm_start_init_point = 'yes';
+    p.ipopt.mu_init               = 0.1;
+end
 opti.solver('ipopt', p);
 
 success = true;  status = 'solved';
 try
     sol = opti.solve();
     Xs = sol.value(X);  Us = sol.value(U);
+    lamAll = full(sol.value(opti.lam_g));
     status = char(opti.return_status());
 catch solveErr
     Xs = opti.debug.value(X);  Us = opti.debug.value(U);
+    try
+        lamAll = full(opti.debug.value(opti.lam_g));
+    catch
+        lamAll = [];
+    end
     success = false;  status = solveErr.message;
 end
 
@@ -161,10 +193,35 @@ end
 Fs = full(Fmap(Xs, Us));
 Dd = Xs(:,2:end) - Xs(:,1:end-1) - tauf*(repmat(dsig,8,1)/2).*(Fs(:,1:end-1) + Fs(:,2:end));
 ss = Us(4,:);
+
+% --- KKT multipliers -> discrete costates + PMP primer-vector check ---------
+% The duals of the dynamics-defect constraints ARE the discrete costates
+% [lam_r; lam_v; lam_m; lam_t] (one per interval, up to a positive mesh-weight
+% scaling and a global sign convention). The primer condition
+% alpha* = -lam_v/||lam_v|| is scale-invariant, so comparing it to the NLP
+% thrust direction on burn arcs is an independent optimality certificate.
+lamDef = [];  primerAlignDeg = NaN;  lamMassEnd = NaN;
+if numel(lamAll) >= 8*N
+    lamDef = reshape(lamAll(1:8*N), 8, N);          % [8 x N] discrete costates
+    lamV   = lamDef(4:6, :);                          % velocity-costate proxy
+    primer = -lamV ./ max(sqrt(sum(lamV.^2,1)), 1e-12);
+    aMid   = 0.5*(Us(1:3,1:end-1) + Us(1:3,2:end));   % node dirs -> interval mids
+    aMid   = aMid ./ max(sqrt(sum(aMid.^2,1)), 1e-12);
+    burn   = (Us(4,1:end-1) > 0.5) & (Us(4,2:end) > 0.5);
+    if any(burn)
+        cang = sum(primer(:,burn).*aMid(:,burn), 1);
+        if mean(cang) < 0, cang = -cang; end          % absorb global costate sign
+        primerAlignDeg = mean(acosd(min(max(cang,-1),1)));
+    end
+    lamMassEnd = lamDef(7,end);                        % mass costate ~0 (transversality)
+end
+
 out = struct('X', Xs, 'U', Us, 'tauf', tauf, 'mf', Xs(7,end), ...
              'maxDefect', max(abs(Dd(:))), ...
              'maxUnit', max(abs(sum(Us(1:3,:).^2,1) - 1)), ...
              'switches', sum(abs(diff(ss > 0.5))), ...
              'edge', mean(ss > 0.95 | ss < 0.05), ...
+             'lamDef', lamDef, 'lamAll', lamAll, ...
+             'primerAlignDeg', primerAlignDeg, 'lamMassEnd', lamMassEnd, ...
              'success', success, 'ipoptStatus', status);
 end

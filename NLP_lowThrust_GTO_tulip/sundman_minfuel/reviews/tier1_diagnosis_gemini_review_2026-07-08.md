@@ -1,0 +1,34 @@
+You’ve uncovered a highly interesting problem. Your diagnosis that costate recovery is fundamentally doomed because of the "BVP/dynamic range" is **INCORRECT**. Primal recovery is mathematically well-posed here and the proposed pivot to CasADi's KKT duals contains two catastrophic mathematical errors that will completely ruin the certification metric.
+
+Here is the adversarial evaluation answering your questions directly.
+
+### BOTTOM LINE
+**Do NOT proceed with the KKT-dual pivot as written.** Your diagnosis that primal recovery is "hopelessly ill-conditioned and doomed" blames the mathematics for a computational matrix-setup error. Your setup passed block-bidiagonal ODE constraints into an unconstrained tall least-squares solver (`A \ b`), which completely scrambles hard constraints against soft data. 
+
+Worse, your "reliable" CasADi dual route contains two fatal theoretical flaws:
+1. Freezing `tauf` to keep the Jacobian sparse secretly injects a physical isoperimetric constraint on the Sundman orbit length, meaning IPOPT’s duals will **not** satisfy physical PMP costate equations (the Hamiltonian derivative takes on a spurious $E_{tau}$ bias).
+2. The manual "de-scaling" plan for multipliers at the mesh level is analytically backwards.
+
+You should instead fix `certify_minfuel_pmp.m` to properly treat the ODE map as a **hard constraint** (a sparse uncoupled saddle-point solver), which is completely immune to the $10^{11}$ condition number.
+
+---
+
+### Q1: Is the primal costate recovery genuinely doomed, or just set up wrong?
+- **[ROBUSTNESS / CORRECTNESS]** `certify_minfuel_pmp.m:147` — **Issue:** Method 2 is *not* doomed, it is formulated incorrectly. You passed a tall block-bidiagonal system containing strictly required dynamics (entries $\sim 10^5$) and soft primer directions (entries $\sim 1$) into MATLAB's sparse `A \ b` (which implies a QR decomposition / normal equations `A^T A y = A^T b`). This attempts a purely 2-norm residual tradeoff. To avoid the massive $O(10^5)$ penalty of slightly modifying a state, `A \ b` zeroes out the path (collapsing $\lambda_v$) and eats the $O(1)$ primer error. 
+- **Concrete Fix:** Formulate this as an **Equality-Constrained Least Squares** problem by separating the adjoint tracking $C y = 0$ (hard constraints) from the primer direction fit $\min y^T Q y$ (objective). Solve the square symmetric-indefinite saddle point KKT matrix: `[Q, C'; C, 0] * [y; mu] = [0; d]`. MATLAB's built-in `ldl` (MA57/UMFPACK) will directly perform deferred pivoting on this matrix. Because $C$ is block-bidiagonal, this saddle-point solve is isomorphic to a stabilized backward Riccati sweep and is entirely immune to the $10^{11}$ forward eigenmode amplification.
+
+### Q2: Is the "no boundary condition on lam_r, lam_v" reasoning correct?
+- **[CORRECTNESS]** `TIER1_PMP_CERTIFICATION_SCOPE.md` (Finding 2) — **Issue:** The reasoning is **correct**, but it does not make the problem ill-posed. Since the rendezvous problem fixes primal state variables ($r, v$) at *both* ends ($t_0, t_f$), the state variations identically vanish: $\delta x = 0$. By the transversality condition $[\lambda^T \delta x]_0^{tf} = 0$, the costates for position and velocity are completely **free** at both boundaries. 
+- **Consequence:** They are pinned *only* by the interior primer directional data at the burn nodes. Because you have 25 switches (giving 50 independent equations for the 2-D orthogonal subspace of $\alpha$), you have $\gg 6$ interior observations to pin the 6 initial degrees of freedom. Mathematically, it is a well-posed interior-data inverse problem; only the numerical formulation failed.
+
+### Q3: Is the KKT-dual route actually SOUND? (Isoperimetric taint & Scaling)
+- **[CORRECTNESS]** `casadi_minfuel_sundman.m:79-81` — **Issue (Isoperimetric Taint):** You fixed $\tau_f$ (`tauf0`) as a constant scalar parameter to avoid a dense Jacobian column. By doing this, you accidentally constrained the physical trajectory's Sundman length: $\int_0^{tf} \kappa(r)^{-1} dt \equiv \tau_{f0}$. Because $\tau_f$ is not free, the Sundman Hamiltonian $H_{\tau} = \kappa H_{phys}$ is strictly **not** zero ($H_{\tau} \equiv C \neq 0$). The costates from IPOPT will therefore equal $d\lambda_r / dt = -\partial H_{phys} / \partial r - (C/\kappa^2) \partial \kappa / \partial r$. **The extracted duals will mathematically fail PMP.**
+- **Concrete Fix:** You *must* free $\tau_f$ for duals to be valid. To avoid the dense MUMPS column, add it as a new physical state variable `T_f` (so state vector is 9x1), subject to $d(T_f)/d\sigma = 0$, with it completely free at $\sigma=0$.
+- **[CORRECTNESS]** `TIER1_PMP_CERTIFICATION_SCOPE.md` (Corrected plan Step 3) — **Issue (De-scaling):** "De-scale $nu_k$: undo the trapezoid weight, tauf, and the Sundman kappa...". **This is mathematically backwards.** In discrete collocation of the form $x_{k+1} - x_k - h/2(f_{k+1} + f_k) = 0$, setting the KKT gradient of the Lagrangian to zero *analytically reconstructs Euler's formula for the adjoint ODE entirely unmodified*. The raw unscaled NLP multiplier $\nu_k$ **is** directly the continuous costate $\lambda(t_k)$. Dividing by $dsig \cdot tauf$ will artificially inflate the costates by a massive numerical boundary as $N \to \infty$. Furthermore, Pontryagin time transformation proves that position/velocity costates are invariant under $\kappa$ scaling. Multiply by NOTHING. 
+
+### Q4: Is there a THIRD route better than either?
+- **[EFFICIENCY / ROBUSTNESS]** — **Issue:** The fastest, cleanest, non-intrusive route is fixing your primal recovery to use the sparse saddle-point system mentioned in Q1. It avoids modifying the CasADi source to carry $\tau_f$ as a state variable, and runs cleanly on the fixed post-processed physical nodes.
+- **Third Route Option:** If you don't want to build a saddle point matrix, you can implement a standard **Indirect Multiple Shooting** recovery. Break the 2000 nodes into 20 sub-arcs. The condition number of a single sub-arc transition matrix is only $10^{11/20} \approx 3$. Write a small `lsqnonlin` / `fsolve` that finds the 20 `lam(0)_arc` vectors, constrained to match continuously at the 19 partition boundaries, while fitting the interior alpha vectors.
+
+### Q5: Other oversights
+- **[STYLE]** `certify_minfuel_pmp.m:92-94` — By putting the normalization row (setting the scale at strong burn node $k_b$) directly into the tall matrix $A$ right alongside the homogeneous dynamics $B_k$, the solver distributes error into your fixed scale! When equality matrices scale by $10^5$, pushing $\lambda_{v}^T \alpha = -1$ as a 2-norm residual is virtually ignored by the normal equations, collapsing the system toward the zero solution despite your constraint. Hard-enforce this via the sparse KKT construction or elimination.

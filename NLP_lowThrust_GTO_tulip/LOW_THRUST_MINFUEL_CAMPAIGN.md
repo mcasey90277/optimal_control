@@ -142,6 +142,57 @@ local best (more t_f alone just adds scatter). Per-t_f solutions (state,
 control, costates) are saved in `tf_sweep_results.mat`; scatter plot
 `tf_dv_front.png`.
 
+### Follow-up: certified-basin continuation (`run_tf_front.m`, Jul 9)
+
+Continuing the CERTIFIED 25-switch solution in small (5%) t_f steps —
+`run_tf_front.m` — produces a MUCH cleaner curve than the energy-continuation
+scatter, but only over a limited band, and it exposes the basin structure
+directly (data + plot `tf_front.png`):
+- **Good band, t_f = 1.15–1.45× (32–40 d):** a clean, smooth, decreasing front,
+  ΔV 3.370 → **2.961 km/s** (min near 1.35×/37.6 d), then a slight uptick to
+  3.063 at 1.45×. This is the trustworthy segment.
+- **Drift, 1.50–1.70× (42–47 d):** ΔV climbs to an unphysical 5.58 km/s — the
+  certified basin stops being near-optimal and the small-step continuation
+  follows a suboptimal branch (edge% drops, throttle smears).
+- **Basin jump, 1.75–1.85× (49–52 d):** the continuation falls into a
+  *different, much better* family (22–23 switches, ΔV **2.52**→2.60→2.67) — the
+  lowest ΔV found, ~44% below min-time.
+
+**Reading:** the true front is monotone non-increasing in t_f (more time can
+always coast more), so the drift hump and the 2.52-then-rising tail are both
+continuation artifacts, not the front. The reliable takeaways: (i) the good band
+gives a real 32–40 d segment; (ii) the 1.75×+ basin proves ΔV ≈ 2.5 km/s is
+reachable at ~49 d. A single basin does NOT thread the whole t_f range — the
+optimal family CHANGES with t_f (more coast ⇒ fewer, differently-placed
+switches). The run CRASHED (CasADi/IPOPT MEX fatal error) on the down-pass, so
+the 1.05–1.10× near-min-time points are missing; 15 up-pass points are saved in
+`tf_front_results.mat`. Getting the true monotone front needs a scheme that
+re-seeds the basin as t_f grows (or global multi-start per t_f).
+
+### Per-t_f PMP verification of the front (`verify_tf_front.m`, Jul 9)
+
+Each front point is checked against Pontryagin's first-order conditions using
+its own KKT-dual costates (`out.lamDef`), via the validated empirical-β
+switching-law route (`OPTIMALITY_VERIFICATION_PLAN.md` §D): recover
+`S = 1 − β·W`, β pinned by LS at the switch intervals (absorbs the covector
+scaling), then require burn-sign `S<0`≥99%, coast-sign `S>0`≥99%, β-spread ≤5%,
+primer ≤0.2°, |λ_m(τ_f)|≤1e-3. This is an **objective per-t_f optimality test**
+— it tells a genuine local extremal from a merely-converged-looking point.
+
+Run on the 15-point front (`tf_front_verified.png`, green=certified):
+**only 1.15–1.25× (32–35 d) certify** as first-order PMP extremals
+(β-spread ≤2.3%, burn-sign ≥99.6%). The dV curve *looked* clean out to 1.45×,
+but the switching law exposes that the light 4-step re-sharpen converged the
+**primal** (dV, defect ~1e-14) without converging the **multipliers** — β-spread
+climbs 0.6%→17% and burn-sign agreement falls 100%→56% past 1.25×. The primer
+stays ~0.06° everywhere (scale-invariant), so **the switching law is the
+discriminating test.** Lesson for the front: acceptance must be PMP-pass, not
+just defect<1e-6, and re-sharpening must be fine enough to converge the costate
+structure. `verify_tf_front.m` is the reusable checker (any results `.mat` →
+per-point verdict table + colored plot); `run_tf_2anchor.m` continues the
+certified AND the 1.75× low basin with a finer schedule to try to extend the
+certified band and fill the 1.30–1.70× gap.
+
 ## The problem
 GTO (350 × 35786 km, ω = −25°) → a south-pole tulip point in the Earth–Moon
 CR3BP. 15 kg, 25 mN, Isp 2100 s (muStar = 0.012150585609624). Minimize

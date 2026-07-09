@@ -70,7 +70,14 @@ saves `lamDef` per t_f.
 ## Notes
 - The full method write-up and the "two walls" (dynamics vs objective) analysis
   are in `../LOW_THRUST_MINFUEL_CAMPAIGN.md`.
-- To explore the ΔV–time trade, call `run_tf_sweep` (t_f-continuation of the
-  smooth energy solution, re-sharpened per t_f; saves state, control, costates).
-  Larger t_f ⇒ more coast ⇒ lower ΔV, more switches. The many-switch optimum has
-  genuine local-minimum scatter, so absolute ΔV values are schedule-sensitive.
+- **ΔV–time front.** `run_tf_front.m` continues the certified basin in small
+  t_f steps (cleaner than `run_tf_sweep.m`'s energy-continuation, which
+  scatters). `run_tf_2anchor.m` continues two basins (certified + a lower one
+  found at 1.75×) to cover more of the t_f range. Larger t_f ⇒ more coast ⇒
+  lower ΔV; the optimal *family changes* with t_f, so no single basin threads
+  the whole range.
+- **Per-t_f optimality verification.** `verify_tf_front.m` checks each solution
+  against Pontryagin's first-order conditions from its own KKT-dual costates
+  (empirical-β switching law) and colors the front by PMP-certified vs not.
+  Use it to tell a genuine local extremal from a merely-converged point. Full
+  five-layer plan in `OPTIMALITY_VERIFICATION_PLAN.md`.

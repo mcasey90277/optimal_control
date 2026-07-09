@@ -234,14 +234,33 @@ Darin's min-time t_f (27.88 d, 4.4665 km/s, 0 switches — the known endpoint).
 ### Down-sweep status: a hard TRANSITION BAND at ~1.01–1.11× (Jul 9 2026)
 
 Pushing the method above toward min-time hit a wall that BOTH continuation and
-from-scratch solves share. Current map of the front:
+from-scratch solves share. Current map of the front (machine-tight solutions,
+ΔV monotone-decreasing in t_f as physics requires):
 
-| region | ΔV | status |
-|---|---|---|
-| 1.12× → 1.25× | 3.60 → 3.14 km/s | **certified / mappable** ✅ |
-| 1.13× | 3.5955 (24 sw) | certified down-point ✅ |
-| **1.01× → 1.11×** | — | **hard transition band; resists all methods** ❌ |
-| 1.0× (min-time) | 4.4665 (0 sw) | known endpoint ✅ |
+| t_f× | days | ΔV (km/s) | switches | PMP |
+|---|---|---|---|---|
+| 1.12 | 31.2 | 3.8278 | 12 | switching law perfect; transversality marginal |
+| 1.13 | 31.6 | 3.5955 | 24 | certified down-step (earlier build) |
+| 1.14 | 32.5 | 3.4905 | 26 | switching law perfect; transversality marginal |
+| 1.15 | 32.1 | 3.3696 | 25 | **certified extremal** ✅ |
+| 1.20 | 33.5 | 3.2355 | 44 | **certified extremal** ✅ |
+| 1.25 | 34.9 | 3.1409 | 50 | **certified extremal** ✅ |
+| **1.01–1.11** | 27.9–30.8 | — | — | **transition band; resists all methods** ❌ |
+| 1.00 (min-time) | 27.9 | 4.4665 | 0 | known endpoint ✅ |
+
+Monotone ordering holds: 3.83(1.12) > 3.49(1.14) > 3.37(1.15) > 3.24(1.20) >
+3.14(1.25). The **switch count drops toward the band** (25→12 from 1.15× to
+1.12×) — direct evidence of the many-switch → min-time reorganization.
+Full-front figure: `front_full_verified.png` (green=PMP-certified, grey=not,
+black=min-time), assembled by the `combine_front.m` pattern + `verify_tf_front`.
+
+**Transversality nuance (open item):** the new down-points 1.12×/1.14× have
+NEAR-PERFECT switching-law fits (100% burn-sign, 100% coast-sign, β-spread
+0.5%) — as strong as the certified points — but marginally miss the
+transversality gate (|λ_m(τ_f)|≤1e-3), so `verify_tf_front` colors them grey.
+Likely either the 1e-3 threshold is too strict for these fewer-switch down-band
+solutions or the terminal mass-costate proxy `lamDef(7,end)` is noisier there;
+worth a quick check (they are almost certainly genuine extremals).
 
 **What was tried on the band, and how each failed:**
 - *Continuation (energy backbone, watchdog, 0.01 steps):* cleanly reached

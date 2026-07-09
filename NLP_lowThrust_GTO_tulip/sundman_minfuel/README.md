@@ -87,9 +87,12 @@ saves `lamDef` per t_f.
   enough that the warm start is clean; hits the restoration wall in the hard band.
 - **Hard transition band ~1.01–1.11×**: where the control reorganizes from
   many-switch to always-burn min-time. Both continuation and from-scratch solves
-  fail there (bifurcation-rich). Certified front is 1.12×→1.25× + the min-time
-  anchor; the band is an open item (indirect/multiple-shooting is the proposed
-  next tool). Full account: campaign doc "Down-sweep CRACKED" + "transition band".
+  fail there (bifurcation-rich). Mapped front (all machine-tight, ΔV monotone):
+  1.12×=3.83 (12 sw) / 1.14×=3.49 / 1.15×=3.37 / 1.20×=3.24 / 1.25×=3.14 km/s,
+  + the min-time anchor (4.4665, 0 sw); switches drop toward the band. The band
+  is an open item (indirect/multiple-shooting is the proposed next tool). Full
+  color-coded figure `front_full_verified.png`; account in the campaign doc
+  "Down-sweep CRACKED" + "transition band".
 - **Per-t_f optimality verification.** `verify_tf_front.m` checks each solution
   against Pontryagin's first-order conditions from its own KKT-dual costates
   (empirical-β switching law) and colors the front by PMP-certified vs not.

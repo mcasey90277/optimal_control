@@ -231,6 +231,58 @@ INDEPENDENT and run in PARALLEL. Uncatchable MEX crashes are isolated by running
 each t_f in its own process. This is the method for the whole down-band toward
 Darin's min-time t_f (27.88 d, 4.4665 km/s, 0 switches — the known endpoint).
 
+### Down-sweep status: a hard TRANSITION BAND at ~1.01–1.11× (Jul 9 2026)
+
+Pushing the method above toward min-time hit a wall that BOTH continuation and
+from-scratch solves share. Current map of the front:
+
+| region | ΔV | status |
+|---|---|---|
+| 1.12× → 1.25× | 3.60 → 3.14 km/s | **certified / mappable** ✅ |
+| 1.13× | 3.5955 (24 sw) | certified down-point ✅ |
+| **1.01× → 1.11×** | — | **hard transition band; resists all methods** ❌ |
+| 1.0× (min-time) | 4.4665 (0 sw) | known endpoint ✅ |
+
+**What was tried on the band, and how each failed:**
+- *Continuation (energy backbone, watchdog, 0.01 steps):* cleanly reached
+  1.14/1.13/1.12×, then **1.11, 1.10, 1.09, 1.08, 1.07× all time out** (the
+  watchdog auto-skips; each retry is a bigger jump from 1.12×, so it can't
+  re-establish). 1.11× specifically *hangs* the solver (line-search stall).
+- *Direct build from scratch (`direct_build_minfuel.m`):* a fresh burn+coast
+  warm start built AT the target t_f → min-energy → homotopy. Tested at 1.07×,
+  1.03×, 1.01×: the min-energy solve **stalls in restoration (inf_pr frozen
+  ~0.3–0.6, inf_du → 1e8) or oscillates without converging.** The fresh warm
+  start is not good enough — the same restoration wall the 1.15× seed took a
+  hard multi-stage effort (+ no-resample) to beat. Counter-intuitively 1.01×
+  (closest to min-time) is WORSE than 1.03×, likely near-degenerate (~1% coast
+  ⇒ barely any structure to optimize).
+
+**Why the band is hard (the physics):** 1.01–1.11× is the TRANSITION ZONE where
+the min-fuel control reorganizes from the many-switch regime (~24 switches at
+1.12×) down to the always-burn min-time limit (0 switches at 1.0×). Switches
+disappear through this band, so it is **bifurcation-rich** — exactly the setting
+where a direct-collocation basin fragments and continuation jumps or hangs.
+
+**How to proceed (options, in preference order):**
+1. **Indirect / multiple-shooting PMP, marching UP from min-time.** This is the
+   tool matched to a bifurcation region: parameterize by the switch TIMES
+   (which are few and shrinking toward min-time) and solve the TPBVP, seeded by
+   the KKT-dual costates we already save (Layer 5 of
+   `OPTIMALITY_VERIFICATION_PLAN.md`). Sundman-regularized MULTIPLE shooting
+   (~20 arcs) keeps per-arc conditioning tame. Heavier, but structurally right.
+2. **Fine-grained assault:** much smaller steps (0.005) from 1.12× with the
+   watchdog + hang-timeout, accepting a low hit rate, to see whether ANY interior
+   points are reachable and where exactly the switch count drops.
+3. **Bank the certified band** (1.12–1.25×) + the min-time anchor as the result,
+   documenting 1.01–1.11× as a genuine hard transition region — itself a
+   publishable structural finding about the problem.
+
+Infrastructure for the down-sweep: `build_energy_backbone.m` / `energy_step.m`
+(chained energy continuation, process-isolated), `solve_tf_minfuel.m` (re-clean
++ sharpen), `direct_build_minfuel.m` (from-scratch burn+coast build), `tf_step.m`
+(isolated single step). Watchdog + process isolation handle the uncatchable MEX
+crashes and solver hangs.
+
 ## The problem
 GTO (350 × 35786 km, ω = −25°) → a south-pole tulip point in the Earth–Moon
 CR3BP. 15 kg, 25 mN, Isp 2100 s (muStar = 0.012150585609624). Minimize

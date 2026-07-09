@@ -75,13 +75,21 @@ saves `lamDef` per t_f.
   scatters). The optimal *family changes* with t_f, so no single basin threads
   the whole range.
 - **Down-sweep toward min-time** (the robust method — bang-bang continuation
-  MEX-crashes going down): two phases. `build_energy_backbone.m` chains the
-  SMOOTH energy solution down in small t_f steps (convex ⇒ crash-free), saving
-  `energy_<f>.mat` per t_f. Then `solve_tf_minfuel.m` (one per t_f, PARALLEL):
-  tight multiplier re-clean of the backbone energy, then fine energy→fuel
-  sharpen to certified min-fuel. First down-step: 1.13× = 3.5955 km/s / 24 sw /
-  defect 4.5e-14 (monotone-correct vs 1.15× = 3.370). See campaign doc
-  "Down-sweep CRACKED".
+  MEX-crashes going down): two phases. `build_energy_backbone.m` / `energy_step.m`
+  chain the SMOOTH energy solution down in small t_f steps (convex ⇒ crash-free),
+  saving `energy_<f>.mat` per t_f (process-isolated + watchdog to survive MEX
+  crashes/hangs). Then `solve_tf_minfuel.m` (one per t_f, PARALLEL): tight
+  multiplier re-clean of the backbone energy, then fine energy→fuel sharpen to
+  certified min-fuel. First down-step: 1.13× = 3.5955 km/s / 24 sw / defect
+  4.5e-14 (monotone-correct vs 1.15× = 3.370).
+- **`direct_build_minfuel.m`** — solve a t_f from SCRATCH (fresh burn+coast →
+  min-energy → homotopy, no continuation). Works only where the coast is small
+  enough that the warm start is clean; hits the restoration wall in the hard band.
+- **Hard transition band ~1.01–1.11×**: where the control reorganizes from
+  many-switch to always-burn min-time. Both continuation and from-scratch solves
+  fail there (bifurcation-rich). Certified front is 1.12×→1.25× + the min-time
+  anchor; the band is an open item (indirect/multiple-shooting is the proposed
+  next tool). Full account: campaign doc "Down-sweep CRACKED" + "transition band".
 - **Per-t_f optimality verification.** `verify_tf_front.m` checks each solution
   against Pontryagin's first-order conditions from its own KKT-dual costates
   (empirical-β switching law) and colors the front by PMP-certified vs not.

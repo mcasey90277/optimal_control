@@ -97,4 +97,9 @@ saves `lamDef` per t_f.
   against Pontryagin's first-order conditions from its own KKT-dual costates
   (empirical-β switching law) and colors the front by PMP-certified vs not.
   Use it to tell a genuine local extremal from a merely-converged point. Full
-  five-layer plan in `OPTIMALITY_VERIFICATION_PLAN.md`.
+  five-layer plan in `OPTIMALITY_VERIFICATION_PLAN.md`. **Transversality is
+  checked RELATIVE** — |λ_m(τ_f)|/max|λ_m| ≤ 1e-3 — because the costates are
+  known only up to a positive scale; an absolute gate on λ_m(τ_f) wrongly failed
+  the fewer-switch down-band points (1.12×, 1.14×), whose overall costate scale
+  is larger (their raw λ_m(τ_f) ≈ −4e-3 is a genuine zero against max|λ_m| ≈ 31).
+  With the scale-invariant gate the full certified band is **1.12×–1.25× + 1.85×**.

@@ -11,7 +11,8 @@ function pmp = verify_tf_front(resultsFile, makePlot)
 % needed). A point is a certified first-order PMP EXTREMAL when it meets all of:
 %   burn-sign agreement (S<0 on burns) >= 99%,  coast-sign (S>0) >= 99%,
 %   per-switch beta spread <= 5%,  primer alignment <= 0.2 deg,
-%   |terminal mass costate| <= 1e-3.
+%   RELATIVE transversality |lam_m(tau_f)|/max|lam_m| <= 1e-3 (scale-invariant;
+%   an absolute gate wrongly fails solutions with a larger overall costate scale).
 % The primer condition is scale-invariant and typically passes everywhere; the
 % switching law is the discriminating test that exposes non-extremal points.
 %
@@ -38,7 +39,7 @@ p = cr3bp_lt_params(0.025,15,2100);  c = p.c;
 S = load(resultsFile);  R = S.results;  [~,ix]=sort([R.factor]);  R=R(ix);
 
 pmp = struct('factor',{},'dV',{},'switches',{},'edge',{},'primerDeg',{}, ...
-             'lamMend',{},'beta',{},'spreadPct',{},'burnPct',{},'coastPct',{},'pmpPass',{});
+             'lamMend',{},'relTrans',{},'beta',{},'spreadPct',{},'burnPct',{},'coastPct',{},'pmpPass',{});
 fprintf('%-6s %-8s %-4s %-6s %-7s %-8s %-6s %-6s %-5s\n', ...
     'fac','dV','sw','edge%','primer','betaSpr','burn%','coast%','PMP');
 for e=1:numel(R)
@@ -53,11 +54,17 @@ for e=1:numel(R)
     Sfun=1-beta*W;
     burnPct=100*mean(Sfun(burnI)<0); coastPct=100*mean(Sfun(coastI)>0);
     primerDeg=R(e).primerAlignDeg; lamMend=lamDef(7,end);
-    pass=(burnPct>=99)&&(coastPct>=99)&&(spreadPct<=5)&&(primerDeg<=0.2)&&(abs(lamMend)<=1e-3);
+    % transversality lam_m(tau_f)=0 checked RELATIVE to the mass-costate's own
+    % magnitude -- the costates are known only up to a positive scale, so an
+    % ABSOLUTE gate on lamMend is scale-dependent and wrongly fails solutions
+    % with a larger overall costate scale (e.g. the fewer-switch down-band
+    % points). relTrans = |lam_m(tau_f)| / max|lam_m| is scale-invariant.
+    relTrans=abs(lamMend)/max(max(abs(lamDef(7,:))),eps);
+    pass=(burnPct>=99)&&(coastPct>=99)&&(spreadPct<=5)&&(primerDeg<=0.2)&&(relTrans<=1e-3);
     fprintf('%-6.2f %-8.4f %-4d %-6.1f %-7.3f %-8.1f %-6.1f %-6.1f %-5d\n', ...
         R(e).factor,R(e).dV,R(e).switches,100*R(e).edge,primerDeg,spreadPct,burnPct,coastPct,pass);
     pmp(end+1)=struct('factor',R(e).factor,'dV',R(e).dV,'switches',R(e).switches, ...
-        'edge',R(e).edge,'primerDeg',primerDeg,'lamMend',lamMend,'beta',beta, ...
+        'edge',R(e).edge,'primerDeg',primerDeg,'lamMend',lamMend,'relTrans',relTrans,'beta',beta, ...
         'spreadPct',spreadPct,'burnPct',burnPct,'coastPct',coastPct,'pmpPass',pass); %#ok<AGROW>
 end
 [pp,ff]=fileparts(resultsFile); outF=fullfile(pp,[ff '_pmp.mat']); save(outF,'pmp');

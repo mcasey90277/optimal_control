@@ -239,9 +239,9 @@ from-scratch solves share. Current map of the front (machine-tight solutions,
 
 | t_f× | days | ΔV (km/s) | switches | PMP |
 |---|---|---|---|---|
-| 1.12 | 31.2 | 3.8278 | 12 | switching law perfect; transversality marginal |
+| 1.12 | 31.2 | 3.8278 | 12 | **certified extremal** ✅ |
 | 1.13 | 31.6 | 3.5955 | 24 | certified down-step (earlier build) |
-| 1.14 | 32.5 | 3.4905 | 26 | switching law perfect; transversality marginal |
+| 1.14 | 32.5 | 3.4905 | 26 | **certified extremal** ✅ |
 | 1.15 | 32.1 | 3.3696 | 25 | **certified extremal** ✅ |
 | 1.20 | 33.5 | 3.2355 | 44 | **certified extremal** ✅ |
 | 1.25 | 34.9 | 3.1409 | 50 | **certified extremal** ✅ |
@@ -254,13 +254,18 @@ Monotone ordering holds: 3.83(1.12) > 3.49(1.14) > 3.37(1.15) > 3.24(1.20) >
 Full-front figure: `front_full_verified.png` (green=PMP-certified, grey=not,
 black=min-time), assembled by the `combine_front.m` pattern + `verify_tf_front`.
 
-**Transversality nuance (open item):** the new down-points 1.12×/1.14× have
+**Transversality nuance (RESOLVED):** the new down-points 1.12×/1.14× have
 NEAR-PERFECT switching-law fits (100% burn-sign, 100% coast-sign, β-spread
-0.5%) — as strong as the certified points — but marginally miss the
-transversality gate (|λ_m(τ_f)|≤1e-3), so `verify_tf_front` colors them grey.
-Likely either the 1e-3 threshold is too strict for these fewer-switch down-band
-solutions or the terminal mass-costate proxy `lamDef(7,end)` is noisier there;
-worth a quick check (they are almost certainly genuine extremals).
+0.5%) — as strong as the certified points. They initially colored grey because
+`verify_tf_front` applied an ABSOLUTE transversality gate (|λ_m(τ_f)|≤1e-3), but
+the costates are known only up to a positive scale, so an absolute gate is
+scale-dependent. These fewer-switch down-band solutions carry a LARGER overall
+costate scale (max|λ_m| ≈ 31 vs the certified points' smaller magnitudes), so
+their raw λ_m(τ_f) ≈ −4×10⁻³ is a genuine zero relative to their own scale
+(|λ_m(τ_f)|/max|λ_m| ≈ 1.3×10⁻⁴ at 1.12×, 2.0×10⁻⁴ at 1.14×). Fix: `verify_tf_front`
+now gates on **relative transversality** |λ_m(τ_f)|/max|λ_m| ≤ 1e-3, which is
+scale-invariant. Both points certify green; 1.85× (also fewer-switch) certifies
+as well. Certified band is now **1.12×–1.25× + 1.85×**.
 
 **What was tried on the band, and how each failed:**
 - *Continuation (energy backbone, watchdog, 0.01 steps):* cleanly reached

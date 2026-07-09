@@ -193,6 +193,44 @@ per-point verdict table + colored plot); `run_tf_2anchor.m` continues the
 certified AND the 1.75× low basin with a finer schedule to try to extend the
 certified band and fill the 1.30–1.70× gap.
 
+### Down-sweep CRACKED (Jul 9 2026) — energy backbone + tight re-clean
+
+Extending the front DOWN in t_f (toward min-time) defeated every method until
+this. The recipe below produced the first successful down-step in the campaign:
+**1.13× = 3.5955 km/s, 24 switches, defect 4.5e-14, primer 0.097°** — converged,
+PMP-consistent, monotone-correct (ΔV rises below 1.15×: 3.596 > 3.370, as
+physics requires; ordering 3.596/1.13 > 3.370/1.15 > 3.236/1.20 > 3.141/1.25).
+
+**Why the down-direction is uniquely hard, and what failed:**
+- *Bang-bang continuation* (rescale a min-fuel solution to smaller t_f,
+  re-sharpen): reducing t_f forces coast arcs to become burns (active-set
+  change) — this **MEX-crashes** IPOPT (uncatchable, kills the process).
+- *Fresh homotopy from a rescaled min-fuel seed*: rescaling the 1.15× solution
+  to a shorter t_f makes it dynamically inconsistent, so the ENERGY solve either
+  **plateaus at ~1e-3** or **blows up to inf_du ~1e10**.
+
+**The working recipe** (two independent robust primitives, kept separate):
+1. **Energy→energy continuation is crash-free DOWNWARD.** The ε=1 problem is
+   convex in the control, so continuing the SMOOTH energy solution to a
+   neighbouring (smaller) t_f converges to machine zero and never crashes —
+   where every bang-bang method died. Build a *backbone* of energy solutions by
+   stepping t_f down in small (~2%) steps from the cleanly-converged 1.15×
+   energy, each warm-started (loose) from the previous. (`build_energy_backbone.m`)
+2. **A tight re-clean is required before sharpening.** The loose continuation
+   gives a defect-tight but *multiplier-inconsistent* energy solution; sharpening
+   it directly blows up (inf_du ~1e10 on the first ε=0.6 step). Re-solving ε=1 AT
+   the same t_f with the TIGHT warm start (no move ⇒ no wedge) cleans the duals,
+   after which the fine energy→fuel sharpen converges every step to ~1e-14.
+   (`solve_tf_minfuel.m`)
+
+**Full down-recipe:** good energy → continue *energy* down in small steps
+(smooth, crash-free) → tight multiplier re-clean at each t_f → fine sharpen to
+bang-bang → PMP-verify + monotonicity. Because the backbone energy solutions are
+built first (sequential, cheap), the per-t_f re-clean+sharpen steps are
+INDEPENDENT and run in PARALLEL. Uncatchable MEX crashes are isolated by running
+each t_f in its own process. This is the method for the whole down-band toward
+Darin's min-time t_f (27.88 d, 4.4665 km/s, 0 switches — the known endpoint).
+
 ## The problem
 GTO (350 × 35786 km, ω = −25°) → a south-pole tulip point in the Earth–Moon
 CR3BP. 15 kg, 25 mN, Isp 2100 s (muStar = 0.012150585609624). Minimize

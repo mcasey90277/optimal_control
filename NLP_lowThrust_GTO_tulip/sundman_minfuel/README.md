@@ -72,10 +72,16 @@ saves `lamDef` per t_f.
   are in `../LOW_THRUST_MINFUEL_CAMPAIGN.md`.
 - **ΔV–time front.** `run_tf_front.m` continues the certified basin in small
   t_f steps (cleaner than `run_tf_sweep.m`'s energy-continuation, which
-  scatters). `run_tf_2anchor.m` continues two basins (certified + a lower one
-  found at 1.75×) to cover more of the t_f range. Larger t_f ⇒ more coast ⇒
-  lower ΔV; the optimal *family changes* with t_f, so no single basin threads
+  scatters). The optimal *family changes* with t_f, so no single basin threads
   the whole range.
+- **Down-sweep toward min-time** (the robust method — bang-bang continuation
+  MEX-crashes going down): two phases. `build_energy_backbone.m` chains the
+  SMOOTH energy solution down in small t_f steps (convex ⇒ crash-free), saving
+  `energy_<f>.mat` per t_f. Then `solve_tf_minfuel.m` (one per t_f, PARALLEL):
+  tight multiplier re-clean of the backbone energy, then fine energy→fuel
+  sharpen to certified min-fuel. First down-step: 1.13× = 3.5955 km/s / 24 sw /
+  defect 4.5e-14 (monotone-correct vs 1.15× = 3.370). See campaign doc
+  "Down-sweep CRACKED".
 - **Per-t_f optimality verification.** `verify_tf_front.m` checks each solution
   against Pontryagin's first-order conditions from its own KKT-dual costates
   (empirical-β switching law) and colors the front by PMP-certified vs not.

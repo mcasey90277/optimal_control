@@ -100,6 +100,48 @@ optional independent adjoint-ODE consistency check. See
 `sundman_minfuel/TIER1_PMP_CERTIFICATION_SCOPE.md` for the full plan and the
 (failed) continuous-costate route that motivated using the duals.
 
+## ΔV–time front (tf-sweep) — a dense local-minimum landscape (Jul 9 2026)
+
+`sundman_minfuel/run_tf_sweep.m` maps the min-fuel ΔV vs transfer-time trade by
+t_f-continuation (fixed endpoints; only t_f varies, imposed through the carried
+time state; the smooth energy solution is continued across t_f and re-sharpened
+per t_f). Every point converges machine-tight and PMP-consistent (primer
+alignment 0.06–0.17°). **But the ΔV values SCATTER — they do not trace a clean
+monotone front:**
+
+| t_f (×min / days) | ΔV (km/s) | switches |
+|---|---|---|
+| 1.10 / 30.7 | 3.785 | 26 |
+| 1.15 / 32.1 | 3.457 | 38 |
+| 1.23 / 34.3 | 3.074 | 39 |
+| 1.33 / 37.1 | 3.009 | 24 |
+| 1.45 / 40.4 | 3.195 | 20 |
+| 1.60 / 44.6 | 4.185 | 28 |
+| 1.80 / 50.2 | 2.708 | 24 |
+
+(For reference the fine-schedule certified point at 1.15× is **3.370 / 25 sw** —
+*better* than this sweep's 1.15× 3.457/38-sw, i.e. even the anchor fell into a
+worse basin under the coarser sweep schedule.)
+
+**Finding — the scatter is the physics, not a solver bug.** Each point is a
+valid, distinct *local* minimum. The many-switch min-fuel problem has a **dense
+set of local optima**: with ~40 apogees, there are combinatorially many
+near-optimal choices of which apogees to coast through, each a separate
+bang-bang basin. Single-thread t_f-continuation lands in whatever basin the
+warm start drifts into at each t_f, so ΔV scatters instead of tracing one
+family. This is the same local-minimum multiplicity that made the base problem
+hard, now made visible. The **lower envelope** still shows the genuine trade —
+min-time 4.47 (27.9 d) → ~3.0 (35 d) → **2.71 (50 d), ~39% below min-time** —
+but the exact front curve cannot be pinned by single-thread continuation.
+
+**To get an accurate front:** multi-start per t_f (K independent trials —
+perturbed sharpening starts, varied schedules, and seeding from the *best-known*
+certified solution rescaled — take the ΔV-minimum), then the best-of-K lower
+envelope is the front. Finer t_f resolution helps only *after* each point is the
+local best (more t_f alone just adds scatter). Per-t_f solutions (state,
+control, costates) are saved in `tf_sweep_results.mat`; scatter plot
+`tf_dv_front.png`.
+
 ## The problem
 GTO (350 × 35786 km, ω = −25°) → a south-pole tulip point in the Earth–Moon
 CR3BP. 15 kg, 25 mN, Isp 2100 s (muStar = 0.012150585609624). Minimize

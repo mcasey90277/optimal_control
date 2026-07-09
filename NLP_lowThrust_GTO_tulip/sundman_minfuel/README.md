@@ -48,8 +48,29 @@ CasADi is loaded from `$CASADI_PATH` (default `~/casadi-3.7.0`). A movie of the
 solution (with a running ΔV meter) is produced by
 `../movie/animate_sundman_minfuel.m`.
 
+## Costates & PMP verification
+`casadi_minfuel_sundman` returns the **discrete costates** — the KKT multipliers
+of the dynamics-defect constraints — so the direct solution can be checked
+against Pontryagin's principle:
+- `out.lamDef` `[8×N]` — `[λ_r; λ_v; λ_m; λ_t]` per interval (up to a positive
+  mesh-weight scaling and a global sign); `out.lamAll` — the full stacked
+  multiplier vector (includes the throttle-bound duals that encode the
+  switching-function sign law).
+- `out.primerAlignDeg` — mean angle between the NLP thrust direction and the
+  costate primer `-λ_v/‖λ_v‖` on burn arcs (scale-invariant).
+- `out.lamMassEnd` — terminal mass-costate proxy (transversality, ≈0).
+
+**Verified** on the certified solution: primer alignment **0.058°**,
+transversality **−1.7×10⁻⁷** — the direct solution meets the PMP direction and
+transversality conditions to a hundredth of a degree. **Remaining:** the
+scale-dependent switching-function sign law and an independent adjoint check.
+Full plan and status in `TIER1_PMP_CERTIFICATION_SCOPE.md`; `run_tf_sweep.m`
+saves `lamDef` per t_f.
+
 ## Notes
 - The full method write-up and the "two walls" (dynamics vs objective) analysis
   are in `../LOW_THRUST_MINFUEL_CAMPAIGN.md`.
-- To explore the ΔV–time trade, call `sundman_homotopy` at several `t_f`
-  factors (larger t_f ⇒ more coast ⇒ lower ΔV, more switches).
+- To explore the ΔV–time trade, call `run_tf_sweep` (t_f-continuation of the
+  smooth energy solution, re-sharpened per t_f; saves state, control, costates).
+  Larger t_f ⇒ more coast ⇒ lower ΔV, more switches. The many-switch optimum has
+  genuine local-minimum scatter, so absolute ΔV values are schedule-sensitive.

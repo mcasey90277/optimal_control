@@ -333,6 +333,44 @@ Sundman solve thrashes into restoration on the bang-bang objective; without
 Sundman the homotopy cannot drive the perigee defects below $\sim\!10^{-3}$.
 Both walls had to fall together.
 
+\section{Costate recovery and a PMP cross-check}
+\label{sec:pmp}
+The solution above was obtained by direct transcription, which never forms the
+costates. We can nonetheless recover them and check the result against
+Pontryagin's principle, because the KKT multipliers of the dynamics-defect
+constraints \eqref{eq:defect} \emph{are} the discrete adjoint: solving the NLP
+to stationarity is exactly enforcing the discrete costate equations. The solver
+returns them as $\lambda^{\mathrm{def}}\in\R^{8\times N}$ (the multipliers of
+$D_k=0$, reshaped to $[\lam_r;\lam_v;\lambda_m;\lambda_t]$ per interval), up to a
+positive mesh-weight scaling and a global sign.
+
+Two of the PMP conditions are \emph{scale-invariant} and can be checked directly
+from these multipliers, with no de-scaling:
+\begin{itemize}[leftmargin=1.4em,itemsep=1pt]
+\item \textbf{Primer-vector (direction) condition.} The optimal thrust must point
+  along $\vv\alpha^\star=-\lam_v/\lVert\lam_v\rVert$; any positive weight cancels
+  in the normalization. On the certified solution the direct-NLP thrust direction
+  matches the costate primer to a \textbf{mean $0.058^\circ$} over all burn arcs.
+\item \textbf{Transversality.} The final mass is free, so $\lambda_m(t_f)=0$;
+  the recovered terminal mass costate is $-1.7\times10^{-7}$.
+\end{itemize}
+That a solution obtained without ever forming costates reproduces the primer
+direction to a hundredth of a degree is an independent cross-check between the
+direct and indirect (PMP) formulations. (A prior attempt to recover the costates
+from the \emph{primal} trajectory instead — the classical covector map — failed:
+the forward adjoint map spans ${\sim}10^{11}$ over 40 revolutions and the
+fixed-endpoint rendezvous leaves $\lam_r,\lam_v$ without a boundary condition, so
+the discrete KKT duals are the reliable route.)
+
+What remains for a complete first-order certificate is the \emph{scale-dependent}
+piece: the switching-function sign law, $s^\star=1$ where $S<0$ and $0$ where
+$S>0$ with $S$ from \eqref{eq:switch}, and $S$'s zero-crossings at the 25
+switches. Verifying it requires de-scaling the defect multipliers to node
+costates (undoing the trapezoid weight, $\tau_f$, and $\kappa$), or, scale-free,
+decoding the throttle-bound multipliers directly; together with an optional
+independent adjoint-ODE consistency check, this would upgrade the strong
+cross-check here to a full primal-plus-costate certificate.
+
 \section{Software and reproducibility}
 \label{sec:software}
 

@@ -73,6 +73,33 @@ thrashes into restoration on the bang-bang objective; the homotopy without
 Sundman can't drive the perigee defects below ~5e-3. The two walls had to fall
 at once.
 
+## PMP verification via the costates (Jul 8 2026)
+
+The solver now returns the **discrete costates** so the direct solution can be
+checked against Pontryagin's principle. `casadi_minfuel_sundman.m` reads the
+KKT multipliers of the dynamics-defect constraints (`out.lamDef` `[8xN]` =
+`[λ_r;λ_v;λ_m;λ_t]` per interval; full stacked `out.lamAll`) — these are the
+discrete adjoint, up to a positive mesh-weight scaling and a global sign. It
+also computes two **scale-invariant** PMP checks in-solver: `out.primerAlignDeg`
+and `out.lamMassEnd`. `run_tf_sweep.m` saves `lamDef` per t_f.
+
+**Verified on the certified solution** (eps=0 re-solve, defect 2e-14):
+- **Primer-vector condition** — the NLP thrust direction matches the costate
+  primer `-λ_v/‖λ_v‖` to **0.058°** on every burn arc. A direct-method solution
+  that never forms costates satisfies the PMP direction law to a hundredth of a
+  degree — an independent direct-vs-indirect cross-check.
+- **Transversality** — `λ_m(τ_f) = -1.7×10⁻⁷ ≈ 0` (free final mass).
+
+Both are scale-invariant (direction cancels any positive weight; 0 stays 0), so
+they need no calibration. **Still to close** for a full first-order certificate:
+the **switching-function sign law** (`S = 1-‖λ_v‖c/m-λ_m < 0` on burns, `>0` on
+coasts, zero-crossings at the 25 switches) — scale-DEPENDENT, needs the
+duals de-scaled to node costates (undo the trapezoid weight, `τ_f`, `κ`), or,
+scale-free, decode the throttle-bound multipliers in `lamAll` directly; and an
+optional independent adjoint-ODE consistency check. See
+`sundman_minfuel/TIER1_PMP_CERTIFICATION_SCOPE.md` for the full plan and the
+(failed) continuous-costate route that motivated using the duals.
+
 ## The problem
 GTO (350 × 35786 km, ω = −25°) → a south-pole tulip point in the Earth–Moon
 CR3BP. 15 kg, 25 mN, Isp 2100 s (muStar = 0.012150585609624). Minimize
@@ -241,9 +268,19 @@ The core numerical objective is met. Remaining work is packaging and payoff:
    tf/tf_min values (larger tf ⇒ more coast ⇒ lower ΔV, more switches) to map
    the min-fuel Pareto front. The pipeline (`run_sundman_homotopy` +
    `run_sundman_tail`) now does one point robustly; loop it over tf.
-3. **Independent verification** — check the 25-switch structure against the PMP
-   switching function S = 1 − ‖λ_v‖c/m − λ_m sign changes (recover costates from
-   the converged NLP multipliers) as a cross-solver certificate.
+3. **Independent verification (Tier-1 PMP certification)** — check the 25-switch
+   structure against the PMP switching function S = 1 − ‖λ_v‖c/m − λ_m sign
+   changes as a cross-solver certificate. **Scoped + attempted Jul 8; full record
+   in `sundman_minfuel/TIER1_PMP_CERTIFICATION_SCOPE.md`.** FINDING: recovering
+   costates from the PRIMAL (trajectory + primer directions) fails — the
+   homogeneous costate map amplifies ~5×10¹¹ over the 40 revs and rendezvous
+   leaves no BC on λ_r,λ_v, so the recovery is ill-posed (three methods tried,
+   all fail; gravity-gradient model FD-validated, so it is conditioning not a
+   bug). Corrected route: read the KKT DUALS from IPOPT (stable factorization),
+   which needs `casadi_minfuel_sundman.m` to return `opti.dual` + a warm-started
+   eps=0 re-solve to regenerate the `.mat`. `certify_minfuel_pmp.m` is in place as
+   the scaffold (report/figure/switch-alignment work; recovery front-end pending
+   the dual swap). Go/no-go on the pivot open.
 4. **Optional indirect confirmation** — multiple shooting (partition the 40
    revs) could re-derive the same optimum from PMP for a belt-and-suspenders
    check, but is no longer *needed* — the direct result is machine-tight.

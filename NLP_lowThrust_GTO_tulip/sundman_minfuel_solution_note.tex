@@ -1,0 +1,411 @@
+\documentclass[11pt]{article}
+\usepackage[margin=1in]{geometry}
+\usepackage{amsmath,amssymb,amsthm}
+\usepackage{booktabs}
+\usepackage{siunitx}
+\usepackage{microtype}
+\usepackage{xcolor}
+\usepackage{enumitem}
+\usepackage[colorlinks=true,linkcolor=blue!50!black,urlcolor=blue!50!black,
+            citecolor=blue!50!black]{hyperref}
+
+\newcommand{\code}[1]{\texttt{#1}}
+\newcommand{\vv}[1]{\boldsymbol{#1}}
+\newcommand{\rvec}{\vv{r}}
+\newcommand{\vvec}{\vv{v}}
+\newcommand{\lam}{\vv{\lambda}}
+\newcommand{\R}{\mathbb{R}}
+\newcommand{\dtau}{\,d\tau}
+\newcommand{\dt}{\,dt}
+\DeclareMathOperator*{\argmin}{arg\,min}
+
+\title{\bfseries Solving the Sharp Many-Switch Minimum-Fuel\\
+GTO$\to$Tulip Low-Thrust Transfer\\[2pt]
+\large A Sundman-Regularized Energy$\to$Fuel Homotopy in the Earth--Moon CR3BP}
+\author{Coorbital, Inc. --- internal technical note\\
+M.\ Casey, with D.\ Koblick (pumpkyn/pumpkynPie)}
+\date{8 July 2026}
+
+\begin{document}
+\sloppy  % many \texttt{} code paths; prefer loose spacing over overfull boxes
+\maketitle
+
+\begin{abstract}
+\noindent
+We record the method that solved the minimum-\emph{fuel} low-thrust transfer
+from a geostationary transfer orbit (GTO) to a south-pole \emph{tulip} orbit in
+the Earth--Moon circular restricted three-body problem (CR3BP), on the full
+$\sim$40-revolution spiral. The minimum-fuel optimal control is sharp
+bang-bang with roughly two dozen thrust arcs, and had resisted every direct and
+indirect attempt in the preceding campaign. The solution combines three
+regularizations, none of which suffices alone: a \emph{Sundman} change of
+independent variable that tames the near-perigee singularity in the exact
+Hessian, a \emph{Bertrand--\'Ep\'enoy energy$\to$fuel homotopy} that deforms the
+smooth energy problem into the non-smooth fuel problem, and a \emph{no-resample}
+warm-start map that keeps the nonlinear-program solver out of its restoration
+phase. Transcribed by trapezoidal collocation and solved with CasADi/IPOPT
+(exact sparse Jacobian and Hessian), the result is certified to machine
+precision: \code{Solve\_Succeeded}, maximum collocation defect
+$2.4\times10^{-14}$, zero terminal rendezvous error, 25 switches, 99.6\%
+bang-bang, propellant \SI{2.2640}{kg}, $\Delta V = \SI{3.3696}{km/s}$ --- a
+24.6\% $\Delta V$ saving over the always-on minimum-time baseline.
+\end{abstract}
+
+\section{Introduction}
+The transfer of interest departs a GTO ($350\times\SI{35786}{km}$, argument of
+perigee $-25^\circ$) and rendezvous with a point on a $(5/6)$-resonant
+south-pole tulip orbit, all expressed in the rotating, nondimensional (ND)
+Earth--Moon CR3BP frame. The spacecraft is \SI{15}{kg} with a \SI{25}{mN}
+thruster at $I_{sp}=\SI{2100}{s}$. This is the low-thrust cislunar transfer
+behind the pumpkynPie demonstration \code{lowThrust\_GTO\_Tulip.m}; the
+present note concerns the \emph{minimum-fuel} version on the full multi-rev
+spiral.
+
+Minimum-time for this problem is easy: maximum thrust is optimal everywhere, so
+the control has no switches and single-shooting converges. Minimum-fuel is
+qualitatively harder. The running cost is \emph{linear} in the throttle, so the
+Pontryagin minimization drives the throttle onto its bounds and the optimal
+control is \emph{bang-bang}: full thrust near each perigee, coast near each
+apogee, with a discrete switch at every transition. On a $\sim$40-revolution
+spiral this means order-$25$ switches, a control that is nowhere smooth, and a
+trajectory whose $1/r^3$ perigee dynamics wreck the conditioning of any
+Newton-type solver. The campaign that preceded this note (documented in
+\code{LOW\_THRUST\_MINFUEL\_CAMPAIGN.md}) established that the difficulty is
+really \emph{two independent walls}: an objective-side wall (the bang-bang
+non-smoothness) and a dynamics-side wall (the perigee singularity and the
+$\sim\!10^6$ multi-rev sensitivity). This note describes how each wall is
+removed and how the pieces compose into a machine-tight certified solution.
+
+\section{The optimal control problem}
+\label{sec:ocp}
+
+\subsection{Dynamics: CR3BP with low thrust}
+Let $\rvec=(x,y,z)$ and $\vvec=(\dot x,\dot y,\dot z)$ be the ND position and
+velocity in the rotating frame, with mass ratio $\mu=0.012150585609624$. The
+primaries sit at $\rvec_E=(-\mu,0,0)$ (Earth) and $\rvec_M=(1-\mu,0,0)$ (Moon);
+write $\rvec_1=\rvec-\rvec_E$, $\rvec_2=\rvec-\rvec_M$, $r_1=\lVert\rvec_1\rVert$,
+$r_2=\lVert\rvec_2\rVert$. With a thruster of ND maximum acceleration $T$ at
+unit mass, throttle $s\in[0,1]$, and unit thrust direction $\vv{\alpha}$
+($\lVert\vv{\alpha}\rVert=1$), the controlled equations of motion are
+\begin{equation}
+\dot\rvec=\vvec,\qquad
+\dot\vvec = \vv{g}(\rvec)+\vv{h}(\vvec)+\frac{sT}{m}\,\vv{\alpha},\qquad
+\dot m = -\frac{T}{c}\,s,
+\label{eq:eom}
+\end{equation}
+where the gravity-plus-centrifugal and Coriolis terms are
+\begin{equation}
+\vv{g}(\rvec)=\begin{bmatrix}x\\y\\0\end{bmatrix}
+-(1-\mu)\frac{\rvec_1}{r_1^{3}}-\mu\frac{\rvec_2}{r_2^{3}},
+\qquad
+\vv{h}(\vvec)=\begin{bmatrix}2\dot y\\-2\dot x\\0\end{bmatrix},
+\label{eq:gh}
+\end{equation}
+and $c=I_{sp}g_0$ is the ND exhaust velocity. The mass is normalized so
+$m(0)=1$; the propellant burned is $m_p=1-m(t_f)$, and by
+\eqref{eq:eom},
+\begin{equation}
+m(t_f)=1-\frac{T}{c}\int_0^{t_f}\!s\dt .
+\label{eq:massfuel}
+\end{equation}
+
+\subsection{Boundary conditions}
+The transfer time $t_f$ is \emph{fixed} (here $t_f=1.15\,t_f^{\min}$, with
+$t_f^{\min}=6.290694$ ND $=\SI{27.88}{d}$, so $t_f=7.2343$ ND $\approx
+\SI{32.1}{d}$). The endpoints are
+\begin{equation}
+\rvec(0),\vvec(0)=\text{(GTO departure)},\quad m(0)=1,\qquad
+\rvec(t_f),\vvec(t_f)=\text{(tulip arrival)} .
+\end{equation}
+Both endpoint states are built with pumpkyn (Sec.~\ref{sec:software}).
+
+\subsection{The minimum-fuel cost and its bang-bang structure}
+Minimizing propellant is, by \eqref{eq:massfuel}, minimizing
+\begin{equation}
+J=\int_0^{t_f}\! s\dt .
+\label{eq:Jfuel}
+\end{equation}
+Introduce costates $\lam_r,\lam_v,\lam_m$ and the Hamiltonian
+\begin{equation}
+H=\lam_r\!\cdot\!\vvec+\lam_v\!\cdot\!\Big(\vv g+\vv h+\tfrac{sT}{m}\vv\alpha\Big)
+-\lambda_m\tfrac{T}{c}s+s .
+\end{equation}
+Pontryagin's minimum principle minimizes $H$ over the admissible controls at
+each instant. The direction enters only through $\lam_v\!\cdot\!\vv\alpha$, so
+the optimal thrust points along the \emph{primer vector},
+\begin{equation}
+\vv\alpha^\star=-\frac{\lam_v}{\lVert\lam_v\rVert}.
+\end{equation}
+Substituting, $H$ is \emph{affine} in the throttle,
+$H=(\text{terms independent of }s)+S\,s$, with switching function
+\begin{equation}
+S \;=\; 1-\frac{T}{m}\lVert\lam_v\rVert-\frac{T}{c}\lambda_m .
+\label{eq:switch}
+\end{equation}
+Minimizing an affine function over $s\in[0,1]$ gives the bang-bang law
+\begin{equation}
+s^\star=\begin{cases}1,& S<0\ (\text{burn}),\\[2pt]0,& S>0\ (\text{coast}),\end{cases}
+\label{eq:bangbang}
+\end{equation}
+with singular arcs only on the measure-zero set $S\equiv0$. On the full spiral
+$S$ changes sign near every perigee, producing the many-switch control that is
+the crux of the difficulty.
+
+\subsection{Two walls}
+The affine-in-$s$ structure is the \emph{objective-side wall}: the control is
+non-smooth, which collapses the indirect shooting basin and makes low-order
+collocation smear the throttle. Independently, the $1/r_1^3$ terms in
+\eqref{eq:gh} at the $\sim$40 perigee passes (where $r_1\approx0.017$) form the
+\emph{dynamics-side wall}: they blow up second derivatives and give a
+$\sim\!10^6$ multi-rev sensitivity. Minimum-time faced only the second wall;
+minimum-fuel faces both at once. The strategy of Sec.~\ref{sec:strategy}
+removes them one at a time.
+
+\section{Solution strategy: three regularizations}
+\label{sec:strategy}
+
+\subsection{Energy\texorpdfstring{$\to$}{->}fuel homotopy (objective wall)}
+Replace the fuel cost \eqref{eq:Jfuel} by the Bertrand--\'Ep\'enoy family
+\begin{equation}
+J(\varepsilon)=\int_0^{t_f}\!\big[\,s-\varepsilon\,s(1-s)\,\big]\dt,
+\qquad \varepsilon\in[0,1].
+\label{eq:homotopy}
+\end{equation}
+At $\varepsilon=0$ this is the fuel cost \eqref{eq:Jfuel} (affine, bang-bang).
+At $\varepsilon=1$ it is $\int s^2\dt$, the \emph{energy} cost: strictly convex
+in $s$, so the throttle is a smooth interior ramp rather than a bang-bang, the
+costate dynamics are smooth, and the solver basin is large. We solve
+$\varepsilon=1$ first and then step $\varepsilon\to0$, warm-starting each solve
+from the last. As $\varepsilon$ decreases the ramp sharpens continuously into
+the bang-bang limit while staying inside the solver's basin. This is the
+practical realization of ``start smooth, then sharpen.''
+
+\subsection{Sundman regularization (dynamics wall)}
+Change the independent variable from time $t$ to a regularizing variable $\tau$
+through the Sundman relation
+\begin{equation}
+\frac{dt}{d\tau}=\kappa(\rvec)=r_1^{\,p},\qquad p=1.5 .
+\label{eq:sundman}
+\end{equation}
+Every state equation is multiplied by $\kappa$: writing the augmented state
+$X=[\rvec;\vvec;m;t]$ and its time dynamics $\dot X=f(X,u)$ from
+\eqref{eq:eom} together with $\dot t=1$,
+\begin{equation}
+\frac{dX}{d\tau}=\kappa(\rvec)\,f(X,u)
+=r_1^{\,p}\begin{bmatrix}\vvec\\[2pt]\vv g+\vv h+\tfrac{sT}{m}\vv\alpha\\[2pt]
+-\tfrac{T}{c}s\\[2pt]1\end{bmatrix}.
+\label{eq:sundmandyn}
+\end{equation}
+Two things happen. First, the near-perigee Hessian terms
+$\sim r_1^{-3}$ become $\sim r_1^{\,p-3}$: bounded for $p\ge3$, and much
+milder already at $p=1.5$, which is exactly what an exact-Hessian solver needs.
+Second, a \emph{uniform} mesh in $\tau$ is a highly \emph{non-uniform} mesh in
+$t$, dense wherever $\kappa=r_1^p$ is small --- i.e.\ near perigee, precisely
+where the burns and switches live. Regularization and mesh refinement come for
+free from the same change of variable.
+
+Carrying $t$ as the eighth state lets us keep $t_f$ fixed while working in
+$\tau$: we impose $t(0)=0$ and $t(\tau_f)=t_f$, and the trajectory adjusts so
+that $\int_0^{\tau_f}\kappa\dtau=t_f$. Crucially, $\tau_f$ is held
+\emph{fixed} at its warm-start value rather than made a decision variable: a
+free scalar $\tau_f$ multiplies every collocation defect, creating a single
+\emph{dense column} in the constraint Jacobian that causes catastrophic
+fill-in in the sparse linear solver (MUMPS) and out-of-memory failures at
+realistic mesh sizes. Fixing $\tau_f$ keeps the Jacobian sparse; fixed
+physical time is still enforced exactly through the $t$-state terminal
+condition.
+
+\subsection{No-resample seeding (staying out of restoration)}
+\label{sec:noresample}
+The homotopy needs a feasible starting trajectory. We seed from an earlier,
+collocation-feasible time-mesh solution (the energy-seeded three-switch
+minimum-fuel local optimum) and map it into $\tau$. The subtlety is
+\emph{how}. Interpolating (pchip) that solution onto a uniform-$\sigma$ mesh
+loses too much of the 40-revolution oscillatory structure and leaves an
+irreducible $\sim\!10^{-2}$ collocation defect; IPOPT reads this as
+infeasibility and spends every iteration in its restoration phase, exiting with
+a false ``locally infeasible.'' Instead we use the seed's \emph{own} nodes:
+map each node's time to $\tau$ by trapezoidal quadrature of \eqref{eq:sundman},
+\begin{equation}
+\Delta\tau_k=\tfrac12\,\Delta t_k\!\left(\frac{1}{\kappa_k}+\frac{1}{\kappa_{k+1}}\right),
+\qquad \tau=\Big[0,\ \textstyle\sum\Delta\tau\Big],\qquad
+\sigma=\tau/\tau_f,
+\end{equation}
+and take the collocation nodes to be exactly these $\sigma$. The only initial
+infeasibility is then the small trapezoid-in-$t$ versus trapezoid-in-$\tau$
+mismatch, which the solver closes to $\sim\!10^{-14}$ in \emph{normal} (not
+restoration) mode. This single change flips the energy solve from perpetual
+restoration to \code{Solve\_Succeeded}.
+
+\section{Direct transcription and IPOPT}
+\label{sec:ipopt}
+
+\subsection{Collocation}
+On a normalized variable $\sigma\in[0,1]$ with nodes $\sigma_1<\dots<\sigma_{N+1}$
+and $dX/d\sigma=\tau_f\,dX/d\tau$, the trapezoidal defects are
+\begin{equation}
+D_k=X_{k+1}-X_k-\tau_f\,\frac{\Delta\sigma_k}{2}
+\big(F_k+F_{k+1}\big)=0,\qquad F_k=\kappa(\rvec_k)f(X_k,u_k),
+\label{eq:defect}
+\end{equation}
+with $\Delta\sigma_k=\sigma_{k+1}-\sigma_k$ (the mesh is non-uniform, so each
+interval carries its own weight; note $\tau_f\Delta\sigma_k$ is the physical
+$\tau$-step). Controls are the unit direction (equality
+$\lVert\vv\alpha_k\rVert^2=1$) and the throttle ($0\le s_k\le1$). Endpoints are
+pinned as equality constraints; the objective is the trapezoidal quadrature of
+\eqref{eq:homotopy} on the physical-time measure $dt=\kappa\dtau$.
+
+\subsection{Exact derivatives via CasADi; why IPOPT}
+The transcription is built symbolically in CasADi, which supplies the
+\emph{exact} sparse constraint Jacobian and Lagrangian Hessian by automatic
+differentiation. IPOPT (interior-point) then solves the nonlinear program. The
+exact Hessian is what makes the many-switch problem tractable --- but only
+\emph{after} the Sundman regularization: on the raw problem the exact Hessian
+carries the $1/r_1^5$ perigee terms that destabilize the Newton step (a solver
+using a damped limited-memory Hessian was ironically \emph{more} stable there).
+Regularize first, then the exact Hessian becomes an asset rather than a
+liability.
+
+\subsection{Warm-start and restoration subtleties}
+Two solver settings matter for a bang-bang warm start. First, IPOPT's default
+\code{bound\_push} shoves every variable a fixed distance off its bounds at
+startup; for a throttle pinned at $0$ and $1$ this is a large, gratuitous
+perturbation that triggers restoration. We set the warm-start bound-push
+parameters to $\sim\!10^{-9}$ so the seed is honored. Second, in the homotopy
+sweep a step that fails to converge tight (e.g.\ a too-large $\varepsilon$ jump
+near the bang-bang limit, where the dual infeasibility can spike) is
+\emph{discarded}: it neither advances the warm start nor overwrites the
+best-so-far, so a single wedged step cannot poison the chain. Near
+$\varepsilon=0$ we simply take smaller $\varepsilon$ steps.
+
+\section{Results}
+\label{sec:results}
+The homotopy tracks smoothly from the smooth energy control to the sharp
+bang-bang fuel control, every point converged to machine precision
+(Table~\ref{tab:homotopy}). As $\varepsilon\to0$ the fraction of nodes pinned
+at a throttle bound (``edge'') rises from 28\% to 99.6\%, the switch count
+climbs from 14 to 25, and the propellant falls monotonically.
+
+\begin{table}[h]
+\centering
+\begin{tabular}{rccccc}
+\toprule
+$\varepsilon$ & max defect & switches & edge (\%) & prop.\ (kg) & $\Delta V$ (km/s)\\
+\midrule
+1.00 & $4.7\times10^{-14}$ & 14 & 28.3 & 2.3593 & 3.5243\\
+0.35 & $3.4\times10^{-14}$ & 18 & 60.0 & 2.2842 & 3.4021\\
+0.12 & $3.8\times10^{-14}$ & 22 & 83.7 & 2.2679 & 3.3758\\
+0.04 & $1.4\times10^{-14}$ & 22 & 94.0 & 2.2646 & 3.3705\\
+0.004& $3.0\times10^{-14}$ & 25 & 98.9 & 2.2640 & 3.3696\\
+0    & $2.4\times10^{-14}$ & 25 & 99.6 & 2.2640 & 3.3696\\
+\bottomrule
+\end{tabular}
+\caption{Energy$\to$fuel homotopy path (representative rows). Every solve is
+\code{Solve\_Succeeded} with zero terminal rendezvous error.}
+\label{tab:homotopy}
+\end{table}
+
+The certified $\varepsilon=0$ solution is a genuine bang-bang control: 59.4\% of
+nodes at full thrust, 40.0\% coasting, and only 0.6\% in transition. Against the
+minimum-time baseline (always-on, no switches), the payoff is substantial:
+
+\begin{table}[h]
+\centering
+\begin{tabular}{lccc}
+\toprule
+ & minimum-time & minimum-fuel & saving\\
+\midrule
+$\Delta V$ (km/s)     & 4.4665 & \textbf{3.3696} & 1.097 (24.6\%)\\
+propellant (kg)       & 2.9247 & \textbf{2.2640} & 0.661 (22.6\%)\\
+switches              & 0 & 25 & ---\\
+transfer time (d)     & 27.88 & 32.06 & $+15\%$\\
+\bottomrule
+\end{tabular}
+\caption{Certified minimum-fuel solution versus the minimum-time baseline
+(the latter matches the pumpkyn reference to 8 significant figures).}
+\label{tab:compare}
+\end{table}
+
+\noindent The minimum-fuel solution buys back $\sim\!\SI{1.1}{km/s}$ (about
+\SI{0.66}{kg}) by coasting through the apogees, at the cost of $\sim15\%$ more
+flight time. Neither regularization alone reaches this: without the homotopy the
+Sundman solve thrashes into restoration on the bang-bang objective; without
+Sundman the homotopy cannot drive the perigee defects below $\sim\!10^{-3}$.
+Both walls had to fall together.
+
+\section{Software and reproducibility}
+\label{sec:software}
+
+\subsection{pumpkyn and pumpkynPie}
+The transcription and the nonlinear solve are entirely local code; Darin
+Koblick's astrodynamics libraries are used only for problem \emph{setup} and for
+the minimum-time reference.
+
+\paragraph{pumpkynPie (private demo/analysis repo).} The problem originates in
+the pumpkynPie demonstration \code{Demos/LunaNet\ Analysis/lowThrust\_GTO\_Tulip.m},
+a minimum-\emph{time} indirect solve of the GTO$\to$tulip transfer. Our work
+reproduces that demo and extends it to minimum-energy and minimum-fuel; the
+demo also supplied the converged reference costate/state guess used to validate
+the minimum-time baseline (which matches to 8 significant figures).
+
+\paragraph{pumpkyn (live CR3BP library, the \code{+pumpkyn/+cr3bp} package).}
+The functions actually called are:
+\begin{description}[leftmargin=1.5em,itemsep=1pt]
+\item[\code{cr3bp.orb2eci}] Keplerian elements $\to$ Earth-centered inertial
+  $\rvec,\vvec$; builds the GTO departure state.
+\item[\code{cr3bp.fromPCI}] planet-centered inertial $\to$ rotating ND CR3BP
+  frame; maps the GTO state into the working frame.
+\item[\code{cr3bp.getTulip}] constructs the $(5/6)$-resonant south-pole tulip
+  orbit initial condition.
+\item[\code{cr3bp.prop}] ballistic (natural) CR3BP propagation; propagates the
+  tulip to extract the maximum-$\dot y$ arrival point, and builds the ballistic
+  coast arcs used in earlier warm starts.
+\item[\code{cr3bp.tfMin}, \code{cr3bp.tfMinEoM}, \code{cr3bp.tfMinProp}] the
+  minimum-time transfer, its indirect equations of motion, and its propellant
+  accounting; used to generate the minimum-time baseline and the burn-arc warm
+  starts of the broader campaign.
+\item[\code{cr3bp.lagrangePts}] Lagrange-point locations, for context and plots.
+\end{description}
+Only \code{orb2eci}, \code{fromPCI}, \code{getTulip}, and \code{prop} are needed
+by the minimum-fuel solver itself (via \code{gto\_tulip\_endpoints.m}); the
+\code{tfMin*} family belongs to the minimum-time reference path. pumpkyn is
+added to the MATLAB path by \code{setup\_paths.m}. (Note: pumpkyn's C++/MEX
+components are unavailable on the current Mac; only the pure-MATLAB routines
+above are used.)
+
+\subsection{Modular library}
+The solver lives in \code{NLP\_lowThrust\_GTO\_tulip/sundman\_minfuel/}:
+\begin{description}[leftmargin=1.5em,itemsep=1pt]
+\item[\code{cr3bp\_lt\_params.m}] Earth--Moon CR3BP and low-thrust ND constants
+  ($\mu,\ell^\star,t^\star,c,T$).
+\item[\code{gto\_tulip\_endpoints.m}] departure/arrival states (pumpkyn).
+\item[\code{sundman\_seed\_map.m}] no-resample map of a time-mesh solution into
+  Sundman coordinates (Sec.~\ref{sec:noresample}).
+\item[\code{casadi\_minfuel\_sundman.m}] the core solver: Sundman collocation
+  \eqref{eq:defect}, the $\varepsilon$-homotopy objective \eqref{eq:homotopy},
+  and the IPOPT call.
+\item[\code{sundman\_homotopy.m}] the guarded $\varepsilon:1\to0$ sweep.
+\item[\code{run\_certified\_minfuel.m}] one-call end-to-end reproduction.
+\end{description}
+CasADi 3.7.0 (with bundled IPOPT) is loaded from \code{\$CASADI\_PATH}
+(default \code{\textasciitilde/casadi-3.7.0}); its prebuilt binaries load despite
+the broken local MEX compiler. A companion animator,
+\code{movie/animate\_sundman\_minfuel.m}, renders the bang-bang trajectory with
+a running $\Delta V$ meter. The full campaign chronology and the ``two walls''
+analysis are in \code{LOW\_THRUST\_MINFUEL\_CAMPAIGN.md}.
+
+\section{Conclusion}
+The sharp many-switch minimum-fuel GTO$\to$tulip transfer is solved and
+certified to machine precision. The lesson is compositional: a hard low-thrust
+transfer presents two independent difficulties --- a non-smooth objective and a
+singular, stiff, high-sensitivity dynamics --- and each needs its own
+regularization. The energy$\to$fuel homotopy removes the first; the Sundman
+transform removes the second; a faithful no-resample warm start keeps the
+interior-point solver in normal mode long enough to exploit both. Transcribed
+with exact CasADi derivatives and solved with IPOPT, the combination reaches a
+$2.4\times10^{-14}$-feasible, 25-switch bang-bang optimum that saves 24.6\% of
+$\Delta V$ over minimum-time. The same recipe should extend to a $t_f$ sweep for
+the full $\Delta V$--time trade, and to other many-revolution low-thrust
+problems where the same two walls appear.
+
+\end{document}

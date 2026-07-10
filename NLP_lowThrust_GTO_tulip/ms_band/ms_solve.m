@@ -7,11 +7,13 @@ function out = ms_solve(Zseed, prob, tolR, maxIter)
 % Task 7: probe-verified ~10x early-phase speedup absorbing the costate
 % (~2e2) vs state (~1) row-magnitude mismatch (probe_scaled_lm.m/.log).
 % The input seed is never modified; on failure the caller keeps its own
-% warm start (guard discipline).
+% warm start (guard discipline). Task S1: optional prob.resFun selects the
+% residual (default @ms_residual; the Sundman-domain path sets
+% @sms_residual via SMS_PROBLEM).
 %
 % INPUTS:
-%   Zseed   - unknown-vector seed [(14M-7)x1]
-%   prob    - problem struct with tJ set [1x(M+1)]
+%   Zseed   - unknown-vector seed [(14M-7)x1] (16M-8 on the sms path)
+%   prob    - problem struct with tJ set [1x(M+1)] (sJ on the sms path)
 %   tolR    - success threshold on ||R||_2 [scalar, e.g. 1e-9]
 %   maxIter - LM iteration cap [scalar]
 %
@@ -29,7 +31,12 @@ opts = optimoptions('lsqnonlin', ...
     'MaxIterations', maxIter, ...
     'MaxFunctionEvaluations', 20*maxIter);
 
-[Z, res2, ~, flag, outp] = lsqnonlin(@(zz) ms_residual(zz, prob), ...
+if isfield(prob, 'resFun') && ~isempty(prob.resFun)
+    resFun = prob.resFun;
+else
+    resFun = @ms_residual;
+end
+[Z, res2, ~, flag, outp] = lsqnonlin(@(zz) resFun(zz, prob), ...
                                      Zseed(:), [], [], opts);
 out = struct('Z', Z, 'resNorm', sqrt(res2), 'flag', flag, ...
              'success', sqrt(res2) <= tolR, 'iterations', outp.iterations);

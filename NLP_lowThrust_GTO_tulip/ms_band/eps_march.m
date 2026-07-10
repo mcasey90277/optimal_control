@@ -47,7 +47,12 @@ while idx <= numel(list)
     epsK = list(idx);
     prob = probBase;  prob.epsSmooth = epsK;
 
-    Rstart = norm(ms_residual(Zwarm, prob));         % step's starting residual
+    % step's starting residual (prob.resFun routes the sms path; Task S1)
+    if isfield(prob, 'resFun') && ~isempty(prob.resFun)
+        Rstart = norm(prob.resFun(Zwarm, prob));
+    else
+        Rstart = norm(ms_residual(Zwarm, prob));
+    end
     out    = ms_solve(Zwarm, prob, tolR, MAX_LM_ITER);
 
     nRelay = 0;

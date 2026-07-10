@@ -109,3 +109,13 @@ v3 design at 16 dims): all 12 columns pass FD Gate 1 at the FIRST h
 (1e-3) — no col-49-style noise limitation; CS h-independence <=6e-13, B2
 <=5e-14, structure exact. The regularized domain also fixes the FD
 conditioning. sigf(1.00x) = 149.75.
+
+### 2026-07-10 — Task S1 Gate C: sms min-time anchor GREEN
+prob.resFun wired into ms_solve + eps_march (default @ms_residual;
+sms_problem sets @sms_residual); time-domain regression
+test_ms_reproduce_mintime PASS after the edit (||R|| = 2.384e-10, 15
+iters — identical record; regress_mintime_resfun.log). **Gate C PASS**
+(test_sms_reproduce gateSel='C', M=24, eps=1e-3, seed sms_seed_mintime
+1.00x): ||R|| = 9.711e-11 (19 iters, wall 1.6 min), dV 4.4665 km/s, prop
+2.9247 kg, bang 100.0%, t(sigf)-tf = -7.8e-13. The sigma-domain system
+even lowers the residual floor below the time-domain's 2.4e-10.

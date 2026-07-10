@@ -95,10 +95,23 @@ if makePlot
     try, theme(fig,'light'); catch, end
     hold on; grid on; box on;
     hh = [];  lbl = {};                       % legend handles built dynamically
-    % envelope FIRST (under the markers), through best certified per factor
+    fac = round(1000*[pts.factor])/1000;   % milli-factor grouping: continuation
+    % factors carry accumulated float error (1.6500000000000001 ~= 1.65), which
+    % splits per-factor groups and zig-zags the envelopes
+    % best-known FEASIBLE envelope (lower hull over ALL points, dashed): the
+    % honest "front is at or below this" curve -- feasible points below the
+    % certified line are information (HONEST_EVALUATION), so draw them a path
+    ufacA = unique(fac); envDA=zeros(size(ufacA)); envVA=zeros(size(ufacA));
+    for kk=1:numel(ufacA)
+        sel = fac==ufacA(kk);
+        [envVA(kk), pos] = min(v(sel)); dd2=d(sel); envDA(kk)=dd2(pos);
+    end
+    hh(end+1) = plot(envDA, envVA, '--', 'Color',[0.35 0.35 0.40], 'LineWidth',1.1);
+    lbl{end+1} = 'best-known feasible envelope';
+    % certified envelope, through best certified per factor
     cf=[pts.class]>=2;
     if any(cf)
-        fac=[pts.factor]; ufac=unique(fac(cf)); envD=zeros(size(ufac)); envV=zeros(size(ufac));
+        ufac=unique(fac(cf)); envD=zeros(size(ufac)); envV=zeros(size(ufac));
         for kk=1:numel(ufac)
             sel = cf & fac==ufac(kk);
             [envV(kk), pos] = min(v(sel)); dd2=d(sel); envD(kk)=dd2(pos);

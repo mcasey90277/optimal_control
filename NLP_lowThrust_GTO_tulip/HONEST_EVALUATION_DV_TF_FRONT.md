@@ -162,3 +162,35 @@ a watchdog; never combine kill + launch in one shell command (SIGTERM races);
 write scripts with the Write tool, not heredocs mixed with kills; in zsh
 never `local f=$1 out=$DIR/x_$f.mat` on one line; the lower-band terminal
 owns `energy_≤1.15` / `ms_*.mat` naming — the upper band uses `ms_up_*.mat`.
+
+---
+
+## Addendum (2026-07-09 late) — checker diagnosed; two-tier gate; front transformed
+
+Written after the up-band campaign that followed the main text. Three
+developments supersede parts of the above:
+
+1. **The few-switch down-chain swept 1.45-1.80x** (neighbor continuation from
+   the certified 1.85x): campaign-best **dV 2.434 km/s at 1.65x (46 d, 45.5%
+   below min-time)**; switch count morphs 22->43 approaching the crossing at
+   ~1.40-1.45x -- the "two families" are one connected structure over a fold.
+2. **The mass certification failure above 1.25x was the CHECKER, not the
+   solutions** (`diag_beta_checker.m`): the W^2-weighted LS beta estimator is
+   fragile to ONE anomalous switch -- the FIRST -- whose implied scale decays
+   smoothly with t_f (0.93 at 1.20x -> 0.12-0.27 in the dn family) while every
+   other switch sits at a common scale to <0.8% MAD. Robust (median) beta:
+   every envelope point 1.20-1.85x passes burn+coast at 99.8-100%.
+3. **Two-tier gate implemented** in `verify_tf_front` (robust beta): tier 2
+   FULL certified (first switch consistent within 10%) = {1.12, 1.14, 1.15,
+   1.20, 1.85}; tier 1 INTERIOR certified (all gates pass, first switch
+   flagged) = the entire rest of the envelope 1.25-1.80x incl. the 2.434
+   minimum; tier 0 = 3 old scatter points. Honesty dividend: 1.25x DEMOTED
+   from the old full-certified set (first-switch scale 0.84, previously
+   smeared invisible by LS). The certified envelope now coincides with the
+   best-known feasible envelope end-to-end (`results/plots/front_honest.png`).
+
+**The open question is now precise:** the first-switch anomaly (departure-burn
+cutoff), real and smoothly growing with t_f -- mesh under-resolution vs
+genuine local non-extremality. That, plus the dominated 1.70-1.85x tail
+(front(t_f>=1.65x) <= 2.434 by loiter-monotonicity), are the two sharpest
+targets for the ms_band indirect arbiter.

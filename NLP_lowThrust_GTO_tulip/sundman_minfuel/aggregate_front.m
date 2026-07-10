@@ -4,15 +4,16 @@ function [pts, pmp] = aggregate_front(makePlot)
 %
 % Promotes the scratchpad combine_front.m pattern into the repo (cleanup plan
 % Phase 0) and implements the honest-plot policy of
-% HONEST_EVALUATION_DV_TF_FRONT.md:
-%   class 1  feasible upper bound   (machine-tight dynamics+BCs, NOT certified)
-%   class 2  direct-certified       (KKT-dual PMP check passes: local extremal)
-%   class 3  direct+indirect        (independent adjoint/shooting match; none
-%                                    yet -- populated by the ms_band certifier)
-% The envelope is drawn ONLY through certified points (classes 2-3). A grey
-% feasible point BELOW the envelope is information (a better local minimum
-% exists there), never noise -- e.g. the 1.75x/2.523 point that dominates the
-% certified 1.85x/2.667.
+% HONEST_EVALUATION_DV_TF_FRONT.md, with the two-tier robust-beta gate of
+% verify_tf_front (post diag_beta_checker, 2026-07-09):
+%   class 1  feasible upper bound     (machine-tight dynamics+BCs, uncertified)
+%   class 2  interior-certified       (robust-beta PMP gates pass; FIRST switch
+%                                      anomalous -- flagged open question)
+%   class 3  FULL direct-certified    (first switch consistent too)
+%   class 4  direct+indirect          (independent adjoint/shooting match; none
+%                                      yet -- populated by the ms_band certifier)
+% The certified envelope is drawn through classes >= 2. A grey feasible point
+% BELOW it is information (a better local minimum exists there), never noise.
 %
 % Sources scanned (all optional): results/minfuel/minfuel_f*_*.mat (new
 % layout), legacy ms_*.mat and tf_front_results.mat in the library root.
@@ -75,16 +76,15 @@ pmp = verify_tf_front(combF, false);
 pts = struct('factor',{},'tf_days',{},'dV',{},'switches',{},'edge',{}, ...
              'defect',{},'class',{},'source',{});
 for k = 1:numel(res)
-    cls = 1;                                   % feasible upper bound
-    if pmp(k).pmpPass, cls = 2; end            % direct-certified extremal
-    % class 3 (direct+indirect) is set once the ms_band certifier stamps a
-    % matching indirect solution -- field reserved, no data yet.
+    cls = 1 + pmp(k).pmpPass;                  % 1 feasible / 2 interior / 3 full
+    % class 4 (direct+indirect) is set once the ms_band certifier stamps a
+    % matching indirect solution -- reserved, no data yet.
     pts(end+1) = struct('factor',res(k).factor,'tf_days',res(k).tf_days, ...
         'dV',res(k).dV,'switches',res(k).switches,'edge',res(k).edge, ...
         'defect',NaN,'class',cls,'source',src{k}); %#ok<AGROW>
 end
-fprintf('\naggregate_front: %d solutions | %d certified | %d feasible-only\n', ...
-        numel(pts), sum([pts.class]>=2), sum([pts.class]==1));
+fprintf('\naggregate_front: %d solutions | %d FULL | %d interior | %d feasible-only\n', ...
+        numel(pts), sum([pts.class]==3), sum([pts.class]==2), sum([pts.class]==1));
 
 % --- plot ---------------------------------------------------------------------
 if makePlot
@@ -125,12 +125,17 @@ if makePlot
         lbl{end+1} = 'feasible upper bound';
     end
     if any(c==2)
-        hh(end+1) = plot(d(c==2), v(c==2), 'o', 'Color',[0.10 0.45 0.15], ...
-             'MarkerFaceColor',[0.20 0.65 0.25],'MarkerSize',9,'LineWidth',1.2);
-        lbl{end+1} = 'direct-certified extremal';
+        hh(end+1) = plot(d(c==2), v(c==2), 'o', 'Color',[0.35 0.60 0.30], ...
+             'MarkerFaceColor',[0.62 0.82 0.55],'MarkerSize',9);
+        lbl{end+1} = 'interior-certified (1st switch flagged)';
     end
     if any(c==3)
-        hh(end+1) = plot(d(c==3), v(c==3), 's', 'Color',[0.05 0.25 0.55], ...
+        hh(end+1) = plot(d(c==3), v(c==3), 'o', 'Color',[0.10 0.45 0.15], ...
+             'MarkerFaceColor',[0.20 0.65 0.25],'MarkerSize',9,'LineWidth',1.2);
+        lbl{end+1} = 'FULL direct-certified';
+    end
+    if any(c==4)
+        hh(end+1) = plot(d(c==4), v(c==4), 's', 'Color',[0.05 0.25 0.55], ...
              'MarkerFaceColor',[0.15 0.45 0.80],'MarkerSize',10,'LineWidth',1.2);
         lbl{end+1} = 'direct+indirect certified';
     end

@@ -31,3 +31,23 @@ underestimates correlated integration noise at RelTol 1e-13. The Jacobian is cor
 heuristic is miscalibrated. Candidate fixes: larger hFD (1e-5..1e-4) for Gate 1, or defer to the
 green CS backstop when Gate 1 is noise-limited. Not changed here (gate discipline).
 Logs: `test_mintime_reltol13.log`, `test_jacobian_reltol13.log`, diagnostics `task5_diag*.log`.
+
+### 2026-07-10 — M1(b) BLOCKED, adjudicated; pivot to up-march-first
+The 1.12x dual-seed reproduction failed to converge under every recipe
+(time-domain MS): best case (M=48, eps=1, 600 LM iters) decelerates
+asymptotically at ||R||~1e-2. Seed machinery itself VALIDATED (beta=0.03102,
+spread 0.5%, burnAgree 100%, arcCheckErr 2.6e-3 at M=48) — committed
+(beta_from_duals.m, seed_from_duals.m). Root-cause candidate: KKT duals are
+SUNDMAN-domain costates; time-domain conversion carries a discrete
+(dkappa/dr)L offset on burn arcs (largest at perigee burns), and the
+unscaled mixed-magnitude system cripples LM. Full traces + analysis:
+.superpowers/sdd/task-6-report.md. test_ms_reproduce_112.m left uncommitted
+(fails; revisit at the endpoint cross-check).
+Rulings (user): (1) proceed up-march-first (Task 7; clean integration seeds);
+1.12x reproduction deferred to an endpoint cross-check where the up-march
+meets the band edge; Sundman-domain MS rebuild is the fallback if the
+up-march also crawls. (2) Guard amended: within-step LM relay allowed
+(iteration-capped solve with monotonically decreasing resnorm may continue
+from its own iterate at the SAME eps; never across steps; worse iterates
+still discarded). Also adopting ScaleProblem='jacobian' in ms_solve
+(probe: ~10x early-phase speedup).

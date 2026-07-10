@@ -62,3 +62,30 @@ easy near-converged problem doesn't exercise the scaling benefit the probe
 measured on the hard dual-seed case, but the gate stays green). physics
 exact (dV 4.4665 km/s, prop 2.9247 kg, bang 100.0%). Log:
 `regress_mintime_scaled.log`.
+
+### 2026-07-10 — Task 7: M2(a) 1.01x up-anchor BLOCKED (adjudicated); Sundman pivot triggered
+Machinery landed and validated: `eps_march.m` (guarded schedule march +
+within-step relay per the 2026-07-10 guard amendment — relay accounting
+worked exactly as designed), `seed_from_mintime.m` (clean integration seed:
+||R(seed)|| = 0.72 at eps=1, entirely the 7-row terminal miss; joint
+defects ~0 by construction), `run_anchor_up.m` (M=24 with one-shot M=48
+escalation).
+**Result: the eps=1 solve at 1.01x plateaus and never converges.** M=24
+relay sequence (200 LM iters each, ScaleProblem=jacobian):
+0.72 -> 4.887e-3 -> 2.566e-3 -> 1.975e-3 -> 1.826e-3 (per-relay improvement
+99.3% -> 47% -> 23% -> 7.5%; <10% => step failed per guard). M=48
+escalation: 0.72 -> 3.308e-3 -> 3.264e-3 (1.3% => abandoned).
+`FAIL run_anchor_up (eps floor Inf)`. Total wall ~95 min. Log: `anchor_up.log`.
+**Plateau mechanism (from the LM traces):** at the M=48 plateau the
+first-order optimality fell to 1.2e-2 (from 9.3e+2 at the seed, a ~8e4
+drop) while ||R|| froze at 3.26e-3 — J'R -> 0 with R != 0. For a SQUARE
+MS system that means the Jacobian is (numerically) singular at the plateau:
+a genuine nonzero local minimum of ||R||^2, not a conditioning crawl that
+more iterations would fix. M=24 shows the softer version (optimality
+0.5–17, asymptotic deceleration to a ~1.8e-3 floor).
+**Conclusion:** time-domain MS is ill-conditioned at ANY in-band tf — the
+clean integration seed did NOT dodge the Task-6 pathology; at 1.01x even
+eps=1 (maximal smoothing) stalls. Together with the 1.12x dual-seed block
+this is decisive: the pre-authorized fallback triggers — Sundman-domain
+MS rebuild (16-dim augmented state, tau as independent variable).
+ScaleProblem=jacobian stays in (mintime regression green).

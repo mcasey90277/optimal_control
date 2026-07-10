@@ -1,12 +1,15 @@
 % TEST_MS_JACOBIAN  Task-4 gate: complex-step Jacobian vs finite differences.
 %
-% Gate design (Task-4 review): a single-h central FD cannot certify the
-% stiff near-Earth perigee columns -- they are roundoff-dominated at small h
-% and truncation-dominated at large h, with no common workable h. So each
-% column's FD tolerance is widened to what FD itself can resolve (3x the
-% h vs h/2 self-consistency delta), and a complex-step h-independence
-% backstop (columns rebuilt at hCS = 1e-16 and 1e-24 must agree to 1e-10;
-% measured ~1e-13) certifies the derivative where FD cannot.
+% Gate design (v3, review-prescribed): no single FD step h certifies all
+% columns here -- stiff perigee columns are roundoff-dominated at small h,
+% truncation-dominated at large h, and the h/(h/2) self-consistency estimate
+% can deflate when the two FD errors correlate. So Gate 1 sweeps h
+% largest-first and passes a column if ANY h satisfies the self-consistency
+% formula: each column certifies in its own FD-convergent regime. Gate 2
+% adds (a) a CS h-independence check (hCS 1e-16 vs 1e-24 agree to 1e-10;
+% measured ~1e-13) and (b) assertion B2: the assembled J block must match
+% the independently rebuilt CS column -- catches assembly/indexing bugs
+% independent of FD conditioning. Structure gate unchanged.
 setup_paths;
 rng(7);
 epsS = 0.3;
@@ -24,36 +27,54 @@ Z    = ms_pack(lam0, yJ(:, 2:M));
 [~, J] = ms_residual(Z, prob);
 n = numel(Z);
 colSel = unique([1 3 7, 8 15 22, n-13, n, randi(n, 1, 4)]);   % lam0 + joint cols
-hFD = 1e-7;
+hSweep = [1e-4 1e-5 1e-6 1e-7];    % largest-first: early break on pass
 failMsg = '';
 
-% Gate 1: per-column FD check with self-consistency tolerance (h vs h/2)
+% Gate 1 (any-h): column passes if ANY h satisfies the FD self-consistency
+% tolerance max(1e-6*denom, 3*selfErr)
 for cIdx = colSel
-    scale   = max(1, abs(Z(cIdx)));
-    colFD   = fd_col(Z, prob, cIdx, hFD*scale);
-    colFDh2 = fd_col(Z, prob, cIdx, hFD*scale/2);
-    denom   = max(1, max(abs(colFD)));
-    selfErr = max(abs(colFD - colFDh2));
-    tolC    = max(1e-6*denom, 3*selfErr);
-    errC    = max(abs(full(J(:, cIdx)) - colFD));
-    fprintf('col %3d  |J-FD| %.3e   tol %.3e   (FD self-consistency %.3e)\n', ...
-            cIdx, errC, tolC, selfErr);
-    if errC > tolC
-        failMsg = sprintf('%s col %d: |J-FD| %.3e > tol %.3e;', ...
-                          failMsg, cIdx, errC, tolC);
+    scale  = max(1, abs(Z(cIdx)));
+    passH  = NaN;
+    for hFD = hSweep
+        colFD   = fd_col(Z, prob, cIdx, hFD*scale);
+        colFDh2 = fd_col(Z, prob, cIdx, hFD*scale/2);
+        denom   = max(1, max(abs(colFD)));
+        selfErr = max(abs(colFD - colFDh2));
+        tolC    = max(1e-6*denom, 3*selfErr);
+        errC    = max(abs(full(J(:, cIdx)) - colFD));
+        okH     = errC <= tolC;
+        fprintf('col %3d  h=%.0e  |J-FD| %.3e   tol %.3e   (selfErr %.3e)  %s\n', ...
+                cIdx, hFD, errC, tolC, selfErr, ternStr(okH, 'pass', 'fail'));
+        if okH, passH = hFD; break; end
+    end
+    if isnan(passH)
+        failMsg = sprintf('%s col %d: no h in sweep passes FD gate;', failMsg, cIdx);
+    else
+        fprintf('col %3d  Gate-1 PASS at h=%.0e\n', cIdx, passH);
     end
 end
 
-% Gate 2: CS h-independence backstop on the same columns (owning arc only)
+% Gate 2: CS h-independence + assertion B2 (assembled J vs rebuilt column)
 for cIdx = colSel
     [kArc, idx] = col_owner(cIdx);
     c16 = cs_col(yJ(:, kArc), idx, prob.tJ(kArc), prob.tJ(kArc+1), prob, 1e-16);
     c24 = cs_col(yJ(:, kArc), idx, prob.tJ(kArc), prob.tJ(kArc+1), prob, 1e-24);
     relCS = max(abs(c16 - c24))/max(1, max(abs(c16)));
-    fprintf('col %3d  CS h-independence (1e-16 vs 1e-24): %.3e\n', cIdx, relCS);
+    if kArc <= M-1
+        b2 = max(abs(full(J(14*(kArc-1)+(1:14), cIdx)) - c16));
+    else
+        b2 = max(abs(full(J(14*(M-1)+(1:7), cIdx)) - c16([1:6 14])));
+    end
+    b2rel = b2/max(1, max(abs(c16)));
+    fprintf('col %3d  CS h-independence %.3e   B2 assembled-vs-rebuilt %.3e\n', ...
+            cIdx, relCS, b2rel);
     if relCS > 1e-10
         failMsg = sprintf('%s col %d: CS h-dependence %.3e > 1e-10;', ...
                           failMsg, cIdx, relCS);
+    end
+    if b2rel > 1e-9
+        failMsg = sprintf('%s col %d: B2 assembled-vs-rebuilt %.3e > 1e-9;', ...
+                          failMsg, cIdx, b2rel);
     end
 end
 
@@ -133,4 +154,17 @@ yp(idx) = yp(idx) + 1i*hCS*scale;
 [~, Yc] = ode113(@(t, y) lt_pmp_eom_minfuel(t, y, prob.Tmax, prob.c, ...
                  prob.muStar, prob.epsSmooth), [t0 t1], yp, prob.odeOpts);
 col = imag(Yc(end, :).')./(hCS*scale);
+end
+
+function s = ternStr(cond, a, b)
+% TERNSTR  Ternary string select.
+%
+% INPUTS:
+%   cond - condition [logical scalar]
+%   a    - string returned when cond is true
+%   b    - string returned when cond is false
+%
+% OUTPUTS:
+%   s - a or b
+if cond, s = a; else, s = b; end
 end

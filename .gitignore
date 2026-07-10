@@ -28,3 +28,17 @@ codegen/
 
 # Runtime solver logs
 tf_continuation*.log
+
+# IPOPT/Fortran scratch output
+fort.6
+
+# MATLAB crash dumps
+matlab_crash_dump.*
+
+# LaTeX aux (cleaned after every compile per CLAUDE.md)
+*.aux
+*.out
+*.toc
+*.synctex.gz
+*.fls
+*.fdb_latexmk

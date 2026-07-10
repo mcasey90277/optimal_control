@@ -89,3 +89,23 @@ eps=1 (maximal smoothing) stalls. Together with the 1.12x dual-seed block
 this is decisive: the pre-authorized fallback triggers — Sundman-domain
 MS rebuild (16-dim augmented state, tau as independent variable).
 ScaleProblem=jacobian stays in (mintime regression green).
+
+### 2026-07-10 — Task S1 Gates A+B: 16-dim Sundman EOM + Jacobian GREEN
+Sundman-domain MS machinery built (sms_ file set: eom/problem/pack/unpack/
+residual/jacobian_cs/traj/seed_mintime + tests). System: sigma with
+dt/dsigma = kappa = r1^1.5, 16-dim Y = [r;v;m;t;lamR;lamV;lamM;lamT],
+lamRdot = kap*(-G'lamV) - dkapdr*(Ht+lamT), Ht ENTROPY-smoothed
+(Lear via CS-safe softplus identity; Lear(S=0) = -log(2) verified to
+1e-15). **Gate A PASS** (test_sms_eom): H_sigma conservation 1.9e-12;
+cross-domain state match — short-span 6.9e-10/2.0e-9, full-span 8.5e-8/
+2.5e-7 vs measured time-domain self-noise 3.7e-8/1.9e-7 (flat 1e-9
+full-span unattainable: STM through ~30 perigee passes amplifies
+1e-13-tolerance noise; diag_s1_gateA.m attribution — matched-span
+agreement 1.6e-11 proves the EOM). Brief's conservation check is BLIND to
+the dkapdr sign on Hval=0 trajectories (drift rate prop. to Hval); added
+offset-lamT short-span check with in-test flipped-sign assertion:
+detection power 1.1e-14 vs 1.8e-1. **Gate B PASS** (test_sms_jacobian,
+v3 design at 16 dims): all 12 columns pass FD Gate 1 at the FIRST h
+(1e-3) — no col-49-style noise limitation; CS h-independence <=6e-13, B2
+<=5e-14, structure exact. The regularized domain also fixes the FD
+conditioning. sigf(1.00x) = 149.75.

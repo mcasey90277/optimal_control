@@ -29,5 +29,9 @@ prob.muStar    = p.muStar;
 prob.p         = p;
 prob.epsSmooth = epsSmooth;
 prob.tJ        = [];
-prob.odeOpts   = odeset('RelTol', 1e-12, 'AbsTol', 1e-14);
+% RelTol 1e-13: costate rows (~2e2 magnitude through perigee arcs) set the
+% MS residual floor at ~(costate scale x RelTol x sqrt(Nrows)) — measured
+% 1.206e-9 at RelTol 1e-12, 2.253e-10 at 1e-13 (Task-5 floor analysis,
+% review-verified). 1e-13 keeps the certified ||R|| <= 1e-9 gate honest.
+prob.odeOpts   = odeset('RelTol', 1e-13, 'AbsTol', 1e-15);
 end

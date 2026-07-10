@@ -13,10 +13,17 @@ prob.tJ = arc_boundaries_tau(sol.x, sol.y(1:3,:), M, prob.muStar);
 yJ   = deval(sol, prob.tJ);
 Zseed = ms_pack(lam0, yJ(:, 2:M));
 
+% At RelTol 1e-13 the seed residual rises to ~2e-5 (tighter integrator
+% exposes the min-time reference's own ~1e-6 gate); LM absorbs it in one step.
 out  = ms_solve(Zseed, prob, 1e-9, 100);
 traj = ms_traj(out.Z, prob);
 fprintf('||R|| = %.3e   dV = %.4f km/s   prop = %.4f kg   bang %.1f%%\n', ...
         out.resNorm, traj.dV_kms, traj.prop_kg, 100*traj.bangFrac);
 ok = out.success && abs(traj.dV_kms - 4.4665) < 0.002 ...
      && abs(traj.prop_kg - 2.9247) < 0.002;
-if ok, fprintf('PASS test_ms_reproduce_mintime\n'); else, fprintf('FAIL test_ms_reproduce_mintime\n'); end
+if ok
+    fprintf('PASS test_ms_reproduce_mintime\n');
+else
+    error('FAIL test_ms_reproduce_mintime: ||R||=%.3e dV=%.4f prop=%.4f', ...
+          out.resNorm, traj.dV_kms, traj.prop_kg);
+end

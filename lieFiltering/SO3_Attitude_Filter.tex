@@ -1,0 +1,989 @@
+\documentclass[11pt,letterpaper]{article}
+\usepackage[margin=1in]{geometry}
+\usepackage{amsmath,amssymb,bm}
+\usepackage{booktabs}
+\usepackage{enumitem}
+\usepackage{xcolor}
+\usepackage[colorlinks=true,linkcolor=blue!70!black,urlcolor=blue!70!black,citecolor=blue!70!black]{hyperref}
+\usepackage{fancyhdr}
+\usepackage{titlesec}
+\usepackage{tocloft}
+\usepackage{algorithm}
+\usepackage{algpseudocode}
+\usepackage{mathtools}
+
+\pagestyle{fancy}
+\fancyhf{}
+\rhead{SO(3) Attitude Filter --- A Lie Group Tutorial}
+\lhead{}
+\rfoot{Page \thepage}
+\setlength{\headheight}{14pt}
+
+\setlength{\parskip}{5pt}
+\setlength{\parindent}{0pt}
+
+\titlespacing*{\section}{0pt}{14pt}{6pt}
+\titlespacing*{\subsection}{0pt}{10pt}{4pt}
+\titlespacing*{\subsubsection}{0pt}{8pt}{3pt}
+
+% Convenience commands
+\newcommand{\R}{\mathbb{R}}
+\newcommand{\SO}{\mathrm{SO}(3)}
+\newcommand{\so}{\mathfrak{so}(3)}
+\newcommand{\skew}[1]{[#1]_{\times}}
+\newcommand{\hatmap}[1]{#1^{\wedge}}
+\newcommand{\veemap}[1]{#1^{\vee}}
+\newcommand{\expmap}{\mathrm{Exp}}
+\newcommand{\logmap}{\mathrm{Log}}
+\newcommand{\eye}{\mathbf{I}}
+
+\title{\textbf{Building an Attitude Filter on SO(3):\\
+A Lie Group Extended Kalman Filter from Scratch}\\[8pt]
+\large For Engineers Who Already Know Kalman Filtering}
+\author{}
+\date{February 2026}
+
+\begin{document}
+\maketitle
+\thispagestyle{fancy}
+
+\tableofcontents
+\newpage
+
+%======================================================================
+\section{Introduction: Why This Document?}
+%======================================================================
+
+If you already know how to build a Kalman filter, you know how to
+build a Lie group filter.  You just need a few new pieces of
+vocabulary.  This document develops those pieces one at a time and
+then assembles them into a working \textbf{Extended Kalman Filter
+on $\SO$}---an attitude filter that estimates the orientation of a
+rigid body from gyroscope and accelerometer measurements.
+
+The goal is economy: only the Lie theory that is directly needed,
+motivated by the estimation problem at every step.  No root systems,
+no Dynkin diagrams, no abstract manifold theory.  Just matrices,
+calculus, and filtering.
+
+\subsection*{What You Should Already Know}
+
+\begin{itemize}[nosep]
+  \item The standard discrete-time Extended Kalman Filter (EKF):
+    predict/update cycle, state vector, covariance matrix,
+    Jacobians, Kalman gain.
+  \item Basic linear algebra: matrix multiplication, transpose,
+    inverse, eigenvalues.
+  \item Rotation matrices and what they represent (a coordinate
+    frame's orientation in 3D space).
+\end{itemize}
+
+\subsection*{What You Will Learn}
+
+\begin{enumerate}[nosep]
+  \item Why Euler angles and raw quaternions cause problems in a
+    Kalman filter.
+  \item The five Lie theory tools you need: the group $\SO$, the
+    algebra $\so$, the exponential map, the logarithmic map, and
+    the right Jacobian.
+  \item How to build the ``error-state'' EKF on $\SO$ step by step.
+  \item A complete algorithm you can implement in MATLAB or Python.
+\end{enumerate}
+
+\newpage
+%======================================================================
+\section{The Problem with Euler Angles\\(and Why We Need Lie Groups)}
+%======================================================================
+
+Suppose you want to estimate the orientation of a drone, a
+satellite, or a robot link.  Your first instinct is to put three
+Euler angles $(\phi, \theta, \psi)$ into the state vector and run
+a standard EKF.  This works---until it doesn't.
+
+\subsection{Gimbal Lock}
+
+At $\theta = \pm 90^{\circ}$, the Euler angle parameterisation is
+singular: two of the three axes align, a degree of freedom is lost,
+and the Jacobians blow up.  This is not a numerical issue---it is
+a \emph{topological} fact.  No three-parameter representation of
+3D rotation can be globally non-singular.
+
+\subsection{Quaternion Normalisation}
+
+Quaternions avoid gimbal lock, but they have four components subject
+to the constraint $\|q\| = 1$.  If you put four quaternion
+components into the state vector, the covariance matrix is
+$4 \times 4$ but the system has only 3 rotational degrees of
+freedom.  The covariance is always rank-deficient, which causes
+numerical problems.
+
+\subsection{The Root Cause}
+
+The space of 3D rotations is \emph{not} $\R^{3}$.  It is a curved,
+compact, three-dimensional manifold.  Any attempt to treat it as a
+flat vector space (by using Euler angles, Rodrigues parameters,
+or unconstrained quaternions as the state) will eventually produce
+artefacts.
+
+The solution is to work with the rotation group directly---and to
+put the \emph{error state} (which is small) in a local vector
+space where the EKF machinery applies naturally.  This is the Lie
+group approach.
+
+\newpage
+%======================================================================
+\section{The Five Lie Theory Tools You Need}
+%======================================================================
+
+This section introduces exactly the Lie theory required for the
+filter.  Nothing more.
+
+%----------------------------------------------------------------------
+\subsection{Tool 1: The Lie Group $\SO$}
+%----------------------------------------------------------------------
+
+\begin{center}
+\fbox{\parbox{0.9\textwidth}{
+\textbf{Definition.} $\SO$ is the set of all $3 \times 3$ rotation
+matrices:
+\[
+  \SO = \bigl\{ R \in \R^{3 \times 3} \;\big|\;
+  R^{\mathsf{T}} R = \eye, \;\; \det(R) = +1 \bigr\}.
+\]
+It is a \emph{group} under matrix multiplication.}}
+\end{center}
+
+\textbf{What this means for you:}
+\begin{itemize}[nosep]
+  \item If $R_1$ and $R_2$ are rotations, so is $R_1 R_2$
+    (closure).
+  \item Every rotation $R$ has an inverse $R^{-1} = R^{\mathsf{T}}$
+    (inversion is free---just transpose).
+  \item The identity rotation is $\eye_{3 \times 3}$.
+  \item Rotations compose by matrix multiplication, not by adding
+    angles.
+\end{itemize}
+
+\textbf{Key point:}  The ``state'' of an attitude filter is an
+element $R \in \SO$, not a vector in $\R^{3}$.  We never flatten
+it into three numbers.  Instead, $R$ is always a $3\times 3$
+orthogonal matrix.
+
+%----------------------------------------------------------------------
+\subsection{Tool 2: The Lie Algebra $\so$ (the Tangent Space)}
+%----------------------------------------------------------------------
+
+\begin{center}
+\fbox{\parbox{0.9\textwidth}{
+\textbf{Definition.} The Lie algebra $\so$ is the set of all
+$3 \times 3$ skew-symmetric matrices:
+\[
+  \so = \bigl\{ \Omega \in \R^{3 \times 3} \;\big|\;
+  \Omega^{\mathsf{T}} = -\Omega \bigr\}.
+\]
+Every element of $\so$ is determined by a 3-vector
+$\bm{\phi} = (\phi_1, \phi_2, \phi_3)^{\mathsf{T}} \in \R^{3}$.}}
+\end{center}
+
+\begin{center}
+\fbox{\parbox{0.9\textwidth}{
+\textbf{Hat and vee maps.}  The \textbf{hat map}
+$(\cdot)^{\wedge}$ converts a 3-vector to a skew-symmetric matrix:
+\[
+  \bm{\phi}^{\wedge}
+  \;\coloneqq\;
+  \begin{pmatrix}
+    0 & -\phi_3 & \phi_2 \\
+    \phi_3 & 0 & -\phi_1 \\
+    -\phi_2 & \phi_1 & 0
+  \end{pmatrix}
+  \in \so.
+\]
+The \textbf{vee map} $(\cdot)^{\vee}$ is the inverse: it extracts
+the 3-vector from a skew-symmetric matrix.  We also write
+$\skew{\bm{\phi}}$ for $\bm{\phi}^{\wedge}$ when emphasising
+the cross-product interpretation:
+$\bm{\phi}^{\wedge}\,\mathbf{v} = \bm{\phi} \times \mathbf{v}$.}}
+\end{center}
+
+\textbf{What this means for you:}  The Lie algebra is a
+\emph{vector space}---it is $\R^{3}$ in disguise.  This is where
+the error state, the covariance, and the Kalman update all live.
+The algebra is the ``local flat map'' of the curved rotation space.
+
+\textbf{Physical interpretation:}  A vector
+$\bm{\phi} \in \R^{3}$ in the Lie algebra represents a small
+rotation.  Its direction is the rotation axis; its magnitude
+$\|\bm{\phi}\|$ is the rotation angle in radians.
+
+%----------------------------------------------------------------------
+\subsection{Tool 3: The Exponential Map
+  ($\R^{3} \to \SO$)}
+%----------------------------------------------------------------------
+
+\begin{center}
+\fbox{\parbox{0.9\textwidth}{
+\textbf{Definition.}  The exponential map takes a Lie algebra
+element (a rotation vector) and produces a rotation matrix:
+\[
+  \expmap(\bm{\phi})
+  = \exp\!\bigl(\bm{\phi}^{\wedge}\bigr)
+  = \eye
+    + \frac{\sin\theta}{\theta}\,\bm{\phi}^{\wedge}
+    + \frac{1 - \cos\theta}{\theta^{2}}\,
+      (\bm{\phi}^{\wedge})^{2},
+\]
+where $\theta = \|\bm{\phi}\|$.  This is the \textbf{Rodrigues
+formula}.}}
+\end{center}
+
+\textbf{What this means for you:}  The exponential map is the
+bridge from the vector space (where the EKF lives) to the group
+(where the state lives).  When the Kalman update gives you a
+correction vector $\delta\bm{\phi} \in \R^{3}$, you apply it to
+the current rotation estimate via:
+\[
+  R_{\text{new}} = \expmap(\delta\bm{\phi}) \; R_{\text{old}}.
+\]
+This is the ``reset'' or ``injection'' step.
+
+\textbf{Small-angle limit:}  When $\|\bm{\phi}\|$ is small,
+\[
+  \expmap(\bm{\phi}) \;\approx\; \eye + \bm{\phi}^{\wedge},
+\]
+a familiar first-order approximation.
+
+%----------------------------------------------------------------------
+\subsection{Tool 4: The Logarithmic Map
+  ($\SO \to \R^{3}$)}
+%----------------------------------------------------------------------
+
+\begin{center}
+\fbox{\parbox{0.9\textwidth}{
+\textbf{Definition.}  The logarithmic map is the inverse of the
+exponential map.  Given a rotation matrix $R$:
+\begin{align*}
+  \theta &= \arccos\!\left(\frac{\mathrm{tr}(R) - 1}{2}\right), \\
+  \logmap(R) &= \frac{\theta}{2\sin\theta}
+    \bigl(R - R^{\mathsf{T}}\bigr)^{\vee}.
+\end{align*}
+The result is a 3-vector: the axis-angle representation.}}
+\end{center}
+
+\textbf{What this means for you:}  The logarithmic map lets you
+compute the ``difference'' between two rotations as a vector:
+\[
+  \bm{\phi}_{\text{error}}
+  = \logmap\!\bigl(R_{\text{true}}\, R_{\text{est}}^{\mathsf{T}}\bigr).
+\]
+This error vector lives in $\R^{3}$ and can be used in least-squares
+cost functions, residual computations, or filter innovations.
+
+%----------------------------------------------------------------------
+\subsection{Tool 5: The Right Jacobian of $\SO$}
+%----------------------------------------------------------------------
+
+When we propagate the covariance through the exponential map, we
+need to know how a small perturbation in the Lie algebra maps to a
+perturbation in the group.  This is captured by the \textbf{right
+Jacobian} $\mathbf{J}_{r}(\bm{\phi})$.
+
+\begin{center}
+\fbox{\parbox{0.9\textwidth}{
+\textbf{Definition.}  For $\bm{\phi} \in \R^{3}$ with
+$\theta = \|\bm{\phi}\|$:
+\[
+  \mathbf{J}_{r}(\bm{\phi})
+  = \eye
+    - \frac{1 - \cos\theta}{\theta^{2}}\,\bm{\phi}^{\wedge}
+    + \frac{\theta - \sin\theta}{\theta^{3}}\,
+      (\bm{\phi}^{\wedge})^{2}.
+\]
+For small $\bm{\phi}$:
+\[
+  \mathbf{J}_{r}(\bm{\phi})
+  \;\approx\; \eye - \tfrac{1}{2}\,\bm{\phi}^{\wedge}.
+\]}}
+\end{center}
+
+\textbf{What this means for you:}  The right Jacobian plays the
+role of the ``state transition Jacobian'' for the orientation error.
+In the EKF covariance propagation, it appears wherever the standard
+EKF would have a partial derivative of the state transition with
+respect to the state.
+
+\textbf{Useful identity:}
+\[
+  \mathbf{J}_{r}^{-1}(\bm{\phi})
+  = \eye
+    + \tfrac{1}{2}\,\bm{\phi}^{\wedge}
+    + \biggl(\frac{1}{\theta^{2}}
+    - \frac{1 + \cos\theta}{2\theta\sin\theta}\biggr)
+    (\bm{\phi}^{\wedge})^{2}.
+\]
+
+\textbf{Small-angle approximation:}  In practice, the time step
+$\Delta t$ in an attitude filter is small (e.g., 0.01\,s), so
+$\bm{\phi} = \bm{\omega}\,\Delta t$ is small and
+$\mathbf{J}_{r} \approx \eye$ is often a perfectly adequate
+approximation.
+
+\subsection{Summary: The Five Tools at a Glance}
+
+\begin{center}
+\begin{tabular}{lll}
+\toprule
+\textbf{Tool} & \textbf{What it does} & \textbf{Filter role} \\
+\midrule
+$\SO$ (group) & Set of rotation matrices & The state space \\
+$\so \cong \R^{3}$ (algebra) & Skew-symmetric matrices / 3-vectors
+  & Error-state space \\
+$\expmap: \R^{3} \to \SO$ & Vector $\to$ rotation (Rodrigues)
+  & Apply correction \\
+$\logmap: \SO \to \R^{3}$ & Rotation $\to$ vector
+  & Compute error/innovation \\
+$\mathbf{J}_{r}$ (right Jacobian) & Sensitivity of $\expmap$
+  & Covariance propagation \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\newpage
+%======================================================================
+\section{The Estimation Problem}
+%======================================================================
+
+We want to estimate the orientation of a rigid body (e.g., a drone
+or satellite) using:
+\begin{itemize}[nosep]
+  \item A \textbf{gyroscope} that measures angular velocity
+    $\bm{\omega}_m \in \R^{3}$ in the body frame, corrupted by
+    bias and noise.
+  \item An \textbf{accelerometer} that measures the gravity vector
+    $\mathbf{a}_m \in \R^{3}$ in the body frame, corrupted by
+    noise.  (We assume the body is not accelerating, or that
+    accelerations are small compared to gravity.)
+\end{itemize}
+
+\subsection{State}
+
+The filter state is:
+\begin{align*}
+  R &\in \SO && \text{(orientation: body frame $\to$ world frame)}, \\
+  \mathbf{b} &\in \R^{3} && \text{(gyroscope bias)}.
+\end{align*}
+
+\textbf{Important:}  $R$ is \emph{not} in the state vector---it is
+a matrix that we propagate on the group.  The state vector for the
+EKF contains only the \emph{error state}
+$\delta\mathbf{x} \in \R^{6}$, which lives in the Lie algebra (and
+a Euclidean space for the bias).
+
+\subsection{Error-State Definition}
+
+We define the error state as:
+\[
+  \boxed{
+  \delta\mathbf{x}
+  = \begin{pmatrix} \delta\bm{\phi} \\ \delta\mathbf{b} \end{pmatrix}
+  \in \R^{6},
+  }
+\]
+where:
+\begin{itemize}[nosep]
+  \item $\delta\bm{\phi} \in \R^{3}$ is the \textbf{orientation
+    error} in the Lie algebra.  It relates the true and estimated
+    rotations by:
+    \[
+      R_{\text{true}}
+      = \expmap(\delta\bm{\phi})\; R_{\text{est}}.
+    \]
+    When the estimate is perfect, $\delta\bm{\phi} = \mathbf{0}$
+    and $\expmap(\mathbf{0}) = \eye$.
+  \item $\delta\mathbf{b} = \mathbf{b}_{\text{true}} -
+    \mathbf{b}_{\text{est}} \in \R^{3}$ is the bias error
+    (ordinary Euclidean subtraction).
+\end{itemize}
+
+\textbf{Key insight:}  The error state is always a vector in
+$\R^{6}$.  We can define a $6 \times 6$ covariance matrix $P$ for
+it, compute Jacobians, and apply the standard EKF equations---all
+without any singularities, because $\delta\bm{\phi}$ is always
+small when the filter is working.
+
+\subsection{Dynamics}
+
+The continuous-time kinematics of a rotation matrix driven by
+angular velocity $\bm{\omega}$ (in the body frame) are:
+\[
+  \dot{R} = R\,\bm{\omega}^{\wedge}.
+\]
+
+The gyroscope measures:
+\[
+  \bm{\omega}_m = \bm{\omega} + \mathbf{b} + \mathbf{n}_{\omega},
+\]
+where $\mathbf{b}$ is a slowly varying bias and
+$\mathbf{n}_{\omega} \sim \mathcal{N}(\mathbf{0},\,
+\sigma_{\omega}^{2}\,\eye)$ is white noise.  The bias evolves as a
+random walk:
+\[
+  \dot{\mathbf{b}} = \mathbf{n}_{b},
+  \qquad
+  \mathbf{n}_{b} \sim \mathcal{N}(\mathbf{0},\,
+  \sigma_{b}^{2}\,\eye).
+\]
+
+\subsection{Why Can't Gyros Alone Estimate Attitude?}
+
+At first glance, gyroscopes seem sufficient: they measure angular
+velocity, and integrating angular velocity gives attitude.  But
+gyro-only attitude estimation suffers from \emph{unbounded drift},
+and this drift is fundamental---not a matter of sensor quality.
+
+\textbf{The drift mechanism.}  The gyroscope measures
+$\bm{\omega}_m = \bm{\omega} + \mathbf{b} + \mathbf{n}_{\omega}$.
+To propagate attitude, we integrate $\bm{\omega}_m - \hat{\mathbf{b}}$,
+where $\hat{\mathbf{b}}$ is our bias estimate.  Two error sources
+cause the attitude estimate to drift without bound:
+
+\begin{enumerate}[nosep]
+  \item \textbf{Bias error integrates to a ramp.}  If the bias
+    estimate $\hat{\mathbf{b}}$ is wrong by
+    $\delta\mathbf{b} = \mathbf{b} - \hat{\mathbf{b}}$, then the
+    attitude error grows as
+    $\delta\bm{\phi}(t) \approx \delta\mathbf{b}\,t$---a ramp.
+    After 10 minutes with a $0.01$\,deg/s bias error, attitude
+    has drifted by $6$ degrees.  Worse, the bias itself
+    random-walks, so the rate of drift is unpredictable.
+  \item \textbf{White noise integrates to a random walk.}  Even with
+    perfect bias compensation, the white noise
+    $\mathbf{n}_{\omega}$ integrates to a random walk in attitude.
+    The standard deviation grows as
+    $\sigma_{\phi}(t) = \sigma_{\omega}\sqrt{t}$---unbounded.
+\end{enumerate}
+
+\textbf{The observability problem.}  With gyros alone, the filter
+has no way to distinguish the true attitude from the drifted
+estimate.  The bias $\mathbf{b}$ is \emph{unobservable}: there is
+no measurement that constrains it, so the bias covariance grows
+without bound and drags the attitude covariance with it.
+
+\textbf{What the accelerometer provides.}  An accelerometer
+measures the gravity vector in the body frame.  Gravity is a
+\emph{known, fixed reference direction} in the world frame
+($\mathbf{g} = (0, 0, -g)^{\mathsf{T}}$).  By comparing the
+predicted gravity direction $R^{\mathsf{T}}\mathbf{g}$ with the
+measured direction $\mathbf{a}_m$, the filter obtains an
+\emph{absolute} orientation reference that does not drift.  This
+makes two of the three attitude axes (roll and pitch)
+\emph{observable}, bounding their errors.
+
+\textbf{The yaw gap.}  Gravity is a single vector, so it
+constrains the tilt of the body relative to the gravity direction
+(roll and pitch) but says nothing about rotation \emph{around}
+the gravity vector (yaw/heading).  Yaw remains unobservable
+from accelerometer alone.  To bound yaw drift, a heading
+reference is needed---typically a magnetometer (measuring Earth's
+magnetic field) or GPS-derived velocity.
+
+\textbf{Summary:}  Gyros provide high-bandwidth, short-term
+attitude tracking but drift without bound.  Accelerometers provide
+a low-bandwidth, absolute gravity reference that prevents roll and
+pitch drift.  The filter fuses both: gyros for dynamics (prediction),
+accelerometer for correction (update).  This complementary structure
+is why essentially every practical attitude estimation system uses
+both sensors.
+
+\subsection{Measurement Model}
+
+The accelerometer measures the gravity vector expressed in the body
+frame:
+\[
+  \mathbf{a}_m
+  = R^{\mathsf{T}}\,\mathbf{g} + \mathbf{n}_{a},
+  \qquad
+  \mathbf{n}_{a} \sim \mathcal{N}(\mathbf{0},\,
+  \sigma_{a}^{2}\,\eye),
+\]
+where $\mathbf{g} = (0, 0, -g)^{\mathsf{T}}$ is the gravity
+vector in the world frame.
+
+\newpage
+%======================================================================
+\section{The Filter: Step by Step}
+%======================================================================
+
+The filter follows the standard EKF predict/update cycle, but with
+one crucial difference: the state $R$ is propagated on the group,
+while the covariance and Kalman gain operate on the error state in
+$\R^{6}$.
+
+%----------------------------------------------------------------------
+\subsection{Step 0: Initialisation}
+%----------------------------------------------------------------------
+
+\begin{align*}
+  R_{0} &\leftarrow \text{initial orientation estimate
+    (e.g., from accelerometer + magnetometer)}, \\
+  \mathbf{b}_{0} &\leftarrow \mathbf{0}, \\
+  P_{0} &\leftarrow \text{diag}\bigl(\sigma_{\phi,0}^{2}\,\eye_{3},\;
+    \sigma_{b,0}^{2}\,\eye_{3}\bigr)
+    \in \R^{6 \times 6}, \\
+  \delta\mathbf{x}_{0} &\leftarrow \mathbf{0} \in \R^{6}.
+\end{align*}
+
+The error state is always reset to zero after each update (see
+Step~3).
+
+%----------------------------------------------------------------------
+\subsection{Step 1: Prediction (Propagation)}
+%----------------------------------------------------------------------
+
+Given a gyroscope measurement $\bm{\omega}_m$ and time step
+$\Delta t$:
+
+\medskip
+\noindent\textbf{1a.\ Propagate the state on the group:}
+\begin{align}
+  \bm{\omega} &= \bm{\omega}_m - \mathbf{b}, \label{eq:omega} \\
+  R &\leftarrow R \;\expmap(\bm{\omega}\,\Delta t).
+    \label{eq:Rprop}
+\end{align}
+(The bias estimate $\mathbf{b}$ is unchanged in the prediction
+step.)
+
+Equation~\eqref{eq:Rprop} is the \emph{group propagation}:
+we integrate the rotation by multiplying on the right by a small
+rotation $\expmap(\bm{\omega}\,\Delta t)$.  The result is
+guaranteed to remain in $\SO$---no normalisation needed.
+
+\medskip
+\noindent\textbf{1b.\ Propagate the error-state covariance:}
+
+The error-state dynamics (linearised) are:
+\[
+  \delta\dot{\mathbf{x}}
+  = F\,\delta\mathbf{x} + G\,\mathbf{n},
+\]
+where $\mathbf{n} = (\mathbf{n}_{\omega}^{\mathsf{T}},\;
+\mathbf{n}_{b}^{\mathsf{T}})^{\mathsf{T}}$ and:
+\[
+  F = \begin{pmatrix}
+    -\bm{\omega}^{\wedge} & -\eye_{3} \\[3pt]
+    \mathbf{0} & \mathbf{0}
+  \end{pmatrix},
+  \qquad
+  G = \begin{pmatrix}
+    -\eye_{3} & \mathbf{0} \\[3pt]
+    \mathbf{0} & \eye_{3}
+  \end{pmatrix}.
+\]
+
+\textbf{Where does $F$ come from?}  The upper-left block
+$-\bm{\omega}^{\wedge}$ arises from linearising the group
+propagation~\eqref{eq:Rprop} with respect to~$\delta\bm{\phi}$.
+The upper-right block~$-\eye$ reflects the fact that a bias error
+acts as a negative angular velocity error.  The lower row is zero
+because the bias random walk has no state-dependent dynamics.
+
+Discretise to get the state transition matrix and process noise:
+\begin{align}
+  F_{d} &= \exp(F\,\Delta t)
+    \approx \eye_{6} + F\,\Delta t, \label{eq:Fd}\\
+  Q_{d} &\approx G\,Q_{c}\,G^{\mathsf{T}}\,\Delta t,
+    \label{eq:Qd}
+\end{align}
+where $Q_{c} = \text{diag}(\sigma_{\omega}^{2}\,\eye_{3},\;
+\sigma_{b}^{2}\,\eye_{3})$.
+
+The covariance prediction is then the standard EKF equation:
+\[
+  \boxed{P \leftarrow F_{d}\,P\,F_{d}^{\mathsf{T}} + Q_{d}.}
+\]
+
+\textbf{Note:}  If you want to use the exact right Jacobian
+$\mathbf{J}_{r}(\bm{\omega}\,\Delta t)$ instead of the
+first-order approximation in~\eqref{eq:Fd}, replace $F_d$ with:
+\[
+  F_{d} = \begin{pmatrix}
+    \expmap(-\bm{\omega}\,\Delta t) &
+    -\mathbf{J}_{r}(\bm{\omega}\,\Delta t)\,\Delta t \\
+    \mathbf{0}_{3} & \eye_{3}
+  \end{pmatrix}.
+\]
+For small $\Delta t$ (100\,Hz IMU), the first-order approximation
+is usually sufficient.
+
+%----------------------------------------------------------------------
+\subsection{Step 2: Update (Correction)}
+%----------------------------------------------------------------------
+
+When an accelerometer measurement $\mathbf{a}_m$ arrives:
+
+\medskip
+\noindent\textbf{2a.\ Predicted measurement:}
+
+The filter predicts what the accelerometer \emph{should} read given
+the current orientation estimate:
+\[
+  \hat{\mathbf{a}} = R^{\mathsf{T}}\,\mathbf{g}.
+\]
+
+\noindent\textbf{2b.\ Innovation (residual):}
+\[
+  \mathbf{z} = \mathbf{a}_m - \hat{\mathbf{a}} \in \R^{3}.
+\]
+This is an ordinary vector subtraction in $\R^{3}$---no Lie theory
+needed for the measurement residual because the accelerometer
+output lives in $\R^{3}$.
+
+\medskip
+\noindent\textbf{2c.\ Measurement Jacobian:}
+
+We need $H = \partial\mathbf{a}/\partial(\delta\mathbf{x})$, the
+sensitivity of the predicted measurement to the error state.
+
+A small orientation error $\delta\bm{\phi}$ perturbs the predicted
+measurement as:
+\begin{align*}
+  \hat{\mathbf{a}}(\delta\bm{\phi})
+  &= \bigl(\expmap(\delta\bm{\phi})\,R\bigr)^{\mathsf{T}}\,
+    \mathbf{g}
+  \\
+  &= R^{\mathsf{T}}\,
+    \expmap(\delta\bm{\phi})^{\mathsf{T}}\,\mathbf{g}
+  \\
+  &\approx R^{\mathsf{T}}\,
+    \bigl(\eye - \delta\bm{\phi}^{\wedge}\bigr)\,\mathbf{g}
+  \\
+  &= R^{\mathsf{T}}\,\mathbf{g}
+    + R^{\mathsf{T}}\,\mathbf{g}^{\wedge}\,\delta\bm{\phi}.
+\end{align*}
+(We used
+$\expmap(\delta\bm{\phi})^{\mathsf{T}}
+\approx \eye - \delta\bm{\phi}^{\wedge}$
+and the cross-product identity
+$-\mathbf{a}^{\wedge}\mathbf{b}
+= \mathbf{b}^{\wedge}\mathbf{a}$.)
+
+Therefore:
+\[
+  \boxed{
+  H = \begin{pmatrix}
+    R^{\mathsf{T}}\,\mathbf{g}^{\wedge}
+    & \mathbf{0}_{3 \times 3}
+  \end{pmatrix}
+  \in \R^{3 \times 6}.
+  }
+\]
+The bias columns are zero because the accelerometer measurement
+does not depend on the gyro bias.
+
+\medskip
+\noindent\textbf{2d.\ Standard EKF update:}
+
+With the measurement noise covariance
+$V = \sigma_{a}^{2}\,\eye_{3}$:
+\begin{align}
+  S &= H\,P\,H^{\mathsf{T}} + V, \label{eq:S}\\
+  K &= P\,H^{\mathsf{T}}\,S^{-1}, \label{eq:K}\\
+  \delta\mathbf{x} &= K\,\mathbf{z}, \label{eq:dx}\\
+  P &\leftarrow (\eye_{6} - K\,H)\,P. \label{eq:Pupd}
+\end{align}
+
+Equations~\eqref{eq:S}--\eqref{eq:Pupd} are \emph{exactly} the
+standard EKF update equations.  Nothing has changed.  The Lie group
+structure is entirely hidden in how we defined $H$ and what we do
+with $\delta\mathbf{x}$ next.
+
+%----------------------------------------------------------------------
+\subsection{Step 3: Injection (Reset)}
+%----------------------------------------------------------------------
+
+This is the step that makes the filter a ``Lie group filter.''  The
+Kalman update produced a correction
+$\delta\mathbf{x} = (\delta\bm{\phi}^{\mathsf{T}},\;
+\delta\mathbf{b}^{\mathsf{T}})^{\mathsf{T}}$.  We inject it into
+the state:
+
+\[
+  \boxed{
+  \begin{aligned}
+    R &\leftarrow \expmap(\delta\bm{\phi})\; R, \\
+    \mathbf{b} &\leftarrow \mathbf{b} + \delta\mathbf{b}, \\
+    \delta\mathbf{x} &\leftarrow \mathbf{0}.
+  \end{aligned}
+  }
+\]
+
+\textbf{What is happening:}
+\begin{itemize}[nosep]
+  \item The orientation correction $\delta\bm{\phi}$ is mapped from
+    $\R^{3}$ to $\SO$ via the exponential map, then composed with
+    the current estimate by \emph{matrix multiplication} (not
+    addition).
+  \item The bias correction is ordinary vector addition.
+  \item The error state is reset to zero, because the correction has
+    been absorbed into the ``nominal'' state.
+\end{itemize}
+
+\textbf{This is the entire Lie group content of the filter.}  The
+exponential map is used exactly once per update cycle, in a single
+line of code.  Everything else is standard EKF.
+
+\newpage
+%======================================================================
+\section{Complete Algorithm}
+%======================================================================
+
+\begin{algorithm}[H]
+\caption{SO(3) Error-State EKF for Attitude Estimation}
+\begin{algorithmic}[1]
+\State \textbf{Initialise:} $R$, $\mathbf{b} \leftarrow \mathbf{0}$,
+  $P \leftarrow P_0$
+\For{each time step}
+  \State \textbf{--- Prediction ---}
+  \State $\bm{\omega} \leftarrow \bm{\omega}_m - \mathbf{b}$
+    \Comment{Subtract bias}
+  \State $R \leftarrow R \;\expmap(\bm{\omega}\,\Delta t)$
+    \Comment{Propagate on group}
+  \State $F_{d} \leftarrow \eye_{6}
+    + \begin{psmallmatrix}
+      -\bm{\omega}^{\wedge} & -\eye_{3} \\
+      \mathbf{0} & \mathbf{0}
+    \end{psmallmatrix} \Delta t$
+    \Comment{Error-state Jacobian}
+  \State $Q_{d} \leftarrow G\,Q_{c}\,G^{\mathsf{T}}\,\Delta t$
+  \State $P \leftarrow F_{d}\,P\,F_{d}^{\mathsf{T}} + Q_{d}$
+    \Comment{Covariance prediction}
+  \Statex
+  \If{accelerometer measurement available}
+    \State \textbf{--- Update ---}
+    \State $\hat{\mathbf{a}} \leftarrow R^{\mathsf{T}}\,\mathbf{g}$
+      \Comment{Predicted measurement}
+    \State $\mathbf{z} \leftarrow \mathbf{a}_m - \hat{\mathbf{a}}$
+      \Comment{Innovation}
+    \State $H \leftarrow
+      \begin{psmallmatrix}
+        R^{\mathsf{T}}\mathbf{g}^{\wedge} & \mathbf{0}_{3\times 3}
+      \end{psmallmatrix}$
+      \Comment{Measurement Jacobian}
+    \State $S \leftarrow H\,P\,H^{\mathsf{T}} + V$
+    \State $K \leftarrow P\,H^{\mathsf{T}}\,S^{-1}$
+      \Comment{Kalman gain}
+    \State $\delta\mathbf{x} \leftarrow K\,\mathbf{z}$
+      \Comment{Correction}
+    \State $P \leftarrow (\eye_{6} - K\,H)\,P$
+      \Comment{Covariance update}
+    \Statex
+    \State \textbf{--- Injection ---}
+    \State $R \leftarrow
+      \expmap(\delta\mathbf{x}_{1:3})\; R$
+      \Comment{Apply rotation correction}
+    \State $\mathbf{b} \leftarrow
+      \mathbf{b} + \delta\mathbf{x}_{4:6}$
+      \Comment{Apply bias correction}
+  \EndIf
+\EndFor
+\end{algorithmic}
+\end{algorithm}
+
+\textbf{That's it.}  The entire filter is 15 lines of mathematics.
+The only function you need beyond standard linear algebra is
+$\expmap(\cdot)$, which is the three-line Rodrigues formula.
+
+\newpage
+%======================================================================
+\section{Implementation Notes}
+%======================================================================
+
+\subsection{The Rodrigues Formula in Code}
+
+The exponential map is the only Lie-specific function you need to
+implement.  In pseudocode:
+
+\begin{verbatim}
+function R = Exp_SO3(phi)
+    theta = norm(phi);
+    if theta < 1e-10
+        R = eye(3) + skew(phi);   % first-order approx
+    else
+        a = phi / theta;          % unit axis
+        K = skew(a);              % skew-symmetric matrix
+        R = eye(3) + sin(theta)*K + (1-cos(theta))*K^2;
+    end
+end
+\end{verbatim}
+
+And the skew-symmetric matrix:
+
+\begin{verbatim}
+function S = skew(v)
+    S = [  0   -v(3)  v(2);
+          v(3)   0   -v(1);
+         -v(2)  v(1)   0  ];
+end
+\end{verbatim}
+
+\subsection{Numerical Considerations}
+
+\begin{itemize}
+  \item \textbf{Orthogonalisation:}  Due to floating-point
+    arithmetic, $R$ will slowly drift away from $\SO$ over many
+    propagation steps.  Periodically re-orthogonalise using an SVD:
+    $R \leftarrow U\,V^{\mathsf{T}}$ where $U\Sigma V^{\mathsf{T}}
+    = \text{SVD}(R)$.  This is needed perhaps every 1000 steps.
+  \item \textbf{Small-angle guard:}  In $\expmap$ and $\logmap$,
+    use Taylor expansions when $\theta < 10^{-10}$ to avoid
+    division by zero.
+  \item \textbf{Symmetry of $P$:}  After the covariance update,
+    enforce symmetry: $P \leftarrow (P + P^{\mathsf{T}})/2$.
+  \item \textbf{IMU rate vs.\ accelerometer rate:}  Gyroscopes
+    often run at 100--1000\,Hz while accelerometers may be slower.
+    Run the prediction step at the gyro rate; run the update step
+    only when accelerometer data arrives.
+\end{itemize}
+
+\subsection{Tuning Parameters}
+
+\begin{center}
+\begin{tabular}{lll}
+\toprule
+\textbf{Parameter} & \textbf{Typical value} & \textbf{Meaning} \\
+\midrule
+$\sigma_{\omega}$ & $0.01$--$0.1$ rad/s & Gyro noise density \\
+$\sigma_{b}$ & $10^{-4}$--$10^{-3}$ rad/s$^{2}$ & Bias random walk \\
+$\sigma_{a}$ & $0.5$--$2.0$ m/s$^{2}$ & Accelerometer noise \\
+$\sigma_{\phi,0}$ & $0.1$--$1.0$ rad & Initial orientation uncertainty \\
+$\sigma_{b,0}$ & $0.01$--$0.1$ rad/s & Initial bias uncertainty \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+These values come from the IMU datasheet (noise spectral density
+and bias instability) or from empirical tuning.
+
+\newpage
+%======================================================================
+\section{What Makes This a ``Lie Group Filter''?}
+%======================================================================
+
+Let us step back and see what we have done.
+
+\subsection{Comparison with the Standard Vector-State EKF}
+
+\begin{center}
+\begin{tabular}{lll}
+\toprule
+& \textbf{Euler-angle EKF} & \textbf{SO(3) error-state EKF} \\
+\midrule
+State & $(\phi, \theta, \psi) \in \R^{3}$
+  & $R \in \SO$ \\
+Error state & $\delta(\phi, \theta, \psi) \in \R^{3}$
+  & $\delta\bm{\phi} \in \R^{3} \cong \so$ \\
+Propagation & Euler angle kinematics & $R \leftarrow R\,\expmap(\bm{\omega}\,\Delta t)$ \\
+Correction & $\bm{\alpha} \leftarrow \bm{\alpha} + \delta\bm{\alpha}$
+  & $R \leftarrow \expmap(\delta\bm{\phi})\,R$ \\
+Singularity? & Yes (gimbal lock) & No \\
+Covariance dim. & $3 \times 3$ (or $6 \times 6$)
+  & $6 \times 6$ (same) \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+The filter structure is identical.  The only differences are:
+\begin{enumerate}[nosep]
+  \item The state $R$ is propagated using matrix multiplication
+    instead of integrating Euler angle rates.
+  \item The correction is applied via the exponential map (one
+    matrix multiplication) instead of vector addition.
+  \item There is no gimbal lock, no normalisation constraint, and
+    no singularity---ever.
+\end{enumerate}
+
+\subsection{The Pattern Generalises}
+
+The structure you just learned---\emph{propagate on the group,
+correct in the algebra}---is the same for every Lie group filter:
+
+\begin{center}
+\begin{tabular}{ll}
+\toprule
+\textbf{Application} & \textbf{Lie group} \\
+\midrule
+Attitude estimation & $\SO$ \\
+Pose estimation (position + orientation) & $\mathrm{SE}(3)$ \\
+Inertial navigation (pose + velocity) & $\mathrm{SE}_{2}(3)$ \\
+2D robot localisation & $\mathrm{SE}(2)$ \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+In each case, you need only the same five tools (group, algebra,
+$\expmap$, $\logmap$, Jacobians) specialised to the group in
+question.  The Sol\`{a} ``Micro Lie Theory'' paper provides the
+formulas for all of these groups in a single reference.
+
+\newpage
+%======================================================================
+\section{Where to Go Next}
+%======================================================================
+
+\begin{enumerate}
+  \item \textbf{Implement it.}  Build the SO(3) filter in
+    MATLAB or Python.  Generate synthetic gyro and accelerometer
+    data from a known rotation trajectory, run the filter, and
+    compare to ground truth.  The most clarifying exercise.
+
+  \item \textbf{Read Sol\`{a}'s ``Micro Lie Theory'' paper}
+    (\href{https://arxiv.org/abs/1812.01537}{arXiv:1812.01537}).
+    You now have the vocabulary to read it fluently.  It generalises
+    everything in this document to arbitrary Lie groups and provides
+    the formulas for SE(3) and SE$_{2}$(3).
+
+  \item \textbf{Read Sol\`{a}'s ``Quaternion Kinematics for the
+    ESKF''}
+    (\href{https://arxiv.org/abs/1711.02508}{arXiv:1711.02508}).
+    This gives a detailed treatment of the same filter using
+    quaternions internally (but with the same Lie algebra error
+    state).
+
+  \item \textbf{Study Barfoot's \emph{State Estimation for
+    Robotics}} (free draft at
+    \href{http://asrl.utias.utoronto.ca/~tdb/bib/barfoot_ser24.pdf}%
+    {asrl.utias.utoronto.ca}).  Chapters on rotations and poses,
+    then the estimation chapters.
+
+  \item \textbf{Learn the Invariant EKF.}  Read Barrau and
+    Bonnabel's Annual Review paper
+    (\href{https://hal.science/hal-05088150v1/file/AR_barrau_bonnabel.pdf}%
+    {HAL preprint}).  The IEKF uses a different error
+    convention (left- vs.\ right-invariant) that yields
+    trajectory-independent error dynamics and provable convergence
+    guarantees.
+
+  \item \textbf{Explore the Equivariant Filter.}  van Goor, Hamel,
+    and Mahony's work
+    (\href{https://arxiv.org/abs/2010.14666}{arXiv:2010.14666})
+    represents the current frontier of geometric filtering.
+\end{enumerate}
+
+\subsection*{Key References}
+
+\begin{itemize}[nosep,leftmargin=*]
+  \item Sol\`{a} et al.\ ``A Micro Lie Theory for State
+    Estimation in Robotics.'' arXiv:1812.01537.
+  \item Sol\`{a}, ``Quaternion Kinematics for the Error-State
+    Kalman Filter,'' arXiv:1711.02508, 2017.
+  \item Barfoot, \emph{State Estimation for Robotics,} 2nd~ed.,
+    Cambridge, 2024.
+  \item Barrau and Bonnabel, ``Invariant Kalman Filtering,''
+    \emph{Annual Review of Control, Robotics, and Autonomous
+    Systems,} 2018.
+  \item Mahony, Hamel, Pflimlin, ``Nonlinear Complementary Filters
+    on the Special Orthogonal Group,'' \emph{IEEE Trans.\ Automatic
+    Control,} 2008.
+\end{itemize}
+
+\end{document}

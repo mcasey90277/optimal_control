@@ -1,0 +1,483 @@
+\documentclass[11pt,letterpaper]{article}
+\usepackage[margin=1in]{geometry}
+\usepackage{amsmath,amssymb,bm}
+\usepackage{booktabs}
+\usepackage{enumitem}
+\usepackage{xcolor}
+\usepackage[colorlinks=true,linkcolor=blue!70!black,urlcolor=blue!70!black]{hyperref}
+\usepackage{fancyhdr}
+\usepackage{titlesec}
+\usepackage{mathtools}
+\usepackage{tcolorbox}
+
+\pagestyle{fancy}
+\fancyhf{}
+\rhead{Building a BFGS Optimizer --- Guided Exercises}
+\lhead{}
+\rfoot{Page \thepage}
+\setlength{\headheight}{14pt}
+
+\setlength{\parskip}{5pt}
+\setlength{\parindent}{0pt}
+
+\titlespacing*{\section}{0pt}{14pt}{6pt}
+\titlespacing*{\subsection}{0pt}{10pt}{4pt}
+\titlespacing*{\subsubsection}{0pt}{8pt}{3pt}
+
+\newcommand{\R}{\mathbb{R}}
+\newcommand{\grad}{\nabla}
+\newcommand{\T}{^{\mathsf{T}}}
+\newcommand{\half}{\tfrac12}
+
+% Exercise environment
+\newtcolorbox{exercise}[1]{
+  colback=blue!5!white, colframe=blue!50!black, fonttitle=\bfseries,
+  title={Exercise: #1}, sharp corners, boxrule=0.8pt,
+  left=6pt, right=6pt, top=4pt, bottom=4pt}
+
+% Hint environment
+\newtcolorbox{hint}{
+  colback=yellow!5!white, colframe=yellow!60!black, fonttitle=\bfseries,
+  title={Hint}, sharp corners, boxrule=0.5pt,
+  left=6pt, right=6pt, top=4pt, bottom=4pt}
+
+% Checkpoint environment
+\newtcolorbox{checkpoint}[1]{
+  colback=green!5!white, colframe=green!50!black, fonttitle=\bfseries,
+  title={Checkpoint: #1}, sharp corners, boxrule=0.8pt,
+  left=6pt, right=6pt, top=4pt, bottom=4pt}
+
+\title{\textbf{Building a BFGS Optimizer}\\[8pt]
+\large Guided Coding Exercises\\[4pt]
+\normalsize Inverse-Hessian Quasi-Newton on a Convex Quadratic}
+\author{}
+\date{June 2026}
+
+\begin{document}
+\maketitle
+\thispagestyle{fancy}
+
+\tableofcontents
+\newpage
+
+%======================================================================
+\section{Introduction}
+%======================================================================
+
+This document walks you through implementing the \textbf{BFGS} quasi-Newton method
+from scratch in MATLAB, one piece at a time, and using it to minimize a convex
+quadratic. By the end you will have a small, reusable optimizer whose search step is
+a single matrix--vector product, and you will have seen the property that makes BFGS
+on a quadratic so clean: \emph{finite termination in at most $n$ steps} with an exact
+line search.
+
+We minimize \textbf{Problem 1} of Kanamori \& Ohara (arXiv:1010.2846, \S6):
+\begin{equation}\label{eq:prob1}
+\min_{x\in\R^n}\ f(x)=\half\,x\T A x - e\T x,
+\qquad e=(1,\dots,1)\T,\quad
+A=\operatorname{tridiag}(-1,2,-1),
+\end{equation}
+the second-difference (1-D Laplacian) matrix --- symmetric positive definite, so $f$
+is strongly convex with the unique minimizer $x^\ast=A^{-1}e$.
+
+\subsection{Prerequisites}
+Before starting you should have:
+\begin{itemize}[nosep]
+  \item The theory note \texttt{newton\_quasinewton\_bfgs.tex} read --- especially the
+    secant equation, the curvature condition $s\T y>0$, and the BFGS inverse-Hessian
+    update (the ``$V H V\T+\rho ss\T$'' form).
+  \item Basic MATLAB: functions, anonymous-function handles, \texttt{struct}s.
+\end{itemize}
+
+\subsection{What You Will Build}
+\begin{center}
+\begin{tabular}{lp{8.4cm}}
+\toprule
+\textbf{File} & \textbf{Purpose} \\
+\midrule
+\texttt{prob1\_obj.m}     & Objective $f$ and gradient $\grad f$ (Problem 1) \\
+\texttt{bfgs\_update\_H.m} & One BFGS update of the inverse-Hessian model $H$ \\
+\texttt{qn\_minimize\_H.m} & The quasi-Newton driver loop (step, line search, update) \\
+\texttt{demo\_prob1.m}    & Build $A,e$, run the optimizer, report convergence \\
+\texttt{dfp\_update\_H.m} & \emph{(optional, Exercise 6)} the DFP update, for comparison \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+Work in a scratch folder so your build stays separate from the reference solutions:
+create a \texttt{mytry/} subfolder and write your files there. Reference
+implementations live in the parent \texttt{quasiNewton\_matlab/} folder --- consult
+them only \emph{after} attempting each exercise.
+
+\subsection{Notation Recap}
+The quasi-Newton iteration maintains an approximation $H_k$ to the \emph{inverse}
+Hessian $(\grad^2 f)^{-1}$. At each step,
+\begin{align*}
+p_k &= -H_k\,\grad f(x_k) && \text{(search direction --- a matrix--vector product, no solve)}\\
+x_{k+1} &= x_k + \alpha_k\,p_k && \text{(line search for the step length $\alpha_k$)}\\
+H_{k+1} &= \textsf{BFGS}(H_k,\,s_k,\,y_k) && s_k=x_{k+1}-x_k,\ \ y_k=\grad f(x_{k+1})-\grad f(x_k).
+\end{align*}
+The pair $(s_k,y_k)$ feeds the \textbf{secant equation} $H_{k+1}y_k=s_k$; the
+\textbf{curvature condition} $s_k\T y_k>0$ is what lets the update stay symmetric
+positive definite (and hence keep $p_k$ a descent direction).
+
+%======================================================================
+\section{Phase A: The Objective}
+%======================================================================
+
+%----------------------------------------------------------------------
+\subsection{Exercise 1: Objective and Gradient}
+%----------------------------------------------------------------------
+
+The optimizer needs a function returning $f(x)$ and, on demand, $\grad f(x)$. For
+\eqref{eq:prob1}, $\grad f(x)=Ax-e$ and $\grad^2 f=A$.
+
+\begin{exercise}{1. Write prob1\_obj.m}
+Create \texttt{prob1\_obj.m}:
+\begin{verbatim}
+  function [f, g] = prob1_obj(x, A, e)
+\end{verbatim}
+Return $f=\half x\T A x - e\T x$, and compute $g=Ax-e$ \emph{only when requested}.
+\end{exercise}
+
+\begin{hint}
+Guard the gradient with \texttt{nargout} so the same handle serves both a
+value-only line-search call and a value-and-gradient step call:
+\begin{verbatim}
+  f = 0.5 * (x' * A * x) - e' * x;
+  if nargout > 1
+      g = A * x - e;
+  end
+\end{verbatim}
+This matters: if you build \texttt{f}/\texttt{g} with \texttt{deal(...)} inside an
+anonymous function, a single-output call (\texttt{ft = fun(xt)}) will error, because
+\texttt{deal} requires the output count to match. A proper function file with an
+\texttt{if nargout} guard avoids this.
+\end{hint}
+
+\begin{checkpoint}{Gradient matches finite differences}
+Build a small instance and check the analytic gradient against central differences:
+\begin{verbatim}
+  n = 6;  A = full(spdiags(ones(n,1)*[-1 2 -1], -1:1, n, n));  e = ones(n,1);
+  x = randn(n,1);  [~, g] = prob1_obj(x, A, e);
+  gfd = zeros(n,1);  h = 1e-6;
+  for i = 1:n
+      d = zeros(n,1); d(i) = h;
+      gfd(i) = (prob1_obj(x+d,A,e) - prob1_obj(x-d,A,e)) / (2*h);
+  end
+  fprintf('grad error: %.3e\n', norm(g - gfd));   % expect < 1e-7
+\end{verbatim}
+Also confirm the minimizer: \texttt{xstar = A\textbackslash e;} then
+\texttt{[\~{},gs] = prob1\_obj(xstar,A,e); norm(gs)} should be $\sim 10^{-14}$
+(the gradient vanishes at $x^\ast$).
+\end{checkpoint}
+
+%======================================================================
+\section{Phase B: The BFGS Update}
+%======================================================================
+
+%----------------------------------------------------------------------
+\subsection{Exercise 2: The Inverse-Hessian Update}
+%----------------------------------------------------------------------
+
+This is the heart of the method. The BFGS update of the inverse Hessian is
+\begin{equation}\label{eq:bfgsH}
+H_{k+1}=V H_k V\T+\rho\,s s\T,
+\qquad V=I-\rho\,s y\T,\qquad \rho=\frac1{s\T y}.
+\end{equation}
+Two properties fall out of this form for free, and they are the whole reason to write
+it this way:
+\begin{itemize}[nosep]
+  \item \textbf{Symmetry} --- it is a congruence $V H_k V\T$ (preserves symmetry)
+    plus the symmetric rank-one $\rho ss\T$.
+  \item \textbf{Positive definiteness, when $s\T y>0$} --- for any $z\neq0$,
+    $z\T H_{k+1}z=(V\T z)\T H_k(V\T z)+\rho(s\T z)^2$; both terms are $\ge0$ and
+    cannot vanish together (if $s\T z=0$ then $V\T z=z$, making the first term
+    $z\T H_k z>0$).
+\end{itemize}
+
+\begin{exercise}{2. Write bfgs\_update\_H.m}
+Create \texttt{bfgs\_update\_H.m}:
+\begin{verbatim}
+  function H1 = bfgs_update_H(H, s, y)
+\end{verbatim}
+Steps:
+\begin{enumerate}[nosep]
+  \item Compute \texttt{sy = s' * y}. If \texttt{sy <= 0}, the curvature condition
+    fails and no PD update exists --- \texttt{error(...)} rather than silently return
+    a non-PD matrix. (The caller is responsible for guaranteeing $s\T y>0$, or for
+    skipping the update; see Exercise~4.)
+  \item Form \texttt{rho = 1/sy} and \texttt{V = eye(n) - rho*(s*y')}.
+  \item Return \texttt{H1 = V*H*V' + rho*(s*s')}.
+  \item Symmetrize against round-off: \texttt{H1 = (H1 + H1')/2}.
+\end{enumerate}
+\end{exercise}
+
+\begin{hint}
+Get $n$ from the step vector, \texttt{n = numel(s)}. The whole body is five lines.
+Do not try to be clever and expand $VHV\T$ by hand --- the matrix form is clearer and
+just as fast at this scale.
+\end{hint}
+
+\begin{checkpoint}{The update satisfies its three requirements}
+Pick a random SPD \texttt{H} and random \texttt{s}, \texttt{y} with \texttt{s'*y>0},
+then verify:
+\begin{verbatim}
+  n = 5;  M = randn(n); H = M*M' + n*eye(n);
+  s = randn(n,1); y = randn(n,1); if s'*y <= 0, y = -y; end
+  H1 = bfgs_update_H(H, s, y);
+  fprintf('secant   ||H1*y - s|| = %.2e\n', norm(H1*y - s));   % ~1e-15
+  fprintf('symmetry ||H1 - H1''|| = %.2e\n', norm(H1 - H1'));  % ~1e-16
+  fprintf('min eig(H1) = %.4f  (PD if > 0)\n', min(eig(H1)));
+\end{verbatim}
+All three should pass: secant residual at machine precision, symmetric, and
+positive definite.
+\end{checkpoint}
+
+%======================================================================
+\section{Phase C: The Line Search}
+%======================================================================
+
+%----------------------------------------------------------------------
+\subsection{Exercise 3: Exact Line Search for the Quadratic}
+%----------------------------------------------------------------------
+
+Given a descent direction $p$, the line search picks the step length $\alpha$. For a
+quadratic, the minimizer along $p$ has a closed form: differentiate
+$\phi(\alpha)=f(x+\alpha p)$ and set $\phi'(\alpha)=0$,
+\begin{equation}\label{eq:exactls}
+\phi'(\alpha)=\grad f(x+\alpha p)\T p=(g+\alpha A p)\T p=0
+\quad\Longrightarrow\quad
+\boxed{\;\alpha^\ast=-\frac{g\T p}{p\T A p}\;}.
+\end{equation}
+This is exact (no iteration), always positive for a descent direction with $A\succ0$,
+and it is what makes the finite-termination property in Phase~E appear.
+
+\begin{exercise}{3. Build the exact line-search handle}
+You will pass the line search to the driver as a function handle with signature
+\texttt{alpha = ls(fun, x, f, g, p)}. For the quadratic, write it inline in the demo
+(Exercise~5) using \eqref{eq:exactls}:
+\begin{verbatim}
+  exact_ls = @(fun, x, f, g, p) -(g' * p) / (p' * A * p);
+\end{verbatim}
+(The general, non-quadratic case needs a backtracking or Wolfe search instead; that
+is the ``what comes next'' of \S\ref{sec:next}. Keep the driver agnostic by always
+taking a line-search handle.)
+\end{exercise}
+
+\begin{checkpoint}{Exact step zeroes the directional derivative}
+For a random $x$ and descent direction $p=-g$:
+\begin{verbatim}
+  [f,g] = prob1_obj(x,A,e);  p = -g;
+  a = -(g'*p)/(p'*A*p);
+  [~,gnew] = prob1_obj(x + a*p, A, e);
+  fprintf('phi''(a*) = %.2e\n', gnew'*p);   % ~1e-14: slope is zero at the min
+\end{verbatim}
+The directional derivative at the chosen step should be (numerically) zero --- you
+landed at the bottom of the 1-D slice.
+\end{checkpoint}
+
+%======================================================================
+\section{Phase D: The Driver Loop}
+%======================================================================
+
+%----------------------------------------------------------------------
+\subsection{Exercise 4: The Quasi-Newton Loop}
+%----------------------------------------------------------------------
+
+Now assemble the iteration. The driver is \emph{generic} --- it takes the objective,
+a start point, an update handle (so you can later swap BFGS for DFP), and options
+(including the line-search handle).
+
+\begin{exercise}{4. Write qn\_minimize\_H.m}
+Create \texttt{qn\_minimize\_H.m}:
+\begin{verbatim}
+  function [x, info] = qn_minimize_H(fun, x0, update_fn, opts)
+\end{verbatim}
+Steps:
+\begin{enumerate}[nosep]
+  \item Read options with defaults: \texttt{H0} (default \texttt{eye(n)}),
+    \texttt{tol} (\texttt{1e-8}), \texttt{maxit} (\texttt{1000}), and the
+    \texttt{linesearch} handle (default: a backtracking-Armijo helper).
+  \item Initialize \texttt{x = x0(:)}, \texttt{[f,g] = fun(x)}, \texttt{H = H0}.
+  \item Loop while \texttt{k < maxit}:
+    \begin{itemize}[nosep]
+      \item If \texttt{norm(g) <= tol}, mark converged and break.
+      \item Direction \texttt{p = -H * g}. Guard: if \texttt{g'*p >= 0} (not a descent
+        direction --- should not happen with $H\succ0$, but round-off and bad data can
+        cause it), reset \texttt{p = -g; H = eye(n)}.
+      \item \texttt{alpha = ls(fun, x, f, g, p)}; \texttt{xnew = x + alpha*p}.
+      \item \texttt{[fnew,gnew] = fun(xnew)}; \texttt{s = xnew-x}; \texttt{y = gnew-g}.
+      \item \textbf{Curvature guard:} update only if
+        \texttt{s'*y > 1e-12*norm(s)*norm(y)}; else increment a \texttt{skips} counter
+        and leave $H$ unchanged (keeps $H\succ0$).
+      \item Advance: \texttt{x=xnew; f=fnew; g=gnew; k=k+1}; record \texttt{norm(g)}.
+    \end{itemize}
+  \item Return \texttt{x} and an \texttt{info} struct: \texttt{iters},
+    \texttt{gnorm}, \texttt{gnorm\_hist}, \texttt{converged}, \texttt{skips}.
+\end{enumerate}
+\end{exercise}
+
+\begin{hint}
+Default-option pattern and the curvature guard:
+\begin{verbatim}
+  if nargin < 4, opts = struct(); end
+  n   = numel(x0);
+  H0  = getfield_default(opts,'H0',eye(n));
+  tol = getfield_default(opts,'tol',1e-8);
+  maxit = getfield_default(opts,'maxit',1000);
+  c1  = getfield_default(opts,'c1',1e-4);   % Armijo constant
+  bt  = getfield_default(opts,'bt',0.5);    % backtracking factor
+  ls  = getfield_default(opts,'linesearch', ...
+            @(f_,x_,f0_,g_,p_) armijo(f_,x_,f0_,g_,p_,c1,bt));
+  ...
+  if s'*y > 1e-12 * norm(s) * norm(y)
+      H = update_fn(H, s, y);
+  else
+      skips = skips + 1;
+  end
+\end{verbatim}
+Put two local functions \emph{at the end of the file} (MATLAB requires local
+functions after the body). First, the one-line option helper:
+\begin{verbatim}
+  function v = getfield_default(s, name, dflt)
+      if isfield(s,name) && ~isempty(s.(name)), v = s.(name); else, v = dflt; end
+  end
+\end{verbatim}
+Second, the default line search --- \textbf{backtracking Armijo}. It enforces the
+\emph{sufficient-decrease} (Armijo) condition $f(x+\alpha p)\le f(x)+c_1\,\alpha\,g\T p$
+(with $g\T p<0$ for a descent direction): start at $\alpha=1$ and shrink by $bt$ until
+it holds.
+\begin{verbatim}
+  function alpha = armijo(fun, x, f0, g, p, c1, bt)
+      alpha = 1;  gtp = g' * p;
+      while true
+          ft = fun(x + alpha*p);
+          if ft <= f0 + c1*alpha*gtp || alpha < 1e-16, break; end
+          alpha = bt * alpha;
+      end
+  end
+\end{verbatim}
+This default makes the driver usable on a general function; for the quadratic of this
+tutorial you will override it with the \emph{exact} line search (Exercise~3, plugged in
+at Exercise~5), which is what produces the $n$-step termination. Taking the update as a
+handle (\texttt{update\_fn}) is what lets you reuse this same loop for DFP later.
+\end{hint}
+
+\begin{checkpoint}{Loop runs and the direction is a descent direction}
+Before worrying about convergence speed, confirm the loop runs one BFGS step and that
+the very first direction (with $H_0=I$, so $p_0=-g_0$) decreases $f$:
+\begin{verbatim}
+  fun = @(x) prob1_obj(x, A, e);
+  [f0,g0] = fun(x0);  p0 = -g0;
+  fprintf('g0''*p0 = %.3e  (must be < 0)\n', g0'*p0);
+\end{verbatim}
+A negative slope confirms descent. If you ran with a backtracking line search and saw
+many \texttt{skips} on this quadratic, that is expected --- Armijo alone forfeits the
+finite-termination property. Phase~E fixes that with the exact line search.
+\end{checkpoint}
+
+%======================================================================
+\section{Phase E: Run It, and the $n$-Step Surprise}\label{sec:phaseE}
+%======================================================================
+
+%----------------------------------------------------------------------
+\subsection{Exercise 5: The Demo Driver}
+%----------------------------------------------------------------------
+
+\begin{exercise}{5. Write demo\_prob1.m}
+Create \texttt{demo\_prob1.m}:
+\begin{enumerate}[nosep]
+  \item Set \texttt{rng(0)} for reproducibility; choose \texttt{n = 20}.
+  \item Build \texttt{A = full(spdiags(ones(n,1)*[-1 2 -1], -1:1, n, n))} and
+    \texttt{e = ones(n,1)}; set \texttt{fun = @(x) prob1\_obj(x, A, e)}.
+  \item Compute \texttt{xstar = A\textbackslash e} and a start point
+    \texttt{x0 = sqrt(10)*randn(n,1)}.
+  \item Build the exact line search \eqref{eq:exactls} and put it in \texttt{opts}:
+\begin{verbatim}
+  exact_ls = @(fun,x,f,g,p) -(g'*p)/(p'*A*p);
+  opts = struct('tol', n*1e-10, 'maxit', 2000, 'linesearch', exact_ls);
+\end{verbatim}
+  \item Run \texttt{[xB,infoB] = qn\_minimize\_H(fun, x0, @bfgs\_update\_H, opts)} and
+    print \texttt{infoB.iters}, \texttt{infoB.gnorm}, \texttt{norm(xB-xstar)}, and
+    \texttt{infoB.skips}.
+\end{enumerate}
+\end{exercise}
+
+\begin{checkpoint}{Finite termination: BFGS converges in $\le n$ steps}
+With the exact line search, $n=20$, and \texttt{rng(0)} you should see:
+\begin{verbatim}
+  method   iters     final |g|        ||x-x*||   skips
+  BFGS        20     ~3e-14          ~6e-14          0
+\end{verbatim}
+\textbf{Exactly $n=20$ iterations}, gradient driven to $\sim10^{-14}$, zero skips.
+This is the conjugate-direction finite-termination property: BFGS with an exact line
+search minimizes a strongly convex quadratic in at most $n$ steps. If you instead see
+hundreds of iterations, you are almost certainly \emph{not} using the exact line
+search (a backtracking Armijo search loses this property --- see Exercise~6).
+\end{checkpoint}
+
+%----------------------------------------------------------------------
+\subsection{Exercise 6 (stretch): DFP, and why the line search matters}
+%----------------------------------------------------------------------
+
+\begin{exercise}{6. Swap in DFP and compare}
+Write \texttt{dfp\_update\_H.m} --- the DFP inverse-Hessian update,
+\[
+  H_{k+1}=H_k+\frac{s s\T}{s\T y}-\frac{H_k y\,y\T H_k}{y\T H_k y},
+\]
+with the same \texttt{s'*y>0} guard. Run the demo with \texttt{@dfp\_update\_H} as
+well, under \emph{two} line searches:
+\begin{enumerate}[nosep]
+  \item the exact line search of \eqref{eq:exactls};
+  \item a backtracking-Armijo search (the driver's default).
+\end{enumerate}
+Compare iteration counts for BFGS vs DFP in each case.
+\end{exercise}
+
+\begin{checkpoint}{The robustness gap}
+With the \emph{exact} line search, both BFGS and DFP terminate in $n=20$ steps (the
+finite-termination property holds for the whole Broyden family). With the
+\emph{inexact} backtracking search, BFGS still converges quickly and stably while DFP
+slows dramatically (many iterations, many curvature skips). This \emph{qualitatively
+mirrors} the Kanamori \& Ohara result (their Table~3 sweeps line-search \emph{noise}
+$h$ with a near-exact \texttt{fminbnd} search rather than this plain Armijo, so it is
+a foreshadowing, not a reproduction of their exact protocol): BFGS is robust to an
+inexact line search; DFP is not. It is the empirical face of the variational/asymmetry
+story in the theory note --- and the reason BFGS, not DFP, is the default quasi-Newton
+method. (To reproduce their experiment proper, inject the $\tilde s=(1+\varepsilon)s$,
+$\varepsilon\sim\mathcal U[-h,h]$ perturbation and sweep $h$; see
+\S\ref{sec:next}.)
+\end{checkpoint}
+
+%======================================================================
+\section{What Comes Next}\label{sec:next}
+%======================================================================
+
+You now have a working BFGS optimizer whose step is a matrix--vector product. Natural
+extensions, in roughly increasing difficulty:
+
+\begin{enumerate}
+  \item \textbf{A real line search.} Replace the quadratic-only exact step with a
+    backtracking line search satisfying the \emph{Wolfe} conditions. The curvature
+    (second Wolfe) condition is precisely what guarantees $s\T y>0$ on a general
+    function --- the hypothesis our update needs.
+  \item \textbf{Problem 2 (nonlinear, non-convex).} Add the trigonometric
+    boundary-value objective $f(x)=\half x\T Ax-e\T x-\frac1{(n+1)^2}\sum_i(2x_i+\cos x_i)$.
+    Its Hessian is $A+\frac1{(n+1)^2}\operatorname{diag}(\cos x_i)$; the secant
+    equation is now a genuine model, not an identity. A Wolfe line search becomes
+    necessary.
+  \item \textbf{The robustness experiment.} Reproduce Kanamori \& Ohara Table~3:
+    perturb the step $\tilde s_k=(1+\varepsilon)s_k$ with $\varepsilon\sim
+    \mathcal U[-h,h]$, sweep $h\in[0,0.3]$, and plot iteration count vs $h$ for BFGS
+    and DFP on both problems.
+  \item \textbf{L-BFGS.} For large $n$, never form $H$ at all: store the last $m$
+    pairs $(s_k,y_k)$ and apply $H_k$ implicitly via the two-loop recursion. This
+    removes the $O(n^2)$ storage and is what makes quasi-Newton scale to
+    $n=10^6$.
+\end{enumerate}
+
+Each builds on the loop you just wrote without restructuring its core: the direction
+$p=-Hg$, the line search, the curvature-guarded update.
+
+\end{document}

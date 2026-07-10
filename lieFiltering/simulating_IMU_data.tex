@@ -1,0 +1,454 @@
+\documentclass[11pt,letterpaper]{article}
+\usepackage[margin=1in]{geometry}
+\usepackage{amsmath,amssymb,bm}
+\usepackage{booktabs}
+\usepackage{enumitem}
+\usepackage{xcolor}
+\usepackage[colorlinks=true,linkcolor=blue!70!black,urlcolor=blue!70!black,citecolor=blue!70!black]{hyperref}
+\usepackage{fancyhdr}
+\usepackage{titlesec}
+\usepackage{mathtools}
+
+\pagestyle{fancy}
+\fancyhf{}
+\rhead{Simulating IMU Data for the SO(3) Filter}
+\lhead{}
+\rfoot{Page \thepage}
+\setlength{\headheight}{14pt}
+
+\setlength{\parskip}{5pt}
+\setlength{\parindent}{0pt}
+
+\titlespacing*{\section}{0pt}{14pt}{6pt}
+\titlespacing*{\subsection}{0pt}{10pt}{4pt}
+\titlespacing*{\subsubsection}{0pt}{8pt}{3pt}
+
+% Convenience commands
+\newcommand{\R}{\mathbb{R}}
+\newcommand{\SO}{\mathrm{SO}(3)}
+\newcommand{\expmap}{\mathrm{Exp}}
+\newcommand{\eye}{\mathbf{I}}
+
+\title{\textbf{Simulating IMU Data for the SO(3) Attitude Filter}\\[8pt]
+\large What We Need, Why We Need It, and How to Generate It}
+\author{}
+\date{February 2026}
+
+\begin{document}
+\maketitle
+\thispagestyle{fancy}
+
+\tableofcontents
+\newpage
+
+%======================================================================
+\section{The Goal}
+%======================================================================
+
+We want to test the SO(3) error-state EKF developed in the companion
+document.  To test a filter, we need:
+
+\begin{enumerate}[nosep]
+  \item \textbf{Ground truth} --- the true orientation $R(t)$ at
+    every time step, so we can measure filter error.
+  \item \textbf{Synthetic measurements} --- gyroscope and
+    accelerometer readings generated from the ground truth, with
+    realistic noise and bias, so the filter has something to
+    process.
+\end{enumerate}
+
+This document explains exactly what ``ground truth'' means for
+attitude estimation, what physical assumptions underlie the sensor
+models, and how to generate everything in MATLAB.
+
+%======================================================================
+\section{Do We Need to Simulate a Full Trajectory?}
+%======================================================================
+
+\textbf{Short answer: No.}  We need a \emph{rotation trajectory},
+not a translational trajectory.
+
+\subsection{What the Filter Estimates}
+
+The SO(3) filter estimates \emph{orientation only} --- the rotation
+matrix $R(t)$ that maps body-frame vectors to world-frame vectors.
+It does not estimate position or velocity.  Therefore the ground
+truth we need is:
+\[
+  R_{\mathrm{true}}(t) \in \SO \quad \text{for } t = 0, \Delta t, 2\Delta t, \ldots, T.
+\]
+
+We do \emph{not} need to simulate:
+\begin{itemize}[nosep]
+  \item Position or velocity of the vehicle.
+  \item Aerodynamic forces, thrust, or orbital mechanics.
+  \item Translational accelerations (with one important caveat ---
+    see Section~\ref{sec:accel_assumption}).
+\end{itemize}
+
+\subsection{What Defines a Rotation Trajectory}
+
+A rotation trajectory is fully determined by specifying either:
+\begin{enumerate}[nosep]
+  \item The \textbf{angular velocity} $\bm{\omega}(t) \in \R^{3}$
+    (in the body frame) as a function of time, plus an initial
+    orientation $R(0)$.
+  \item The \textbf{orientation} $R(t)$ directly as a function of
+    time (from which $\bm{\omega}(t)$ can be recovered).
+\end{enumerate}
+
+Option~1 is simpler for simulation: we choose $\bm{\omega}(t)$,
+then propagate $R(t)$ by numerical integration.
+
+%======================================================================
+\section{The Accelerometer Assumption}
+\label{sec:accel_assumption}
+%======================================================================
+
+This is the one place where translational motion matters, and it
+deserves careful discussion.
+
+\subsection{What an Accelerometer Actually Measures}
+
+An accelerometer does \emph{not} measure acceleration.  It measures
+\textbf{specific force} --- the non-gravitational force per unit
+mass acting on the sensor:
+\[
+  \mathbf{a}_m = R^{\mathsf{T}} (\mathbf{a}_{\mathrm{vehicle}} - \mathbf{g})
+    + \mathbf{n}_{a},
+\]
+where $\mathbf{a}_{\mathrm{vehicle}}$ is the true translational
+acceleration of the vehicle in the world frame, and $\mathbf{g}$
+is the gravitational acceleration vector.
+
+\subsection{The Static/Quasi-Static Assumption}
+
+In our filter, we use the simplified measurement model:
+\[
+  \mathbf{a}_m = R^{\mathsf{T}} \mathbf{g} + \mathbf{n}_{a}.
+\]
+
+This is valid when $\mathbf{a}_{\mathrm{vehicle}} \approx \mathbf{0}$
+--- i.e., the vehicle is either stationary, moving at constant
+velocity, or experiencing accelerations that are small compared to
+$g = 9.8$\,m/s$^{2}$.
+
+\subsection{When This Assumption Holds}
+
+\begin{center}
+\begin{tabular}{lcc}
+\toprule
+\textbf{Scenario} & \textbf{Typical accel.} &
+  \textbf{Assumption valid?} \\
+\midrule
+Stationary IMU on a table & $0$ & Yes \\
+Ground vehicle, normal driving & $< 0.3g$ & Approximately \\
+Quadrotor in hover & $\approx 0$ & Yes \\
+Quadrotor in aggressive manoeuvre & $1$--$3g$ & No \\
+Fixed-wing aircraft, straight \& level & $< 0.1g$ & Yes \\
+Fixed-wing aircraft, banking turn & $0.5$--$2g$ & No \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\subsection{When This Assumption Fails Completely: Satellites}
+
+A satellite in orbit is in \textbf{free fall}.  The gravitational
+force and the ``centrifugal force'' (in the orbital frame) cancel
+exactly.  An accelerometer on a satellite reads \emph{zero} (plus
+noise) --- it provides no attitude information whatsoever.
+
+Satellite attitude determination uses different sensors:
+\begin{itemize}[nosep]
+  \item \textbf{Star trackers} --- measure the direction to known
+    stars in the body frame.
+  \item \textbf{Sun sensors} --- measure the direction to the Sun.
+  \item \textbf{Magnetometers} --- measure Earth's magnetic field
+    vector (LEO only).
+  \item \textbf{Horizon sensors} --- measure the direction to
+    Earth's limb.
+\end{itemize}
+
+The SO(3) filter structure is identical for these sensors --- only
+the measurement model $h(R)$ changes.  But for our simulation, we
+use the accelerometer model, which means we are simulating a
+\textbf{terrestrial or near-surface} scenario.
+
+\subsection{Bottom Line}
+
+For our simulation, we assume the body is not translating (or
+translating at constant velocity).  The accelerometer measures the
+gravity vector rotated into the body frame, plus noise.  No
+translational trajectory is needed.
+
+%======================================================================
+\section{Generating the Ground Truth}
+%======================================================================
+
+The ground truth consists of three time series: angular velocity,
+orientation, and gyro bias.
+
+\subsection{Step 1: Define the True Angular Velocity}
+
+We choose $\bm{\omega}_{\mathrm{true}}(t) \in \R^{3}$ at each
+time step.  This is the true body-frame angular velocity.  Several
+useful scenarios:
+
+\begin{center}
+\begin{tabular}{lp{7cm}}
+\toprule
+\textbf{Scenario} & \textbf{Description} \\
+\midrule
+Static &
+  $\bm{\omega}(t) = \mathbf{0}$.  Body is fixed at a tilted
+  orientation.  Tests bias estimation and steady-state convergence.
+  \\[4pt]
+Constant rate &
+  $\bm{\omega}(t) = (0, 0, \Omega)^{\mathsf{T}}$ (spin about
+  $z$-axis).  Tests tracking of constant rotation.
+  \\[4pt]
+Sinusoidal &
+  $\omega_i(t) = A_i \sin(2\pi f_i t + \phi_i)$ for each axis.
+  Tests dynamic tracking with smooth, predictable motion.
+  \\[4pt]
+Multi-axis tumble &
+  Superposition of sinusoids at different frequencies and amplitudes
+  on all three axes.  Stress test for the filter.
+  \\[4pt]
+Step input &
+  $\bm{\omega}(t)$ steps from zero to a constant value at $t_0$.
+  Tests transient response.
+  \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\subsection{Step 2: Propagate the True Orientation}
+
+Given $\bm{\omega}_{\mathrm{true}}(t_k)$ and an initial orientation
+$R_{\mathrm{true}}(0)$, propagate forward:
+\[
+  \boxed{
+  R_{\mathrm{true}}(t_{k+1})
+  = R_{\mathrm{true}}(t_k) \; \expmap\bigl(\bm{\omega}_{\mathrm{true}}(t_k)
+    \, \Delta t\bigr).
+  }
+\]
+
+This is exact for constant $\bm{\omega}$ over $[t_k, t_{k+1}]$
+(the zero-order hold assumption).  For smoothly varying
+$\bm{\omega}$, it is accurate to first order in $\Delta t$.  At
+100\,Hz, this is more than adequate.
+
+\textbf{Initial orientation:}  Set $R_{\mathrm{true}}(0)$ to
+represent the initial tilt.  For example, to start with the body
+tilted 30$^{\circ}$ in roll and 20$^{\circ}$ in pitch:
+\[
+  R_{\mathrm{true}}(0) = R_x(30^{\circ})\, R_y(20^{\circ}).
+\]
+
+\subsection{Step 3: Generate the True Gyro Bias}
+
+The gyro bias evolves as a random walk:
+\[
+  \boxed{
+  \mathbf{b}(t_{k+1}) = \mathbf{b}(t_k)
+    + \sigma_b \sqrt{\Delta t} \;\mathbf{w}_k,
+  \qquad \mathbf{w}_k \sim \mathcal{N}(\mathbf{0}, \eye_3).
+  }
+\]
+
+\textbf{Initial bias:}  Set $\mathbf{b}(0) = \mathbf{b}_0$ to a
+chosen value (e.g., $(0.01, -0.005, 0.008)^{\mathsf{T}}$ rad/s).
+This is the ``true'' initial bias that the filter must estimate.
+
+\textbf{Typical values:}  Consumer MEMS gyros have bias instability
+of $1$--$10$\,deg/hr, which corresponds to
+$\sigma_b \approx 10^{-4}$--$10^{-3}$\,rad/s/$\sqrt{\text{s}}$.
+Over a 60-second simulation at $\sigma_b = 5 \times 10^{-4}$, the
+bias will random-walk by roughly
+$\sigma_b \sqrt{T} = 5 \times 10^{-4} \times \sqrt{60}
+\approx 0.004$\,rad/s $\approx 0.2$\,deg/s.  The bias is
+``slowly varying'' but definitely not constant.
+
+%======================================================================
+\section{Generating the Sensor Measurements}
+%======================================================================
+
+With the ground truth in hand, generating measurements is
+straightforward.
+
+\subsection{Gyroscope Measurements}
+
+At each time step $t_k$:
+\[
+  \boxed{
+  \bm{\omega}_m(t_k)
+  = \bm{\omega}_{\mathrm{true}}(t_k)
+    + \mathbf{b}(t_k)
+    + \sigma_{\omega} \, \mathbf{v}_k,
+  \qquad \mathbf{v}_k \sim \mathcal{N}(\mathbf{0}, \eye_3).
+  }
+\]
+
+The gyro measurement is the true angular velocity, corrupted by:
+\begin{itemize}[nosep]
+  \item \textbf{Bias} $\mathbf{b}(t_k)$ --- a slowly drifting
+    offset (generated in Step~3 above).
+  \item \textbf{White noise}
+    $\sigma_{\omega}\,\mathbf{v}_k$ --- zero-mean Gaussian noise
+    at each sample, uncorrelated between samples.
+\end{itemize}
+
+\textbf{Typical values:}  Consumer MEMS gyros have angular random
+walk of $0.1$--$1.0$\,deg/$\sqrt{\text{hr}}$, which converts to
+$\sigma_{\omega} \approx 0.003$--$0.03$\,rad/s (at 100\,Hz
+sampling).  Tactical-grade gyros are 10--100$\times$ better.
+
+\subsection{Accelerometer Measurements}
+
+At each time step $t_k$ where an accelerometer reading is available:
+\[
+  \boxed{
+  \mathbf{a}_m(t_k)
+  = R_{\mathrm{true}}(t_k)^{\mathsf{T}} \, \mathbf{g}
+    + \sigma_a \, \mathbf{u}_k,
+  \qquad \mathbf{u}_k \sim \mathcal{N}(\mathbf{0}, \eye_3),
+  }
+\]
+where $\mathbf{g} = (0, 0, -9.8)^{\mathsf{T}}$\,m/s$^{2}$.
+
+\textbf{What this means physically:}  The true gravity vector
+$(0, 0, -g)$ in the world frame is rotated into the body frame by
+$R^{\mathsf{T}}$, then corrupted by white noise.
+
+\textbf{Decimation:}  The accelerometer may run slower than the
+gyro.  If the gyro runs at 100\,Hz and the accelerometer at 50\,Hz,
+generate accelerometer measurements every other time step.  The
+filter runs its prediction step at every gyro sample but only runs
+the update step when an accelerometer measurement is available.
+
+\textbf{Typical values:}  Consumer MEMS accelerometers have noise
+density of $100$--$500$\,$\mu g/\sqrt{\text{Hz}}$, which at
+100\,Hz corresponds to
+$\sigma_a \approx 0.01$--$0.05$\,m/s$^{2}$.  For initial testing,
+$\sigma_a = 0.5$\,m/s$^{2}$ is a reasonable ``noisy sensor''
+value.
+
+\subsection{Accelerometer Bias (Optional Extension)}
+
+In real sensors, accelerometers also have bias.  We omit this for
+the initial implementation because:
+\begin{itemize}[nosep]
+  \item It adds 3 more states to the filter
+    ($\delta\mathbf{x} \in \R^{9}$ instead of $\R^{6}$).
+  \item Accelerometer bias is harder to observe than gyro bias.
+  \item The core concepts are the same --- adding it later is
+    straightforward.
+\end{itemize}
+
+For now, we model the accelerometer as having white noise only.
+
+%======================================================================
+\section{Summary: The Complete Simulation Pipeline}
+%======================================================================
+
+\begin{center}
+\begin{tabular}{rp{10cm}}
+\toprule
+\textbf{Step} & \textbf{Action} \\
+\midrule
+0 & \textbf{Configure:} Choose scenario, sensor parameters
+    ($\sigma_{\omega}, \sigma_b, \mathbf{b}_0, \sigma_a$),
+    timing ($\Delta t$, $T$), initial orientation $R(0)$. \\[4pt]
+1 & \textbf{Generate $\bm{\omega}_{\mathrm{true}}(t)$} from the
+    chosen scenario (static, sinusoidal, tumble, etc.). \\[4pt]
+2 & \textbf{Propagate $R_{\mathrm{true}}(t)$} from $R(0)$ using
+    $R_{k+1} = R_k \, \expmap(\bm{\omega}_k \Delta t)$. \\[4pt]
+3 & \textbf{Propagate $\mathbf{b}(t)$} via random walk from
+    $\mathbf{b}_0$. \\[4pt]
+4 & \textbf{Generate $\bm{\omega}_m(t)$} $= \bm{\omega}_{\mathrm{true}}
+    + \mathbf{b} + \text{noise}$. \\[4pt]
+5 & \textbf{Generate $\mathbf{a}_m(t)$} $= R_{\mathrm{true}}^{\mathsf{T}}
+    \mathbf{g} + \text{noise}$. \\[4pt]
+6 & \textbf{Package} all time series into an output struct. \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\bigskip
+
+The output of this pipeline is a struct containing:
+
+\begin{center}
+\begin{tabular}{llp{6cm}}
+\toprule
+\textbf{Field} & \textbf{Size} & \textbf{Description} \\
+\midrule
+\texttt{t} & $1 \times N$ & Time vector \\
+\texttt{omega\_true} & $3 \times N$ & True angular velocity \\
+\texttt{R\_true} & $3 \times 3 \times N$ & True rotation matrices \\
+\texttt{b\_true} & $3 \times N$ & True gyro bias \\
+\texttt{omega\_m} & $3 \times N$ & Gyro measurements \\
+\texttt{a\_m} & $3 \times N$ & Accelerometer measurements \\
+\texttt{params} & struct & All sensor/scenario parameters \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+This struct is the input to the SO(3) EKF implementation.  The
+ground truth fields (\texttt{R\_true}, \texttt{b\_true},
+\texttt{omega\_true}) are used only for computing filter error
+after the fact --- the filter never sees them.
+
+%======================================================================
+\section{Verification Plots}
+%======================================================================
+
+Before running the filter, we should plot the simulated data to
+confirm it is reasonable:
+
+\begin{enumerate}[nosep]
+  \item \textbf{True angular velocity} $\bm{\omega}(t)$ --- does
+    the scenario look as intended?
+  \item \textbf{True Euler angles} (extracted from $R_{\mathrm{true}}$
+    for visualisation) --- does the orientation evolve smoothly?
+  \item \textbf{Gyro measurements vs.\ truth} --- is the bias
+    offset visible?  Is the noise level reasonable?
+  \item \textbf{Bias evolution} --- is it slowly varying as
+    expected?
+  \item \textbf{Accelerometer measurements} --- does the measured
+    gravity vector rotate correctly with orientation?  Does the
+    magnitude stay near $g$?
+\end{enumerate}
+
+%======================================================================
+\section{What Comes Next}
+%======================================================================
+
+With the simulation data in hand, the development sequence is:
+
+\begin{enumerate}
+  \item \textbf{\texttt{generate\_imu\_data.m}} --- implements
+    everything in this document.  Takes a scenario name and
+    parameter struct, returns the data struct.
+
+  \item \textbf{\texttt{run\_so3\_ekf.m}} --- implements the
+    filter algorithm from the companion document.  Takes the
+    data struct, runs predict/update/inject, returns estimated
+    $R(t)$ and $\mathbf{b}(t)$.
+
+  \item \textbf{\texttt{analyse\_results.m}} --- computes
+    attitude error $\logmap(R_{\mathrm{true}}\,
+    R_{\mathrm{est}}^{\mathsf{T}})$, bias error, plots
+    error vs.\ time with $\pm 3\sigma$ bounds from the filter
+    covariance.  The $3\sigma$ bounds should contain the errors
+    --- if they do, the filter is consistent.
+
+  \item \textbf{Iterate:} Try different scenarios, noise levels,
+    initial conditions, and tuning parameters.  Break the filter
+    (violate assumptions, use wrong noise parameters) and observe
+    how it fails.
+\end{enumerate}
+
+\end{document}

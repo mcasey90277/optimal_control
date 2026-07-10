@@ -1,0 +1,382 @@
+% $ biblatex auxiliary file $
+% $ biblatex version 2.3 $
+% Do not modify the above lines!
+%
+% This is an auxiliary file used by the 'biblatex' package.
+% This file may safely be deleted. It will be recreated as
+% required.
+%
+\begingroup
+\makeatletter
+\@ifundefined{ver@biblatex.sty}
+  {\@latex@error
+     {Missing 'biblatex' package}
+     {The bibliography requires the 'biblatex' package.}
+      \aftergroup\endinput}
+  {}
+\endgroup
+
+\entry{aravkin}{article}{}
+  \name{author}{3}{}{%
+    {{}%
+     {Aravkin}{A.}%
+     {Aleksandr~Y}{A.~Y.}%
+     {}{}%
+     {}{}}%
+    {{}%
+     {Burke}{B.}%
+     {James~V}{J.~V.}%
+     {}{}%
+     {}{}}%
+    {{}%
+     {Pillonetto}{P.}%
+     {Gianluigi}{G.}%
+     {}{}%
+     {}{}}%
+  }
+  \list{publisher}{1}{%
+    {JMLR. org}%
+  }
+  \strng{namehash}{AAYBJVPG1}
+  \strng{fullhash}{AAYBJVPG1}
+  \field{sortinit}{A}
+  \field{number}{1}
+  \field{pages}{2689\bibrangedash 2728}
+  \field{title}{Sparse/robust estimation and kalman smoothing with nonsmooth
+  log-concave densities: Modeling, computation, and theory}
+  \field{volume}{14}
+  \field{journaltitle}{The Journal of Machine Learning Research}
+  \field{year}{2013}
+\endentry
+
+\entry{LogConcaveApp}{article}{}
+  \name{author}{2}{}{%
+    {{}%
+     {Bagnoli}{B.}%
+     {Mark}{M.}%
+     {}{}%
+     {}{}}%
+    {{}%
+     {Bergstrom}{B.}%
+     {Ted}{T.}%
+     {}{}%
+     {}{}}%
+  }
+  \list{publisher}{1}{%
+    {Springer}%
+  }
+  \strng{namehash}{BMBT1}
+  \strng{fullhash}{BMBT1}
+  \field{sortinit}{B}
+  \field{number}{2}
+  \field{pages}{445\bibrangedash 469}
+  \field{title}{Log-concave probability and its applications}
+  \field{volume}{26}
+  \field{journaltitle}{Economic theory}
+  \field{year}{2005}
+\endentry
+
+\entry{Bertsekas}{book}{}
+  \name{author}{1}{}{%
+    {{}%
+     {Bertsekas}{B.}%
+     {Dimitri~P}{D.~P.}%
+     {}{}%
+     {}{}}%
+  }
+  \list{publisher}{1}{%
+    {Athena Scientific Belmont}%
+  }
+  \strng{namehash}{BDP1}
+  \strng{fullhash}{BDP1}
+  \field{sortinit}{B}
+  \field{title}{Convex optimization theory}
+  \field{year}{2009}
+\endentry
+
+\entry{Cox}{article}{}
+  \name{author}{1}{}{%
+    {{}%
+     {Cox}{C.}%
+     {Henry}{H.}%
+     {}{}%
+     {}{}}%
+  }
+  \list{publisher}{1}{%
+    {IEEE}%
+  }
+  \strng{namehash}{CH1}
+  \strng{fullhash}{CH1}
+  \field{sortinit}{C}
+  \field{number}{1}
+  \field{pages}{5\bibrangedash 12}
+  \field{title}{On the estimation of state variables and parameters for noisy
+  dynamic systems}
+  \field{volume}{9}
+  \field{journaltitle}{Automatic Control, IEEE Transactions on}
+  \field{year}{1964}
+\endentry
+
+\entry{LinEstControl}{book}{}
+  \name{author}{1}{}{%
+    {{}%
+     {Davis}{D.}%
+     {M.H.A.}{M.}%
+     {}{}%
+     {}{}}%
+  }
+  \list{publisher}{2}{%
+    {Chapman}%
+    {Hall}%
+  }
+  \strng{namehash}{DM1}
+  \strng{fullhash}{DM1}
+  \field{sortinit}{D}
+  \field{isbn}{9780412151309}
+  \field{series}{Chapman and Hall mathematics series}
+  \field{title}{Linear estimation and stochastic control}
+  \verb{url}
+  \verb https://books.google.com/books?id=QgIqAQAAMAAJ
+  \endverb
+  \field{year}{1977}
+\endentry
+
+\entry{UniConvApp}{book}{}
+  \name{author}{2}{}{%
+    {{}%
+     {Dharmadhikari}{D.}%
+     {Sudhakar}{S.}%
+     {}{}%
+     {}{}}%
+    {{}%
+     {Joag-Dev}{J.-D.}%
+     {Kumar}{K.}%
+     {}{}%
+     {}{}}%
+  }
+  \list{publisher}{1}{%
+    {Elsevier}%
+  }
+  \strng{namehash}{DSJDK1}
+  \strng{fullhash}{DSJDK1}
+  \field{sortinit}{D}
+  \field{title}{Unimodality, convexity, and applications}
+  \field{year}{1988}
+\endentry
+
+\entry{CRANPackage}{article}{}
+  \name{author}{2}{}{%
+    {{}%
+     {D{\"u}mbgen}{D.}%
+     {Lutz}{L.}%
+     {}{}%
+     {}{}}%
+    {{}%
+     {Rufibach}{R.}%
+     {Kaspar}{K.}%
+     {}{}%
+     {}{}}%
+  }
+  \strng{namehash}{DLRK1}
+  \strng{fullhash}{DLRK1}
+  \field{sortinit}{D}
+  \field{title}{logcondens: Computations Related to Univariate Log-Concave
+  Density Estimation}
+\endentry
+
+\entry{jarosz2015function}{book}{}
+  \name{author}{1}{}{%
+    {{}%
+     {Jarosz}{J.}%
+     {Krzysztof}{K.}%
+     {}{}%
+     {}{}}%
+  }
+  \list{publisher}{1}{%
+    {American Mathematical Society}%
+  }
+  \strng{namehash}{JK1}
+  \strng{fullhash}{JK1}
+  \field{sortinit}{J}
+  \field{title}{Function Spaces in Analysis}
+  \field{volume}{645}
+  \field{year}{2015}
+\endentry
+
+\entry{Kalman}{article}{}
+  \name{author}{1}{}{%
+    {{}%
+     {Kalman}{K.}%
+     {Rudolph~Emil}{R.~E.}%
+     {}{}%
+     {}{}}%
+  }
+  \strng{namehash}{KRE1}
+  \strng{fullhash}{KRE1}
+  \field{sortinit}{K}
+  \field{number}{Series D}
+  \field{pages}{35\bibrangedash 45}
+  \field{title}{A New Approach to Linear Filtering and Prediction Problems}
+  \field{volume}{82}
+  \field{journaltitle}{Transactions of the ASME--Journal of Basic Engineering}
+  \field{year}{1960}
+\endentry
+
+\entry{pal}{article}{}
+  \name{author}{3}{}{%
+    {{}%
+     {Pal}{P.}%
+     {Jayanta~Kumar}{J.~K.}%
+     {}{}%
+     {}{}}%
+    {{}%
+     {Woodroofe}{W.}%
+     {Michael}{M.}%
+     {}{}%
+     {}{}}%
+    {{}%
+     {Meyer}{M.}%
+     {Mary}{M.}%
+     {}{}%
+     {}{}}%
+  }
+  \list{publisher}{1}{%
+    {JSTOR}%
+  }
+  \strng{namehash}{PJKWMMM1}
+  \strng{fullhash}{PJKWMMM1}
+  \field{sortinit}{P}
+  \field{pages}{239\bibrangedash 249}
+  \field{title}{Estimating a Polya Frequency Function₂}
+  \field{journaltitle}{Lecture Notes-Monograph Series}
+  \field{year}{2007}
+\endentry
+
+\entry{ConjDual}{book}{}
+  \name{author}{1}{}{%
+    {{}%
+     {Rockafellar}{R.}%
+     {R~Tyrrell}{R.~T.}%
+     {}{}%
+     {}{}}%
+  }
+  \list{publisher}{1}{%
+    {SIAM}%
+  }
+  \strng{namehash}{RRT1}
+  \strng{fullhash}{RRT1}
+  \field{sortinit}{R}
+  \field{title}{Conjugate duality and optimization}
+  \field{volume}{14}
+  \field{year}{1974}
+\endentry
+
+\entry{VarAnal}{book}{}
+  \name{author}{2}{}{%
+    {{}%
+     {Rockafellar}{R.}%
+     {R~Tyrrell}{R.~T.}%
+     {}{}%
+     {}{}}%
+    {{}%
+     {Wets}{W.}%
+     {Roger J-B}{R.~J.-B.}%
+     {}{}%
+     {}{}}%
+  }
+  \list{publisher}{1}{%
+    {Springer Science \& Business Media}%
+  }
+  \strng{namehash}{RRTWRJB1}
+  \strng{fullhash}{RRTWRJB1}
+  \field{sortinit}{R}
+  \field{title}{Variational analysis}
+  \field{volume}{317}
+  \field{year}{2009}
+\endentry
+
+\entry{ConvAnal}{book}{}
+  \name{author}{1}{}{%
+    {{}%
+     {Rockafellar}{R.}%
+     {Ralph~Tyrell}{R.~T.}%
+     {}{}%
+     {}{}}%
+  }
+  \list{publisher}{1}{%
+    {Princeton university press}%
+  }
+  \strng{namehash}{RRT2}
+  \strng{fullhash}{RRT2}
+  \field{sortinit}{R}
+  \field{title}{Convex analysis}
+  \field{year}{2015}
+\endentry
+
+\entry{MultStochDual}{article}{}
+  \name{author}{1}{}{%
+    {{}%
+     {Rockafellar}{R.}%
+     {RT}{R.}%
+     {}{}%
+     {}{}}%
+  }
+  \list{publisher}{1}{%
+    {Springer}%
+  }
+  \strng{namehash}{RR1}
+  \strng{fullhash}{RR1}
+  \field{sortinit}{R}
+  \field{pages}{1\bibrangedash 19}
+  \field{title}{Duality and optimality in multistage stochastic programming}
+  \field{volume}{85}
+  \field{journaltitle}{Annals of Operations Research}
+  \field{year}{1999}
+\endentry
+
+\entry{rufibach}{thesis}{}
+  \name{author}{1}{}{%
+    {{}%
+     {Rufibach}{R.}%
+     {Kaspar}{K.}%
+     {}{}%
+     {}{}}%
+  }
+  \strng{namehash}{RK1}
+  \strng{fullhash}{RK1}
+  \field{sortinit}{R}
+  \field{title}{Log-concave Density Estimation and Bump Hunting for iid
+  Observations}
+  \list{institution}{2}{%
+    {Univ. Bern}%
+    {Gottingen}%
+  }
+  \field{type}{phdthesis}
+  \field{year}{2006}
+\endentry
+
+\entry{Todorov}{inproceedings}{}
+  \name{author}{1}{}{%
+    {{}%
+     {Todorov}{T.}%
+     {Emanuel}{E.}%
+     {}{}%
+     {}{}}%
+  }
+  \list{organization}{1}{%
+    {IEEE}%
+  }
+  \strng{namehash}{TE1}
+  \strng{fullhash}{TE1}
+  \field{sortinit}{T}
+  \field{booktitle}{Decision and Control, 2008. CDC 2008. 47th IEEE Conference
+  on}
+  \field{pages}{4286\bibrangedash 4292}
+  \field{title}{General duality between optimal control and estimation}
+  \field{year}{2008}
+\endentry
+
+\lossort
+\endlossort
+
+\endinput

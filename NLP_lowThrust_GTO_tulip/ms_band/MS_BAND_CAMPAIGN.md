@@ -51,3 +51,14 @@ up-march also crawls. (2) Guard amended: within-step LM relay allowed
 from its own iterate at the SAME eps; never across steps; worse iterates
 still discarded). Also adopting ScaleProblem='jacobian' in ms_solve
 (probe: ~10x early-phase speedup).
+
+### 2026-07-10 — Task 7 step 1: ms_solve ScaleProblem='jacobian' + regression
+Added `'ScaleProblem', 'jacobian'` to the lsqnonlin options in `ms_solve.m`
+(Marquardt scaling; probe-verified ~10x early-phase speedup on the crawling
+1.12x dual-seed system — `probe_scaled_lm.m`/`.log`). Re-ran
+`test_ms_reproduce_mintime` as a regression gate: PASS, ||R||=2.384e-10
+(15 iters; comparable to the pre-change 2.253e-10 at 10 iters — this
+easy near-converged problem doesn't exercise the scaling benefit the probe
+measured on the hard dual-seed case, but the gate stays green). physics
+exact (dV 4.4665 km/s, prop 2.9247 kg, bang 100.0%). Log:
+`regress_mintime_scaled.log`.

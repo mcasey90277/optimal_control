@@ -44,14 +44,14 @@ if exist(cfg.dirs.minfuel,'dir')
         [res, src] = add_point(res, src, R.out, flds, dd(k).name);
     end
 end
-% --- legacy per-factor files (ms_<f>.mat carry `out`) ------------------------
-dd = dir(fullfile(here, 'ms_*.mat'));
+% --- legacy per-factor files (legacy_ms_f####.mat carry `out`, no meta) -------
+dd = dir(fullfile(cfg.dirs.minfuel, 'legacy_ms_f*.mat'));
 for k = 1:numel(dd)
     R = load(fullfile(dd(k).folder, dd(k).name));
     if isfield(R,'out'), [res, src] = add_point(res, src, R.out, flds, dd(k).name); end
 end
 % --- legacy up-pass front (struct array `results`) ---------------------------
-fLeg = fullfile(here, 'tf_front_results.mat');
+fLeg = fullfile(cfg.dirs.fronts, 'tf_front_results.mat');
 if isfile(fLeg)
     R = load(fLeg);
     for k = 1:numel(R.results)

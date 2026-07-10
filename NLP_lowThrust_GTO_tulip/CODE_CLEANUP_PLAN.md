@@ -131,11 +131,20 @@ NLP_lowThrust_GTO_tulip/
   physics campaign resumes on clean rails (recover 1.30/1.35/1.40× greens,
   few-switch down-trace from 1.85×, indirect certifier build).
 
-## Decisions needed from Mike
+## Decisions from Mike (RESOLVED 2026-07-09)
 
-1. `lieFiltering/` and `gauss_sum_curvature/` are untracked in the repo —
-   commit them, or .gitignore?
-2. Raw campaign logs (`sundman_n50.log`, `tf_continuation*.log`, …): attic or
-   delete? (The MD docs carry all the learnings.)
-3. Rename existing `energy_*.mat` to the new scheme in Phase 1, or leave
-   legacy names and use the new scheme only for new files?
+1. Untracked folders → **tracked and pushed** (`lieFiltering/`,
+   `quasiNewton_matlab/`, `gauss_sum_curvature/`, `papers/` — PDFs force-added
+   past the `*.pdf` ignore rule).
+2. Raw campaign logs → **deleted** (learnings live in the MD docs).
+3. `.mat` renaming → **done** (pulled forward from Phase 1, safe because
+   `ms_band` greps clean of the old names): `results/energy/energy_f####.mat`
+   (18 files), `results/minfuel/legacy_ms_f####.mat` (2, no meta — excluded
+   from the provenance glob), front collections → `results/fronts/`. Only the
+   two canonical artifacts remain in the library root. Code updated:
+   `backbone_walk.sh`, `sharpen_batch.sh`, `minfuel_at_tf`, `aggregate_front`,
+   `verify_tf_front` default. **Consequence:** the superseded drivers
+   (`solve_tf_minfuel`, `run_tf_sweep/front/2anchor`, `build_energy_backbone`)
+   now reference dead filenames — they are broken-by-migration and MUST be
+   atticked in Phase 1 (left in place for now: the live lower-band terminal
+   has `sundman_minfuel/` on its path).

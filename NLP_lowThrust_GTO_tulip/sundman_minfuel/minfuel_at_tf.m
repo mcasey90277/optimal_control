@@ -150,17 +150,15 @@ end
 end
 
 % ---------------------------------------------------------------------------
-function f = find_energy_file(here, cfg, factor)
-% Locate the backbone energy solution: new results layout first, legacy names
-% (energy_<%.2f>.mat in the library root) second.
-cand = {fullfile(cfg.dirs.energy, cfg.fname('energy', factor)), ...
-        fullfile(here, sprintf('energy_%.2f.mat', factor))};
-for k = 1:numel(cand)
-    if isfile(cand{k}), f = cand{k}; return; end
+function f = find_energy_file(here, cfg, factor) %#ok<INUSL>
+% Locate the backbone energy solution in the canonical results layout
+% (results/energy/energy_f####.mat; legacy root names migrated 2026-07-09).
+f = fullfile(cfg.dirs.energy, cfg.fname('energy', factor));
+if ~isfile(f)
+    error('minfuel_at_tf:noEnergySeed', ...
+          'no energy backbone file for factor %.3f (%s); run orchestrate/backbone_walk.sh first', ...
+          factor, f);
 end
-error('minfuel_at_tf:noEnergySeed', ...
-      'no energy backbone file for factor %.3f (looked for %s and %s); run build_energy_backbone / energy_step first', ...
-      factor, cand{1}, cand{2});
 end
 
 % ---------------------------------------------------------------------------
@@ -172,7 +170,7 @@ if strcmp(op.seedKind, 'file')
 else
     cand = {fullfile(cfg.dirs.minfuel, strrep(cfg.fname('minfuel',op.seedFactor),'.mat','_en.mat')), ...
             fullfile(cfg.dirs.minfuel, strrep(cfg.fname('minfuel',op.seedFactor),'.mat','_nb.mat')), ...
-            fullfile(here, sprintf('ms_%.2f.mat', op.seedFactor)), ...
+            fullfile(cfg.dirs.minfuel, cfg.fname('legacy_ms', op.seedFactor)), ...
             fullfile(here, 'sundman_minfuel_certified.mat')};
     fn = '';
     for k = 1:numel(cand)

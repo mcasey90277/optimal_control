@@ -44,7 +44,7 @@ sharpen_one() {
   out=$(expected_out $f)
   local milli
   milli=$(printf '%04.0f' $((f * 1000)))
-  if [ ! -f "$DIR/energy_$f.mat" ] && [ ! -f "$DIR/results/energy/energy_f$milli.mat" ]; then
+  if [ ! -f "$DIR/results/energy/energy_f$milli.mat" ]; then
     echo "  SKIP ${f}x (no energy backbone file)" >> "$LOG"; return
   fi
   local try

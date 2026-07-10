@@ -67,6 +67,22 @@ scale-dependent switching-function sign law and an independent adjoint check.
 Full plan and status in `TIER1_PMP_CERTIFICATION_SCOPE.md`; `run_tf_sweep.m`
 saves `lamDef` per t_f.
 
+## Results layout (2026-07-09 migration)
+
+All result `.mat`s live under `results/` with collision-free milli-factor
+names from `minfuel_config`: `results/energy/energy_f####.mat` (backbone),
+`results/minfuel/minfuel_f####_<branch>.mat` (provenance-stamped, from
+`minfuel_at_tf`), `results/minfuel/legacy_ms_f####.mat` (pre-migration
+solutions, no meta), `results/fronts/` (front collections),
+`results/plots/`, `results/logs/`. Only the two canonical artifacts stay in
+the library root: `sundman_minfuel_certified.mat` and
+`minfuel_from_energy_seed.mat`. **The canonical toolchain is
+`minfuel_config` / `minfuel_at_tf` / `aggregate_front` +
+`orchestrate/*.sh`** — the older drivers below (`solve_tf_minfuel`,
+`run_tf_sweep/front/2anchor`, `build_energy_backbone`) still reference the
+pre-migration filenames and are superseded (atticked in cleanup Phase 1; see
+`../CODE_CLEANUP_PLAN.md`).
+
 ## Notes
 - The full method write-up and the "two walls" (dynamics vs objective) analysis
   are in `../LOW_THRUST_MINFUEL_CAMPAIGN.md`.

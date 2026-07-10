@@ -31,11 +31,14 @@ LOG=$LOGDIR/backbone_walk_$(date +%Y%m%d_%H%M%S).log
 
 [ $# -lt 2 ] && { echo "usage: $0 <seed_factor> <factor1> [factor2 ...]"; exit 1; }
 seedf=$1; shift
-seed=$DIR/energy_$seedf.mat
+# canonical energy layout: results/energy/energy_f<milli>.mat (2026-07-09 migration)
+efile() { printf '%s/results/energy/energy_f%04.0f.mat' "$DIR" $(($1 * 1000)); }
+mkdir -p "$DIR/results/energy"
+seed=$(efile $seedf)
 [ ! -f "$seed" ] && { echo "seed $seed not found" | tee -a "$LOG"; exit 1; }
 
 for f in "$@"; do
-  out=$DIR/energy_$f.mat
+  out=$(efile $f)
   before=0; [ -f "$out" ] && before=$(stat -f %m "$out")
   echo "=== step -> ${f}x  (seed $(basename "$seed")) ===" >> "$LOG"
   "$MAT" -batch "cd('$DIR'); energy_step('$seed',$f,'$out')" >> "$LOG" 2>&1 &

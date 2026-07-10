@@ -33,7 +33,7 @@ function pmp = verify_tf_front(resultsFile, makePlot)
 %   [2] Pontryagin minimum principle; primer-vector theory (Lawden).
 
 here = fileparts(mfilename('fullpath'));  addpath(here);
-if nargin<1||isempty(resultsFile), resultsFile=fullfile(here,'tf_front_results.mat'); end
+if nargin<1||isempty(resultsFile), resultsFile=fullfile(here,'results','fronts','tf_front_results.mat'); end
 if nargin<2||isempty(makePlot), makePlot=true; end
 p = cr3bp_lt_params(0.025,15,2100);  c = p.c;
 S = load(resultsFile);  R = S.results;  [~,ix]=sort([R.factor]);  R=R(ix);

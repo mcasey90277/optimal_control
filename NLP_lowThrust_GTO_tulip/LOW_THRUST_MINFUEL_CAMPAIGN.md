@@ -305,7 +305,36 @@ Infrastructure for the down-sweep: `build_energy_backbone.m` / `energy_step.m`
 (chained energy continuation, process-isolated), `solve_tf_minfuel.m` (re-clean
 + sharpen), `direct_build_minfuel.m` (from-scratch burn+coast build), `tf_step.m`
 (isolated single step). Watchdog + process isolation handle the uncatchable MEX
-crashes and solver hangs.
+crashes and solver hangs. (Post-cleanup the canonical equivalents are
+`minfuel_at_tf.m` + `orchestrate/*.sh`; the older drivers are atticked.)
+
+## Up-band 1.30–1.45×: the fold region loses extremal support (Jul 9 pm 2026)
+
+Branch enumeration above the certified 1.25× point, three independent seeds per
+t_f — (a) the old up-pass bang-bang continuation, (b) the energy-backbone
+sharpen (via `minfuel_at_tf` 'energy'), (c) a fresh neighbor-seed chain
+continued from the certified 1.25× solution itself ('neighbor', light
+schedule). Two decisive facts:
+
+1. **The ΔV envelope is robust**: all three basins agree to ~0.01 km/s —
+   1.30× ≈ 3.032, 1.35× ≈ 2.96–2.98, 1.40× ≈ 2.961 (the up-family minimum),
+   1.45× ≈ 3.056. Solid feasible upper bounds, machine-tight, primer ~0.06°.
+2. **The dual-inconsistency is a property of the REGION, not the seed**:
+   burn-sign agreement matches across all three seeds to <0.2% at every
+   factor and degrades smoothly toward the fold — 98.0% (1.30×), 92.6%
+   (1.35×), 79.4% (1.40×), 71.6% (1.45×) — while β-spread grows 4.9→16%.
+   Even the certified family's own gentle continuation loses switching-law
+   support immediately past 1.25×. Not basin luck: the many-switch pattern
+   itself stops being extremal-supported where the up-family folds
+   (its ΔV turns back up at 1.45×).
+
+Consequence: certified greens stay {1.12–1.25×, 1.85×}; 1.30–1.45× are
+well-reproduced feasible envelope points, deliberately grey. The true optimum
+in 1.30–1.80× most likely belongs to the FEW-SWITCH family that holds
+1.75–1.85× (2.52–2.67, ~22 sw) — next probe: continue that family DOWN from
+1.85×/1.75× into the gap. Independent arbiter remains the ms_band indirect
+certifier. Diagnostic still open: where the burn-sign violations live
+(near-switch vs mid-arc).
 
 ## The problem
 GTO (350 × 35786 km, ω = −25°) → a south-pole tulip point in the Earth–Moon

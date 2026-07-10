@@ -336,6 +336,39 @@ in 1.30–1.80× most likely belongs to the FEW-SWITCH family that holds
 certifier. Diagnostic still open: where the burn-sign violations live
 (near-switch vs mid-arc).
 
+## Few-switch down-chain SWEEPS the upper band (Jul 9 pm 2026, part 2)
+
+Neighbor-chain from the certified 1.85× (22-sw) solution down to 1.45× in
+0.05 steps (branch 'dn', light schedule, all finals Solve_Succeeded, defects
+~1e-14, primer ≤0.072°). The 1.45–1.70× wasteland collapses:
+
+| t_f× | ΔV dn | sw | prior best | Δ |
+|---|---|---|---|---|
+| 1.45 | **2.782** | 43 | 3.056 | −0.27 |
+| 1.50 | **2.647** | 35 | 3.246 | −0.60 |
+| 1.55 | **2.520** | 31 | 3.596 | −1.08 |
+| 1.60 | **2.444** | 27 | 4.170 | −1.73 |
+| 1.65 | **2.434** | 23 | 4.856 | −2.42 |
+| 1.70 | **2.466** | 23 | 5.585 | −3.12 |
+| 1.75/1.80 | 2.523 / 2.591 | 23 | ≈ ties the old greys | — |
+
+1. **New campaign-best ΔV: 2.434 km/s at 1.65× (46 d)** — 45.5% below
+   min-time. By loiter-monotonicity, front(t_f ≥ 1.65×) ≤ 2.434, so the
+   chain's own 1.70–1.85× values INCLUDING the certified 1.85× (2.667) are
+   dominated local minima (modulo the tulip-period phasing caveat).
+2. **The families connect**: switch count grows continuously descending
+   (22→23→27@1.60→31→35→43@1.45) — the few-switch family morphs into
+   many-switch structure approaching the crossing at ~1.40–1.45×. One
+   connected structure over a fold, not two isolated families.
+3. **Checker under test**: every dn point fails the empirical-β gate
+   (burn 62–75%, β-spread ~15%) despite clean Solve_Succeeded KKT
+   convergence, while 1.85× sits pristine (spread 0.6%). A discontinuity
+   that sharp between adjacent same-family points says either everything
+   above 1.25× is genuinely non-extremal, or the single-β model itself
+   breaks structurally in this region. CRITICAL-PATH diagnostics: (a)
+   violation locality + β-fit residual structure at 1.65× vs a certifying
+   point (pure post-processing); (b) ms_band indirect arbiter at 1.65×.
+
 ## The problem
 GTO (350 × 35786 km, ω = −25°) → a south-pole tulip point in the Earth–Moon
 CR3BP. 15 kg, 25 mN, Isp 2100 s (muStar = 0.012150585609624). Minimize

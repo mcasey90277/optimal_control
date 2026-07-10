@@ -119,3 +119,26 @@ iters — identical record; regress_mintime_resfun.log). **Gate C PASS**
 1.00x): ||R|| = 9.711e-11 (19 iters, wall 1.6 min), dV 4.4665 km/s, prop
 2.9247 kg, bang 100.0%, t(sigf)-tf = -7.8e-13. The sigma-domain system
 even lowers the residual floor below the time-domain's 2.4e-10.
+
+### 2026-07-10 — Task S1 Gate D: 1.12x dual-seed eps-march BLOCKED (healthy system, strategy mismatch)
+Native sigma-domain dual seed validated (sms_seed_duals, M=50: beta =
+0.03102, spread 0.45%, burn/coastAgree 100%, node1Err 0, arcCheckErr
+2.25e-3, lamT dual relStd 8.7e-3; ||R(eps=1)|| = 4.285, costate joints
+dominant). eps-march per the S1 brief ([1 0.3 ... 1e-4], 200 iters/step,
+relays): the eps=1 step capped 3x — 4.285 -> 9.082e-3 -> 7.307e-3
+(19.5%) -> 6.607e-3 (9.6% < 10% guard) -> abandoned. FAIL
+test_sms_reproduce(D). **Trace capture (diag_s1_gateD.m/.mat): this is
+NOT the time-domain pathology.** At the plateau iterate the GN system is
+CONSISTENT to 6.4e-12 (R entirely in range(J); J full numerical rank) —
+no singular residual minimum. Instead: (1) the eps=1 extremal is far
+from the near-bang seed (terminal rv rows 4.4e-3 dominate; dV 4.22 vs
+3.83; switches 0, bang 40.7% — the smooth extremal has no bang
+structure); (2) cond(J) = 6.3e8 with GN step norm 129 (solution-scale,
+outside the linear regime) — LM crawls at ~1e-4 nats/iter (~1.6e5 iters
+to 1e-9). The Sundman machinery itself is certified (Gates A-C green,
+lower residual floor, clean FD conditioning); the block is the
+smooth-first continuation schedule applied to a SHARP seed.
+Recommendation for the gate owner: march start near the source's
+effective sharpness (e.g. eps0 ~ 1e-2..1e-3, sharp-end warm start)
+instead of eps=1; alternatives: M=40, larger per-step budget (likely
+insufficient alone). Logs: test_sms_gateD.log, diag_s1_gateD.log.

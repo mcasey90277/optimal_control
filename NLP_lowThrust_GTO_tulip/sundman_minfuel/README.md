@@ -107,7 +107,7 @@ pre-migration filenames and are superseded (atticked in cleanup Phase 1; see
   1.12×=3.83 (12 sw) / 1.14×=3.49 / 1.15×=3.37 / 1.20×=3.24 / 1.25×=3.14 km/s,
   + the min-time anchor (4.4665, 0 sw); switches drop toward the band. The band
   is an open item (indirect/multiple-shooting is the proposed next tool). Full
-  color-coded figure `front_full_verified.png`; account in the campaign doc
+  color-coded figure `results/plots/front_full_verified.png`; account in the campaign doc
   "Down-sweep CRACKED" + "transition band".
 - **Per-t_f optimality verification.** `verify_tf_front.m` checks each solution
   against Pontryagin's first-order conditions from its own KKT-dual costates

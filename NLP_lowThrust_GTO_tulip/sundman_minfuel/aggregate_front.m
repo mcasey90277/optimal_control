@@ -94,13 +94,8 @@ if makePlot
     fig=figure('Color','w','Position',[100 100 880 520],'Visible','off');
     try, theme(fig,'light'); catch, end
     hold on; grid on; box on;
-    plot(d(c==1), v(c==1), 'o', 'Color',[0.60 0.60 0.65], ...
-         'MarkerFaceColor',[0.87 0.87 0.90],'MarkerSize',7);
-    plot(d(c==2), v(c==2), 'o', 'Color',[0.10 0.45 0.15], ...
-         'MarkerFaceColor',[0.20 0.65 0.25],'MarkerSize',9,'LineWidth',1.2);
-    plot(d(c==3), v(c==3), 's', 'Color',[0.05 0.25 0.55], ...
-         'MarkerFaceColor',[0.15 0.45 0.80],'MarkerSize',10,'LineWidth',1.2);
-    % envelope through the best certified point per factor
+    hh = [];  lbl = {};                       % legend handles built dynamically
+    % envelope FIRST (under the markers), through best certified per factor
     cf=[pts.class]>=2;
     if any(cf)
         fac=[pts.factor]; ufac=unique(fac(cf)); envD=zeros(size(ufac)); envV=zeros(size(ufac));
@@ -108,16 +103,31 @@ if makePlot
             sel = cf & fac==ufac(kk);
             [envV(kk), pos] = min(v(sel)); dd2=d(sel); envD(kk)=dd2(pos);
         end
-        plot(envD, envV, '-', 'Color',[0.10 0.45 0.15 0.5], 'LineWidth',1.5);
+        hh(end+1) = plot(envD, envV, '-', 'Color',[0.10 0.45 0.15 0.5], 'LineWidth',1.5);
+        lbl{end+1} = 'certified envelope';
     end
-    plot(cfg.tfMin*tStar/86400, 4.4665, 'ks', 'MarkerFaceColor','k','MarkerSize',9);
+    if any(c==1)
+        hh(end+1) = plot(d(c==1), v(c==1), 'o', 'Color',[0.60 0.60 0.65], ...
+             'MarkerFaceColor',[0.87 0.87 0.90],'MarkerSize',7);
+        lbl{end+1} = 'feasible upper bound';
+    end
+    if any(c==2)
+        hh(end+1) = plot(d(c==2), v(c==2), 'o', 'Color',[0.10 0.45 0.15], ...
+             'MarkerFaceColor',[0.20 0.65 0.25],'MarkerSize',9,'LineWidth',1.2);
+        lbl{end+1} = 'direct-certified extremal';
+    end
+    if any(c==3)
+        hh(end+1) = plot(d(c==3), v(c==3), 's', 'Color',[0.05 0.25 0.55], ...
+             'MarkerFaceColor',[0.15 0.45 0.80],'MarkerSize',10,'LineWidth',1.2);
+        lbl{end+1} = 'direct+indirect certified';
+    end
+    hh(end+1) = plot(cfg.tfMin*tStar/86400, 4.4665, 'ks', 'MarkerFaceColor','k','MarkerSize',9);
+    lbl{end+1} = 'min-time';
     text(cfg.tfMin*tStar/86400+0.4, 4.4665, 'min-time (4.4665, 0 sw)', ...
          'FontSize',9,'Color',[0.2 0.2 0.2]);
     xlabel('transfer time t_f (days)'); ylabel('\DeltaV (km/s)');
     title('Min-fuel \DeltaV vs t_f -- honest front (envelope through certified points only)');
-    legend({'feasible upper bound','direct-certified extremal', ...
-            'direct+indirect certified','certified envelope','min-time'}, ...
-           'Location','northwest','Box','off');
+    legend(hh, lbl, 'Location','northwest','Box','off');
     outP = fullfile(cfg.dirs.plots, 'front_honest.png');
     exportgraphics(fig, outP, 'Resolution',150); close(fig);
     fprintf('WROTE %s\n', outP);

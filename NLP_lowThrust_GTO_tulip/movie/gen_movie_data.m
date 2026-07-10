@@ -6,7 +6,7 @@
 
 addpath('/Users/msc/Desktop/optimal_control/lowThrust_GTO_tulip');
 addpath('/Users/msc/Desktop/optimal_control/NLP_lowThrust_GTO_tulip');
-run('/Users/msc/Desktop/optimal_control/NLP_lowThrust_GTO_tulip/setup_paths.m');  % pumpkyn on path
+run('/Users/msc/Desktop/optimal_control/NLP_lowThrust_GTO_tulip/sundman_minfuel/setup_paths.m');  % pumpkyn on path
 
 muStar = 0.012150585609624;
 lStar  = 389703.264829278;

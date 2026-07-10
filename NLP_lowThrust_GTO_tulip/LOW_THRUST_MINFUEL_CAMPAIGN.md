@@ -140,14 +140,14 @@ certified solution rescaled — take the ΔV-minimum), then the best-of-K lower
 envelope is the front. Finer t_f resolution helps only *after* each point is the
 local best (more t_f alone just adds scatter). Per-t_f solutions (state,
 control, costates) are saved in `tf_sweep_results.mat`; scatter plot
-`tf_dv_front.png`.
+`attic/tf_dv_front.png`.
 
 ### Follow-up: certified-basin continuation (`run_tf_front.m`, Jul 9)
 
 Continuing the CERTIFIED 25-switch solution in small (5%) t_f steps —
 `run_tf_front.m` — produces a MUCH cleaner curve than the energy-continuation
 scatter, but only over a limited band, and it exposes the basin structure
-directly (data + plot `tf_front.png`):
+directly (data + plot `attic/tf_front.png`):
 - **Good band, t_f = 1.15–1.45× (32–40 d):** a clean, smooth, decreasing front,
   ΔV 3.370 → **2.961 km/s** (min near 1.35×/37.6 d), then a slight uptick to
   3.063 at 1.45×. This is the trustworthy segment.
@@ -251,7 +251,7 @@ from-scratch solves share. Current map of the front (machine-tight solutions,
 Monotone ordering holds: 3.83(1.12) > 3.49(1.14) > 3.37(1.15) > 3.24(1.20) >
 3.14(1.25). The **switch count drops toward the band** (25→12 from 1.15× to
 1.12×) — direct evidence of the many-switch → min-time reorganization.
-Full-front figure: `front_full_verified.png` (green=PMP-certified, grey=not,
+Full-front figure: `results/plots/front_full_verified.png` (green=PMP-certified, grey=not,
 black=min-time), assembled by the `combine_front.m` pattern + `verify_tf_front`.
 
 **Transversality nuance (RESOLVED):** the new down-points 1.12×/1.14× have

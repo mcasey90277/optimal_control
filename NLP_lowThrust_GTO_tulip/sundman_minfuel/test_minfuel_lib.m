@@ -41,14 +41,21 @@ end
 assert(~strcmp(cfg.fname('x',1.125), cfg.fname('x',1.13)), '0.001-granularity collision');
 nOK = nOK + 1;  fprintf('PASS %d: filename encode/parse round-trips\n', nOK);
 
-% 4. certified artifact integrity: lamDef [8xN] vs X [8x(N+1)], costate-based
-%    quantities finite, transversality (relative) tiny
+% 4. artifact integrity. The certified .mat predates the costate-return
+%    feature (its `out` has no lamDef; the PMP numbers came from a later
+%    re-solve), so basics are checked there and costate integrity on a
+%    lamDef-bearing artifact (legacy down-sweep solution).
 N = size(C.out.X,2) - 1;
-assert(isequal(size(C.out.lamDef), [8 N]), 'lamDef shape %s != 8x%d', mat2str(size(C.out.lamDef)), N);
-relTrans = abs(C.out.lamDef(7,end)) / max(abs(C.out.lamDef(7,:)));
-assert(relTrans < 1e-3, 'certified relative transversality %.2g >= 1e-3', relTrans);
-assert(C.out.primerAlignDeg < 0.2, 'certified primer alignment %.3f deg >= 0.2', C.out.primerAlignDeg);
-nOK = nOK + 1;  fprintf('PASS %d: certified artifact integrity (lamDef 8x%d, relTrans %.1e)\n', nOK, N, relTrans);
+assert(C.out.maxDefect < 1e-12, 'certified defect %.2g not machine-tight', C.out.maxDefect);
+assert(abs(C.out.mf - (1 - 2.2640/15)) < 5e-4, 'certified final mass drifted');
+L = load(fullfile(cfg.dirs.minfuel, 'legacy_ms_f1120.mat'));
+NL = size(L.out.X,2) - 1;
+assert(isequal(size(L.out.lamDef), [8 NL]), 'lamDef shape %s != 8x%d', mat2str(size(L.out.lamDef)), NL);
+relTrans = abs(L.out.lamDef(7,end)) / max(abs(L.out.lamDef(7,:)));
+assert(relTrans < 1e-3, 'legacy_ms_f1120 relative transversality %.2g >= 1e-3', relTrans);
+assert(L.out.primerAlignDeg < 0.2, 'legacy_ms_f1120 primer %.3f deg >= 0.2', L.out.primerAlignDeg);
+nOK = nOK + 1;  fprintf('PASS %d: artifact integrity (certified defect %.1e; lamDef 8x%d, relTrans %.1e)\n', ...
+                        nOK, C.out.maxDefect, NL, relTrans);
 
 % 5. physics constants: params round-trip and ND time scale
 p = cr3bp_lt_params(cfg.thrustN, cfg.m0kg, cfg.ispS);

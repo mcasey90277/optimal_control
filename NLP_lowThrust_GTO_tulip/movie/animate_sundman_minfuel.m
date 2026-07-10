@@ -15,7 +15,7 @@ function animate_sundman_minfuel(mode)
 %          'movie' renders BOTH the MP4 and a smaller looping GIF.
 %          [default 'movie']
 %
-% Reads ../sundman_minfuel_certified.mat (out.X = [r;v;m;t] 8xN, out.U =
+% Reads ../sundman_minfuel/sundman_minfuel_certified.mat (out.X = [r;v;m;t] 8xN, out.U =
 % [alpha;s] 4xN).  Writes sundman_minfuel.mp4 + .gif in this movie/ folder.
 
 if nargin < 1, mode = 'movie'; end
@@ -27,7 +27,7 @@ m0kg = 15; g0 = 9.80665*tStar^2/(1000*lStar);  c = (2100/tStar)*g0;
 earth = [-muStar 0 0];  moon = [1-muStar 0 0];
 
 % --- load certified solution ----------------------------------------------
-S  = load([sp '..' filesep 'sundman_minfuel_certified.mat']);
+S  = load([sp '..' filesep 'sundman_minfuel' filesep 'sundman_minfuel_certified.mat']);
 X  = S.out.X;  U = S.out.U;  rvf = S.rvf;
 r  = X(1:3,:);  m = X(7,:);  t = X(8,:);
 s  = U(4,:);   al = U(1:3,:);
@@ -40,7 +40,7 @@ dVtot = dV(end);
 % --- tulip backdrop trace (best-effort; skip if pumpkyn unavailable) ------
 yTul = [];
 try
-    run([sp '..' filesep 'setup_paths.m']);
+    run([sp '..' filesep 'sundman_minfuel' filesep 'setup_paths.m']);
     [~, x0T] = pumpkyn.cr3bp.getTulip((5/6)*2*pi, 7, -1, 1e-12);
     [~, yT ] = pumpkyn.cr3bp.prop((5/6)*2*pi, x0T, muStar);
     yTul = yT(:,1:3);

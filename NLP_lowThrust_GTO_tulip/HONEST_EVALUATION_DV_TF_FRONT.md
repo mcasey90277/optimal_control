@@ -116,7 +116,7 @@ global one. The current plot is honest about extremality, not optimality.
 | 1.80 | 2.595 | 23 | same |
 | 1.85 | 2.667 | 22 | certified green — but dominated by the 1.75× feasible point → local, not global |
 
-Plot: `sundman_minfuel/front_full_verified.png`. Energy backbone
+Plot: `sundman_minfuel/results/plots/front_full_verified.png`. Energy backbone
 `energy_1.20…1.85.mat` all banked and machine-tight (the expensive part; any
 single-t_f sharpen off it is ~10–30 min).
 

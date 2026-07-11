@@ -102,6 +102,13 @@ end
 
 function eE = ifs_int_arc(startY, span, uArc, prob)
 % Integrate one arc; returns the endpoint [16x1] (may be complex under CS).
+% Guard: a (near-)zero-length or reversed span (a collapsed switch gap during
+% an LM step) has endpoint = start -- short-circuit ode113, which errors on
+% tspan with equal/decreasing entries. CS-safe (branch on real part).
+if real(span(2) - span(1)) <= 1e-13
+    eE = startY;
+    return;
+end
 [~, Y] = ode113(@(s,y) ifs_eom(s, y, prob.Tmax, prob.c, prob.muStar, ...
                               prob.pSund, uArc), span, startY, prob.odeOpts);
 eE = Y(end, :).';

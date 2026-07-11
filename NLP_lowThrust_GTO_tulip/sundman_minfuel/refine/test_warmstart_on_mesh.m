@@ -9,7 +9,8 @@ X = [ (1:6);  (11:16);  (21:26);  (31:36); ...
       (41:46); (51:56);  linspace(1,0.9,6);  linspace(0,1,6) ];   % [8x6]
 % throttle switches between node 3 and node 4 (burn -> coast)
 s   = [1 1 1 0 0 0];
-al  = repmat([1;0;0], 1, 6);                 % unit +x direction
+th  = linspace(0, pi/3, 6);                  % rotating direction: pchip insert is non-unit
+al  = [cos(th); sin(th); zeros(1, 6)];       % unit at each original node, varying between
 U   = [al; s];                                % [4x6]
 out = struct('X', X, 'U', U);
 

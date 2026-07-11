@@ -28,5 +28,13 @@ opts2  = struct('K', 1, 'hFloor', 1e-9, 'maxAdd', 40);
 [sn2, in2, nd2] = refine_sigma(sigma2, score2, opts2);
 assert(nnz(in2) == 0 && nd2 == 1, 'sub-hFloor interval must be dropped');
 
+% guard: maxAdd cap counts viable excluded intervals as dropped (not the K quota)
+sigma3 = linspace(0, 1, 9).';                 % 8 intervals
+score3 = zeros(1, 8);  score3([2 4 6 8]) = [1 2 3 4];   % 4 hot, all wide
+opts3  = struct('K', 4, 'hFloor', 1e-9, 'maxAdd', 2);
+[~, in3, nd3] = refine_sigma(sigma3, score3, opts3);
+assert(nnz(in3) == 2, 'maxAdd caps inserts at 2, got %d', nnz(in3));
+assert(nd3 == 2, 'the 2 viable intervals beyond maxAdd must count as dropped, got %d', nd3);
+
 fprintf('ALL PASS\n');
 end

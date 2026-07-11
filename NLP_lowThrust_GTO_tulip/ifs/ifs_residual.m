@@ -55,8 +55,9 @@ if nargout > 1
         else
             zdep = nodeIdx(a-1).';                % start node N_{a-1}
         end
-        if a >= 2, zdep = [zdep; tauIdx(a-1)]; end     % arc start tau
-        if a <= k, zdep = [zdep; tauIdx(a)];   end     % arc end tau (tauf fixed for a=k+1)
+        for jg = 1:min(a, k)                            % stick-breaking: arc a depends on g_1..g_min(a,k)
+            zdep = [zdep; tauIdx(jg)];
+        end
         % residual rows this arc's endpoint feeds:
         if a <= k
             rr = contRow(a);  applyG = @(de) de;                  % Rcont_a = e_a - N_a

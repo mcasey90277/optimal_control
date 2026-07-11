@@ -31,6 +31,7 @@ underestimates correlated integration noise at RelTol 1e-13. The Jacobian is cor
 heuristic is miscalibrated. Candidate fixes: larger hFD (1e-5..1e-4) for Gate 1, or defer to the
 green CS backstop when Gate 1 is noise-limited. Not changed here (gate discipline).
 Logs: `test_mintime_reltol13.log`, `test_jacobian_reltol13.log`, diagnostics `task5_diag*.log`.
+(Resolved 2026-07-09 by the gate v3 rework — any-h FD sweep + B2 assembled-vs-rebuilt assertion, commit 940f5df; the committed suite is green.)
 
 ### 2026-07-10 — M1(b) BLOCKED, adjudicated; pivot to up-march-first
 The 1.12x dual-seed reproduction failed to converge under every recipe
@@ -182,6 +183,8 @@ folded in: beta_from_duals error()s on no-switch data; sms_eom rejects
 ||lamV|| < 1e-8 via identified error (sms_residual catches it, returns a
 large finite miss — documented threshold rejection, no regularization).
 Logs: test_sms_dualmap.log, dualmap_table.mat, probe_s1_meshmin.m.
+
+**Gate-D attempt 3 (mode-d seed + adaptive march) — the record behind the intrinsic-crawl adjudication.** With the mode-d seed at M=40 the eps=1e-2 start improved markedly (||R|| seed 3.414 -> 1.500) but entered the same relay crawl (200-iter solves cutting ~12-18% each: 1.36e-2 -> 1.11e-2 -> 9.7e-3), and the switch-displacement-keyed adaptive march (`eps_march_adaptive.m`, driver `run_s1_gateD_dualmap.m`, log `run_s1_gateD_dualmap.log`, state `sms_gateD_dualmap_state.mat` — working files retained uncommitted, campaign precedent) showed the same ~9e-3 crawl mid-first-step when the verifier reframe superseded it. This third recipe is what completes the 3-recipe basis (smooth-first, sharp-start, mode-d+adaptive) for closing the reproduction line as intrinsically blocked.
 
 ### 2026-07-10 — Task S1 close-out: Gate-D reproduction CLOSED (BLOCKED); verifier reframe delivers the Tier-1 adjoint-ODE certificate
 Adjudication (user-approved): the 1.12x LM reproduction crawl is intrinsic

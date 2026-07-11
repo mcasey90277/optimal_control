@@ -336,8 +336,7 @@ Option 1 above was executed as a full campaign (`ms_band/`; see
   adjoint-ODE consistency verifier (no LM anywhere) that closes this doc's open
   Tier-1 item ("optional independent adjoint-ODE consistency check", below). It
   certifies the 1.12× direct solution as **consistent with a continuous PMP
-  extremal at its transcription's O(h²) resolution**: worst per-arc state
-  defect ~1e-2 (37/39 arcs under 1e-2), primer alignment 0.097° mean,
+  extremal at its transcription's O(h²) resolution**: worst per-arc state defect ~1e-2 over arcs 1-39 (arc 40 adjudicated: terminal switch-complex amplification), primer alignment 0.097° mean,
   transversality |λ_m(σ_f)| = 1.7e-6 (relative gate). It also **corrects the
   1.12× switch count** (see the table footnote below).
 

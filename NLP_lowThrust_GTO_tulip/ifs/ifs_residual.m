@@ -38,7 +38,6 @@ R = [Rcont(:); Rterm; Rsw];
 
 if nargout > 1
     nR = 8 + 17*k;  hCS = 1e-20;
-    rows = struct();                     % residual-row bookkeeping
     contRow = @(a) (a-1)*16 + (1:16);    % continuity block a
     termRow = 16*k + (1:8);
     swRow   = @(ii) 16*k + 8 + ii;
@@ -47,6 +46,8 @@ if nargout > 1
     Jt = [];  Ji = [];  Jj = [];         % triplet accumulators (filled via pushblock)
 
     % --- per-arc complex-step blocks (integrated sensitivities) ----------
+    % NB: ifs_eom is autonomous (tau unused), so a complex tau-span endpoint is
+    % a valid analytic continuation -> CS through the integration limit is exact.
     for a = 1:k+1
         % which Z-unknowns arc a's integration depends on:
         if a == 1

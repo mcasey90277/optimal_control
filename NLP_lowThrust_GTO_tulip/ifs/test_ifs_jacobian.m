@@ -18,7 +18,7 @@ prob = struct('rv0',Y0(1:6),'m0',Y0(7),'t0',Y0(8),'tau0',0,'Tmax',p.Tmax,'c',p.c
     'termMode','fixedState','termTarget',Yb(end,1:8).','odeOpts',odeOpts);
 
 % perturb off the self-consistent point so the Jacobian is exercised generally
-Z = ifs_pack(Y0(9:16), N1, tau1) + 1e-3*randn_fixed(25);
+Z = ifs_pack(Y0(9:16), N1, ifs_gseed(tau1, 0, tauf)) + 1e-3*randn_fixed(25);
 [R0, J] = ifs_residual(Z, prob);
 Jfd = zeros(numel(R0));
 for c = 1:numel(Z)
@@ -52,7 +52,7 @@ tauA = 0.02;  tauB = 0.045;  tauF2 = 0.07;
 prob2 = struct('rv0',Y0(1:6),'m0',Y0(7),'t0',Y0(8),'tau0',0,'Tmax',p.Tmax,'c',p.c, ...
     'muStar',p.muStar,'pSund',pSund,'tauf',tauF2,'k',2,'uArc',[1 0 1], ...
     'termMode','fixedState','termTarget',e2(1:8),'odeOpts',odeOpts);
-Z2 = ifs_pack(Y0(9:16), [Na Nb], [tauA;tauB]) + 1e-3*randn_fixed(8+17*2);
+Z2 = ifs_pack(Y0(9:16), [Na Nb], ifs_gseed([tauA;tauB], 0, tauF2)) + 1e-3*randn_fixed(8+17*2);
 [R2, J2] = ifs_residual(Z2, prob2);
 J2fd = zeros(numel(R2));
 for c = 1:numel(Z2)

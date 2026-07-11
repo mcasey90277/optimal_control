@@ -19,7 +19,8 @@ function cert = ifs_certify(Z, prob, meta)
 %
 % REFERENCES: docs/superpowers/specs/2026-07-11-ifs-design.md
 k = prob.k;
-[~, N, tau] = ifs_unpack(Z, k);
+[~, N, gblk] = ifs_unpack(Z, k);
+tau = ifs_taus(gblk, prob.tau0, prob.tauf);
 R = ifs_residual(Z, prob);
 
 % S at each switch node (should be ~0)

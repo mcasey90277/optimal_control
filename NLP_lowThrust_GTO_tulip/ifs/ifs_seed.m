@@ -58,7 +58,7 @@ if strcmp(opts.mode, 'window')
         'tauf',tauN(a1),'k',1, ...
         'uArc',[arcThrottle(tauN(a0),tau1), arcThrottle(tau1,tauN(a1))], ...
         'termMode','fixedState','termTarget',Yend(1:8),'odeOpts',odeOpts);
-    Z = ifs_pack(Y0(9:16), N1, tau1);
+    Z = ifs_pack(Y0(9:16), N1, ifs_gseed(tau1, tauN(a0), tauN(a1)));
     tauSwitch = tau1;
 else   % full
     k = numel(tauCr);
@@ -71,7 +71,7 @@ else   % full
         'Tmax',sd.Tmax,'c',c,'muStar',sd.muStar,'pSund',sd.pSund, ...
         'tauf',tauN(end),'k',k,'uArc',uArc, ...
         'termMode','rendezvous','rvf',sd.rvf(:),'tf',sd.tf,'odeOpts',odeOpts);
-    Z = ifs_pack(Y0(9:16), N, tauCr(:));
+    Z = ifs_pack(Y0(9:16), N, ifs_gseed(tauCr(:), tauN(1), tauN(end)));
     tauSwitch = tauCr;
 end
 

@@ -16,10 +16,10 @@ function [R, J] = ifs_residual(Z, prob)
 %
 % REFERENCES: docs/superpowers/specs/2026-07-11-ifs-design.md
 k = prob.k;
-[lam0, N, tau] = ifs_unpack(Z, k);
+[lam0, N, gblock] = ifs_unpack(Z, k);
 
-% arc start states and tau-spans
-[starts, spans] = ifs_arcs(lam0, N, tau, prob);   % starts{a}[16], spans{a}[1x2]
+% arc start states and tau-spans (gblock -> tau via ifs_taus inside ifs_arcs)
+[starts, spans] = ifs_arcs(lam0, N, gblock, prob);   % starts{a}[16], spans{a}[1x2]
 e = cell(1, k+1);
 for a = 1:k+1
     e{a} = ifs_int_arc(starts{a}, spans{a}, prob.uArc(a), prob);
@@ -84,9 +84,11 @@ end
 end
 
 % ---- helpers shared with the Jacobian (Task 3) --------------------------
-function [starts, spans] = ifs_arcs(lam0, N, tau, prob)
-% Build per-arc start state and tau-span from the unknowns.
+function [starts, spans] = ifs_arcs(lam0, N, gblock, prob)
+% Build per-arc start state and tau-span from the unknowns. gblock is the
+% unconstrained gap-param block, mapped to bounded switch times via IFS_TAUS.
 k = prob.k;  starts = cell(1,k+1);  spans = cell(1,k+1);
+tau = ifs_taus(gblock, prob.tau0, prob.tauf);
 starts{1} = [prob.rv0(:); prob.m0; prob.t0; lam0];
 spans{1}  = [prob.tau0, tau(1)];            % arc-1 tau-span starts at prob.tau0
 for a = 2:k
@@ -148,8 +150,8 @@ function [startY, span] = ifs_arcs_one(Z, a, prob)
 %   span   - arc a's tau-span [1x2], possibly complex
 %
 % REFERENCES: docs/superpowers/specs/2026-07-11-ifs-design.md
-k = prob.k;  [lam0, N, tau] = ifs_unpack(Z, k);
-[starts, spans] = ifs_arcs(lam0, N, tau, prob);
+k = prob.k;  [lam0, N, gblock] = ifs_unpack(Z, k);
+[starts, spans] = ifs_arcs(lam0, N, gblock, prob);
 startY = starts{a};  span = spans{a};
 end
 

@@ -50,6 +50,10 @@ function ye = propagate_arc(y0, s0, s1, prob)
 % threshold is rejected by returning a large finite end state (constant,
 % real): the residual becomes huge and LM discards the trial point
 % (documented threshold rejection; never triggered at accepted iterates).
+% CS caveat: the constant fallback carries no imaginary part, so a
+% complex-step derivative through a rejected trial is zero/meaningless —
+% acceptable because rejection only occurs at (discarded) trial points,
+% and the Jacobian path (SMS_JACOBIAN_CS) is deliberately left uncaught.
 try
     [~, Y] = ode113(@(s, y) sms_eom(s, y, prob.Tmax, prob.c, prob.muStar, ...
                     prob.epsSmooth, prob.pSund), [s0 s1], y0, prob.odeOpts);

@@ -108,10 +108,11 @@ function [maxMove, localH] = switch_move(prev, curr, tauN)
 % Nearest-neighbor match of switch times between rounds; max move + the
 % local interval width at the worst-moving switch (acceptance scale).
 maxMove = 0;  localH = Inf;
-n = min(numel(prev), numel(curr));
 if numel(prev) ~= numel(curr)
     maxMove = Inf;  localH = 1;  return;   % count changed -> not converged
 end
+% tauSwitch is the quantized bracket-midpoint; diag.tauCr holds the sub-cell
+% S=0 root for a stronger future criterion
 sp = sort(prev);  sc = sort(curr);
 mv = abs(sp - sc);
 [maxMove, w] = max(mv);

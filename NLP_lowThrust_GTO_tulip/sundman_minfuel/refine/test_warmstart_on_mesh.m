@@ -32,5 +32,20 @@ assert(abs(U0(4, ins) - 1) < 1e-15, 'insert throttle must step-hold left value 1
 assert(abs(norm(U0(1:3, ins)) - 1) < 1e-12, 'insert direction must be unit norm');
 % inserted state is between its neighbors (pchip monotone here)
 assert(X0(1, ins) > X(1,3) && X0(1, ins) < X(1,4), 'insert state interpolated');
+% guard: symmetric sign-flip makes the pchip direction vanish at the insert;
+% output must stay finite + unit-norm (falls back to the left node's direction)
+sigmaA = linspace(0, 1, 6).';
+Ua     = [ [1 1 1 -1 -1 -1]; zeros(2, 6); ones(1, 6) ];    % dir x-flip at 3->4, throttle 1
+Xa     = [ repmat(1:6, 6, 1); linspace(1, 0.9, 6); linspace(0, 1, 6) ];   % 8x6
+outA   = struct('X', Xa, 'U', Ua);
+midA   = 0.5*(sigmaA(3) + sigmaA(4));
+sigmaNewA = sort([sigmaA; midA]);
+isNewA = false(size(sigmaNewA));  isNewA(abs(sigmaNewA - midA) < 1e-15) = true;
+[~, U0a] = warmstart_on_mesh(outA, sigmaA, sigmaNewA, isNewA);
+insA = find(isNewA);
+assert(all(isfinite(U0a(:, insA))), 'degenerate-direction insert must not be NaN/Inf');
+assert(abs(norm(U0a(1:3, insA)) - 1) < 1e-12, 'direction must stay unit-norm when pchip vanished');
+assert(max(abs(U0a(1:3, insA) - [1;0;0])) < 1e-12, 'fallback takes the left node direction [1;0;0]');
+
 fprintf('ALL PASS\n');
 end

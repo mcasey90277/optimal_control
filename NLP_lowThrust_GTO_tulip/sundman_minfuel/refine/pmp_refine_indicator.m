@@ -16,7 +16,8 @@ function [score, tauSwitch, diag] = pmp_refine_indicator(seedFile, opts)
 %              factor, tauf0, sigma [(N+1)x1] (sms_seed_duals input layout)
 %   opts     - struct: M arcs for dual map [default 40], epsEval smoothing
 %              [default 1e-4], mode dual->costate map [default 'd'], nbr
-%              neighbor half-window for scoring [default 3]
+%              neighbor half-window for scoring [default 3] (also sets the
+%              nViol switch-deadband half-width)
 %
 % OUTPUTS:
 %   score     - per-interval refinement score [1xN], >= 0
@@ -81,7 +82,7 @@ end
 % switching-law sign violations outside a +-3-node deadband of a direct switch
 viol = sign(Snode) ~= sign(0.5 - s);
 dead = false(1, nN);
-for w = -3:3
+for w = -opts.nbr:opts.nbr
     idx = swI + w;  idx = idx(idx >= 1 & idx <= nN);  dead(idx) = true;
 end
 nViol = nnz(viol & ~dead);

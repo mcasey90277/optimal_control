@@ -36,9 +36,15 @@ if ~isempty(ins)
     sv = sigmaNew(ins);
     % states + direction by pchip on the OLD (sigma, .) grid
     X0(:, ins)     = interp1(sigma, X.',        sv, 'pchip').';
-    al             = interp1(sigma, U(1:3, :).', sv, 'pchip').';
-    al             = al ./ sqrt(sum(al.^2, 1));
-    U0(1:3, ins)   = al;
+    al  = interp1(sigma, U(1:3, :).', sv, 'pchip').';    % [3 x nins]
+    nrm = sqrt(sum(al.^2, 1));
+    al  = al ./ max(nrm, 1e-12);                         % floor guards 0/0 -> NaN
+    weak = find(nrm < 1e-8);        % pchip interpolant vanished (near-antipodal bracket)
+    for q = weak                    % fall back to the nearest left node's unit direction
+        kk = find(sigma <= sv(q), 1, 'last');  kk = min(max(kk, 1), numel(sigma));
+        al(:, q) = U(1:3, kk);
+    end
+    U0(1:3, ins) = al;
     % throttle: step-hold from the nearest original node to the left
     for q = ins
         kk = find(sigma <= sigmaNew(q), 1, 'last');

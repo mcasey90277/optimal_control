@@ -1,7 +1,8 @@
 # RESULTS — headline 1.15× refinement demonstration
 
 Run: `run_headline_1p15.m` on the certified 1.15× solution
-(`sundman_minfuel_certified.mat`, 4001 nodes, 25 switches, defect 2.4e-14,
+(`sundman_minfuel_certified.mat`, 4001 nodes, 25 switches, defect
+2.04e-14 (live file; the campaign record quotes 2.4e-14),
 propellant 2.2640 kg), `maxRounds=4, K=8, maxAdd=40`. Seed prep regenerated
 KKT-dual costates via one `eps=0 warmTight` re-solve (the certified `.mat`
 predates dual extraction), stamping `factor=1.15`. Full console output in
@@ -20,6 +21,10 @@ round  nodes   sw   maxMove     dProp(kg)   nViol   HresMax
 (round = measured index printed by `run_headline_1p15`, matching
 `refine_loop`'s internal `[round r-1]` log lines. Round 2 is where the
 acceptance test fired — `converged=1` in `refine_history_headline_1p15.mat`.)
+
+Note: switch counts are the raw s>0.5 threshold counter; per the ms_band
+campaign the certified count is 10 for 1.12x and the near-graze dip inflates
+raw counts (threshold artifact) — see LOW_THRUST_MINFUEL_CAMPAIGN.md.
 
 Additional fields from the saved history (not in the console table):
 
@@ -48,6 +53,10 @@ comfortably inside the 1e-4 kg tolerance and an order of magnitude smaller
 than the certified propellant itself (2.264 kg) — the mesh refinement moved
 switch brackets without perturbing the optimum's fuel cost. `nViol` (switching-
 law sign violations outside the deadband) stayed at 0 in every round.
+Caveat: `maxSwitchMove` measures the quantized bracket-midpoint switch
+position (resolution ~half a local cell), not the sub-cell S=0 root;
+`diag.tauCr` provides that root and is the natural stronger acceptance
+signal for a follow-up.
 
 The final 25 switch times (`history(3).tauSwitch`, sorted) show 20 switches
 clustered over τ∈[0, 55] and a tight group of 5 switches over τ∈[149.1,

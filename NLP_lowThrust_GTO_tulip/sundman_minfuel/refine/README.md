@@ -19,6 +19,10 @@ times stabilize (max move below the local mesh width, propellant drift below
 converge tight. History is persisted to disk every round, so an IPOPT
 MEX-crash (documented, uncatchable) never loses completed rounds.
 
+Limitation: the stabilization check compares quantized bracket-midpoint
+switch times (`tauSwitch`), not the sub-cell S=0 root (`diag.tauCr`), so the
+acceptance test's resolution is only ~half a local cell width.
+
 ## File map
 
 | file | role |

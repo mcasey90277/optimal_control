@@ -96,7 +96,10 @@ the **switching-function sign law** (`S = 1-‖λ_v‖c/m-λ_m < 0` on burns, `>
 coasts, zero-crossings at the 25 switches) — scale-DEPENDENT, needs the
 duals de-scaled to node costates (undo the trapezoid weight, `τ_f`, `κ`), or,
 scale-free, decode the throttle-bound multipliers in `lamAll` directly; and an
-optional independent adjoint-ODE consistency check. See
+optional independent adjoint-ODE consistency check — **DONE (Jul 10 2026,
+`ms_band/verify_direct_pmp.m`)**: certifies the 1.12× solution consistent with
+a continuous PMP extremal and corrects its switch count (see the down-sweep
+table footnote above). See
 `sundman_minfuel/TIER1_PMP_CERTIFICATION_SCOPE.md` for the full plan and the
 (failed) continuous-costate route that motivated using the duals.
 
@@ -248,6 +251,10 @@ from-scratch solves share. Current map of the front (machine-tight solutions,
 | **1.01–1.11** | 27.9–30.8 | — | — | **transition band; resists all methods** ❌ |
 | 1.00 (min-time) | 27.9 | 4.4665 | 0 | known endpoint ✅ |
 
+(1.12x switch count: see the Jul-10 adjudication — 10 PMP-certified switches +
+1 near-graze throttle dip miscounted by the s>0.5 threshold;
+`ms_band/MS_BAND_CAMPAIGN.md`.)
+
 Monotone ordering holds: 3.83(1.12) > 3.49(1.14) > 3.37(1.15) > 3.24(1.20) >
 3.14(1.25). The **switch count drops toward the band** (25→12 from 1.15× to
 1.12×) — direct evidence of the many-switch → min-time reorganization.
@@ -300,6 +307,41 @@ where a direct-collocation basin fragments and continuation jumps or hangs.
 3. **Bank the certified band** (1.12–1.25×) + the min-time anchor as the result,
    documenting 1.01–1.11× as a genuine hard transition region — itself a
    publishable structural finding about the problem.
+
+### Indirect/multiple-shooting attack on the band — executed, band still open; verifier delivered (Jul 9-10 2026)
+
+Option 1 above was executed as a full campaign (`ms_band/`; see
+`ms_band/MS_BAND_CAMPAIGN.md` for the complete record). Findings:
+
+- **Time-domain multiple shooting is structurally rank-deficient in the band.**
+  At the 1.01× up-anchor (clean integration seed, eps=1 maximal smoothing) and
+  at the 1.12× dual-seed reproduction, LM plateaus with first-order optimality
+  collapsing toward zero while the residual freezes nonzero (J'R → 0, ‖R‖ ~
+  1e-3–3e-3) — for a square MS system that is a genuinely singular Jacobian at
+  the plateau, not a conditioning crawl more iterations would fix.
+- **The Sundman-domain 16-dim rebuild fixed the rank deficiency** (τ as
+  independent variable, dt/dτ = κ = r₁^1.5; EOM + Jacobian gated green). At the
+  1.12× dual-seed eps-march the rebuilt system is full-rank and GN-consistent
+  at every plateau (R ∈ range(J)) — but LM still stalls, this time in an
+  **intrinsic trust-region crawl** against the smoothing's own 1/ε switch
+  layers (cond(J) ~1e8–1e9, GN steps far outside the local basin). Externally
+  reviewed (GPT-5.6): the Jacobian/EOM/residual are correct; the cure is not a
+  better dual seed or solver tweak but **switch-structure parameterization or
+  event-based (saltation-aware) integration to remove the 1/ε layers** — a
+  future build, not attempted here.
+- **The band therefore REMAINS OPEN.** Indirect reproduction of the 1.12× point
+  is adjudicated CLOSED/BLOCKED; the transition band 1.01–1.11× is not reached
+  by this campaign either.
+- **The durable payoff is `ms_band/verify_direct_pmp.m`** — an independent
+  adjoint-ODE consistency verifier (no LM anywhere) that closes this doc's open
+  Tier-1 item ("optional independent adjoint-ODE consistency check", below). It
+  certifies the 1.12× direct solution as **consistent with a continuous PMP
+  extremal at its transcription's O(h²) resolution**: worst per-arc state
+  defect ~1e-2 (37/39 arcs under 1e-2), primer alignment 0.097° mean,
+  transversality |λ_m(σ_f)| = 1.7e-6 (relative gate). It also **corrects the
+  1.12× switch count** (see the table footnote below).
+
+Full record: `ms_band/MS_BAND_CAMPAIGN.md`.
 
 Infrastructure for the down-sweep: `build_energy_backbone.m` / `energy_step.m`
 (chained energy continuation, process-isolated), `solve_tf_minfuel.m` (re-clean

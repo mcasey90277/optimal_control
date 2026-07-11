@@ -26,6 +26,12 @@ mMid  = 0.5*(X(7, 1:end-1) + X(7, 2:end));
 nLamV = sqrt(sum(lamDef(4:6, :).^2, 1));
 W     = nLamV.*c./mMid + (-1)*lamDef(7, :);
 swI   = min(find(diff(double(s > 0.5)) ~= 0), N);
+if isempty(swI)
+    % No throttle switches -> the least-squares pin on S=0 has no data and
+    % beta would be NaN. Fail loudly (GPT-5.6 review robustness item).
+    error('beta_from_duals:noSwitches', ...
+          'no throttle switches in U(4,:): beta is unidentifiable');
+end
 beta  = sum(W(swI))/sum(W(swI).^2);
 S     = 1 - beta*W;
 burnI  = (s(1:end-1) > 0.5) & (s(2:end) > 0.5);

@@ -142,3 +142,42 @@ Recommendation for the gate owner: march start near the source's
 effective sharpness (e.g. eps0 ~ 1e-2..1e-3, sharp-end warm start)
 instead of eps=1; alternatives: M=40, larger per-step budget (likely
 insufficient alone). Logs: test_sms_gateD.log, diag_s1_gateD.log.
+
+### 2026-07-10 — Task S1 Gate D retry (sharp-start) also plateaus; M=40 runs killed by external watchdog
+Adjudicated retry (sharp schedule [1e-2 3e-3 1e-3 3e-4 1e-4], native dual
+seed): eps=1e-2 step capped 4.184 -> 1.435e-2 -> relay 1.301e-2 (9.3% <
+10% guard) -> abandoned. Trace capture (diag_s1_gateD2.m/.mat): again NO
+singular minimum (GN consistent 5.7e-11) but cond(J) 2.6e9, ||dGN|| =
+1131 (13x seed norm), LM moved only 9.6 in 400 iters; at the iterate the
+trajectory is a ZERO-SWITCH 99.4%-saturated full burn (dV 4.54) — the
+discrete-dual costate noise collapses the 12-switch structure on
+propagation. M=40 escalation (authorized): relay cuts 15.6%/14.6%,
+relay 3 trending ~9.1e-3 — three successive runs killed by an external
+~70-min watchdog at the identical wall point (run_s1_gateD_m40*.log);
+kill-robust resume driver written (run_s1_gateD_m40b.m, state saved per
+solve) but superseded by the external-review directive before relay 3
+completed.
+
+### 2026-07-10 — Task S1: external review + weighted dual-map adjudication (mode d wins)
+GPT-5.6 external review (.superpowers/sdd/gpt56_review_S1.md): EOM/
+Jacobian/residual confirmed correct; prime suspect = the interval-dual ->
+node-costate map in sms_seed_duals. Four candidate maps implemented
+(sms_seed_duals mode 'a' baseline left-interval, 'b' h-weighted, 'c'
+adjacent-h averaged, 'd' midpoint-principled) + full-trajectory
+validation harness test_sms_dualmap.m (one-arc propagation at 5 arcs
+incl. perigee + switch arcs; |Ht+lamT| along the trajectory; FD-vs-RHS
+adjoint defects). KKT derivation of the casadi trapezoid transcription:
+interval multipliers are MIDPOINT costates with NO h-weights (objective
+and defect quadrature weights cancel) — mode 'd'. Table
+(legacy_ms_f1120, M=40): 'd' wins everything mode-sensitive — one-arc
+costate err 0.497 -> 0.023 (21x vs baseline), |Ht+lamT| rms 2.40 ->
+0.40, max 13.9 -> 1.41, adjV rms 2.4x; 'b' catastrophically falsified
+(adj defects ~1e12): duals carry NO interval weights. Caveat: the mesh
+has near-duplicate nodes (min h = 4.2e-12, 356 intervals < mean/10)
+whose duals are noise (adjacent lamT-dual jumps to 0.89) — inflates the
+FD adjoint metric for ALL modes (adjM/adjT floors ~1e2) and is a
+residual seed-noise source no node map can remove. Robustness fixes
+folded in: beta_from_duals error()s on no-switch data; sms_eom rejects
+||lamV|| < 1e-8 via identified error (sms_residual catches it, returns a
+large finite miss — documented threshold rejection, no regularization).
+Logs: test_sms_dualmap.log, dualmap_table.mat, probe_s1_meshmin.m.

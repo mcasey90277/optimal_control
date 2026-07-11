@@ -46,7 +46,19 @@ end
 % -------------------------------------------------------------------------
 function ye = propagate_arc(y0, s0, s1, prob)
 % One arc of the Sundman-domain PMP dynamics (complex-step safe end state).
-[~, Y] = ode113(@(s, y) sms_eom(s, y, prob.Tmax, prob.c, prob.muStar, ...
-                prob.epsSmooth, prob.pSund), [s0 s1], y0, prob.odeOpts);
-ye = Y(end, :).';
+% A trial state whose primer magnitude collapses below the SMS_EOM
+% threshold is rejected by returning a large finite end state (constant,
+% real): the residual becomes huge and LM discards the trial point
+% (documented threshold rejection; never triggered at accepted iterates).
+try
+    [~, Y] = ode113(@(s, y) sms_eom(s, y, prob.Tmax, prob.c, prob.muStar, ...
+                    prob.epsSmooth, prob.pSund), [s0 s1], y0, prob.odeOpts);
+    ye = Y(end, :).';
+catch err
+    if strcmp(err.identifier, 'sms_eom:primerSingular')
+        ye = 1e3*ones(16, 1, 'like', y0);
+    else
+        rethrow(err);
+    end
+end
 end

@@ -66,8 +66,17 @@ G  = diag([1, 1, 0]) ...
      -      muStar *(eye(3)./r3 - 3*(rr*rr.')./r5);
 Hc = [0 2 0; -2 0 0; 0 0 0];
 
-% Smoothed min-fuel control law (tanh form: CS-safe, no exp overflow)
+% Smoothed min-fuel control law (tanh form: CS-safe, no exp overflow).
+% alpha = -lamV/||lamV|| is singular at zero primer magnitude; below the
+% documented threshold the trial state is REJECTED (identified error, not
+% regularized in the PMP equations — GPT-5.6 review robustness item).
+% SMS_RESIDUAL catches this id and returns a large finite miss so LM
+% discards the trial point. Threshold on real() keeps complex-step alive.
 lamvMag = sqrt(sum(lamV.^2));
+if real(lamvMag) < 1e-8
+    error('sms_eom:primerSingular', ...
+          '||lamV|| = %.3e < 1e-8: primer direction undefined', real(lamvMag));
+end
 alpha   = -lamV./lamvMag;
 S       = 1 - lamvMag*c/m - lamM;
 u       = (1 - tanh(S/(2*epsSmooth)))/2;

@@ -181,3 +181,32 @@ folded in: beta_from_duals error()s on no-switch data; sms_eom rejects
 ||lamV|| < 1e-8 via identified error (sms_residual catches it, returns a
 large finite miss — documented threshold rejection, no regularization).
 Logs: test_sms_dualmap.log, dualmap_table.mat, probe_s1_meshmin.m.
+
+### 2026-07-10 — Task S1 close-out: Gate-D reproduction CLOSED (BLOCKED); verifier reframe delivers the Tier-1 adjoint-ODE certificate
+Adjudication (user-approved): the 1.12x LM reproduction crawl is intrinsic
+(full-rank GN-consistent J at every plateau; trust-region collapse on
+1/eps switch layers per the GPT-5.6 methods verdict) — reproduction line
+closed. Reframe: the Sundman 16-dim machinery + mode-'d' dual map now
+serve as a VERIFIER. `verify_direct_pmp.m` (no LM anywhere): per-arc
+propagation of the direct solution's own (state; costate) through
+sms_eom, per-block defects vs the direct joints, along-arc |Ht+lamT|,
+dual-S vs direct-throttle switch structure, primer alignment, terminal
+transversality; table + verify_pmp_<name>.mat + two-panel png.
+**1.12x verdict (legacy_ms_f1120, M=40, mode d, eps 1e-4):** arcs 1-39
+at/below the dual-map floor (state blocks <= 1.03e-2, 37/39 under 1e-2);
+primer 0.0971 deg mean (PASS); |lamM(sigf)| = 1.7e-6 (PASS); 10/10
+PMP-supportable switches matched at 0-1 nodes. Two ATTN rows, both
+explained by the dig (diag_verify_1120.m): (1) direct switches #3/#4 are
+a ONE-NODE coast glitch at tau 19.46-19.51 whose dual-S stays burn-side
+at the dual-noise floor (min|S| 7.5e-4) — a transcription artifact, not
+PMP structure, unresolvable at O(h^2); (2) the arc-40 defect (0.68) is
+switch-crossing AMPLIFICATION, not costate error: the last arc contains
+switches #7-#12 (terminal complex: 5 switches in the last 0.5 tau);
+defect <= 4.2e-3 up to the first in-arc switch (tau 149.763, crossing
+matched at 0 nodes), then the u-vs-s disagreement (25.9% of samples)
+integrates to O(1). The earlier "6 crossings" observation was seed
+-propagation degradation at eps=1e-2, not grid resolution. Verdict
+framing: legacy_ms_f1120 is CONSISTENT WITH A CONTINUOUS PMP EXTREMAL at
+its transcription's O(h^2) resolution; its 12-switch count is 10 PMP
+switches + 1 spurious single-node pair. Logs: run_verify_1120.log,
+diag_verify_1120.log; figure verify_pmp_legacy_ms_f1120.png.

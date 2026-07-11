@@ -1,4 +1,13 @@
-# refine/ — PMP-residual-driven mesh refinement (prototype)
+# refine/ — PMP-Steered Refinement (PSR) prototype
+
+**Method name: PMP-Steered Refinement (PSR).** The direct collocation method
+is the only solver; the indirect/PMP machinery never solves anything — it
+*steers* where the mesh refines. This is "point 4" of the direct↔indirect
+roadmap. Its sibling — **Indirect Finishing Solve (IFS)**, "point 3", where an
+actual fixed-structure saltation-aware TPBVP takes over as the workhorse to
+place S=0 exactly and diagnose switch-count changes — is a separate, unbuilt
+method. Keep the distinction sharp: in PSR the indirect side *steers*; in IFS
+it *solves*.
 
 Point-4 prototype: adaptive mesh refinement for the Sundman min-fuel
 bang-bang solver, driven by how well the collocation mesh **localizes PMP

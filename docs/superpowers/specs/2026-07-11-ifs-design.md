@@ -84,6 +84,14 @@ with τ_0=0 and τ_{k+1}=τ_f fixed; τ_1…τ_k the switch times):
 Square check: 16k + 8 + k = 8 + 17k = dim(Z). ✓
 (k=1 → 25; k=3 → 59; k=25 → 433.)
 
+**Terminal-BC modes** (both 8 conditions, both keep the system square):
+- `"rendezvous"` (the real problem, rungs 2–3): r,v rendezvous (6) + λ_m=0 (1) +
+  t=t_f (1).
+- `"fixedState"` (an interior window, rung 1): the window-end state
+  (r,v,m,t) is FIXED (8) — no transversality, since the window-end mass is
+  fixed, not free. This is what makes the ground-truth window test possible.
+`ifs_residual` selects the mode by an option; everything else is identical.
+
 **Why keep the node states as unknowns** (instead of reducing to λ_0 + switch
 times, size 8+k): eliminating the nodes is *stitched single shooting* and
 reintroduces the ~10⁶ perigee sensitivity that provably fails. The node
@@ -146,22 +154,36 @@ is Option B / v2.
 
 ## 6. Staging — the validation ladder (milestones, one shared codebase)
 
-- **Rung 1 — the 1-switch arrival leg** (the τ≥4.0 tail leg the campaign posed,
-  m_0<1, phase-shifted target). k=1, 25 unknowns, 2 arcs. Validates the hard
-  EOM + residual + S=0 + LM at minimal size. **Make-or-break gate**: the
-  campaign's *smoothed* indirect FAILED here (stalled at ‖R‖=0.14); if
-  fixed-structure IFS with a good seed converges it, the core thesis is proven.
-  Seed from the direct leg solution (regenerate duals à la `prep_refine_seed`
-  if the leg `.mat` predates dual extraction).
-- **Rung 2 — a few-switch full spiral** (e.g. the certified 3-switch burn-then-
-  coast optimum). Adds real perigee sensitivity + Sundman + multiple shooting at
-  k≈3, without 26 arcs of bookkeeping. Seed from that direct solution
-  (PSR-refined if available).
-- **Rung 3 — the 25-switch 1.15× headline**. The full certified point
-  (`sundman_minfuel_certified.mat`, PSR-refined). k=25, 433 unknowns. The
-  deliverable: exact switch times + continuous-time certificate + diagnostics.
+Revised 2026-07-11 to use ready seed artifacts (the arrival-leg and 3-switch
+`.mat`s the first draft named are not in a usable layout — the leg lives only in
+`attic/`, and `minfuel_from_energy_seed.mat` holds a raw decision vector with no
+dual costates). The two readily-seedable solutions are `legacy_ms_f1120.mat`
+(1.12×, ~10 switches, already carries `out.lamDef`) and
+`sundman_minfuel_certified.mat` (1.15×, 25 switches, duals regenerated via the
+existing `sundman_minfuel/refine/prep_refine_seed.m`).
+
+- **Rung 1 — interior-window ground-truth solve** (minimal make-or-break gate).
+  Extract a 1-switch (or 2-switch) *window* of consecutive nodes around a single
+  switch from the 1.12× solution (which carries duals), and pose it as its own
+  fixed-endpoint sub-BVP: the window-boundary states (r,v,m,t) are FIXED at both
+  ends (terminal-BC mode "fixedState", §3), one switch inside. IFS must
+  **reproduce that known sub-trajectory to ~1e-10** — a ground-truth check, the
+  strongest possible unit test, isolating the hard EOM + continuity + S=0 + LM +
+  seeding at k=1 (25 unknowns, 2 arcs). Seed = the extracted window states +
+  costates (mode-'d' duals) + switch time (`diag.tauCr` nearest the window).
+- **Rung 2 — full 1.12× (~10 switches)**. First test of the REAL terminal BCs
+  (terminal-BC mode "rendezvous": r,v rendezvous + λ_m=0 transversality + t=t_f),
+  moderate switch count, full-spiral perigee sensitivity + Sundman + multiple
+  shooting. Seed = `results/minfuel/legacy_ms_f1120.mat` directly (already
+  carries `out.lamDef`, all top-level fields — zero seed prep).
+- **Rung 3 — the 25-switch 1.15× headline**. The full certified point,
+  seeded via `prep_refine_seed('../sundman_minfuel/sundman_minfuel_certified.mat', …)`.
+  k=25, 433 unknowns. The deliverable: exact switch times vs the direct/PSR
+  quantized ones + a continuous-time certificate + structure diagnostics.
 
 Each rung is a milestone gate: do not advance until the prior rung certifies.
+Rung 1 also gives ground truth for the residual/Jacobian correctness that
+rungs 2–3 rely on.
 
 ## 7. Non-goals (YAGNI)
 
@@ -185,10 +207,10 @@ New folder `NLP_lowThrust_GTO_tulip/ifs/`:
 | `ifs_eom.m` | hard-throttle 16-dim Sundman PMP EOM; throttle u passed as an arc parameter (0/1), entropy term dropped; also returns S for diagnostics |
 | `ifs_pack.m` / `ifs_unpack.m` | Z ⇄ (λ_0, {N_i}, {τ_i}) |
 | `ifs_residual.m` | R(Z) multiple-shooting residual (+ block-sparse complex-step Jacobian / sparsity pattern) |
-| `ifs_seed.m` | build Z from a PSR/direct `.mat`: switch times (`diag.tauCr`), node states (interp), costates (mode-'d' β-scaled duals), arc throttle pattern |
+| `ifs_seed.m` | build Z from a direct/PSR `.mat` (full problem or an extracted window): switch times (`diag.tauCr`), node states (interp), costates (mode-'d' β-scaled duals via `sms_seed_duals`), arc throttle pattern; sets the terminal-BC mode |
 | `ifs_solve.m` | LM driver (`lsqnonlin`), seed-residual gate, returns converged Z + per-iterate log |
-| `ifs_certify.m` | post-hoc S=0/sign-law/rendezvous/transversality checks + structure diagnostics + certificate paragraph + report/figure |
-| `run_ifs_leg.m` / `run_ifs_fewswitch.m` / `run_ifs_1p15.m` | rung 1/2/3 entry points + RESULTS |
+| `ifs_certify.m` | post-hoc S=0/sign-law/rendezvous-or-fixedState/transversality checks + structure diagnostics + certificate paragraph + report/figure |
+| `run_ifs_window.m` / `run_ifs_1p12.m` / `run_ifs_1p15.m` | rung 1 (interior-window ground truth) / rung 2 (full 1.12×) / rung 3 (1.15× headline) entry points + RESULTS |
 | `setup_paths.m`, `test_*.m` | path setup + per-module tests |
 
 Reuses (unchanged): `cr3bp_lt_params`, `gto_tulip_endpoints`, the `sms_seed_duals`

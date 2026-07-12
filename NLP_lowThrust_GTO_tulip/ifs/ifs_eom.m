@@ -1,4 +1,4 @@
-function [dY, S] = ifs_eom(~, Y, Tmax, c, muStar, pSund, uArc)
+function [dY, S, Ht] = ifs_eom(~, Y, Tmax, c, muStar, pSund, uArc)
 % IFS_EOM  Hard-throttle min-fuel PMP dynamics, Sundman tau-domain (16-dim).
 %
 % Fixed-structure form of the min-fuel PMP EOM: the throttle is a KNOWN

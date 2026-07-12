@@ -89,8 +89,13 @@ function [starts, spans] = ifs_arcs(lam0, N, gblock, prob)
 % Build per-arc start state and tau-span from the unknowns. gblock is the
 % unconstrained gap-param block, mapped to bounded switch times via IFS_TAUS.
 k = prob.k;  starts = cell(1,k+1);  spans = cell(1,k+1);
-tau = ifs_taus(gblock, prob.tau0, prob.tauf);
+if ~isfield(prob,'tauParam'), prob.tauParam = 'sigmoid'; end
+tau = ifs_taus(gblock, prob.tau0, prob.tauf, prob.tauParam);
 starts{1} = [prob.rv0(:); prob.m0; prob.t0; lam0];
+if k == 0                                   % all-burn anchor: one arc, no switches
+    spans{1} = [prob.tau0, prob.tauf];
+    return;
+end
 spans{1}  = [prob.tau0, tau(1)];            % arc-1 tau-span starts at prob.tau0
 for a = 2:k
     starts{a} = N(:, a-1);

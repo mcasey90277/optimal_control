@@ -1,17 +1,25 @@
-function g = ifs_gseed(tau, tau0, tauf)
-% IFS_GSEED  Inverse of IFS_TAUS (stick-breaking): gap-params from ordered switch
-%   times. frac_i = (p_i - p_{i-1})/(1 - p_{i-1}); g_i = logit(frac_i). Seed-time
-%   (real); clamps inputs strictly inside (0,1) and enforces strict increase.
+function g = ifs_gseed(tau, tau0, tauf, mode)
+% IFS_GSEED  Inverse of IFS_TAUS: switch-time unknowns from ordered switch times.
+%   mode='sigmoid' (default): stick-breaking inverse. frac_i = (p_i -
+%     p_{i-1})/(1 - p_{i-1}); g_i = logit(frac_i). Clamps inside (0,1),
+%     enforces strict increase.
+%   mode='direct': identity -- the unknowns ARE the switch times.
 %
 % INPUTS:
 %   tau  - switch times [kx1], strictly increasing in (tau0, tauf)
 %   tau0 - initial time [scalar]
 %   tauf - final time [scalar] (tau0 < tauf)
+%   mode - 'sigmoid'(default)|'direct' [char]
 %
 % OUTPUTS:
-%   g    - unconstrained gap-params [kx1]
+%   g    - switch-time unknowns [kx1]
 %
 % REFERENCES: docs/superpowers/specs/2026-07-11-ifs-design.md
+if nargin < 4 || isempty(mode), mode = 'sigmoid'; end
+if strcmp(mode, 'direct')
+    g = tau(:);
+    return;
+end
 tau = tau(:);  k = numel(tau);
 p = (tau - tau0)/(tauf - tau0);
 p = min(max(p, 1e-9), 1 - 1e-9);

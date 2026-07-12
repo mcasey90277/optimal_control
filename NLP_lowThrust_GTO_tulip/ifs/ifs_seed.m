@@ -23,6 +23,7 @@ function [Z, prob, meta] = ifs_seed(matFile, opts)
 if ~isfield(opts,'M'),        opts.M = 40;        end
 if ~isfield(opts,'winSwitch'),opts.winSwitch = 3; end
 if ~isfield(opts,'winPad'),   opts.winPad = 60;   end
+if ~isfield(opts,'tauParam'), opts.tauParam = 'sigmoid'; end
 
 [~, sd, info] = sms_seed_duals(matFile, opts.M, 1e-4, 'd');
 Y16 = info.Y16;  tauN = info.tauN;  nN = size(Y16,2);
@@ -57,8 +58,9 @@ if strcmp(opts.mode, 'window')
         'Tmax',sd.Tmax,'c',c,'muStar',sd.muStar,'pSund',sd.pSund, ...
         'tauf',tauN(a1),'k',1, ...
         'uArc',[arcThrottle(tauN(a0),tau1), arcThrottle(tau1,tauN(a1))], ...
-        'termMode','fixedState','termTarget',Yend(1:8),'odeOpts',odeOpts);
-    Z = ifs_pack(Y0(9:16), N1, ifs_gseed(tau1, tauN(a0), tauN(a1)));
+        'termMode','fixedState','termTarget',Yend(1:8),'odeOpts',odeOpts, ...
+        'tauParam',opts.tauParam);
+    Z = ifs_pack(Y0(9:16), N1, ifs_gseed(tau1, tauN(a0), tauN(a1), opts.tauParam));
     tauSwitch = tau1;
 else   % full
     k = numel(tauCr);
@@ -70,8 +72,9 @@ else   % full
     prob = struct('rv0',sd.rv0(:),'m0',1,'t0',0,'tau0',tauN(1), ...
         'Tmax',sd.Tmax,'c',c,'muStar',sd.muStar,'pSund',sd.pSund, ...
         'tauf',tauN(end),'k',k,'uArc',uArc, ...
-        'termMode','rendezvous','rvf',sd.rvf(:),'tf',sd.tf,'odeOpts',odeOpts);
-    Z = ifs_pack(Y0(9:16), N, ifs_gseed(tauCr(:), tauN(1), tauN(end)));
+        'termMode','rendezvous','rvf',sd.rvf(:),'tf',sd.tf,'odeOpts',odeOpts, ...
+        'tauParam',opts.tauParam);
+    Z = ifs_pack(Y0(9:16), N, ifs_gseed(tauCr(:), tauN(1), tauN(end), opts.tauParam));
     tauSwitch = tauCr;
 end
 

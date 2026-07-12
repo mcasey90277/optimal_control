@@ -38,6 +38,7 @@ for a = 2:k, startY{a} = Nn(:,a-1); end
 startY{k+1} = Nn(:,k);
 for a = 1:k+1
     sp = [edges(a), edges(a+1)];
+    if sp(2) - sp(1) <= 1e-13, continue; end   % collapsed gap: skip sign-law sampling
     [~, Yar] = ode113(@(s,y) ifs_eom(s,y,prob.Tmax,prob.c,prob.muStar,prob.pSund,prob.uArc(a)), ...
                       sp, startY{a}, prob.odeOpts);
     Smid = zeros(size(Yar,1),1);

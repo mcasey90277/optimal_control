@@ -173,12 +173,23 @@ else
 end
 opti.solver('ipopt', p);
 
-success = true;  status = 'solved';
+success = true;  status = 'solved';  regHistory = [];
 try
     sol = opti.solve();
     Xs = sol.value(X);  Us = sol.value(U);
     lamAll = full(sol.value(opti.lam_g));
     status = char(opti.return_status());
+    % IPOPT per-iteration Hessian regularization (delta_w). At a genuine local
+    % min IPOPT's inertia-controlled linear solver adds ZERO regularization at
+    % convergence -- the reduced Hessian is PD without correction. Captured here
+    % so psr_ipopt_certify can read the native (well-scaled) 2nd-order verdict.
+    try
+        st = sol.stats();
+        if isfield(st,'iterations') && isfield(st.iterations,'regularization_size')
+            regHistory = st.iterations.regularization_size(:).';
+        end
+    catch  %#ok<CTCH>
+    end
 catch solveErr
     Xs = opti.debug.value(X);  Us = opti.debug.value(U);
     try
@@ -223,5 +234,5 @@ out = struct('X', Xs, 'U', Us, 'tauf', tauf, 'mf', Xs(7,end), ...
              'edge', mean(ss > 0.95 | ss < 0.05), ...
              'lamDef', lamDef, 'lamAll', lamAll, ...
              'primerAlignDeg', primerAlignDeg, 'lamMassEnd', lamMassEnd, ...
-             'success', success, 'ipoptStatus', status);
+             'success', success, 'ipoptStatus', status, 'regHistory', regHistory);
 end

@@ -41,8 +41,9 @@ S  = load(solFile);
 X  = S.out.X;  U = S.out.U;  rvf = S.rvf;
 r  = X(1:3,:);  m = X(7,:);  t = X(8,:);
 s  = U(4,:);   al = U(1:3,:);
-burn  = s > 0.5;
-nSw   = sum(abs(diff(burn)));            % throttle switch count (display only)
+burnTol = 0.05;                          % throttle above this = BURNING (red).
+burn  = s > burnTol;                     % red whenever thrusting to ANY extent
+nSw   = sum(abs(diff(burn)));            % on/off transition count (display only)
 tDays = t * tStar/86400;
 dV    = c*log(1./m) * lStar/tStar;       % running Delta-V (km/s), per node
 mKg   = m0kg*m;  propKg = m0kg*(1-m);
@@ -112,7 +113,11 @@ axS = nexttile(tl, 4);  hold(axS,'on'); grid(axS,'on'); box(axS,'on');
 stairs(axS, tDays, s, '-','Color',[0.45 0.45 0.45],'LineWidth',0.9);
 ylim(axS,[-0.05 1.08]); xlim(axS,[0 tDays(end)]);
 ylabel(axS,'throttle s');
-title(axS, sprintf('throttle: %d-switch bang-bang (red burn / blue coast)', nSw));
+if mean(s>0.05 & s<0.95) > 0.05      % smooth control (many interior nodes)
+    title(axS, sprintf('throttle: smooth control, %d on/off transitions (red burning / blue coasting)', nSw));
+else
+    title(axS, sprintf('throttle: %d-switch bang-bang (red burn / blue coast)', nSw));
+end
 set(axS,'XTickLabel',[]);
 hCurS = plot(axS,[0 0],[-0.05 1.08],'k-','LineWidth',1.0);
 hDotS = plot(axS, nan,nan,'o','MarkerFaceColor',[0.85 0.15 0.15],'MarkerEdgeColor','k','MarkerSize',6);
@@ -144,10 +149,11 @@ for tF = tFrames
     set(hCoast,'XData',maskv(xb,cMask),'YData',maskv(yb,cMask),'ZData',maskv(zb,cMask));
     set(hSC,'XData',r(1,f),'YData',r(2,f),'ZData',r(3,f));
     if burn(f)
-        a = al(:,f); an = a/max(norm(a),eps)*arrScale;
+        % arrow length scales with throttle magnitude: full at s=1, half at s=0.5
+        a = al(:,f); an = a/max(norm(a),eps)*arrScale*s(f);
         set(hArr,'XData',r(1,f),'YData',r(2,f),'ZData',r(3,f), ...
                  'UData',an(1),'VData',an(2),'WData',an(3),'Visible','on');
-        state = 'BURN';
+        state = sprintf('BURN  s=%.2f', s(f));
     else
         set(hArr,'Visible','off'); state = 'COAST';
     end

@@ -37,7 +37,10 @@ The originals were **kept in place** (copy, not move) so the IFS folder and the
 
 Two of these are **actively developed for PSR** and should be edited HERE, not
 in the origin folders: `refine_loop.m` and `verify_direct_pmp.m` (and the
-`minfuel_config.m` copy, which is deliberately different from its origin). The
+`minfuel_config.m` copy, which is deliberately different from its origin).
+`casadi_minfuel_sundman.m` also carries a PSR-only addition (2026-07-12): it
+returns `out.regHistory`, IPOPT's per-iteration Hessian regularization delta_w,
+read by `psr_ipopt_certify.m` for the native-inertia local-min certificate. The
 rest are **stable machinery** — if you ever need to sync a bug fix from the
 origin (e.g. a `casadi_minfuel_sundman` fix), re-copy that one file and note it
 here. The origins as of the copy were git 5c0bdbc.

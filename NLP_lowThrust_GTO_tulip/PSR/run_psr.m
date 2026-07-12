@@ -85,16 +85,43 @@ factor = 1.15;                   % t_f / t_f_min   e.g. 1.12 ... 1.85
 %              dV-vs-tf front from a solved case. Requires that solution to
 %              exist in sundman_minfuel/results/minfuel/.
 %
-%   <path>     Seed from an explicit .mat you provide (fields X [8xnN],
-%              U [4xnN] at top level or inside `out`, plus sigma, tauf0,
-%              rv0, rvf). Treated like 'neighbor'.
-seedSpec   = 'energy';           % 'energy' | 'neighbor' | '/path/to/seed.mat'
+%   <path>     Seed from an EXPLICIT solution file -- INCLUDING A PRIOR PSR
+%              RESULT. This is how you "use a good result as a new seed": point
+%              seedSpec at a PSR_data product or a psr_refined_*.mat and the
+%              pipeline warm-starts from that bang-bang solution instead of the
+%              energy root. Its time state is rescaled to THIS factor and a
+%              light re-sharpen (cfg.schedNeighbor) runs -- FAR cheaper than the
+%              full energy->fuel homotopy, since the seed is already bang-bang
+%              (and carries the refined, non-uniform mesh forward). Any .mat
+%              with out.X/out.U (or top-level X/U) + sigma, tauf0, rv0, rvf
+%              works; PSR_data / psr_refined files carry exactly this layout.
+%              Examples:
+%                seedSpec = fullfile(dataDir,'psr_data_tf1p150_sw26.mat'); % our 1.15x result
+%                seedSpec = fullfile(resDir, 'psr_refined_f1150.mat');     % or the refined file
+%              WORKFLOW (walk the dV-vs-tf front): solve one factor from
+%              'energy', then seed each neighbor factor from the previous result.
+%              NOTE: re-seeding the SAME factor re-uses the existing outputs
+%              unless you set rerunDirect=true (stage 2 skips when its output
+%              file already exists).
+seedSpec   = 'energy';           % 'energy' | 'neighbor' | '/path/to/result.mat'
 seedFactor = NaN;                % only used when seedSpec = 'neighbor'
 
 % ---- direct-solve knobs ----------------------------------------------------
+% epsMin: the ENDPOINT of the energy->fuel homotopy (Bertrand-Epenoy epsilon).
+%   epsMin = 0  (DEFAULT) -> march all the way to pure fuel = BANG-BANG.
+%   epsMin > 0           -> stop the homotopy at that epsilon, giving a SMOOTHER,
+%                           epsilon-optimal control (a regularized ramp, not
+%                           bang-bang). Larger epsMin = smoother. The schedule is
+%                           auto-truncated to end exactly at epsMin.
+% NOTE: epsMin > 0 yields a SMOOTH control, so the bang-bang-specific stages are
+% auto-skipped -- stage 3 (switch-localization refinement) and stage 5 (bang-bang
+% PMP verification) do not apply. Stages 4 (export) and 6 (movie) still run on
+% the direct solution, and psr_second_order.m (NLP SSOSC) applies cleanly to a
+% smooth eps>0 solution (run it manually on the direct file).
+epsMin     = 0;                  % homotopy endpoint: 0 = bang-bang (default)
 % epsilon schedule [] = default by seed type (cfg.schedSharpen for 'energy':
-% 0.6 -> 0 in 13 steps; cfg.schedNeighbor for the rest). Override only for
-% experiments -- the defaults are the campaign-validated schedules.
+% 0.6 -> 0 in 13 steps; cfg.schedNeighbor for the rest), truncated at epsMin.
+% Override only for experiments -- the defaults are the campaign-validated ones.
 sched      = [];
 maxIter    = cfg.maxIter;        % IPOPT iteration cap per schedule step [1500]
 
@@ -138,7 +165,11 @@ movieMode = 'movie';             % 'preview' (3 stills, fast) | 'movie' | 'none'
 rerunDirect = false;  rerunRefine = false;  rerunVerify = false;
 
 % ---- derived file names (canonical; do not edit) ---------------------------
-tag         = sprintf('f%04d', round(1000*factor));
+% tag includes BOTH factor and epsMin so runs at the same t_f but different
+% homotopy endpoints do not collide (a factor-only tag made an eps>0 run
+% silently reuse the eps=0 solution).
+eTag        = strrep(sprintf('%g', epsMin), '.', 'p');   % 0 -> '0', 0.5 -> '0p5'
+tag         = sprintf('f%04d_minEps%s', round(1000*factor), eTag);
 directFile  = fullfile(resDir, ['psr_direct_'  tag '.mat']);
 seedFile    = fullfile(resDir, ['psr_seed_'    tag '.mat']);
 refinedFile = fullfile(resDir, ['psr_refined_' tag '.mat']);
@@ -161,16 +192,28 @@ if isfile(directFile) && ~rerunDirect
     fprintf('\n[stage 2] direct solution exists (%s) -- skipping. Set rerunDirect=true to redo.\n', directFile);
     D = load(directFile);  outDirect = D.out;
 else
-    fprintf('\n[stage 2] DIRECT SOLVE (energy->fuel homotopy)...\n');
+    fprintf('\n[stage 2] DIRECT SOLVE (energy->fuel homotopy, endpoint eps=%.3g)...\n', epsMin);
+    % base schedule (default by seed type, or the user override), then truncate
+    % so it ENDS EXACTLY at epsMin: keep steps > epsMin, append epsMin.
+    if isempty(sched)
+        if strcmp(seedSpec,'energy'), baseSched = cfg.schedSharpen; else, baseSched = cfg.schedNeighbor; end
+    else
+        baseSched = sched;
+    end
+    effSched = [baseSched(baseSched > epsMin), epsMin];
     % seedFactor is ignored unless seedSpec = 'neighbor' (minfuel_at_tf checks)
-    args = {'seedFactor', seedFactor, 'outFile', directFile, 'maxIter', maxIter, 'branch', 'psr'};
-    if ~isempty(sched), args = [args {'sched', sched}]; end
+    args = {'seedFactor', seedFactor, 'sched', effSched, ...
+            'outFile', directFile, 'maxIter', maxIter, 'branch', 'psr'};
     outDirect = minfuel_at_tf(factor, 'seed', seedSpec, args{:});
     assert(outDirect.certified, ...
         'direct solve did not certify at factor %.3f -- inspect outDirect, do not proceed', factor);
 end
 fprintf('[stage 2] dV=%.4f km/s  prop=%.4f kg  switches=%d  edge=%.1f%%  defect=%.2g\n', ...
     outDirect.dV, outDirect.prop_kg, outDirect.switches, 100*outDirect.edge, outDirect.maxDefect);
+
+% eps=0 => bang-bang => the switch-based refinement + bang-bang verification
+% apply. eps>0 => smooth control => those stages are skipped (see below).
+bangBang = (epsMin == 0);
 
 %% ------------------------------------------------------------------------
 %% 3. PSR REFINEMENT  (indirect-steered mesh refinement -> sharp switch times)
@@ -186,9 +229,15 @@ fprintf('[stage 2] dV=%.4f km/s  prop=%.4f kg  switches=%d  edge=%.1f%%  defect=
 % mesh width and the propellant change is below propTol -- switch times are
 % then resolved to sub-original-mesh accuracy. (Campaign result: 1.15x switch
 % times stabilize in ~4 rounds; see refine/RESULTS.md.)
-if isfile(refinedFile) && ~rerunRefine
+history = [];
+if ~bangBang
+    fprintf(['\n[stage 3] epsMin=%.3g > 0 -> SMOOTH control; switch-localization ' ...
+             'refinement does not apply -- SKIPPED. Downstream uses the direct solution.\n'], epsMin);
+    finalSol = directFile;                       % minfuel_at_tf output = seed layout
+elseif isfile(refinedFile) && ~rerunRefine
     fprintf('\n[stage 3] refined solution exists (%s) -- skipping. Set rerunRefine=true to redo.\n', refinedFile);
     H = load(fullfile(resDir, sprintf('refine_history_psr_%s.mat', tag)));  history = H.history;
+    finalSol = refinedFile;
 else
     fprintf('\n[stage 3] PSR REFINEMENT (max %d rounds)...\n', refineOpts.maxRounds);
     % prep: normalize the direct file into the refine-seed layout (pass-through
@@ -199,14 +248,17 @@ else
     ro.outDir  = resDir;             % history .mat + summary figure land here
     ro.solFile = refinedFile;        % FINAL refined solution, seed layout
     history = refine_loop(seedFile, ro);
+    finalSol = refinedFile;
 end
-fprintf('\n[stage 3] summary (round 0 = unrefined seed):\n');
-fprintf('%-6s %-7s %-4s %-11s %-11s %-7s %-11s\n', ...
-        'round', 'nodes', 'sw', 'maxMove', 'dProp(kg)', 'nViol', 'HresMax');
-for r = 1:numel(history)
-    h = history(r);
-    fprintf('%-6d %-7d %-4d %-11.2e %-11.2e %-7d %-11.2e\n', ...
-            r-1, h.nNodes, h.switches, h.maxSwitchMove, h.dProp, h.nViol, h.HresMax);
+if ~isempty(history)
+    fprintf('\n[stage 3] summary (round 0 = unrefined seed):\n');
+    fprintf('%-6s %-7s %-4s %-11s %-11s %-7s %-11s\n', ...
+            'round', 'nodes', 'sw', 'maxMove', 'dProp(kg)', 'nViol', 'HresMax');
+    for r = 1:numel(history)
+        h = history(r);
+        fprintf('%-6d %-7d %-4d %-11.2e %-11.2e %-7d %-11.2e\n', ...
+                r-1, h.nNodes, h.switches, h.maxSwitchMove, h.dProp, h.nViol, h.HresMax);
+    end
 end
 
 %% ------------------------------------------------------------------------
@@ -230,7 +282,11 @@ end
 % designed handoff artifact from the direct pipeline to independent analysis.
 % Cheap (~seconds) and idempotent: always regenerated from the refined file.
 fprintf('\n[stage 4] COSTATE GENERATION + DATA EXPORT...\n');
-dataFile = psr_export_data(refinedFile, dataDir, struct('M', verifyOpts.M));
+if ~bangBang
+    fprintf('  (smooth eps=%.3g solution: costates are from the dual map of a NON-bang-bang\n', epsMin);
+    fprintf('   control -- the switching-function / beta diagnostics are not physically meaningful)\n');
+end
+dataFile = psr_export_data(finalSol, dataDir, struct('M', verifyOpts.M, 'epsMin', epsMin));
 
 %% ------------------------------------------------------------------------
 %% 5. VERIFY  (first-order PMP certificate -- extremality)
@@ -248,32 +304,74 @@ dataFile = psr_export_data(refinedFile, dataDir, struct('M', verifyOpts.M));
 % WHAT THIS PROVES / DOES NOT PROVE: this is a FIRST-ORDER certificate --
 % the solution satisfies the Pontryagin necessary conditions (an EXTREMAL)
 % at its mesh's O(h^2) resolution. It does NOT prove local minimality.
-% TODO (planned upgrade): second-order test -- no conjugate points on the
-% arcs (Jacobi condition via the variational/Riccati system along the
-% trajectory) or verification of the second-order sufficient conditions at
-% the NLP level (reduced-Hessian positivity at the active set). Until then,
-% "certified" in this pipeline means first-order extremality + tight
-% feasibility, and minimality evidence is only comparative (homotopy family
-% + front monotonicity, see HONEST_EVALUATION_DV_TF_FRONT.md).
-verifyFile = fullfile(resDir, sprintf('verify_pmp_psr_refined_%s.mat', tag));
-if isfile(verifyFile) && ~rerunVerify
-    fprintf('\n[stage 5] verification exists (%s) -- skipping. Set rerunVerify=true to redo.\n', verifyFile);
-    V = load(verifyFile);  vsum = V.summary;
+%
+% SECOND-ORDER (local minimality): psr_second_order.m implements the NLP-level
+% reduced-Hessian (SSOSC) test via a KKT-inertia factorization. FINDING
+% (2026-07-12): it is NOT APPLICABLE to the eps=0 bang-bang output -- the fuel
+% objective is linear in the throttle, the solver leaves the throttle near (not
+% at) its bounds, the active set is ambiguous, and the reduced Hessian is
+% structurally degenerate. The correct bang-bang certifier is the SWITCHING-TIME
+% (Maurer-Osmolovskii) reduced Hessian (k x k over the switch times) -- the
+% recommended next build; psr_second_order does apply cleanly to a REGULARIZED
+% (eps>0) solution. Until a switching-time certificate lands, "certified" here
+% means first-order extremality + tight feasibility + the complementary
+% transversal-crossing check (Sdot != 0 at switches, reported by
+% psr_second_order), and minimality evidence is comparative (homotopy family +
+% front monotonicity, see ../HONEST_EVALUATION_DV_TF_FRONT.md).
+if bangBang
+    % eps=0 bang-bang: FIRST-ORDER PMP extremality certificate.
+    verifyFile = fullfile(resDir, sprintf('verify_pmp_psr_refined_%s.mat', tag));
+    if isfile(verifyFile) && ~rerunVerify
+        fprintf('\n[stage 5] verification exists (%s) -- skipping. Set rerunVerify=true to redo.\n', verifyFile);
+        V = load(verifyFile);  vsum = V.summary;
+    else
+        fprintf('\n[stage 5] FIRST-ORDER PMP VERIFICATION (M=%d arcs)...\n', verifyOpts.M);
+        oldDir = cd(resDir);                   % verifier writes to pwd
+        cleanupObj = onCleanup(@() cd(oldDir));
+        vsum = verify_direct_pmp(finalSol, verifyOpts);
+        clear cleanupObj
+    end
+    fprintf('[stage 5] certOK=%d  worstStateDef=%.3g  primer(mean/p95)=%.3f/%.3f deg  |lamM(sigf)|=%.2g  switches matched %d/%d\n', ...
+        vsum.certOK, vsum.worstStateDef, vsum.primerMeanDeg, vsum.primerP95Deg, ...
+        abs(vsum.lamMend), vsum.nMatched, vsum.nSwitches);
+    verify = vsum;
+    save(dataFile, 'verify', '-append');
+    fprintf('[stage 5] verify summary appended to %s\n', dataFile);
 else
-    fprintf('\n[stage 5] FIRST-ORDER PMP VERIFICATION (M=%d arcs)...\n', verifyOpts.M);
-    oldDir = cd(resDir);                       % verifier writes to pwd
-    cleanupObj = onCleanup(@() cd(oldDir));
-    vsum = verify_direct_pmp(refinedFile, verifyOpts);
-    clear cleanupObj
+    % eps>0 SMOOTH control: the bang-bang PMP certificate does not apply. Run the
+    % NLP-level SECOND-ORDER test (psr_second_order, SSOSC via KKT inertia), which
+    % DOES apply to a regularized solution -- this is the local-minimality probe.
+    fprintf('\n[stage 5] SECOND-ORDER (NLP SSOSC) on the smooth eps=%.3g solution...\n', epsMin);
+    so = psr_second_order(finalSol, struct('eps', epsMin));
+    fprintf(['[stage 5] certLocalMin=%d  In(K)=(%d,%d,%d) (expect (%d,%d,0))  ' ...
+             'activeBnd=%d  statResid=%.1e\n'], so.certLocalMin, so.nPos, so.nNeg, ...
+             so.nZero, so.n, so.mActive, so.nActiveBnd, so.statResid);
+    fprintf('[stage 5] %s\n', so.verdict);
+    secondOrder = so;
+    save(dataFile, 'secondOrder', '-append');
+    fprintf('[stage 5] second-order result appended to %s\n', dataFile);
 end
-fprintf('[stage 5] certOK=%d  worstStateDef=%.3g  primer(mean/p95)=%.3f/%.3f deg  |lamM(sigf)|=%.2g  switches matched %d/%d\n', ...
-    vsum.certOK, vsum.worstStateDef, vsum.primerMeanDeg, vsum.primerP95Deg, ...
-    abs(vsum.lamMend), vsum.nMatched, vsum.nSwitches);
-% append the certificate summary to the PSR_data product file so downstream
-% analysis has the verification verdict alongside the data
-verify = vsum;
-save(dataFile, 'verify', '-append');
-fprintf('[stage 5] verify summary appended to %s\n', dataFile);
+
+%% ------------------------------------------------------------------------
+%% 5b. LOCAL-MINIMALITY CERTIFICATE  (IPOPT native inertia -- the robust 2nd-order test)
+%% ------------------------------------------------------------------------
+% This is the conditioning-robust second-order certificate for BOTH bang-bang
+% and smooth solutions. Reconstructing the KKT Hessian ourselves and
+% factorizing it (psr_second_order.m) fails on this 40-rev problem -- the matrix
+% is so ill-conditioned (cond ~1e9-1e16) that the LDL pivot signs near the noise
+% floor are unreliable, faking hundreds of tiny "negative" eigenvalues. IPOPT
+% avoids that entirely: its inertia-controlled linear solver checks the KKT
+% inertia at every iteration on the WELL-SCALED system and adds Hessian
+% regularization delta_w ONLY when the reduced Hessian is indefinite. delta_w=0
+% at convergence => reduced Hessian positive definite => LOCAL MINIMUM. Reads
+% the delta_w history captured by casadi_minfuel_sundman (or re-solves if the
+% solution file predates that capture).
+fprintf('\n[stage 5b] LOCAL-MIN CERTIFICATE (IPOPT native inertia, delta_w)...\n');
+ic = psr_ipopt_certify(finalSol, struct('eps', epsMin));
+fprintf('[stage 5b] certLocalMin=%d\n[stage 5b] %s\n', ic.certLocalMin, ic.verdict);
+ipoptCert = ic;
+save(dataFile, 'ipoptCert', '-append');
+fprintf('[stage 5b] IPOPT certificate appended to %s\n', dataFile);
 
 %% ------------------------------------------------------------------------
 %% 6. CONTROL MOVIE  (transfer + control law, synced)
@@ -286,9 +384,15 @@ fprintf('[stage 5] verify summary appended to %s\n', dataFile);
 % the full MP4+GIF ('movie').
 if ~strcmp(movieMode, 'none')
     fprintf('\n[stage 6] CONTROL MOVIE (%s)...\n', movieMode);
-    titleStr = sprintf('PSR min-fuel GTO\\rightarrowtulip, t_f = %.2fx min-time (%d-switch bang-bang)', ...
-                       factor, history(end).switches);
-    psr_movie(refinedFile, fullfile(resDir, ['psr_movie_' tag]), titleStr, movieMode);
+    if bangBang
+        nsw = numel(psr_switch_times(finalSol));       % throttle-crossing count
+        titleStr = sprintf('PSR min-fuel GTO\\rightarrowtulip, t_f = %.2fx min-time (%d-switch bang-bang)', ...
+                           factor, nsw);
+    else
+        titleStr = sprintf('PSR GTO\\rightarrowtulip, t_f = %.2fx min-time (smooth \\epsilon=%.3g control)', ...
+                           factor, epsMin);
+    end
+    psr_movie(finalSol, fullfile(resDir, ['psr_movie_' tag]), titleStr, movieMode);
 end
 
 fprintf('\n=== PSR PIPELINE DONE (factor %.3f). Intermediates: %s  Data products: %s ===\n', ...

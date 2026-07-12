@@ -50,12 +50,14 @@ function dataFile = psr_export_data(solFile, dataDir, opts)
 %             lamDef [8xN]), sigma, tauf0, rv0, rvf, factor
 %   dataDir - destination directory (created if missing) [char]
 %   opts    - (optional) struct: M dual-map arcs [default 40], quiet
-%             suppress prints [default false]
+%             suppress prints [default false], epsMin the homotopy endpoint
+%             epsilon of the run [default 0] -- recorded in the filename
 %
 % OUTPUTS:
-%   dataFile - written path, named psr_data_tf<factor>_sw<k>.mat, e.g.
-%              psr_data_tf1p150_sw25.mat (factor with '.'->'p', k = certified
-%              dual-S switch count) [char]
+%   dataFile - written path, named psr_data_tf<factor>_sw<k>_minEps<e>.mat, e.g.
+%              psr_data_tf1p150_sw25_minEps0.mat (bang-bang) or
+%              psr_data_tf1p200_sw0_minEps0p01.mat (smooth eps=0.01); factor and
+%              epsMin encode '.'->'p', k = certified dual-S switch count [char]
 %
 % REFERENCES:
 %   [1] ms_band/sms_seed_duals.m (mode-'d' dual->costate map, adjudicated
@@ -64,8 +66,9 @@ function dataFile = psr_export_data(solFile, dataDir, opts)
 %   [3] PSR/run_psr.m section 4 (pipeline caller).
 
 if nargin < 3, opts = struct(); end
-if ~isfield(opts,'M'),     opts.M = 40;      end
-if ~isfield(opts,'quiet'), opts.quiet = false; end
+if ~isfield(opts,'M'),      opts.M = 40;       end
+if ~isfield(opts,'quiet'),  opts.quiet = false; end
+if ~isfield(opts,'epsMin'), opts.epsMin = 0;   end
 if ~exist(dataDir, 'dir'), mkdir(dataDir); end
 
 % ---- load the solution (seed layout) ----------------------------------------
@@ -145,7 +148,10 @@ provenance = struct('date', char(datetime('now','Format','yyyy-MM-dd HH:mm')), .
 
 % ---- write, seed-compatible layer + products together -------------------------
 fTag = strrep(sprintf('%.3f', factor), '.', 'p');
-dataFile = fullfile(dataDir, sprintf('psr_data_tf%s_sw%d.mat', fTag, ctrl.nSwitchS));
+eTag = strrep(sprintf('%g', opts.epsMin), '.', 'p');   % 0 -> '0', 0.001 -> '0p001'
+dataFile = fullfile(dataDir, ...
+    sprintf('psr_data_tf%s_sw%d_minEps%s.mat', fTag, ctrl.nSwitchS, eTag));
+provenance.epsMin = opts.epsMin;
 save(dataFile, 'out', 'sigma', 'tauf0', 'rv0', 'rvf', 'factor', ...
      'mesh', 'traj', 'ctrl', 'costate', 'pmp', 'scal', 'const', 'provenance');
 

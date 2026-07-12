@@ -162,20 +162,31 @@ dual costates). The two readily-seedable solutions are `legacy_ms_f1120.mat`
 `sundman_minfuel_certified.mat` (1.15×, 25 switches, duals regenerated via the
 existing `sundman_minfuel/refine/prep_refine_seed.m`).
 
-- **Rung 1 — interior-window ground-truth solve** (minimal make-or-break gate).
-  Extract a 1-switch (or 2-switch) *window* of consecutive nodes around a single
-  switch from the 1.12× solution (which carries duals), and pose it as its own
-  fixed-endpoint sub-BVP: the window-boundary states (r,v,m,t) are FIXED at both
-  ends (terminal-BC mode "fixedState", §3), one switch inside. IFS must
-  **reproduce that known sub-trajectory to ~1e-10** — a ground-truth check, the
-  strongest possible unit test, isolating the hard EOM + continuity + S=0 + LM +
-  seeding at k=1 (25 unknowns, 2 arcs). Seed = the extracted window states +
-  costates (mode-'d' duals) + switch time (`diag.tauCr` nearest the window).
-- **Rung 2 — full 1.12× (~10 switches)**. First test of the REAL terminal BCs
-  (terminal-BC mode "rendezvous": r,v rendezvous + λ_m=0 transversality + t=t_f),
-  moderate switch count, full-spiral perigee sensitivity + Sundman + multiple
-  shooting. Seed = `results/minfuel/legacy_ms_f1120.mat` directly (already
-  carries `out.lamDef`, all top-level fields — zero seed prep).
+**REVISED AGAIN 2026-07-11 (post-diagnosis — window dropped as the gate).**
+The interior-window rung (below, struck through) turned out **structurally
+rank-deficient** and cannot be the gate. Root cause (verified by SVD +
+GN-consistency diagnostics, `.superpowers/sdd/ifs-diag-*`): mass dynamics are
+costate-independent (`dm/dτ = -κ·u·Tmax/c`) and on a coast arc the λ_m equation
+vanishes identically, so λ_m is decoupled; the window's `fixedState` terminal
+fixes the end *mass* but imposes **no** λ_m(τ_f)=0 transversality, leaving λ_m an
+unconstrained gauge → smallest singular value 1.5e-16, isolated 9 orders below
+its neighbor. The **full problem** (`rendezvous` terminal) is **full-rank** (all
+178 SVs healthy, transversality row pins the gauge, GN-consistent to 5e-11) — so
+the window failed for a reason the real deliverable does not have. **The gate is
+repointed to the full 1.12× solve.** The window code is kept as a documented
+rank-deficiency finding, not a gate.
+
+- ~~Rung 1 — interior-window ground-truth solve~~ **(dropped — rank-deficient in
+  the λ_m gauge; see above).** The IFS machinery is instead validated by the
+  Task 1–4 unit tests (EOM matches `sms_eom`; residual zero on a continuous
+  ground-truth; CS-vs-FD Jacobian for fixedState + rendezvous + k=2; seed builds).
+- **Rung 2 — full 1.12× (~10 switches) — NOW THE MAKE-OR-BREAK GATE**. First
+  real IFS solve: terminal-BC mode "rendezvous" (r,v rendezvous + λ_m=0
+  transversality + t=t_f), moderate switch count, full-spiral perigee sensitivity
+  + Sundman + multiple shooting. Full-rank at the seed (cond≈3.5e11 from shooting
+  sensitivity, but resInRange 5e-11 — reachable). Seed =
+  `results/minfuel/legacy_ms_f1120.mat` directly (carries `out.lamDef` — zero
+  prep). Convergence is promising, not guaranteed; running it is the real test.
 - **Rung 3 — the 25-switch 1.15× headline**. The full certified point,
   seeded via `prep_refine_seed('../sundman_minfuel/sundman_minfuel_certified.mat', …)`.
   k=25, 433 unknowns. The deliverable: exact switch times vs the direct/PSR

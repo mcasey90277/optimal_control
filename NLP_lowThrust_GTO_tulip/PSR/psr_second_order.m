@@ -229,13 +229,19 @@ Hnum = (Hnum + Hnum.')/2;                             % symmetrize (round-off)
 Aall = sparse(Afun(wstar));
 Aact = Aall(actMask, :);                              % m_active x n
 
-tolEig = 1e-9 * max(full(median(abs(diag(Hnum)))), 1);   % full: sparse median -> sparse
-so.tolEig = tolEig;
-
 K = [Hnum, Aact.'; Aact, sparse(mActive, mActive)];
 vp('  KKT matrix %d x %d, LDL inertia...\n', size(K,1), size(K,1));
 [~, Dblk, ~] = ldl(K, 'vector');
-[nPos, nNeg, nZero, evK] = inertia_blockdiag(Dblk, tolEig);
+% Calibrate tolEig on the ACTUAL LDL pivot (block-eigenvalue) magnitudes, NOT
+% on H's diagonal: the pivots are Schur complements on a different scale (up to
+% ~cond(K)), so an H-diagonal threshold can land mid-distribution and mislabel
+% genuine eigenvalues. One tol=0 pass returns all block eigenvalues; threshold
+% at 1e-9 of the median nonzero magnitude.
+[~, ~, ~, evK] = inertia_blockdiag(Dblk, 0);
+nz = evK(evK ~= 0);
+tolEig = 1e-9 * max(median(abs(nz)), 1);
+so.tolEig = tolEig;
+[nPos, nNeg, nZero] = inertia_blockdiag(Dblk, tolEig);
 so.nPos = nPos;  so.nNeg = nNeg;  so.nZero = nZero;
 % compact spectrum diagnostic (for a tolEig sweep without re-factorizing): the
 % eigenvalues near zero are the only ambiguous ones; large ones are counted.

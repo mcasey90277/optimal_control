@@ -106,10 +106,19 @@ tailN = min(opts.tailN, numel(reg));
 ic.regTail = reg(end-tailN+1:end);
 ic.regTailMax = max(ic.regTail);
 
-ic.certLocalMin = ic.converged && (ic.regTailMax <= opts.regTol);
+% Require at least tailN iterations: IPOPT initializes delta_w=0 BEFORE any
+% inertia factorization, so a solve that terminates in ~0 iters (e.g. a warm
+% re-solve that accepts the point immediately) returns regHistory=[0] -- the
+% DEFAULT, not an inertia verdict. Certifying off that would be spurious.
+ic.certLocalMin = ic.converged && (ic.regTailMax <= opts.regTol) && (ic.nIter >= opts.tailN);
 if ~ic.converged
     ic.verdict = sprintf(['NOT CERTIFIED: the warm re-solve did not converge tight ' ...
         '(defect %.2e) -- the seed is not a clean KKT point.'], ic.defect);
+elseif ic.nIter < opts.tailN
+    ic.verdict = sprintf(['NO SIGNAL: only %d iteration(s) -- IPOPT accepted the point ' ...
+        'before running >=%d inertia checks, so delta_w=%.1e is its pre-factorization ' ...
+        'default, not a verdict. Re-solve from a slightly perturbed/looser warm start, ' ...
+        'or read regHistory from the original solve.'], ic.nIter, opts.tailN, ic.regTailMax);
 elseif ic.certLocalMin
     ic.verdict = sprintf(['LOCAL MIN (IPOPT native inertia): converged in %d iters with ' ...
         'delta_w = 0 over the final %d iterations (max %.1e <= %.1e). The reduced ' ...

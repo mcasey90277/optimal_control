@@ -236,7 +236,13 @@ if ~bangBang
     finalSol = directFile;                       % minfuel_at_tf output = seed layout
 elseif isfile(refinedFile) && ~rerunRefine
     fprintf('\n[stage 3] refined solution exists (%s) -- skipping. Set rerunRefine=true to redo.\n', refinedFile);
-    H = load(fullfile(resDir, sprintf('refine_history_psr_%s.mat', tag)));  history = H.history;
+    histFile = fullfile(resDir, sprintf('refine_history_psr_%s.mat', tag));
+    if isfile(histFile)                          % may be absent (e.g. copied refinedFile)
+        H = load(histFile);  history = H.history;
+    else
+        history = [];  warning('run_psr:noHistory', ...
+            'refined solution present but its refine history (%s) is not -- skipping the round table', histFile);
+    end
     finalSol = refinedFile;
 else
     fprintf('\n[stage 3] PSR REFINEMENT (max %d rounds)...\n', refineOpts.maxRounds);

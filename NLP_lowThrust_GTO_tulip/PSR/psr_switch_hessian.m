@@ -197,7 +197,22 @@ end
 H = (H + H.')/2;
 
 % ---- project onto feasible switch-time variations + eigen-test --------------
-Z = null(dc);                                   % k x (k-7)
+Z = null(dc);                                   % k x (k - rank(dc))
+so.k = k;
+if isempty(Z)
+    % k <= #terminal-constraints (7): the terminal constraints pin every
+    % switch-time direction, so there are NO free directions to test. The
+    % switching-time problem is (vacuously) locally minimal iff first-order
+    % optimality holds. No Hessian eig-test is defined; guard the scalar-&&.
+    so.certLocalMin  = (so.redGradNorm <= opts.gTol);
+    so.redHessEig    = [];
+    so.redHessMinEig = Inf;
+    so.verdict = sprintf(['VACUOUS (k=%d <= 7 terminal constraints): no free ' ...
+        'switch-time directions after the terminal rendezvous; first-order ' ...
+        'optimality (||g||=%.2e) is the whole certificate.'], k, so.redGradNorm);
+    vp('  %s\n', so.verdict);
+    return
+end
 Hr = Z.'*H*Z;
 Hr = (Hr + Hr.')/2;
 ev = sort(real(eig(Hr)));
@@ -205,7 +220,6 @@ so.redHessEig = ev(:).';
 so.redHessMinEig = min(ev);
 scaleH = max(median(abs(diag(Hr))), 1);
 tolEig = 1e-10 * scaleH;  if isfield(opts,'tolEig'), tolEig = opts.tolEig; end
-so.k = k;
 
 so.certLocalMin = (so.redHessMinEig > tolEig) && (so.redGradNorm <= opts.gTol);
 if so.certLocalMin

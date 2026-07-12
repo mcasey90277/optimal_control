@@ -148,3 +148,59 @@ nodes work for the rest of the trajectory.
 No further gate re-runs were performed in this pass (the 400-iteration solve
 takes ~30 minutes and its numbers are already recorded above and in
 `.superpowers/sdd/progress.md`).
+
+---
+
+## Post-merge diagnostic investigation (2026-07-11)
+
+After banking IFS with the conditioning stall characterized, we ran a focused
+investigation into the stall's true cause, including an external GPT-5.6-sol
+methodology review (`reviews/gpt56sol_2026-07-11.md`). **Context: PSR (the
+point-4 mesh-refinement method) already works and is merged; IFS is the open
+one.** Summary of what we found — three candidate culprits were tested and the
+first two were ruled out:
+
+**GPT-5.6-sol review (validated the formulation, sharpened the diagnosis):**
+- Explicit-switch-node hard-throttle multiple shooting is standard and sound;
+  saltation matrices correctly unnecessary. Our vanishing-arc read is credible —
+  it named it a "vanishing bang/coast arc near a switching-structure fold."
+- Cautions that proved decisive: (a) `cond(J)` and `R in range(J)` are weak
+  evidence — confirm from the **smallest singular VECTORS of a physically-scaled
+  Jacobian**; (b) the stick-breaking sigmoid parameterization DEGENERATES as a
+  gap -> 0 (dtau/dg -> 0), compounding the crawl; use center/width variables;
+  (c) audit whether fixing both tau_f and t(tau_f)=t_f over-constrains.
+
+**Scaled-SVD localization (the decisive test) — near-double-root REFUTED:**
+Physically-equilibrated Jacobian, smallest singular vector, at two iterates:
+- **Seed** (||R||=1.96): smallest SV 1.2e-11 (near-singular, survives scaling);
+  null direction 76% on **switch #4's node** (the shallowest S-crossing,
+  |dS/dtau|=0.11) — NOT the tight terminal pair (only 1.8% of the mass).
+- **Mid-crawl** (||R||=0.15): smallest SV 1.9e-9; null direction has MOVED — now
+  83% on the **initial costate lambda_0** (dominated by the position-costate
+  components lambda_r,x / lambda_r,y).
+- The near-double-root pair {switches 8,9 / 9,10}: 1.8% -> ~0%. **Not the
+  culprit.** (The solve does compress that pair, tau-gap 9.95e-3 -> 3.17e-3 —
+  the collapse symptom that the ifs_int_arc guard handles — but it is not the
+  conditioning driver.)
+
+**tau_f over-constraint — RULED OUT:** terminal-block residual split at both
+iterates has |t - t_f| ~ 4e-3-5e-7 and |lambda_m| ~ 6e-5-2e-2, both negligible
+vs the continuity/switch blocks. Fixing tau_f is not implicated.
+
+**Conclusion:** the conditioning is **diffuse and shifting** (a shallow switch at
+the seed, the initial position-costate lambda_r at mid-crawl), not a single
+surgical target. This is the textbook weak spot of indirect shooting — lambda_r
+is only indirectly coupled to the trajectory and is weakly determined by a short
+first arc — and it confirms the "echoes the ms_band conditioning wall" reading.
+There is no near-coincident pair to merge and no grazing switch to regularize.
+
+**Remaining levers (all heavier; a strategy decision, not a surgical fix):**
+1. Canonical physical scaling (reciprocal-costate) + a regularized / rank-
+   revealing (truncated-SVD) Newton step to move through the near-null lambda_r
+   direction instead of crawling against it. Cheapest to try.
+2. A better-conditioned costate seed via t_f-homotopy (converge an easier t_f
+   first, continue in t_f into 1.12x).
+3. Tighter multiple shooting (interior non-switch nodes) so no single arc weakly
+   determines its upstream costate. The principled structural cure, biggest build.
+
+IFS remains OPEN. PSR is the working deliverable.

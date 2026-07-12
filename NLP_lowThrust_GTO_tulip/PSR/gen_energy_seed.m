@@ -30,6 +30,15 @@ function outFile = gen_energy_seed(targetFactor, opts)
 %   outFile - path to the generated energy_f####.mat at targetFactor (the file
 %             run_psr's 'energy' seed then finds). Errors if the walk fails.
 %
+% EMPIRICAL USABLE BAND (2026-07-12): the walk converges only for factors in
+% ~[1.12, 1.95]. Below 1.12x it DIVERGES on the first step (the transfer
+% approaches min-time = all-burn, the throttle saturates, the convexity that
+% makes energy easy degrades -- a near-min-time conditioning wall that hits the
+% SMOOTH problem too, not just bang-bang). Above 1.95x it also diverges (2.00x:
+% inf_du ~1e11, MUMPS OOM). Outside that band, expect failure without a finer
+% perigee mesh / tighter warm start / different continuation. See
+% ../LOW_THRUST_MINFUEL_CAMPAIGN.md "ENERGY-BACKBONE floor/ceiling".
+%
 % RESUMABLE (important): every rung is saved as it succeeds and existing rungs
 % are skipped, so if a step dies -- especially the sporadic UNCATCHABLE CasADi/
 % IPOPT MEX FATAL crash (~1 in 10 solves) that kills the whole MATLAB process --

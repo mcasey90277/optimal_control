@@ -308,6 +308,38 @@ where a direct-collocation basin fragments and continuation jumps or hangs.
    documenting 1.01–1.11× as a genuine hard transition region — itself a
    publishable structural finding about the problem.
 
+### ENERGY-BACKBONE floor/ceiling — and the band is hard even for ENERGY (Jul 12 2026)
+
+New empirical result, and it sharpens the "why" of the transition band. Built
+`PSR/gen_energy_seed.m` (one-command energy-backbone generator: walk the convex
+ε=1 problem from the nearest existing backbone in small t_f steps, loose
+continuation + tight re-clean per rung, resumable). Two ends probed:
+
+- **Ceiling extended 1.85× → 1.95×** (added `energy_f1900`, `energy_f1950`).
+  But **2.00× DIVERGES**: the loose continuation runs away (`inf_du` ~1e11,
+  `δ_w` ~1e7, MUMPS OOM-reallocating icntl[13] 2000→8000). So the current
+  **energy-seed ceiling is 1.95×**.
+- **Floor is 1.12× and it is a HARD floor.** Walking DOWN from 1.12× toward
+  1.05× at step 0.02 **diverges on the very first step** (1.12→1.10:
+  `inf_du` ~1.6e7 climbing, restoration, ~985 iters). No rung below 1.12 was
+  writable. So the current **energy-seed floor is 1.12×**.
+
+**The fascinating part — the 1.01–1.12× band (NOT including 1.12×) is nasty even
+for the SMOOTH energy problem, not just bang-bang.** This reframes the whole
+transition band: it was tempting to blame "min-fuel has too many switches," but
+the *smooth, strictly-convex* ε=1 continuation ALSO collapses there. Mechanism:
+as factor→1.0 the transfer approaches min-TIME = all-burn, so the throttle
+saturates near 1 almost everywhere, the control leaves the interior and pins to
+its bound, the strict convexity that makes energy well-conditioned degrades, and
+the continuation basin collapses. The 1.01–1.11× wall is therefore MORE
+FUNDAMENTAL than the switch-count story — it is a near-min-time conditioning
+wall that afflicts the smooth problem too. (Consistent with the min-time fold /
+costate-gauge degeneracy the IFS work hit from the indirect side.)
+
+**Current usable energy-seed band: 1.12× (floor, hard) … 1.95× (ceiling).**
+Going below 1.12× or above 1.95× is real research (finer perigee mesh, tighter
+non-loose warm start, or a different continuation parameter), not a knob-turn.
+
 ### Indirect/multiple-shooting attack on the band — executed, band still open; verifier delivered (Jul 9-10 2026)
 
 Option 1 above was executed as a full campaign (`ms_band/`; see

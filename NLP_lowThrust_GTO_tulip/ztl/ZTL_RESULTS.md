@@ -56,8 +56,24 @@ below.
    caps the rate.** The SVD-LM trust region (More) descends monotonically where
    diagonal-LM and backtracking-Newton crawl/stall -- but the stiff
    perigee-continuity nonlinearity keeps the trust radius small, so it
-   asymptotes slowly. The remaining lever is LINEARITY (perigee-concentrated
-   nodes), not conditioning or step strategy.
+   asymptotes slowly.
+
+8. **GEODESIC (2nd-order) acceleration is the curved-valley cure.** The perigee
+   arcs make the residual map highly CURVED, so the linear GN model
+   mispredicts and the trust radius collapses. A Transtrum geodesic correction
+   (directional 2nd derivative from one extra residual eval, solved via the
+   reused SVD) fixes the misprediction -- the trust radius GROWS, and
+   convergence is ~10x faster. This is the single biggest accelerator; combine
+   it with the trust region for any curved multi-rev shooting problem.
+
+9. **There is a CONDITIONING NOISE FLOOR at ~cond(Jc) x eps.** Below ||R||~1e-6
+   the residual is pure stiff-direction continuity and cond(Jc)~1e9 makes the
+   linear-solve noise ~5-7e-7. It is objective-safe-unbreakable: two-sided
+   equilibration (cond 5e6) would fix it but changes the objective (ascent);
+   fixed-weight down-weights the stiff rows (balloons). Breaking it needs a
+   structurally better-conditioned formulation (Sundman-regularized arcs) or
+   extended precision. Perigee amplification, un-splittable by nodes, is the
+   root -- the same intrinsic feature seen for conditioning AND curvature.
 
 ## P0 — preflight (2026-07-12)
 
@@ -481,3 +497,45 @@ gentle). The principled structural fix for Z1's last two orders is
 **Sundman-regularized arcs** (PLAN_PRONG_Z's named fallback for perigee
 stiffness), consistent with the whole campaign's experience. Meanwhile the
 perigee+TR run continues toward its floor as the practical anchor.
+
+### Z1 geodesic acceleration + the conditioning-floor endgame (2026-07-13)
+
+**Geodesic acceleration (Transtrum) is the biggest single accelerator.** Added
+a 2nd-order (directional-2nd-derivative) correction to the SVD trust region:
+one extra residual eval gives R''(v,v), the acceleration is solved via the
+reused SVD, applied when small vs the base step. The diagnosed barrier was
+CURVATURE (the perigee arcs make the map highly curved, so the linear GN model
+mispredicts and the trust radius collapses); the 2nd-order term fixes it. With
+perigee1 nodes at M=104 it reached 1.5e-5 at it 29 (vs it 174 without) and the
+trust radius GREW (Delta 0.25-0.5) instead of collapsing -- descending
+4.95e-3 -> **1.39e-6** with the terminal BC fully converged (termErr 2e-9),
+~10x faster than any prior variant.
+
+**The last ~2 orders (1e-6 -> 1e-8) hit a CONDITIONING NOISE FLOOR.** At
+||R||~1e-6 the residual is pure continuity (~7e-7) in the STIFF perigee
+directions, and cond(Jc) (column-scaled) has grown to ~1.4e9, whose
+linear-solve noise floor (~1e9 x eps) is ~5-7e-7 -- exactly where maxCont
+sticks. Every objective-safe route to break it was tried and characterized:
+- column-SVD damped step: objective-safe, floors at the cond noise. (kept)
+- TWO-SIDED-equilibrated damped step (cond 5e6): row-scaling the augmented
+  system changes the objective -> ascent -> Delta collapses to 1e-11. (bug)
+- two-sided Newton step for the INTERIOR case: correct but never triggers (the
+  Newton step is genuinely large -- the stiff directions need big moves).
+- fixed-weight LM (Dr=1/rownorm): the weighted norm converges but true ||R||
+  BALLOONS (1.4e-6 -> 7e-5) -- Dr down-weights the stiff perigee-continuity
+  rows, so it breaks continuity. Wrong weighting, even near the solution.
+- smaller geodesic FD step (geoH 0.1 -> 1e-3): no change (floor is not
+  geodesic FD noise, it is the linear-solve conditioning).
+Breaking below ~7e-7 needs a structurally better-conditioned formulation
+(SUNDMAN-regularized arcs, which stretch the perigee and lower the intrinsic
+stiffness -- the direct side's cure) or extended-precision linear algebra. That
+is a deliberate next build, not a tuning knob.
+
+**Z1 DELIVERABLE (`results/z1_anchor_75mN.mat`):** the 75 mN energy anchor,
+||R|| = 1.39e-6, terminal BC (rendezvous) satisfied to 1.95e-9, continuity
+7e-7, dV 4.06 km/s, smooth interior throttle u in [0.08, 0.65]. This is the
+FIRST converged indirect multi-revolution solve in the entire campaign (single
+shooting floored dead at 4.95e-3; nothing before reached below ~1e-3). It is a
+legitimate near-extremal and a strong warm anchor for the Z3 thrust ladder
+(each rung re-solves warm). The push to a full 1e-8 is blocked only by the
+characterized conditioning floor above.

@@ -24,8 +24,10 @@ if isfield(S,'out') && isfield(S.out,'Delta') && isfinite(S.out.Delta), Delta0 =
 fprintf('=== Z1 RESUME (TR) M=%d: start ||R||=%.4e (termErr=%.2e maxCont=%.2e), Delta0=%.2e ===\n', ...
         prob.M, norm(ztl_ms_residual(z0, prob, false)), ri0.termErr, ri0.maxCont, Delta0);
 
+geoH = 0.1;
+if evalin('base', 'exist(''geoH'',''var'')'), geoH = evalin('base','geoH'); end
 [z, out] = ztl_ms_solve_tr(z0, prob, ...
-    struct('tolR', 1e-9, 'maxIter', moreIter, 'Delta0', Delta0));
+    struct('tolR', 1e-9, 'maxIter', moreIter, 'Delta0', Delta0, 'geoH', geoH));
 
 S.z = z;  S.out = out;                            % overwrite trace with progress
 save(fullfile(resDir, 'z1_trace.mat'), '-struct', 'S');

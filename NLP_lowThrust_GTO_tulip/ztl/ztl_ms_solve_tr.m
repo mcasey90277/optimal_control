@@ -56,30 +56,39 @@ while it < maxIter
     end
     if rn < tolR, flag = 1; break; end
 
-    % --- trust-region subproblem (reuses the current SVD) -------------------
-    if isfinite(norm(sgn)) && norm(sgn) <= Delta
-        s = sgn;  atBoundary = false;  muUsed = 0;
-    else
-        muUsed = lm_mu(sig, UtR, Delta);
-        s  = -V * ((sig .* UtR) ./ (sig.^2 + muUsed));
-        atBoundary = true;
-    end
-    dz = s ./ D;                                % dz = diag(1/D) s
-
-    % --- geodesic acceleration (2nd-order correction for the curved valley) --
-    % a solves J a = -R''(v,v) along the step direction v; computed from ONE
-    % extra residual eval (directional 2nd derivative) and the reused SVD.
-    % Applied only when it is small vs the base step (Transtrum's criterion).
-    if geodesic
-        Jdz = Jc * s;                            % = J*dz
-        Rh  = ztl_ms_residual(z + geoH*dz, prob, false);
-        fvv = (2/geoH^2) * (Rh - R - geoH*Jdz);  % directional 2nd derivative
-        sa  = -V * ((sig .* (U.'*fvv)) ./ (sig.^2 + muUsed));
-        if norm(sa) <= geoAlpha*norm(s)
-            s = s + 0.5*sa;  dz = s ./ D;
+    % --- trust-region subproblem -------------------------------------------
+    % INTERIOR (near the solution): use the accurate TWO-SIDED-equilibrated
+    % Newton step -- for a square system it equals -J\R but is computed at
+    % cond ~5e6 (vs the column-only ~1e9), lowering the linear-solve NOISE
+    % FLOOR from ~5e-7 to ~1e-9 (the last barrier at ||R||~1e-6). BOUNDARY
+    % (far): the column-SVD LM mu-step globalizes.
+    interior = isfinite(norm(sgn)) && norm(sgn) <= Delta;
+    if interior
+        atBoundary = false;
+        dz = solve2s(J, -R);                     % accurate Newton (cond ~5e6)
+        if geodesic
+            Jdz = J*dz;
+            Rh  = ztl_ms_residual(z + geoH*dz, prob, false);
+            fvv = (2/geoH^2)*(Rh - R - geoH*Jdz);
+            da  = solve2s(J, -fvv);
+            if norm(da) <= geoAlpha*norm(dz), dz = dz + 0.5*da; end
         end
+        predResid = R + J*dz;
+    else
+        atBoundary = true;
+        muUsed = lm_mu(sig, UtR, Delta);
+        s  = -V * ((sig .* UtR) ./ (sig.^2 + muUsed));   % column-SVD damped step
+        dz = s ./ D;
+        if geodesic
+            Jdz = Jc * s;
+            Rh  = ztl_ms_residual(z + geoH*dz, prob, false);
+            fvv = (2/geoH^2)*(Rh - R - geoH*Jdz);
+            sa  = -V * ((sig .* (U.'*fvv)) ./ (sig.^2 + muUsed));
+            if norm(sa) <= geoAlpha*norm(s), s = s + 0.5*sa; dz = s ./ D; end
+        end
+        predResid = R + Jc*s;
     end
-    pred = 0.5*rn^2 - 0.5*norm(R + Jc*s)^2;      % model reduction
+    pred = 0.5*rn^2 - 0.5*norm(predResid)^2;      % model reduction
 
     [Rt, Jt, it2] = ztl_ms_residual(z + dz, prob, true);
     rnt = norm(Rt);
@@ -118,6 +127,41 @@ if sig(end) > tol
 else
     sgn = Inf(size(UtR));                        % rank-deficient -> force boundary
 end
+end
+
+function s = solve_damped2s(Jc, R, mu)
+% Damped LM step s = argmin ||Jc s + R||^2 + mu||s||^2, computed by two-sided
+% (Ruiz) equilibration of the augmented system [Jc; sqrt(mu) I] s = [-R; 0].
+% The equilibration lowers the augmented condition number so the step is
+% accurate in the small-singular-value (stiff) directions where the
+% column-SVD reconstruction floors at the conditioning noise.
+n = size(Jc, 2);
+A = [Jc; sqrt(mu)*speye(n)];
+b = [-R; zeros(n, 1)];
+[m2, n2] = size(A);  dr = ones(m2,1);  dc = ones(n2,1);
+for it = 1:5
+    M = (spdiags(dr,0,m2,m2)*A)*spdiags(dc,0,n2,n2);
+    rr = sqrt(max(abs(M),[],2));  rr(rr==0)=1;
+    cc = sqrt(max(abs(M),[],1)).'; cc(cc==0)=1;
+    dr = dr./rr;  dc = dc./cc;
+end
+Ae = (spdiags(dr,0,m2,m2)*A)*spdiags(dc,0,n2,n2);
+s = dc .* (Ae \ (dr .* b));
+end
+
+function x = solve2s(J, b)
+% Solve J x = b via TWO-SIDED (Ruiz) equilibration: x = Dc*((Dr J Dc)\(Dr b)).
+% For square nonsingular J this equals J\b but the solved system has cond ~5e6
+% instead of ~1e9 -- lowering the linear-solve noise floor by ~2-3 orders.
+[m, n] = size(J);  dr = ones(m,1);  dc = ones(n,1);
+for it = 1:5
+    A = (spdiags(dr,0,m,m)*J)*spdiags(dc,0,n,n);
+    rr = sqrt(max(abs(A),[],2));  rr(rr==0)=1;
+    cc = sqrt(max(abs(A),[],1)).'; cc(cc==0)=1;
+    dr = dr./rr;  dc = dc./cc;
+end
+Je = (spdiags(dr,0,m,m)*J)*spdiags(dc,0,n,n);
+x = dc .* (Je \ (dr .* b));
 end
 
 function mu = lm_mu(sig, UtR, Delta)

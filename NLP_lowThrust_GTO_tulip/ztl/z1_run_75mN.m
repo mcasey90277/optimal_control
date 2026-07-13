@@ -39,6 +39,8 @@ fprintf('seed: maxCont=%.2e (on flow), termErr=%.4e (= SS floor)\n', ...
 
 tStart = tic;
 switch solver
+    case 'tr'
+        [z, out] = ztl_ms_solve_tr(z0, prob, struct('tolR', 1e-9, 'maxIter', 200));
     case 'wlm'
         [z, out] = ztl_ms_solve_wlm(z0, prob, struct('tolR', 1e-9, 'maxIter', 200));
     case 'newton'

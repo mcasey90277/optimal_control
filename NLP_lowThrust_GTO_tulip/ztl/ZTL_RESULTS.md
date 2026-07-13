@@ -3,6 +3,62 @@
 Honest running record. Plan: `../ifs/PLAN_PRONG_Z.md` (execution),
 `../ifs/PLAN_OF_ATTACK_3.md` (strategy + Zhang audit).
 
+## Lessons learned (transferable) — the distilled findings
+
+These transcend this problem and apply to any multi-revolution indirect
+optimal-control / shooting work. Detailed evidence is in the dated sections
+below.
+
+1. **Differencing-based Jacobians are structurally inadequate for multi-rev
+   CR3BP shooting.** BOTH complex-step (through an adaptive integrator) and
+   central finite-difference fail: the derivative scales span ~11 orders, CS
+   is corrupted at O(1) by adaptive-step coupling, FD takes secants across a
+   curved valley. Only the VARIATIONAL STM (exact derivative of the continuous
+   system, integrated alongside the state) is usable. This was measured, not
+   assumed (P0h/P0i), and it confirms Zhang 2015's ingredient (a) as
+   load-bearing. It likely explains a large part of the whole indirect
+   campaign's historical crawl.
+
+2. **The indirect shooting Jacobian is ARTIFICIALLY ill-conditioned by the
+   disparate state-vs-costate scales — equilibrate it.** Raw cond ~3e11;
+   two-sided (Ruiz) equilibration -> 5e6, column-only -> 8e8. This is a large,
+   cheap, likely campaign-wide-missed lever. CAVEAT: row-scaling the RESIDUAL
+   changes the objective and produces ascent steps far from the solution
+   (instant stall); COLUMN scaling is a pure reparametrization (objective-safe)
+   -- use it, or use two-sided only to compute an accurate Newton DIRECTION
+   with a true-objective globalization.
+
+3. **Node placement does NOT fix conditioning; equilibration does.** Perigee
+   amplification is intrinsic and un-splittable -- cond(J_MS) plateaus ~1e11
+   for uniform M=26..208, and amplification-equidistributing placement does
+   not help (int|A|dt placement makes it WORSE). Placement is a LINEARITY lever
+   (shorter stiff arcs), a separate axis from conditioning.
+
+4. **Multiple shooting is NECESSARY, not merely nicer, for multi-rev
+   indirect.** The decisive test: at a converged-ish MS iterate (||R||~1e-5,
+   continuity gaps ~5e-6), the SINGLE-shooting residual at the SAME lam0 is
+   2.56 -- enormous. The tiny continuity gaps are LOAD-BEARING: they absorb the
+   13-rev amplification that single shooting cannot represent. This is why SS
+   floors dead and MS descends 80x past it. Corollary: "re-chop to zero the
+   gaps" is a dead end (throws away the amplification the gaps encode).
+
+5. **Cold-seed landscape asymmetry: "wide basin at high thrust" really means
+   ARRIVES-WARM easy.** High thrust -> a wrong seed crashes into Earth/escapes
+   within a rev (explosive residual 1e10-1e21); low thrust -> tame landscape
+   but lethal 40-rev amplification. Cold is hard everywhere; only the failure
+   mode changes. Zhang's thrust ladder works because every solve after the
+   first arrives warm.
+
+6. **Min-time is a bad continuation substrate here** (near-singularity at
+   factor 1.0; machinery-independent). It is only ever a one-shot seed source.
+
+7. **A proper trust region converts STALL into CONVERGENCE, but nonlinearity
+   caps the rate.** The SVD-LM trust region (More) descends monotonically where
+   diagonal-LM and backtracking-Newton crawl/stall -- but the stiff
+   perigee-continuity nonlinearity keeps the trust radius small, so it
+   asymptotes slowly. The remaining lever is LINEARITY (perigee-concentrated
+   nodes), not conditioning or step strategy.
+
 ## P0 — preflight (2026-07-12)
 
 ### P0a — graze margin at the PSR bang-bang solutions: PASS, favorable
@@ -356,3 +412,43 @@ is not yet reached; it is now a bounded, well-characterized solver-tuning
 problem on the stiff costate-continuity directions (candidate levers above),
 not a wall. The machinery (exact block-STM residual, dynamically-consistent
 seed, equilibration) is the reusable substrate for Z3/Z4.**
+
+### Z1 trust-region globalization (2026-07-13)
+
+Built `ztl_ms_solve_tr.m` -- SVD-based Levenberg-Marquardt trust region
+(More-style) on the column-scaled Jacobian: one SVD per accepted iterate
+makes the boundary mu-search closed-form/free; Delta adapts by the true-
+objective reduction ratio, interpolating between short globalizing steps and
+the full Newton step. `z1_resume_tr.m` warm-restarts it (resumable).
+
+**Result (M=104, from the banked Z0 seed):** the TR is the best method yet --
+descends monotonically 4.95e-3 -> 1.44e-5 (200 it) -> <1e-5 (resume),
+**flag=0 (iteration cap, NOT stalled)**, with terminal BC essentially
+converged (termErr ~2e-7) and the residual now dominated by continuity
+(maxCont ~4.4e-6). It is the FIRST method in the whole campaign to converge
+monotonically past 1e-5 with no plateau. BUT the convergence rate DEGRADES as
+||R|| falls (1%/it -> 0.5%/it), and Delta stays pinned small (~0.01): the
+stiff perigee-continuity nonlinearity caps the productive step, so it
+asymptotes slowly and does NOT reach 1e-8 at M=104 in practical iteration
+counts (extrapolates ~1e3+ iters, rate degrading).
+
+**Re-chop is a DEAD END, and the reason is illuminating.** At the TR iterate
+(MS ||R||~1e-5, gaps ~4.6e-6), the SINGLE-SHOOTING residual at the extracted
+lam0 is **2.56** -- enormous. The tiny continuity gaps are LOAD-BEARING: they
+absorb the 13-rev amplification that single shooting cannot represent.
+Re-integrating lam0 gap-free lands back at ||R||~2.6 (worse than the seed).
+This is the cleanest proof yet of WHY multiple shooting is necessary here (and
+why single shooting floored dead) -- and why closing the gaps to zero is
+intrinsically the slow part.
+
+**Z1 status after the TR push:** multiple shooting + SVD trust region is the
+first method to CONVERGE (monotone, no stall) on this 13-rev indirect problem,
+reaching ~1e-5 with the terminal BC solved and only the stiff continuity
+remaining. It asymptotes short of 1e-8 at M=104 (nonlinearity caps Delta).
+The clear next lever (flagged from the start as insurance) is PERIGEE-
+CONCENTRATED nodes: shorter arcs through the perigees reduce the per-arc
+amplification/nonlinearity, which should let Delta grow and the gaps close --
+targeting the floor exactly where the re-chop test localized it. (Uniform-node
+scaling of the continuity floor: M=26 ~3.9e-4, M=104 ~1.2e-5 -> ~7e-6; uniform
+alone won't reach 1e-8 at feasible M, but perigee-concentrated should be far
+more efficient.)

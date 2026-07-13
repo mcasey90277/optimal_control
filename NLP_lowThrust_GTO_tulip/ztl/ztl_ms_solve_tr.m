@@ -32,11 +32,13 @@ if nargin < 3, opts = struct(); end
 g = @(f,d) getdef(opts, f, d);
 tolR = g('tolR', 1e-9);  maxIter = g('maxIter', 200);
 Dmax = g('Dmax', 1e6);   eta = g('eta', 1e-4);  verbose = g('verbose', true);
+geodesic = g('geodesic', true);   % 2nd-order (geodesic) acceleration
+geoH = g('geoH', 0.1);  geoAlpha = g('geoAlpha', 0.75);
 
 z = z0(:);
 [R, J, info] = ztl_ms_residual(z, prob, true);
 rn = norm(R);
-[D, Jc, V, sig, UtR, sgn] = refactor(J, R);
+[D, Jc, U, V, sig, UtR, sgn] = refactor(J, R);
 % Start Delta modest: the full GN step (||sgn|| ~ 1e2) overshoots the stiff
 % nonlinear valley and wastes iterations shrinking; a modest Delta lets the
 % ratio test grow it into the quadratic phase near the solution. A warm
@@ -56,14 +58,28 @@ while it < maxIter
 
     % --- trust-region subproblem (reuses the current SVD) -------------------
     if isfinite(norm(sgn)) && norm(sgn) <= Delta
-        s = sgn;  atBoundary = false;
+        s = sgn;  atBoundary = false;  muUsed = 0;
     else
-        mu = lm_mu(sig, UtR, Delta);
-        s  = -V * ((sig .* UtR) ./ (sig.^2 + mu));
+        muUsed = lm_mu(sig, UtR, Delta);
+        s  = -V * ((sig .* UtR) ./ (sig.^2 + muUsed));
         atBoundary = true;
     end
     dz = s ./ D;                                % dz = diag(1/D) s
-    pred = 0.5*rn^2 - 0.5*norm(R + Jc*s)^2;      % model reduction (>=0)
+
+    % --- geodesic acceleration (2nd-order correction for the curved valley) --
+    % a solves J a = -R''(v,v) along the step direction v; computed from ONE
+    % extra residual eval (directional 2nd derivative) and the reused SVD.
+    % Applied only when it is small vs the base step (Transtrum's criterion).
+    if geodesic
+        Jdz = Jc * s;                            % = J*dz
+        Rh  = ztl_ms_residual(z + geoH*dz, prob, false);
+        fvv = (2/geoH^2) * (Rh - R - geoH*Jdz);  % directional 2nd derivative
+        sa  = -V * ((sig .* (U.'*fvv)) ./ (sig.^2 + muUsed));
+        if norm(sa) <= geoAlpha*norm(s)
+            s = s + 0.5*sa;  dz = s ./ D;
+        end
+    end
+    pred = 0.5*rn^2 - 0.5*norm(R + Jc*s)^2;      % model reduction
 
     [Rt, Jt, it2] = ztl_ms_residual(z + dz, prob, true);
     rnt = norm(Rt);
@@ -78,7 +94,7 @@ while it < maxIter
 
     if rho > eta && isfinite(rnt)               % accept
         z = z + dz;  R = Rt;  J = Jt;  info = it2;  rn = rnt;
-        [D, Jc, V, sig, UtR, sgn] = refactor(J, R);
+        [D, Jc, U, V, sig, UtR, sgn] = refactor(J, R);
     end
     if Delta < 1e-13*max(norm(z),1), flag = -2; break; end
 end
@@ -89,7 +105,7 @@ out = struct('resNorm', rn, 'iters', it, 'flag', flag, 'hist', hist(1:it,:), ...
 end
 
 % ---------------------------------------------------------------------------
-function [D, Jc, V, sig, UtR, sgn] = refactor(J, R)
+function [D, Jc, U, V, sig, UtR, sgn] = refactor(J, R)
 % Column scaling + SVD of the column-equilibrated Jacobian; scaled GN step.
 D = sqrt(sum(J.^2, 1)).';  D(D == 0) = 1;
 Jc = J ./ D.';                                  % J * diag(1/D)

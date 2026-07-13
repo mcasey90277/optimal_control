@@ -654,3 +654,17 @@ The core numerical objective is met. Remaining work is packaging and payoff:
 - tf-continuation: `tf_continuation_minfuel.m`, `tf_continuation_minfuel_fine.m`.
 - Movies + solutions: `movie/` (min-fuel leg, coarse 6-switch, 53-switch,
   min-energy solo, three-way comparison; MP4 + GIF each).
+
+## ZTL — Zhang-style thrust ladder (Prong Z, opened 2026-07-12)
+
+After PSR banked the direct deliverable and every indirect route blocked,
+the campaign pivoted to running Zhang 2015's recipe WHOLE (the audit showed
+every prior failure used a strict subset of his four ingredients). Strategy:
+`ifs/PLAN_OF_ATTACK_3.md`; execution plan: `ifs/PLAN_PRONG_Z.md`; live
+results record: **`ztl/ZTL_RESULTS.md`** (P0 preflight findings: graze
+margin healthy at 1.15x; the 2025 thrust-ladder tfMin table was an artifact;
+min-time retired as continuation substrate — machinery-independent
+near-singularity; fixed-tf ladder needs no min-time table; the cold-seed
+landscape is explosive at high thrust vs amplification-limited at low, so
+"wide basin at high thrust" = arrives-warm easy; cold multistart sweet-spot
+signal near 75 mN). Memory: ztl-p0-findings.

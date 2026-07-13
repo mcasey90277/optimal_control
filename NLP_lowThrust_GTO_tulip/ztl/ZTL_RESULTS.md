@@ -539,3 +539,35 @@ shooting floored dead at 4.95e-3; nothing before reached below ~1e-3). It is a
 legitimate near-extremal and a strong warm anchor for the Z3 thrust ladder
 (each rung re-solves warm). The push to a full 1e-8 is blocked only by the
 characterized conditioning floor above.
+
+## Z1-Sundman — regularized arcs break the conditioning floor (2026-07-13)
+
+Build: `SUN_BUILD.md`. Files: `ztl_eom_sun.m` (Sundman-time RHS
+dY/dtau = [kappa*f; kappa], kappa=r1^pSund, t carried as the 15th state),
+`ztl_A_sun.m` (15x15 field Jacobian by CS, gated vs FD 6e-11), `ztl_flow_sun.m`
+(sigma-integration scaled by tauF, 15x15 STM + the dYf/dtauF sensitivity column
+w, event automaton), `ztl_ms_residual_sun.m` / `ztl_ms_seed_sun.m` (MS in
+normalized sigma, unknowns [lam0; Y_2..Y_M; tauF], terminal adds t(1)=tf), the
+trust-region solver GENERICIZED via prob.resFun. `z1_run_sun.m` / `z1_resume_sun.m`.
+
+**The hypothesis holds -- Sundman lowers AND MAINTAINS the conditioning:**
+- Per-arc balance (probe_sundman): pSund=2 gives max/med arc-||Phi|| = 9 (vs
+  physical uniform 2918, physical perigee1 42). Worst-arc magnitude only ~1.5x
+  lower (2.6e3 vs 4.4e3) -- but the BALANCE is transformed.
+- cond(col-scaled J) at the seed (probe_sundman_cond): **9.5e8 (physical) ->
+  5.3e7 (Sundman pSund=1.5)**, ~18x.
+- CRUCIALLY the advantage is MAINTAINED through the solve: cond(Jc) stays
+  ~1.2e8 all the way down, whereas the PHYSICAL cond GREW to 2.5e9 near its
+  floor. So the Sundman linear-solve noise floor stays ~cond*eps ~ 3e-8 (vs
+  physical ~5e-7) -- exactly the ~10-18x needed to move the floor to the 1e-8
+  target.
+- pSund knob: 1.5 (PSR-matched) is best for cond; 2 best-balanced arcs;
+  3 over-regularizes (worst-arc ||Phi|| blows to 1.6e6).
+
+**Descent (M=104, pSund=1.5, from the clean Z0 lam0):** 4.95e-3 -> 4.0e-6
+(300 it) -> 2.3e-6 (resume), cond stable ~1.2e8, terminal BC ~4e-9, descending
+monotonically PAST the physical floor (1.39e-6) with no sign of the physical
+conditioning stall. Grinding toward the ~3e-8 noise floor (rate-limited now,
+not floored). [Resume in progress.] This confirms the user's hypothesis:
+Sundman regularization -- the direct-side (PSR) perigee cure -- is what the
+indirect side needs too.

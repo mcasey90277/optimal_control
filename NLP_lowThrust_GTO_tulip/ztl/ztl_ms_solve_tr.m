@@ -36,7 +36,8 @@ geodesic = g('geodesic', true);   % 2nd-order (geodesic) acceleration
 geoH = g('geoH', 0.1);  geoAlpha = g('geoAlpha', 0.75);
 
 z = z0(:);
-[R, J, info] = ztl_ms_residual(z, prob, true);
+rf = @ztl_ms_residual;  if isfield(prob,'resFun'), rf = prob.resFun; end
+[R, J, info] = rf(z, prob, true);
 rn = norm(R);
 [D, Jc, U, V, sig, UtR, sgn] = refactor(J, R);
 % Start Delta modest: the full GN step (||sgn|| ~ 1e2) overshoots the stiff
@@ -68,7 +69,7 @@ while it < maxIter
         dz = solve2s(J, -R);                     % accurate Newton (cond ~5e6)
         if geodesic
             Jdz = J*dz;
-            Rh  = ztl_ms_residual(z + geoH*dz, prob, false);
+            Rh  = rf(z + geoH*dz, prob, false);
             fvv = (2/geoH^2)*(Rh - R - geoH*Jdz);
             da  = solve2s(J, -fvv);
             if norm(da) <= geoAlpha*norm(dz), dz = dz + 0.5*da; end
@@ -81,7 +82,7 @@ while it < maxIter
         dz = s ./ D;
         if geodesic
             Jdz = Jc * s;
-            Rh  = ztl_ms_residual(z + geoH*dz, prob, false);
+            Rh  = rf(z + geoH*dz, prob, false);
             fvv = (2/geoH^2)*(Rh - R - geoH*Jdz);
             sa  = -V * ((sig .* (U.'*fvv)) ./ (sig.^2 + muUsed));
             if norm(sa) <= geoAlpha*norm(s), s = s + 0.5*sa; dz = s ./ D; end
@@ -90,7 +91,7 @@ while it < maxIter
     end
     pred = 0.5*rn^2 - 0.5*norm(predResid)^2;      % model reduction
 
-    [Rt, Jt, it2] = ztl_ms_residual(z + dz, prob, true);
+    [Rt, Jt, it2] = rf(z + dz, prob, true);
     rnt = norm(Rt);
     rho = (0.5*rn^2 - 0.5*rnt^2) / max(pred, realmin);
     hist(it, 3) = rho;

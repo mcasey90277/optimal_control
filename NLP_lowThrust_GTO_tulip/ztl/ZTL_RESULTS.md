@@ -276,3 +276,83 @@ escapes:
 
 Assets banked: `z0_accept_trace.mat` / `z0_accept2_trace.mat` (best 75 mN
 iterate ||R|| = 4.95e-3 in BE convention — the Z1-MS seed).
+
+## Z1 — multiple shooting (built 2026-07-13)
+
+Files: `ztl_ms_residual.m` (MS residual + exact block-bidiagonal Jacobian
+from Z0's per-arc STMs), `ztl_ms_seed.m` (dynamically-consistent seed by
+chopping a single-shooting trajectory -> continuity residual EXACTLY 0 at the
+seed), `ztl_ms_nodes.m` (uniform / amplification node placement),
+`ztl_ms_solve.m` (column-scaled augmented-QR LM), `ztl_ms_solve_trr.m`
+(lsqnonlin TRR), `test_ztl_z1.m` (gates), `z1_run_75mN.m` (driver).
+
+**Unit gates 3/3 PASS:** H1 seed on the flow (maxCont = 0, termErr = SS floor
+4.947e-3 exactly); H2 block Jacobian vs FD shrinks with arc length
+(M=6 2.8e-4 -> M=26 2.3e-7, confirming the block placement is exact and the
+M=6 gap was long-arc FD-reference degradation); H3 cond(J_MS) < cond(J_SS)/10.
+
+**Three findings from bringing it up:**
+
+1. **Node placement is NOT the conditioning lever.** cond(J_MS) plateaus at
+   ~1e11 for uniform M=26..208 (does not fall with more nodes). Per-arc STM
+   norms are wildly non-uniform (median 15, max 1.85e5 at an early-perigee
+   arc -- 12000x). But amplification-EQUIDISTRIBUTING placement (equidistribute
+   log||Phi(t,0)||) did NOT help (cond stayed ~1e12, ratio still ~5000x): the
+   perigee amplification is INTRINSIC and un-splittable -- you cannot divide a
+   perigee pass into equal-amplification sub-arcs. (int||A||dt placement was
+   worse still, ~1e16: it packs nodes into the perigee instant.) Kept as an
+   option; default uniform.
+
+2. **THE conditioning lever is Jacobian EQUILIBRATION, and it is large.** The
+   MS Jacobian is artificially ill-conditioned by the disparate scales of the
+   state vs costate columns (and the residual-component rows). Two-sided
+   (Ruiz) equilibration drops cond 3.4e11 -> 5.0e6 at M=104 (FOUR-plus orders);
+   column-only drops it to 8.4e8. This likely explains a large part of the
+   whole indirect campaign's crawl -- the shooting Jacobian was never
+   equilibrated.
+   - CAVEAT (a real bug, then fixed): ROW-scaling the residual changes the
+     objective, so its LM step is an ascent direction for the true ||R|| far
+     from the solution -- the two-sided solver stalled instantly (mu -> 1e14,
+     every step rejected). The safe form is COLUMN-only reparametrization
+     dz = Dc w (objective-preserving, textbook Marquardt), cond ~8e8,
+     guaranteed descent.
+
+3. **With column-scaled LM at M=104, MS BREAKS the single-shooting wall
+   (the headline Z1 result).** From the banked Z0 seed (4.947e-3, where SS
+   floored dead and TRR stalled at 4.78e-3), the objective-preserving
+   column-scaled LM descends monotonically: 4.95e-3 -> 9.97e-4 (it 15) ->
+   9.2e-5 (it 67) -> 6.2e-5 (it 79) -- an ~80x break past the ~1e-3 indirect
+   floor that stopped EVERY prior method in the whole campaign
+   (ms_band, IFS, Z0 single-shooting). The terminal BC converges well
+   (termErr 3.3e-6 at it 79); the remaining residual is the CONTINUITY block,
+   which plateaus at maxCont ~3e-5.
+
+4. **The residual floor is the stiff costate-continuity directions, and the
+   solver-side fix is still open.** maxCont ~3e-5 sits far above integration
+   tol (1e-13), so it is a real un-reduced residual: the near-null (stiff)
+   directions of the perigee-continuity rows. Four solver variants were
+   characterized:
+   - column-scaled LM (objective-preserving): BEST -- monotone to 6.2e-5,
+     floors on continuity. Default.
+   - two-sided-equilibrated LM (row+col): row-scaling the residual changes
+     the objective -> ascent steps, instant stall (mu->1e14). Rejected.
+   - equilibrated-Newton + Armijo: exact Newton direction (cond 3.5e7) but the
+     full step overshoots the seed (13-rev sensitivity), backtracks to tiny
+     alpha -> crawls (4.95e-3 -> 4.80e-3 / 13 it). Rejected.
+   - weighted LM, fixed Dr = 1/rownorm(J_seed) (Deuflhard): the weighted norm
+     converges (5.3e-3 -> 1.5e-4) but Dr DOWN-weights the stiff perigee rows
+     (rownorm ~1e5), so true continuity BALLOONS to 2e-2. Wrong weighting.
+   Candidate next levers (not yet built): (a) a genuine trust-region on the
+   TRUE objective with the equilibrated Newton direction (dogleg/2-D subspace,
+   controlling step length not just backtracking a fixed direction);
+   (b) node refinement targeting the stiff directions specifically;
+   (c) a physically-scaled residual DEFINITION (scale costate-continuity vs
+   state-continuity by characteristic magnitudes) rather than rownorm.
+
+**Z1 STATUS: multiple shooting is built, unit-gated (3/3), and demonstrably
+BREAKS the single-shooting wall (80x past the campaign-wide ~1e-3 indirect
+floor, monotone) -- the qualitative thesis is PROVEN. Full 1e-8 convergence
+is not yet reached; it is now a bounded, well-characterized solver-tuning
+problem on the stiff costate-continuity directions (candidate levers above),
+not a wall. The machinery (exact block-STM residual, dynamically-consistent
+seed, equilibration) is the reusable substrate for Z3/Z4.**

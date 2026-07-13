@@ -28,6 +28,7 @@ codegen/
 
 # Runtime solver logs
 tf_continuation*.log
+*.log
 
 # IPOPT/Fortran scratch output
 fort.6

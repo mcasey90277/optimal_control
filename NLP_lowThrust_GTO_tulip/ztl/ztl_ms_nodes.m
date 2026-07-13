@@ -35,6 +35,29 @@ if strcmpi(method, 'uniform')
     return
 end
 
+% --- PERIGEE-concentrated (a LINEARITY lever, not a conditioning one) --------
+% The stiff arcs are the perigee passes (per-arc ||Phi|| ~ 1e5). Making them
+% SHORT (many nodes straddling each perigee, few in the benign coast) reduces
+% their nonlinearity so the trust radius can grow. Equidistribute the monitor
+% w = 1/r1^p (r1 = distance to Earth), evaluated on the INTEGRATOR'S NATIVE
+% output -- ode89 clusters steps at perigee, giving the fine resolution the
+% log||Phi|| monitor (fixed 400-pt grid) lacked. p sets concentration strength.
+if strncmpi(method, 'perigee', 7)
+    p = 1.5;                                        % default concentration power
+    if length(method) > 7, p = str2double(method(8:end)); end   % 'perigee2' -> p=2
+    o = ztl_flow([rv0(:); 1; lam0(:)], [0 tf], P, false);
+    [t, iu] = unique(o.t(:));  Y = o.y(iu, :);
+    r1 = sqrt((Y(:,1) + P.muStar).^2 + Y(:,2).^2 + Y(:,3).^2);
+    w = 1 ./ max(r1, 1e-4).^p;
+    g = cumtrapz(t, w);
+    if g(end) <= 0, tNodes = linspace(0, tf, M+1); return; end
+    [gu, ig] = unique(g);
+    tNodes = interp1(gu, t(ig), linspace(0, g(end), M+1), 'linear');
+    tNodes(1) = 0;  tNodes(end) = tf;
+    tNodes = sort(tNodes);
+    return
+end
+
 % --- amplification clock g(t) = log||Phi(t,0)|| from an STM monitor pass -----
 % Integrate [y; Phi(:)] over [0,tf] on a fine grid (eps=1 interior throttle
 % is single-regime 'medium'; the monitor is for PLACEMENT, so a fixed regime

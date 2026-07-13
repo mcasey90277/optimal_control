@@ -452,3 +452,32 @@ targeting the floor exactly where the re-chop test localized it. (Uniform-node
 scaling of the continuity floor: M=26 ~3.9e-4, M=104 ~1.2e-5 -> ~7e-6; uniform
 alone won't reach 1e-8 at feasible M, but perigee-concentrated should be far
 more efficient.)
+
+### Z1 perigee-concentrated nodes (2026-07-13)
+
+Added a `perigee` placement to `ztl_ms_nodes.m` (equidistribute w = 1/r1^p,
+r1 = distance to Earth, on the integrator's native perigee-dense output;
+`probe_perigee.m`). p=1 is the sweet spot: it flattens the per-arc
+amplification profile from max/med **2918 (uniform) -> 42**, worst-arc ||Phi||
+1.77e4 -> 4.44e3 (higher p over-concentrates into the perigee instant and is
+worse). Combined with the trust region (M=104):
+- **Helped the EARLY descent:** the trust radius grew to Delta=0.125 (vs 0.016
+  pinned for uniform) and held through ~it 37, descending 4.9e-3 -> 1.2e-3
+  much faster than uniform.
+- **Did NOT crack the late-stage asymptote:** near ~2e-5 Delta shrinks again
+  (0.008) and the rate degrades to ~1%/it, same as uniform. Reason: the WORST
+  perigee arc's amplification (~4e3) is INTRINSIC and barely responds to node
+  count -- `probe_perigee_M.m`: worst ||Phi|| = 4.44e3 (M=104) -> 3.96e3 (156)
+  -> 3.71e3 (208) -> 3.18e3 (M=312). The single closest-approach passage
+  cannot be split by time-based nodes (the same "perigee amplification is
+  un-splittable" lesson as the conditioning, now for LINEARITY/curvature).
+
+**Read:** perigee nodes are a real but partial win (faster early descent,
+lower unknown-count needed than uniform for the same progress). The remaining
+barrier is the intrinsic CURVATURE of the closest-perigee arc in PHYSICAL
+time -- which is exactly why the DIRECT side (PSR) uses SUNDMAN regularization
+(dt/dtau = r^1.5, stretching the perigee passage so per-tau dynamics are
+gentle). The principled structural fix for Z1's last two orders is
+**Sundman-regularized arcs** (PLAN_PRONG_Z's named fallback for perigee
+stiffness), consistent with the whole campaign's experience. Meanwhile the
+perigee+TR run continues toward its floor as the practical anchor.

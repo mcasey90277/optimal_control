@@ -23,6 +23,7 @@ warning('off', 'MATLAB:ode113:IntegrationTolNotMet');
 
 if evalin('base', 'exist(''Mnodes'',''var'')'), M = evalin('base', 'Mnodes'); else, M = 52; end
 if evalin('base', 'exist(''solver'',''var'')'), solver = evalin('base', 'solver'); else, solver = 'lm'; end
+if evalin('base', 'exist(''placement'',''var'')'), placement = evalin('base', 'placement'); else, placement = 'uniform'; end
 
 T = load(fullfile(resDir, 'z0_accept2_trace.mat'));
 A = load(fullfile(resDir, 'p0i_fd_finish.mat'));  a = A.anchor;
@@ -32,8 +33,8 @@ P = struct('muStar', P0.muStar, 'c', P0.c, 'Tmax', Tmax, 'eps', 1, ...
            'odeRelTol', 1e-13, 'odeAbsTol', 1e-15);
 lam0 = T.lam(:);
 
-fprintf('=== Z1: multiple shooting @ 75 mN, eps=1, M=%d arcs, solver=%s ===\n', M, solver);
-[z0, prob, si] = ztl_ms_seed(lam0, rv0, rvf, tfL, P, M);
+fprintf('=== Z1: multiple shooting @ 75 mN, eps=1, M=%d arcs, solver=%s, nodes=%s ===\n', M, solver, placement);
+[z0, prob, si] = ztl_ms_seed(lam0, rv0, rvf, tfL, P, M, placement);
 fprintf('seed: maxCont=%.2e (on flow), termErr=%.4e (= SS floor)\n', ...
         si.maxContSeed, si.termErrSeed);
 

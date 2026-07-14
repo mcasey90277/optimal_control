@@ -13,18 +13,18 @@ Legend: ✅ done/validated · 🟡 partial · ⬜ open
 |---|---|---|---|
 | **min-time** | direct | 🟡 `attic/solve_tfmin_nlp` (fmincon; converges at fine mesh, "easy case") | ⬜ fmincon doesn't scale (t_f plunges) |
 | | indirect | ✅ single-shoot = pumpkyn to 8 sig figs; **MS 4e-9** (`min_time/mintime_ms_*`) | ⬜ MS retarget fights shooting sensitivity |
-| **min-energy** (var t_f) | direct | ✅ energy backbones factor 1.12–1.95 (`sundman_minfuel/results/energy`) | ✅ **gravity-homotopy seed 1.8e-15** (`sundman_minfuel/gen_elfo_energy_gravhom.m` → `results/energy_elfo_freetf.mat`, tf 33.5 d, 15.7% prop) |
+| **min-energy** (var t_f) | direct | ✅ energy backbones factor 1.12–1.95 (`sundman_minfuel/results/energy`) | ✅ **gravity-homotopy seed 1.8e-15** (`elfo/gen_elfo_energy_gravhom.m` → `elfo/results/energy_elfo_freetf.mat`, tf 33.5 d, 15.7% prop) |
 | | indirect | ✅ Sundman-MS 75 mN anchor **4.8e-10** (`ztl/results/z1_sun_anchor_75mN.mat`); band via costates 🟡 | ⬜ (energy seed now exists; not yet run) |
-| **min-fuel** (var t_f) | direct | ✅ PSR pipeline, 3- & 25-switch bang-bang certified, band [1.12,1.95] | 🟡 **ε=0 reached at tf=33.5 d (1.20×)**: 34-switch bang-bang, 14.5% prop, def 5.7e-15, verified (`gen_elfo_minfuel.m`→`minfuel_elfo.mat`). tf-GRID map pending (energy band ⊋ fuel band) |
+| **min-fuel** (var t_f) | direct | ✅ PSR pipeline, 3- & 25-switch bang-bang certified, band [1.12,1.95] | 🟡 **ε=0 reached at tf=33.5 d (1.20×)**: 34-switch bang-bang, 14.5% prop, def 5.7e-15, verified (`elfo/gen_elfo_minfuel.m`→`elfo/results/minfuel_elfo.mat`). tf-GRID map pending (energy band ⊋ fuel band) |
 | | indirect | 🟡 IFS/ms_band: 1.12x = 10 switches certified; band = conditioning wall | ⬜ (energy seed exists; not yet run) |
 
 ## The ELFO-column blocker is CLEARED (2026-07-13)
 
 The **GTO→ELFO min-ENERGY seed** — the one missing input the whole ELFO column
-was blocked on — is MADE: `sundman_minfuel/results/energy_elfo_freetf.mat`,
+was blocked on — is MADE: `elfo/results/energy_elfo_freetf.mat`,
 defect **1.8e-15**, independently verified. Built by the **gravity-homotopy
-ladder** `gen_elfo_energy_gravhom.m` on the new free-t_f two-primary solver
-`sundman_minfuel/casadi_energy_freetf.m` (a GPT-5.6-terra + Gemini 3.1 Pro design
+ladder** `elfo/gen_elfo_energy_gravhom.m` on the new free-t_f two-primary solver
+`elfo/casadi_energy_freetf.m` (a GPT-5.6-terra + Gemini 3.1 Pro design
 review killed the earlier direct-min-time-collocation plan as a detour and
 prescribed this route instead). Full build record + the two extra fixes (pin
 t_f; leg order clock-on-before-retarget with gravity off) in `elfo/ELFO_RETARGET.md`.
@@ -34,12 +34,17 @@ the energy seed with ε:1→0. Then the indirect ELFO cells.
 
 ## Key module map
 
-- `sundman_minfuel/` — direct min-energy backbones + min-fuel (Sundman collocation).
-  ELFO: `casadi_energy_freetf.m` (free-t_f, two-primary clock, gravity homotopy);
+- `sundman_minfuel/` — direct min-energy backbones + tulip min-fuel (Sundman
+  collocation); the shared solver engine (`cr3bp_lt_params`, `minfuel_config`)
+  that the per-target deliverables reference on the path.
+- `elfo/` — GTO→ELFO direct deliverable (self-contained sibling of PSR;
+  shared-path to the sundman_minfuel engine; reorg 2026-07-14):
+  `casadi_energy_freetf.m` (free-t_f, two-primary clock, gravity homotopy);
   `gen_elfo_energy_gravhom.m` (4-leg ladder → energy seed); `gen_elfo_minfuel.m`
   (ε→0 fuel); `run_elfo_minfuel.m` (entry: solve→export→verify→movie, target-tagged);
-  `elfo_export_data.m` (data products); `gen_elfo_energy_tfsweep.m` (tf-band map).
-- `PSR/` — PMP-Steered Refinement (direct min-fuel pipeline) + ELFO retarget work.
+  `elfo_export_data.m` (data products); `gen_elfo_energy_tfsweep.m` (tf-band map);
+  build record `ELFO_RETARGET.md`.
+- `PSR/` — PMP-Steered Refinement (direct GTO→tulip min-fuel pipeline).
 - `ztl/` — indirect Sundman multiple-shooting (energy anchor 4.8e-10).
 - `min_time/` — min-time (single + multiple shooting); tulip MS validated 4e-9.
 - `ms_band/`, `ifs/` — indirect min-fuel band attempts (conditioning wall).

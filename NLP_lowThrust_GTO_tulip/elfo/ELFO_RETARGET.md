@@ -147,7 +147,7 @@ GTO->ELFO energy seed. Strong, independent convergence:
   rewards the optimizer for shrinking r (diving at a primary to slow the clock)
   -- which retroactively explains route (5)'s "t_f plunges."
 - **Fix Route (1) instead**, via three changes (all now built into
-  `sundman_minfuel/casadi_energy_freetf.m`):
+  `elfo/casadi_energy_freetf.m`):
   1. **Two-primary Sundman clock** kappa=(r1^-q + (r2/D)^-q)^(-p/q), p=1.5, q~4,
      D=moonZone~0.15 (~lunar SOI). Recovers r1^p near Earth, (r2/D)^p near Moon;
      redistributes mesh into the lunar-capture arc where the single-primary clock
@@ -177,7 +177,7 @@ as expected; that is the driver's job).
 
 # GTO->ELFO min-ENERGY seed: DONE (2026-07-13)
 
-**SOLVED.** `sundman_minfuel/gen_elfo_energy_gravhom.m` produced a
+**SOLVED.** `elfo/gen_elfo_energy_gravhom.m` produced a
 machine-precision GTO->ELFO min-energy solution: `results/energy_elfo_freetf.mat`
 (9-row free-t_f, tf=7.5488 ND=33.46 d, mf=0.8430 [15.7% prop], terminal dMoon
 16799 km at full CR3BP gravity). Independently verified (solver-free MATLAB defect
@@ -224,7 +224,7 @@ eps-reached / switches / mf. Output = the ELFO min-fuel convergence map.
 
 # Entry pipeline: run_elfo_minfuel (the run_psr analog, 2026-07-13)
 
-`sundman_minfuel/run_elfo_minfuel.m` is the editable-parameters entry driver
+`elfo/run_elfo_minfuel.m` is the editable-parameters entry driver
 (mirrors PSR/run_psr): pick target/factor/epsMin, and it runs
   stage 2 SOLVE   energy->fuel homotopy (gen_elfo_minfuel on casadi_energy_freetf)
   stage 4 EXPORT  data products -> ../PSR_data/psr_data_<target>_tf<f>_sw<k>_minEps<e>.mat

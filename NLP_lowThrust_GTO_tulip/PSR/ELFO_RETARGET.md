@@ -204,7 +204,20 @@ ELFO 0.00). `verify_elfo_seed.m`.
    the retarget with the clock already on (terminal resolved). Every leg then
    converges to ~1e-14; edge stayed ~30-38% throughout.
 
-**Next: min-fuel GTO->ELFO.** Re-run `casadi_energy_freetf` from
-energy_elfo_freetf.mat with epsilon ramped 1->0 (fuel runs on the free-t_f
-two-primary solver -- the lunar leg needs that clock, NOT the old fixed-t_f
-casadi_minfuel_sundman pipeline). This is now unblocked.
+**Min-fuel GTO->ELFO at tf=1.20x: DONE (2026-07-13).** `gen_elfo_minfuel.m`
+ramped epsilon 1->0 from the energy seed (fixed tf=7.5488 ND, two-primary clock,
+full gravity): reached eps=0 (pure FUEL) at machine precision. Result
+`minfuel_elfo.mat`: **34-switch bang-bang, edge 99.6%, mf=0.8545 (14.5% prop)**,
+defect 5.7e-14, independently verified. The epsilon ladder: eps=0.8 -> 8 sw,
+0.6 -> 8, 0.4 -> 18, 0.2 -> 40, 0.0 -> 34 sw (count settles as near-switches
+resolve). The sharpening wall that left the tulip many-switch case open did NOT
+stop this -- the two-primary clock keeps the lunar-arc mesh resolved through
+bang-bang.
+
+**Next: the min-fuel tf-GRID (per [[minfuel-tf-grid-strategy]]).** Min-fuel is a
+tf-grid convergence map, not a single-tf solve (energy band is wider than the
+eps=0-convergent band; some tf's stall before fuel). tf=1.20x is grid-point #1
+(reaches eps=0). Plan: tf-continuation on `casadi_energy_freetf` (step opts.tfTarget)
+to spread ELFO energy seeds across a tf band -- cheaper than re-running the full
+gravity ladder per tf -- then `gen_elfo_minfuel` at each grid tf, recording
+eps-reached / switches / mf. Output = the ELFO min-fuel convergence map.

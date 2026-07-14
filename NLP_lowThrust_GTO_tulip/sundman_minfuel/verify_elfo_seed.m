@@ -4,10 +4,15 @@
 here = fileparts(mfilename('fullpath'));  cd(here);  setup_paths();
 addpath(fullfile(here,'..','PSR'));
 cfg = minfuel_config();  p = cr3bp_lt_params(cfg.thrustN, cfg.m0kg, cfg.ispS);
-S = load(fullfile(here,'results','energy_elfo_freetf.mat'));
+if ~exist('SEEDFILE','var') || isempty(SEEDFILE)
+    SEEDFILE = fullfile(here,'results','energy_elfo_freetf.mat');
+end
+S = load(SEEDFILE);
 
-fprintf('seed: X is %dx%d, U %dx%d, moonZone=%.3f muGain=%.2f\n', ...
-        size(S.X,1),size(S.X,2),size(S.U,1),size(S.U,2),S.moonZone,S.muGain);
+muGainS = 1;  if isfield(S,'muGain'), muGainS = S.muGain; end
+epsS = NaN;   if isfield(S,'epsilon'), epsS = S.epsilon; end
+fprintf('seed: X is %dx%d, U %dx%d, moonZone=%.3f muGain=%.2f eps=%.2f\n', ...
+        size(S.X,1),size(S.X,2),size(S.U,1),size(S.U,2),S.moonZone,muGainS,epsS);
 r0err = norm(S.X(1:6,1)   - S.rv0(:));
 rferr = norm(S.X(1:6,end) - S.rvf(:));
 mMoon = [1-p.muStar,0,0];

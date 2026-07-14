@@ -15,7 +15,7 @@ Legend: ✅ done/validated · 🟡 partial · ⬜ open
 | | indirect | ✅ single-shoot = pumpkyn to 8 sig figs; **MS 4e-9** (`min_time/mintime_ms_*`) | ⬜ MS retarget fights shooting sensitivity |
 | **min-energy** (var t_f) | direct | ✅ energy backbones factor 1.12–1.95 (`sundman_minfuel/results/energy`) | ✅ **gravity-homotopy seed 1.8e-15** (`sundman_minfuel/gen_elfo_energy_gravhom.m` → `results/energy_elfo_freetf.mat`, tf 33.5 d, 15.7% prop) |
 | | indirect | ✅ Sundman-MS 75 mN anchor **4.8e-10** (`ztl/results/z1_sun_anchor_75mN.mat`); band via costates 🟡 | ⬜ (energy seed now exists; not yet run) |
-| **min-fuel** (var t_f) | direct | ✅ PSR pipeline, 3- & 25-switch bang-bang certified, band [1.12,1.95] | 🟡 **UNBLOCKED**: energy seed made; run `casadi_energy_freetf` ε:1→0 from it |
+| **min-fuel** (var t_f) | direct | ✅ PSR pipeline, 3- & 25-switch bang-bang certified, band [1.12,1.95] | 🟡 **ε=0 reached at tf=33.5 d (1.20×)**: 34-switch bang-bang, 14.5% prop, def 5.7e-15, verified (`gen_elfo_minfuel.m`→`minfuel_elfo.mat`). tf-GRID map pending (energy band ⊋ fuel band) |
 | | indirect | 🟡 IFS/ms_band: 1.12x = 10 switches certified; band = conditioning wall | ⬜ (energy seed exists; not yet run) |
 
 ## The ELFO-column blocker is CLEARED (2026-07-13)

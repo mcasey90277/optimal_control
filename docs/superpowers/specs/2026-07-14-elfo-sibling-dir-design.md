@@ -75,6 +75,7 @@ Files relocated with `git mv` (preserve history):
 | `elfo_export_data.m` | `sundman_minfuel/` |
 | `verify_elfo_seed.m` | `sundman_minfuel/` |
 | `smoke_energy_freetf.m` | `sundman_minfuel/` |
+| `smoke_fixedtf.m` | `sundman_minfuel/` (free-tf solver smoke; sole external caller of `casadi_energy_freetf`) |
 | `gto_elfo_endpoints.m` | `PSR/` |
 | `probe_elfo_target.m` | `PSR/` |
 

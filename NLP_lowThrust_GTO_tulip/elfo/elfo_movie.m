@@ -1,7 +1,7 @@
 function elfo_movie(solFile, outStem, titleStr, mode, bgTrace)
 % ELFO_MOVIE  Control movie for a GTO->ELFO (or any Sundman min-fuel) solution.
 %
-% Renders the GTO->tulip transfer in the rotating CR3BP frame with the control
+% Renders the GTO->ELFO (or GTO->tulip) transfer in the rotating CR3BP frame with the control
 % law: trajectory colored by throttle state (red = full-thrust burn, blue =
 % coast), primer thrust-direction arrow on the spacecraft during burns, a
 % synced bang-bang throttle strip, a running Delta-V accumulation curve, and a

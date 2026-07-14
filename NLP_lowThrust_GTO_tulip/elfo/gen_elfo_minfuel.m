@@ -34,7 +34,6 @@ if nargin < 1, opts = struct(); end
 gd = @(f,d) getdef(opts,f,d);
 
 here = fileparts(mfilename('fullpath'));  cd(here);  setup_paths();
-addpath(fullfile(here,'..','PSR'));
 resDir = fullfile(here,'results');
 cfg = minfuel_config();  p = cr3bp_lt_params(cfg.thrustN, cfg.m0kg, cfg.ispS);
 

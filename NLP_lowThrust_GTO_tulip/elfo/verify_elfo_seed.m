@@ -2,7 +2,6 @@
 % min-energy solution: endpoints hit, terminal really at the ELFO, dynamics
 % residual small at full gravity + two-primary clock.
 here = fileparts(mfilename('fullpath'));  cd(here);  setup_paths();
-addpath(fullfile(here,'..','PSR'));
 cfg = minfuel_config();  p = cr3bp_lt_params(cfg.thrustN, cfg.m0kg, cfg.ispS);
 if ~exist('SEEDFILE','var') || isempty(SEEDFILE)
     SEEDFILE = fullfile(here,'results','energy_elfo_freetf.mat');

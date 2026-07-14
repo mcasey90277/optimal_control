@@ -54,14 +54,13 @@ function outFile = gen_elfo_energy_gravhom(opts)
 %
 % REFERENCES:
 %   [1] casadi_energy_freetf.m (the free-t_f two-primary solver this drives).
-%   [2] PSR/gen_elfo_energy_backbone.m (the fixed-t_f predecessor + wall record).
+%   [2] elfo/attic/gen_elfo_energy_backbone.m (the fixed-t_f predecessor + wall record).
 %   [3] PSR/ELFO_RETARGET.md (design-review verdict this implements).
 
 if nargin < 1, opts = struct(); end
 gd = @(f,d) getdef(opts,f,d);
 
 here = fileparts(mfilename('fullpath'));  cd(here);  setup_paths();
-addpath(fullfile(here,'..','PSR'));               % for gto_elfo_endpoints
 resDir = fullfile(here,'results');  if ~exist(resDir,'dir'), mkdir(resDir); end
 ckptFile = fullfile(resDir,'energy_elfo_gravhom_ckpt.mat');
 

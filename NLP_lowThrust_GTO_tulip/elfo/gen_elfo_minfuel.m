@@ -4,7 +4,7 @@ function outFile = gen_elfo_minfuel(opts)
 %
 % Called by RUN_ELFO_MINFUEL (the entry driver) and also runnable standalone.
 % Consumes a converged min-ENERGY seed (energy_elfo_freetf.mat, or a tf-grid seed
-% energy_elfo_tf####.mat) and sweeps epsilon 1 -> epsMin:
+% energy_elfo_f####.mat) and sweeps epsilon 1 -> epsMin:
 %   J(eps) = Int[s]dt - eps*Int[s(1-s)]dt   (physical-time measure)
 %   eps=1 -> Int[s^2]dt ENERGY (the seed) ;  eps=0 -> Int[s]dt FUEL (bang-bang)
 % Everything else is held at the seed's converged configuration: t_f PINNED

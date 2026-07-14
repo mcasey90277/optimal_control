@@ -11,13 +11,13 @@ function outFile = gen_elfo_energy_tfsweep(opts)
 % (the eps->0 fuel sweep per tf) has ready warm starts.
 %
 % INPUTS:
-%   opts - (optional): .tfStep[0.5 ND] .tfHi[12.5] .tfLo[7.0] .maxIter[2000]
-%          .looseIter[500] .stepMin[0.0625] .resume[true]
+%   opts - (optional): .factorLo[1.11] .factorHi[2.00] .factorStep[0.08]
+%          .factorStepMin[0.01] .maxIter[2000] .looseIter[500] .resume[true]
 %
 % OUTPUTS:
 %   outFile - results/energy_elfo_tfgrid.mat: struct array .grid(tf, ok, mf, edge,
 %             switches, file) and the band [tfLo tfHi]. Per-tf seeds saved as
-%             results/energy_elfo_tf<NNNN>.mat (NNNN = round(1000*tf)).
+%             results/energy_elfo_f<NNNN>.mat (NNNN = round(1000*factor)).
 %
 % REFERENCES:
 %   [1] casadi_energy_freetf.m; [2] gen_elfo_energy_gravhom.m (the base seed);
@@ -34,9 +34,11 @@ tf0 = S.X(8,end);
 ctx = struct('sigma',S.sigma,'rv0',S.rv0,'rvf',S.rvf,'Tmax',p.Tmax,'cEx',p.c, ...
     'muStar',p.muStar,'tauf0',S.tauf0,'pSund',S.pSund,'qSund',S.qSund, ...
     'moonZone',S.moonZone,'maxIter',gd('maxIter',2000),'looseIter',gd('looseIter',500), ...
-    'resDir',resDir,'tStar',p.tStar);
-tfStep = gd('tfStep',0.5);  tfHi = gd('tfHi',12.5);  tfLo = gd('tfLo',7.0);
-stepMin = gd('stepMin',0.0625);
+    'resDir',resDir,'tStar',p.tStar,'tfMin',cfg.tfMin);
+% factor band (factor = tf/tfMin), converted to ND for the continuation
+factorLo = gd('factorLo',1.11);  factorHi = gd('factorHi',2.00);  factorStep = gd('factorStep',0.08);
+tfLo = factorLo*cfg.tfMin;  tfHi = factorHi*cfg.tfMin;  tfStep = factorStep*cfg.tfMin;
+stepMin = gd('factorStepMin',0.01)*cfg.tfMin;
 
 fprintf('=== GEN_ELFO_ENERGY_TFSWEEP: tf band map from tf0=%.4f ND (%.2f d) ===\n', ...
         tf0, tf0*p.tStar/86400);
@@ -112,10 +114,11 @@ end
 function g = save_point(ctx, X, U, tf, ok)
 sigma = ctx.sigma;  rv0 = ctx.rv0;  rvf = ctx.rvf;  tauf0 = ctx.tauf0; %#ok<NASGU>
 moonZone = ctx.moonZone;  pSund = ctx.pSund;  qSund = ctx.qSund; %#ok<NASGU>
-file = fullfile(ctx.resDir, sprintf('energy_elfo_tf%04d.mat', round(1000*tf)));
+factor = tf/ctx.tfMin;
+file = fullfile(ctx.resDir, sprintf('energy_elfo_f%04d.mat', round(1000*factor)));
 save(file,'X','U','sigma','rv0','rvf','tauf0','tf','moonZone','pSund','qSund');
 ss = U(4,:);
-g = struct('tf',tf,'ok',ok,'mf',X(7,end),'edge',mean(ss>0.95|ss<0.05), ...
+g = struct('tf',tf,'factor',factor,'ok',ok,'mf',X(7,end),'edge',mean(ss>0.95|ss<0.05), ...
            'switches',sum(abs(diff(ss>0.5))),'file',file);
 end
 

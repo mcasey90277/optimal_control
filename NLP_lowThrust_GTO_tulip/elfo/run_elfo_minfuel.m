@@ -19,7 +19,7 @@
 %
 % PREREQUISITE: an ELFO min-ENERGY seed at this t_f must exist -- the base seed
 % energy_elfo_freetf.mat (tf=7.5488 ND = 1.20x, from gen_elfo_energy_gravhom), or
-% a tf-grid seed energy_elfo_tf####.mat (from gen_elfo_energy_tfsweep). Remember
+% a tf-grid seed energy_elfo_f####.mat (from gen_elfo_energy_tfsweep). Remember
 % the energy band is WIDER than the eps=0-convergent band: some t_f reach fuel,
 % some stall -- that map is the point of a t_f sweep (minfuel-tf-grid-strategy).
 %
@@ -65,7 +65,7 @@ looseIter= 500;           % IPOPT cap (loose probe)
 tf = factor * cfg.tfMin;
 if strcmpi(seedSpec, 'auto')
     seedFile = '';
-    cand = fullfile(resDir, sprintf('energy_elfo_tf%04d.mat', round(1000*tf)));  % tf-grid seed
+    cand = fullfile(resDir, sprintf('energy_elfo_f%04d.mat', round(1000*factor)));  % factor-keyed tf-grid seed
     base = fullfile(resDir, 'energy_elfo_freetf.mat');                            % base seed (1.20x)
     if isfile(cand)
         seedFile = cand;

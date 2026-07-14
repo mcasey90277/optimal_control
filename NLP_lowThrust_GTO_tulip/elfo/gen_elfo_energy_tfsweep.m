@@ -10,6 +10,12 @@ function outFile = gen_elfo_energy_tfsweep(opts)
 % (where energy stops converging) and banks a seed at each grid tf, so Phase 2
 % (the eps->0 fuel sweep per tf) has ready warm starts.
 %
+% RESUMABLE (opts.resume, default true): each direction restarts from the
+% furthest already-banked seed instead of the base, so a MEX crash mid-sweep
+% only loses the in-flight solve. The tf-grid summary is scanned from the banked
+% seed files on disk, so it is complete no matter how many restarts it took.
+% The crash-retry loop is driven by the elfo_energy_sweep.sh wrapper.
+%
 % INPUTS:
 %   opts - (optional): .factorLo[1.11] .factorHi[2.00] .factorStep[0.08]
 %          .factorStepMin[0.01] .maxIter[2000] .looseIter[500] .resume[true]
@@ -43,15 +49,28 @@ stepMin = gd('factorStepMin',0.01)*cfg.tfMin;
 fprintf('=== GEN_ELFO_ENERGY_TFSWEEP: tf band map from tf0=%.4f ND (%.2f d) ===\n', ...
         tf0, tf0*p.tStar/86400);
 
-% seed grid-point at tf0 itself
-grid = save_point(ctx, S.X, S.U, tf0, true);   % the base seed (already converged)
+% base grid-point (always re-bank the converged base at tf0)
+save_point(ctx, S.X, S.U, tf0, true);
 
-% --- sweep UP -----------------------------------------------------------------
-grid = [grid, sweep_dir(ctx, S.X, S.U, tf0, +tfStep, tfHi, stepMin)];
-% --- sweep DOWN ---------------------------------------------------------------
-grid = [grid, sweep_dir(ctx, S.X, S.U, tf0, -tfStep, tfLo, stepMin)];
+% --- resume: continue each direction from the furthest already-banked seed ----
+% A MEX crash mid-sweep loses only the in-flight solve; re-running picks up from
+% the last banked seed in each direction instead of redoing from the base.
+resume = gd('resume', true);
+upX = S.X;  upU = S.U;  upTf = tf0;   dnX = S.X;  dnU = S.U;  dnTf = tf0;
+if resume
+    [upTf, upX, upU, nUp] = furthest_banked(resDir, tf0, tfHi, +1, tf0, S.X, S.U);
+    [dnTf, dnX, dnU, nDn] = furthest_banked(resDir, tf0, tfLo, -1, tf0, S.X, S.U);
+    if nUp > 0, fprintf('  RESUME up   from tf=%.4f (%d banked up-seed(s))\n',   upTf, nUp); end
+    if nDn > 0, fprintf('  RESUME down from tf=%.4f (%d banked down-seed(s))\n', dnTf, nDn); end
+end
 
-% --- summary ------------------------------------------------------------------
+% --- sweep UP / DOWN (side-effecting: banks a seed per step; summary scanned
+%     from disk below so it is complete regardless of how many restarts it took)
+sweep_dir(ctx, upX, upU, upTf, +tfStep, tfHi, stepMin);
+sweep_dir(ctx, dnX, dnU, dnTf, -tfStep, tfLo, stepMin);
+
+% --- summary: scan ALL banked per-factor seeds in the band --------------------
+grid = scan_grid(resDir, tfLo, tfHi, cfg.tfMin);
 [~,ord] = sort([grid.tf]);  grid = grid(ord);
 okv = [grid.ok];  tfs = [grid.tf];
 tfLoB = min(tfs(okv));  tfHiB = max(tfs(okv));
@@ -120,6 +139,45 @@ save(file,'X','U','sigma','rv0','rvf','tauf0','tf','moonZone','pSund','qSund');
 ss = U(4,:);
 g = struct('tf',tf,'factor',factor,'ok',ok,'mf',X(7,end),'edge',mean(ss>0.95|ss<0.05), ...
            'switches',sum(abs(diff(ss>0.5))),'file',file);
+end
+
+% ===========================================================================
+function [tfS, XS, US, n] = furthest_banked(resDir, tfBase, tfLimit, sgn, tf0, X0, U0)
+% FURTHEST_BANKED  Furthest already-banked per-factor seed strictly beyond tfBase
+% toward tfLimit (in direction sgn). Returns its (tf, X, U) to resume the sweep,
+% or the base (tf0, X0, U0) if none is banked. n = number of in-range banked seeds.
+% Matches only energy_elfo_f<digits>.mat (NOT the base energy_elfo_freetf.mat).
+tfS = tf0;  XS = X0;  US = U0;  n = 0;  best = [];
+d = dir(fullfile(resDir, 'energy_elfo_f*.mat'));
+for k = 1:numel(d)
+    if isempty(regexp(d(k).name, '^energy_elfo_f\d+\.mat$', 'once')), continue; end
+    L = load(fullfile(resDir, d(k).name), 'tf', 'X', 'U');
+    if ~isfield(L, 'tf'), continue; end
+    beyond = (sgn > 0 && L.tf > tfBase+1e-9 && L.tf <= tfLimit+1e-9) || ...
+             (sgn < 0 && L.tf < tfBase-1e-9 && L.tf >= tfLimit-1e-9);
+    if ~beyond, continue; end
+    n = n + 1;
+    if isempty(best) || (sgn > 0 && L.tf > best) || (sgn < 0 && L.tf < best)
+        best = L.tf;  tfS = L.tf;  XS = L.X;  US = L.U;
+    end
+end
+end
+
+% ===========================================================================
+function grid = scan_grid(resDir, tfLo, tfHi, tfMin)
+% SCAN_GRID  Build the tf-grid summary from every banked per-factor seed whose
+% tf falls in [tfLo, tfHi] (so the summary is complete across sweep restarts).
+grid = struct('tf',{},'factor',{},'ok',{},'mf',{},'edge',{},'switches',{},'file',{});
+d = dir(fullfile(resDir, 'energy_elfo_f*.mat'));
+for k = 1:numel(d)
+    if isempty(regexp(d(k).name, '^energy_elfo_f\d+\.mat$', 'once')), continue; end
+    f = fullfile(resDir, d(k).name);
+    L = load(f, 'tf', 'X', 'U');
+    if ~isfield(L, 'tf') || L.tf < tfLo-1e-9 || L.tf > tfHi+1e-9, continue; end
+    ss = L.U(4,:);
+    grid(end+1) = struct('tf',L.tf,'factor',L.tf/tfMin,'ok',true,'mf',L.X(7,end), ...
+        'edge',mean(ss>0.95|ss<0.05),'switches',sum(abs(diff(ss>0.5))),'file',f); %#ok<AGROW>
+end
 end
 
 % ===========================================================================

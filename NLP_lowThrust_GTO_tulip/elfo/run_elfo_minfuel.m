@@ -32,7 +32,7 @@
 %% 0. Paths
 %% ------------------------------------------------------------------------
 here = fileparts(mfilename('fullpath'));
-cd(here);  setup_paths();  addpath(fullfile(here,'..','PSR'));
+cd(here);  setup_paths();
 resDir = fullfile(here,'results');
 cfg = minfuel_config();
 p   = cr3bp_lt_params(cfg.thrustN, cfg.m0kg, cfg.ispS);
@@ -139,7 +139,7 @@ if ~strcmpi(movieMode, 'none')
         titleStr = sprintf('GTO\\rightarrow%s, t_f=%.2fx min-time (smooth \\epsilon=%.3g)', target, factor, epsMin);
     end
     movieStem = fullfile(resDir, sprintf('movie_%s_tf%s_minEps%s', target, fTag, eTag));
-    psr_movie(outFile, movieStem, titleStr, movieMode, elfoTrace(:,1:3));
+    elfo_movie(outFile, movieStem, titleStr, movieMode, elfoTrace(:,1:3));
 end
 
 fprintf('\n=== RUN_ELFO_MINFUEL DONE. Solution: %s ===\n', outFile);

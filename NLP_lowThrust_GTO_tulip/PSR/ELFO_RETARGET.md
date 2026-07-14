@@ -135,12 +135,76 @@ Net: the indirect min-time MS is a real, validated result for the tulip, but
 **retargeting to the ELFO resists both fixed-t_f direct continuation (Moon-ward
 stiffness) and shooting continuation (sensitivity).** See `min_time/README.md`.
 
-# Where we are going (open)
+# External design review (GPT-5.6-terra + Gemini 3.1 Pro, 2026-07-13)
 
-**Goal: min-fuel GTO->ELFO** (as we have for GTO->tulip). That needs a
-**GTO->ELFO min-ENERGY seed** (the homotopy root the PSR fuel pipeline consumes),
-which is exactly the missing piece. The one path that would have BOTH
-direct-collocation robustness AND floating t_f -- and moot the edge issue via
-always-burn -- is a **direct min-time collocation** (modify `casadi_minfuel_
-sundman` to minimize t_f, free final time). That is the leading candidate for
-manufacturing the GTO->ELFO energy seed; not yet built.
+Fired a two-model design review (not a code audit) on how to manufacture the
+GTO->ELFO energy seed. Strong, independent convergence:
+
+- **KILL the direct-min-time-collocation plan.** Both models reject it as a
+  detour: min-time is s==1 bang-everywhere, structurally far from a smooth energy
+  ramp, so min-time->energy re-introduces a hard restructuring. Both also flagged
+  the SAME trap in a naive free-t_f min-time: minimizing t(tau_f)=Int[kappa]dtau
+  rewards the optimizer for shrinking r (diving at a primary to slow the clock)
+  -- which retroactively explains route (5)'s "t_f plunges."
+- **Fix Route (1) instead**, via three changes (all now built into
+  `sundman_minfuel/casadi_energy_freetf.m`):
+  1. **Two-primary Sundman clock** kappa=(r1^-q + (r2/D)^-q)^(-p/q), p=1.5, q~4,
+     D=moonZone~0.15 (~lunar SOI). Recovers r1^p near Earth, (r2/D)^p near Moon;
+     redistributes mesh into the lunar-capture arc where the single-primary clock
+     starved. (terra's soft-min form + gemini's D-scaling; D<=0 -> original.)
+  2. **Free physical t_f with a BANDED KKT** via a constant slack STATE cScale
+     (Betts): dt/dtau=cScale*kappa, dcScale/dtau=0. One number tied by LOCAL
+     continuity constraints -> Jacobian stays banded (a free SCALAR tau_f would
+     make one dense column -> OOM). Every intermediate target is now reachable at
+     some t_f, killing the fixed-t_f "can't-reach-terminal" wall.
+  3. **Moon-gravity homotopy**: hold rvf FIXED, continue muGain: 0->1 scaling
+     ONLY the Moon-gravity term -muGain*muStar*rr/r3 (NOT muStar in the frame/
+     Coriolis -- that would move the barycenter under the BCs). muGain=0 is a
+     well-less near-2-body transfer; the linear Cartesian retarget that was toxic
+     at muGain=1 is benign with the well off.
+- Where they diverged: terra preferred a free ELFO-insertion-phase terminal
+  manifold; gemini preferred the gravity homotopy. Taken as complementary
+  (gravity homotopy first -- cheaper, fixed true target; phase-freedom is the
+  fallback structural upgrade). Both ranked meet-in-the-middle two-phase
+  collocation as the #2 fallback (as DIRECT matching, NOT backward shooting).
+
+Solver `casadi_energy_freetf.m` smoke-validated 2026-07-13 (N=4000 f1.20
+backbone): with the clock matching the backbone (moonZone=0) the free-t_f slack
+formulation reproduces it to **9.5e-8** in 40 iters (t_f floats 7.55->8.30,
+cScale~1.0, no runaway) -- proving the KKT stays solvable and t_f is tame. The
+two-primary + gravity-off cases construct and step (defect high pre-continuation,
+as expected; that is the driver's job).
+
+# GTO->ELFO min-ENERGY seed: DONE (2026-07-13)
+
+**SOLVED.** `sundman_minfuel/gen_elfo_energy_gravhom.m` produced a
+machine-precision GTO->ELFO min-energy solution: `results/energy_elfo_freetf.mat`
+(9-row free-t_f, tf=7.5488 ND=33.46 d, mf=0.8430 [15.7% prop], terminal dMoon
+16799 km at full CR3BP gravity). Independently verified (solver-free MATLAB defect
+recompute): defect **1.77e-15**, unit-norm 1.2e-12, endpoints exact (GTO 8e-33,
+ELFO 0.00). `verify_elfo_seed.m`.
+
+**Two fixes were needed beyond the three review changes:**
+1. **Pin t_f** (opts.tfTarget) -- free-t_f min-ENERGY is ill-posed (energy optimum
+   drifts t_f -> longer time, thinner thrust, lower Int[s^2]dt; IPOPT wandered off
+   the warm start, loose->3.7e-3, tight->0.21). Constraining t(tau_f)=tfTarget and
+   letting cScale float to satisfy it makes it well-posed (machine precision).
+   [The slack state still earns its keep: a clean single-DOF way to hold a fixed
+   t_f under the *changing* two-primary clock.]
+2. **Leg ORDER** (found empirically, each step observation-driven):
+   LEG 0  free-t_f convert (mu=1, single-primary, tulip)   -- machine precision
+   LEG A  gravity OFF muGain 1->0 (single-primary, tulip)  -- cleanest leg
+   LEG B  clock ON moonZone 0->0.15 (mu=0, tulip)          -- BENIGN with well off
+   LEG C  retarget tulip->ELFO (mu=0, clock on)            -- THE crux, walked clean
+   LEG D  gravity ON muGain 0->1 (ELFO, two-primary)       -- dissolves s=0.45 wall
+   Two dead orders were tried and rejected: (i) retarget BEFORE clock-on ->
+   mesh-starved near-Moon terminal -> dual stalls (iter 973, tiny steps); (ii)
+   clock-on at mu=1 -> concentrating nodes in the full-gravity well stiffens at
+   moonZone~0.09. Lesson: do the clock-on with gravity OFF (benign re-mesh), and
+   the retarget with the clock already on (terminal resolved). Every leg then
+   converges to ~1e-14; edge stayed ~30-38% throughout.
+
+**Next: min-fuel GTO->ELFO.** Re-run `casadi_energy_freetf` from
+energy_elfo_freetf.mat with epsilon ramped 1->0 (fuel runs on the free-t_f
+two-primary solver -- the lunar leg needs that clock, NOT the old fixed-t_f
+casadi_minfuel_sundman pipeline). This is now unblocked.

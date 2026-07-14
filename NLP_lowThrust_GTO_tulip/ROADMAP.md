@@ -13,24 +13,30 @@ Legend: ✅ done/validated · 🟡 partial · ⬜ open
 |---|---|---|---|
 | **min-time** | direct | 🟡 `attic/solve_tfmin_nlp` (fmincon; converges at fine mesh, "easy case") | ⬜ fmincon doesn't scale (t_f plunges) |
 | | indirect | ✅ single-shoot = pumpkyn to 8 sig figs; **MS 4e-9** (`min_time/mintime_ms_*`) | ⬜ MS retarget fights shooting sensitivity |
-| **min-energy** (var t_f) | direct | ✅ energy backbones factor 1.12–1.95 (`sundman_minfuel/results/energy`) | ⬜ target-homotopy stalls s=0.45 (Moon-ward) |
-| | indirect | ✅ Sundman-MS 75 mN anchor **4.8e-10** (`ztl/results/z1_sun_anchor_75mN.mat`); band via costates 🟡 | ⬜ (blocked with direct) |
-| **min-fuel** (var t_f) | direct | ✅ PSR pipeline, 3- & 25-switch bang-bang certified, band [1.12,1.95] | ⬜ **blocked on the ELFO energy seed** |
-| | indirect | 🟡 IFS/ms_band: 1.12x = 10 switches certified; band = conditioning wall | ⬜ (blocked) |
+| **min-energy** (var t_f) | direct | ✅ energy backbones factor 1.12–1.95 (`sundman_minfuel/results/energy`) | ✅ **gravity-homotopy seed 1.8e-15** (`sundman_minfuel/gen_elfo_energy_gravhom.m` → `results/energy_elfo_freetf.mat`, tf 33.5 d, 15.7% prop) |
+| | indirect | ✅ Sundman-MS 75 mN anchor **4.8e-10** (`ztl/results/z1_sun_anchor_75mN.mat`); band via costates 🟡 | ⬜ (energy seed now exists; not yet run) |
+| **min-fuel** (var t_f) | direct | ✅ PSR pipeline, 3- & 25-switch bang-bang certified, band [1.12,1.95] | 🟡 **UNBLOCKED**: energy seed made; run `casadi_energy_freetf` ε:1→0 from it |
+| | indirect | 🟡 IFS/ms_band: 1.12x = 10 switches certified; band = conditioning wall | ⬜ (energy seed exists; not yet run) |
 
-## The one blocker for the whole ELFO column
+## The ELFO-column blocker is CLEARED (2026-07-13)
 
-Everything ELFO-min-fuel needs is a **GTO→ELFO min-ENERGY seed** (the homotopy
-root the PSR fuel pipeline consumes; the pipeline is target-agnostic, so that
-seed is the only missing input). Making that seed is the active problem — see
-`PSR/ELFO_RETARGET.md` and `min_time/README.md` for the routes tried and their
-walls. Leading candidate: a **direct min-time collocation** (free t_f, built on
-`casadi_minfuel_sundman`) — the only approach with both direct-collocation
-robustness and floating t_f.
+The **GTO→ELFO min-ENERGY seed** — the one missing input the whole ELFO column
+was blocked on — is MADE: `sundman_minfuel/results/energy_elfo_freetf.mat`,
+defect **1.8e-15**, independently verified. Built by the **gravity-homotopy
+ladder** `gen_elfo_energy_gravhom.m` on the new free-t_f two-primary solver
+`sundman_minfuel/casadi_energy_freetf.m` (a GPT-5.6-terra + Gemini 3.1 Pro design
+review killed the earlier direct-min-time-collocation plan as a detour and
+prescribed this route instead). Full build record + the two extra fixes (pin
+t_f; leg order clock-on-before-retarget with gravity off) in `PSR/ELFO_RETARGET.md`.
+
+**Now open (unblocked):** min-fuel GTO→ELFO — re-run `casadi_energy_freetf` from
+the energy seed with ε:1→0. Then the indirect ELFO cells.
 
 ## Key module map
 
 - `sundman_minfuel/` — direct min-energy backbones + min-fuel (Sundman collocation).
+  ELFO: `casadi_energy_freetf.m` (free-t_f, two-primary clock, gravity homotopy) +
+  `gen_elfo_energy_gravhom.m` (the 4-leg ladder) → `results/energy_elfo_freetf.mat`.
 - `PSR/` — PMP-Steered Refinement (direct min-fuel pipeline) + ELFO retarget work.
 - `ztl/` — indirect Sundman multiple-shooting (energy anchor 4.8e-10).
 - `min_time/` — min-time (single + multiple shooting); tulip MS validated 4e-9.

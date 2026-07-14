@@ -6,11 +6,18 @@
 % convergence (seed at solution).
 %
 % Gate D (THE decisive test, 1.12x from native sigma-domain duals): seed
-% from legacy_ms_f1120.mat via sms_seed_duals (M = 50), eps-march schedule
-% [1 0.3 0.1 0.03 0.01 3e-3 1e-3 3e-4 1e-4] with relays (eps_march,
-% prob.resFun wired). Gate: eps <= 1e-3, ||R|| <= 1e-9,
-% |dV - 3.8278| < 0.005 km/s, switches == 12. This is what the time-domain
-% formulation could not do (campaign 2026-07-10 entries).
+% from legacy_ms_f1120.mat via sms_seed_duals (M = 50), eps-march with
+% relays (eps_march, prob.resFun wired). SHARP-START schedule
+% [1e-2 3e-3 1e-3 3e-4 1e-4]: the native duals sit near the eps ~ 0
+% extremal, so the march is LOCAL convergence at the sharp end — not
+% homotopy from afar. (The original smooth-first schedule [1 0.3 ...]
+% was tried first and BLOCKED at the eps=1 step: the eps=1 extremal is
+% far from the near-bang seed; trace capture in diag_s1_gateD.m showed a
+% full-rank, GN-consistent J — formulation healthy, schedule mismatched.
+% Adjudicated 2026-07-10; retry authorized with this schedule.)
+% Gate: eps <= 1e-3, ||R|| <= 1e-9, |dV - 3.8278| < 0.005 km/s,
+% switches == 12. This is what the time-domain formulation could not do
+% (campaign 2026-07-10 entries).
 %
 % Select gates by defining gateSel ('C', 'D', or 'CD') before running;
 % default 'CD'. error() on fail (nonzero exit under -batch).
@@ -42,15 +49,16 @@ end
 if contains(gateSel, 'D') && isempty(failMsg)
     tD = tic;
     matFile = '../sundman_minfuel/results/minfuel/legacy_ms_f1120.mat';
-    [Zseed, prob, info] = sms_seed_duals(matFile, 50, 1);
+    [Zseed, prob, info] = sms_seed_duals(matFile, 50, 1e-2);
     fprintf(['Gate D seed: beta = %.5f  spread %.2f%%  burnAgree %.1f%%  ' ...
              'coastAgree %.1f%%  lamT relStd %.3e  node1Err %.3e  ' ...
              'arcCheckErr %.3e\n'], info.beta, info.spreadPct, ...
             100*info.burnAgree, 100*info.coastAgree, info.lamTrelStd, ...
             info.node1Err, info.arcCheckErr);
-    fprintf('Gate D seed ||R(eps=1)|| = %.3e\n', norm(sms_residual(Zseed, prob)));
+    fprintf('Gate D seed ||R(eps=%.3g)|| = %.3e\n', prob.epsSmooth, ...
+            norm(sms_residual(Zseed, prob)));
 
-    best = eps_march(Zseed, prob, [1 0.3 0.1 0.03 0.01 3e-3 1e-3 3e-4 1e-4], 1e-9);
+    best = eps_march(Zseed, prob, [1e-2 3e-3 1e-3 3e-4 1e-4], 1e-9);
 
     if isempty(best.Z)
         failMsg = sprintf('%s Gate D: eps_march produced no converged step;', failMsg);

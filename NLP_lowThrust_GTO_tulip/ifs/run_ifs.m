@@ -60,7 +60,7 @@ if ~exist(resDir, 'dir'), mkdir(resDir); end
 % ---- transfer time --------------------------------------------------------
 % t_f = factor * tfMin, tfMin = 6.2906939607 ND. 1.12x is the canonical gate
 % (k=10 certified switches, the smallest many-switch system on disk).
-factor = 1.12;                   % t_f / t_f_min
+factor = 1.25;                   % t_f / t_f_min
 
 % ---- SEED (the DIRECT / PSR bang-bang solution to finish indirectly) -------
 % Any direct-solution .mat with out.X/out.U, out.lamDef (KKT duals), sigma,

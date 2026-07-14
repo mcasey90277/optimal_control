@@ -64,7 +64,7 @@ cfg = minfuel_config();          % campaign constants: tfMin, schedules, dirs
 % indirect min-time). The campaign's validated band for this pipeline is
 % factor >= 1.12 (below ~1.12 the direct solver itself struggles; the
 % 1.01-1.11 "transition band" is an open research problem, see [1]).
-factor = 1.15;                   % t_f / t_f_min   e.g. 1.12 ... 1.85
+factor = 2.00;                   % t_f / t_f_min   e.g. 1.12 ... 1.85
 
 % ---- SEED for the direct solve --------------------------------------------
 % The direct solve is seeded one of three ways (see minfuel_at_tf.m):
@@ -104,6 +104,8 @@ factor = 1.15;                   % t_f / t_f_min   e.g. 1.12 ... 1.85
 %              unless you set rerunDirect=true (stage 2 skips when its output
 %              file already exists).
 seedSpec   = 'energy';           % 'energy' | 'neighbor' | '/path/to/result.mat'
+%seedSpec   = '/Users/msc/Desktop/optimal_control/NLP_lowThrust_GTO_tulip/PSR_data/psr_data_tf1p150_sw20_minEps0p2.mat';
+%seedSpec   = '/Users/msc/Desktop/optimal_control/NLP_lowThrust_GTO_tulip/PSR_data/psr_data_tf1p150_sw22_minEps0p1.mat';
 seedFactor = NaN;                % only used when seedSpec = 'neighbor'
 
 % ---- direct-solve knobs ----------------------------------------------------
@@ -118,7 +120,7 @@ seedFactor = NaN;                % only used when seedSpec = 'neighbor'
 % PMP verification) do not apply. Stages 4 (export) and 6 (movie) still run on
 % the direct solution, and psr_second_order.m (NLP SSOSC) applies cleanly to a
 % smooth eps>0 solution (run it manually on the direct file).
-epsMin     = 0;                  % homotopy endpoint: 0 = bang-bang (default)
+epsMin     = 0.5;                  % homotopy endpoint: 0 = bang-bang (default)
 % epsilon schedule [] = default by seed type (cfg.schedSharpen for 'energy':
 % 0.6 -> 0 in 13 steps; cfg.schedNeighbor for the rest), truncated at epsMin.
 % Override only for experiments -- the defaults are the campaign-validated ones.

@@ -31,8 +31,10 @@ function out = minfuel_at_tf(factor, varargin)
 %
 % OUTPUTS:
 %   out - solver struct (X,U,lamDef,switches,edge,maxDefect,primerAlignDeg,...)
-%         plus .factor .tf .tf_days .dV .prop_kg .meta (provenance: date, git
-%         hash, seed source, schedule, per-step table, ipopt statuses)
+%         plus .factor .tf .tf_days .dV .prop_kg .certified (logical: at least
+%         one schedule step converged tight) .meta (provenance: date, git hash,
+%         seed source, schedule, per-step table, ipopt statuses). An uncertified
+%         result is NOT saved -- a loose iterate must never become a neighbor seed.
 %
 % REFERENCES:
 %   [1] LOW_THRUST_MINFUEL_CAMPAIGN.md ("Down-sweep CRACKED": backbone+sharpen).
@@ -86,14 +88,17 @@ for ke = 1:numel(op.sched)
             e, ok, o.maxDefect, o.switches, 100*o.edge);
     if ok, Xk=o.X; Uk=o.U; best=o; end
 end
-if isempty(best)
+certified = ~isempty(best);
+if ~certified
     warning('minfuel_at_tf:noCleanStep', ...
-        'no schedule step converged clean at factor %.3f; returning last attempt', factor);
+        ['no schedule step converged tight at factor %.3f; returning the last ' ...
+         'UNCERTIFIED attempt (will NOT be saved)'], factor);
     best = o;
 end
 
 % --- package with provenance ------------------------------------------------
 out = best;
+out.certified = certified;
 out.factor  = factor;  out.tf = tf;  out.tf_days = tf*p.tStar/86400;
 out.dV      = p.c*log(1/best.mf)*p.lStar/p.tStar;
 out.prop_kg = p.m0kg*(1-best.mf);
@@ -106,7 +111,11 @@ out.meta = struct('date', char(datetime('now','Format','yyyy-MM-dd HH:mm')), ...
 fprintf('MINFUEL_AT_TF done: f=%.3f dV=%.4f km/s sw=%d edge=%.1f%% defect=%.2g primer=%.3f\n', ...
         factor, out.dV, best.switches, 100*best.edge, best.maxDefect, best.primerAlignDeg);
 
-if op.save
+if op.save && ~certified
+    warning('minfuel_at_tf:skipSaveUncertified', ...
+        ['factor %.3f did not converge tight; NOT writing an output file (a loose ' ...
+         'iterate would poison neighbor-seed lookups). Inspect the returned struct instead.'], factor);
+elseif op.save
     if isempty(op.outFile)
         if ~exist(cfg.dirs.minfuel,'dir'), mkdir(cfg.dirs.minfuel); end
         base = cfg.fname('minfuel', factor);

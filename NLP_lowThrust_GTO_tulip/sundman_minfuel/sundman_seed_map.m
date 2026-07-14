@@ -37,7 +37,13 @@ alpha = w ./ max(sqrt(sum(w.^2,1)), 1e-9);             % unit direction (guarded
 r1  = sqrt((Xseed(1,:)+muStar).^2 + Xseed(2,:).^2 + Xseed(3,:).^2).';
 kap = r1.^pSund;
 dt  = diff(tSeed);
-dtau = dt.*0.5.*(1./kap(1:end-1) + 1./kap(2:end));     % trapezoid of dt/kappa
+% Invert the solver's OWN carried-time trapezoid so the seed carries no
+% systematic initial time-defect. The solver enforces (casadi_minfuel_sundman)
+% Dt = (dtau/2)*(kappa_L + kappa_R) on the t-state, so the exact discrete
+% inverse is dtau = 2*dt/(kappa_L + kappa_R) -- the reciprocal of the mean,
+% NOT the mean of reciprocals 0.5*(1/kL+1/kR) (they agree only when kL=kR, so
+% the old form biased fast-varying perigee intervals).
+dtau = 2*dt./(kap(1:end-1) + kap(2:end));              % discrete inverse of the t-defect trapezoid
 tau  = [0; cumsum(dtau)];  tauf0 = tau(end);  sig = tau/tauf0;
 
 [sigma, ku] = unique(sig, 'stable');

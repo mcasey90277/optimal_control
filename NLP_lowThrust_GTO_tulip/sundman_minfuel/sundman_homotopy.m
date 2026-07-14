@@ -25,7 +25,10 @@ function [best, tbl] = sundman_homotopy(p, rv0, rvf, sigma, X0, U0, tauf0, pSund
 %              improving step
 %
 % OUTPUTS:
-%   best - best (smallest-eps, tight) solver struct from CASADI_MINFUEL_SUNDMAN
+%   best - best (smallest-eps, tight) solver struct from CASADI_MINFUEL_SUNDMAN,
+%          carrying a .certified logical: true iff at least one schedule step
+%          converged tight (success & maxDefect<1e-6). When false, `best` is the
+%          last UNCERTIFIED iterate and must not be treated as a solution.
 %   tbl  - per-step table, columns [eps defect switches edge% prop_kg dV_kms]
 
 if nargin < 10 || isempty(maxIter), maxIter = 1500; end
@@ -55,8 +58,16 @@ for ie = 1:numel(epsSched)
         fprintf('   (loose step: warm start not advanced; best kept at eps=%.4g)\n', bestEps);
     end
 end
-if isempty(best), best = out; bestEps = epsSched(end); end
+certified = ~isempty(best);
+if ~certified
+    warning('sundman_homotopy:noCleanStep', ...
+        ['no homotopy step converged tight (success & maxDefect<1e-6); returning ' ...
+         'the last UNCERTIFIED iterate -- do NOT treat it as a solution']);
+    best = out;  bestEps = epsSched(end);
+end
+best.certified = certified;
 dVb = p.c*log(1/best.mf)*p.lStar/p.tStar;
-fprintf('\n=== HOMOTOPY BEST: eps=%.4g defect=%.2g switches=%d edge=%.1f%% prop=%.4f kg dV=%.4f km/s ===\n', ...
-        bestEps, best.maxDefect, best.switches, 100*best.edge, p.m0kg*(1-best.mf), dVb);
+tag = 'BEST'; if ~certified, tag = 'UNCERTIFIED (no tight step)'; end
+fprintf('\n=== HOMOTOPY %s: eps=%.4g defect=%.2g switches=%d edge=%.1f%% prop=%.4f kg dV=%.4f km/s ===\n', ...
+        tag, bestEps, best.maxDefect, best.switches, 100*best.edge, p.m0kg*(1-best.mf), dVb);
 end

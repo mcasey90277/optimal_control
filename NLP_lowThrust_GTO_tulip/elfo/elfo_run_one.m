@@ -51,7 +51,12 @@ row = struct('factor',factor,'tf',tf,'tf_days',tf*p.tStar/86400,'ok',false, ...
 % --- resumable: an existing row means this factor is done --------------------
 if isfile(resultFile) && ~rerun
     L = load(resultFile, 'row');
-    if isfield(L,'row'), row = L.row; fprintf('elfo_run_one f=%.3f: row exists -- skip\n', factor); return; end
+    % done only for a real outcome (solved, or a genuine stuck-wall). A
+    % recoverable failure (no seed / transient error: ~ok & isnan(epsFloor))
+    % is NOT cached -- re-solve so a later-built seed or a transient retries.
+    if isfield(L,'row') && (L.row.ok || ~isnan(L.row.epsFloor))
+        row = L.row;  fprintf('elfo_run_one f=%.3f: row exists (done) -- skip\n', factor);  return
+    end
 end
 
 % --- resolve the factor-keyed energy seed (base-seed fallback near 1.20x) ----

@@ -70,7 +70,7 @@ end
 % ===========================================================================
 function G = sweep_dir(ctx, X, U, tf0, dstep, tfLimit, stepMin)
 % Continuation from tf0 by dstep (signed) until tfLimit or a stuck step.
-G = struct('tf',{},'ok',{},'mf',{},'edge',{},'switches',{},'file',{});
+G = struct('tf',{},'factor',{},'ok',{},'mf',{},'edge',{},'switches',{},'file',{});
 Xk = X;  Uk = U;  tf = tf0;  step = abs(dstep);  sgn = sign(dstep);
 while (sgn > 0 && tf < tfLimit-1e-9) || (sgn < 0 && tf > tfLimit+1e-9)
     tfTry = tf + sgn*step;

@@ -1,4 +1,4 @@
-function psr_movie(solFile, outStem, titleStr, mode)
+function psr_movie(solFile, outStem, titleStr, mode, bgTrace)
 % PSR_MOVIE  Control movie for a PSR (or any Sundman min-fuel) solution.
 %
 % Renders the GTO->tulip transfer in the rotating CR3BP frame with the control
@@ -21,6 +21,13 @@ function psr_movie(solFile, outStem, titleStr, mode)
 %   titleStr - trajectory-panel title [char]
 %   mode     - 'preview' (3 stills, seconds) | 'movie' (MP4+GIF, ~10-15 min
 %              at 320 frames) [char, default 'preview']
+%   bgTrace  - (optional) [Kx3+] backdrop orbit trace to draw instead of the
+%              default tulip (e.g. the ELFO one-period trace). Omit for tulip.
+%
+% Accepts BOTH the tulip seed layout (S.out.X 8xnN) and the free-t_f ELFO layout
+% (top-level S.X 9xnN); only rows 1-8 [r;v;m;t] are used, so a 9th cScale row is
+% ignored. All panels (trajectory, throttle, running dV via the rocket equation)
+% are model-independent, so this renders either transfer correctly.
 %
 % OUTPUTS: none (files written; paths printed)
 %
@@ -38,7 +45,12 @@ earth = [-muStar 0 0];  moon = [1-muStar 0 0];
 
 % --- load solution ----------------------------------------------------------
 S  = load(solFile);
-X  = S.out.X;  U = S.out.U;  rvf = S.rvf;
+if isfield(S,'out') && isfield(S.out,'X')      % tulip seed layout
+    X = S.out.X;  U = S.out.U;
+else                                           % free-t_f ELFO layout (top-level)
+    X = S.X;      U = S.U;
+end
+rvf = S.rvf;
 r  = X(1:3,:);  m = X(7,:);  t = X(8,:);
 s  = U(4,:);   al = U(1:3,:);
 burnTol = 0.05;                          % throttle above this = BURNING (red).
@@ -49,13 +61,17 @@ dV    = c*log(1./m) * lStar/tStar;       % running Delta-V (km/s), per node
 mKg   = m0kg*m;  propKg = m0kg*(1-m);
 dVtot = dV(end);
 
-% --- tulip backdrop trace (best-effort; skip if pumpkyn unavailable) --------
+% --- backdrop orbit trace: caller-supplied (e.g. ELFO) or tulip default -----
 yTul = [];
-try
-    [~, x0T] = pumpkyn.cr3bp.getTulip((5/6)*2*pi, 7, -1, 1e-12);
-    [~, yT ] = pumpkyn.cr3bp.prop((5/6)*2*pi, x0T, muStar);
-    yTul = yT(:,1:3);
-catch
+if nargin >= 5 && ~isempty(bgTrace)
+    yTul = bgTrace(:, 1:3);                    % caller's target orbit (e.g. ELFO)
+else
+    try                                        % default tulip (best-effort)
+        [~, x0T] = pumpkyn.cr3bp.getTulip((5/6)*2*pi, 7, -1, 1e-12);
+        [~, yT ] = pumpkyn.cr3bp.prop((5/6)*2*pi, x0T, muStar);
+        yTul = yT(:,1:3);
+    catch
+    end
 end
 
 % --- fixed axis limits -------------------------------------------------------

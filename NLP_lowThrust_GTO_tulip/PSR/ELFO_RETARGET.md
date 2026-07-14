@@ -221,3 +221,25 @@ eps=0-convergent band; some tf's stall before fuel). tf=1.20x is grid-point #1
 to spread ELFO energy seeds across a tf band -- cheaper than re-running the full
 gravity ladder per tf -- then `gen_elfo_minfuel` at each grid tf, recording
 eps-reached / switches / mf. Output = the ELFO min-fuel convergence map.
+
+# Entry pipeline: run_elfo_minfuel (the run_psr analog, 2026-07-13)
+
+`sundman_minfuel/run_elfo_minfuel.m` is the editable-parameters entry driver
+(mirrors PSR/run_psr): pick target/factor/epsMin, and it runs
+  stage 2 SOLVE   energy->fuel homotopy (gen_elfo_minfuel on casadi_energy_freetf)
+  stage 4 EXPORT  data products -> ../PSR_data/psr_data_<target>_tf<f>_sw<k>_minEps<e>.mat
+                  (elfo_export_data: costates from the TWO-PRIMARY KKT duals +
+                   primer-alignment PMP diagnostic + best-effort switching fn --
+                   NOT the tulip single-primary dual-map, which would be wrong here)
+  stage 5 VERIFY  independent endpoint + solver-free defect (verify_elfo_seed)
+  stage 6 MOVIE   psr_movie (generalized: reads the 9-state free-tf layout + an
+                  ELFO orbit backdrop; the tulip pipeline is untouched)
+All outputs carry the TARGET tag ('ELFO'/'Tulip'): solution
+`minfuel_ELFO_tf1p200_sw34_minEps0.mat`, data `psr_data_ELFO_...`, movie
+`movie_ELFO_tf1p200_minEps0.{mp4,gif}`. First full movie (34-switch bang-bang,
+GTO spiral -> ELFO capture, running dV) rendered 2026-07-13.
+
+DEFERRED for ELFO (tulip single-primary fixed-tf machinery, needs two-primary
+porting): stage 3 switch-localization refinement (refine_loop) and the full
+16-dim per-arc PMP-propagation certificate (verify_direct_pmp). gen_elfo_minfuel
+now saves the solver `out` struct (with lamDef) so the export has the costates.

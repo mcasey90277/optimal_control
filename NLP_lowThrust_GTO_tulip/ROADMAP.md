@@ -35,8 +35,10 @@ the energy seed with ε:1→0. Then the indirect ELFO cells.
 ## Key module map
 
 - `sundman_minfuel/` — direct min-energy backbones + min-fuel (Sundman collocation).
-  ELFO: `casadi_energy_freetf.m` (free-t_f, two-primary clock, gravity homotopy) +
-  `gen_elfo_energy_gravhom.m` (the 4-leg ladder) → `results/energy_elfo_freetf.mat`.
+  ELFO: `casadi_energy_freetf.m` (free-t_f, two-primary clock, gravity homotopy);
+  `gen_elfo_energy_gravhom.m` (4-leg ladder → energy seed); `gen_elfo_minfuel.m`
+  (ε→0 fuel); `run_elfo_minfuel.m` (entry: solve→export→verify→movie, target-tagged);
+  `elfo_export_data.m` (data products); `gen_elfo_energy_tfsweep.m` (tf-band map).
 - `PSR/` — PMP-Steered Refinement (direct min-fuel pipeline) + ELFO retarget work.
 - `ztl/` — indirect Sundman multiple-shooting (energy anchor 4.8e-10).
 - `min_time/` — min-time (single + multiple shooting); tulip MS validated 4e-9.

@@ -122,3 +122,38 @@ pre-migration filenames and are superseded (atticked in cleanup Phase 1; see
   the fewer-switch down-band points (1.12×, 1.14×), whose overall costate scale
   is larger (their raw λ_m(τ_f) ≈ −4e-3 is a genuine zero against max|λ_m| ≈ 31).
   With the scale-invariant gate the full certified band is **1.12×–1.25× + 1.85×**.
+
+## ELFO transfer (GTO → lunar elliptical frozen orbit)
+
+The same campaign retargeted to a **lunar ELFO** (the south-pole nav orbit:
+sma 12000 km, ecc 0.69, inc 56.5°, argp 90°) instead of the tulip. The lunar
+capture leg needs a **two-primary** Sundman clock and a **free t_f**, so ELFO
+runs on a redesigned solver rather than `casadi_minfuel_sundman`:
+
+| file | role |
+|---|---|
+| `casadi_energy_freetf.m` | ELFO **core solver**: free-t_f (constant slack state `cScale`, banded KKT), two-primary clock κ=(r₁⁻�qᵁ+(r₂/D)⁻ᵠ)⁻ᵖ/ᵠ, Moon-gravity homotopy, Bertrand–Épénoy ε objective; optional pinned t_f (`tfTarget`) for well-posed energy |
+| `gen_elfo_energy_gravhom.m` | make the GTO→ELFO **min-energy seed** via the gravity-homotopy ladder (gravity off → clock on → retarget → gravity on) |
+| `gen_elfo_energy_tfsweep.m` | t_f-continuation mapping the ELFO energy band + banking a seed per grid t_f (built; not yet run) |
+| `gen_elfo_minfuel.m` | ε:1→ε_min energy→fuel homotopy core (from an energy seed) |
+| `run_elfo_minfuel.m` | **entry driver** (run_psr analog): solve → data export → verify → movie; target-tagged output names |
+| `elfo_export_data.m` | data products → `../PSR_data/psr_data_<target>_...` (costates from the two-primary KKT duals) |
+| `verify_elfo_seed.m` | independent endpoint + solver-free defect check (energy or fuel `.mat`) |
+
+**Results (t_f = 1.20× = 33.46 d):** min-energy seed defect **1.8e-15**;
+min-fuel **34-switch bang-bang**, 99.6% edge, propellant **~2.16 kg**, ΔV **~3.24
+km/s**, defect **5.7e-14** — all independently verified. Output names carry the
+target, e.g. `minfuel_ELFO_tf1p200_sw34_minEps0.mat`, so tulip and ELFO products
+never collide. Full build record: `../PSR/ELFO_RETARGET.md`.
+
+**Run:**
+```matlab
+cd sundman_minfuel
+run_elfo_minfuel        % edit the PARAMETERS block: target / factor / epsMin / movieMode
+```
+
+**Deferred** (tulip single-primary machinery, not yet ported to the two-primary
+free-t_f model): switch-localization mesh refinement and the full 16-dim per-arc
+PMP-propagation certificate. The min-fuel **t_f-grid** convergence map (the energy
+band is wider than the ε=0-convergent band) is the next campaign step:
+`gen_elfo_energy_tfsweep` then `run_elfo_minfuel` per grid t_f.

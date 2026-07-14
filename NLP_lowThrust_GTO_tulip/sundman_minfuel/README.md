@@ -144,7 +144,7 @@ runs on a redesigned solver rather than `casadi_minfuel_sundman`:
 min-fuel **34-switch bang-bang**, 99.6% edge, propellant **~2.16 kg**, ΔV **~3.24
 km/s**, defect **5.7e-14** — all independently verified. Output names carry the
 target, e.g. `minfuel_ELFO_tf1p200_sw34_minEps0.mat`, so tulip and ELFO products
-never collide. Full build record: `../PSR/ELFO_RETARGET.md`.
+never collide. Full build record: `../elfo/ELFO_RETARGET.md`.
 
 **Run:**
 ```matlab

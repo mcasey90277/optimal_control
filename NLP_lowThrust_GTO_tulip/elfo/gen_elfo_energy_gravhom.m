@@ -55,7 +55,7 @@ function outFile = gen_elfo_energy_gravhom(opts)
 % REFERENCES:
 %   [1] casadi_energy_freetf.m (the free-t_f two-primary solver this drives).
 %   [2] elfo/attic/gen_elfo_energy_backbone.m (the fixed-t_f predecessor + wall record).
-%   [3] PSR/ELFO_RETARGET.md (design-review verdict this implements).
+%   [3] elfo/ELFO_RETARGET.md (design-review verdict this implements).
 
 if nargin < 1, opts = struct(); end
 gd = @(f,d) getdef(opts,f,d);
@@ -71,7 +71,7 @@ E = load(fullfile(cfg.dirs.energy, cfg.fname('energy', factor)));
 sigma = E.sigma;  rv0 = E.rv0;  rvf_tul = E.rvf;  tauf0 = E.tauf0;
 
 % ELFO target: nearest-insertion to the tulip terminal (velAngle 63 deg, no
-% speed collapse -- see PSR/ELFO_RETARGET.md).
+% speed collapse -- see elfo/ELFO_RETARGET.md).
 [~, rvf_elfo] = gto_elfo_endpoints(p, struct('point','nearest','ref',rvf_tul));
 mz = gd('moonZone', 0.15);
 fprintf('=== GEN_ELFO_ENERGY_GRAVHOM: tulip(f=%.2f) -> ELFO (nearest) ===\n', factor);

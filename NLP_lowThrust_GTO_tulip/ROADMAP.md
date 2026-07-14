@@ -27,7 +27,7 @@ ladder** `gen_elfo_energy_gravhom.m` on the new free-t_f two-primary solver
 `sundman_minfuel/casadi_energy_freetf.m` (a GPT-5.6-terra + Gemini 3.1 Pro design
 review killed the earlier direct-min-time-collocation plan as a detour and
 prescribed this route instead). Full build record + the two extra fixes (pin
-t_f; leg order clock-on-before-retarget with gravity off) in `PSR/ELFO_RETARGET.md`.
+t_f; leg order clock-on-before-retarget with gravity off) in `elfo/ELFO_RETARGET.md`.
 
 **Now open (unblocked):** min-fuel GTO→ELFO — re-run `casadi_energy_freetf` from
 the energy seed with ε:1→0. Then the indirect ELFO cells.

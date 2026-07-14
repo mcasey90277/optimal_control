@@ -51,7 +51,7 @@ here.
 **Bottom line:** the min-time MS machinery WORKS (tulip 4e-9) and answers
 "is indirect min-time viable? yes." But **retargeting to the ELFO via shooting
 is impractical** (sensitivity); the ELFO seed is still open. See
-`../PSR/ELFO_RETARGET.md`. Leading next candidate: a **direct min-time
+`../elfo/ELFO_RETARGET.md`. Leading next candidate: a **direct min-time
 collocation** (free t_f) built on `casadi_minfuel_sundman`.
 
 ## Run

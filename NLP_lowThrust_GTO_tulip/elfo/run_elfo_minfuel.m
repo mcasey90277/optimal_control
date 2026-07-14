@@ -26,7 +26,7 @@
 % REFERENCES:
 %   [1] PSR/run_psr.m (the tulip entry driver this mirrors)
 %   [2] gen_elfo_minfuel.m (the homotopy core); casadi_energy_freetf.m (solver)
-%   [3] PSR/ELFO_RETARGET.md (the GTO->ELFO build record)
+%   [3] elfo/ELFO_RETARGET.md (the GTO->ELFO build record)
 
 %% ------------------------------------------------------------------------
 %% 0. Paths

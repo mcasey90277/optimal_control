@@ -32,6 +32,9 @@ optimal_control/
 │                                #   LOW_THRUST_MINFUEL_CAMPAIGN.md (min-energy is
 │                                #   the homotopy root; many-switch bang-bang open,
 │                                #   needs regularized coords). movie/ has MP4+GIFs.
+│                                #   Per-target min-fuel deliverables: PSR/ (GTO->
+│                                #   tulip, w/ PMP refine) and elfo/ (GTO->ELFO);
+│                                #   sundman_minfuel/ is the shared solver engine.
 ├── mpc_cart_pole/               # Model Predictive Control for cart-pole
 │   ├── mpc_cart_pole_demo.m     # MPC controller (N=50 horizon, 20Hz control)
 │   └── mpc_cart_pole_explained.tex  # Step-by-step code walkthrough

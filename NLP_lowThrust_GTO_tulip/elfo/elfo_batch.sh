@@ -48,7 +48,7 @@ shift
 # --- resolve the factor list ------------------------------------------------
 if [ "$1" = "energy" ]; then
   factors=()
-  for f in "$SEEDDIR"/energy_elfo_f*.mat; do
+  for f in "$SEEDDIR"/energy_elfo_f[0-9]*.mat; do
     [ -e "$f" ] || continue
     b=$(basename "$f")
     n=${b#energy_elfo_f}

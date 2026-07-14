@@ -245,14 +245,22 @@ git mv PSR/gen_elfo_energy_backbone.m   elfo/attic/gen_elfo_energy_backbone.m
 git mv PSR/gen_elfo_energy_tangential.m elfo/attic/gen_elfo_energy_tangential.m
 ```
 
-- [ ] **Step 4: git mv the ELFO result files**
+- [ ] **Step 4: move the ELFO result files (plain `mv` — they are gitignored)**
+
+These 4 files are gitignored by extension (`*.mat`, `*.mp4`, `*.gif`), so they
+are untracked — `git mv` refuses them and there is no history to preserve. The
+destination `elfo/results/` is covered by the same rules, so they stay ignored.
+Use plain `mv`:
 
 ```bash
-git mv sundman_minfuel/results/energy_elfo_freetf.mat        elfo/results/energy_elfo_freetf.mat
-git mv sundman_minfuel/results/minfuel_elfo.mat             elfo/results/minfuel_elfo.mat
-git mv sundman_minfuel/results/movie_ELFO_tf1p200_minEps0.gif elfo/results/movie_ELFO_tf1p200_minEps0.gif
-git mv sundman_minfuel/results/movie_ELFO_tf1p200_minEps0.mp4 elfo/results/movie_ELFO_tf1p200_minEps0.mp4
+mv sundman_minfuel/results/energy_elfo_freetf.mat        elfo/results/energy_elfo_freetf.mat
+mv sundman_minfuel/results/minfuel_elfo.mat             elfo/results/minfuel_elfo.mat
+mv sundman_minfuel/results/movie_ELFO_tf1p200_minEps0.gif elfo/results/movie_ELFO_tf1p200_minEps0.gif
+mv sundman_minfuel/results/movie_ELFO_tf1p200_minEps0.mp4 elfo/results/movie_ELFO_tf1p200_minEps0.mp4
 ```
+
+These moves are filesystem-only and will NOT appear in the Step 6 commit
+(untracked → correct).
 
 - [ ] **Step 5: Verify the moves and that nothing external now dangles**
 

@@ -37,8 +37,8 @@
 # sweep is interrupted just re-run the SAME command -- finished factors are
 # skipped instantly. Per-factor result rows are written to
 # PSR_data/psr_result_f####_minEps#.mat; a summary table is printed and saved to
-# PSR_data/psr_batch_summary_minEps#.mat at the end (also rebuildable any time
-# with:  matlab -batch "cd('PSR'); psr_collect_summary(<epsMin>)").
+# PSR_data/psr_batch_summary_minEps#_<insertionLabel>.mat at the end (also
+# rebuildable any time with:  matlab -batch "cd('PSR'); psr_collect_summary(<epsMin>)").
 # ===================================================================
 
 set -u

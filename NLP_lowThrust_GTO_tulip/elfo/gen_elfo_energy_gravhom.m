@@ -73,15 +73,15 @@ sigma = E.sigma;  rv0 = E.rv0;  tauf0 = E.tauf0;
 % ELFO target: nearest-insertion to the tulip terminal (velAngle 63 deg, no
 % speed collapse -- see elfo/ELFO_RETARGET.md). Declared via insertion_states
 % (single source of truth) rather than recomputed inline.
-[~, rvf_tul]           = insertion_states('tulip','campaign');   % the ELFO 'nearest' reference
+[rv0Decl, rvf_tul]     = insertion_states('tulip','campaign');   % the ELFO 'nearest' reference
 [~, rvf_elfo, insMeta] = insertion_states('elfo','nearest');
 
 % drift guard: the base tulip energy backbone this driver loads must match
 % the declared tulip insertion point used as the ELFO 'nearest' reference.
-assert(norm(E.rvf(:).' - rvf_tul) < 1e-10, ...
-    'insertion:drift', ['base tulip backbone rvf differs from the declared %s ' ...
-    'insertion (%.2e) -- regenerate the seed for this criterion'], ...
-    insMeta.label, norm(E.rvf(:).'-rvf_tul));
+assert(norm(E.rvf(:).' - rvf_tul) < 1e-10 && norm(E.rv0(:).' - rv0Decl) < 1e-10, ...
+    'insertion:drift', ['base tulip backbone rv0/rvf differs from the declared %s ' ...
+    'insertion (rvf %.2e, rv0 %.2e) -- regenerate the seed for this criterion'], ...
+    insMeta.label, norm(E.rvf(:).'-rvf_tul), norm(E.rv0(:).'-rv0Decl));
 
 mz = gd('moonZone', 0.15);
 fprintf('=== GEN_ELFO_ENERGY_GRAVHOM: tulip(f=%.2f) -> ELFO (nearest) ===\n', factor);

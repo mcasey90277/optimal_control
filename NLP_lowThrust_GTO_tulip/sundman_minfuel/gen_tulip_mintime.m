@@ -91,7 +91,9 @@ end
 
 % save with a 4-row U (s==1 row) for drop-in compat with verify_elfo_seed / movie
 X = out.X;  U = [out.U; ones(1,size(out.U,2))];  sigma = S.sigma; %#ok<NASGU>
-rv0 = S.rv0;  rvf = S.rvf;  tauf0 = S.tauf0; %#ok<NASGU>
+tauf0 = S.tauf0; %#ok<NASGU>  % rv0/rvf: keep the DECLARED values from insertion_states (line 42) --
+                              % guard-equal to the seed's (<=1e-10) but these are the ones the
+                              % 'insertion' label above actually describes.
 pSund = 1.5;  qSund = 4;  moonZone = o.moonZone; %#ok<NASGU>
 tf = out.tf;  mf = out.mf;  cScale = out.cScale; %#ok<NASGU>
 maxDefect = out.maxDefect;  minR1 = out.minR1; %#ok<NASGU>

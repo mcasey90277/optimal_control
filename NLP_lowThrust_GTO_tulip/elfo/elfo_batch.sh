@@ -28,8 +28,8 @@
 #
 # RESUMABLE: elfo_run_one skips any factor whose result row already exists, so
 # re-running the SAME command finishes only the missing factors. A summary is
-# printed and saved to results/elfo_batch_summary_minEps#.mat (rebuildable with
-#   matlab -batch "cd('elfo'); elfo_collect_summary(<epsMin>)").
+# printed and saved to results/elfo_batch_summary_minEps#_<insertionLabel>.mat
+# (rebuildable with matlab -batch "cd('elfo'); elfo_collect_summary(<epsMin>)").
 # ===================================================================
 
 set -u

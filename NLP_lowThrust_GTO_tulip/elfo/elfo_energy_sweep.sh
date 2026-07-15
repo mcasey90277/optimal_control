@@ -4,7 +4,7 @@
 # Phase 1 of the min-fuel tf-grid campaign: sweeps the PINNED transfer time UP and
 # DOWN from the 1.20x base seed, banking a converged energy seed
 # results/energy_elfo_f<NNNN>.mat at each grid factor (NNNN=round(1000*factor)),
-# plus the band summary results/energy_elfo_tfgrid.mat.
+# plus the band summary results/energy_elfo_tfgrid_<insertionLabel>.mat.
 #
 # Unlike the fuel batch (one process per factor), the energy sweep is a SINGLE
 # warm-started continuation, so it runs in ONE matlab process. To survive the

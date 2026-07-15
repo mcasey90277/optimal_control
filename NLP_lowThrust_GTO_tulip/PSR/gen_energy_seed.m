@@ -65,9 +65,19 @@ edir = cfg.dirs.energy;
 if ~exist(edir, 'dir'), mkdir(edir); end
 efile = @(f) fullfile(edir, cfg.fname('energy', f));
 
+% ---- INSERTION POINT (edit here to retarget) --------------------------------
+insertion = 'campaign';        % tulip: 'campaign'|'maxydot'|'apoapsis'  (elfo: 'nearest'|'apolune'|'perilune')
+% insertion = 'maxydot';       % uncomment to use the max-ydot point (needs a matching energy seed)
+% insertion = 'apoapsis';      % uncomment to use the slowest/apoapsis point (needs a matching seed)
+[rv0Decl, rvfDecl, insMeta] = insertion_states('tulip', insertion);
+
 % already have it?
 outFile = efile(targetFactor);
 if isfile(outFile) && ~opts.force
+    Lo = load(outFile, 'rv0', 'rvf');
+    assert(norm(Lo.rvf(:).' - rvfDecl) < 1e-10 && norm(Lo.rv0(:).' - rv0Decl) < 1e-10, ...
+        'insertion:drift', ['cached target backbone %s is for a different insertion than the ' ...
+        'declared %s -- delete it or change the criterion'], outFile, insMeta.label);
     fprintf('gen_energy_seed: backbone already exists: %s\n', outFile);
     return
 end
@@ -90,12 +100,6 @@ else
 end
 fprintf('gen_energy_seed: target %.3f, nearest backbone %.3f, step %.3f\n', ...
         targetFactor, seedFactor, opts.step);
-
-% ---- INSERTION POINT (edit here to retarget) --------------------------------
-insertion = 'campaign';        % tulip: 'campaign'|'maxydot'|'apoapsis'  (elfo: 'nearest'|'apolune'|'perilune')
-% insertion = 'maxydot';       % uncomment to use the max-ydot point (needs a matching energy seed)
-% insertion = 'apoapsis';      % uncomment to use the slowest/apoapsis point (needs a matching seed)
-[rv0Decl, rvfDecl, insMeta] = insertion_states('tulip', insertion);
 
 % drift guard: the base backbone this walk starts from must match the
 % declared insertion point (rv0/rvf are propagated unchanged through every

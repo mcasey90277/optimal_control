@@ -11,9 +11,10 @@ function outFile = gen_elfo_mintime(opts)
 %          .maxIter[3000] .warmTight[false]
 %
 % OUTPUTS:
-%   outFile - results/mintime_elfo.mat: X[9xnN], U[4xnN] (alpha + s==1 row),
-%             sigma, rv0, rvf, tauf0, tf(=tfMin), mf, cScale, maxDefect, minR1,
-%             pSund, qSund, moonZone
+%   outFile - results/mintime_elfo_<insertionLabel>.mat (e.g. mintime_elfo_
+%             elfoNearest.mat): X[9xnN], U[4xnN] (alpha + s==1 row), sigma, rv0,
+%             rvf, tauf0, tf(=tfMin), mf, cScale, maxDefect, minR1, pSund, qSund,
+%             moonZone, insertion (= insMeta.label; provenance only)
 %
 % REFERENCES:
 %   [1] casadi_mintime_freetf.m; [2] the Route B design spec
@@ -65,9 +66,10 @@ rv0 = S.rv0;  rvf = S.rvf;  tauf0 = S.tauf0; %#ok<NASGU>
 pSund = S.pSund;  qSund = S.qSund;  moonZone = S.moonZone; %#ok<NASGU>
 tf = out.tf;  mf = out.mf;  cScale = out.cScale; %#ok<NASGU>
 maxDefect = out.maxDefect;  minR1 = out.minR1; %#ok<NASGU>
-outFile = fullfile(resDir,'mintime_elfo.mat');
+insertion = insMeta.label; %#ok<NASGU>  provenance: the declared insertion criterion
+outFile = fullfile(resDir, sprintf('mintime_elfo_%s.mat', insMeta.label));
 save(outFile,'X','U','sigma','rv0','rvf','tauf0','tf','mf','cScale', ...
-     'maxDefect','minR1','pSund','qSund','moonZone');
+     'maxDefect','minR1','pSund','qSund','moonZone','insertion');
 fprintf('  saved %s\n', outFile);
 
 % relabel: the mapped front in ELFO's own units

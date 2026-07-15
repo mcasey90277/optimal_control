@@ -17,9 +17,11 @@ function outFile = gen_tulip_mintime(opts)
 %          .maxIter[3000] .warmTight[false]
 %
 % OUTPUTS:
-%   outFile - results/mintime_tulip.mat: X[9xnN], U[4xnN] (alpha + s==1 row for
+%   outFile - results/mintime_tulip_<insertionLabel>.mat (e.g. mintime_tulip_
+%             tulipCampaign.mat): X[9xnN], U[4xnN] (alpha + s==1 row for
 %             drop-in verify_elfo_seed compat), sigma, rv0, rvf, tauf0, tf(=tfMin),
-%             mf, cScale, maxDefect, minR1, pSund, qSund, moonZone(=0)
+%             mf, cScale, maxDefect, minR1, pSund, qSund, moonZone(=0), insertion
+%             (= insMeta.label, the declared endpoint criterion; provenance only)
 %
 % REFERENCES:
 %   [1] elfo/casadi_mintime_freetf.m (the solver, target-agnostic);
@@ -42,7 +44,9 @@ insertion = 'campaign';        % tulip: 'campaign'|'maxydot'|'apoapsis'  (elfo: 
 % Default: the TWO-primary tulip energy seed (gen_tulip_energy_2p) -- re-meshed
 % for the two-primary clock so the exact Hessian survives the near-Moon terminal.
 % (The single-primary backbone energy_f####.mat crashes the exact-Hessian solve.)
-seedFile = gd('seedFile', fullfile(resDir,'energy_tulip_2p.mat'));
+% Filename carries the insertion label (gen_tulip_energy_2p writes it tagged the
+% same way) -- both sides are in-scope drivers so they stay consistent.
+seedFile = gd('seedFile', fullfile(resDir, sprintf('energy_tulip_2p_%s.mat', insMeta.label)));
 S = load(seedFile);
 % drift guard: the seed must be for the declared insertion point
 assert(norm(S.rvf(:).' - rvf) < 1e-10 && norm(S.rv0(:).' - rv0) < 1e-10, ...
@@ -91,9 +95,10 @@ rv0 = S.rv0;  rvf = S.rvf;  tauf0 = S.tauf0; %#ok<NASGU>
 pSund = 1.5;  qSund = 4;  moonZone = o.moonZone; %#ok<NASGU>
 tf = out.tf;  mf = out.mf;  cScale = out.cScale; %#ok<NASGU>
 maxDefect = out.maxDefect;  minR1 = out.minR1; %#ok<NASGU>
-outFile = fullfile(resDir,'mintime_tulip.mat');
+insertion = insMeta.label; %#ok<NASGU>  provenance: the declared insertion criterion
+outFile = fullfile(resDir, sprintf('mintime_tulip_%s.mat', insMeta.label));
 save(outFile,'X','U','sigma','rv0','rvf','tauf0','tf','mf','cScale', ...
-     'maxDefect','minR1','pSund','qSund','moonZone');
+     'maxDefect','minR1','pSund','qSund','moonZone','insertion');
 fprintf('  saved %s\n', outFile);
 fprintf('GEN_TULIP_MINTIME DONE\n');
 end

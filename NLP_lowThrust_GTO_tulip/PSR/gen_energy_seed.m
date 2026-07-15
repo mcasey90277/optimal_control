@@ -152,8 +152,14 @@ for f = rungs
             'tight re-clean at %.3f failed (ok=%d defect=%.2g)', f, oT.success, oT.maxDefect);
     end
     X = oT.X;  U = oT.U;  factor = f;  sigma = E.sigma;  tauf0 = E.tauf0; %#ok<NASGU>
-    rv0 = E.rv0;  rvf = E.rvf; %#ok<NASGU>
-    save(rungFile, 'X', 'U', 'factor', 'tauf0', 'sigma', 'rv0', 'rvf');
+    rv0 = E.rv0;  rvf = E.rvf;  insertion = insMeta.label; %#ok<NASGU>
+    % NOTE: filename (energy_f####.mat) is NOT tagged with the insertion label --
+    % it is the shared cfg.fname('energy',...) convention read by minfuel_at_tf.m,
+    % elfo/smoke_fixedtf.m, elfo/smoke_energy_freetf.m, gen_elfo_energy_gravhom.m,
+    % and others outside this task's touched-file set. Retagging would require
+    % updating all of those readers too (see task-4-report.md concerns); the
+    % 'insertion' field still records the criterion for provenance.
+    save(rungFile, 'X', 'U', 'factor', 'tauf0', 'sigma', 'rv0', 'rvf', 'insertion');
     fprintf('  saved %s\n', rungFile);
     prevFactor = f;
 end

@@ -36,9 +36,10 @@ function outFile = gen_tulip_energy_2p(opts)
 %          .resume   pick up from checkpoint if present     [true]
 %
 % OUTPUTS:
-%   outFile - results/energy_tulip_2p.mat: X[9x(N+1)],U,factor,tauf0,sigma,rv0,
-%             rvf(=tulip),pSund,qSund,moonZone,muGain -- the two-primary tulip
-%             energy seed / warm start for gen_tulip_mintime (moonZone=mz).
+%   outFile - results/energy_tulip_2p_<insertionLabel>.mat: X[9x(N+1)],U,factor,
+%             tauf0,sigma,rv0,rvf(=tulip),pSund,qSund,moonZone,muGain,insertion
+%             (= insMeta.label) -- the two-primary tulip energy seed / warm
+%             start for gen_tulip_mintime (moonZone=mz).
 %
 % REFERENCES:
 %   [1] casadi_energy_freetf.m (the free-t_f two-primary solver this drives).
@@ -122,8 +123,11 @@ end
 % --- save the two-primary tulip energy seed ---------------------------------
 X = Xk;  U = Uk;  rvf = rvf_tul(:).';  pSund = cfg.pSund; %#ok<NASGU>
 qSund = ctx.qSund;  moonZone = mz;  muGain = 1; %#ok<NASGU>
-outFile = fullfile(resDir, 'energy_tulip_2p.mat');
-save(outFile, 'X','U','factor','tauf0','sigma','rv0','rvf','pSund','qSund','moonZone','muGain');
+insertion = insMeta.label; %#ok<NASGU>  provenance: the declared insertion criterion
+% filename carries the insertion label -- gen_tulip_mintime's default seedFile
+% is tagged the same way (both are in-scope drivers, kept consistent).
+outFile = fullfile(resDir, sprintf('energy_tulip_2p_%s.mat', insMeta.label));
+save(outFile, 'X','U','factor','tauf0','sigma','rv0','rvf','pSund','qSund','moonZone','muGain','insertion');
 fprintf('GEN_TULIP_ENERGY_2P DONE: %s\n', outFile);
 fprintf('  tf=%.4f ND (%.2f d), mf=%.4f, edge=%.1f%%, maxDefect (last)=see log\n', ...
         X(8,end), X(8,end)*p.tStar/86400, X(7,end), 100*mean(U(4,:)>0.95|U(4,:)<0.05));

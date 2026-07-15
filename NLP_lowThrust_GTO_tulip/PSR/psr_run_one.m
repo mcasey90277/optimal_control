@@ -69,7 +69,13 @@ refinedFile = fullfile(resDir, ['psr_refined_' tag '.mat']);
 bangBang    = (epsMin == 0);
 
 row = struct('factor',factor,'ok',false,'dV',NaN,'prop',NaN,'switches',NaN, ...
-    'edge',NaN,'defect',NaN,'certLocalMin',NaN,'dataFile','','err','');
+    'edge',NaN,'defect',NaN,'certLocalMin',NaN,'dataFile','','err','', ...
+    'rv0',rv0(:).','rvf',rvf(:).','insertion',insMeta.label);
+% NOTE: resultFile/directFile/seedFile/refinedFile (above) are NOT tagged with
+% the insertion label -- doing so consistently would also require updating
+% PSR/run_psr.m (the parallel single-run entry point that builds the same
+% filenames from the same `tag` formula) and psr_collect_summary.m's glob, all
+% outside a clean, fully-traced edit for this task; see task-4-report.md.
 resultFile = fullfile(dataDir, sprintf('psr_result_%s.mat', tag));
 
 fprintf('\n=== PSR_RUN_ONE factor %.3f (epsMin=%.3g, seed=%s) ===\n', factor, epsMin, char(string(seedSpec)));

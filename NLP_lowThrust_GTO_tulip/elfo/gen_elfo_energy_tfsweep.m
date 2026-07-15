@@ -21,9 +21,11 @@ function outFile = gen_elfo_energy_tfsweep(opts)
 %          .factorStepMin[0.01] .maxIter[2000] .looseIter[500] .resume[true]
 %
 % OUTPUTS:
-%   outFile - results/energy_elfo_tfgrid.mat: struct array .grid(tf, ok, mf, edge,
-%             switches, file) and the band [tfLo tfHi]. Per-tf seeds saved as
-%             results/energy_elfo_f<NNNN>.mat (NNNN = round(1000*factor)).
+%   outFile - results/energy_elfo_tfgrid_<insertionLabel>.mat: struct array
+%             .grid(tf, ok, mf, edge, switches, file), the band [tfLo tfHi],
+%             rv0, rvf, insertion (= insMeta.label). Per-tf seeds saved as
+%             results/energy_elfo_f<NNNN>.mat (NNNN = round(1000*factor)) --
+%             NOT insertion-tagged (shared name, see save_point note).
 %
 % REFERENCES:
 %   [1] casadi_energy_freetf.m; [2] gen_elfo_energy_gravhom.m (the base seed);
@@ -54,7 +56,7 @@ tf0 = S.X(8,end);
 ctx = struct('sigma',S.sigma,'rv0',S.rv0,'rvf',S.rvf,'Tmax',p.Tmax,'cEx',p.c, ...
     'muStar',p.muStar,'tauf0',S.tauf0,'pSund',S.pSund,'qSund',S.qSund, ...
     'moonZone',S.moonZone,'maxIter',gd('maxIter',2000),'looseIter',gd('looseIter',500), ...
-    'resDir',resDir,'tStar',p.tStar,'tfMin',cfg.tfMin);
+    'resDir',resDir,'tStar',p.tStar,'tfMin',cfg.tfMin,'insertion',insMeta.label);
 % factor band (factor = tf/tfMin), converted to ND for the continuation
 factorLo = gd('factorLo',1.11);  factorHi = gd('factorHi',2.00);  factorStep = gd('factorStep',0.08);
 tfLo = factorLo*cfg.tfMin;  tfHi = factorHi*cfg.tfMin;  tfStep = factorStep*cfg.tfMin;
@@ -88,8 +90,11 @@ grid = scan_grid(resDir, tfLo, tfHi, cfg.tfMin);
 [~,ord] = sort([grid.tf]);  grid = grid(ord);
 okv = [grid.ok];  tfs = [grid.tf];
 tfLoB = min(tfs(okv));  tfHiB = max(tfs(okv));
-outFile = fullfile(resDir,'energy_elfo_tfgrid.mat');
-save(outFile,'grid','tfLoB','tfHiB');
+rv0 = S.rv0;  rvf = S.rvf;  insertion = insMeta.label; %#ok<NASGU>
+% this summary file is write-only (no other file reads it back), so it is safe
+% to tag with the insertion label.
+outFile = fullfile(resDir, sprintf('energy_elfo_tfgrid_%s.mat', insMeta.label));
+save(outFile,'grid','tfLoB','tfHiB','rv0','rvf','insertion');
 fprintf('\n--- ELFO ENERGY tf band = [%.4f, %.4f] ND (%.2f - %.2f d) ---\n', ...
         tfLoB, tfHiB, tfLoB*p.tStar/86400, tfHiB*p.tStar/86400);
 fprintf('  tf(ND)   tf(d)   ok  mf      edge   sw\n');
@@ -147,9 +152,16 @@ end
 function g = save_point(ctx, X, U, tf, ok)
 sigma = ctx.sigma;  rv0 = ctx.rv0;  rvf = ctx.rvf;  tauf0 = ctx.tauf0; %#ok<NASGU>
 moonZone = ctx.moonZone;  pSund = ctx.pSund;  qSund = ctx.qSund; %#ok<NASGU>
+insertion = ctx.insertion; %#ok<NASGU>  provenance: the declared ELFO insertion criterion
 factor = tf/ctx.tfMin;
+% NOTE: filename (energy_elfo_f####.mat) is NOT tagged with the insertion label
+% -- it is read by elfo_run_one.m (factor-keyed seed lookup) AND by
+% run_elfo_minfuel.m (outside this task's touched-file set); retagging would
+% require updating both readers consistently, which Task 4 leaves untouched
+% (see task-4-report.md concerns). The 'insertion' field still records the
+% criterion for provenance.
 file = fullfile(ctx.resDir, sprintf('energy_elfo_f%04d.mat', round(1000*factor)));
-save(file,'X','U','sigma','rv0','rvf','tauf0','tf','moonZone','pSund','qSund');
+save(file,'X','U','sigma','rv0','rvf','tauf0','tf','moonZone','pSund','qSund','insertion');
 ss = U(4,:);
 g = struct('tf',tf,'factor',factor,'ok',ok,'mf',X(7,end),'edge',mean(ss>0.95|ss<0.05), ...
            'switches',sum(abs(diff(ss>0.5))),'file',file);

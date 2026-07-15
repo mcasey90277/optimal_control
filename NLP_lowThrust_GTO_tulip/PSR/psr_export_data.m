@@ -54,10 +54,16 @@ function dataFile = psr_export_data(solFile, dataDir, opts)
 %             epsilon of the run [default 0] -- recorded in the filename
 %
 % OUTPUTS:
-%   dataFile - written path, named psr_data_tf<factor>_sw<k>_minEps<e>.mat, e.g.
-%              psr_data_tf1p150_sw25_minEps0.mat (bang-bang) or
-%              psr_data_tf1p200_sw0_minEps0p01.mat (smooth eps=0.01); factor and
-%              epsMin encode '.'->'p', k = certified dual-S switch count [char]
+%   dataFile - written path, named
+%              psr_data_tf<factor>_sw<k>_<insertionLabel>_minEps<e>.mat, e.g.
+%              psr_data_tf1p150_sw25_tulipCampaign_minEps0.mat (bang-bang) or
+%              psr_data_tf1p200_sw0_tulipCampaign_minEps0p01.mat (smooth
+%              eps=0.01); factor and epsMin encode '.'->'p', k = certified
+%              dual-S switch count, insertionLabel = insMeta.label (the
+%              declared endpoint criterion, reconstructed via insertion_states
+%              since this exporter is tulip-only) [char]. The tag is inserted
+%              BEFORE _minEps so ztl/p0a_graze_margin.m's glob
+%              ('psr_data_tf*_minEps0.mat') keeps matching.
 %
 % REFERENCES:
 %   [1] ms_band/sms_seed_duals.m (mode-'d' dual->costate map, adjudicated
@@ -71,12 +77,34 @@ if ~isfield(opts,'quiet'),  opts.quiet = false; end
 if ~isfield(opts,'epsMin'), opts.epsMin = 0;   end
 if ~exist(dataDir, 'dir'), mkdir(dataDir); end
 
+% ---- declared insertion point (provenance + filename tag) -------------------
+% This exporter is tulip-only (no target parameter), so the criterion is the
+% pipeline's declared default ('campaign' -- see PSR/run_psr.m, psr_run_one.m).
+% Reconstructed here (rather than threaded through opts) so this file's only
+% callers (run_psr.m, psr_run_one.m) need no changes; the drift-guard assert
+% below still catches a criterion mismatch loudly instead of silently
+% mislabeling the export.
+here = fileparts(mfilename('fullpath'));
+if isempty(which('insertion_states'))
+    addpath(fullfile(here, '..', 'sundman_minfuel'));
+end
+[rv0Decl, rvfDecl, insMeta] = insertion_states('tulip', 'campaign');
+
 % ---- load the solution (seed layout) ----------------------------------------
 Ssol   = load(solFile);
 out    = Ssol.out;    sigma = Ssol.sigma;  tauf0 = Ssol.tauf0;
 rv0    = Ssol.rv0;    rvf   = Ssol.rvf;    factor = Ssol.factor;
 rvfC   = rvf(:);      % column view for residuals (legacy files store 1x6 rows;
                       % a row would broadcast X(1:3,end)-rvf(1:3) into a 3x3)
+
+% drift guard: the solution being exported must match the reconstructed
+% insertion point (catches a future criterion change loudly instead of
+% silently mislabeling the export with the wrong 'insertion' tag).
+assert(norm(rvf(:).' - rvfDecl) < 1e-10 && norm(rv0(:).' - rv0Decl) < 1e-10, ...
+    'insertion:drift', ['solution endpoints differ from the reconstructed %s ' ...
+    'insertion (rvf %.2e, rv0 %.2e) -- psr_export_data assumes the tulip ' ...
+    'campaign default; update it if the pipeline default has changed'], ...
+    insMeta.label, norm(rvf(:).'-rvfDecl), norm(rv0(:).'-rv0Decl));
 X = out.X;  U = out.U;  nN = size(X, 2);
 p   = cr3bp_lt_params(0.025, 15, 2100);
 cfg = minfuel_config();
@@ -149,10 +177,13 @@ provenance = struct('date', char(datetime('now','Format','yyyy-MM-dd HH:mm')), .
 % ---- write, seed-compatible layer + products together -------------------------
 fTag = strrep(sprintf('%.3f', factor), '.', 'p');
 eTag = strrep(sprintf('%g', opts.epsMin), '.', 'p');   % 0 -> '0', 0.001 -> '0p001'
+insertion = insMeta.label; %#ok<NASGU>
+% tag inserted BEFORE _minEps (not appended at the end) so the existing
+% ztl/p0a_graze_margin.m glob ('psr_data_tf*_minEps0.mat') still matches.
 dataFile = fullfile(dataDir, ...
-    sprintf('psr_data_tf%s_sw%d_minEps%s.mat', fTag, ctrl.nSwitchS, eTag));
+    sprintf('psr_data_tf%s_sw%d_%s_minEps%s.mat', fTag, ctrl.nSwitchS, insMeta.label, eTag));
 provenance.epsMin = opts.epsMin;
-save(dataFile, 'out', 'sigma', 'tauf0', 'rv0', 'rvf', 'factor', ...
+save(dataFile, 'out', 'sigma', 'tauf0', 'rv0', 'rvf', 'factor', 'insertion', ...
      'mesh', 'traj', 'ctrl', 'costate', 'pmp', 'scal', 'const', 'provenance');
 
 if ~opts.quiet

@@ -52,7 +52,14 @@ resultFile = fullfile(resDir, sprintf('elfo_result_%s.mat', tag));
 
 row = struct('factor',factor,'tf',tf,'tf_days',tf*p.tStar/86400,'ok',false, ...
     'epsReached',false,'epsFloor',NaN,'dV',NaN,'prop',NaN,'switches',NaN, ...
-    'edge',NaN,'defect',NaN,'ipoptStatus','','dataFile','','err','');
+    'edge',NaN,'defect',NaN,'ipoptStatus','','dataFile','','err','', ...
+    'rv0',rv0(:).','rvf',rvf(:).','insertion',insMeta.label);
+% NOTE: resultFile (above) is NOT tagged with the insertion label -- per the
+% task-4 brief's priority-3 rule, since a consistent retag would need the
+% factor-keyed energy-seed lookup below (energy_elfo_f####.mat / the
+% base-seed fallback) retagged too, and that filename is shared with
+% run_elfo_minfuel.m and gen_elfo_energy_tfsweep.m (outside this task's
+% touched-file set). See task-4-report.md concerns.
 
 % --- resolve the factor-keyed energy seed (base-seed fallback near 1.20x) ----
 % Runs UNCONDITIONALLY, before the cache-skip check below, so a retargeted

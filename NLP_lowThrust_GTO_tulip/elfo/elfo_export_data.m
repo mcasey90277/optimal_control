@@ -24,7 +24,10 @@ function dataFile = elfo_export_data(solFile, dataDir, opts)
 %   opts    - (optional): .quiet [false]
 %
 % OUTPUTS:
-%   dataFile - written path psr_data_<target>_tf<f>_sw<k>_minEps<e>.mat.
+%   dataFile - written path psr_data_<target>_tf<f>_sw<k>_<insertionLabel>_
+%             minEps<e>.mat (insertionLabel = insMeta.label, reconstructed via
+%             insertion_states('elfo','nearest') and drift-guarded against the
+%             loaded solution's rv0/rvf -- see below).
 %
 % REFERENCES:
 %   [1] PSR/psr_export_data.m (the tulip analog this mirrors).
@@ -41,11 +44,30 @@ here = fileparts(mfilename('fullpath'));
 p = cr3bp_lt_params(0.025, 15, 2100);
 lStar = p.lStar;  tStar = p.tStar;  m0kg = p.m0kg;  cEx = p.c;  Tmax = p.Tmax;
 
+% ---- declared insertion point (provenance + filename tag) -------------------
+% Reconstructed via insertion_states (rather than threaded through opts) so
+% this file's only caller (run_elfo_minfuel.m) needs no changes; the drift-
+% guard assert below still catches a criterion mismatch loudly instead of
+% silently mislabeling the export.
+if isempty(which('insertion_states'))
+    addpath(fullfile(here, '..', 'sundman_minfuel'));
+end
+[rv0Decl, rvfDecl, insMeta] = insertion_states('elfo', 'nearest');
+
 S = load(solFile);
 out = S.out;  X = out.X;  U = out.U;  nN = size(X,2);
 sigma = S.sigma(:).';  tauf0 = S.tauf0;  rv0 = S.rv0;  rvf = S.rvf;  rvfC = rvf(:);
 target = S.target;  factor = S.factor;  epsMin = S.epsilon;  tf = S.tf;
 moonZone = S.moonZone;  pSund = S.pSund;  qSund = S.qSund;
+
+% drift guard: the solution being exported must match the reconstructed
+% insertion point (catches a future criterion change loudly instead of
+% silently mislabeling the export with the wrong 'insertion' tag).
+assert(norm(rvf(:).' - rvfDecl) < 1e-10 && norm(rv0(:).' - rv0Decl) < 1e-10, ...
+    'insertion:drift', ['solution endpoints differ from the reconstructed %s ' ...
+    'insertion (rvf %.2e, rv0 %.2e) -- elfo_export_data assumes the ELFO ' ...
+    'nearest default; update it if the pipeline default has changed'], ...
+    insMeta.label, norm(rvf(:).'-rvfDecl), norm(rv0(:).'-rv0Decl));
 
 r = X(1:3,:);  v = X(4:6,:);  m = X(7,:);  t = X(8,:);  cScale = X(9,:);
 al = U(1:3,:);  s = U(4,:);
@@ -122,9 +144,13 @@ provenance = struct('date',datestr(now,'yyyy-mm-dd HH:MM:SS'), ... %#ok<TNOW1,DA
 % ---- write ------------------------------------------------------------------
 fTag = strrep(sprintf('%.3f', factor), '.', 'p');
 eTag = strrep(sprintf('%g', epsMin), '.', 'p');
-dataFile = fullfile(dataDir, sprintf('psr_data_%s_tf%s_sw%d_minEps%s.mat', ...
-                    target, fTag, numel(tauSwitch), eTag));
-save(dataFile, 'out','sigma','tauf0','rv0','rvf','factor','target','tf', ...  %#ok<USENS> seed layer
+insertion = insMeta.label; %#ok<NASGU>
+% tag inserted BEFORE _minEps (matching PSR/psr_export_data.m's placement);
+% nothing globs this ELFO data-product family today, so this is a free choice,
+% kept consistent with the tulip exporter for uniformity.
+dataFile = fullfile(dataDir, sprintf('psr_data_%s_tf%s_sw%d_%s_minEps%s.mat', ...
+                    target, fTag, numel(tauSwitch), insMeta.label, eTag));
+save(dataFile, 'out','sigma','tauf0','rv0','rvf','factor','target','tf','insertion', ...  %#ok<USENS> seed layer
      'mesh','traj','ctrl','costate','pmp','scal','const','provenance');
 if ~quiet
     fprintf('WROTE %s\n', dataFile);

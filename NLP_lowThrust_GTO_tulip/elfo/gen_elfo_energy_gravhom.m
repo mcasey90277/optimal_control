@@ -138,8 +138,14 @@ end
 % --- save the GTO->ELFO energy seed -----------------------------------------
 X = Xk;  U = Uk;  rvf = rvf_elfo(:).';  pSund = cfg.pSund; %#ok<NASGU>
 qSund = ctx.qSund;  moonZone = mz;  muGain = 1; %#ok<NASGU>
+insertion = insMeta.label; %#ok<NASGU>  provenance: the declared ELFO insertion criterion
+% NOTE: filename is NOT tagged with the insertion label -- energy_elfo_freetf.mat
+% is a fixed name read by run_elfo_minfuel.m, verify_elfo_seed.m, and
+% gen_elfo_minfuel.m (all outside this task's touched-file set); retagging it
+% would require updating those readers too, which Task 4 leaves untouched (see
+% task-4-report.md concerns). The 'insertion' field still records the criterion.
 outFile = fullfile(resDir, 'energy_elfo_freetf.mat');
-save(outFile, 'X','U','factor','tauf0','sigma','rv0','rvf','pSund','qSund','moonZone','muGain');
+save(outFile, 'X','U','factor','tauf0','sigma','rv0','rvf','pSund','qSund','moonZone','muGain','insertion');
 fprintf('GEN_ELFO_ENERGY_GRAVHOM DONE: %s\n', outFile);
 fprintf('  achieved tf=%.4f ND (%.2f d), mf=%.4f, edge=%.1f%%\n', ...
         X(8,end), X(8,end)*p.tStar/86400, X(7,end), 100*mean(U(4,:)>0.95|U(4,:)<0.05));

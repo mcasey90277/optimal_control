@@ -284,7 +284,44 @@ FINDINGS:
     then converged at 60 min); use WATCHDOG_S=3600. Every timed-out factor keeps
     its ε-step checkpoint, so a re-run resumes rather than restarts.
 
-CAVEAT ON SCALE: factor = tf/tfMin_tulip (6.2907 ND) -- ELFO's own min-time is
-still UNSOLVED, so `factor` is a shared label, not ×ELFO-min-time. Solving ELFO
-min-time (next objective) anchors the scale AND gives the front's 0-switch
-low-tf endpoint.
+CAVEAT ON SCALE (RESOLVED 2026-07-15, see Min-time anchor below): factor =
+tf/tfMin_tulip (6.2907 ND) was a shared label because ELFO's own min-time was
+unsolved. It is now solved (tfMin_ELFO = 6.0962 ND), so the front relabels into
+ELFO units tf/tfMin_ELFO.
+
+# GTO->ELFO min-time ANCHOR: SOLVED (2026-07-15)
+
+**Result: tfMin_ELFO = 6.0961534862 ND = 27.0221 days**, hard all-burn (s==1),
+machine-tight and independently verified. This anchors the ELFO factor scale and
+supplies the front's 0-switch low-tf endpoint. `elfo/results/mintime_elfo.mat`.
+
+**Route A first (energy->time continuation, walls).** Stepping the pinned tf DOWN
+from the converged energy seed (gen_elfo_energy_tfsweep, factorLo 0.80) rode the
+throttle up cleanly -- 6.79 ND (edge 28%) -> 6.61 (31%) -> 6.42 (41%) -> **6.2278
+ND (edge 57.5%)**, every rung defect ~1.6e-15 -- then the next step (~6.04 ND)
+DIVERGED (inf_pr frozen ~0.067, inf_du -> 1e10): the near-min-time conditioning
+wall, same as tulip below 1.12x. Edge 57.5% at the floor is NOT all-burn, so Route
+A gives only a loose upper bound tfMin_ELFO in (~5.5, 6.23) ND. The lowest
+converged rung `results/energy_elfo_f0990.mat` (6.2278 ND) is Route B's warm start.
+
+**Route B (hard all-burn, the sharp anchor).** Pose true min-time directly:
+throttle pinned s==1 (control = 3-row steering alpha, ||alpha||=1), tf free via the
+cScale slack, objective min t(tau_f). No continuation -- the objective IS min-time,
+so IPOPT drives tf to the all-burn floor. Solver `casadi_mintime_freetf.m` (sibling
+of casadi_energy_freetf: same two-primary clock + cScale slack, throttle dropped,
+mdot=-Tmax/cEx), driver `gen_elfo_mintime.m` (warm-starts from the 6.23 ND rung,
+overrides throttle to 1, saves a 4-row U=[alpha;ones] for drop-in verify_elfo_seed
+reuse). Gate ALL PASS: Solve_Succeeded (320 iters, loose/warmTight=false),
+maxDefect 1.65e-15, rendezvous 0, maxUnit 3.85e-12, minR1 = GTO perigee exactly
+(grazes, no dive), tMonotone, cScale 1.008 interior, |mf-pred| 1.1e-16, tf < 6.2278
+floor. verify_elfo_seed (pure-MATLAB full-gravity recompute) reproduces defect
+1.65e-15 = PASS. CROSS-CHECK: loose (warmTight=false) and the tight (warmTight=true)
+preview agree to 4 sig figs -> anchor trustworthy.
+
+**Physics note:** ELFO's min-time (6.0962 ND) is slightly SHORTER than tulip's
+(6.2907 ND). **Front relabel:** 1.11x tulip (6.98 ND) = 1.145x ELFO; front minimum
+1.73x tulip (10.9 ND) = 1.79x ELFO.
+
+**Still open:** the ELFO min-time INDIRECT cell (Route C: MS/PMP retarget, fights
+shooting sensitivity; the direct anchor is now a candidate seed). Spec/plan:
+`docs/superpowers/{specs,plans}/2026-07-15-elfo-mintime-route-b*`.

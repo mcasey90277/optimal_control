@@ -37,7 +37,7 @@ cfg = minfuel_config();  p = cr3bp_lt_params(cfg.thrustN, cfg.m0kg, cfg.ispS);
 insertion = 'campaign';        % tulip: 'campaign'|'maxydot'|'apoapsis'  (elfo: 'nearest'|'apolune'|'perilune')
 % insertion = 'maxydot';       % uncomment to use the max-ydot point (needs a matching energy seed)
 % insertion = 'apoapsis';      % uncomment to use the slowest/apoapsis point (needs a matching seed)
-[rv0, rvf, insMeta] = insertion_states('tulip', insertion);   % <TGT> = 'tulip' or 'elfo'
+[rv0, rvf, insMeta] = insertion_states('tulip', insertion);
 
 % Default: the TWO-primary tulip energy seed (gen_tulip_energy_2p) -- re-meshed
 % for the two-primary clock so the exact Hessian survives the near-Moon terminal.

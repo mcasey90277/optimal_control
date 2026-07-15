@@ -29,7 +29,7 @@ cfg = minfuel_config();  p = cr3bp_lt_params(cfg.thrustN, cfg.m0kg, cfg.ispS);
 insertion = 'nearest';          % elfo: 'nearest'|'apolune'|'perilune'  (tulip: 'campaign'|'maxydot'|'apoapsis')
 % insertion = 'apolune';        % uncomment to use the apolune point (needs a matching energy seed)
 % insertion = 'perilune';       % uncomment to use the perilune point (needs a matching seed)
-[rv0, rvf, insMeta] = insertion_states('elfo', insertion);   % <TGT> = 'tulip' or 'elfo'
+[rv0, rvf, insMeta] = insertion_states('elfo', insertion);
 
 seedFile = gd('seedFile', fullfile(resDir,'energy_elfo_f0990.mat'));
 S = load(seedFile);

@@ -43,7 +43,7 @@ if ~exist(resDir,'dir'), mkdir(resDir); end
 insertion = 'nearest';          % elfo: 'nearest'|'apolune'|'perilune'  (tulip: 'campaign'|'maxydot'|'apoapsis')
 % insertion = 'apolune';        % uncomment to use the apolune point (needs a matching energy seed)
 % insertion = 'perilune';       % uncomment to use the perilune point (needs a matching seed)
-[rv0, rvf, insMeta] = insertion_states('elfo', insertion);   % <TGT> = 'tulip' or 'elfo'
+[rv0, rvf, insMeta] = insertion_states('elfo', insertion);
 
 tf   = factor * cfg.tfMin;
 eTag = strrep(sprintf('%g', epsMin), '.', 'p');
@@ -54,18 +54,12 @@ row = struct('factor',factor,'tf',tf,'tf_days',tf*p.tStar/86400,'ok',false, ...
     'epsReached',false,'epsFloor',NaN,'dV',NaN,'prop',NaN,'switches',NaN, ...
     'edge',NaN,'defect',NaN,'ipoptStatus','','dataFile','','err','');
 
-% --- resumable: an existing row means this factor is done --------------------
-if isfile(resultFile) && ~rerun
-    L = load(resultFile, 'row');
-    % done only for a real outcome (solved, or a genuine stuck-wall). A
-    % recoverable failure (no seed / transient error: ~ok & isnan(epsFloor))
-    % is NOT cached -- re-solve so a later-built seed or a transient retries.
-    if isfield(L,'row') && (L.row.ok || ~isnan(L.row.epsFloor))
-        row = L.row;  fprintf('elfo_run_one f=%.3f: row exists (done) -- skip\n', factor);  return
-    end
-end
-
 % --- resolve the factor-keyed energy seed (base-seed fallback near 1.20x) ----
+% Runs UNCONDITIONALLY, before the cache-skip check below, so a retargeted
+% insertion is caught even when a cached result row already exists at this
+% factor (the seed the guard checks exists independent of the result cache;
+% cross-criterion collisions are additionally closed by Task 4's criterion-
+% tagged output filenames).
 seed = fullfile(resDir, sprintf('energy_elfo_f%04d.mat', round(1000*factor)));
 if ~isfile(seed)
     base = fullfile(resDir, 'energy_elfo_freetf.mat');
@@ -84,6 +78,17 @@ assert(norm(E.rvf(:).' - rvf) < 1e-10 && norm(E.rv0(:).' - rv0) < 1e-10, ...
     'insertion:drift', ['seed endpoints differ from the declared %s insertion ' ...
     '(rvf %.2e, rv0 %.2e) -- regenerate the seed for this criterion'], ...
     insMeta.label, norm(E.rvf(:).'-rvf), norm(E.rv0(:).'-rv0));
+
+% --- resumable: an existing row means this factor is done --------------------
+if isfile(resultFile) && ~rerun
+    L = load(resultFile, 'row');
+    % done only for a real outcome (solved, or a genuine stuck-wall). A
+    % recoverable failure (no seed / transient error: ~ok & isnan(epsFloor))
+    % is NOT cached -- re-solve so a later-built seed or a transient retries.
+    if isfield(L,'row') && (L.row.ok || ~isnan(L.row.epsFloor))
+        row = L.row;  fprintf('elfo_run_one f=%.3f: row exists (done) -- skip\n', factor);  return
+    end
+end
 
 fprintf('\n=== ELFO_RUN_ONE factor %.3f (epsMin=%g, seed=%s) ===\n', factor, epsMin, seed);
 

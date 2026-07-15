@@ -57,7 +57,7 @@ rerun    = false;         % true -> ignore any checkpoint and re-solve from the 
 insertion = 'nearest';          % elfo: 'nearest'|'apolune'|'perilune'  (tulip: 'campaign'|'maxydot'|'apoapsis')
 % insertion = 'apolune';        % uncomment to use the apolune point (needs a matching energy seed)
 % insertion = 'perilune';       % uncomment to use the perilune point (needs a matching seed)
-[rv0, rvf, insMeta] = insertion_states('elfo', insertion);   % <TGT> = 'tulip' or 'elfo'
+[rv0, rvf, insMeta] = insertion_states('elfo', insertion);
 
 % solver knobs (campaign defaults; edit only for experiments)
 step0    = 0.20;          % initial epsilon step

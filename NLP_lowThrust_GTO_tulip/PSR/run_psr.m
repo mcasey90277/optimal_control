@@ -71,7 +71,7 @@ factor = 2.00;                   % t_f / t_f_min   e.g. 1.12 ... 1.85
 insertion = 'campaign';        % tulip: 'campaign'|'maxydot'|'apoapsis'  (elfo: 'nearest'|'apolune'|'perilune')
 % insertion = 'maxydot';       % uncomment to use the max-ydot point (needs a matching energy seed)
 % insertion = 'apoapsis';      % uncomment to use the slowest/apoapsis point (needs a matching seed)
-[rv0, rvf, insMeta] = insertion_states('tulip', insertion);   % <TGT> = 'tulip' or 'elfo'
+[rv0, rvf, insMeta] = insertion_states('tulip', insertion);
 
 % ---- SEED for the direct solve --------------------------------------------
 % The direct solve is seeded one of three ways (see minfuel_at_tf.m):
@@ -197,6 +197,31 @@ fprintf('\n=== PSR PIPELINE: factor=%.3f (t_f=%.4f ND = %.2f days), seed=%s ===\
 % throttle -> bang-bang) with warm-tight IPOPT settings. "Certified" here
 % means at least one schedule step converged tight (defect < 1e-6); an
 % uncertified attempt is returned but never saved (it must not poison seeds).
+% drift guard: locate the same seed minfuel_at_tf is about to load and
+% confirm it matches the declared insertion point (covers the 'energy' and
+% explicit-file seedSpec cases; a 'neighbor' seed chains from an already-
+% guarded upstream solve at another factor, so it is not re-resolved here --
+% see insertion_states.m single-source note; cross-criterion collisions for
+% 'neighbor' are additionally closed by Task 4's criterion-tagged output
+% filenames). Runs UNCONDITIONALLY, before the cache-skip check below, so a
+% retargeted insertion is caught even when a cached direct solution already
+% exists at this factor (the seed the guard checks exists independent of the
+% result cache).
+if strcmpi(seedSpec, 'energy')
+    guardSeedFile = fullfile(cfg.dirs.energy, cfg.fname('energy', factor));
+elseif ~strcmpi(seedSpec, 'neighbor') && ischar(seedSpec) && isfile(seedSpec)
+    guardSeedFile = seedSpec;
+else
+    guardSeedFile = '';
+end
+if ~isempty(guardSeedFile) && isfile(guardSeedFile)
+    S = load(guardSeedFile, 'rvf', 'rv0');
+    assert(norm(S.rvf(:).' - rvf) < 1e-10 && norm(S.rv0(:).' - rv0) < 1e-10, ...
+        'insertion:drift', ['seed endpoints differ from the declared %s insertion ' ...
+        '(rvf %.2e, rv0 %.2e) -- regenerate the seed for this criterion'], ...
+        insMeta.label, norm(S.rvf(:).'-rvf), norm(S.rv0(:).'-rv0));
+end
+
 if isfile(directFile) && ~rerunDirect
     fprintf('\n[stage 2] direct solution exists (%s) -- skipping. Set rerunDirect=true to redo.\n', directFile);
     D = load(directFile);  outDirect = D.out;
@@ -213,25 +238,6 @@ else
     % seedFactor is ignored unless seedSpec = 'neighbor' (minfuel_at_tf checks)
     args = {'seedFactor', seedFactor, 'sched', effSched, ...
             'outFile', directFile, 'maxIter', maxIter, 'branch', 'psr'};
-    % drift guard: locate the same seed minfuel_at_tf is about to load and
-    % confirm it matches the declared insertion point (covers the 'energy'
-    % and explicit-file seedSpec cases; a 'neighbor' seed chains from an
-    % already-guarded upstream solve at another factor, so it is not
-    % re-resolved here -- see insertion_states.m single-source note).
-    if strcmpi(seedSpec, 'energy')
-        guardSeedFile = fullfile(cfg.dirs.energy, cfg.fname('energy', factor));
-    elseif ~strcmpi(seedSpec, 'neighbor') && ischar(seedSpec) && isfile(seedSpec)
-        guardSeedFile = seedSpec;
-    else
-        guardSeedFile = '';
-    end
-    if ~isempty(guardSeedFile) && isfile(guardSeedFile)
-        S = load(guardSeedFile, 'rvf', 'rv0');
-        assert(norm(S.rvf(:).' - rvf) < 1e-10 && norm(S.rv0(:).' - rv0) < 1e-10, ...
-            'insertion:drift', ['seed endpoints differ from the declared %s insertion ' ...
-            '(rvf %.2e, rv0 %.2e) -- regenerate the seed for this criterion'], ...
-            insMeta.label, norm(S.rvf(:).'-rvf), norm(S.rv0(:).'-rv0));
-    end
     outDirect = minfuel_at_tf(factor, 'seed', seedSpec, args{:});
     assert(outDirect.certified, ...
         'direct solve did not certify at factor %.3f -- inspect outDirect, do not proceed', factor);

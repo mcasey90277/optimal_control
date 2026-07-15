@@ -11,7 +11,7 @@ Legend: ✅ done/validated · 🟡 partial · ⬜ open
 
 | problem | method | GTO→tulip | GTO→ELFO |
 |---|---|---|---|
-| **min-time** | direct | 🟡 `attic/solve_tfmin_nlp` (fmincon; converges at fine mesh, "easy case") | ✅ **hard all-burn `tfMin_ELFO` = 6.0962 ND = 27.02 d** (`elfo/casadi_mintime_freetf.m` + `gen_elfo_mintime.m`; s≡1, min t(τ_f); machine-tight def 1.7e-15, rendezvous 0, mass-identity 1e-16, independently verified; below the 6.23 ND energy floor). Anchors the ELFO factor scale + the front's 0-switch endpoint |
+| **min-time** | direct | ✅ **hard all-burn `tfMin_tulip` = 5.8267 ND = 25.83 d** (`sundman_minfuel/gen_tulip_mintime.m` on `casadi_mintime_freetf`; two-primary clock + `gen_tulip_energy_2p` seed; def 1.7e-15, primer 0.19°, mesh-invariant, verified) — to the **front's backbone target** (dMoon 28k). NB the legacy 6.2907 ND is min-time to a DIFFERENT (max-ẏ) tulip point; the min-fuel front's factor scale should be tf/5.8267, not tf/6.2907. (fmincon `attic/solve_tfmin_nlp` also converges at fine mesh) | ✅ **hard all-burn `tfMin_ELFO` = 6.0962 ND = 27.02 d** (`elfo/casadi_mintime_freetf.m` + `gen_elfo_mintime.m`; s≡1, min t(τ_f); machine-tight def 1.7e-15, rendezvous 0, mass-identity 1e-16, independently verified; below the 6.23 ND energy floor). Anchors the ELFO factor scale + the front's 0-switch endpoint |
 | | indirect | ✅ single-shoot = pumpkyn to 8 sig figs; **MS 4e-9** (`min_time/mintime_ms_*`) | ⬜ MS retarget fights shooting sensitivity (the direct anchor above is now a candidate seed) |
 | **min-energy** (var t_f) | direct | ✅ energy backbones factor 1.12–1.95 (`sundman_minfuel/results/energy`) | ✅ **gravity-homotopy seed 1.8e-15** (`elfo/gen_elfo_energy_gravhom.m` → `elfo/results/energy_elfo_freetf.mat`, tf 33.5 d, 15.7% prop) |
 | | indirect | ✅ Sundman-MS 75 mN anchor **4.8e-10** (`ztl/results/z1_sun_anchor_75mN.mat`); band via costates 🟡 | ⬜ (energy seed now exists; not yet run) |
@@ -39,6 +39,37 @@ than tulip's (6.0962 vs 6.2907 ND).
 minimum 1.73× tulip (10.9 ND) = **1.79× ELFO**. Full record:
 `elfo/ELFO_RETARGET.md` (Min-time anchor section). Still ⬜: the ELFO min-time
 **indirect** cell (Route C).
+
+## GTO→tulip min-time DIRECT: certified + a front-scale correction (2026-07-15)
+
+`tfMin_tulip = 5.8267 ND (25.83 d)`, hard all-burn, machine-tight (def 1.7e-15,
+primer 0.19°, rendezvous exact), **mesh-invariant**, independently verified —
+the last direct goal-matrix cell, now green. Reuses `casadi_mintime_freetf`
+(target-agnostic) via `sundman_minfuel/gen_tulip_mintime.m`.
+
+**The hard part — a real conditioning wall, root-caused.** Pointing Route B at
+the tulip with the SINGLE-primary clock (moonZone=0) **deterministically
+bus-errors** (3/3): IPOPT's exact Hessian overflows at the near-Moon terminal
+(dMoon 28k) because the single-primary clock r1^1.5 tames only the Earth perigee,
+not the lunar gravity. Confirmed by an L-BFGS test (limited-memory Hessian → no
+crash). Fix = the **two-primary clock** (moonZone=0.15), which tames the lunar
+Hessian; the exact Hessian then converges in ~460 iters. (L-BFGS "works" but
+parks in a shallow local min at 6.96 ND — an artifact; the exact Hessian finds
+the true 5.827.) A proper two-primary tulip energy seed `gen_tulip_energy_2p.m`
+(ELFO gravhom ladder minus the retarget leg; START from the LEAST-saturated
+backbone factor 1.20 edge 12%, NOT the lowest-tf 1.12 edge 71% which stalls
+LEG A) gives a mesh-consistent warm start — and the min-time value is identical
+(5.826718) from both the mismatched and proper mesh, proving mesh-invariance.
+
+**Front-scale finding.** 5.8267 is min-time to the backbone rendezvous the tulip
+min-fuel front ACTUALLY targets (dMoon 28k, speed 0.31). The campaign's
+`cfg.tfMin = 6.2907 ND` is min-time to a DIFFERENT tulip point (max-ẏ,
+`min_time/mintime_params`, dMoon ~6k). So the tulip front's `factor = tf/6.2907`
+is mis-anchored (same "borrowed scale" issue as ELFO); it should be tf/5.8267.
+Physical tf/ΔV unchanged, only the ×-labels shift. Paper §2/§4 carry this.
+`verify_elfo_seed` generalized to moonZone≤0 (single-primary) too. Still ⬜: the
+tulip min-time **indirect** cell (the `min_time/mintime_ms_*` MS = 4e-9 targets
+the max-ẏ point, not the backbone).
 
 ## The ELFO-column blocker is CLEARED (2026-07-13)
 

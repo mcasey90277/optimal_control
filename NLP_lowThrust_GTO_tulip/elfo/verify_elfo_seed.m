@@ -1,6 +1,9 @@
-% VERIFY_ELFO_SEED  Confirm energy_elfo_freetf.mat is a genuine GTO->ELFO
-% min-energy solution: endpoints hit, terminal really at the ELFO, dynamics
-% residual small at full gravity + two-primary clock.
+% VERIFY_ELFO_SEED  Confirm a saved solution (default energy_elfo_freetf.mat, or
+% any SEEDFILE) is a genuine GTO->target transfer: endpoints hit, terminal really
+% at the target, dynamics residual small at full gravity. Handles BOTH the
+% two-primary clock (moonZone>0, ELFO) and the single-primary clock
+% (moonZone<=0, tulip: kappa=r1^pSund), so it verifies min-time solutions to
+% either target.
 here = fileparts(mfilename('fullpath'));  cd(here);  setup_paths();
 cfg = minfuel_config();  p = cr3bp_lt_params(cfg.thrustN, cfg.m0kg, cfg.ispS);
 if ~exist('SEEDFILE','var') || isempty(SEEDFILE)
@@ -20,7 +23,7 @@ dMoonf = norm(S.X(1:3,end)- mMoon.')*p.lStar;
 dEarthf= norm(S.X(1:3,end)- [-p.muStar,0,0].')*p.lStar;
 spdf   = norm(S.X(4:6,end));
 fprintf('  ||X(:,1)-rv0||   = %.2e   (GTO departure)\n', r0err);
-fprintf('  ||X(:,end)-rvf|| = %.2e   (ELFO rendezvous hit)\n', rferr);
+fprintf('  ||X(:,end)-rvf|| = %.2e   (target rendezvous hit)\n', rferr);
 fprintf('  terminal: dMoon=%.0f km  dEarth=%.0f km  speed=%.4f ND\n', dMoonf, dEarthf, spdf);
 fprintf('  start   : dMoon=%.0f km\n', dMoon0);
 fprintf('  tf=%.4f ND (%.2f d)  mf=%.4f (prop %.1f%%)  cScale=%.4f\n', ...
@@ -40,7 +43,11 @@ gr = [r(1,:);r(2,:);zeros(1,nN)] - (1-mu)*dd./d3 - mu*rr./r3e;   % muGain=1
 hv = [2*v(2,:); -2*v(1,:); zeros(1,nN)];
 accel = gr + hv + (s.*Tmax./m).*al;
 mdot  = -(Tmax/cEx)*s;
-kappa = ( r1e.^(-q) + (r2e/D).^(-q) ).^(-pw/q);
+if D > 0
+    kappa = ( r1e.^(-q) + (r2e/D).^(-q) ).^(-pw/q);   % two-primary (ELFO)
+else
+    kappa = r1e.^pw;                                   % single-primary (tulip)
+end
 F = [cs.*kappa.*[v; accel; mdot; ones(1,nN)]; zeros(1,nN)];   % 9 x nN
 dsig = diff(S.sigma(:)).';
 Dd = X(:,2:end) - X(:,1:end-1) - tauf*(repmat(dsig,9,1)/2).*(F(:,1:end-1)+F(:,2:end));

@@ -57,23 +57,51 @@ function [rv0, rvf, meta] = insertion_states(target, criterion)
     (`gto_tulip_endpoints` max-ẏ) · `'apoapsis'` (min-speed point on the tulip)
   - elfo: **`'nearest'`** (default; `gto_elfo_endpoints('nearest', ref=tulip
     campaign rvf)`) · `'apolune'` · `'perilune'` (both via `gto_elfo_endpoints`)
-- Returns `rv0` (the shared GTO departure — hardcoded constant above, matching all
-  pipelines), `rvf` (per target+criterion), and `meta` = struct with `.target
-  .criterion .label` (e.g. `label='tulipCampaign'` / `'elfoNearest'`) for filenames
-  and provenance.
+- Returns `rv0` (the shared GTO departure), `rvf` (per target+criterion), and
+  `meta` = struct with `.target .criterion .label` (e.g. `label='tulipCampaign'` /
+  `'elfoNearest'`) for filenames and provenance.
+- **All alternate criteria are built now** (they are cheap — each reuses an
+  existing helper): tulip `'maxydot'` = `gto_tulip_endpoints` max-ẏ; tulip
+  `'apoapsis'` = the min-speed (gentlest) point on the propagated tulip; elfo
+  `'apolune'`/`'perilune'` = `gto_elfo_endpoints`. So switching target is a
+  one-word change (subject to a matching seed existing — see the guard note in §2).
+- **`rv0` = hardcoded constant, with a commented-out regenerate-from-orbital-
+  elements block** right beside it, so the departure is exact by default but
+  trivially reproducible/auditable:
+  ```matlab
+  rv0 = [0.00349629072294633, -0.0072962582600817, 0, ...
+         4.19147893803368, 8.98865558978329, 0];        % GTO departure (exact)
+  % -- to regenerate rv0 from the GTO orbital elements, uncomment: -------------
+  % muEarth = 6.67384e-20*(1-muStar)*(5.9736e24 + 7.35e22);
+  % sma = (6378+350 + 6378+35786)/2;  ecc = (35786-350)/(2*sma);
+  % [r0,v0] = pumpkyn.cr3bp.orb2eci(muEarth, [sma,ecc,0,-25*pi/180,0,0], 2);
+  % rv0 = pumpkyn.cr3bp.fromPCI(0, [r0,v0], muStar, tStar, lStar, 1);
+  ```
 - Lives in `sundman_minfuel/` (the shared engine dir, already on every pipeline's
   path). The ELFO branch reaches `gto_elfo_endpoints` by adding `../elfo` to the
   path internally (elfo callers already have it; tulip callers never hit that branch).
 
 ### 2. Explicit INSERTION block in every high-level driver
 
-Each driver gets a visible, commented block near its parameters:
+Each driver gets a visible block near its parameters, with the alternate
+criteria present as **commented-out one-liners** ready to uncomment:
 ```matlab
-% ---- INSERTION POINTS (edit here to retarget) --------------------------------
-insertion = 'campaign';                       % tulip: 'campaign'|'maxydot'|'apoapsis'
+% ---- INSERTION POINT (edit here to retarget) ---------------------------------
+insertion = 'campaign';        % tulip default: slow south-pole point (dMoon 28k)
+% insertion = 'maxydot';       % uncomment for the max-ydot point (needs a maxydot seed)
+% insertion = 'apoapsis';      % uncomment for the slowest/apoapsis point (needs a seed)
 [rv0, rvf, insMeta] = insertion_states('tulip', insertion);
 ```
-(ELFO drivers use `('elfo','nearest')`.) Behaviour by driver role:
+(ELFO drivers use `('elfo', ...)` with `'nearest'` default and commented
+`'apolune'`/`'perilune'`.) **The commented criteria + the drift guard are
+designed to work together**: uncommenting a different criterion changes the
+declared `rvf`, so the guard will **fail loudly** unless a matching energy seed
+for that point already exists — which is exactly the desired safety (you can't
+silently run a `maxydot` transfer off a `campaign` seed). To actually use an
+alternate: uncomment it, generate its energy seed with the same criterion, then
+the guard passes.
+
+Behaviour by driver role:
 
 - **Consumers that load a seed** (`PSR/run_psr`, `PSR/psr_run_one`,
   `elfo/run_elfo_minfuel`, `elfo/elfo_run_one`, `sundman_minfuel/gen_tulip_mintime`,

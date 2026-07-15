@@ -243,3 +243,48 @@ DEFERRED for ELFO (tulip single-primary fixed-tf machinery, needs two-primary
 porting): stage 3 switch-localization refinement (refine_loop) and the full
 16-dim per-arc PMP-propagation certificate (verify_direct_pmp). gen_elfo_minfuel
 now saves the solver `out` struct (with lamDef) so the export has the costates.
+
+# Min-fuel tf-grid FRONT: MAPPED (2026-07-15)
+
+The batch infrastructure (mirrors the PSR trio) that turns the single 1.20x
+solution into the full ΔV-time front, all terminal-runnable, crash-robust,
+resumable:
+  elfo_energy_sweep.sh <lo> <hi> <step>  factor-band energy seeds (retry+resume;
+      gen_elfo_energy_tfsweep resumes each direction from the furthest banked seed)
+  elfo_batch.sh <epsMin> [factors|energy] per-factor ε:1->0 bang-bang, ONE process
+      per factor (uncatchable CasADi MEX crash isolation) + watchdog + resume-skip
+  elfo_run_one(factor,opts)               the per-factor unit (seed->gen_elfo_minfuel
+      ->result row; try/catches minfuel:stuck; resumable)
+  elfo_collect_summary(epsMin)            rows -> the tf-grid map
+  elfo_movies.sh [all|factors]            post-hoc movies (elfo_render_movies ->
+      elfo_movie on the saved .mat, NO re-solve, no CasADi)
+
+RESULT (energy band 1.11-2.00x, 14 seeds; FUEL run epsMin=0):
+  11/14 factors reached ε=0 machine-tight (edge ~99.6%, defect 1e-15..1e-12).
+  factor  days   dV(km/s)  prop%   sw
+  1.11    31.0   3.344     15.0    26
+  1.20    33.5   3.238     14.5    34
+  1.33    37.1   3.060     13.8    50   (switch-count peak)
+  1.49    41.6   2.824     12.8    42
+  1.57    43.8   2.750     12.5    40
+  1.73    48.2   2.693     12.3    40   <-- FRONT MINIMUM
+  1.81    50.5   2.701     12.3    38
+  1.97    54.9   2.706     12.3    38
+FINDINGS:
+  - Clean monotone front 3.344 -> min 2.693 km/s at 1.73x/48 d (~20% prop saving
+    vs 1.11x for ~17 more days), then flat. The tiny uptick past 1.73x
+    (2.701/2.706) is local-basin scatter (dense local-minima, same as tulip),
+    NOT physical -- the true front plateaus ~2.69.
+  - 3 GAPS (1.65x, 1.89x, 2.00x) timed out even at a 60-min watchdog: the
+    many-switch bang-bang is hardest to resolve in the low-ΔV plateau, and 1.65x
+    sits AT the front minimum -- the optimum is at a fold. Checkpointed; a 2-hr
+    watchdog pass would fill them (they'd land on the ~2.69 plateau).
+  - Switch count non-monotone: peaks 50 @1.33x, eases to ~38 at high tf.
+  - Watchdog lesson: default 30 min too short mid-band (timed out 1.33-1.49x
+    then converged at 60 min); use WATCHDOG_S=3600. Every timed-out factor keeps
+    its ε-step checkpoint, so a re-run resumes rather than restarts.
+
+CAVEAT ON SCALE: factor = tf/tfMin_tulip (6.2907 ND) -- ELFO's own min-time is
+still UNSOLVED, so `factor` is a shared label, not ×ELFO-min-time. Solving ELFO
+min-time (next objective) anchors the scale AND gives the front's 0-switch
+low-tf endpoint.

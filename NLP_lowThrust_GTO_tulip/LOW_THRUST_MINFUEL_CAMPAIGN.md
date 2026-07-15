@@ -668,3 +668,30 @@ near-singularity; fixed-tf ladder needs no min-time table; the cold-seed
 landscape is explosive at high thrust vs amplification-limited at low, so
 "wide basin at high thrust" = arrives-warm easy; cold multistart sweet-spot
 signal near 75 mN). Memory: ztl-p0-findings.
+
+## GTO -> ELFO min-fuel ΔV-time FRONT: MAPPED (2026-07-15)
+
+The min-fuel campaign extended to the second target (lunar ELFO, proj7
+`im_elfo_optimum`). Full record: `elfo/ELFO_RETARGET.md`; pipeline lives in
+`elfo/` (self-contained sibling of PSR, two-primary free-tf solver
+`casadi_energy_freetf` for the lunar-capture leg).
+
+**Result:** the GTO->ELFO min-fuel ΔV-time front is mapped over the energy band
+1.11-2.00x (factor = tf/tfMin_tulip). 11/14 grid factors reached ε=0 bang-bang
+machine-tight (edge ~99.6%, defect 1e-15..1e-12). The front is a clean monotone
+decrease **3.344 km/s (1.11x/31 d) -> minimum 2.693 km/s at 1.73x/48 d** (prop
+12.3%), then flat; the slight uptick past the minimum is local-basin scatter
+(dense local-minima, as tulip), not physical. 3 gaps (1.65x, 1.89x, 2.00x)
+timed out even at a 60-min watchdog -- the low-ΔV plateau is where the
+many-switch bang-bang is hardest to resolve, and 1.65x sits AT the minimum, so
+the **optimum is at a fold**. Switch count non-monotone, peaks 50 @1.33x.
+
+**Infrastructure (terminal-runnable, crash-robust, resumable; on main):**
+`elfo/elfo_energy_sweep.sh` (energy seed band) -> `elfo/elfo_batch.sh 0 energy`
+(per-factor ε->0, one process/factor for MEX-crash isolation, watchdog, resume)
+-> `elfo/elfo_collect_summary` -> `results/elfo_batch_summary_minEps0.mat`;
+post-hoc movies `elfo/elfo_movies.sh all`. Watchdog lesson: default 30 min too
+short mid-band; use `WATCHDOG_S=3600` (every timed-out factor keeps its ε-step
+checkpoint, so a re-run resumes). NEXT: solve ELFO min-time (anchors the factor
+scale + gives the 0-switch front endpoint). See memory `elfo-retarget-open`,
+`minfuel-tf-grid-strategy`.

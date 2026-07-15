@@ -15,7 +15,7 @@ Legend: ✅ done/validated · 🟡 partial · ⬜ open
 | | indirect | ✅ single-shoot = pumpkyn to 8 sig figs; **MS 4e-9** (`min_time/mintime_ms_*`) | ⬜ MS retarget fights shooting sensitivity |
 | **min-energy** (var t_f) | direct | ✅ energy backbones factor 1.12–1.95 (`sundman_minfuel/results/energy`) | ✅ **gravity-homotopy seed 1.8e-15** (`elfo/gen_elfo_energy_gravhom.m` → `elfo/results/energy_elfo_freetf.mat`, tf 33.5 d, 15.7% prop) |
 | | indirect | ✅ Sundman-MS 75 mN anchor **4.8e-10** (`ztl/results/z1_sun_anchor_75mN.mat`); band via costates 🟡 | ⬜ (energy seed now exists; not yet run) |
-| **min-fuel** (var t_f) | direct | ✅ PSR pipeline, 3- & 25-switch bang-bang certified, band [1.12,1.95] | 🟡 **ε=0 reached at tf=33.5 d (1.20×)**: 34-switch bang-bang, 14.5% prop, def 5.7e-15, verified (`elfo/gen_elfo_minfuel.m`→`elfo/results/minfuel_elfo.mat`). tf-GRID map pending (energy band ⊋ fuel band) |
+| **min-fuel** (var t_f) | direct | ✅ PSR pipeline, 3- & 25-switch bang-bang certified, band [1.12,1.95] | ✅ **ΔV–time FRONT mapped** (2026-07-15): 11/14 factors ε=0 bang-bang, machine-tight (edge ~99.6%, def 1e-15..1e-12); **min 2.693 km/s @ 1.73×/48 d** (12.3% prop), monotone from 3.344 (1.11×/31 d) then flat; 3 gaps at the 1.65–2.0× fold (timed out even at 60 min = hard fold AT the optimum). Pipeline: `elfo/elfo_energy_sweep.sh`→`elfo_batch.sh 0 energy`→`elfo_collect_summary` (`results/elfo_batch_summary_minEps0.mat`) |
 | | indirect | 🟡 IFS/ms_band: 1.12x = 10 switches certified; band = conditioning wall | ⬜ (energy seed exists; not yet run) |
 
 ## The ELFO-column blocker is CLEARED (2026-07-13)
@@ -42,8 +42,11 @@ the energy seed with ε:1→0. Then the indirect ELFO cells.
   `casadi_energy_freetf.m` (free-t_f, two-primary clock, gravity homotopy);
   `gen_elfo_energy_gravhom.m` (4-leg ladder → energy seed); `gen_elfo_minfuel.m`
   (ε→0 fuel); `run_elfo_minfuel.m` (entry: solve→export→verify→movie, target-tagged);
-  `elfo_export_data.m` (data products); `gen_elfo_energy_tfsweep.m` (tf-band map);
-  build record `ELFO_RETARGET.md`.
+  `elfo_export_data.m` (data products); `gen_elfo_energy_tfsweep.m` (tf-band map).
+  Terminal-runnable, crash-robust + resumable: `elfo_energy_sweep.sh` (energy seed
+  band) → `elfo_batch.sh 0 energy` (per-factor ε→0 bang-bang) → `elfo_collect_summary`;
+  post-hoc movies `elfo_movies.sh all` (`elfo_render_movies`→`elfo_movie`, no re-solve).
+  Build record `ELFO_RETARGET.md`.
 - `PSR/` — PMP-Steered Refinement (direct GTO→tulip min-fuel pipeline).
 - `ztl/` — indirect Sundman multiple-shooting (energy anchor 4.8e-10).
 - `min_time/` — min-time (single + multiple shooting); tulip MS validated 4e-9.

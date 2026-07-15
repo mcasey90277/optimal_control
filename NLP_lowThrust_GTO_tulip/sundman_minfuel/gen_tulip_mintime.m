@@ -33,11 +33,22 @@ addpath(fullfile(here, '..', 'elfo'));      % casadi_mintime_freetf + verify_elf
 resDir = fullfile(here,'results');
 cfg = minfuel_config();  p = cr3bp_lt_params(cfg.thrustN, cfg.m0kg, cfg.ispS);
 
+% ---- INSERTION POINT (edit here to retarget) ---------------------------------
+insertion = 'campaign';        % tulip: 'campaign'|'maxydot'|'apoapsis'  (elfo: 'nearest'|'apolune'|'perilune')
+% insertion = 'maxydot';       % uncomment to use the max-ydot point (needs a matching energy seed)
+% insertion = 'apoapsis';      % uncomment to use the slowest/apoapsis point (needs a matching seed)
+[rv0, rvf, insMeta] = insertion_states('tulip', insertion);   % <TGT> = 'tulip' or 'elfo'
+
 % Default: the TWO-primary tulip energy seed (gen_tulip_energy_2p) -- re-meshed
 % for the two-primary clock so the exact Hessian survives the near-Moon terminal.
 % (The single-primary backbone energy_f####.mat crashes the exact-Hessian solve.)
 seedFile = gd('seedFile', fullfile(resDir,'energy_tulip_2p.mat'));
 S = load(seedFile);
+% drift guard: the seed must be for the declared insertion point
+assert(norm(S.rvf(:).' - rvf) < 1e-10 && norm(S.rv0(:).' - rv0) < 1e-10, ...
+    'insertion:drift', ['seed endpoints differ from the declared %s insertion ' ...
+    '(rvf %.2e, rv0 %.2e) -- regenerate the seed for this criterion'], ...
+    insMeta.label, norm(S.rvf(:).'-rvf), norm(S.rv0(:).'-rv0));
 fprintf('=== GEN_TULIP_MINTIME: seed %s (tf=%.4f ND, %.2f d) ===\n', ...
         seedFile, S.X(8,end), S.X(8,end)*p.tStar/86400);
 
@@ -49,7 +60,7 @@ X0 = S.X;  U0 = S.U(1:3,:);
 o = struct('pSund',1.5,'qSund',4,'moonZone',gd('moonZone',0.15), ...
            'cBox',[0.10 8],'tfCapMult',4,'maxIter',gd('maxIter',3000), ...
            'warmTight',gd('warmTight',false));
-out = casadi_mintime_freetf(S.sigma, S.rv0, S.rvf, p.Tmax, p.c, p.muStar, ...
+out = casadi_mintime_freetf(S.sigma, rv0, rvf, p.Tmax, p.c, p.muStar, ...
                             X0, U0, S.tauf0, o);
 
 % acceptance diagnostics

@@ -25,8 +25,19 @@ here = fileparts(mfilename('fullpath'));  cd(here);  setup_paths();
 resDir = fullfile(here,'results');
 cfg = minfuel_config();  p = cr3bp_lt_params(cfg.thrustN, cfg.m0kg, cfg.ispS);
 
+% ---- INSERTION POINT (edit here to retarget) ---------------------------------
+insertion = 'nearest';          % elfo: 'nearest'|'apolune'|'perilune'  (tulip: 'campaign'|'maxydot'|'apoapsis')
+% insertion = 'apolune';        % uncomment to use the apolune point (needs a matching energy seed)
+% insertion = 'perilune';       % uncomment to use the perilune point (needs a matching seed)
+[rv0, rvf, insMeta] = insertion_states('elfo', insertion);   % <TGT> = 'tulip' or 'elfo'
+
 seedFile = gd('seedFile', fullfile(resDir,'energy_elfo_f0990.mat'));
 S = load(seedFile);
+% drift guard: the seed must be for the declared insertion point
+assert(norm(S.rvf(:).' - rvf) < 1e-10 && norm(S.rv0(:).' - rv0) < 1e-10, ...
+    'insertion:drift', ['seed endpoints differ from the declared %s insertion ' ...
+    '(rvf %.2e, rv0 %.2e) -- regenerate the seed for this criterion'], ...
+    insMeta.label, norm(S.rvf(:).'-rvf), norm(S.rv0(:).'-rv0));
 fprintf('=== GEN_ELFO_MINTIME: seed %s (tf=%.4f ND, %.2f d, edge from energy) ===\n', ...
         seedFile, S.X(8,end), S.X(8,end)*p.tStar/86400);
 
@@ -35,7 +46,7 @@ X0 = S.X;  U0 = S.U(1:3,:);
 o = struct('pSund',S.pSund,'qSund',S.qSund,'moonZone',S.moonZone, ...
            'cBox',[0.10 8],'tfCapMult',4,'maxIter',gd('maxIter',3000), ...
            'warmTight',gd('warmTight',false));
-out = casadi_mintime_freetf(S.sigma, S.rv0, S.rvf, p.Tmax, p.c, p.muStar, ...
+out = casadi_mintime_freetf(S.sigma, rv0, rvf, p.Tmax, p.c, p.muStar, ...
                             X0, U0, S.tauf0, o);
 
 % acceptance diagnostics

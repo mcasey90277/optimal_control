@@ -39,6 +39,12 @@ resDir    = d('resDir', fullfile(here,'results'));
 rerun     = d('rerun', false);
 if ~exist(resDir,'dir'), mkdir(resDir); end
 
+% ---- INSERTION POINT (edit here to retarget) ---------------------------------
+insertion = 'nearest';          % elfo: 'nearest'|'apolune'|'perilune'  (tulip: 'campaign'|'maxydot'|'apoapsis')
+% insertion = 'apolune';        % uncomment to use the apolune point (needs a matching energy seed)
+% insertion = 'perilune';       % uncomment to use the perilune point (needs a matching seed)
+[rv0, rvf, insMeta] = insertion_states('elfo', insertion);   % <TGT> = 'tulip' or 'elfo'
+
 tf   = factor * cfg.tfMin;
 eTag = strrep(sprintf('%g', epsMin), '.', 'p');
 tag  = sprintf('f%04d_minEps%s', round(1000*factor), eTag);
@@ -71,6 +77,13 @@ if ~isfile(seed)
     row.err = sprintf('no ELFO energy seed for factor %.3f (build via gen_elfo_energy_tfsweep)', factor);
     save(resultFile,'row');  fprintf('elfo_run_one f=%.3f: %s\n', factor, row.err);  return
 end
+
+% drift guard: the seed must be for the declared insertion point
+E = load(seed, 'rvf', 'rv0');
+assert(norm(E.rvf(:).' - rvf) < 1e-10 && norm(E.rv0(:).' - rv0) < 1e-10, ...
+    'insertion:drift', ['seed endpoints differ from the declared %s insertion ' ...
+    '(rvf %.2e, rv0 %.2e) -- regenerate the seed for this criterion'], ...
+    insMeta.label, norm(E.rvf(:).'-rvf), norm(E.rv0(:).'-rv0));
 
 fprintf('\n=== ELFO_RUN_ONE factor %.3f (epsMin=%g, seed=%s) ===\n', factor, epsMin, seed);
 

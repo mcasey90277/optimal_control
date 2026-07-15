@@ -34,6 +34,7 @@ function row = psr_run_one(factor, opts)
 
 here = fileparts(mfilename('fullpath'));
 addpath(here);  setup_paths();
+addpath(fullfile(here, '..', 'sundman_minfuel'));   % insertion_states (single-source; PSR vendors the rest)
 cfg = minfuel_config();
 
 if nargin < 2, opts = struct(); end
@@ -53,6 +54,12 @@ resDir     = d('resDir', fullfile(here,'results'));
 dataDir    = d('dataDir', fullfile(here,'..','PSR_data'));
 if ~exist(resDir,'dir'), mkdir(resDir); end
 if ~exist(dataDir,'dir'), mkdir(dataDir); end
+
+% ---- INSERTION POINT (edit here to retarget) ---------------------------------
+insertion = 'campaign';        % tulip: 'campaign'|'maxydot'|'apoapsis'  (elfo: 'nearest'|'apolune'|'perilune')
+% insertion = 'maxydot';       % uncomment to use the max-ydot point (needs a matching energy seed)
+% insertion = 'apoapsis';      % uncomment to use the slowest/apoapsis point (needs a matching seed)
+[rv0, rvf, insMeta] = insertion_states('tulip', insertion);   % <TGT> = 'tulip' or 'elfo'
 
 eTag = strrep(sprintf('%g', epsMin), '.', 'p');
 tag  = sprintf('f%04d_minEps%s', round(1000*factor), eTag);
@@ -78,6 +85,24 @@ else
     end
     effSched = [base(base > epsMin), epsMin];
     fprintf('[2] direct solve (endpoint eps=%.3g)...\n', epsMin);
+    % drift guard: locate the same seed minfuel_at_tf is about to load and
+    % confirm it matches the declared insertion point ('energy' / explicit-file
+    % seedSpec cases; 'neighbor' isn't wired through this driver's opts, so it
+    % is left to minfuel_at_tf's own error -- see run_psr.m for the full case).
+    if strcmpi(seedSpec, 'energy')
+        guardSeedFile = fullfile(cfg.dirs.energy, cfg.fname('energy', factor));
+    elseif ~strcmpi(seedSpec, 'neighbor') && ischar(seedSpec) && isfile(seedSpec)
+        guardSeedFile = seedSpec;
+    else
+        guardSeedFile = '';
+    end
+    if ~isempty(guardSeedFile) && isfile(guardSeedFile)
+        S = load(guardSeedFile, 'rvf', 'rv0');
+        assert(norm(S.rvf(:).' - rvf) < 1e-10 && norm(S.rv0(:).' - rv0) < 1e-10, ...
+            'insertion:drift', ['seed endpoints differ from the declared %s insertion ' ...
+            '(rvf %.2e, rv0 %.2e) -- regenerate the seed for this criterion'], ...
+            insMeta.label, norm(S.rvf(:).'-rvf), norm(S.rv0(:).'-rv0));
+    end
     outDirect = minfuel_at_tf(factor, 'seed', seedSpec, 'sched', effSched, ...
         'outFile', directFile, 'maxIter', maxIter, 'branch', 'psr');
     assert(outDirect.certified, 'direct solve did not certify at factor %.3f', factor);

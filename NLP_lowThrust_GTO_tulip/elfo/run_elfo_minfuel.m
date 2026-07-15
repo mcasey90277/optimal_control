@@ -53,6 +53,12 @@ doVerify = true;          % stage 5: independent endpoint + defect check
 movieMode= 'movie';       % stage 6: 'movie' (MP4+GIF) | 'preview' (3 stills) | 'none'
 rerun    = false;         % true -> ignore any checkpoint and re-solve from the seed
 
+% ---- INSERTION POINT (edit here to retarget) ---------------------------------
+insertion = 'nearest';          % elfo: 'nearest'|'apolune'|'perilune'  (tulip: 'campaign'|'maxydot'|'apoapsis')
+% insertion = 'apolune';        % uncomment to use the apolune point (needs a matching energy seed)
+% insertion = 'perilune';       % uncomment to use the perilune point (needs a matching seed)
+[rv0, rvf, insMeta] = insertion_states('elfo', insertion);   % <TGT> = 'tulip' or 'elfo'
+
 % solver knobs (campaign defaults; edit only for experiments)
 step0    = 0.20;          % initial epsilon step
 stepMin  = 0.005;         % give up below this step (declares the sharpening wall)
@@ -77,6 +83,13 @@ if strcmpi(seedSpec, 'auto')
 else
     seedFile = seedSpec;  assert(isfile(seedFile), 'seedSpec not found: %s', seedFile);
 end
+
+% drift guard: the seed must be for the declared insertion point
+E = load(seedFile, 'rvf', 'rv0');
+assert(norm(E.rvf(:).' - rvf) < 1e-10 && norm(E.rv0(:).' - rv0) < 1e-10, ...
+    'insertion:drift', ['seed endpoints differ from the declared %s insertion ' ...
+    '(rvf %.2e, rv0 %.2e) -- regenerate the seed for this criterion'], ...
+    insMeta.label, norm(E.rvf(:).'-rvf), norm(E.rv0(:).'-rv0));
 
 fTag = strrep(sprintf('%.3f', factor), '.', 'p');
 eTag = strrep(sprintf('%g', epsMin), '.', 'p');

@@ -1,0 +1,268 @@
+%==============================================================================
+%  OUTLINE: Minimum-Fuel Low-Thrust GTO -> Cislunar Transfers (tulip & ELFO)
+%
+%  Skeleton only. Each section gives the intended content in a few sentences
+%  plus bullet points. Source of record for all numbers:
+%    optimal_control/NLP_lowThrust_GTO_tulip/LOW_THRUST_MINFUEL_CAMPAIGN.md
+%    optimal_control/NLP_lowThrust_GTO_tulip/ROADMAP.md
+%    optimal_control/NLP_lowThrust_GTO_tulip/sundman_minfuel_solution_note.tex
+%==============================================================================
+\documentclass[11pt]{article}
+\usepackage[margin=1in]{geometry}
+\usepackage{amsmath,amssymb}
+\usepackage{enumitem}
+\setlist{nosep}
+
+\title{Minimum-Fuel Low-Thrust Transfers from GTO to\\
+       Cislunar Tulip and ELFO Orbits\\[4pt]
+       \large (Paper Outline)}
+\author{M.\ Casey \and D.\ Koblick}
+\date{\today}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+\emph{[Outline note.]} One paragraph: pose the minimum-fuel low-thrust
+GTO$\rightarrow$cislunar transfer, state that we certify a sharp bang-bang
+solution on the full $\sim$40-revolution spiral to machine tolerance, and that
+we map the $\Delta V$--transfer-time front for two operationally relevant
+targets---a south-pole \emph{tulip} orbit and a lunar \emph{ELFO}. Headline
+numbers: tulip $\Delta V = 3.37$~km/s (25 switches, defect $2.4\times10^{-14}$)
+at $1.15\times$ min-time; ELFO front minimum $2.69$~km/s at $1.73\times$
+min-time. \emph{[Outline note: the ``$\times$~min-time'' factors quoted here are
+the legacy tulip-$6.2907$~ND scaling; final copy must state them against each
+target's own certified min-time (tulip $\sim$5.8~ND, ELFO $6.0962$~ND) --- see
+\S2/\S4. Physical $t_f$/$\Delta V$ are unaffected.]}
+\end{abstract}
+
+%==============================================================================
+\section{Introduction}
+%==============================================================================
+\emph{[A few sentences.]} Motivate low-thrust cislunar delivery: high-$I_{sp}$
+electric propulsion trades trip time for propellant, which dominates rideshare
+economics from a GTO drop-off. The many-revolution min-fuel problem is the hard
+member of the min-time/min-energy/min-fuel trio because its cost is \emph{linear}
+in the control, so the optimum is genuinely bang-bang (burn near perigee, coast
+near apogee) with dozens of switches, and it lives on a $\sim$40-revolution
+CR3BP spiral whose perigee passes give $\sim10^6$ shooting sensitivity. We show
+both walls can be knocked down together and the resulting solutions certified.
+
+\begin{itemize}
+  \item Problem framing: GTO $\rightarrow$ cislunar via continuous low thrust in
+        the Earth--Moon CR3BP; why min-fuel matters commercially.
+  \item Why min-fuel is hard: linear-in-control $\Rightarrow$ bang-bang
+        (objective-side wall) compounded by the many-perigee spiral
+        (dynamics-side wall). The two-wall framing is the paper's spine.
+  \item Contributions: (i) machine-tight certified full-spiral bang-bang
+        solution; (ii) energy$\rightarrow$fuel homotopy + Sundman regularization
+        recipe; (iii) PMP cross-check of a direct solution via KKT duals;
+        (iv) $\Delta V$--time fronts for two targets.
+  \item Related work: Bertrand--\'Ep\'enoy continuation, Sundman/regularized
+        transcriptions, prior GTO$\rightarrow$cislunar low-thrust studies.
+        \emph{[cite]}
+\end{itemize}
+
+%==============================================================================
+\section{Target Orbits: Tulip and ELFO}
+%==============================================================================
+\emph{[A few sentences.]} Define the two rendezvous targets and why each is of
+interest for lunar south-pole service. The \emph{tulip} is a south-pole-favorable
+petal orbit (single plane, single-hop nav/relay geometry); the \emph{ELFO} is
+the elliptical lunar frozen orbit used as an Intuitive-Machines-style data-relay
+reference. Both are specified as fixed rendezvous states in CR3BP nondimensional
+units.
+
+\begin{itemize}
+  \item \textbf{Tulip}: south-pole tulip point; role in nav/relay constellation
+        (link to proj7 line of work). Give the target state used.
+  \item \textbf{ELFO}: \texttt{im\_elfo\_optimum} --- sma 12{,}000~km, ecc 0.69,
+        inc $56.5^\circ$, argp $90^\circ$; role as relay benchmark.
+  \item Common departure: GTO $350\times35786$~km, $\omega=-25^\circ$.
+  \item CR3BP setup: $\mu^\star = 0.012150585609624$; nondimensionalization;
+        spacecraft 15~kg, 25~mN, $I_{sp}=2100$~s.
+  \item Min-time anchors (front endpoints, 0 switches), computed as a hard
+        all-burn ($s\equiv1$) free-time min-time solve on the two-primary-clock
+        transcription (\S3):
+        \begin{itemize}
+          \item \textbf{ELFO}: $t_f=6.0962$~ND $=27.02$~d (certified: machine-tight,
+                defect $1.7\times10^{-15}$, primer $0.17^\circ$).
+          \item \textbf{Tulip}: $t_f\approx 5.83$~ND $\approx 25.8$~d
+                \emph{[value pending final mesh-converged certification]},
+                to the \emph{backbone rendezvous state the $\Delta V$--$t_f$ front
+                actually targets} (dMoon $\sim$28{,}000~km).
+        \end{itemize}
+        \emph{[Outline note --- IMPORTANT.]} The frequently quoted tulip min-time
+        $t_f=6.2907$~ND ($\Delta V=4.47$~km/s) is the min-time to a \emph{different}
+        tulip state (the max-$\dot y$ point, dMoon $\sim$6{,}000~km) and must
+        \emph{not} be used to scale this front: the min-fuel front rendezvouses at
+        the backbone state above, whose true min-time is $\sim$5.8~ND. All ``$\times$
+        min-time'' factors in \S4 are therefore relative to the target-consistent
+        anchors here, not to $6.2907$.
+\end{itemize}
+
+%==============================================================================
+\section{The Optimal Control Problem}
+%==============================================================================
+\emph{[A few sentences.]} State the fixed-time min-fuel OCP, the direct
+transcription, and the two regularizations that make it solvable. Minimize
+propellant $\propto\int s\,dt$ (throttle $s\in[0,1]$) at fixed $t_f$ subject to
+CR3BP low-thrust dynamics and the GTO/target boundary conditions. Solve by
+direct collocation with an exact-Hessian NLP (CasADi + IPOPT), made tractable by
+(a) Sundman regularization of the independent variable and (b) an
+energy$\rightarrow$fuel homotopy that starts from the smooth (convex) root.
+
+\medskip
+\noindent\textbf{Continuous-time problem.} In the rotating, nondimensional (ND)
+Earth--Moon CR3BP frame let $\boldsymbol r=(x,y,z)$ be position, $\boldsymbol
+v=\dot{\boldsymbol r}$ velocity, and $m$ mass, with mass ratio
+$\mu=0.012150585609624$, primaries at $\boldsymbol r_E=(-\mu,0,0)$ (Earth) and
+$\boldsymbol r_M=(1-\mu,0,0)$ (Moon), and $\boldsymbol r_1=\boldsymbol
+r-\boldsymbol r_E$, $\boldsymbol r_2=\boldsymbol r-\boldsymbol r_M$
+($r_i=\lVert\boldsymbol r_i\rVert$). The thruster has ND maximum acceleration
+$T$, exhaust velocity $c=I_{sp}g_0$, throttle $s\in[0,1]$, and unit thrust
+direction $\boldsymbol\alpha$. The fixed-time minimum-fuel optimal control
+problem is
+\begin{equation}
+\begin{aligned}
+\min_{s(\cdot),\,\boldsymbol\alpha(\cdot)}\quad
+  & J=\int_0^{t_f} s\,dt \\[2pt]
+\text{s.t.}\quad
+  & \dot{\boldsymbol r}=\boldsymbol v,\qquad
+    \dot{\boldsymbol v}=\boldsymbol g(\boldsymbol r)+\boldsymbol h(\boldsymbol v)
+      +\frac{sT}{m}\,\boldsymbol\alpha,\qquad
+    \dot m=-\frac{T}{c}\,s,\\[2pt]
+  & \boldsymbol g(\boldsymbol r)=\begin{bmatrix}x\\y\\0\end{bmatrix}
+      -(1-\mu)\frac{\boldsymbol r_1}{r_1^{3}}
+      -\mu\frac{\boldsymbol r_2}{r_2^{3}},\qquad
+    \boldsymbol h(\boldsymbol v)=\begin{bmatrix}2\dot y\\-2\dot x\\0\end{bmatrix},\\[2pt]
+  & s(t)\in[0,1],\qquad \lVert\boldsymbol\alpha(t)\rVert=1,\\[2pt]
+  & \boldsymbol r(0),\boldsymbol v(0)=\text{(GTO departure)},\quad m(0)=1,\\[2pt]
+  & \boldsymbol r(t_f),\boldsymbol v(t_f)=\text{(target arrival)},\quad
+    m(t_f)\ \text{free},\quad t_f\ \text{fixed}.
+\end{aligned}
+\label{eq:ocp}
+\end{equation}
+Mass is normalized to $m(0)=1$, so propellant burned is $m_p=1-m(t_f)=
+\tfrac{T}{c}\int_0^{t_f}\!s\,dt$; minimizing $J$ therefore minimizes propellant.
+The target arrival state is the tulip or ELFO rendezvous point of \S2; the two
+targets differ only in these terminal conditions.
+
+\medskip
+\noindent\textbf{Optimality structure (why it is bang-bang).} With costates
+$\boldsymbol\lambda_r,\boldsymbol\lambda_v,\lambda_m$ the Hamiltonian is
+$H=\boldsymbol\lambda_r\!\cdot\!\boldsymbol v+\boldsymbol\lambda_v\!\cdot\!
+\big(\boldsymbol g+\boldsymbol h+\tfrac{sT}{m}\boldsymbol\alpha\big)
+-\lambda_m\tfrac{T}{c}s+s$. Pontryagin's principle minimizes $H$ pointwise: the
+direction enters only through $\boldsymbol\lambda_v\!\cdot\!\boldsymbol\alpha$,
+so thrust aligns with the primer vector $\boldsymbol\alpha^\star=
+-\boldsymbol\lambda_v/\lVert\boldsymbol\lambda_v\rVert$, and $H$ is then
+\emph{affine} in $s$, giving the bang-bang law $s^\star=1$ where $S<0$ (burn) and
+$s^\star=0$ where $S>0$ (coast), with switching function
+\begin{equation}
+S=1-\frac{T}{m}\lVert\boldsymbol\lambda_v\rVert-\frac{T}{c}\lambda_m .
+\label{eq:switch}
+\end{equation}
+On the $\sim$40-revolution spiral $S$ changes sign near every perigee, producing
+the order-25 switches that are the crux of the difficulty.
+
+\begin{itemize}
+  \item Continuous-time OCP + PMP structure: stated in \eqref{eq:ocp} and
+        \eqref{eq:switch} above (dynamics, controls, cost, fixed $t_f$, bang-bang
+        switching function). Controls in code are the cone-eliminated
+        unit-direction $\boldsymbol\alpha$ plus throttle $s$.
+  \item \textbf{Sundman regularization}: $dt/d\tau=\kappa(r)=r_1^{\,p}$ ($p=1.5$),
+        time carried as an 8th state, $\tau_f$ fixed; tames the $1/r^3$ perigee
+        terms and auto-concentrates nodes near perigee.
+  \item \textbf{Two-primary clock (lunar-capture leg)}: the single-primary clock
+        $\kappa=r_1^{\,p}$ tames only the Earth-perigee singularity; near a
+        Moon-vicinity target it leaves the lunar gravity unresolved, and the
+        exact Hessian then overflows at the near-Moon nodes (a MUMPS crash on
+        the cislunar min-time solve). Replace $\kappa$ by the two-primary
+        min-distance clock $\kappa=(r_1^{-q}+(r_2/D)^{-q})^{-p/q}$ ($q\sim4$,
+        $D\approx$ lunar SOI $\sim0.15$~ND), which recovers $r_1^{\,p}$ near
+        Earth and $(r_2/D)^{\,p}$ near the Moon, redistributing nodes into the
+        capture arc. Required for the ELFO front and for the target-consistent
+        min-time anchors of both targets.
+  \item \textbf{Exact Hessian vs.\ the singularity}: a reusable lesson --- the
+        exact NLP Hessian, an asset for a well-scaled problem, \emph{destabilizes}
+        (overflows/crashes) near the $1/r$ singularities unless the transcription
+        is first regularized; the two clocks above are what make the exact-Hessian
+        solve safe. (Free physical $t_f$ for the min-time anchors is carried by a
+        constant slack state so the KKT stays banded.)
+  \item \textbf{Energy$\rightarrow$fuel homotopy}: $J(\varepsilon)=\int s\,dt -
+        \varepsilon\int s(1-s)\,dt$; $\varepsilon{=}1$ strictly convex (smooth
+        ramp), $\varepsilon{=}0$ fuel (bang-bang); warm-start-continue
+        $\varepsilon:1\to0$. "Start smooth, then sharpen."
+  \item \textbf{Seeding \& continuation}: no-resample seed map; energy-backbone
+        continuation in $t_f$ (crash-free downward); tight multiplier re-clean
+        before sharpening.
+  \item \textbf{Optimality verification}: PMP cross-check from KKT duals ---
+        primer-vector alignment ($0.06^\circ$), transversality
+        ($\lambda_m(\tau_f)\approx0$), switching-function sign law; independent
+        adjoint-ODE consistency check.
+\end{itemize}
+
+%==============================================================================
+\section{Results}
+%==============================================================================
+\emph{[A few sentences.]} Present the certified point solution, the two
+$\Delta V$--time fronts, and the structural findings. The full-spiral tulip
+min-fuel optimum is certified machine-tight and PMP-consistent; sweeping $t_f$
+maps the propellant--trip-time trade for both targets and exposes a dense
+local-minimum landscape and a hard near-min-time transition band.
+
+\begin{itemize}
+  \item \textbf{Certified tulip solution} ($1.15\times$): 25 switches, 99.4\%
+        bang-bang, propellant 2.264~kg, $\Delta V=3.370$~km/s, max defect
+        $2.4\times10^{-14}$, terminal error 0. Contrast with the 3-switch local
+        optimum (2.950~kg) to show the global many-switch structure.
+  \item \textbf{Tulip $\Delta V$--$t_f$ front}: certified band $1.12$--$1.25\times$
+        (+$1.85\times$); campaign-best $\Delta V=2.434$~km/s at $1.65\times$
+        (46~d, $\sim$45\% below min-time). Switch count grows/shrinks with
+        $t_f$; dense-local-minima scatter and the lower envelope.
+        \emph{[Outline note.]} ``Certified'' here $=$ PMP first-order via the
+        KKT-dual costates (primer alignment + switching-law sign test); the
+        low-$\Delta V$/fold points are well-reproduced \emph{feasible-envelope}
+        bounds, deliberately not first-order-certified --- keep that distinction
+        explicit wherever these numbers appear. \emph{[Also: the ``$\times$
+        min-time'' factors and the ``\% below min-time'' figure are stated
+        against $6.2907$~ND; recompute them against the target-consistent tulip
+        anchor ($\sim$5.8~ND, \S2) --- physical $t_f$ and $\Delta V$ values are
+        unchanged, only the min-time-relative labels shift.]}
+  \item \textbf{Hard transition band} $1.01$--$1.11\times$: resists all methods;
+        near-min-time conditioning wall that afflicts even the smooth energy
+        problem---itself a structural finding.
+  \item \textbf{ELFO $\Delta V$--$t_f$ front}: monotone $3.344$~km/s
+        ($1.11\times$/31~d) $\to$ minimum $2.693$~km/s ($1.73\times$/48~d), then
+        flat; optimum sits at a fold. 11/14 grid factors certified bang-bang.
+        \emph{[Outline note.]} These ``$\times$'' were scaled by \emph{tulip's}
+        $6.2907$~ND (the ELFO min-time was unsolved when the front was built);
+        relabel against the now-certified ELFO min-time $6.0962$~ND. E.g.\ the
+        $1.73\times$-tulip minimum $=1.79\times$ ELFO-min-time; $1.11\times$-tulip
+        $=1.14\times$ ELFO. Same as tulip (\S2): physical $t_f$/$\Delta V$
+        unchanged, only the labels.
+  \item \textbf{Cross-target comparison / figures}: trajectory + throttle movie
+        stills over the 40 revs; both fronts on one axis; PMP verification table.
+\end{itemize}
+
+%==============================================================================
+\section{Future Work}
+%==============================================================================
+\emph{[A few sentences.]} Outline what remains: closing the transition band by
+indirect/multiple-shooting from the min-time end, pinning exact fronts with
+per-$t_f$ multi-start, and extending both the method and the mission scope.
+
+\begin{itemize}
+  \item Close the $1.01$--$1.11\times$ band: Sundman-domain multiple-shooting /
+        switch-structure parameterization / saltation-aware (event-based)
+        integration to remove the $1/\varepsilon$ smoothing layers.
+  \item Accurate fronts: multi-start per $t_f$ to pin the lower envelope; fill
+        the ELFO $1.65$--$2.0\times$ fold gaps.
+  \item Indirect confirmation: full PMP TPBVP re-derivation as a
+        belt-and-suspenders certificate.
+  \item Mission extensions: additional targets, mass/thrust/$I_{sp}$ sweeps,
+        variable-$t_f$ (free-time) objectives, station-keeping/re-phasing tie-in.
+\end{itemize}
+
+\end{document}

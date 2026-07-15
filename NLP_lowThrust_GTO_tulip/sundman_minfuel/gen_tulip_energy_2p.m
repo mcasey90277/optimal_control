@@ -61,6 +61,20 @@ cfg = minfuel_config();  p = cr3bp_lt_params(cfg.thrustN, cfg.m0kg, cfg.ispS);
 factor = gd('factor', 1.20);
 E = load(fullfile(resDir,'energy',sprintf('energy_f%04d.mat', round(1000*factor))));
 sigma = E.sigma;  rv0 = E.rv0;  rvf_tul = E.rvf;  tauf0 = E.tauf0;
+
+% ---- INSERTION POINT (edit here to retarget) --------------------------------
+insertion = 'campaign';        % tulip: 'campaign'|'maxydot'|'apoapsis'  (elfo: 'nearest'|'apolune'|'perilune')
+% insertion = 'maxydot';       % uncomment to use the max-ydot point (needs a matching energy seed)
+% insertion = 'apoapsis';      % uncomment to use the slowest/apoapsis point (needs a matching seed)
+[rv0Decl, rvfDecl, insMeta] = insertion_states('tulip', insertion);
+
+% drift guard: the tulip energy backbone this driver loads must match the
+% declared insertion point.
+assert(norm(E.rvf(:).' - rvfDecl) < 1e-10 && norm(E.rv0(:).' - rv0Decl) < 1e-10, ...
+    'insertion:drift', ['seed endpoints differ from the declared %s insertion ' ...
+    '(rvf %.2e, rv0 %.2e) -- regenerate the seed for this criterion'], ...
+    insMeta.label, norm(E.rvf(:).'-rvfDecl), norm(E.rv0(:).'-rv0Decl));
+
 mz = gd('moonZone', 0.15);
 fprintf('=== GEN_TULIP_ENERGY_2P: tulip(f=%.2f) clock-on to two-primary ===\n', factor);
 fprintf('  N=%d  tf_ws=%.4f ND  target dMoon=%.0f km\n', numel(sigma)-1, E.X(8,end), ...

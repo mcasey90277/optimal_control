@@ -36,6 +36,20 @@ resDir = fullfile(here,'results');
 cfg = minfuel_config();  p = cr3bp_lt_params(cfg.thrustN, cfg.m0kg, cfg.ispS);
 
 S = load(fullfile(resDir,'energy_elfo_freetf.mat'));
+
+% ---- INSERTION POINT (edit here to retarget) --------------------------------
+insertion = 'nearest';          % elfo: 'nearest'|'apolune'|'perilune'  (tulip: 'campaign'|'maxydot'|'apoapsis')
+% insertion = 'apolune';        % uncomment to use the apolune point (needs a matching energy seed)
+% insertion = 'perilune';       % uncomment to use the perilune point (needs a matching seed)
+[rv0Decl, rvfDecl, insMeta] = insertion_states('elfo', insertion);
+
+% drift guard: the ELFO energy backbone this driver loads must match the
+% declared insertion point.
+assert(norm(S.rvf(:).' - rvfDecl) < 1e-10 && norm(S.rv0(:).' - rv0Decl) < 1e-10, ...
+    'insertion:drift', ['seed endpoints differ from the declared %s insertion ' ...
+    '(rvf %.2e, rv0 %.2e) -- regenerate the seed for this criterion'], ...
+    insMeta.label, norm(S.rvf(:).'-rvfDecl), norm(S.rv0(:).'-rv0Decl));
+
 tf0 = S.X(8,end);
 ctx = struct('sigma',S.sigma,'rv0',S.rv0,'rvf',S.rvf,'Tmax',p.Tmax,'cEx',p.c, ...
     'muStar',p.muStar,'tauf0',S.tauf0,'pSund',S.pSund,'qSund',S.qSund, ...

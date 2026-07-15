@@ -58,6 +58,7 @@ if ~isfield(opts,'force'),   opts.force = false;   end
 
 here = fileparts(mfilename('fullpath'));
 addpath(here);  setup_paths();
+addpath(fullfile(here, '..', 'sundman_minfuel'));   % insertion_states (single-source; PSR vendors the rest)
 cfg  = minfuel_config();
 p    = cr3bp_lt_params(cfg.thrustN, cfg.m0kg, cfg.ispS);
 edir = cfg.dirs.energy;
@@ -89,6 +90,21 @@ else
 end
 fprintf('gen_energy_seed: target %.3f, nearest backbone %.3f, step %.3f\n', ...
         targetFactor, seedFactor, opts.step);
+
+% ---- INSERTION POINT (edit here to retarget) --------------------------------
+insertion = 'campaign';        % tulip: 'campaign'|'maxydot'|'apoapsis'  (elfo: 'nearest'|'apolune'|'perilune')
+% insertion = 'maxydot';       % uncomment to use the max-ydot point (needs a matching energy seed)
+% insertion = 'apoapsis';      % uncomment to use the slowest/apoapsis point (needs a matching seed)
+[rv0Decl, rvfDecl, insMeta] = insertion_states('tulip', insertion);
+
+% drift guard: the base backbone this walk starts from must match the
+% declared insertion point (rv0/rvf are propagated unchanged through every
+% rung -- see the save() below -- so checking the base backbone is sufficient).
+base = load(efile(seedFactor), 'rv0', 'rvf');
+assert(norm(base.rvf(:).' - rvfDecl) < 1e-10 && norm(base.rv0(:).' - rv0Decl) < 1e-10, ...
+    'insertion:drift', ['seed endpoints differ from the declared %s insertion ' ...
+    '(rvf %.2e, rv0 %.2e) -- regenerate the seed for this criterion'], ...
+    insMeta.label, norm(base.rvf(:).'-rvfDecl), norm(base.rv0(:).'-rv0Decl));
 
 % ---- build the continuation ladder seedFactor -> targetFactor --------------
 sgn   = sign(targetFactor - seedFactor);

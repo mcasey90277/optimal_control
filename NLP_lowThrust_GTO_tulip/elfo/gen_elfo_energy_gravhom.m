@@ -68,11 +68,21 @@ cfg = minfuel_config();
 p   = cr3bp_lt_params(cfg.thrustN, cfg.m0kg, cfg.ispS);
 factor = gd('factor', 1.20);
 E = load(fullfile(cfg.dirs.energy, cfg.fname('energy', factor)));
-sigma = E.sigma;  rv0 = E.rv0;  rvf_tul = E.rvf;  tauf0 = E.tauf0;
+sigma = E.sigma;  rv0 = E.rv0;  tauf0 = E.tauf0;
 
 % ELFO target: nearest-insertion to the tulip terminal (velAngle 63 deg, no
-% speed collapse -- see elfo/ELFO_RETARGET.md).
-[~, rvf_elfo] = gto_elfo_endpoints(p, struct('point','nearest','ref',rvf_tul));
+% speed collapse -- see elfo/ELFO_RETARGET.md). Declared via insertion_states
+% (single source of truth) rather than recomputed inline.
+[~, rvf_tul]           = insertion_states('tulip','campaign');   % the ELFO 'nearest' reference
+[~, rvf_elfo, insMeta] = insertion_states('elfo','nearest');
+
+% drift guard: the base tulip energy backbone this driver loads must match
+% the declared tulip insertion point used as the ELFO 'nearest' reference.
+assert(norm(E.rvf(:).' - rvf_tul) < 1e-10, ...
+    'insertion:drift', ['base tulip backbone rvf differs from the declared %s ' ...
+    'insertion (%.2e) -- regenerate the seed for this criterion'], ...
+    insMeta.label, norm(E.rvf(:).'-rvf_tul));
+
 mz = gd('moonZone', 0.15);
 fprintf('=== GEN_ELFO_ENERGY_GRAVHOM: tulip(f=%.2f) -> ELFO (nearest) ===\n', factor);
 fprintf('  N=%d  tf_ws=%.4f  ||rvf_elfo-rvf_tul||=%.4f ND\n', ...

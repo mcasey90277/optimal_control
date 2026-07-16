@@ -11,6 +11,7 @@
 \usepackage[margin=1in]{geometry}
 \usepackage{amsmath,amssymb}
 \usepackage{enumitem}
+\usepackage[capitalise]{cleveref}
 \setlist{nosep}
 
 \title{Minimum-Fuel Low-Thrust Transfers from GTO to\\
@@ -65,6 +66,7 @@ both walls can be knocked down together and the resulting solutions certified.
 
 %==============================================================================
 \section{Target Orbits: Tulip and ELFO}
+\label{sec:constellation}
 %==============================================================================
 \emph{[A few sentences.]} Define the two rendezvous targets and why each is of
 interest for lunar south-pole service. The \emph{tulip} is a south-pole-favorable
@@ -105,25 +107,28 @@ units.
 %==============================================================================
 \section{The Optimal Control Problem}
 %==============================================================================
-\emph{[A few sentences.]} State the fixed-time min-fuel OCP, the direct
-transcription, and the two regularizations that make it solvable. Minimize
-propellant $\propto\int s\,dt$ (throttle $s\in[0,1]$) at fixed $t_f$ subject to
-CR3BP low-thrust dynamics and the GTO/target boundary conditions. Solve by
-direct collocation with an exact-Hessian NLP (CasADi + IPOPT), made tractable by
-(a) Sundman regularization of the independent variable and (b) an
-energy$\rightarrow$fuel homotopy that starts from the smooth (convex) root.
+Delivering a spacecraft from geostationary transfer orbit (GTO) to a cislunar
+target under continuous low thrust is posed here as a fixed-time minimum-fuel
+optimal control problem in the Earth--Moon circular restricted three-body
+problem (CR3BP). Fixing the transfer time and minimizing propellant isolates the
+quantity of engineering interest, the electric-propulsion equivalent $\Delta V$,
+and turns the trade against trip time into a one-parameter sweep
+(\cref{sec:results}). The problem is solved by direct collocation: the trajectory
+is transcribed into a nonlinear program (NLP) and solved with an interior-point
+method. This section states the continuous-time problem, identifies why its
+minimum-fuel form is numerically hard, and describes the two regularizations that
+make it solvable to machine tolerance.
 
-\medskip
-\noindent\textbf{Continuous-time problem.} In the rotating, nondimensional (ND)
-Earth--Moon CR3BP frame let $\boldsymbol r=(x,y,z)$ be position, $\boldsymbol
-v=\dot{\boldsymbol r}$ velocity, and $m$ mass, with mass ratio
-$\mu=0.012150585609624$, primaries at $\boldsymbol r_E=(-\mu,0,0)$ (Earth) and
-$\boldsymbol r_M=(1-\mu,0,0)$ (Moon), and $\boldsymbol r_1=\boldsymbol
-r-\boldsymbol r_E$, $\boldsymbol r_2=\boldsymbol r-\boldsymbol r_M$
-($r_i=\lVert\boldsymbol r_i\rVert$). The thruster has ND maximum acceleration
-$T$, exhaust velocity $c=I_{sp}g_0$, throttle $s\in[0,1]$, and unit thrust
-direction $\boldsymbol\alpha$. The fixed-time minimum-fuel optimal control
-problem is
+\subsection{Continuous-time formulation}
+Let $\boldsymbol r=(x,y,z)$ and $\boldsymbol v=\dot{\boldsymbol r}$ be
+nondimensional (ND) position and velocity in the rotating Earth--Moon frame and
+$m$ the spacecraft mass, with mass ratio $\mu=0.012150585609624$ and primaries
+fixed at $\boldsymbol r_E=(-\mu,0,0)$ (Earth) and $\boldsymbol r_M=(1-\mu,0,0)$
+(Moon). Writing $\boldsymbol r_1=\boldsymbol r-\boldsymbol r_E$ and
+$\boldsymbol r_2=\boldsymbol r-\boldsymbol r_M$ with $r_i=\lVert\boldsymbol
+r_i\rVert$, and denoting the ND maximum thrust acceleration $T$, exhaust velocity
+$c=I_{sp}g_0$, throttle $s\in[0,1]$, and unit thrust direction $\boldsymbol
+\alpha$, the fixed-time minimum-fuel problem is
 \begin{equation}
 \begin{aligned}
 \min_{s(\cdot),\,\boldsymbol\alpha(\cdot)}\quad
@@ -144,68 +149,155 @@ problem is
 \end{aligned}
 \label{eq:ocp}
 \end{equation}
-Mass is normalized to $m(0)=1$, so propellant burned is $m_p=1-m(t_f)=
-\tfrac{T}{c}\int_0^{t_f}\!s\,dt$; minimizing $J$ therefore minimizes propellant.
-The target arrival state is the tulip or ELFO rendezvous point of \S2; the two
-targets differ only in these terminal conditions.
+Mass is normalized to $m(0)=1$, so the propellant burned is $m_p=1-m(t_f)=
+\tfrac{T}{c}\int_0^{t_f}s\,dt$ and minimizing $J$ minimizes propellant directly.
+The departure state is an equatorial GTO with perigee and apogee altitudes of
+$350$~km and $35{,}786$~km and argument of perigee $-25^\circ$; the arrival state
+is the tulip or ELFO rendezvous point of \cref{sec:constellation}. The two
+targets differ only in these terminal conditions, so a single solver serves both.
+The spacecraft modeled here is $15$~kg with a $25$~mN thruster at
+$I_{sp}=2100$~s; because the transfer is governed by the thrust-to-mass ratio and
+specific impulse, the result scales to heavier vehicles at fixed propellant mass
+fraction. Solar radiation pressure, third-body perturbations beyond the two CR3BP
+primaries, finite-attitude slew dynamics, and thruster duty-cycle constraints are
+not modeled.
 
-\medskip
-\noindent\textbf{Optimality structure (why it is bang-bang).} With costates
-$\boldsymbol\lambda_r,\boldsymbol\lambda_v,\lambda_m$ the Hamiltonian is
-$H=\boldsymbol\lambda_r\!\cdot\!\boldsymbol v+\boldsymbol\lambda_v\!\cdot\!
-\big(\boldsymbol g+\boldsymbol h+\tfrac{sT}{m}\boldsymbol\alpha\big)
--\lambda_m\tfrac{T}{c}s+s$. Pontryagin's principle minimizes $H$ pointwise: the
-direction enters only through $\boldsymbol\lambda_v\!\cdot\!\boldsymbol\alpha$,
-so thrust aligns with the primer vector $\boldsymbol\alpha^\star=
--\boldsymbol\lambda_v/\lVert\boldsymbol\lambda_v\rVert$, and $H$ is then
-\emph{affine} in $s$, giving the bang-bang law $s^\star=1$ where $S<0$ (burn) and
-$s^\star=0$ where $S>0$ (coast), with switching function
+\subsection{Bang-bang structure and two sources of difficulty}
+Minimum-fuel low thrust is the hard member of the minimum-time/minimum-energy/%
+minimum-fuel family, and the reason is structural. The running cost $\int s\,dt$
+is linear in the throttle, so Pontryagin's minimum principle drives $s$ onto its
+bounds. With costates $\boldsymbol\lambda_r,\boldsymbol\lambda_v,\lambda_m$ and
+Hamiltonian $H=\boldsymbol\lambda_r\!\cdot\!\boldsymbol v+\boldsymbol\lambda_v
+\!\cdot\!\big(\boldsymbol g+\boldsymbol h+\tfrac{sT}{m}\boldsymbol\alpha\big)
+-\lambda_m\tfrac{T}{c}s+s$, the thrust direction aligns with the primer vector
+$\boldsymbol\alpha^\star=-\boldsymbol\lambda_v/\lVert\boldsymbol\lambda_v\rVert$
+and $H$ is then affine in $s$. The optimal throttle is therefore bang-bang,
+$s^\star=1$ where $S<0$ (burn) and $s^\star=0$ where $S>0$ (coast), with
+switching function
 \begin{equation}
-S=1-\frac{T}{m}\lVert\boldsymbol\lambda_v\rVert-\frac{T}{c}\lambda_m .
+S=1-\frac{T}{m}\lVert\boldsymbol\lambda_v\rVert-\frac{T}{c}\lambda_m ,
 \label{eq:switch}
 \end{equation}
-On the $\sim$40-revolution spiral $S$ changes sign near every perigee, producing
-the order-25 switches that are the crux of the difficulty.
+and singular arcs occurring only on the measure-zero set $S\equiv0$. Over the
+roughly 40-revolution GTO-to-cislunar spiral, $S$ changes sign near every perigee,
+so the optimal control carries order-25 discontinuous switches.
 
-\begin{itemize}
-  \item Continuous-time OCP + PMP structure: stated in \eqref{eq:ocp} and
-        \eqref{eq:switch} above (dynamics, controls, cost, fixed $t_f$, bang-bang
-        switching function). Controls in code are the cone-eliminated
-        unit-direction $\boldsymbol\alpha$ plus throttle $s$.
-  \item \textbf{Sundman regularization}: $dt/d\tau=\kappa(r)=r_1^{\,p}$ ($p=1.5$),
-        time carried as an 8th state, $\tau_f$ fixed; tames the $1/r^3$ perigee
-        terms and auto-concentrates nodes near perigee.
-  \item \textbf{Two-primary clock (lunar-capture leg)}: the single-primary clock
-        $\kappa=r_1^{\,p}$ tames only the Earth-perigee singularity; near a
-        Moon-vicinity target it leaves the lunar gravity unresolved, and the
-        exact Hessian then overflows at the near-Moon nodes (a MUMPS crash on
-        the cislunar min-time solve). Replace $\kappa$ by the two-primary
-        min-distance clock $\kappa=(r_1^{-q}+(r_2/D)^{-q})^{-p/q}$ ($q\sim4$,
-        $D\approx$ lunar SOI $\sim0.15$~ND), which recovers $r_1^{\,p}$ near
-        Earth and $(r_2/D)^{\,p}$ near the Moon, redistributing nodes into the
-        capture arc. Required for the ELFO front and for the target-consistent
-        min-time anchors of both targets.
-  \item \textbf{Exact Hessian vs.\ the singularity}: a reusable lesson --- the
-        exact NLP Hessian, an asset for a well-scaled problem, \emph{destabilizes}
-        (overflows/crashes) near the $1/r$ singularities unless the transcription
-        is first regularized; the two clocks above are what make the exact-Hessian
-        solve safe. (Free physical $t_f$ for the min-time anchors is carried by a
-        constant slack state so the KKT stays banded.)
-  \item \textbf{Energy$\rightarrow$fuel homotopy}: $J(\varepsilon)=\int s\,dt -
-        \varepsilon\int s(1-s)\,dt$; $\varepsilon{=}1$ strictly convex (smooth
-        ramp), $\varepsilon{=}0$ fuel (bang-bang); warm-start-continue
-        $\varepsilon:1\to0$. "Start smooth, then sharpen."
-  \item \textbf{Seeding \& continuation}: no-resample seed map; energy-backbone
-        continuation in $t_f$ (crash-free downward); tight multiplier re-clean
-        before sharpening.
-  \item \textbf{Optimality verification}: PMP cross-check from KKT duals ---
-        primer-vector alignment ($0.06^\circ$), transversality
-        ($\lambda_m(\tau_f)\approx0$), switching-function sign law; independent
-        adjoint-ODE consistency check.
-\end{itemize}
+Two independent difficulties compound at this optimum. The first is the
+nonsmoothness just described: a control that is nowhere differentiable collapses
+the convergence basin of indirect shooting and causes low-order collocation to
+smear each switch, because a throttle jump between two mesh nodes registers as a
+large defect that the optimizer rounds off. The second is dynamical and
+independent of the objective: the $1/r_1^3$ gravity terms at the $\sim$40 perigee
+passes, where $r_1\approx0.017$~ND, dominate the second derivatives and give the
+multi-revolution trajectory a sensitivity of order $10^6$. Minimum-time faces
+only the second difficulty and is comparatively easy, because maximum thrust is
+optimal everywhere and its control has no switches; minimum-fuel faces both at
+once. Each difficulty is removed by its own regularization below.
+
+\subsection{Direct transcription}
+The trajectory is transcribed by trapezoidal collocation on $N$ intervals: state
+and control are carried at each node, the dynamics are enforced as trapezoidal
+defect equalities between adjacent nodes, the endpoints are pinned as equality
+constraints, and the objective is the trapezoidal quadrature of the running cost.
+The unit-direction control is carried explicitly as $\boldsymbol\alpha$ with the
+constraint $\lVert\boldsymbol\alpha\rVert=1$ alongside a separate throttle
+$s\in[0,1]$, rather than as a single thrust vector; the vector form is degenerate
+on coast arcs, where $s\to0$ leaves the direction undefined and wedges the solver.
+The NLP is built symbolically in CasADi, which supplies the exact sparse
+constraint Jacobian and Lagrangian Hessian by automatic differentiation, and is
+solved with IPOPT. The exact Hessian is what resolves the many-switch coupling
+that a limited-memory approximation cannot, but only after the dynamics are
+regularized: on the raw problem the exact Hessian carries $1/r_1^5$ perigee terms
+that destabilize the Newton step, and a solver using a damped limited-memory
+Hessian is ironically more stable there. Regularize first, then the exact Hessian
+becomes an asset rather than a liability.
+
+\subsection{Sundman regularization of the perigee singularity}
+The dynamics-side difficulty is removed by a Sundman change of independent
+variable from time $t$ to a regularizing variable $\tau$,
+\begin{equation}
+\frac{dt}{d\tau}=\kappa(\boldsymbol r)=r_1^{\,p},\qquad p=1.5,
+\label{eq:sundman}
+\end{equation}
+with every state equation multiplied by $\kappa$ and physical time carried as an
+eighth state. This does two things at once. The near-perigee Hessian terms scale
+as $r_1^{\,p-3}$ rather than $r_1^{-3}$, bounded for $p\ge3$ and already much
+milder at $p=1.5$, which is what the exact-Hessian solve requires. And a uniform
+mesh in $\tau$ is automatically dense in physical time wherever $\kappa=r_1^{\,p}$
+is small, that is near perigee, exactly where the burns and switches concentrate,
+so regularization and mesh refinement come from the same substitution. Carrying
+$t$ as a state keeps the transfer time fixed while working in $\tau$: the terminal
+condition $t(\tau_f)=t_f$ is imposed and the trajectory adjusts so that
+$\int_0^{\tau_f}\kappa\,d\tau=t_f$. The regularized horizon $\tau_f$ is held fixed
+rather than made a decision variable; a free $\tau_f$ multiplies every collocation
+defect, producing a dense column in the constraint Jacobian that causes
+catastrophic fill-in in the sparse linear solver and out-of-memory failure at
+realistic mesh sizes.
+
+The single-primary clock $\kappa=r_1^{\,p}$ regularizes only the Earth-perigee
+singularity, which suffices for the tulip target but not for a rendezvous in the
+Moon's vicinity, where the unresolved lunar gravity overflows the exact Hessian
+at the near-Moon nodes. Replacing $\kappa$ with a two-primary minimum-distance
+clock, $\kappa=(r_1^{-q}+(r_2/D)^{-q})^{-p/q}$ with $q\approx4$ and $D$ the ND
+lunar sphere-of-influence radius ($\approx0.15$), recovers $r_1^{\,p}$ near Earth
+and $(r_2/D)^{\,p}$ near the Moon and redistributes nodes into the capture arc.
+The same regularization therefore serves both targets, differing only in whether
+the second primary is active.
+
+\subsection{Energy-to-fuel homotopy and warm starting}
+The objective-side nonsmoothness is removed by continuation from a smooth
+relaxation. The fuel cost is replaced by the Bertrand--\'Ep\'enoy family
+\begin{equation}
+J(\varepsilon)=\int_0^{t_f}\!\big[\,s-\varepsilon\,s(1-s)\,\big]\,dt,
+\qquad\varepsilon\in[0,1].
+\label{eq:homotopy}
+\end{equation}
+At $\varepsilon=0$ this is the fuel cost of \cref{eq:ocp}; at $\varepsilon=1$ it
+is $\int s^2\,dt$, the minimum-energy cost, which is strictly convex in $s$, so
+the optimal throttle is a smooth interior ramp rather than a bang-bang, the
+costate dynamics are smooth, and the solver basin is large. The problem is solved
+at $\varepsilon=1$ and then continued toward $\varepsilon=0$ in warm-started
+steps; the ramp sharpens continuously into the bang-bang limit while the iterate
+stays inside the basin. This ``start smooth, then sharpen'' continuation is the
+single most effective element of the method.
+
+Continuation requires a feasible starting trajectory, and how the seed is mapped
+into the Sundman variable is decisive. Interpolating a time-mesh solution onto a
+uniform $\tau$ mesh discards enough of the 40-revolution oscillatory structure to
+leave an irreducible $\sim\!10^{-2}$ collocation defect, which the interior-point
+solver reads as infeasibility and answers by remaining in its restoration phase,
+exiting with a false ``locally infeasible.'' Mapping the seed onto its own nodes
+instead, with each node's time carried to $\tau$ by trapezoidal quadrature of
+\cref{eq:sundman}, leaves only a small trapezoid-rule mismatch, which the solver
+closes to $\sim\!10^{-14}$ in normal mode. This no-resample seeding is what
+converts the energy solve from perpetual restoration to convergence, and neither
+regularization alone suffices: without the homotopy the Sundman solve thrashes
+into restoration on the bang-bang objective, and without Sundman the homotopy
+cannot drive the perigee defects below $\sim\!10^{-3}$.
+
+\subsection{Optimality verification}
+The direct transcription never forms the costates, but they can be recovered from
+the converged NLP and checked against the minimum principle, because the
+Karush--Kuhn--Tucker (KKT) multipliers of the defect constraints are the discrete
+adjoint, up to a positive mesh-weight scaling and a global sign. Two of the
+first-order conditions are scale-invariant and are checked directly. The thrust
+direction of the direct solution matches the costate primer
+$-\boldsymbol\lambda_v/\lVert\boldsymbol\lambda_v\rVert$ to a mean of
+$0.06^\circ$ over all burn arcs, and the terminal mass costate, which
+transversality requires to vanish under free final mass, is recovered at
+$\sim\!10^{-7}$. That a solution obtained without ever forming costates
+reproduces the primer direction to a hundredth of a degree is an independent
+cross-check between the direct and indirect formulations. The remaining
+first-order condition, the switching-function sign law of \cref{eq:switch}, is
+scale-dependent and is verified separately by de-scaling the defect multipliers
+to node costates; recovering the costates from the primal trajectory instead is
+ill-posed here, because the forward adjoint map spans $\sim\!10^{11}$ over 40
+revolutions and the fixed-endpoint rendezvous leaves $\boldsymbol\lambda_r$ and
+$\boldsymbol\lambda_v$ without a boundary condition.
 
 %==============================================================================
 \section{Results}
+\label{sec:results}
 %==============================================================================
 \emph{[A few sentences.]} Present the certified point solution, the two
 $\Delta V$--time fronts, and the structural findings. The full-spiral tulip

@@ -1,0 +1,745 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Minimum-Fuel GTO&rarr;Cislunar Transfers</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css">
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"></script>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
+
+:root {
+  --bg: #09090b;
+  --surface: #111118;
+  --border: #1c1c28;
+  --text: #e4e4ec;
+  --text-muted: #6b6b84;
+  --text-dim: #44445a;
+  --accent: #00d4aa;
+  --accent-glow: rgba(0, 212, 170, 0.12);
+  --accent-border: rgba(0, 212, 170, 0.3);
+  --warn: #f59e0b;
+  --warn-glow: rgba(245, 158, 11, 0.10);
+  --warn-border: rgba(245, 158, 11, 0.3);
+  --error: #ef4444;
+  --error-glow: rgba(239, 68, 68, 0.10);
+  --error-border: rgba(239, 68, 68, 0.3);
+  --pass: #22c55e;
+  --sidebar-w: 190px;
+  --transition: 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+*, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+html, body {
+  height: 100%; overflow: auto;
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  background: var(--bg); color: var(--text);
+  -webkit-font-smoothing: antialiased;
+}
+body.slideshow { overflow: hidden; }
+
+#progress {
+  position: fixed; top: 0; left: 0; height: 2px; z-index: 200;
+  background: var(--accent);
+  transition: width var(--transition);
+  box-shadow: 0 0 12px rgba(0,212,170,0.4);
+  display: none;
+}
+body.slideshow #progress { display: block; }
+
+#sidebar {
+  position: fixed; left: 0; top: 50%; transform: translateY(-50%);
+  z-index: 100; padding: 0 1.4rem;
+  display: none; flex-direction: column; gap: 0.2rem;
+}
+body.slideshow #sidebar { display: flex; }
+
+.nav-item {
+  display: flex; align-items: center; gap: 0.65rem;
+  padding: 0.4rem 0; cursor: pointer; text-decoration: none;
+  transition: all 0.3s;
+}
+.nav-dot {
+  width: 5px; height: 5px; border-radius: 50%; flex-shrink: 0;
+  background: var(--text-dim); transition: all 0.3s;
+}
+.nav-label {
+  font-size: 0.68rem; font-weight: 400; letter-spacing: 0.06em;
+  text-transform: uppercase; color: var(--text-dim); transition: color 0.3s;
+  white-space: nowrap;
+}
+.nav-item.active .nav-dot {
+  background: var(--accent); box-shadow: 0 0 8px rgba(0,212,170,0.5);
+  width: 6px; height: 6px;
+}
+.nav-item.active .nav-label { color: var(--accent); font-weight: 500; }
+.nav-item.visited .nav-dot { background: var(--text-muted); }
+.nav-item.visited .nav-label { color: var(--text-muted); }
+.nav-item:hover .nav-label { color: var(--text); }
+
+#counter {
+  position: fixed; bottom: 1.5rem; right: 2rem; z-index: 100;
+  font-size: 0.75rem; color: var(--text-dim); font-variant-numeric: tabular-nums;
+  letter-spacing: 0.05em; display: none;
+}
+body.slideshow #counter { display: block; }
+
+.slide {
+  display: flex; align-items: center; justify-content: center;
+  padding: 3rem 2rem; min-height: 100vh;
+  border-bottom: 1px solid var(--border);
+}
+body.slideshow .slide {
+  position: absolute; inset: 0;
+  padding: 3rem 3rem 3rem calc(var(--sidebar-w) + 3rem);
+  opacity: 0; pointer-events: none;
+  transition: opacity var(--transition), transform var(--transition);
+  transform: translateY(8px);
+  border-bottom: none; min-height: 0;
+}
+body.slideshow .slide.active {
+  opacity: 1; pointer-events: auto; transform: translateY(0);
+}
+
+.slide-inner { width: 100%; max-width: 960px; }
+
+.slide-chapter {
+  font-size: 0.65rem; font-weight: 500; letter-spacing: 0.12em;
+  text-transform: uppercase; color: var(--accent); margin-bottom: 0.6rem;
+  opacity: 0.8;
+}
+.slide-title {
+  font-size: 1.7rem; font-weight: 600; line-height: 1.3;
+  margin-bottom: 2rem; letter-spacing: -0.01em;
+}
+
+p, li { font-size: 1.02rem; line-height: 1.75; color: var(--text); }
+p + p { margin-top: 0.8rem; }
+ul, ol { padding-left: 1.3rem; }
+li { margin-bottom: 0.35rem; }
+li::marker { color: var(--text-dim); }
+strong, b { font-weight: 600; }
+
+.muted { color: var(--text-muted); }
+.dim { color: var(--text-dim); }
+.small { font-size: 0.88rem; }
+.accent { color: var(--accent); }
+.warn { color: var(--warn); }
+
+.result-box {
+  border: 1px solid var(--accent-border); background: var(--accent-glow);
+  border-radius: 10px; padding: 1.3rem 1.8rem; margin: 1.5rem 0;
+}
+.result-box .result-label {
+  font-size: 0.7rem; font-weight: 500; letter-spacing: 0.1em;
+  text-transform: uppercase; color: var(--accent); margin-bottom: 0.6rem;
+}
+
+.warn-box {
+  border: 1px solid var(--warn-border); background: var(--warn-glow);
+  border-radius: 10px; padding: 1.3rem 1.8rem; margin: 1.5rem 0;
+}
+.warn-box .warn-label {
+  font-size: 0.7rem; font-weight: 500; letter-spacing: 0.1em;
+  text-transform: uppercase; color: var(--warn); margin-bottom: 0.6rem;
+}
+
+.error-box {
+  border: 1px solid var(--error-border); background: var(--error-glow);
+  border-radius: 10px; padding: 1.3rem 1.8rem; margin: 1.5rem 0;
+}
+.error-box .error-label {
+  font-size: 0.7rem; font-weight: 500; letter-spacing: 0.1em;
+  text-transform: uppercase; color: var(--error); margin-bottom: 0.6rem;
+}
+
+.insight-box {
+  border-left: 3px solid var(--accent);
+  padding: 1rem 0 1rem 1.5rem; margin: 1.5rem 0;
+  background: rgba(0,212,170,0.03); border-radius: 0 8px 8px 0;
+}
+.insight-box .insight-label {
+  font-size: 0.7rem; font-weight: 600; letter-spacing: 0.1em;
+  text-transform: uppercase; color: var(--accent); margin-bottom: 0.4rem;
+}
+
+.block-box {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: 10px; padding: 1.2rem 1.6rem; margin: 1.2rem 0;
+}
+
+.code-box {
+  background: #0d0d14; border: 1px solid var(--border);
+  border-radius: 8px; padding: 1rem 1.4rem; margin: 1rem 0;
+  font-family: 'JetBrains Mono', monospace; font-size: 0.82rem;
+  line-height: 1.7; overflow-x: auto;
+}
+.code-box .kw { color: #7c8cf5; }
+.code-box .cm { color: #5a6a3a; }
+.code-box .fn { color: #00d4aa; }
+.code-box .str { color: #e5a06e; }
+.code-box .num { color: #d4a0e0; }
+
+.columns { display: grid; gap: 2.5rem; align-items: start; }
+.columns-60-40 { grid-template-columns: 3fr 2fr; }
+.columns-50-50 { grid-template-columns: 1fr 1fr; }
+.columns-45-55 { grid-template-columns: 9fr 11fr; }
+
+.spacer-sm { height: 0.6rem; }
+.spacer { height: 1.2rem; }
+.spacer-lg { height: 2rem; }
+
+.data-table { width: 100%; border-collapse: collapse; font-size: 0.92rem; }
+.data-table th {
+  text-align: left; padding: 0.7rem 1rem;
+  border-bottom: 2px solid var(--border);
+  color: var(--accent); font-weight: 500; font-size: 0.85rem;
+  letter-spacing: 0.03em;
+}
+.data-table td {
+  padding: 0.55rem 1rem; border-bottom: 1px solid var(--border);
+  color: var(--text); line-height: 1.6;
+}
+.data-table tr:last-child td { border-bottom: none; }
+
+.katex { font-size: 1.08em; }
+.katex-display { margin: 1rem 0; }
+.katex-display > .katex { font-size: 1.15em; }
+
+.title-slide { text-align: center; }
+.title-slide .main-title {
+  font-size: 2.6rem; font-weight: 700; letter-spacing: -0.02em;
+  line-height: 1.2; margin-bottom: 1rem;
+}
+.title-slide .subtitle {
+  font-size: 1.1rem; color: var(--text-muted); font-weight: 300;
+  line-height: 1.6; max-width: 640px; margin: 0 auto 2.5rem;
+}
+.title-slide .divider {
+  width: 60px; height: 2px; background: var(--accent);
+  margin: 0 auto 2rem; border-radius: 1px;
+}
+.title-slide .meta {
+  font-size: 0.8rem; color: var(--text-dim); letter-spacing: 0.05em;
+}
+
+.end-slide { text-align: center; }
+.end-slide .end-text {
+  font-size: 3rem; font-weight: 300; color: var(--text-muted);
+  letter-spacing: 0.05em;
+}
+.end-slide .end-accent {
+  width: 40px; height: 2px; background: var(--accent);
+  margin: 1.5rem auto 0; border-radius: 1px;
+}
+
+.outline-list {
+  list-style: none; padding: 0; display: flex; flex-direction: column; gap: 0.5rem;
+}
+.outline-list li {
+  display: flex; align-items: center; gap: 0.8rem;
+  font-size: 1.05rem; color: var(--text-muted); line-height: 2;
+}
+.outline-list .ol-num {
+  font-variant-numeric: tabular-nums; font-size: 0.8rem;
+  color: var(--accent); font-weight: 500; min-width: 1.5rem; text-align: right;
+}
+
+.click-prev, .click-next {
+  position: fixed; top: 0; bottom: 0; z-index: 50; cursor: pointer; display: none;
+}
+body.slideshow .click-prev, body.slideshow .click-next { display: block; }
+.click-prev { left: var(--sidebar-w); width: 80px; }
+.click-next { right: 0; width: 120px; }
+
+#keyhint {
+  position: fixed; bottom: 1.5rem; left: 50%; transform: translateX(-50%);
+  font-size: 0.65rem; color: var(--text-dim); letter-spacing: 0.05em;
+  opacity: 0.6; transition: opacity 1s; display: none;
+}
+body.slideshow #keyhint { display: block; }
+
+.fig-img { width: 100%; border-radius: 8px; border: 1px solid var(--border); }
+.fig-caption { font-size: 0.8rem; color: var(--text-muted); text-align: center; margin-top: 0.5rem; }
+.fig-pair { display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; align-items: start; }
+.fig-cell { text-align: center; }
+
+.vid { width: 100%; border-radius: 8px; border: 1px solid var(--border); background:#000; }
+
+@media (max-width: 768px) {
+  html, body { overflow-x: hidden; }
+  body.slideshow #sidebar { display: none; }
+  body.slideshow #keyhint { display: none; }
+  body.slideshow .click-prev, body.slideshow .click-next { display: none; }
+  body.slideshow #counter { bottom: 0.8rem; right: 1rem; font-size: 0.7rem; }
+
+  .slide { padding: 1.5rem 1.2rem 2rem 1.2rem; min-height: auto; }
+  body.slideshow .slide {
+    padding: 1.5rem 1.2rem 3rem 1.2rem;
+    position: relative; opacity: 1; pointer-events: auto;
+    transform: none; display: none;
+    align-items: flex-start; min-height: 100vh; min-height: 100dvh;
+    overflow-y: auto; border-bottom: none;
+  }
+  body.slideshow .slide.active { display: flex; }
+
+  .slide-inner { max-width: 100%; }
+  .slide-title { font-size: 1.3rem; margin-bottom: 1.2rem; }
+  .slide-chapter { font-size: 0.6rem; }
+  .title-slide .main-title { font-size: 1.8rem; }
+  .title-slide .subtitle { font-size: 0.95rem; }
+  p, li { font-size: 0.92rem; line-height: 1.65; }
+  .small { font-size: 0.82rem; }
+  .columns, .columns-50-50, .columns-60-40, .columns-45-55 {
+    grid-template-columns: 1fr !important; gap: 1rem;
+  }
+  .fig-pair { grid-template-columns: 1fr; }
+  .data-table { font-size: 0.78rem; display: block; overflow-x: auto; white-space: nowrap; }
+  .data-table th { padding: 0.4rem 0.5rem; font-size: 0.72rem; }
+  .data-table td { padding: 0.35rem 0.5rem; }
+  .result-box, .warn-box, .error-box, .insight-box, .block-box {
+    padding: 1rem 1.2rem; margin: 1rem 0;
+  }
+  pre, code { font-size: 0.75rem !important; }
+  .code-box { padding: 0.8rem 1rem; overflow-x: auto; }
+  .katex-display { margin: 0.6rem 0; overflow-x: auto; overflow-y: hidden; }
+  .katex { font-size: 0.95em; }
+  .end-slide .end-text { font-size: 1.6rem; }
+  ol, ul { padding-left: 1rem; }
+}
+</style>
+</head>
+<body>
+
+<div id="progress"></div>
+
+<nav id="sidebar">
+  <a class="nav-item" data-chapter="intro" onclick="goToChapter('intro')">
+    <span class="nav-dot"></span><span class="nav-label">Problem</span>
+  </a>
+  <a class="nav-item" data-chapter="method" onclick="goToChapter('method')">
+    <span class="nav-dot"></span><span class="nav-label">Method</span>
+  </a>
+  <a class="nav-item" data-chapter="tulip" onclick="goToChapter('tulip')">
+    <span class="nav-dot"></span><span class="nav-label">Tulip</span>
+  </a>
+  <a class="nav-item" data-chapter="elfo" onclick="goToChapter('elfo')">
+    <span class="nav-dot"></span><span class="nav-label">ELFO</span>
+  </a>
+  <a class="nav-item" data-chapter="results" onclick="goToChapter('results')">
+    <span class="nav-dot"></span><span class="nav-label">Results</span>
+  </a>
+</nav>
+
+<div id="counter"></div>
+<div class="click-prev" onclick="prev()"></div>
+<div class="click-next" onclick="next()"></div>
+<div id="keyhint">Arrow keys to navigate</div>
+
+<!-- ============== SLIDES ============== -->
+
+<!-- 0 · Title -->
+<section class="slide" data-chapter="">
+  <div class="slide-inner title-slide">
+    <div class="main-title">Minimum-Fuel Low-Thrust<br>GTO &rarr; Cislunar Transfers</div>
+    <p class="subtitle">Certified bang-bang trajectories to a lunar south-pole
+      tulip orbit and an elliptical lunar frozen orbit (ELFO), in the
+      Earth&ndash;Moon CR3BP</p>
+    <div class="divider"></div>
+    <p class="meta">Coorbital &middot; M. Casey &middot; July 2026</p>
+  </div>
+</section>
+
+<!-- 1 · Outline -->
+<section class="slide" data-chapter="">
+  <div class="slide-inner">
+    <div class="slide-title">What we've done</div>
+    <ul class="outline-list">
+      <li><span class="ol-num">01</span> The transfer problem &mdash; and why min-fuel is the hard one</li>
+      <li><span class="ol-num">02</span> The method: min-time root &rarr; energy seeds &rarr; fuel homotopy</li>
+      <li><span class="ol-num">03</span> Tulip: geometry, best-&Delta;V transfer, &Delta;V&ndash;time front</li>
+      <li><span class="ol-num">04</span> ELFO: geometry, best-&Delta;V transfer, &Delta;V&ndash;time front</li>
+      <li><span class="ol-num">05</span> Results summary</li>
+    </ul>
+  </div>
+</section>
+
+<!-- 2 · Problem statement -->
+<section class="slide" data-chapter="intro">
+  <div class="slide-inner">
+    <div class="slide-chapter">The Problem</div>
+    <div class="slide-title">A rideshare drop at GTO, low-thrust to the Moon</div>
+    <div class="columns columns-60-40">
+      <div>
+        <p>A 15&nbsp;kg spacecraft departs a GTO
+          ($350\times35{,}786$&nbsp;km) with a 25&nbsp;mN,
+          $I_{sp}=2100$&nbsp;s electric thruster, and must rendezvous with a
+          cislunar science orbit.</p>
+        <p>High $I_{sp}$ trades trip time for propellant &mdash; and for a
+          rideshare the propellant mass dominates the economics. So the
+          objective that matters is <span class="accent">minimum fuel</span>.</p>
+        <div class="block-box">
+          <p><strong>Two destinations</strong></p>
+          <p class="small muted">&bull; <span class="accent">Tulip</span> &mdash; south-pole-favorable petal orbit (nav / relay geometry)<br>
+          &bull; <span class="accent">ELFO</span> &mdash; elliptical lunar frozen orbit, IM-style data relay</p>
+        </div>
+      </div>
+      <div>
+        <div class="result-box">
+          <div class="result-label">Fixed parameters</div>
+          <p class="small">$m_0 = 15$ kg<br>$T_{\max} = 25$ mN<br>$I_{sp} = 2100$ s<br>$\mu^\star = 0.01215$<br>CR3BP, rotating frame</p>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- 3 · Why min-fuel is hard -->
+<section class="slide" data-chapter="intro">
+  <div class="slide-inner">
+    <div class="slide-chapter">The Problem</div>
+    <div class="slide-title">Why minimum-fuel is the hard problem</div>
+    <p>Of the three canonical objectives, only min-fuel is
+      <span class="accent">linear</span> in the throttle $s\in[0,1]$:</p>
+    $$ J_{\text{time}}=\!\int 1\,dt,\qquad
+       J_{\text{energy}}=\!\int \tfrac12 s^2\,dt,\qquad
+       J_{\text{fuel}}=\!\int s\,dt $$
+    <p>Minimizing a linear cost pushes the optimum onto a bound &mdash; the
+      throttle is genuinely <span class="accent">bang-bang</span>: burn near
+      perigee, coast near apogee, with dozens of switches.</p>
+    <div class="warn-box">
+      <div class="warn-label">Two walls that compound</div>
+      <p class="small"><strong>Objective-side:</strong> bang-bang non-smoothness kills the shooting basin and smears low-order collocation. &nbsp;&bull;&nbsp;
+      <strong>Dynamics-side:</strong> a $\sim$40-revolution spiral; each perigee pass contributes $\sim\!10^6$ sensitivity and enormous gravity curvature.</p>
+    </div>
+  </div>
+</section>
+
+<!-- 4 · Method: the pipeline -->
+<section class="slide" data-chapter="method">
+  <div class="slide-inner">
+    <div class="slide-chapter">The Method</div>
+    <div class="slide-title">A three-stage pipeline &mdash; dismantle the walls separately</div>
+    <div class="block-box">
+      <p style="text-align:center; font-size:1.05rem;">
+        <span class="accent">min-time root</span>
+        &nbsp;&rarr;&nbsp;
+        <span class="accent">min-energy seeds over a $t_f$ band</span>
+        &nbsp;&rarr;&nbsp;
+        <span class="accent">energy&rarr;fuel homotopy per $t_f$</span>
+      </p>
+    </div>
+    <ol>
+      <li><strong>Min-time</strong> is all-burn ($s\equiv1$, no switches) &mdash; a robust root that anchors the time scale.</li>
+      <li><strong>Min-energy</strong> ($\tfrac12 s^2$) is the <em>convex relaxation</em>: a smooth saturated ramp with a wide convergence basin. This is the substrate we deform from.</li>
+      <li><strong>Homotopy</strong> continuously sharpens the smooth ramp into the bang-bang optimum.</li>
+    </ol>
+    <p class="small muted">Both walls are handled: the homotopy removes the
+      bang-bang wall by starting from the convex problem; a Sundman
+      time-reparameterization removes the perigee-curvature wall.</p>
+  </div>
+</section>
+
+<!-- 5 · Method: Sundman + homotopy detail -->
+<section class="slide" data-chapter="method">
+  <div class="slide-inner">
+    <div class="slide-chapter">The Method</div>
+    <div class="slide-title">Two regularizations make collocation tractable</div>
+    <div class="columns columns-50-50">
+      <div>
+        <p><strong>Sundman clock</strong> &mdash; change the independent variable,</p>
+        $$ \frac{dt}{d\tau}=\kappa(\mathbf r),\quad \kappa=r_1^{\,p},\ p=1.5 $$
+        <p class="small">Lowers every gravitational singular exponent by $p$
+          and auto-concentrates mesh nodes at perigee. A
+          <span class="accent">two-primary</span> clock
+          $\kappa=(r_1^{-q}+(r_2/D)^{-q})^{-p/q}$ tames the
+          <em>lunar</em> perigee too &mdash; required, or the exact Hessian
+          overflows near the Moon.</p>
+      </div>
+      <div>
+        <p><strong>Bertrand&ndash;&Eacute;p&eacute;noy homotopy</strong> &mdash; deform the cost,</p>
+        $$ J(\varepsilon)=\!\int s\,dt-\varepsilon\!\int s(1-s)\,dt $$
+        <p class="small">$\varepsilon:1\!\to\!0$ walks from energy (smooth) to
+          fuel (bang-bang). The saturated-node fraction climbs
+          $28\%\!\to\!75\%\!\to\!94\%\!\to\!99.6\%$ as the coasts open up.</p>
+        <div class="insight-box">
+          <div class="insight-label">Start smooth, then sharpen</div>
+          <p class="small">Deform <em>from</em> the convex relaxation <em>toward</em> the non-smooth optimum.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- 6 · Tulip geometry -->
+<section class="slide" data-chapter="tulip">
+  <div class="slide-inner">
+    <div class="slide-chapter">Tulip</div>
+    <div class="slide-title">GTO &rarr; tulip transfer geometry</div>
+    <div class="columns columns-60-40">
+      <div>
+        <img class="fig-img" src="assets/fig_geometry_tulip.png" alt="Tulip transfer geometry">
+      </div>
+      <div>
+        <p class="small">The $\sim$40-rev spiral (blue) departs GTO at the Earth
+          (<span style="color:#3a9b4a">green</span>, initial velocity arrow) and
+          winds out to the Moon, inserting onto the tulip orbit
+          (<span class="warn">orange</span>) at the campaign phase
+          (<span class="error">red</span>, insertion velocity arrow).</p>
+        <div class="block-box">
+          <p class="small"><strong>Insertion (campaign phase)</strong><br>
+          <span class="muted">119 km on-orbit &middot; 28,300 km from Moon &middot; ND speed 0.31 &mdash; a gentle low-thrust capture state</span></p>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- 7 · Tulip best-tf movie -->
+<section class="slide" data-chapter="tulip">
+  <div class="slide-inner">
+    <div class="slide-chapter">Tulip</div>
+    <div class="slide-title">The certified bang-bang transfer</div>
+    <div class="columns columns-60-40">
+      <div>
+        <video class="vid" src="assets/tulip_besttf.mp4" autoplay muted loop playsinline></video>
+      </div>
+      <div>
+        <div class="result-box">
+          <div class="result-label">Certified &middot; $t_f = 1.15\times$</div>
+          <p class="small">25 switches &middot; 99.4% bang-bang<br>
+          defect $2.4\times10^{-14}$ &middot; rendezvous error 0<br>
+          propellant 2.264 kg &middot; $\Delta V$ 3.370 km/s</p>
+        </div>
+        <p class="small muted">Burn near perigee, coast near apogee &mdash; the
+          many-switch structure is 23% leaner than the best 3-switch
+          burn-then-coast, confirming it is the genuine optimum, not an
+          artifact.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- 8 · Tulip front -->
+<section class="slide" data-chapter="tulip">
+  <div class="slide-inner">
+    <div class="slide-chapter">Tulip</div>
+    <div class="slide-title">The &Delta;V&ndash;time front</div>
+    <div class="columns columns-60-40">
+      <div>
+        <img class="fig-img" src="assets/fig_front_tulip.png" alt="Tulip dV-time front">
+      </div>
+      <div>
+        <p class="small">Sweeping the transfer time $t_f$ maps the
+          propellant&ndash;trip-time trade. The lower envelope is the deliverable.</p>
+        <div class="result-box">
+          <div class="result-label">Front minimum</div>
+          <p class="small">$\Delta V = 2.434$ km/s at $1.65\times$ ($\sim$46 d)<br>
+          &mdash; about 45% below the min-time cost (4.47 km/s)</p>
+        </div>
+        <p class="small muted">Green points are PMP first-order certified
+          ($1.12$&ndash;$1.25\times$); grey are feasible-envelope bounds.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- 9 · ELFO geometry -->
+<section class="slide" data-chapter="elfo">
+  <div class="slide-inner">
+    <div class="slide-chapter">ELFO</div>
+    <div class="slide-title">GTO &rarr; ELFO transfer geometry</div>
+    <div class="columns columns-60-40">
+      <div>
+        <img class="fig-img" src="assets/fig_geometry_elfo.png" alt="ELFO transfer geometry">
+      </div>
+      <div>
+        <p class="small">The same pipeline retargets to the ELFO
+          (<code>im_elfo_optimum</code>: $a=12{,}000$ km, $e=0.69$,
+          $i=56.5^\circ$). The seed is manufactured by a gravity-homotopy
+          ladder that turns lunar gravity off, retargets, then turns it back on.</p>
+        <div class="block-box">
+          <p class="small"><strong>Insertion (nearest phase)</strong><br>
+          <span class="muted">16,800 km from Moon &middot; ND speed 0.39 &mdash; chosen to keep the target-continuation well-conditioned</span></p>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- 10 · ELFO best-tf movie -->
+<section class="slide" data-chapter="elfo">
+  <div class="slide-inner">
+    <div class="slide-chapter">ELFO</div>
+    <div class="slide-title">The best-&Delta;V transfer</div>
+    <div class="columns columns-60-40">
+      <div>
+        <video class="vid" src="assets/elfo_besttf.mp4" autoplay muted loop playsinline></video>
+      </div>
+      <div>
+        <div class="result-box">
+          <div class="result-label">Front minimum &middot; $t_f = 1.73\times$</div>
+          <p class="small">$\varepsilon=0$ machine-tight<br>
+          edge $\sim$99.6% &middot; 48 days<br>
+          $\Delta V$ 2.693 km/s &middot; 12.3% propellant</p>
+        </div>
+        <p class="small muted">This is the lowest-&Delta;V ELFO transfer &mdash;
+          it sits right at the fold of the front, where the many-switch
+          bang-bang is hardest to resolve.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- 11 · ELFO front -->
+<section class="slide" data-chapter="elfo">
+  <div class="slide-inner">
+    <div class="slide-chapter">ELFO</div>
+    <div class="slide-title">The &Delta;V&ndash;time front</div>
+    <div class="columns columns-60-40">
+      <div>
+        <img class="fig-img" src="assets/fig_front_elfo.png" alt="ELFO dV-time front">
+      </div>
+      <div>
+        <p class="small">A cleaner, near-monotone front &mdash; ELFO is an easier
+          capture than the tulip.</p>
+        <div class="result-box">
+          <div class="result-label">Front minimum</div>
+          <p class="small">$\Delta V = 2.693$ km/s at $1.73\times$ (48 d),<br>then flat past the fold.</p>
+        </div>
+        <p class="small muted">11 of 14 grid factors reach $\varepsilon=0$
+          machine-tight; the 3 gaps are the low-&Delta;V plateau where
+          bang-bang is hardest.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- 12 · Results summary -->
+<section class="slide" data-chapter="results">
+  <div class="slide-inner">
+    <div class="slide-chapter">Results</div>
+    <div class="slide-title">Both targets, certified end to end</div>
+    <table class="data-table">
+      <thead><tr><th>Target</th><th>Min-time $t_f$</th><th>Best-$\Delta V$ $t_f$</th><th>Best $\Delta V$</th><th>Propellant</th></tr></thead>
+      <tbody>
+        <tr><td>Tulip (campaign)</td><td>5.83 ND / 25.8 d</td><td>$1.65\times$ / ~46 d</td><td>2.434 km/s</td><td>&mdash;</td></tr>
+        <tr><td>ELFO (nearest)</td><td>6.10 ND / 27.0 d</td><td>$1.73\times$ / 48 d</td><td>2.693 km/s</td><td>12.3%</td></tr>
+      </tbody>
+    </table>
+    <div class="result-box">
+      <div class="result-label">What "certified" means here</div>
+      <p class="small">A machine-tight KKT point of the discrete NLP,
+        PMP-consistent by the scale-invariant primer ($0.06^\circ$&ndash;$0.19^\circ$)
+        and transversality indicators and an independent adjoint-ODE verifier,
+        corroborated by mesh-invariance and $\Delta V$ cross-checks.</p>
+    </div>
+    <p class="small muted">Full method write-up: <code>doc/minfuel_method_note.pdf</code>.
+      All solvers, seed generators, and verifiers under
+      <code>NLP_lowThrust_GTO_tulip/</code>.</p>
+  </div>
+</section>
+
+<!-- 13 · End -->
+<section class="slide" data-chapter="">
+  <div class="slide-inner end-slide">
+    <div class="end-text">Questions?</div>
+    <div class="end-accent"></div>
+  </div>
+</section>
+
+<!-- ============== SCRIPT ============== -->
+<script>
+document.addEventListener("DOMContentLoaded", function() {
+  document.body.classList.add('slideshow');
+
+  renderMathInElement(document.body, {
+    delimiters: [
+      {left: '$$', right: '$$', display: true},
+      {left: '$', right: '$', display: false}
+    ],
+    macros: {
+      "\\vect": "\\boldsymbol{#1}",
+      "\\T": "^{\\mathsf{T}}"
+    },
+    throwOnError: false
+  });
+
+  const slides = document.querySelectorAll('.slide');
+  const navItems = document.querySelectorAll('.nav-item');
+  const progress = document.getElementById('progress');
+  const counter = document.getElementById('counter');
+  const keyhint = document.getElementById('keyhint');
+  let current = 0;
+  let hintVisible = true;
+
+  const chapterFirstSlide = {};
+  slides.forEach((s, i) => {
+    const ch = s.dataset.chapter;
+    if (ch && !(ch in chapterFirstSlide)) chapterFirstSlide[ch] = i;
+  });
+
+  function goTo(n) {
+    if (n < 0 || n >= slides.length) return;
+    slides[current].classList.remove('active');
+    current = n;
+    slides[current].classList.add('active');
+    updateUI();
+    if (hintVisible) { keyhint.style.opacity = '0'; hintVisible = false; }
+  }
+
+  function updateUI() {
+    const pct = slides.length > 1 ? (current / (slides.length - 1)) * 100 : 0;
+    progress.style.width = pct + '%';
+    counter.textContent = (current + 1) + ' / ' + slides.length;
+    const currentChapter = slides[current].dataset.chapter;
+    const visitedChapters = new Set();
+    for (let i = 0; i <= current; i++) {
+      const ch = slides[i].dataset.chapter;
+      if (ch) visitedChapters.add(ch);
+    }
+    navItems.forEach(item => {
+      const ch = item.dataset.chapter;
+      item.classList.remove('active', 'visited');
+      if (ch === currentChapter && currentChapter !== '') {
+        item.classList.add('active');
+      } else if (visitedChapters.has(ch)) {
+        item.classList.add('visited');
+      }
+    });
+  }
+
+  window.next = function() { goTo(current + 1); };
+  window.prev = function() { goTo(current - 1); };
+  window.goToChapter = function(ch) {
+    if (ch in chapterFirstSlide) goTo(chapterFirstSlide[ch]);
+  };
+
+  document.addEventListener('keydown', function(e) {
+    if (e.key === 'ArrowRight' || e.key === ' ' || e.key === 'PageDown') {
+      e.preventDefault(); next();
+    } else if (e.key === 'ArrowLeft' || e.key === 'PageUp') {
+      e.preventDefault(); prev();
+    } else if (e.key === 'Home') {
+      e.preventDefault(); goTo(0);
+    } else if (e.key === 'End') {
+      e.preventDefault(); goTo(slides.length - 1);
+    }
+  });
+
+  let touchStartX = 0;
+  document.addEventListener('touchstart', e => { touchStartX = e.touches[0].clientX; });
+  document.addEventListener('touchend', e => {
+    const dx = e.changedTouches[0].clientX - touchStartX;
+    if (Math.abs(dx) > 50) { dx < 0 ? next() : prev(); }
+  });
+
+  goTo(0);
+});
+</script>
+
+</body>
+</html>

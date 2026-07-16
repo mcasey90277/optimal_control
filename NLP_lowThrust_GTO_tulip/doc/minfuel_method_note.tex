@@ -49,7 +49,7 @@
 \title{\bfseries Minimum-Fuel Low-Thrust GTO\,$\rightarrow$\,Cislunar Transfers\\[2pt]
        \large Method, Regularization, and Lessons\\[6pt]
        \normalsize (tulip and ELFO targets --- internal method note)}
-\author{M.\ Casey \and D.\ Koblick}
+\author{M.\ Casey}
 \date{\today}
 
 \begin{document}
@@ -122,6 +122,18 @@ it explicit (Appendix~A):
 Every result in this note is for these two insertion points; the pipeline is
 target-agnostic, so retargeting to a different phase (e.g.\ the maximum-$\dot y$
 tulip point or the ELFO apolune) is a one-line change followed by a re-solve.
+
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=0.82\textwidth]{figures/fig_geometry_tulip.png}
+  \caption{GTO\,$\rightarrow$\,tulip transfer geometry in the rotating
+    Earth--Moon frame. The $\sim$40-revolution transfer spiral (light blue)
+    departs GTO near the Earth (green triangle, ND speed $9.9$) and rendezvous
+    with the campaign insertion phase (red star, ND speed $0.31$) on the tulip
+    orbit (orange) about the Moon. Arrows show the departure and insertion
+    velocity directions.}
+  \label{fig:geom-tulip}
+\end{figure}
 
 \subsection{Why minimum-fuel is the hard problem}\label{sec:why-hard}
 Consider the three canonical objectives with running cost $L$, control throttle
@@ -557,6 +569,17 @@ representation and machinery, not to a free-time optimization.
 $\rightarrow$ \file{gen\_elfo\_energy\_gravhom.m}, \file{gen\_tulip\_energy\_2p.m}
 (the tulip analog, which stops at the tulip target --- legs 0/A/B/D, no retarget).
 
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=0.82\textwidth]{figures/fig_geometry_elfo.png}
+  \caption{GTO\,$\rightarrow$\,ELFO transfer geometry in the rotating
+    Earth--Moon frame, produced by the gravity-homotopy ladder. As for the
+    tulip, the spiral departs GTO (green, ND speed $9.9$) and inserts at the
+    nearest ELFO phase (red star, ND speed $0.39$) on the ELFO (orange) about
+    the Moon.}
+  \label{fig:geom-elfo}
+\end{figure}
+
 %==============================================================================
 \section{Stage 3 --- The energy$\rightarrow$fuel homotopy}\label{sec:homotopy}
 %==============================================================================
@@ -617,6 +640,18 @@ The propellant is $23\%$ below the certified $3$-switch burn-then-coast
 \emph{local} optimum ($2.950$~kg), confirming that the many-switch
 burn-near-perigee / coast-near-apogee structure is the genuine global optimum
 rather than a numerical artifact.
+
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=\textwidth]{figures/fig_traj_throttle.png}
+  \caption{The certified $\varepsilon=0$ tulip minimum-fuel solution
+    ($t_f=1.15\times$). \emph{Left}: the transfer arc colored by throttle
+    $s$ --- dense burning near perigee (dark), coasting near apogee (light).
+    \emph{Right}: the throttle history is genuinely bang-bang ($99.4\%$ of
+    nodes at a bound) with $25$ switches, the sharp early switching giving way
+    to a long single burn as the spiral expands.}
+  \label{fig:traj-throttle}
+\end{figure}
 
 %==============================================================================
 \section{Optimality verification}\label{sec:verify}
@@ -716,6 +751,23 @@ trade for each target.
 The lower envelope of both fronts --- not the scattered individual solves --- is
 the deliverable; pinning the exact envelope needs multi-start per $t_f$.
 
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=0.49\textwidth]{figures/fig_front_tulip.png}
+  \hfill
+  \includegraphics[width=0.49\textwidth]{figures/fig_front_elfo.png}
+  \caption{Minimum-fuel $\Delta V$--transfer-time fronts. \emph{Left}: tulip.
+    The black square is the $0$-switch min-time endpoint; green points are the
+    PMP first-order-certified band ($1.12$--$1.25\times$); grey points are
+    well-reproduced feasible-envelope bounds; the front minimum is
+    $2.434$~km/s at $1.65\times$ ($\sim46$~d). \emph{Right}: ELFO --- a cleaner,
+    near-monotone front reaching a minimum $2.693$~km/s at $1.73\times$
+    ($48$~d) before flattening at the fold. Both axes normalize by each
+    target's own $t_f^{\min}$ (the ELFO grid retains the tulip-scale abscissa
+    of the batch record).}
+  \label{fig:fronts}
+\end{figure}
+
 %==============================================================================
 \section{Lessons learned}\label{sec:lessons}
 %==============================================================================
@@ -794,10 +846,14 @@ The reusable lessons, several of which cost the most effort:
         \file{verify\_elfo\_seed.m} (solver-free defect).
 \end{itemize}
 
-\paragraph{Fixed constants (ND).} $\muS=0.012150585609624$; GTO departure
-$\rv_0=(0.003496,-0.007296,0,\,4.1915,8.9887,0)$; tulip \code{campaign}
-insertion $\rv_f=(1.00658,0.04257,-0.05578,\,-0.16004,0.06657,-0.26046)$;
-$\Tmax$ and $c$ from $25$~mN, $15$~kg, $I_{sp}=2100$~s.
+\paragraph{Fixed constants (ND).} $\muS=0.012150585609624$; $\Tmax$ and $c$
+from $25$~mN, $15$~kg, $I_{sp}=2100$~s; endpoints
+\begin{align*}
+  \rv_0 &= (0.003496,\,-0.007296,\,0,\ 4.1915,\,8.9887,\,0)
+          &&\text{(GTO departure)},\\
+  \rv_f &= (1.00658,\,0.04257,\,-0.05578,\ -0.16004,\,0.06657,\,-0.26046)
+          &&\text{(tulip \code{campaign})}.
+\end{align*}
 
 \paragraph{External review.} The three core solvers and the homotopy/seed recipe
 were reviewed (2026-07-15) by GPT-5.6-terra and Gemini~3.1~Pro: the physics,

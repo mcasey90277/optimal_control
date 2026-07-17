@@ -36,12 +36,17 @@ Xh = 1 + hx^2 + hy^2;
 hterm = hx*sL - hy*cL;
 sqPmu = sqrt(P/mu);
 
-Pdot  = (2*Tm/m)*sqrt(P^3/mu) * (s/Z);
+Pdot  = (2*Tm/m)*(P*sqPmu) * (s/Z);
 exdot = (Tm/m)*sqPmu*(1/Z)*( Z*sL*q + A1*s - ey*hterm*w );
 eydot = (Tm/m)*sqPmu*(1/Z)*(-Z*cL*q + A2*s + ex*hterm*w );
 hxdot = (Tm/(2*m))*sqPmu*(Xh/Z)*cL*w;
 hydot = (Tm/(2*m))*sqPmu*(Xh/Z)*sL*w;
-Ldot  = sqrt(mu/P^3)*Z^2 + (1/m)*sqPmu*(1/Z)*hterm*w;
+% NOTE: the paper's printed L-dot equation (p.6) omits Tmax on the thrust
+% term -- a typo. The same page's compact form xdot = a(x) + (Tmax/m)*B(x)*u,
+% and the standard Walker/Betts MEE Gauss equations, both carry Tmax/m on
+% every thrust term (compare hxdot/hydot above, which correctly have
+% Tm/(2*m)). Fixed here to (Tm/m).
+Ldot  = sqrt(mu/P^3)*Z^2 + (Tm/m)*sqPmu*(1/Z)*hterm*w;
 mdot  = -(Tm/c)*thr;             % ||(q,s,w)|| = thr since ||beta||=1
 tdot  = 1;
 

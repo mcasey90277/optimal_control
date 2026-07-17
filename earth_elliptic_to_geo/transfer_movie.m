@@ -10,6 +10,8 @@ function transfer_movie(matFile, outStem)
 %
 % REFERENCES: [1] PSR/psr_movie.m (layout). [2] memory: matlab-movie-diagonal-
 %   streaks (fixed 1280x720 divisible-by-16 frame -> no H.264 shear).
+%
+% NOTE: The ΔV/mass meter (lines ~18, ~48) assumes campaign Isp=2000 s and m0=1500 kg.
 S = load(matFile);  res = S.res;
 p  = kepler_lt_params(res.cfg.thrustN, 1500, 2000);
 X = res.fuel.X;  U = res.fuel.U;

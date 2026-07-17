@@ -109,7 +109,7 @@ separately when validating the solver core end to end.
   rounds if stage 2 doesn't reach gate tolerance directly.
 - **Mesh sensitivity changes switch count and rev basin, not the mass
   match.** Refining M2 from N=600 to N=1200 moved the solution from
-  22 switches / 7.97 revs toward 19 switches / 7.32 revs (a basin change,
+  24 switches / 8.11 revs toward 19 switches / 7.32 revs (a basin change,
   not noise) while m_f moved only 0.31 kg — the paper's own reported
   structure (18 switches, 7.5 revs) sits between our two mesh resolutions.
   Switch count should be read as a band, not a fixed integer.
@@ -135,14 +135,14 @@ separately when validating the solver core end to end.
   2.5 N leg and the stretch goal of 1 N (74.5 revs, "Out of scope" per
   DESIGN.md but listed as an optional attempt) were never reached — the
   campaign never advances past a blocked lower thrust level.
-- **PMP dual/primer anomaly (~20° misalignment), open, non-gating.** The
-  KKT-dual costates on M0/M1 show a reproducible ~20° primer-vector
-  misalignment that survives dual-polishing, node re-centering, and wide
-  control bounds (consistent at 20.4645° to 4 decimals across probes) —
-  suspected coupling through the Sundman `cScale` slack state, not yet
-  root-caused. Primal certification (defects, mass, structure) is
-  unaffected; M2/M3 gate on primal results only. Diagnostic scripts are
-  preserved in `results/dual_anomaly/`.
+- **PMP dual/primer anomaly, open, non-gating: primer misalignment 10–24°
+  across milestones** (M0 13.3°, M1 20.5° — stable at 20.4645° across all
+  three M1 probes, M2 18.8°, M2-N1200 23.5°); switching-sign (96.7–97.1% vs
+  98% gate) and transversality margins degrade in tandem (M2-N1200
+  transversality passes at 9.5e-11). Suspected coupling through the Sundman
+  `cScale` slack state, not yet root-caused. Primal certification (defects,
+  mass, structure) is unaffected; M2/M3 gate on primal results only.
+  Diagnostic scripts are preserved in `results/dual_anomaly/`.
 - **Sporadic CasADi/IPOPT MEX fatal crash on process init**, mostly on the
   first `opti.solve()` of a MATLAB process after an idle gap (observed ~4
   crashes across 10 launches this session). A plain relaunch always

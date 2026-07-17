@@ -31,6 +31,10 @@ p  = kepler_lt_params(cfg.thrustN, 1500, ispS);
 P0 = 11625/p.LU_km;
 [r0, v0] = elements_to_cart(P0, 0.75, 0, cfg.hx0, 0, pi, p.mu);
 rv0 = [r0; v0];
+assert(ispS == 2000, 'run_transfer:ispMismatch', ...
+    ['cfg.ispS=%g but run_mintime anchors are built/cached at Isp=2000 s only ' ...
+     '(cache tag does not encode Isp) -- thread ispS through run_mintime before ' ...
+     'using a different value'], ispS);
 mt  = run_mintime(cfg.thrustN, cfg.hx0, N);
 tf  = cfg.ctf * mt.tfmin;
 Lf  = pi + (1.12*cfg.ctf + 0.09) * mt.dL_mt;
@@ -40,6 +44,10 @@ switch cfg.term
 end
 ho = struct('par', p, 'rv0', rv0, 'maxIter', 1500);
 if ~isempty(seedMat)                       % neighbor-style warm start
+    if isfield(cfg,'N') && ~isempty(cfg.N)
+        warning('run_transfer:seedMatMesh', ...
+            'cfg.N ignored: mesh is inherited verbatim from seedMat (no-resample rule)');
+    end
     S = load(seedMat);
     sg = S.res.sg;  tauf0 = S.res.fuel.tauf0;
     Xk = S.res.fuel.X;  Uk = S.res.fuel.U;

@@ -11,8 +11,8 @@ Date: 2026-07-16. Status: **implemented (2026-07-17), T1–T16 complete.** Isp
 pinned at 2000 s (default, §7 item 1; validated by the M2 mass match, not an
 independent citation — the intended ref [6] PDF was unreadable). Headline
 result (M2, free-longitude insertion manifold, 10 N, c_tf=1.5): m_f = 1376.74 kg
-(N=600) / 1377.05 kg (N=1200), inside the paper's 1370–1375 kg band (Δmesh
-0.31 kg). M3 front (c_tf 1.2→3.0, 10 N) monotone 1360.37→1386.81 kg matching
+(N=600) / 1377.05 kg (N=1200), within the plan's [1355,1385] kg gate band, ~2 kg above the paper's Fig-23 reading (1370–1375 kg); Δmesh
+0.31 kg. M3 front (c_tf 1.2→3.0, 10 N) monotone 1360.37→1386.81 kg matching
 Fig 23's shape; thrust law C≈846.6 N·h at 10 N vs paper's ≈850 N·h, but the
 5 N/2.5 N law leg is BLOCKED (defect floor ~5e-3, false-infeasibility
 signature, nodes-per-rev hypothesis — future work). Open, non-gating finding:

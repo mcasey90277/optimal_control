@@ -87,6 +87,15 @@ betaMode    = d('betaMode', 'tangential');
 % retain-if-improved machinery -- same final converged answer (still gated
 % at defect<1e-8/termErr<1e-8), just reached in more, individually-
 % resumable steps. Default 3000 leaves single-invocation callers unaffected.
+%
+% mtMaxIter is DELIBERATELY EXCLUDED from the per-rung fingerprint `fp`
+% built below (review finding, Fix 4): it only changes HOW MANY per-round
+% checkpoints the continuation loop takes to reach the same converged
+% answer (checkpoint granularity only), not the physics/config the rung
+% actually solves -- so two invocations differing only in mtMaxIter must be
+% treated as the SAME rung (cache hit, no re-solve), not flagged as a
+% fingerprint mismatch. Every other field in `fp` IS solver-relevant and
+% must stay fingerprinted.
 mtMaxIter   = d('mtMaxIter', 3000);
 
 here   = fileparts(mfilename('fullpath'));
@@ -107,6 +116,8 @@ for k = 1:nRungs
     thrustN = thrustList(k);
     fprintf('\n=== LADDER RUNG %d/%d: T=%g N ===\n', k, nRungs, thrustN);
     rungFile = fullfile(resDir, sprintf('MEE_ladder_T%d.mat', round(10*thrustN)));
+    % NOTE: mtMaxIter is intentionally NOT a field here -- see its
+    % declaration above (checkpoint granularity only, not a config change).
     fp = struct('thrustN', thrustN, 'ctf', ctf, 'nodesPerRev', nodesPerRev, ...
         'm0kg', m0kg, 'ispS', ispS, 'maxIter', maxIter, 'seedThr', seedThr, ...
         'betaMode', betaMode);

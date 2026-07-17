@@ -263,9 +263,10 @@ end
 % when cfg.warmStartAnchor is supplied (struct .X/.U/.dL/.N -- the PREVIOUS
 % rung's own CONVERGED min-time anchor result, already thr=1 throughout,
 % already satisfying the terminal manifold EXACTLY), Stage B mesh-refines
-% THAT trajectory (same interp1 pattern as run_transfer_mee.m's fuel
-% cfg.warmStart: linear for X, linear for the RTN thrust-direction rows of
-% U -- thr itself is irrelevant, forced to 1 regardless) onto a grid sized
+% THAT trajectory (interp_warmstart.m, the SAME shared helper run_transfer_
+% mee.m's fuel cfg.warmStart path uses: linear for X, linear-then-unit-
+% renormalized for the RTN thrust-direction rows of U -- thr itself is
+% irrelevant, forced to 1 regardless) onto a grid sized
 % by warmStartAnchor.dL/(2*pi) (already C-law rescaled by the caller,
 % run_ladder.m: dL_guess = dL_mt(T_prev)*(T_prev/T_new)) at cfg.nRevSeed
 % node density, INSTEAD OF calling mee_seed. This is a self-similar-shape,
@@ -280,11 +281,8 @@ if ~stageAOK || alwaysTryB
         N = round(nodesPerRev * revsGuessB);
         sigmaPrevB = linspace(0, 1, warmStartAnchor.N + 1).';
         sigmaB = linspace(0, 1, N + 1).';
-        X0B    = interp1(sigmaPrevB, warmStartAnchor.X.',       sigmaB, 'linear').';
-        Ubeta  = interp1(sigmaPrevB, warmStartAnchor.U(1:3,:).', sigmaB, 'linear').';
-        Uthr   = interp1(sigmaPrevB, warmStartAnchor.U(4,:).',   sigmaB, 'nearest').';
-        U0B    = [Ubeta; Uthr];
-        dL0B   = warmStartAnchor.dL;
+        W = interp_warmstart(warmStartAnchor.X, warmStartAnchor.U, warmStartAnchor.dL, sigmaPrevB, sigmaB);
+        X0B    = W.X;  U0B = W.U;  dL0B = W.dL;
         x0state = X0B(:,1);
         fprintf(['MINTIME_MEE Stage B: T=%g N, WARM-STARTED from prior rung''s converged ' ...
                  'anchor (dL_guess=%.4f rad -> revs_guess=%.4f, N=%d nodes, %d nodes/rev)\n'], ...
@@ -544,8 +542,20 @@ end
 % ---------------------------------------------------------------------------
 function check_cache_fp_mt(S, fp, file, tag)
 % CHECK_CACHE_FP_MT  Fail-loud cache-fingerprint guard (mirrors
-% run_transfer_mee.m's check_cache_fp). BACKWARD COMPAT: a pre-fix cache
-% with no .fp field only WARNs and is trusted as-is.
+% run_transfer_mee.m's check_cache_fp). BACKWARD COMPAT, two distinct cases:
+%   (1) NO .fp AT ALL (pre-fingerprint-guard cache) -- WARN and trust as-is,
+%       no per-field comparison possible.
+%   (2) SCHEMA-OLDER .fp (review finding, Fix 1): the cache HAS a .fp, but a
+%       field that exists in the CURRENT config's fingerprint (e.g. a newly
+%       added cfg knob such as seedThrB) is simply ABSENT from the cached
+%       one -- this is schema evolution, not a configuration mismatch, and
+%       must not hard-error: the documented primary entry point
+%       run_mintime_mee(10, 25) reusing the Task-6-validated 10 N anchor
+%       cache (results/MEE_mintime_T100.mat, saved before seedThrB existed)
+%       is exactly this case. WARN (id '<caller>:fpSchemaOlder') and treat
+%       as compatible. The hard error is preserved for fields present on
+%       BOTH sides with different values -- a genuine configuration drift
+%       under the same tag must still fail loudly.
 if ~isfield(S, 'out') || ~isfield(S.out, 'fp')
     warning('run_mintime_mee:noCachedFingerprint', ['%s has no cached config ' ...
         'fingerprint -- trusting it because tag=''%s'' matches; use a new ' ...
@@ -556,7 +566,14 @@ sfp = S.out.fp;
 flds = fieldnames(fp);
 for k = 1:numel(flds)
     f = flds{k};
-    if ~isfield(sfp, f) || ~isequal(sfp.(f), fp.(f))
+    if ~isfield(sfp, f)
+        warning('run_mintime_mee:fpSchemaOlder', ['%s: field ''%s'' is present ' ...
+            'in the current config fingerprint but absent from the cached one ' ...
+            '(schema evolution -- the cache predates this field) -- trusting ' ...
+            'the cache as compatible under tag=''%s'''], file, f, tag);
+        continue;
+    end
+    if ~isequal(sfp.(f), fp.(f))
         error('run_mintime_mee:fingerprintMismatch', ['cached config ' ...
             'fingerprint mismatch in %s: field ''%s'' differs between the ' ...
             'cache and the current config -- stale cache under tag=''%s''; ' ...

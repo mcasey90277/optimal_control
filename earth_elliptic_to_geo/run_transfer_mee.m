@@ -37,9 +37,10 @@ function res = run_transfer_mee(cfg)
 %          dL_prev*(T_prev/T_new)) -- when supplied, Stage 1's cold
 %          constant-throttle mee_seed pass is skipped entirely in favor of
 %          mesh-refining this trajectory onto the new rung's own node grid
-%          (interp1 pattern from nodestudy_mee.m's solve_warm_node: linear
-%          for X and U's RTN thrust-direction rows, nearest for U's throttle
-%          row; N sized from warmStart.dL/(2*pi) at cfg.nodesPerRev), and
+%          (interp_warmstart.m, factored out of what was formerly inline
+%          interp1 code here -- linear for X and U's RTN thrust-direction
+%          rows, nearest-plus-renormalize for U's throttle/beta rows; N
+%          sized from warmStart.dL/(2*pi) at cfg.nodesPerRev), and
 %          Stage 2 tries a SINGLE direct eps=0 solve first (same-basin
 %          refinement precedent, mirroring solve_warm_node) before falling
 %          back to a short eps continuation tail (cfg.warmFallbackSched,
@@ -149,11 +150,8 @@ assert(N >= 1, 'run_transfer_mee:warmStartTooFewNodes', ...
 fp = fpBase;  fp.N = N;  fp.warmStartDL = warmStart.dL;
 
 sigma = linspace(0, 1, N+1).';
-X0    = interp1(warmStart.sigma, warmStart.X.',       sigma, 'linear').';
-Ubeta = interp1(warmStart.sigma, warmStart.U(1:3,:).', sigma, 'linear').';
-Uthr  = interp1(warmStart.sigma, warmStart.U(4,:).',   sigma, 'nearest').';
-U0    = [Ubeta; Uthr];
-dL0   = warmStart.dL;
+W     = interp_warmstart(warmStart.X, warmStart.U, warmStart.dL, warmStart.sigma, sigma);
+X0    = W.X;  U0 = W.U;  dL0 = W.dL;
 % Rescale the interpolated physical-time row (X row 7) so the INITIAL GUESS
 % lands near this rung's own tf target: the previous rung's absolute time
 % values live on a different (shorter) tf scale. Every other row (orbital

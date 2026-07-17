@@ -5,7 +5,10 @@ function [dXdL, Ldot] = lt_mee_rhs(X, U, par)
 % State X = [P; ex; ey; hx; hy; m; t] evolves per the paper's Gauss-equation
 % block (RTN thrust components), converted from d/dt to d/dL via Ldot. Written
 % without norm/abs/max/if on state-dependent quantities and with trig taken on
-% mod(L,2*pi), so it evaluates on both numeric doubles and CasADi MX symbolics.
+% an inline floor-based wrap of L into [0,2*pi) -- MATLAB's own documented
+% definition mod(a,m) = a - m.*floor(a./m), value-identical to mod(L,2*pi) for
+% all real L -- so it evaluates on both numeric doubles and CasADi MX
+% symbolics (MX has no overload of the builtin mod(), but floor() works).
 %
 % INPUTS:
 %   X   - State [P; ex; ey; hx; hy; m; t] [7x1]
@@ -28,7 +31,8 @@ L  = par.L;  Tm = par.Tmax;  c = par.c;  mu = par.mu;
 thr = U(4);
 q = thr*U(1);  s = thr*U(2);  w = thr*U(3);
 
-cL = cos(mod(L,2*pi));  sL = sin(mod(L,2*pi));
+Lw = L - 2*pi*floor(L/(2*pi));
+cL = cos(Lw);  sL = sin(Lw);
 Z  = 1 + ex*cL + ey*sL;
 A1 = ex + (1+Z)*cL;
 A2 = ey + (1+Z)*sL;

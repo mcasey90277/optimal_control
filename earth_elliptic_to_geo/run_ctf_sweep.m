@@ -73,7 +73,11 @@ here = fileparts(mfilename('fullpath'));
 resDir = fullfile(here, 'results');
 
 % --- leg 1: c_tf front at 10 N (neighbor-chain upward from M2) ---------------
-ctfs = [1.2 1.5 2.0 2.5 3.0];
+% ctfs includes the 4 densify_front.m points (1.35, 1.75, 2.25, 2.75; Task 14
+% cleanup pass) alongside the original 5 -- all 9 are already cached, so
+% adding them here only widens the collection table/figure below, it does
+% not change the main sweep loop's solve behavior (every point skips).
+ctfs = [1.2 1.35 1.5 1.75 2.0 2.25 2.5 2.75 3.0];
 redoSet = [1.2 2.5 3.0];              % controller-authorized best-of-envelope set
 noChainRetry = 1.2;                   % Task 14 M3 closure: the chain-seeded solve at
                                        % c_tf=1.2 deterministically fails to certify (same
@@ -204,7 +208,11 @@ else
             numel(C), numel(thr), mat2str(round(C)));
 end
 fig = figure('Visible','off');
-plot(ctfs, mfC, 'o-', 'LineWidth', 1.5);  grid on
+try, theme(fig,'light'); catch, end
+set(fig, 'Color', 'w');
+plot(ctfs, mfC, 'o-', 'Color',[0.10 0.35 0.85], 'MarkerFaceColor',[0.10 0.35 0.85], ...
+     'MarkerEdgeColor','k', 'LineWidth', 1.8, 'MarkerSize', 7);
+grid on
 xlabel('c_{tf}');  ylabel('m_f [kg]');
 title('GEO transfer: final mass vs transfer-time multiplier (T_{max}=10 N)');
 exportgraphics(fig, fullfile(resDir, 'front_mf_ctf.png'), 'Resolution', 150);

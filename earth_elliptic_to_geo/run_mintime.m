@@ -177,8 +177,9 @@ if nargin < 5, routeB = []; end
 % every call site below -- the fast 10 N case still exits the continuation
 % loop immediately via isGood (0 extra rounds needed, per the M0-M2 logs),
 % so raising its ceiling and lowering its floor costs nothing there.
-CONTIN_MAX_ROUNDS  = 24;      % ~0.24 decades/round observed at 5 N, N=1200, ~5 min/round
-CONTIN_DECADE_MIN  = 0.15;    % ...  (recalibrated from the original 1-decade/round 10 N floor)
+[CONTIN_MAX_ROUNDS, CONTIN_DECADE_MIN] = mintime_guard_constants();
+% Documented in mintime_guard_constants.m: ~0.24 decades/round at 5 N, N=1200,
+% ~5 min/round; recalibrated from the original 1-decade/round 10 N floor.
 
 here = fileparts(mfilename('fullpath'));
 resDir = fullfile(here, 'results');

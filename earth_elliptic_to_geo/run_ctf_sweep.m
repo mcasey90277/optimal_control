@@ -173,16 +173,27 @@ end
 fprintf('\n--- thrust law (c_tf=1.5) ---\n');
 C = [];
 for kt = 1:numel(thr)
-    fnT = fullfile(resDir, sprintf('sweep_T%03d_c150.mat', round(10*thr(kt))));
-    if isfile(fnT)
-        S = load(fnT);
-        C(end+1) = thr(kt) * S.res.mintime.tfmin_h; %#ok<AGROW>
-        fprintf('%-8g %-6.2f %-9.2f %-6d %-9.1f %-6s\n', thr(kt), 1.5, ...
-                S.res.report.m_f_kg, S.res.report.switches, S.res.mintime.tfmin_h, 'fresh');
-    else
+    chainFn = fullfile(resDir, sprintf('sweep_T%03d_c150.mat', round(10*thr(kt))));
+    freshFn = fullfile(resDir, sprintf('sweep_T%03d_c150_fresh.mat', round(10*thr(kt))));
+    cand = struct('mf', {}, 'S', {}, 'src', {});
+    if isfile(chainFn)
+        Sc = load(chainFn);
+        cand(end+1) = struct('mf', Sc.res.report.m_f_kg, 'S', Sc, 'src', 'chain'); %#ok<AGROW>
+    end
+    if isfile(freshFn)
+        Sf = load(freshFn);
+        cand(end+1) = struct('mf', Sf.res.report.m_f_kg, 'S', Sf, 'src', 'fresh'); %#ok<AGROW>
+    end
+    if isempty(cand)
         fprintf('%-8g %-6.2f BLOCKED (min-time anchor did not converge -- see task-14-report.md)\n', ...
                 thr(kt), 1.5);
+        continue;
     end
+    [~, ibest] = max([cand.mf]);
+    S = cand(ibest).S;
+    C(end+1) = thr(kt) * S.res.mintime.tfmin_h; %#ok<AGROW>
+    fprintf('%-8g %-6.2f %-9.2f %-6d %-9.1f %-6s\n', thr(kt), 1.5, ...
+            S.res.report.m_f_kg, S.res.report.switches, S.res.mintime.tfmin_h, cand(ibest).src);
 end
 if numel(C) == numel(thr)
     fprintf('law R0: T*tfmin = %s N.h  (spread %.1f%%)\n', mat2str(round(C)), ...

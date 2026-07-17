@@ -8,7 +8,7 @@
 % floor of 1.0 instead. This pins the guard arithmetic itself against the two
 % observed data points so it can be trusted independent of which
 % roundsMax/decadeMin pair gets plumbed into which call site.
-decadeMin = 0.15;
+[~, decadeMin] = mintime_guard_constants();
 
 % Case 1: observed 5 N cold-seed round 1 (9.353e-03 -> 5.336e-03) -- must NOT stall
 d1 = log10(9.353e-03) - log10(5.336e-03);

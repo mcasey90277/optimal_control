@@ -68,6 +68,22 @@ function out = run_mintime_mee(thrustN, nodesPerRev, cfg)
 % duals" is to keep IPOPT on adaptive-mu (loose) for the NEXT round rather
 % than asking it to warm-start tight from an untrustworthy point.
 %
+% PER-ROUND RETAIN-IF-IMPROVED / RETRY-LOOSE (review finding, binding --
+% DESIGN_thrust_ladder.md Phase 0 item 1): a continuation round's result is
+% NO LONGER accepted unconditionally. After each round, the new iterate is
+% retained only if it improved feasibility (measured maxDefect) over the
+% iterate it was warm-started from; on regression (no improvement), the
+% prior iterate is kept and retried EXACTLY ONCE, forced to the loose
+% (adaptive-mu) regime regardless of what warmTight would otherwise have
+% been, warm-started from that same retained prior point --
+% mintime_guard_constants.m's maxLooseRetries (currently 1). Only if that
+% loose retry ALSO fails to improve does the existing stall guard (below)
+% get to fire. The retain/retry decision itself is a small pure function,
+% round_advance_decision.m, factored out specifically so it is unit-
+% testable with synthetic defect numbers without a solve
+% (test_mintime_mee_guard.m) -- see that file for the improved /
+% regressed-first-time / regressed-after-retry cases.
+%
 % Stall/converge guard: identical arithmetic to run_mintime.m's continuation
 % loop, reusing mintime_guard_constants.m directly (NOT a hardcoded local
 % copy -- pinned by test_mintime_mee_guard.m).
@@ -77,10 +93,14 @@ function out = run_mintime_mee(thrustN, nodesPerRev, cfg)
 % and keep-if-improved: the final anchor file is only overwritten by a new
 % solve that is BOTH certified and has a lower (better, for a minimization)
 % t_f,min than whatever is already cached under the same tag. Per-round
-% solver outputs are also cached (resDir/<tag>_A_round%02d.mat /
-% <tag>_B_round%02d.mat) so a killed process (sporadic MEX init crash) can
-% be resumed by simply re-invoking this function -- already-solved rounds
-% are loaded, not re-solved.
+% solver outputs are ALSO config-fingerprinted (same WARN-only backward-
+% compat pattern for pre-fix round files with no stored fingerprint) and
+% cached (resDir/<tag>_A_round%02d.mat / <tag>_B_round%02d.mat) so a killed
+% process (sporadic MEX init crash) can be resumed by simply re-invoking
+% this function -- already-solved rounds are loaded, not re-solved, and the
+% retain/retry state machine is reconstructed by replaying the cached
+% rounds in order (round_advance_decision is pure, so replay reproduces the
+% same keep/retry decisions deterministically from the same defect trace).
 %
 % INPUTS:  thrustN     - max thrust [N]
 %          nodesPerRev - node density [scalar, default 25 -- Task 5's
@@ -106,6 +126,8 @@ function out = run_mintime_mee(thrustN, nodesPerRev, cfg)
 %   [5] .superpowers/sdd/task-6-brief.md (this task's spec).
 %   [6] earth_elliptic_to_geo/mee_fuel_tag.m (shared fuel-tag convention,
 %       also used by run_ladder.m).
+%   [7] earth_elliptic_to_geo/round_advance_decision.m (retain-if-improved /
+%       retry-loose decision, Phase 0 item 1, factored out for unit testing).
 if nargin < 2 || isempty(nodesPerRev), nodesPerRev = 25; end
 if nargin < 3, cfg = struct(); end
 d = @(f,v) getdef7(cfg, f, v);
@@ -123,7 +145,7 @@ here   = fileparts(mfilename('fullpath'));
 resDir = fullfile(here, 'results');
 if ~exist(resDir, 'dir'), mkdir(resDir); end
 
-[roundsMax, decadeMin] = mintime_guard_constants();   % shared, NOT duplicated
+[roundsMax, decadeMin, maxLooseRetries] = mintime_guard_constants();   % shared, NOT duplicated
 
 fp = struct('thrustN', thrustN, 'nodesPerRev', nodesPerRev, 'm0kg', m0kg, ...
     'ispS', ispS, 'maxIter', maxIter, 'fuelTag', fuelTag, 'nRevSeed', nRevSeed, ...
@@ -141,7 +163,7 @@ if isfile(finalFile)
 end
 
 par = kepler_lt_params(thrustN, m0kg, ispS);
-isGood = @(o) o.success && o.maxDefect < 1e-8 && o.termErr < 1e-8;
+isGood = @is_certified;   % shared with pack_candidate's .certified (Fix 3, no divergent copies)
 
 candidates = {};
 
@@ -158,7 +180,7 @@ if isfile(fuelFile)
             thrustN, fuelTag, size(X0A,2)-1, dL0A);
     try
         [outA, roundA] = mintime_mee_continue(sigmaA, X0A, U0A, dL0A, x0state, par, ...
-            isGood, roundsMax, decadeMin, maxIter, printLvl, resDir, tag, 'A');
+            isGood, roundsMax, decadeMin, maxLooseRetries, maxIter, printLvl, resDir, tag, 'A', fp);
         candidates{end+1} = pack_candidate(outA, thrustN, nodesPerRev, size(X0A,2)-1, 'A', roundA, par); %#ok<AGROW>
         stageAOK = true;
     catch ME_A
@@ -184,7 +206,7 @@ if ~stageAOK || alwaysTryB
             thrustN, nRevSeed, N, dL0B, seedInfoB.nRev);
     try
         [outB, roundB] = mintime_mee_continue(sigmaB, X0B, U0B, dL0B, x0state, par, ...
-            isGood, roundsMax, decadeMin, maxIter, printLvl, resDir, tag, 'B');
+            isGood, roundsMax, decadeMin, maxLooseRetries, maxIter, printLvl, resDir, tag, 'B', fp);
         candidates{end+1} = pack_candidate(outB, thrustN, nodesPerRev, N, 'B', roundB, par); %#ok<AGROW>
     catch ME_B
         fprintf('MINTIME_MEE Stage B FAILED (%s)\n', ME_B.message);
@@ -222,32 +244,58 @@ end
 
 % ---------------------------------------------------------------------------
 function [out, round_] = mintime_mee_continue(sigma, X0, U0, dL0, x0state, par, ...
-    isGood, roundsMax, decadeMin, maxIter, printLvl, resDir, tag, label)
+    isGood, roundsMax, decadeMin, maxLooseRetries, maxIter, printLvl, resDir, tag, label, fp)
 % MINTIME_MEE_CONTINUE  Shared initial-solve + warm-continuation loop with
-% the feasibility-selected barrier policy and the shared stall/converge
-% guard. Per-round outputs are cached to resDir/<tag>_<label>_round%02d.mat
-% (round 0 = the initial loose solve) so a killed process resumes without
-% re-solving completed rounds.
+% the feasibility-selected barrier policy, the retain-if-improved / retry-
+% loose mechanism (DESIGN_thrust_ladder.md Phase 0 item 1), and the shared
+% stall/converge guard. Per-round outputs are config-fingerprinted and
+% cached to resDir/<tag>_<label>_round%02d.mat (round 0 = the initial loose
+% solve) so a killed process resumes without re-solving completed rounds.
+%
+% RETAIN-IF-IMPROVED / RETRY-LOOSE: each round's candidate (outNew) is
+% retained (out = outNew) only if round_advance_decision.m says it improved
+% feasibility over the incoming (retained) point. On regression, the prior
+% iterate is kept and the NEXT round is a forced-loose (warmTight=false)
+% retry from that SAME retained point, consuming one of
+% mintime_guard_constants's maxLooseRetries. Only once that budget is
+% exhausted (and the retry still didn't improve) does the pre-existing
+% decadeImprove/decadeMin stall guard get evaluated -- which it always
+% fails at that point (no improvement implies decadeImprove<=0<decadeMin),
+% so exhausting the retry budget on a non-improving round is what actually
+% throws run_mintime_mee:stall.
 %
 % INPUTS:  sigma [(N+1)x1]; X0/U0 [7/4 x (N+1)] warm-start state/control;
 %          dL0 [scalar]; x0state [7x1] initial MEE state (opts.x0); par -
 %          kepler_lt_params struct; isGood [function handle]; roundsMax/
-%          decadeMin [scalar, from mintime_guard_constants]; maxIter/
-%          printLvl [scalar]; resDir [char]; tag/label [char]
+%          decadeMin/maxLooseRetries [scalar, from mintime_guard_constants];
+%          maxIter/printLvl [scalar]; resDir [char]; tag/label [char];
+%          fp [struct, the caller's config fingerprint -- extended here
+%          with .label/.N for the per-round cache fingerprint check]
 % OUTPUTS: out - converged (or best-effort) casadi_lt_mee output struct;
-%          round_ - number of continuation rounds beyond round 0
+%          round_ - number of continuation rounds beyond round 0 (includes
+%          any loose-retry rounds -- they consume the same round budget)
 %
 % REFERENCES: [1] run_mintime.m>mintime_continue_only (pattern this mirrors,
 %   adapted for casadi_lt_mee's opts contract and the feasibility-selected
 %   barrier policy in place of the round-number-indexed warmTight rule).
+%   [2] round_advance_decision.m (the retain/retry decision, unit-tested
+%   separately). [3] DESIGN_thrust_ladder.md Phase 0 item 1 (the mandate).
+fpRound = fp;  fpRound.label = label;  fpRound.N = size(X0,2) - 1;
+fp = fpRound;   % shadow the input fp with the round-level fingerprint for the
+                % remainder of this function -- the caller's copy is untouched
+                % (MATLAB passes by value), and every save() below stores this
+                % as field name 'fp', matching check_cache_fp_round's read and
+                % the run_transfer_mee.m/check_cache_fp convention.
+
 round0File = fullfile(resDir, sprintf('%s_%s_round%02d.mat', tag, label, 0));
 if isfile(round0File)
     S = load(round0File);  out = S.out;
+    check_cache_fp_round(S, fpRound, round0File, tag, label, 0);
     fprintf('  [cached] %s round 0\n', label);
 else
     out = casadi_lt_mee(sigma, X0, U0, dL0, struct('par', par, 'mode', 'mintime', ...
         'x0', x0state, 'maxIter', maxIter, 'warmTight', false, 'printLevel', printLvl));
-    save(round0File, 'out');
+    save(round0File, 'out', 'fp');
 end
 fprintf('  %s round 0 (loose, adaptive mu): status=%s defect=%.3e termErr=%.3e\n', ...
         label, out.ipoptStatus, out.maxDefect, out.termErr);
@@ -255,40 +303,64 @@ fprintf('  %s round 0 (loose, adaptive mu): status=%s defect=%.3e termErr=%.3e\n
 round_ = 0;
 defect0 = out.maxDefect;
 gateDefect = 1e-8;
+guardC = struct('maxLooseRetries', maxLooseRetries);
+retriedThisStall = false;   % true iff the CURRENTLY retained `out` has
+                             % already consumed its one loose-regime retry
+                             % (Phase 0 item 1) without improving on it.
 while ~isGood(out) && round_ < roundsMax
     round_ = round_ + 1;
     roundFile = fullfile(resDir, sprintf('%s_%s_round%02d.mat', tag, label, round_));
     if isfile(roundFile)
-        S = load(roundFile);  outNew = S.out;
+        S = load(roundFile);  outNew = S.outNew;
+        check_cache_fp_round(S, fpRound, roundFile, tag, label, round_);
         fprintf('  [cached] %s round %d\n', label, round_);
     else
-        % FEASIBILITY-SELECTED BARRIER POLICY: warmTight only if the
-        % INCOMING point exited cleanly (out.success) AND its measured
-        % defect is already tight (<1e-6) -- never from the round index,
-        % never on a restoration/failed exit (out.success==false forces
-        % loose/adaptive-mu regardless of the reported defect number).
-        warmTight = out.success && out.maxDefect < 1e-6;
+        % FEASIBILITY-SELECTED BARRIER POLICY, with the retry-loose override
+        % (Phase 0 item 1): if this round IS the one-shot loose retry for a
+        % regressed prior round, warmTight is forced false regardless of the
+        % measured feasibility of the (retained) incoming point.
+        if retriedThisStall
+            warmTight = false;
+        else
+            warmTight = out.success && out.maxDefect < 1e-6;
+        end
         outNew = casadi_lt_mee(sigma, out.X, out.U, out.dL, struct('par', par, ...
             'mode', 'mintime', 'x0', x0state, 'maxIter', maxIter, ...
             'warmTight', warmTight, 'printLevel', printLvl));
-        save(roundFile, 'outNew');
+        save(roundFile, 'outNew', 'fp');
     end
-    fprintf(['  %s round %d (warmTight=%d): defect %.3e -> %.3e, termErr=%.3e, status=%s\n'], ...
-            label, round_, out.success && out.maxDefect < 1e-6, out.maxDefect, ...
-            outNew.maxDefect, outNew.termErr, outNew.ipoptStatus);
+    warmTightUsed = ~retriedThisStall && out.success && out.maxDefect < 1e-6;
+    fprintf(['  %s round %d (warmTight=%d, looseRetry=%d): defect %.3e -> %.3e, ' ...
+             'termErr=%.3e, status=%s\n'], label, round_, warmTightUsed, retriedThisStall, ...
+            out.maxDefect, outNew.maxDefect, outNew.termErr, outNew.ipoptStatus);
     decadeImprove = log10(max(out.maxDefect, realmin)) - log10(max(outNew.maxDefect, realmin));
     cumDecades = log10(max(defect0, realmin)) - log10(max(outNew.maxDefect, realmin));
     decadesRemaining = log10(max(outNew.maxDefect, realmin)) - log10(gateDefect);
     fprintf(['    cumulative: %.2f decades closed since round 0 (defect0=%.3e), ' ...
              '~%.2f decades remaining to gate (%d/%d rounds used)\n'], ...
             cumDecades, defect0, max(decadesRemaining, 0), round_, roundsMax);
-    if ~isGood(outNew) && decadeImprove < decadeMin
-        error('run_mintime_mee:stall', ['continuation stalled at %s round %d: ' ...
-            'defect %.3e -> %.3e (%.2f decades, need >=%.2f), termErr=%.3e, status=%s'], ...
-            label, round_, out.maxDefect, outNew.maxDefect, decadeImprove, decadeMin, ...
-            outNew.termErr, outNew.ipoptStatus);
+
+    [keepNew, retryLoose] = round_advance_decision(out.maxDefect, outNew.maxDefect, ...
+        retriedThisStall, guardC);
+    if keepNew
+        out = outNew;
+        retriedThisStall = false;
+    elseif retryLoose
+        fprintf(['    round %d regressed (defect %.3e -> %.3e) -- keeping the retained ' ...
+                 'prior iterate, retrying once with the loose regime before declaring a stall\n'], ...
+                round_, out.maxDefect, outNew.maxDefect);
+        retriedThisStall = true;   % out intentionally NOT advanced
+    else
+        if ~isGood(outNew) && decadeImprove < decadeMin
+            error('run_mintime_mee:stall', ['continuation stalled at %s round %d ' ...
+                '(loose retry exhausted, maxLooseRetries=%d): defect %.3e -> %.3e ' ...
+                '(%.2f decades, need >=%.2f), termErr=%.3e, status=%s'], label, round_, ...
+                maxLooseRetries, out.maxDefect, outNew.maxDefect, decadeImprove, decadeMin, ...
+                outNew.termErr, outNew.ipoptStatus);
+        end
+        out = outNew;
+        retriedThisStall = false;
     end
-    out = outNew;
 end
 if ~isGood(out)
     error('run_mintime_mee:noConverge', ...
@@ -298,13 +370,25 @@ end
 end
 
 % ---------------------------------------------------------------------------
+function tf = is_certified(o)
+% IS_CERTIFIED  Single shared certification predicate (review finding, Fix
+% 3): the feasibility + terminal-accuracy gate used BOTH as the
+% continuation loop's isGood test and pack_candidate's .certified flag, so
+% the two definitions cannot silently diverge.
+%
+% INPUTS:  o - casadi_lt_mee output struct (.success/.maxDefect/.termErr)
+% OUTPUTS: tf - true iff o is a certified (converged, tight) result [logical]
+tf = o.success && o.maxDefect < 1e-8 && o.termErr < 1e-8;
+end
+
+% ---------------------------------------------------------------------------
 function cand = pack_candidate(o, thrustN, nodesPerRev, N, stage, roundsUsed, par)
 % PACK_CANDIDATE  Build the anchor summary struct from a converged
 % casadi_lt_mee output (mirrors run_mintime.m's revs/dL_mt reporting).
 cand = struct('tfmin', o.tf, 'tfmin_h', o.tf*par.TU_s/3600, 'dL_mt', o.dL, ...
     'revs', o.dL/(2*pi), 'thrustN', thrustN, 'nodesPerRev', nodesPerRev, 'N', N, ...
-    'stage', stage, 'continuationRounds', roundsUsed, 'certified', ...
-    o.success && o.maxDefect < 1e-8 && o.termErr < 1e-8, 'solverOut', o);
+    'stage', stage, 'continuationRounds', roundsUsed, 'certified', is_certified(o), ...
+    'solverOut', o);
 end
 
 % ---------------------------------------------------------------------------
@@ -364,6 +448,42 @@ for k = 1:numel(flds)
             'fingerprint mismatch in %s: field ''%s'' differs between the ' ...
             'cache and the current config -- stale cache under tag=''%s''; ' ...
             'delete the file or use a new tag'], file, f, tag);
+    end
+end
+end
+
+% ---------------------------------------------------------------------------
+function check_cache_fp_round(S, fpRound, file, tag, label, roundIdx)
+% CHECK_CACHE_FP_ROUND  Fail-loud cache-fingerprint guard for the PER-ROUND
+% cache files (<tag>_<label>_round%02d.mat) -- review finding (Fix 2): these
+% were previously loaded by round number with no config check at all,
+% unlike the final anchor file (check_cache_fp_mt above) and
+% run_transfer_mee.m's check_cache_fp, which this mirrors exactly.
+% BACKWARD COMPAT: a pre-fix round file with no stored .fp field (e.g. the
+% pre-existing MEE_mintime_T100_A/B_round00.mat) only WARNs and is trusted
+% as-is -- tag/label/round index are already an exact match (that's how the
+% file was found by name), and no per-field comparison is possible without
+% a stored fingerprint.
+%
+% INPUTS:  S - loaded round-cache struct; fpRound - current round-level
+%          config fingerprint [struct]; file - path [char]; tag/label
+%          [char]; roundIdx - round number [scalar, for messages]
+if ~isfield(S, 'fp')
+    warning('run_mintime_mee:noCachedRoundFingerprint', ['%s (round %d, %s) has ' ...
+        'no cached config fingerprint (pre-fix round cache) -- trusting it ' ...
+        'because tag/label/round match; use a new tag to regain fingerprint ' ...
+        'protection'], file, roundIdx, label);
+    return;
+end
+flds = fieldnames(fpRound);
+for k = 1:numel(flds)
+    f = flds{k};
+    if ~isfield(S.fp, f) || ~isequal(S.fp.(f), fpRound.(f))
+        error('run_mintime_mee:roundFingerprintMismatch', ['cached config ' ...
+            'fingerprint mismatch in %s (round %d, %s): field ''%s'' differs ' ...
+            'between the cache and the current config -- stale round cache ' ...
+            'under tag=''%s''; delete the file or use a new tag'], file, roundIdx, ...
+            label, f, tag);
     end
 end
 end

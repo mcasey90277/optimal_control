@@ -54,10 +54,12 @@ assert(d2 < decadeMin, 'case 2 (%.4f decades) SHOULD stall at floor %.2f', d2, d
 % decision (DESIGN_thrust_ladder.md Phase 0 item 1, Fix 1) unit-tested with
 % synthetic defect numbers -- no solve required. round_advance_decision.m
 % is kept as its own file (not a nested local function of run_mintime_mee.m)
-% specifically so it can be called directly here. -----------------------
-guardC = struct('maxLooseRetries', maxLooseRetries);
+% specifically so it can be called directly here. "Improved" is FLOOR-GATED
+% (decadeImprove >= decadeMin), not a bare newDefect<prevDefect inequality
+% (re-review finding, 2026-07-17 -- see case D below, the original defect). -
+guardC = struct('decadeMin', decadeMin, 'maxLooseRetries', maxLooseRetries);
 
-% Case A: improved (newDefect < prevDefect) -> keep the new iterate, no retry.
+% Case A: improved, clears the decadeMin floor -> keep the new iterate, no retry.
 [keepNew, retryLoose] = round_advance_decision(5.0e-03, 2.0e-03, false, guardC);
 assert(keepNew == true && retryLoose == false, ...
     'round_advance_decision case A (improved): expected keepNew=true, retryLoose=false, got keepNew=%d retryLoose=%d', ...
@@ -85,8 +87,29 @@ assert(keepNew == false && retryLoose == false, ...
     'round_advance_decision case C (regressed-after-retry): expected keepNew=false, retryLoose=false, got keepNew=%d retryLoose=%d', ...
     keepNew, retryLoose);
 
+% Case D: SUB-FLOOR CRAWL -- re-review finding, the exact bug this test now
+% pins against. This is the guard's own "case 2" data point (5.141e-03 ->
+% 3.912e-03, d2=0.1186 decades above -- POSITIVE progress, newDefect <
+% prevDefect, but BELOW decadeMin=0.15). The original (buggy) cut of
+% round_advance_decision used a bare newDefect<prevDefect test and would
+% have returned keepNew=true here -- silently defeating the stall guard by
+% letting an arbitrarily slow crawl run to roundsMax. The fixed version
+% must NOT treat this as improved: first encounter spends the loose retry;
+% a second encounter of the same sub-floor progress with the retry already
+% spent must stall (retryLoose=false, matching test_stall_guard.m's own
+% "case 2 SHOULD stall" verdict for these exact numbers).
+[keepNew, retryLoose] = round_advance_decision(5.141e-03, 3.912e-03, false, guardC);
+assert(keepNew == false && retryLoose == true, ...
+    'round_advance_decision case D (sub-floor crawl, first time, %.4f decades < floor %.2f): expected keepNew=false, retryLoose=true, got keepNew=%d retryLoose=%d', ...
+    d2, decadeMin, keepNew, retryLoose);
+[keepNew, retryLoose] = round_advance_decision(5.141e-03, 3.912e-03, true, guardC);
+assert(keepNew == false && retryLoose == false, ...
+    'round_advance_decision case D'' (sub-floor crawl, after retry -- must stall): expected keepNew=false, retryLoose=false, got keepNew=%d retryLoose=%d', ...
+    keepNew, retryLoose);
+
 fprintf(['test_mintime_mee_guard: ALL PASS (run_mintime_mee.m reads the shared ' ...
     'mintime_guard_constants() -- roundsMax=%d, decadeMin=%.2f, maxLooseRetries=%d; ' ...
     'case1=%.4f decades continue, case2=%.4f decades stall; round_advance_decision ' ...
-    'improved/regressed-first-time/no-change/regressed-after-retry all correct)\n'], ...
+    'improved/regressed-first-time/no-change/regressed-after-retry/sub-floor-crawl ' ...
+    'all correct -- floor-gated, not a bare inequality)\n'], ...
     roundsMax, decadeMin, maxLooseRetries, d1, d2);

@@ -71,18 +71,26 @@ function out = run_mintime_mee(thrustN, nodesPerRev, cfg)
 % PER-ROUND RETAIN-IF-IMPROVED / RETRY-LOOSE (review finding, binding --
 % DESIGN_thrust_ladder.md Phase 0 item 1): a continuation round's result is
 % NO LONGER accepted unconditionally. After each round, the new iterate is
-% retained only if it improved feasibility (measured maxDefect) over the
-% iterate it was warm-started from; on regression (no improvement), the
-% prior iterate is kept and retried EXACTLY ONCE, forced to the loose
-% (adaptive-mu) regime regardless of what warmTight would otherwise have
-% been, warm-started from that same retained prior point --
-% mintime_guard_constants.m's maxLooseRetries (currently 1). Only if that
-% loose retry ALSO fails to improve does the existing stall guard (below)
-% get to fire. The retain/retry decision itself is a small pure function,
-% round_advance_decision.m, factored out specifically so it is unit-
-% testable with synthetic defect numbers without a solve
+% retained (resetting the retry budget) only if it cleared the SAME
+% decadeMin floor the stall guard has always used -- decadeImprove =
+% log10(prevDefect) - log10(newDefect) >= decadeMin -- NOT merely
+% newDefect<prevDefect (re-review finding, 2026-07-17: a bare-inequality
+% "improved" let a sub-floor crawl, positive but below decadeMin, run to
+% roundsMax without ever reaching the stall guard, silently defeating it).
+% Anything below the floor -- sub-floor crawl OR true regression -- is
+% retried EXACTLY ONCE, forced to the loose (adaptive-mu) regime regardless
+% of what warmTight would otherwise have been -- mintime_guard_constants.m's
+% maxLooseRetries (currently 1); the retained warm-start point for that
+% retry is the BETTER of the two by defect (a sub-floor-but-positive
+% candidate is kept as the new baseline even though it didn't reset the
+% retry budget). Only if that loose retry ALSO fails to clear the floor
+% does the existing stall guard (below) get to fire -- which it always
+% does at that point, since not-clearing-the-floor is exactly the stall
+% guard's own trigger condition. The retain/retry decision itself is a
+% small pure function, round_advance_decision.m, factored out specifically
+% so it is unit-testable with synthetic defect numbers without a solve
 % (test_mintime_mee_guard.m) -- see that file for the improved /
-% regressed-first-time / regressed-after-retry cases.
+% regressed-first-time / sub-floor-crawl / regressed-after-retry cases.
 %
 % Stall/converge guard: identical arithmetic to run_mintime.m's continuation
 % loop, reusing mintime_guard_constants.m directly (NOT a hardcoded local
@@ -253,16 +261,20 @@ function [out, round_] = mintime_mee_continue(sigma, X0, U0, dL0, x0state, par, 
 % solve) so a killed process resumes without re-solving completed rounds.
 %
 % RETAIN-IF-IMPROVED / RETRY-LOOSE: each round's candidate (outNew) is
-% retained (out = outNew) only if round_advance_decision.m says it improved
-% feasibility over the incoming (retained) point. On regression, the prior
-% iterate is kept and the NEXT round is a forced-loose (warmTight=false)
-% retry from that SAME retained point, consuming one of
-% mintime_guard_constants's maxLooseRetries. Only once that budget is
-% exhausted (and the retry still didn't improve) does the pre-existing
-% decadeImprove/decadeMin stall guard get evaluated -- which it always
-% fails at that point (no improvement implies decadeImprove<=0<decadeMin),
-% so exhausting the retry budget on a non-improving round is what actually
-% throws run_mintime_mee:stall.
+% retained (out = outNew, retry budget reset) only if round_advance_decision.m
+% says decadeImprove = log10(out.maxDefect)-log10(outNew.maxDefect) cleared
+% decadeMin -- the SAME floor the stall guard itself uses, not a bare
+% newDefect<prevDefect test (a bare inequality would let a sub-floor crawl
+% run to roundsMax without ever reaching the stall guard). On a sub-floor
+% round (positive-but-below-floor progress, OR true regression), the
+% warm-start point for the retry is the BETTER of {out, outNew} by defect,
+% and the NEXT round is a forced-loose (warmTight=false) retry from that
+% point, consuming one of mintime_guard_constants's maxLooseRetries. Only
+% once that budget is exhausted (and the retry still didn't clear the
+% floor) does the pre-existing decadeImprove/decadeMin stall guard get
+% evaluated -- which it always fires at that point (not-clearing-the-floor
+% is exactly decadeImprove<decadeMin), so exhausting the retry budget on a
+% non-improving round is what actually throws run_mintime_mee:stall.
 %
 % INPUTS:  sigma [(N+1)x1]; X0/U0 [7/4 x (N+1)] warm-start state/control;
 %          dL0 [scalar]; x0state [7x1] initial MEE state (opts.x0); par -
@@ -303,7 +315,7 @@ fprintf('  %s round 0 (loose, adaptive mu): status=%s defect=%.3e termErr=%.3e\n
 round_ = 0;
 defect0 = out.maxDefect;
 gateDefect = 1e-8;
-guardC = struct('maxLooseRetries', maxLooseRetries);
+guardC = struct('decadeMin', decadeMin, 'maxLooseRetries', maxLooseRetries);
 retriedThisStall = false;   % true iff the CURRENTLY retained `out` has
                              % already consumed its one loose-regime retry
                              % (Phase 0 item 1) without improving on it.
@@ -346,10 +358,25 @@ while ~isGood(out) && round_ < roundsMax
         out = outNew;
         retriedThisStall = false;
     elseif retryLoose
-        fprintf(['    round %d regressed (defect %.3e -> %.3e) -- keeping the retained ' ...
-                 'prior iterate, retrying once with the loose regime before declaring a stall\n'], ...
-                round_, out.maxDefect, outNew.maxDefect);
-        retriedThisStall = true;   % out intentionally NOT advanced
+        % Sub-floor crawl OR true regression -- either way this round does
+        % NOT clear decadeMin, so it does not reset the retry budget. But
+        % the RETAINED point for the retry is the better of the two by
+        % defect (review finding, re-review): a sub-floor-but-positive
+        % candidate is still numerically better than the incoming point and
+        % should not be thrown away, it just doesn't count as "progress"
+        % for stall-guard purposes.
+        if outNew.maxDefect < out.maxDefect
+            fprintf(['    round %d sub-floor progress (defect %.3e -> %.3e, %.2f decades ' ...
+                     '< floor %.2f) -- retaining the improved point as the new baseline, ' ...
+                     'retrying once with the loose regime before declaring a stall\n'], ...
+                    round_, out.maxDefect, outNew.maxDefect, decadeImprove, decadeMin);
+            out = outNew;
+        else
+            fprintf(['    round %d regressed (defect %.3e -> %.3e) -- keeping the retained ' ...
+                     'prior iterate, retrying once with the loose regime before declaring a stall\n'], ...
+                    round_, out.maxDefect, outNew.maxDefect);
+        end
+        retriedThisStall = true;
     else
         if ~isGood(outNew) && decadeImprove < decadeMin
             error('run_mintime_mee:stall', ['continuation stalled at %s round %d ' ...

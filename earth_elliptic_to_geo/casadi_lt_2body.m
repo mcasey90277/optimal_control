@@ -106,6 +106,15 @@ switch term.type
         opti.subject_to(re(1)^2 + re(2)^2 + re(3)^2 == a^2);
         opti.subject_to(ve(1)^2 + ve(2)^2 + ve(3)^2 == par.mu/a);
         opti.subject_to(re(1)*ve(1) + re(2)*ve(2) + re(3)*ve(3) == 0);
+        % PROGRADE GUARD (2026-07-17 triage, both reviewers): the 5 residuals
+        % above admit the retrograde GEO circle as a legitimate branch (h_z<0)
+        % -- a solve that converges onto it is silently wrong, not a
+        % convergence failure. Exclude it without constraining the converged
+        % prograde value: in canonical units (mu=1, GEO circular r=v=1) the
+        % prograde solution has h_z=+1 exactly, retrograde h_z=-1, so
+        % h_min=0.1 is inactive at the solution and cleanly excludes h_z<0.
+        h_min = 0.1;
+        opti.subject_to(re(1)*ve(2) - re(2)*ve(1) >= h_min);
 end
 
 % objective + t_f handling

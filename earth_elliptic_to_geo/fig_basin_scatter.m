@@ -26,28 +26,27 @@ function fig_basin_scatter()
 here   = fileparts(mfilename('fullpath'));
 resDir = fullfile(here, 'results');
 
-% --- certified points: {c_tf, chain tag, fresh tag} -------------------------
+% --- certified points: {c_tf, chain/fresh/alt1/alt2 tags} -------------------
 % Includes the 4 densify_front.m points (1.35, 1.75, 2.25, 2.75; Task 14
-% cleanup pass) alongside the original 5. The densified points have no
-% "_fresh" alternative on disk (only a single neighbor-seeded chain solve
-% each, with the two non-monotone ones already re-seeded from the OTHER
-% neighbor and kept as the best -- see densify_front.m / results/
-% densify_run.log), so they show up here as chain-marker points.
+% cleanup pass) alongside the original 5, PLUS the Task 14 dominated-basin
+% recovery pass's alt1/alt2 alternate-neighbor-seeded retries at c_tf=1.35
+% and c_tf=2.00 (fix_dominated_basins.m; see results/densify_run.log). The
+% densified points other than 1.35/2.00 have no "_fresh"/"_alt" alternative
+% on disk (only a single neighbor-seeded chain solve each, with the two
+% non-monotone ones already re-seeded from the OTHER neighbor and kept as
+% the best), so they show up here as chain-marker points.
 ctfs = [1.20 1.35 1.50 1.75 2.00 2.25 2.50 2.75 3.00];
 pts  = struct('cf', {}, 'src', {}, 'mf', {});
+srcTags  = {'', '_fresh', '_alt1', '_alt2'};
+srcNames = {'chain', 'fresh', 'alt1', 'alt2'};
 for cf = ctfs
-    chainFn = fullfile(resDir, sprintf('sweep_T100_c%03d.mat', round(100*cf)));
-    freshFn = fullfile(resDir, sprintf('sweep_T100_c%03d_fresh.mat', round(100*cf)));
-    if isfile(chainFn)
-        S = load(chainFn);
-        if S.res.report.certified
-            pts(end+1) = struct('cf', cf, 'src', 'chain', 'mf', S.res.report.m_f_kg); %#ok<AGROW>
-        end
-    end
-    if isfile(freshFn)
-        S = load(freshFn);
-        if S.res.report.certified
-            pts(end+1) = struct('cf', cf, 'src', 'fresh', 'mf', S.res.report.m_f_kg); %#ok<AGROW>
+    for kt = 1:numel(srcTags)
+        fn = fullfile(resDir, sprintf('sweep_T100_c%03d%s.mat', round(100*cf), srcTags{kt}));
+        if isfile(fn)
+            S = load(fn);
+            if S.res.report.certified
+                pts(end+1) = struct('cf', cf, 'src', srcNames{kt}, 'mf', S.res.report.m_f_kg); %#ok<AGROW>
+            end
         end
     end
 end
@@ -72,9 +71,10 @@ fig = figure('Color','w','Visible','off');
 try, theme(fig,'light'); catch, end
 hold on; grid on; box on
 
-hChain = []; hFresh = [];
+hChain = []; hFresh = []; hAlt = [];
 chainMask = strcmp({pts.src}, 'chain');
 freshMask = strcmp({pts.src}, 'fresh');
+altMask   = strcmp({pts.src}, 'alt1') | strcmp({pts.src}, 'alt2');
 if any(chainMask)
     hChain = plot([pts(chainMask).cf], [pts(chainMask).mf], 's', ...
         'MarkerFaceColor',[0.10 0.35 0.85], 'MarkerEdgeColor','k', 'MarkerSize',9, 'LineStyle','none');
@@ -82,6 +82,10 @@ end
 if any(freshMask)
     hFresh = plot([pts(freshMask).cf], [pts(freshMask).mf], '^', ...
         'MarkerFaceColor',[0.85 0.35 0.10], 'MarkerEdgeColor','k', 'MarkerSize',9, 'LineStyle','none');
+end
+if any(altMask)
+    hAlt = plot([pts(altMask).cf], [pts(altMask).mf], 'd', ...
+        'MarkerFaceColor',[0.15 0.65 0.30], 'MarkerEdgeColor','k', 'MarkerSize',9, 'LineStyle','none');
 end
 hUncert = plot(uncertCf, uncertMf, 'o', 'MarkerFaceColor','none', ...
     'MarkerEdgeColor',[0.5 0.5 0.5], 'MarkerSize',10, 'LineWidth',1.6);
@@ -93,6 +97,7 @@ hEnv = plot(ctfs, envMf, '-', 'Color',[0.15 0.15 0.15], 'LineWidth',1.4);
 legendH = [hEnv];  legendS = {'best-of envelope'};
 if ~isempty(hChain), legendH(end+1) = hChain; legendS{end+1} = 'chain-seeded (certified)'; end
 if ~isempty(hFresh), legendH(end+1) = hFresh; legendS{end+1} = 'fresh redo (certified)'; end
+if ~isempty(hAlt), legendH(end+1) = hAlt; legendS{end+1} = 'alt-neighbor retry (certified)'; end
 legendH(end+1) = hUncert; legendS{end+1} = 'uncertified (log only)';
 legend(legendH, legendS, 'Location','southeast');
 

@@ -25,6 +25,20 @@ function run_ctf_sweep()
 %        provenance printed. This matches the paper's own Fig 18, which
 %        shows exactly this kind of basin scatter in the same c_tf range.
 %
+% Dominated-basin recovery (Task 14, 2026-07-17): the densify pass exposed
+% two monotonicity violations invisible on the sparser 5-point front:
+% c_tf=1.35 (1360.21 kg) below c_tf=1.20 (1360.37 kg), and c_tf=2.00
+% (1377.10 kg, an ORIGINAL chain point that predates the densify targets)
+% below c_tf=1.75 (1379.86 kg). fix_dominated_basins.m (separate driver)
+% attempted alternate-neighbor-seeded retries, tags '..._alt1'/'..._alt2':
+% c_tf=1.35 alt1 (seeded UP from c120_fresh) recovered to 1368.20 kg,
+% restoring monotonicity there. c_tf=2.00 alt1 (seeded from c175) reached
+% 1378.71 kg and alt2 (seeded from c225) reached 1375.60 kg -- best-of is
+% 1378.71 kg, which STILL sits 1.15 kg below c175's 1379.86 kg: a residual
+% dominated point that survived both retry directions (reported, not
+% hidden -- see task-14-report.md). The collection loop below folds
+% alt1/alt2 into the same max-certified-m_f best-of rule as chain/fresh.
+%
 % Leg 2: thrust law at c_tf = 1.5, fresh fuel pipelines at T_max = 10, 5, 2.5 N
 %        (N = 600, 1200, 2400). Each thrust needs its own min-time anchor
 %        (run_mintime). Two earlier fix attempts (thrust-continuation
@@ -149,24 +163,26 @@ for kt = 1:numel(thr)
 end
 
 % --- collect + gates ----------------------------------------------------------
+% Candidate tags per c_tf: base chain, cold-fresh redo, and (Task 14 dominated-
+% basin recovery pass) alt1/alt2 alternate-neighbor-seeded retries. Same
+% max-certified-m_f best-of rule and provenance recording as chain/fresh.
 fprintf('\n%-8s %-6s %-9s %-6s %-9s %-6s\n', 'T [N]', 'c_tf', 'mf [kg]', 'sw', 'tfmin [h]', 'src');
 mfC = zeros(1, numel(ctfs));
+srcTags = {'', '_fresh', '_alt1', '_alt2'};
+srcNames = {'chain', 'fresh', 'alt1', 'alt2'};
 for kc = 1:numel(ctfs)
     cf = ctfs(kc);
-    chainFn = fullfile(resDir, sprintf('sweep_T100_c%03d.mat', round(100*cf)));
-    freshFn = fullfile(resDir, sprintf('sweep_T100_c%03d_fresh.mat', round(100*cf)));
     cand = struct('mf', {}, 'S', {}, 'src', {});
-    if isfile(chainFn)
-        Sc = load(chainFn);
-        cand(end+1) = struct('mf', Sc.res.report.m_f_kg, 'S', Sc, 'src', 'chain'); %#ok<AGROW>
-    end
-    if isfile(freshFn)
-        Sf = load(freshFn);
-        cand(end+1) = struct('mf', Sf.res.report.m_f_kg, 'S', Sf, 'src', 'fresh'); %#ok<AGROW>
+    for kt = 1:numel(srcTags)
+        fn = fullfile(resDir, sprintf('sweep_T100_c%03d%s.mat', round(100*cf), srcTags{kt}));
+        if isfile(fn)
+            S = load(fn);
+            cand(end+1) = struct('mf', S.res.report.m_f_kg, 'S', S, 'src', srcNames{kt}); %#ok<AGROW>
+        end
     end
     if isempty(cand)
         error('run_ctf_sweep:missingPoint', ...
-              'c_tf=%.2f has no certified result (chain or fresh) -- rerun the sweep', cf);
+              'c_tf=%.2f has no certified result (chain/fresh/alt1/alt2) -- rerun the sweep', cf);
     end
     [~, ibest] = max([cand.mf]);
     mfC(kc) = cand(ibest).mf;

@@ -61,8 +61,33 @@ Tperiod = 2*pi*sqrt(a0^3 / p.mu);
 assert(abs(inf3.tEnd - 2*Tperiod) < 0.01*2*Tperiod, ...
     'ballistic tEnd not ~2 Kepler periods: got %.6f vs %.6f', inf3.tEnd, 2*Tperiod);
 
-fprintf('test_mee_seed: ALL PASS (nRev1=%.4f mEnd1=%.6f, stopP nRev=%.4f, ballistic tEnd=%.4f vs 2T=%.4f)\n', ...
-    inf1.nRev, inf1.mEnd, inf2.nRev, inf3.tEnd, 2*Tperiod);
+% (f) [check 6] tangential betaMode: unit RTN velocity-direction steering,
+% previously exercised by zero tests despite being implemented (Task 4
+% depends on it). Same N/thr/nRev as check 2 (N=190, thr=1, nRev=3) so the
+% comparison sits in the same stable, non-escaping window documented above
+% (both 'transverse' and 'tangential' overshoot P=1 around rev~3.1).
+opts4 = struct('thr', 1, 'betaMode', 'tangential', 'N', 190, 'nRev', 3);
+[sg4, X04, U04, dL04, inf4] = mee_seed(p, opts4);
+
+assert(all(isfinite(sg4(:))) && all(isfinite(X04(:))) && all(isfinite(U04(:))) ...
+    && isfinite(dL04), 'tangential seed outputs must be finite');
+
+betaNorm4 = sqrt(sum(U04(1:3,:).^2, 1));
+assert(all(abs(betaNorm4 - 1) < 1e-12), 'tangential beta must be unit-norm to 1e-12');
+assert(all(U04(3,:) == 0), 'tangential beta normal component must be exactly 0');
+assert(all(U04(2,:) > 0), 'tangential beta transverse component must be positive (prograde)');
+assert(abs(U04(1,1)) < 1e-9, ...
+    'radial component at apogee start node (L=pi, e=0.75) must be ~0: got %.3e', U04(1,1));
+
+assert(all(diff(X04(1,:)) > 0), 'P must strictly increase under tangential thrust');
+mdrop4_expected = (p.Tmax/p.c) * opts4.thr * inf4.tEnd;
+mdrop4_actual   = 1 - X04(6,end);
+assert(abs(mdrop4_actual - mdrop4_expected) < 1e-6*mdrop4_expected, ...
+    'tangential mass drop inconsistent with mdot = -(Tm/c)*thr: got %.6e vs %.6e', ...
+    mdrop4_actual, mdrop4_expected);
+
+fprintf('test_mee_seed: ALL PASS (nRev1=%.4f mEnd1=%.6f, stopP nRev=%.4f, ballistic tEnd=%.4f vs 2T=%.4f, tangential nRev=%.4f mEnd=%.6f)\n', ...
+    inf1.nRev, inf1.mEnd, inf2.nRev, inf3.tEnd, 2*Tperiod, inf4.nRev, inf4.mEnd);
 
 function dmax = seed_stencil_defect(sg, X0, U0, dL0, p)
 % Trapezoid defect of the seed under the solver's sigma-stencil (numeric

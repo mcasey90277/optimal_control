@@ -19,12 +19,37 @@ function out = run_mintime_mee(thrustN, nodesPerRev, cfg)
 %             available when a certified fuel anchor already exists for this
 %             exact thrustN (true today only at 10 N; every lower thrust
 %             falls through to Stage B until run_ladder.m produces one).
-%   Stage B - a FRESH cold tangential seed (mee_seed, thr=1,
-%             betaMode='tangential', nRev=3 -- an arbitrary but reasonable
-%             all-burn starting shape; DeltaL is free, so the solve is not
-%             committed to 3 revs, only seeded near it) at the same node
-%             density, then the same continuation recipe.
+%   Stage B - a FRESH cold tangential seed (mee_seed, thr=cfg.seedThrB
+%             [default 0.4 -- see STAGE-B SEED THROTTLE FIX below],
+%             betaMode='tangential', nRev=cfg.nRevSeed [default 3, an
+%             arbitrary but reasonable starting shape; DeltaL is free, so
+%             the solve is not committed to nRevSeed revs, only seeded near
+%             it]) at the same node density, then the same continuation
+%             recipe.
 %
+% STAGE-B SEED THROTTLE FIX (2026-07-17, Task 7's first live ladder descent):
+% the raw seed's throttle was originally hardcoded thr=1 (matching mintime's
+% own all-burn physics). This is harmless at nRevSeed=3 (10 N, Task 6) but
+% CATASTROPHIC once run_ladder.m's C-law warm hint pushes nRevSeed higher at
+% lower thrust (nRevSeed=9 at the 5 N rung): a raw thr=1 constant-throttle
+% ode113 integration is EXACTLY the seed shape run_transfer_mee.m's own
+% DEVIATION note already warns about ("crosses GEO (P=1) at rev~3.06 and
+% goes coordinate-singular past ~rev 4") -- confirmed live here too (offline
+% probe: thr=1/nRev=9 at 5 N hits an ode113 tolerance failure with P blowing
+% up to 1.3e6 by the end of the achieved partial integration), and feeding
+% that garbage tail into casadi_lt_mee as a warm start produced instant
+% NaN-in-constraint IPOPT failures and a hard stall (defect ~2e4, unmoving
+% across 2 continuation rounds). FIX: Stage B's seed throttle now defaults
+% to cfg.seedThrB=0.4 -- THE SAME constant-throttle value already proven
+% robust for the FUEL seed (run_transfer_mee.m's seedThr) -- which stays
+% cleanly conditioned across the WHOLE nRevSeed range the ladder needs
+% (offline probe: thr=0.4/nRev=9 at 5 N: P range [0.276, 0.477], ex range
+% [0.668, 0.750], no ode113 warning). This is a SEED-SHAPE-ONLY change: the
+% actual mintime physics is unaffected, since casadi_lt_mee.m already forces
+% the warm-start throttle row to 1 for 'mintime' mode regardless of what the
+% seed's own U0 throttle contains (the "U0w(4,:)=1" priming line) -- thr=0.4
+% only slows the RAW ballistic seed integration enough to stay well short of
+% the coordinate singularity while still spanning the needed rev range.
 % BASIN-MULTIPLICITY FINDING (2026-07-17, this task's own Step-2 validation
 % run) -- CONTROLLER-AUTHORIZED DEVIATION from the brief's literal "Stage B
 % only if Stage A fails" wording: at 10 N, Stage A (warm-started from the
@@ -116,7 +141,15 @@ function out = run_mintime_mee(thrustN, nodesPerRev, cfg)
 %          cfg         - optional struct: .m0kg (1500), .ispS (2000),
 %                        .maxIter (3000), .printLevel (3), .fuelTag (auto,
 %                        see mee_fuel_tag.m), .nRevSeed (3, Stage B cold
-%                        seed's target revs), .tag (auto, see below),
+%                        seed's target revs), .seedThrB (0.4, Stage B cold
+%                        seed's constant throttle -- see STAGE-B SEED
+%                        THROTTLE FIX above; NOT the mintime physics, only
+%                        the raw-seed conditioning), .warmStartAnchor
+%                        (optional struct .X [7x(Np+1)] .U [4x(Np+1)] .dL
+%                        [scalar, ALREADY C-law rescaled by the caller]
+%                        .N [scalar, Np] -- the PREVIOUS ladder rung's own
+%                        converged min-time anchor result; see ANCHOR
+%                        WARM-START FIX below), .tag (auto, see below),
 %                        .alwaysTryStageB (true -- see BASIN-MULTIPLICITY
 %                        FINDING above; set false to trust a converged
 %                        Stage A outright and skip the Stage-B cross-check)
@@ -146,6 +179,8 @@ maxIter  = d('maxIter', 3000);
 printLvl = d('printLevel', 3);
 fuelTag  = d('fuelTag', mee_fuel_tag(thrustN));
 nRevSeed = d('nRevSeed', 3);
+seedThrB = d('seedThrB', 0.4);   % see STAGE-B SEED THROTTLE FIX below
+warmStartAnchor = d('warmStartAnchor', []);   % see ANCHOR WARM-START FIX below
 tag      = d('tag', sprintf('MEE_mintime_T%d', round(10*thrustN)));
 alwaysTryB = d('alwaysTryStageB', true);   % see BASIN-MULTIPLICITY FINDING above
 
@@ -157,7 +192,12 @@ if ~exist(resDir, 'dir'), mkdir(resDir); end
 
 fp = struct('thrustN', thrustN, 'nodesPerRev', nodesPerRev, 'm0kg', m0kg, ...
     'ispS', ispS, 'maxIter', maxIter, 'fuelTag', fuelTag, 'nRevSeed', nRevSeed, ...
-    'roundsMax', roundsMax, 'decadeMin', decadeMin, 'alwaysTryStageB', alwaysTryB);
+    'seedThrB', seedThrB, 'roundsMax', roundsMax, 'decadeMin', decadeMin, ...
+    'alwaysTryStageB', alwaysTryB);
+if ~isempty(warmStartAnchor)
+    fp.warmStartAnchorDL = warmStartAnchor.dL;   % fingerprint the warm-start input itself
+    fp.warmStartAnchorN  = warmStartAnchor.N;
+end
 
 finalFile = fullfile(resDir, [tag '.mat']);
 if isfile(finalFile)
@@ -198,20 +238,66 @@ else
     fprintf('MINTIME_MEE Stage A SKIPPED: no cached fuel anchor %s\n', fuelFile);
 end
 
-% --- Stage B: fresh cold tangential thr=1 seed. Per the BASIN-MULTIPLICITY
-% FINDING above, this is run whenever Stage A is unavailable/failed (the
-% brief's literal fallback case) AND, by default (cfg.alwaysTryStageB),
-% even when Stage A already converged -- a converged Stage A result is only
-% a LOCAL optimum candidate, not proof of having found the globally-
-% relevant one, so a second independent starting shape is cheap insurance.
+% --- Stage B: EITHER a fresh cold tangential seed OR (Task 7 addition, see
+% ANCHOR WARM-START FIX below) a mesh-refined/rescaled warm start from the
+% PREVIOUS ladder rung's own converged min-time anchor. Per the BASIN-
+% MULTIPLICITY FINDING above, this is run whenever Stage A is unavailable/
+% failed (the brief's literal fallback case) AND, by default
+% (cfg.alwaysTryStageB), even when Stage A already converged -- a converged
+% Stage A result is only a LOCAL optimum candidate, not proof of having
+% found the globally-relevant one, so a second independent starting shape
+% is cheap insurance.
+%
+% ANCHOR WARM-START FIX (2026-07-17, Task 7's first live ladder descent):
+% the raw cold tangential seed -- even with the STAGE-B SEED THROTTLE FIX
+% above (thr=0.4, well-conditioned) -- turned out to be a GENUINELY hard
+% NLP start at 5 N, independent of seed conditioning: offline probing
+% showed dual infeasibility exploding past 1e6 within 30 iterations and the
+% defect stuck at ~1.3e-2 (essentially zero net progress) across multiple
+% full-maxIter continuation rounds -- a real stall, not a fast-converging
+% problem merely needing more compute. Root cause: the raw tangential-
+% steering seed, however well-conditioned numerically, is nothing like the
+% true (bang-bang, costate-driven) min-time control law's shape, and its
+% large terminal-manifold miss (P ending well short of 1) gives Newton a
+% hard multi-constraint target to hit from a poor starting direction. FIX:
+% when cfg.warmStartAnchor is supplied (struct .X/.U/.dL/.N -- the PREVIOUS
+% rung's own CONVERGED min-time anchor result, already thr=1 throughout,
+% already satisfying the terminal manifold EXACTLY), Stage B mesh-refines
+% THAT trajectory (same interp1 pattern as run_transfer_mee.m's fuel
+% cfg.warmStart: linear for X, linear for the RTN thrust-direction rows of
+% U -- thr itself is irrelevant, forced to 1 regardless) onto a grid sized
+% by warmStartAnchor.dL/(2*pi) (already C-law rescaled by the caller,
+% run_ladder.m: dL_guess = dL_mt(T_prev)*(T_prev/T_new)) at cfg.nRevSeed
+% node density, INSTEAD OF calling mee_seed. This is a self-similar-shape,
+% already-optimal-adjacent starting point (same rationale as the fuel warm
+% start) rather than an arbitrary constant-throttle spiral, and is
+% expected to be dramatically better conditioned. When warmStartAnchor is
+% NOT supplied (e.g. the very first/10 N rung, which has no predecessor),
+% Stage B falls back to the original raw cold tangential seed unchanged.
 if ~stageAOK || alwaysTryB
-    N = round(nodesPerRev * nRevSeed);
-    [sigmaB, X0B, U0B, dL0B, seedInfoB] = mee_seed(par, struct('thr', 1, ...
-        'betaMode', 'tangential', 'nRev', nRevSeed, 'N', N));
-    x0state = X0B(:,1);
-    fprintf(['MINTIME_MEE Stage B: T=%g N, cold tangential thr=1 seed, nRev=%g target ' ...
-             '(N=%d, dL0=%.4f, achieved seed nRev=%.4f)\n'], ...
-            thrustN, nRevSeed, N, dL0B, seedInfoB.nRev);
+    if ~isempty(warmStartAnchor)
+        revsGuessB = warmStartAnchor.dL / (2*pi);
+        N = round(nodesPerRev * revsGuessB);
+        sigmaPrevB = linspace(0, 1, warmStartAnchor.N + 1).';
+        sigmaB = linspace(0, 1, N + 1).';
+        X0B    = interp1(sigmaPrevB, warmStartAnchor.X.',       sigmaB, 'linear').';
+        Ubeta  = interp1(sigmaPrevB, warmStartAnchor.U(1:3,:).', sigmaB, 'linear').';
+        Uthr   = interp1(sigmaPrevB, warmStartAnchor.U(4,:).',   sigmaB, 'nearest').';
+        U0B    = [Ubeta; Uthr];
+        dL0B   = warmStartAnchor.dL;
+        x0state = X0B(:,1);
+        fprintf(['MINTIME_MEE Stage B: T=%g N, WARM-STARTED from prior rung''s converged ' ...
+                 'anchor (dL_guess=%.4f rad -> revs_guess=%.4f, N=%d nodes, %d nodes/rev)\n'], ...
+                thrustN, dL0B, revsGuessB, N, nodesPerRev);
+    else
+        N = round(nodesPerRev * nRevSeed);
+        [sigmaB, X0B, U0B, dL0B, seedInfoB] = mee_seed(par, struct('thr', seedThrB, ...
+            'betaMode', 'tangential', 'nRev', nRevSeed, 'N', N));
+        x0state = X0B(:,1);
+        fprintf(['MINTIME_MEE Stage B: T=%g N, cold tangential thr=%.2g seed, nRev=%g target ' ...
+                 '(N=%d, dL0=%.4f, achieved seed nRev=%.4f)\n'], ...
+                thrustN, seedThrB, nRevSeed, N, dL0B, seedInfoB.nRev);
+    end
     try
         [outB, roundB] = mintime_mee_continue(sigmaB, X0B, U0B, dL0B, x0state, par, ...
             isGood, roundsMax, decadeMin, maxLooseRetries, maxIter, printLvl, resDir, tag, 'B', fp);

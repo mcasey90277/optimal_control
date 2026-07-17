@@ -29,7 +29,22 @@ function res = run_transfer_mee(cfg)
 %          constant throttle, default 0.4 -- see DEVIATION note below),
 %          .betaMode (default 'tangential'), .nodesPerRev (default 25),
 %          .maxIter (default 1500), .sched (homotopy eps schedule, optional),
-%          .m0kg (default 1500), .ispS (default 2000)
+%          .m0kg (default 1500), .ispS (default 2000), .warmStart (Task 7
+%          EXTERNAL WARM-START ENTRY POINT, optional -- struct .sigma
+%          [(Mp+1)x1] .X [7x(Mp+1)] .U [4x(Mp+1)] .dL [scalar], the PREVIOUS
+%          ladder rung's converged fuel solution, with .dL ALREADY C-law
+%          rescaled by the caller (run_ladder.m: dL_guess =
+%          dL_prev*(T_prev/T_new)) -- when supplied, Stage 1's cold
+%          constant-throttle mee_seed pass is skipped entirely in favor of
+%          mesh-refining this trajectory onto the new rung's own node grid
+%          (interp1 pattern from nodestudy_mee.m's solve_warm_node: linear
+%          for X and U's RTN thrust-direction rows, nearest for U's throttle
+%          row; N sized from warmStart.dL/(2*pi) at cfg.nodesPerRev), and
+%          Stage 2 tries a SINGLE direct eps=0 solve first (same-basin
+%          refinement precedent, mirroring solve_warm_node) before falling
+%          back to a short eps continuation tail (cfg.warmFallbackSched,
+%          default [0.3 0.2 0.12 0.07 0.04 0.025 0.015 0.008 0.004 0.002
+%          0.001 0]) only if the direct attempt does not certify.
 % OUTPUTS: res - .cfg .seed .tf .fuel .tbl .report .recon (ALWAYS returned;
 %          saved to results/<tag>.mat ONLY when best.certified -- same
 %          "never cache uncertified" discipline as run_transfer.m); .report
@@ -40,6 +55,11 @@ function res = run_transfer_mee(cfg)
 % REFERENCES: [1] earth_elliptic_to_geo/run_transfer.m (Cartesian template).
 %             [2] earth_elliptic_to_geo/homotopy_mee.m (guarded eps sweep).
 %             [3] .superpowers/sdd/task-4-brief.md (this task's spec).
+%             [4] earth_elliptic_to_geo/nodestudy_mee.m>solve_warm_node
+%                 (the mesh-refine-and-single-solve pattern Task 7's
+%                 cfg.warmStart direct-eps0 attempt mirrors).
+%             [5] .superpowers/sdd/task-7-brief.md (warm-start entry point,
+%                 this task's KNOWN GAP to close).
 here   = fileparts(mfilename('fullpath'));
 resDir = fullfile(here, 'results');
 if ~exist(resDir, 'dir'), mkdir(resDir); end
@@ -56,6 +76,7 @@ maxIter    = d('maxIter', 1500);
 sched      = d('sched', []);
 m0kg       = d('m0kg', 1500);
 ispS       = d('ispS', 2000);
+warmStart  = d('warmStart', []);
 
 p  = kepler_lt_params(thrustN, m0kg, ispS);
 tf = ctf * tfMinAnchor;
@@ -78,6 +99,7 @@ fpBase = struct('thrustN', thrustN, 'm0kg', m0kg, 'ispS', ispS, 'ctf', ctf, ...
 % crossing to ~7.5 revs, matching the paper's optimal revolution count and
 % giving a well-conditioned collocation seed.
 
+if isempty(warmStart)
 % --- stage 1: seed (two-pass: cheap revs probe, then full-density sample) --
 probeFile = fullfile(resDir, [tag '_seed_probe.mat']);
 if exist(probeFile, 'file')
@@ -109,12 +131,89 @@ x0 = X0(:,1);
 fprintf(['RUN_TRANSFER_MEE %s: T=%g N, ctf=%.2f, tf=%.4f ND (%.1f h), ' ...
          'seedThr=%.2f, N=%d nodes (%d nodes/rev), seed revs=%.4f\n'], ...
         tag, thrustN, ctf, tf, tf*p.TU_s/3600, seedThr, N, nodesPerRev, seedInfo.nRev);
+else
+% --- stage 1 (WARM-START PATH, Task 7): mesh-refine the PREVIOUS ladder
+% rung's converged fuel trajectory onto THIS rung's own node grid instead of
+% cold-seeding -- skips mee_seed entirely. warmStart.dL is the caller's
+% (run_ladder.m) C-law rescale dL_guess = dL_prev*(T_prev/T_new); it both
+% sizes the new node count (self-similar-shape assumption: revs_guess =
+% dL_guess/2pi) and serves as the solver's dL0 initial guess. interp1
+% pattern mirrors nodestudy_mee.m>solve_warm_node: LINEAR for the continuous
+% state X and the RTN thrust-direction rows of U (rows 1-3), NEAREST for the
+% throttle row (row 4, keeps bang-bang switch edges crisp instead of
+% blurring them into intermediate throttle values).
+revsGuess = warmStart.dL / (2*pi);
+N = round(nodesPerRev * revsGuess);
+assert(N >= 1, 'run_transfer_mee:warmStartTooFewNodes', ...
+    'warmStart.dL=%.4f rad gives revsGuess=%.4f -- N would be < 1', warmStart.dL, revsGuess);
+fp = fpBase;  fp.N = N;  fp.warmStartDL = warmStart.dL;
 
-% --- stage 2: guarded eps 1->0 homotopy at fixed tf ------------------------
-ho = struct('par', p, 'x0', x0, 'tfTarget', tf, 'maxIter', maxIter, ...
-            'resDir', resDir, 'tag', tag, 'printLevel', 0, 'fp', fp);
-if ~isempty(sched), ho.sched = sched; end
-[best, tbl] = homotopy_mee(sigma, X0, U0, dL0, ho);
+sigma = linspace(0, 1, N+1).';
+X0    = interp1(warmStart.sigma, warmStart.X.',       sigma, 'linear').';
+Ubeta = interp1(warmStart.sigma, warmStart.U(1:3,:).', sigma, 'linear').';
+Uthr  = interp1(warmStart.sigma, warmStart.U(4,:).',   sigma, 'nearest').';
+U0    = [Ubeta; Uthr];
+dL0   = warmStart.dL;
+% Rescale the interpolated physical-time row (X row 7) so the INITIAL GUESS
+% lands near this rung's own tf target: the previous rung's absolute time
+% values live on a different (shorter) tf scale. Every other row (orbital
+% elements, mass, controls) is left as interpolated per-sigma-fraction
+% values, UNSCALED -- the C-law's self-similar-shape argument (same
+% physical spiral shape at fixed sigma-fraction, different total span) is
+% exactly what makes this warm start meaningful, and is why m_f comes out
+% nearly thrust-independent (paper Fig-23 / this task's gate).
+if X0(7,end) > 0
+    X0(7,:) = X0(7,:) * (tf / X0(7,end));
+end
+x0 = X0(:,1);
+seedInfo = struct('nRev', revsGuess, 'tEnd', tf, 'mEnd', X0(6,end));
+fprintf(['RUN_TRANSFER_MEE %s: T=%g N, ctf=%.2f, tf=%.4f ND (%.1f h), ' ...
+         'WARM-STARTED from prior rung (dL_guess=%.4f rad -> revs_guess=%.4f, ' ...
+         'N=%d nodes, %d nodes/rev)\n'], ...
+        tag, thrustN, ctf, tf, tf*p.TU_s/3600, warmStart.dL, revsGuess, N, nodesPerRev);
+end
+
+% --- stage 2: guarded eps 1->0 homotopy at fixed tf -------------------------
+% (or, warm-start path: a single direct eps=0 solve, falling back to a short
+% continuation tail only if that does not certify -- see cfg.warmStart doc)
+if isempty(warmStart)
+    ho = struct('par', p, 'x0', x0, 'tfTarget', tf, 'maxIter', maxIter, ...
+                'resDir', resDir, 'tag', tag, 'printLevel', 0, 'fp', fp);
+    if ~isempty(sched), ho.sched = sched; end
+    [best, tbl] = homotopy_mee(sigma, X0, U0, dL0, ho);
+else
+    % Direct eps=0 attempt (same-basin refinement precedent, mirrors
+    % nodestudy_mee.m>solve_warm_node): warmTight=true, no sweep. Resume-safe
+    % (cached to <tag>_warmdirect.mat, config-fingerprinted like every other
+    % cache in this file).
+    directFile = fullfile(resDir, [tag '_warmdirect.mat']);
+    if exist(directFile, 'file')
+        S = load(directFile);
+        oD = S.oD;  okD = S.okD;
+        check_cache_fp(S, fp, directFile, tag);
+    else
+        oD = casadi_lt_mee(sigma, X0, U0, dL0, struct('par', p, 'mode', 'fixedtf', ...
+            'eps', 0, 'tfTarget', tf, 'x0', x0, 'maxIter', maxIter, ...
+            'warmTight', true, 'printLevel', 0));
+        okD = oD.success && oD.maxDefect < 1e-8;
+        save(directFile, 'oD', 'okD', 'fp');
+    end
+    fprintf('  [warm direct eps=0] ok=%d defect=%.2e sw=%d edge=%.1f%% mf=%.2f kg\n', ...
+            okD, oD.maxDefect, oD.switches, 100*oD.edge, oD.m_f_kg);
+    if okD
+        best = oD;  best.epsReached = 0;  best.certified = true;
+        tbl  = [0, oD.maxDefect, oD.switches, oD.edge, oD.m_f_kg];
+    else
+        fprintf(['  [warm direct eps=0] did NOT certify (defect=%.2e, status=%s) -- ' ...
+                 'falling back to a short eps continuation tail\n'], oD.maxDefect, oD.ipoptStatus);
+        fallbackSched = d('warmFallbackSched', ...
+            [0.3 0.2 0.12 0.07 0.04 0.025 0.015 0.008 0.004 0.002 0.001 0]);
+        ho = struct('par', p, 'x0', x0, 'tfTarget', tf, 'maxIter', maxIter, ...
+                    'resDir', resDir, 'tag', [tag '_warmtail'], 'printLevel', 0, ...
+                    'fp', fp, 'sched', fallbackSched);
+        [best, tbl] = homotopy_mee(sigma, X0, U0, dL0, ho);
+    end
+end
 
 % --- stage 3: structure report ---------------------------------------------
 [rr, ~] = recon_cart(best.X, sigma, best.dL, p.mu);

@@ -5,32 +5,40 @@ function results = run_ladder(thrustList, cfg)
 % via run_transfer_mee.m at c_tf*t_f,min, recording per-rung structure
 % counts (revs, switches, m_f_kg, edge, tfmin) into a resume-safe cache.
 %
-% GEOMETRIC WARM CHAIN (per rung k>1): the min-time anchor's cold-seed
-% fallback (run_mintime_mee.m's Stage B) is given a REVOLUTION-COUNT HINT
-% derived from the PREVIOUS rung's converged anchor, rescaled by the C-law
-% (T_max*t_f,min ~ const, hence total winding DeltaL ~ 1/T_max at fixed
-% trajectory shape -- consistent with paper Table 3's revs roughly doubling
-% every thrust halving: 7.5 -> 15 -> 30 -> 74.5 -> ...):
+% GEOMETRIC WARM CHAIN (per rung k>1): the min-time anchor's Stage B is
+% given the PREVIOUS rung's converged anchor as a FULL-TRAJECTORY warm
+% start (X/U/dL, mesh-refined by run_mintime_mee.m -- see its ANCHOR
+% WARM-START FIX), DeltaL rescaled by the C-law (T_max*t_f,min ~ const,
+% hence total winding DeltaL ~ 1/T_max at fixed trajectory shape --
+% consistent with paper Table 3's revs roughly doubling every thrust
+% halving: 7.5 -> 15 -> 30 -> 74.5 -> ...):
 %     dL_guess(T_new) = dL_mt(T_prev) * (T_prev / T_new)
-%     nRevSeed_guess  = round(dL_guess / (2*pi))
-% passed through as cfg.nRevSeed to run_mintime_mee (which already exposes
-% this as a Stage-B seed-shaping knob -- see run_mintime_mee.m). This is a
-% WORKING warm hint, not a placeholder: it directly narrows the cold-seed
-% search away from the hardcoded nRev=3 default used at the top rung.
+% passed through as cfg.warmStartAnchor.dL (plus .X/.U/.N from the prior
+% anchor) to run_mintime_mee. A live 5 N probe (Task 7) found the ORIGINAL
+% design -- a raw cold tangential seed, only hinted via nRevSeed (an
+% integer target passed to mee_seed) -- to be a genuinely hard NLP start
+% once nRevSeed exceeds ~3-4 (dual infeasibility diverges, hard stall,
+% independent of seed throttle conditioning); the full-trajectory warm
+% start closes that gap the same way the fuel solve's warm start does.
+% cfg.nRevSeed is still passed too (used only as Stage B's cold-seed
+% FALLBACK inside run_mintime_mee.m when no warmStartAnchor is available,
+% e.g. a future direct/standalone call).
 %
-% FUEL-SOLVE WARM START -- EXTENSION POINT FOR TASK 7/9 (documented, NOT
-% implemented here; out of this task's file list, which is run_mintime_mee.m
-% + run_ladder.m only): the brief's step (2) calls for the fuel solve to
-% warm-start from the PREVIOUS rung's converged fuel solution (state/
-% control interpolated and DeltaL rescaled, mirroring nodestudy_mee.m's
-% solve_warm_node mesh-refine-and-resolve pattern). run_transfer_mee.m's
-% current interface always builds its own cold mee_seed start internally;
-% it does not yet accept an externally-supplied warm X0/U0/dL0. Task 7/9
-% should add that entry point (or a thin run_transfer_mee_warm.m sibling)
-% and wire it in at the "% --- fuel solve ---" block below. Until then,
-% every rung's fuel solve either reuses an EXISTING certified cache (the 10 N
-% leg, this task) or falls through to run_transfer_mee's own cold-seed
-% recipe (correct, just not warm-started from the ladder's neighbor).
+% FUEL-SOLVE WARM START (Task 7 -- CLOSES the extension point Task 6 left
+% documented-but-unimplemented): run_transfer_mee.m now accepts cfg.warmStart
+% (struct .sigma/.X/.U/.dL, see its header). Every rung k>1 that needs a
+% FRESH fuel solve (i.e. no existing certified cache under mee_fuel_tag) is
+% given the PREVIOUS rung's converged fuel trajectory (X/U/dL/sigma, kept
+% in `prevFuelFull` across loop iterations -- sourced from `fuelRes` whether
+% that rung was freshly solved OR loaded from its own <fuelTag>.mat cache,
+% so this warm chain survives a killed-and-resumed run_ladder invocation
+% with no extra persistence: each rung's <fuelTag>.mat already carries the
+% full trajectory), with DeltaL C-law rescaled exactly like the anchor's
+% own warm hint above:
+%     dL_guess(T_new) = dL_prevFuel * (T_prev / T_new)
+% passed as cfg.warmStart.dL; run_transfer_mee.m sizes its own node count
+% and interpolation from this. The 10 N leg (k=1, no prevFuelFull) is
+% unaffected -- reuses its existing certified artifact exactly as in Task 6.
 %
 % RESUME-SAFE, PER-RUNG CACHING: each rung's result is cached to
 % resDir/MEE_ladder_T<10*thrustN>.mat (keyed by THRUST, not list position,
@@ -69,6 +77,17 @@ ispS        = d('ispS', 2000);
 maxIter     = d('maxIter', 1500);
 seedThr     = d('seedThr', 0.4);
 betaMode    = d('betaMode', 'tangential');
+% mtMaxIter -- OPERATIONAL checkpoint-granularity knob (Task 7, execution-
+% environment constraint, NOT a solver-quality change): run_mintime_mee's
+% own per-round cache only saves AFTER a full casadi_lt_mee call returns; at
+% large N (2.5/1 N rungs) a single MUMPS-dominated Newton solve can run
+% longer than one execution window with zero intermediate checkpoint. A
+% capped mtCfg.maxIter turns "one long uninterruptible solve" into several
+% cheaper, independently-cached continuation rounds via the EXISTING
+% retain-if-improved machinery -- same final converged answer (still gated
+% at defect<1e-8/termErr<1e-8), just reached in more, individually-
+% resumable steps. Default 3000 leaves single-invocation callers unaffected.
+mtMaxIter   = d('mtMaxIter', 3000);
 
 here   = fileparts(mfilename('fullpath'));
 resDir = fullfile(here, 'results');
@@ -82,7 +101,7 @@ assert(all(diff(thrustList) < 0), 'run_ladder:notDescending', ...
 
 nRungs  = numel(thrustList);
 results = repmat(empty_rung(), 1, nRungs);
-prevAnchor = [];  prevThrust = [];
+prevAnchor = [];  prevThrust = [];  prevFuelFull = [];
 
 for k = 1:nRungs
     thrustN = thrustList(k);
@@ -99,15 +118,38 @@ for k = 1:nRungs
         fprintf('  [cached rung] %s: tfmin=%.4f ND revs_mt=%.3f | fuel mf=%.2f kg sw=%d revs=%.3f\n', ...
                 rungFile, rung.anchor.tfmin, rung.anchor.revs, rung.fuel.m_f_kg, ...
                 rung.fuel.switches, rung.fuel.revs);
+        % Reload the full fuel trajectory (X/U/dL/sigma) from its own
+        % <fuelTag>.mat cache -- the rung cache only stores the SUMMARY
+        % report (rung.fuel), not the full state, but the next rung's
+        % warm-start chain (below) needs the full trajectory regardless of
+        % whether THIS rung was freshly solved or loaded from cache.
+        Sfc = load(fullfile(resDir, [rung.fuelTag '.mat']));
+        fuelRes = Sfc.res;
     else
         % --- min-time anchor, warm-hinted by the C-law rev-growth rescale --
-        mtCfg = struct('m0kg', m0kg, 'ispS', ispS);
+        mtCfg = struct('m0kg', m0kg, 'ispS', ispS, 'maxIter', mtMaxIter);
         if ~isempty(prevAnchor)
             dLGuess = prevAnchor.dL_mt * (prevThrust / thrustN);
             nRevGuess = max(1, round(dLGuess / (2*pi)));
             mtCfg.nRevSeed = nRevGuess;
+            % FULL-TRAJECTORY anchor warm start (Task 7 addition -- see
+            % run_mintime_mee.m's ANCHOR WARM-START FIX): a raw cold
+            % tangential seed turned out to be a genuinely hard NLP start
+            % once the C-law hint pushes nRevSeed beyond ~3-4 (offline
+            % probe at the 5 N rung: dual infeasibility exploding past 1e6,
+            % defect stuck ~1.3e-2 across multiple full continuation
+            % rounds -- a real stall, not a slow-but-convergent solve).
+            % The PREVIOUS rung's own converged min-time anchor (already
+            % thr=1 throughout, already exactly satisfying the terminal
+            % manifold) is a far better-conditioned starting shape than a
+            % constant-throttle spiral -- same self-similar-shape argument
+            % as the fuel warm start, applied here to close the SAME class
+            % of gap for the anchor.
+            mtCfg.warmStartAnchor = struct('X', prevAnchor.solverOut.X, ...
+                'U', prevAnchor.solverOut.U, 'dL', dLGuess, 'N', prevAnchor.N);
             fprintf(['  anchor warm hint: dL_guess=%.4f rad -> nRevSeed=%d ' ...
-                     '(rescaled %.4f rad * %g/%g N, C-law T*tf~const)\n'], ...
+                     '(rescaled %.4f rad * %g/%g N, C-law T*tf~const; full-trajectory ' ...
+                     'warm start from prior rung''s converged anchor)\n'], ...
                     dLGuess, nRevGuess, prevAnchor.dL_mt, prevThrust, thrustN);
         end
         anchorOut = run_mintime_mee(thrustN, nodesPerRev, mtCfg);
@@ -127,6 +169,14 @@ for k = 1:nRungs
             fuelCfg = struct('thrustN', thrustN, 'ctf', ctf, 'tfMinAnchor', anchorOut.tfmin, ...
                 'tag', fuelTag, 'seedThr', seedThr, 'betaMode', betaMode, ...
                 'nodesPerRev', nodesPerRev, 'maxIter', maxIter, 'm0kg', m0kg, 'ispS', ispS);
+            if ~isempty(prevFuelFull)
+                dLGuessFuel = prevFuelFull.fuel.dL * (prevThrust / thrustN);
+                fuelCfg.warmStart = struct('sigma', prevFuelFull.sigma, ...
+                    'X', prevFuelFull.fuel.X, 'U', prevFuelFull.fuel.U, 'dL', dLGuessFuel);
+                fprintf(['  fuel solve warm hint: dL_guess=%.4f rad -> revs_guess=%.3f ' ...
+                         '(rescaled %.4f rad * %g/%g N, prior rung''s converged fuel dL)\n'], ...
+                        dLGuessFuel, dLGuessFuel/(2*pi), prevFuelFull.fuel.dL, prevThrust, thrustN);
+            end
             fuelRes = run_transfer_mee(fuelCfg);
             reused = false;
             assert(fuelRes.report.certified, 'run_ladder:fuelUncertified', ...
@@ -144,7 +194,7 @@ for k = 1:nRungs
     end
 
     results(k) = rung;
-    prevAnchor = rung.anchor;  prevThrust = thrustN;
+    prevAnchor = rung.anchor;  prevThrust = thrustN;  prevFuelFull = fuelRes;
 end
 
 save(fullfile(resDir, 'MEE_ladder.mat'), 'results');

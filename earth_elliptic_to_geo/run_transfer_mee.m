@@ -60,28 +60,50 @@ ispS       = d('ispS', 2000);
 p  = kepler_lt_params(thrustN, m0kg, ispS);
 tf = ctf * tfMinAnchor;
 
+% Config fingerprint (cache drift-guard): every physics/solver-relevant cfg
+% field the driver reads. Saved into every cache .mat written below; on load,
+% compared field-by-field against the CURRENT config so a stale cache from a
+% different configuration can never be silently reused just because it
+% happens to share cfg.tag (the only cache key) -- see check_cache_fp below.
+% N (actual node count) is appended once known, after the probe stage.
+fpBase = struct('thrustN', thrustN, 'm0kg', m0kg, 'ispS', ispS, 'ctf', ctf, ...
+    'tfMinAnchor', tfMinAnchor, 'seedThr', seedThr, 'betaMode', betaMode, ...
+    'nodesPerRev', nodesPerRev, 'maxIter', maxIter, 'sched', sched);
+
+% DEVIATION (seed throttle): seedThr defaults to ~0.4, not thr=1. A thr=1
+% constant burn from the paper's e=0.75 apogee GTO start crosses GEO (P=1) at
+% rev~3.06 and goes coordinate-singular past ~rev 4 (Task-2 finding -- the
+% MEE seed ODE chases an e->1 singularity once P overshoots the target).
+% Throttling to ~0.4 (tangential steering, stopP=1.0) stretches the P=1
+% crossing to ~7.5 revs, matching the paper's optimal revolution count and
+% giving a well-conditioned collocation seed.
+
 % --- stage 1: seed (two-pass: cheap revs probe, then full-density sample) --
 probeFile = fullfile(resDir, [tag '_seed_probe.mat']);
 if exist(probeFile, 'file')
     S = load(probeFile);  infoP = S.infoP;
+    check_cache_fp(S, fpBase, probeFile, tag);
 else
     optsP = struct('thr', seedThr, 'betaMode', betaMode, 'N', 50, 'stopP', 1.0);
     [~, ~, ~, ~, infoP] = mee_seed(p, optsP);
-    save(probeFile, 'infoP');
+    fp = fpBase;
+    save(probeFile, 'infoP', 'fp');
 end
 assert(infoP.nRev >= 6.5 && infoP.nRev <= 9, 'run_transfer_mee:revsOutOfRange', ...
     'seedThr=%.3f gives nRev=%.3f, outside the required [6.5,9] window -- adjust cfg.seedThr', ...
     seedThr, infoP.nRev);
 N = round(nodesPerRev * infoP.nRev);
+fp = fpBase;  fp.N = N;
 
 seedFile = fullfile(resDir, [tag '_seed.mat']);
 if exist(seedFile, 'file')
     S = load(seedFile);
     sigma = S.sigma;  X0 = S.X0;  U0 = S.U0;  dL0 = S.dL0;  seedInfo = S.seedInfo;
+    check_cache_fp(S, fp, seedFile, tag);
 else
     opts = struct('thr', seedThr, 'betaMode', betaMode, 'N', N, 'stopP', 1.0);
     [sigma, X0, U0, dL0, seedInfo] = mee_seed(p, opts);
-    save(seedFile, 'sigma', 'X0', 'U0', 'dL0', 'seedInfo');
+    save(seedFile, 'sigma', 'X0', 'U0', 'dL0', 'seedInfo', 'fp');
 end
 x0 = X0(:,1);
 fprintf(['RUN_TRANSFER_MEE %s: T=%g N, ctf=%.2f, tf=%.4f ND (%.1f h), ' ...
@@ -90,7 +112,7 @@ fprintf(['RUN_TRANSFER_MEE %s: T=%g N, ctf=%.2f, tf=%.4f ND (%.1f h), ' ...
 
 % --- stage 2: guarded eps 1->0 homotopy at fixed tf ------------------------
 ho = struct('par', p, 'x0', x0, 'tfTarget', tf, 'maxIter', maxIter, ...
-            'resDir', resDir, 'tag', tag, 'printLevel', 0);
+            'resDir', resDir, 'tag', tag, 'printLevel', 0, 'fp', fp);
 if ~isempty(sched), ho.sched = sched; end
 [best, tbl] = homotopy_mee(sigma, X0, U0, dL0, ho);
 
@@ -114,7 +136,7 @@ report = struct('revs', revs, 'switches', best.switches, 'm_f_kg', best.m_f_kg, 
 recon = check_reconstruction(best.X, best.U, best.dL, sigma, p);
 
 res = struct('cfg', cfg, 'seed', seedInfo, 'tf', tf, 'fuel', best, ...
-             'tbl', tbl, 'report', report, 'recon', recon, 'sigma', sigma);
+             'tbl', tbl, 'report', report, 'recon', recon, 'sigma', sigma, 'fp', fp);
 if best.certified
     save(fullfile(resDir, [tag '.mat']), 'res');
 else
@@ -133,6 +155,38 @@ end
 function v = getdef6(s, f, dflt)
 % GETDEF6  Optional-field default (mirrors casadi_lt_2body's helper).
 if isfield(s, f) && ~isempty(s.(f)), v = s.(f); else, v = dflt; end
+end
+
+% ---------------------------------------------------------------------------
+function check_cache_fp(S, fp, file, tag)
+% CHECK_CACHE_FP  Fail-loud cache-fingerprint guard. If loaded cache struct S
+% carries a .fp field, compare it field-by-field against the current config
+% fingerprint fp and error, naming the first mismatched field and the
+% offending file, on any disagreement -- a stale cache built under a
+% different thrustN/ctf/seedThr/... must never be silently reused just
+% because it happens to share cfg.tag (the only cache key). BACKWARD COMPAT:
+% a pre-fix cache file with NO .fp field (e.g. the MEE_M2_10N certified run
+% predating this guard) only WARNs and is trusted as-is -- cfg.tag is already
+% an exact match (that's how the file was found by name), and no per-field
+% comparison is possible without a stored fingerprint.
+if ~isfield(S, 'fp')
+    warning('run_transfer_mee:noCachedFingerprint', ['%s has no cached ' ...
+        'config fingerprint (pre-fix cache) -- trusting it because ' ...
+        'tag=''%s'' matches; use a new cfg.tag to regain fingerprint ' ...
+        'protection for this run'], file, tag);
+    return;
+end
+flds = fieldnames(fp);
+for k = 1:numel(flds)
+    f = flds{k};
+    if ~isfield(S.fp, f) || ~isequal(S.fp.(f), fp.(f))
+        error('run_transfer_mee:fingerprintMismatch', ['cached config ' ...
+            'fingerprint mismatch in %s: field ''%s'' differs between the ' ...
+            'cache and the current cfg -- stale cache from a different ' ...
+            'configuration under the same tag=''%s''; delete the file or ' ...
+            'use a new cfg.tag'], file, f, tag);
+    end
+end
 end
 
 % ---------------------------------------------------------------------------

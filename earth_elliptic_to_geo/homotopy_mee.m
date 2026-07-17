@@ -27,6 +27,10 @@ maxIter = d('maxIter', 1500);
 resDir  = d('resDir', pwd);
 tag     = d('tag', 'mee_run');
 printLvl = d('printLevel', 0);
+fp       = d('fp', struct());
+fp.sched = sched;   % overwrite with the ACTUALLY-resolved schedule (opts.fp
+                     % may carry the caller's raw cfg.sched, which is [] when
+                     % the caller means "use this function's own default")
 
 if ~exist(resDir, 'dir'), mkdir(resDir); end
 
@@ -38,6 +42,7 @@ for ke = 1:numel(sched)
         S  = load(stepFile);
         o  = S.o;  ok = S.ok;
         Xk = S.Xk;  Uk = S.Uk;  dLk = S.dLk;
+        check_cache_fp(S, fp, stepFile, tag);
         if ok, best = o;  best.epsReached = e; end
         tbl(ke,:) = [e, o.maxDefect, o.switches, o.edge, o.m_f_kg];
         fprintf('  [cached] eps=%6.4f ok=%d defect=%.2e sw=%3d edge=%5.1f%% mf=%.2f kg\n', ...
@@ -54,7 +59,7 @@ for ke = 1:numel(sched)
     if ok
         Xk = o.X;  Uk = o.U;  dLk = o.dL;  best = o;  best.epsReached = e;
     end
-    save(stepFile, 'o', 'ok', 'Xk', 'Uk', 'dLk', 'e');
+    save(stepFile, 'o', 'ok', 'Xk', 'Uk', 'dLk', 'e', 'fp');
 end
 if isempty(best)
     best = o;  best.epsReached = NaN;  best.certified = false;
@@ -67,4 +72,33 @@ end
 function v = getdef5(s, f, dflt)
 % GETDEF5  Optional-field default (mirrors casadi_lt_2body's helper).
 if isfield(s, f) && ~isempty(s.(f)), v = s.(f); else, v = dflt; end
+end
+
+% ---------------------------------------------------------------------------
+function check_cache_fp(S, fp, file, tag)
+% CHECK_CACHE_FP  Fail-loud cache-fingerprint guard (mirrors
+% run_transfer_mee.m's helper of the same name). If loaded per-eps-step cache
+% struct S carries a .fp field, compare it field-by-field against the
+% current config fingerprint fp and error, naming the first mismatched field
+% and the offending file, on any disagreement. BACKWARD COMPAT: a pre-fix
+% step cache with NO .fp field only WARNs and is trusted as-is (tag already
+% matched by filename; no per-field comparison possible without one).
+if ~isfield(S, 'fp')
+    warning('homotopy_mee:noCachedFingerprint', ['%s has no cached config ' ...
+        'fingerprint (pre-fix cache) -- trusting it because tag=''%s'' ' ...
+        'matches; use a new tag to regain fingerprint protection for this ' ...
+        'run'], file, tag);
+    return;
+end
+flds = fieldnames(fp);
+for k = 1:numel(flds)
+    f = flds{k};
+    if ~isfield(S.fp, f) || ~isequal(S.fp.(f), fp.(f))
+        error('homotopy_mee:fingerprintMismatch', ['cached config ' ...
+            'fingerprint mismatch in %s: field ''%s'' differs between the ' ...
+            'cache and the current config -- stale cache from a different ' ...
+            'configuration under the same tag=''%s''; delete the file or ' ...
+            'use a new tag'], file, f, tag);
+    end
+end
 end

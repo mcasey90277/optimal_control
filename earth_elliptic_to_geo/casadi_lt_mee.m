@@ -155,11 +155,26 @@ opti.set_initial(U, U0w);
 opti.set_initial(dL, dL0);
 ip = struct('max_iter', maxIter, 'tol', 1e-9, 'constr_viol_tol', 1e-10, ...
             'print_level', printLvl, 'mu_strategy', 'adaptive', ...
-            'linear_solver', 'mumps', ...
+            'linear_solver', 'mumps', 'mumps_pivot_order', 0, ...
             'nlp_scaling_method', 'gradient-based');   % IPOPT default, set
             % explicitly and recorded on purpose (Campaign-B review lesson:
             % don't inherit a silent default); applies in both regimes below,
             % since warmTight only overrides the mu_/warm_start_ fields.
+            % mumps_pivot_order=0 forces MUMPS' analysis-phase ordering
+            % (ICNTL(7)) to AMD instead of the automatic choice, which at
+            % N~193 nodes (Task 4's cross-formulation gate problem size)
+            % selects METIS and hits a hard crash (abort(), not a catchable
+            % MATLAB exception) inside this machine's bundled METIS build --
+            % confirmed via crash-dump backtrace: MumpsSolverInterface::
+            % SymbolicFactorization -> dmumps_ana_driver -> mumps_metis_
+            % nodend_mixedto32 -> METIS_NodeND -> __CompressGraph/__GKfree.
+            % Reproduced identically across two fresh MATLAB relaunches (not
+            % the sporadic ~1/10 MEX-init crash) and independent of tfTarget
+            % aggressiveness, so it is a genuine library bug for this
+            % sparsity pattern, not a physics/transcription issue. AMD is
+            % the standard robust fallback ordering and does not change any
+            % problem formulation; verified this does not regress the N=75
+            % Task-3 smoke test (both modes still pass).
 if warmTight
     ip.mu_strategy = 'monotone';  ip.mu_init = 1e-4;
     ip.warm_start_init_point = 'yes';

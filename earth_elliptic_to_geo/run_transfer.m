@@ -12,8 +12,12 @@ function res = run_transfer(cfg)
 %          warm-start the homotopy from a prior result's res.fuel instead of
 %          building a seed; uses the light schedule
 %          [0.05 0.02 0.008 0.003 0.001 0]) .ispS (default 2000)
-% OUTPUTS: res - .cfg .mintime .tf .Lf .fuel .tbl .report (saved to
-%          results/<tag>.mat); .report = .revs .switches .m_f_kg .dV_kms
+% OUTPUTS: res - .cfg .mintime .tf .Lf .fuel .tbl .report (ALWAYS returned;
+%          saved to results/<tag>.mat ONLY when best.certified -- campaign
+%          rule "never cache uncertified" (Task 14 controller triage): an
+%          uncertified point warns and leaves no file, so a per-point resume
+%          scan will retry it rather than silently adopting a bad optimum as
+%          a downstream seed); .report = .revs .switches .m_f_kg .dV_kms
 %          .edge .apoBurnRatio
 %
 % REFERENCES: [1] DESIGN.md secs 4-5.
@@ -63,7 +67,13 @@ report = struct('revs', revs, 'switches', best.switches, 'm_f_kg', best.m_f_kg, 
     'defect', best.maxDefect, 'certified', best.certified);
 res = struct('cfg', cfg, 'mintime', mt, 'tf', tf, 'Lf', Lf, 'fuel', best, ...
              'tbl', tbl, 'report', report, 'sg', sg, 'rv0', rv0);
-save(fullfile(resDir, [cfg.tag '.mat']), 'res');
+if best.certified
+    save(fullfile(resDir, [cfg.tag '.mat']), 'res');
+else
+    warning('run_transfer:uncertified', ['%s: NOT saved (certified=0, ' ...
+        'defect=%.2e) -- campaign rule: never cache uncertified results'], ...
+        cfg.tag, best.maxDefect);
+end
 fprintf(['DONE %s: certified=%d revs=%.2f sw=%d edge=%.1f%% mf=%.2f kg ' ...
          'dV=%.3f km/s apoBurn=%.2f\n'], cfg.tag, report.certified, revs, ...
          best.switches, 100*best.edge, best.m_f_kg, best.dV_kms, apoBurnRatio);

@@ -1,0 +1,96 @@
+You are performing a domain-aware technical review of MATLAB code implementing a DIRECT (collocation) optimal-control solver for a low-thrust Earth orbit transfer. This is NOT a general code review — answer the FOUR SPECIFIC QUESTIONS below. Depth on Q1 and Q2 matters far more than breadth.
+
+## Context
+
+Problem: minimum-fuel low-thrust transfer, LEO ellipse (semi-latus rectum P=11625 km, e=0.75, i=7 deg, starting at APOGEE, m0=1500 kg) -> equatorial GEO (P=42165 km, e=0, i=0), Tmax=10 N, Isp=2000 s, mu_Earth=398600.47 km^3/s^2.
+
+Reproduction target: Haberkorn, Martinon & Gergaud, "Low thrust minimum-fuel orbital transfer: a homotopic approach," JGCD 27(6), 2004. They solved it INDIRECTLY (single shooting + energy->mass homotopy) in equinoctial elements. We solved it DIRECTLY (Sundman-regularized trapezoidal collocation + Bertrand-Epenoy energy->fuel homotopy, CasADi+IPOPT) in inertial CARTESIAN coordinates.
+
+Our results (machine-tight, defects ~5e-12, independently re-derived from artifacts):
+- min-time anchor 10 N: t_f,min = 22.2248 ND = 84.66 h (paper approx 84.7 h) -- matches
+- headline min-fuel: m_f = 1376.74 kg (N=600) / 1377.05 kg (N=1200) at c_tf=1.5 with FREE final longitude (paper Fig 23 reads approx 1370-1375 kg)
+- structure: 19-24 switches, 7.3-8.1 revs, burns concentrated at APOGEE (paper Table 3: 18 switches, 7.5 revs) -- matches
+
+Transcription essentials (casadi_lt_2body.m):
+- State x = [r(3); v(3); m; t; cScale] (9 rows). Control u = [alpha(3); s] (4 rows), cone-eliminated: thrust = s*Tmax*alpha/m, ||alpha||=1, s in [0,1].
+- Sundman clock: dt/dtau = cScale * kappa(r), kappa = ||r||^pSund, pSund = 1.5. tau_f is FIXED (= tauf0, a constant, NOT a decision variable); cScale is a slack STATE, constant along the trajectory (tied by its own zero row in the defect equation), which lets physical t_f float or be pinned. This is Betts' sparse free-time trick: a free scalar tau_f would multiply every defect and create one dense KKT column (MUMPS fill-in / OOM at large N), so we carry the freedom in a state instead.
+- Trapezoidal collocation on a UNIFORM tau-mesh (sigma = tau/tauf0 in [0,1], dtau_k = tauf0 * diff(sigma)).
+- Objective (mode 'fixedtf'): J(eps) = Int[s]dt - eps*Int[s(1-s)]dt with the physical-time measure dt = cScale*kappa*dtau, swept eps 1 -> 0. eps=1 is min-energy (strictly convex in s, smooth ramp); eps=0 is min-fuel (linear in s, bang-bang).
+- Mode 'mintime': s == 1 pinned, objective = minimize t(tau_f); cScale carries the free time.
+- Costates are read from the KKT duals of the defect constraints: out.lamDef is [9 x N], columns = INTERVALS, rows = [lam_r(3); lam_v(3); lam_m; lam_t; lam_cScale].
+
+## Q1 (HIGHEST VALUE) -- the dual -> costate map
+
+verify_pmp_2body.m checks Pontryagin first-order conditions from out.lamDef, treating rows 4:6 of the INTERVAL duals as the continuous costate lam_v at the node: primer vector = -lam_v/||lam_v||, and the NLP thrust direction alpha should align with it on burn arcs.
+
+OBSERVED ANOMALY: primer misalignment is 10-24 deg IN BULK (M0 13.3 deg, M1 20.5 deg, M2 18.8 deg, M2 at N=1200 23.5 deg). Not outliers -- M1 median is 17.3 deg.
+
+CRITICAL COMPARISON: our sibling solver on a DIFFERENT problem (Earth-Moon CR3BP, 8-state transcription x = [r;v;m;t], same Sundman clock, same cone-eliminated control, same trapezoid, same eps-homotopy, same naive dual map -- but NO cScale slack state, because there tau_f is fixed and t_f is pinned directly by a terminal condition on the carried t-state) reads 0.06 deg on the identical check. So the architecture is shared; the cScale row is the salient structural difference.
+
+Refutation experiments already run (ALL NEGATIVE -- the anomaly is invariant):
+(a) tight eps=0 dual-polish re-solve, warm-started AT the converged solution, returns Solve_Succeeded: primer IDENTICAL to 4 decimals (20.4645 deg). So the duals are the converged, deterministic KKT multipliers -- not a loose warm-chain artifact.
+(b) node-centered averaging of adjacent interval duals, 0.5*(lam_{k-1} + lam_k): 17.26 -> 17.22 deg. No effect.
+(c) alpha box bounds widened +/-1.01 -> +/-2 (removing redundant near-active bounds whose barrier multipliers might contaminate stationarity): identical (20.4645 deg).
+(d) ||lam_v|| magnitudes are healthy (30-58, about 83% of total dual magnitude); misalignment is UNIFORM across ||lam_v|| magnitude quartiles (small->large: 22.6, 20.3, 22.3, 16.9 deg) -- so it is not direction noise at small magnitudes.
+(e) DISCRIMINATING CLUE: on the N=1200 solution the mass-costate transversality check PASSES at 9.5e-11 (relative |lam_m(end)|/max|lam_m|) while the primer on that SAME solution reads 23.5 deg. Some dual components look right while the direction is rotated.
+
+QUESTION: Is the naive map wrong for THIS transcription? If so, derive the correct dual -> costate map. Specifically, write out the KKT stationarity conditions for alpha_k and for v_k for this 9-state cScale-augmented Sundman trapezoid, accounting for:
+ (i) cScale multiplying EVERY dynamics row;
+ (ii) kappa(r) = ||r||^1.5 depending on r, so d(defect)/dr picks up d(kappa)/dr TIMES the entire time-domain RHS -- i.e. the r-rows and v-rows of the adjoint are coupled through the clock, which the CR3BP sibling ALSO has... note this and say whether it can therefore explain a difference;
+ (iii) the trapezoid weights dtau_k/2 and the fact that each node k participates in TWO defects (k-1 and k) with different dtau if the mesh is non-uniform (ours is uniform in tau -- does that matter?);
+ (iv) any contribution of the cScale row (row 9) and its Lagrange multiplier to the stationarity of alpha_k / v_k.
+Does the correct nodal lam_v involve a kappa-, cScale-, or weight-scaled combination of adjacent interval duals? SHOW THE ALGEBRA. If you conclude the map is fine and the problem is elsewhere (CasADi opti.dual sign/scaling conventions, IPOPT nlp_scaling_method contaminating returned multipliers, or something about how the objective's own dependence on alpha/s enters stationarity), say so and give the decisive test.
+
+Note: we have a candidate practical fix we intend to test -- for a CONVERGED fixed-t_f solution cScale is a known constant c*, so we can re-pose the problem with cScale ELIMINATED (absorb c* into the clock: tau_f' = c* * tau_f), reducing to the 8-state tulip-style transcription, warm-start at the solution, solve (~0 iterations), and extract duals from that reduced problem. Comment on whether this is sound and whether it would in fact isolate the cause.
+
+## Q2 -- the low-thrust min-time stall
+
+run_mintime.m implements the recipe that WORKS at 10 N:
+  cold tangential-thrust propagation seed (constant throttle s=1, alpha = v_hat, ode113 to GEO energy -- this winds the CORRECT number of revolutions by construction)
+  -> stage 1: min-time solve vs a FIXED terminal rendezvous at the seed's own arrival longitude (max-iter expected; it is a warm-up)
+  -> stage 2: min-time vs the FREE-longitude insertion manifold (5 constraints: r_z=0, v_z=0, ||r||^2=a^2, ||v||^2=mu/a, r.v=0), warm-started from stage 1 with warmTight=true
+  -> continuation rounds: re-solve from the previous iterate with warmTight=true until Solve_Succeeded. Guard: stall-error if a round improves the defect by < 0.15 decades; cap 24 rounds.
+
+At 10 N this converges (coplanar and 3D anchors, defect 2.6e-12, 4.5 revs, tf 22 ND). At 5 N it FAILS. Actual 5 N trajectory at N=1200 (that is ~133 nodes per min-time revolution -- the SAME nodes/rev density as the SUCCESSFUL 10 N anchors, so this is NOT a mesh-resolution deficit):
+  round 1: defect 9.353e-03 -> 5.336e-03 (0.244 decades), termErr 3.216e-04, status=Maximum_Iterations_Exceeded
+  round 2: defect 5.336e-03 -> 4.877e-03 (0.04 decades), termErr 4.441e-16, status=Infeasible_Problem_Detected
+Also tried and failed at 5 N:
+  (i) "thrust-continuation" seed: time-stretch the converged 10 N anchor by the empirical-law factor 2.0 (T*tf_min ~ const) -- FAILED (Infeasible_Problem_Detected). We believe this is topology-flawed: stretching doubles duration but adds NO revolutions, so a 4.5-rev shape is being forced toward a ~9-rev solution.
+  (ii) Route B: warm-start min-time from a converged min-ENERGY solution -- the ENERGY stage itself failed (Maximum_Iterations_Exceeded, defect 3.0e-2, N=1200, tf pinned at 89 ND, about 2x the expected min-time).
+
+OUR HYPOTHESIS (untested): the continuation rounds run warmTight=true, i.e. IPOPT options mu_strategy='monotone', mu_init=1e-4, warm_start_init_point='yes', warm_start_bound_push=1e-9, warm_start_mult_bound_push=1e-9 -- but they are applied to an iterate that is still INFEASIBLE at defect ~5e-3. Tight warm starts are meant for re-solving AT a converged point. On an infeasible iterate they should drive IPOPT into restoration, and "restoration + false Infeasible_Problem_Detected at a stuck defect floor" is exactly the signature observed. Proposed fix: mu-staged rounds -- warmTight=false (mu_strategy='adaptive', default mu_init) while defect >= 1e-6, tight only below; plus maxIter 3000 -> 6000.
+
+QUESTION: Is this diagnosis right? What else in this transcription would make the SAME recipe converge at 10 N (4.5 revs, ~9.4 ND to the anchor) and fail at 5 N (~9 revs, ~44 ND)? Consider at least: interior-point warm-start semantics on infeasible points; the cScale slack's scaling as t_f grows (cScale bounds are [0.05, 20]); the t-state bound (t <= 300) and velocity bounds (+/-8) versus the actual 5 N trajectory; conditioning growth with revolution count in Cartesian; whether the free-longitude manifold's 5 constraints admit a nearby spurious/retrograde branch that traps the solve. RANK the candidate causes and give the CHEAPEST DECISIVE TEST for each.
+
+## Q3 -- baseline integrity
+
+We are about to build a successor solver in modified equinoctial elements and VALIDATE it by requiring it to reproduce m_f = 1376.74 kg at 10 N / c_tf=1.5 to within 0.5 kg. If the Cartesian transcription has a bug, that gate validates against a wrong answer. Check for anything that would INVALIDATE the Cartesian baseline:
+- dynamics (lt2b_rhs_time.m): 2-body gravity + thrust, softened radius, must be CasADi-MX-safe (no norm/abs/max on the state);
+- the Sundman/cScale collocation structure and the zero-row that ties cScale constant;
+- the objective quadrature: is Int[...]dt correctly expressed on the tau-mesh with the cScale*kappa measure?
+- boundary/terminal conditions (initial full state pinned; terminal either fixed rvf or the 5-constraint manifold);
+- unit consistency: canonical units LU = 42165 km, TU = sqrt(LU^3/mu) so mu=1; Tmax_nondim = (thrustN/m0kg)/AU_ms2 where AU_ms2 = 1000*VU_kms/TU_s; c_nondim = (Isp*g0/1000)/VU_kms;
+- mass/dV bookkeeping: dV_kms = c*log(1/mf)*VU_kms, m_f_kg = m0kg*mf.
+
+## Q4 -- vet the go-forward plan
+
+We plan to rebuild in MODIFIED EQUINOCTIAL ELEMENTS (P, ex, ey, hx, hy, L) using the paper's own Gauss variational equations, with the TRUE LONGITUDE L as the INDEPENDENT VARIABLE (physical time t carried as a state), to reach the low-thrust ladder (1 N -> 0.1 N, i.e. 75 -> 754 revolutions) where Cartesian collocation is hopeless (~100 nodes/rev x 754 revs x 12 vars ~ 10^6 variables).
+
+Rationale: in elements, 5 of 6 states are FROZEN under pure Kepler and driven ONLY by thrust (every RHS carries a Tmax/m factor), so the node budget is set by the bang-bang switching structure (~2 switches/rev per the paper) rather than by the orbital oscillation. We estimate 15-25 nodes/rev -> ~11k-19k nodes at 0.1 N (~10^5 variables).
+
+Element definitions we use (paper's): ex = e cos(Omega+omega), ey = e sin(Omega+omega), hx = tan(i/2) cos Omega, hy = tan(i/2) sin Omega, L = Omega+omega+theta. Target is e -> 0 AND i -> 0 exactly (which is why equinoctial rather than classical).
+
+Critique:
+ (a) Is L-as-independent-variable sound here, given L is monotone but L_dot depends on the state (and on the thrust through the normal component w)? What happens to the transcription if L_dot -> 0 or changes sign under thrust? Can that occur for this problem?
+ (b) Do we still need a Sundman-like clock, or does L subsume it? (Note: dt/dL = 1/L_dot plays the clock role.)
+ (c) What singularities / conditioning traps should we expect?
+ (d) What is the realistic node-per-rev FLOOR to resolve ~2 bang-bang switches per revolution with TRAPEZOIDAL collocation? Would Hermite-Simpson or a pseudospectral scheme materially change that floor? Our campaign's banked lesson is that trapezoid SMEARS sharp switches (a 0->1 jump between nodes creates a large defect, so the optimizer rounds the switch off) -- how does that interact with the node budget at 754 revs?
+ (e) Anything else that will bite us. In particular: the paper asserts direct methods are "predictably unsuitable ... due to the huge number of resulting variables for long transfers at low thrusts" -- is that judgment still true for MEE + L-as-variable, or does our plan actually defeat it?
+
+## Output format
+
+Answer Q1-Q4 IN ORDER, with explicit algebra where asked. Be concrete; cite file:line. For code defects use:
+- **[SEVERITY]** `file:line` -- Issue description. Concrete fix recommendation.
+SEVERITY in {CORRECTNESS (wrong math/result or runtime break), ROBUSTNESS (edge case, numerical instability), EFFICIENCY, STYLE}.
+
+If a question rests on a false premise, say so plainly. Do not pad; a short correct answer beats a long hedged one.

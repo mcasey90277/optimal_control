@@ -193,6 +193,14 @@ formulation — noted as the future escalation, not attempted here.
 3. **Free-L_f local minima** (Fig 18 non-monotone at 10 N) — the paper resolves L_f by a
    min-longitude sub-anchor + c_Lf sweep (law R2: c_Lf,opt≈1.12·c_tf+0.09). M2 may need
    the same; M3's clean front uses the optimal-L_f (rendezvous) branch (Fig 23, smooth).
+4. **Three-way core review (2026-07-17)** validated the Cartesian baseline as clean
+   (1376.74 kg stands as the MEE validation gate) and produced two code findings now
+   tracked in the follow-on specs: the primer/dual-map correction (`DESIGN_dual_map.md`)
+   and the free-longitude manifold's missing prograde guard (`DESIGN_thrust_ladder.md`
+   Phase 0). **[ROBUSTNESS]** nit also raised: `casadi_lt_2body.m`'s post-solve numeric
+   defect re-check uses `norm(r)^pSund` while the NLP itself uses the softened
+   `(r'r+1e-12)^(pSund/2)` — negligible at our radii, but a verifier should certify the
+   actual NLP expression, not a slightly different one. See `doc/reviews/2026-07-17_triage.md`.
 
 ---
 

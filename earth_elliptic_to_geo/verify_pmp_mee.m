@@ -31,12 +31,21 @@ function ver = verify_pmp_mee(out, par, sigma, opts)
 %      itself).
 %   4. Gates (Campaign-B T1 acceptance, binding): primer misalignment < 1 deg
 %      (MEDIAN over burn nodes) and switching-sign agreement >= 99% of ALL
-%      nodes (S<0 <=> thr=1, S>0 <=> thr=0). Also reports the T1 tangential
-%      Lagrangian residual (I-beta*beta')*primerVec at burn nodes (its norm
-%      distribution -- mathematically the same information as the primer
-%      angle, reported separately by explicit request) and a coupling-
-%      strength diagnostic K_L/Ldot0 (should be small for "low thrust";
-%      NOT assumed anywhere in the derivation, just reported).
+%      nodes (S<0 <=> thr=1, S>0 <=> thr=0). Also reports the tangential
+%      residual (I-beta*beta')*primerVec at burn nodes (its norm
+%      distribution) -- NOTE: despite the similar name, this is NOT
+%      DESIGN_dual_map.md's multi-group Lagrangian-residual T1 test (that
+%      test assembles the FULL NLP Lagrangian gradient from ALL dual groups
+%      -- defect, cone, terminal/equality, bound multipliers -- and is not
+%      built here; this transcription has no cone constraint on beta to
+%      begin with, since ||beta||=1 is enforced by construction, not as an
+%      NLP constraint with its own multiplier). This quantity is
+%      mathematically the same information as the primer misalignment angle
+%      recast in norm form (both come from decomposing primerVec against the
+%      burn direction beta), reported separately by explicit request. The
+%      full multi-group Lagrangian-residual T1 remains future work. Also
+%      reports a coupling-strength diagnostic K_L/Ldot0 (should be small for
+%      "low thrust"; NOT assumed anywhere in the derivation, just reported).
 %
 % INPUTS:
 %   out   - casadi_lt_mee result struct [fields .X .U .dL .lamDef]
@@ -52,9 +61,14 @@ function ver = verify_pmp_mee(out, par, sigma, opts)
 %     .primerMedianDeg .primerMeanDeg  - primer misalignment on burns [deg]
 %     .overallSignPct                  - pct of ALL nodes with correct S sign
 %     .burnSignPct .coastSignPct       - same, split by arc (diagnostic)
-%     .T1_residNormRelMedian .T1_residNormRelMax
+%     .tangentialResidNormRelMedian .tangentialResidNormRelMax
 %                                       - ||tangential primerVec component|| /
-%                                         ||primerVec|| on burns (T1 test)
+%                                         ||primerVec|| on burns -- primer-
+%                                         angle information in norm form, NOT
+%                                         DESIGN_dual_map.md's full multi-
+%                                         group Lagrangian-residual T1 (see
+%                                         pipeline step 4 note above; that
+%                                         test remains future work)
 %     .KLoverLdot0Median .KLoverLdot0Max
 %                                       - |K_L/Ldot0| coupling-strength stats
 %     .maxSwitchAlignErr               - max |t of nearest S=0 crossing - t of
@@ -75,8 +89,9 @@ function ver = verify_pmp_mee(out, par, sigma, opts)
 %       since this transcription has no cScale).
 %   [2] earth_elliptic_to_geo/mee_dual_to_costate.m, mee_primer_switch.m (the
 %       two pieces this file orchestrates).
-%   [3] earth_elliptic_to_geo/DESIGN_dual_map.md (Campaign-B T1 acceptance
-%       test this reuses: tangential Lagrangian residual).
+%   [3] earth_elliptic_to_geo/DESIGN_dual_map.md (Campaign-B's own T1
+%       acceptance test is the full multi-group Lagrangian residual, NOT the
+%       tangentialResid quantity reported here -- see pipeline step 4 note).
 %   [4] Haberkorn, Martinon, Gergaud, JGCD 27(6), 2004, Fig. 16 (H1/H2).
 if nargin < 4, opts = struct(); end
 d = @(f, v) getdef_vpm(opts, f, v);
@@ -125,7 +140,10 @@ ver.overallSignPct = 100 * mean(predBurn == burn);
 ver.burnSignPct    = 100 * mean(S(burn)  < 0);
 ver.coastSignPct   = 100 * mean(S(~burn) > 0);
 
-% T1 tangential Lagrangian residual: (I - beta*beta')*primerVec at burn nodes
+% Tangential residual: (I - beta*beta')*primerVec at burn nodes. This is the
+% primer-angle information recast in norm form -- NOT DESIGN_dual_map.md's
+% full multi-group Lagrangian-residual T1 (defect + cone + terminal + bound
+% duals); that test remains future work (see pipeline step 4 note above).
 nB = nnz(burn);  Rtan = zeros(1, nB);  pvB = pvn(burn);
 Ub = U(1:3, burn);  pvVecB = primerVec(:, burn);
 for q = 1:nB
@@ -133,8 +151,8 @@ for q = 1:nB
     Rtan(q) = norm(pvVecB(:, q) - dot(pvVecB(:, q), b) * b);
 end
 RtanRel = Rtan ./ max(pvB, 1e-30);
-ver.T1_residNormRelMedian = median(RtanRel);
-ver.T1_residNormRelMax    = max(RtanRel);
+ver.tangentialResidNormRelMedian = median(RtanRel);
+ver.tangentialResidNormRelMax    = max(RtanRel);
 
 ver.KLoverLdot0Median = median(abs(info.KLoverLdot0));
 ver.KLoverLdot0Max    = max(abs(info.KLoverLdot0));
@@ -187,12 +205,12 @@ ver.tCross  = tCross;
 ver.tSwitch = tSwitch;
 
 fprintf(['verify_pmp_mee: primer median %.3f deg (mean %.3f) | sign agree ' ...
-         '%.2f%% (burn %.1f%% coast %.1f%%) | T1 tanRel median %.2e max ' ...
-         '%.2e | K_L/Ldot0 median %.2e max %.2e | switchAlignErr %.2e | ' ...
+         '%.2f%% (burn %.1f%% coast %.1f%%) | tangentialResid median %.2e ' ...
+         'max %.2e | K_L/Ldot0 median %.2e max %.2e | switchAlignErr %.2e | ' ...
          'singularArcNodes %d | lamM rel %.1e | pass=%d\n'], ...
     ver.primerMedianDeg, ver.primerMeanDeg, ver.overallSignPct, ...
-    ver.burnSignPct, ver.coastSignPct, ver.T1_residNormRelMedian, ...
-    ver.T1_residNormRelMax, ver.KLoverLdot0Median, ver.KLoverLdot0Max, ...
+    ver.burnSignPct, ver.coastSignPct, ver.tangentialResidNormRelMedian, ...
+    ver.tangentialResidNormRelMax, ver.KLoverLdot0Median, ver.KLoverLdot0Max, ...
     ver.maxSwitchAlignErr, ver.singularArcNodes, ver.lamMendRel, ver.pass);
 end
 

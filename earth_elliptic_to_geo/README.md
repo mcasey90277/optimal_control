@@ -157,6 +157,15 @@ separately when validating the solver core end to end.
 - `results/M2_movie.mp4` / `.gif` — trajectory + throttle animation of the M2
   transfer (apogee burns visible, GEO ring, running ΔV/mass meter).
 - `results/dual_anomaly/` — diagnostics for the open PMP primer finding.
+- `run_gergaud.m` — the front door (see "Front door: `run_gergaud`" below):
+  one call prints a Table-3-style row and (optionally) a plot + movie for a
+  chosen thrust/endpoint pair.
+- `results/movie_MEE_10N.{mp4,gif}` / `results/movie_MEE_5N.{mp4,gif}` /
+  `results/movie_MEE_2p5N.{mp4,gif}` / `results/movie_MEE_1N.{mp4,gif}` —
+  trajectory + throttle animations of the four certified MEE min-fuel rungs
+  (10/5/2.5/1 N), rendered via `mee_res_to_cart_res.m` + `transfer_movie.m`.
+- `results/gergaud_MEE_M2_10N.{png,mp4,gif}` — example front-door output
+  (default-endpoint 10 N run): static plot (`gergaud_plot.m`) + movie.
 
 ## MEE thrust-ladder campaign — Phase 2 (Campaign A)
 
@@ -268,6 +277,99 @@ variable), `mee_seed.m`, `run_mintime_mee.m`/`run_transfer_mee.m`/
 Full task-by-task ledger: `.superpowers/sdd/progress.md` (section dated
 2026-07-17 onward, "MEE thrust-ladder SDD ledger"). Design rationale and
 open items: `DESIGN_thrust_ladder.md`.
+
+## Front door: `run_gergaud`
+
+`run_gergaud.m` is a single-call, PARAMETERS-block front door onto the MEE
+thrust-ladder campaign above — it adds no new solver physics, just endpoint
+resolution, cache-vs-solve selection, and Table-3 row/plot/movie assembly on
+top of `mee_seed.m` / `casadi_lt_mee.m` / `homotopy_mee.m` /
+`run_mintime_mee.m` / `run_transfer_mee.m` / `psr_mee_refine.m`.
+
+**Usage.** Two equivalent calling styles, matching `PSR/run_psr.m` and
+`elfo/elfo_run_one.m`:
+
+```matlab
+run_gergaud                                  % interactive: edit the
+                                              % PARAMETERS block at the top
+                                              % of the file, then run
+row = run_gergaud(struct('thrustN', 5));     % opts override, same defaults
+row = run_gergaud(struct('thrustN', 1, 'runMode', 'solve'));
+row = run_gergaud(struct('thrustN', 0.2, 'runMode', 'probe'));   % honest
+                                              % up-front wall warning, never
+                                              % certified in this campaign
+```
+
+Every PARAMETERS-block field is also an `opts.<field>` key: `thrustN` (one
+of 10/5/2.5/1/0.5/0.2/0.1 N, default 10), `P0_km`/`e0`/`i0_deg` (initial
+orbit, default 11625/0.75/7 — the paper's own GTO-like start), `Pf_km`/`ef`/
+`if_deg` (final orbit, default 42165/0/0 — GEO), `ctf` (t_f/t_f,min, default
+1.5), `nodesPerRev` (default 25), `maxIter` (default 1500), `runMode`
+(default `'auto'`), `makeMovie`/`makePlot` (default `true`), `m0kg`/`ispS`
+(default 1500 kg / 2000 s), and `returnOnly` (test hook: returns the row
+struct, skips plot+movie regardless of `makeMovie`/`makePlot`).
+
+**Run modes.**
+- `'auto'` (default) — if BOTH endpoints are the paper defaults AND a
+  certified cache exists for `thrustN` (10/5/2.5/1/0.5 N), loads it and
+  builds the row with no solve. Otherwise it falls through to a live solve
+  automatically (this includes custom endpoints — `'auto'` never claims a
+  cached number for a non-default target/initial orbit).
+- `'solve'` — always runs the live pipeline (`run_mintime_mee` anchor →
+  `run_transfer_mee` fixed-tf fuel homotopy → `psr_mee_refine` for
+  `thrustN<=1` N), ignoring any cache.
+- `'probe'` — research mode: forces a live solve and prints an up-front
+  warning that thrust below 0.5 N (0.2/0.1 N) was never certified in this
+  campaign. `row.certified` is reported honestly either way — the script
+  never fabricates a row for a rung that doesn't converge.
+
+**Endpoint knobs (default-preserving).** `(P0_km,e0,i0_deg)` and
+`(Pf_km,ef,if_deg)` at their paper/GEO defaults resolve to `initElems=[]`
+(the byte-preserving legacy literal already inside `mee_seed.m`) and
+`xf=[1;0;0;0;0]` (the byte-preserving default already inside
+`casadi_lt_mee.m`) — leaving both endpoints at their defaults reproduces the
+existing certified numbers exactly and is what lets `'auto'` mode hit the
+cache. Any deviation builds `initElems = [P0_km/LU; e0; 0;
+tan(deg2rad(i0_deg)/2); 0; 1; 0]` and/or `xf = [Pf_km/LU; ef; 0;
+tan(deg2rad(if_deg)/2); 0]` (LU = 42165 km, `kepler_lt_params.m`'s fixed
+length unit) and tags the result's cache files with a deterministic hash
+suffix so a custom run can never collide with a certified-default cache.
+**Research-probe caveat:** the solver/seed were validated for GEO-like
+(near-circular, near-equatorial) targets only — a significantly eccentric,
+inclined, or retrograde custom final orbit is research-probe territory, not
+a reproduction of a known-good case; the script reports whether the live
+solve certified rather than presuming any custom target converges.
+
+**Per-rung recipe / honesty map.** `run_gergaud` encodes, but does not
+re-litigate, the campaign's own honesty footnotes above:
+
+| T [N] | recipe | status |
+|---|---|---|
+| 10 / 5 / 2.5 | `run_mintime_mee` + `run_transfer_mee` | clean, cache-hit in `'auto'` mode |
+| 1 | + `psr_mee_refine` | headline is the PSR-refined value (footnote 4) |
+| 0.5 | anchor-free R0-law t_f,min (footnote 1) + `psr_mee_refine` (footnote 2) | budget-limited PSR, anchor is an estimate |
+| 0.2 / 0.1 | live probe only (same recipe, honestly attempted) | never certified in this campaign (footnote 6); reports `certified=false` rather than a fabricated row |
+
+See the "Six binding footnotes" list above for the full detail behind each
+of these — `run_gergaud` only points at them.
+
+**Outputs.** The row (a `gergaud_row()` struct) is always printed via
+`gergaud_row_str()`, with an `UNCERTIFIED — <note>` banner prepended
+whenever `row.certified` is false. Unless `returnOnly` is set, it also
+writes `results/gergaud_<tag>.png` (`makePlot`, via `gergaud_plot.m`) and
+`results/gergaud_<tag>.{mp4,gif}` (`makeMovie`, via `transfer_movie.m`),
+where `tag = mee_fuel_tag(thrustN)` (e.g. `MEE_M2_10N`, `MEE_M2_2p5N`) plus
+the endpoint-hash suffix for a custom target. Both renderers consume
+Cartesian trajectory data; `mee_res_to_cart_res.m` is the adapter that
+converts the solver's native MEE/L-domain state and RTN-frame control into
+that inertial layout (reconstructing (r,v) via `elements_to_cart` at each
+node's true longitude and rotating the thrust direction into ECI).
+
+The four rendered movies of the certified ladder rungs live at
+`results/movie_MEE_10N.{mp4,gif}`, `results/movie_MEE_5N.{mp4,gif}`,
+`results/movie_MEE_2p5N.{mp4,gif}`, and `results/movie_MEE_1N.{mp4,gif}`.
+`results/gergaud_MEE_M2_10N.{png,mp4,gif}` is an example of the front
+door's own output (a default-endpoint 10 N run).
 
 ## Companions
 

@@ -69,6 +69,52 @@ Tasks 4-11):**
 
 ---
 
+## 0. Front door + endpoint parameterization (post-Task-11 SDD, `.superpowers/sdd/task-1..8`)
+
+On top of the ladder work above, a separate small SDD pass generalized the
+fixed GEO-from-paper-GTO pipeline into a parameterized one and wrapped it in
+a single front door, `run_gergaud.m` (README.md, "Front door: `run_gergaud`"
+section, has the user-facing usage; this note is the design-side pointer).
+
+**Core change.** `casadi_lt_mee.m` gained `opts.xf` — the 5-element MEE
+terminal target `[P;ex;ey;hx;hy]`, defaulting to `[1;0;0;0;0]` (GEO in the
+solver's own normalized units) — replacing five previously-hardcoded GEO
+equality constraints with a loop over `xf`. `mee_seed.m` gained
+`opts.initElems` — the 7-element seed initial state
+`[P;ex;ey;hx;hy;m;t]`, which when absent or empty falls through to the
+exact pre-existing literal (no `tan(3.5°)` recompute at seed time) rather
+than a numerically-close-but-not-identical reconstruction. Both were then
+threaded through the downstream drivers — `homotopy_mee.m`,
+`run_transfer_mee.m`, `run_mintime_mee.m` — including their cache
+fingerprints, so a custom-endpoint run cannot silently reuse or corrupt a
+default-endpoint cache.
+
+**Default-preservation guarantee.** At the paper's own endpoints
+(P0=11625 km, e0=0.75, i0=7°, GTO-like start; Pf=42165 km, ef=0, if=0°,
+GEO), `initElems` resolves to `[]` and `xf` resolves to `[1;0;0;0;0]` —
+byte-identical to the pre-parameterization code path. Every certified
+number in this document (the 10/5/2.5/1/0.5 N ladder, the R0 law, the PSR
+results) was produced before this change and reproduced after it at the
+same values (Task 1/2/4 regression checks in `.superpowers/sdd/progress.md`,
+e.g. MEE 10 N m_f=1377.10 kg / tfmin=22.2206 ND reproduced with zero
+fingerprint mismatch) — the parameterization is additive, not a rewrite of
+the ladder's numerics.
+
+**Front door.** `run_gergaud.m` is the user-facing consumer of both new
+option fields: it resolves `(P0_km,e0,i0_deg)`/`(Pf_km,ef,if_deg)` into
+`initElems`/`xf` (falling back to the defaults above whenever the inputs
+match the paper/GEO endpoints exactly), selects cache-hit vs. live-solve
+(`'auto'`/`'solve'`/`'probe'` modes), and assembles/prints one Table-3 row
+(`gergaud_row.m`/`gergaud_row_str.m`) plus an optional plot/movie via the
+`mee_res_to_cart_res.m` → `transfer_movie.m`/`gergaud_plot.m` chain. It adds
+no new solver physics — it is a thin front end over the ladder machinery
+documented in the rest of this file. A significantly non-GEO-like custom
+final orbit is explicitly out of the validated scope (research-probe
+territory), since the solver/seed were only ever validated against the
+paper's GTO→GEO case and the certified ladder rungs.
+
+---
+
 ## 1. Where we actually stand (corrected diagnosis)
 
 The 5 N anchor blocked after six strategies (Task 14 report). Post-mortem

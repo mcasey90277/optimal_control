@@ -28,8 +28,12 @@ assert(threw, 'test_run_ladder: run_ladder([5 10]) should have thrown run_ladder
 
 % --- (b) run_ladder([10]) with the existing certified 10 N artifacts must
 % REUSE (no solve) -- fast and reused=true ----------------------------------
+% cfg.summaryFile is namespaced TEST_-prefixed (final-review Fix 1): the
+% default summaryFile='MEE_ladder.mat' is the real 4-rung [10 5 2.5 1]
+% campaign summary -- without this override, every test run would clobber
+% it with a 1-rung summary.
 tStart = tic;
-results = run_ladder([10]);
+results = run_ladder([10], struct('summaryFile', 'TEST_MEE_ladder.mat'));
 wallSec = toc(tStart);
 assert(isscalar(results), 'test_run_ladder: expected a 1x1 results struct for a single-rung call');
 assert(results.reused == true, ['test_run_ladder: expected results.reused=true (no-solve ' ...

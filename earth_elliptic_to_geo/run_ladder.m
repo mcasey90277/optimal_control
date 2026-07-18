@@ -53,7 +53,14 @@ function results = run_ladder(thrustList, cfg)
 %          warm-hints the next lower one), e.g. [10 5 2.5 1]
 %          cfg - optional struct: .ctf (1.5), .nodesPerRev (25), .m0kg
 %          (1500), .ispS (2000), .maxIter (1500, fuel homotopy), .seedThr
-%          (0.4, fuel cold-seed throttle), .betaMode ('tangential')
+%          (0.4, fuel cold-seed throttle), .betaMode ('tangential'),
+%          .summaryFile (default 'MEE_ladder.mat' -- the whole-campaign
+%          summary written at the end of the run; final-review Fix 1:
+%          test_run_ladder.m calls run_ladder([10]) for a fast no-solve
+%          cache-hit check, and with the old unconditional filename every
+%          test invocation clobbered the real 4-rung [10 5 2.5 1] campaign
+%          summary with a 1-rung one -- callers that want a distinct
+%          summary artifact, e.g. tests, must pass a different name here)
 % OUTPUTS: results - struct array [1 x numel(thrustList)], fields
 %          .thrustN .anchor (run_mintime_mee out struct) .fuelTag .fuel
 %          (run_transfer_mee report struct) .tf .certified .reused (true
@@ -77,6 +84,7 @@ ispS        = d('ispS', 2000);
 maxIter     = d('maxIter', 1500);
 seedThr     = d('seedThr', 0.4);
 betaMode    = d('betaMode', 'tangential');
+summaryFile = d('summaryFile', 'MEE_ladder.mat');
 % mtMaxIter -- OPERATIONAL checkpoint-granularity knob (Task 7, execution-
 % environment constraint, NOT a solver-quality change): run_mintime_mee's
 % own per-round cache only saves AFTER a full casadi_lt_mee call returns; at
@@ -208,7 +216,7 @@ for k = 1:nRungs
     prevAnchor = rung.anchor;  prevThrust = thrustN;  prevFuelFull = fuelRes;
 end
 
-save(fullfile(resDir, 'MEE_ladder.mat'), 'results');
+save(fullfile(resDir, summaryFile), 'results');
 print_ladder_table(results);
 end
 

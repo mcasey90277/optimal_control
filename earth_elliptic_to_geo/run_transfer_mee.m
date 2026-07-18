@@ -25,7 +25,10 @@ function res = run_transfer_mee(cfg)
 % INPUTS:  cfg - .thrustN (default 10), .ctf (default 1.5), .tfMinAnchor
 %          (default 22.2248 ND, the Cartesian free-longitude min-time anchor
 %          for 10 N -- see run_mintime.m / results/M2_manifold.mat), .tag
-%          (results filename stem, default 'MEE_M2_10N'), .seedThr (mee_seed
+%          (results filename stem, default mee_fuel_tag(cfg.thrustN) --
+%          equals 'MEE_M2_10N' at the default thrustN=10, final-review Fix 2:
+%          was a hardcoded 'MEE_M2_10N' literal regardless of thrustN before
+%          this fix), .seedThr (mee_seed
 %          constant throttle, default 0.4 -- see DEVIATION note below),
 %          .betaMode (default 'tangential'), .nodesPerRev (default 25),
 %          .maxIter (default 1500), .sched (homotopy eps schedule, optional),
@@ -69,7 +72,7 @@ d = @(f,v) getdef6(cfg, f, v);
 thrustN    = d('thrustN', 10);
 ctf        = d('ctf', 1.5);
 tfMinAnchor = d('tfMinAnchor', 22.2248);   % Cartesian M2 min-time anchor [ND]
-tag        = d('tag', 'MEE_M2_10N');
+tag        = d('tag', mee_fuel_tag(thrustN));
 seedThr    = d('seedThr', 0.4);
 betaMode   = d('betaMode', 'tangential');
 nodesPerRev = d('nodesPerRev', 25);

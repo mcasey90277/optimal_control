@@ -1,5 +1,11 @@
 # Thrust Ladder to 0.1 N (MEE + ΔL) — Implementation Plan
 
+> **CLOSE-OUT (executed 2026-07-17/18):** Plan executed through Task 11;
+> delivered scope + deviations from this plan are documented in
+> `DESIGN_thrust_ladder.md`'s status header and in `README.md`'s "MEE
+> thrust-ladder campaign" section — see those for the authoritative
+> as-built record rather than this plan document.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Reach the low-thrust ladder (10 N → 0.1 N, Table 3 of HMG-2004) that the

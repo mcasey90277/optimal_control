@@ -56,6 +56,11 @@ function deep = run_task9_rung(thrustN, prevThrust, prevAnchor, prevFuelSigma, p
 %   [2] run_mintime_mee.m, run_transfer_mee.m, psr_mee_refine.m (the three
 %   stages called here). [3] .superpowers/sdd/task-9-brief.md (this task's
 %   STRATEGY section, the source of the node-density choices).
+%
+% STATUS (final review, 2026-07-18): committed but not yet exercised live --
+% the 0.5 N rung was certified via the anchor-free R0-law-estimate path
+% (DESIGN_thrust_ladder.md footnote 1), not through this function; the first
+% live use of this file will be the 0.2 N rung.
 here   = fileparts(mfilename('fullpath'));
 resDir = fullfile(here, 'results');
 if ~exist(resDir, 'dir'), mkdir(resDir); end

@@ -56,6 +56,16 @@ Tasks 4-11):**
    reviewer insight (windowed PSR cannot discover switch pairs outside its
    own neighbor windows — a hybrid periodic uniform-sweep round is the
    suggested fix, not yet built).
+6. **T7c cross-process hang, uninvestigated** (Task 7c, `task-7-report.md`
+   item 3): round 14 of the 1 N manual continuation hung for an unexplained
+   42+ minutes on a nominally bit-identical computation. If CasADi/MUMPS's
+   underlying BLAS is multi-threaded, the exact Newton path through an
+   ill-conditioned region may not be bit-reproducible run-to-run across
+   fresh process launches (unlike the within-session determinism confirmed
+   at rounds 6-13) — an important caveat for anyone relying on
+   retry-determinism reasoning for this solver stack. Not root-caused; not
+   blocking primal results above, but worth investigating before the next
+   deep-descent attempt (Task 9's 0.2/0.1 N rungs).
 
 ---
 

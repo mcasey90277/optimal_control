@@ -83,7 +83,9 @@ assert(ok_L, ...
 % (e) CASADI MX REGRESSION: lt_mee_rhs must build/evaluate cleanly under
 % CasADi MX symbolics (no norm/abs/max/if on state-dependent quantities),
 % and the symbolic evaluation must match the numeric path exactly.
-addpath('/Users/msc/casadi-3.7.0');
+cp = getenv('CASADI_PATH');
+if isempty(cp), cp = fullfile(getenv('HOME'), 'casadi-3.7.0'); end
+addpath(cp);
 import casadi.*
 Xs = MX.sym('x', 7, 1);
 Us = MX.sym('u', 4, 1);

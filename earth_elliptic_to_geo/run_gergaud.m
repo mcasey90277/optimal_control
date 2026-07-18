@@ -29,7 +29,7 @@ function row = run_gergaud(opts)
 %   (P0_km,e0,i0_deg)=(11625,0.75,7) and (Pf_km,ef,if_deg)=(42165,0,0) are
 %   the paper's own endpoints (GTO-like ellipse -> GEO); leaving both at
 %   their defaults is what lets 'auto' mode reuse the certified caches.
-%   c_tf        - t_f / t_f,min ratio for the fixed-tf fuel solve [default 1.5]
+%   ctf         - t_f / t_f,min ratio for the fixed-tf fuel solve [default 1.5]
 %   nodesPerRev - collocation node density [nodes/rev]             [default 25]
 %   maxIter     - IPOPT iteration cap per continuation step      [default 1500]
 %   runMode     - 'auto' | 'solve' | 'probe' (see RUN MODES below) [default 'auto']
@@ -412,7 +412,10 @@ else
         tfmin_ND = NaN; tfmin_h = NaN;
         note = sprintf(['T=%g N: min-time anchor solve THREW (%s) -- likely the known deep-' ...
             'ladder conditioning wall'], thrustN, ME_anchor.message);
-        nrm = uncertified_nrm(ctf, note);
+        % note carried in the function's own note output only (see caller's
+        % noteParts assembly) -- do NOT also fold it into nrm.note, or the
+        % printed UNCERTIFIED banner would show the same diagnostic twice.
+        nrm = uncertified_nrm(ctf, '');
         return;
     end
 end
@@ -425,7 +428,9 @@ try
     res = run_transfer_mee(fuelCfg);
 catch ME_fuel
     note = strtrim([note ' ' sprintf('T=%g N: fuel homotopy THREW (%s)', thrustN, ME_fuel.message)]);
-    nrm = uncertified_nrm(ctf, note);
+    % note carried in the function's own note output only -- see the
+    % ME_anchor catch above for why nrm.note stays empty here.
+    nrm = uncertified_nrm(ctf, '');
     return;
 end
 
@@ -446,10 +451,15 @@ if needsPSR
     catch ME_psr
         note = strtrim([note ' ' sprintf(['T=%g N: PSR refinement THREW (%s) -- falling back ' ...
             'to the pre-PSR fuel solve'], thrustN, ME_psr.message)]);
-        nrm = res_to_nrm(res, ctf, note);
+        % note carried in the function's own note output only -- see the
+        % ME_anchor catch above for why nrm.note stays empty here.
+        nrm = res_to_nrm(res, ctf, '');
     end
 else
-    nrm = res_to_nrm(res, ctf, note);
+    % note (if any, e.g. an anchor-did-not-certify message from above) is
+    % carried in the function's own note output only -- same reasoning as
+    % the catch blocks above, so it isn't printed twice by the caller.
+    nrm = res_to_nrm(res, ctf, '');
 end
 end
 

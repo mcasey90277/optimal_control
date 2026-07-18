@@ -88,7 +88,21 @@ Xr = X(1:3,:);  Xv = X(4:6,:);
 opti.subject_to(Xr(:) >= -5);      opti.subject_to(Xr(:) <= 5);
 opti.subject_to(Xv(:) >= -8);      opti.subject_to(Xv(:) <= 8);
 opti.subject_to(m(:) >= 0.3);      opti.subject_to(m(:) <= 1.001);
-opti.subject_to(t(:) >= 0);        opti.subject_to(t(:) <= 300);
+% t upper bound: scale with the problem's own timescale, not a flat
+% constant (Task 7c fix-round, 2026-07-17 -- see casadi_lt_mee.m's matching
+% comment for the incident this guards against: a fixed t<=300 ceiling
+% became a structural infeasibility once tfTarget exceeded it, hidden
+% behind machine-precision maxDefect/termErr). Verified a no-op for every
+% banked Cartesian config in results/ (max observed tf = 66.67 ND, all
+% well under 300); kept here purely for consistency/future-proofing since
+% this file shares the same "generous box" pattern casadi_lt_mee.m copied
+% from.
+if strcmp(mode, 'fixedtf')
+    tUB = max(300, 2*tfTarget);
+else
+    tUB = max(300, 3*X0(8,end));   % mintime: 3x the warm-start seed's t-span
+end
+opti.subject_to(t(:) >= 0);        opti.subject_to(t(:) <= tUB);
 opti.subject_to(cS(:) >= 0.05);    opti.subject_to(cS(:) <= 20);
 opti.subject_to(al(:) >= -1.01);   opti.subject_to(al(:) <= 1.01);
 

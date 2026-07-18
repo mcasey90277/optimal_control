@@ -36,9 +36,16 @@ function out = casadi_lt_mee(sigma, X0, U0, dL0, opts)
 %
 % OUTPUTS:
 %   out - struct: .X [7x(N+1)] .U [4x(N+1)] .dL (converged DeltaL) .success
-%         .ipoptStatus .maxDefect .maxUnit .termErr .mf .m_f_kg .dV_kms .tf
-%         .switches .edge .lamDef [7xN] .LdotMin .incDeg (terminal
+%         .ipoptStatus .maxDefect .maxUnit .termErr .tfErr (|t(end)-tfTarget|,
+%         fixedtf only; NaN in mintime -- Task 7c diagnostic) .mf .m_f_kg
+%         .dV_kms .tf .switches .edge .lamDef [7xN] .LdotMin .incDeg (terminal
 %         inclination, deg -- should be ~0 since the h=0 target is equatorial)
+%
+% A "casadi_lt_mee:boundSaturation" WARNING fires if t(end), P, or m sits
+% within 1e-6 of its box bound at the solution -- maxDefect/termErr alone
+% can both read machine precision while a box bound is quietly the real
+% blocker (Task 7c, 2026-07-17: the old flat t<=300 ceiling did exactly
+% this at the 1 N fuel rung).
 %
 % REFERENCES:
 %   [1] earth_elliptic_to_geo/casadi_lt_2body.m (Cartesian template this
@@ -114,7 +121,27 @@ opti.subject_to(X(3,:).' >= -1.5);   opti.subject_to(X(3,:).' <= 1.5);    % ey
 opti.subject_to(X(4,:).' >= -2);     opti.subject_to(X(4,:).' <= 2);      % hx
 opti.subject_to(X(5,:).' >= -2);     opti.subject_to(X(5,:).' <= 2);      % hy
 opti.subject_to(m(:) >= 0.3);        opti.subject_to(m(:) <= 1.001);
-opti.subject_to(t(:) >= 0);          opti.subject_to(t(:) <= 300);
+% t upper bound: MUST scale with the problem's own timescale, not a fixed
+% constant. Task 7c incident (2026-07-17): this was hardcoded to a flat 300
+% (copied verbatim from casadi_lt_2body.m's "generous box"), which silently
+% became a structural infeasibility at the 1 N fuel rung -- 'fixedtf' pins
+% t(end)==tfTarget=335.71 ND (1.5x the certified 1 N min-time anchor), so
+% t<=300 made the BC constraint and the box bound mutually unsatisfiable
+% before IPOPT ever started iterating. Every resulting
+% "Infeasible_Problem_Detected" showed t(end) parked at ~300.25 (the box
+% ceiling) with IPOPT's own "Overall NLP error" reading ~35.46 (=tfTarget-
+% 300.25) even while the re-derived maxDefect/termErr read machine
+% precision -- a blind spot this file's diagnostics did not surface (see
+% the bound-saturation WARNING below, added for the same reason). Fix:
+% derive the ceiling from tfTarget (fixedtf) or the seed's own time span
+% (mintime, where tfTarget is empty and t(end) is a free DOF found by the
+% solve) so the box can never outrun the BC it is meant to merely bound.
+if strcmp(mode, 'fixedtf')
+    tUB = max(300, 2*tfTarget);
+else
+    tUB = max(300, 3*X0(7,end));   % mintime: 3x the warm-start seed's t-span
+end
+opti.subject_to(t(:) >= 0);          opti.subject_to(t(:) <= tUB);
 opti.subject_to(beta(:) >= -1.01);   opti.subject_to(beta(:) <= 1.01);
 opti.subject_to(dL >= 0.1);          opti.subject_to(dL <= 2000);
 
@@ -212,9 +239,44 @@ burn = ss > 0.5;
 termErr = norm([Xs(1,end) - 1; Xs(2,end); Xs(3,end); Xs(4,end); Xs(5,end)]);
 mf = Xs(6,end);
 incDeg = 2*atand(sqrt(Xs(4,end)^2 + Xs(5,end)^2));
+if strcmp(mode, 'fixedtf')
+    tfErr = abs(Xs(7,end) - tfTarget);
+else
+    tfErr = nan;
+end
+
+% Bound-saturation diagnostic (Task 7c fix-round, 2026-07-17): maxDefect and
+% termErr can BOTH read machine precision while a box bound quietly sits
+% saturated at the solution -- that exact combination (t(end) pinned at the
+% t<=300 ceiling, defect/termErr fine) is what cost a full task cycle on the
+% 1 N fuel rung before the true root cause (the box, not the physics) was
+% found. Cheap check, always run: flag t(end), P, or m within 1e-6 of
+% either box edge. t(1)=0 and m(1)=1 are excluded (those are the pinned
+% initial BCs, expected to sit at/near their bounds, not a symptom).
+tolSat = 1e-6;
+satMsgs = {};
+if abs(Xs(7,end) - tUB) < tolSat || abs(Xs(7,end) - 0) < tolSat
+    satMsgs{end+1} = sprintf('t(end)=%.6g saturates its box [0,%.6g]', Xs(7,end), tUB);
+end
+Pvals = Xs(1,:);
+if any(abs(Pvals - 0.05) < tolSat) || any(abs(Pvals - 3) < tolSat)
+    satMsgs{end+1} = 'P saturates its box [0.05,3] at >=1 node';
+end
+mvals = Xs(6,2:end);   % exclude the pinned m(1)=1 initial BC
+if any(abs(mvals - 0.3) < tolSat) || any(abs(mvals - 1.001) < tolSat)
+    satMsgs{end+1} = 'm saturates its box [0.3,1.001] at >=1 node';
+end
+if ~isempty(satMsgs)
+    warning('casadi_lt_mee:boundSaturation', ...
+        ['casadi_lt_mee: box-bound saturation at the reported solution ' ...
+         '(maxDefect/termErr alone do NOT rule this out) -- %s'], ...
+        strjoin(satMsgs, '; '));
+end
+
 out = struct('X', Xs, 'U', Us, 'dL', dLs, 'success', success, ...
     'ipoptStatus', status, 'maxDefect', dmax, ...
     'maxUnit', max(abs(sum(Us(1:3,:).^2,1) - 1)), 'termErr', termErr, ...
+    'tfErr', tfErr, ...
     'mf', mf, 'm_f_kg', par.m0kg*mf, 'dV_kms', par.c*log(1/mf)*par.VU_kms, ...
     'tf', Xs(7,end), 'switches', sum(abs(diff(burn))), ...
     'edge', mean(ss > 0.95 | ss < 0.05), 'lamDef', lamDef, ...

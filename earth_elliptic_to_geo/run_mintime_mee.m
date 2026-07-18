@@ -192,7 +192,18 @@ function out = run_mintime_mee(thrustN, nodesPerRev, cfg)
 %                        WARM-START FIX below), .tag (auto, see below),
 %                        .alwaysTryStageB (true -- see BASIN-MULTIPLICITY
 %                        FINDING above; set false to trust a converged
-%                        Stage A outright and skip the Stage-B cross-check)
+%                        Stage A outright and skip the Stage-B cross-check),
+%                        .xf (Task 4, [5x1] terminal target [P;ex;ey;hx;hy],
+%                        default [1;0;0;0;0] = GEO -- forwarded into every
+%                        'mintime'-mode casadi_lt_mee call), .initElems
+%                        (Task 4, [7x1] [P;ex;ey;hx;hy;m;t] initial-orbit
+%                        override, default [] -- forwarded into Stage B's
+%                        cold mee_seed call). NOTE: when either .xf or
+%                        .initElems is non-default, Stage A is SKIPPED
+%                        regardless of whether a cached fuel anchor exists --
+%                        that anchor was solved for the DEFAULT endpoints and
+%                        is endpoint-mismatched under a custom override; see
+%                        useStageA below
 % OUTPUTS: out - struct: .tfmin (ND) .tfmin_h .dL_mt .revs .thrustN
 %          .nodesPerRev .N .stage ('A'|'B') .continuationRounds .certified
 %          .solverOut (full casadi_lt_mee output, for downstream
@@ -223,6 +234,13 @@ seedThrB = d('seedThrB', 0.4);   % see STAGE-B SEED THROTTLE FIX below
 warmStartAnchor = d('warmStartAnchor', []);   % see ANCHOR WARM-START FIX below
 tag      = d('tag', sprintf('MEE_mintime_T%d', round(10*thrustN)));
 alwaysTryB = d('alwaysTryStageB', true);   % see BASIN-MULTIPLICITY FINDING above
+xf       = d('xf', [1;0;0;0;0]);   % Task 4: terminal target [P;ex;ey;hx;hy],
+                                    % default GEO -- forwarded into every
+                                    % casadi_lt_mee(...,'mode','mintime',...)
+                                    % call inside mintime_mee_continue
+initElems = d('initElems', []);    % Task 4: initial-orbit override [7x1]
+                                    % [P;ex;ey;hx;hy;m;t], default [] --
+                                    % forwarded into Stage B's mee_seed call
 
 here   = fileparts(mfilename('fullpath'));
 resDir = fullfile(here, 'results');
@@ -233,7 +251,7 @@ if ~exist(resDir, 'dir'), mkdir(resDir); end
 fp = struct('thrustN', thrustN, 'nodesPerRev', nodesPerRev, 'm0kg', m0kg, ...
     'ispS', ispS, 'maxIter', maxIter, 'fuelTag', fuelTag, 'nRevSeed', nRevSeed, ...
     'seedThrB', seedThrB, 'roundsMax', roundsMax, 'decadeMin', decadeMin, ...
-    'alwaysTryStageB', alwaysTryB);
+    'alwaysTryStageB', alwaysTryB, 'xf', xf, 'initElems_isset', ~isempty(initElems));
 if ~isempty(warmStartAnchor)
     fp.warmStartAnchorDL = warmStartAnchor.dL;   % fingerprint the warm-start input itself
     fp.warmStartAnchorN  = warmStartAnchor.N;
@@ -256,9 +274,13 @@ isGood = @is_certified;   % shared with pack_candidate's .certified (Fix 3, no d
 candidates = {};
 
 % --- Stage A: warm-start from the certified fuel solution at this thrust ---
+% Task 4: SKIP Stage A whenever xf/initElems is overridden -- the cached fuel
+% file was solved for the DEFAULT endpoints, so it is endpoint-mismatched
+% under a custom target/initial-orbit and must not be used as a warm start.
 fuelFile = fullfile(resDir, [fuelTag '.mat']);
+useStageA = isempty(initElems) && isequal(xf, [1;0;0;0;0]) && isfile(fuelFile);
 stageAOK = false;
-if isfile(fuelFile)
+if useStageA
     Sf = load(fuelFile);
     fres = Sf.res;
     sigmaA = fres.sigma;
@@ -275,7 +297,12 @@ if isfile(fuelFile)
         fprintf('MINTIME_MEE Stage A FAILED (%s)\n', ME_A.message);
     end
 else
-    fprintf('MINTIME_MEE Stage A SKIPPED: no cached fuel anchor %s\n', fuelFile);
+    if isfile(fuelFile) && ~useStageA
+        fprintf(['MINTIME_MEE Stage A SKIPPED: cached fuel anchor %s exists but is ' ...
+                 'endpoint-mismatched under a custom xf/initElems override\n'], fuelFile);
+    else
+        fprintf('MINTIME_MEE Stage A SKIPPED: no cached fuel anchor %s\n', fuelFile);
+    end
 end
 
 % --- Stage B: EITHER a fresh cold tangential seed OR (Task 7 addition, see
@@ -330,7 +357,7 @@ if ~stageAOK || alwaysTryB
     else
         N = round(nodesPerRev * nRevSeed);
         [sigmaB, X0B, U0B, dL0B, seedInfoB] = mee_seed(par, struct('thr', seedThrB, ...
-            'betaMode', 'tangential', 'nRev', nRevSeed, 'N', N));
+            'betaMode', 'tangential', 'nRev', nRevSeed, 'N', N, 'initElems', initElems));
         x0state = X0B(:,1);
         fprintf(['MINTIME_MEE Stage B: T=%g N, cold tangential thr=%.2g seed, nRev=%g target ' ...
                  '(N=%d, dL0=%.4f, achieved seed nRev=%.4f)\n'], ...
@@ -430,7 +457,8 @@ if isfile(round0File)
     fprintf('  [cached] %s round 0\n', label);
 else
     out = casadi_lt_mee(sigma, X0, U0, dL0, struct('par', par, 'mode', 'mintime', ...
-        'x0', x0state, 'maxIter', maxIter, 'warmTight', false, 'printLevel', printLvl));
+        'x0', x0state, 'maxIter', maxIter, 'warmTight', false, 'printLevel', printLvl, ...
+        'xf', fp.xf));
     save(round0File, 'out', 'fp');
 end
 fprintf('  %s round 0 (loose, adaptive mu): status=%s defect=%.3e termErr=%.3e\n', ...
@@ -462,7 +490,7 @@ while ~isGood(out) && round_ < roundsMax
         end
         outNew = casadi_lt_mee(sigma, out.X, out.U, out.dL, struct('par', par, ...
             'mode', 'mintime', 'x0', x0state, 'maxIter', maxIter, ...
-            'warmTight', warmTight, 'printLevel', printLvl));
+            'warmTight', warmTight, 'printLevel', printLvl, 'xf', fp.xf));
         save(roundFile, 'outNew', 'fp');
     end
     warmTightUsed = ~retriedThisStall && is_benign_warmtight_status(out.ipoptStatus) && out.maxDefect < 1e-4;

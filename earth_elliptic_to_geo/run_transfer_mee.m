@@ -48,7 +48,15 @@ function res = run_transfer_mee(cfg)
 %          refinement precedent, mirroring solve_warm_node) before falling
 %          back to a short eps continuation tail (cfg.warmFallbackSched,
 %          default [0.3 0.2 0.12 0.07 0.04 0.025 0.015 0.008 0.004 0.002
-%          0.001 0]) only if the direct attempt does not certify.
+%          0.001 0]) only if the direct attempt does not certify. .xf (Task
+%          4, [5x1] terminal target [P;ex;ey;hx;hy], default [1;0;0;0;0] =
+%          GEO -- forwarded into mee_seed's stopP (stopP = xf(1), so the seed
+%          integrates to the CUSTOM final radius rather than the hardcoded
+%          1.0), the homotopy_mee .xf opts field, and the warm-direct
+%          casadi_lt_mee call), .initElems (Task 4, [7x1]
+%          [P;ex;ey;hx;hy;m;t] initial-orbit override, default [] = the
+%          paper's legacy literal GTO-at-apogee state -- forwarded into both
+%          mee_seed calls; see mee_seed.m)
 % OUTPUTS: res - .cfg .seed .tf .fuel .tbl .report .recon (ALWAYS returned;
 %          saved to results/<tag>.mat ONLY when best.certified -- same
 %          "never cache uncertified" discipline as run_transfer.m); .report
@@ -81,6 +89,13 @@ sched      = d('sched', []);
 m0kg       = d('m0kg', 1500);
 ispS       = d('ispS', 2000);
 warmStart  = d('warmStart', []);
+xf         = d('xf', [1;0;0;0;0]);   % Task 4: terminal target [P;ex;ey;hx;hy],
+                                      % default GEO -- forwarded to mee_seed's
+                                      % stopP, homotopy_mee, and the warm-
+                                      % direct casadi_lt_mee call
+initElems  = d('initElems', []);     % Task 4: initial-orbit override [7x1]
+                                      % [P;ex;ey;hx;hy;m;t], default [] (paper
+                                      % legacy literal) -- forwarded to mee_seed
 
 p  = kepler_lt_params(thrustN, m0kg, ispS);
 tf = ctf * tfMinAnchor;
@@ -93,7 +108,8 @@ tf = ctf * tfMinAnchor;
 % N (actual node count) is appended once known, after the probe stage.
 fpBase = struct('thrustN', thrustN, 'm0kg', m0kg, 'ispS', ispS, 'ctf', ctf, ...
     'tfMinAnchor', tfMinAnchor, 'seedThr', seedThr, 'betaMode', betaMode, ...
-    'nodesPerRev', nodesPerRev, 'maxIter', maxIter, 'sched', sched);
+    'nodesPerRev', nodesPerRev, 'maxIter', maxIter, 'sched', sched, ...
+    'xf', xf, 'initElems_isset', ~isempty(initElems));
 
 % DEVIATION (seed throttle): seedThr defaults to ~0.4, not thr=1. A thr=1
 % constant burn from the paper's e=0.75 apogee GTO start crosses GEO (P=1) at
@@ -110,7 +126,8 @@ if exist(probeFile, 'file')
     S = load(probeFile);  infoP = S.infoP;
     check_cache_fp(S, fpBase, probeFile, tag);
 else
-    optsP = struct('thr', seedThr, 'betaMode', betaMode, 'N', 50, 'stopP', 1.0);
+    optsP = struct('thr', seedThr, 'betaMode', betaMode, 'N', 50, 'stopP', xf(1), ...
+        'initElems', initElems);
     [~, ~, ~, ~, infoP] = mee_seed(p, optsP);
     fp = fpBase;
     save(probeFile, 'infoP', 'fp');
@@ -127,7 +144,8 @@ if exist(seedFile, 'file')
     sigma = S.sigma;  X0 = S.X0;  U0 = S.U0;  dL0 = S.dL0;  seedInfo = S.seedInfo;
     check_cache_fp(S, fp, seedFile, tag);
 else
-    opts = struct('thr', seedThr, 'betaMode', betaMode, 'N', N, 'stopP', 1.0);
+    opts = struct('thr', seedThr, 'betaMode', betaMode, 'N', N, 'stopP', xf(1), ...
+        'initElems', initElems);
     [sigma, X0, U0, dL0, seedInfo] = mee_seed(p, opts);
     save(seedFile, 'sigma', 'X0', 'U0', 'dL0', 'seedInfo', 'fp');
 end
@@ -179,7 +197,7 @@ end
 % continuation tail only if that does not certify -- see cfg.warmStart doc)
 if isempty(warmStart)
     ho = struct('par', p, 'x0', x0, 'tfTarget', tf, 'maxIter', maxIter, ...
-                'resDir', resDir, 'tag', tag, 'printLevel', 0, 'fp', fp);
+                'resDir', resDir, 'tag', tag, 'printLevel', 0, 'fp', fp, 'xf', xf);
     if ~isempty(sched), ho.sched = sched; end
     [best, tbl] = homotopy_mee(sigma, X0, U0, dL0, ho);
 else
@@ -195,7 +213,7 @@ else
     else
         oD = casadi_lt_mee(sigma, X0, U0, dL0, struct('par', p, 'mode', 'fixedtf', ...
             'eps', 0, 'tfTarget', tf, 'x0', x0, 'maxIter', maxIter, ...
-            'warmTight', true, 'printLevel', 0));
+            'warmTight', true, 'printLevel', 0, 'xf', xf));
         okD = oD.success && oD.maxDefect < 1e-8;
         save(directFile, 'oD', 'okD', 'fp');
     end
@@ -264,11 +282,22 @@ function check_cache_fp(S, fp, file, tag)
 % fingerprint fp and error, naming the first mismatched field and the
 % offending file, on any disagreement -- a stale cache built under a
 % different thrustN/ctf/seedThr/... must never be silently reused just
-% because it happens to share cfg.tag (the only cache key). BACKWARD COMPAT:
-% a pre-fix cache file with NO .fp field (e.g. the MEE_M2_10N certified run
-% predating this guard) only WARNs and is trusted as-is -- cfg.tag is already
-% an exact match (that's how the file was found by name), and no per-field
-% comparison is possible without a stored fingerprint.
+% because it happens to share cfg.tag (the only cache key). BACKWARD COMPAT,
+% two distinct cases (Task 4, harmonized with homotopy_mee's check_cache_fp /
+% run_mintime_mee.m's check_cache_fp_mt):
+%   (1) NO .fp AT ALL (pre-fix cache file, e.g. the MEE_M2_10N certified run
+%       predating this guard) -- WARN and trust as-is, no per-field
+%       comparison possible.
+%   (2) SCHEMA-OLDER .fp (Task 4): the cache HAS a .fp, but a field that
+%       exists in the CURRENT fp (e.g. the newly added xf/initElems_isset)
+%       is simply ABSENT from the cached one -- this is schema evolution,
+%       not a configuration mismatch, and must not hard-error: the
+%       documented default-cfg reuse of results/MEE_M2_10N*.mat (saved
+%       before xf/initElems existed) is exactly this case. WARN (id
+%       'run_transfer_mee:fpSchemaOlder') and treat as compatible. The hard
+%       error is preserved for fields present on BOTH sides with different
+%       values -- a genuine configuration drift under the same tag must
+%       still fail loudly.
 if ~isfield(S, 'fp')
     warning('run_transfer_mee:noCachedFingerprint', ['%s has no cached ' ...
         'config fingerprint (pre-fix cache) -- trusting it because ' ...
@@ -279,7 +308,14 @@ end
 flds = fieldnames(fp);
 for k = 1:numel(flds)
     f = flds{k};
-    if ~isfield(S.fp, f) || ~isequal(S.fp.(f), fp.(f))
+    if ~isfield(S.fp, f)
+        warning('run_transfer_mee:fpSchemaOlder', ['%s: field ''%s'' ' ...
+            'present in current fp but absent from cache (schema ' ...
+            'evolution) -- trusting as compatible under tag=''%s'''], ...
+            file, f, tag);
+        continue;
+    end
+    if ~isequal(S.fp.(f), fp.(f))
         error('run_transfer_mee:fingerprintMismatch', ['cached config ' ...
             'fingerprint mismatch in %s: field ''%s'' differs between the ' ...
             'cache and the current cfg -- stale cache from a different ' ...

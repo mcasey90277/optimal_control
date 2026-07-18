@@ -69,4 +69,37 @@ assert(strcmp(wid, 'homotopy_mee:fpSchemaOlder'), ...
 
 fprintf('test_mee_threading (b) schema-older-WARN PASSED\n');
 
+%% Task 4: default cfg reuses the existing certified 10 N caches with
+% NO fingerprint error (schema-older WARN only), and cfg.xf is carried into fp.
+here = fileparts(mfilename('fullpath')); cd(here);
+src1 = fileread('run_transfer_mee.m'); src2 = fileread('run_mintime_mee.m');
+assert(contains(src1,'xf') && contains(src1,'initElems'), 'run_transfer_mee must thread xf/initElems');
+assert(contains(src2,'xf') && contains(src2,'initElems'), 'run_mintime_mee must thread xf/initElems');
+% default-preserving reuse: loading the cached 10 N mintime anchor with the
+% new (xf-bearing) fp must NOT throw fingerprintMismatch.
+lastwarn('');
+try
+  out = run_mintime_mee(10, 25);      % reuses results/MEE_mintime_T100.mat
+  assert(abs(out.tfmin-22.2206) < 1e-2, 'cached 10 N anchor tfmin preserved');
+catch ME
+  assert(isempty(strfind(ME.identifier,'fingerprintMismatch')), ...
+     'default 10 N reuse must not fingerprint-error after adding xf/initElems');
+  rethrow(ME);
+end
+fprintf('test_mee_threading (Task4) PASSED\n');
+
+%% Task 4, Step 5 regression note: a default run_transfer_mee cfg must not
+% throw a fingerprint error either -- it may reuse results/MEE_M2_10N.mat (or
+% its _seed/_seed_probe/_step* intermediates) OR re-solve to m_f ~ 1377 kg.
+lastwarn('');
+try
+  resT = run_transfer_mee(struct('thrustN', 10, 'ctf', 1.5, 'tfMinAnchor', 22.2248));
+  assert(resT.report.certified, 'default run_transfer_mee cfg must certify');
+catch ME
+  assert(isempty(strfind(ME.identifier,'fingerprintMismatch')), ...
+     'default run_transfer_mee reuse must not fingerprint-error after adding xf/initElems');
+  rethrow(ME);
+end
+fprintf('test_mee_threading (Task4 Step5 regression) PASSED (m_f=%.2f kg)\n', resT.report.m_f_kg);
+
 fprintf('test_mee_threading: ALL PASS\n');

@@ -12,9 +12,9 @@ function out = casadi_lt_mee(sigma, X0, U0, dL0, opts)
 % (4) with beta a unit RTN thrust direction and thr in [0,1]. Node longitude
 % L_k = pi + sigma_k*DeltaL (x0's L is pi, the paper's apogee start); dynamics
 % at each node come from lt_mee_rhs (d/dL, MX-safe) with par.L set per node.
-% Time is state row 7 (t(1)=0 pinned via the initial-state constraint); GEO
-% terminal is expressed directly in elements (P=1, ex=ey=hx=hy=0), leaving L
-% free -- DeltaL is the transfer's free DOF.
+% Time is state row 7 (t(1)=0 pinned via the initial-state constraint); the
+% terminal is expressed directly in elements as opts.xf (default GEO: P=1,
+% ex=ey=hx=hy=0), leaving L free -- DeltaL is the transfer's free DOF.
 %
 % Modes:
 %   'mintime' - thr == 1 (all-burn restriction) at every node; objective
@@ -32,14 +32,18 @@ function out = casadi_lt_mee(sigma, X0, U0, dL0, opts)
 %   opts  - struct: .par (kepler_lt_params struct; .LdotMin default 1e-3 if
 %           absent), .mode 'mintime'|'fixedtf', .eps (fixedtf homotopy param),
 %           .tfTarget (fixedtf target transfer time), .x0 [7x1 initial MEE
-%           state, t=0], .maxIter, .warmTight, .printLevel
+%           state, t=0], .xf [5x1 terminal target [P;ex;ey;hx;hy], default
+%           [1;0;0;0;0] = GEO], .maxIter, .warmTight, .printLevel, .selftest
+%           (true -> skip the solve and return early with .xf resolved, for
+%           option-parse unit tests -- Task 1)
 %
 % OUTPUTS:
 %   out - struct: .X [7x(N+1)] .U [4x(N+1)] .dL (converged DeltaL) .success
-%         .ipoptStatus .maxDefect .maxUnit .termErr .tfErr (|t(end)-tfTarget|,
-%         fixedtf only; NaN in mintime -- Task 7c diagnostic) .mf .m_f_kg
-%         .dV_kms .tf .switches .edge .lamDef [7xN] .LdotMin .incDeg (terminal
-%         inclination, deg -- should be ~0 since the h=0 target is equatorial)
+%         .ipoptStatus .maxDefect .maxUnit .termErr (distance to opts.xf)
+%         .tfErr (|t(end)-tfTarget|, fixedtf only; NaN in mintime -- Task 7c
+%         diagnostic) .mf .m_f_kg .dV_kms .tf .switches .edge .lamDef [7xN]
+%         .LdotMin .incDeg (terminal inclination, deg -- should be ~0 for the
+%         h=0 equatorial default target)
 %
 % A "casadi_lt_mee:boundSaturation" WARNING fires if t(end), P, or m sits
 % within 1e-6 of its box bound at the solution -- maxDefect/termErr alone
@@ -65,6 +69,9 @@ tfTarget  = d('tfTarget', []);
 maxIter   = d('maxIter', 1500);
 warmTight = d('warmTight', false);
 printLvl  = d('printLevel', 0);
+xf        = d('xf', [1;0;0;0;0]);
+assert(numel(xf)==5, 'casadi_lt_mee: opts.xf must be 5x1 [P;ex;ey;hx;hy]');
+if d('selftest', false), out = struct('xf', xf(:)); return; end
 assert(isfield(opts, 'x0') && ~isempty(opts.x0), ...
     'casadi_lt_mee requires opts.x0 (7x1 initial MEE state, t=0)');
 
@@ -147,13 +154,12 @@ opti.subject_to(dL >= 0.1);          opti.subject_to(dL <= 2000);
 
 % boundary conditions
 opti.subject_to(X(:,1) == opts.x0(:));
-% terminal GEO in elements: P=1, ex=ey=hx=hy=0; L free (DeltaL is the DOF).
-% Prograde automatic (h=0 target is equatorial; no separate guard needed).
-opti.subject_to(X(1,end) == 1);
-opti.subject_to(X(2,end) == 0);
-opti.subject_to(X(3,end) == 0);
-opti.subject_to(X(4,end) == 0);
-opti.subject_to(X(5,end) == 0);
+% terminal target in elements (default GEO [1;0;0;0;0]); L free (DeltaL is DOF).
+% Prograde automatic for the h=0 equatorial default; a custom xf is the
+% caller's responsibility (see run_gergaud scope note).
+for kt = 1:5
+    opti.subject_to(X(kt,end) == xf(kt));
+end
 
 % objective + t_f handling
 if strcmp(mode, 'mintime')
@@ -236,7 +242,7 @@ catch
 end
 ss = Us(4,:);
 burn = ss > 0.5;
-termErr = norm([Xs(1,end) - 1; Xs(2,end); Xs(3,end); Xs(4,end); Xs(5,end)]);
+termErr = norm(Xs(1:5,end) - xf(:));
 mf = Xs(6,end);
 incDeg = 2*atand(sqrt(Xs(4,end)^2 + Xs(5,end)^2));
 if strcmp(mode, 'fixedtf')

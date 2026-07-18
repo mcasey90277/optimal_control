@@ -32,7 +32,10 @@ function [sigma, X0, U0, dL0, info] = mee_seed(par, opts)
 %          field required (set internally per ode113 step / per node)
 %   opts - struct: .thr [scalar, 0-1], .betaMode ['transverse'|'tangential'],
 %          .N [scalar segments, nodes = N+1], and EITHER .nRev [scalar] OR
-%          .stopP [scalar]
+%          .stopP [scalar]. Optional .initElems [7x1] [P;ex;ey;hx;hy;m;t] --
+%          overrides the initial-node MEE state at L0=pi; absent or empty
+%          ([]) falls back to the paper's legacy literal state (Haberkorn
+%          et al. GTO at apogee, i0~7deg parameterized as hx=0.0612).
 %
 % OUTPUTS:
 %   sigma - uniform node parameter, 0->1 [(N+1)x1]
@@ -47,8 +50,17 @@ function [sigma, X0, U0, dL0, info] = mee_seed(par, opts)
 %   [2] earth_elliptic_to_geo/seed_2body.m (Cartesian analog: dense-output
 %       sampling, vhat steering law, "no-resample" lesson).
 
-L0     = pi;
-X_init = [11625/par.LU_km; 0.75; 0; 0.0612; 0; 1; 0];
+L0 = pi;                                    % apogee-start convention (all endpoints)
+% Default = the paper's legacy literal, byte-for-byte (NOT recomputed from
+% i0=7deg: tan(3.5deg)=0.061163 != the certified 0.0612). A caller wanting a
+% different start orbit passes opts.initElems explicitly (run_gergaud builds
+% it from P0/e0/i0 only when the user overrides the paper defaults).
+if isfield(opts,'initElems') && ~isempty(opts.initElems)
+    X_init = opts.initElems(:);
+    assert(numel(X_init)==7, 'mee_seed: opts.initElems must be 7x1 [P;ex;ey;hx;hy;m;t]');
+else
+    X_init = [11625/par.LU_km; 0.75; 0; 0.0612; 0; 1; 0];
+end
 
 thr      = opts.thr;
 betaMode = opts.betaMode;

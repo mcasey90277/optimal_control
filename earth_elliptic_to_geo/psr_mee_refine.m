@@ -77,12 +77,35 @@ function out = psr_mee_refine(baseResult, opts)
 %                is the mechanism that is supposed to fix that).
 %   opts       - struct, all optional:
 %                .maxRounds [4], .tag [baseResult.cfg.tag + '_PSR'],
-%                .outDir [earth_elliptic_to_geo/results], .maxIter [1500],
+%                .outDir [earth_elliptic_to_geo/results], .maxIter [1500] a
+%                FLOOR, not a fixed cap (Task 9 Step 0 fix): the EFFECTIVE
+%                per-round cap is psr_iter_cap(opts.maxIter, N_round) =
+%                max(opts.maxIter, ceil(N_round)), so later/bigger rounds get
+%                proportionally more iterations instead of the same fixed
+%                budget every round; if a round's first attempt at that cap
+%                still fails to certify, ONE retry is made at 2x the cap
+%                before the round is treated as resolveFailed (see
+%                REFERENCES [9]),
 %                .nbr [2] switch-window half-width in COLLOCATION INTERVALS,
 %                .K [Inf -> all positively-scored intervals], .hFloor [1e-9]
 %                min sigma-interval width to bisect, .maxAdd [2000] safety
 %                cap on inserted nodes per round, .propTol [0.1] kg,
-%                .swTol [2] switches.
+%                .swTol [2] switches, .globalEvery [0 -> disabled] period (in
+%                MEASURED rounds) for a periodic GLOBAL densify round (Task 9
+%                Step 0 hybrid-refinement fix, see psr_is_global_round.m):
+%                every opts.globalEvery-th measured round, the refinement
+%                step uses psr_global_score_mee.m (evenly-spaced, switch-
+%                blind densify by opts.globalFactor) INSTEAD OF the default
+%                switch-local psr_switch_score_mee.m score, so a switch pair
+%                hiding in a region with no visible throttle crossing yet
+%                gets a chance to surface on the next resolve -- windowed
+%                PSR scoring alone is structurally blind to switches it
+%                hasn't already seen (Task 8's uniform-1.5x-vs-PSR
+%                comparison: sw=177 vs PSR's flat 171 at the same node
+%                budget). Switch COUNTING/history (nSw, swSigma) always uses
+%                the switch scorer regardless of which round type is
+%                refining, .globalFactor [1.3] densify factor for a global
+%                round (see psr_global_score_mee.m).
 %
 % OUTPUTS:
 %   out - struct: .history [1xR] struct array (round [0-based], nNodes,
@@ -125,6 +148,11 @@ function out = psr_mee_refine(baseResult, opts)
 %   [7] earth_elliptic_to_geo/casadi_lt_mee.m (the L-domain solver every
 %       round re-solves against).
 %   [8] .superpowers/sdd/task-8-brief.md (this task's spec).
+%   [9] .superpowers/sdd/task-9-brief.md Step 0 (the N-scaled maxIter +
+%       2x-retry fix, and the periodic global-round hybrid fix, both added
+%       here). psr_iter_cap.m / psr_is_global_round.m / psr_global_score_mee.m
+%       (the three pure-function decision helpers those fixes are factored
+%       into for no-solve testability).
 
 here   = fileparts(mfilename('fullpath'));
 resDir = fullfile(here, 'results');
@@ -145,6 +173,8 @@ opts.hFloor    = d('hFloor', 1e-9);
 opts.maxAdd    = d('maxAdd', 2000);
 opts.propTol   = d('propTol', 0.1);
 opts.swTol     = d('swTol', 2);
+opts.globalEvery  = d('globalEvery', 0);
+opts.globalFactor = d('globalFactor', 1.3);
 tag    = opts.tag;
 outDir = opts.outDir;
 if ~exist(outDir, 'dir'), mkdir(outDir); end
@@ -176,8 +206,7 @@ for row = 1:(opts.maxRounds + 1)
     nSw = numel(swIdx);
     mfk = curOut.m_f_kg;
     tfE = getdef_psr(curOut, 'tfErr', NaN);
-    certified = isfield(curOut, 'success') && curOut.success ...
-                && curOut.maxDefect < 1e-8 && (isnan(tfE) || tfE < 1e-8);
+    certified = is_psr_certified(curOut);
 
     converged = false;
     if row > 1
@@ -210,7 +239,17 @@ for row = 1:(opts.maxRounds + 1)
     end
     prevSwitch = nSw;  prevMf = mfk;
 
-    [sigmaNew, isNew, nDropped] = psr_refine_sigma_mee(curSigma, score, opts);
+    measuredRound = row - 1;    % 0-based, matches history(row).round
+    globalRound = psr_is_global_round(measuredRound, opts.globalEvery);
+    if globalRound
+        refScore = psr_global_score_mee(numel(curSigma) - 1, opts.globalFactor);
+        fprintf('  [round %d] GLOBAL densify round (every %d, factor %.2f)\n', ...
+                measuredRound, opts.globalEvery, opts.globalFactor);
+    else
+        refScore = score;
+    end
+
+    [sigmaNew, isNew, nDropped] = psr_refine_sigma_mee(curSigma, refScore, opts);
     if nDropped > 0
         fprintf('  psr_refine_sigma_mee dropped %d viable interval(s) (hFloor/maxAdd)\n', nDropped);
     end
@@ -232,21 +271,22 @@ for row = 1:(opts.maxRounds + 1)
         o = S.o;
         check_cache_fp_psr(S, fpRound, roundFile, tag);
         fprintf('  [round %d] loaded certified cache %s\n', roundIdx, roundFile);
+        okCert = true;   % never cached unless certified at save time
     else
-        o = casadi_lt_mee(sigmaNew, W.X, W.U, W.dL, struct('par', par, 'mode', 'fixedtf', ...
-            'eps', 0, 'tfTarget', tf, 'x0', x0, 'maxIter', opts.maxIter, ...
-            'warmTight', true, 'printLevel', 0));
-        okCert = o.success && o.maxDefect < 1e-8 && (isnan(o.tfErr) || o.tfErr < 1e-8);
+        [o, iterCapUsed, retried] = solve_psr_round(sigmaNew, W, par, tf, x0, opts.maxIter);
+        okCert = is_psr_certified(o);
         if okCert
             save(roundFile, 'o', 'sigmaNew', 'isNew', 'fpRound');
         else
-            fprintf(['  [round %d] resolve did NOT certify (defect=%.2e tfErr=%.2e ' ...
-                     'status=%s); NOT cached, stopping refinement.\n'], ...
-                    roundIdx, o.maxDefect, o.tfErr, o.ipoptStatus);
+            retryMsg = '';
+            if retried, retryMsg = sprintf(' (after retry at 2x cap=%d)', iterCapUsed); end
+            fprintf(['  [round %d] resolve did NOT certify%s (iterCap=%d, defect=%.2e ' ...
+                     'tfErr=%.2e status=%s); NOT cached, stopping refinement.\n'], ...
+                    roundIdx, retryMsg, iterCapUsed, o.maxDefect, o.tfErr, o.ipoptStatus);
         end
     end
 
-    if ~(o.success && o.maxDefect < 1e-8 && (isnan(o.tfErr) || o.tfErr < 1e-8))
+    if ~okCert
         stopReason = 'resolveFailed';  break;
     end
     curSigma = sigmaNew;  curOut = o;
@@ -276,6 +316,73 @@ end
 function v = getdef_psr(s, f, dflt)
 % GETDEF_PSR  Optional-field default (mirrors casadi_lt_mee.m's local helper).
 if isfield(s, f) && ~isempty(s.(f)), v = s.(f); else, v = dflt; end
+end
+
+% ---------------------------------------------------------------------------
+function ok = is_psr_certified(o)
+% IS_PSR_CERTIFIED  Single feasibility-selected certification predicate --
+% success && maxDefect<1e-8 && (tfErr is NaN or tfErr<1e-8). Factored out of
+% 3 separately-inlined copies of the same test (Task 9 Step 0 review finding:
+% the round-0/seed measurement check, the post-resolve accept-and-cache
+% check, and the loop's own resolveFailed check had each spelled out the
+% same predicate independently, a drift risk if any one of them were ever
+% edited alone). Semantics UNCHANGED from all three original inlined copies.
+tfE = NaN;
+if isfield(o, 'tfErr'), tfE = o.tfErr; end
+ok = isfield(o, 'success') && o.success && isfield(o, 'maxDefect') ...
+     && o.maxDefect < 1e-8 && (isnan(tfE) || tfE < 1e-8);
+end
+
+% ---------------------------------------------------------------------------
+function [o, iterCapUsed, retried] = solve_psr_round(sigmaNew, W, par, tf, x0, floorIter)
+% SOLVE_PSR_ROUND  One fresh casadi_lt_mee resolve at an N-scaled iteration
+% cap (psr_iter_cap.m), with a SINGLE retry at 2x that cap if the first
+% attempt fails to certify (Task 9 Step 0 fix: Task 8's validation runs both
+% stalled via 'resolveFailed' at N~3000-3365 under the OLD flat
+% opts.maxIter=1500 default, at defects only 1-2 orders of magnitude above
+% the certify gate -- 5.7e-7/7.95e-7 vs <1e-8 -- suggesting the solves were
+% close, not diverging). The retry reuses the SAME warm start W (the
+% interpolated trajectory, not the maxed-out iterate) -- an IPOPT iterate
+% that stopped short of the barrier-clearing point at maxIter is not
+% obviously a better warm start than the original interpolation, and reusing
+% it would complicate the never-cache-uncertified bookkeeping.
+%
+% INPUTS:  sigmaNew  - refined node grid for this round [(N'+1)x1]
+%          W         - interp_warmstart.m output (.X .U .dL) for sigmaNew
+%          par       - kepler_lt_params output for this rung's thrust
+%          tf        - fixedtf target [ND]
+%          x0        - initial state [7x1]
+%          floorIter - opts.maxIter, the user-set FLOOR [scalar]
+%
+% OUTPUTS: o           - casadi_lt_mee out struct (the retry's result if a
+%                        retry happened and improved on the first attempt,
+%                        else the first attempt)
+%          iterCapUsed - the iteration cap actually used to produce o
+%                        [scalar]
+%          retried     - true iff a second (2x-cap) attempt was made
+%                        [logical]
+%
+% REFERENCES: [1] psr_iter_cap.m (the N-scaling formula). [2] task-9-brief.md
+%   Step 0 item 1. [3] psr_mee_refine.m (sole caller).
+Nround  = numel(sigmaNew) - 1;
+iterCap = psr_iter_cap(floorIter, Nround);
+o = casadi_lt_mee(sigmaNew, W.X, W.U, W.dL, struct('par', par, 'mode', 'fixedtf', ...
+    'eps', 0, 'tfTarget', tf, 'x0', x0, 'maxIter', iterCap, ...
+    'warmTight', true, 'printLevel', 0));
+retried = false;
+if ~is_psr_certified(o)
+    iterCap2 = 2 * iterCap;
+    fprintf(['  [psr retry] round did not certify at maxIter=%d (defect=%.2e, status=%s); ' ...
+             'retrying once at maxIter=%d before giving up\n'], iterCap, o.maxDefect, o.ipoptStatus, iterCap2);
+    o2 = casadi_lt_mee(sigmaNew, W.X, W.U, W.dL, struct('par', par, 'mode', 'fixedtf', ...
+        'eps', 0, 'tfTarget', tf, 'x0', x0, 'maxIter', iterCap2, ...
+        'warmTight', true, 'printLevel', 0));
+    retried = true;
+    if is_psr_certified(o2) || o2.maxDefect < o.maxDefect
+        o = o2;  iterCap = iterCap2;
+    end
+end
+iterCapUsed = iterCap;
 end
 
 % ---------------------------------------------------------------------------

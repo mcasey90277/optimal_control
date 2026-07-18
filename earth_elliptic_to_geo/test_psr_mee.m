@@ -1,16 +1,19 @@
 % TEST_PSR_MEE  No-solve-where-possible coverage for the MEE PSR port
-% (psr_mee_refine.m + its two pure-function helpers, psr_switch_score_mee.m
-% and psr_refine_sigma_mee.m). Mirrors test_warmstart_mee.m's structure:
-% Parts 1-3 exercise the pure mesh-insertion logic on synthetic fixtures (no
-% solve, no CasADi needed); Part 4 is ONE cheap budgeted live smoke of the
-% full psr_mee_refine.m round loop against the certified 5 N fuel anchor
-% (fast to re-solve, unlike the 1 N problem this port is validated against
-% in the task-8 report).
+% (psr_mee_refine.m + its pure-function helpers: psr_switch_score_mee.m,
+% psr_refine_sigma_mee.m, and (Task 9 Step 0) psr_iter_cap.m,
+% psr_is_global_round.m, psr_global_score_mee.m). Mirrors
+% test_warmstart_mee.m's structure: Parts 1-4 exercise pure logic on
+% synthetic fixtures (no solve, no CasADi needed); Part 5 is ONE cheap
+% budgeted live smoke of the full psr_mee_refine.m round loop against the
+% certified 5 N fuel anchor (fast to re-solve, unlike the 1 N problem this
+% port is validated against in the task-8 report).
 %
 % REFERENCES: [1] psr_switch_score_mee.m, psr_refine_sigma_mee.m (functions
 %   under test in Parts 1-2). [2] interp_warmstart.m (handoff shape checked
-%   in Part 3). [3] psr_mee_refine.m (Part 4). [4] test_warmstart_mee.m (the
-%   no-certification-required live-smoke pattern Part 4 mirrors).
+%   in Part 3). [3] psr_iter_cap.m, psr_is_global_round.m,
+%   psr_global_score_mee.m (Task 9 Step 0 fixes, tested in Part 4).
+%   [4] psr_mee_refine.m (Part 5). [5] test_warmstart_mee.m (the
+%   no-certification-required live-smoke pattern Part 5 mirrors).
 
 % =============================================================================
 % Part 1: psr_switch_score_mee.m -- pure function, no solve
@@ -159,7 +162,69 @@ fprintf(['test_psr_mee: Part 3 (psr_refine_sigma_mee.m -> interp_warmstart.m han
     'dL passthrough correct\n']);
 
 % =============================================================================
-% Part 4: ONE cheap live smoke of psr_mee_refine.m's full round loop, budgeted
+% Part 4: Task 9 Step 0 fixes -- pure decision-logic helpers, no solve
+% (psr_iter_cap.m, psr_is_global_round.m, psr_global_score_mee.m)
+% =============================================================================
+
+% --- (a) psr_iter_cap.m: floor-vs-N-scaled cap -----------------------------
+assert(psr_iter_cap(1500, 800) == 1500, ...
+    'test_psr_mee: psr_iter_cap should return the floor when N < floor');
+assert(psr_iter_cap(1500, 3365) == 3365, ...
+    'test_psr_mee: psr_iter_cap should return ceil(N) when N > floor');
+assert(psr_iter_cap(1500, 1500) == 1500, ...
+    'test_psr_mee: psr_iter_cap at N==floor should return the floor exactly');
+assert(psr_iter_cap(1500, 1500.4) == 1501, ...
+    'test_psr_mee: psr_iter_cap should ceil() a non-integer N above the floor');
+
+fprintf('test_psr_mee: Part 4a (psr_iter_cap.m) ALL PASS -- floor and N-scaling both correct\n');
+
+% --- (b) psr_is_global_round.m: periodicity + disabled/edge cases ---------
+assert(psr_is_global_round(0, 3) == false, ...
+    'test_psr_mee: round 0 (the seed) must never be a global round');
+assert(psr_is_global_round(3, 3) == true, ...
+    'test_psr_mee: round 3 with globalEvery=3 should be a global round');
+assert(psr_is_global_round(6, 3) == true, ...
+    'test_psr_mee: round 6 with globalEvery=3 should be a global round');
+assert(psr_is_global_round(2, 3) == false, ...
+    'test_psr_mee: round 2 with globalEvery=3 should NOT be a global round');
+assert(psr_is_global_round(3, 0) == false, ...
+    'test_psr_mee: globalEvery=0 must disable global rounds entirely');
+assert(psr_is_global_round(3, []) == false, ...
+    'test_psr_mee: empty globalEvery must disable global rounds entirely');
+assert(psr_is_global_round(3) == false, ...
+    'test_psr_mee: omitted globalEvery (nargin<2) must disable global rounds');
+
+fprintf(['test_psr_mee: Part 4b (psr_is_global_round.m) ALL PASS -- periodicity correct, ' ...
+    'round 0 excluded, disabled cases (0/empty/omitted) all false\n']);
+
+% --- (c) psr_global_score_mee.m: evenly-spread, count-correct, no solve ----
+Ng = 100;  factorG = 1.3;
+scoreG = psr_global_score_mee(Ng, factorG);
+assert(isequal(size(scoreG), [1, Ng]), 'test_psr_mee: psr_global_score_mee size mismatch');
+expectedAdd = round((factorG - 1) * Ng);   % 30
+assert(nnz(scoreG) == expectedAdd, ...
+    'test_psr_mee: psr_global_score_mee(100,1.3) should select %d intervals, got %d', ...
+    expectedAdd, nnz(scoreG));
+assert(all(scoreG == 0 | scoreG == 1), 'test_psr_mee: psr_global_score_mee scores must be 0 or 1');
+% spread check: selected indices should span close to the full [1,N] range,
+% not cluster at one end (evenly spaced via linspace)
+selIdx = find(scoreG > 0);
+assert(min(selIdx) <= 5 && max(selIdx) >= Ng - 4, ...
+    'test_psr_mee: psr_global_score_mee selections should span the whole mesh, got range [%d %d]', ...
+    min(selIdx), max(selIdx));
+% feeding this score into the SAME bisection call as the switch scorer must
+% produce a valid strictly-increasing, duplicate-free, original-preserving grid
+[sigmaG, isNewG, nDroppedG] = psr_refine_sigma_mee(sigma1, scoreG(1:N), struct('K', Inf, 'hFloor', 1e-9, 'maxAdd', 2000));
+assert(all(diff(sigmaG) > 0), 'test_psr_mee: global-densify sigmaNew must be strictly increasing');
+assert(nDroppedG == 0, 'test_psr_mee: global-densify at N=20 well under maxAdd should drop nothing');
+assert(nnz(isNewG) == nnz(psr_global_score_mee(N, factorG) > 0), ...
+    'test_psr_mee: global-densify insertion count should match the global scorer''s selection count');
+
+fprintf(['test_psr_mee: Part 4c (psr_global_score_mee.m) ALL PASS -- correct count, evenly spread, ' ...
+    'plugs into psr_refine_sigma_mee.m cleanly\n']);
+
+% =============================================================================
+% Part 5: ONE cheap live smoke of psr_mee_refine.m's full round loop, budgeted
 % (mirrors test_warmstart_mee.m Part 2's non-convergence-gated pattern, but
 % here maxIter is generous enough that certification is plausible, since
 % psr_mee_refine's round-accept/cache logic is only exercised by an actual
@@ -171,7 +236,7 @@ here    = fileparts(mfilename('fullpath'));
 resDir  = fullfile(here, 'results');
 srcFile = fullfile(resDir, 'MEE_M2_5N.mat');
 assert(isfile(srcFile), ['test_psr_mee: prerequisite %s not found -- this is the certified ' ...
-    '25/rev 5 N fuel anchor Part 4 smoke-tests PSR against; re-run ' ...
+    '25/rev 5 N fuel anchor Part 5 smoke-tests PSR against; re-run ' ...
     'run_transfer_mee(struct(''thrustN'',10)) to regenerate it first'], srcFile);
 S = load(srcFile);
 baseResult = S.res;
@@ -191,7 +256,7 @@ out = psr_mee_refine(baseResult, optsPsr);
 wallSec = toc(tStart);
 
 budget_s = 180;
-assert(wallSec < budget_s, 'test_psr_mee: Part 4 live smoke took %.1fs, budget %.0fs', wallSec, budget_s);
+assert(wallSec < budget_s, 'test_psr_mee: Part 5 live smoke took %.1fs, budget %.0fs', wallSec, budget_s);
 
 assert(isfield(out, 'history') && numel(out.history) >= 1, ...
     'test_psr_mee: psr_mee_refine output missing a populated .history');
@@ -203,9 +268,9 @@ assert(out.history(1).switches == baseResult.fuel.switches, ...
     ['test_psr_mee: round-0 history switch count should match the seed''s own out.switches ' ...
      '(psr_switch_score_mee''s bracketing must agree with casadi_lt_mee''s)']);
 
-fprintf(['test_psr_mee: Part 4 (psr_mee_refine.m, live, 5 N anchor) ALL PASS -- wallSec=%.2f, ' ...
+fprintf(['test_psr_mee: Part 5 (psr_mee_refine.m, live, 5 N anchor) ALL PASS -- wallSec=%.2f, ' ...
     'rounds measured=%d, stopReason=%s, final certified=%d, final mf=%.4f kg, final sw=%d, ' ...
     'no exception\n'], wallSec, numel(out.history), out.stopReason, out.certified, ...
     out.finalOut.m_f_kg, out.finalOut.switches);
 
-fprintf('test_psr_mee: ALL PASS (Parts 1-4)\n');
+fprintf('test_psr_mee: ALL PASS (Parts 1-5)\n');

@@ -6,7 +6,14 @@ function s = gergaud_row_str(row)
 % Pure function: no file I/O, no side effects, deterministic given row.
 % When row.certified is false, an UNCERTIFIED banner line (carrying
 % row.note) is PREPENDED, so a printed row can never be mistaken for a
-% certified result even if only skimmed.
+% certified result even if only skimmed. Some CERTIFIED rows also carry a
+% legitimate caveat in row.note (e.g. the 0.5 N anchor-free R0-law tfmin
+% estimate, a custom-endpoint research-probe scope note, or the I-1
+% PSR-skipped-for-custom-endpoints note) -- for those, a "NOTE: <note>"
+% line is PREPENDED instead, so the caveat is never silently dropped just
+% because the row happens to be certified. The two banners are mutually
+% exclusive (a row is either uncertified-with-banner or certified-with-
+% NOTE-if-any), so a note is never printed twice.
 %
 % INPUTS:
 %   row - struct produced by gergaud_row(), with fields:
@@ -16,7 +23,8 @@ function s = gergaud_row_str(row)
 % OUTPUTS:
 %   s - char row: header line + fixed-width data line + defect line,
 %       with an "UNCERTIFIED -- <note>" banner prepended when
-%       ~row.certified                                                  [1xN char]
+%       ~row.certified, OR a "NOTE: <note>" line prepended when certified
+%       but row.note is non-empty                                       [1xN char]
 %
 % REFERENCES:
 %   [1] Haberkorn, Martinon, Gergaud, "Low Thrust Minimum-Fuel Orbital
@@ -41,6 +49,13 @@ s = [hdr, body, defline];
 if ~row.certified
     banner = sprintf('UNCERTIFIED \x2014 %s\n', row.note);
     s = [banner, s];
+elseif isfield(row, 'note') && ~isempty(row.note)
+    % Certified but footnoted (e.g. anchor-free tfmin estimate, custom-
+    % endpoint research-probe scope, or an I-1 PSR-skipped-for-custom-
+    % endpoints note): print the caveat so a certified row is never
+    % mistaken for a fully-clean certified result (DESIGN Sec 6).
+    noteLine = sprintf('NOTE: %s\n', row.note);
+    s = [noteLine, s];
 end
 
 end

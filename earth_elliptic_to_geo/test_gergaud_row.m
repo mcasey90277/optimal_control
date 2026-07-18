@@ -13,4 +13,13 @@ assert(ischar(s) && contains(s,'1377.10'), 'row string carries m_f');
 inp2 = inp; inp2.thrustN=0.2; inp2.certified=false; inp2.note='not attained (0.5 N wall)';
 s2 = gergaud_row_str(gergaud_row(inp2));
 assert(contains(lower(s2),'not attained') || contains(s2,'UNCERTIFIED'), 'uncertified flagged');
+% FIX I-2: a CERTIFIED row with a non-empty note (e.g. the 0.5 N anchor-
+% free tfmin estimate, or the I-1 PSR-skipped-for-custom-endpoints note)
+% must still print that note -- a printed row must never be mistaken for
+% a fully-clean certified one just because certified==true.
+inp3 = inp; inp3.certified=true; ...
+    inp3.note='PSR switch-refinement skipped for custom endpoints (research-probe): reported solution is the un-refined fuel solve';
+s3 = gergaud_row_str(gergaud_row(inp3));
+assert(contains(s3, inp3.note), 'certified-but-footnoted row must still print its note');
+assert(~contains(s3, 'UNCERTIFIED'), 'certified row must not carry the UNCERTIFIED banner');
 fprintf('test_gergaud_row PASSED\n');

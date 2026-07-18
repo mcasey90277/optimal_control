@@ -70,9 +70,21 @@ function row = run_gergaud(opts)
 %   any custom target converges. Custom endpoints get a hashed tag suffix
 %   (endpoint_hash_suffix, below) so a custom run's cache files never
 %   collide with the default-endpoint certified caches.
+%   PSR + CUSTOM ENDPOINTS: psr_mee_refine.m always re-solves against the
+%   DEFAULT GEO terminal [1;0;0;0;0] (it has no xf passthrough). So for a
+%   custom-endpoint run at thrustN<=1 N (where the default-endpoint recipe
+%   would call psr_mee_refine), the PSR step is SKIPPED instead -- calling
+%   it would silently re-terminate the trajectory at GEO while the row
+%   stays labeled with the user's custom target. The reported row is the
+%   un-refined run_transfer_mee fuel solve, which already terminates
+%   correctly at the custom xf; row.note carries an explicit
+%   "PSR switch-refinement skipped for custom endpoints" caveat. Default
+%   endpoints are unaffected -- PSR still runs exactly as before.
 %
 % PER-RUNG RECIPE MAP (honest, encoded here; see README.md/DESIGN_thrust_
-% ladder.md for the full campaign record):
+% ladder.md for the full campaign record; DEFAULT ENDPOINTS ONLY -- custom
+% endpoints at thrustN<=1 N skip the PSR step, see PSR + CUSTOM ENDPOINTS
+% above):
 %   T [N]     | recipe                                    | status
 %   10/5/2.5  | run_mintime_mee + run_transfer_mee         | clean, cached
 %   1         | + psr_mee_refine switch-refinement         | headline is PSR round 2
@@ -435,7 +447,24 @@ catch ME_fuel
 end
 
 needsPSR = (thrustN <= 1 + 1e-9);
-if needsPSR
+if needsPSR && ~isDefaultEndpoints
+    % FIX I-1: psr_mee_refine.m (and its internal solve_psr_round) do NOT
+    % accept/forward a terminal target xf -- every PSR round re-solves
+    % against the hardcoded default GEO terminal [1;0;0;0;0]. Calling it
+    % here for a custom-endpoint run would silently refine the trajectory
+    % back toward GEO while the row/plot/movie stay labeled with the
+    % user's custom target: a silent wrong answer. Rather than threading
+    % xf into the validated PSR core, SKIP the PSR step for custom
+    % endpoints and report the un-refined fuel solve, which already
+    % terminates correctly at the custom xf (run_transfer_mee threads xf
+    % through the fuel homotopy) -- just not switch-sharpened.
+    fprintf(['[run_gergaud] T=%g N: PSR switch-refinement SKIPPED for custom endpoints -- ' ...
+             'psr_mee_refine always re-targets the default GEO terminal, so refining here ' ...
+             'would silently re-terminate at GEO instead of the requested custom xf. ' ...
+             'Reporting the un-refined fuel solve (already correctly targeted).\n'], thrustN);
+    nrm = res_to_nrm(res, ctf, ['PSR switch-refinement skipped for custom endpoints ' ...
+        '(research-probe): reported solution is the un-refined fuel solve']);
+elseif needsPSR
     fprintf('[run_gergaud] SOLVE: T=%g N -- applying PSR switch-refinement recipe...\n', thrustN);
     try
         psrOpts = struct('tag', [fuelTag '_PSR'], 'maxRounds', 4, 'maxIter', maxIter, 'nbr', 2);

@@ -6,9 +6,56 @@ overlay — m_f(c_tf) curves at multiple thrusts and the near-independence test,
 (ii) empirical law R0 (T_max·t_f,min ≈ C) across two decades of thrust, and
 (iii) the low-thrust structure counts (revs, switches) vs Table 3.
 
-Date: 2026-07-17. Status: approved design, pre-implementation.
-Dependency: inherits the verification front-end from Campaign B (DESIGN_dual_map.md)
-— run B first or in parallel; A's milestone gates are primal and do not block on B.
+Date: 2026-07-17. **Status (2026-07-18, Task 11 close-out): Phase 2 (MEE +
+ΔL) IMPLEMENTED and the ladder run 10 N → 0.5 N.** Phase 0/1 (Cartesian
+5 N/2.5 N patch attempts) superseded — Phase 2 subsumed the problem entirely,
+per the Phase-2 gate note below. Dependency: inherits the verification
+front-end from Campaign B (DESIGN_dual_map.md) — Campaign B delivered a
+correct MEE PMP verifier (Task 10) whose primal gates are unaffected by the
+open raw-dual finding (see Results summary).
+
+**Results summary (all reviewer-verified, `.superpowers/sdd/progress.md`
+Tasks 4-11):**
+- **Gate P2a (10 N cross-formulation) PASSED**: MEE m_f=1377.10 kg vs
+  Cartesian 1376.74 kg (diff 0.36 kg < 0.5 kg gate) — the linchpin (Task 4).
+- **Ladder 10→0.5 N complete** (fuel, c_tf=1.5): m_f = 1377.10 / 1364.54 /
+  1369.79 / 1371.44 / 1375.28 kg at 10/5/2.5/1/0.5 N; switches 19/32/76/171/362;
+  revs 7.33/14.16/27.84/69.15/138.60 vs paper 7.5/15/30/74.5/149.
+- **R0 law**: 4 independently certified min-time anchors (10/5/2.5/1 N) give
+  T·t_f,min spread **0.72%** (mean 850.0 N·h vs paper ≈850 N·h). The 0.5 N
+  row is an **R0-law estimate**, not an independent anchor (see footnote 1
+  below) — deliberately excluded from the fit.
+- **PSR (switch-aware refinement) ported and validated**: 1 N m_f went
+  171-switch uniform 1370.36 kg → PSR-refined **1371.44 kg** (supersedes);
+  0.5 N reached m_f=1375.28 kg/sw=362 after 4 PSR rounds (budget-limited,
+  stopReason=`maxRounds`).
+- **PMP verifier (Task 10) delivered and proven correct**; gates FAIL on raw
+  IPOPT duals at high eccentricity (characterized, not a verifier bug — see
+  Campaign B escalate branch). Primal certifications (m_f/switches/revs
+  above) are defect/terminal-gated and unaffected.
+- Deliverable figures: `fig_table3.m` → `results/fig_table3.png` (Table-3
+  analog + R0-law panel), `fig_front_mee.m` → `results/fig_front_mee.png`
+  (single-c_tf Fig-23-adjacent overlay, honestly not a multi-c_tf overlay —
+  only one c_tf per thrust was ever solved).
+
+**Open items (not closed by Task 11, carried forward as future work):**
+1. **0.5 N min-time anchor wall** — 7 configurations attempted, best defect
+   0.0545, reproducible MEX crashes (same `libcoinmumps` signature); the
+   0.5 N row's anchor stays an R0-law estimate until this is resolved.
+2. **0.2 N and 0.1 N** — honestly not attempted; the 0.5 N wall is where the
+   deep-descent effort stopped (footnote 6, README.md).
+3. **Dual/PMP escalate branch** (Campaign B, `DESIGN_dual_map.md`) — probe
+   raw `lam_g` via `nlpsol` bypassing `opti.dual` to root-cause the raw-dual
+   KKT-stationarity failure at high eccentricity; primal work does not block
+   on this.
+4. **Full Table 3 (down to 0.1 N)** — not reached; this campaign delivers
+   10→0.5 N (two decades minus the last quarter-decade), not the paper's
+   full 10→0.1 N span.
+5. Minor/inherited: decadeMin stall-guard not yet rung-size-aware; the
+   171-vs-179 switch-count question at 1 N remains open per Task 8's
+   reviewer insight (windowed PSR cannot discover switch pairs outside its
+   own neighbor windows — a hybrid periodic uniform-sweep round is the
+   suggested fix, not yet built).
 
 ---
 

@@ -158,6 +158,117 @@ separately when validating the solver core end to end.
   transfer (apogee burns visible, GEO ring, running ΔV/mass meter).
 - `results/dual_anomaly/` — diagnostics for the open PMP primer finding.
 
+## MEE thrust-ladder campaign — Phase 2 (Campaign A)
+
+**The story.** The Cartesian/Sundman stack above reproduces the paper's 10 N
+headline case cleanly (M0-M3) but **dies at 5 N**: six documented strategies
+(`DESIGN_thrust_ladder.md` §1) all hit the same false-infeasibility signature,
+and a post-mortem review concluded the paper's own thrust ladder (10 N → 0.1 N,
+Table 3) is not reachable by stretching the Cartesian/Sundman formulation —
+the fixed-τ_f seed freezes the revolution count into the seed geometry, so
+"stretching" a seed in time cannot add revolutions (a topology error, not a
+tuning one). **Campaign A rebuilds the solver in Modified Equinoctial
+Elements (MEE)** with true longitude L as the independent variable and the
+total longitude span **ΔL as a decision variable** — L̇>0 strictly in this
+regime, so L subsumes the Sundman clock outright, and because ΔL is now
+solved for rather than fixed, **the optimizer grows the revolution count
+itself** as thrust steps down. This is what makes thrust continuation work as
+the ladder's backbone (10→5→2.5→1→0.5 N, each warm-starting the next) where
+the Cartesian formulation could not.
+
+**The linchpin gate (Task 4).** Before any ladder point is trusted, the new
+MEE solver had to reproduce the Cartesian 10 N/c_tf=1.5 baseline to within
+0.5 kg with matching burn structure — a cross-FORMULATION check, not just a
+mesh check. It passed: m_f = 1377.10 kg vs the Cartesian 1376.74 kg (diff
+0.36 kg), maxDefect 6.3e-15, same switch/rev basin (sw=19, revs=7.326). Every
+ladder number below inherits this gate.
+
+**The ladder (fuel solves, c_tf=1.5) + PSR-ported switch-aware refinement:**
+
+| T [N] | m_f [kg] | switches | revs (ours) | revs (paper) | anchor t_f,min [ND] | anchor revs | R0=T·t_f,min [N·h] |
+|---|---|---|---|---|---|---|---|
+| 10  | 1377.10 | 19  | 7.326  | 7.5  | 22.2206 | 4.503 | 846.5 |
+| 5   | 1364.54 | 32  | 14.157 | 15   | 44.6796 | 8.673 | 851.0 |
+| 2.5 | 1369.79 | 76  | 27.841 | 30   | 89.2530 | 17.66 | 850.0 |
+| 1   | **1371.44** | 171 | 69.152 | 74.5 | 223.8081 | 44.17 | 852.6 |
+| 0.5 | 1375.28 | 362 | 138.597 | 149  | 446.27 (est.) | (est.) | 850.0 (by construction) |
+
+Anchors are the free-longitude min-time solves; R0 = T_max·t_f,min holds to
+**0.72% spread across the 4 independently certified anchors** (mean 223.14
+ND ≈ 850.0 N·h) — the same empirical law the paper reports (≈850 N·h), now
+reproduced across two thrust decades in a formulation the paper itself never
+built. Figures: `fig_table3.m` → `results/fig_table3.png` (switches/revs vs
+thrust + the R0-law panel) and `fig_front_mee.m` → `results/fig_front_mee.png`
+(m_f vs thrust, the Fig-23-adjacent overlay).
+
+**Six binding footnotes (carry into any downstream use of these numbers):**
+
+1. **0.5 N row is anchor-free.** Its "t_f/t_f,min" is an **R0-law ESTIMATE**
+   (anchorSource='R0law': tfTarget = 1.5×(223.14/0.5) = 669.42 ND), not an
+   independently certified min-time solve — the 0.5 N min-time anchor hit a
+   genuine conditioning wall (7 configs attempted, best defect 0.0545,
+   reproducible MEX crashes). It is excluded from the R0-law fit shown on
+   `fig_table3.png` (circular: it was built from the fit). If a certified
+   0.5 N min-time anchor is ever obtained and differs from 446.27 ND by more
+   than ~1%, the 0.5 N m_f/switches/revs need re-solving against the new target.
+2. **0.5 N m_f/switches are PSR round-4-of-4, budget-limited** (stopReason=
+   `maxRounds`, dsw=4/dmf=0.33 kg between the last two rounds) — not confirmed
+   mesh-stable. Shown hollow on `fig_front_mee.png` for this reason.
+3. **The ours-vs-paper revs gap is ladder-wide and systematic**
+   (approximately −5.6%/−7.2%/−7.2%/−7.0% at 5/2.5/1/0.5 N), not a per-rung
+   anomaly — one inherited model/paper discrepancy, footnoted once here
+   rather than re-litigated at every rung.
+4. **1 N provenance:** the table above carries the PSR-refined m_f =
+   **1371.44 kg** (PSR round 2 of the MEE port), which **supersedes** the
+   earlier uniform-mesh value 1370.36 kg (sw=171 stable across both; edge
+   improved 0.9983→0.9994 — a discretization refinement, not a basin change).
+5. **PMP dual/primer status: verifier delivered and proven correct, gates
+   fail on raw duals, primal certification unaffected.** `verify_pmp_mee.m` +
+   `mee_dual_to_costate.m`/`mee_primer_switch.m` were built and independently
+   re-derived term-for-term (Task 10); the Fig-16 analog (`fig_switching.m`)
+   honestly shows large primer misalignment (median 32.4° at 10 N, 60.0° at
+   1 N-PSR, eccentricity-correlated) and switching-sign gates failing. A
+   reviewer's independent KKT re-derivation showed this is **not a verifier
+   bug** — raw IPOPT duals themselves fail cone-elided KKT stationarity at
+   high eccentricity. This is now Campaign B scope (`DESIGN_dual_map.md`,
+   escalate branch: investigate raw `lam_g` via `nlpsol` bypassing
+   `opti.dual`). **Every m_f/switch/revs number in this README is a primal
+   certification (defect/terminal-gated) and is unaffected by this open
+   dual-side finding — do not read the primer/switching gate failures as
+   casting doubt on the mass or structure numbers.**
+6. **0.2 N and 0.1 N were honestly not attempted.** The 0.5 N min-time anchor
+   conditioning wall (footnote 1) is where the deep-descent effort stopped;
+   extending the ladder further is open future work, not a silent gap.
+
+**Isp caveat carries forward unchanged:** Isp = 2000 s is not stated
+numerically in the paper; it is pinned as the design default and validated
+only by family cross-check (the 10 N M2 mass match landing inside the
+paper's 1370-1375 kg band) — every m_f number in the table above inherits
+this same caveat.
+
+**Fig-23 honesty note.** The paper's Fig 23 overlays several c_tf curves;
+this campaign only ever solved **one c_tf (1.5) per thrust level**, so
+`fig_front_mee.png` is the honest single-c_tf version (our 5 rungs against
+a shaded band showing the paper-implied near-independence range, 1370-1375
+kg) rather than a fabricated multi-curve reproduction. Ours spans
+1364.5-1377.1 kg over the ladder — noticeably wider scatter than the paper's
+implied near-independence, consistent with the basin-scatter phenomenon
+already documented for the Cartesian M3 front (`fig_basin_scatter.m`).
+
+**New modules (Phase 2, on top of the Cartesian module map above):**
+`casadi_lt_mee.m` (MEE solver core, L-domain collocation, ΔL decision
+variable), `mee_seed.m`, `run_mintime_mee.m`/`run_transfer_mee.m`/
+`run_ladder.m` (per-thrust drivers + ladder orchestrator), `interp_warmstart.m`
+(mesh-refine handoff, renormalizes RTN beta), `psr_mee_refine.m` +
+`psr_switch_score_mee.m` + `psr_refine_sigma_mee.m` (PSR ported from
+`NLP_lowThrust_GTO_tulip/PSR/`), `mee_dual_to_costate.m` + `mee_primer_switch.m`
++ `verify_pmp_mee.m` (PMP verifier, footnote 5), `fig_table3.m` +
+`fig_front_mee.m` (this section's deliverable figures).
+
+Full task-by-task ledger: `.superpowers/sdd/progress.md` (section dated
+2026-07-17 onward, "MEE thrust-ladder SDD ledger"). Design rationale and
+open items: `DESIGN_thrust_ladder.md`.
+
 ## Companions
 
 - Parent campaign (shared solver architecture, `sundman_minfuel` pattern):

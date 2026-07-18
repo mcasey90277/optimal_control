@@ -122,10 +122,16 @@ function out = run_mintime_mee(thrustN, nodesPerRev, cfg)
 % from 1e-6 to 1e-4 (still one full decade of margin below the probe's
 % validated 5.633e-6 trigger point, and one full decade above the 1e-3-ish
 % defects a genuinely non-converging round would show). This directly
-% unblocks BOTH the 2.5 N rung's automatic descent and, more importantly,
-% the much larger 1 N rung, where the same structural dead end would
-% otherwise force every round into the slow loose regime at a problem size
-% where that is even more expensive.
+% unblocks the 2.5 N rung's automatic descent (validated live, see the 2.5 N
+% row of the per-rung table in task-7-report.md). CORRECTION (Task 7c,
+% 2026-07-17): the gate is only STRUCTURALLY AVAILABLE to a larger rung like
+% 1 N, not proven to unblock it -- it fires only once a round's defect first
+% drops under the 1e-4 trigger, and the live 1 N attempt under Task 7b never
+% got there (every round's defect stayed 2+ decades above 1e-4, from 0.4962
+% down to the best achieved 1.778e-2). Whether this gate helps 1 N is
+% therefore still an open question, not a demonstrated fact -- it applies
+% verbatim to any rung, at any N, once (and if) that rung's own continuation
+% first reaches the 1e-4 decade.
 %
 % PER-ROUND RETAIN-IF-IMPROVED / RETRY-LOOSE (review finding, binding --
 % DESIGN_thrust_ladder.md Phase 0 item 1): a continuation round's result is

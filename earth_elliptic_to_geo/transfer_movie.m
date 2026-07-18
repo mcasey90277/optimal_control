@@ -9,9 +9,11 @@ function transfer_movie(matFile, outStem)
 % campaign's Earth-Moon transfer movies (PSR/psr_movie.m house style).
 %
 % INPUTS:
-%   matFile - run_transfer results .mat: res.cfg (.thrustN .ctf), res.fuel.X
-%             (9xnN = [r;v;m;t;cScale], row 9 unused here), res.fuel.U
-%             (4xnN = [alpha;s]) [char]
+%   matFile - EITHER a path to a run_transfer results .mat holding a `res`
+%             variable [char/string], OR the `res` struct itself (e.g. from
+%             mee_res_to_cart_res) [struct]. Either way res.cfg (.thrustN
+%             .ctf), res.fuel.X (9xnN = [r;v;m;t;cScale], row 9 unused
+%             here), res.fuel.U (4xnN = [alpha;s])
 %   outStem - output basename WITHOUT extension; writes <outStem>.mp4 and
 %             <outStem>.gif [char]
 %
@@ -24,7 +26,11 @@ function transfer_movie(matFile, outStem)
 %       no H.264 shear).
 %
 % NOTE: The Delta-V/mass meter assumes campaign Isp=2000 s and m0=1500 kg.
-S = load(matFile);  res = S.res;
+if isstruct(matFile)
+    res = matFile;                       % already a Cartesian res struct
+else
+    S = load(matFile); res = S.res;      % path to a .mat holding `res`
+end
 p = kepler_lt_params(res.cfg.thrustN, 1500, 2000);
 m0kg = p.m0kg;  c = p.c;
 

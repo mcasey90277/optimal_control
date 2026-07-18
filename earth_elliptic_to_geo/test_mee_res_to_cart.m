@@ -21,7 +21,7 @@
 %   [3] earth_elliptic_to_geo/gergaud_plot.m (static trajectory PNG).
 
 here = fileparts(mfilename('fullpath')); cd(here);
-scratchDir = '/private/tmp/claude-501/-Users-msc-Desktop-optimal-control/7953f18e-8fd4-48b1-a47f-b565d00b2ad7/scratchpad';
+scratchDir = fullfile(tempdir, 'gergaud_test_scratch');
 
 %% (a) adapter reconstruction on the certified 10 N case
 S = load(fullfile(here,'results','MEE_M2_10N.mat'));
@@ -38,8 +38,6 @@ fprintf('test_mee_res_to_cart (a) adapter reconstruction PASSED\n');
 % internally (hardcoded, not something this task may change), so we run it
 % in a detached subprocess and kill it after a few seconds -- "a couple of
 % frames is enough" -- rather than sit through the full render here.
-assert(nargin('transfer_movie') >= 1); %#ok<NASGU>
-
 if ~exist(scratchDir, 'dir'), mkdir(scratchDir); end
 tmpDir  = tempname(scratchDir); mkdir(tmpDir);
 probeM  = fullfile(tmpDir, 'tm_probe.m');

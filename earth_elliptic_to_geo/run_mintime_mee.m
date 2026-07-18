@@ -80,11 +80,12 @@ function out = run_mintime_mee(thrustN, nodesPerRev, cfg)
 % FEASIBILITY-SELECTED BARRIER POLICY (review finding, binding -- supersedes
 % the Cartesian file's round-number-indexed warmTight rule): every
 % continuation round chooses warmTight from the MEASURED defect of the
-% INCOMING warm-start point, not from which round index it is --
-%   warmTight = incoming.success && incoming.maxDefect < 1e-6
-% -- so a round warm-started from a point that did not exit cleanly
-% (incoming.success==false: restoration-phase abort, Infeasible_Problem_
-% Detected, Maximum_Iterations_Exceeded, ...) ALWAYS gets loose/adaptive-mu
+% INCOMING warm-start point AND its exit status class, not from which round
+% index it is --
+%   warmTight = benignStatus(incoming.ipoptStatus) && incoming.maxDefect < 1e-4
+% -- so a round warm-started from a point that exited via a genuinely
+% untrustworthy status (restoration-phase abort, Infeasible_Problem_
+% Detected, Restoration_Failed, ...) ALWAYS gets loose/adaptive-mu
 % treatment, regardless of what its self-reported maxDefect happens to read.
 % This is how "never reuse restoration-phase multipliers" is enforced here:
 % casadi_lt_mee.m builds a fresh casadi.Opti() every call (no dual state
@@ -92,6 +93,39 @@ function out = run_mintime_mee(thrustN, nodesPerRev, cfg)
 % so the only lever available to "not trust a restoration-phase exit's
 % duals" is to keep IPOPT on adaptive-mu (loose) for the NEXT round rather
 % than asking it to warm-start tight from an untrustworthy point.
+%
+% WARMTIGHT GATE WIDENED (2026-07-17, Task 7b, probe25-driven fix): the
+% ORIGINAL gate required incoming.success==true (IPOPT's own clean-exit
+% flag, true only for Solve_Succeeded/Solved_To_Acceptable_Level) AND
+% maxDefect<1e-6. Live re-driving of the 2.5 N rung under this task found
+% that gate is a STRUCTURAL DEAD END: Maximum_Iterations_Exceeded is never
+% "success" by definition, so once a round's own re-verified defect is
+% already excellent (probe25's round06 point: maxDefect=5.633e-6,
+% termErr=2.19e-25 -- essentially exact terminal satisfaction, just a
+% budget cutoff, NOT a restoration-phase or infeasibility failure) the
+% ORIGINAL gate can never fire tight mode automatically, no matter how many
+% more loose rounds run -- each fresh loose/adaptive-mu round re-fights the
+% SAME barrier transition from scratch (mu always resets, see
+% casadi_lt_mee.m's warmTight branch) and makes only slow, expensive
+% incremental progress (confirmed live: one N=434 mtMaxIter=300 loose round
+% from a COLDER interpolated start took 4364 s of IPOPT time to reach only
+% maxDefect=3.9e-2). probe25_report.md's Arm 1 control experiments proved
+% that forcing warmTight=true from EXACTLY this class of point (Max_Iter_
+% Exceeded, defect in the 1e-6..1e-4 decade, termErr already ~1e-25)
+% converges to machine precision (~1e-14) in 75-96 further iterations
+% regardless of N (350/434/550 all tested). FIX: replace the success-flag
+% requirement with an explicit STATUS-CLASS allowlist (benignStatus --
+% Solve_Succeeded, Solved_To_Acceptable_Level, or Maximum_Iterations_
+% Exceeded; genuinely bad exits like Infeasible_Problem_Detected or
+% Restoration_Failed_! stay excluded, preserving the original "never trust
+% a restoration-phase exit's duals" intent) and widen the defect threshold
+% from 1e-6 to 1e-4 (still one full decade of margin below the probe's
+% validated 5.633e-6 trigger point, and one full decade above the 1e-3-ish
+% defects a genuinely non-converging round would show). This directly
+% unblocks BOTH the 2.5 N rung's automatic descent and, more importantly,
+% the much larger 1 N rung, where the same structural dead end would
+% otherwise force every round into the slow loose regime at a problem size
+% where that is even more expensive.
 %
 % PER-ROUND RETAIN-IF-IMPROVED / RETRY-LOOSE (review finding, binding --
 % DESIGN_thrust_ladder.md Phase 0 item 1): a continuation round's result is
@@ -418,14 +452,14 @@ while ~isGood(out) && round_ < roundsMax
         if retriedThisStall
             warmTight = false;
         else
-            warmTight = out.success && out.maxDefect < 1e-6;
+            warmTight = is_benign_warmtight_status(out.ipoptStatus) && out.maxDefect < 1e-4;
         end
         outNew = casadi_lt_mee(sigma, out.X, out.U, out.dL, struct('par', par, ...
             'mode', 'mintime', 'x0', x0state, 'maxIter', maxIter, ...
             'warmTight', warmTight, 'printLevel', printLvl));
         save(roundFile, 'outNew', 'fp');
     end
-    warmTightUsed = ~retriedThisStall && out.success && out.maxDefect < 1e-6;
+    warmTightUsed = ~retriedThisStall && is_benign_warmtight_status(out.ipoptStatus) && out.maxDefect < 1e-4;
     fprintf(['  %s round %d (warmTight=%d, looseRetry=%d): defect %.3e -> %.3e, ' ...
              'termErr=%.3e, status=%s\n'], label, round_, warmTightUsed, retriedThisStall, ...
             out.maxDefect, outNew.maxDefect, outNew.termErr, outNew.ipoptStatus);
@@ -478,6 +512,21 @@ if ~isGood(out)
         ['%s failed to converge after %d continuation round(s): defect=%.3e ' ...
          'termErr=%.3e status=%s'], label, round_, out.maxDefect, out.termErr, out.ipoptStatus);
 end
+end
+
+% ---------------------------------------------------------------------------
+function tf = is_benign_warmtight_status(ipoptStatus)
+% IS_BENIGN_WARMTIGHT_STATUS  Status-class allowlist for the WIDENED
+% feasibility-selected barrier policy (see WARMTIGHT GATE WIDENED note
+% above): Maximum_Iterations_Exceeded is a benign budget cutoff (the primal
+% point can still be excellent), unlike a restoration-phase abort or a
+% genuine infeasibility detection, which must keep the NEXT round on
+% loose/adaptive-mu regardless of the incoming defect reading.
+%
+% INPUTS:  ipoptStatus - IPOPT return_status string [char]
+% OUTPUTS: tf - true iff this status class is safe to warm-tight from [logical]
+tf = any(strcmp(ipoptStatus, {'Solve_Succeeded', 'Solved_To_Acceptable_Level', ...
+    'Maximum_Iterations_Exceeded'}));
 end
 
 % ---------------------------------------------------------------------------

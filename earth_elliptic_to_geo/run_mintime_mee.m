@@ -672,11 +672,23 @@ function check_cache_fp_round(S, fpRound, file, tag, label, roundIdx)
 % were previously loaded by round number with no config check at all,
 % unlike the final anchor file (check_cache_fp_mt above) and
 % run_transfer_mee.m's check_cache_fp, which this mirrors exactly.
-% BACKWARD COMPAT: a pre-fix round file with no stored .fp field (e.g. the
-% pre-existing MEE_mintime_T100_A/B_round00.mat) only WARNs and is trusted
-% as-is -- tag/label/round index are already an exact match (that's how the
-% file was found by name), and no per-field comparison is possible without
-% a stored fingerprint.
+% BACKWARD COMPAT, two distinct cases (mirrors check_cache_fp_mt above):
+%   (1) NO .fp AT ALL (pre-fix round cache, e.g. the pre-existing
+%       MEE_mintime_T100_A/B_round00.mat) -- only WARNs and is trusted
+%       as-is -- tag/label/round index are already an exact match (that's
+%       how the file was found by name), and no per-field comparison is
+%       possible without a stored fingerprint.
+%   (2) SCHEMA-OLDER .fp (follow-up review finding): the round cache HAS a
+%       .fp, but a field that exists in the CURRENT round fingerprint
+%       (e.g. a newly added xf/initElems_isset endpoint knob) is simply
+%       ABSENT from the cached one -- this is schema evolution, not a
+%       configuration mismatch, and must not hard-error: a stale
+%       <tag>_<label>_round%02d.mat that predates the endpoint-threading
+%       fingerprint fields is exactly this case. WARN
+%       ('run_mintime_mee:roundFpSchemaOlder') and treat as compatible.
+%       The hard error is preserved for fields present on BOTH sides with
+%       different values -- a genuine configuration drift under the same
+%       tag/label/round must still fail loudly.
 %
 % INPUTS:  S - loaded round-cache struct; fpRound - current round-level
 %          config fingerprint [struct]; file - path [char]; tag/label
@@ -691,7 +703,15 @@ end
 flds = fieldnames(fpRound);
 for k = 1:numel(flds)
     f = flds{k};
-    if ~isfield(S.fp, f) || ~isequal(S.fp.(f), fpRound.(f))
+    if ~isfield(S.fp, f)
+        warning('run_mintime_mee:roundFpSchemaOlder', ['%s (round %d, %s): field ' ...
+            '''%s'' is present in the current round config fingerprint but ' ...
+            'absent from the cached one (schema evolution -- the cache predates ' ...
+            'this field) -- trusting the cache as compatible under tag=''%s'''], ...
+            file, roundIdx, label, f, tag);
+        continue;
+    end
+    if ~isequal(S.fp.(f), fpRound.(f))
         error('run_mintime_mee:roundFingerprintMismatch', ['cached config ' ...
             'fingerprint mismatch in %s (round %d, %s): field ''%s'' differs ' ...
             'between the cache and the current config -- stale round cache ' ...

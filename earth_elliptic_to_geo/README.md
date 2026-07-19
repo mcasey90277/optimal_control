@@ -185,6 +185,74 @@ Tests (fast, `matlab -batch`): `test_mee_xf`, `test_mee_seed_initelems`,
 `test_run_gergaud_auto` (front-door suite); plus the campaign's no-solve guards
 `test_params/elements/dynamics/terminal/seed/mee_rhs/mee_seed/...`.
 
+## Reproducing from scratch (best-found)
+
+`reproduce_row.m` is a **keep-best-mass reproducer ENGINE**, not a bit-exact
+replay: for one thrust rung `T` it re-solves the min-fuel transfer entirely
+FROM SCRATCH (own `REPRO_`-prefixed tags, so it can never load or clobber the
+campaign's production caches), then verifies the result against the campaign
+floor. Because minimum-fuel means *maximize final mass*, its fuel stage runs a
+multi-start (a seed set at the exact min-time-anchor `t_f`, falling back to a
+tiny `t_f`-bracket) and keeps whichever certified candidate has the highest
+final mass — the fuel bang-bang basin is razor-sensitive to `t_f` (a ~2e-5
+change in `t_f` can flip the whole switch structure), so a single solve is not
+trusted.
+
+- **Entry points**, in order of preference for the deep/crash-prone rungs:
+  - `reproduce_table3.sh` — per-*process* watchdog: one MATLAB process per
+    rung, relaunch-on-crash-or-hang (up to a per-rung attempt cap), because a
+    CasADi/MUMPS MEX-level crash is not catchable from inside MATLAB. Usage:
+    `./reproduce_table3.sh` (default rungs `10 5 2.5 1 0.5`) or
+    `./reproduce_table3.sh 10 5`; logs to `results/repro/reproduce_table3.log`.
+  - `reproduce_table3.m(thrustList)` — thin **in-process** wrapper (`for T =
+    thrustList, reproduce_row(T); end`, then prints the table). Convenient for
+    the crash-free top rungs (10/5/2.5 N) or quick iteration; a fatal crash on
+    a deep rung takes the whole process down with no auto-relaunch, so prefer
+    the watchdog for 1 N and below.
+  - `reproduce_row(T)` — the single-rung engine itself, callable directly for
+    one row.
+- **`results/repro/` namespace** — every rung writes
+  `results/repro/REPRO_row_T<round(10*T)>.mat` (variables `row`, `anchor`,
+  `sol`, `rep`; e.g. `REPRO_row_T100.mat` for 10 N, `REPRO_row_T5.mat` for
+  0.5 N), kept separate from both the campaign's own `results/*.mat` caches
+  and the driver-internal `REPRO_`-tagged per-stage cache files. `reproduce_row`
+  also builds a `results/repro/` directory if absent, and `chain`-strategy
+  rungs must be reproduced in order (`load_prev` errors loudly if a rung's
+  predecessor hasn't been reproduced yet).
+- **Recipe registry** — `table3_recipes.m` is a pure lookup: for each of the
+  seven Table-3 rungs (10, 5, 2.5, 1, 0.5, 0.2, 0.1 N) it returns the exact
+  proven anchor strategy (`coldB` cold min-time solve / `chain` warm-started
+  from the previous rung / `smallN_first`, the 1 N low-node-density-then-
+  mesh-refine anchor / `R0law`, the anchor-free `t_{f,min} ≈ 223.14/T`
+  estimate), fuel-stage node density + seed throttle + warm-start source, and
+  an optional PSR (post-solution mesh refinement) pass. 0.2 N and 0.1 N have
+  registered recipes (`.seeded = true`) but have not been run to a certified
+  row in this build.
+- **One-sided verify, not a bit-exact match** — `verify_row.m` throws only if
+  the reproduced final mass falls below `table3_certified(T).m_f_kg` minus a
+  0.5 kg numerical-noise slack. A HIGHER mass always passes and is reported as
+  an improvement; switch count and revolution count are reported for
+  comparison but never gated, because the best min-fuel optimum can have a
+  different (better) bang-bang structure than the campaign's row.
+- **Table 3 gets updated with best-found numbers, not just replayed** — as
+  each rung is re-run, `reproduce_table3_collect.m` prints the *updated*
+  table (row + a BEAT/matched verdict against the campaign floor). This has
+  already happened at 10 N: the engine independently found **18 switches /
+  7.56 rev / 1378.46 kg**, beating the campaign's certified 1377.10 kg by
+  1.36 kg (and closer to the paper's ~18-switch structure) — the campaign had
+  under-optimized that rung, and the reproducer is expected to equal or beat
+  it at every thrust level. The 5/2.5/1/0.5 N rungs have registered recipes
+  and are expected to meet-or-beat their campaign floors the same way, but
+  that is validated only when the full ladder is actually run (see `TODO.md`).
+
+```matlab
+reproduce_row(10)                    % one rung, live, verified against the floor
+reproduce_table3([10 5 2.5])         % in-process, crash-free top rungs
+```
+```bash
+./reproduce_table3.sh 10 5 2.5 1 0.5 # per-process watchdog, survives MEX crashes
+```
+
 ## Related files (outside this directory)
 
 - **Method note (full methodology + flow diagram):** `doc/table3_method_note.tex`

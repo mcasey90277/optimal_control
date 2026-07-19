@@ -1,12 +1,39 @@
 function deep = run_task9_rung(thrustN, prevThrust, prevAnchor, prevFuelSigma, prevFuelX, ...
     prevFuelU, prevFuelDL, opts)
-% RUN_TASK9_RUNG  One rung of the Task 9 deep thrust ladder (0.5 -> 0.2 ->
-% 0.1 N): a min-time anchor (small-N-first, C-law warm-hinted from the
-% PREVIOUS rung's own converged anchor, exactly run_ladder.m's mechanism) +
-% a COARSE-BASE fixed-tf fuel solve (interp_warmstart-ed from the previous
-% rung's own converged fuel trajectory, C-law dL rescaled, direct eps=0
-% entry via run_transfer_mee.m's cfg.warmStart path) + PSR refinement
-% (psr_mee_refine.m, Task 8/9) to stabilization or budget.
+% RUN_TASK9_RUNG  *** DEPRECATED (2026-07-18) ***
+% Superseded by the Table-3 reproducer ENGINE: reproduce_row.m + the
+% per-rung recipe registry table3_recipes.m (see README.md "Reproducing
+% from scratch (best-found)"). table3_recipes.m now carries 'chain'-anchor
+% recipes for 0.2 N (warmFrom 0.5) and 0.1 N (warmFrom 0.2) that cover the
+% same anchor + coarse-fuel + PSR ground this function hand-assembled, PLUS
+% a keep-best-mass fuel multi-start (this function ran a single coarse fuel
+% solve) and from-scratch REPRO_-tag isolation (this function shares the
+% campaign's own production tags/cache directory). Prefer
+% `reproduce_row(0.2)` / `reproduce_row(0.1)` (after `reproduce_row(0.5)`
+% has produced results/repro/REPRO_row_T5.mat) for any new work.
+%
+% KEPT CALLABLE, NOT DELETED: run_task9_deep.m still calls this function
+% with this exact 8-argument signature (prevAnchor/prevFuelSigma/prevFuelX/
+% prevFuelU/prevFuelDL threaded by hand from its own caller-side state, not
+% from a results/repro/REPRO_row_*.mat file) -- reproduce_row.m's `chain`
+% strategy instead loads the previous rung's state itself via its internal
+% load_prev helper, reading a REPRO_row_T*.mat file. Those two calling
+% conventions do not line up 1:1 (bridging them would mean either changing
+% run_task9_deep.m's call site or teaching reproduce_row.m to accept an
+% in-memory previous-rung state -- both out of scope for a docs/shim-only
+% change), so THIS function's original three-stage body (below) is left
+% intact rather than gutted, and a deprecation warning is emitted on every
+% call instead. Do not add new callers of this function; drive new deep-rung
+% work through reproduce_row.m/table3_recipes.m instead.
+%
+% ORIGINAL DESCRIPTION (still accurate for the body below): one rung of the
+% Task 9 deep thrust ladder (0.5 -> 0.2 -> 0.1 N): a min-time anchor
+% (small-N-first, C-law warm-hinted from the PREVIOUS rung's own converged
+% anchor, exactly run_ladder.m's mechanism) + a COARSE-BASE fixed-tf fuel
+% solve (interp_warmstart-ed from the previous rung's own converged fuel
+% trajectory, C-law dL rescaled, direct eps=0 entry via run_transfer_mee.m's
+% cfg.warmStart path) + PSR refinement (psr_mee_refine.m, Task 8/9) to
+% stabilization or budget.
 %
 % This is a hand-assembled analog of run_ladder.m's per-rung body, NOT a
 % call into run_ladder.m itself: Task 9's brief strategy uses DIFFERENT
@@ -56,15 +83,26 @@ function deep = run_task9_rung(thrustN, prevThrust, prevAnchor, prevFuelSigma, p
 %   [2] run_mintime_mee.m, run_transfer_mee.m, psr_mee_refine.m (the three
 %   stages called here). [3] .superpowers/sdd/task-9-brief.md (this task's
 %   STRATEGY section, the source of the node-density choices).
+%   [4] reproduce_row.m / table3_recipes.m (Task-4 reproducer engine that
+%   supersedes this function; see the DEPRECATED banner above).
 %
-% STATUS (final review, 2026-07-18): committed but not yet exercised live --
-% the 0.5 N rung was certified via the anchor-free R0-law-estimate path
-% (DESIGN_thrust_ladder.md footnote 1), not through this function; the first
-% live use of this file will be the 0.2 N rung.
+% STATUS (deprecated 2026-07-18; last live-use status unchanged from the
+% prior review): committed but not yet exercised live -- the 0.5 N rung was
+% certified via the anchor-free R0-law-estimate path (DESIGN_thrust_ladder.md
+% footnote 1), not through this function; run_task9_deep.m (its one live
+% caller) has not yet been run past 0.5 N, so the first live use of this
+% file's body would be the 0.2 N rung -- but new work should reach 0.2/0.1 N
+% via reproduce_row.m instead (table3_recipes.m already carries 'chain'
+% recipes for both, seeded/not-yet-run).
 here   = fileparts(mfilename('fullpath'));
 resDir = fullfile(here, 'results');
 if ~exist(resDir, 'dir'), mkdir(resDir); end
 if nargin < 8, opts = struct(); end
+warning('run_task9_rung:deprecated', ['run_task9_rung is DEPRECATED -- ' ...
+    'superseded by reproduce_row.m + table3_recipes.m (the Table-3 ' ...
+    'reproducer engine; see README.md "Reproducing from scratch ' ...
+    '(best-found)"). Kept callable only because run_task9_deep.m still ' ...
+    'calls this exact signature; do not add new callers.']);
 d = @(f, v) getdef_t9(opts, f, v);
 
 opts.mtNodesPerRev   = d('mtNodesPerRev', 12);

@@ -131,9 +131,16 @@ is the unit circle ($P=1$), the GEO circular speed is $1$, and the GEO period is
 $2\pi$. Thrust enters as the nondimensional acceleration
 $\Tmax = (\Tmax^{\,\mathrm{[N]}}/m_0)/\mathrm{AU}$ at unit mass, and the exhaust
 speed as $c = I_{sp}\,g_0$ nondimensionalized by the velocity unit. $I_{sp}$ is
-not stated numerically in the paper; it is pinned to $2000$~s and validated only
-by the $10$~N mass match landing inside the paper's reported band (see
-\file{CAMPAIGN.md}).
+not stated numerically in \cite{ghm2004}, but its benchmark constants are those
+of Caillau \& Noailles \cite{cn2001} (the min-time predecessor on the identical
+transfer), whose p.\,255 gives the mass-flow coefficient
+$\delta = 0.05112~\mathrm{km}^{-1}\mathrm{s}$ in $\dot m = -\delta\lVert
+\mathbf{u}\rVert$. Since $\delta = 1/c = 1/(I_{sp}g_0)$, this fixes
+$c = 1/\delta = 19.562$~km/s and hence $I_{sp} = c/g_0 = \mathbf{1994.8~s}$. We
+run at the default $2000$~s ($0.27\%$ high; absolute masses $\sim0.3$~kg high,
+trajectory structure $I_{sp}$-independent); pass $I_{sp}=1994.8$~s for the exact
+source value. All other benchmark constants ($P^0,P^f,e^0,L^0,m^0,\mu^0$) are
+confirmed identical to \cite{cn2001}.
 
 \paragraph{Inertial frame and the RTN control frame.} The physical state is the
 inertial (Earth-centered, ``ECI'') position and velocity $(\rv,\vv)$. Thrust is
@@ -409,6 +416,10 @@ every collocation node.}
 \bibitem{ghm2004} J.~Gergaud, T.~Haberkorn, and P.~Martinon,
 ``Low thrust minimum-fuel orbital transfer: a homotopic approach,''
 \emph{Journal of Guidance, Control, and Dynamics}, 27(6), 2004.
+\bibitem{cn2001} J.-B.~Caillau and J.~Noailles,
+``Coplanar control of a satellite around the Earth,''
+\emph{ESAIM: Control, Optimisation and Calculus of Variations}, 6, 2001, 239--258
+(benchmark constants incl. $\delta$/$I_{sp}$, p.~255).
 \bibitem{be2002} R.~Bertrand and R.~\'Ep\'enoy,
 ``New smoothing techniques for solving bang-bang optimal control problems,''
 \emph{Optimal Control Applications and Methods}, 23(4), 2002.

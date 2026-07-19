@@ -7,7 +7,8 @@ function p = kepler_lt_params(thrustN, m0kg, ispS)
 % INPUTS:
 %   thrustN - max thrust [N]        (paper cases: 10, 5, 2.5, 1)
 %   m0kg    - initial mass [kg]     (paper: 1500)
-%   ispS    - specific impulse [s]  (default 2000; DESIGN.md open item 1)
+%   ispS    - specific impulse [s]  (default 2000; the benchmark's exact value
+%             is 1994.8 s per Caillau & Noailles 2001 -- see the note at ispS below)
 %
 % OUTPUTS:
 %   p - struct: dimensional anchors .g0 .muKm3s2 .LU_km .TU_s .VU_kms .AU_ms2;
@@ -17,6 +18,16 @@ function p = kepler_lt_params(thrustN, m0kg, ispS)
 % REFERENCES:
 %   [1] Haberkorn, Martinon, Gergaud, JGCD 27(6), 2004 (problem constants).
 %   [2] earth_elliptic_to_geo/DESIGN.md sec 2 (units decision).
+% ISP SOURCE (DESIGN.md open item 1 -- CLOSED 2026-07-19): the paper
+% (Gergaud-Haberkorn-Martinon, JGCD 2004) never states Isp numerically; its
+% benchmark constants come from Caillau & Noailles, "Coplanar control of a
+% satellite around the Earth," ESAIM COCV 6 (2001), p.255
+% (min_fuel_papers/COCV_2001__6__239_0.pdf), which gives the mass-flow
+% coefficient delta = 0.05112 km^-1 s in mdot = -delta*|thrust|. Since
+% delta = 1/c = 1/(Isp*g0):  c = 1/delta = 19.562 km/s  =>  Isp = c/g0 = 1994.8 s.
+% So Caillau & Noailles use Isp = 1994.8 s. We keep 2000 s as the default (only
+% 0.27% above the exact 1994.8 s -> absolute masses run ~0.3 kg high; trajectory
+% STRUCTURE is Isp-independent). Pass ispS = 1994.8 for the exact source value.
 if nargin < 3, ispS = 2000; end
 p.g0      = 9.80665;                          % [m/s^2]
 p.muKm3s2 = 398600.47;                        % [km^3/s^2]

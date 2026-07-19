@@ -80,10 +80,16 @@ Paper numbers: Table 3 / Figs 18, 21–23, at c_tf = 1.5, T_max = 10 N unless no
 | **M3** front, T_max=10 N, c_tf = 1.2/1.5/2.0/2.5/3.0 | 1360.37 / 1376.74 / 1377.10 / 1385.42 / 1386.81 kg | ~1350→1388 kg, c_tf 1.05→3 | monotone, best-of chain/fresh with provenance; matches Fig 23 shape |
 | **M3** thrust law C = T_max·t_{f,min} | 846.6 N·h (10 N) | ≈ 850 N·h | 5 N / 2.5 N legs blocked (see Findings) |
 
-Isp is not stated numerically in the paper; we pinned **2000 s** (the design
-default) and validated it by the M2 mass match landing inside the paper's
-1370–1375 kg band — this is a family cross-check, not an independent citation
-(the intended ref [6] Caillau & Noailles 2001 PDF was unreadable).
+Isp is not stated numerically in the paper, but the benchmark's constants are
+those of ref [6] Caillau & Noailles (ESAIM COCV 6, 2001,
+`min_fuel_papers/COCV_2001__6__239_0.pdf`), obtained and read 2026-07-19: p.255
+gives the mass-flow coefficient δ = 0.05112 km⁻¹·s in ṁ = −δ‖u‖, so
+δ = 1/(Isp·g₀) ⇒ c = 1/δ = 19.562 km/s ⇒ **Isp = 1994.8 s**. We run at the
+default **2000 s** (0.27% high; masses ~0.3 kg high); pass ispS=1994.8 for the
+exact value. The earlier "unreadable reference / family cross-check" caveat is
+now **CLOSED** — all benchmark constants (P⁰=11625, Pᶠ=42165, e⁰=0.75, L⁰=π,
+m⁰=1500, μ⁰=398600.47) are confirmed identical, and the M2 mass match
+(landing in the paper's 1370–1375 kg band) is corroborated by the true Isp.
 
 ## Test suite
 
@@ -256,11 +262,11 @@ thrust + the R0-law panel) and `fig_front_mee.m` → `results/fig_front_mee.png`
    conditioning wall (footnote 1) is where the deep-descent effort stopped;
    extending the ladder further is open future work, not a silent gap.
 
-**Isp caveat carries forward unchanged:** Isp = 2000 s is not stated
-numerically in the paper; it is pinned as the design default and validated
-only by family cross-check (the 10 N M2 mass match landing inside the
-paper's 1370-1375 kg band) — every m_f number in the table above inherits
-this same caveat.
+**Isp caveat now RESOLVED (2026-07-19):** the benchmark Isp is **1994.8 s**
+(Caillau & Noailles 2001, δ=0.05112 km⁻¹·s ⇒ Isp=1/(δg₀); see the intro
+paragraph above). Our default 2000 s is 0.27% high, so every m_f in the table
+above is ~0.3 kg high vs the exact-Isp value — negligible, and no conclusion
+changes. The absolute masses no longer rest on an unverified assumption.
 
 **Fig-23 honesty note.** The paper's Fig 23 overlays several c_tf curves;
 this campaign only ever solved **one c_tf (1.5) per thrust level**, so

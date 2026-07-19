@@ -186,8 +186,16 @@ formulation — noted as the future escalation, not attempted here.
 
 ## 7. Open items to resolve during implementation
 
-1. **Isp** — pin from ref [6] Caillau & Noailles 2001 (same benchmark); default 2000 s;
-   validate by the M2 m_f match. (Only M2 depends on it.)
+1. **Isp** — ~~pin from ref [6] Caillau & Noailles 2001 (same benchmark); default 2000 s;
+   validate by the M2 m_f match. (Only M2 depends on it.)~~ **CLOSED 2026-07-19.**
+   Ref [6] obtained and read (`min_fuel_papers/COCV_2001__6__239_0.pdf`, p.255): the
+   benchmark's mass-flow coefficient is δ = 0.05112 km⁻¹·s in ṁ = −δ·|thrust|, and
+   δ = 1/(Isp·g₀) ⇒ c = 1/δ = 19.562 km/s ⇒ **Isp = c/g₀ = 1994.8 s** (Caillau &
+   Noailles' exact value). Our default 2000 s was 0.27% high (masses ~0.3 kg high;
+   validated by the M2 match, as planned). All other benchmark constants confirmed
+   identical (P⁰=11625 km, Pᶠ=42165 km, e⁰=0.75, L⁰=π, m⁰=1500 kg, μ⁰=398600.47).
+   Default kept at 2000 s with the exact value documented in `kepler_lt_params.m`
+   (pass ispS=1994.8 for the source value).
 2. **Canonical units** — choose LU (candidate: initial P or GEO radius), TU=√(LU³/μ),
    T_max → nondim acceleration. Fix in `kepler_lt_params`.
 3. **Free-L_f local minima** (Fig 18 non-monotone at 10 N) — the paper resolves L_f by a

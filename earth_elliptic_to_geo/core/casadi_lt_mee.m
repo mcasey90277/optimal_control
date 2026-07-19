@@ -35,7 +35,11 @@ function out = casadi_lt_mee(sigma, X0, U0, dL0, opts)
 %           state, t=0], .xf [5x1 terminal target [P;ex;ey;hx;hy], default
 %           [1;0;0;0;0] = GEO], .maxIter, .warmTight, .printLevel, .selftest
 %           (true -> skip the solve and return early with .xf resolved, for
-%           option-parse unit tests -- Task 1)
+%           option-parse unit tests -- Task 1), .returnModel (default false;
+%           true -> ADDITIONALLY attach out.model with the live opti/X/U/dL
+%           handles + a constraint registry creg and variable registry vreg,
+%           for SOSC KKT assembly -- Task 2. Purely additive: with the flag
+%           absent/false, X/U/dL are byte-identical and out.model is absent)
 %
 % OUTPUTS:
 %   out - struct: .X [7x(N+1)] .U [4x(N+1)] .dL (converged DeltaL) .success
@@ -43,7 +47,12 @@ function out = casadi_lt_mee(sigma, X0, U0, dL0, opts)
 %         .tfErr (|t(end)-tfTarget|, fixedtf only; NaN in mintime -- Task 7c
 %         diagnostic) .mf .m_f_kg .dV_kms .tf .switches .edge .lamDef [7xN]
 %         .LdotMin .incDeg (terminal inclination, deg -- should be ~0 for the
-%         h=0 equatorial default target)
+%         h=0 equatorial default target). .model (opts.returnModel only) -
+%         struct('opti',opti,'X',X,'U',U,'dL',dL,'creg',creg,'vreg',vreg);
+%         creg is a struct array, one per subject_to group, with fields
+%         label[char] kind['eq'|'ineqLo'|'ineqHi'] rows[1xk] (row range in
+%         opti.g, partitioning 1:size(opti.g,1) exactly once) bound[scalar|[]]
+%         node[1xk|[]]; vreg indexes into opti.x (Xrows/Urows/nNode).
 %
 % A "casadi_lt_mee:boundSaturation" WARNING fires if t(end), P, or m sits
 % within 1e-6 of its box bound at the solution -- maxDefect/termErr alone
@@ -70,6 +79,7 @@ maxIter   = d('maxIter', 1500);
 warmTight = d('warmTight', false);
 printLvl  = d('printLevel', 0);
 xf        = d('xf', [1;0;0;0;0]);
+returnModel = d('returnModel', false);
 assert(numel(xf)==5, 'casadi_lt_mee: opts.xf must be 5x1 [P;ex;ey;hx;hy]');
 if d('selftest', false), out = struct('xf', xf(:)); return; end
 assert(isfield(opts, 'x0') && ~isempty(opts.x0), ...
@@ -80,6 +90,12 @@ sg   = sigma(:);
 dsig = diff(sg).';                                  % [1xN]
 
 opti = casadi.Opti();
+% SOSC registry (Task 2, additive only): records the row range each
+% subject_to group occupies in opti.g, purely for later KKT assembly --
+% zero effect on the solve itself (bracketing reads size(opti.g,1), never
+% writes it).
+creg = struct('label',{},'kind',{},'rows',{},'bound',{},'node',{});
+addc = @(lab,kind,r0,bnd,nd) struct('label',lab,'kind',kind,'rows',r0:size(opti.g,1),'bound',bnd,'node',nd);
 X  = opti.variable(7, N+1);
 U  = opti.variable(4, N+1);
 dL = opti.variable();                               % scalar DOF (single column)
@@ -99,35 +115,66 @@ Ldot = [Ldotc{:}];      % [1x(N+1)] MX
 
 % collocation defects in sigma (KEEP HANDLES for the duals); dX/dsigma =
 % DeltaL*dXdL, so DeltaL scales the defect exactly like tau_f would
+r0 = size(opti.g,1)+1;
 conDef = cell(1, N);
 for k = 1:N
     conDef{k} = X(:,k+1) - X(:,k) - (dsig(k)/2)*dL*(dXdL(:,k) + dXdL(:,k+1)) == 0;
     opti.subject_to(conDef{k});
 end
+if returnModel, creg(end+1) = addc('defect','eq',r0,0,1:N); end
 
 % Ldot degeneracy guard at every node
+r0 = size(opti.g,1)+1;
 for k = 1:N+1
     opti.subject_to(Ldot(k) >= par.LdotMin);
 end
+if returnModel, creg(end+1) = addc('ldotGuard','ineqLo',r0,par.LdotMin,1:N+1); end
 
 % control cone + throttle (NEVER chain a<=x<=b -- MATLAB gotcha)
+r0 = size(opti.g,1)+1;
 for k = 1:N+1
     opti.subject_to(beta(1,k)^2 + beta(2,k)^2 + beta(3,k)^2 == 1);
 end
+if returnModel, creg(end+1) = addc('betaNorm','eq',r0,1,1:N+1); end
 if strcmp(mode, 'mintime')
+    r0 = size(opti.g,1)+1;
     opti.subject_to(thr == 1);
+    if returnModel, creg(end+1) = addc('thrEq','eq',r0,1,1:N+1); end
 else
-    opti.subject_to(thr(:) >= 0);  opti.subject_to(thr(:) <= 1);
+    r0 = size(opti.g,1)+1;
+    opti.subject_to(thr(:) >= 0);
+    if returnModel, creg(end+1) = addc('thrLo','ineqLo',r0,0,1:N+1); end
+    r0 = size(opti.g,1)+1;
+    opti.subject_to(thr(:) <= 1);
+    if returnModel, creg(end+1) = addc('thrHi','ineqHi',r0,1,1:N+1); end
 end
 
 % generous boxes (review lesson: bounds only block divergence); non-square/
 % row-vector slices flattened with (:) per the Cartesian file's convention
-opti.subject_to(X(1,:).' >= 0.05);   opti.subject_to(X(1,:).' <= 3);      % P
-opti.subject_to(X(2,:).' >= -1.5);   opti.subject_to(X(2,:).' <= 1.5);    % ex
-opti.subject_to(X(3,:).' >= -1.5);   opti.subject_to(X(3,:).' <= 1.5);    % ey
-opti.subject_to(X(4,:).' >= -2);     opti.subject_to(X(4,:).' <= 2);      % hx
-opti.subject_to(X(5,:).' >= -2);     opti.subject_to(X(5,:).' <= 2);      % hy
-opti.subject_to(m(:) >= 0.3);        opti.subject_to(m(:) <= 1.001);
+r0 = size(opti.g,1)+1;  opti.subject_to(X(1,:).' >= 0.05);
+if returnModel, creg(end+1) = addc('boxP_lo','ineqLo',r0,0.05,1:N+1); end
+r0 = size(opti.g,1)+1;  opti.subject_to(X(1,:).' <= 3);      % P
+if returnModel, creg(end+1) = addc('boxP_hi','ineqHi',r0,3,1:N+1); end
+r0 = size(opti.g,1)+1;  opti.subject_to(X(2,:).' >= -1.5);
+if returnModel, creg(end+1) = addc('boxEx_lo','ineqLo',r0,-1.5,1:N+1); end
+r0 = size(opti.g,1)+1;  opti.subject_to(X(2,:).' <= 1.5);    % ex
+if returnModel, creg(end+1) = addc('boxEx_hi','ineqHi',r0,1.5,1:N+1); end
+r0 = size(opti.g,1)+1;  opti.subject_to(X(3,:).' >= -1.5);
+if returnModel, creg(end+1) = addc('boxEy_lo','ineqLo',r0,-1.5,1:N+1); end
+r0 = size(opti.g,1)+1;  opti.subject_to(X(3,:).' <= 1.5);    % ey
+if returnModel, creg(end+1) = addc('boxEy_hi','ineqHi',r0,1.5,1:N+1); end
+r0 = size(opti.g,1)+1;  opti.subject_to(X(4,:).' >= -2);
+if returnModel, creg(end+1) = addc('boxHx_lo','ineqLo',r0,-2,1:N+1); end
+r0 = size(opti.g,1)+1;  opti.subject_to(X(4,:).' <= 2);      % hx
+if returnModel, creg(end+1) = addc('boxHx_hi','ineqHi',r0,2,1:N+1); end
+r0 = size(opti.g,1)+1;  opti.subject_to(X(5,:).' >= -2);
+if returnModel, creg(end+1) = addc('boxHy_lo','ineqLo',r0,-2,1:N+1); end
+r0 = size(opti.g,1)+1;  opti.subject_to(X(5,:).' <= 2);      % hy
+if returnModel, creg(end+1) = addc('boxHy_hi','ineqHi',r0,2,1:N+1); end
+r0 = size(opti.g,1)+1;  opti.subject_to(m(:) >= 0.3);
+if returnModel, creg(end+1) = addc('boxM_lo','ineqLo',r0,0.3,1:N+1); end
+r0 = size(opti.g,1)+1;  opti.subject_to(m(:) <= 1.001);
+if returnModel, creg(end+1) = addc('boxM_hi','ineqHi',r0,1.001,1:N+1); end
 % t upper bound: MUST scale with the problem's own timescale, not a fixed
 % constant. Task 7c incident (2026-07-17): this was hardcoded to a flat 300
 % (copied verbatim from casadi_lt_2body.m's "generous box"), which silently
@@ -148,25 +195,40 @@ if strcmp(mode, 'fixedtf')
 else
     tUB = max(300, 3*X0(7,end));   % mintime: 3x the warm-start seed's t-span
 end
-opti.subject_to(t(:) >= 0);          opti.subject_to(t(:) <= tUB);
-opti.subject_to(beta(:) >= -1.01);   opti.subject_to(beta(:) <= 1.01);
-opti.subject_to(dL >= 0.1);          opti.subject_to(dL <= 2000);
+r0 = size(opti.g,1)+1;  opti.subject_to(t(:) >= 0);
+if returnModel, creg(end+1) = addc('tBox_lo','ineqLo',r0,0,1:N+1); end
+r0 = size(opti.g,1)+1;  opti.subject_to(t(:) <= tUB);
+if returnModel, creg(end+1) = addc('tBox_hi','ineqHi',r0,tUB,1:N+1); end
+r0 = size(opti.g,1)+1;  opti.subject_to(beta(:) >= -1.01);
+if returnModel, creg(end+1) = addc('betaBox_lo','ineqLo',r0,-1.01,[]); end
+r0 = size(opti.g,1)+1;  opti.subject_to(beta(:) <= 1.01);
+if returnModel, creg(end+1) = addc('betaBox_hi','ineqHi',r0,1.01,[]); end
+r0 = size(opti.g,1)+1;  opti.subject_to(dL >= 0.1);
+if returnModel, creg(end+1) = addc('dLbox_lo','ineqLo',r0,0.1,[]); end
+r0 = size(opti.g,1)+1;  opti.subject_to(dL <= 2000);
+if returnModel, creg(end+1) = addc('dLbox_hi','ineqHi',r0,2000,[]); end
 
 % boundary conditions
+r0 = size(opti.g,1)+1;
 opti.subject_to(X(:,1) == opts.x0(:));
+if returnModel, creg(end+1) = addc('initBC','eq',r0,0,1); end
 % terminal target in elements (default GEO [1;0;0;0;0]); L free (DeltaL is DOF).
 % Prograde automatic for the h=0 equatorial default; a custom xf is the
 % caller's responsibility (see run_gergaud scope note).
+r0 = size(opti.g,1)+1;
 for kt = 1:5
     opti.subject_to(X(kt,end) == xf(kt));
 end
+if returnModel, creg(end+1) = addc('termBC','eq',r0,0,N+1); end
 
 % objective + t_f handling
 if strcmp(mode, 'mintime')
     opti.minimize(t(end));
 else
     assert(~isempty(tfTarget), 'fixedtf mode requires opts.tfTarget');
+    r0 = size(opti.g,1)+1;
     opti.subject_to(t(end) == tfTarget);
+    if returnModel, creg(end+1) = addc('tfPin','eq',r0,tfTarget,N+1); end
     w = (dL ./ Ldot) .* (thr - epsv*thr.*(1 - thr));    % homotopy integrand * dt/dsigma
     opti.minimize(sum((dsig/2) .* (w(1:N) + w(2:N+1))));
 end
@@ -287,4 +349,9 @@ out = struct('X', Xs, 'U', Us, 'dL', dLs, 'success', success, ...
     'tf', Xs(7,end), 'switches', sum(abs(diff(burn))), ...
     'edge', mean(ss > 0.95 | ss < 0.05), 'lamDef', lamDef, ...
     'LdotMin', min(LdotN), 'incDeg', incDeg);
+
+if returnModel
+    vreg = struct('Xrows',1:7,'Urows',1:4,'nNode',N+1);
+    out.model = struct('opti',opti,'X',X,'U',U,'dL',dL,'creg',creg,'vreg',vreg);
+end
 end

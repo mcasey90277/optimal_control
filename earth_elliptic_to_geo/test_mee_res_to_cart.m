@@ -24,7 +24,7 @@ here = fileparts(mfilename('fullpath')); cd(here);
 scratchDir = fullfile(tempdir, 'gergaud_test_scratch');
 
 %% (a) adapter reconstruction on the certified 10 N case
-S = load(fullfile(here,'results','MEE_M2_10N.mat'));
+S = load(fullfile(module_root(),'results','MEE_M2_10N.mat'));
 c = mee_res_to_cart_res(S.res.fuel.X, S.res.fuel.U, S.res.fuel.dL, S.res.sigma, 10, 1.5, 1);
 r = c.fuel.X(1:3,:); rmag = vecnorm(r); an = vecnorm(c.fuel.U(1:3,:));
 assert(abs(rmag(1)-1.1028) < 1e-3, 'apogee start ~1.103');
@@ -53,7 +53,7 @@ fprintf(fidP, [ ...
     'cp = mee_res_to_cart_res(Sp.res.fuel.X, Sp.res.fuel.U, Sp.res.fuel.dL, Sp.res.sigma, 10, 1.5, 1);\n' ...
     'fprintf(''CALLING_TRANSFER_MOVIE_WITH_STRUCT\\n'');\n' ...
     'transfer_movie(cp, ''%s'');\n' ...
-    'fprintf(''TRANSFER_MOVIE_RETURNED_FULLY\\n'');\n'], here, outStem);
+    'fprintf(''TRANSFER_MOVIE_RETURNED_FULLY\\n'');\n'], module_root(), outStem);
 fclose(fidP);
 
 fidS = fopen(wrapSh, 'w');

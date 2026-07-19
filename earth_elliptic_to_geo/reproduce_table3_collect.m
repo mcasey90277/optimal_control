@@ -60,8 +60,7 @@ if nargin < 1 || isempty(thrustList)
     error('reproduce_table3_collect:badInput', 'thrustList is required');
 end
 
-here     = fileparts(mfilename('fullpath'));
-reproDir = fullfile(here, 'results', 'repro');
+reproDir = fullfile(module_root(), 'results', 'repro');
 
 matchTolKg = 0.5;   % mirrors reproduce_row.m's own defaultTol(T).m_f_kg policy
                     % (0.5 kg numerical-noise slack below the campaign floor)

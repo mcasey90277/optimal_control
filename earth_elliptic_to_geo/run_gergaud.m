@@ -164,8 +164,7 @@ returnOnly  = d('returnOnly',  returnOnly);
 assert(any(strcmpi(runMode, {'auto','solve','probe'})), ...
     'run_gergaud:badRunMode', 'runMode must be ''auto''|''solve''|''probe'', got ''%s''', runMode);
 
-here   = fileparts(mfilename('fullpath'));
-resDir = fullfile(here, 'results');
+resDir = fullfile(module_root(), 'results');
 if ~exist(resDir, 'dir'), mkdir(resDir); end
 
 %% =======================================================================

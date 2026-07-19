@@ -35,7 +35,7 @@ function fig_switching(ver, out, tag, outDir)
 %   [3] earth_elliptic_to_geo/fig_basin_scatter.m (house figure-script style:
 %       theme(fig,'light') try/catch, exportgraphics, 'Visible','off').
 if nargin < 4 || isempty(outDir)
-    outDir = fullfile(fileparts(mfilename('fullpath')), 'results');
+    outDir = fullfile(module_root(), 'results');
 end
 
 t    = ver.t;

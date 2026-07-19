@@ -52,8 +52,7 @@ function [rowsCold, rowsWarm, anchorRow] = nodestudy_mee()
 %             [3] results/diag_node30_full.log (live IPOPT diagnostic
 %                 backing the cold-path ill-conditioning finding).
 
-here   = fileparts(mfilename('fullpath'));
-resDir = fullfile(here, 'results');
+resDir = fullfile(module_root(), 'results');
 
 par      = kepler_lt_params(10, 1500, 2000);
 tfTarget = 1.5 * 22.2248;   % ctf * tfMinAnchor -- same physics as Task 4

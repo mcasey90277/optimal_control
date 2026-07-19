@@ -93,8 +93,7 @@ recipe = table3_recipes(T);
 cert   = table3_certified(T);
 par    = kepler_lt_params(T, m0kg, ispS);   % dimensional context (TU_s, Tmax); logged below
 
-here     = fileparts(mfilename('fullpath'));
-reproDir = fullfile(here, 'results', 'repro');
+reproDir = fullfile(module_root(), 'results', 'repro');
 if ~exist(reproDir, 'dir'), mkdir(reproDir); end
 
 if reuseCampaignCache

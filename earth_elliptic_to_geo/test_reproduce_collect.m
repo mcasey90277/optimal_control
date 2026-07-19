@@ -15,7 +15,7 @@
 %   [1] .superpowers/sdd/task-4-brief.md (Step 1's exact test).
 here = fileparts(mfilename('fullpath')); cd(here);
 
-rowfile = fullfile(here, 'results', 'repro', 'REPRO_row_T100.mat');
+rowfile = fullfile(module_root(), 'results', 'repro', 'REPRO_row_T100.mat');
 if isfile(rowfile)
     tbl = reproduce_table3_collect([10]);
     assert(isscalar(tbl), 'reproduce_table3_collect([10]) must return exactly one row');

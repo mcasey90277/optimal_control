@@ -94,8 +94,7 @@ function deep = run_task9_rung(thrustN, prevThrust, prevAnchor, prevFuelSigma, p
 % file's body would be the 0.2 N rung -- but new work should reach 0.2/0.1 N
 % via reproduce_row.m instead (table3_recipes.m already carries 'chain'
 % recipes for both, seeded/not-yet-run).
-here   = fileparts(mfilename('fullpath'));
-resDir = fullfile(here, 'results');
+resDir = fullfile(module_root(), 'results');
 if ~exist(resDir, 'dir'), mkdir(resDir); end
 if nargin < 8, opts = struct(); end
 warning('run_task9_rung:deprecated', ['run_task9_rung is DEPRECATED -- ' ...

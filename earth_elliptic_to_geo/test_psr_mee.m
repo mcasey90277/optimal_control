@@ -232,8 +232,7 @@ fprintf(['test_psr_mee: Part 4c (psr_global_score_mee.m) ALL PASS -- correct cou
 % fast to re-solve), NOT the 1 N problem this port is validated against in
 % the task-8 report (that lives in a separate, longer-running validation run).
 % =============================================================================
-here    = fileparts(mfilename('fullpath'));
-resDir  = fullfile(here, 'results');
+resDir  = fullfile(module_root(), 'results');
 srcFile = fullfile(resDir, 'MEE_M2_5N.mat');
 assert(isfile(srcFile), ['test_psr_mee: prerequisite %s not found -- this is the certified ' ...
     '25/rev 5 N fuel anchor Part 5 smoke-tests PSR against; re-run ' ...

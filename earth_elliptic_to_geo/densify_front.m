@@ -26,8 +26,7 @@ function densify_front()
 %
 % REFERENCES: [1] run_ctf_sweep.m (front sweep, seedMat no-resample warm
 %   start, certified-only save gate). [2] run_transfer.m.
-here   = fileparts(mfilename('fullpath'));
-resDir = fullfile(here, 'results');
+resDir = fullfile(module_root(), 'results');
 logFn  = fullfile(resDir, 'densify_run.log');
 
 pts = struct('cf', {1.35, 1.75, 2.25, 2.75}, ...

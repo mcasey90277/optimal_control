@@ -181,8 +181,7 @@ if nargin < 5, routeB = []; end
 % Documented in mintime_guard_constants.m: ~0.24 decades/round at 5 N, N=1200,
 % ~5 min/round; recalibrated from the original 1-decade/round 10 N floor.
 
-here = fileparts(mfilename('fullpath'));
-resDir = fullfile(here, 'results');
+resDir = fullfile(module_root(), 'results');
 if ~exist(resDir, 'dir'), mkdir(resDir); end
 tag = sprintf('mintime_T%d_i%d', round(10*thrustN), round(hx0 > 0)*7);
 fn  = fullfile(resDir, [tag '.mat']);

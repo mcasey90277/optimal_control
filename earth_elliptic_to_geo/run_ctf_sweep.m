@@ -83,8 +83,7 @@ function run_ctf_sweep()
 %       best-of chain/fresh envelope for basin scatter, thrust-continuation
 %       anchor seeding (run_mintime seedAnchor, run_transfer certified-gate),
 %       Route-B, closure with the law leg blocked at 5 N.
-here = fileparts(mfilename('fullpath'));
-resDir = fullfile(here, 'results');
+resDir = fullfile(module_root(), 'results');
 
 % --- leg 1: c_tf front at 10 N (neighbor-chain upward from M2) ---------------
 % ctfs includes the 4 densify_front.m points (1.35, 1.75, 2.25, 2.75; Task 14

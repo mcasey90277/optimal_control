@@ -26,8 +26,7 @@
 %       thrustN/m0kg/ispS, the only inputs verify_pmp_mee.m needs beyond
 %       what's in the .mat files).
 %   [4] .superpowers/sdd/task-10-report.md (gate numbers this reproduces).
-here    = fileparts(mfilename('fullpath'));
-resDir  = fullfile(here, 'results');
+resDir  = fullfile(module_root(), 'results');
 
 %% --- 10 N M2 case (results/MEE_M2_10N.mat: struct 'res') -------------------
 S1  = load(fullfile(resDir, 'MEE_M2_10N.mat'));

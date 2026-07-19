@@ -23,8 +23,7 @@ function fig_front_mee()
 %   [2] README.md (M2 cross-formulation gate, 1370-1375 kg paper band).
 %   [3] fig_basin_scatter.m / fig_switching.m (house figure-script style).
 
-here   = fileparts(mfilename('fullpath'));
-resDir = fullfile(here, 'results');
+resDir = fullfile(module_root(), 'results');
 
 thrustN = [10, 5, 2.5, 1, 0.5];
 

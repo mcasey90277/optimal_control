@@ -72,8 +72,7 @@ function res = run_transfer_mee(cfg)
 %                 cfg.warmStart direct-eps0 attempt mirrors).
 %             [5] .superpowers/sdd/task-7-brief.md (warm-start entry point,
 %                 this task's KNOWN GAP to close).
-here   = fileparts(mfilename('fullpath'));
-resDir = fullfile(here, 'results');
+resDir = fullfile(module_root(), 'results');
 if ~exist(resDir, 'dir'), mkdir(resDir); end
 d = @(f,v) optdef(cfg, f, v);
 

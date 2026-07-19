@@ -85,8 +85,7 @@ tag             = d('tag', sprintf('REPRO_smallN_%s', ttag_local(T)));
 maxRoundsManual = d('maxRoundsManual', 60);
 maxWallS        = d('maxWallS', 2.5*3600);
 
-here     = fileparts(mfilename('fullpath'));
-reproDir = fullfile(here, 'results', 'repro');
+reproDir = fullfile(module_root(), 'results', 'repro');
 if ~exist(reproDir, 'dir'), mkdir(reproDir); end
 
 nRevSeed = 3;     % run_mintime_mee.m's Stage-B cold-seed default nRev

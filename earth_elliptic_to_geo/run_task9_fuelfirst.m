@@ -45,9 +45,8 @@
 %   diagnosis + R0-law recommendation this driver executes).
 %   [2] run_transfer_mee.m (fuel solve). [3] psr_mee_refine.m (refinement).
 
-here   = fileparts(mfilename('fullpath'));
-resDir = fullfile(here, 'results');
-addpath(here);
+resDir = fullfile(module_root(), 'results');
+addpath(module_root());
 
 R0law = 223.14;   % mean T*tfmin [N.ND] across the 4 certified rungs, <1% spread
 

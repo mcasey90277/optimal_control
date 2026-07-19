@@ -106,8 +106,7 @@ summaryFile = d('summaryFile', 'MEE_ladder.mat');
 % must stay fingerprinted.
 mtMaxIter   = d('mtMaxIter', 3000);
 
-here   = fileparts(mfilename('fullpath'));
-resDir = fullfile(here, 'results');
+resDir = fullfile(module_root(), 'results');
 if ~exist(resDir, 'dir'), mkdir(resDir); end
 
 thrustList = thrustList(:).';

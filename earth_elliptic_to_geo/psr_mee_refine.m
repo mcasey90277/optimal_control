@@ -154,8 +154,7 @@ function out = psr_mee_refine(baseResult, opts)
 %       (the three pure-function decision helpers those fixes are factored
 %       into for no-solve testability).
 
-here   = fileparts(mfilename('fullpath'));
-resDir = fullfile(here, 'results');
+resDir = fullfile(module_root(), 'results');
 if ~exist(resDir, 'dir'), mkdir(resDir); end
 if nargin < 2, opts = struct(); end
 d = @(f, v) optdef(opts, f, v);

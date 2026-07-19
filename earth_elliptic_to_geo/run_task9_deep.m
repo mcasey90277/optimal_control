@@ -20,9 +20,8 @@
 %   [2] run_task9_rung.m (per-rung body). [3] run_ladder.m (the pattern this
 %   hand-assembles a variant of).
 
-here   = fileparts(mfilename('fullpath'));
-resDir = fullfile(here, 'results');
-addpath(here);
+resDir = fullfile(module_root(), 'results');
+addpath(module_root());
 
 S = load(fullfile(resDir, 'MEE_ladder_T10.mat'));   % the certified 1 N rung
 rung1N = S.rung;

@@ -117,8 +117,7 @@ fprintf(['test_warmstart_mee: Part 1 (interp_warmstart.m, no solve) ALL PASS -- 
 % maxIter=5, budget mirrors test_mee_solver_smoke.m (no certification
 % required, just "returns without exception, seed actually entered")
 % =============================================================================
-here   = fileparts(mfilename('fullpath'));
-resDir = fullfile(here, 'results');
+resDir = fullfile(module_root(), 'results');
 srcFile = fullfile(resDir, 'MEE_M2_10N.mat');
 assert(isfile(srcFile), ['test_warmstart_mee: prerequisite %s not found -- this is the ' ...
     'certified 25/rev 10 N fuel anchor Part 2 warm-starts FROM; if it was deleted, re-run ' ...

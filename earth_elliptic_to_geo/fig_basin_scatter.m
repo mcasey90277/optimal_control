@@ -23,8 +23,7 @@ function fig_basin_scatter()
 %       deliberately never saved to a .mat, so the log is the only source).
 %   [3] paper Fig 18 (free-longitude local-minima scatter, the figure this
 %       one is styled to match).
-here   = fileparts(mfilename('fullpath'));
-resDir = fullfile(here, 'results');
+resDir = fullfile(module_root(), 'results');
 
 % --- certified points: {c_tf, chain/fresh/alt1/alt2 tags} -------------------
 % Includes the 4 densify_front.m points (1.35, 1.75, 2.25, 2.75; Task 14

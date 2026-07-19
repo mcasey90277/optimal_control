@@ -38,8 +38,7 @@ function fig_table3()
 %   [3] fig_switching.m / fig_basin_scatter.m (house figure-script style:
 %       theme(fig,'light') try/catch, exportgraphics, 'Visible','off').
 
-here   = fileparts(mfilename('fullpath'));
-resDir = fullfile(here, 'results');
+resDir = fullfile(module_root(), 'results');
 
 % =========================================================================
 % (1) load "ours" -- fuel-solve structure counts (c_tf=1.5) --------------

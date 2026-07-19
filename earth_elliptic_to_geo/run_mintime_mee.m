@@ -242,8 +242,7 @@ initElems = d('initElems', []);    % Task 4: initial-orbit override [7x1]
                                     % [P;ex;ey;hx;hy;m;t], default [] --
                                     % forwarded into Stage B's mee_seed call
 
-here   = fileparts(mfilename('fullpath'));
-resDir = fullfile(here, 'results');
+resDir = fullfile(module_root(), 'results');
 if ~exist(resDir, 'dir'), mkdir(resDir); end
 
 [roundsMax, decadeMin, maxLooseRetries] = mintime_guard_constants();   % shared, NOT duplicated

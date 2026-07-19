@@ -30,8 +30,7 @@ function fix_dominated_basins()
 %
 % REFERENCES: [1] densify_front.m (pattern this follows). [2] run_transfer.m
 %   (certified-only save gate, no-resample seedMat warm start).
-here   = fileparts(mfilename('fullpath'));
-resDir = fullfile(here, 'results');
+resDir = fullfile(module_root(), 'results');
 logFn  = fullfile(resDir, 'densify_run.log');
 
 attempt(resDir, logFn, 2.00, 'sweep_T100_c200_alt1', 'sweep_T100_c175.mat');

@@ -10,7 +10,7 @@ cert = table3_certified(10);
 assert(row.certified == true, '10 N reproduced solution certified');
 assert(row.m_f_kg >= cert.m_f_kg - 0.5, ...
     sprintf('10 N reproduced m_f=%.4f must be >= campaign floor %.4f', row.m_f_kg, cert.m_f_kg - 0.5));
-assert(isfile(fullfile(here,'results','repro','REPRO_row_T100.mat')), 'REPRO row written');
+assert(isfile(fullfile(module_root(),'results','repro','REPRO_row_T100.mat')), 'REPRO row written');
 if row.m_f_kg > cert.m_f_kg + 1e-3
     fprintf('  reproduce_row(10) BEAT the campaign: %.4f vs %.4f kg (+%.4f) [%d sw / %.3f rev]\n', ...
         row.m_f_kg, cert.m_f_kg, row.m_f_kg - cert.m_f_kg, row.switches, row.revs);

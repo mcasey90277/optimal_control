@@ -21,8 +21,7 @@ function res = run_transfer(cfg)
 %          .edge .apoBurnRatio
 %
 % REFERENCES: [1] DESIGN.md secs 4-5.
-here = fileparts(mfilename('fullpath'));
-resDir = fullfile(here, 'results');
+resDir = fullfile(module_root(), 'results');
 if ~exist(resDir, 'dir'), mkdir(resDir); end
 d = @(f,v) optdef(cfg, f, v);
 N = d('N', 600);  ispS = d('ispS', 2000);  seedMat = d('seedMat', '');

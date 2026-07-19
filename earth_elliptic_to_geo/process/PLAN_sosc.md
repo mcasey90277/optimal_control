@@ -417,8 +417,10 @@ root = fileparts(fileparts(mfilename('fullpath'))); cd(root); setup_paths;
 R.n=2; R.m=2;
 R.grad_f = [ -1; -1 ];
 R.A_all  = sparse([1 0; 0 1]);        % d g1/dx, d g2/dx
-R.lam_g  = [1; 1];                     % grad_f + A' * lam = 0  (s=+1)
-R.gval   = [0; -0.2];                  % eq satisfied; ineq slack 0.2 (inactive)
+R.lam_g  = [1; 1];                     % grad_f + A' * lam = 0  (s=+1)  -> lam forced nonzero
+R.gval   = [0; 0];                     % both active: eq satisfied; ineq AT its bound
+                                       % (a nonzero lam on row 2 requires slack 0 for
+                                       %  complementarity -- an inactive row would violate it)
 R.creg = struct('label',{'eqA','ineqB'},'kind',{'eq','ineqHi'}, ...
                 'rows',{1,2},'bound',{0,0},'node',{[],[]});
 K = sosc_kkt_residual(R, sosc_defaults());

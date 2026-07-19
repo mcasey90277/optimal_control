@@ -196,22 +196,32 @@ numbers:
 **Files:** whole `earth_elliptic_to_geo/` tree (a); `reproduce_row.m` /
 `table3_recipes.m` (b, c); `reproduce_table3.sh` (d).
 
-- **(a) Coming: code-tidy + generic `lib/` refactor.** The directory has grown
-  flat and dense (100+ `.m` files at the top level: solver core, per-rung
-  drivers, PSR machinery, viz, tests, and now the reproducer engine all
-  side-by-side). A refactor into a shared, generic `lib/` (mirroring the
-  `mlabTools` layout used elsewhere in this repo) is planned so the pipeline
-  stays navigable — flagged here so it is not lost as a priority. Scope: pure
-  reorganization + path fixes, not a rewrite of certified numerics.
+- **(a) DONE (2026-07-19): code-tidy + subfolder/`lib/` reorg.** The formerly
+  flat directory (~87 `.m` at top level) was split into functional subfolders
+  (`core/ drivers/ psr/ verify/ frontdoor/ reproduce/ viz/ coords/
+  cartesian_legacy/ lib/ tests/ attic/`) with generic helpers extracted to
+  `lib/` and `setup_paths.m`/`module_root.m` handling the path + `results/`
+  resolution; the working process docs moved to `process/` (see README "Code
+  layout"). Pure reorganization + path fixes, certified numerics unchanged;
+  verified by the 15-test no-solve sweep, a live IPOPT smoke, and a full
+  from-scratch 10 N reproduce through the new shell path.
 - **(b) Deeper warm-rung optimization.** The 10 N cold rung's multi-start
   spans a real seed-diversity sweep (multiple `seedThr`/`betaMode` pairs) that
   is how it found the better 18-switch basin. The warm-chained rungs
   (5/2.5/1/0.5 N) currently only explore the inherited warm-start plus
   `fuel_multistart`'s tiny `t_f`-bracket (`fuel_seed_set` returns a single
   inert candidate on the warm path) — they do not yet get the cold rung's
-  seed-diversity treatment. Worth exploring once the full ladder validation
-  (Task 6) shows whether the warm rungs already meet the floor or need a
-  wider search themselves.
+  seed-diversity treatment.
+  **Empirical finding (2026-07-19, deep-ladder run):** this limitation now has
+  teeth. The 2.5 N reproduce (warm-chained from the *improved* 18-switch 10→5 N
+  basin) solved cleanly but topped out at **1368.13 kg — below the 1369.79 kg
+  campaign floor**, so one-sided `verify_row` correctly rejected it. A better
+  upper rung warm-starts the lower rung into a *different, worse* basin, and the
+  warm-rung multi-start can't climb out — improvement does **not** monotonically
+  chain down the ladder. Fix options under discussion: give the warm rungs a
+  cold-seed diversity sweep, warm-start 2.5 N from a different source (e.g. the
+  campaign's 5 N rather than the improved one), or widen the `t_f`-bracket.
+  Blocks the 2.5/1/0.5 N deep-ladder validation until a recipe decision is made.
 - **(c) 0.2/0.1 N recipes are seeded, not run.** `table3_recipes.m` carries
   `chain` recipes for both (`.seeded=true`, warm-started 0.5→0.2→0.1 N), but
   neither has been executed to a certified `REPRO_row_T*.mat` in this build —

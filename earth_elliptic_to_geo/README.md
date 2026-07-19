@@ -169,10 +169,18 @@ superseded it. Kept for the cross-formulation gate (see `process/CAMPAIGN.md`).
 
 Code is organized into functional subfolders: `core/` `drivers/` `psr/`
 `verify/` `frontdoor/` `reproduce/` `viz/` `coords/` `cartesian_legacy/` `lib/`
-`tests/` `attic/`. Only `setup_paths.m` and `module_root.m` stay at the module
-root. **Run `setup_paths` once per session** (after `cd`-ing into this
-directory) before calling anything — it puts every subfolder on the MATLAB
+`tests/` `attic/`. At the module root sit only the two front-door docs
+(`README.md`, `TODO.md`) and the two path helpers (`setup_paths.m`,
+`module_root.m`). **Run `setup_paths` once per session** (after `cd`-ing into
+this directory) before calling anything — it puts every subfolder on the MATLAB
 path so functions resolve regardless of which subfolder they live in.
+
+Documentation lives in two folders, split by maturity:
+- **`doc/`** — polished deliverables: the method note and the campaign
+  reproduction runbook (`.tex` + rendered `.pdf`) and external `reviews/`.
+- **`process/`** — the working development record: the design specs and
+  implementation plans (`DESIGN*.md`, `PLAN*.md`) and the campaign narrative
+  with its honesty footnotes (`CAMPAIGN.md`).
 
 ## Usage
 

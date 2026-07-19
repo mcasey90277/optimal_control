@@ -6,7 +6,6 @@ function K = sosc_kkt_residual(R, tol)
 % OUTPUTS: K - struct .sign .signOK .stat .primalEq .primalIneq .dualFeas
 %              .comp .pass
 % REFERENCES: process/DESIGN_sosc.md sec 4.3; verify_pmp_mee.m:112-121 (sign trick).
-isEq   = strcmp({R.creg.kind},'eq'); %#ok<NASGU>
 % expand per-group kind to per-row masks
 kindRow = strings(R.m,1);
 for i=1:numel(R.creg), kindRow(R.creg(i).rows) = R.creg(i).kind; end

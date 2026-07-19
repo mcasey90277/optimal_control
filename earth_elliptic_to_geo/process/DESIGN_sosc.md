@@ -297,3 +297,232 @@ confirmed/tightened before the rest of the ladder is trusted.
 4. **MUMPS/METIS crash class** inherited by the warm re-solve — reuse the
    existing `mumps_pivot_order=0` workaround; deep rungs may still hit it and
    would surface as ERROR (recovery failure), not a false verdict.
+
+---
+
+## 11. Revision — bang-bang WEAK_MIN + `lbg/ubg` bound sourcing (2026-07-19)
+
+The Task-8 integration (first real end-to-end run on the certified 10 N row)
+found that the original §5 verdict logic is wrong for this problem class, and
+that the bound bookkeeping of §4.1/§4.3 is fragile. Stationarity came back
+machine-tight (‖∇ℒ‖ = 1.5e-14), so the recovery framework is sound; the
+findings below refine the residual sourcing and the second-order taxonomy.
+This section supersedes the affected parts of §4.3, §4.4, §4.5, §5.
+
+### 11.1 The finding — min-fuel bang-bang is a *weak* (non-strict) local minimum
+
+Computed directly from the 10 N KKT matrix `K = [H Aᵀ; A 0]` (eig of the full
+3885×3885): the active Jacobian is rank-deficient by only **1** (LICQ
+essentially holds), and `inertia(K) = (1865, 1749, 271)` decomposes to a
+**reduced Hessian of inertia (116 positive, 0 negative, 270 zero)** on the
+386-dim critical cone. A clean spectral gap (≈270 eigenvalues at 1e-10, then
+nothing until ~1e-4) confirms the null space is genuine, not a threshold
+artifact. So the reduced Hessian is **positive semi-definite with a ~270-dim
+null space**: no negative curvature (not a saddle), but not strictly PD. This
+is the signature of a bang-bang / linear-in-control extremal — perturbations
+preserving the switching structure are flat to second order. **Strict NLP-SOSC
+(a PASS) is generically unreachable for min-fuel solutions**; the honest,
+useful second-order statement is a *weak local minimum*.
+
+### 11.2 Robust bound sourcing from `opti.lbg`/`opti.ubg`
+
+CasADi Opti canonicalizes every `subject_to` into `g ∈ [lbg, ubg]` and exposes
+`opti.lbg`, `opti.ubg` (both length `m`). `sosc_recover_kkt` now returns
+`R.lbg`, `R.ubg` (m×1). All residual/slack/active/dual logic sources bounds
+from these — NOT from hand-coded `creg.bound` — eliminating the class of bugs
+where `creg` recorded a scalar 0 for `initBC`/`termBC` (whose true per-row
+bounds are `x0`/`xf`) or omitted the bound subtraction (`tfPin`, `betaNorm`).
+`creg` is retained only for human LABELS/NODES in weak-node reporting.
+
+Per-row constraint KIND is derived from the bounds:
+`isEq = (lbg==ubg)`; `upperActive` row has finite `ubg`; `lowerActive` has
+finite `lbg`. Residual (primal feasibility) becomes uniform:
+`viol_i = max(lbg_i − g_i, 0) + max(g_i − ubg_i, 0)` for every row; equality
+residual is just the `lbg==ubg` case of the same formula.
+
+### 11.3 Per-kind dual feasibility
+
+Opti/IPOPT reports `lam_g` with OPPOSITE sign conventions per active bound
+(empirically: lower-bound-active `lam ≤ 0`, upper-bound-active `lam ≥ 0`;
+equalities free). After resolving the one global sign `s`, dual feasibility is
+checked per kind: for an upper-bound-only row require `s·lam ≥ −tol.dual`; for
+a lower-bound-only row require `s·lam ≤ +tol.dual`; equality rows are
+unconstrained in sign. (The single-global-sign check of §4.3 was wrong and
+produced a spurious `dualFeas` from the lower-bound rows.)
+
+### 11.4 Reduced-Hessian inertia (supersedes the §4.5 subspace test)
+
+**Inertia method — `eig` primary, size-guarded (calibrated 2026-07-19).** The
+bang-bang KKT is deeply near-singular (~270 eigenvalues at the 1e-10 level), and
+the `ldl`-pivot-sign inertia (`count_inertia`) is UNRELIABLE there: on the 10 N
+row, gold-standard `eig` gives the true reduced `nneg=0` for relative
+`zt ∈ [1e-9, 1e-8]`, but `ldl` only for `zt ∈ [1e-7, 1e-6]` (a disjoint window;
+at `zt=1e-9` `ldl` reports 56 spurious negatives). Tuning `zt` to `ldl`'s window
+is not robust across rungs. Therefore `sosc_inertia` computes the inertia by
+**`eig(full(K))`** (Sylvester-exact, robust) whenever `size(K) ≤ maxEigDim`
+(≈15000, covering 10/5/2.5 N), counting `|λ| > zt` as ±, `|λ| ≤ zt` as zero with
+`zt = tol.inertiaZero·normest(K)` and `tol.inertiaZero = 1e-9` (the original §6
+value — correct for `eig`; the Amendment-B raise to 1e-6 was an `ldl` workaround
+and is reverted). Above `maxEigDim` (1 N, 0.5 N — too large for dense `eig`) the
+inertia is **not computed with a validated method**; `IN.robust = false` and the
+verdict is INCONCLUSIVE with reason "reduced inertia not computable at this scale".
+**OPEN ITEM (Task-10 prerequisite):** a scalable robust inertia for the deep
+rungs — reduced-Hessian `eig(Z'HZ)` via a sparse null-space basis of `A`, or
+`eigs` on the near-zero cluster — so 1 N / 0.5 N can be certified.
+
+`sosc_inertia` reports the KKT inertia `(npos,nneg,nzero)` (via `eig` or, above
+the guard, `ldl`/`count_inertia`), `IN.method ∈ {'eig','ldl'}`, `IN.robust`, and
+the **reduced-Hessian inertia** via the Gould decomposition with `r = rank(A)`
+(via `sprank(A)`, the structural rank):
+
+```
+red.npos  = npos  − r
+red.nneg  = nneg  − r
+red.nzero = nzero − (m_a − r)
+```
+
+Consistency (must hold, else the rank estimate is untrustworthy →
+INCONCLUSIVE): `red.npos + red.nneg + red.nzero == n − r`, and
+`red.nneg ≥ 0`, `red.nzero ≥ 0`. `IN.red = struct('npos',_,'nneg',_,'nzero',_)`,
+`IN.rankA = r`, `IN.redConsistent = <bool>`. The old `subspaceOK` remains a
+reported field but no longer drives the verdict.
+
+### 11.5 Revised verdict taxonomy (supersedes §5 verdict logic)
+
+The reduced inertia `IN.red` is computed on the null space of the STRONGLY-active
+Jacobian `A` (equalities + strongly-active inequalities) — call that subspace `S`.
+The critical cone `C ⊆ S`, with equality only when there are no weakly-active
+constraints (`AS.nWeak==0`). Two robustness facts drive the logic: (i) reduced
+Hessian PD on `S` ⟹ PD on `C ⊆ S`, so a PASS is valid regardless of
+weakly-active or LICQ rank-deficiency; (ii) "no negative curvature on `S`" ⟹ none
+on `C`, so WEAK_MIN is likewise robust. Only the FAIL conclusion (a negative
+curvature *direction*) can be spoiled by `C ⊊ S`.
+
+Verdict logic, in order:
+1. `~recoverOK` or `~K.signOK` or `~K.pass` ⇒ **ERROR** (no trustworthy KKT point).
+2. `~IN.robust` (KKT too large for a validated inertia, §11.4) or
+   `~IN.redConsistent` (the Gould consistency check failed — the `sprank` rank
+   estimate is untrustworthy) ⇒ **INCONCLUSIVE** (the reduced inertia cannot be
+   trusted).
+3. `red.nneg == 0` and `red.nzero == 0` ⇒ **PASS** (reduced Hessian PD on `S` ⇒
+   PD on the critical cone ⇒ strict local minimum; valid even under
+   weakly-active junctions or a rank-deficient active Jacobian).
+4. `red.nneg == 0` and `red.nzero > 0` ⇒ **WEAK_MIN** (reduced Hessian PSD, no
+   negative curvature anywhere on `S` ⇒ no descent direction ⇒ a weak local
+   minimum; strict sufficiency not established — `red.nzero` flat directions.
+   The expected outcome for bang-bang min-fuel).
+5. `red.nneg > 0` and `AS.nWeak == 0` ⇒ **FAIL** (`C == S` has a negative
+   curvature direction ⇒ genuine descent direction ⇒ provably not a local min).
+6. `red.nneg > 0` and `AS.nWeak > 0` ⇒ **INCONCLUSIVE** (`S` has negative
+   curvature, but weakly-active junctions make `C ⊊ S`; the descent direction
+   may lie outside the cone — cannot conclude a saddle).
+
+**LICQ** (`sprank(A) < m_active`) is REPORTED as a diagnostic but does NOT by
+itself force any verdict — the Gould decomposition with `r = sprank(A)` handles a
+rank-deficient active Jacobian, and `IN.redConsistent` (rule 2) is the guard
+against a wrong rank estimate. **Weakly-active** constraints gate only rule 5-vs-6,
+never PASS/WEAK_MIN.
+
+`redMinEig` stays a NaN placeholder (non-gating). The verdict struct gains
+`.red` (the reduced inertia struct) and `.nFlat = IN.red.nzero` (the dimension
+of the flat manifold — reported, meaningful for WEAK_MIN).
+
+### 11.6 Revised tiered gate
+
+- PASS → `certified-sosc` (strict local min).
+- **WEAK_MIN → `certified-weak-min`** — a POSITIVE certificate (no descent
+  direction; necessary 2nd-order condition met). **Does NOT demote**; kept in
+  the certified Table 3, annotated with `nFlat`.
+- FAIL → `feasible-only`; excluded from the certified Table 3; loud warning.
+- INCONCLUSIVE / ERROR → `certified-feasibility+sosc-inconclusive`; kept,
+  annotated, non-demoting.
+
+Only FAIL (a *proven* saddle) demotes. The reproducer (§8) adopts a candidate
+whose verdict ∈ {PASS, WEAK_MIN, INCONCLUSIVE} (never FAIL).
+
+### 11.7 Expected results
+
+The 10 N certified row is expected to certify as **WEAK_MIN** (`nFlat ≈ 270`),
+and the same is anticipated for the other min-fuel rungs (bang-bang). A rung
+returning FAIL would be a genuine finding (a reported non-minimizer); PASS
+would indicate an unexpectedly non-degenerate solution. The batch re-cert
+(§8, Task 10) reports the verdict + `nFlat` per rung.
+
+---
+
+## 12. FINAL inertia method — direct reduced-Hessian `eig(Z'HZ)` + `zt`-sensitivity (2026-07-19)
+
+**This section is the authoritative inertia method and verdict logic. It
+supersedes the inertia computation of §11.4 (Gould decomposition + `sprank`)
+and the verdict logic of §11.5.** Bounds (§11.2), per-kind dual feasibility
+(§11.3), and the tiered gate (§11.6, with WEAK_MIN added below) stand.
+
+**Why.** The Task-10 batch showed the Gould-`sprank`-single-`zt` method gives
+SPURIOUS FAIL on 5/2.5 N: their reduced Hessian has near-flat directions
+(eigenvalues at ~1e-6 relative — six orders above 10 N's ~1e-10 noise floor but
+six orders below the real spectrum) whose SIGN is not resolvable — `nneg`
+slides 2→2→1→0 as `zt` sweeps 1e-9→1e-6. A verdict that flips with the
+threshold cannot honestly be FAIL. The rank-subtraction (`sprank`, only a
+structural estimate) compounds the ambiguity.
+
+### 12.1 Method (`sosc_inertia`)
+
+- **Size guard:** if `n > tol.maxNullDim` (default 10000) the dense null-space
+  is intractable → `IN.robust = false`, `IN.method = 'scale-skip'` (⇒
+  INCONCLUSIVE-by-scale; the 1 N / 0.5 N rungs). OPEN ITEM: a sparse null-space
+  / iterative reduced-eig for those.
+- Else form `Z = null(full(A))` — an orthonormal basis of `null(A)`, `n×(n−r)`,
+  where `A` is the STRONGLY-active Jacobian (equalities + strongly-active
+  inequalities). `Z` gives the rank exactly (`r = n − size(Z,2)`); **no
+  `sprank`, no Gould subtraction.**
+- Reduced Hessian `RH = Zᵀ H Z` ((n−r)×(n−r)), symmetrized; `ev = eig(RH)`.
+- `s = ‖H‖` (via `normest`). Sign counts over a `zt`-band
+  `ztr ∈ {1e-9, 1e-8, 1e-7, 1e-6}`, `zt = ztr·s`:
+  `nnegBand(i) = #{ev < −zt_i}`. Report at the tightest `zt = 1e-9·s`:
+  `IN.red = struct('npos',#{ev>zt}, 'nneg',#{ev<−zt}, 'nzero',#{|ev|≤zt})`.
+- `IN.nnegBand = nnegBand`, `IN.sensStable = all(nnegBand == nnegBand(1))`,
+  `IN.robust = true`, `IN.method = 'reduced-eig'`, `IN.rankA = r`,
+  `IN.redMinEig = min(ev)` (now a REAL reported margin, not NaN).
+
+### 12.2 Verdict logic (supersedes §11.5)
+
+In order:
+1. `~recoverOK` / `~K.pass` / `~K.signOK` ⇒ **ERROR**.
+2. `~IN.robust` ⇒ **INCONCLUSIVE** (KKT/null-space too large — scale).
+3. `~IN.sensStable` ⇒ **INCONCLUSIVE** (reduced-Hessian negative count is
+   `zt`-sensitive: near-flat directions of unresolvable sign at numerical
+   precision — the 5/2.5 N case).
+4. `IN.red.nneg > 0` and `AS.nWeak == 0` ⇒ **FAIL** (a stably-negative reduced
+   eigenvalue = genuine descent direction on the critical cone).
+5. `IN.red.nneg > 0` and `AS.nWeak > 0` ⇒ **INCONCLUSIVE** (negative curvature
+   on the subspace, but weakly-active junctions make the cone strictly smaller).
+6. `IN.red.nneg == 0` and `IN.red.nzero == 0` ⇒ **PASS** (strictly PD reduced
+   Hessian ⇒ strict local minimum).
+7. `IN.red.nneg == 0` and `IN.red.nzero > 0` ⇒ **WEAK_MIN** (PSD, `nzero` flat
+   directions; `nFlat = IN.red.nzero`).
+
+LICQ is no longer computed for the verdict (`Z` gives the exact rank);
+`AS.licq` remains a reported diagnostic. `redConsistent` is retired.
+
+### 12.3 Expected batch (supersedes §11.7)
+
+**Actual batch result (2026-07-19):**
+
+| rung | verdict | why |
+|---|---|---|
+| 10 N | **WEAK_MIN** (`nFlat=270`) | reduced eig `nneg=0` stable (`nnegBand=[0 0 0 0]`); clean |
+| 5 N | **INCONCLUSIVE** | `nnegBand=[2 2 1 0]` — `zt`-sensitive (near-flat directions, `redMinEig≈−1.1e-4`) |
+| 2.5 N | **INCONCLUSIVE** | `nnegBand` `zt`-sensitive (same class) |
+| 1 N | **ERROR** | the warm **re-solve recovery** fails at this scale (n≈16.5k, PSR-refined) — before inertia |
+| 0.5 N | **uncomputable** | recovery likewise fails; batch produced no clean record |
+
+Only 10 N certifies cleanly (as a weak local minimum). This is the honest
+result: a rigorous NLP-level second-order certificate confirms 10 N is not a
+saddle and is a weak minimum; 5/2.5 N have near-flat directions of
+numerically-unresolvable sign (INCONCLUSIVE, not a spurious FAIL); and the deep
+rungs (1/0.5 N) fail even at the recovery stage — the certificate is candid
+about its reach rather than over-claiming. **OPEN ITEMS (deep rungs):** (a) a
+scalable robust reduced-eig (sparse null-space) *and* (b) a scalable warm-resolve
+recovery (the 1/0.5 N re-solve itself is the first wall). (c) `recertify_table3`
+should persist an ERROR-verdict sidecar in its `catch` path so every rung leaves
+a record even when recovery throws.

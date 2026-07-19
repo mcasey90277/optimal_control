@@ -58,7 +58,7 @@
   `casadi_lt_mee(saved.sigma, saved.X, saved.U, saved.dL, opts)` with
   `opts = struct('par', kepler_lt_params(saved.thrustN,saved.m0kg,saved.ispS), 'mode','fixedtf','eps',0, 'tfTarget',saved.tfTarget, 'x0',saved.X(:,1), 'xf',saved.xf, 'maxIter',saved.maxIter, 'warmTight',true, 'printLevel',0)`.
 
-**Context:** MEE_M2 rows save a `res` struct (`run_transfer_mee.m:255-258`) with `res.sigma`, `res.fuel` (a `casadi_lt_mee` out struct: `.X/.U/.dL`), `res.tf`, `res.fp` (`.thrustN/.m0kg/.ispS/.xf/.maxIter`). PSR-final rows save `out` (`psr_mee_refine.m:294-305`) with `out.finalSigma`, `out.finalOut` (out struct), and `fpFinal` (`.thrustN/.m0kg/.ispS/.xf/.ctf/.tfMinAnchor`); there `tfTarget = fpFinal.ctf*fpFinal.tfMinAnchor`.
+**Context:** MEE_M2 rows save a `res` struct (`run_transfer_mee.m:255-258`) with `res.sigma`, `res.fuel` (a `casadi_lt_mee` out struct: `.X/.U/.dL`), `res.tf` (the resolved fixed-tf target — use this directly as `tfTarget`), `res.fp` (`.thrustN/.m0kg/.ispS/.maxIter`; **`.xf` is present only on rows regenerated after the xf field was added — the older 5/2.5/1/0.5 N caches lack it**). PSR-final rows save `out` (`psr_mee_refine.m:294-305`) with `out.finalSigma`, `out.finalOut` (out struct), and `fpFinal` (`.baseTag/.thrustN/.m0kg/.ispS/.tf`; there `tfTarget = fpFinal.tf` — already resolved, no `ctf*tfMinAnchor` multiply; **`.xf` is absent from `fpFinal` and from every field of the PSR file**). **`xf` must therefore default to the GEO target `[1;0;0;0;0]` when absent** — correct for every campaign row (all target GEO; custom endpoints are a never-used research feature), via `optdef(fp,'xf',[1;0;0;0;0])`.
 
 - [ ] **Step 1: Write the failing test** `tests/test_sosc_recon_10N.m`
 
@@ -87,6 +87,17 @@ drift = max(abs(o.X(:) - saved.X(:)));
 fprintf('recon drift ||x_rebuilt - x_saved||_inf = %.3e\n', drift);
 assert(o.success, 'rebuild re-solve did not converge');
 assert(drift < 1e-6, sprintf('recon drift %.3e >= 1e-6 tol.recon', drift));
+
+% Normalizer correctness on the real xf-less MEE_M2 row (5 N) and a PSR-final
+% row -- both lack fp.xf; expect the GEO default. No re-solve (cheap checks).
+s5 = sosc_load_row(fullfile(module_root(),'results','MEE_M2_5N.mat'));
+assert(isequal(s5.xf,[1;0;0;0;0]), '5 N: xf must default to GEO when fp.xf absent');
+assert(abs(s5.tfTarget - 67.0194) < 1e-3 && s5.thrustN==5, '5 N: tfTarget/thrustN');
+sP = sosc_load_row(fullfile(module_root(),'results','MEE_M2_1N_PSR_psr_final.mat'));
+assert(strcmp(sP.kind,'PSR') && sP.thrustN==1, 'PSR: kind/thrustN');
+assert(isequal(sP.xf,[1;0;0;0;0]), 'PSR: xf defaults to GEO');
+assert(abs(sP.tfTarget - 335.7122) < 1e-3, 'PSR: tfTarget = fpFinal.tf (already resolved)');
+assert(isequal(size(sP.X),[7,numel(sP.sigma)]), 'PSR: X/sigma shapes consistent');
 fprintf('test_sosc_recon_10N PASSED\n');
 ```
 
@@ -113,16 +124,17 @@ function saved = sosc_load_row(matPath)
 %       (PSR out layout); process/DESIGN_sosc.md sec 4.2.
 S = load(matPath);
 [~, base] = fileparts(matPath);
+geoXf = [1;0;0;0;0];                             % GEO default when fp.xf absent
 if isfield(S,'res')                              % MEE_M2 row
     r  = S.res;  fu = r.fuel;  fp = r.fp;
     saved = struct('sigma', r.sigma(:), 'X', fu.X, 'U', fu.U, 'dL', fu.dL, ...
-        'tfTarget', r.tf, 'xf', fp.xf(:), 'thrustN', fp.thrustN, ...
-        'm0kg', fp.m0kg, 'ispS', fp.ispS, 'maxIter', fp.maxIter, ...
+        'tfTarget', r.tf, 'xf', optdef(fp,'xf',geoXf), 'thrustN', fp.thrustN, ...
+        'm0kg', fp.m0kg, 'ispS', fp.ispS, 'maxIter', optdef(fp,'maxIter',1500), ...
         'tag', base, 'kind', 'MEE_M2');
 elseif isfield(S,'out')                          % PSR-refined row
     o  = S.out;  fu = o.finalOut;  fp = S.fpFinal;
     saved = struct('sigma', o.finalSigma(:), 'X', fu.X, 'U', fu.U, 'dL', fu.dL, ...
-        'tfTarget', fp.ctf*fp.tfMinAnchor, 'xf', fp.xf(:), 'thrustN', fp.thrustN, ...
+        'tfTarget', fp.tf, 'xf', optdef(fp,'xf',geoXf), 'thrustN', fp.thrustN, ...
         'm0kg', fp.m0kg, 'ispS', fp.ispS, ...
         'maxIter', optdef(fp,'maxIter',1500), 'tag', base, 'kind', 'PSR');
 else
@@ -156,7 +168,7 @@ git commit -m "feat(sosc): row normalizer + reconstruction checkpoint (Task 1 ga
 **Interfaces:**
 - Produces: with `opts.returnModel=true`, `out.model = struct('opti',opti,'X',X,'U',U,'dL',dL,'creg',creg,'vreg',vreg)`.
   `creg`: struct array, one per constraint group, fields `label[char]`, `kind['eq'|'ineqLo'|'ineqHi']`, `rows[1xk]` (row range in `opti.g`), `bound[scalar|[]]`, `node[1xk|[]]`.
-  `vreg`: `struct('Xrows',1:7,'Urows',1:4,'nNode',N+1,'idxX',...,'idxU',...,'idxdL',...)` — index maps into `opti.x`.
+  `vreg`: `struct('Xrows',1:7,'Urows',1:4,'nNode',N+1)` — decision-block layout metadata. (The full per-index maps into `opti.x` are intentionally NOT built — YAGNI: no downstream task consumes them; `sosc_active_set`'s node labels come from `creg.node`, and `sosc_recover_kkt` assembles `H`/`A` from `opti.x`/`opti.g` wholesale.)
 
 **Context:** Every constraint is added via `opti.subject_to` (lines 105,110,115,118,120,125-130,151-153,156,161,169). None are native `lbx/ubx`. Registry entries are recorded by bracketing each group: `r0 = size(opti.g,1)+1; <add>; r1 = size(opti.g,1); creg(end+1)=...`.
 
@@ -405,8 +417,10 @@ root = fileparts(fileparts(mfilename('fullpath'))); cd(root); setup_paths;
 R.n=2; R.m=2;
 R.grad_f = [ -1; -1 ];
 R.A_all  = sparse([1 0; 0 1]);        % d g1/dx, d g2/dx
-R.lam_g  = [1; 1];                     % grad_f + A' * lam = 0  (s=+1)
-R.gval   = [0; -0.2];                  % eq satisfied; ineq slack 0.2 (inactive)
+R.lam_g  = [1; 1];                     % grad_f + A' * lam = 0  (s=+1)  -> lam forced nonzero
+R.gval   = [0; 0];                     % both active: eq satisfied; ineq AT its bound
+                                       % (a nonzero lam on row 2 requires slack 0 for
+                                       %  complementarity -- an inactive row would violate it)
 R.creg = struct('label',{'eqA','ineqB'},'kind',{'eq','ineqHi'}, ...
                 'rows',{1,2},'bound',{0,0},'node',{[],[]});
 K = sosc_kkt_residual(R, sosc_defaults());
@@ -871,9 +885,13 @@ function T = recertify_table3(thrustList)
 % REFERENCES: process/DESIGN_sosc.md sec 8.
 resDir  = fullfile(module_root(),'results');
 sideDir = fullfile(resDir,'sosc'); if ~isfolder(sideDir), mkdir(sideDir); end
-% tag map: MEE_M2 fuel row per rung; PSR-final where it exists (0.5/1 N).
+% tag map: the CERTIFIED HEADLINE row per rung. 10/5/2.5 N are the MEE_M2 fuel
+% rows; 1 N and 0.5 N headline numbers (1371.44 kg, 1375.28 kg) are the
+% PSR-refined solutions, so certify those PSR-final rows (sosc_load_row handles
+% both the res and out shapes).
 tagOf = containers.Map({10,5,2.5,1,0.5}, ...
-    {'MEE_M2_10N','MEE_M2_5N','MEE_M2_2p5N','MEE_M2_1N','MEE_M2_0p5N'});
+    {'MEE_M2_10N','MEE_M2_5N','MEE_M2_2p5N', ...
+     'MEE_M2_1N_PSR_psr_final','MEE_M2_0p5N_PSR_psr_final'});
 T = struct('thrustN',{},'tag',{},'verdict',{},'drift',{},'stat',{},'inertia',{});
 fprintf('\n  T[N]   tag                 verdict        drift      stat     inertia\n');
 for Tn = thrustList(:).'

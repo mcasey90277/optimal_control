@@ -56,12 +56,21 @@ function res = run_transfer_mee(cfg)
 %          casadi_lt_mee call), .initElems (Task 4, [7x1]
 %          [P;ex;ey;hx;hy;m;t] initial-orbit override, default [] = the
 %          paper's legacy literal GTO-at-apogee state -- forwarded into both
-%          mee_seed calls; see mee_seed.m)
+%          mee_seed calls; see mee_seed.m), .certifySosc (Task 9, OPT-IN
+%          NLP-level SOSC tiered gate, default FALSE -- a ~1-2 min warm
+%          re-solve + eig inertia per call, so it is NOT run on every
+%          routine solve; when true and the row certifies feasibility,
+%          attaches res.report.sosc (verify_sosc_mee.m output) and applies
+%          the tiered gate, process/DESIGN_sosc.md sec 11.6: only a FAIL
+%          verdict demotes report.certified -- PASS/WEAK_MIN/INCONCLUSIVE/
+%          ERROR all keep it true. certifySosc=false is BYTE-IDENTICAL to
+%          pre-Task-9 behavior)
 % OUTPUTS: res - .cfg .seed .tf .fuel .tbl .report .recon (ALWAYS returned;
 %          saved to results/<tag>.mat ONLY when best.certified -- same
 %          "never cache uncertified" discipline as run_transfer.m); .report
 %          = .revs .switches .m_f_kg .dV_kms .edge .apoBurnRatio .incDeg
-%          .LdotMin .certified; .recon = .maxResidual .nInterior (the
+%          .LdotMin .certified (+ .sosc when cfg.certifySosc=true, see
+%          above); .recon = .maxResidual .nInterior (the
 %          cross-formulation EOM check, Step 3 of the Task-4 brief)
 %
 % REFERENCES: [1] earth_elliptic_to_geo/run_transfer.m (Cartesian template).
@@ -251,6 +260,26 @@ report = struct('revs', revs, 'switches', best.switches, 'm_f_kg', best.m_f_kg, 
 
 % --- stage 4: cross-formulation reconstruction check ------------------------
 recon = check_reconstruction(best.X, best.U, best.dL, sigma, p);
+
+% --- stage 5 (OPT-IN, cfg.certifySosc, default false): NLP-level SOSC ------
+% tiered gate. A ~1-2 min warm re-solve + eig inertia per call, so it is NOT
+% run on every routine solve (run_ladder/run_gergaud call this driver many
+% times per campaign) -- only when the caller explicitly asks for it. When
+% best.certified and certifySosc is true, build the transient saved-row
+% struct in-memory (mirrors sosc_load_row's MEE_M2 field shape, no disk
+% round-trip) and apply the tiered gate (process/DESIGN_sosc.md sec 11.6):
+% only a FAIL (proven saddle) demotes; PASS/WEAK_MIN/INCONCLUSIVE/ERROR all
+% keep best.certified true. When certifySosc is false (the default), this
+% block is skipped entirely and the driver's behavior is byte-identical to
+% before Task 9.
+certifySosc = d('certifySosc', false);
+if certifySosc && best.certified
+    savedT = struct('sigma', sigma, 'X', best.X, 'U', best.U, 'dL', best.dL, ...
+        'tfTarget', tf, 'xf', xf, 'thrustN', thrustN, 'm0kg', m0kg, 'ispS', ispS, ...
+        'maxIter', maxIter, 'tag', tag, 'kind', 'MEE_M2');
+    report = apply_sosc_gate(report, verify_sosc_mee(savedT));
+    best.certified = report.certified;   % keep res.fuel + save gate consistent
+end
 
 res = struct('cfg', cfg, 'seed', seedInfo, 'tf', tf, 'fuel', best, ...
              'tbl', tbl, 'report', report, 'recon', recon, 'sigma', sigma, 'fp', fp);

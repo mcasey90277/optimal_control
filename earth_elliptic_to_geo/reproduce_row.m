@@ -15,9 +15,10 @@ function row = reproduce_row(T, opts)
 %
 % FROM-SCRATCH ISOLATION: cfg.tag/.fuelTag for every driver call below are
 % REPRO_-prefixed (see ttag/local helper), landing in the SAME
-% earth_elliptic_to_geo/results/ directory the campaign uses (drivers
-% fix their own resDir internally and take no outDir override) but under
-% names that can never collide with a campaign tag. The anchor stage's
+% earth_elliptic_to_geo/results/ directory the campaign uses (run_mintime_mee/
+% run_transfer_mee fix their own resDir internally; psr_mee_refine does accept
+% an outDir, which the PSR stage points at results/repro/) but under names that
+% can never collide with a campaign tag. The anchor stage's
 % cfg.fuelTag is set to a tag that is GUARANTEED never to exist
 % ('REPRO_none_<ttag>'), forcing run_mintime_mee.m's Stage A (warm-start
 % from an existing certified fuel anchor) to be skipped unconditionally,
@@ -184,11 +185,21 @@ rep = res.report;
 % PSR (optional post-solution refinement)
 % ---------------------------------------------------------------------------
 if ~isempty(recipe.psr)
-    psrOut = psr_mee_refine(res, struct('tag', [tagFuel '_PSR'], 'outDir', reproDir, ...
+    psrOpts = struct('tag', [tagFuel '_PSR'], 'outDir', reproDir, ...
         'maxRounds', recipe.psr.maxRounds, 'nbr', recipe.psr.nbr, ...
-        'globalEvery', getf(recipe.psr, 'globalEvery', 3), ...
-        'globalFactor', getf(recipe.psr, 'globalFactor', 1.3), ...
-        'maxIter', recipe.fuel.maxIter));
+        'maxIter', recipe.fuel.maxIter);
+    % Pass globalEvery/globalFactor ONLY when the recipe actually specifies them,
+    % so a recipe that omits them keeps psr_mee_refine's OWN default -- do NOT
+    % inject 3/1.3 into a rung that intends no global-sweep round (reviewer
+    % Important: the 1 N recipe omits these; forcing 3 silently overrode the
+    % driver's disabled default).
+    if isfield(recipe.psr, 'globalEvery') && ~isempty(recipe.psr.globalEvery)
+        psrOpts.globalEvery = recipe.psr.globalEvery;
+    end
+    if isfield(recipe.psr, 'globalFactor') && ~isempty(recipe.psr.globalFactor)
+        psrOpts.globalFactor = recipe.psr.globalFactor;
+    end
+    psrOut = psr_mee_refine(res, psrOpts);
     if ~psrOut.certified
         error('reproduce_row:psrNotCertified', ...
             ['T=%g N: PSR refinement (psr_mee_refine) did NOT certify its final ' ...
@@ -322,8 +333,12 @@ try
     if res.report.certified && res.report.m_f_kg > bestMf
         bestRes = res;  bestMf = res.report.m_f_kg;
     end
-catch
-    % out-of-seed-window / transient failure -- skip this candidate
+catch ME
+    % out-of-seed-window / transient failure -- skip this candidate, but LOG
+    % which one and why: this stage is failure-prone by design (seed-window
+    % rejects, transient IPOPT failures), and a silent drop leaves the terminal
+    % fuelAllFailed error with no breadcrumbs (reviewer Important).
+    fprintf('  [fuel multi-start] SKIP %s: %s\n', cfg.tag, ME.message);
 end
 end
 

@@ -22,4 +22,15 @@ drift = max(abs(o.X(:) - saved.X(:)));
 fprintf('recon drift ||x_rebuilt - x_saved||_inf = %.3e\n', drift);
 assert(o.success, 'rebuild re-solve did not converge');
 assert(drift < 1e-6, sprintf('recon drift %.3e >= 1e-6 tol.recon', drift));
+
+% Normalizer correctness on the real xf-less MEE_M2 row (5 N) and a PSR-final
+% row -- both lack fp.xf; expect the GEO default. No re-solve (cheap checks).
+s5 = sosc_load_row(fullfile(module_root(),'results','MEE_M2_5N.mat'));
+assert(isequal(s5.xf,[1;0;0;0;0]), '5 N: xf must default to GEO when fp.xf absent');
+assert(abs(s5.tfTarget - 67.0194) < 1e-3 && s5.thrustN==5, '5 N: tfTarget/thrustN');
+sP = sosc_load_row(fullfile(module_root(),'results','MEE_M2_1N_PSR_psr_final.mat'));
+assert(strcmp(sP.kind,'PSR') && sP.thrustN==1, 'PSR: kind/thrustN');
+assert(isequal(sP.xf,[1;0;0;0;0]), 'PSR: xf defaults to GEO');
+assert(abs(sP.tfTarget - 335.7122) < 1e-3, 'PSR: tfTarget = fpFinal.tf (already resolved)');
+assert(isequal(size(sP.X),[7,numel(sP.sigma)]), 'PSR: X/sigma shapes consistent');
 fprintf('test_sosc_recon_10N PASSED\n');

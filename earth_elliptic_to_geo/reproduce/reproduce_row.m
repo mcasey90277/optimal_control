@@ -57,9 +57,21 @@ function row = reproduce_row(T, opts)
 %                    default false (from-scratch isolation preserved)  [logical]
 %     .m0kg        - initial mass [kg]; default 1500                  [scalar]
 %     .ispS        - specific impulse [s]; default 2000                [scalar]
+%     .certifySosc - Task 9, OPT-IN NLP-level SOSC certificate on the
+%                    keep-best-mass WINNER only (never per multi-start
+%                    candidate -- too costly); default false, so the
+%                    reproducer stays fast by default, matching
+%                    run_transfer_mee.m's cfg.certifySosc opt-in default.
+%                    When true, row.sosc is populated (verify_sosc_mee.m
+%                    output) and a FAIL verdict emits a loud warning
+%                    (a proven-saddle best-mass candidate is a genuine
+%                    finding) WITHOUT changing which candidate won --
+%                    mass alone still decides, per process/DESIGN_sosc.md
+%                    sec 11.6                                          [logical]
 %
 % OUTPUTS:
-%   row - gergaud_row.m row struct for this rung, VERIFIED against
+%   row - gergaud_row.m row struct for this rung (+ .sosc, [] unless
+%         opts.certifySosc=true), VERIFIED against
 %         table3_certified(T) within defaultTol(T) (verify_row throws on
 %         any breach, so a returned row is, by construction, a passing
 %         row). Also written to
@@ -88,6 +100,7 @@ d = @(f,v) optdef(opts, f, v);
 reuseCampaignCache = d('reuseCampaignCache', false);
 m0kg = d('m0kg', 1500);
 ispS = d('ispS', 2000);
+certifySosc = d('certifySosc', false);   % Task 9, OPT-IN: see SOSC block below
 
 recipe = table3_recipes(T);
 cert   = table3_certified(T);
@@ -212,6 +225,36 @@ if ~isempty(recipe.psr)
 end
 
 % ---------------------------------------------------------------------------
+% SOSC (Task 9, OPT-IN): certify the WINNING candidate ONCE, not per keep-
+% best-mass multi-start candidate -- each verify_sosc_mee call is a ~1-2 min
+% warm re-solve + eig inertia, far too costly to run on every fuel_multistart
+% seed (mass alone still decides the winner; see fuel_multistart above).
+% Gated behind opts.certifySosc (default false) so the reproducer stays fast
+% by default -- OPT-IN CHOICE, matching the driver's cfg.certifySosc default.
+% When enabled, runs exactly ONCE on the FINAL winner (post-PSR if the
+% recipe ran one, since `sol`/`rep` are reassigned to the PSR output above)
+% and does NOT change which candidate won: SOSC only ANNOTATES the row via
+% row.sosc (process/DESIGN_sosc.md sec 11.6 tiered gate: PASS/WEAK_MIN/
+% INCONCLUSIVE/ERROR keep the row as-is; a FAIL verdict is a genuine finding
+% -- a best-mass candidate that is a PROVEN SADDLE -- surfaced via a loud
+% warning, never by silently swapping in a different candidate).
+sosc = [];
+if certifySosc
+    savedT = struct('sigma', sol.sigma(:), 'X', sol.X, 'U', sol.U, 'dL', sol.dL, ...
+        'tfTarget', 1.5*tfMinAnchor, 'xf', [1;0;0;0;0], 'thrustN', T, ...
+        'm0kg', m0kg, 'ispS', ispS, 'maxIter', recipe.fuel.maxIter, ...
+        'tag', tagFuel, 'kind', 'MEE_M2');
+    sosc = verify_sosc_mee(savedT);
+    fprintf('  [sosc] T=%g N: verdict=%s (%s)\n', T, sosc.verdict, sosc.status);
+    if strcmp(sosc.verdict, 'FAIL')
+        warning('reproduce_row:soscFail', ['T=%g N: the BEST-MASS candidate is a ' ...
+            'PROVEN SADDLE (SOSC verdict FAIL) -- %s; row is annotated but NOT ' ...
+            're-selected (keep-best-by-mass selection is unchanged by design)'], ...
+            T, sosc.reason);
+    end
+end
+
+% ---------------------------------------------------------------------------
 % ROW + VERIFY + SAVE
 % ---------------------------------------------------------------------------
 note = '';
@@ -222,7 +265,7 @@ end
 row = gergaud_row(struct('thrustN', T, 'tfmin_ND', tfMinAnchor, 'ctf', 1.5, ...
     'tf_ND', 1.5*tfMinAnchor, 'm_f_kg', rep.m_f_kg, 'switches', rep.switches, ...
     'revs', rep.revs, 'edge', rep.edge, 'incl_deg', rep.incDeg, 'defect', rep.defect, ...
-    'certified', true, 'note', note, 'm0kg', m0kg, 'ispS', ispS));
+    'certified', true, 'note', note, 'm0kg', m0kg, 'ispS', ispS, 'sosc', sosc));
 
 tol = defaultTol(T);
 [~, vinfo] = verify_row(row, cert, tol);   % ONE-SIDED: throws only if WORSE than the campaign floor

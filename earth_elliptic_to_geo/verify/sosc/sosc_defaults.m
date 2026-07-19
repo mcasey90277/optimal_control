@@ -1,6 +1,6 @@
 function tol = sosc_defaults()
 % SOSC_DEFAULTS  Single source of SOSC certificate tolerances (canonical units,
-% magnitudes O(1)). See process/DESIGN_sosc.md sec 6.
+% magnitudes O(1)). See process/DESIGN_sosc.md sec 6, 11.4.
 % OUTPUTS: tol - struct of scalar thresholds.
 tol = struct( ...
     'recon',       1e-6, ...  % rebuild reproduces saved primal
@@ -11,19 +11,23 @@ tol = struct( ...
     'comp',        1e-6, ...  % complementarity max|lam*slack|
     'active',      1e-7, ...  % inequality slack -> active
     'mu',          1e-6, ...  % relative multiplier -> strongly-active
-    'inertiaZero', 1e-6);     % relative pivot magnitude -> zero eigenvalue
-% inertiaZero CALIBRATED on the 10 N row (DESIGN sec 6: "the 10 N integration
-% test is where they are confirmed/tightened"). The bang-bang min-fuel KKT is
-% near-singular with a ~270-dim genuine null space (reduced Hessian eigenvalues
-% clustered at ~1e-10..1e-6; verified independently by dense eig of Z'HZ and of
-% the full KKT, both reproducing DESIGN sec 11.1: KKT inertia (1865,1749,271),
-% reduced (116,0,270)). Its ldl D-pivots show a WIDE, STABLE plateau: negative
-% pivots with |.|>1e-5 number exactly 1749 (= true nneg) and stay 1749 through
-% |.|>1e-3, while all spurious near-zero pivots sit below ~1e-5 (269th smallest
-% |pivot|=1.23e-5, 270th=2.03e-4). Any zt in [1e-5,1e-3] recovers the true
-% inertia (red.nneg=0, nFlat~265-269). With scale=normest(K)~125, inertiaZero=
-% 1e-6 -> zt~1.25e-4, mid-plateau. The old 1e-9 (zt~1.25e-7) sat BELOW the
-% spurious band and mis-signed ~56 noise pivots as negative curvature -> a
-% spurious FAIL. 1e-6 errs conservatively (masks only truly-negligible
-% curvature; genuine negatives here are O(1e-3+), well above threshold).
+    'inertiaZero', 1e-9, ...  % relative eigenvalue magnitude -> zero eigenvalue
+    'maxEigDim',   15000);    % KKT dim (n+m_a) at/below which dense eig is used
+% inertiaZero REVERTED to 1e-9 (DESIGN sec 11.4, 2026-07-19): this value is
+% correct for gold-standard dense `eig(full(K))`, which is now the primary
+% inertia method (sosc_inertia). On the 10 N row, `eig` gives the true reduced
+% inertia (116,0,270) robustly for relative zt in [1e-9,1e-8] -- a clean
+% spectral gap (~270 eigenvalues at 1e-10, nothing until ~1e-4) makes the
+% classification insensitive to zt across that whole window. The earlier
+% Amendment-B raise to 1e-6 was a workaround for `ldl`-pivot-sign inertia
+% (count_inertia), which is UNRELIABLE on this near-singular KKT: at zt=1e-9
+% ldl mis-signs 56 spurious negative pivots, and ldl's own correct window
+% (zt in [1e-7,1e-6]) is disjoint from eig's -- there is no single zt that
+% works for both methods, so tuning zt to ldl's window is not robust across
+% rungs. `eig` is therefore the gold standard and 1e-9 is restored.
+% maxEigDim=15000 is the size guard: dense `eig` is used only when the full
+% KKT dimension (n+m_a) is at or below this bound (covers 10/5/2.5 N rungs).
+% Above it (1 N, 0.5 N) dense eig is intractable and sosc_inertia falls back
+% to the ldl/count_inertia path with IN.robust=false, honestly deferring
+% those rungs to INCONCLUSIVE rather than trusting an unvalidated inertia.
 end

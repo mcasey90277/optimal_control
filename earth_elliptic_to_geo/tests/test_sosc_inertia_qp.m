@@ -11,6 +11,9 @@ IN = sosc_inertia(sparse(eye(2)), sparse([1 1]), tol);
 assert(isequal([IN.npos IN.nneg IN.nzero],[2 1 0]) && IN.subspaceOK, 'PD case');
 assert(isequal([IN.red.npos IN.red.nneg IN.red.nzero],[1 0 0]) && IN.redConsistent, ...
     'PD case reduced inertia (1,0,0)');
+% Tiny KKT (nk=3 <= tol.maxEigDim) must take the eig path (sec 11.4).
+assert(strcmp(IN.method,'eig') && IN.robust, ...
+    'PD case must use eig (method=eig, robust=true) at this scale');
 % Case indefinite: H=diag(1,-3), A=[1 1] -> reduced Hessian = (1-3)/2 = -1 < 0
 IN2 = sosc_inertia(sparse(diag([1 -3])), sparse([1 1]), tol);
 assert(~IN2.subspaceOK && IN2.nneg==2, 'indefinite case -> FAIL signature');

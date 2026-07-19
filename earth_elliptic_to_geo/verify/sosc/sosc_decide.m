@@ -6,6 +6,7 @@ function v = sosc_decide(K, AS, IN)
 %   K  - kkt_residual struct; needs .pass .signOK .sign
 %   AS - active_set struct;   needs .nWeak .licq (licq REPORTED, never gates)
 %   IN - inertia struct;      needs .red (.npos .nneg .nzero) .redConsistent
+%                             .robust (false -> INCONCLUSIVE, sec 11.5 rule 2)
 %
 % OUTPUTS:
 %   v - struct .verdict .reason .status
@@ -20,9 +21,13 @@ red = IN.red;
 if ~K.pass || ~K.signOK
     v.verdict = 'ERROR';
     v.reason  = 'KKT residual/sign check failed (no trustworthy KKT point)';
+elseif ~IN.robust
+    v.verdict = 'INCONCLUSIVE';
+    v.reason  = sprintf(['inertia not computable at this scale (KKT too large for ' ...
+        'validated eig, method=%s)'], IN.method);
 elseif ~IN.redConsistent
     v.verdict = 'INCONCLUSIVE';
-    v.reason  = sprintf(['reduced-inertia consistency failed (sprank untrustworthy): ' ...
+    v.reason  = sprintf(['rank estimate inconsistent (sprank untrustworthy): ' ...
         'red=[%d %d %d], rankA=%d'], red.npos, red.nneg, red.nzero, IN.rankA);
 elseif red.nneg == 0 && red.nzero == 0
     v.verdict = 'PASS';

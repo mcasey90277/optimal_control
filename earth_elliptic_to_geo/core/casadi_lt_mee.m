@@ -99,9 +99,24 @@ creg = struct('label',{},'kind',{},'rows',{},'bound',{},'node',{});
 addc = @(lab,kind,r0,bnd,nd) struct('label',lab,'kind',kind,'rows',r0:size(opti.g,1),'bound',bnd,'node',nd);
 X  = opti.variable(7, N+1);
 U  = opti.variable(4, N+1);
-dL = opti.variable();                               % scalar DOF (single column)
+% DeltaL span. Default: a single scalar DOF (a scalar multiplying EVERY defect
+% -> a dense Jacobian column -> bordered/"arrowhead" KKT hostile to sparse MUMPS
+% factorization at large N). Optional liftDL (external review, GPT-5.6 + Gemini,
+% 2026-07-19): promote to an N+1 sequence tied equal by a LOCAL (bidiagonal)
+% constraint chain, so the span enters each defect only via a local node value
+% -> strictly block-banded KKT. Entries are numerically identical; dL is the
+% scalar handle for bounds/reporting; dLnode is the per-node span.
+liftDL = d('liftDL', false);
+if liftDL
+    dLv = opti.variable(1, N+1);
+    opti.subject_to(dLv(2:end) == dLv(1:end-1));    % tie all equal (local coupling)
+    dLnode = dLv;   dL = dLv(1);
+else
+    dL = opti.variable();                           % scalar DOF (single column)
+    dLnode = repmat(dL, 1, N+1);
+end
 m  = X(6,:);  t = X(7,:);  beta = U(1:3,:);  thr = U(4,:);
-Lk = pi + sg*dL;                                     % [(N+1)x1] MX, x0's L = pi
+Lk = pi + sg(:).*dLnode(:);                          % [(N+1)x1] MX per-node L (x0's L=pi)
 
 % node dynamics dXdL_k = d/dL, Ldot_k = dL/dt (par.L set per node; Lk(k) is an
 % MX expression depending on dL, which lt_mee_rhs handles fine since it only
@@ -119,7 +134,7 @@ Ldot = [Ldotc{:}];      % [1x(N+1)] MX
 r0 = size(opti.g,1)+1;
 conDef = cell(1, N);
 for k = 1:N
-    conDef{k} = X(:,k+1) - X(:,k) - (dsig(k)/2)*dL*(dXdL(:,k) + dXdL(:,k+1)) == 0;
+    conDef{k} = X(:,k+1) - X(:,k) - (dsig(k)/2)*dLnode(k)*(dXdL(:,k) + dXdL(:,k+1)) == 0;
     opti.subject_to(conDef{k});
 end
 if returnModel, creg(end+1) = addc('defect','eq',r0,0,1:N); end
@@ -204,8 +219,6 @@ r0 = size(opti.g,1)+1;  opti.subject_to(beta(:) >= -1.01);
 if returnModel, creg(end+1) = addc('betaBox_lo','ineqLo',r0,-1.01,[]); end
 r0 = size(opti.g,1)+1;  opti.subject_to(beta(:) <= 1.01);
 if returnModel, creg(end+1) = addc('betaBox_hi','ineqHi',r0,1.01,[]); end
-r0 = size(opti.g,1)+1;  opti.subject_to(dL >= 0.1);
-if returnModel, creg(end+1) = addc('dLbox_lo','ineqLo',r0,0.1,[]); end
 % dL upper bound is RUNG-ADAPTIVE (external review, GPT-5.6, 2026-07-19): a fixed
 % dL<=2000 (~318 rev) made the deep rungs structurally INFEASIBLE -- 0.2 N needs
 % DeltaL~2168 (~345 rev) and 0.1 N ~4335 (~690 rev), both above 2000. Derive a
@@ -213,8 +226,17 @@ if returnModel, creg(end+1) = addc('dLbox_lo','ineqLo',r0,0.1,[]); end
 % divergence"); the max(2000,..) floor leaves the shallow rungs unchanged (10 N
 % dL0~46 -> 2000).
 dLub = max(2000, 5*dL0);
-r0 = size(opti.g,1)+1;  opti.subject_to(dL <= dLub);
-if returnModel, creg(end+1) = addc('dLbox_hi','ineqHi',r0,dLub,[]); end
+if liftDL
+    % bound every lifted node (the equality chain keeps them equal at the
+    % solution; bounding all keeps iterates in range). Not registered for SOSC.
+    opti.subject_to(dLv(:) >= 0.1);
+    opti.subject_to(dLv(:) <= dLub);
+else
+    r0 = size(opti.g,1)+1;  opti.subject_to(dL >= 0.1);
+    if returnModel, creg(end+1) = addc('dLbox_lo','ineqLo',r0,0.1,[]); end
+    r0 = size(opti.g,1)+1;  opti.subject_to(dL <= dLub);
+    if returnModel, creg(end+1) = addc('dLbox_hi','ineqHi',r0,dLub,[]); end
+end
 
 % boundary conditions
 r0 = size(opti.g,1)+1;
@@ -237,7 +259,7 @@ else
     r0 = size(opti.g,1)+1;
     opti.subject_to(t(end) == tfTarget);
     if returnModel, creg(end+1) = addc('tfPin','eq',r0,tfTarget,N+1); end
-    w = (dL ./ fmax(Ldot, par.LdotFloor)) .* (thr - epsv*thr.*(1 - thr)); % dt/dsigma; Ldot guarded (see LdotFloor)
+    w = (dLnode ./ fmax(Ldot, par.LdotFloor)) .* (thr - epsv*thr.*(1 - thr)); % dt/dsigma; Ldot guarded (see LdotFloor)
     opti.minimize(sum((dsig/2) .* (w(1:N) + w(2:N+1))));
 end
 
@@ -255,7 +277,7 @@ U0w = U0;
 if strcmp(mode, 'mintime'), U0w(4,:) = 1; end
 opti.set_initial(X, X0);
 opti.set_initial(U, U0w);
-opti.set_initial(dL, dL0);
+if liftDL, opti.set_initial(dLv, dL0*ones(1,N+1)); else, opti.set_initial(dL, dL0); end
 ip = struct('max_iter', maxIter, 'tol', 1e-9, 'constr_viol_tol', 1e-10, ...
             'print_level', printLvl, 'mu_strategy', 'adaptive', ...
             'linear_solver', 'mumps', 'mumps_pivot_order', 0, ...

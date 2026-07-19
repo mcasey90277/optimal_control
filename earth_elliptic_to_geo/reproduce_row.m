@@ -4,10 +4,11 @@ function row = reproduce_row(T, opts)
 % the campaign's certified numbers, and cache the result.
 %
 % Composes the existing certified drivers (run_mintime_mee.m,
-% run_transfer_mee.m, psr_mee_refine.m) under a strategy dispatched from
-% table3_recipes.m (the anchor stage's strategy: coldB/chain/R0law -- the
-% fourth, smallN_first, is Task 3's job and is a clear placeholder error
-% here). Every solve uses REPRO_-prefixed tags so a from-scratch run can
+% run_transfer_mee.m, psr_mee_refine.m, anchor_smallN_first.m) under a
+% strategy dispatched from table3_recipes.m (the anchor stage's strategy:
+% coldB/chain/R0law/smallN_first -- the last, the 1 N low-node-density-first
+% strategy, is anchor_smallN_first.m, Task 3). Every solve uses REPRO_-prefixed
+% tags so a from-scratch run can
 % NEVER load or clobber the campaign's own production caches under the
 % plain MEE_mintime_T.../MEE_M2_...N tags -- this is the whole point of
 % the "engine": prove the certified numbers are reproducible by an
@@ -47,11 +48,9 @@ function row = reproduce_row(T, opts)
 % defensive assert.
 %
 % INPUTS:
-%   T    - max thrust level [N]; one of 10, 5, 2.5 (coldB/chain, this
-%          task), 0.5 (R0law, this task; its fuel-stage chain predecessor
-%          is 1 N, Task 3's smallN_first -- so a full 0.5 N run is only
-%          possible once Task 3 lands), 1 (smallN_first, Task 3 --
-%          errors here)                                              [scalar]
+%   T    - max thrust level [N]; one of 10, 5, 2.5 (coldB/chain), 1
+%          (smallN_first -- anchor_smallN_first.m, Task 3), 0.5 (R0law;
+%          its fuel-stage chain predecessor is the 1 N smallN_first rung) [scalar]
 %   opts - optional struct:
 %     .reuseCampaignCache - if true, use the campaign's own canonical
 %                    driver tags instead of REPRO_ tags (see above);
@@ -141,8 +140,10 @@ switch recipe.anchor.strategy
             'thrustN', T, 'dL_mt', [], 'N', [], 'solverOut', []);
 
     case 'smallN_first'
-        error('reproduce_row:smallNFirstNotYet', ...
-            'smallN_first is implemented in Task 3');
+        prevSN = load_prev(T, recipe.anchor.warmFrom, reproDir);
+        aopts  = struct('nprLo', recipe.anchor.nprLo, 'nprHi', recipe.anchor.nprHi, ...
+            'tag', tagMt);
+        anchor = anchor_smallN_first(T, par, prevSN.anchor, aopts);
 
     otherwise
         error('reproduce_row:unknownStrategy', ...

@@ -24,7 +24,7 @@ function report = apply_sosc_gate(report, sosc)
 report.sosc = sosc;
 if strcmp(sosc.verdict, 'FAIL')
     report.certified = false;
-    warning('run_transfer_mee:soscFail', ...
+    warning('apply_sosc_gate:fail', ...
         'SOSC FAIL (proven saddle) -> demoted to feasible-only: %s', sosc.reason);
 end
 end

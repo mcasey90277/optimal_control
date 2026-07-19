@@ -63,11 +63,16 @@ function row = reproduce_row(T, opts)
 %                    reproducer stays fast by default, matching
 %                    run_transfer_mee.m's cfg.certifySosc opt-in default.
 %                    When true, row.sosc is populated (verify_sosc_mee.m
-%                    output) and a FAIL verdict emits a loud warning
-%                    (a proven-saddle best-mass candidate is a genuine
-%                    finding) WITHOUT changing which candidate won --
-%                    mass alone still decides, per process/DESIGN_sosc.md
-%                    sec 11.6                                          [logical]
+%                    output) and a FAIL verdict emits a loud warning AND
+%                    demotes row.certified to false (via apply_sosc_gate,
+%                    the same gate run_transfer_mee.m uses) -- a proven
+%                    saddle is never adopted as a clean certified
+%                    reproduction, per process/DESIGN_sosc.md sec 11.6.
+%                    This does NOT change which candidate won -- mass
+%                    alone still decides the keep-best-mass selection;
+%                    only the CERTIFIED status of that winner is gated.
+%                    PASS/WEAK_MIN/INCONCLUSIVE/ERROR all leave
+%                    row.certified true                                [logical]
 %
 % OUTPUTS:
 %   row - gergaud_row.m row struct for this rung (+ .sosc, [] unless
@@ -238,19 +243,30 @@ end
 % INCONCLUSIVE/ERROR keep the row as-is; a FAIL verdict is a genuine finding
 % -- a best-mass candidate that is a PROVEN SADDLE -- surfaced via a loud
 % warning, never by silently swapping in a different candidate).
+% Winner-tag provenance: res.cfg.tag is the ACTUAL winning multi-start
+% candidate's tag (e.g. '..._A3'/'..._B2', set per-candidate in
+% build_fuel_cfg/fuel_multistart above), not the un-suffixed tagFuel stem --
+% using it here lets sosc.meta.tag trace to the candidate that actually won
+% (reviewer Minor).
+winnerTag = tagFuel;
+if isfield(res, 'cfg') && isfield(res.cfg, 'tag') && ~isempty(res.cfg.tag)
+    winnerTag = res.cfg.tag;
+end
+
 sosc = [];
 if certifySosc
     savedT = struct('sigma', sol.sigma(:), 'X', sol.X, 'U', sol.U, 'dL', sol.dL, ...
         'tfTarget', 1.5*tfMinAnchor, 'xf', [1;0;0;0;0], 'thrustN', T, ...
         'm0kg', m0kg, 'ispS', ispS, 'maxIter', recipe.fuel.maxIter, ...
-        'tag', tagFuel, 'kind', 'MEE_M2');
+        'tag', winnerTag, 'kind', 'MEE_M2');
     sosc = verify_sosc_mee(savedT);
     fprintf('  [sosc] T=%g N: verdict=%s (%s)\n', T, sosc.verdict, sosc.status);
     if strcmp(sosc.verdict, 'FAIL')
         warning('reproduce_row:soscFail', ['T=%g N: the BEST-MASS candidate is a ' ...
-            'PROVEN SADDLE (SOSC verdict FAIL) -- %s; row is annotated but NOT ' ...
-            're-selected (keep-best-by-mass selection is unchanged by design)'], ...
-            T, sosc.reason);
+            'PROVEN SADDLE (SOSC verdict FAIL) -- %s; keep-best-by-mass selection ' ...
+            'is unchanged by design, but the row is demoted to uncertified ' ...
+            '(row.certified=false) per DESIGN_sosc.md sec 11.6 -- a proven saddle ' ...
+            'is never adopted as a clean certified reproduction'], T, sosc.reason);
     end
 end
 
@@ -266,6 +282,18 @@ row = gergaud_row(struct('thrustN', T, 'tfmin_ND', tfMinAnchor, 'ctf', 1.5, ...
     'tf_ND', 1.5*tfMinAnchor, 'm_f_kg', rep.m_f_kg, 'switches', rep.switches, ...
     'revs', rep.revs, 'edge', rep.edge, 'incl_deg', rep.incDeg, 'defect', rep.defect, ...
     'certified', true, 'note', note, 'm0kg', m0kg, 'ispS', ispS, 'sosc', sosc));
+
+% SOSC gate (Task 9 review fix, Important): a FAIL verdict on the winner must
+% NEVER be adopted as a clean certified reproduction (DESIGN_sosc.md sec 11.6:
+% "the reproducer adopts a candidate whose verdict in {PASS, WEAK_MIN,
+% INCONCLUSIVE} (never FAIL)"). Reuse the SAME gate the driver
+% (run_transfer_mee.m) uses -- row already carries a .certified field, so
+% apply_sosc_gate demotes it to false on FAIL (and re-attaches row.sosc,
+% a no-op here since gergaud_row already passed it through). PASS/WEAK_MIN/
+% INCONCLUSIVE/ERROR (or certifySosc=false, sosc=[]) leave the row untouched.
+if certifySosc
+    row = apply_sosc_gate(row, sosc);
+end
 
 tol = defaultTol(T);
 [~, vinfo] = verify_row(row, cert, tol);   % ONE-SIDED: throws only if WORSE than the campaign floor

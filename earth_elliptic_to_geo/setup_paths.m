@@ -5,8 +5,8 @@ function setup_paths()
 % the module root; every other .m lives in a functional subfolder. isfolder-
 % guarded so it is a safe no-op if a subfolder is absent.
 r = fileparts(mfilename('fullpath'));
-subs = {'core','coords','drivers','psr','verify','frontdoor', ...
-        'reproduce','viz','cartesian_legacy','lib','tests','attic'};
+subs = {'core','coords','drivers','psr','verify',fullfile('verify','sosc'), ...
+        'frontdoor','reproduce','viz','cartesian_legacy','lib','tests','attic'};
 addpath(r);
 for k = 1:numel(subs)
     d = fullfile(r, subs{k});

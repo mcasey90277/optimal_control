@@ -9,7 +9,7 @@ function ver = verify_pmp_mee(out, par, sigma, opts)
 % PIPELINE:
 %   1. mee_dual_to_costate: interval defect duals out.lamDef -> nodal costate
 %      lam, via the step-weighted adjacent-interval average (mandatory
-%      correctness fix, DESIGN_dual_map.md), one-sided at the endpoints.
+%      correctness fix, process/DESIGN_dual_map.md), one-sided at the endpoints.
 %   2. mee_primer_switch: forms the primer vector primerVec = (Tmax/m)*Ldot*
 %      p_el - G*K_L*e3 (p_el = B(X)'*lam_el, the MEE primer; G the sigma-
 %      domain Hamiltonian bracket; K_L the Ldot-on-control coupling
@@ -34,7 +34,7 @@ function ver = verify_pmp_mee(out, par, sigma, opts)
 %      nodes (S<0 <=> thr=1, S>0 <=> thr=0). Also reports the tangential
 %      residual (I-beta*beta')*primerVec at burn nodes (its norm
 %      distribution) -- NOTE: despite the similar name, this is NOT
-%      DESIGN_dual_map.md's multi-group Lagrangian-residual T1 test (that
+%      process/DESIGN_dual_map.md's multi-group Lagrangian-residual T1 test (that
 %      test assembles the FULL NLP Lagrangian gradient from ALL dual groups
 %      -- defect, cone, terminal/equality, bound multipliers -- and is not
 %      built here; this transcription has no cone constraint on beta to
@@ -65,7 +65,7 @@ function ver = verify_pmp_mee(out, par, sigma, opts)
 %                                       - ||tangential primerVec component|| /
 %                                         ||primerVec|| on burns -- primer-
 %                                         angle information in norm form, NOT
-%                                         DESIGN_dual_map.md's full multi-
+%                                         process/DESIGN_dual_map.md's full multi-
 %                                         group Lagrangian-residual T1 (see
 %                                         pipeline step 4 note above; that
 %                                         test remains future work)
@@ -89,7 +89,7 @@ function ver = verify_pmp_mee(out, par, sigma, opts)
 %       since this transcription has no cScale).
 %   [2] earth_elliptic_to_geo/mee_dual_to_costate.m, mee_primer_switch.m (the
 %       two pieces this file orchestrates).
-%   [3] earth_elliptic_to_geo/DESIGN_dual_map.md (Campaign-B's own T1
+%   [3] earth_elliptic_to_geo/process/DESIGN_dual_map.md (Campaign-B's own T1
 %       acceptance test is the full multi-group Lagrangian residual, NOT the
 %       tangentialResid quantity reported here -- see pipeline step 4 note).
 %   [4] Haberkorn, Martinon, Gergaud, JGCD 27(6), 2004, Fig. 16 (H1/H2).
@@ -141,7 +141,7 @@ ver.burnSignPct    = 100 * mean(S(burn)  < 0);
 ver.coastSignPct   = 100 * mean(S(~burn) > 0);
 
 % Tangential residual: (I - beta*beta')*primerVec at burn nodes. This is the
-% primer-angle information recast in norm form -- NOT DESIGN_dual_map.md's
+% primer-angle information recast in norm form -- NOT process/DESIGN_dual_map.md's
 % full multi-group Lagrangian-residual T1 (defect + cone + terminal + bound
 % duals); that test remains future work (see pipeline step 4 note above).
 nB = nnz(burn);  Rtan = zeros(1, nB);  pvB = pvn(burn);

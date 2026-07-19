@@ -21,13 +21,13 @@ function out = casadi_lt_2body(sigma, X0, U0, tauf0, term, opts)
 % INPUTS:  sigma [(N+1)x1] 0->1;  X0 [8|9 x N+1] warm start (cScale row appended
 %          as 1s if absent);  U0 [4xN+1];  tauf0 [scalar];  term [struct];
 %          opts .par .mode .eps .tfTarget .rv0 .maxIter .warmTight .printLevel
-% OUTPUTS: out - see header table in PLAN.md Task 7 (X,U,success,maxDefect,
+% OUTPUTS: out - see header table in process/PLAN.md Task 7 (X,U,success,maxDefect,
 %          lamDef, primerAlignDeg, m_f_kg, dV_kms, switches, edge, ...)
 %
 % REFERENCES:
 %   [1] NLP_lowThrust_GTO_tulip/sundman_minfuel/casadi_minfuel_sundman.m (parent).
 %   [2] NLP_lowThrust_GTO_tulip/elfo/casadi_energy_freetf.m (cScale pattern).
-%   [3] DESIGN.md secs 2-4.
+%   [3] process/DESIGN.md secs 2-4.
 cp = getenv('CASADI_PATH');
 if isempty(cp), cp = fullfile(getenv('HOME'), 'casadi-3.7.0'); end
 addpath(cp);

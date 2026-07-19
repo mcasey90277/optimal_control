@@ -134,7 +134,7 @@ function out = run_mintime_mee(thrustN, nodesPerRev, cfg)
 % first reaches the 1e-4 decade.
 %
 % PER-ROUND RETAIN-IF-IMPROVED / RETRY-LOOSE (review finding, binding --
-% DESIGN_thrust_ladder.md Phase 0 item 1): a continuation round's result is
+% process/DESIGN_thrust_ladder.md Phase 0 item 1): a continuation round's result is
 % NO LONGER accepted unconditionally. After each round, the new iterate is
 % retained (resetting the retry budget) only if it cleared the SAME
 % decadeMin floor the stall guard has always used -- decadeImprove =
@@ -213,7 +213,7 @@ function out = run_mintime_mee(thrustN, nodesPerRev, cfg)
 %   two-stage/continuation recipe, stall guard, seedAnchor precedent).
 %   [2] earth_elliptic_to_geo/mintime_guard_constants.m (shared guard pair).
 %   [3] earth_elliptic_to_geo/casadi_lt_mee.m (MEE solver core, Task 3).
-%   [4] DESIGN_thrust_ladder.md sec "Phase 2" (feasibility-selected barrier
+%   [4] process/DESIGN_thrust_ladder.md sec "Phase 2" (feasibility-selected barrier
 %       policy, Phase-0 review finding, carried into the MEE driver).
 %   [5] .superpowers/sdd/task-6-brief.md (this task's spec).
 %   [6] earth_elliptic_to_geo/mee_fuel_tag.m (shared fuel-tag convention,
@@ -405,7 +405,7 @@ function [out, round_] = mintime_mee_continue(sigma, X0, U0, dL0, x0state, par, 
     isGood, roundsMax, decadeMin, maxLooseRetries, maxIter, printLvl, resDir, tag, label, fp)
 % MINTIME_MEE_CONTINUE  Shared initial-solve + warm-continuation loop with
 % the feasibility-selected barrier policy, the retain-if-improved / retry-
-% loose mechanism (DESIGN_thrust_ladder.md Phase 0 item 1), and the shared
+% loose mechanism (process/DESIGN_thrust_ladder.md Phase 0 item 1), and the shared
 % stall/converge guard. Per-round outputs are config-fingerprinted and
 % cached to resDir/<tag>_<label>_round%02d.mat (round 0 = the initial loose
 % solve) so a killed process resumes without re-solving completed rounds.
@@ -441,7 +441,7 @@ function [out, round_] = mintime_mee_continue(sigma, X0, U0, dL0, x0state, par, 
 %   adapted for casadi_lt_mee's opts contract and the feasibility-selected
 %   barrier policy in place of the round-number-indexed warmTight rule).
 %   [2] round_advance_decision.m (the retain/retry decision, unit-tested
-%   separately). [3] DESIGN_thrust_ladder.md Phase 0 item 1 (the mandate).
+%   separately). [3] process/DESIGN_thrust_ladder.md Phase 0 item 1 (the mandate).
 fpRound = fp;  fpRound.label = label;  fpRound.N = size(X0,2) - 1;
 fp = fpRound;   % shadow the input fp with the round-level fingerprint for the
                 % remainder of this function -- the caller's copy is untouched

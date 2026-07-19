@@ -15,7 +15,7 @@ function xdot = lt2b_rhs_time(x, u, par)
 %   xdot - Time derivative of state [8x1] = d/dt [r; v; m; t]
 %
 % REFERENCES:
-%   [1] DESIGN.md sec 2 (problem statement).
+%   [1] process/DESIGN.md sec 2 (problem statement).
 
 r = x(1:3);  v = x(4:6);  m = x(7);
 rn2 = r(1)^2 + r(2)^2 + r(3)^2 + 1e-12;      % softened, AD/CS-safe

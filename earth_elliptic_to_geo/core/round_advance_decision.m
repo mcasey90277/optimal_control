@@ -1,6 +1,6 @@
 function [keepNew, retryLoose] = round_advance_decision(prevDefect, newDefect, alreadyRetried, C)
 % ROUND_ADVANCE_DECISION  Pure retain-if-improved / retry-loose-once decision
-% for a single mintime continuation round (DESIGN_thrust_ladder.md Phase 0
+% for a single mintime continuation round (process/DESIGN_thrust_ladder.md Phase 0
 % item 1: "retain the new primal iterate only if feasibility improved over
 % the incoming one ... otherwise keep the prior iterate and retry with
 % adaptive mu"). Factored out of run_mintime_mee.m's mintime_mee_continue so
@@ -58,7 +58,7 @@ function [keepNew, retryLoose] = round_advance_decision(prevDefect, newDefect, a
 %                       warmTight=false) before the caller's existing stall
 %                       guard is allowed to fire
 %
-% REFERENCES: [1] DESIGN_thrust_ladder.md Phase 0 item 1 (the mandate).
+% REFERENCES: [1] process/DESIGN_thrust_ladder.md Phase 0 item 1 (the mandate).
 %   [2] mintime_guard_constants.m (decadeMin/maxLooseRetries, shared).
 %   [3] test_stall_guard.m / test_mintime_mee_guard.m (decadeImprove
 %   arithmetic and floor value this must match exactly).

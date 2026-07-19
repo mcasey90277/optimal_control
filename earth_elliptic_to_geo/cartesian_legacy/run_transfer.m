@@ -20,7 +20,7 @@ function res = run_transfer(cfg)
 %          a downstream seed); .report = .revs .switches .m_f_kg .dV_kms
 %          .edge .apoBurnRatio
 %
-% REFERENCES: [1] DESIGN.md secs 4-5.
+% REFERENCES: [1] process/DESIGN.md secs 4-5.
 resDir = fullfile(module_root(), 'results');
 if ~exist(resDir, 'dir'), mkdir(resDir); end
 d = @(f,v) optdef(cfg, f, v);

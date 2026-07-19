@@ -6,7 +6,7 @@ function lam = mee_dual_to_costate(LamDef, sigma)
 % so out.lamDef(:,k) is the multiplier of INTERVAL k (living between nodes k
 % and k+1), not a per-node quantity. The continuous costate lambda(sigma) is
 % sampled AT the nodes; the standard (alpha-stationarity) discrete-adjoint
-% result -- adopted campaign-wide per DESIGN_dual_map.md's "[CORRECTNESS]"
+% result -- adopted campaign-wide per process/DESIGN_dual_map.md's "[CORRECTNESS]"
 % clause and the ms_band precedent (MS_BAND_CAMPAIGN.md) -- is that the
 % interior nodal costate is the STEP-WEIGHTED AVERAGE of its two adjacent
 % interval duals (reduces to the plain average on a uniform mesh), one-sided
@@ -19,7 +19,7 @@ function lam = mee_dual_to_costate(LamDef, sigma)
 % with h(k) = sigma(k+1)-sigma(k) the interval's own sigma-width. This map is
 % NOT in dispute for this transcription: unlike casadi_lt_2body's 9-state
 % cScale-augmented Sundman solver (open ~20 deg primer anomaly, believed
-% extraction-side per DESIGN_dual_map.md's triage, NOT this averaging step),
+% extraction-side per process/DESIGN_dual_map.md's triage, NOT this averaging step),
 % casadi_lt_mee.m has no per-node slack state at all -- DeltaL is a single
 % free SCALAR (opti.variable(), one column, not a per-node row multiplying
 % every dynamics row) -- so there is no analogous row-scaling suspect here.
@@ -36,7 +36,7 @@ function lam = mee_dual_to_costate(LamDef, sigma)
 %   lam - nodal costate, step-weighted adjacent-interval average [nx x (N+1)]
 %
 % REFERENCES:
-%   [1] earth_elliptic_to_geo/DESIGN_dual_map.md sec "[CORRECTNESS]" (the
+%   [1] earth_elliptic_to_geo/process/DESIGN_dual_map.md sec "[CORRECTNESS]" (the
 %       mandatory weighted-average formula, campaign-wide).
 %   [2] NLP_lowThrust_GTO_tulip/ms_band/MS_BAND_CAMPAIGN.md (adjudicated
 %       midpoint dual map, the method precedent).

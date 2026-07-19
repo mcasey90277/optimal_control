@@ -155,13 +155,13 @@ the reconstruction check, and the viz adapter.
 ### PMP verifier — `verify_pmp_mee.m` (+ `mee_dual_to_costate.m`, `mee_primer_switch.m`)
 First-order Pontryagin certificate from the NLP's KKT duals (primer alignment,
 switching-sign law). Diagnostic only; **primal certifications (defect/terminal)
-never depend on it.** See `CAMPAIGN.md` footnote 5 for the open dual anomaly.
+never depend on it.** See `process/CAMPAIGN.md` footnote 5 for the open dual anomaly.
 
 ### Cartesian counterparts (original reproduction)
 `casadi_lt_2body.m`, `run_transfer.m`, `run_mintime.m`, `homotopy_2body.m`,
 `seed_2body.m`, `verify_pmp_2body.m` — the Sundman-regularized Cartesian solver
 that reproduced the paper's 10 N case but stalled at 5 N; the MEE stack above
-superseded it. Kept for the cross-formulation gate (see `CAMPAIGN.md`).
+superseded it. Kept for the cross-formulation gate (see `process/CAMPAIGN.md`).
 
 ---
 
@@ -273,7 +273,7 @@ cd reproduce && ./reproduce_table3.sh 10 5 2.5 1 0.5   # per-process watchdog, s
 ## Related files (outside this directory)
 
 - **Method note (full methodology + flow diagram):** `doc/table3_method_note.tex`
-- **Campaign narrative + results tables + honesty footnotes:** `CAMPAIGN.md`
+- **Campaign narrative + results tables + honesty footnotes:** `process/CAMPAIGN.md`
 - **Outstanding work:** `TODO.md`
 - **CasADi/IPOPT:** `~/casadi-3.7.0`
 - **Parent campaign (CR3BP, shared solver architecture):** `../NLP_lowThrust_GTO_tulip/`
@@ -283,7 +283,7 @@ cd reproduce && ./reproduce_table3.sh 10 5 2.5 1 0.5   # per-process watchdog, s
 ## Results (headline)
 
 Certified min-fuel ladder at c_tf = 1.5 (full table + honesty footnotes in
-`CAMPAIGN.md`):
+`process/CAMPAIGN.md`):
 
 | T [N] | m_f [kg] | switches | revs (ours / paper) | movie |
 |---|---|---|---|---|

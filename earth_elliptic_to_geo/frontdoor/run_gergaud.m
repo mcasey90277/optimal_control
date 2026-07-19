@@ -110,7 +110,7 @@ function row = run_gergaud(opts)
 % REFERENCES:
 %   [1] Haberkorn, Martinon, Gergaud, "Low Thrust Minimum-Fuel Orbital
 %       Transfer: A Homotopic Approach," JGCD 27(6), 2004, Table 3.
-%   [2] earth_elliptic_to_geo/README.md, DESIGN_thrust_ladder.md (campaign
+%   [2] earth_elliptic_to_geo/README.md, process/DESIGN_thrust_ladder.md (campaign
 %       record + the six binding footnotes the recipe map above summarizes).
 %   [3] earth_elliptic_to_geo/run_mintime_mee.m, run_transfer_mee.m,
 %       psr_mee_refine.m (the three live-pipeline stages).

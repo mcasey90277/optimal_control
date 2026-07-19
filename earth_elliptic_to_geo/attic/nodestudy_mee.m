@@ -34,7 +34,7 @@ function [rowsCold, rowsWarm, anchorRow] = nodestudy_mee()
 % nodes/rev at 10 N -- always warm-start/continue a dense mesh from a
 % converged neighbor, never cold-solve it from a fresh constant-throttle
 % seed. This VALIDATES (does not change) the thrust ladder's existing
-% continuation-based architecture (DESIGN_thrust_ladder.md).
+% continuation-based architecture (process/DESIGN_thrust_ladder.md).
 %
 % GATE (Task-5 brief): m_f spread across {25,30,40} nodes/rev, WARM
 % values (25 = the shared anchor), must be < 0.5 kg. 15/20 nodes/rev

@@ -153,7 +153,7 @@ function res = run_mintime(thrustN, hx0, N, seedAnchor, routeB)
 %          anchor-seeded path, or (.routeB .sbar .tDur .energyDefect) on the
 %          Route-B path.
 %
-% REFERENCES: [1] DESIGN.md sec 4 step 1.  [2] PLAN.md Task 8.
+% REFERENCES: [1] process/DESIGN.md sec 4 step 1.  [2] process/PLAN.md Task 8.
 %   [3] task-8-brief.md contingency comment (origin of the stage-1/stage-2
 %       idea; promoted here from documented fallback to the default path
 %       after the one-shot manifold solve was shown not to converge).

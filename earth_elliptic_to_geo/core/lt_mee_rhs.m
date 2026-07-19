@@ -23,7 +23,7 @@ function [dXdL, Ldot] = lt_mee_rhs(X, U, par)
 %
 % REFERENCES:
 %   [1] Haberkorn, Martinon, Gergaud, JGCD 27(6), 2004, p.6 (Gauss equations).
-%   [2] earth_elliptic_to_geo/DESIGN.md sec 2 (problem statement).
+%   [2] earth_elliptic_to_geo/process/DESIGN.md sec 2 (problem statement).
 
 P  = X(1);  ex = X(2);  ey = X(3);  hx = X(4);  hy = X(5);  m = X(6);
 L  = par.L;  Tm = par.Tmax;  c = par.c;  mu = par.mu;

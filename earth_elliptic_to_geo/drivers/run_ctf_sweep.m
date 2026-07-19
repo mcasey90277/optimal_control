@@ -78,7 +78,7 @@ function run_ctf_sweep()
 % point as the sole available law-R0 value.
 %
 % INPUTS:  none   OUTPUTS: none (results/sweep_*.mat + front figure + printed table)
-% REFERENCES: [1] DESIGN.md sec 5 milestone M3. [2] paper Figs 18/23, law R0.
+% REFERENCES: [1] process/DESIGN.md sec 5 milestone M3. [2] paper Figs 18/23, law R0.
 %   [3] Task 14 controller triage (this task): certified-only caching,
 %       best-of chain/fresh envelope for basin scatter, thrust-continuation
 %       anchor seeding (run_mintime seedAnchor, run_transfer certified-gate),

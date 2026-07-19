@@ -10,7 +10,7 @@ function reproduce_table3(thrustList)
 % continuation, 0.5 N's PSR-refinement budget, and any future seeded 0.2/
 % 0.1 N rung) are known to be susceptible to the recurring UNCATCHABLE
 % MEX/CasADi fatal crash documented throughout this campaign (e.g.
-% run_task9_watchdog.sh's header comment, CAMPAIGN.md) -- a crash there
+% run_task9_watchdog.sh's header comment, process/CAMPAIGN.md) -- a crash there
 % takes this ENTIRE MATLAB process down, and this in-process loop does NOT
 % auto-relaunch (rows already reproduced earlier in the SAME call are safe
 % -- they were already written to results/repro/ -- but the loop itself

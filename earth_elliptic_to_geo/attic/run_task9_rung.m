@@ -88,7 +88,7 @@ function deep = run_task9_rung(thrustN, prevThrust, prevAnchor, prevFuelSigma, p
 %
 % STATUS (deprecated 2026-07-18; last live-use status unchanged from the
 % prior review): committed but not yet exercised live -- the 0.5 N rung was
-% certified via the anchor-free R0-law-estimate path (DESIGN_thrust_ladder.md
+% certified via the anchor-free R0-law-estimate path (process/DESIGN_thrust_ladder.md
 % footnote 1), not through this function; run_task9_deep.m (its one live
 % caller) has not yet been run past 0.5 N, so the first live use of this
 % file's body would be the 0.2 N rung -- but new work should reach 0.2/0.1 N

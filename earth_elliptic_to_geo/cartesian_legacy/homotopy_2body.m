@@ -11,7 +11,7 @@ function [best, tbl] = homotopy_2body(sigma, X0, U0, tauf0, term, tf, opts)
 % OUTPUTS: best - last tight solver out + .certified .epsReached;  tbl [Kx5]
 %          = [eps, maxDefect, switches, edge, m_f_kg]
 %
-% REFERENCES: [1] sundman_minfuel/sundman_homotopy.m (pattern). [2] DESIGN.md sec 4.
+% REFERENCES: [1] sundman_minfuel/sundman_homotopy.m (pattern). [2] process/DESIGN.md sec 4.
 d = @(f,v) optdef(opts, f, v);
 sched   = d('sched', [1 0.6 0.35 0.2 0.12 0.07 0.04 0.025 0.015 0.008 0.004 0.002 0.001 0]);
 maxIter = d('maxIter', 1500);

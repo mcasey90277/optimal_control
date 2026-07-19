@@ -103,7 +103,7 @@ function [primerVec, S, info] = mee_primer_switch(X, U, lam, sigma, dL, par)
 %   [2] earth_elliptic_to_geo/lt_mee_rhs.m (dXdL, Ldot -- the RHS this file
 %       probes, never hand-transcribed).
 %   [3] earth_elliptic_to_geo/mee_dual_to_costate.m (the lam this consumes).
-%   [4] earth_elliptic_to_geo/DESIGN_dual_map.md (Campaign-B context; no
+%   [4] earth_elliptic_to_geo/process/DESIGN_dual_map.md (Campaign-B context; no
 %       cScale-class anomaly here -- see mee_dual_to_costate.m header).
 Nn = size(X, 2);
 e1 = [1;0;0];  e2 = [0;1;0];  e3 = [0;0;1];

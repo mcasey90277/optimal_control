@@ -3,7 +3,7 @@ function cert = table3_certified(thrustN)
 %
 % Pure lookup: no file I/O, no solves, no side effects. Source of truth
 % for the Table-3 reproducer engine's verify step (verify_row.m) -- these
-% are the campaign's own certified numbers (see CAMPAIGN.md), not the
+% are the campaign's own certified numbers (see process/CAMPAIGN.md), not the
 % published-paper numbers (those live in gergaud_row.m's revs_paper).
 %
 % INPUTS:
@@ -23,7 +23,7 @@ function cert = table3_certified(thrustN)
 % REFERENCES:
 %   [1] Haberkorn, Martinon, Gergaud, "Low Thrust Minimum-Fuel Orbital
 %       Transfer: A Homotopic Approach," JGCD 27(6), 2004, Table 3.
-%   [2] earth_elliptic_to_geo/CAMPAIGN.md (campaign record; certified
+%   [2] earth_elliptic_to_geo/process/CAMPAIGN.md (campaign record; certified
 %       numbers harvested from here).
 
 if nargin < 1

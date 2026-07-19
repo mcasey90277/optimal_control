@@ -2,7 +2,7 @@
 
 Companion to `README.md`. Same structure as `proj7/pipelines/crlb/TODO.md`
 (Done / Open ranked by priority / Not-a-goal). Source of record for the numbers
-and provenance below: `CAMPAIGN.md` and `.superpowers/sdd/progress.md`.
+and provenance below: `process/CAMPAIGN.md` and `.superpowers/sdd/progress.md`.
 
 ---
 
@@ -55,7 +55,7 @@ variable and `L` the independent variable; certified the full 10/5/2.5/1 N
 min-fuel ladder (the Cartesian/Sundman stack died at 5 N) plus 0.5 N via an
 anchor-free R0-law path. Cross-formulation gate passed (MEE 10 N m_f = 1377.10
 vs Cartesian 1376.74 kg). PSR switch-refinement ported. PMP verifier delivered.
-Full record + 6 binding footnotes in `CAMPAIGN.md`.
+Full record + 6 binding footnotes in `process/CAMPAIGN.md`.
 
 ### 2026-07-18 — `run_gergaud` front door (commits `c04a057..a5b568b`)
 Single PARAMETERS-block entry with user-definable initial AND final orbits,
@@ -156,7 +156,7 @@ stationarity at high eccentricity — proven not a verifier bug by an independen
 KKT re-derivation. Primal certifications are unaffected (they never use the duals).
 
 **Fix path (Campaign B):** recover the raw `lam_g` via `nlpsol` bypassing
-`opti.dual` (suspected incomplete `opti.dual` un-scaling). See `DESIGN_dual_map.md`.
+`opti.dual` (suspected incomplete `opti.dual` un-scaling). See `process/DESIGN_dual_map.md`.
 
 ### 5. Map the full Fig-23 front (multiple c_tf per thrust)
 
@@ -167,7 +167,7 @@ The paper's Fig 23 overlays several `c_tf` curves. `run_gergaud`/`run_transfer_m
 already accept `ctf`, so this is a sweep, not new machinery.
 
 **Fix:** loop `c_tf ∈ {1.2,1.5,2.0,2.5,3.0}` per thrust, collect `m_f(c_tf)`, and
-plot the multi-curve front. Watch the basin scatter documented in `CAMPAIGN.md`
+plot the multi-curve front. Watch the basin scatter documented in `process/CAMPAIGN.md`
 (take the best certified point per `(T,c_tf)`).
 
 ### 6. Housekeeping minors (deferred from the front-door review)

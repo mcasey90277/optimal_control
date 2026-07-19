@@ -7,7 +7,7 @@
 %
 % Gate G2: success && maxDefect<1e-8 && |tf - tfTarget| < 1e-6.
 %
-% REFERENCES: [1] task-9-brief.md Step 2-3. [2] run_mintime.m. [3] DESIGN.md sec 4.
+% REFERENCES: [1] task-9-brief.md Step 2-3. [2] run_mintime.m. [3] process/DESIGN.md sec 4.
 
 root = fileparts(fileparts(mfilename('fullpath'))); cd(root); setup_paths;
 

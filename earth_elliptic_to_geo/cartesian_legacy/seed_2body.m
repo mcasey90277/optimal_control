@@ -20,7 +20,7 @@ function [sigma, X0, U0, tauf0, info] = seed_2body(par, rv0, opts)
 %   U0    - [4x(N+1)] = [vhat; sbar];  tauf0 - total tau length;
 %   info  - .sbar .Larr (arrival unwrapped longitude) .tEnd .mEnd
 %
-% REFERENCES: [1] DESIGN.md secs 3-4. [2] sundman_minfuel/sundman_seed_map.m.
+% REFERENCES: [1] process/DESIGN.md secs 3-4. [2] sundman_minfuel/sundman_seed_map.m.
 sbar = opts.sbar;  N = opts.N;
 if isfield(opts,'targetLf') && ~isempty(opts.targetLf)
     lo = 0.25;  hi = 1.0;                     % Larr(lo) > Larr(hi)

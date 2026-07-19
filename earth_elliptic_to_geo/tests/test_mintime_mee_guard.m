@@ -51,7 +51,7 @@ d2 = log10(5.141e-03) - log10(3.912e-03);     % must stall
 assert(d2 < decadeMin, 'case 2 (%.4f decades) SHOULD stall at floor %.2f', d2, decadeMin);
 
 % --- (4) round_advance_decision.m: the retain-if-improved / retry-loose
-% decision (DESIGN_thrust_ladder.md Phase 0 item 1, Fix 1) unit-tested with
+% decision (process/DESIGN_thrust_ladder.md Phase 0 item 1, Fix 1) unit-tested with
 % synthetic defect numbers -- no solve required. round_advance_decision.m
 % is kept as its own file (not a nested local function of run_mintime_mee.m)
 % specifically so it can be called directly here. "Improved" is FLOOR-GATED

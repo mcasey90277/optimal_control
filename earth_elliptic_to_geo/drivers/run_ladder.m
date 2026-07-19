@@ -67,9 +67,9 @@ function results = run_ladder(thrustList, cfg)
 %          if BOTH the anchor and the fuel solve were loaded from a
 %          pre-existing cache -- no solve at all for that rung)
 %
-% REFERENCES: [1] DESIGN_thrust_ladder.md sec 2 "Phase 2" (thrust-
+% REFERENCES: [1] process/DESIGN_thrust_ladder.md sec 2 "Phase 2" (thrust-
 %   continuation backbone, C-law rev-growth rationale).
-%   [2] PLAN_thrust_ladder.md Task 6/7 (this file's scope: orchestration +
+%   [2] process/PLAN_thrust_ladder.md Task 6/7 (this file's scope: orchestration +
 %       10 N leg here, the real 5/2.5/1 N descent in Task 7).
 %   [3] earth_elliptic_to_geo/run_mintime_mee.m (per-rung anchor).
 %   [4] earth_elliptic_to_geo/run_transfer_mee.m (per-rung fuel solve).

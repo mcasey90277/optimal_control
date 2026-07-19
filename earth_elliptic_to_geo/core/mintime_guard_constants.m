@@ -15,13 +15,13 @@ function [roundsMax, decadeMin, maxLooseRetries] = mintime_guard_constants()
 %                            prior iterate is retained and retried this many
 %                            times with the loose (adaptive-mu) regime before
 %                            the stall guard is allowed to fire (review
-%                            finding, DESIGN_thrust_ladder.md Phase 0 item 1:
+%                            finding, process/DESIGN_thrust_ladder.md Phase 0 item 1:
 %                            "retain the new primal iterate only if
 %                            feasibility improved ... otherwise keep the
 %                            prior iterate and retry with adaptive mu").
 %
 % REFERENCES: [1] task-14-report.md (guard recalibration record).
-%   [2] DESIGN_thrust_ladder.md Phase 0 item 1 (retain-if-improved / retry-
+%   [2] process/DESIGN_thrust_ladder.md Phase 0 item 1 (retain-if-improved / retry-
 %       loose mandate, origin of maxLooseRetries).
 roundsMax = 24;
 decadeMin = 0.15;

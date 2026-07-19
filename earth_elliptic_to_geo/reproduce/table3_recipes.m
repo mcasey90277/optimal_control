@@ -3,7 +3,7 @@ function recipe = table3_recipes(thrustN)
 %
 % Pure lookup: no file I/O, no solves, no side effects. Each rung's recipe
 % captures the exact proven knobs (harvested from the campaign's hand
-% scripts, see CAMPAIGN.md and DESIGN_thrust_ladder.md) needed by
+% scripts, see process/CAMPAIGN.md and process/DESIGN_thrust_ladder.md) needed by
 % reproduce_row.m to re-solve that row from scratch: which anchor strategy
 % to use (coldB/chain/smallN_first/R0law), the fuel-stage node count and
 % warm-start source, and an optional PSR (post-solution refinement) pass.
@@ -43,7 +43,7 @@ function recipe = table3_recipes(thrustN)
 %       Transfer: A Homotopic Approach," JGCD 27(6), 2004, Table 3.
 %   [2] docs/superpowers/specs/2026-07-18-table3-reproducer-engine-design.md
 %       Sec. 4 (anchor strategies) and Sec. 6 (recipe registry table).
-%   [3] earth_elliptic_to_geo/CAMPAIGN.md (harvested per-rung numbers).
+%   [3] earth_elliptic_to_geo/process/CAMPAIGN.md (harvested per-rung numbers).
 
 if nargin < 1
     error('table3_recipes:badInput', 'thrustN is required');

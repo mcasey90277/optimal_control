@@ -1,0 +1,3 @@
+
+# Fortran unit-6 stdout dropped by IPOPT/MUMPS during solves
+fort.*

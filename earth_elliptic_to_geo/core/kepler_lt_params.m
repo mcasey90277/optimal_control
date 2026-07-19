@@ -17,8 +17,8 @@ function p = kepler_lt_params(thrustN, m0kg, ispS)
 %
 % REFERENCES:
 %   [1] Haberkorn, Martinon, Gergaud, JGCD 27(6), 2004 (problem constants).
-%   [2] earth_elliptic_to_geo/DESIGN.md sec 2 (units decision).
-% ISP SOURCE (DESIGN.md open item 1 -- CLOSED 2026-07-19): the paper
+%   [2] earth_elliptic_to_geo/process/DESIGN.md sec 2 (units decision).
+% ISP SOURCE (process/DESIGN.md open item 1 -- CLOSED 2026-07-19): the paper
 % (Gergaud-Haberkorn-Martinon, JGCD 2004) never states Isp numerically; its
 % benchmark constants come from Caillau & Noailles, "Coplanar control of a
 % satellite around the Earth," ESAIM COCV 6 (2001), p.255

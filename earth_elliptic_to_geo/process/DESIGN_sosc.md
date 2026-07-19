@@ -352,9 +352,28 @@ produced a spurious `dualFeas` from the lower-bound rows.)
 
 ### 11.4 Reduced-Hessian inertia (supersedes the §4.5 subspace test)
 
-`sosc_inertia` still forms `K` and takes its inertia `(npos,nneg,nzero)` via
-`count_inertia`, but now ALSO reports the **reduced-Hessian inertia** using the
-Gould decomposition with `r = rank(A)` (via `sprank(A)`, the structural rank):
+**Inertia method — `eig` primary, size-guarded (calibrated 2026-07-19).** The
+bang-bang KKT is deeply near-singular (~270 eigenvalues at the 1e-10 level), and
+the `ldl`-pivot-sign inertia (`count_inertia`) is UNRELIABLE there: on the 10 N
+row, gold-standard `eig` gives the true reduced `nneg=0` for relative
+`zt ∈ [1e-9, 1e-8]`, but `ldl` only for `zt ∈ [1e-7, 1e-6]` (a disjoint window;
+at `zt=1e-9` `ldl` reports 56 spurious negatives). Tuning `zt` to `ldl`'s window
+is not robust across rungs. Therefore `sosc_inertia` computes the inertia by
+**`eig(full(K))`** (Sylvester-exact, robust) whenever `size(K) ≤ maxEigDim`
+(≈15000, covering 10/5/2.5 N), counting `|λ| > zt` as ±, `|λ| ≤ zt` as zero with
+`zt = tol.inertiaZero·normest(K)` and `tol.inertiaZero = 1e-9` (the original §6
+value — correct for `eig`; the Amendment-B raise to 1e-6 was an `ldl` workaround
+and is reverted). Above `maxEigDim` (1 N, 0.5 N — too large for dense `eig`) the
+inertia is **not computed with a validated method**; `IN.robust = false` and the
+verdict is INCONCLUSIVE with reason "reduced inertia not computable at this scale".
+**OPEN ITEM (Task-10 prerequisite):** a scalable robust inertia for the deep
+rungs — reduced-Hessian `eig(Z'HZ)` via a sparse null-space basis of `A`, or
+`eigs` on the near-zero cluster — so 1 N / 0.5 N can be certified.
+
+`sosc_inertia` reports the KKT inertia `(npos,nneg,nzero)` (via `eig` or, above
+the guard, `ldl`/`count_inertia`), `IN.method ∈ {'eig','ldl'}`, `IN.robust`, and
+the **reduced-Hessian inertia** via the Gould decomposition with `r = rank(A)`
+(via `sprank(A)`, the structural rank):
 
 ```
 red.npos  = npos  − r
@@ -381,9 +400,10 @@ curvature *direction*) can be spoiled by `C ⊊ S`.
 
 Verdict logic, in order:
 1. `~recoverOK` or `~K.signOK` or `~K.pass` ⇒ **ERROR** (no trustworthy KKT point).
-2. `~IN.redConsistent` ⇒ **INCONCLUSIVE** (the Gould decomposition failed its
-   consistency check — the `sprank` rank estimate is untrustworthy, so the
-   reduced inertia cannot be formed).
+2. `~IN.robust` (KKT too large for a validated inertia, §11.4) or
+   `~IN.redConsistent` (the Gould consistency check failed — the `sprank` rank
+   estimate is untrustworthy) ⇒ **INCONCLUSIVE** (the reduced inertia cannot be
+   trusted).
 3. `red.nneg == 0` and `red.nzero == 0` ⇒ **PASS** (reduced Hessian PD on `S` ⇒
    PD on the critical cone ⇒ strict local minimum; valid even under
    weakly-active junctions or a rank-deficient active Jacobian).

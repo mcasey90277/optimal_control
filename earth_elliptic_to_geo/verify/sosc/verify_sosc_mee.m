@@ -18,7 +18,8 @@ else, saved = saved_or_path; end
 
 R = sosc_recover_kkt(saved, tol);
 sosc = struct('thresholds',tol,'drift',NaN,'sign',NaN, ...
-    'kkt',[],'active',[],'inertia',[],'red',[],'nFlat',NaN,'redMinEig',NaN, ...
+    'kkt',[],'active',[],'inertia',[],'red',[],'nFlat',NaN, ...
+    'sensStable',false,'nnegBand',nan(1,4),'redMinEig',NaN, ...
     'method','','robust',false, ...
     'meta',struct('thrustN',saved.thrustN,'tag',saved.tag,'when',datestr(now)));
 if ~R.recoverOK
@@ -30,6 +31,7 @@ K  = sosc_kkt_residual(R, tol);   sosc.sign=K.sign;  sosc.kkt=K;
 AS = sosc_active_set(R, K, tol);  sosc.active=AS;
 IN = sosc_inertia(R.H, AS.A, tol);sosc.inertia=IN;
 sosc.red=IN.red; sosc.nFlat=IN.red.nzero;
+sosc.sensStable=IN.sensStable; sosc.nnegBand=IN.nnegBand; sosc.redMinEig=IN.redMinEig;
 sosc.method=IN.method; sosc.robust=IN.robust;
 v  = sosc_decide(K, AS, IN);
 sosc.verdict=v.verdict; sosc.reason=v.reason; sosc.status=v.status;

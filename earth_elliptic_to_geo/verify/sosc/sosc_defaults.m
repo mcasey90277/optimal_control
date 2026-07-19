@@ -12,6 +12,7 @@ tol = struct( ...
     'active',      1e-7, ...  % inequality slack -> active
     'mu',          1e-6, ...  % relative multiplier -> strongly-active
     'inertiaZero', 1e-9, ...  % relative eigenvalue magnitude -> zero eigenvalue
+    'maxNullDim',  10000, ... % n at/below which the dense null-space is formed
     'maxEigDim',   15000);    % KKT dim (n+m_a) at/below which dense eig is used
 % inertiaZero REVERTED to 1e-9 (DESIGN sec 11.4, 2026-07-19): this value is
 % correct for gold-standard dense `eig(full(K))`, which is now the primary
@@ -25,9 +26,11 @@ tol = struct( ...
 % (zt in [1e-7,1e-6]) is disjoint from eig's -- there is no single zt that
 % works for both methods, so tuning zt to ldl's window is not robust across
 % rungs. `eig` is therefore the gold standard and 1e-9 is restored.
-% maxEigDim=15000 is the size guard: dense `eig` is used only when the full
-% KKT dimension (n+m_a) is at or below this bound (covers 10/5/2.5 N rungs).
-% Above it (1 N, 0.5 N) dense eig is intractable and sosc_inertia falls back
-% to the ldl/count_inertia path with IN.robust=false, honestly deferring
-% those rungs to INCONCLUSIVE rather than trusting an unvalidated inertia.
+% maxNullDim=10000 is the FINAL-method size guard (DESIGN sec 12.1): the direct
+% reduced-Hessian method forms Z=null(full(A)) (dense), tractable only for
+% n<=maxNullDim (covers 10/5/2.5 N). Above it (1 N, 0.5 N) the dense null-space
+% is intractable, so sosc_inertia returns IN.robust=false, IN.method='scale-skip'
+% and the verdict is INCONCLUSIVE-by-scale rather than an unvalidated inertia.
+% maxEigDim=15000 is retained for the legacy count_inertia utility/tests only;
+% it no longer gates sosc_inertia's FINAL direct reduced-eig method.
 end

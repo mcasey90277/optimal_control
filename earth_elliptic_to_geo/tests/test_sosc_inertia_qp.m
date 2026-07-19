@@ -1,37 +1,38 @@
-% Hand-built KKT inertia cases (no NLP), incl. reduced-Hessian inertia (sec 11.4):
-%   PD reduced Hessian -> KKT (n, m_a, 0), red=(1,0,0), subspaceOK=true
-%   Indefinite reduced Hessian -> red=(0,1,0) (one negative curvature dir)
-%   Rank-deficient A -> KKT nzero>0, but red=(2,0,0) redConsistent (LICQ
-%       deficiency is separated out; the reduced Hessian is actually PD)
-%   WEAK_MIN -> red=(0,0,1): PSD reduced Hessian with one flat direction
+% Hand-built reduced-Hessian inertia cases (no NLP) for the FINAL direct method
+% (DESIGN sec 12.1): Z=null(full(A)), RH=Z'HZ, ev=eig(RH). Each case is
+% hand-verified; sensStable must be true for all four (single-signed spectra).
+%   PD           H=I2,        A=[1 1]      -> Z=[1;-1]/sqrt2, RH=1  -> red=(1,0,0)
+%   indefinite   H=diag(1,-3),A=[1 1]      -> RH=-1                 -> red.nneg=1
+%   WEAK_MIN     H=diag(2,0), A=[1 0]      -> Z=[0;1],       RH=0  -> red=(0,0,1)
+%   rank-defic.  H=I3,        A=[1 0 0;1 0 0] -> Z spans e2,e3, RH=I2 -> red=(2,0,0)
 root = fileparts(fileparts(mfilename('fullpath'))); cd(root); setup_paths;
 tol = sosc_defaults();
-% Case PD: H=I2, A=[1 1] -> reduced Hessian 1x1 = 1 > 0
+
+% Case PD: reduced Hessian 1x1 = 1 > 0 -> PASS-shape
 IN = sosc_inertia(sparse(eye(2)), sparse([1 1]), tol);
-assert(isequal([IN.npos IN.nneg IN.nzero],[2 1 0]) && IN.subspaceOK, 'PD case');
-assert(isequal([IN.red.npos IN.red.nneg IN.red.nzero],[1 0 0]) && IN.redConsistent, ...
-    'PD case reduced inertia (1,0,0)');
-% Tiny KKT (nk=3 <= tol.maxEigDim) must take the eig path (sec 11.4).
-assert(strcmp(IN.method,'eig') && IN.robust, ...
-    'PD case must use eig (method=eig, robust=true) at this scale');
-% Case indefinite: H=diag(1,-3), A=[1 1] -> reduced Hessian = (1-3)/2 = -1 < 0
+assert(isequal([IN.red.npos IN.red.nneg IN.red.nzero],[1 0 0]), 'PD red=(1,0,0)');
+assert(IN.sensStable==true, 'PD sensStable');
+assert(strcmp(IN.method,'reduced-eig') && IN.robust, 'PD method=reduced-eig robust');
+assert(IN.rankA==1, 'PD rankA=1');
+
+% Case indefinite: reduced Hessian = -1 < 0 -> FAIL-shape, stable
 IN2 = sosc_inertia(sparse(diag([1 -3])), sparse([1 1]), tol);
-assert(~IN2.subspaceOK && IN2.nneg==2, 'indefinite case -> FAIL signature');
-assert(isequal([IN2.red.npos IN2.red.nneg IN2.red.nzero],[0 1 0]) && IN2.redConsistent, ...
-    'indefinite case reduced inertia (0,1,0)');
-% Case rank-deficient A: two identical rows
-IN3 = sosc_inertia(sparse(eye(3)), sparse([1 0 0; 1 0 0]), tol);
-assert(IN3.nzero > 0, 'rank-deficient A -> nonzero nullity');
-assert(isequal([IN3.red.npos IN3.red.nneg IN3.red.nzero],[2 0 0]) && IN3.redConsistent, ...
-    'rank-deficient A reduced inertia (2,0,0), LICQ deficiency separated out');
-% Case WEAK_MIN: H=diag(2,0), A=[1 0] -> r=1, m_a=1, n=2; KKT inertia (1,1,1);
-% reduced Hessian PSD with one flat direction -> red=(0,0,1) (bang-bang signature)
-IN4 = sosc_inertia(sparse(diag([2 0])), sparse([1 0]), tol);
-assert(isequal([IN4.npos IN4.nneg IN4.nzero],[1 1 1]), 'WEAK_MIN KKT inertia (1,1,1)');
-assert(IN4.red.nneg==0 && IN4.red.nzero==1 && IN4.redConsistent, ...
-    'WEAK_MIN reduced inertia red.nneg==0, red.nzero==1, redConsistent');
-% Direct 2x2-block coverage: D with a [[0 1];[1 0]] block (eigs -1,+1) + a 1x1 (+3).
-% Bypasses ldl pivot selection so the 2x2 classification arithmetic is exercised.
+assert(isequal([IN2.red.npos IN2.red.nneg IN2.red.nzero],[0 1 0]), 'indef red=(0,1,0)');
+assert(IN2.sensStable==true, 'indef sensStable');
+
+% Case WEAK_MIN: reduced Hessian = 0 -> one flat direction
+IN3 = sosc_inertia(sparse(diag([2 0])), sparse([1 0]), tol);
+assert(IN3.red.nneg==0 && IN3.red.nzero==1, 'WEAK_MIN red.nneg==0 red.nzero==1');
+assert(IN3.sensStable==true, 'WEAK_MIN sensStable');
+
+% Case rank-deficient A (redundant constraint, handled by null()): red=(2,0,0)
+IN4 = sosc_inertia(sparse(eye(3)), sparse([1 0 0; 1 0 0]), tol);
+assert(isequal([IN4.red.npos IN4.red.nneg IN4.red.nzero],[2 0 0]), 'rank-def red=(2,0,0)');
+assert(IN4.sensStable==true, 'rank-def sensStable');
+assert(IN4.rankA==1, 'rank-def rankA=1 (redundant row collapsed by null())');
+
+% Direct 2x2-block coverage of the legacy count_inertia utility (unchanged):
+% D with a [[0 1];[1 0]] block (eigs -1,+1) + a 1x1 (+3).
 Dtest = blkdiag([0 1; 1 0], 3);
 [np, nn, nz] = count_inertia(Dtest, 1e-9);
 assert(isequal([np nn nz],[2 1 0]), ...

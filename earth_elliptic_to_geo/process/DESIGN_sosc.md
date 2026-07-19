@@ -297,3 +297,112 @@ confirmed/tightened before the rest of the ladder is trusted.
 4. **MUMPS/METIS crash class** inherited by the warm re-solve — reuse the
    existing `mumps_pivot_order=0` workaround; deep rungs may still hit it and
    would surface as ERROR (recovery failure), not a false verdict.
+
+---
+
+## 11. Revision — bang-bang WEAK_MIN + `lbg/ubg` bound sourcing (2026-07-19)
+
+The Task-8 integration (first real end-to-end run on the certified 10 N row)
+found that the original §5 verdict logic is wrong for this problem class, and
+that the bound bookkeeping of §4.1/§4.3 is fragile. Stationarity came back
+machine-tight (‖∇ℒ‖ = 1.5e-14), so the recovery framework is sound; the
+findings below refine the residual sourcing and the second-order taxonomy.
+This section supersedes the affected parts of §4.3, §4.4, §4.5, §5.
+
+### 11.1 The finding — min-fuel bang-bang is a *weak* (non-strict) local minimum
+
+Computed directly from the 10 N KKT matrix `K = [H Aᵀ; A 0]` (eig of the full
+3885×3885): the active Jacobian is rank-deficient by only **1** (LICQ
+essentially holds), and `inertia(K) = (1865, 1749, 271)` decomposes to a
+**reduced Hessian of inertia (116 positive, 0 negative, 270 zero)** on the
+386-dim critical cone. A clean spectral gap (≈270 eigenvalues at 1e-10, then
+nothing until ~1e-4) confirms the null space is genuine, not a threshold
+artifact. So the reduced Hessian is **positive semi-definite with a ~270-dim
+null space**: no negative curvature (not a saddle), but not strictly PD. This
+is the signature of a bang-bang / linear-in-control extremal — perturbations
+preserving the switching structure are flat to second order. **Strict NLP-SOSC
+(a PASS) is generically unreachable for min-fuel solutions**; the honest,
+useful second-order statement is a *weak local minimum*.
+
+### 11.2 Robust bound sourcing from `opti.lbg`/`opti.ubg`
+
+CasADi Opti canonicalizes every `subject_to` into `g ∈ [lbg, ubg]` and exposes
+`opti.lbg`, `opti.ubg` (both length `m`). `sosc_recover_kkt` now returns
+`R.lbg`, `R.ubg` (m×1). All residual/slack/active/dual logic sources bounds
+from these — NOT from hand-coded `creg.bound` — eliminating the class of bugs
+where `creg` recorded a scalar 0 for `initBC`/`termBC` (whose true per-row
+bounds are `x0`/`xf`) or omitted the bound subtraction (`tfPin`, `betaNorm`).
+`creg` is retained only for human LABELS/NODES in weak-node reporting.
+
+Per-row constraint KIND is derived from the bounds:
+`isEq = (lbg==ubg)`; `upperActive` row has finite `ubg`; `lowerActive` has
+finite `lbg`. Residual (primal feasibility) becomes uniform:
+`viol_i = max(lbg_i − g_i, 0) + max(g_i − ubg_i, 0)` for every row; equality
+residual is just the `lbg==ubg` case of the same formula.
+
+### 11.3 Per-kind dual feasibility
+
+Opti/IPOPT reports `lam_g` with OPPOSITE sign conventions per active bound
+(empirically: lower-bound-active `lam ≤ 0`, upper-bound-active `lam ≥ 0`;
+equalities free). After resolving the one global sign `s`, dual feasibility is
+checked per kind: for an upper-bound-only row require `s·lam ≥ −tol.dual`; for
+a lower-bound-only row require `s·lam ≤ +tol.dual`; equality rows are
+unconstrained in sign. (The single-global-sign check of §4.3 was wrong and
+produced a spurious `dualFeas` from the lower-bound rows.)
+
+### 11.4 Reduced-Hessian inertia (supersedes the §4.5 subspace test)
+
+`sosc_inertia` still forms `K` and takes its inertia `(npos,nneg,nzero)` via
+`count_inertia`, but now ALSO reports the **reduced-Hessian inertia** using the
+Gould decomposition with `r = rank(A)` (via `sprank(A)`, the structural rank):
+
+```
+red.npos  = npos  − r
+red.nneg  = nneg  − r
+red.nzero = nzero − (m_a − r)
+```
+
+Consistency (must hold, else the rank estimate is untrustworthy →
+INCONCLUSIVE): `red.npos + red.nneg + red.nzero == n − r`, and
+`red.nneg ≥ 0`, `red.nzero ≥ 0`. `IN.red = struct('npos',_,'nneg',_,'nzero',_)`,
+`IN.rankA = r`, `IN.redConsistent = <bool>`. The old `subspaceOK` remains a
+reported field but no longer drives the verdict.
+
+### 11.5 Revised verdict taxonomy (supersedes §5 verdict logic)
+
+Verdict logic, in order (on the REDUCED inertia):
+1. `~recoverOK` or `~K.signOK` or `~K.pass` ⇒ **ERROR**.
+2. `~AS.licq` or `AS.nWeak>0` or `~IN.redConsistent` ⇒ **INCONCLUSIVE**
+   (critical cone not a trustworthy subspace; can neither confirm nor deny).
+3. `IN.red.nneg > 0` ⇒ **FAIL** (a negative curvature direction on the cone =
+   descent direction ⇒ genuine saddle, provably not a local min).
+4. `IN.red.nzero == 0` (and `red.nneg==0`) ⇒ **PASS** (reduced Hessian PD ⇒
+   strict local minimum).
+5. else (`red.nneg==0`, `red.nzero>0`) ⇒ **WEAK_MIN** (reduced Hessian PSD with
+   `red.nzero` flat directions — necessary second-order condition holds, strict
+   sufficient does not; the expected outcome for bang-bang min-fuel).
+
+`redMinEig` stays a NaN placeholder (non-gating). The verdict struct gains
+`.red` (the reduced inertia) and `.nFlat = IN.red.nzero` (reported for
+WEAK_MIN — the dimension of the flat manifold).
+
+### 11.6 Revised tiered gate
+
+- PASS → `certified-sosc` (strict local min).
+- **WEAK_MIN → `certified-weak-min`** — a POSITIVE certificate (no descent
+  direction; necessary 2nd-order condition met). **Does NOT demote**; kept in
+  the certified Table 3, annotated with `nFlat`.
+- FAIL → `feasible-only`; excluded from the certified Table 3; loud warning.
+- INCONCLUSIVE / ERROR → `certified-feasibility+sosc-inconclusive`; kept,
+  annotated, non-demoting.
+
+Only FAIL (a *proven* saddle) demotes. The reproducer (§8) adopts a candidate
+whose verdict ∈ {PASS, WEAK_MIN, INCONCLUSIVE} (never FAIL).
+
+### 11.7 Expected results
+
+The 10 N certified row is expected to certify as **WEAK_MIN** (`nFlat ≈ 270`),
+and the same is anticipated for the other min-fuel rungs (bang-bang). A rung
+returning FAIL would be a genuine finding (a reported non-minimizer); PASS
+would indicate an unexpectedly non-degenerate solution. The batch re-cert
+(§8, Task 10) reports the verdict + `nFlat` per rung.

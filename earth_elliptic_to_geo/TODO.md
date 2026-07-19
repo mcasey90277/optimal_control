@@ -49,6 +49,20 @@ the deep rungs. See the runbook for the full argument.
 
 ## Done
 
+### 2026-07-19 — SOSC certificate (branch `sosc-certificate`, `verify/sosc/`)
+NLP-level second-order local-minimum certificate: warm-re-solve KKT recovery
+(bounds from `opti.lbg/ubg`, per-kind dual feasibility), active-set classification,
+and a **direct reduced-Hessian `eig(Z'HZ)` + `zt`-sensitivity** verdict (PASS /
+WEAK_MIN / FAIL / INCONCLUSIVE). Opt-in gate in driver+reproducer (`cfg.certifySosc`,
+default off; only FAIL demotes). **Finding:** 10 N certifies as **WEAK_MIN (270 flat
+directions)** — min-fuel bang-bang extremals are weak, non-strict minima; strict SOSC
+is generically unreachable. Batch (`recertify_table3`): 10 N WEAK_MIN; 5 N/2.5 N
+INCONCLUSIVE (near-flat directions of unresolvable sign — corrected from spurious
+FAILs of the first-cut `ldl`/Gould method); 1 N/0.5 N ERROR/uncomputable (recovery
+fails at scale). Built via subagent-driven development (10 tasks + amendments, all
+reviewed; whole-branch review Ready-to-merge). Design + method evolution:
+`process/DESIGN_sosc.md` (§11–12), `process/PLAN_sosc.md`.
+
 ### 2026-07-16..18 — MEE thrust-ladder campaign (commits `5f839dd..567801b`)
 Rebuilt the solver in Modified Equinoctial Elements with `ΔL` a scalar decision
 variable and `L` the independent variable; certified the full 10/5/2.5/1 N
@@ -97,6 +111,27 @@ file's own DEPRECATED header).
 ---
 
 ## Open — ranked by priority
+
+### 0. SOSC certificate — deep-rung scalability + deferred minors
+
+**Files:** `verify/sosc/sosc_inertia.m`, `sosc_recover_kkt.m`, `recertify_table3.m`.
+
+**What:** the certificate certifies 10 N cleanly (WEAK_MIN) but stops at the deep
+rungs. Two distinct scale walls: (a) **recovery** — the warm re-solve itself fails
+at 1 N/0.5 N (`n≈16.5k`); (b) **inertia** — `Z=null(full(A))` is a dense
+allocation, guarded at `n≤maxNullDim=10000` (so 5/2.5 N run but 1/0.5 N
+scale-skip). Also: 5 N/2.5 N return INCONCLUSIVE (near-flat reduced-Hessian
+directions of numerically-unresolvable sign) — not a bug, a genuine precision
+limit.
+
+**Fix paths:** a scalable warm-resolve recovery for the deep rungs; a sparse
+null-space / `eigs`-on-the-near-zero-cluster reduced-eig so 1/0.5 N need not
+scale-skip. **Minors (non-blocking, from the whole-branch review):**
+`recertify_table3` should persist an ERROR-verdict sidecar in its `catch` path (so a
+hard MEX crash still leaves a per-rung record); `sosc_kkt_residual` two-sided-range
+row hardening (fail-safe, provably absent today); drop the unused `K` param from
+`sosc_active_set`; `datestr(now)`→`datetime` in `verify_sosc_mee`; header-style
+consistency across `verify/sosc/`.
 
 ### 1. Certify a 0.5 N min-time anchor (conditioning wall)
 

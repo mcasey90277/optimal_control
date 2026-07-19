@@ -157,6 +157,21 @@ First-order Pontryagin certificate from the NLP's KKT duals (primer alignment,
 switching-sign law). Diagnostic only; **primal certifications (defect/terminal)
 never depend on it.** See `process/CAMPAIGN.md` footnote 5 for the open dual anomaly.
 
+### SOSC certificate — `verify/sosc/` (NLP-level second-order local-min test)
+A rigorous **second-order** certificate for a saved min-fuel row: it warm-re-solves
+the NLP to recover a machine-tight KKT point, then classifies the reduced Hessian
+on the critical cone via a direct null-space eig (`Z=null(A)`, `RH=Z'HZ`, `eig`) with
+a `zt`-sensitivity gate. Verdicts: **PASS** (strict local min) / **WEAK_MIN** (PSD,
+flat directions — no descent direction, not strict) / **FAIL** (proven saddle) /
+**INCONCLUSIVE** (sign not resolvable, or too large to compute). Entry point
+`verify_sosc_mee(<row.mat>)`; batch `recertify_table3([10 5 2.5 1 0.5])` writes
+sidecar verdicts to `results/sosc/` (campaign caches untouched). **Key result:** the
+10 N certified row is a **WEAK_MIN with 270 flat directions** — min-fuel bang-bang
+extremals are *weak* (non-strict) minima, so strict SOSC is generically unreachable.
+Gated into the driver/reproducer opt-in via `cfg.certifySosc` (default off); only a
+FAIL verdict demotes a certified row. Design + method evolution + per-rung results:
+`process/DESIGN_sosc.md` (esp. §12) and `process/PLAN_sosc.md`.
+
 ### Cartesian counterparts (original reproduction)
 `casadi_lt_2body.m`, `run_transfer.m`, `run_mintime.m`, `homotopy_2body.m`,
 `seed_2body.m`, `verify_pmp_2body.m` — the Sundman-regularized Cartesian solver
@@ -168,7 +183,8 @@ superseded it. Kept for the cross-formulation gate (see `process/CAMPAIGN.md`).
 ## Code layout
 
 Code is organized into functional subfolders: `core/` `drivers/` `psr/`
-`verify/` `frontdoor/` `reproduce/` `viz/` `coords/` `cartesian_legacy/` `lib/`
+`verify/` (with a nested `verify/sosc/` for the second-order certificate)
+`frontdoor/` `reproduce/` `viz/` `coords/` `cartesian_legacy/` `lib/`
 `tests/` `attic/`. At the module root sit only the two front-door docs
 (`README.md`, `TODO.md`) and the two path helpers (`setup_paths.m`,
 `module_root.m`). **Run `setup_paths` once per session** (after `cd`-ing into

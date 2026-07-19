@@ -8,13 +8,20 @@ okK = mk(true,true);
 % helper builders for the reduced-inertia struct + active set
 mkIN = @(rp,rn,rz,cons) struct('red',struct('npos',rp,'nneg',rn,'nzero',rz), ...
     'redConsistent',cons,'rankA',1,'subspaceOK',rn==0&&rz==0, ...
-    'npos',rp+1,'nneg',rn+1,'nzero',rz,'expected',[2 1 0]);
+    'npos',rp+1,'nneg',rn+1,'nzero',rz,'expected',[2 1 0], ...
+    'robust',true,'method','eig');
 mkAS = @(nWeak,licq) struct('licq',licq,'nWeak',nWeak,'m_active',1, ...
     'weakLabels',{{}},'nEq',1,'nStrong',0);
 
 % PASS: red=(1,0,0), consistent, K ok  -> certified-sosc
 v = sosc_decide(okK, mkAS(0,true), mkIN(1,0,0,true));
 assert(strcmp(v.verdict,'PASS') && strcmp(v.status,'certified-sosc'), 'PASS');
+
+% ~IN.robust (KKT too large for a validated inertia) -> INCONCLUSIVE (rule 2)
+INbig = mkIN(1,0,0,true); INbig.robust = false;
+v = sosc_decide(okK, mkAS(0,true), INbig);
+assert(strcmp(v.verdict,'INCONCLUSIVE'), 'robust=false must gate to INCONCLUSIVE');
+assert(strcmp(v.status,'certified-feasibility+sosc-inconclusive'), 'INCONCLUSIVE status');
 
 % WEAK_MIN: red.nneg=0, red.nzero>0, consistent -> certified-weak-min
 v = sosc_decide(okK, mkAS(0,true), mkIN(1,0,3,true));

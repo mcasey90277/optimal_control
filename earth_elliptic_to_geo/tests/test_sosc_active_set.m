@@ -1,10 +1,14 @@
 % n=3 vars; rows: 1 eq (active), 2 ineq. Ineq A active+strong (slack 0, |lam|
 % big); ineq B active+WEAK (slack 0, |lam|~0). Expect nWeak==1, A has eq+strong.
+% Active/kind now sourced from R.lbg/R.ubg (Amendment A, sec 11.2): eq row ->
+% lbg=ubg=bound; ineqHi bound b -> lbg=-inf, ubg=b. creg -> labels/nodes only.
 root = fileparts(fileparts(mfilename('fullpath'))); cd(root); setup_paths;
 R.n=3; R.m=3;
 R.A_all = sparse([1 0 0; 0 1 0; 0 0 1]);
 R.gval  = [0; 0; 0];                  % all active (slack 0)
 R.lam_g = [5; 3; 1e-12];              % eq; strong ineq; weak ineq
+R.lbg   = [0; -inf; -inf];            % row1 eq; rows 2,3 ineqHi (g<=0)
+R.ubg   = [0;  0;  0];
 R.creg = struct('label',{'eqA','strongB','weakC'},'kind',{'eq','ineqHi','ineqHi'}, ...
     'rows',{1,2,3},'bound',{0,0,0},'node',{[],137,204});
 K.sign = 1;
@@ -15,11 +19,13 @@ assert(any(contains(AS.weakLabels,'204')), 'weak label names the node');
 assert(AS.licq, 'independent rows -> LICQ ok');
 
 % Case 2: inactive ineqLo row excluded from both nWeak and AS.A, plus an
-% ineqLo slack branch exercised (slack = g-bound) alongside a weak ineqHi row.
+% ineqLo slack branch exercised (slack = g-lbg) alongside a weak ineqHi row.
 R2.n=4; R2.m=4;
 R2.A_all = sparse(eye(4));
-R2.gval  = [0; 0; 0.5; 0];             % row3 ineqLo INACTIVE (slack = g-bound = 0.5)
+R2.gval  = [0; 0; 0.5; 0];             % row3 ineqLo INACTIVE (slack = g-lbg = 0.5)
 R2.lam_g = [1; 4; 0; 1e-11];           % eq; strong ineqLo; inactive; weak ineqHi
+R2.lbg   = [0; 0; 0; -inf];            % row1 eq; rows 2,3 ineqLo (g>=0); row4 ineqHi
+R2.ubg   = [0; inf; inf; 0];
 R2.creg = struct('label',{'eqA','loStrong','loInactive','hiWeak'}, ...
     'kind',{'eq','ineqLo','ineqLo','ineqHi'},'rows',{1,2,3,4}, ...
     'bound',{0,0,0,0},'node',{[],[],[],204});
@@ -35,6 +41,8 @@ R3.n=2; R3.m=2;
 R3.A_all = sparse([1 0; 1 0]);         % duplicate rows -> structural rank 1
 R3.gval  = [0; 0];
 R3.lam_g = [1; 1];
+R3.lbg   = [0; 0];                     % both eq (lbg==ubg)
+R3.ubg   = [0; 0];
 R3.creg = struct('label',{'eq1','eq2'},'kind',{'eq','eq'}, ...
     'rows',{1,2},'bound',{0,0},'node',{[],[]});
 K3.sign=1;

@@ -8,7 +8,10 @@ function R = sosc_recover_kkt(saved, tol)
 %   tol   - struct from sosc_defaults
 % OUTPUTS:
 %   R - struct: .recoverOK .x[nx1] .lam_g[mx1] .gval[mx1] .grad_f[nx1]
-%       .H[nxn sparse] .A_all[mxn sparse] .creg .vreg .drift .n .m .ipoptStatus
+%       .H[nxn sparse] .A_all[mxn sparse] .lbg[mx1] .ubg[mx1] .creg .vreg
+%       .drift .n .m .ipoptStatus
+%       (.lbg/.ubg are the canonical NLP constraint bounds from Opti; all
+%        downstream bound/kind/slack/dual logic sources from these.)
 % REFERENCES:
 %   [1] process/DESIGN_sosc.md sec 4.2. [2] casadi_lt_mee.m (returnModel hook).
 import casadi.*
@@ -21,7 +24,7 @@ R.ipoptStatus = o.ipoptStatus;
 R.recoverOK   = o.success && o.maxDefect < tol.feas;
 R.drift = max(abs(o.X(:) - saved.X(:)));
 if ~R.recoverOK, R.x=[]; R.lam_g=[]; R.gval=[]; R.grad_f=[]; R.H=[]; R.A_all=[];
-    R.creg=[]; R.vreg=[]; R.n=0; R.m=0; return; end
+    R.lbg=[]; R.ubg=[]; R.creg=[]; R.vreg=[]; R.n=0; R.m=0; return; end
 
 opti = o.model.opti;  sol = opti.debug;   % the solved Opti (sol from last solve)
 % Native symbols:
@@ -38,6 +41,11 @@ Fkkt  = Function('Fkkt', {x, lam}, {gradF, Jg, Hlag});
 R.grad_f = full(gf);
 R.A_all  = sparse(A);
 R.H      = sparse(H);
+% Canonical NLP constraint bounds (Opti canonicalizes every subject_to into
+% g in [lbg, ubg]); these are the authoritative source for kind/slack/dual.
+% opti.lbg/opti.ubg are MX in the Opti graph -> evaluate to numeric via sol.
+R.lbg = full(sol.value(opti.lbg));
+R.ubg = full(sol.value(opti.ubg));
 R.creg = o.model.creg;  R.vreg = o.model.vreg;
 R.n = numel(R.x);  R.m = numel(R.gval);
 end

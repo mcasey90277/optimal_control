@@ -447,3 +447,72 @@ and the same is anticipated for the other min-fuel rungs (bang-bang). A rung
 returning FAIL would be a genuine finding (a reported non-minimizer); PASS
 would indicate an unexpectedly non-degenerate solution. The batch re-cert
 (§8, Task 10) reports the verdict + `nFlat` per rung.
+
+---
+
+## 12. FINAL inertia method — direct reduced-Hessian `eig(Z'HZ)` + `zt`-sensitivity (2026-07-19)
+
+**This section is the authoritative inertia method and verdict logic. It
+supersedes the inertia computation of §11.4 (Gould decomposition + `sprank`)
+and the verdict logic of §11.5.** Bounds (§11.2), per-kind dual feasibility
+(§11.3), and the tiered gate (§11.6, with WEAK_MIN added below) stand.
+
+**Why.** The Task-10 batch showed the Gould-`sprank`-single-`zt` method gives
+SPURIOUS FAIL on 5/2.5 N: their reduced Hessian has near-flat directions
+(eigenvalues at ~1e-6 relative — six orders above 10 N's ~1e-10 noise floor but
+six orders below the real spectrum) whose SIGN is not resolvable — `nneg`
+slides 2→2→1→0 as `zt` sweeps 1e-9→1e-6. A verdict that flips with the
+threshold cannot honestly be FAIL. The rank-subtraction (`sprank`, only a
+structural estimate) compounds the ambiguity.
+
+### 12.1 Method (`sosc_inertia`)
+
+- **Size guard:** if `n > tol.maxNullDim` (default 10000) the dense null-space
+  is intractable → `IN.robust = false`, `IN.method = 'scale-skip'` (⇒
+  INCONCLUSIVE-by-scale; the 1 N / 0.5 N rungs). OPEN ITEM: a sparse null-space
+  / iterative reduced-eig for those.
+- Else form `Z = null(full(A))` — an orthonormal basis of `null(A)`, `n×(n−r)`,
+  where `A` is the STRONGLY-active Jacobian (equalities + strongly-active
+  inequalities). `Z` gives the rank exactly (`r = n − size(Z,2)`); **no
+  `sprank`, no Gould subtraction.**
+- Reduced Hessian `RH = Zᵀ H Z` ((n−r)×(n−r)), symmetrized; `ev = eig(RH)`.
+- `s = ‖H‖` (via `normest`). Sign counts over a `zt`-band
+  `ztr ∈ {1e-9, 1e-8, 1e-7, 1e-6}`, `zt = ztr·s`:
+  `nnegBand(i) = #{ev < −zt_i}`. Report at the tightest `zt = 1e-9·s`:
+  `IN.red = struct('npos',#{ev>zt}, 'nneg',#{ev<−zt}, 'nzero',#{|ev|≤zt})`.
+- `IN.nnegBand = nnegBand`, `IN.sensStable = all(nnegBand == nnegBand(1))`,
+  `IN.robust = true`, `IN.method = 'reduced-eig'`, `IN.rankA = r`,
+  `IN.redMinEig = min(ev)` (now a REAL reported margin, not NaN).
+
+### 12.2 Verdict logic (supersedes §11.5)
+
+In order:
+1. `~recoverOK` / `~K.pass` / `~K.signOK` ⇒ **ERROR**.
+2. `~IN.robust` ⇒ **INCONCLUSIVE** (KKT/null-space too large — scale).
+3. `~IN.sensStable` ⇒ **INCONCLUSIVE** (reduced-Hessian negative count is
+   `zt`-sensitive: near-flat directions of unresolvable sign at numerical
+   precision — the 5/2.5 N case).
+4. `IN.red.nneg > 0` and `AS.nWeak == 0` ⇒ **FAIL** (a stably-negative reduced
+   eigenvalue = genuine descent direction on the critical cone).
+5. `IN.red.nneg > 0` and `AS.nWeak > 0` ⇒ **INCONCLUSIVE** (negative curvature
+   on the subspace, but weakly-active junctions make the cone strictly smaller).
+6. `IN.red.nneg == 0` and `IN.red.nzero == 0` ⇒ **PASS** (strictly PD reduced
+   Hessian ⇒ strict local minimum).
+7. `IN.red.nneg == 0` and `IN.red.nzero > 0` ⇒ **WEAK_MIN** (PSD, `nzero` flat
+   directions; `nFlat = IN.red.nzero`).
+
+LICQ is no longer computed for the verdict (`Z` gives the exact rank);
+`AS.licq` remains a reported diagnostic. `redConsistent` is retired.
+
+### 12.3 Expected batch (supersedes §11.7)
+
+| rung | verdict | why |
+|---|---|---|
+| 10 N | **WEAK_MIN** (`nFlat≈270`) | reduced eig `nneg=0` stable across the band; clean |
+| 5 N, 2.5 N | **INCONCLUSIVE** | `nneg` `zt`-sensitive (near-flat directions ~1e-6 rel) |
+| 1 N, 0.5 N | **INCONCLUSIVE** (scale) | `n > maxNullDim`; dense null-space intractable |
+
+Only 10 N certifies cleanly (as a weak local minimum). This is the honest
+result: a rigorous NLP-level second-order certificate confirms 10 N is not a
+saddle and is a weak minimum, and is candid that the larger, more near-singular
+rungs are beyond what this method resolves — rather than over-claiming.

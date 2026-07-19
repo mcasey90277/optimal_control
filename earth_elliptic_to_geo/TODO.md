@@ -49,6 +49,26 @@ the deep rungs. See the runbook for the full argument.
 
 ## Done
 
+### 2026-07-19 — Thrust-ladder external review + deep-thrust fixes (branch `ladder-deep-thrust`)
+Three-way deep review (GPT-5.6-terra + Gemini 3.1 Pro + host) of the ladder core
+(`kepler_lt_params`, `lt_mee_rhs`, `mee_seed`, `casadi_lt_mee`, `homotopy_mee`,
+`run_mintime_mee`, `run_transfer_mee`, `run_ladder`, `psr_mee_refine`). Both
+reviewers independently pinned the **single scalar `ΔL` as the root cause of the
+MUMPS/METIS conditioning wall** (a scalar in every defect = a dense Jacobian
+column). Verified + FIXED (all commits on `ladder-deep-thrust`, each inert at
+feasible points — 10 N reproduces `m_f=1377.1012`, |Δ|=0):
+- **`dL` bound rung-adaptive** (`dbc17e3`): the fixed `dL≤2000` (~318 rev) made
+  0.2 N (ΔL~2168) and 0.1 N (~4335) STRUCTURALLY INFEASIBLE; now
+  `max(2000, 5·dL0)`.
+- **Guarded `Ldot` division** (`dbc17e3`): `1/Ldot` (rhs + objective) was
+  unguarded → NaN on an IPOPT trial step with `Ldot≤0`; now `fmax(Ldot,1e-6)`
+  (far below `LdotMin`, inert feasibly).
+- **`opts.liftDL`** (`8a3c78c`, plumbed `9933383`): lift scalar `ΔL` → tied `N+1`
+  sequence → block-banded KKT. Verified equivalent (byte-identical 10 N); max
+  Jacobian column nnz **1546 → 19** (81× at N=193; ~1700× projected at 0.2 N).
+Full reviews: `scratchpad/{gpt,gemini}_review.md`. Remaining reviewer
+recommendations still open — see the deep-thrust item below.
+
 ### 2026-07-19 — SOSC certificate (branch `sosc-certificate`, `verify/sosc/`)
 NLP-level second-order local-minimum certificate: warm-re-solve KKT recovery
 (bounds from `opti.lbg/ubg`, per-kind dual feasibility), active-set classification,
@@ -164,6 +184,29 @@ and ~600+ switches, N in the tens of thousands, and the crash class of item 1.
 `table3_recipes.m` already registers `chain` recipes for both rungs
 (`.seeded=true`) so `reproduce_row(0.2)`/`reproduce_row(0.1)` are wired and
 ready to run once item 1 unblocks the chain — see item 7 below.
+
+**Progress (2026-07-19, external review):** the `dL≤2000` infeasibility and the
+conditioning root cause are FIXED (rung-adaptive `dL` bound + `opts.liftDL`
+block-banded KKT + guarded `Ldot`; see the Done entry). **Remaining
+reviewer-recommended levers, in priority order:**
+1. **Fix the β warm-start aliasing** (`interp_warmstart.m`): linear interp of β in
+   σ keeps the SOURCE oscillation frequency; onto a finer-rev rung it phase-aliases
+   (0.5 N→0.2 N is 2.5× revs). Reconstruct β by L-phase (evaluate at the target
+   node's true longitude mod 2π), and rescale the warm time-row consistently
+   (currently unrescaled on the warm/mintime path). *Likely the next wall after
+   liftDL.*
+2. **Explicit NLP scaling** (`casadi_lt_mee`): nondimensionalize `t` by `tfTarget`,
+   `ΔL` by the C-law prediction, defect rows by expected state increments — both
+   reviewers call gradient-based auto-scaling inadequate at these scales.
+3. **Bypass the fragile min-time anchor**: continue jointly in (thrust, ε, t_f)
+   from certified 1 N with smaller thrust ratios (1→0.8→0.65…) + adaptive-bisection
+   homotopy (`homotopy_mee` currently jumps to the next ε on a failed step instead
+   of bisecting).
+4. **Architectural, if factorization stays the limit**: Sundman/time-domain
+   transcription (precedent in `cartesian_legacy/`); HSL MA57/MA97 or Pardiso vs
+   the AMD-workaround MUMPS; Schur-condensing/multiple-shooting; PSR `maxAdd`
+   scaled to problem size + a genuinely PMP-steered (switching-function) refinement.
+A first 0.2 N solve with the fixes + liftDL is being trialed (warm from 0.5 N).
 
 ### 3. Thread a custom terminal target through PSR
 

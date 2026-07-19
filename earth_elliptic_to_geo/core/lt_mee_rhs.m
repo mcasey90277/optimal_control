@@ -55,5 +55,16 @@ mdot  = -(Tm/c)*thr;             % ||(q,s,w)|| = thr since ||beta||=1
 tdot  = 1;
 
 dXdt  = [Pdot; exdot; eydot; hxdot; hydot; mdot; tdot];
-dXdL  = dXdt / Ldot;
+% Guard the d/dt -> d/dL division against IPOPT trial steps with Ldot <= 0.
+% The NLP's `Ldot >= LdotMin` path constraint only holds at FEASIBLE points, but
+% CasADi evaluates this graph during line searches BEFORE the constraint bites,
+% so an unguarded 1/Ldot yields NaN -> Invalid_Number_Detected (external review,
+% GPT-5.6 + Gemini, 2026-07-19). LdotFloor (default 1e-6) is far below LdotMin
+% (default 1e-3), so the guard is INERT at every feasible point and does not
+% change certified results -- it only prevents a NaN at pathological trial
+% points. (Numeric re-check calls pass doubles; MX build passes symbolics.)
+LdotFloor = 1e-6;
+if isfield(par, 'LdotFloor') && ~isempty(par.LdotFloor), LdotFloor = par.LdotFloor; end
+if isnumeric(Ldot), Ldiv = max(Ldot, LdotFloor); else, Ldiv = fmax(Ldot, LdotFloor); end
+dXdL  = dXdt / Ldiv;
 end

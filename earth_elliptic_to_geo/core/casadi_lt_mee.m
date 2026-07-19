@@ -71,6 +71,7 @@ if isempty(cp), cp = fullfile(getenv('HOME'), 'casadi-3.7.0'); end
 addpath(cp);
 par = opts.par;
 if ~isfield(par, 'LdotMin') || isempty(par.LdotMin), par.LdotMin = 1e-3; end
+if ~isfield(par, 'LdotFloor') || isempty(par.LdotFloor), par.LdotFloor = 1e-6; end
 d = @(f,v) optdef(opts, f, v);
 mode      = d('mode', 'fixedtf');
 epsv      = d('eps', 0);
@@ -205,8 +206,15 @@ r0 = size(opti.g,1)+1;  opti.subject_to(beta(:) <= 1.01);
 if returnModel, creg(end+1) = addc('betaBox_hi','ineqHi',r0,1.01,[]); end
 r0 = size(opti.g,1)+1;  opti.subject_to(dL >= 0.1);
 if returnModel, creg(end+1) = addc('dLbox_lo','ineqLo',r0,0.1,[]); end
-r0 = size(opti.g,1)+1;  opti.subject_to(dL <= 2000);
-if returnModel, creg(end+1) = addc('dLbox_hi','ineqHi',r0,2000,[]); end
+% dL upper bound is RUNG-ADAPTIVE (external review, GPT-5.6, 2026-07-19): a fixed
+% dL<=2000 (~318 rev) made the deep rungs structurally INFEASIBLE -- 0.2 N needs
+% DeltaL~2168 (~345 rev) and 0.1 N ~4335 (~690 rev), both above 2000. Derive a
+% generous ceiling from the warm-start C-law estimate dL0 (bounds "only block
+% divergence"); the max(2000,..) floor leaves the shallow rungs unchanged (10 N
+% dL0~46 -> 2000).
+dLub = max(2000, 5*dL0);
+r0 = size(opti.g,1)+1;  opti.subject_to(dL <= dLub);
+if returnModel, creg(end+1) = addc('dLbox_hi','ineqHi',r0,dLub,[]); end
 
 % boundary conditions
 r0 = size(opti.g,1)+1;
@@ -229,7 +237,7 @@ else
     r0 = size(opti.g,1)+1;
     opti.subject_to(t(end) == tfTarget);
     if returnModel, creg(end+1) = addc('tfPin','eq',r0,tfTarget,N+1); end
-    w = (dL ./ Ldot) .* (thr - epsv*thr.*(1 - thr));    % homotopy integrand * dt/dsigma
+    w = (dL ./ fmax(Ldot, par.LdotFloor)) .* (thr - epsv*thr.*(1 - thr)); % dt/dsigma; Ldot guarded (see LdotFloor)
     opti.minimize(sum((dsig/2) .* (w(1:N) + w(2:N+1))));
 end
 

@@ -25,8 +25,6 @@ function IN = sosc_inertia(H, A, tol)
 %        .method     - 'reduced-eig' (direct) or 'scale-skip' (n>maxNullDim)
 %        .rankA      - exact rank r = n - size(Z,2) from the null-space basis
 %        .redMinEig  - min(eig(RH)); a REAL reported curvature margin (NaN skip)
-%        .expected   - [n, m_a, 0] (reported diagnostic; no longer gates)
-%        .subspaceOK - reported diagnostic (bool); no longer gates
 %
 % REFERENCES:
 %   [1] process/DESIGN_sosc.md sec 12.1 (FINAL inertia method), sec 12.2.
@@ -46,8 +44,6 @@ if n > tol.maxNullDim
     IN.sensStable = false;
     IN.rankA      = NaN;
     IN.redMinEig  = NaN;
-    IN.expected   = [n, ma, 0];
-    IN.subspaceOK = false;
     return;
 end
 
@@ -77,8 +73,4 @@ IN.robust     = true;
 IN.method     = 'reduced-eig';
 IN.rankA      = r;
 IN.redMinEig  = min(ev);
-
-% Back-compat diagnostics (reported only; do NOT gate the verdict, sec 12.2).
-IN.expected   = [n, ma, 0];
-IN.subspaceOK = (IN.red.nneg == 0 && IN.red.nzero == 0);
 end

@@ -12,8 +12,7 @@ tol = struct( ...
     'active',      1e-7, ...  % inequality slack -> active
     'mu',          1e-6, ...  % relative multiplier -> strongly-active
     'inertiaZero', 1e-9, ...  % relative eigenvalue magnitude -> zero eigenvalue
-    'maxNullDim',  10000, ... % n at/below which the dense null-space is formed
-    'maxEigDim',   15000);    % KKT dim (n+m_a) at/below which dense eig is used
+    'maxNullDim',  10000);    % n at/below which the dense null-space is formed
 % inertiaZero REVERTED to 1e-9 (DESIGN sec 11.4, 2026-07-19): this value is
 % correct for gold-standard dense `eig(full(K))`, which is now the primary
 % inertia method (sosc_inertia). On the 10 N row, `eig` gives the true reduced
@@ -31,6 +30,4 @@ tol = struct( ...
 % n<=maxNullDim (covers 10/5/2.5 N). Above it (1 N, 0.5 N) the dense null-space
 % is intractable, so sosc_inertia returns IN.robust=false, IN.method='scale-skip'
 % and the verdict is INCONCLUSIVE-by-scale rather than an unvalidated inertia.
-% maxEigDim=15000 is retained for the legacy count_inertia utility/tests only;
-% it no longer gates sosc_inertia's FINAL direct reduced-eig method.
 end

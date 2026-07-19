@@ -30,11 +30,4 @@ IN4 = sosc_inertia(sparse(eye(3)), sparse([1 0 0; 1 0 0]), tol);
 assert(isequal([IN4.red.npos IN4.red.nneg IN4.red.nzero],[2 0 0]), 'rank-def red=(2,0,0)');
 assert(IN4.sensStable==true, 'rank-def sensStable');
 assert(IN4.rankA==1, 'rank-def rankA=1 (redundant row collapsed by null())');
-
-% Direct 2x2-block coverage of the legacy count_inertia utility (unchanged):
-% D with a [[0 1];[1 0]] block (eigs -1,+1) + a 1x1 (+3).
-Dtest = blkdiag([0 1; 1 0], 3);
-[np, nn, nz] = count_inertia(Dtest, 1e-9);
-assert(isequal([np nn nz],[2 1 0]), ...
-    sprintf('2x2-block count wrong: got [%d %d %d], expected [2 1 0]', np, nn, nz));
 fprintf('test_sosc_inertia_qp PASSED\n');

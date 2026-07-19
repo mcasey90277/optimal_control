@@ -165,10 +165,20 @@ superseded it. Kept for the cross-formulation gate (see `CAMPAIGN.md`).
 
 ---
 
+## Code layout
+
+Code is organized into functional subfolders: `core/` `drivers/` `psr/`
+`verify/` `frontdoor/` `reproduce/` `viz/` `coords/` `cartesian_legacy/` `lib/`
+`tests/` `attic/`. Only `setup_paths.m` and `module_root.m` stay at the module
+root. **Run `setup_paths` once per session** (after `cd`-ing into this
+directory) before calling anything — it puts every subfolder on the MATLAB
+path so functions resolve regardless of which subfolder they live in.
+
 ## Usage
 
 ```matlab
 cd earth_elliptic_to_geo
+setup_paths                                           % put all subfolders on the path
 addpath(fullfile(getenv('HOME'),'casadi-3.7.0'))      % CasADi on path
 
 % one Table-3 row, default paper endpoints, reuse the certified cache:
@@ -182,10 +192,13 @@ run_gergaud(struct('thrustN',2.5,'runMode','solve','e0',0.6,'i0_deg',10, ...
 run_ladder([10 5 2.5 1])
 ```
 
-Tests (fast, `matlab -batch`): `test_mee_xf`, `test_mee_seed_initelems`,
-`test_mee_threading`, `test_mee_res_to_cart`, `test_gergaud_row`,
-`test_run_gergaud_auto` (front-door suite); plus the campaign's no-solve guards
-`test_params/elements/dynamics/terminal/seed/mee_rhs/mee_seed/...`.
+Tests live in `tests/` (fast, `matlab -batch`): `test_mee_xf`,
+`test_mee_seed_initelems`, `test_mee_threading`, `test_mee_res_to_cart`,
+`test_gergaud_row`, `test_run_gergaud_auto` (front-door suite); plus the
+campaign's no-solve guards `test_params/elements/dynamics/terminal/seed/
+mee_rhs/mee_seed/...`. Each test locates the module root and calls
+`setup_paths` itself, so it can be run standalone, e.g.
+`matlab -batch "run('/abs/path/earth_elliptic_to_geo/tests/test_mee_xf.m')"`.
 
 ## Reproducing from scratch (best-found)
 
@@ -201,11 +214,13 @@ change in `t_f` can flip the whole switch structure), so a single solve is not
 trusted.
 
 - **Entry points**, in order of preference for the deep/crash-prone rungs:
-  - `reproduce_table3.sh` — per-*process* watchdog: one MATLAB process per
-    rung, relaunch-on-crash-or-hang (up to a per-rung attempt cap), because a
-    CasADi/MUMPS MEX-level crash is not catchable from inside MATLAB. Usage:
-    `./reproduce_table3.sh` (default rungs `10 5 2.5 1 0.5`) or
-    `./reproduce_table3.sh 10 5`; logs to `results/repro/reproduce_table3.log`.
+  - `reproduce/reproduce_table3.sh` — per-*process* watchdog: one MATLAB
+    process per rung, relaunch-on-crash-or-hang (up to a per-rung attempt
+    cap), because a CasADi/MUMPS MEX-level crash is not catchable from inside
+    MATLAB. Usage (from `reproduce/`): `./reproduce_table3.sh` (default rungs
+    `10 5 2.5 1 0.5`) or `./reproduce_table3.sh 10 5`; logs to
+    `results/repro/reproduce_table3.log` (module root, resolved via
+    `module_root()`).
   - `reproduce_table3.m(thrustList)` — thin **in-process** wrapper (`for T =
     thrustList, reproduce_row(T); end`, then prints the table). Convenient for
     the crash-free top rungs (10/5/2.5 N) or quick iteration; a fatal crash on
@@ -252,7 +267,7 @@ reproduce_row(10)                    % one rung, live, verified against the floo
 reproduce_table3([10 5 2.5])         % in-process, crash-free top rungs
 ```
 ```bash
-./reproduce_table3.sh 10 5 2.5 1 0.5 # per-process watchdog, survives MEX crashes
+cd reproduce && ./reproduce_table3.sh 10 5 2.5 1 0.5   # per-process watchdog, survives MEX crashes
 ```
 
 ## Related files (outside this directory)

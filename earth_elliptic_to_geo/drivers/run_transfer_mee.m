@@ -94,6 +94,8 @@ betaMode   = d('betaMode', 'tangential');
 nodesPerRev = d('nodesPerRev', 25);
 maxIter    = d('maxIter', 1500);
 sched      = d('sched', []);
+liftDL     = d('liftDL', false);   % external-review deep-rung option: lift scalar
+                                   % DeltaL to a tied N+1 sequence (block-banded KKT)
 m0kg       = d('m0kg', 1500);
 ispS       = d('ispS', 2000);
 warmStart  = d('warmStart', []);
@@ -205,7 +207,8 @@ end
 % continuation tail only if that does not certify -- see cfg.warmStart doc)
 if isempty(warmStart)
     ho = struct('par', p, 'x0', x0, 'tfTarget', tf, 'maxIter', maxIter, ...
-                'resDir', resDir, 'tag', tag, 'printLevel', 0, 'fp', fp, 'xf', xf);
+                'resDir', resDir, 'tag', tag, 'printLevel', 0, 'fp', fp, 'xf', xf, ...
+                'liftDL', liftDL);
     if ~isempty(sched), ho.sched = sched; end
     [best, tbl] = homotopy_mee(sigma, X0, U0, dL0, ho);
 else
@@ -221,7 +224,7 @@ else
     else
         oD = casadi_lt_mee(sigma, X0, U0, dL0, struct('par', p, 'mode', 'fixedtf', ...
             'eps', 0, 'tfTarget', tf, 'x0', x0, 'maxIter', maxIter, ...
-            'warmTight', true, 'printLevel', 0, 'xf', xf));
+            'warmTight', true, 'printLevel', 0, 'xf', xf, 'liftDL', liftDL));
         okD = oD.success && oD.maxDefect < 1e-8;
         save(directFile, 'oD', 'okD', 'fp');
     end
@@ -237,7 +240,7 @@ else
             [0.3 0.2 0.12 0.07 0.04 0.025 0.015 0.008 0.004 0.002 0.001 0]);
         ho = struct('par', p, 'x0', x0, 'tfTarget', tf, 'maxIter', maxIter, ...
                     'resDir', resDir, 'tag', [tag '_warmtail'], 'printLevel', 0, ...
-                    'fp', fp, 'sched', fallbackSched);
+                    'fp', fp, 'sched', fallbackSched, 'xf', xf, 'liftDL', liftDL);
         [best, tbl] = homotopy_mee(sigma, X0, U0, dL0, ho);
     end
 end

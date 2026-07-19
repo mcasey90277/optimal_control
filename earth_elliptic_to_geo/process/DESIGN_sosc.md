@@ -370,21 +370,42 @@ reported field but no longer drives the verdict.
 
 ### 11.5 Revised verdict taxonomy (supersedes §5 verdict logic)
 
-Verdict logic, in order (on the REDUCED inertia):
-1. `~recoverOK` or `~K.signOK` or `~K.pass` ⇒ **ERROR**.
-2. `~AS.licq` or `AS.nWeak>0` or `~IN.redConsistent` ⇒ **INCONCLUSIVE**
-   (critical cone not a trustworthy subspace; can neither confirm nor deny).
-3. `IN.red.nneg > 0` ⇒ **FAIL** (a negative curvature direction on the cone =
-   descent direction ⇒ genuine saddle, provably not a local min).
-4. `IN.red.nzero == 0` (and `red.nneg==0`) ⇒ **PASS** (reduced Hessian PD ⇒
-   strict local minimum).
-5. else (`red.nneg==0`, `red.nzero>0`) ⇒ **WEAK_MIN** (reduced Hessian PSD with
-   `red.nzero` flat directions — necessary second-order condition holds, strict
-   sufficient does not; the expected outcome for bang-bang min-fuel).
+The reduced inertia `IN.red` is computed on the null space of the STRONGLY-active
+Jacobian `A` (equalities + strongly-active inequalities) — call that subspace `S`.
+The critical cone `C ⊆ S`, with equality only when there are no weakly-active
+constraints (`AS.nWeak==0`). Two robustness facts drive the logic: (i) reduced
+Hessian PD on `S` ⟹ PD on `C ⊆ S`, so a PASS is valid regardless of
+weakly-active or LICQ rank-deficiency; (ii) "no negative curvature on `S`" ⟹ none
+on `C`, so WEAK_MIN is likewise robust. Only the FAIL conclusion (a negative
+curvature *direction*) can be spoiled by `C ⊊ S`.
+
+Verdict logic, in order:
+1. `~recoverOK` or `~K.signOK` or `~K.pass` ⇒ **ERROR** (no trustworthy KKT point).
+2. `~IN.redConsistent` ⇒ **INCONCLUSIVE** (the Gould decomposition failed its
+   consistency check — the `sprank` rank estimate is untrustworthy, so the
+   reduced inertia cannot be formed).
+3. `red.nneg == 0` and `red.nzero == 0` ⇒ **PASS** (reduced Hessian PD on `S` ⇒
+   PD on the critical cone ⇒ strict local minimum; valid even under
+   weakly-active junctions or a rank-deficient active Jacobian).
+4. `red.nneg == 0` and `red.nzero > 0` ⇒ **WEAK_MIN** (reduced Hessian PSD, no
+   negative curvature anywhere on `S` ⇒ no descent direction ⇒ a weak local
+   minimum; strict sufficiency not established — `red.nzero` flat directions.
+   The expected outcome for bang-bang min-fuel).
+5. `red.nneg > 0` and `AS.nWeak == 0` ⇒ **FAIL** (`C == S` has a negative
+   curvature direction ⇒ genuine descent direction ⇒ provably not a local min).
+6. `red.nneg > 0` and `AS.nWeak > 0` ⇒ **INCONCLUSIVE** (`S` has negative
+   curvature, but weakly-active junctions make `C ⊊ S`; the descent direction
+   may lie outside the cone — cannot conclude a saddle).
+
+**LICQ** (`sprank(A) < m_active`) is REPORTED as a diagnostic but does NOT by
+itself force any verdict — the Gould decomposition with `r = sprank(A)` handles a
+rank-deficient active Jacobian, and `IN.redConsistent` (rule 2) is the guard
+against a wrong rank estimate. **Weakly-active** constraints gate only rule 5-vs-6,
+never PASS/WEAK_MIN.
 
 `redMinEig` stays a NaN placeholder (non-gating). The verdict struct gains
-`.red` (the reduced inertia) and `.nFlat = IN.red.nzero` (reported for
-WEAK_MIN — the dimension of the flat manifold).
+`.red` (the reduced inertia struct) and `.nFlat = IN.red.nzero` (the dimension
+of the flat manifold — reported, meaningful for WEAK_MIN).
 
 ### 11.6 Revised tiered gate
 

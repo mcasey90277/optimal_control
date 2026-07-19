@@ -506,13 +506,23 @@ LICQ is no longer computed for the verdict (`Z` gives the exact rank);
 
 ### 12.3 Expected batch (supersedes §11.7)
 
+**Actual batch result (2026-07-19):**
+
 | rung | verdict | why |
 |---|---|---|
-| 10 N | **WEAK_MIN** (`nFlat≈270`) | reduced eig `nneg=0` stable across the band; clean |
-| 5 N, 2.5 N | **INCONCLUSIVE** | `nneg` `zt`-sensitive (near-flat directions ~1e-6 rel) |
-| 1 N, 0.5 N | **INCONCLUSIVE** (scale) | `n > maxNullDim`; dense null-space intractable |
+| 10 N | **WEAK_MIN** (`nFlat=270`) | reduced eig `nneg=0` stable (`nnegBand=[0 0 0 0]`); clean |
+| 5 N | **INCONCLUSIVE** | `nnegBand=[2 2 1 0]` — `zt`-sensitive (near-flat directions, `redMinEig≈−1.1e-4`) |
+| 2.5 N | **INCONCLUSIVE** | `nnegBand` `zt`-sensitive (same class) |
+| 1 N | **ERROR** | the warm **re-solve recovery** fails at this scale (n≈16.5k, PSR-refined) — before inertia |
+| 0.5 N | **uncomputable** | recovery likewise fails; batch produced no clean record |
 
 Only 10 N certifies cleanly (as a weak local minimum). This is the honest
 result: a rigorous NLP-level second-order certificate confirms 10 N is not a
-saddle and is a weak minimum, and is candid that the larger, more near-singular
-rungs are beyond what this method resolves — rather than over-claiming.
+saddle and is a weak minimum; 5/2.5 N have near-flat directions of
+numerically-unresolvable sign (INCONCLUSIVE, not a spurious FAIL); and the deep
+rungs (1/0.5 N) fail even at the recovery stage — the certificate is candid
+about its reach rather than over-claiming. **OPEN ITEMS (deep rungs):** (a) a
+scalable robust reduced-eig (sparse null-space) *and* (b) a scalable warm-resolve
+recovery (the 1/0.5 N re-solve itself is the first wall). (c) `recertify_table3`
+should persist an ERROR-verdict sidecar in its `catch` path so every rung leaves
+a record even when recovery throws.

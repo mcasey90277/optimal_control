@@ -1,0 +1,277 @@
+\documentclass[11pt]{article}
+%==============================================================================
+%  Reproducing Our Table 3: A Campaign Runbook
+%  How the earth_elliptic_to_geo min-fuel thrust ladder was actually solved,
+%  per rung, with the reasoning -- and why run_gergaud will not reproduce the
+%  deep ladder.
+%
+%  Source of record for numbers/provenance:
+%    earth_elliptic_to_geo/CAMPAIGN.md
+%    earth_elliptic_to_geo/.superpowers/sdd/progress.md  (MEE ladder ledger)
+%    earth_elliptic_to_geo/doc/table3_method_note.tex   (the method/theory)
+%==============================================================================
+\usepackage[margin=1in]{geometry}
+\usepackage{amsmath,amssymb}
+\usepackage{booktabs}
+\usepackage{xcolor}
+\usepackage{listings}
+\usepackage[colorlinks=true,linkcolor=blue,citecolor=blue,urlcolor=blue]{hyperref}
+\usepackage{enumitem}
+\setlist{itemsep=2pt,topsep=3pt}
+\emergencystretch=2.5em
+
+\definecolor{codegray}{gray}{0.95}
+\definecolor{codekw}{rgb}{0.13,0.13,0.7}
+\definecolor{codecomment}{rgb}{0.0,0.5,0.0}
+\definecolor{codestr}{rgb}{0.6,0.1,0.1}
+\lstdefinestyle{mat}{
+  language=Matlab, basicstyle=\ttfamily\footnotesize,
+  keywordstyle=\color{codekw}, commentstyle=\color{codecomment}\itshape,
+  stringstyle=\color{codestr}, backgroundcolor=\color{codegray},
+  numbers=none, breaklines=true, frame=single, framerule=0pt,
+  showstringspaces=false, columns=fullflexible, keepspaces=true, aboveskip=6pt, belowskip=6pt}
+\lstset{style=mat}
+\newcommand{\code}[1]{\texttt{\small #1}}
+\newcommand{\file}[1]{\texttt{\small #1}}
+\newcommand{\dL}{\Delta L}
+\newcommand{\Tmax}{T_{\max}}
+
+\title{\vspace{-1.5em}Reproducing Our Table~3: A Campaign Runbook\\[3pt]
+\large How the minimum-fuel thrust ladder was actually solved, per rung ---
+and why \file{run\_gergaud} will not reproduce the deep ladder}
+\author{\normalsize \file{earth\_elliptic\_to\_geo} pipeline --- internal runbook}
+\date{\normalsize 2026-07-18}
+
+\begin{document}
+\maketitle
+\vspace{-1.4em}
+
+\begin{abstract}
+\noindent
+This runbook records \emph{exactly} how each row of our version of Gergaud's
+Table~3 was produced during the campaign, and the reasoning behind every
+non-obvious step. It is a companion to the theory note
+(\file{doc/table3\_method\_note.tex}); read that first for the optimal-control
+problem, the MEE formulation, and the discretization. The short version: the
+ladder was a \emph{warm-chained thrust continuation} with \emph{per-rung
+recipes} that get progressively more hands-on as thrust drops, and the newer
+front door \file{run\_gergaud.m} --- built after the campaign --- deliberately
+does \emph{not} carry those recipes, so it is the wrong tool for re-solving the
+hard rungs (\S\ref{sec:whynot}).
+\end{abstract}
+
+\section{Two meanings of ``reproduce''}
+
+\paragraph{(A) Present the numbers we already certified.} If the goal is the
+table/figure as reported, nothing needs re-solving --- the certified solutions
+are cached in \file{results/} (Table~\ref{tab:provenance}). Use the campaign's
+own generators, which read those caches:
+\begin{lstlisting}
+run_ladder([10 5 2.5 1])   % prints the ladder summary table from the rung caches
+fig_table3                 % the Table-3 figure (switches / revs / R0 panels)
+\end{lstlisting}
+\file{run\_gergaud(struct('thrustN',T,'runMode','auto'))} returns the same
+numbers one row at a time (and can add a plot/movie); it is the right tool for a
+single row or a custom-endpoint row, not for regenerating the whole table.
+
+\paragraph{(B) Re-solve from scratch.} This is the rest of the document: the
+per-rung recipes (\S\ref{sec:rungs}), the operational essentials that keep them
+converging (\S\ref{sec:ops}), and why \file{run\_gergaud} cannot stand in for
+them (\S\ref{sec:whynot}).
+
+\begin{table}[h]\centering\small
+\begin{tabular}{@{}llll@{}}
+\toprule
+$\Tmax$ & fuel result (\file{results/}) & min-time anchor & headline $m_f$ / sw / revs \\
+\midrule
+10\,N   & \file{MEE\_M2\_10N.mat}                 & \file{MEE\_mintime\_T100.mat} & 1377.10 / 19 / 7.33 \\
+5\,N    & \file{MEE\_M2\_5N.mat}                  & \file{MEE\_mintime\_T50.mat}  & 1364.54 / 32 / 14.16 \\
+2.5\,N  & \file{MEE\_M2\_2p5N.mat}                & \file{MEE\_mintime\_T25.mat}  & 1369.79 / 76 / 27.84 \\
+1\,N    & \file{MEE\_M2\_1N\_PSR\_psr\_final.mat} & \file{MEE\_mintime\_T10.mat}  & 1371.44 / 171 / 69.15 \\
+0.5\,N  & \file{MEE\_M2\_0p5N\_PSR\_psr\_final.mat} & \emph{none (R0-law)}       & 1375.28 / 362 / 138.60 \\
+\bottomrule
+\end{tabular}
+\caption{Where each certified row lives. The 1\,N and 0.5\,N headline rows are
+the PSR-refined files (they supersede the coarse \file{MEE\_M2\_1N}/\file{\_0p5N}).
+The 0.5\,N anchor is an R0-law estimate, not a certified min-time solve.}
+\label{tab:provenance}
+\end{table}
+
+\section{The strategy in one paragraph}
+
+Each row is a fixed-time min-fuel solve at $t_f=c_{tf}\,t_{f,\min}(\Tmax)$ with
+$c_{tf}=1.5$, so every rung needs (i) a min-time anchor $t_{f,\min}$ and (ii) an
+energy$\to$fuel homotopy at that fixed time. The ladder descends
+$10\to5\to2.5\to1\to0.5$~N, \emph{warm-chaining} each rung from the one above:
+because $\Tmax\,t_{f,\min}\approx\text{const}$ (the $R0$ law), the total winding
+$\dL\sim1/\Tmax$ at fixed trajectory shape, so the previous rung's converged
+trajectory --- rescaled $\dL_{\text{new}}=\dL_{\text{prev}}(\Tmax^{\text{prev}}/
+\Tmax^{\text{new}})$ --- is an excellent starting shape for both the anchor and
+the fuel solve. This warm chain is what \file{run\_ladder.m} automates. The
+recipes below are what that chain needs at each rung to actually converge.
+
+\section{Per-rung runbook}
+\label{sec:rungs}
+
+\subsection*{10\,N --- the anchor of the ladder}
+\begin{lstlisting}
+% fuel solve (energy->fuel homotopy at fixed t_f):
+res = run_transfer_mee(struct('thrustN',10,'ctf',1.5,'tfMinAnchor',22.2206));
+% min-time anchor (multi-basin -- keep-best of cold + warm):
+mt  = run_mintime_mee(10, 25);
+\end{lstlisting}
+\textbf{Why / what to watch:}
+\begin{itemize}
+\item \textbf{Seed throttle $\approx0.4$, not 1.} A full-throttle constant burn
+from the $e_0=0.75$ apogee overshoots GEO by revolution $\sim3$ and goes
+coordinate-singular; \file{mee\_seed} uses $\delta\!\approx\!0.4$, \code{stopP=1},
+giving a $\sim7.3$-rev, well-conditioned seed.
+\item \textbf{Node density $25$/rev is production.} A warm mesh-refinement study
+(15/20/25/30/40 nodes/rev) showed $m_f$ flat to $0.025$~kg and \code{sw=19}
+across $\{25,30,40\}$; \textbf{cold} solves at $\ge30$/rev are ill-conditioned
+(dual infeasibility $\sim10^{16}$), so always \emph{warm}-refine dense meshes,
+never cold-solve them.
+\item \textbf{Min-time is multi-basin.} \file{run\_mintime\_mee} runs both a
+fuel-warm Stage~A \emph{and} a cold 3-rev tangential Stage~B and keeps the lower
+$t_f$. Here Stage~A converged \emph{cleanly} to a spurious $7.16$-rev basin
+($14\%$ off); the cold Stage~B found the correct $4.503$-rev basin
+($t_{f,\min}=22.2206$, matching the Cartesian anchor's $4.504$ revs). ``Converged''
+is not evidence of the globally relevant optimum.
+\end{itemize}
+
+\subsection*{5\,N and 2.5\,N --- the warm-chained middle}
+\begin{lstlisting}
+run_ladder([10 5 2.5], struct('mtMaxIter', 300));
+\end{lstlisting}
+\textbf{Why / what to watch:}
+\begin{itemize}
+\item \textbf{5\,N broke the Cartesian wall.} The old Cartesian/Sundman stack
+died at 5\,N; the MEE$+\dL$ formulation, warm-chained from 10\,N, certifies it
+cleanly ($t_{f,\min}=44.6796$, $m_f=1364.54$, \code{sw=32}).
+\item \textbf{2.5\,N ``wall'' was a budget artifact, not conditioning.} The
+first 2.5\,N attempts stalled; a probe proved fresh solves converge to $\sim
+10^{-14}$ in $<110$ iterations. The cause was a per-round iteration cap
+(\code{mtMaxIter=50}) combined with IPOPT's barrier parameter resetting each
+round --- every capped round re-fought the same barrier transition. \textbf{Cure:
+raise the per-round budget to $\ge150$--$300$} (\code{cfg.mtMaxIter}). This is why
+the call above passes \code{mtMaxIter=300}.
+\end{itemize}
+
+\subsection*{1\,N --- the hard anchor (small-N-first), plus a real infeasibility bug}
+This rung does \emph{not} converge by simply asking for 25/rev. The recipe:
+\begin{lstlisting}
+% ANCHOR, step 1: small-N-first at 15 nodes/rev (converges where 25/rev crashes)
+mt15 = run_mintime_mee(1, 15);          % ~6 min; manual continuation past the stall guard
+% ANCHOR, step 2: warm mesh-refine 15/rev -> 25/rev in ONE tight solve (~57 s)
+%   (interp_warmstart onto the 25/rev grid, then a single warmTight casadi_lt_mee)
+% FUEL: at the certified anchor, energy->fuel homotopy
+res1 = run_transfer_mee(struct('thrustN',1,'ctf',1.5,'tfMinAnchor',mt.tfmin));
+% PSR: switch-time sharpening (headline result is round 2)
+psr  = psr_mee_refine(res1, struct( ... ));   % -> MEE_M2_1N_PSR_psr_final.mat, 1371.44 kg
+\end{lstlisting}
+\textbf{Why / what to watch:}
+\begin{itemize}
+\item \textbf{Small-N-first, then refine.} A direct 25/rev ($N\!\approx\!1104$)
+cold anchor hit four reproducible mid-computation MEX/SIGBUS crashes; the same
+$N=1104$ solved in $57$~s \emph{as a warm refinement} from a converged 15/rev
+($N=662$) anchor. The crashes were conditioning-driven, not size-driven ---
+approach the hard size warm, never cold.
+\item \textbf{The fuel solve had a structural-infeasibility bug.} A hardcoded
+time-box $t\le300$ collided with $t_f=335.7$: the fixed-$t_f$ boundary condition
+and the box were mutually unsatisfiable before IPOPT iterated (IPOPT's ``NLP
+error $35.46$'' $=335.71-300.25$ was the tell; \code{maxDefect}/\code{termErr}
+never checked the time equality). \textbf{Fix: the time box is now
+tfTarget-relative} --- already in \file{casadi\_lt\_mee.m}. With that, 1\,N fuel
+certified on the first attempt ($m_f=1370.36$, \code{sw=171}).
+\item \textbf{PSR gives the headline.} \file{psr\_mee\_refine} round~2 sharpens
+switch times, moving $m_f$ $1370.36\to1371.44$ (edge $0.9983\to0.9994$, revs
+stable) --- a discretization refinement, not a basin change. The $171$-vs-$179$
+switch-count gap versus the paper is open (windowed PSR scoring cannot
+\emph{discover} new switch pairs; a periodic uniform-sweep round is the fix).
+\end{itemize}
+
+\subsection*{0.5\,N --- anchor-free (the min-time anchor is walled)}
+\begin{lstlisting}
+% NO certified min-time anchor exists. Use the R0-law estimate:
+%   t_f = c_tf * (R0 / T),  R0 = mean(T*t_fmin) = 223.14 ND  (from the 4 certified anchors)
+%   t_f = 1.5 * (223.14 / 0.5) = 669.42 ND
+res05 = run_transfer_mee(struct('thrustN',0.5,'ctf',1.5,'tfMinAnchor',223.14/0.5));
+psr05 = psr_mee_refine(res05, struct( ... ));   % 5 rounds (hybrid global) -> 1375.28 kg, sw=362
+\end{lstlisting}
+\textbf{Why / what to watch:}
+\begin{itemize}
+\item \textbf{The min-time anchor hit a conditioning wall.} Seven configurations
+were tried; the best defect was $0.0545$ ($12$/rev $\times75$; $15$/rev was
+worse), with a bit-identical stall on retry and repeated \code{libcoinmumps}
+MEX/SIGBUS crashes. So the 0.5\,N row is built against an \emph{R0-law estimate}
+$t_{f,\min}\approx446.27$~ND, not a certified anchor.
+\item \textbf{The R0 law makes this honest but caveated.} $\Tmax\,t_{f,\min}
+\approx850$~N$\cdot$h ($223.14$~ND) holds to $0.72\%$ across the four certified
+anchors, so the estimate is well grounded --- but the 0.5\,N $t_f/t_{f,\min}$
+column is a construction, \emph{excluded} from any $R0$ refit (circularity), and
+the $m_f=1375.28$/\code{sw}$=362$ result is PSR-round-5-of-5, budget-limited
+(\code{stopReason=maxRounds}), not confirmed mesh-stable.
+\end{itemize}
+
+\subsection*{0.2\,N and 0.1\,N --- not attained}
+Honestly never solved: the deep-descent effort stopped at the 0.5\,N min-time
+wall. Reaching them means either certifying a 0.5\,N anchor and chaining down, or
+extending the anchor-free R0-law path to $\sim300$ and $\sim600$ switches at $N$
+in the tens of thousands --- expecting the same crash class. See \file{TODO.md}
+items~1--2.
+
+\section{Operational essentials (the whole ladder)}
+\label{sec:ops}
+\begin{enumerate}[leftmargin=1.4em]
+\item \textbf{Warm-start dense meshes; never cold-solve them.} $\ge30$/rev cold
+is ill-conditioned. Mesh-refine from a certified coarser solve
+(\file{interp\_warmstart}: linear for the state and RTN direction, nearest for
+the throttle to keep switch edges crisp, then one \code{warmTight} solve).
+\item \textbf{Per-round iteration budget $\ge150$--$300$.} A small cap plus
+IPOPT's per-round barrier reset stalls the middle rungs (the false 2.5\,N wall).
+\item \textbf{tfTarget-relative time box.} Never a hardcoded $t\le300$; derive it
+from $t_f$ (the 1\,N infeasibility bug).
+\item \textbf{\code{mumps\_pivot\_order=0}.} METIS ordering hard-aborts at
+$N\!\sim\!193$ on this machine; AMD ordering fixes it.
+\item \textbf{Never cache an uncertified result.} A loose iterate must not poison
+the warm-start chain. Every driver caches only defect/terminal-certified
+solutions; per-round and per-$\varepsilon$-step caches make a killed run
+resumable by simply re-invoking.
+\item \textbf{Classify crashes by the dump, not the exit code.} The recurring
+\code{libcoinmumps} MEX/SIGBUS death is volume/duration-linked; a fresh
+\file{\textasciitilde/matlab\_crash\_dump.*} identifies it (exit $137$ is
+non-discriminating). Recovery is a plain relaunch (the caches resume).
+\item \textbf{The $R0$ law is the anchor-free fallback.} $\Tmax\,t_{f,\min}
+\approx223.14$~ND supplies a target when a min-time anchor will not certify
+(the 0.5\,N recipe).
+\end{enumerate}
+
+\section{Why \file{run\_gergaud} will not reproduce the deep ladder}
+\label{sec:whynot}
+
+\file{run\_gergaud} is the right front door for a \emph{single} row, a
+\emph{custom-endpoint} row, or a plot/movie. It is the wrong tool for re-solving
+(B) the low-thrust rungs, for four concrete reasons:
+\begin{enumerate}[leftmargin=1.4em]
+\item \textbf{It is single-rung; the campaign was warm-chained.} The
+$5\to2.5\to1$~N descent worked because each rung warm-started from the one above
+(the $\dL$ $R0$-rescale in \file{run\_ladder}). \file{run\_gergaud solve} treats
+one thrust in isolation, so a 1\,N solve starts far colder and is much harder.
+\item \textbf{It does not encode the per-rung recipes.} \file{run\_gergaud solve}
+calls \file{run\_mintime\_mee($T$,25)} directly --- straight into the 25/rev
+crash wall at 1\,N (it has no ``small-N-first then refine'' step) --- and has no
+notion of the 0.5\,N anchor-free R0-law construction or its multi-round PSR.
+\item \textbf{Its solve/probe path was wired but never run to convergence on the
+deep rungs.} The build's final review checked it as \emph{correct wiring}, not as
+a validated deep solve; the certified numbers came from the campaign's driver
+runs, not from \file{run\_gergaud}.
+\item \textbf{For 0.5\,N its \code{auto} row already carries an R0-law $t_{f,\min}$
+estimate (446.27\,ND) as a footnote} --- correct for \emph{presenting} the row,
+but re-deriving it would not reconstruct the 5-round, budget-limited PSR process
+that actually produced $m_f=1375.28$.
+\end{enumerate}
+In short: use \file{run\_ladder} + the recipes above (and the ledger/reports for
+the exact hand-steps) to re-solve; use \file{run\_gergaud} to present a row, to
+explore a custom transfer, or to render a movie.
+
+\end{document}

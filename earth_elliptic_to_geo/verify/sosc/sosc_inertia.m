@@ -14,14 +14,24 @@ function IN = sosc_inertia(H, A, tol)
 %        .nzero       - count of (near-)zero eigenvalues
 %        .expected    - [n, m_a, 0], the target inertia signature
 %        .subspaceOK  - true iff [npos nneg nzero] == expected (bool)
+%                       (reported only; no longer drives the verdict, sec 11.4)
+%        .rankA       - structural rank of A (sprank), r
+%        .red         - reduced-Hessian inertia struct .npos .nneg .nzero
+%                       via the Gould decomposition (sec 11.4)
+%        .redConsistent - true iff red inertia is self-consistent (bool)
 %        .redMinEig   - NaN placeholder; non-gating curvature margin,
 %                       not computed here (reserved for later enhancement)
 %
 % REFERENCES:
-%   [1] process/DESIGN_sosc.md sec 4.5.
+%   [1] process/DESIGN_sosc.md sec 4.5, 11.4.
 %   [2] Nocedal & Wright, "Numerical Optimization," 2nd ed., Thm 16.3:
 %       inertia(KKT) = (n, m_a, 0) <=> reduced Hessian PD on null(A),
 %       when A has full row rank.
+%   [3] Gould, N.I.M., "On practical conditions for the existence and
+%       uniqueness of solutions to the general equality quadratic
+%       programming problem," Math. Prog. 32 (1985): the reduced-Hessian
+%       inertia from the full KKT inertia and rank(A):
+%       inertia(Z'HZ) = (npos-r, nneg-r, nzero-(m_a-r)), r = rank(A).
 
 n  = size(H,1);
 ma = size(A,1);
@@ -40,6 +50,19 @@ IN.npos       = npos;
 IN.nneg       = nneg;
 IN.nzero      = nzero;
 IN.expected   = [n, ma, 0];
-IN.subspaceOK = isequal([npos nneg nzero], [n ma 0]);
+IN.subspaceOK = isequal([npos nneg nzero], [n ma 0]);  % reported only (sec 11.4)
+
+% Reduced-Hessian inertia via the Gould decomposition (sec 11.4). r is the
+% structural rank of the active Jacobian; the reduced Hessian Z'HZ (H on
+% null(A)) has inertia (npos-r, nneg-r, nzero-(m_a-r)).
+r = sprank(A);
+red.npos  = npos  - r;
+red.nneg  = nneg  - r;
+red.nzero = nzero - (ma - r);
+IN.rankA  = r;
+IN.red    = struct('npos', red.npos, 'nneg', red.nneg, 'nzero', red.nzero);
+IN.redConsistent = (red.npos + red.nneg + red.nzero == n - r) ...
+                   && red.nneg >= 0 && red.nzero >= 0;
+
 IN.redMinEig  = NaN;   % non-gating placeholder; not computed here
 end

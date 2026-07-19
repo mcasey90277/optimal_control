@@ -17,7 +17,7 @@ else, saved = saved_or_path; end
 
 R = sosc_recover_kkt(saved, tol);
 sosc = struct('thresholds',tol,'drift',NaN,'sign',NaN, ...
-    'kkt',[],'active',[],'inertia',[],'redMinEig',NaN, ...
+    'kkt',[],'active',[],'inertia',[],'red',[],'nFlat',NaN,'redMinEig',NaN, ...
     'meta',struct('thrustN',saved.thrustN,'tag',saved.tag,'when',datestr(now)));
 if ~R.recoverOK
     sosc.verdict='ERROR'; sosc.reason=sprintf('warm re-solve failed: %s',R.ipoptStatus);
@@ -27,6 +27,7 @@ sosc.drift = R.drift;
 K  = sosc_kkt_residual(R, tol);   sosc.sign=K.sign;  sosc.kkt=K;
 AS = sosc_active_set(R, K, tol);  sosc.active=AS;
 IN = sosc_inertia(R.H, AS.A, tol);sosc.inertia=IN;
+sosc.red=IN.red; sosc.nFlat=IN.red.nzero;
 v  = sosc_decide(K, AS, IN);
 sosc.verdict=v.verdict; sosc.reason=v.reason; sosc.status=v.status;
 sosc.meta.n=R.n; sosc.meta.m=R.m; sosc.meta.m_active=AS.m_active;

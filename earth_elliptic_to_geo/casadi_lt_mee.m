@@ -62,7 +62,7 @@ if isempty(cp), cp = fullfile(getenv('HOME'), 'casadi-3.7.0'); end
 addpath(cp);
 par = opts.par;
 if ~isfield(par, 'LdotMin') || isempty(par.LdotMin), par.LdotMin = 1e-3; end
-d = @(f,v) getdef(opts, f, v);
+d = @(f,v) optdef(opts, f, v);
 mode      = d('mode', 'fixedtf');
 epsv      = d('eps', 0);
 tfTarget  = d('tfTarget', []);
@@ -287,10 +287,4 @@ out = struct('X', Xs, 'U', Us, 'dL', dLs, 'success', success, ...
     'tf', Xs(7,end), 'switches', sum(abs(diff(burn))), ...
     'edge', mean(ss > 0.95 | ss < 0.05), 'lamDef', lamDef, ...
     'LdotMin', min(LdotN), 'incDeg', incDeg);
-end
-
-% ---------------------------------------------------------------------------
-function v = getdef(s, f, dflt)
-% GETDEF  Optional-field default (mirrors casadi_lt_2body's helper).
-if isfield(s, f) && ~isempty(s.(f)), v = s.(f); else, v = dflt; end
 end

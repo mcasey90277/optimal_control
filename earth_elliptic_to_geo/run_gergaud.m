@@ -143,7 +143,7 @@ ispS        = 2000;      % specific impulse [s]
 returnOnly  = false;     % test hook: return row, skip plot+movie
 
 %% ---- opts overrides (field-by-field; only used when called with opts) --
-d = @(f,v) getdef_rg(opts, f, v);
+d = @(f,v) optdef(opts, f, v);
 thrustN     = d('thrustN',     thrustN);
 P0_km       = d('P0_km',       P0_km);
 e0          = d('e0',          e0);
@@ -273,13 +273,6 @@ end
 end
 
 % =============================================================================
-function v = getdef_rg(s, f, dflt)
-% GETDEF_RG  Optional-field default (mirrors run_transfer_mee.m's getdef6 /
-% run_mintime_mee.m's getdef7 -- same pattern, local copy for this file).
-if isfield(s, f) && ~isempty(s.(f)), v = s.(f); else, v = dflt; end
-end
-
-% =============================================================================
 function suf = endpoint_hash_suffix(P0_km, e0, i0_deg, Pf_km, ef, if_deg)
 % ENDPOINT_HASH_SUFFIX  Short deterministic tag suffix for a custom endpoint
 % set, so a custom run's cache files (fuel/mintime/PSR) never collide with
@@ -324,7 +317,7 @@ switch layout
             'sigma', res.sigma(:), 'm_f_kg', res.report.m_f_kg, 'switches', res.report.switches, ...
             'revs', res.report.revs, 'edge', res.report.edge, 'incDeg', res.report.incDeg, ...
             'defect', res.report.defect, 'certified', logical(res.report.certified), ...
-            'tf', res.tf, 'ctf', getdef_rg(res.cfg, 'ctf', 1.5), 'note', '');
+            'tf', res.tf, 'ctf', optdef(res.cfg, 'ctf', 1.5), 'note', '');
     case 'psr'
         out = S.out;
         fo  = out.finalOut;

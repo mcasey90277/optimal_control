@@ -222,7 +222,7 @@ function out = run_mintime_mee(thrustN, nodesPerRev, cfg)
 %       retry-loose decision, Phase 0 item 1, factored out for unit testing).
 if nargin < 2 || isempty(nodesPerRev), nodesPerRev = 25; end
 if nargin < 3, cfg = struct(); end
-d = @(f,v) getdef7(cfg, f, v);
+d = @(f,v) optdef(cfg, f, v);
 
 m0kg     = d('m0kg', 1500);
 ispS     = d('ispS', 2000);
@@ -719,10 +719,4 @@ for k = 1:numel(flds)
             label, f, tag);
     end
 end
-end
-
-% ---------------------------------------------------------------------------
-function v = getdef7(s, f, dflt)
-% GETDEF7  Optional-field default (mirrors casadi_lt_2body's helper).
-if isfield(s, f) && ~isempty(s.(f)), v = s.(f); else, v = dflt; end
 end

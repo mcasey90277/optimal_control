@@ -83,7 +83,7 @@ if nargin < 1
     error('reproduce_row:badInput', 'T (thrustN) is required');
 end
 if nargin < 2, opts = struct(); end
-d = @(f,v) getf(opts, f, v);
+d = @(f,v) optdef(opts, f, v);
 
 reuseCampaignCache = d('reuseCampaignCache', false);
 m0kg = d('m0kg', 1500);
@@ -449,19 +449,4 @@ if ~any(abs(T - [10, 5, 2.5, 1, 0.5]) < 1e-9)
         'no default tolerance policy registered for thrustN=%g', T);
 end
 tol = struct('m_f_kg', 0.5);
-end
-
-% ---------------------------------------------------------------------------
-function v = getf(s, f, dflt)
-% GETF  Optional-field default, empty-tolerant (mirrors the getdef*
-% helpers already used by run_mintime_mee.m / run_transfer_mee.m /
-% psr_mee_refine.m): returns dflt if the field is absent OR present-but-empty.
-%
-% INPUTS:  s - struct; f - field name [char]; dflt - default value
-% OUTPUTS: v - s.(f) if present and nonempty, else dflt
-if isfield(s, f) && ~isempty(s.(f))
-    v = s.(f);
-else
-    v = dflt;
-end
 end

@@ -158,10 +158,10 @@ here   = fileparts(mfilename('fullpath'));
 resDir = fullfile(here, 'results');
 if ~exist(resDir, 'dir'), mkdir(resDir); end
 if nargin < 2, opts = struct(); end
-d = @(f, v) getdef_psr(opts, f, v);
+d = @(f, v) optdef(opts, f, v);
 
 cfg = baseResult.cfg;
-baseTagStr = getdef_psr(cfg, 'tag', 'MEE_M2_unknown');
+baseTagStr = optdef(cfg, 'tag', 'MEE_M2_unknown');
 
 opts.maxRounds = d('maxRounds', 4);
 opts.tag       = d('tag', [baseTagStr '_PSR']);
@@ -185,10 +185,10 @@ assert(isfield(cfg, 'thrustN') && ~isempty(cfg.thrustN), 'psr_mee_refine:noThrus
      'config (e.g. MEE_M2_10N.mat''s res.cfg is a no-field struct); pass a baseResult whose ' ...
      'cfg.thrustN/.m0kg/.ispS are populated (e.g. MEE_M2_1N.mat / MEE_M2_5N.mat / ' ...
      'MEE_M2_2p5N.mat, or a hand-built struct for the node-economy probe)']);
-m0kg = getdef_psr(cfg, 'm0kg', 1500);
-ispS = getdef_psr(cfg, 'ispS', 2000);
+m0kg = optdef(cfg, 'm0kg', 1500);
+ispS = optdef(cfg, 'ispS', 2000);
 par  = kepler_lt_params(cfg.thrustN, m0kg, ispS);
-tf   = getdef_psr(baseResult, 'tf', getdef_psr(cfg, 'ctf', 1.5) * getdef_psr(cfg, 'tfMinAnchor', NaN));
+tf   = optdef(baseResult, 'tf', optdef(cfg, 'ctf', 1.5) * optdef(cfg, 'tfMinAnchor', NaN));
 assert(~isnan(tf), 'psr_mee_refine:noTf', ...
     'baseResult carries neither .tf nor cfg.ctf/cfg.tfMinAnchor -- cannot fix the fixedtf target');
 
@@ -205,7 +205,7 @@ for row = 1:(opts.maxRounds + 1)
     [swIdx, score] = psr_switch_score_mee(curSigma, curOut.U, opts);
     nSw = numel(swIdx);
     mfk = curOut.m_f_kg;
-    tfE = getdef_psr(curOut, 'tfErr', NaN);
+    tfE = optdef(curOut, 'tfErr', NaN);
     certified = is_psr_certified(curOut);
 
     converged = false;
@@ -224,8 +224,8 @@ for row = 1:(opts.maxRounds + 1)
     history(row).tfErr      = tfE;
     history(row).certified  = certified;
     history(row).converged  = converged;
-    history(row).success    = getdef_psr(curOut, 'success', false);
-    history(row).ipoptStatus = getdef_psr(curOut, 'ipoptStatus', '');
+    history(row).success    = optdef(curOut, 'success', false);
+    history(row).ipoptStatus = optdef(curOut, 'ipoptStatus', '');
     save(historyFile, 'history');
     fprintf(['[psr round %2d] N=%5d sw=%4d mf=%9.4f kg defect=%.2e tfErr=%.2e ' ...
              'cert=%d conv=%d\n'], row - 1, numel(curSigma) - 1, nSw, mfk, ...
@@ -310,12 +310,6 @@ else
         '(defect=%.2e) -- not cached as final (house rule: never cache uncertified)'], ...
         tag, curOut.maxDefect);
 end
-end
-
-% ---------------------------------------------------------------------------
-function v = getdef_psr(s, f, dflt)
-% GETDEF_PSR  Optional-field default (mirrors casadi_lt_mee.m's local helper).
-if isfield(s, f) && ~isempty(s.(f)), v = s.(f); else, v = dflt; end
 end
 
 % ---------------------------------------------------------------------------

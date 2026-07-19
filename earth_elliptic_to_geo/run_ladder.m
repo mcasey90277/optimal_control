@@ -75,7 +75,7 @@ function results = run_ladder(thrustList, cfg)
 %   [4] earth_elliptic_to_geo/run_transfer_mee.m (per-rung fuel solve).
 %   [5] earth_elliptic_to_geo/mee_fuel_tag.m (shared fuel-tag convention).
 if nargin < 2, cfg = struct(); end
-d = @(f,v) getdef_ladder(cfg, f, v);
+d = @(f,v) optdef(cfg, f, v);
 
 ctf         = d('ctf', 1.5);
 nodesPerRev = d('nodesPerRev', 25);
@@ -272,10 +272,4 @@ for kf = 1:numel(flds)
             'or change cfg'], file, f, thrustN);
     end
 end
-end
-
-% ---------------------------------------------------------------------------
-function v = getdef_ladder(s, f, dflt)
-% GETDEF_LADDER  Optional-field default (mirrors casadi_lt_2body's helper).
-if isfield(s, f) && ~isempty(s.(f)), v = s.(f); else, v = dflt; end
 end

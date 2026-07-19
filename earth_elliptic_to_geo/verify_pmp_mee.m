@@ -94,7 +94,7 @@ function ver = verify_pmp_mee(out, par, sigma, opts)
 %       tangentialResid quantity reported here -- see pipeline step 4 note).
 %   [4] Haberkorn, Martinon, Gergaud, JGCD 27(6), 2004, Fig. 16 (H1/H2).
 if nargin < 4, opts = struct(); end
-d = @(f, v) getdef_vpm(opts, f, v);
+d = @(f, v) optdef(opts, f, v);
 eps0 = d('eps', 0);
 assert(eps0 == 0, ['verify_pmp_mee: switching-function derivation assumes ' ...
     'eps=0 (fuel); the eps>0 homotopy running cost is quadratic in thr and ' ...
@@ -212,10 +212,4 @@ fprintf(['verify_pmp_mee: primer median %.3f deg (mean %.3f) | sign agree ' ...
     ver.burnSignPct, ver.coastSignPct, ver.tangentialResidNormRelMedian, ...
     ver.tangentialResidNormRelMax, ver.KLoverLdot0Median, ver.KLoverLdot0Max, ...
     ver.maxSwitchAlignErr, ver.singularArcNodes, ver.lamMendRel, ver.pass);
-end
-
-% ---------------------------------------------------------------------------
-function v = getdef_vpm(s, f, dflt)
-% GETDEF_VPM  Optional-field default (mirrors casadi_lt_mee's getdef).
-if isfield(s, f) && ~isempty(s.(f)), v = s.(f); else, v = dflt; end
 end

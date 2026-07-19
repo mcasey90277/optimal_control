@@ -24,7 +24,7 @@ function res = run_transfer(cfg)
 here = fileparts(mfilename('fullpath'));
 resDir = fullfile(here, 'results');
 if ~exist(resDir, 'dir'), mkdir(resDir); end
-d = @(f,v) getdef3(cfg, f, v);
+d = @(f,v) optdef(cfg, f, v);
 N = d('N', 600);  ispS = d('ispS', 2000);  seedMat = d('seedMat', '');
 
 p  = kepler_lt_params(cfg.thrustN, 1500, ispS);
@@ -85,10 +85,4 @@ end
 fprintf(['DONE %s: certified=%d revs=%.2f sw=%d edge=%.1f%% mf=%.2f kg ' ...
          'dV=%.3f km/s apoBurn=%.2f\n'], cfg.tag, report.certified, revs, ...
          best.switches, 100*best.edge, best.m_f_kg, best.dV_kms, apoBurnRatio);
-end
-
-% ---------------------------------------------------------------------------
-function v = getdef3(s, f, dflt)
-% GETDEF3  Optional-field default (mirrors casadi_lt_2body's getdef).
-if isfield(s, f) && ~isempty(s.(f)), v = s.(f); else, v = dflt; end
 end

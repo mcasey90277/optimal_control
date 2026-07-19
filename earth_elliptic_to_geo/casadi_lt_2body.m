@@ -32,7 +32,7 @@ cp = getenv('CASADI_PATH');
 if isempty(cp), cp = fullfile(getenv('HOME'), 'casadi-3.7.0'); end
 addpath(cp);
 par = opts.par;
-d = @(f,v) getdef(opts, f, v);
+d = @(f,v) optdef(opts, f, v);
 mode      = d('mode', 'fixedtf');
 epsv      = d('eps', 0);
 tfTarget  = d('tfTarget', []);
@@ -199,10 +199,4 @@ out = struct('X', Xs, 'U', Us, 'tauf0', tauf0, 'success', success, ...
     'tf', Xs(8,end), 'switches', sum(abs(diff(burn))), ...
     'edge', mean(ss > 0.95 | ss < 0.05), 'lamDef', lamDef, ...
     'primerAlignDeg', primer, 'lamMassEnd', lamDef(7,end));
-end
-
-% ---------------------------------------------------------------------------
-function v = getdef(s, f, dflt)
-% GETDEF  Optional-field default (mirrors campaign helper).
-if isfield(s, f) && ~isempty(s.(f)), v = s.(f); else, v = dflt; end
 end

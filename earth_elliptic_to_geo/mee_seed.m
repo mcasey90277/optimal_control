@@ -111,10 +111,7 @@ switch betaMode
         beta = [0; 1; 0];
     case 'tangential'
         [r, v] = elements_to_cart(X(1), X(2), X(3), X(4), X(5), L, par.mu);
-        rhat = r / norm(r);
-        hvec = cross(r, v);
-        nhat = hvec / norm(hvec);
-        that = cross(nhat, rhat);
+        [rhat, that, nhat] = rtn_frame(r, v); %#ok<ASGLU>
         vhat = v / norm(v);
         beta = [dot(vhat, rhat); dot(vhat, that); 0];
         beta = beta / norm(beta);          % defensive renormalization

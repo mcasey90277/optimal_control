@@ -48,10 +48,7 @@ for k = 1:Nn
     [rk, vk] = elements_to_cart(Xmee(1,k), Xmee(2,k), Xmee(3,k), ...
                                 Xmee(4,k), Xmee(5,k), Lk, mu);
     % inertial RTN triad at this node (radial, transverse, normal)
-    rhat = rk / norm(rk);
-    hvec = cross(rk, vk);
-    nhat = hvec / norm(hvec);
-    that = cross(nhat, rhat);
+    [rhat, that, nhat] = rtn_frame(rk, vk);
     Rrtn2eci = [rhat, that, nhat];           % columns = R, T, N (inertial)
 
     beta = Umee(1:3, k);

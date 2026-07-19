@@ -75,7 +75,7 @@ function res = run_transfer_mee(cfg)
 here   = fileparts(mfilename('fullpath'));
 resDir = fullfile(here, 'results');
 if ~exist(resDir, 'dir'), mkdir(resDir); end
-d = @(f,v) getdef6(cfg, f, v);
+d = @(f,v) optdef(cfg, f, v);
 
 thrustN    = d('thrustN', 10);
 ctf        = d('ctf', 1.5);
@@ -270,12 +270,6 @@ fprintf(['DONE %s: certified=%d revs=%.3f sw=%d edge=%.1f%% mf=%.2f kg ' ...
 end
 
 % ---------------------------------------------------------------------------
-function v = getdef6(s, f, dflt)
-% GETDEF6  Optional-field default (mirrors casadi_lt_2body's helper).
-if isfield(s, f) && ~isempty(s.(f)), v = s.(f); else, v = dflt; end
-end
-
-% ---------------------------------------------------------------------------
 function check_cache_fp(S, fp, file, tag)
 % CHECK_CACHE_FP  Fail-loud cache-fingerprint guard. If loaded cache struct S
 % carries a .fp field, compare it field-by-field against the current config
@@ -378,9 +372,7 @@ for k = 2:Nn-1
     vdotFD = (v(:,k+1) - v(:,k-1)) / (t(k+1) - t(k-1));    % central FD, nonuniform-safe
     rk   = r(:,k);  rmag = norm(rk);
     m    = X(6,k);  thr = U(4,k);  beta = U(1:3,k);
-    rhat = rk / rmag;
-    hvec = cross(rk, v(:,k));  nhat = hvec / norm(hvec);
-    that = cross(nhat, rhat);
+    [rhat, that, nhat] = rtn_frame(rk, v(:,k));
     Rrtn2eci = [rhat, that, nhat];         % columns = radial, transverse, normal (inertial)
     accGrav   = -mu * rk / rmag^3;
     accThrust = (Tm/m) * thr * (Rrtn2eci * beta);

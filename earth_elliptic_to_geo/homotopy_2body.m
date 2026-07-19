@@ -12,7 +12,7 @@ function [best, tbl] = homotopy_2body(sigma, X0, U0, tauf0, term, tf, opts)
 %          = [eps, maxDefect, switches, edge, m_f_kg]
 %
 % REFERENCES: [1] sundman_minfuel/sundman_homotopy.m (pattern). [2] DESIGN.md sec 4.
-d = @(f,v) getdef2(opts, f, v);
+d = @(f,v) optdef(opts, f, v);
 sched   = d('sched', [1 0.6 0.35 0.2 0.12 0.07 0.04 0.025 0.015 0.008 0.004 0.002 0.001 0]);
 maxIter = d('maxIter', 1500);
 Xk = X0;  Uk = U0;  best = [];  tbl = zeros(numel(sched), 5);
@@ -34,10 +34,4 @@ if isempty(best)
 else
     best.certified = (best.epsReached == 0);
 end
-end
-
-% ---------------------------------------------------------------------------
-function v = getdef2(s, f, dflt)
-% GETDEF2  Optional-field default (mirrors casadi_lt_2body's getdef).
-if isfield(s, f) && ~isempty(s.(f)), v = s.(f); else, v = dflt; end
 end

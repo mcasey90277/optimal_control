@@ -24,7 +24,7 @@ function [best, tbl] = homotopy_mee(sigma, X0, U0, dL0, opts)
 %
 % REFERENCES: [1] earth_elliptic_to_geo/homotopy_2body.m (pattern this mirrors).
 %             [2] earth_elliptic_to_geo/casadi_lt_mee.m (per-step solver).
-d = @(f,v) getdef5(opts, f, v);
+d = @(f,v) optdef(opts, f, v);
 sched   = d('sched', [1 0.6 0.35 0.2 0.12 0.07 0.04 0.025 0.015 0.008 0.004 0.002 0.001 0]);
 maxIter = d('maxIter', 1500);
 resDir  = d('resDir', pwd);
@@ -73,12 +73,6 @@ if isempty(best)
 else
     best.certified = (best.epsReached == 0);
 end
-end
-
-% ---------------------------------------------------------------------------
-function v = getdef5(s, f, dflt)
-% GETDEF5  Optional-field default (mirrors casadi_lt_2body's helper).
-if isfield(s, f) && ~isempty(s.(f)), v = s.(f); else, v = dflt; end
 end
 
 % ---------------------------------------------------------------------------

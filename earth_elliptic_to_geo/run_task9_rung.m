@@ -103,7 +103,7 @@ warning('run_task9_rung:deprecated', ['run_task9_rung is DEPRECATED -- ' ...
     'reproducer engine; see README.md "Reproducing from scratch ' ...
     '(best-found)"). Kept callable only because run_task9_deep.m still ' ...
     'calls this exact signature; do not add new callers.']);
-d = @(f, v) getdef_t9(opts, f, v);
+d = @(f, v) optdef(opts, f, v);
 
 opts.mtNodesPerRev   = d('mtNodesPerRev', 12);
 opts.fuelNodesPerRev = d('fuelNodesPerRev', 12);
@@ -180,10 +180,4 @@ deep = struct('thrustN', thrustN, 'anchor', anchorOut, 'fuelTag', fuelTag, ...
     'wallPsr', wallPsr, 'opts', opts);
 save(deepRungFile, 'deep');
 fprintf('[deep rung DONE] saved %s\n', deepRungFile);
-end
-
-% ---------------------------------------------------------------------------
-function v = getdef_t9(s, f, dflt)
-% GETDEF_T9  Optional-field default (mirrors run_ladder.m's local helper).
-if isfield(s, f) && ~isempty(s.(f)), v = s.(f); else, v = dflt; end
 end

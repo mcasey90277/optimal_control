@@ -77,7 +77,7 @@ function anchor = anchor_smallN_first(T, par, warmAnchor, aopts)
 
 if nargin < 3, warmAnchor = []; end
 if nargin < 4, aopts = struct(); end
-d = @(f,v) getf_local(aopts, f, v);
+d = @(f,v) optdef(aopts, f, v);
 
 nprLo           = d('nprLo', 15);
 nprHi           = d('nprHi', 25);
@@ -212,21 +212,6 @@ fprintf(['ANCHOR_SMALLN_FIRST T=%g N DONE: tfmin=%.6f ND (%.2f h), revs=%.4f, ' 
          'N=%d (%d nodes/rev), defect=%.3e\n'], ...
         T, anchor.tfmin, anchor.tfmin_h, anchor.revs, anchor.N, nprHi, o.maxDefect);
 
-end
-
-% ---------------------------------------------------------------------------
-function v = getf_local(s, f, dflt)
-% GETF_LOCAL  Optional-field default, empty-tolerant (mirrors reproduce_row.m's
-% getf / run_mintime_mee.m's getdef7): returns dflt if the field is absent OR
-% present-but-empty.
-%
-% INPUTS:  s - struct; f - field name [char]; dflt - default value
-% OUTPUTS: v - s.(f) if present and nonempty, else dflt
-if isfield(s, f) && ~isempty(s.(f))
-    v = s.(f);
-else
-    v = dflt;
-end
 end
 
 % ---------------------------------------------------------------------------

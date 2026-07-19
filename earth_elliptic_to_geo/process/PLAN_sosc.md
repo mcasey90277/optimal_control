@@ -168,7 +168,7 @@ git commit -m "feat(sosc): row normalizer + reconstruction checkpoint (Task 1 ga
 **Interfaces:**
 - Produces: with `opts.returnModel=true`, `out.model = struct('opti',opti,'X',X,'U',U,'dL',dL,'creg',creg,'vreg',vreg)`.
   `creg`: struct array, one per constraint group, fields `label[char]`, `kind['eq'|'ineqLo'|'ineqHi']`, `rows[1xk]` (row range in `opti.g`), `bound[scalar|[]]`, `node[1xk|[]]`.
-  `vreg`: `struct('Xrows',1:7,'Urows',1:4,'nNode',N+1,'idxX',...,'idxU',...,'idxdL',...)` — index maps into `opti.x`.
+  `vreg`: `struct('Xrows',1:7,'Urows',1:4,'nNode',N+1)` — decision-block layout metadata. (The full per-index maps into `opti.x` are intentionally NOT built — YAGNI: no downstream task consumes them; `sosc_active_set`'s node labels come from `creg.node`, and `sosc_recover_kkt` assembles `H`/`A` from `opti.x`/`opti.g` wholesale.)
 
 **Context:** Every constraint is added via `opti.subject_to` (lines 105,110,115,118,120,125-130,151-153,156,161,169). None are native `lbx/ubx`. Registry entries are recorded by bracketing each group: `r0 = size(opti.g,1)+1; <add>; r1 = size(opti.g,1); creg(end+1)=...`.
 

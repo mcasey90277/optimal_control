@@ -70,14 +70,25 @@ row = reproduce_row(T, recipe)   % recipe defaults to table3_recipes(T)
 | `smallN_first` | 1 N | anchor at `nprLo` (15) warm from prev, **manual relaxed-stall continuation** (maxIter 75→150, no decadeMin floor, always-advance, per-round save — harvested from `task7c_step1_manual.m`), then `interp_warmstart` up to `nprHi` (25) + one `warmTight` solve (`task7c_step1b_refine.m`) |
 | `R0law` | 0.5 N (+ future deep) | no min-time solve: `tfMinAnchor = R0const/T` with `R0const = 223.14` ND; records `anchorSource='R0law'` and the footnote |
 
-## 5. Verification (assert against the certified table)
+## 5. Verification — ONE-SIDED (find-best, 2026-07-18 user decision)
 
-A `table3_certified.m` table holds the campaign's certified numbers. After each
-row, `verify_row(row, cert, tol)` asserts `m_f`, `switches`, `revs` within
-tolerance (mass ~0.5 kg; switches exact for 10/5/2.5, banded for 1/0.5 given the
-PSR count sensitivity; revs ~1%). A mismatch is a loud failure — reproduction
-that lands elsewhere is not reproduction. This is also the regression guard when
-a shared knob is later tuned for 0.2/0.1 N.
+**The reproducer is a keep-best-mass OPTIMIZER, not a bit-exact reproducer.**
+Minimum-fuel = maximize final mass, so the goal is to find the highest-mass
+solution — at least equalling, and where possible BEATING, the campaign. (This
+is not hypothetical: at 10 N the keep-best-mass multi-start finds
+18 sw / 7.56 rev / **1378.46 kg**, +1.36 kg over the campaign's 1377.10 and
+structurally closer to the paper — the campaign under-optimized. See memory
+`tenN-minfuel-razor-basin`.)
+
+`table3_certified.m` holds the campaign numbers as the **FLOOR**. `verify_row(row,
+cert, tol)` is **one-sided**: it throws only if `row.m_f_kg < cert.m_f_kg -
+tol.m_f_kg` (a regression below the floor). A higher mass always passes and is
+flagged `info.improved`. **Structure (switches/revs) is REPORTED, not gated** —
+the best min-fuel optimum can have a different bang-bang structure than the
+campaign row, so gating on the campaign's exact structure would wrongly reject a
+better solution. As the full ladder is re-run, the best-found numbers become the
+**updated Table 3** (collected in Task 4/6; the documented Table 3 in README/
+CAMPAIGN is updated once the improved ladder is validated).
 
 ## 6. The recipe registry (harvested, proven)
 
@@ -143,6 +154,37 @@ body it already implements becomes the `chain`+coarse-fuel+PSR path).
   crash-prone). Their recipe code is unit-covered and the anchor `smallN_first`
   strategy is validated against the cached 15/rev anchor where possible. The full
   multi-hour reproduction is the user's click-go via the watchdog.
+
+## 9b. Keep-best-mass multi-start fuel stage (razor-basin finding, 2026-07-18)
+
+**Finding (memory `tenN-minfuel-razor-basin`):** the fuel basin is razor-sensitive
+to `t_f` — at 10 N, the *exact* min-time anchor (22.220578) lands the fuel solve
+in a slightly-worse local optimum (24 sw / 8.118 rev / 1377.086 kg) while a value
+2.2e-5 larger, or a different *seed* at the exact tf, reaches the better basin
+(19 sw / ~7.3 rev / up to 1377.19 kg). A single cold solve at the exact anchor is
+not guaranteed to find the best optimum.
+
+**Fix — the fuel stage does a keep-best-mass multi-start (A→B hybrid)**, since
+min-fuel means *maximize final mass*:
+- **A (seeds at exact tf):** solve the fuel problem at the exact `tf = c_tf·tfMinAnchor`
+  over a small candidate set — for a cold-seed rung, vary `seedThr ∈ {0.40,0.45,0.50}`
+  × `betaMode ∈ {tangential,transverse}` (the driver's own seed-revs window guard
+  skips out-of-window seeds; a hung/failed seed is skipped, never fatal); for a
+  warm-started rung, the warm trajectory is the seed (optionally with beta
+  variants). Keep the highest-mass **certified** candidate.
+- **B (tiny tf-bracket, fallback):** only if A's best certified mass does not reach
+  the campaign reference (`>= table3_certified(T).m_f_kg - tol.m_f_kg`), also sweep
+  `tfMinAnchor` over a tiny bracket (a few ×1e-5, i.e. within `c_tf=1.5`'s
+  numerical precision) and keep the best over A∪B. For 10 N, A suffices; B is the
+  safety net for any rung where seeds alone can't escape a worse basin.
+- **Verify** against the campaign number with tolerance (structure exact/banded,
+  mass within tol): the reproducer reproduces the STRUCTURE and returns mass
+  `>=` the campaign's — sometimes marginally better (10 N: 1377.19 vs 1377.10).
+
+Confirmed at 10 N (seedThr 0.45 transverse → 19 sw / 7.324 rev / 1377.19 kg at the
+exact anchor). This makes the engine a **find-the-best-min-fuel-optimum** tool.
+The recurring intermittent MUMPS-init hang is absorbed by skipping a hung seed and
+by the watchdog's per-process relaunch.
 
 ## 10. Non-goals (this build)
 

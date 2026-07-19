@@ -34,36 +34,7 @@ K = (K + K.') / 2;                              % symmetrize numerically
 scale = max(1, normest(K));
 zt = tol.inertiaZero * scale;
 
-npos = 0; nneg = 0; nzero = 0;
-i = 1; nD = size(D,1);
-while i <= nD
-    if i < nD && D(i+1,i) ~= 0
-        % 2x2 block: classify both eigenvalues of the symmetrized block
-        b = full(D(i:i+1, i:i+1));
-        ev = eig((b + b.') / 2);
-        for e = ev.'
-            if e > zt
-                npos = npos + 1;
-            elseif e < -zt
-                nneg = nneg + 1;
-            else
-                nzero = nzero + 1;
-            end
-        end
-        i = i + 2;
-    else
-        % 1x1 block
-        e = D(i,i);
-        if e > zt
-            npos = npos + 1;
-        elseif e < -zt
-            nneg = nneg + 1;
-        else
-            nzero = nzero + 1;
-        end
-        i = i + 1;
-    end
-end
+[npos, nneg, nzero] = count_inertia(D, zt);
 
 IN.npos       = npos;
 IN.nneg       = nneg;

@@ -27,9 +27,23 @@ if isfile(rowfile)
 
     % MISSING-rung path: a thrust level with no cached REPRO row must print
     % MISSING and be OMITTED from the return (not error, not fabricate a row).
-    tblMissing = reproduce_table3_collect([10, 5]);
-    assert(isscalar(tblMissing) && tblMissing(1).thrustN == 10, ...
-        'a rung with no cached REPRO_row file must be omitted from the return, not error');
+    % Pick a rung that is genuinely un-reproduced RIGHT NOW -- do not hardcode
+    % one (e.g. 5 N gains a REPRO_row once the deep-ladder run produces it, so a
+    % hardcoded "missing" rung goes stale).
+    Tmiss = [];
+    for Tc = [0.1, 0.2, 0.5, 1, 2.5, 5]
+        if ~isfile(fullfile(module_root(), 'results', 'repro', ...
+                sprintf('REPRO_row_T%d.mat', round(10*Tc))))
+            Tmiss = Tc; break;
+        end
+    end
+    if ~isempty(Tmiss)
+        tblMissing = reproduce_table3_collect([10, Tmiss]);
+        assert(isscalar(tblMissing) && tblMissing(1).thrustN == 10, ...
+            'a rung with no cached REPRO_row file must be omitted from the return, not error');
+    else
+        fprintf('  (every candidate rung is cached -- MISSING-omit sub-check skipped)\n');
+    end
 
     fprintf('test_reproduce_collect PASSED\n');
 else

@@ -57,7 +57,7 @@
 #   chmod +x reproduce_table3.sh          # once
 #   ./reproduce_table3.sh                 # default rung list: 10 5 2.5 1 0.5
 #   ./reproduce_table3.sh 10 5            # only these rungs
-#   WALLCAP_S=3600 MAXATTEMPTS=4 ./reproduce_table3.sh 1
+#   WALLCAP_S=3600 MAXATTEMPTS=4 POLL_S=5 ./reproduce_table3.sh 1
 #
 # Run detached so a closed terminal doesn't kill it:
 #   nohup ./reproduce_table3.sh >/dev/null 2>&1 &
@@ -77,7 +77,7 @@ MAT=${MATLAB_BIN:-/Applications/MATLAB_R2025b.app/bin/matlab}
 CASADI_DIR=${CASADI_PATH:-"$HOME/casadi-3.7.0"}
 WALLCAP_S=${WALLCAP_S:-21600}      # 6 h per attempt, flat (see header)
 MAXATTEMPTS=${MAXATTEMPTS:-8}      # per-rung attempt cap
-POLL_S=15
+POLL_S=${POLL_S:-15}       # poll interval for the hang-watchdog loop, in seconds
 
 mkdir -p "$DIR/results/repro"
 LOG="$DIR/results/repro/reproduce_table3.log"

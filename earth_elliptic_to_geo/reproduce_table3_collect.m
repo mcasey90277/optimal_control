@@ -107,10 +107,14 @@ for T = thrustList
                 row.m_f_kg, -delta, cert.m_f_kg, row.switches, cert.switches, ...
                 row.revs, cert.revs);
         end
-    catch
-        fprintf(['  NOTE: no registered campaign floor for T=%g N (table3_certified ' ...
-                 'has no entry -- likely a seeded/deep rung); printing row only, no ' ...
-                 'floor comparison\n'], T);
+    catch ME
+        if strcmp(ME.identifier, 'table3_certified:unknownThrust')
+            fprintf(['  NOTE: no registered campaign floor for T=%g N (table3_certified ' ...
+                     'has no entry -- likely a seeded/deep rung); printing row only, no ' ...
+                     'floor comparison\n'], T);
+        else
+            rethrow(ME);
+        end
     end
     fprintf('\n');
 
@@ -126,7 +130,12 @@ for T = thrustList
     end
 end
 
-fprintf('=== R0-law spread (T*tfmin, R0const=223.14) across real-anchor rungs ===\n');
+% R0const pulled programmatically from table3_recipes.m (its single source
+% of truth) via the 0.5 N rung's R0law recipe: tfmin_or_R0 = R0const/thrustN,
+% so R0const = tfmin_or_R0 * thrustN. Avoids duplicating the literal here.
+r0recipe = table3_recipes(0.5);
+R0const  = r0recipe.tfmin_or_R0 * r0recipe.thrustN;
+fprintf('=== R0-law spread (T*tfmin, R0const=%.2f) across real-anchor rungs ===\n', R0const);
 if isempty(anchorT)
     fprintf('  (no loaded rungs had a real, independently-solved anchor)\n');
 else

@@ -41,7 +41,16 @@ fp.xf    = xf;      % Task 3: terminal target now user-definable (default
 
 if ~exist(resDir, 'dir'), mkdir(resDir); end
 
-Xk = X0;  Uk = U0;  dLk = dL0;  best = [];  tbl = zeros(numel(sched), 5);
+% Deep-rung options (external review, 2026-07-19; all default off/inert):
+adaptiveEps = d('adaptiveEps', false);   % bisect-on-failure eps continuation
+epsMinStep  = d('epsMinStep', 5e-4);     % give up bisecting below this eps step
+maxSolves   = d('maxSolves', 80);        % hard cap on adaptive solves
+liftDLh     = d('liftDL', false);
+scaleNLPh   = d('scaleNLP', false);
+
+Xk = X0;  Uk = U0;  dLk = dL0;  best = [];
+if ~adaptiveEps
+tbl = zeros(numel(sched), 5);
 for ke = 1:numel(sched)
     e = sched(ke);
     stepFile = fullfile(resDir, sprintf('%s_step%02d.mat', tag, ke));
@@ -59,7 +68,7 @@ for ke = 1:numel(sched)
     o = casadi_lt_mee(sigma, Xk, Uk, dLk, struct('par', opts.par, ...
         'mode', 'fixedtf', 'eps', e, 'tfTarget', opts.tfTarget, 'x0', opts.x0, ...
         'maxIter', maxIter, 'warmTight', ke > 1, 'printLevel', printLvl, 'xf', xf, ...
-        'liftDL', optdef(opts, 'liftDL', false)));
+        'liftDL', liftDLh, 'scaleNLP', scaleNLPh));
     ok = o.success && o.maxDefect < 1e-8;
     tbl(ke,:) = [e, o.maxDefect, o.switches, o.edge, o.m_f_kg];
     fprintf('  eps=%6.4f ok=%d defect=%.2e sw=%3d edge=%5.1f%% mf=%.2f kg\n', ...
@@ -68,6 +77,36 @@ for ke = 1:numel(sched)
         Xk = o.X;  Uk = o.U;  dLk = o.dL;  best = o;  best.epsReached = e;
     end
     save(stepFile, 'o', 'ok', 'Xk', 'Uk', 'dLk', 'e', 'fp');
+end
+else
+    % ADAPTIVE eps-continuation with bisection-on-failure (external review,
+    % 2026-07-19): walk the schedule as coarse waypoints toward eps=0, but on a
+    % FAILED step bisect between the last CONVERGED eps and the failed one and
+    % retry from the last good warm start -- never propagate a bad iterate
+    % forward (the failure mode that OOM'd the fixed-schedule 0.2 N run).
+    tblc = {};  targets = sched(:).';  eGood = inf;  ti = 1;  eTry = targets(1);
+    o = [];
+    for ns = 1:maxSolves
+        o = casadi_lt_mee(sigma, Xk, Uk, dLk, struct('par', opts.par, ...
+            'mode','fixedtf','eps',eTry,'tfTarget',opts.tfTarget,'x0',opts.x0, ...
+            'maxIter',maxIter,'warmTight',isfinite(eGood),'printLevel',printLvl, ...
+            'xf',xf,'liftDL',liftDLh,'scaleNLP',scaleNLPh));
+        ok = o.success && o.maxDefect < 1e-8;
+        tblc{end+1} = [eTry, o.maxDefect, o.switches, o.edge, o.m_f_kg]; %#ok<AGROW>
+        fprintf('  [adap %2d] eps=%8.6f ok=%d defect=%.2e sw=%d edge=%4.1f%% mf=%.2f kg\n', ...
+                ns, eTry, ok, o.maxDefect, o.switches, 100*o.edge, o.m_f_kg);
+        if ok
+            Xk=o.X; Uk=o.U; dLk=o.dL; best=o; best.epsReached=eTry; eGood=eTry;
+            if eTry <= 0, break; end                        % reached the fuel problem
+            while ti <= numel(targets) && targets(ti) >= eGood, ti = ti + 1; end
+            if ti > numel(targets), eTry = 0; else, eTry = targets(ti); end
+        else
+            if ~isfinite(eGood), break; end                 % eps=1 itself failed -> give up
+            eTry = 0.5*(eGood + eTry);                       % bisect toward the last good eps
+            if (eGood - eTry) < epsMinStep, break; end       % cannot refine further
+        end
+    end
+    tbl = cell2mat(tblc(:));
 end
 if isempty(best)
     best = o;  best.epsReached = NaN;  best.certified = false;

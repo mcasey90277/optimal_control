@@ -76,6 +76,16 @@ d = @(f,v) optdef(opts, f, v);
 mode      = d('mode', 'fixedtf');
 epsv      = d('eps', 0);
 tfTarget  = d('tfTarget', []);
+% scaleNLP (external review lever #2, 2026-07-19; default FALSE -> certified path
+% byte-identical): the time state/defect is O(tf)~1e3 while orbital elements and
+% throttle are O(1); at deep rungs this scale disparity drives the IPOPT
+% dual-infeasibility blowup + restoration failures. When on, scale the time-row
+% defect and the t(end)=tfTarget pin by 1/tf so their conditioning matches the
+% O(1) rows (argmin-preserving: they are ==0 constraints, and the numeric defect
+% re-check below stays UNSCALED so certification uses the physical defect).
+scaleNLP  = d('scaleNLP', false);
+tScaleNLP = 1;
+if scaleNLP && strcmp(mode,'fixedtf') && ~isempty(tfTarget), tScaleNLP = tfTarget; end
 maxIter   = d('maxIter', 1500);
 warmTight = d('warmTight', false);
 printLvl  = d('printLevel', 0);
@@ -134,7 +144,9 @@ Ldot = [Ldotc{:}];      % [1x(N+1)] MX
 r0 = size(opti.g,1)+1;
 conDef = cell(1, N);
 for k = 1:N
-    conDef{k} = X(:,k+1) - X(:,k) - (dsig(k)/2)*dLnode(k)*(dXdL(:,k) + dXdL(:,k+1)) == 0;
+    dexpr = X(:,k+1) - X(:,k) - (dsig(k)/2)*dLnode(k)*(dXdL(:,k) + dXdL(:,k+1));
+    if scaleNLP, dexpr(7) = dexpr(7)/tScaleNLP; end   % scale time-row defect (see scaleNLP)
+    conDef{k} = dexpr == 0;
     opti.subject_to(conDef{k});
 end
 if returnModel, creg(end+1) = addc('defect','eq',r0,0,1:N); end
@@ -257,7 +269,11 @@ if strcmp(mode, 'mintime')
 else
     assert(~isempty(tfTarget), 'fixedtf mode requires opts.tfTarget');
     r0 = size(opti.g,1)+1;
-    opti.subject_to(t(end) == tfTarget);
+    if scaleNLP
+        opti.subject_to((t(end) - tfTarget)/tScaleNLP == 0);   % scaled t_f pin (see scaleNLP)
+    else
+        opti.subject_to(t(end) == tfTarget);
+    end
     if returnModel, creg(end+1) = addc('tfPin','eq',r0,tfTarget,N+1); end
     w = (dLnode ./ fmax(Ldot, par.LdotFloor)) .* (thr - epsv*thr.*(1 - thr)); % dt/dsigma; Ldot guarded (see LdotFloor)
     opti.minimize(sum((dsig/2) .* (w(1:N) + w(2:N+1))));

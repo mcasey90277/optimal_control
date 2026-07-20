@@ -7,7 +7,7 @@ function cert = table3_certified(thrustN)
 % published-paper numbers (those live in gergaud_row.m's revs_paper).
 %
 % INPUTS:
-%   thrustN - max thrust level [N]; one of 10, 5, 2.5, 1, 0.5             [scalar]
+%   thrustN - max thrust level [N]; one of 10, 5, 2.5, 1, 0.5, 0.2, 0.1   [scalar]
 %
 % OUTPUTS:
 %   cert - struct with fields:
@@ -25,6 +25,9 @@ function cert = table3_certified(thrustN)
 %       Transfer: A Homotopic Approach," JGCD 27(6), 2004, Table 3.
 %   [2] earth_elliptic_to_geo/process/CAMPAIGN.md (campaign record; certified
 %       numbers harvested from here).
+%   [3] earth_elliptic_to_geo/process/DEEP_THRUST_LESSONS.md (0.2/0.1 N rungs,
+%       certified 2026-07-20 via drivers/reproduce_deep_rung.m; numbers pulled
+%       from the certified results/MEE_M2_0p{2,1}N.mat caches).
 
 if nargin < 1
     error('table3_certified:badInput', 'thrustN is required');
@@ -37,6 +40,8 @@ rungs = { ...
     2.5, struct('m_f_kg',1369.79, 'switches',76,  'revs',27.841, 'tfmin',89.253,  'anchorSource','solved'); ...
     1,   struct('m_f_kg',1371.44, 'switches',171, 'revs',69.152, 'tfmin',223.808, 'anchorSource','solved'); ...
     0.5, struct('m_f_kg',1375.28, 'switches',362, 'revs',138.597,'tfmin',446.28,  'anchorSource','R0law'); ...
+    0.2, struct('m_f_kg',1377.2867,'switches',823, 'revs',346.726,'tfmin',1115.70, 'anchorSource','R0law'); ...
+    0.1, struct('m_f_kg',1377.2882,'switches',1644,'revs',693.601,'tfmin',2231.40, 'anchorSource','R0law'); ...
 };
 
 for k = 1:size(rungs,1)
@@ -48,6 +53,6 @@ for k = 1:size(rungs,1)
 end
 
 error('table3_certified:unknownThrust', ...
-    'No certified Table-3 row for thrustN=%g (known: 10, 5, 2.5, 1, 0.5)', thrustN);
+    'No certified Table-3 row for thrustN=%g (known: 10, 5, 2.5, 1, 0.5, 0.2, 0.1)', thrustN);
 
 end

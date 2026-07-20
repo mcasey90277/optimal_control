@@ -322,6 +322,12 @@ reproduce_table3([10 5 2.5])         % in-process, crash-free top rungs
 cd reproduce && ./reproduce_table3.sh 10 5 2.5 1 0.5   # per-process watchdog, survives MEX crashes
 ```
 
+> **Reproducing the ladder from scratch?** `process/LADDER_FROM_SCRATCH.md` is the
+> one-page operational recipe — exact commands per rung, the full certified-number
+> table (10→0.1 N), per-rung anchor strategy, the deep-rung four levers, and the
+> gotchas. The canonical numbers themselves live in `reproduce/table3_certified.m`
+> (all seven rungs).
+
 ## Related files (outside this directory)
 
 - **Method note (full methodology + flow diagram):** `doc/table3_method_note.tex`

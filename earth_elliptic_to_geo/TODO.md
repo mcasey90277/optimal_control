@@ -197,7 +197,16 @@ critical fix vs the first attempt was `maxIter` 1500→3000 (under-iterated step
 collapsed the tail); `adaptiveEps` bisection was armed but not triggered.
 `scaleNLP` was tried and DROPPED (it fought IPOPT's gradient-based auto-scaling
 → ε=1 restoration failure; a proper *complete* user-scaling is a separate item).
-**Next: 0.1 N** should fall to the same recipe warm-chained from this 0.2 N.
+
+**0.1 N CERTIFIED (2026-07-20)** — `results/MEE_M2_0p1N.mat`: `m_f=1377.29 kg`,
+1644 switches, 693.6 rev, defect **5.0e-13**, termErr 0.00, incl 0°,
+Solve_Succeeded, ε=0 (edge 99.9%). Reproduced by `reproduce_deep_rung(0.1,
+'results/MEE_M2_0p2N.mat')` (warm-chained from 0.2 N, `maxIter=5000`, all 17
+ε-steps ok=1) — the driver + recipe validated at the last rung. **THE FULL
+10 → 0.1 N THRUST LADDER IS NOW CERTIFIED** (10/5/2.5/1/0.5/0.2/0.1 N; the deep
+two were never attained before the external review). Only remaining open item on
+this front is the proper complete user-scaling (deferred) and, optionally, PSR
+switch-time refinement of the deep rungs.
 
 **Progress (2026-07-19, external review):** the `dL≤2000` infeasibility and the
 conditioning root cause are FIXED (rung-adaptive `dL` bound + `opts.liftDL`

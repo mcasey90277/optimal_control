@@ -1,10 +1,17 @@
 # Deep-thrust (0.2 N / 0.1 N) — lessons learned + reproduction recipe
 
-**Result (2026-07-20): FIRST CERTIFIED 0.2 N.** `m_f = 1377.29 kg`, 823 switches,
-346.7 rev, **maxDefect = 2.47e-13**, termErr = 7.5e-36, incl 0°, IPOPT
-`Solve_Succeeded`, ε=0 bang-bang (edge 99.9%). Cache: `results/MEE_M2_0p2N.mat`
-(gitignored, like all campaign `.mat`). This rung was *"never attained / instant
-wall"* before the 2026-07-19 external code review (GPT-5.6-terra + Gemini 3.1 Pro).
+**Result (2026-07-20): the FULL 10 → 0.1 N ladder is certified** — the recipe
+below reached both deep rungs that were *"never attained / instant wall"* before
+the 2026-07-19 external code review (GPT-5.6-terra + Gemini 3.1 Pro):
+- **0.2 N** (`results/MEE_M2_0p2N.mat`): m_f=1377.29 kg, 823 sw, 346.7 rev,
+  maxDefect **2.47e-13**, termErr 7.5e-36, incl 0°, `Solve_Succeeded`, edge 99.9%.
+- **0.1 N** (`results/MEE_M2_0p1N.mat`): m_f=1377.29 kg, 1644 sw, 693.6 rev,
+  maxDefect **5.04e-13**, termErr 0.00, incl 0°, `Solve_Succeeded`, edge 99.9%
+  — reproduced by `reproduce_deep_rung(0.1,'results/MEE_M2_0p2N.mat')`
+  (`maxIter=5000`, all 17 ε-steps ok=1), validating the driver + recipe at the
+  last rung. m_f is near-thrust-independent across the whole ladder (10 N=1377.10
+  … 0.1 N=1377.29), as the paper's Fig-23 predicts. (Caches gitignored, like all
+  campaign `.mat`.)
 
 ## Reproduce it
 ```matlab

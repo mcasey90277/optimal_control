@@ -49,6 +49,27 @@ the deep rungs. See the runbook for the full argument.
 
 ## Done
 
+### 2026-07-20 — Hamiltonian optimality verification + render densification
+Independent **first-order (PMP)** verification of the certified rows, complementary to
+SOSC. `verify/hamiltonian_const_check.m`: the time-costate `λ_t` (row-7 defect dual) is
+**constant** along the trajectory (⇔ the time-domain Hamiltonian `H_t` is conserved),
+because the L-domain problem is autonomous in the time state — measured **CoV ~1e-9
+(0.1 N), 2e-8 (10 N)**; a mass-costate control varies **56%**, so the check
+discriminates (not trivially satisfied). `verify/hamiltonian_along_traj.m`: reconstructs
+`H_L(t)` and `H_t(t) = −λ_t` node-by-node. **Tricks worth keeping:** the dual **sign** is
+pinned by transversality `H_t = dJ*/dt_f < 0` (verified on the textbook `min∫u²`: `J*=1/T`,
+`H=−1/T²`) — the extremal identity does *not* discriminate sign; and that extremal identity
+`dH_L/dσ = ∂H_L/∂σ` holds only to **collocation order** (~1.6% @26 nodes/rev — a
+reconstruction check, not a precision claim). Movie `viz/hamiltonian_movie.m` (`H_L`
+breathes / `H_t` flat, one shared scale). **Polygonal-trajectory fix:**
+`viz/mee_res_to_cart_res.m` gained `nDense` (default 1 = byte-identical; `>1` pchip-densifies
+the render) — the polygon was **8 nodes/rev + linear segments**, not physics. Also
+re-confirmed **verbatim** from the HMG-2004 preprint (p.6–7,
+`min_fuel_papers/Gergaud-Haberkorn-Martinon-JournalGuidance2004-preprint.pdf`) that
+`t_f = c_tf·t_{fMin}, c_tf>1` is a **fixed**-time transfer ("not obvious that the minimum
+fuel problem with free final time has a solution"; min-time `TfMin` solved first for the
+feasibility floor) — validates our `c_tf = 1.5` convention.
+
 ### 2026-07-19 — Thrust-ladder external review + deep-thrust fixes (branch `ladder-deep-thrust`)
 Three-way deep review (GPT-5.6-terra + Gemini 3.1 Pro + host) of the ladder core
 (`kepler_lt_params`, `lt_mee_rhs`, `mee_seed`, `casadi_lt_mee`, `homotopy_mee`,

@@ -1,4 +1,4 @@
-function cartRes = mee_res_to_cart_res(Xmee, Umee, dL, sigma, thrustN, ctf, mu)
+function cartRes = mee_res_to_cart_res(Xmee, Umee, dL, sigma, thrustN, ctf, mu, nDense)
 % MEE_RES_TO_CART_RES  Convert an MEE/L-domain min-fuel solution into the
 % Cartesian (inertial) results layout that transfer_movie.m consumes.
 %
@@ -23,6 +23,17 @@ function cartRes = mee_res_to_cart_res(Xmee, Umee, dL, sigma, thrustN, ctf, mu)
 %   thrustN - max thrust [N] (echoed into cartRes.cfg for the movie title)
 %   ctf     - t_f / t_f,min ratio [scalar] (echoed into cartRes.cfg)
 %   mu      - gravitational parameter in the solution's units [scalar, =1 ND]
+%   nDense  - OPTIONAL render-densification factor [scalar int, default 1].
+%             nDense=1 reproduces the original node-only output byte-for-byte.
+%             nDense>1 inserts nDense-1 intermediate points per original segment
+%             by shape-preserving (pchip) interpolation of the MEE elements onto
+%             a fine sigma grid and re-mapping to Cartesian at the fine true
+%             longitudes L = pi + sigma*dL. Because the equinoctial elements
+%             drift SLOWLY while L sweeps 2*pi per revolution, this recovers the
+%             smooth orbit that the coarse mesh (~8 nodes/rev at deep rungs)
+%             renders as a polygon. Throttle is held piecewise-constant ('previous')
+%             so the bang-bang switch structure and switch COUNT are preserved;
+%             beta is pchip-interpolated and renormalized (arrow display only).
 %
 % OUTPUTS:
 %   cartRes - struct matching transfer_movie.m's expectations:
@@ -40,6 +51,20 @@ Nn = size(Xmee, 2);
 sigma = sigma(:);
 assert(numel(sigma) == Nn, 'mee_res_to_cart_res:sizeMismatch', ...
     'sigma has %d entries but Xmee has %d columns', numel(sigma), Nn);
+if nargin < 8 || isempty(nDense), nDense = 1; end
+
+% Optional render densification: interpolate the (slowly-varying) elements onto
+% a fine sigma grid; L is re-mapped analytically at each fine node so the fast
+% orbital sweep is resolved. nDense=1 leaves Xmee/Umee untouched (byte-identical).
+if nDense > 1
+    sf   = linspace(sigma(1), sigma(end), (Nn-1)*nDense + 1).';
+    Xf   = zeros(7, numel(sf));
+    for rr = 1:7, Xf(rr,:) = interp1(sigma, Xmee(rr,:), sf, 'pchip'); end
+    bt   = interp1(sigma, Umee(1:3,:).', sf, 'pchip').';   % [3 x Nf]
+    bt   = bt ./ max(vecnorm(bt,2,1), realmin);            % renormalize beta
+    th   = interp1(sigma, Umee(4,:), sf, 'previous').';    % hold throttle (bang-bang)
+    Xmee = Xf;  Umee = [bt; th(:).'];  sigma = sf;  Nn = numel(sf);
+end
 
 Xc = zeros(9, Nn);
 Uc = zeros(4, Nn);

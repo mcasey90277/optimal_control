@@ -172,6 +172,34 @@ Gated into the driver/reproducer opt-in via `cfg.certifySosc` (default off); onl
 FAIL verdict demotes a certified row. Design + method evolution + per-rung results:
 `process/DESIGN_sosc.md` (esp. §12) and `process/PLAN_sosc.md`.
 
+### Hamiltonian verification — `verify/hamiltonian_const_check.m`, `verify/hamiltonian_along_traj.m`
+Independent **first-order (PMP)** checks from the recovered costates, complementary
+to the second-order SOSC test. Because the L-domain carries **time `t` as a state**
+(true longitude is the independent variable), the dynamics are autonomous in `t`, so
+the time-costate `λ_t` is a first integral and `λ_t = −H_t` (energy–time conjugacy).
+- **`hamiltonian_const_check(<row.mat>)`** — verifies `λ_t` (row-7 defect dual) is
+  **constant** ⇔ the time-domain Hamiltonian `H_t` is conserved. KKT stationarity
+  forces this exactly at a true KKT point; measured **CoV ~1e-9 (0.1 N) / 2e-8 (10 N)**,
+  while a mass-costate control varies **56%** — so the test genuinely discriminates.
+- **`hamiltonian_along_traj(<row.mat>)`** — reconstructs BOTH Hamiltonians node-by-node
+  (`H_L = ℓ_L + λᵀ·dXdL`, `H_t = −λ_t`). Two subtleties, both handled: (1) the CasADi
+  dual **sign** is pinned by transversality `H_t = dJ*/dt_f < 0` for min-fuel above
+  min-time (the extremal identity does *not* discriminate sign); (2) the extremal
+  identity `dH_L/dσ = ∂H_L/∂σ` (complex-step `∂/∂L`) is reported as a reconstruction
+  check that holds only to **collocation order** (~1.6% at 26 nodes/rev), *not* a
+  machine-precision claim. `H_L` breathes once per orbit (L explicit in the dynamics);
+  `H_t` is flat.
+
+### Movie / viz — `viz/hamiltonian_movie.m`, `viz/mee_res_to_cart_res.m`
+`hamiltonian_movie(H, stem)` renders the two-panel synced animation (`H_L` breathing
+vs `H_t` conserved, on one shared y-scale). The Cartesian adapter
+`mee_res_to_cart_res(..., nDense)` gained an opt-in **render-densification** factor
+(default `1` = byte-identical): the coarse mesh (~8 nodes/rev at deep rungs) draws each
+orbit as a **polygon** (straight segments between nodes — a rendering artifact, not
+physics); `nDense>1` pchip-interpolates the slow elements onto a fine σ grid and
+re-maps to Cartesian at the fine longitudes, recovering the smooth spiral (throttle
+held piecewise-constant so the switch count is preserved).
+
 ### Cartesian counterparts (original reproduction)
 `casadi_lt_2body.m`, `run_transfer.m`, `run_mintime.m`, `homotopy_2body.m`,
 `seed_2body.m`, `verify_pmp_2body.m` — the Sundman-regularized Cartesian solver

@@ -185,6 +185,20 @@ and ~600+ switches, N in the tens of thousands, and the crash class of item 1.
 (`.seeded=true`) so `reproduce_row(0.2)`/`reproduce_row(0.1)` are wired and
 ready to run once item 1 unblocks the chain — see item 7 below.
 
+**0.2 N CERTIFIED (2026-07-20)** — `results/MEE_M2_0p2N.mat` (gitignored cache):
+`m_f=1377.29 kg`, 823 switches, 346.7 rev, defect **2.5e-13**, termErr 7.5e-36,
+incДeg 0, IPOPT Solve_Succeeded, ε=0 bang-bang (edge 99.9%). Never attained
+before. **Recipe:** warm-chain from certified 0.5 N → rung-adaptive `dL` bound
+(feasibility) + `opts.liftDL` (block-banded KKT, no crash at n~30k) +
+**phase-correct β warm start** (`warmstart_phase_beta`, kills the σ-interp
+aliasing) + **ε-continuation 1→0 with `maxIter=3000`** (`homotopy_mee`
+`adaptiveEps`) — every ε-step converged tight (ok=1, defect ~2e-13). The
+critical fix vs the first attempt was `maxIter` 1500→3000 (under-iterated steps
+collapsed the tail); `adaptiveEps` bisection was armed but not triggered.
+`scaleNLP` was tried and DROPPED (it fought IPOPT's gradient-based auto-scaling
+→ ε=1 restoration failure; a proper *complete* user-scaling is a separate item).
+**Next: 0.1 N** should fall to the same recipe warm-chained from this 0.2 N.
+
 **Progress (2026-07-19, external review):** the `dL≤2000` infeasibility and the
 conditioning root cause are FIXED (rung-adaptive `dL` bound + `opts.liftDL`
 block-banded KKT + guarded `Ldot`; see the Done entry). **Remaining

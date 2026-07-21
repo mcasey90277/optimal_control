@@ -1,4 +1,4 @@
-function out = casadi_minfuel_sundman(sigma, tf, rv0, rvf, Tmax, c, muStar, X0, U0, tauf0, pSund, maxIter, epsilon, warmTight)
+function out = casadi_minfuel_sundman(sigma, tf, rv0, rvf, Tmax, c, muStar, X0, U0, tauf0, pSund, maxIter, epsilon, warmTight, opts)
 % CASADI_MINFUEL_SUNDMAN  Sundman-regularized min-fuel collocation (CasADi+IPOPT).
 %
 % Path A: fix the near-perigee ill-conditioning that stalled the plain
@@ -42,6 +42,10 @@ function out = casadi_minfuel_sundman(sigma, tf, rv0, rvf, Tmax, c, muStar, X0, 
 %           near-bang-bang solution (homotopy sharpening); false: loose
 %           (adaptive barrier, default bound_push) for a genuine continuation
 %           move such as an energy re-solve at a shifted t_f [logical]
+%   opts    - (optional) struct: .vBox position/velocity... see below
+%           .vBox - velocity box half-width, ND [scalar, default 12]
+%           .rBox - position box half-width, ND [scalar, default 3]
+%           Omit or pass [] / struct() for the nominal (byte-identical) bounds.
 %
 % OUTPUTS:
 %   out - struct: .X [8x(N+1)] .U [4x(N+1)] .tauf .mf .maxDefect .maxUnit
@@ -52,6 +56,10 @@ function out = casadi_minfuel_sundman(sigma, tf, rv0, rvf, Tmax, c, muStar, X0, 
 %         .primerAlignDeg (mean angle between the NLP thrust direction and the
 %           costate primer -lam_v/||lam_v|| on burn arcs; ~0 certifies PMP),
 %         .lamMassEnd (terminal mass-costate proxy; ~0 is the transversality)
+%         .boundSat - struct('minSlack',s,'worst',label,'hit',logical): the
+%           tightest nonphysical-box slack at INTERIOR nodes (BCs pin the
+%           endpoints by construction); .hit true warns the box may be
+%           binding and should be widened via opts before trusting the result
 %
 % REFERENCES:
 %   [1] Bertrand & Epenoy, "New smoothing techniques for solving bang-bang
@@ -64,6 +72,9 @@ if nargin < 11 || isempty(pSund),  pSund  = 1.5;  end
 if nargin < 12 || isempty(maxIter), maxIter = 3000; end
 if nargin < 13 || isempty(epsilon), epsilon = 0;   end   % 0=fuel, 1=energy
 if nargin < 14 || isempty(warmTight), warmTight = true; end  % see IPOPT opts
+if nargin < 15 || isempty(opts), opts = struct(); end
+vBox = 12;  if isfield(opts,'vBox') && ~isempty(opts.vBox), vBox = opts.vBox; end
+rBox = 3;   if isfield(opts,'rBox') && ~isempty(opts.rBox), rBox = opts.rBox; end
 cpath = getenv('CASADI_PATH');
 if isempty(cpath), cpath = fullfile(getenv('HOME'), 'casadi-3.7.0'); end
 addpath(cpath);
@@ -111,8 +122,8 @@ opti.subject_to(D(:) == 0);
 opti.subject_to((sum(U(1:3,:).^2, 1) - 1).' == 0);
 
 % bounds (explicit two-sided)
-lbX = repmat([-3;-3;-3;-12;-12;-12;0.3;0], 1, nN);
-ubX = repmat([ 3; 3; 3; 12; 12; 12;1.0; 2*tf], 1, nN);
+lbX = repmat([-rBox;-rBox;-rBox;-vBox;-vBox;-vBox;0.3;0], 1, nN);
+ubX = repmat([ rBox; rBox; rBox; vBox; vBox; vBox;1.0; 2*tf], 1, nN);
 opti.subject_to(X(:) >= lbX(:));   opti.subject_to(X(:) <= ubX(:));
 lbU = repmat([-1.1;-1.1;-1.1;0], 1, nN);
 ubU = repmat([ 1.1; 1.1; 1.1;1], 1, nN);
@@ -216,6 +227,22 @@ if numel(lamAll) >= 8*N
     lamMassEnd = lamDef(7,end);                        % mass costate ~0 (transversality)
 end
 
+% Bound-saturation diagnostic (2026-07-21 triage C4; output-only). Nonphysical
+% boxes checked at INTERIOR nodes (BCs pin the endpoints by construction).
+Xi = Xs(:,2:end-1);
+slk = [ rBox - max(abs(Xi(1:3,:)),[],'all');            % position box
+        vBox - max(abs(Xi(4:6,:)),[],'all');            % velocity box
+        min(Xi(7,:),[],'all') - 0.3;                    % mass lower
+        1.0 - max(Xi(7,:),[],'all') ];                  % mass upper
+lbl = {'rBox','vBox','massLo','massHi'};
+[minSlack, iw] = min(slk);
+boundSat = struct('minSlack', minSlack, 'worst', lbl{iw}, 'hit', minSlack < 1e-4);
+if boundSat.hit
+    warning('casadi_minfuel_sundman:boundSaturation', ...
+        'nonphysical box ''%s'' within %.2g of binding -- widen via opts before trusting', ...
+        lbl{iw}, max(minSlack,0));
+end
+
 out = struct('X', Xs, 'U', Us, 'tauf', tauf, 'mf', Xs(7,end), ...
              'maxDefect', max(abs(Dd(:))), ...
              'maxUnit', max(abs(sum(Us(1:3,:).^2,1) - 1)), ...
@@ -223,5 +250,6 @@ out = struct('X', Xs, 'U', Us, 'tauf', tauf, 'mf', Xs(7,end), ...
              'edge', mean(ss > 0.95 | ss < 0.05), ...
              'lamDef', lamDef, 'lamAll', lamAll, ...
              'primerAlignDeg', primerAlignDeg, 'lamMassEnd', lamMassEnd, ...
+             'boundSat', boundSat, ...
              'success', success, 'ipoptStatus', status);
 end

@@ -41,20 +41,25 @@ function out = minfuel_at_tf(factor, varargin)
 %   [2] CODE_CLEANUP_PLAN.md (driver consolidation rationale).
 
 here = fileparts(mfilename('fullpath'));  addpath(here);
+addpath(fullfile(here, '..', '..', '..', 'cr3bp_common'));  % cr3bp_fingerprint/check_cr3bp_fp
 cfg  = minfuel_config();
 op   = parse_opts(varargin, cfg);
 p    = cr3bp_lt_params(cfg.thrustN, cfg.m0kg, cfg.ispS);
 tf   = factor * cfg.tfMin;
+fp   = cr3bp_fingerprint(p, struct('tf', tf, 'factor', factor));
 
 % --- resolve the seed -------------------------------------------------------
 switch op.seedKind
     case 'energy'
-        E = load(find_energy_file(here, cfg, factor));
+        efile = find_energy_file(here, cfg, factor);
+        E = load(efile);
+        check_cr3bp_fp(E, fp, efile, 'energy-seed');
         sigma=E.sigma; rv0=E.rv0; rvf=E.rvf; tauf0=E.tauf0;
         Xk=E.X; Uk=E.U; firstLoose=false; needClean=true;
         seedDesc = sprintf('energy backbone f=%.3f', factor);
     otherwise   % 'neighbor' or explicit file
-        [S, seedDesc] = load_seed_file(here, cfg, op);
+        [S, seedDesc, seedFn] = load_seed_file(here, cfg, op);
+        check_cr3bp_fp(S, fp, seedFn, 'neighbor-seed');
         sigma=S.sigma; rv0=S.rv0; rvf=S.rvf; tauf0=S.tauf0;
         Xk=S.X; Uk=S.U;
         Xk(8,:) = Xk(8,:) * (tf / Xk(8,end));   % rescale time state to new t_f
@@ -130,7 +135,7 @@ elseif op.save
         base = cfg.fname('minfuel', factor);
         op.outFile = fullfile(cfg.dirs.minfuel, strrep(base, '.mat', ['_' op.branch '.mat']));
     end
-    save(op.outFile, 'out', 'sigma', 'tauf0', 'rv0', 'rvf', 'factor');
+    save(op.outFile, 'out', 'sigma', 'tauf0', 'rv0', 'rvf', 'factor', 'fp');
     fprintf('  WROTE %s\n', op.outFile);
 end
 end
@@ -180,7 +185,7 @@ end
 end
 
 % ---------------------------------------------------------------------------
-function [S, desc] = load_seed_file(here, cfg, op)
+function [S, desc, fn] = load_seed_file(here, cfg, op)
 % Load a bang-bang seed: explicit file, or resolve from seedFactor (new
 % minfuel results, then legacy ms_<f>.mat, then the certified anchor).
 if strcmp(op.seedKind, 'file')
@@ -199,6 +204,7 @@ end
 R = load(fn);
 if isfield(R,'out'), S.X = R.out.X; S.U = R.out.U; else, S.X = R.X; S.U = R.U; end
 S.sigma = R.sigma;  S.tauf0 = R.tauf0;  S.rv0 = R.rv0;  S.rvf = R.rvf;
+if isfield(R,'fp'), S.fp = R.fp; end
 [~, b, ext] = fileparts(fn);  desc = [b ext];
 end
 

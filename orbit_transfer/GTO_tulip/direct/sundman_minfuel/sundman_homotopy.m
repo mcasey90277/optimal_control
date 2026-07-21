@@ -33,8 +33,11 @@ function [best, tbl] = sundman_homotopy(p, rv0, rvf, sigma, X0, U0, tauf0, pSund
 
 if nargin < 10 || isempty(maxIter), maxIter = 1500; end
 if nargin < 11, saveFile = ''; end
+here = fileparts(mfilename('fullpath'));
+addpath(fullfile(here, '..', '..', '..', 'cr3bp_common'));  % cr3bp_fingerprint/check_cr3bp_fp
 
 tf = X0(8,end);                          % transfer time, pinned by the seed map
+fp = cr3bp_fingerprint(p, struct('tf', tf)); %#ok<NASGU>  % saved with the best iterate
 tbl = zeros(numel(epsSched), 6);
 best = []; bestEps = NaN;  out = [];
 for ie = 1:numel(epsSched)
@@ -55,7 +58,7 @@ for ie = 1:numel(epsSched)
         X0 = out.X; U0 = out.U; best = out; bestEps = epsH;
         if ~isempty(saveFile)
             eps = epsH; %#ok<NASGU>  (saved as 'eps' for .mat back-compat)
-            save(saveFile, 'out','sigma','rv0','rvf','tauf0','pSund','eps','tbl');
+            save(saveFile, 'out','sigma','rv0','rvf','tauf0','pSund','eps','tbl','fp');
         end
     else
         fprintf('   (loose step: warm start not advanced; best kept at eps=%.4g)\n', bestEps);

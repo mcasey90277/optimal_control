@@ -98,9 +98,10 @@ pSund = 1.5;  qSund = 4;  moonZone = o.moonZone; %#ok<NASGU>
 tf = out.tf;  mf = out.mf;  cScale = out.cScale; %#ok<NASGU>
 maxDefect = out.maxDefect;  minR1 = out.minR1; %#ok<NASGU>
 insertion = insMeta.label; %#ok<NASGU>  provenance: the declared insertion criterion
+fp = cr3bp_fingerprint(p, struct('tf', tf, 'insertion', insertion)); %#ok<NASGU>
 outFile = fullfile(resDir, sprintf('mintime_tulip_%s.mat', insMeta.label));
 save(outFile,'X','U','sigma','rv0','rvf','tauf0','tf','mf','cScale', ...
-     'maxDefect','minR1','pSund','qSund','moonZone','insertion');
+     'maxDefect','minR1','pSund','qSund','moonZone','insertion','fp');
 fprintf('  saved %s\n', outFile);
 fprintf('GEN_TULIP_MINTIME DONE\n');
 end

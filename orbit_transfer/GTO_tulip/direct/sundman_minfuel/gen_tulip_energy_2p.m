@@ -77,6 +77,7 @@ assert(norm(E.rvf(:).' - rvfDecl) < 1e-10 && norm(E.rv0(:).' - rv0Decl) < 1e-10,
     insMeta.label, norm(E.rvf(:).'-rvfDecl), norm(E.rv0(:).'-rv0Decl));
 
 mz = gd('moonZone', 0.15);
+fp = cr3bp_fingerprint(p, struct('factor', factor, 'moonZone', mz));
 fprintf('=== GEN_TULIP_ENERGY_2P: tulip(f=%.2f) clock-on to two-primary ===\n', factor);
 fprintf('  N=%d  tf_ws=%.4f ND  target dMoon=%.0f km\n', numel(sigma)-1, E.X(8,end), ...
         norm(rvf_tul(1:3)-[1-p.muStar 0 0])*p.lStar);
@@ -85,7 +86,7 @@ ctx = struct('sigma',sigma,'rv0',rv0,'Tmax',p.Tmax,'cEx',p.c,'muStar',p.muStar, 
     'tauf0',tauf0,'pSund',cfg.pSund,'qSund',gd('qSund',4), ...
     'maxIter',gd('maxIter',1500),'looseIter',gd('looseIter',400), ...
     'step0',gd('step0',0.20),'stepMin',gd('stepMin',0.01), ...
-    'tf0',E.X(8,end),'factor',factor,'rvf',rvf_tul);
+    'tf0',E.X(8,end),'factor',factor,'rvf',rvf_tul,'fp',fp);
 
 % one-change-per-leg parameterizations (target FIXED at rvf_tul throughout)
 legs = { ...
@@ -97,6 +98,7 @@ legs = { ...
 startLeg = 0;  sStart = 0;  Xk = E.X;  Uk = E.U;
 if gd('resume',true) && isfile(ckptFile)
     C = load(ckptFile);
+    check_cr3bp_fp(C, fp, ckptFile, 'tulip2p-ckpt');
     if isequal(C.ctx.factor,factor) && norm(C.ctx.rvf(:)-rvf_tul(:)) < 1e-9
         startLeg = C.legIdx;  sStart = C.s;  Xk = C.Xk;  Uk = C.Uk;
         fprintf('  RESUMED at leg %d, s=%.3f\n', startLeg, sStart);
@@ -110,7 +112,7 @@ if startLeg == 0
     if ~ok, error('tulip2p:leg0','free-t_f conversion failed (def=%.2g)', info.maxDefect); end
     fprintf('  LEG0 OK def=%.2g tf=%.3f cS=%.3f edge=%.1f%%\n', ...
             info.maxDefect, info.tf, info.cScale, 100*info.edge);
-    legIdx = 1;  s = 0;  save(ckptFile,'legIdx','s','Xk','Uk','ctx');
+    legIdx = 1;  s = 0;  save(ckptFile,'legIdx','s','Xk','Uk','ctx','fp');
     startLeg = 1;  sStart = 0;
 end
 
@@ -127,7 +129,7 @@ insertion = insMeta.label; %#ok<NASGU>  provenance: the declared insertion crite
 % filename carries the insertion label -- gen_tulip_mintime's default seedFile
 % is tagged the same way (both are in-scope drivers, kept consistent).
 outFile = fullfile(resDir, sprintf('energy_tulip_2p_%s.mat', insMeta.label));
-save(outFile, 'X','U','factor','tauf0','sigma','rv0','rvf','pSund','qSund','moonZone','muGain','insertion');
+save(outFile, 'X','U','factor','tauf0','sigma','rv0','rvf','pSund','qSund','moonZone','muGain','insertion','fp');
 fprintf('GEN_TULIP_ENERGY_2P DONE: %s\n', outFile);
 fprintf('  tf=%.4f ND (%.2f d), mf=%.4f, edge=%.1f%%, maxDefect (last)=see log\n', ...
         X(8,end), X(8,end)*p.tStar/86400, X(7,end), 100*mean(U(4,:)>0.95|U(4,:)<0.05));
@@ -136,7 +138,7 @@ end
 
 % ===========================================================================
 function [Xk, Uk] = walk(ctx, legIdx, legName, paramFun, Xk, Uk, s0, ckptFile)
-s = s0;  step = ctx.step0;  nstep = 0;
+s = s0;  step = ctx.step0;  nstep = 0;  fp = ctx.fp; %#ok<NASGU>
 fprintf('--- LEG %d (%s): s=%.3f -> 1 ---\n', legIdx, legName, s0);
 while s < 1 - 1e-9
     sTry = min(s + step, 1);
@@ -148,7 +150,7 @@ while s < 1 - 1e-9
         continue
     end
     Xk = Xn;  Uk = Un;  s = sTry;  nstep = nstep + 1;
-    save(ckptFile,'legIdx','s','Xk','Uk','ctx');
+    save(ckptFile,'legIdx','s','Xk','Uk','ctx','fp');
     fprintf('  %s s=%.4f OK def=%.2g tf=%.3f cS=%.3f edge=%.1f%% (step %d)\n', ...
             legName, s, info.maxDefect, info.tf, info.cScale, 100*info.edge, nstep);
     if step < ctx.step0, step = min(2*step, ctx.step0); end

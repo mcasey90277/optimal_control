@@ -56,11 +56,11 @@ tf0 = S.X(8,end);
 ctx = struct('sigma',S.sigma,'rv0',S.rv0,'rvf',S.rvf,'Tmax',p.Tmax,'cEx',p.c, ...
     'muStar',p.muStar,'tauf0',S.tauf0,'pSund',S.pSund,'qSund',S.qSund, ...
     'moonZone',S.moonZone,'maxIter',gd('maxIter',2000),'looseIter',gd('looseIter',500), ...
-    'resDir',resDir,'tStar',p.tStar,'tfMin',cfg.tfMin,'insertion',insMeta.label);
+    'resDir',resDir,'tStar',p.tStar,'tfMin',cfg.tfMin_elfo,'insertion',insMeta.label);
 % factor band (factor = tf/tfMin), converted to ND for the continuation
 factorLo = gd('factorLo',1.11);  factorHi = gd('factorHi',2.00);  factorStep = gd('factorStep',0.08);
-tfLo = factorLo*cfg.tfMin;  tfHi = factorHi*cfg.tfMin;  tfStep = factorStep*cfg.tfMin;
-stepMin = gd('factorStepMin',0.01)*cfg.tfMin;
+tfLo = factorLo*cfg.tfMin_elfo;  tfHi = factorHi*cfg.tfMin_elfo;  tfStep = factorStep*cfg.tfMin_elfo;   % ELFO-anchored (triage C1)
+stepMin = gd('factorStepMin',0.01)*cfg.tfMin_elfo;
 
 fprintf('=== GEN_ELFO_ENERGY_TFSWEEP: tf band map from tf0=%.4f ND (%.2f d) ===\n', ...
         tf0, tf0*p.tStar/86400);
@@ -136,12 +136,12 @@ base = struct('moonZone',ctx.moonZone,'muGain',1,'tfTarget',tfTarget,'epsilon',1
               'pSund',ctx.pSund,'qSund',ctx.qSund,'tfCapMult',8,'cBox',[0.10 8]);
 oL = base;  oL.maxIter = ctx.looseIter;  oL.warmTight = false;
 rL = casadi_energy_freetf(ctx.sigma,ctx.rv0,ctx.rvf,ctx.Tmax,ctx.cEx,ctx.muStar,Xk,Uk,ctx.tauf0,oL);
-if rL.success && rL.maxDefect < 1e-6
+if strcmp(rL.ipoptStatus,'Solve_Succeeded') && rL.maxDefect < 1e-6
     Xn = rL.X;  Un = rL.U;  ok = true;  info = rL;  return
 end
 oF = base;  oF.maxIter = ctx.maxIter;  oF.warmTight = true;
 rF = casadi_energy_freetf(ctx.sigma,ctx.rv0,ctx.rvf,ctx.Tmax,ctx.cEx,ctx.muStar,Xk,Uk,ctx.tauf0,oF);
-if rF.success && rF.maxDefect < 1e-6
+if strcmp(rF.ipoptStatus,'Solve_Succeeded') && rF.maxDefect < 1e-6
     Xn = rF.X;  Un = rF.U;  ok = true;  info = rF;
 else
     ok = false;  Xn = Xk;  Un = Uk;  info = rF;

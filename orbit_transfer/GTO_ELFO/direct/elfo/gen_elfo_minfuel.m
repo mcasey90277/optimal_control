@@ -43,7 +43,11 @@ epsMin   = gd('epsMin', 0);
 assert(isfile(seedPath), 'no energy seed at %s', seedPath);
 S = load(seedPath);
 tf0    = S.X(8,end);
-factor = tf0 / cfg.tfMin;
+% Factor label vs the target's OWN anchor (2026-07-21 triage C1): ELFO runs
+% use the certified ELFO min-time anchor; a 'Tulip'-tagged run keeps the
+% tulip anchor. The physical tf0 (from the seed) is authoritative either way.
+if strcmpi(target, 'ELFO'), tfMinRef = cfg.tfMin_elfo; else, tfMinRef = cfg.tfMin; end
+factor = tf0 / tfMinRef;
 fTag   = strrep(sprintf('%.3f', factor), '.', 'p');       % 1.200 -> '1p200'
 eTag   = strrep(sprintf('%g', epsMin), '.', 'p');         % 0 -> '0', 0.2 -> '0p2'
 tag    = sprintf('%s_tf%s_minEps%s', target, fTag, eTag);
@@ -93,6 +97,15 @@ if isempty(finalInfo)
                  'maxIter',ctx.maxIter,'warmTight',true);
     finalInfo = casadi_energy_freetf(ctx.sigma,ctx.rv0,ctx.rvf,ctx.Tmax,ctx.cEx,ctx.muStar,Xk,Uk,ctx.tauf0,oRe);
 end
+% Certification gate + single-trajectory guarantee (2026-07-21 triage C2):
+% the resumed-path re-solve above was previously UN-GATED and the file saved
+% checkpoint X,U beside out=finalInfo (two trajectories in one file). Now the
+% final out struct must be fully converged, and X,U ARE its trajectory.
+assert(strcmp(finalInfo.ipoptStatus,'Solve_Succeeded') && finalInfo.maxDefect < 1e-6, ...
+    'gen_elfo_minfuel:finalUncertified', ...
+    'final solution not certified (status=%s, defect=%.2g) -- not saving', ...
+    finalInfo.ipoptStatus, finalInfo.maxDefect);
+Xk = finalInfo.X;  Uk = finalInfo.U;
 out = finalInfo; %#ok<NASGU>
 
 % --- save (target-tagged; switch count appended) ----------------------------
@@ -120,12 +133,12 @@ base = struct('moonZone',ctx.moonZone,'muGain',1,'tfTarget',ctx.tf0,'epsilon',ep
               'pSund',ctx.pSund,'qSund',ctx.qSund,'tfCapMult',6,'cBox',[0.15 6]);
 oL = base;  oL.maxIter = ctx.looseIter;  oL.warmTight = false;
 rL = casadi_energy_freetf(ctx.sigma,ctx.rv0,ctx.rvf,ctx.Tmax,ctx.cEx,ctx.muStar,Xk,Uk,ctx.tauf0,oL);
-if rL.success && rL.maxDefect < 1e-6
+if strcmp(rL.ipoptStatus,'Solve_Succeeded') && rL.maxDefect < 1e-6
     Xs = rL.X;  Us = rL.U;
 else
     oF = base;  oF.maxIter = ctx.maxIter;  oF.warmTight = true;
     rF = casadi_energy_freetf(ctx.sigma,ctx.rv0,ctx.rvf,ctx.Tmax,ctx.cEx,ctx.muStar,Xk,Uk,ctx.tauf0,oF);
-    if rF.success && rF.maxDefect < 1e-6
+    if strcmp(rF.ipoptStatus,'Solve_Succeeded') && rF.maxDefect < 1e-6
         Xs = rF.X;  Us = rF.U;
     else
         ok = false;  Xn = Xk;  Un = Uk;  info = rF;  return
@@ -133,7 +146,7 @@ else
 end
 oT = base;  oT.maxIter = ctx.maxIter;  oT.warmTight = true;
 rT = casadi_energy_freetf(ctx.sigma,ctx.rv0,ctx.rvf,ctx.Tmax,ctx.cEx,ctx.muStar,Xs,Us,ctx.tauf0,oT);
-if rT.success && rT.maxDefect < 1e-6
+if strcmp(rT.ipoptStatus,'Solve_Succeeded') && rT.maxDefect < 1e-6
     Xn = rT.X;  Un = rT.U;  ok = true;  info = rT;
 else
     ok = false;  Xn = Xk;  Un = Uk;  info = rT;

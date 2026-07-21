@@ -184,13 +184,13 @@ o = setfields(base, oExtra);
 % (a) loose probe (fail-fast) -- a genuine continuation move
 oL = o;  oL.maxIter = ctx.looseIter;  oL.warmTight = false;
 rL = casadi_energy_freetf(ctx.sigma,ctx.rv0,rvf_s,ctx.Tmax,ctx.cEx,ctx.muStar,Xk,Uk,ctx.tauf0,oL);
-if rL.success && rL.maxDefect < 1e-6
+if strcmp(rL.ipoptStatus,'Solve_Succeeded') && rL.maxDefect < 1e-6
     Xs = rL.X;  Us = rL.U;
 else
     % (b) tight fallback from the current solution
     oF = o;  oF.maxIter = ctx.maxIter;  oF.warmTight = true;
     rF = casadi_energy_freetf(ctx.sigma,ctx.rv0,rvf_s,ctx.Tmax,ctx.cEx,ctx.muStar,Xk,Uk,ctx.tauf0,oF);
-    if rF.success && rF.maxDefect < 1e-6
+    if strcmp(rF.ipoptStatus,'Solve_Succeeded') && rF.maxDefect < 1e-6
         Xs = rF.X;  Us = rF.U;
     else
         ok = false;  Xn = Xk;  Un = Uk;  info = rF;  return
@@ -199,7 +199,7 @@ end
 % (c) tight re-clean at the same target (consistent duals)
 oT = o;  oT.maxIter = ctx.maxIter;  oT.warmTight = true;
 rT = casadi_energy_freetf(ctx.sigma,ctx.rv0,rvf_s,ctx.Tmax,ctx.cEx,ctx.muStar,Xs,Us,ctx.tauf0,oT);
-if rT.success && rT.maxDefect < 1e-6
+if strcmp(rT.ipoptStatus,'Solve_Succeeded') && rT.maxDefect < 1e-6
     Xn = rT.X;  Un = rT.U;  ok = true;  info = rT;
 else
     ok = false;  Xn = Xk;  Un = Uk;  info = rT;

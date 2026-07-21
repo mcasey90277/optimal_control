@@ -44,7 +44,10 @@ for ie = 1:numel(epsSched)
                                  X0, U0, tauf0, pSund, maxIter, epsH);
     dV = p.c*log(1/out.mf)*p.lStar/p.tStar;
     tbl(ie,:) = [epsH, out.maxDefect, out.switches, 100*out.edge, p.m0kg*(1-out.mf), dV];
-    ok = out.success && out.maxDefect < 1e-6;
+    % 2026-07-21 triage C1: require full convergence -- `success` alone also
+    % covers Solved_To_Acceptable_Level, whose 1e-5-grade duals must not enter
+    % the warm chain or PMP checks.
+    ok = strcmp(out.ipoptStatus,'Solve_Succeeded') && out.maxDefect < 1e-6;
     verdict = 'DISCARD'; if ok, verdict = 'KEEP'; end
     fprintf('eps=%.4g: success=%d defect=%.2g switches=%d edge=%.1f%% prop=%.4f kg dV=%.4f  %s\n', ...
             epsH, out.success, out.maxDefect, out.switches, 100*out.edge, p.m0kg*(1-out.mf), dV, verdict);
@@ -58,14 +61,25 @@ for ie = 1:numel(epsSched)
         fprintf('   (loose step: warm start not advanced; best kept at eps=%.4g)\n', bestEps);
     end
 end
-certified = ~isempty(best);
-if ~certified
+anyClean = ~isempty(best);
+if ~anyClean
     warning('sundman_homotopy:noCleanStep', ...
-        ['no homotopy step converged tight (success & maxDefect<1e-6); returning ' ...
-         'the last UNCERTIFIED iterate -- do NOT treat it as a solution']);
+        ['no homotopy step converged tight (Solve_Succeeded & maxDefect<1e-6); ' ...
+         'returning the last UNCERTIFIED iterate -- do NOT treat it as a solution']);
     best = out;  bestEps = epsSched(end);
 end
-best.certified = certified;
+% 2026-07-21 triage C2: `certified` now requires the REQUESTED homotopy
+% endpoint (last scheduled eps), not merely "some clean step" -- an eps>0
+% best must not carry the min-fuel certification flag.
+best.epsReached = bestEps;
+best.certified  = anyClean && abs(bestEps - epsSched(end)) < 1e-12;
+certified = best.certified;
+if anyClean && ~certified
+    warning('sundman_homotopy:endpointNotReached', ...
+        ['homotopy stalled at eps=%.4g (requested endpoint eps=%.4g): result is ' ...
+         'a clean INTERMEDIATE solution, NOT certified at the requested objective'], ...
+        bestEps, epsSched(end));
+end
 dVb = p.c*log(1/best.mf)*p.lStar/p.tStar;
 tag = 'BEST'; if ~certified, tag = 'UNCERTIFIED (no tight step)'; end
 fprintf('\n=== HOMOTOPY %s: eps=%.4g defect=%.2g switches=%d edge=%.1f%% prop=%.4f kg dV=%.4f km/s ===\n', ...

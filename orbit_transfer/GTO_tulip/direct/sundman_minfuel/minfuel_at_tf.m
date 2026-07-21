@@ -71,34 +71,43 @@ if needClean
                                 Xk,Uk,tauf0,cfg.pSund,op.maxIter,1,true);
     fprintf('  re-clean energy: ok=%d defect=%.2g\n', oT.success, oT.maxDefect);
     stat{end+1} = sprintf('reclean:%s', oT.ipoptStatus);
-    if oT.success && oT.maxDefect < 1e-6, Xk=oT.X; Uk=oT.U; end
+    if strcmp(oT.ipoptStatus,'Solve_Succeeded') && oT.maxDefect < 1e-6, Xk=oT.X; Uk=oT.U; end   % triage C1: full convergence only
 end
 
 % --- (2) homotopy sharpen ---------------------------------------------------
-best = [];  o = [];  tbl = zeros(numel(op.sched), 4);
+best = [];  o = [];  bestEps = NaN;  tbl = zeros(numel(op.sched), 4);
 for ke = 1:numel(op.sched)
     e = op.sched(ke);
     tight = ~(firstLoose && ke==1);
     o = casadi_minfuel_sundman(sigma,tf,rv0,rvf,p.Tmax,p.c,p.muStar, ...
                                Xk,Uk,tauf0,cfg.pSund,op.maxIter,e,tight);
-    ok = o.success && o.maxDefect < 1e-6;
+    ok = strcmp(o.ipoptStatus,'Solve_Succeeded') && o.maxDefect < 1e-6;   % triage C1
     tbl(ke,:) = [e, o.maxDefect, o.switches, 100*o.edge];
     stat{end+1} = sprintf('eps=%.4g:%s', e, o.ipoptStatus); %#ok<AGROW>
     fprintf('  eps=%.4g: ok=%d defect=%.2g sw=%d edge=%.1f%%\n', ...
             e, ok, o.maxDefect, o.switches, 100*o.edge);
-    if ok, Xk=o.X; Uk=o.U; best=o; end
+    if ok, Xk=o.X; Uk=o.U; best=o; bestEps=e; end
 end
-certified = ~isempty(best);
-if ~certified
+anyClean = ~isempty(best);
+if ~anyClean
     warning('minfuel_at_tf:noCleanStep', ...
         ['no schedule step converged tight at factor %.3f; returning the last ' ...
          'UNCERTIFIED attempt (will NOT be saved)'], factor);
-    best = o;
+    best = o;  bestEps = NaN;
+end
+% 2026-07-21 triage C2: certification requires the REQUESTED endpoint eps
+% (last schedule entry), not merely some clean step.
+certified = anyClean && abs(bestEps - op.sched(end)) < 1e-12;
+if anyClean && ~certified
+    warning('minfuel_at_tf:endpointNotReached', ...
+        ['factor %.3f stalled at eps=%.4g (requested %.4g): clean INTERMEDIATE ' ...
+         'solution, NOT certified (will NOT be saved)'], factor, bestEps, op.sched(end));
 end
 
 % --- package with provenance ------------------------------------------------
 out = best;
 out.certified = certified;
+out.epsReached = bestEps;
 out.factor  = factor;  out.tf = tf;  out.tf_days = tf*p.tStar/86400;
 out.dV      = p.c*log(1/best.mf)*p.lStar/p.tStar;
 out.prop_kg = p.m0kg*(1-best.mf);

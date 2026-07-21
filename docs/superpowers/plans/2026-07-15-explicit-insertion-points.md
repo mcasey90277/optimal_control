@@ -24,8 +24,8 @@
 ### Task 1: `insertion_states.m` helper + unit test
 
 **Files:**
-- Create: `NLP_lowThrust_GTO_tulip/sundman_minfuel/insertion_states.m`
-- Test: `NLP_lowThrust_GTO_tulip/sundman_minfuel/test_insertion_states.m`
+- Create: `GTO_tulip/sundman_minfuel/insertion_states.m`
+- Test: `GTO_tulip/sundman_minfuel/test_insertion_states.m`
 
 **Interfaces:**
 - Produces: `[rv0, rvf, meta] = insertion_states(target, criterion)` — `rv0` [1x6], `rvf` [1x6], `meta` struct `.target .criterion .label`. `target` `'tulip'|'elfo'`; tulip criteria `'campaign'`(default)`|'maxydot'|'apoapsis'`; elfo criteria `'nearest'`(default)`|'apolune'|'perilune'`.
@@ -68,7 +68,7 @@ fprintf('TEST_INSERTION_STATES: PASS (defaults match seeds <1e-12; alternates va
 
 Run:
 ```bash
-/Applications/MATLAB_R2025b.app/bin/matlab -batch "cd('/Users/msc/Desktop/optimal_control/NLP_lowThrust_GTO_tulip/sundman_minfuel'); setup_paths; test_insertion_states"
+/Applications/MATLAB_R2025b.app/bin/matlab -batch "cd('/Users/msc/Desktop/optimal_control/GTO_tulip/sundman_minfuel'); setup_paths; test_insertion_states"
 ```
 Expected: FAIL — `Unrecognized function or variable 'insertion_states'`.
 
@@ -169,7 +169,7 @@ Run the Step-2 command. Expected: `TEST_INSERTION_STATES: PASS (…)`.
 
 ```bash
 cd /Users/msc/Desktop/optimal_control
-git add NLP_lowThrust_GTO_tulip/sundman_minfuel/insertion_states.m NLP_lowThrust_GTO_tulip/sundman_minfuel/test_insertion_states.m
+git add GTO_tulip/sundman_minfuel/insertion_states.m GTO_tulip/sundman_minfuel/test_insertion_states.m
 git commit -m "feat(insertion-points): insertion_states helper (single source of truth) + test"
 ```
 
@@ -213,7 +213,7 @@ Apply the pattern above to all 6 files (`<TGT>` per the file's pipeline). Keep e
 
 Run a check that, for the seed files these drivers use, `insertion_states` matches (i.e. the guard would pass):
 ```bash
-/Applications/MATLAB_R2025b.app/bin/matlab -batch "cd('/Users/msc/Desktop/optimal_control/NLP_lowThrust_GTO_tulip/sundman_minfuel'); setup_paths; addpath('../elfo'); \
+/Applications/MATLAB_R2025b.app/bin/matlab -batch "cd('/Users/msc/Desktop/optimal_control/GTO_tulip/sundman_minfuel'); setup_paths; addpath('../elfo'); \
  [~,rt]=insertion_states('tulip','campaign'); [~,re]=insertion_states('elfo','nearest'); \
  Eb=load('results/energy/energy_f1120.mat');          fprintf('tulip backbone drvf=%.1e\n', norm(Eb.rvf(:).'-rt)); \
  T =load('results/energy/energy_tulip_2p.mat');        fprintf('tulip 2p seed  drvf=%.1e\n', norm(T.rvf(:).'-rt)); \
@@ -225,7 +225,7 @@ Expected: all three `drvf` < 1e-10 (guards pass on the current seeds — zero re
 
 ```bash
 cd /Users/msc/Desktop/optimal_control
-git add NLP_lowThrust_GTO_tulip/PSR/run_psr.m NLP_lowThrust_GTO_tulip/PSR/psr_run_one.m NLP_lowThrust_GTO_tulip/elfo/run_elfo_minfuel.m NLP_lowThrust_GTO_tulip/elfo/elfo_run_one.m NLP_lowThrust_GTO_tulip/sundman_minfuel/gen_tulip_mintime.m NLP_lowThrust_GTO_tulip/elfo/gen_elfo_mintime.m
+git add GTO_tulip/PSR/run_psr.m GTO_tulip/PSR/psr_run_one.m GTO_tulip/elfo/run_elfo_minfuel.m GTO_tulip/elfo/elfo_run_one.m GTO_tulip/sundman_minfuel/gen_tulip_mintime.m GTO_tulip/elfo/gen_elfo_mintime.m
 git commit -m "feat(insertion-points): explicit block + drift guard in the 6 seed-consumer drivers"
 ```
 
@@ -249,7 +249,7 @@ git commit -m "feat(insertion-points): explicit block + drift guard in the 6 see
 - [ ] **Step 3: CasADi-free check** that the substitutions produce the same `rvf` as before (for `gen_elfo_energy_gravhom`, `insertion_states('elfo','nearest')` equals the old `gto_elfo_endpoints('nearest',ref=E.rvf)` — verified 0.00 in the spec pre-facts).
 - [ ] **Step 4: Commit**
 ```bash
-git add NLP_lowThrust_GTO_tulip/PSR/gen_energy_seed.m NLP_lowThrust_GTO_tulip/sundman_minfuel/gen_tulip_energy_2p.m NLP_lowThrust_GTO_tulip/elfo/gen_elfo_energy_gravhom.m NLP_lowThrust_GTO_tulip/elfo/gen_elfo_energy_tfsweep.m
+git add GTO_tulip/PSR/gen_energy_seed.m GTO_tulip/sundman_minfuel/gen_tulip_energy_2p.m GTO_tulip/elfo/gen_elfo_energy_gravhom.m GTO_tulip/elfo/gen_elfo_energy_tfsweep.m
 git commit -m "feat(insertion-points): declare/guard endpoints in the 4 seed generators"
 ```
 
@@ -268,7 +268,7 @@ git commit -m "feat(insertion-points): declare/guard endpoints in the 4 seed gen
 - [ ] **Step 3: Verify (CasADi-free where possible)** — re-save a min-time solution via `gen_tulip_mintime` metadata path is CasADi-bound; instead unit-check that a representative saver, given `insMeta`, writes the three fields + tagged name (a small synthetic-struct save/load round-trip, mirroring how `elfo_collect_summary` was unit-tested CasADi-free).
 - [ ] **Step 4: Commit**
 ```bash
-git add -A NLP_lowThrust_GTO_tulip/
+git add -A GTO_tulip/
 git commit -m "feat(insertion-points): save rv0/rvf/insertion + label tag in outputs"
 ```
 

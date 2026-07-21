@@ -1,4 +1,4 @@
-# NLP_lowThrust_GTO_tulip
+# GTO_tulip
 
 Direct-NLP (collocation) solver for the minimum-time low-thrust GTO -> tulip
 transfer in the Earth-Moon CR3BP — the direct-method twin of pumpkynPie's
@@ -26,7 +26,7 @@ tf = 6.290694 ND = 27.8845 days, propellant 2.9247 kg, dV = 4.4665 km/s.
 ## Usage
 
 ```matlab
-cd NLP_lowThrust_GTO_tulip
+cd GTO_tulip
 out = NLP_lowThrust_GTO_Tulip();            % N = 3000, indirect warm start, plot
 out = NLP_lowThrust_GTO_Tulip(6000);        % finer mesh
 ```

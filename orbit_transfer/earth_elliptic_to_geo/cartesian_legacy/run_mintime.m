@@ -111,7 +111,7 @@ function res = run_mintime(thrustN, hx0, N, seedAnchor, routeB)
 % seed's basin cannot climb out of. This exact signature (defect floor ~5e-3
 % + false local-infeasibility) is documented in the parent tulip campaign for
 % the min-time cell, cured there by the ELFO ROUTE-B pattern (see
-% NLP_lowThrust_GTO_tulip/elfo/gen_elfo_mintime.m,
+% GTO_tulip/elfo/gen_elfo_mintime.m,
 % docs/superpowers/specs/2026-07-15-elfo-mintime-route-b-design.md): warm-
 % start min-time from a CONVERGED SMOOTH ENERGY solution (mode='fixedtf',
 % eps=1) instead of from a raw thrust-propagation seed. The energy problem is
@@ -158,7 +158,7 @@ function res = run_mintime(thrustN, hx0, N, seedAnchor, routeB)
 %       idea; promoted here from documented fallback to the default path
 %       after the one-shot manifold solve was shown not to converge).
 %   [4] Task 14 controller triage rounds 1-5 (thrust-continuation fix,
-%       Route-B). [5] NLP_lowThrust_GTO_tulip/elfo/gen_elfo_mintime.m (Route-B
+%       Route-B). [5] GTO_tulip/elfo/gen_elfo_mintime.m (Route-B
 %       origin, parent tulip campaign).
 if nargin < 3 || isempty(N), N = 600; end
 if nargin < 4, seedAnchor = ''; end

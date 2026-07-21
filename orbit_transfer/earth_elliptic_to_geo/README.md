@@ -10,7 +10,7 @@ movie.
 
 > **Two-body, Earth-centered — NOT CR3BP.** The only gravity is Earth's central
 > field; there is no third body and **no Moon**. (The CR3BP + lunar-gravity
-> low-thrust work is a *different* campaign, `../NLP_lowThrust_GTO_tulip/`.) Full
+> low-thrust work is a *different* campaign, `../GTO_tulip/`.) Full
 > methodology — coordinate systems, the optimal-control problem, the MEE
 > formulation, discretization, and numerical lessons — is in
 > **`doc/table3_method_note.tex`**.
@@ -119,7 +119,7 @@ propagation from the initial orbit at `L0=π`, sampled at uniform-σ nodes
 per-ε-step resume cache. Forwards `opts.xf` to every solve.
 
 ### `psr_mee_refine.m` (+ `psr_switch_score_mee.m`, `psr_refine_sigma_mee.m`, …)
-PMP-steered switch-aware mesh refinement, ported from `../NLP_lowThrust_GTO_tulip/PSR/`.
+PMP-steered switch-aware mesh refinement, ported from `../GTO_tulip/PSR/`.
 Used at 1 N and 0.5 N to sharpen switch times below the base mesh width. **Does
 not yet thread a custom terminal target** — `run_gergaud` skips PSR for custom
 endpoints (see `TODO.md`).
@@ -334,7 +334,7 @@ cd reproduce && ./reproduce_table3.sh 10 5 2.5 1 0.5   # per-process watchdog, s
 - **Campaign narrative + results tables + honesty footnotes:** `process/CAMPAIGN.md`
 - **Outstanding work:** `TODO.md`
 - **CasADi/IPOPT:** `~/casadi-3.7.0`
-- **Parent campaign (CR3BP, shared solver architecture):** `../NLP_lowThrust_GTO_tulip/`
+- **Parent campaign (CR3BP, shared solver architecture):** `../GTO_tulip/`
 - **Problem source:** Haberkorn, Martinon & Gergaud, JGCD 27(6), 2004
   (`orbit_transfer/min_fuel_papers/Gergaud-Haberkorn-Martinon-JournalGuidance2004-preprint.pdf`)
 

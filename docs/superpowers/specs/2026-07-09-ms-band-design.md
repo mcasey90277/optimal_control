@@ -16,7 +16,7 @@ The band is where the min-fuel control reorganizes from many-switch bang-bang
 It is bifurcation-rich — switches are born/die across it — and it defeated
 every direct-collocation method tried (energy-backbone continuation times out
 or hangs; from-scratch direct builds stall in restoration). Full account:
-`NLP_lowThrust_GTO_tulip/LOW_THRUST_MINFUEL_CAMPAIGN.md`, sections
+`GTO_tulip/LOW_THRUST_MINFUEL_CAMPAIGN.md`, sections
 "Down-sweep CRACKED" and "transition band". The campaign's own preferred next
 tool (option 1) and the verification plan's Layer 5
 (`sundman_minfuel/OPTIMALITY_VERIFICATION_PLAN.md`) both point at indirect
@@ -134,7 +134,7 @@ fraction, diagnostics.
 
 ## 7. Folder layout
 
-`NLP_lowThrust_GTO_tulip/ms_band/` (sibling of `sundman_minfuel/`):
+`GTO_tulip/ms_band/` (sibling of `sundman_minfuel/`):
 
 | file | role |
 |---|---|

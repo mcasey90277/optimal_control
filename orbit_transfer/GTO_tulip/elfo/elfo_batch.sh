@@ -8,7 +8,7 @@
 # of PSR/psr_batch.sh.
 #
 # ============================ HOW TO RUN ============================
-#   cd /Users/msc/Desktop/optimal_control/orbit_transfer/NLP_lowThrust_GTO_tulip/elfo
+#   cd /Users/msc/Desktop/optimal_control/orbit_transfer/GTO_tulip/elfo
 #   chmod +x elfo_batch.sh                        # once
 #   ./elfo_batch.sh <epsMin> <factor1> [factor2 ...]
 #   ./elfo_batch.sh <epsMin> energy               # every factor with an energy seed

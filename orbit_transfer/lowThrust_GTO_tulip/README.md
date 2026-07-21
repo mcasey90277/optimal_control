@@ -5,7 +5,7 @@ in the Earth-Moon CR3BP (the problem behind pumpkynPie's
 `Demos/LunaNet Analysis/lowThrust_GTO_Tulip.m`). Contains the theory note,
 the build-it-yourself coding tutorial, and the reference INDIRECT (PMP
 shooting) solver. The reference DIRECT (collocation NLP) solver lives in
-`../NLP_lowThrust_GTO_tulip/`.
+`../GTO_tulip/`.
 
 ## Documents
 
@@ -40,7 +40,7 @@ Verified result: tf = 6.290694 ND = 27.8845 days (agrees with
 `solve_minfuel_indirect.m` (Levenberg-Marquardt + eps-continuation),
 `run_gto_tulip_minfuel.m` (indirect driver; requires a supplied costate
 seed). The min-fuel TPBVP itself remains unconverged from the best seed
-available (see `../NLP_lowThrust_GTO_tulip/README.md` and the theory note
+available (see `../GTO_tulip/README.md` and the theory note
 S6 for the honest accounting); the direct solver in the sibling folder is
 the converged min-fuel reference.
 

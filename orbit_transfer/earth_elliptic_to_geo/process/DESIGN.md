@@ -106,7 +106,7 @@ with the paper's own numbers.
 ## 3. Module architecture
 
 New top-level study folder `optimal_control/earth_elliptic_to_geo/` (sibling of
-`lambert/`, `NLP_lowThrust_GTO_tulip/`). Each module is a small, single-purpose unit.
+`lambert/`, `GTO_tulip/`). Each module is a small, single-purpose unit.
 
 | module | role | depends on |
 |---|---|---|
@@ -217,5 +217,5 @@ formulation — noted as the future escalation, not attempted here.
 - Haberkorn, Martinon, Gergaud, JGCD 27(6), 2004 (the target paper).
 - ref [6] Caillau & Noailles, *Coplanar control of a satellite around the Earth*, ESAIM
   COCV 6, 2001 (benchmark constants incl. Isp).
-- Our machinery: `NLP_lowThrust_GTO_tulip/sundman_minfuel/` (Sundman min-fuel engine),
+- Our machinery: `GTO_tulip/sundman_minfuel/` (Sundman min-fuel engine),
   `PSR/` (energy→fuel homotopy + PMP verification), `LOW_THRUST_MINFUEL_CAMPAIGN.md`.

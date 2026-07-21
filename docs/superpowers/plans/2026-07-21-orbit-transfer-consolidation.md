@@ -4,16 +4,16 @@
 
 **Goal:** Make `orbit_transfer/` the top-level container for all orbit-transfer work: nest its current tutorial into `min_energy_tutorial/`, then move the five sibling campaign folders inside it, preserving git history and all path dependencies.
 
-**Architecture:** Single git repo (no submodules) → every move is `git mv` (history preserved). Interdependent folders (`lowThrust_GTO_tulip` ↔ `NLP_lowThrust_GTO_tulip`) move together so their `../../lowThrust_GTO_tulip`-style relative refs stay valid. One executable absolute-path file and a handful of comment/doc links get repointed. Verified by running each moved folder's `setup_paths` + a cheap smoke before each commit.
+**Architecture:** Single git repo (no submodules) → every move is `git mv` (history preserved). Interdependent folders (`lowThrust_GTO_tulip` ↔ `GTO_tulip`) move together so their `../../lowThrust_GTO_tulip`-style relative refs stay valid. One executable absolute-path file and a handful of comment/doc links get repointed. Verified by running each moved folder's `setup_paths` + a cheap smoke before each commit.
 
 **Tech Stack:** git, zsh, MATLAB R2025b (`/Applications/MATLAB_R2025b.app/bin/matlab`).
 
 ## Global Constraints
 
 - **Repo root:** `/Users/msc/Desktop/optimal_control` (git remote `origin git@github.com:mcasey90277/optimal_control.git`, branch `main` tracks `origin/main`). All `git`/`ls` commands run from here.
-- **Scope is EXACTLY five folders** → `orbit_transfer/`: `earth_elliptic_to_geo`, `earth_elliptic_to_geo_CR3BP`, `lambert`, `lowThrust_GTO_tulip`, `NLP_lowThrust_GTO_tulip`. **Do NOT touch** any other top-level folder (`ex1_block_move`, `ex2_cart_pole_swing_up`, `mpc_cart_pole`, `quasiNewton_matlab`, `lieFiltering`, `gauss_sum_curvature`, `mfmax-v0`, `mfmax-v1`, `mfmax_docs`, `min_fuel_paper`, `min_fuel_papers`, `papers`, `learning_docs`).
+- **Scope is EXACTLY five folders** → `orbit_transfer/`: `earth_elliptic_to_geo`, `earth_elliptic_to_geo_CR3BP`, `lambert`, `lowThrust_GTO_tulip`, `GTO_tulip`. **Do NOT touch** any other top-level folder (`ex1_block_move`, `ex2_cart_pole_swing_up`, `mpc_cart_pole`, `quasiNewton_matlab`, `lieFiltering`, `gauss_sum_curvature`, `mfmax-v0`, `mfmax-v1`, `mfmax_docs`, `min_fuel_paper`, `min_fuel_papers`, `papers`, `learning_docs`).
 - **Subfolder name for the nested tutorial:** `min_energy_tutorial` (exact).
-- **`lowThrust_GTO_tulip` and `NLP_lowThrust_GTO_tulip` MUST move in the same task** — moving one without the other breaks `ms_band/setup_paths.m`'s `../../lowThrust_GTO_tulip` addpath.
+- **`lowThrust_GTO_tulip` and `GTO_tulip` MUST move in the same task** — moving one without the other breaks `ms_band/setup_paths.m`'s `../../lowThrust_GTO_tulip` addpath.
 - **MATLAB invocation:** `/Applications/MATLAB_R2025b.app/bin/matlab -batch "<one-line cmd>"` (multi-line `-batch` gets mangled by zsh — keep it one line, or `run('/abs/path.m')`).
 - **`earth_elliptic_to_geo_CR3BP` is an empty untracked stub** — `git mv` won't move it; use plain `mv`.
 - **Do not commit `.mat`** (gitignored) or any untracked scratch. Stage only the moves + the specific edits named per task.
@@ -130,52 +130,52 @@ Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>"
 ### Task 3: Move the interdependent pair together + fix the one executable absolute-path file
 
 **Files:**
-- Move (git mv): `lowThrust_GTO_tulip/`, `NLP_lowThrust_GTO_tulip/` → `orbit_transfer/` (same command — they must move together)
-- Modify: `orbit_transfer/NLP_lowThrust_GTO_tulip/movie/gen_movie_data.m:7-9`
+- Move (git mv): `lowThrust_GTO_tulip/`, `GTO_tulip/` → `orbit_transfer/` (same command — they must move together)
+- Modify: `orbit_transfer/GTO_tulip/movie/gen_movie_data.m:7-9`
 
 **Interfaces:**
 - Consumes: `orbit_transfer/` container.
-- Produces: `orbit_transfer/lowThrust_GTO_tulip/`, `orbit_transfer/NLP_lowThrust_GTO_tulip/` as siblings. `ms_band/setup_paths.m`'s `addpath(fullfile(here,'..','..','lowThrust_GTO_tulip'))` now resolves to `orbit_transfer/lowThrust_GTO_tulip` — still valid because both moved together.
+- Produces: `orbit_transfer/lowThrust_GTO_tulip/`, `orbit_transfer/GTO_tulip/` as siblings. `ms_band/setup_paths.m`'s `addpath(fullfile(here,'..','..','lowThrust_GTO_tulip'))` now resolves to `orbit_transfer/lowThrust_GTO_tulip` — still valid because both moved together.
 
 - [ ] **Step 1: Move both folders in one command**
 
 ```bash
 cd /Users/msc/Desktop/optimal_control
-git mv lowThrust_GTO_tulip NLP_lowThrust_GTO_tulip orbit_transfer/
+git mv lowThrust_GTO_tulip GTO_tulip orbit_transfer/
 ```
 
 - [ ] **Step 2: Fix the executable absolute paths in `gen_movie_data.m`**
 
-Edit `orbit_transfer/NLP_lowThrust_GTO_tulip/movie/gen_movie_data.m`, inserting `orbit_transfer/` into each of the three paths:
+Edit `orbit_transfer/GTO_tulip/movie/gen_movie_data.m`, inserting `orbit_transfer/` into each of the three paths:
 
 ```matlab
 % line 7  (was: '/Users/msc/Desktop/optimal_control/lowThrust_GTO_tulip')
 addpath('/Users/msc/Desktop/optimal_control/orbit_transfer/lowThrust_GTO_tulip');
-% line 8  (was: '/Users/msc/Desktop/optimal_control/NLP_lowThrust_GTO_tulip')
-addpath('/Users/msc/Desktop/optimal_control/orbit_transfer/NLP_lowThrust_GTO_tulip');
-% line 9  (was: '/Users/msc/Desktop/optimal_control/NLP_lowThrust_GTO_tulip/sundman_minfuel/setup_paths.m')
-run('/Users/msc/Desktop/optimal_control/orbit_transfer/NLP_lowThrust_GTO_tulip/sundman_minfuel/setup_paths.m');  % pumpkyn on path
+% line 8  (was: '/Users/msc/Desktop/optimal_control/GTO_tulip')
+addpath('/Users/msc/Desktop/optimal_control/orbit_transfer/GTO_tulip');
+% line 9  (was: '/Users/msc/Desktop/optimal_control/GTO_tulip/sundman_minfuel/setup_paths.m')
+run('/Users/msc/Desktop/optimal_control/orbit_transfer/GTO_tulip/sundman_minfuel/setup_paths.m');  % pumpkyn on path
 ```
 
 - [ ] **Step 3: Verify moves + history**
 
 ```bash
 ls orbit_transfer/                       # expect the pair now present
-git log --oneline --follow -1 -- orbit_transfer/NLP_lowThrust_GTO_tulip/core/casadi_lt_mee.m 2>/dev/null || \
+git log --oneline --follow -1 -- orbit_transfer/GTO_tulip/core/casadi_lt_mee.m 2>/dev/null || \
 git log --oneline --follow -1 -- orbit_transfer/lowThrust_GTO_tulip/setup_paths.m
 ```
 Expected: pair under `orbit_transfer/`; `git log --follow` shows history.
 
 - [ ] **Step 4: Smoke — the critical cross-folder dependency still resolves**
 
-Run: `/Applications/MATLAB_R2025b.app/bin/matlab -batch "cd('/Users/msc/Desktop/optimal_control/orbit_transfer/NLP_lowThrust_GTO_tulip/ms_band'); setup_paths; fprintf('ms_band->lowThrust resolves: lt_pmp_eom_minfuel exist=%d\n', exist('lt_pmp_eom_minfuel','file'))"`
+Run: `/Applications/MATLAB_R2025b.app/bin/matlab -batch "cd('/Users/msc/Desktop/optimal_control/orbit_transfer/GTO_tulip/ms_band'); setup_paths; fprintf('ms_band->lowThrust resolves: lt_pmp_eom_minfuel exist=%d\n', exist('lt_pmp_eom_minfuel','file'))"`
 Expected: prints `ms_band->lowThrust resolves: lt_pmp_eom_minfuel exist=2` (the `../../lowThrust_GTO_tulip` addpath found the EOM in the moved sibling). A `0` means the pair did not stay siblings — STOP and investigate.
 
 - [ ] **Step 5: Commit**
 
 ```bash
 # git mv staged the pair's renames; stage only the one edited file
-git add orbit_transfer/NLP_lowThrust_GTO_tulip/movie/gen_movie_data.m
+git add orbit_transfer/GTO_tulip/movie/gen_movie_data.m
 git status --short          # confirm ONLY the renames + gen_movie_data.m edit are staged
 git commit -m "refactor(structure): move lowThrust + NLP_lowThrust GTO_tulip into orbit_transfer/
 
@@ -191,34 +191,34 @@ Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>"
 ### Task 4: Repoint stale comment/doc cross-links + sweep for stragglers
 
 **Files:**
-- Modify: `orbit_transfer/NLP_lowThrust_GTO_tulip/sundman_minfuel/certify_minfuel_pmp.m:31,67`
-- Modify: `orbit_transfer/NLP_lowThrust_GTO_tulip/sundman_minfuel/TIER1_PMP_CERTIFICATION_SCOPE.md:31,90`
-- Modify: `orbit_transfer/NLP_lowThrust_GTO_tulip/PSR/run_psr.m:114-115` (commented examples)
+- Modify: `orbit_transfer/GTO_tulip/sundman_minfuel/certify_minfuel_pmp.m:31,67`
+- Modify: `orbit_transfer/GTO_tulip/sundman_minfuel/TIER1_PMP_CERTIFICATION_SCOPE.md:31,90`
+- Modify: `orbit_transfer/GTO_tulip/PSR/run_psr.m:114-115` (commented examples)
 
 **Interfaces:**
 - Consumes: the moved layout. These are non-executable references (comments/docs) — updated for accuracy, not to unbreak execution.
 
-- [ ] **Step 1: Fix the `primer_check.m` links** — `../../orbit_transfer/primer_check.m` → `../../min_energy_tutorial/primer_check.m` (from `orbit_transfer/NLP_lowThrust_GTO_tulip/sundman_minfuel/`, `../..` = `orbit_transfer/`, then `min_energy_tutorial/primer_check.m`).
+- [ ] **Step 1: Fix the `primer_check.m` links** — `../../orbit_transfer/primer_check.m` → `../../min_energy_tutorial/primer_check.m` (from `orbit_transfer/GTO_tulip/sundman_minfuel/`, `../..` = `orbit_transfer/`, then `min_energy_tutorial/primer_check.m`).
 
 ```bash
 cd /Users/msc/Desktop/optimal_control
 sed -i '' 's#\.\./\.\./orbit_transfer/primer_check\.m#../../min_energy_tutorial/primer_check.m#g' \
-  orbit_transfer/NLP_lowThrust_GTO_tulip/sundman_minfuel/certify_minfuel_pmp.m \
-  orbit_transfer/NLP_lowThrust_GTO_tulip/sundman_minfuel/TIER1_PMP_CERTIFICATION_SCOPE.md
+  orbit_transfer/GTO_tulip/sundman_minfuel/certify_minfuel_pmp.m \
+  orbit_transfer/GTO_tulip/sundman_minfuel/TIER1_PMP_CERTIFICATION_SCOPE.md
 ```
 
 - [ ] **Step 2: Fix the commented seedSpec examples in `run_psr.m`** — insert `orbit_transfer/`.
 
 ```bash
-sed -i '' 's#optimal_control/NLP_lowThrust_GTO_tulip/PSR_data#optimal_control/orbit_transfer/NLP_lowThrust_GTO_tulip/PSR_data#g' \
-  orbit_transfer/NLP_lowThrust_GTO_tulip/PSR/run_psr.m
+sed -i '' 's#optimal_control/GTO_tulip/PSR_data#optimal_control/orbit_transfer/GTO_tulip/PSR_data#g' \
+  orbit_transfer/GTO_tulip/PSR/run_psr.m
 ```
 
 - [ ] **Step 3: Sweep for any remaining stale references in TRACKED files**
 
 ```bash
 # (a) absolute paths to the OLD (pre-move) locations of the five folders:
-git grep -n -E "optimal_control/(lambert|earth_elliptic_to_geo|lowThrust_GTO_tulip|NLP_lowThrust_GTO_tulip)/" -- '*.m' '*.sh' | \
+git grep -n -E "optimal_control/(lambert|earth_elliptic_to_geo|lowThrust_GTO_tulip|GTO_tulip)/" -- '*.m' '*.sh' | \
   grep -v "optimal_control/orbit_transfer/"
 # (b) relative refs to the OLD orbit_transfer tutorial content:
 git grep -n -E "\.\./\.\./orbit_transfer/" -- '*.m' '*.md'
@@ -228,9 +228,9 @@ Expected: **no output** from either (all repointed). Any line that appears is a 
 - [ ] **Step 4: Commit**
 
 ```bash
-git add orbit_transfer/NLP_lowThrust_GTO_tulip/sundman_minfuel/certify_minfuel_pmp.m \
-        orbit_transfer/NLP_lowThrust_GTO_tulip/sundman_minfuel/TIER1_PMP_CERTIFICATION_SCOPE.md \
-        orbit_transfer/NLP_lowThrust_GTO_tulip/PSR/run_psr.m
+git add orbit_transfer/GTO_tulip/sundman_minfuel/certify_minfuel_pmp.m \
+        orbit_transfer/GTO_tulip/sundman_minfuel/TIER1_PMP_CERTIFICATION_SCOPE.md \
+        orbit_transfer/GTO_tulip/PSR/run_psr.m
 git status --short          # confirm ONLY these three edited files are staged
 git commit -m "refactor(docs): repoint cross-folder links after orbit_transfer consolidation
 
@@ -263,9 +263,9 @@ orbit_transfer/                  # top-level container: all orbit-transfer work
 ├── earth_elliptic_to_geo/       # GTO->GEO min-fuel (HMG-2004 direct reproduction)
 ├── earth_elliptic_to_geo_CR3BP/ # (stub) CR3BP variant
 ├── lowThrust_GTO_tulip/         # CR3BP GTO->tulip, indirect
-└── NLP_lowThrust_GTO_tulip/     # CR3BP GTO->tulip, direct NLP
+└── GTO_tulip/     # CR3BP GTO->tulip, direct NLP
 ```
-Update any prose paths in `CLAUDE.md` that name these folders at the old top level (e.g. ``` `NLP_lowThrust_GTO_tulip/...` ``` → ``` `orbit_transfer/NLP_lowThrust_GTO_tulip/...` ```).
+Update any prose paths in `CLAUDE.md` that name these folders at the old top level (e.g. ``` `GTO_tulip/...` ``` → ``` `orbit_transfer/GTO_tulip/...` ```).
 
 - [ ] **Step 2: Note the hub `CLAUDE.md`**
 
@@ -283,7 +283,7 @@ ls orbit_transfer/                  # min_energy_tutorial + the 5
 git status --short                  # only intended changes staged/committed; no stray deletes
 ```
 Then a MATLAB cross-check that the two path-sensitive folders still work post-move:
-Run: `/Applications/MATLAB_R2025b.app/bin/matlab -batch "cd('/Users/msc/Desktop/optimal_control/orbit_transfer/earth_elliptic_to_geo'); setup_paths; kepler_lt_params(10,1500,2000); cd('/Users/msc/Desktop/optimal_control/orbit_transfer/NLP_lowThrust_GTO_tulip/ms_band'); setup_paths; assert(exist('lt_pmp_eom_minfuel','file')==2); disp('POST-MOVE SMOKE PASS')"`
+Run: `/Applications/MATLAB_R2025b.app/bin/matlab -batch "cd('/Users/msc/Desktop/optimal_control/orbit_transfer/earth_elliptic_to_geo'); setup_paths; kepler_lt_params(10,1500,2000); cd('/Users/msc/Desktop/optimal_control/orbit_transfer/GTO_tulip/ms_band'); setup_paths; assert(exist('lt_pmp_eom_minfuel','file')==2); disp('POST-MOVE SMOKE PASS')"`
 Expected: `POST-MOVE SMOKE PASS`.
 
 - [ ] **Step 4: Commit the docs**

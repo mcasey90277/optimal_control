@@ -40,7 +40,7 @@ rotating Earth-Moon CR3BP frame.
 ## Comparison movies — regenerate
 
 ```matlab
-cd optimal_control/orbit_transfer/NLP_lowThrust_GTO_tulip/movie
+cd optimal_control/orbit_transfer/GTO_tulip/movie
 gen_compare_data            % assembles compare_data.mat from the min-fuel
                             %  bundle (min-time + tulip) + energy_pipeline.mat
 animate_energy_solo('movie')   % -> minenergy_solution.mp4 + .gif
@@ -54,7 +54,7 @@ see `../MIN_ENERGY_NOTES.md`.
 ## Regenerate
 
 ```matlab
-cd optimal_control/orbit_transfer/NLP_lowThrust_GTO_tulip/movie
+cd optimal_control/orbit_transfer/GTO_tulip/movie
 gen_movie_data      % re-solves: min-time spiral + min-fuel NLP leg (N=3000)
                     %  -> minfuel_movie_data.mat   (a few minutes)
 animate_minfuel('preview')   % three stills (early / switch / late)

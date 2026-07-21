@@ -33,7 +33,7 @@ optimal_control/
 │   ├── lowThrust_GTO_tulip/     # CR3BP min-time GTO->tulip: theory note + guided
 │   │                            #   tutorial + indirect (PMP shooting, complex-step)
 │   │                            #   for min-time/energy/fuel + mytry/
-│   └── NLP_lowThrust_GTO_tulip/ # Direct-NLP solvers: min-time/energy/fuel, cone-
+│   └── GTO_tulip/ # Direct-NLP solvers: min-time/energy/fuel, cone-
 │                                #   elimination, Hermite-Simpson, CasADi+IPOPT.
 │                                #   Min-fuel CAMPAIGN record + next steps in
 │                                #   LOW_THRUST_MINFUEL_CAMPAIGN.md (min-energy is

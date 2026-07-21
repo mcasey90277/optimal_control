@@ -72,7 +72,7 @@ test — later found rank-deficient in the λ_m gauge and dropped as a gate, see
 ## How to run
 
 ```matlab
-cd NLP_lowThrust_GTO_tulip/ifs
+cd GTO_tulip/ifs
 setup_paths();
 test_ifs_residual; test_ifs_jacobian; test_ifs_seed   % fast, seconds
 

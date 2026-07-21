@@ -1,4 +1,4 @@
-# NLP_lowThrust_GTO_tulip — direct min-time/energy/fuel GTO→tulip solvers
+# GTO_tulip — direct min-time/energy/fuel GTO→tulip solvers
 
 Direct (collocation NLP) solvers for the low-thrust GTO → south-pole tulip
 transfer in the Earth–Moon CR3BP (15 kg, 25 mN, Isp 2100 s, ~40-rev spiral).

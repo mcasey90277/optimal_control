@@ -1,4 +1,4 @@
-# Code Cleanup & Reorganization Plan — NLP_lowThrust_GTO_tulip
+# Code Cleanup & Reorganization Plan — GTO_tulip
 
 **Date:** 2026-07-09. **Status:** PLAN — not yet executed.
 **Companion docs:** `HONEST_EVALUATION_DV_TF_FRONT.md` (why: §5 code-organization
@@ -48,7 +48,7 @@ terminal) is well-organized — own campaign doc + unit tests. Model to follow.
 ## Target layout
 
 ```
-NLP_lowThrust_GTO_tulip/
+GTO_tulip/
 ├── README.md                      # rewritten: map + entry points
 ├── LOW_THRUST_MINFUEL_CAMPAIGN.md # history (stays)
 ├── HONEST_EVALUATION_DV_TF_FRONT.md

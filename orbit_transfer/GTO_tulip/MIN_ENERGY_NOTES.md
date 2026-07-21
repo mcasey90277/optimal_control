@@ -20,7 +20,7 @@ Indirect (PMP shooting), `lowThrust_GTO_tulip/`:
 - `solve_energy_indirect.m` — lsqnonlin Levenberg-Marquardt, single solve
   (no eps-homotopy — the control is already smooth).
 
-Direct (collocation NLP), `NLP_lowThrust_GTO_tulip/`:
+Direct (collocation NLP), `GTO_tulip/`:
 - `solve_energy_nlp.m`               — fmincon interior-point; objective
   int 1/2 s^2 dt (trapezoidal, analytic sparse gradient); REUSES the
   verified min-fuel transcription (`lt_dynamics_throttle`,

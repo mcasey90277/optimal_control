@@ -102,7 +102,7 @@ duals (e.g. a `results/minfuel/*_en.mat`) may be substituted via `seedFile`.
 
 ## 4. Components
 
-New self-contained folder `NLP_lowThrust_GTO_tulip/sundman_minfuel/refine/`.
+New self-contained folder `GTO_tulip/sundman_minfuel/refine/`.
 Each file has the standard commented header (purpose, inputs w/ sizes, outputs
 w/ sizes, references).
 

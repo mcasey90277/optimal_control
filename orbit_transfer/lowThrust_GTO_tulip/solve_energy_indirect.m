@@ -8,7 +8,7 @@ function [lamSol, resNorm, flag] = solve_energy_indirect(rv0, m0, rvf, tf, lamGu
 % The remaining difficulty on the full multi-revolution spiral is the
 % integrator sensitivity (~40 perigee passes), the same wall the min-time
 % shooter faced; a covector-mapped seed from the direct solution is the
-% robust source (see NLP_lowThrust_GTO_tulip driver).
+% robust source (see GTO_tulip driver).
 %
 % INPUTS:
 %   rv0      - initial position/velocity (ND) [1x6]

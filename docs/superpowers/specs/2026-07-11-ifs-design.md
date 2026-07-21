@@ -210,7 +210,7 @@ rungs 2–3 rely on.
 
 ## 8. Module structure
 
-New folder `NLP_lowThrust_GTO_tulip/ifs/`:
+New folder `GTO_tulip/ifs/`:
 
 | file | role |
 |---|---|

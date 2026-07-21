@@ -9,7 +9,7 @@ function out = run_gto_tulip_minfuel(lamSeed, tfFactor, makePlot)
 % min-fuel lambda_r/lambda_v ratio differs; shooting stalls at
 % ||R|| ~ 0.4-1 from any such seed). Obtain the seed from the direct
 % solution's KKT multipliers via the covector mapping -- see
-% NLP_lowThrust_GTO_tulip/NLP_lowThrust_GTO_Tulip_minfuel.m, which runs
+% GTO_tulip/NLP_lowThrust_GTO_Tulip_minfuel.m, which runs
 % the full direct-then-indirect pipeline and calls this driver's
 % machinery.
 %

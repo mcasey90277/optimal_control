@@ -183,7 +183,7 @@ all switches with one β to ~1%.
 
 ```matlab
 % Switching-function sign law from discrete costates (route: empirical scale).
-addpath('/Users/msc/Desktop/optimal_control/orbit_transfer/NLP_lowThrust_GTO_tulip/sundman_minfuel');
+addpath('/Users/msc/Desktop/optimal_control/orbit_transfer/GTO_tulip/sundman_minfuel');
 p = cr3bp_lt_params(0.025,15,2100);  c = p.c;
 S = load('tf_sweep_results.mat');
 for e = 1:numel(S.results)

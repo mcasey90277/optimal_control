@@ -362,7 +362,7 @@ numbers:
 
 - **CR3BP / third-body / lunar gravity.** This pipeline is strictly two-body
   Earth-centered — that is the paper's problem. The CR3BP + Moon low-thrust work
-  lives in `../NLP_lowThrust_GTO_tulip/` and is a separate campaign; do not add
+  lives in `../GTO_tulip/` and is a separate campaign; do not add
   third-body terms to `lt_mee_rhs.m`.
 - **Full SPICE ephemeris / perturbations (J2, drag, SRP).** The paper is a clean
   two-body + thrust benchmark; keep it that way unless a study demands otherwise.

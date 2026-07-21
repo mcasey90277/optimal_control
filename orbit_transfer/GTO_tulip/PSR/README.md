@@ -13,7 +13,7 @@ PMP certificate  →  control movie
 ## How to run
 
 ```matlab
-cd NLP_lowThrust_GTO_tulip/PSR
+cd GTO_tulip/PSR
 edit run_psr          % set factor + seed + knobs in section 1
 run_psr
 ```

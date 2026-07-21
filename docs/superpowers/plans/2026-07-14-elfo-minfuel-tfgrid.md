@@ -10,7 +10,7 @@
 
 ## Global Constraints
 
-- **Working directory:** `/Users/msc/Desktop/optimal_control/NLP_lowThrust_GTO_tulip` (call it `$ROOT`). Branch `ifs-retarget`; `main` = latest (FF + push both after commits).
+- **Working directory:** `/Users/msc/Desktop/optimal_control/GTO_tulip` (call it `$ROOT`). Branch `ifs-retarget`; `main` = latest (FF + push both after commits).
 - **Drive everything by `factor = tf/tfMin`**, `tfMin = cfg.tfMin = 6.2906939607` ND (tulip min-time, a shared reference scale — ELFO min-time is unsolved and out of scope). Seeds are **factor-keyed** `energy_elfo_f<round(1000·factor)>.mat` (e.g. factor 1.20 → `energy_elfo_f1200.mat`), mirroring PSR's `energy_f####.mat`.
 - **MATLAB is R2025b only:** `/Applications/MATLAB_R2025b.app/bin/matlab` (R2025a → Licensing Error 9).
 - **Process isolation is mandatory** in the batch: one `matlab -batch` per factor (uncatchable CasADi/IPOPT MEX FATAL, ~1 in 10 solves, kills only that factor).
@@ -121,13 +121,13 @@ In the header, change the two mentions of the old name to the new one:
 Run (R2025b):
 
 ```
-/Applications/MATLAB_R2025b.app/bin/matlab -batch "cd('/Users/msc/Desktop/optimal_control/NLP_lowThrust_GTO_tulip/elfo'); setup_paths; assert(isempty(checkcode('gen_elfo_energy_tfsweep.m','-struct')) || true); cfg=minfuel_config; f=1.20; assert(strcmp(sprintf('energy_elfo_f%04d.mat',round(1000*f)),'energy_elfo_f1200.mat')); disp('OK naming + parse')" 2>&1 | grep -v "Home License\|personal use\|academic, research\|organizational use"
+/Applications/MATLAB_R2025b.app/bin/matlab -batch "cd('/Users/msc/Desktop/optimal_control/GTO_tulip/elfo'); setup_paths; assert(isempty(checkcode('gen_elfo_energy_tfsweep.m','-struct')) || true); cfg=minfuel_config; f=1.20; assert(strcmp(sprintf('energy_elfo_f%04d.mat',round(1000*f)),'energy_elfo_f1200.mat')); disp('OK naming + parse')" 2>&1 | grep -v "Home License\|personal use\|academic, research\|organizational use"
 ```
 
 Expected: `OK naming + parse`. Then confirm no stale name remains:
 
 ```bash
-cd /Users/msc/Desktop/optimal_control/NLP_lowThrust_GTO_tulip
+cd /Users/msc/Desktop/optimal_control/GTO_tulip
 grep -rn "energy_elfo_tf" elfo/ && echo "FAIL: stale energy_elfo_tf name remains" || echo "OK: no energy_elfo_tf refs"
 ```
 
@@ -136,7 +136,7 @@ Expected: `OK: no energy_elfo_tf refs`.
 - [ ] **Step 7: Commit**
 
 ```bash
-cd /Users/msc/Desktop/optimal_control/NLP_lowThrust_GTO_tulip
+cd /Users/msc/Desktop/optimal_control/GTO_tulip
 git add elfo/gen_elfo_energy_tfsweep.m elfo/run_elfo_minfuel.m elfo/gen_elfo_minfuel.m
 git commit -m "elfo phase1: factor-key the energy seeds (energy_elfo_f####) for PSR parity"
 ```
@@ -270,7 +270,7 @@ end
 This exercises the row-building, save, and resumability WITHOUT a solve, by asking for a factor that has no seed:
 
 ```
-/Applications/MATLAB_R2025b.app/bin/matlab -batch "cd('/Users/msc/Desktop/optimal_control/NLP_lowThrust_GTO_tulip/elfo'); setup_paths; r = elfo_run_one(9.99, struct('epsMin',0)); assert(~r.ok && ~isempty(r.err)); assert(isfile('results/elfo_result_f9990_minEps0.mat')); r2 = elfo_run_one(9.99, struct('epsMin',0)); assert(isequal(r,r2)); delete('results/elfo_result_f9990_minEps0.mat'); disp('OK run_one error-path + resume + fields')" 2>&1 | grep -v "Home License\|personal use\|academic, research\|organizational use"
+/Applications/MATLAB_R2025b.app/bin/matlab -batch "cd('/Users/msc/Desktop/optimal_control/GTO_tulip/elfo'); setup_paths; r = elfo_run_one(9.99, struct('epsMin',0)); assert(~r.ok && ~isempty(r.err)); assert(isfile('results/elfo_result_f9990_minEps0.mat')); r2 = elfo_run_one(9.99, struct('epsMin',0)); assert(isequal(r,r2)); delete('results/elfo_result_f9990_minEps0.mat'); disp('OK run_one error-path + resume + fields')" 2>&1 | grep -v "Home License\|personal use\|academic, research\|organizational use"
 ```
 
 Expected: `OK run_one error-path + resume + fields` (no seed → `ok=false`, row written; second call loads the identical row = resumability; then the temp row file is cleaned up).
@@ -278,7 +278,7 @@ Expected: `OK run_one error-path + resume + fields` (no seed → `ok=false`, row
 - [ ] **Step 3: Commit**
 
 ```bash
-cd /Users/msc/Desktop/optimal_control/NLP_lowThrust_GTO_tulip
+cd /Users/msc/Desktop/optimal_control/GTO_tulip
 git add elfo/elfo_run_one.m
 git commit -m "elfo phase2: elfo_run_one (per-factor min-fuel batch unit, result row)"
 ```
@@ -307,7 +307,7 @@ git commit -m "elfo phase2: elfo_run_one (per-factor min-fuel batch unit, result
 # of PSR/psr_batch.sh.
 #
 # ============================ HOW TO RUN ============================
-#   cd /Users/msc/Desktop/optimal_control/NLP_lowThrust_GTO_tulip/elfo
+#   cd /Users/msc/Desktop/optimal_control/GTO_tulip/elfo
 #   chmod +x elfo_batch.sh                        # once
 #   ./elfo_batch.sh <epsMin> <factor1> [factor2 ...]
 #   ./elfo_batch.sh <epsMin> energy               # every factor with an energy seed
@@ -400,7 +400,7 @@ echo "log: $LOG"
 - [ ] **Step 2: Make executable + syntax check + arg/discovery dry-run**
 
 ```bash
-cd /Users/msc/Desktop/optimal_control/NLP_lowThrust_GTO_tulip/elfo
+cd /Users/msc/Desktop/optimal_control/GTO_tulip/elfo
 chmod +x elfo_batch.sh
 zsh -n elfo_batch.sh && echo "OK zsh syntax"
 # usage on too-few args:
@@ -418,7 +418,7 @@ Expected: `OK zsh syntax`, `OK usage-exit`, and `discovered: 1.150 1.200`. (Only
 - [ ] **Step 3: Commit**
 
 ```bash
-cd /Users/msc/Desktop/optimal_control/NLP_lowThrust_GTO_tulip
+cd /Users/msc/Desktop/optimal_control/GTO_tulip
 git add elfo/elfo_batch.sh
 git commit -m "elfo phase2: elfo_batch.sh (crash-robust per-factor min-fuel sweep)"
 ```
@@ -495,7 +495,7 @@ end
 Write a fake result row, collect it, confirm the table + saved summary:
 
 ```
-/Applications/MATLAB_R2025b.app/bin/matlab -batch "cd('/Users/msc/Desktop/optimal_control/NLP_lowThrust_GTO_tulip/elfo'); setup_paths; if ~exist('results','dir'), mkdir('results'); end; row = struct('factor',1.20,'tf',7.5488,'tf_days',33.46,'ok',true,'epsReached',true,'epsFloor',NaN,'dV',3.24,'prop',2.18,'switches',34,'edge',0.98,'defect',5.7e-15,'ipoptStatus','Solve_Succeeded','dataFile','x.mat','err',''); save('results/elfo_result_f1200_minEps0.mat','row'); res = elfo_collect_summary(0); assert(numel(res)==1 && res.switches==34); assert(isfile('results/elfo_batch_summary_minEps0.mat')); delete('results/elfo_result_f1200_minEps0.mat','results/elfo_batch_summary_minEps0.mat'); disp('OK collect_summary')" 2>&1 | grep -v "Home License\|personal use\|academic, research\|organizational use"
+/Applications/MATLAB_R2025b.app/bin/matlab -batch "cd('/Users/msc/Desktop/optimal_control/GTO_tulip/elfo'); setup_paths; if ~exist('results','dir'), mkdir('results'); end; row = struct('factor',1.20,'tf',7.5488,'tf_days',33.46,'ok',true,'epsReached',true,'epsFloor',NaN,'dV',3.24,'prop',2.18,'switches',34,'edge',0.98,'defect',5.7e-15,'ipoptStatus','Solve_Succeeded','dataFile','x.mat','err',''); save('results/elfo_result_f1200_minEps0.mat','row'); res = elfo_collect_summary(0); assert(numel(res)==1 && res.switches==34); assert(isfile('results/elfo_batch_summary_minEps0.mat')); delete('results/elfo_result_f1200_minEps0.mat','results/elfo_batch_summary_minEps0.mat'); disp('OK collect_summary')" 2>&1 | grep -v "Home License\|personal use\|academic, research\|organizational use"
 ```
 
 Expected: the printed 1-row map + `OK collect_summary`. (Cleans up its two temp files; do not delete any real result rows.)
@@ -503,7 +503,7 @@ Expected: the printed 1-row map + `OK collect_summary`. (Cleans up its two temp 
 - [ ] **Step 3: Commit**
 
 ```bash
-cd /Users/msc/Desktop/optimal_control/NLP_lowThrust_GTO_tulip
+cd /Users/msc/Desktop/optimal_control/GTO_tulip
 git add elfo/elfo_collect_summary.m
 git commit -m "elfo phase2: elfo_collect_summary (assemble the min-fuel tf-grid map)"
 ```
@@ -523,13 +523,13 @@ git commit -m "elfo phase2: elfo_collect_summary (assemble the min-fuel tf-grid 
 Run a short band around the base seed (needs `energy_elfo_freetf.mat` present in `elfo/results`). Background it — energy solves are minutes each:
 
 ```
-/Applications/MATLAB_R2025b.app/bin/matlab -batch "cd('/Users/msc/Desktop/optimal_control/NLP_lowThrust_GTO_tulip/elfo'); setup_paths; gen_elfo_energy_tfsweep(struct('factorLo',1.15,'factorHi',1.25,'factorStep',0.05));" 2>&1 | grep -v "Home License\|personal use\|academic, research\|organizational use"
+/Applications/MATLAB_R2025b.app/bin/matlab -batch "cd('/Users/msc/Desktop/optimal_control/GTO_tulip/elfo'); setup_paths; gen_elfo_energy_tfsweep(struct('factorLo',1.15,'factorHi',1.25,'factorStep',0.05));" 2>&1 | grep -v "Home License\|personal use\|academic, research\|organizational use"
 ```
 
 Expected: banks `energy_elfo_f1150.mat`, `energy_elfo_f1200.mat`, `energy_elfo_f1250.mat` (each a converged energy solve) + `energy_elfo_tfgrid.mat`. Confirm:
 
 ```bash
-ls /Users/msc/Desktop/optimal_control/NLP_lowThrust_GTO_tulip/elfo/results/energy_elfo_f1*.mat
+ls /Users/msc/Desktop/optimal_control/GTO_tulip/elfo/results/energy_elfo_f1*.mat
 ```
 
 - [ ] **Step 2: Batch two factors through the fuel homotopy (plumbing exercise)**
@@ -537,7 +537,7 @@ ls /Users/msc/Desktop/optimal_control/NLP_lowThrust_GTO_tulip/elfo/results/energ
 Use `epsMin=0.5` (smooth — fewer homotopy steps, faster) to exercise the full seed→solve→row→summary path without the long bang-bang tail:
 
 ```bash
-cd /Users/msc/Desktop/optimal_control/NLP_lowThrust_GTO_tulip/elfo
+cd /Users/msc/Desktop/optimal_control/GTO_tulip/elfo
 chmod +x elfo_batch.sh
 ./elfo_batch.sh 0.5 1.20 1.25
 ```
@@ -547,7 +547,7 @@ Expected: two factors run in separate processes; `elfo/results/elfo_result_f1200
 - [ ] **Step 3: Rebuild the summary standalone**
 
 ```
-/Applications/MATLAB_R2025b.app/bin/matlab -batch "cd('/Users/msc/Desktop/optimal_control/NLP_lowThrust_GTO_tulip/elfo'); setup_paths; res = elfo_collect_summary(0.5); fprintf('rows=%d\n', numel(res));" 2>&1 | grep -v "Home License\|personal use\|academic, research\|organizational use"
+/Applications/MATLAB_R2025b.app/bin/matlab -batch "cd('/Users/msc/Desktop/optimal_control/GTO_tulip/elfo'); setup_paths; res = elfo_collect_summary(0.5); fprintf('rows=%d\n', numel(res));" 2>&1 | grep -v "Home License\|personal use\|academic, research\|organizational use"
 ```
 
 Expected: reprints the map and reports `rows=2` (or however many factors survived).

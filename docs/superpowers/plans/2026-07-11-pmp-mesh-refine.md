@@ -27,8 +27,8 @@ Spec: `docs/superpowers/specs/2026-07-11-pmp-mesh-refine-design.md`.
 ### Task 1: PMP switch-localization indicator
 
 **Files:**
-- Create: `NLP_lowThrust_GTO_tulip/sundman_minfuel/refine/pmp_refine_indicator.m`
-- Test: `NLP_lowThrust_GTO_tulip/sundman_minfuel/refine/test_pmp_refine_indicator.m`
+- Create: `GTO_tulip/sundman_minfuel/refine/pmp_refine_indicator.m`
+- Test: `GTO_tulip/sundman_minfuel/refine/test_pmp_refine_indicator.m`
 
 **Interfaces:**
 - Consumes: `ms_band/sms_seed_duals(matFile, M, epsEval, mode) → [Zseed, prob, info]` where `info.tauN [1×nN]`, `info.Y16 [16×nN]` (rows 1:8 states `[r;v;m;t]`, 9:11 λ_r, 12:14 λ_v, 15 λ_m, 16 λ_t), `info.X [8×nN]`, `info.U [4×nN]`, `info.beta`, `info.spreadPct`; `prob.c`, `prob.Tmax`, `prob.muStar`, `prob.pSund`. Consumes `ms_band/sms_eom(σ, Y, Tmax, c, muStar, epsSmooth, pSund) → [dY, Ht, S, u]`.
@@ -78,7 +78,7 @@ end
 
 Run:
 ```bash
-cd /Users/msc/Desktop/optimal_control/NLP_lowThrust_GTO_tulip/sundman_minfuel/refine
+cd /Users/msc/Desktop/optimal_control/GTO_tulip/sundman_minfuel/refine
 /Applications/MATLAB_R2025b.app/bin/matlab -batch "cd('$(pwd)'); test_pmp_refine_indicator" 2>&1 | grep -v -i "home license\|personal use\|academic, research\|organizational use"
 ```
 Expected: FAIL with `Unrecognized function or variable 'pmp_refine_indicator'`.
@@ -186,7 +186,7 @@ end
 
 Run:
 ```bash
-cd /Users/msc/Desktop/optimal_control/NLP_lowThrust_GTO_tulip/sundman_minfuel/refine
+cd /Users/msc/Desktop/optimal_control/GTO_tulip/sundman_minfuel/refine
 /Applications/MATLAB_R2025b.app/bin/matlab -batch "cd('$(pwd)'); test_pmp_refine_indicator" 2>&1 | grep -v -i "home license\|personal use\|academic, research\|organizational use"
 ```
 Expected: `ALL PASS (nSwitch=..., betaSpread=0.4...%, HresMax=..., nViol=...)`. (betaSpread ≈ 0.45% for `legacy_ms_f1120` mode-'d' per the campaign record.)
@@ -195,7 +195,7 @@ Expected: `ALL PASS (nSwitch=..., betaSpread=0.4...%, HresMax=..., nViol=...)`. 
 
 ```bash
 cd /Users/msc/Desktop/optimal_control
-git add NLP_lowThrust_GTO_tulip/sundman_minfuel/refine/pmp_refine_indicator.m NLP_lowThrust_GTO_tulip/sundman_minfuel/refine/test_pmp_refine_indicator.m
+git add GTO_tulip/sundman_minfuel/refine/pmp_refine_indicator.m GTO_tulip/sundman_minfuel/refine/test_pmp_refine_indicator.m
 git commit -m "refine: PMP switch-localization indicator + passive Hamiltonian diagnostic"
 ```
 
@@ -204,8 +204,8 @@ git commit -m "refine: PMP switch-localization indicator + passive Hamiltonian d
 ### Task 2: σ-mesh refiner
 
 **Files:**
-- Create: `NLP_lowThrust_GTO_tulip/sundman_minfuel/refine/refine_sigma.m`
-- Test: `NLP_lowThrust_GTO_tulip/sundman_minfuel/refine/test_refine_sigma.m`
+- Create: `GTO_tulip/sundman_minfuel/refine/refine_sigma.m`
+- Test: `GTO_tulip/sundman_minfuel/refine/test_refine_sigma.m`
 
 **Interfaces:**
 - Consumes: `score [1×N]` from Task 1.
@@ -254,7 +254,7 @@ end
 
 Run:
 ```bash
-cd /Users/msc/Desktop/optimal_control/NLP_lowThrust_GTO_tulip/sundman_minfuel/refine
+cd /Users/msc/Desktop/optimal_control/GTO_tulip/sundman_minfuel/refine
 /Applications/MATLAB_R2025b.app/bin/matlab -batch "cd('$(pwd)'); test_refine_sigma" 2>&1 | grep -v -i "home license\|personal use\|academic, research\|organizational use"
 ```
 Expected: FAIL with `Unrecognized function or variable 'refine_sigma'`.
@@ -321,7 +321,7 @@ end
 
 Run:
 ```bash
-cd /Users/msc/Desktop/optimal_control/NLP_lowThrust_GTO_tulip/sundman_minfuel/refine
+cd /Users/msc/Desktop/optimal_control/GTO_tulip/sundman_minfuel/refine
 /Applications/MATLAB_R2025b.app/bin/matlab -batch "cd('$(pwd)'); test_refine_sigma" 2>&1 | grep -v -i "home license\|personal use\|academic, research\|organizational use"
 ```
 Expected: `ALL PASS`.
@@ -330,7 +330,7 @@ Expected: `ALL PASS`.
 
 ```bash
 cd /Users/msc/Desktop/optimal_control
-git add NLP_lowThrust_GTO_tulip/sundman_minfuel/refine/refine_sigma.m NLP_lowThrust_GTO_tulip/sundman_minfuel/refine/test_refine_sigma.m
+git add GTO_tulip/sundman_minfuel/refine/refine_sigma.m GTO_tulip/sundman_minfuel/refine/test_refine_sigma.m
 git commit -m "refine: top-K interval bisection with hFloor/maxAdd guards"
 ```
 
@@ -339,8 +339,8 @@ git commit -m "refine: top-K interval bisection with hFloor/maxAdd guards"
 ### Task 3: No-resample warm-start builder
 
 **Files:**
-- Create: `NLP_lowThrust_GTO_tulip/sundman_minfuel/refine/warmstart_on_mesh.m`
-- Test: `NLP_lowThrust_GTO_tulip/sundman_minfuel/refine/test_warmstart_on_mesh.m`
+- Create: `GTO_tulip/sundman_minfuel/refine/warmstart_on_mesh.m`
+- Test: `GTO_tulip/sundman_minfuel/refine/test_warmstart_on_mesh.m`
 
 **Interfaces:**
 - Consumes: `out` (with `out.X [8×nN]`, `out.U [4×nN]`), `sigma [nN×1]`, `sigmaNew [nN'×1]`, `isNew [nN'×1] logical` from Tasks 1–2.
@@ -392,7 +392,7 @@ end
 
 Run:
 ```bash
-cd /Users/msc/Desktop/optimal_control/NLP_lowThrust_GTO_tulip/sundman_minfuel/refine
+cd /Users/msc/Desktop/optimal_control/GTO_tulip/sundman_minfuel/refine
 /Applications/MATLAB_R2025b.app/bin/matlab -batch "cd('$(pwd)'); test_warmstart_on_mesh" 2>&1 | grep -v -i "home license\|personal use\|academic, research\|organizational use"
 ```
 Expected: FAIL with `Unrecognized function or variable 'warmstart_on_mesh'`.
@@ -457,7 +457,7 @@ end
 
 Run:
 ```bash
-cd /Users/msc/Desktop/optimal_control/NLP_lowThrust_GTO_tulip/sundman_minfuel/refine
+cd /Users/msc/Desktop/optimal_control/GTO_tulip/sundman_minfuel/refine
 /Applications/MATLAB_R2025b.app/bin/matlab -batch "cd('$(pwd)'); test_warmstart_on_mesh" 2>&1 | grep -v -i "home license\|personal use\|academic, research\|organizational use"
 ```
 Expected: `ALL PASS`.
@@ -466,7 +466,7 @@ Expected: `ALL PASS`.
 
 ```bash
 cd /Users/msc/Desktop/optimal_control
-git add NLP_lowThrust_GTO_tulip/sundman_minfuel/refine/warmstart_on_mesh.m NLP_lowThrust_GTO_tulip/sundman_minfuel/refine/test_warmstart_on_mesh.m
+git add GTO_tulip/sundman_minfuel/refine/warmstart_on_mesh.m GTO_tulip/sundman_minfuel/refine/test_warmstart_on_mesh.m
 git commit -m "refine: no-resample warm-start builder (step-throttle across switches)"
 ```
 
@@ -475,8 +475,8 @@ git commit -m "refine: no-resample warm-start builder (step-throttle across swit
 ### Task 4: Seed preparation (regenerate duals)
 
 **Files:**
-- Create: `NLP_lowThrust_GTO_tulip/sundman_minfuel/refine/prep_refine_seed.m`
-- Test: `NLP_lowThrust_GTO_tulip/sundman_minfuel/refine/test_prep_refine_seed.m`
+- Create: `GTO_tulip/sundman_minfuel/refine/prep_refine_seed.m`
+- Test: `GTO_tulip/sundman_minfuel/refine/test_prep_refine_seed.m`
 
 **Interfaces:**
 - Consumes: `sundman_minfuel/casadi_minfuel_sundman(sigma, tf, rv0, rvf, Tmax, c, muStar, X0, U0, tauf0, pSund, maxIter, epsilon, warmTight) → out` (with `out.lamDef [8×N]`); `sundman_minfuel/cr3bp_lt_params`.
@@ -516,7 +516,7 @@ end
 
 Run:
 ```bash
-cd /Users/msc/Desktop/optimal_control/NLP_lowThrust_GTO_tulip/sundman_minfuel/refine
+cd /Users/msc/Desktop/optimal_control/GTO_tulip/sundman_minfuel/refine
 /Applications/MATLAB_R2025b.app/bin/matlab -batch "cd('$(pwd)'); test_prep_refine_seed" 2>&1 | grep -v -i "home license\|personal use\|academic, research\|organizational use"
 ```
 Expected: FAIL with `Unrecognized function or variable 'prep_refine_seed'`.
@@ -574,7 +574,7 @@ end
 
 Run:
 ```bash
-cd /Users/msc/Desktop/optimal_control/NLP_lowThrust_GTO_tulip/sundman_minfuel/refine
+cd /Users/msc/Desktop/optimal_control/GTO_tulip/sundman_minfuel/refine
 /Applications/MATLAB_R2025b.app/bin/matlab -batch "cd('$(pwd)'); test_prep_refine_seed" 2>&1 | grep -v -i "home license\|personal use\|academic, research\|organizational use"
 ```
 Expected: `ALL PASS (switches=25, defect=...e-14)` (or the certified count; a re-solve may report the near-graze-adjudicated 24–25). Delete any stray `fort.6`.
@@ -583,8 +583,8 @@ Expected: `ALL PASS (switches=25, defect=...e-14)` (or the certified count; a re
 
 ```bash
 cd /Users/msc/Desktop/optimal_control
-rm -f NLP_lowThrust_GTO_tulip/sundman_minfuel/refine/fort.6
-git add NLP_lowThrust_GTO_tulip/sundman_minfuel/refine/prep_refine_seed.m NLP_lowThrust_GTO_tulip/sundman_minfuel/refine/test_prep_refine_seed.m
+rm -f GTO_tulip/sundman_minfuel/refine/fort.6
+git add GTO_tulip/sundman_minfuel/refine/prep_refine_seed.m GTO_tulip/sundman_minfuel/refine/test_prep_refine_seed.m
 git commit -m "refine: seed-prep helper (regenerate KKT duals via eps=0 re-solve)"
 ```
 
@@ -593,8 +593,8 @@ git commit -m "refine: seed-prep helper (regenerate KKT duals via eps=0 re-solve
 ### Task 5: Refinement-loop driver + smoke run
 
 **Files:**
-- Create: `NLP_lowThrust_GTO_tulip/sundman_minfuel/refine/refine_loop.m`
-- Test: `NLP_lowThrust_GTO_tulip/sundman_minfuel/refine/test_refine_loop_smoke.m`
+- Create: `GTO_tulip/sundman_minfuel/refine/refine_loop.m`
+- Test: `GTO_tulip/sundman_minfuel/refine/test_refine_loop_smoke.m`
 
 **Interfaces:**
 - Consumes: `pmp_refine_indicator`, `refine_sigma`, `warmstart_on_mesh` (Tasks 1–3), `casadi_minfuel_sundman`, `cr3bp_lt_params`.
@@ -634,7 +634,7 @@ end
 
 Run:
 ```bash
-cd /Users/msc/Desktop/optimal_control/NLP_lowThrust_GTO_tulip/sundman_minfuel/refine
+cd /Users/msc/Desktop/optimal_control/GTO_tulip/sundman_minfuel/refine
 /Applications/MATLAB_R2025b.app/bin/matlab -batch "cd('$(pwd)'); test_refine_loop_smoke" 2>&1 | grep -v -i "home license\|personal use\|academic, research\|organizational use"
 ```
 Expected: FAIL with `Unrecognized function or variable 'refine_loop'`.
@@ -798,7 +798,7 @@ end
 
 Run:
 ```bash
-cd /Users/msc/Desktop/optimal_control/NLP_lowThrust_GTO_tulip/sundman_minfuel/refine
+cd /Users/msc/Desktop/optimal_control/GTO_tulip/sundman_minfuel/refine
 /Applications/MATLAB_R2025b.app/bin/matlab -batch "cd('$(pwd)'); test_refine_loop_smoke" 2>&1 | grep -v -i "home license\|personal use\|academic, research\|organizational use"
 ```
 Expected: `ALL PASS (rounds=..., final switches=..., maxMove=...)`. Delete any stray `fort.6`.
@@ -807,8 +807,8 @@ Expected: `ALL PASS (rounds=..., final switches=..., maxMove=...)`. Delete any s
 
 ```bash
 cd /Users/msc/Desktop/optimal_control
-rm -f NLP_lowThrust_GTO_tulip/sundman_minfuel/refine/fort.6
-git add NLP_lowThrust_GTO_tulip/sundman_minfuel/refine/refine_loop.m NLP_lowThrust_GTO_tulip/sundman_minfuel/refine/test_refine_loop_smoke.m
+rm -f GTO_tulip/sundman_minfuel/refine/fort.6
+git add GTO_tulip/sundman_minfuel/refine/refine_loop.m GTO_tulip/sundman_minfuel/refine/test_refine_loop_smoke.m
 git commit -m "refine: adaptive mesh-refinement loop driver + 1.12x smoke test"
 ```
 
@@ -817,9 +817,9 @@ git commit -m "refine: adaptive mesh-refinement loop driver + 1.12x smoke test"
 ### Task 6: Headline 1.15× run + results note
 
 **Files:**
-- Create: `NLP_lowThrust_GTO_tulip/sundman_minfuel/refine/run_headline_1p15.m`
-- Create: `NLP_lowThrust_GTO_tulip/sundman_minfuel/refine/RESULTS.md`
-- Create: `NLP_lowThrust_GTO_tulip/sundman_minfuel/refine/README.md`
+- Create: `GTO_tulip/sundman_minfuel/refine/run_headline_1p15.m`
+- Create: `GTO_tulip/sundman_minfuel/refine/RESULTS.md`
+- Create: `GTO_tulip/sundman_minfuel/refine/README.md`
 
 **Interfaces:**
 - Consumes: `prep_refine_seed`, `refine_loop` (Tasks 4–5).
@@ -869,7 +869,7 @@ end
 
 Run:
 ```bash
-cd /Users/msc/Desktop/optimal_control/NLP_lowThrust_GTO_tulip/sundman_minfuel/refine
+cd /Users/msc/Desktop/optimal_control/GTO_tulip/sundman_minfuel/refine
 /Applications/MATLAB_R2025b.app/bin/matlab -batch "cd('$(pwd)'); run_headline_1p15" 2>&1 | grep -v -i "home license\|personal use\|academic, research\|organizational use" | tee headline_run.log
 ```
 Expected: a per-round table; switch `maxMove` decreasing toward/below the round's local h, `dProp` within ~1e-4 kg, `nViol` non-increasing. This is the empirical result — record the actual numbers (do not fabricate).
@@ -886,8 +886,8 @@ Create `README.md`: one-paragraph purpose (point-4 prototype), the file map (`pm
 
 ```bash
 cd /Users/msc/Desktop/optimal_control
-rm -f NLP_lowThrust_GTO_tulip/sundman_minfuel/refine/fort.6
-git add NLP_lowThrust_GTO_tulip/sundman_minfuel/refine/run_headline_1p15.m NLP_lowThrust_GTO_tulip/sundman_minfuel/refine/RESULTS.md NLP_lowThrust_GTO_tulip/sundman_minfuel/refine/README.md NLP_lowThrust_GTO_tulip/sundman_minfuel/refine/refine_headline_1p15.png NLP_lowThrust_GTO_tulip/sundman_minfuel/refine/refine_history_headline_1p15.mat
+rm -f GTO_tulip/sundman_minfuel/refine/fort.6
+git add GTO_tulip/sundman_minfuel/refine/run_headline_1p15.m GTO_tulip/sundman_minfuel/refine/RESULTS.md GTO_tulip/sundman_minfuel/refine/README.md GTO_tulip/sundman_minfuel/refine/refine_headline_1p15.png GTO_tulip/sundman_minfuel/refine/refine_history_headline_1p15.mat
 git commit -m "refine: headline 1.15x demonstration + RESULTS/README"
 ```
 

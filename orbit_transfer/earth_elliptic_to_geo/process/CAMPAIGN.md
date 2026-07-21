@@ -14,7 +14,7 @@ satellite from a low, elliptic, 7°-inclined orbit (P=11625 km, e=0.75) to
 equatorial GEO (P=42165 km). The paper solves it **indirectly** (single
 shooting + PMP + energy→mass homotopy); this reproduction solves the same
 physics **directly** (Sundman-regularized trapezoidal collocation + CasADi/
-IPOPT), reusing the campaign architecture from `NLP_lowThrust_GTO_tulip/`.
+IPOPT), reusing the campaign architecture from `GTO_tulip/`.
 
 The paper's method **is** our method, done the other way:
 
@@ -288,7 +288,7 @@ variable), `mee_seed.m`, `run_mintime_mee.m`/`run_transfer_mee.m`/
 `run_ladder.m` (per-thrust drivers + ladder orchestrator), `interp_warmstart.m`
 (mesh-refine handoff, renormalizes RTN beta), `psr_mee_refine.m` +
 `psr_switch_score_mee.m` + `psr_refine_sigma_mee.m` (PSR ported from
-`NLP_lowThrust_GTO_tulip/PSR/`), `mee_dual_to_costate.m` + `mee_primer_switch.m`
+`GTO_tulip/PSR/`), `mee_dual_to_costate.m` + `mee_primer_switch.m`
 + `verify_pmp_mee.m` (PMP verifier, footnote 5), `fig_table3.m` +
 `fig_front_mee.m` (this section's deliverable figures).
 
@@ -392,6 +392,6 @@ door's own output (a default-endpoint 10 N run).
 ## Companions
 
 - Parent campaign (shared solver architecture, `sundman_minfuel` pattern):
-  `../NLP_lowThrust_GTO_tulip/`, esp. `LOW_THRUST_MINFUEL_CAMPAIGN.md`.
+  `../GTO_tulip/`, esp. `LOW_THRUST_MINFUEL_CAMPAIGN.md`.
 - Problem source: Haberkorn, Martinon & Gergaud, JGCD 27(6), 2004
   (`orbit_transfer/min_fuel_papers/Gergaud-Haberkorn-Martinon-JournalGuidance2004-preprint.pdf`).

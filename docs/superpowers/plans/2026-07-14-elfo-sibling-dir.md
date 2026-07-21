@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Consolidate the scattered GTO→ELFO direct min-fuel code into a self-contained `NLP_lowThrust_GTO_tulip/elfo/` sibling directory that mirrors PSR's role for the tulip target.
+**Goal:** Consolidate the scattered GTO→ELFO direct min-fuel code into a self-contained `GTO_tulip/elfo/` sibling directory that mirrors PSR's role for the tulip target.
 
 **Architecture:** A new `elfo/` deliverable directory holds every ELFO-specific file (solver, seed generators, drivers, endpoints, export/verify, movie). It references the two shared engine files (`cr3bp_lt_params`, `minfuel_config`) from `sundman_minfuel/` on the MATLAB path — single source of truth, no re-vendoring. A dedicated `elfo_movie.m` (copy+rename of the already-generalized `psr_movie`) removes the current `elfo→PSR` dependency. PSR and `min_time/` are untouched.
 
@@ -10,7 +10,7 @@
 
 ## Global Constraints
 
-- **Working directory:** `/Users/msc/Desktop/optimal_control/NLP_lowThrust_GTO_tulip` (call it `$ROOT`). Branch: `ifs-retarget`.
+- **Working directory:** `/Users/msc/Desktop/optimal_control/GTO_tulip` (call it `$ROOT`). Branch: `ifs-retarget`.
 - **Preserve history:** every relocation uses `git mv`, never copy+delete.
 - **Do NOT touch:** `PSR/` (except reading `psr_movie.m` to derive `elfo_movie.m`), `PSR/lib/`, `min_time/`, and the `cr3bp_lt_params.m` / `minfuel_config.m` masters in `sundman_minfuel/` (referenced, never copied).
 - **No new drift surface:** do not copy `cr3bp_lt_params` or `minfuel_config` into `elfo/`.
@@ -34,7 +34,7 @@
 - [ ] **Step 1: Create the directory skeleton**
 
 ```bash
-cd /Users/msc/Desktop/optimal_control/NLP_lowThrust_GTO_tulip
+cd /Users/msc/Desktop/optimal_control/GTO_tulip
 mkdir -p elfo/results elfo/attic
 touch elfo/results/.gitkeep elfo/attic/.gitkeep
 ```
@@ -121,7 +121,7 @@ Full design rationale: `docs/superpowers/specs/2026-07-14-elfo-sibling-dir-desig
 Run (matlab-headless skill):
 
 ```
-matlab -batch "cd('/Users/msc/Desktop/optimal_control/NLP_lowThrust_GTO_tulip/elfo'); setup_paths; assert(~isempty(which('cr3bp_lt_params')),'cr3bp missing'); assert(~isempty(which('minfuel_config')),'minfuel_config missing'); disp('OK setup_paths')"
+matlab -batch "cd('/Users/msc/Desktop/optimal_control/GTO_tulip/elfo'); setup_paths; assert(~isempty(which('cr3bp_lt_params')),'cr3bp missing'); assert(~isempty(which('minfuel_config')),'minfuel_config missing'); disp('OK setup_paths')"
 ```
 
 Expected: prints `OK setup_paths` (both shared files resolve to `sundman_minfuel/`). CasADi not required for this check.
@@ -129,7 +129,7 @@ Expected: prints `OK setup_paths` (both shared files resolve to `sundman_minfuel
 - [ ] **Step 5: Commit**
 
 ```bash
-cd /Users/msc/Desktop/optimal_control/NLP_lowThrust_GTO_tulip
+cd /Users/msc/Desktop/optimal_control/GTO_tulip
 git add elfo/setup_paths.m elfo/README.md elfo/results/.gitkeep elfo/attic/.gitkeep
 git commit -m "elfo: scaffold sibling deliverable dir (setup_paths, README, results/, attic/)"
 ```
@@ -151,7 +151,7 @@ Rationale: `psr_movie` was already generalized to render BOTH layouts (it branch
 - [ ] **Step 1: Copy the file and rename the function**
 
 ```bash
-cd /Users/msc/Desktop/optimal_control/NLP_lowThrust_GTO_tulip
+cd /Users/msc/Desktop/optimal_control/GTO_tulip
 cp PSR/psr_movie.m elfo/elfo_movie.m
 ```
 
@@ -191,7 +191,7 @@ Leave all rendering logic byte-identical.
 Run (matlab-headless skill):
 
 ```
-matlab -batch "cd('/Users/msc/Desktop/optimal_control/NLP_lowThrust_GTO_tulip/elfo'); setup_paths; assert(~isempty(which('elfo_movie')),'elfo_movie not on path'); nargin('elfo_movie'); disp('OK elfo_movie parses')"
+matlab -batch "cd('/Users/msc/Desktop/optimal_control/GTO_tulip/elfo'); setup_paths; assert(~isempty(which('elfo_movie')),'elfo_movie not on path'); nargin('elfo_movie'); disp('OK elfo_movie parses')"
 ```
 
 Expected: prints `OK elfo_movie parses` (function is found and its signature reads with 5 inputs; no parse error).
@@ -199,7 +199,7 @@ Expected: prints `OK elfo_movie parses` (function is found and its signature rea
 - [ ] **Step 4: Commit**
 
 ```bash
-cd /Users/msc/Desktop/optimal_control/NLP_lowThrust_GTO_tulip
+cd /Users/msc/Desktop/optimal_control/GTO_tulip
 git add elfo/elfo_movie.m
 git commit -m "elfo: add elfo_movie (copy+rename of generalized psr_movie; no PSR dependency)"
 ```
@@ -223,7 +223,7 @@ This is one atomic relocation task — splitting per-file adds no reviewer value
 - [ ] **Step 1: git mv the source files from sundman_minfuel/**
 
 ```bash
-cd /Users/msc/Desktop/optimal_control/NLP_lowThrust_GTO_tulip
+cd /Users/msc/Desktop/optimal_control/GTO_tulip
 for f in casadi_energy_freetf gen_elfo_energy_gravhom gen_elfo_energy_tfsweep \
          gen_elfo_minfuel run_elfo_minfuel elfo_export_data verify_elfo_seed \
          smoke_energy_freetf smoke_fixedtf; do
@@ -265,7 +265,7 @@ These moves are filesystem-only and will NOT appear in the Step 6 commit
 - [ ] **Step 5: Verify the moves and that nothing external now dangles**
 
 ```bash
-cd /Users/msc/Desktop/optimal_control/NLP_lowThrust_GTO_tulip
+cd /Users/msc/Desktop/optimal_control/GTO_tulip
 # 5a: all 11 source files present in elfo/
 ls elfo/*.m
 # 5b: the two dead routes in attic
@@ -337,7 +337,7 @@ No edit. This is intentional per the spec (in-place data reference).
 - [ ] **Step 4: Grep guard — no PSR *code* references remain**
 
 ```bash
-cd /Users/msc/Desktop/optimal_control/NLP_lowThrust_GTO_tulip
+cd /Users/msc/Desktop/optimal_control/GTO_tulip
 echo "--- expect: no psr_movie, no addpath ...PSR' (code); PSR_data data ref is OK ---"
 grep -n "psr_movie" elfo/run_elfo_minfuel.m && echo "FAIL: psr_movie still referenced" || echo "OK: no psr_movie"
 grep -n "addpath.*'PSR'" elfo/run_elfo_minfuel.m && echo "FAIL: addpath PSR still present" || echo "OK: no addpath PSR"
@@ -368,7 +368,7 @@ git commit -m "elfo: retarget run_elfo_minfuel internals (drop addpath PSR, psr_
 Run (matlab-headless skill):
 
 ```
-matlab -batch "restoredefaultpath; cd('/Users/msc/Desktop/optimal_control/NLP_lowThrust_GTO_tulip/elfo'); setup_paths; fns={'casadi_energy_freetf','gen_elfo_energy_gravhom','gen_elfo_energy_tfsweep','gen_elfo_minfuel','run_elfo_minfuel','elfo_export_data','verify_elfo_seed','smoke_energy_freetf','smoke_fixedtf','gto_elfo_endpoints','probe_elfo_target','elfo_movie','cr3bp_lt_params','minfuel_config'}; for k=1:numel(fns), w=which(fns{k}); assert(~isempty(w),['MISSING ' fns{k}]); assert(isempty(strfind(w,'/PSR/')),['RESOLVES TO PSR: ' fns{k} ' -> ' w]); fprintf('%-26s %s\n', fns{k}, w); end; disp('OK all resolve, none via PSR')"
+matlab -batch "restoredefaultpath; cd('/Users/msc/Desktop/optimal_control/GTO_tulip/elfo'); setup_paths; fns={'casadi_energy_freetf','gen_elfo_energy_gravhom','gen_elfo_energy_tfsweep','gen_elfo_minfuel','run_elfo_minfuel','elfo_export_data','verify_elfo_seed','smoke_energy_freetf','smoke_fixedtf','gto_elfo_endpoints','probe_elfo_target','elfo_movie','cr3bp_lt_params','minfuel_config'}; for k=1:numel(fns), w=which(fns{k}); assert(~isempty(w),['MISSING ' fns{k}]); assert(isempty(strfind(w,'/PSR/')),['RESOLVES TO PSR: ' fns{k} ' -> ' w]); fprintf('%-26s %s\n', fns{k}, w); end; disp('OK all resolve, none via PSR')"
 ```
 
 Expected: every function prints a path under `elfo/` or `sundman_minfuel/`; none under `/PSR/`; final line `OK all resolve, none via PSR`. (`casadi_energy_freetf`…`probe_elfo_target`, `elfo_movie` → `elfo/`; `cr3bp_lt_params`, `minfuel_config` → `sundman_minfuel/`.)
@@ -376,7 +376,7 @@ Expected: every function prints a path under `elfo/` or `sundman_minfuel/`; none
 - [ ] **Step 2: Tree-wide grep guard for stale references**
 
 ```bash
-cd /Users/msc/Desktop/optimal_control/NLP_lowThrust_GTO_tulip
+cd /Users/msc/Desktop/optimal_control/GTO_tulip
 echo "--- any code still pointing at the OLD locations? (expect none) ---"
 grep -rn "PSR/psr_movie" elfo/ && echo "FAIL" || echo "OK: elfo has no PSR/psr_movie ref"
 grep -rn "sundman_minfuel/casadi_energy_freetf\|sundman_minfuel/gen_elfo\|sundman_minfuel/run_elfo\|sundman_minfuel/elfo_export\|sundman_minfuel/verify_elfo\|sundman_minfuel/smoke_energy_freetf\|sundman_minfuel/smoke_fixedtf" . --include='*.m' && echo "FAIL: stale hardcoded path" || echo "OK: no stale hardcoded ELFO paths"
@@ -389,7 +389,7 @@ Expected: `OK: elfo has no PSR/psr_movie ref` and `OK: no stale hardcoded ELFO p
 Run (matlab-headless skill; needs `~/casadi-3.7.0`):
 
 ```
-matlab -batch "cd('/Users/msc/Desktop/optimal_control/NLP_lowThrust_GTO_tulip/elfo'); setup_paths; smoke_energy_freetf"
+matlab -batch "cd('/Users/msc/Desktop/optimal_control/GTO_tulip/elfo'); setup_paths; smoke_energy_freetf"
 ```
 
 Expected: `smoke_energy_freetf` reports the free-tf form reproducing the f1.20 backbone at machine precision (its existing success print, e.g. `maxDefect` ~1e-8, `ok=1`). If CasADi is unavailable in the run environment, record that Step 3 was skipped and note it explicitly — do NOT claim the live check passed.
@@ -397,7 +397,7 @@ Expected: `smoke_energy_freetf` reports the free-tf form reproducing the f1.20 b
 - [ ] **Step 4: Final consistency check of the working tree**
 
 ```bash
-cd /Users/msc/Desktop/optimal_control/NLP_lowThrust_GTO_tulip
+cd /Users/msc/Desktop/optimal_control/GTO_tulip
 git status --short
 git log --oneline -5
 ```
@@ -411,7 +411,7 @@ Expected: clean or only-intended changes; the last 4-5 commits are the elfo scaf
 ## Follow-up (optional, out of the core reorg — do only if requested)
 
 - Update `CLAUDE.md` (project instructions) directory map / the
-  `NLP_lowThrust_GTO_tulip` description to mention `elfo/` alongside `PSR/`.
+  `GTO_tulip` description to mention `elfo/` alongside `PSR/`.
 - Update the ELFO memory `elfo-retarget-open.md` file:line references from
   `sundman_minfuel/` to `elfo/`.
 

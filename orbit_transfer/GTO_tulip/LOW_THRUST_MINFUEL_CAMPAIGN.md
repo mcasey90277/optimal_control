@@ -627,7 +627,7 @@ The core numerical objective is met. Remaining work is packaging and payoff:
    revs) could re-derive the same optimum from PMP for a belt-and-suspenders
    check, but is no longer *needed* — the direct result is machine-tight.
 
-## File inventory (NLP_lowThrust_GTO_tulip/)
+## File inventory (GTO_tulip/)
 - Min-time direct: `lt_dynamics.m`, `nlp_constraints.m`, `solve_tfmin_nlp.m`,
   `NLP_lowThrust_GTO_Tulip.m`.
 - Min-fuel (cone form): `lt_dynamics_throttle.m`, `nlp_constraints_minfuel.m`,

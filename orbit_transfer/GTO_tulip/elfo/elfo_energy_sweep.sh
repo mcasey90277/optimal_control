@@ -15,7 +15,7 @@
 # cleanly), so retries fire ONLY on crashes, not on a legitimate early stop.
 #
 # ============================ HOW TO RUN ============================
-#   cd /Users/msc/Desktop/optimal_control/orbit_transfer/NLP_lowThrust_GTO_tulip/elfo
+#   cd /Users/msc/Desktop/optimal_control/orbit_transfer/GTO_tulip/elfo
 #   chmod +x elfo_energy_sweep.sh            # once
 #   ./elfo_energy_sweep.sh <factorLo> <factorHi> <factorStep>
 #

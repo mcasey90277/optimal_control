@@ -26,7 +26,7 @@ function ver = verify_pmp_2body(out, par)
 %           .pass           - true if all gates satisfied [logical]
 %
 % REFERENCES:
-%   [1] NLP_lowThrust_GTO_tulip/sundman_minfuel/verify_tf_front.m (empirical-beta).
+%   [1] GTO_tulip/sundman_minfuel/verify_tf_front.m (empirical-beta).
 %   [2] HONEST_EVALUATION_DV_TF_FRONT.md (robust-beta lesson; relative gate).
 N    = size(out.lamDef, 2);
 ss   = out.U(4, 1:N);

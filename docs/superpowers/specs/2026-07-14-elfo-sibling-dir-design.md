@@ -61,7 +61,7 @@ reaches into `PSR/` (for `psr_movie`) creating a cross-directory dependency.
 
 ## Target structure
 
-New directory `NLP_lowThrust_GTO_tulip/elfo/`.
+New directory `GTO_tulip/elfo/`.
 
 Files relocated with `git mv` (preserve history):
 

@@ -111,8 +111,8 @@ insertion = 'campaign';        % tulip: 'campaign'|'maxydot'|'apoapsis'  (elfo: 
 %              unless you set rerunDirect=true (stage 2 skips when its output
 %              file already exists).
 seedSpec   = 'energy';           % 'energy' | 'neighbor' | '/path/to/result.mat'
-%seedSpec   = '/Users/msc/Desktop/optimal_control/orbit_transfer/NLP_lowThrust_GTO_tulip/PSR_data/psr_data_tf1p150_sw20_minEps0p2.mat';
-%seedSpec   = '/Users/msc/Desktop/optimal_control/orbit_transfer/NLP_lowThrust_GTO_tulip/PSR_data/psr_data_tf1p150_sw22_minEps0p1.mat';
+%seedSpec   = '/Users/msc/Desktop/optimal_control/orbit_transfer/GTO_tulip/PSR_data/psr_data_tf1p150_sw20_minEps0p2.mat';
+%seedSpec   = '/Users/msc/Desktop/optimal_control/orbit_transfer/GTO_tulip/PSR_data/psr_data_tf1p150_sw22_minEps0p1.mat';
 seedFactor = NaN;                % only used when seedSpec = 'neighbor'
 
 % ---- direct-solve knobs ----------------------------------------------------

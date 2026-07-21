@@ -13,7 +13,7 @@
 - **MATLAB is R2025b only**: `/Applications/MATLAB_R2025b.app/bin/matlab` (R2025a license is broken).
 - **Run headless**: `matlab -batch "cd('<elfo>'); setup_paths; <cmd>"` from the `elfo/` dir.
 - **CasADi path**: solvers `addpath(getenv('HOME')/casadi-3.7.0)` via the `CASADI_PATH` env fallback already coded in the sibling.
-- **elfo dir**: `/Users/msc/Desktop/optimal_control/NLP_lowThrust_GTO_tulip/elfo`.
+- **elfo dir**: `/Users/msc/Desktop/optimal_control/GTO_tulip/elfo`.
 - **Seed (fixed)**: `results/energy_elfo_f0990.mat` — the Route A floor, `tf` 6.2278 ND (27.61 d), edge 57.5%. Contains fields `X [9×nN], U [4×nN], sigma, rv0, rvf, tauf0, tf, moonZone, pSund, qSund`.
 - **Every MATLAB function needs the commented header block** (purpose, inputs w/ sizes, outputs w/ sizes, references).
 - **Never use `i`/`j` as loop indices** (imaginary unit).
@@ -25,8 +25,8 @@
 ### Task 1: `casadi_mintime_freetf.m` solver + smoke test
 
 **Files:**
-- Create: `NLP_lowThrust_GTO_tulip/elfo/casadi_mintime_freetf.m`
-- Test: `NLP_lowThrust_GTO_tulip/elfo/test_mintime_freetf.m`
+- Create: `GTO_tulip/elfo/casadi_mintime_freetf.m`
+- Test: `GTO_tulip/elfo/test_mintime_freetf.m`
 
 **Interfaces:**
 - Consumes: the energy seed `results/energy_elfo_f0990.mat`; params from `minfuel_config()` + `cr3bp_lt_params()` (`p.Tmax, p.c, p.muStar, p.tStar`).
@@ -34,7 +34,7 @@
 
 - [ ] **Step 1: Write the failing smoke test**
 
-Create `NLP_lowThrust_GTO_tulip/elfo/test_mintime_freetf.m`:
+Create `GTO_tulip/elfo/test_mintime_freetf.m`:
 
 ```matlab
 % TEST_MINTIME_FREETF  Smoke test: casadi_mintime_freetf constructs, runs, and
@@ -67,13 +67,13 @@ fprintf('TEST_MINTIME_FREETF: PASS (tf=%.4f ND, maxUnit=%.2e; mf=%.4f vs all-bur
 
 Run:
 ```bash
-/Applications/MATLAB_R2025b.app/bin/matlab -batch "cd('/Users/msc/Desktop/optimal_control/NLP_lowThrust_GTO_tulip/elfo'); setup_paths; test_mintime_freetf"
+/Applications/MATLAB_R2025b.app/bin/matlab -batch "cd('/Users/msc/Desktop/optimal_control/GTO_tulip/elfo'); setup_paths; test_mintime_freetf"
 ```
 Expected: FAIL — `Unrecognized function or variable 'casadi_mintime_freetf'`.
 
 - [ ] **Step 3: Write the solver**
 
-Create `NLP_lowThrust_GTO_tulip/elfo/casadi_mintime_freetf.m`:
+Create `GTO_tulip/elfo/casadi_mintime_freetf.m`:
 
 ```matlab
 function out = casadi_mintime_freetf(sigma, rv0, rvf, Tmax, cEx, muStar, X0, U0, tauf0, opts)
@@ -277,7 +277,7 @@ end
 
 Run:
 ```bash
-/Applications/MATLAB_R2025b.app/bin/matlab -batch "cd('/Users/msc/Desktop/optimal_control/NLP_lowThrust_GTO_tulip/elfo'); setup_paths; test_mintime_freetf"
+/Applications/MATLAB_R2025b.app/bin/matlab -batch "cd('/Users/msc/Desktop/optimal_control/GTO_tulip/elfo'); setup_paths; test_mintime_freetf"
 ```
 Expected: PASS — prints `TEST_MINTIME_FREETF: PASS (tf=..., maxUnit=...; mf=... vs all-burn pred ...)`. Structural assertions only (`X` 9-row, `U` **3-row** = `s≡1` wired, `tf` finite/positive, `maxUnit < 1e-2`); the `mf`-vs-prediction number is printed for eyeballing but not asserted (it converges only at the anchor, Task 2).
 
@@ -285,7 +285,7 @@ Expected: PASS — prints `TEST_MINTIME_FREETF: PASS (tf=..., maxUnit=...; mf=..
 
 ```bash
 cd /Users/msc/Desktop/optimal_control
-git add NLP_lowThrust_GTO_tulip/elfo/casadi_mintime_freetf.m NLP_lowThrust_GTO_tulip/elfo/test_mintime_freetf.m
+git add GTO_tulip/elfo/casadi_mintime_freetf.m GTO_tulip/elfo/test_mintime_freetf.m
 git commit -m "feat(elfo min-time): casadi_mintime_freetf hard all-burn solver + smoke test"
 ```
 
@@ -294,8 +294,8 @@ git commit -m "feat(elfo min-time): casadi_mintime_freetf hard all-burn solver +
 ### Task 2: `gen_elfo_mintime.m` driver + verified anchor run
 
 **Files:**
-- Create: `NLP_lowThrust_GTO_tulip/elfo/gen_elfo_mintime.m`
-- Uses (unchanged): `NLP_lowThrust_GTO_tulip/elfo/verify_elfo_seed.m` (reads `SEEDFILE`, `U(4,:)` throttle).
+- Create: `GTO_tulip/elfo/gen_elfo_mintime.m`
+- Uses (unchanged): `GTO_tulip/elfo/verify_elfo_seed.m` (reads `SEEDFILE`, `U(4,:)` throttle).
 
 **Interfaces:**
 - Consumes: `casadi_mintime_freetf` (Task 1); seed `results/energy_elfo_f0990.mat`; `minfuel_config`, `cr3bp_lt_params`.
@@ -303,7 +303,7 @@ git commit -m "feat(elfo min-time): casadi_mintime_freetf hard all-burn solver +
 
 - [ ] **Step 1: Write the driver**
 
-Create `NLP_lowThrust_GTO_tulip/elfo/gen_elfo_mintime.m`:
+Create `GTO_tulip/elfo/gen_elfo_mintime.m`:
 
 ```matlab
 function outFile = gen_elfo_mintime(opts)
@@ -383,7 +383,7 @@ end
 
 Run (this is the real ~2–10 min solve; watch for a MEX crash and just re-run if so):
 ```bash
-/Applications/MATLAB_R2025b.app/bin/matlab -batch "cd('/Users/msc/Desktop/optimal_control/NLP_lowThrust_GTO_tulip/elfo'); setup_paths; gen_elfo_mintime;"
+/Applications/MATLAB_R2025b.app/bin/matlab -batch "cd('/Users/msc/Desktop/optimal_control/GTO_tulip/elfo'); setup_paths; gen_elfo_mintime;"
 ```
 Expected: prints `ipopt: Solve_Succeeded`, a `tfMin` line with `tf < 6.2278 ND` (≈ 5.5 ND / 24–25 d), `maxDefect` ≤ 1e-8, `rendezvous` ≤ 1e-8, `minR1 ≥ 0.95·GTO perigee`, `tMonotone=1`, and `saved .../mintime_elfo.mat`.
 
@@ -391,7 +391,7 @@ Expected: prints `ipopt: Solve_Succeeded`, a `tfMin` line with `tf < 6.2278 ND` 
 
 Run:
 ```bash
-/Applications/MATLAB_R2025b.app/bin/matlab -batch "cd('/Users/msc/Desktop/optimal_control/NLP_lowThrust_GTO_tulip/elfo'); setup_paths; SEEDFILE=fullfile(pwd,'results','mintime_elfo.mat'); verify_elfo_seed"
+/Applications/MATLAB_R2025b.app/bin/matlab -batch "cd('/Users/msc/Desktop/optimal_control/GTO_tulip/elfo'); setup_paths; SEEDFILE=fullfile(pwd,'results','mintime_elfo.mat'); verify_elfo_seed"
 ```
 Expected: prints `||X(:,end)-rvf|| ≤ 1e-8`, `INDEP defect (pure MATLAB, full gravity) ≤ 1e-8`, `maxUnit ≤ 1e-8`, and `VERIFY: PASS`. (The `s≡1` row makes the verifier recompute at full thrust — an independent MATLAB re-derivation of the CasADi solution.)
 
@@ -410,7 +410,7 @@ If instead the solve does NOT close the rendezvous (restoration failure / `rende
 
 ```bash
 cd /Users/msc/Desktop/optimal_control
-git add NLP_lowThrust_GTO_tulip/elfo/gen_elfo_mintime.m
+git add GTO_tulip/elfo/gen_elfo_mintime.m
 git commit -m "feat(elfo min-time): gen_elfo_mintime driver -> verified tfMin_ELFO anchor"
 ```
 

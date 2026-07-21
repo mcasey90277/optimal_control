@@ -28,7 +28,7 @@ function cert = certify_minfuel_pmp(solFile, makePlot)
 % fitting is hopelessly ill-conditioned. The block-bidiagonal global solve is
 % BVP-stable for exactly the reason multiple shooting beats single shooting: it
 % never forward-multiplies the ill-conditioned transition map. This mirrors the
-% primer-vector verification of ../../orbit_transfer/primer_check.m, adapted to
+% primer-vector verification of ../../min_energy_tutorial/primer_check.m, adapted to
 % a long multi-rev arc.
 %
 % Recovery pipeline:
@@ -64,7 +64,7 @@ function cert = certify_minfuel_pmp(solFile, makePlot)
 % REFERENCES:
 %   [1] Lawden, "Optimal Trajectories for Space Navigation," 1963 (primer vector).
 %   [2] Bertrand & Epenoy, OCAM 23(4), 2002 (min-fuel switching function).
-%   [3] cf. ../../orbit_transfer/primer_check.m (verify-along-trajectory idea).
+%   [3] cf. ../../min_energy_tutorial/primer_check.m (verify-along-trajectory idea).
 
 here = fileparts(mfilename('fullpath'));
 if nargin < 1 || isempty(solFile)

@@ -28,7 +28,7 @@ with `G`, `H_c` exactly as in `../../lowThrust_GTO_tulip/lt_pmp_eom_minfuel.m`
 whole costate history is fixed by 7 initial numbers `λ(0)=[λ_r0; λ_v0; λ_m0]`.
 We recover `λ(0)` by a tiny least-squares fit, then check PMP consistency —
 the same "propagate the adjoint alongside the frozen state trajectory and
-compare" pattern already used in `../../orbit_transfer/primer_check.m`.
+compare" pattern already used in `../../min_energy_tutorial/primer_check.m`.
 
 **Why this over CasADi KKT-dual extraction:** it avoids the two fragile parts of
 the dual route — CasADi's dual sign/layout convention, and the
@@ -87,7 +87,7 @@ kept as an OPTIONAL independent cross-check (see below), not the primary path.
 | need | existing asset |
 |---|---|
 | adjoint EOM (`G`, `H_c`, `λ̇` block, `S` definition) | `../../lowThrust_GTO_tulip/lt_pmp_eom_minfuel.m` (lift RHS, drop the state block) |
-| propagate-costates-along-frozen-trajectory pattern | `../../orbit_transfer/primer_check.m` |
+| propagate-costates-along-frozen-trajectory pattern | `../../min_energy_tutorial/primer_check.m` |
 | `lsqnonlin` continuation harness | `../../lowThrust_GTO_tulip/solve_minfuel_indirect.m` |
 | CR3BP/LT constants, endpoints, solution | `cr3bp_lt_params.m`, `sundman_minfuel_certified.mat` |
 

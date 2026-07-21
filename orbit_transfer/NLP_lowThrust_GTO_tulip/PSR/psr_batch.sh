@@ -12,7 +12,7 @@
 # ============================ HOW TO RUN ============================
 # Open a terminal and:
 #
-#   cd /Users/msc/Desktop/optimal_control/NLP_lowThrust_GTO_tulip/PSR
+#   cd /Users/msc/Desktop/optimal_control/orbit_transfer/NLP_lowThrust_GTO_tulip/PSR
 #   chmod +x psr_batch.sh            # once, to make it executable
 #   ./psr_batch.sh <epsMin> <factor1> [factor2 ...]
 #   ./psr_batch.sh <epsMin> energy   # run EVERY factor that has an energy seed

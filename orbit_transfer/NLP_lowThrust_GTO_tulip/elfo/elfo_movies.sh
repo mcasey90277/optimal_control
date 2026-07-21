@@ -8,7 +8,7 @@
 # so no MEX-crash risk -- one process, looped.
 #
 # ============================ HOW TO RUN ============================
-#   cd /Users/msc/Desktop/optimal_control/NLP_lowThrust_GTO_tulip/elfo
+#   cd /Users/msc/Desktop/optimal_control/orbit_transfer/NLP_lowThrust_GTO_tulip/elfo
 #   chmod +x elfo_movies.sh                  # once
 #   ./elfo_movies.sh all                     # a movie for every banked solution
 #   ./elfo_movies.sh 1.20 1.65               # just these factors

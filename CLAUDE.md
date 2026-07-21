@@ -24,24 +24,25 @@ optimal_control/
 │       ├── cart_accel.m                  # Cart acceleration from Lagrangian EOM
 │       └── pendulum_accel.m             # Pendulum angular acceleration
 ├── orbit_transfer/              # top-level container: all orbit-transfer work
+│   ├── cr3bp_common/            # shared CR3BP GTO library: cr3bp_lt_params,
+│   │                            #   minfuel_config, gto_{tulip,elfo}_endpoints,
+│   │                            #   setup_cr3bp_common (adds pumpkyn)
 │   ├── min_energy_tutorial/     # min-energy transfer tutorial: indirect shooting +
 │   │                            #   collocation + primer verification (was orbit_transfer/)
 │   ├── lambert/                 # universal-variables Lambert (incl. multi-rev,
 │   │                            #   validated vs pyKep)
 │   ├── earth_elliptic_to_geo/   # GTO->GEO min-fuel (HMG-2004 direct reproduction)
 │   ├── earth_elliptic_to_geo_CR3BP/  # (stub) CR3BP variant
-│   ├── lowThrust_GTO_tulip/     # CR3BP min-time GTO->tulip: theory note + guided
-│   │                            #   tutorial + indirect (PMP shooting, complex-step)
-│   │                            #   for min-time/energy/fuel + mytry/
-│   └── GTO_tulip/ # Direct-NLP solvers: min-time/energy/fuel, cone-
-│                                #   elimination, Hermite-Simpson, CasADi+IPOPT.
-│                                #   Min-fuel CAMPAIGN record + next steps in
-│                                #   LOW_THRUST_MINFUEL_CAMPAIGN.md (min-energy is
-│                                #   the homotopy root; many-switch bang-bang open,
-│                                #   needs regularized coords). movie/ has MP4+GIFs.
-│                                #   Per-target min-fuel deliverables: PSR/ (GTO->
-│                                #   tulip, w/ PMP refine) and elfo/ (GTO->ELFO);
-│                                #   sundman_minfuel/ is the shared solver engine.
+│   ├── GTO_tulip/               # CR3BP GTO->tulip; campaign docs at root
+│   │   ├── direct/              #   sundman_minfuel (Sundman engine), PSR(+data), movie
+│   │   └── indirect/            #   lowThrust_GTO_tulip (base PMP shooting),
+│   │                            #   ms_band, ifs(+data), ztl, min_time
+│   ├── GTO_ELFO/                # CR3BP GTO->ELFO
+│   │   ├── direct/              #   elfo (CasADi campaign; reuses tulip Sundman engine)
+│   │   └── indirect/            #   placeholder (Route C future work)
+│   ├── mfmax/                   # MfMax v0/v1 Fortran (Gergaud-group indirect) + docs
+│   ├── min_fuel_paper/          # paper outline (co-author Koblick)
+│   └── min_fuel_papers/         # reference PDFs
 ├── mpc_cart_pole/               # Model Predictive Control for cart-pole
 │   ├── mpc_cart_pole_demo.m     # MPC controller (N=50 horizon, 20Hz control)
 │   └── mpc_cart_pole_explained.tex  # Step-by-step code walkthrough

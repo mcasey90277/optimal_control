@@ -10,11 +10,12 @@ Educational implementations of **optimal control and estimation** methods. Core 
 
 ```
 optimal_control/
-├── ex1_block_move/              # Minimum-energy point-to-point motion
+├── collocation_examples/        # standalone direct-collocation tutorials
+│   ├── ex1_block_move/          # Minimum-energy point-to-point motion
 │   ├── block_main.m             # Basic implementation (10 segments)
 │   ├── block_move_2.m           # Cleaner version with plots (100 segments)
 │   └── block_move_3.m           # Vectorized version (100 segments)
-├── ex2_cart_pole_swing_up/      # Nonlinear underactuated system
+│   ├── ex2_cart_pole_swing_up/  # Nonlinear underactuated system
 │   ├── trap_collocation/
 │   │   └── cart_pole_swing_up_trap_1.m   # Monolithic implementation
 │   └── try2/                    # Modularized refactor
@@ -42,7 +43,7 @@ optimal_control/
 │   │   └── indirect/            #   placeholder (Route C future work)
 │   ├── min_fuel_paper/          # paper outline (co-author Koblick)
 │   └── min_fuel_papers/         # reference PDFs
-├── mpc_cart_pole/               # Model Predictive Control for cart-pole
+├── mpc/mpc_cart_pole/           # Model Predictive Control for cart-pole
 │   ├── mpc_cart_pole_demo.m     # MPC controller (N=50 horizon, 20Hz control)
 │   └── mpc_cart_pole_explained.tex  # Step-by-step code walkthrough
 ├── lieFiltering/                # Lie group attitude estimation on SO(3)
@@ -106,7 +107,7 @@ x(1) = 1,  v(1) = 0   (end at position 1, at rest)
 ### Running Block Move
 
 ```matlab
-cd ex1_block_move
+cd collocation_examples/ex1_block_move
 block_move_3  % recommended version
 ```
 
@@ -154,7 +155,7 @@ Final:   q1=0, q2=π, q1dot=0, q2dot=0  (cart at origin, pendulum up, at rest)
 ### Running Cart-Pole
 
 ```matlab
-cd ex2_cart_pole_swing_up/trap_collocation
+cd collocation_examples/ex2_cart_pole_swing_up/trap_collocation
 cart_pole_swing_up_trap_1  % takes ~1-2 minutes
 ```
 

@@ -25,6 +25,7 @@
 
 **Files:**
 - Create: `CC/cr3bp_fingerprint.m`, `CC/check_cr3bp_fp.m`, `CC/thrust_tag.m`
+- Modify: `CC/cr3bp_lt_params.m` — ADDITIVE input echo `p.thrustN = thrust_N; p.ispS = Isp_s;` (the struct today carries only `.Isp`/no thrust echo; the fingerprint reads `.thrustN/.ispS`, matching the earth `kepler_lt_params` convention; additive ⇒ all existing dependents unaffected). Update its header OUTPUTS comment accordingly. (Plan amendment 2026-07-21 after Task-1 BLOCKED escalation.)
 - Test: `CC/test_cr3bp_fp.m`
 
 **Interfaces:**

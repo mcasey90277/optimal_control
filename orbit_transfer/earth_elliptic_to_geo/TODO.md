@@ -65,7 +65,7 @@ breathes / `H_t` flat, one shared scale). **Polygonal-trajectory fix:**
 `viz/mee_res_to_cart_res.m` gained `nDense` (default 1 = byte-identical; `>1` pchip-densifies
 the render) — the polygon was **8 nodes/rev + linear segments**, not physics. Also
 re-confirmed **verbatim** from the HMG-2004 preprint (p.6–7,
-`min_fuel_papers/Gergaud-Haberkorn-Martinon-JournalGuidance2004-preprint.pdf`) that
+`orbit_transfer/min_fuel_papers/Gergaud-Haberkorn-Martinon-JournalGuidance2004-preprint.pdf`) that
 `t_f = c_tf·t_{fMin}, c_tf>1` is a **fixed**-time transfer ("not obvious that the minimum
 fuel problem with free final time has a solution"; min-time `TfMin` solved first for the
 feasibility floor) — validates our `c_tf = 1.5` convention.

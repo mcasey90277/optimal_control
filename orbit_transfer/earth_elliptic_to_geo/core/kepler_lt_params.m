@@ -22,7 +22,7 @@ function p = kepler_lt_params(thrustN, m0kg, ispS)
 % (Gergaud-Haberkorn-Martinon, JGCD 2004) never states Isp numerically; its
 % benchmark constants come from Caillau & Noailles, "Coplanar control of a
 % satellite around the Earth," ESAIM COCV 6 (2001), p.255
-% (min_fuel_papers/COCV_2001__6__239_0.pdf), which gives the mass-flow
+% (orbit_transfer/min_fuel_papers/COCV_2001__6__239_0.pdf), which gives the mass-flow
 % coefficient delta = 0.05112 km^-1 s in mdot = -delta*|thrust|. Since
 % delta = 1/c = 1/(Isp*g0):  c = 1/delta = 19.562 km/s  =>  Isp = c/g0 = 1994.8 s.
 % So Caillau & Noailles use Isp = 1994.8 s. We keep 2000 s as the default (only

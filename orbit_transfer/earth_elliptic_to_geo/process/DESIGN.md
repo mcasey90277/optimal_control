@@ -2,7 +2,7 @@
 
 **Goal.** Reproduce the low-thrust **minimum-fuel** Earth orbit transfer of Haberkorn,
 Martinon & Gergaud, *"Low thrust minimum-fuel orbital transfer: a homotopic
-approach,"* JGCD 27(6), 2004 (`min_fuel_papers/Gergaud-Haberkorn-Martinon-JournalGuidance2004-preprint.pdf`)
+approach,"* JGCD 27(6), 2004 (`orbit_transfer/min_fuel_papers/Gergaud-Haberkorn-Martinon-JournalGuidance2004-preprint.pdf`)
 — transfer a 1500 kg satellite from a low, elliptic, inclined orbit to equatorial
 GEO — using **our direct (collocation) machinery**, whereas the paper solves it
 **indirectly** (single shooting + homotopy).
@@ -188,7 +188,7 @@ formulation — noted as the future escalation, not attempted here.
 
 1. **Isp** — ~~pin from ref [6] Caillau & Noailles 2001 (same benchmark); default 2000 s;
    validate by the M2 m_f match. (Only M2 depends on it.)~~ **CLOSED 2026-07-19.**
-   Ref [6] obtained and read (`min_fuel_papers/COCV_2001__6__239_0.pdf`, p.255): the
+   Ref [6] obtained and read (`orbit_transfer/min_fuel_papers/COCV_2001__6__239_0.pdf`, p.255): the
    benchmark's mass-flow coefficient is δ = 0.05112 km⁻¹·s in ṁ = −δ·|thrust|, and
    δ = 1/(Isp·g₀) ⇒ c = 1/δ = 19.562 km/s ⇒ **Isp = c/g₀ = 1994.8 s** (Caillau &
    Noailles' exact value). Our default 2000 s was 0.27% high (masses ~0.3 kg high;

@@ -145,7 +145,7 @@ render an MEE result). `gergaud_plot` writes a static trajectory PNG;
 ### `kepler_lt_params.m` — constants + canonical units
 LU = GEO radius 42165 km, TU = √(LU³/μ) so μ=1, mass unit = m0. Isp default
 2000 s (the benchmark's exact value is **1994.8 s** — Caillau & Noailles 2001,
-`min_fuel_papers/COCV_2001__6__239_0.pdf` p.255, δ=0.05112 km⁻¹s ⇒ Isp=1/(δg₀);
+`orbit_transfer/min_fuel_papers/COCV_2001__6__239_0.pdf` p.255, δ=0.05112 km⁻¹s ⇒ Isp=1/(δg₀);
 our default is 0.27% high). Single source of physical constants.
 
 ### `elements_to_cart.m` / `cart_to_elements.m`
@@ -336,7 +336,7 @@ cd reproduce && ./reproduce_table3.sh 10 5 2.5 1 0.5   # per-process watchdog, s
 - **CasADi/IPOPT:** `~/casadi-3.7.0`
 - **Parent campaign (CR3BP, shared solver architecture):** `../NLP_lowThrust_GTO_tulip/`
 - **Problem source:** Haberkorn, Martinon & Gergaud, JGCD 27(6), 2004
-  (`min_fuel_papers/Gergaud-Haberkorn-Martinon-JournalGuidance2004-preprint.pdf`)
+  (`orbit_transfer/min_fuel_papers/Gergaud-Haberkorn-Martinon-JournalGuidance2004-preprint.pdf`)
 
 ## Results (headline)
 

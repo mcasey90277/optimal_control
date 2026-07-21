@@ -82,7 +82,7 @@ Paper numbers: Table 3 / Figs 18, 21–23, at c_tf = 1.5, T_max = 10 N unless no
 
 Isp is not stated numerically in the paper, but the benchmark's constants are
 those of ref [6] Caillau & Noailles (ESAIM COCV 6, 2001,
-`min_fuel_papers/COCV_2001__6__239_0.pdf`), obtained and read 2026-07-19: p.255
+`orbit_transfer/min_fuel_papers/COCV_2001__6__239_0.pdf`), obtained and read 2026-07-19: p.255
 gives the mass-flow coefficient δ = 0.05112 km⁻¹·s in ṁ = −δ‖u‖, so
 δ = 1/(Isp·g₀) ⇒ c = 1/δ = 19.562 km/s ⇒ **Isp = 1994.8 s**. We run at the
 default **2000 s** (0.27% high; masses ~0.3 kg high); pass ispS=1994.8 for the
@@ -394,4 +394,4 @@ door's own output (a default-endpoint 10 N run).
 - Parent campaign (shared solver architecture, `sundman_minfuel` pattern):
   `../NLP_lowThrust_GTO_tulip/`, esp. `LOW_THRUST_MINFUEL_CAMPAIGN.md`.
 - Problem source: Haberkorn, Martinon & Gergaud, JGCD 27(6), 2004
-  (`min_fuel_papers/Gergaud-Haberkorn-Martinon-JournalGuidance2004-preprint.pdf`).
+  (`orbit_transfer/min_fuel_papers/Gergaud-Haberkorn-Martinon-JournalGuidance2004-preprint.pdf`).

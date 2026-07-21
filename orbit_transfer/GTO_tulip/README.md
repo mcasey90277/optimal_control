@@ -7,15 +7,35 @@ flagship result is the **certified sharp bang-bang min-fuel solution**
 (1.15× min-time, 25 switches, defect 2.4e-14, ΔV 3.3696 km/s) and the
 ΔV-vs-t_f front built around it.
 
+## Goals
+
+1. **Perfect the direct code** — close the remaining direct open items (the
+   1.01–1.11× near-min-time band, PSR/lib de-dup).
+2. **Get the indirect code working** — a certified indirect (PMP shooting)
+   solve of the same problem; today the indirect campaigns are built but stall
+   short of certification.
+
+Concrete open items live in `TODO.md`.
+
 ## Folder map
 
 | where | what |
 |---|---|
-| `direct/sundman_minfuel/` | **THE canonical library** — Sundman-regularized CasADi+IPOPT solver, energy→fuel homotopy, energy-backbone continuation, PMP certification, front aggregation. Start at `direct/sundman_minfuel/README.md`. |
-| `indirect/ms_band/` | Indirect multiple-shooting attack on the hard 1.01–1.11× transition band (own campaign doc + unit tests). |
+| `direct/sundman_minfuel/` | **THE canonical direct library** — Sundman-regularized CasADi+IPOPT solver, energy→fuel homotopy, energy-backbone continuation, PMP certification, front aggregation. Start at `direct/sundman_minfuel/README.md`. |
+| `direct/PSR/` | PMP-Steered Refinement deliverable (switch-aware mesh refinement; vendors its own frozen `lib/`). `PSR_data/` holds its gitignored caches. |
 | `direct/movie/` | Trajectory animations (certified solution with running ΔV meter). |
+| `indirect/lowThrust_GTO_tulip/` | Base indirect campaign: PMP shooting w/ complex-step Jacobians, theory note + guided tutorial (`gto_tulip_mintime_theory.pdf`, `building_the_gto_tulip_solvers.pdf`). |
+| `indirect/ms_band/` | Indirect multiple-shooting attack on the hard 1.01–1.11× transition band (own campaign doc + unit tests). |
+| `indirect/ifs/` | IFS — Indirect Finishing Solve: direct-seeded indirect certification machinery. `IFS_data/` holds its gitignored caches. |
+| `indirect/ztl/` | Zhang-thrust-ladder indirect probes (P0 findings recorded in its docs). |
+| `indirect/min_time/` | PMP min-time root (always-burn shooting; seeds retargeting for tulip and ELFO). |
+| `process/` | Campaign narratives + plans (see Key documents below). |
+| `doc/` | Technical notes, figures, briefing, and `doc/reviews/` (external code-review records). |
 | `attic/` | Superseded code: fmincon-era min-time/min-fuel NLPs, Sundman prototypes, old continuation experiments. Do not use; see `attic/README.md`. The fmincon min-time formulation notes (density-matched mesh, throttle-on-bound gotcha, mesh-refinement table) are preserved in `attic/README_legacy_fmincon_era.md`. |
-| `reviews/` | External code-review records. |
+
+Shared problem definition (`cr3bp_lt_params`, `minfuel_config`,
+`gto_tulip_endpoints`) lives in `../cr3bp_common/`; every module's
+`setup_paths.m` pulls it in via `setup_cr3bp_common()`.
 
 ## Key documents
 
@@ -30,7 +50,7 @@ flagship result is the **certified sharp bang-bang min-fuel solution**
 ## Entry points
 
 ```matlab
-cd sundman_minfuel
+cd direct/sundman_minfuel
 run_certified_minfuel          % reproduce THE certified 1.15x result (~15 min)
 minfuel_at_tf(1.30)            % solve one t_f from the energy backbone
 aggregate_front                % collect + PMP-verify + honest 3-class front plot
@@ -45,9 +65,8 @@ direct/sundman_minfuel/orchestrate/backbone_walk.sh 1.15 1.20 1.25 1.30   # ener
 direct/sundman_minfuel/orchestrate/sharpen_batch.sh 2 1.30 1.35 1.40      # parallel sharpen
 ```
 
-Root-level `setup_paths.m` and the two root `.mat`s (`sundman_minfuel_certified`,
-`minfuel_from_energy_seed`) are load-bearing for `direct/movie/` and legacy scripts —
-dedupe scheduled for cleanup Phase 1.
+The folder root deliberately holds only `README.md` and `TODO.md`; campaign
+records are in `process/`, technical notes in `doc/` (tidied 2026-07-21).
 
 ## Companions
 

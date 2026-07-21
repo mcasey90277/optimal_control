@@ -32,7 +32,7 @@ optimal_control/
 │   ├── lambert/                 # universal-variables Lambert (incl. multi-rev,
 │   │                            #   validated vs pyKep)
 │   ├── earth_elliptic_to_geo/   # GTO->GEO min-fuel (HMG-2004 direct reproduction)
-│   ├── earth_elliptic_to_geo_CR3BP/  # (stub) CR3BP variant
+│   ├── earth_elliptic_to_geo_CR3BP/  # elliptic->GEO WITH lunar gravity (CR3BP): README/TODO scoped, work not started
 │   ├── GTO_tulip/               # CR3BP GTO->tulip; README at root, campaign docs in process/
 │   │   ├── direct/              #   sundman_minfuel (Sundman engine), PSR(+data), movie
 │   │   └── indirect/            #   lowThrust_GTO_tulip (base PMP shooting),

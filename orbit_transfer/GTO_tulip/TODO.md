@@ -1,0 +1,46 @@
+# GTO_tulip — TODO
+
+Two standing goals (2026-07-21): **(a) keep perfecting the direct code,
+(b) get the indirect code working.** Full history behind every item:
+`process/LOW_THRUST_MINFUEL_CAMPAIGN.md`.
+
+## (a) Direct — perfect what works
+
+- [ ] **Close the 1.01–1.11× near-min-time band.** The certified front starts
+  at 1.12×; the energy backbone itself is only generatable for
+  t_f ≈ 1.12×–1.95× (the band is hard even for the SMOOTH energy problem —
+  a near-min-time conditioning wall, not just bang-bang structure). Candidate
+  attacks: direct continuation from the min-time anchor downward, or the
+  indirect band campaign below.
+- [ ] **PSR/lib de-dup.** `direct/PSR/lib/` vendors ~20 files (params, refine
+  suite, sms_* set) that partially duplicate `direct/sundman_minfuel/` and
+  `../cr3bp_common/`. Deliberately left intact during the 2026-07-21
+  restructure (behavior risk); fold into the shared sources with a
+  reproduce-the-certified-result gate when touched.
+- [ ] **Front hygiene.** Keep `aggregate_front`'s honest 3-class front current
+  as new t_f points land; switch counts reported as bands (mesh-sensitivity
+  lesson from the earth_elliptic P0 study applies here too).
+
+## (b) Indirect — get it working
+
+Today: machinery built and validated, no certified indirect solve yet.
+
+- [ ] **IFS to certification.** `indirect/ifs/` (direct-seeded indirect
+  finishing solve) stalls at ‖R‖ ≈ 0.023 on terminal-cluster conditioning at
+  the full 1.12× problem. Next move (per campaign record): retarget to a
+  clean-band t_f whose switches are non-grazing, then walk back to 1.12×.
+- [ ] **ms_band.** Multiple-shooting attack on the 1.01–1.11× band — blocked by
+  the same near-min-time wall; revisit after IFS certifies anywhere.
+- [ ] **Use the ztl P0 findings** (recorded in `indirect/ztl/`): the min-time
+  substrate is dead as a ladder start; fixed-t_f ladder argument; the
+  cold-landscape asymmetry ("arrives-warm easy"); ~75 mN sweet-spot signal.
+  These constrain which indirect strategies are worth another attempt.
+- [ ] **Success bar:** an indirect (PMP shooting) solution of the 1.15×
+  min-fuel problem certified against the direct result (25 switches,
+  ΔV 3.3696 km/s) — or an honest documented refutation of why single/multiple
+  shooting cannot close it at this scale.
+
+## Housekeeping
+
+- [ ] `indirect/min_time/` serves both tulip and ELFO retargeting — if it grows,
+  consider promoting it to a shared home (noted in the restructure spec).

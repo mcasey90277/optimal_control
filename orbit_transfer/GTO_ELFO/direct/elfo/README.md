@@ -6,10 +6,13 @@ in the Earth-Moon CR3BP. Sibling of `PSR/` (the GTO -> tulip deliverable).
 ## Model: shared-path, not vendored
 
 Unlike PSR (which vendors a frozen machinery snapshot into `PSR/lib`), this
-directory references the two shared engine files -- `cr3bp_lt_params` and
-`minfuel_config` -- from `../sundman_minfuel` on the path (`setup_paths.m`).
-Single source of truth, no drift surface. Tradeoff: elfo/ tracks the dev
-library, so a dev edit to those two files can change ELFO results.
+directory references shared code on the path (`setup_paths.m`): the problem
+definition (`cr3bp_lt_params`, `minfuel_config`, `gto_elfo_endpoints`) from
+`../../../cr3bp_common/`, and the Sundman engine
+(`casadi_minfuel_sundman`, `insertion_states`, `minfuel_at_tf`) from
+`../../../GTO_tulip/direct/sundman_minfuel/`. Single source of truth, no
+drift surface. Tradeoff: elfo/ tracks the dev library, so a dev edit to those
+shared files can change ELFO results.
 
 ## Pipeline
 

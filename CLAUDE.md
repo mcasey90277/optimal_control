@@ -23,10 +23,17 @@ optimal_control/
 │       ├── objective.m                   # Cost function (trap quadrature of u²)
 │       ├── cart_accel.m                  # Cart acceleration from Lagrangian EOM
 │       └── pendulum_accel.m             # Pendulum angular acceleration
-├── lowThrust_GTO_tulip/         # CR3BP min-time GTO->tulip: theory note + guided
-│                                #   tutorial + indirect (PMP shooting, complex-step)
-│                                #   for min-time/energy/fuel + mytry/
-├── NLP_lowThrust_GTO_tulip/     # Direct-NLP solvers: min-time/energy/fuel, cone-
+├── orbit_transfer/              # top-level container: all orbit-transfer work
+│   ├── min_energy_tutorial/     # min-energy transfer tutorial: indirect shooting +
+│   │                            #   collocation + primer verification (was orbit_transfer/)
+│   ├── lambert/                 # universal-variables Lambert (incl. multi-rev,
+│   │                            #   validated vs pyKep)
+│   ├── earth_elliptic_to_geo/   # GTO->GEO min-fuel (HMG-2004 direct reproduction)
+│   ├── earth_elliptic_to_geo_CR3BP/  # (stub) CR3BP variant
+│   ├── lowThrust_GTO_tulip/     # CR3BP min-time GTO->tulip: theory note + guided
+│   │                            #   tutorial + indirect (PMP shooting, complex-step)
+│   │                            #   for min-time/energy/fuel + mytry/
+│   └── NLP_lowThrust_GTO_tulip/ # Direct-NLP solvers: min-time/energy/fuel, cone-
 │                                #   elimination, Hermite-Simpson, CasADi+IPOPT.
 │                                #   Min-fuel CAMPAIGN record + next steps in
 │                                #   LOW_THRUST_MINFUEL_CAMPAIGN.md (min-energy is

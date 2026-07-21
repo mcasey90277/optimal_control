@@ -27,7 +27,7 @@ both to new reproducer rows and to the existing campaign rows.
 - **Global** optimality — unattainable and unverifiable for this problem; not attempted.
 - **Full critical-cone copositivity** for weakly-active junctions — INCONCLUSIVE is the honest verdict; copositivity is a later enhancement.
 - **OCP-level continuous second-order** (strengthened Legendre–Clebsch / conjugate points) — separate track; the finite-dimensional NLP SOSC is the deliverable here.
-- The **Cartesian/Sundman legacy** stack (`cartesian_legacy/`) — MEE only.
+- The **Cartesian/Sundman legacy** stack (`../direct/cartesian_legacy/`) — MEE only.
 
 ---
 
@@ -55,20 +55,20 @@ both to new reproducer rows and to the existing campaign rows.
 
 ## 3. Architecture
 
-New subsystem lives in a new `verify/sosc/` subfolder. Exactly one
+New subsystem lives in a new `../direct/verify/sosc/` subfolder. Exactly one
 numerics-preserving hook is added to the solver; nothing on the certified
 numeric path is otherwise touched.
 
 | File | Responsibility |
 |---|---|
-| `verify/sosc/verify_sosc_mee.m` | Orchestrator: rebuild → recover → KKT re-check → active set → inertia → verdict struct + tiered-gate status. |
-| `verify/sosc/sosc_recover_kkt.m` | Warm re-solve at saved primal; return `x*`, full `lam_g`, sparse `H`, sparse `A_all`, `gval`, `grad_f`, constraint/variable registries, drift. |
-| `verify/sosc/sosc_kkt_residual.m` | Global Lagrangian-sign resolution + stationarity / primal-feas / dual-feas / complementarity residuals vs thresholds. |
-| `verify/sosc/sosc_active_set.m` | Classify each inequality active / strongly-active / weakly-active; assemble active Jacobian `A`; LICQ (rank) check; human-readable weak/degenerate labels. |
-| `verify/sosc/sosc_inertia.m` | Sparse LDLᵀ inertia of the KKT matrix; PASS/FAIL/INCONCLUSIVE decision; optional non-gating reduced-Hessian curvature margin. |
-| `verify/sosc/sosc_defaults.m` | Single source of the tolerance struct (all thresholds, §6). |
-| `verify/sosc/recertify_table3.m` | Batch driver: loop existing certified rows (10/5/2.5/1/0.5 N), certify, write **sidecar** verdicts + printed report. |
-| `core/casadi_lt_mee.m` | **Only change:** an `opts.returnModel` flag that *additionally* returns the `opti` object, symbol handles, and a constraint/variable registry. Added output fields only — no numeric change. |
+| `../direct/verify/sosc/verify_sosc_mee.m` | Orchestrator: rebuild → recover → KKT re-check → active set → inertia → verdict struct + tiered-gate status. |
+| `../direct/verify/sosc/sosc_recover_kkt.m` | Warm re-solve at saved primal; return `x*`, full `lam_g`, sparse `H`, sparse `A_all`, `gval`, `grad_f`, constraint/variable registries, drift. |
+| `../direct/verify/sosc/sosc_kkt_residual.m` | Global Lagrangian-sign resolution + stationarity / primal-feas / dual-feas / complementarity residuals vs thresholds. |
+| `../direct/verify/sosc/sosc_active_set.m` | Classify each inequality active / strongly-active / weakly-active; assemble active Jacobian `A`; LICQ (rank) check; human-readable weak/degenerate labels. |
+| `../direct/verify/sosc/sosc_inertia.m` | Sparse LDLᵀ inertia of the KKT matrix; PASS/FAIL/INCONCLUSIVE decision; optional non-gating reduced-Hessian curvature margin. |
+| `../direct/verify/sosc/sosc_defaults.m` | Single source of the tolerance struct (all thresholds, §6). |
+| `../direct/verify/sosc/recertify_table3.m` | Batch driver: loop existing certified rows (10/5/2.5/1/0.5 N), certify, write **sidecar** verdicts + printed report. |
+| `../direct/core/casadi_lt_mee.m` | **Only change:** an `opts.returnModel` flag that *additionally* returns the `opti` object, symbol handles, and a constraint/variable registry. Added output fields only — no numeric change. |
 
 Design intent: each file has one clear job and a small, testable interface.
 `sosc_inertia` and `sosc_active_set` are pure linear-algebra/bookkeeping units
@@ -78,7 +78,7 @@ testable on a hand-built QP with no NLP solve.
 
 ## 4. Interfaces (signatures + contracts)
 
-### 4.1 Solver hook — `core/casadi_lt_mee.m`
+### 4.1 Solver hook — `../direct/core/casadi_lt_mee.m`
 
 Add `opts.returnModel` (default `false`). When true, the returned `out` gains:
 
@@ -258,7 +258,7 @@ confirmed/tightened before the rest of the ladder is trusted.
 - **Existing campaign rows:** `recertify_table3.m` rebuilds/certifies
   10/5/2.5/1/0.5 N (both the `MEE_M2_*` fuel rows and the `*_PSR_psr_final`
   refined rows) and writes verdicts to **sidecar** files
-  `results/sosc/sosc_<tag>.mat` plus a printed summary table — the campaign
+  `../direct/results/sosc/sosc_<tag>.mat` plus a printed summary table — the campaign
   `.mat` caches are **left untouched** (honors "never clobber production
   caches"). A FAIL here is a genuine finding surfaced loudly.
 

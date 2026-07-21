@@ -33,8 +33,8 @@ Tasks 4-11):**
   IPOPT duals at high eccentricity (characterized, not a verifier bug — see
   Campaign B escalate branch). Primal certifications (m_f/switches/revs
   above) are defect/terminal-gated and unaffected.
-- Deliverable figures: `fig_table3.m` → `results/fig_table3.png` (Table-3
-  analog + R0-law panel), `fig_front_mee.m` → `results/fig_front_mee.png`
+- Deliverable figures: `fig_table3.m` → `../direct/results/fig_table3.png` (Table-3
+  analog + R0-law panel), `fig_front_mee.m` → `../direct/results/fig_front_mee.png`
   (single-c_tf Fig-23-adjacent overlay, honestly not a multi-c_tf overlay —
   only one c_tf per thrust was ever solved).
 

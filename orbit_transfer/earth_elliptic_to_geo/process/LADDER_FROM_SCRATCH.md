@@ -4,8 +4,8 @@ The one-page operational recipe: exact commands, per-rung strategy, expected
 numbers, and the gotchas. For the full narrative see
 `doc/campaign_reproduction_runbook.pdf`; for the deep-rung story see
 `process/DEEP_THRUST_LESSONS.md`; the machine-readable per-rung parameters live
-in `reproduce/table3_recipes.m` and the certified numbers in
-`reproduce/table3_certified.m`.
+in `../direct/reproduce/table3_recipes.m` and the certified numbers in
+`../direct/reproduce/table3_certified.m`.
 
 ## The problem
 2-body (Earth-only `1/r²`, no Moon) **minimum-fuel low-thrust GTO→GEO** transfer,
@@ -18,7 +18,7 @@ total span `ΔL` a decision variable). Each rung is a **fixed-time** solve at
 ## Prerequisites (every session)
 ```matlab
 % MATLAB R2025b ONLY (R2025a license is broken)
-cd ~/Desktop/optimal_control/earth_elliptic_to_geo
+cd ~/Desktop/optimal_control/orbit_transfer/earth_elliptic_to_geo/direct
 setup_paths          % adds module paths; the solver auto-adds CasADi from ~/casadi-3.7.0
 ```
 
@@ -29,8 +29,8 @@ setup_paths          % adds module paths; the solver auto-adds CasADi from ~/cas
 | Whole top ladder, in-process (crash-free rungs only) | `reproduce_table3([10 5 2.5 1 0.5])` |
 | **One rung, live solve** | `run_gergaud(struct('thrustN',5,'runMode','solve'))` |
 | One rung, from-scratch + verified vs floor | `reproduce_row(5)` |
-| **Deep rung 0.2 N** (warm-chain from 0.5 N) | `reproduce_deep_rung(0.2,'results/MEE_M2_0p5N.mat')` |
-| **Deep rung 0.1 N** (warm-chain from 0.2 N) | `reproduce_deep_rung(0.1,'results/MEE_M2_0p2N.mat', struct('maxIter',5000))` |
+| **Deep rung 0.2 N** (warm-chain from 0.5 N) | `reproduce_deep_rung(0.2,'../direct/results/MEE_M2_0p5N.mat')` |
+| **Deep rung 0.1 N** (warm-chain from 0.2 N) | `reproduce_deep_rung(0.1,'../direct/results/MEE_M2_0p2N.mat', struct('maxIter',5000))` |
 | Campaign continuation builder (all rungs, warm-chained) | `run_ladder([10 5 2.5 1 0.5], struct())` |
 
 ## Expected results (the full certified ladder, `c_tf = 1.5`)
@@ -55,7 +55,7 @@ min-time·thrust product is ~constant: `t_{f,min} ≈ 223.14 / T` ND (the "R0 la
 holds to <1% across the anchors), so `t_f` scales as `~1/T`.
 
 ## How a rung is built (two stages)
-Both live in `drivers/`; `run_gergaud` / `reproduce_row` / `run_ladder` compose them.
+Both live in `../direct/drivers/`; `run_gergaud` / `reproduce_row` / `run_ladder` compose them.
 
 **Stage A — min-time anchor `t_{f,min}(T)`** (`run_mintime_mee.m`), strategy per
 rung from `table3_recipes.m`:
@@ -99,12 +99,12 @@ is opt-in and **inert at feasible points** (10 N reproduces `m_f=1377.1012`, |Δ
 ## Verify a solved rung
 ```matlab
 verify_row(5)                                   % vs the table3_certified floor (one-sided)
-hamiltonian_const_check('results/MEE_M2_5N.mat')% first-order PMP: H_t conserved (CoV ~1e-8)
-verify_sosc_mee('results/MEE_M2_5N.mat')        % second-order (WEAK_MIN expected for bang-bang)
+hamiltonian_const_check('../direct/results/MEE_M2_5N.mat')% first-order PMP: H_t conserved (CoV ~1e-8)
+verify_sosc_mee('../direct/results/MEE_M2_5N.mat')        % second-order (WEAK_MIN expected for bang-bang)
 ```
 
 ## Deeper references
 - `doc/campaign_reproduction_runbook.pdf` — full whitepaper (anchors, recipes, numbers).
 - `process/DEEP_THRUST_LESSONS.md` — deep-rung recipe + lessons + the arc.
-- `process/DESIGN_thrust_ladder.md`, `reproduce/table3_recipes.m` — per-rung parameters.
-- `reproduce/table3_certified.m` — the canonical certified numbers (source of truth).
+- `process/DESIGN_thrust_ladder.md`, `../direct/reproduce/table3_recipes.m` — per-rung parameters.
+- `../direct/reproduce/table3_certified.m` — the canonical certified numbers (source of truth).

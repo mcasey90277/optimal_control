@@ -51,13 +51,13 @@ Task-by-task build record (16 tasks, T1–T16): `PLAN.md` and
 ## How to run
 
 ```matlab
-cd earth_elliptic_to_geo
+cd earth_elliptic_to_geo/direct
 addpath(fullfile(getenv('HOME'),'casadi-3.7.0'))   % or set CASADI_PATH
 
 mt  = run_mintime(10, 0.0612, 600);        % G1: free-L min-time anchor, 10 N, 3D
 res = run_transfer(struct('thrustN',10,'ctf',1.5,'hx0',0.0612,'term','manifold'));
 run_ctf_sweep                              % M3: full front + thrust-law sweep (hours)
-transfer_movie('results/M2_manifold.mat','results/M2_movie')
+transfer_movie('../direct/results/M2_manifold.mat','../direct/results/M2_movie')
 ```
 
 Batch/resume note: `run_ctf_sweep` and `run_mintime`'s continuation rounds are
@@ -96,7 +96,7 @@ m⁰=1500, μ⁰=398600.47) are confirmed identical, and the M2 mass match
 No-solve / cheap guard tests (all pass in seconds to ~2 min):
 
 ```matlab
-cd earth_elliptic_to_geo
+cd earth_elliptic_to_geo/direct
 test_params; test_elements; test_dynamics; test_terminal; test_seed; ...
 test_solver_smoke; test_stall_guard; test_p2_homotopy
 ```
@@ -160,7 +160,7 @@ separately when validating the solver core end to end.
   transversality passes at 9.5e-11). Suspected coupling through the Sundman
   `cScale` slack state, not yet root-caused. Primal certification (defects,
   mass, structure) is unaffected; M2/M3 gate on primal results only.
-  Diagnostic scripts are preserved in `results/dual_anomaly/`.
+  Diagnostic scripts are preserved in `../direct/results/dual_anomaly/`.
 - **Sporadic CasADi/IPOPT MEX fatal crash on process init**, mostly on the
   first `opti.solve()` of a MATLAB process after an idle gap (observed ~4
   crashes across 10 launches this session). A plain relaunch always
@@ -169,20 +169,20 @@ separately when validating the solver core end to end.
 
 ## Deliverables
 
-- `results/M2_manifold.mat` / `results/M2_manifold_N1200.mat` — the headline
+- `../direct/results/M2_manifold.mat` / `../direct/results/M2_manifold_N1200.mat` — the headline
   mass-match run and its mesh-refinement check.
-- `results/front_mf_ctf.png` — the M3 m_f-vs-c_tf front (Fig 23 analog).
-- `results/M2_movie.mp4` / `.gif` — trajectory + throttle animation of the M2
+- `../direct/results/front_mf_ctf.png` — the M3 m_f-vs-c_tf front (Fig 23 analog).
+- `../direct/results/M2_movie.mp4` / `.gif` — trajectory + throttle animation of the M2
   transfer (apogee burns visible, GEO ring, running ΔV/mass meter).
-- `results/dual_anomaly/` — diagnostics for the open PMP primer finding.
+- `../direct/results/dual_anomaly/` — diagnostics for the open PMP primer finding.
 - `run_gergaud.m` — the front door (see "Front door: `run_gergaud`" below):
   one call prints a Table-3-style row and (optionally) a plot + movie for a
   chosen thrust/endpoint pair.
-- `results/movie_MEE_10N.{mp4,gif}` / `results/movie_MEE_5N.{mp4,gif}` /
-  `results/movie_MEE_2p5N.{mp4,gif}` / `results/movie_MEE_1N.{mp4,gif}` —
+- `../direct/results/movie_MEE_10N.{mp4,gif}` / `../direct/results/movie_MEE_5N.{mp4,gif}` /
+  `../direct/results/movie_MEE_2p5N.{mp4,gif}` / `../direct/results/movie_MEE_1N.{mp4,gif}` —
   trajectory + throttle animations of the four certified MEE min-fuel rungs
   (10/5/2.5/1 N), rendered via `mee_res_to_cart_res.m` + `transfer_movie.m`.
-- `results/gergaud_MEE_M2_10N.{png,mp4,gif}` — example front-door output
+- `../direct/results/gergaud_MEE_M2_10N.{png,mp4,gif}` — example front-door output
   (default-endpoint 10 N run): static plot (`gergaud_plot.m`) + movie.
 
 ## MEE thrust-ladder campaign — Phase 2 (Campaign A)
@@ -224,8 +224,8 @@ Anchors are the free-longitude min-time solves; R0 = T_max·t_f,min holds to
 **0.72% spread across the 4 independently certified anchors** (mean 223.14
 ND ≈ 850.0 N·h) — the same empirical law the paper reports (≈850 N·h), now
 reproduced across two thrust decades in a formulation the paper itself never
-built. Figures: `fig_table3.m` → `results/fig_table3.png` (switches/revs vs
-thrust + the R0-law panel) and `fig_front_mee.m` → `results/fig_front_mee.png`
+built. Figures: `fig_table3.m` → `../direct/results/fig_table3.png` (switches/revs vs
+thrust + the R0-law panel) and `fig_front_mee.m` → `../direct/results/fig_front_mee.png`
 (m_f vs thrust, the Fig-23-adjacent overlay).
 
 **Six binding footnotes (carry into any downstream use of these numbers):**
@@ -374,8 +374,8 @@ of these — `run_gergaud` only points at them.
 **Outputs.** The row (a `gergaud_row()` struct) is always printed via
 `gergaud_row_str()`, with an `UNCERTIFIED — <note>` banner prepended
 whenever `row.certified` is false. Unless `returnOnly` is set, it also
-writes `results/gergaud_<tag>.png` (`makePlot`, via `gergaud_plot.m`) and
-`results/gergaud_<tag>.{mp4,gif}` (`makeMovie`, via `transfer_movie.m`),
+writes `../direct/results/gergaud_<tag>.png` (`makePlot`, via `gergaud_plot.m`) and
+`../direct/results/gergaud_<tag>.{mp4,gif}` (`makeMovie`, via `transfer_movie.m`),
 where `tag = mee_fuel_tag(thrustN)` (e.g. `MEE_M2_10N`, `MEE_M2_2p5N`) plus
 the endpoint-hash suffix for a custom target. Both renderers consume
 Cartesian trajectory data; `mee_res_to_cart_res.m` is the adapter that
@@ -384,9 +384,9 @@ that inertial layout (reconstructing (r,v) via `elements_to_cart` at each
 node's true longitude and rotating the thrust direction into ECI).
 
 The four rendered movies of the certified ladder rungs live at
-`results/movie_MEE_10N.{mp4,gif}`, `results/movie_MEE_5N.{mp4,gif}`,
-`results/movie_MEE_2p5N.{mp4,gif}`, and `results/movie_MEE_1N.{mp4,gif}`.
-`results/gergaud_MEE_M2_10N.{png,mp4,gif}` is an example of the front
+`../direct/results/movie_MEE_10N.{mp4,gif}`, `../direct/results/movie_MEE_5N.{mp4,gif}`,
+`../direct/results/movie_MEE_2p5N.{mp4,gif}`, and `../direct/results/movie_MEE_1N.{mp4,gif}`.
+`../direct/results/gergaud_MEE_M2_10N.{png,mp4,gif}` is an example of the front
 door's own output (a default-endpoint 10 N run).
 
 ## Companions

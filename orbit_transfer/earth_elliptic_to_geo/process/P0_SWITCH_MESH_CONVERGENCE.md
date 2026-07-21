@@ -8,7 +8,7 @@
 An external code review (GPT-5.6-terra + Gemini 3.1 Pro + host, 2026-07-20, on the
 deep-rung recipe of `process/DEEP_THRUST_LESSONS.md`) converged, independently and
 forcefully, on ONE high-value concern: the deep rungs run at **`nodesPerRev = 8`**
-(`drivers/reproduce_deep_rung.m`), so 0.2 N packs ~823 switches into ~2773 nodes —
+(`../direct/drivers/reproduce_deep_rung.m`), so 0.2 N packs ~823 switches into ~2773 nodes —
 **~3 nodes per switch**. A machine-tight collocation defect (~2e-13) certifies the
 *discrete transcription equations*, **not** that the continuous switch structure is
 resolved. Reviewers' charge: the reported switch count could be a discretization
@@ -21,7 +21,7 @@ study had not been done for the deep rungs. This note does it.
 **(A) PMP switching-function cross-check — INCONCLUSIVE here.** Both reviewers
 suggested reconstructing the continuous PMP switching function from the node costates
 (`out.lamDef`) to count switches independent of mesh density. We ran it
-(`verify/verify_pmp_mee.m` on the banked 0.2 N solution): it is **blocked by the
+(`../direct/verify/verify_pmp_mee.m` on the banked 0.2 N solution): it is **blocked by the
 campaign's open raw-dual/primer anomaly** (`process/DESIGN_dual_map.md`). At the 0.2 N
 eccentricity the reconstructed costates are badly corrupted — primer **42.98 deg**
 misaligned (gate <1 deg FAIL), S-sign agreement **71.9 %** (gate >=99 % FAIL) — so its
@@ -29,11 +29,11 @@ misaligned (gate <1 deg FAIL), S-sign agreement **71.9 %** (gate >=99 % FAIL) �
 dead end until Campaign B closes.
 
 **(B) Primal mesh-refinement — the real test.** Purely primal (throttle + node
-longitudes only, `verify/switch_structure.m`), so it is **immune to the dual anomaly**.
+longitudes only, `../direct/verify/switch_structure.m`), so it is **immune to the dual anomaly**.
 Warm-refine the certified 8/rev solution through 16 -> 24 -> 40 nodes/rev (chained
 `interp_warmstart` + a short warm eps-tail `[0.01 0.003 0.001 0]` via `homotopy_mee`,
 deep-rung levers on), re-solving to eps=0 at each, and compare the switch structure.
-Driver: `verify/meshstudy_switch.m`. All four densities reached eps=0 with defect
+Driver: `../direct/verify/meshstudy_switch.m`. All four densities reached eps=0 with defect
 ~2-3e-13; single run, zero crashes (~3.6 h wall).
 
 ## Result (0.2 N, c_tf=1.5, ~346.7 rev; all rows eps=0-certified)
@@ -45,7 +45,7 @@ Driver: `verify/meshstudy_switch.m`. All four densities reached eps=0 with defec
 | 24        | 8 322  | 346.67 | 871      | 2.512  | 1375.836  | 2.4e-13   |
 | 40        | 13 868 | 346.68 | 863      | 2.489  | 1375.819  | 3.4e-13   |
 
-Figure: `results/p0_switch_mesh_convergence.png` (`viz/fig_switch_convergence.m`).
+Figure: `../direct/results/p0_switch_mesh_convergence.png` (`../direct/viz/fig_switch_convergence.m`).
 
 ## Findings
 
@@ -83,9 +83,9 @@ The mass ladder headline numbers are unaffected in substance (0.1 % shifts at mo
 ## Reproduce
 
 ```matlab
-cd earth_elliptic_to_geo; setup_paths
+cd earth_elliptic_to_geo/direct; setup_paths
 addpath(fullfile(getenv('HOME'),'casadi-3.7.0'))
-rows = meshstudy_switch('results/MEE_M2_0p2N.mat', [16 24 40]);  % ~3.6 h, resume-safe
+rows = meshstudy_switch('../direct/results/MEE_M2_0p2N.mat', [16 24 40]);  % ~3.6 h, resume-safe
 fig_switch_convergence(rows)                                     % or fig_switch_convergence() for the baked result
 ```
 

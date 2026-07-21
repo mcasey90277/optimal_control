@@ -53,7 +53,7 @@
 # real timings (Task 6's controller-run) recalibrate this.
 #
 # USAGE:
-#   cd earth_elliptic_to_geo/reproduce
+#   cd earth_elliptic_to_geo/direct/reproduce
 #   chmod +x reproduce_table3.sh          # once
 #   ./reproduce_table3.sh                 # default rung list: 10 5 2.5 1 0.5
 #   ./reproduce_table3.sh 10 5            # only these rungs

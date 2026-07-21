@@ -17,8 +17,8 @@ solves, hardens the tooling A will use).
 ## 1. Evidence base (all preserved; do not re-run to believe)
 
 From Task 12 + five controller refutation experiments (scripts in
-`results/dual_anomaly/`, artifacts `results/M1_dualpolish.mat`,
-`results/M1_wideal_probe.mat`):
+`../direct/results/dual_anomaly/`, artifacts `../direct/results/M1_dualpolish.mat`,
+`../direct/results/M1_wideal_probe.mat`):
 
 | experiment | result |
 |---|---|
@@ -162,7 +162,7 @@ verifying pinpoint zeros at switches and no singular arcs — the paper's H1/H2.
 | module | change |
 |---|---|
 | `casadi_lt_2body.m` | T0: `nlp_scaling_method` option threaded to `opti.solver` call (`:132`) — one line. + option `pinCScale` (fix cScale ≡ given constant, drop row-9 freedom; used only by T2's extraction re-solve) — OR a sibling `extract_duals_8state.m` if touching the core is riskier |
-| `results/dual_anomaly/` | + `diag_kkt_audit.m` (T1 reproducer: full Lagrangian assembly from all dual groups + tangential residual dump) |
+| `../direct/results/dual_anomaly/` | + `diag_kkt_audit.m` (T1 reproducer: full Lagrangian assembly from all dual groups + tangential residual dump) |
 | `verify_pmp_2body.m` | + the mandatory step-weighted adjacent-average primer map (replaces `:34-43`'s direct interval→node assignment) + dual-extraction front-end (mode option: 'raw' legacy / 'reduced' new default once T0/T1/T2 pick a mechanism); gates unchanged, NEVER weakened |
 | `fig_switching.m` | NEW: the Fig-16 analog figure from a verified-dual solution |
 | `README.md` / `DESIGN.md` | finding status update once resolved |
@@ -187,7 +187,7 @@ verifying pinpoint zeros at switches and no singular arcs — the paper's H1/H2.
   *(Gate: ver.pass=1 on at least M1 and M2; any residual failure re-characterized
   honestly, not gate-weakened.)* Includes the mandatory weighted-average map
   regardless of which of D0/D1/D2 resolved the mechanism.
-- **D4** — Fig-16 analog produced (`results/fig_switching.png`): ψ zero-crossings
+- **D4** — Fig-16 analog produced (`../direct/results/fig_switching.png`): ψ zero-crossings
   align with throttle switches (nodeTol ≤1), no finite singular intervals.
 
 ## 6. Verification & honesty rules
@@ -200,7 +200,7 @@ verifying pinpoint zeros at switches and no singular arcs — the paper's H1/H2.
   problem"), and escalate to a full symbolic discrete-adjoint derivation as its
   own future campaign (ms_band precedent). Time-box: do not exceed ~2 days
   total without a controller decision.
-- Every experiment writes a script + artifact under `results/dual_anomaly/`.
+- Every experiment writes a script + artifact under `../direct/results/dual_anomaly/`.
 - Per triage action 9: do NOT gate the Campaign A MEE validation (`DESIGN_thrust_ladder.md`
   Gate P2a) on the raw-dual primer metric until this campaign closes — the m_f/
   structure gates stand on their own for Campaign A.
@@ -216,7 +216,7 @@ changes emphasis, not the budget.
 ## 8. References
 
 - Task 12 report + Fix sections (`.superpowers/sdd/task-12-report.md`).
-- `results/dual_anomaly/diag_*.m` (the five refutation experiments).
+- `../direct/results/dual_anomaly/diag_*.m` (the five refutation experiments).
 - ms_band campaign: `GTO_tulip/indirect/ms_band/MS_BAND_CAMPAIGN.md`
   (adjudicated midpoint dual map — the method precedent).
 - Paper Fig 16 (H1/H2 verification target).

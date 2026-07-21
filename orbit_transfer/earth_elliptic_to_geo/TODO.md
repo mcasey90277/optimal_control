@@ -51,18 +51,18 @@ the deep rungs. See the runbook for the full argument.
 
 ### 2026-07-20 — Hamiltonian optimality verification + render densification
 Independent **first-order (PMP)** verification of the certified rows, complementary to
-SOSC. `verify/hamiltonian_const_check.m`: the time-costate `λ_t` (row-7 defect dual) is
+SOSC. `direct/verify/hamiltonian_const_check.m`: the time-costate `λ_t` (row-7 defect dual) is
 **constant** along the trajectory (⇔ the time-domain Hamiltonian `H_t` is conserved),
 because the L-domain problem is autonomous in the time state — measured **CoV ~1e-9
 (0.1 N), 2e-8 (10 N)**; a mass-costate control varies **56%**, so the check
-discriminates (not trivially satisfied). `verify/hamiltonian_along_traj.m`: reconstructs
+discriminates (not trivially satisfied). `direct/verify/hamiltonian_along_traj.m`: reconstructs
 `H_L(t)` and `H_t(t) = −λ_t` node-by-node. **Tricks worth keeping:** the dual **sign** is
 pinned by transversality `H_t = dJ*/dt_f < 0` (verified on the textbook `min∫u²`: `J*=1/T`,
 `H=−1/T²`) — the extremal identity does *not* discriminate sign; and that extremal identity
 `dH_L/dσ = ∂H_L/∂σ` holds only to **collocation order** (~1.6% @26 nodes/rev — a
-reconstruction check, not a precision claim). Movie `viz/hamiltonian_movie.m` (`H_L`
+reconstruction check, not a precision claim). Movie `direct/viz/hamiltonian_movie.m` (`H_L`
 breathes / `H_t` flat, one shared scale). **Polygonal-trajectory fix:**
-`viz/mee_res_to_cart_res.m` gained `nDense` (default 1 = byte-identical; `>1` pchip-densifies
+`direct/viz/mee_res_to_cart_res.m` gained `nDense` (default 1 = byte-identical; `>1` pchip-densifies
 the render) — the polygon was **8 nodes/rev + linear segments**, not physics. Also
 re-confirmed **verbatim** from the HMG-2004 preprint (p.6–7,
 `orbit_transfer/min_fuel_papers/Gergaud-Haberkorn-Martinon-JournalGuidance2004-preprint.pdf`) that
@@ -90,7 +90,7 @@ feasible points — 10 N reproduces `m_f=1377.1012`, |Δ|=0):
 Full reviews: `scratchpad/{gpt,gemini}_review.md`. Remaining reviewer
 recommendations still open — see the deep-thrust item below.
 
-### 2026-07-19 — SOSC certificate (branch `sosc-certificate`, `verify/sosc/`)
+### 2026-07-19 — SOSC certificate (branch `sosc-certificate`, `direct/verify/sosc/`)
 NLP-level second-order local-minimum certificate: warm-re-solve KKT recovery
 (bounds from `opti.lbg/ubg`, per-kind dual feasibility), active-set classification,
 and a **direct reduced-Hessian `eig(Z'HZ)` + `zt`-sensitivity** verdict (PASS /
@@ -117,7 +117,7 @@ Single PARAMETERS-block entry with user-definable initial AND final orbits,
 three run modes (auto/solve/probe), Table-3 row printout, trajectory plot, and
 movie. Endpoint parameterization (`opts.xf` terminal, `opts.initElems` initial)
 threaded through the solver stack, default-preserving (existing certified caches
-still load). Four rendered movies (`results/movie_MEE_{10N,5N,2p5N,1N}`). Feature
+still load). Four rendered movies (`direct/results/movie_MEE_{10N,5N,2p5N,1N}`). Feature
 test suite 6/6. Built via subagent-driven development; final whole-branch review
 Ready-to-merge after two custom-path fixes (I-1 PSR-skip guard, I-2 note
 visibility).
@@ -155,7 +155,7 @@ file's own DEPRECATED header).
 
 ### 0. SOSC certificate — deep-rung scalability + deferred minors
 
-**Files:** `verify/sosc/sosc_inertia.m`, `sosc_recover_kkt.m`, `recertify_table3.m`.
+**Files:** `direct/verify/sosc/sosc_inertia.m`, `sosc_recover_kkt.m`, `recertify_table3.m`.
 
 **What:** the certificate certifies 10 N cleanly (WEAK_MIN) but stops at the deep
 rungs. Two distinct scale walls: (a) **recovery** — the warm re-solve itself fails
@@ -172,7 +172,7 @@ scale-skip. **Minors (non-blocking, from the whole-branch review):**
 hard MEX crash still leaves a per-rung record); `sosc_kkt_residual` two-sided-range
 row hardening (fail-safe, provably absent today); drop the unused `K` param from
 `sosc_active_set`; `datestr(now)`→`datetime` in `verify_sosc_mee`; header-style
-consistency across `verify/sosc/`.
+consistency across `direct/verify/sosc/`.
 
 ### 1. Certify a 0.5 N min-time anchor (conditioning wall)
 
@@ -206,7 +206,7 @@ and ~600+ switches, N in the tens of thousands, and the crash class of item 1.
 (`.seeded=true`) so `reproduce_row(0.2)`/`reproduce_row(0.1)` are wired and
 ready to run once item 1 unblocks the chain — see item 7 below.
 
-**0.2 N CERTIFIED (2026-07-20)** — `results/MEE_M2_0p2N.mat` (gitignored cache):
+**0.2 N CERTIFIED (2026-07-20)** — `direct/results/MEE_M2_0p2N.mat` (gitignored cache):
 `m_f=1377.29 kg`, 823 switches (8/rev; mesh-converged band ~866±5, see
 `process/P0_SWITCH_MESH_CONVERGENCE.md`), 346.7 rev, defect **2.5e-13**, termErr 7.5e-36,
 incДeg 0, IPOPT Solve_Succeeded, ε=0 bang-bang (edge 99.9%). Never attained
@@ -220,10 +220,10 @@ collapsed the tail); `adaptiveEps` bisection was armed but not triggered.
 `scaleNLP` was tried and DROPPED (it fought IPOPT's gradient-based auto-scaling
 → ε=1 restoration failure; a proper *complete* user-scaling is a separate item).
 
-**0.1 N CERTIFIED (2026-07-20)** — `results/MEE_M2_0p1N.mat`: `m_f=1377.29 kg`,
+**0.1 N CERTIFIED (2026-07-20)** — `direct/results/MEE_M2_0p1N.mat`: `m_f=1377.29 kg`,
 1644 switches, 693.6 rev, defect **5.0e-13**, termErr 0.00, incl 0°,
 Solve_Succeeded, ε=0 (edge 99.9%). Reproduced by `reproduce_deep_rung(0.1,
-'results/MEE_M2_0p2N.mat')` (warm-chained from 0.2 N, `maxIter=5000`, all 17
+'direct/results/MEE_M2_0p2N.mat')` (warm-chained from 0.2 N, `maxIter=5000`, all 17
 ε-steps ok=1) — the driver + recipe validated at the last rung. **THE FULL
 10 → 0.1 N THRUST LADDER IS NOW CERTIFIED** (10/5/2.5/1/0.5/0.2/0.1 N; the deep
 two were never attained before the external review). Only remaining open item on
@@ -248,7 +248,7 @@ reviewer-recommended levers, in priority order:**
    homotopy (`homotopy_mee` currently jumps to the next ε on a failed step instead
    of bisecting).
 4. **Architectural, if factorization stays the limit**: Sundman/time-domain
-   transcription (precedent in `cartesian_legacy/`); HSL MA57/MA97 or Pardiso vs
+   transcription (precedent in `direct/cartesian_legacy/`); HSL MA57/MA97 or Pardiso vs
    the AMD-workaround MUMPS; Schur-condensing/multiple-shooting; PSR `maxAdd`
    scaled to problem size + a genuinely PMP-steered (switching-function) refinement.
 A first 0.2 N solve with the fixes + liftDL is being trialed (warm from 0.5 N).
@@ -319,11 +319,11 @@ numbers:
 **Files:** whole `earth_elliptic_to_geo/` tree (a); `reproduce_row.m` /
 `table3_recipes.m` (b, c); `reproduce_table3.sh` (d).
 
-- **(a) DONE (2026-07-19): code-tidy + subfolder/`lib/` reorg.** The formerly
+- **(a) DONE (2026-07-19): code-tidy + subfolder/`direct/lib/` reorg.** The formerly
   flat directory (~87 `.m` at top level) was split into functional subfolders
-  (`core/ drivers/ psr/ verify/ frontdoor/ reproduce/ viz/ coords/
-  cartesian_legacy/ lib/ tests/ attic/`) with generic helpers extracted to
-  `lib/` and `setup_paths.m`/`module_root.m` handling the path + `results/`
+  (`direct/core/ direct/drivers/ direct/psr/ direct/verify/ direct/frontdoor/ direct/reproduce/ direct/viz/ direct/coords/
+  direct/cartesian_legacy/ direct/lib/ direct/tests/ attic/`) with generic helpers extracted to
+  `direct/lib/` and `setup_paths.m`/`module_root.m` handling the path + `direct/results/`
   resolution; the working process docs moved to `process/` (see README "Code
   layout"). Pure reorganization + path fixes, certified numerics unchanged;
   verified by the 15-test no-solve sweep, a live IPOPT smoke, and a full

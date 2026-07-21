@@ -8,6 +8,16 @@ GEO. The pipeline produces one **row of the paper's Table 3** per thrust level
 (m_f, propellant, ΔV, switch count, revolution count), plus a trajectory plot and
 movie.
 
+## Layout (mirrors the sibling campaigns)
+
+| where | what |
+|---|---|
+| `direct/` | The whole direct campaign: `core/` (MEE solver), `drivers/`, `frontdoor/` (`run_gergaud`), `reproduce/` (Table-3 engine), `verify/` (+SOSC, mesh-convergence), `psr/`, `viz/`, `tests/`, `coords/`, `lib/`, `results/`, `cartesian_legacy/`, and the module `setup_paths.m`/`module_root.m`. Work from `direct/`. |
+| `indirect/` | `mfmax/` — the Gergaud group's own Fortran indirect solver (built + validated here as an independent cross-check: 1378.37 kg vs our 1377.10 kg at 10 N). Our own MATLAB indirect solver is future work — see `indirect/README.md` and `TODO.md`. |
+| `process/` | Campaign narratives, designs, plans (CAMPAIGN.md is the full record). |
+| `doc/` | Method note + reproduction runbook (tex/pdf). |
+| `attic/` | Superseded task-era scripts. Do not use. |
+
 > **Two-body, Earth-centered — NOT CR3BP.** The only gravity is Earth's central
 > field; there is no third body and **no Moon**. (The CR3BP + lunar-gravity
 > low-thrust work is a *different* campaign, `../GTO_tulip/`.) Full
@@ -80,7 +90,7 @@ default paper GTO) and final orbit (`Pf_km,ef,if_deg`, default GEO), `ctf`
   `certified` flag rather than fabricating a row.
 
 Emits the Table-3 row via `gergaud_row_str`, and (unless `returnOnly`) a plot
-(`makePlot`) and movie (`makeMovie`) to `results/gergaud_<tag>.{png,mp4,gif}`.
+(`makePlot`) and movie (`makeMovie`) to `direct/results/gergaud_<tag>.{png,mp4,gif}`.
 
 ### `run_mintime_mee.m` — free-longitude min-time anchor
 `out = run_mintime_mee(thrustN, nodesPerRev, cfg)`. Two-basin (cold seed +
@@ -157,7 +167,7 @@ First-order Pontryagin certificate from the NLP's KKT duals (primer alignment,
 switching-sign law). Diagnostic only; **primal certifications (defect/terminal)
 never depend on it.** See `process/CAMPAIGN.md` footnote 5 for the open dual anomaly.
 
-### SOSC certificate — `verify/sosc/` (NLP-level second-order local-min test)
+### SOSC certificate — `direct/verify/sosc/` (NLP-level second-order local-min test)
 A rigorous **second-order** certificate for a saved min-fuel row: it warm-re-solves
 the NLP to recover a machine-tight KKT point, then classifies the reduced Hessian
 on the critical cone via a direct null-space eig (`Z=null(A)`, `RH=Z'HZ`, `eig`) with
@@ -165,14 +175,14 @@ a `zt`-sensitivity gate. Verdicts: **PASS** (strict local min) / **WEAK_MIN** (P
 flat directions — no descent direction, not strict) / **FAIL** (proven saddle) /
 **INCONCLUSIVE** (sign not resolvable, or too large to compute). Entry point
 `verify_sosc_mee(<row.mat>)`; batch `recertify_table3([10 5 2.5 1 0.5])` writes
-sidecar verdicts to `results/sosc/` (campaign caches untouched). **Key result:** the
+sidecar verdicts to `direct/results/sosc/` (campaign caches untouched). **Key result:** the
 10 N certified row is a **WEAK_MIN with 270 flat directions** — min-fuel bang-bang
 extremals are *weak* (non-strict) minima, so strict SOSC is generically unreachable.
 Gated into the driver/reproducer opt-in via `cfg.certifySosc` (default off); only a
 FAIL verdict demotes a certified row. Design + method evolution + per-rung results:
 `process/DESIGN_sosc.md` (esp. §12) and `process/PLAN_sosc.md`.
 
-### Hamiltonian verification — `verify/hamiltonian_const_check.m`, `verify/hamiltonian_along_traj.m`
+### Hamiltonian verification — `direct/verify/hamiltonian_const_check.m`, `direct/verify/hamiltonian_along_traj.m`
 Independent **first-order (PMP)** checks from the recovered costates, complementary
 to the second-order SOSC test. Because the L-domain carries **time `t` as a state**
 (true longitude is the independent variable), the dynamics are autonomous in `t`, so
@@ -190,7 +200,7 @@ the time-costate `λ_t` is a first integral and `λ_t = −H_t` (energy–time c
   machine-precision claim. `H_L` breathes once per orbit (L explicit in the dynamics);
   `H_t` is flat.
 
-### Movie / viz — `viz/hamiltonian_movie.m`, `viz/mee_res_to_cart_res.m`
+### Movie / viz — `direct/viz/hamiltonian_movie.m`, `direct/viz/mee_res_to_cart_res.m`
 `hamiltonian_movie(H, stem)` renders the two-panel synced animation (`H_L` breathing
 vs `H_t` conserved, on one shared y-scale). The Cartesian adapter
 `mee_res_to_cart_res(..., nDense)` gained an opt-in **render-densification** factor
@@ -210,10 +220,10 @@ superseded it. Kept for the cross-formulation gate (see `process/CAMPAIGN.md`).
 
 ## Code layout
 
-Code is organized into functional subfolders: `core/` `drivers/` `psr/`
-`verify/` (with a nested `verify/sosc/` for the second-order certificate)
-`frontdoor/` `reproduce/` `viz/` `coords/` `cartesian_legacy/` `lib/`
-`tests/` `attic/`. At the module root sit only the two front-door docs
+Code is organized into functional subfolders: `direct/core/` `direct/drivers/` `direct/psr/`
+`direct/verify/` (with a nested `direct/verify/sosc/` for the second-order certificate)
+`direct/frontdoor/` `direct/reproduce/` `direct/viz/` `direct/coords/` `direct/cartesian_legacy/` `direct/lib/`
+`direct/tests/` `attic/`. At the module root sit only the two front-door docs
 (`README.md`, `TODO.md`) and the two path helpers (`setup_paths.m`,
 `module_root.m`). **Run `setup_paths` once per session** (after `cd`-ing into
 this directory) before calling anything — it puts every subfolder on the MATLAB
@@ -229,7 +239,7 @@ Documentation lives in two folders, split by maturity:
 ## Usage
 
 ```matlab
-cd earth_elliptic_to_geo
+cd earth_elliptic_to_geo/direct
 setup_paths                                           % put all subfolders on the path
 addpath(fullfile(getenv('HOME'),'casadi-3.7.0'))      % CasADi on path
 
@@ -244,13 +254,13 @@ run_gergaud(struct('thrustN',2.5,'runMode','solve','e0',0.6,'i0_deg',10, ...
 run_ladder([10 5 2.5 1])
 ```
 
-Tests live in `tests/` (fast, `matlab -batch`): `test_mee_xf`,
+Tests live in `direct/tests/` (fast, `matlab -batch`): `test_mee_xf`,
 `test_mee_seed_initelems`, `test_mee_threading`, `test_mee_res_to_cart`,
 `test_gergaud_row`, `test_run_gergaud_auto` (front-door suite); plus the
 campaign's no-solve guards `test_params/elements/dynamics/terminal/seed/
 mee_rhs/mee_seed/...`. Each test locates the module root and calls
 `setup_paths` itself, so it can be run standalone, e.g.
-`matlab -batch "run('/abs/path/earth_elliptic_to_geo/tests/test_mee_xf.m')"`.
+`matlab -batch "run('/abs/path/earth_elliptic_to_geo/direct/tests/test_mee_xf.m')"`.
 
 ## Reproducing from scratch (best-found)
 
@@ -266,12 +276,12 @@ change in `t_f` can flip the whole switch structure), so a single solve is not
 trusted.
 
 - **Entry points**, in order of preference for the deep/crash-prone rungs:
-  - `reproduce/reproduce_table3.sh` — per-*process* watchdog: one MATLAB
+  - `direct/reproduce/reproduce_table3.sh` — per-*process* watchdog: one MATLAB
     process per rung, relaunch-on-crash-or-hang (up to a per-rung attempt
     cap), because a CasADi/MUMPS MEX-level crash is not catchable from inside
-    MATLAB. Usage (from `reproduce/`): `./reproduce_table3.sh` (default rungs
+    MATLAB. Usage (from `direct/reproduce/`): `./reproduce_table3.sh` (default rungs
     `10 5 2.5 1 0.5`) or `./reproduce_table3.sh 10 5`; logs to
-    `results/repro/reproduce_table3.log` (module root, resolved via
+    `direct/results/repro/reproduce_table3.log` (module root, resolved via
     `module_root()`).
   - `reproduce_table3.m(thrustList)` — thin **in-process** wrapper (`for T =
     thrustList, reproduce_row(T); end`, then prints the table). Convenient for
@@ -280,12 +290,12 @@ trusted.
     the watchdog for 1 N and below.
   - `reproduce_row(T)` — the single-rung engine itself, callable directly for
     one row.
-- **`results/repro/` namespace** — every rung writes
-  `results/repro/REPRO_row_T<round(10*T)>.mat` (variables `row`, `anchor`,
+- **`direct/results/repro/` namespace** — every rung writes
+  `direct/results/repro/REPRO_row_T<round(10*T)>.mat` (variables `row`, `anchor`,
   `sol`, `rep`; e.g. `REPRO_row_T100.mat` for 10 N, `REPRO_row_T5.mat` for
-  0.5 N), kept separate from both the campaign's own `results/*.mat` caches
+  0.5 N), kept separate from both the campaign's own `direct/results/*.mat` caches
   and the driver-internal `REPRO_`-tagged per-stage cache files. `reproduce_row`
-  also builds a `results/repro/` directory if absent, and `chain`-strategy
+  also builds a `direct/results/repro/` directory if absent, and `chain`-strategy
   rungs must be reproduced in order (`load_prev` errors loudly if a rung's
   predecessor hasn't been reproduced yet).
 - **Recipe registry** — `table3_recipes.m` is a pure lookup: for each of the
@@ -325,7 +335,7 @@ cd reproduce && ./reproduce_table3.sh 10 5 2.5 1 0.5   # per-process watchdog, s
 > **Reproducing the ladder from scratch?** `process/LADDER_FROM_SCRATCH.md` is the
 > one-page operational recipe — exact commands per rung, the full certified-number
 > table (10→0.1 N), per-rung anchor strategy, the deep-rung four levers, and the
-> gotchas. The canonical numbers themselves live in `reproduce/table3_certified.m`
+> gotchas. The canonical numbers themselves live in `direct/reproduce/table3_certified.m`
 > (all seven rungs).
 
 ## Related files (outside this directory)
@@ -345,10 +355,10 @@ Certified min-fuel ladder at c_tf = 1.5 (full table + honesty footnotes in
 
 | T [N] | m_f [kg] | switches | revs (ours / paper) | movie |
 |---|---|---|---|---|
-| 10  | 1377.10 | 19  | 7.33 / 7.5  | `results/movie_MEE_10N.{mp4,gif}` |
-| 5   | 1364.54 | 32  | 14.16 / 15  | `results/movie_MEE_5N.{mp4,gif}` |
-| 2.5 | 1369.79 | 76  | 27.84 / 30  | `results/movie_MEE_2p5N.{mp4,gif}` |
-| 1   | 1371.44 | 171 | 69.15 / 74.5 | `results/movie_MEE_1N.{mp4,gif}` |
+| 10  | 1377.10 | 19  | 7.33 / 7.5  | `direct/results/movie_MEE_10N.{mp4,gif}` |
+| 5   | 1364.54 | 32  | 14.16 / 15  | `direct/results/movie_MEE_5N.{mp4,gif}` |
+| 2.5 | 1369.79 | 76  | 27.84 / 30  | `direct/results/movie_MEE_2p5N.{mp4,gif}` |
+| 1   | 1371.44 | 171 | 69.15 / 74.5 | `direct/results/movie_MEE_1N.{mp4,gif}` |
 | 0.5 | 1375.28 | 362 | 138.60 / 149 | (anchor-free, footnoted) |
 
 R0 law `T·t_{f,min} ≈ 850 N·h` holds to 0.72% across the four certified anchors.

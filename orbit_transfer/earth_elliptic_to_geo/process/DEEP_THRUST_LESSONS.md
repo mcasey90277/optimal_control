@@ -3,11 +3,11 @@
 **Result (2026-07-20): the FULL 10 → 0.1 N ladder is certified** — the recipe
 below reached both deep rungs that were *"never attained / instant wall"* before
 the 2026-07-19 external code review (GPT-5.6-terra + Gemini 3.1 Pro):
-- **0.2 N** (`results/MEE_M2_0p2N.mat`): m_f=1377.29 kg, 823 sw, 346.7 rev,
+- **0.2 N** (`../direct/results/MEE_M2_0p2N.mat`): m_f=1377.29 kg, 823 sw, 346.7 rev,
   maxDefect **2.47e-13**, termErr 7.5e-36, incl 0°, `Solve_Succeeded`, edge 99.9%.
-- **0.1 N** (`results/MEE_M2_0p1N.mat`): m_f=1377.29 kg, 1644 sw, 693.6 rev,
+- **0.1 N** (`../direct/results/MEE_M2_0p1N.mat`): m_f=1377.29 kg, 1644 sw, 693.6 rev,
   maxDefect **5.04e-13**, termErr 0.00, incl 0°, `Solve_Succeeded`, edge 99.9%
-  — reproduced by `reproduce_deep_rung(0.1,'results/MEE_M2_0p2N.mat')`
+  — reproduced by `reproduce_deep_rung(0.1,'../direct/results/MEE_M2_0p2N.mat')`
   (`maxIter=5000`, all 17 ε-steps ok=1), validating the driver + recipe at the
   last rung. m_f is near-thrust-independent across the whole ladder (10 N=1377.10
   … 0.1 N=1377.29), as the paper's Fig-23 predicts. (Caches gitignored, like all
@@ -27,11 +27,11 @@ external-review concern about 8/rev under-resolution is thereby resolved: the ph
 ## Reproduce it
 ```matlab
 setup_paths; addpath(fullfile(getenv('HOME'),'casadi-3.7.0'));   % MATLAB R2025b
-best = reproduce_deep_rung(0.2, 'results/MEE_M2_0p5N.mat');       % warm from 0.5 N
+best = reproduce_deep_rung(0.2, '../direct/results/MEE_M2_0p5N.mat');       % warm from 0.5 N
 % best.certified == 1, best.m_f_kg ~ 1377.29, best.maxDefect ~ 1e-13
 ```
 `reproduce_deep_rung.m` is the committed driver; it encodes the four levers below.
-0.1 N: `reproduce_deep_rung(0.1, 'results/MEE_M2_0p2N.mat')` (warm-chain from the
+0.1 N: `reproduce_deep_rung(0.1, '../direct/results/MEE_M2_0p2N.mat')` (warm-chain from the
 0.2 N we just certified). It is a multi-hour run (0.2 N ≈ 34 min of solving over
 17 ε-steps at N≈2773; 0.1 N is ~2× the revs). Runs are detached; observe via the
 per-ε-step `[adap NN]` lines and the step-cache count (see "Observability" below).

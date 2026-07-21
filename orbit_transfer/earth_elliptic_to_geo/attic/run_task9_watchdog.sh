@@ -11,14 +11,14 @@
 # stopping (not masking) on a GENUINE solver failure (an assertion like
 # anchorUncertified/fuelUncertified/allStagesFailed) rather than looping
 # forever on a deterministic block.
-cd /Users/msc/Desktop/optimal_control/earth_elliptic_to_geo || exit 1
+cd /Users/msc/Desktop/optimal_control/orbit_transfer/earth_elliptic_to_geo/direct || exit 1
 LOG=results/task9_deep_run.log
 MAXATTEMPTS=200
 
 for i in $(seq 1 $MAXATTEMPTS); do
     echo "=== WATCHDOG ATTEMPT $i at $(date) ===" >> "$LOG"
     /Applications/MATLAB_R2025b.app/bin/matlab -batch \
-        "cd('/Users/msc/Desktop/optimal_control/earth_elliptic_to_geo'); setup_paths; run_task9_deep" >> "$LOG" 2>&1
+        "cd('/Users/msc/Desktop/optimal_control/orbit_transfer/earth_elliptic_to_geo/direct'); setup_paths; run_task9_deep" >> "$LOG" 2>&1
     RC=$?
     echo "=== WATCHDOG ATTEMPT $i EXIT CODE $RC at $(date) ===" >> "$LOG"
 

@@ -31,7 +31,7 @@ optimal_control/
 │   │                            #   collocation + primer verification (was orbit_transfer/)
 │   ├── lambert/                 # universal-variables Lambert (incl. multi-rev,
 │   │                            #   validated vs pyKep)
-│   ├── earth_elliptic_to_geo/   # GTO->GEO min-fuel (HMG-2004 direct reproduction)
+│   ├── earth_elliptic_to_geo/   # GTO->GEO min-fuel (HMG-2004): direct/ (MEE campaign) + indirect/ (mfmax Fortran)
 │   ├── earth_elliptic_to_geo_CR3BP/  # elliptic->GEO WITH lunar gravity (CR3BP): README/TODO scoped, work not started
 │   ├── GTO_tulip/               # CR3BP GTO->tulip; README at root, campaign docs in process/
 │   │   ├── direct/              #   sundman_minfuel (Sundman engine), PSR(+data), movie
@@ -40,7 +40,6 @@ optimal_control/
 │   ├── GTO_ELFO/                # CR3BP GTO->ELFO
 │   │   ├── direct/              #   elfo (CasADi campaign; reuses tulip Sundman engine)
 │   │   └── indirect/            #   placeholder (Route C future work)
-│   ├── mfmax/                   # MfMax v0/v1 Fortran (Gergaud-group indirect) + docs
 │   ├── min_fuel_paper/          # paper outline (co-author Koblick)
 │   └── min_fuel_papers/         # reference PDFs
 ├── mpc_cart_pole/               # Model Predictive Control for cart-pole

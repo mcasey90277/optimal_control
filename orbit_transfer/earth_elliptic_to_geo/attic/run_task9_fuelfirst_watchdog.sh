@@ -7,14 +7,14 @@
 # fuel-first path is expected to be a single long solve, not a multi-round
 # grind, so a crash-loop guard isn't needed; a second consecutive crash is
 # treated as a genuine blocker to report, not retried further.
-cd /Users/msc/Desktop/optimal_control/earth_elliptic_to_geo || exit 1
+cd /Users/msc/Desktop/optimal_control/orbit_transfer/earth_elliptic_to_geo/direct || exit 1
 LOG=results/task9_fuelfirst_run.log
 MAXATTEMPTS=2
 
 for i in $(seq 1 $MAXATTEMPTS); do
     echo "=== FUELFIRST WATCHDOG ATTEMPT $i at $(date) ===" >> "$LOG"
     /Applications/MATLAB_R2025b.app/bin/matlab -batch \
-        "cd('/Users/msc/Desktop/optimal_control/earth_elliptic_to_geo'); setup_paths; run_task9_fuelfirst" >> "$LOG" 2>&1
+        "cd('/Users/msc/Desktop/optimal_control/orbit_transfer/earth_elliptic_to_geo/direct'); setup_paths; run_task9_fuelfirst" >> "$LOG" 2>&1
     RC=$?
     echo "=== FUELFIRST WATCHDOG ATTEMPT $i EXIT CODE $RC at $(date) ===" >> "$LOG"
 

@@ -11,9 +11,9 @@ flagship result is the **certified sharp bang-bang min-fuel solution**
 
 | where | what |
 |---|---|
-| `sundman_minfuel/` | **THE canonical library** — Sundman-regularized CasADi+IPOPT solver, energy→fuel homotopy, energy-backbone continuation, PMP certification, front aggregation. Start at `sundman_minfuel/README.md`. |
-| `ms_band/` | Indirect multiple-shooting attack on the hard 1.01–1.11× transition band (own campaign doc + unit tests). |
-| `movie/` | Trajectory animations (certified solution with running ΔV meter). |
+| `direct/sundman_minfuel/` | **THE canonical library** — Sundman-regularized CasADi+IPOPT solver, energy→fuel homotopy, energy-backbone continuation, PMP certification, front aggregation. Start at `direct/sundman_minfuel/README.md`. |
+| `indirect/ms_band/` | Indirect multiple-shooting attack on the hard 1.01–1.11× transition band (own campaign doc + unit tests). |
+| `direct/movie/` | Trajectory animations (certified solution with running ΔV meter). |
 | `attic/` | Superseded code: fmincon-era min-time/min-fuel NLPs, Sundman prototypes, old continuation experiments. Do not use; see `attic/README.md`. The fmincon min-time formulation notes (density-matched mesh, throttle-on-bound gotcha, mesh-refinement table) are preserved in `attic/README_legacy_fmincon_era.md`. |
 | `reviews/` | External code-review records. |
 
@@ -41,12 +41,12 @@ Batch orchestration (process isolation + watchdog + retry — required because
 of sporadic uncatchable CasADi/IPOPT MEX crashes):
 
 ```bash
-sundman_minfuel/orchestrate/backbone_walk.sh 1.15 1.20 1.25 1.30   # energy chain
-sundman_minfuel/orchestrate/sharpen_batch.sh 2 1.30 1.35 1.40      # parallel sharpen
+direct/sundman_minfuel/orchestrate/backbone_walk.sh 1.15 1.20 1.25 1.30   # energy chain
+direct/sundman_minfuel/orchestrate/sharpen_batch.sh 2 1.30 1.35 1.40      # parallel sharpen
 ```
 
 Root-level `setup_paths.m` and the two root `.mat`s (`sundman_minfuel_certified`,
-`minfuel_from_energy_seed`) are load-bearing for `movie/` and legacy scripts —
+`minfuel_from_energy_seed`) are load-bearing for `direct/movie/` and legacy scripts —
 dedupe scheduled for cleanup Phase 1.
 
 ## Companions

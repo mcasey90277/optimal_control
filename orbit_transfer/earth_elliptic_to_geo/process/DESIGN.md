@@ -217,5 +217,5 @@ formulation — noted as the future escalation, not attempted here.
 - Haberkorn, Martinon, Gergaud, JGCD 27(6), 2004 (the target paper).
 - ref [6] Caillau & Noailles, *Coplanar control of a satellite around the Earth*, ESAIM
   COCV 6, 2001 (benchmark constants incl. Isp).
-- Our machinery: `GTO_tulip/sundman_minfuel/` (Sundman min-fuel engine),
+- Our machinery: `GTO_tulip/direct/sundman_minfuel/` (Sundman min-fuel engine),
   `PSR/` (energy→fuel homotopy + PMP verification), `LOW_THRUST_MINFUEL_CAMPAIGN.md`.

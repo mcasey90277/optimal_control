@@ -38,7 +38,7 @@ function lam = mee_dual_to_costate(LamDef, sigma)
 % REFERENCES:
 %   [1] earth_elliptic_to_geo/process/DESIGN_dual_map.md sec "[CORRECTNESS]" (the
 %       mandatory weighted-average formula, campaign-wide).
-%   [2] GTO_tulip/ms_band/MS_BAND_CAMPAIGN.md (adjudicated
+%   [2] GTO_tulip/indirect/ms_band/MS_BAND_CAMPAIGN.md (adjudicated
 %       midpoint dual map, the method precedent).
 sigma = sigma(:).';                      % [1x(N+1)]
 N  = size(LamDef, 2);

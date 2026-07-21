@@ -697,8 +697,8 @@ function out = casadi_lt_2body(sigma, X0, U0, tauf0, term, opts)
 %          lamDef, primerAlignDeg, m_f_kg, dV_kms, switches, edge, ...)
 %
 % REFERENCES:
-%   [1] GTO_tulip/sundman_minfuel/casadi_minfuel_sundman.m (parent).
-%   [2] GTO_tulip/elfo/casadi_energy_freetf.m (cScale pattern).
+%   [1] GTO_tulip/direct/sundman_minfuel/casadi_minfuel_sundman.m (parent).
+%   [2] GTO_ELFO/direct/elfo/casadi_energy_freetf.m (cScale pattern).
 %   [3] DESIGN.md secs 2-4.
 cp = getenv('CASADI_PATH');
 if isempty(cp), cp = fullfile(getenv('HOME'), 'casadi-3.7.0'); end
@@ -1230,7 +1230,7 @@ function ver = verify_pmp_2body(out, par)
 %                .lamMendRel .pass
 %
 % REFERENCES:
-%   [1] GTO_tulip/sundman_minfuel/verify_tf_front.m (empirical-beta).
+%   [1] GTO_tulip/direct/sundman_minfuel/verify_tf_front.m (empirical-beta).
 %   [2] HONEST_EVALUATION_DV_TF_FRONT.md (robust-beta lesson; relative gate).
 N    = size(out.lamDef, 2);
 ss   = out.U(4, 1:N);

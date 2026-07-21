@@ -217,7 +217,7 @@ changes emphasis, not the budget.
 
 - Task 12 report + Fix sections (`.superpowers/sdd/task-12-report.md`).
 - `results/dual_anomaly/diag_*.m` (the five refutation experiments).
-- ms_band campaign: `GTO_tulip/ms_band/MS_BAND_CAMPAIGN.md`
+- ms_band campaign: `GTO_tulip/indirect/ms_band/MS_BAND_CAMPAIGN.md`
   (adjudicated midpoint dual map — the method precedent).
 - Paper Fig 16 (H1/H2 verification target).
 - **`doc/reviews/2026-07-17_triage.md`** (this file's §2/§3 rewrite) + the two

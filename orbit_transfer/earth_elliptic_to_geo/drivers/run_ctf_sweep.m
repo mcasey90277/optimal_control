@@ -130,7 +130,7 @@ end
 % local infeasibility -- a documented failure signature for this cell, cured
 % in the parent tulip campaign by warm-starting min-time from a converged
 % smooth ENERGY solution instead of a raw thrust-propagation seed; see
-% run_mintime.m header and GTO_tulip/elfo/gen_elfo_mintime.m).
+% run_mintime.m header and GTO_ELFO/direct/elfo/gen_elfo_mintime.m).
 % routeB.tDur is picked at ~2x each thrust's own min-time estimate from the
 % C-law (T*tf ~ const, C ~ 846.6 N.h from the 10 N anchor): 5 N -> tDur=89 ND
 % (169 h est. x2); 2.5 N -> tDur=176 ND (338 h est. x2), chained from a

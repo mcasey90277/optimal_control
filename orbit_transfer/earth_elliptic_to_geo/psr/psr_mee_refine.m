@@ -15,7 +15,7 @@ function out = psr_mee_refine(baseResult, opts)
 % see REFERENCES [2]). Iterates until switch count and m_f stabilize between
 % rounds, or a re-solve fails to certify, or maxRounds is hit.
 %
-% PORTED FROM vs ADAPTED (GTO_tulip/PSR/lib/refine_loop.m +
+% PORTED FROM vs ADAPTED (GTO_tulip/direct/PSR/lib/refine_loop.m +
 % refine_sigma.m + pmp_refine_indicator.m -- read, NOT modified, NOT
 % path-shared; this file is self-contained, mirroring PSR's own
 % "vendored, not addpath'd" discipline for exactly the reason PSR's README
@@ -132,11 +132,11 @@ function out = psr_mee_refine(baseResult, opts)
 %         between its history file and its solFile).
 %
 % REFERENCES:
-%   [1] GTO_tulip/PSR/lib/refine_loop.m (round-loop structure,
+%   [1] GTO_tulip/direct/PSR/lib/refine_loop.m (round-loop structure,
 %       read-only source of this port).
-%   [2] GTO_tulip/PSR/lib/refine_sigma.m (bisection mechanics,
+%   [2] GTO_tulip/direct/PSR/lib/refine_sigma.m (bisection mechanics,
 %       read-only source of this port).
-%   [3] GTO_tulip/PSR/lib/pmp_refine_indicator.m (the
+%   [3] GTO_tulip/direct/PSR/lib/pmp_refine_indicator.m (the
 %       dual-based switching-function scorer this file's primal-throttle
 %       scorer stands in for; NOT ported -- see ADAPTED note above).
 %   [4] earth_elliptic_to_geo/psr_switch_score_mee.m (the ADAPTED primal

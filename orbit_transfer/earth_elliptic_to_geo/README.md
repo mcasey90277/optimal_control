@@ -119,7 +119,7 @@ propagation from the initial orbit at `L0=π`, sampled at uniform-σ nodes
 per-ε-step resume cache. Forwards `opts.xf` to every solve.
 
 ### `psr_mee_refine.m` (+ `psr_switch_score_mee.m`, `psr_refine_sigma_mee.m`, …)
-PMP-steered switch-aware mesh refinement, ported from `../GTO_tulip/PSR/`.
+PMP-steered switch-aware mesh refinement, ported from `../GTO_tulip/direct/PSR/`.
 Used at 1 N and 0.5 N to sharpen switch times below the base mesh width. **Does
 not yet thread a custom terminal target** — `run_gergaud` skips PSR for custom
 endpoints (see `TODO.md`).

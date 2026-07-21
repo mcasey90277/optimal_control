@@ -213,7 +213,7 @@ Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>"
 ### Task 8: PSR port for switch-aware refinement
 
 **Files:**
-- Create: `earth_elliptic_to_geo/psr_mee_refine.m` (port `GTO_tulip/PSR/` PMP-Steered Refinement — switching-function zeros steer mesh insertion — to the MEE solver).
+- Create: `earth_elliptic_to_geo/psr_mee_refine.m` (port `GTO_tulip/direct/PSR/` PMP-Steered Refinement — switching-function zeros steer mesh insertion — to the MEE solver).
 
 - [ ] **Step 1–4:** port + validate at 1 N (where ~179 switches start to smear on a uniform mesh): show refinement stabilizes switch count and m_f vs the uniform-mesh 1 N result from Task 7. Chosen over stopping ε>0 (which biases m_f — the tulip campaign explicitly fixed a legacy 1e-3 stop for that reason).
 - [ ] **Step 5: Commit.**

@@ -5,7 +5,7 @@
 #
 # Model: this module's own run_task9_watchdog.sh (crash-relaunch precedent,
 # same "grep the log for a genuine-failure marker, else relaunch" pattern)
-# and ../GTO_tulip/PSR/psr_batch.sh (one-process-per-item +
+# and ../GTO_tulip/direct/PSR/psr_batch.sh (one-process-per-item +
 # background-launch/poll-loop hang watchdog, since this Mac has neither
 # `timeout` nor `gtimeout`).
 #

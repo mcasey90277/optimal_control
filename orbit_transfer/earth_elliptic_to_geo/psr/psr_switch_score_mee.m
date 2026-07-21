@@ -1,7 +1,7 @@
 function [swIdx, score] = psr_switch_score_mee(sigma, U, opts)
 % PSR_SWITCH_SCORE_MEE  Primal throttle-crossing switch detector + per-
 % interval mesh-refinement score for the MEE/L-domain PSR port. ADAPTED
-% (not ported) from GTO_tulip/PSR/lib/pmp_refine_indicator.m's
+% (not ported) from GTO_tulip/direct/PSR/lib/pmp_refine_indicator.m's
 % dual-based switching-function S(tau) scorer: that scorer recovers costates
 % from the direct solve's own KKT defect duals and localizes a switch to a
 % sub-interval S=0 root. This file instead scores directly off the PRIMAL
@@ -34,7 +34,7 @@ function [swIdx, score] = psr_switch_score_mee(sigma, U, opts)
 %           tulip scorer's (hInt/sigf) factor)
 %
 % REFERENCES:
-%   [1] GTO_tulip/PSR/lib/pmp_refine_indicator.m (dual-based
+%   [1] GTO_tulip/direct/PSR/lib/pmp_refine_indicator.m (dual-based
 %       analog this file stands in for -- read-only source, not modified).
 %   [2] earth_elliptic_to_geo/casadi_lt_mee.m (out.switches, same bracketing
 %       convention).

@@ -1,7 +1,7 @@
 function [sigmaNew, isNew, nDropped] = psr_refine_sigma_mee(sigma, score, opts)
 % PSR_REFINE_SIGMA_MEE  Bisect the top-scoring collocation intervals,
 % preserving every original node -- PORTED from
-% GTO_tulip/PSR/lib/refine_sigma.m (identical mechanics: insert
+% GTO_tulip/direct/PSR/lib/refine_sigma.m (identical mechanics: insert
 % the midpoint of each selected interval, never bisect an interval narrower
 % than hFloor, cap inserted nodes per call at maxAdd, count dropped
 % selections rather than silently truncating). K/maxAdd DEFAULTS differ from
@@ -30,7 +30,7 @@ function [sigmaNew, isNew, nDropped] = psr_refine_sigma_mee(sigma, score, opts)
 %              maxAdd<=K [scalar]
 %
 % REFERENCES:
-%   [1] GTO_tulip/PSR/lib/refine_sigma.m (read-only source of
+%   [1] GTO_tulip/direct/PSR/lib/refine_sigma.m (read-only source of
 %       this port, mechanics unchanged).
 %   [2] psr_mee_refine.m (K/maxAdd default-deviation rationale).
 if nargin < 3, opts = struct(); end

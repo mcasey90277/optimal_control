@@ -20,7 +20,7 @@ function transfer_movie(matFile, outStem)
 % OUTPUTS: none (files written; paths printed)
 %
 % REFERENCES:
-%   [1] GTO_tulip/PSR/psr_movie.m (house-style movie this file
+%   [1] GTO_tulip/direct/PSR/psr_movie.m (house-style movie this file
 %       is restyled to match: layout, colors, Delta-V meter design).
 %   [2] memory: matlab-movie-diagonal-streaks (fixed divisible-by-16 frame ->
 %       no H.264 shear).

@@ -316,7 +316,7 @@ They prescribe different fixes:
 - **terra: hp/adaptive mesh refinement steered by the switching-function
   zeros**, or switch times as explicit decision variables in a multi-phase
   formulation. **Adopted.** We already own this exact mechanism —
-  **`GTO_tulip/PSR/`** (PMP-Steered Refinement) is switching-
+  **`GTO_tulip/direct/PSR/`** (PMP-Steered Refinement) is switching-
   function-steered mesh refinement, already built and validated on the tulip
   problem. Campaign A Phase 2 should **port PSR to the MEE solver** rather
   than build a new refinement scheme from scratch.
@@ -346,7 +346,7 @@ change):
 | `elements_to_cart.m` / `cart_to_elements.m` | already built + roundtrip-tested to 1e-10 (Task 3) — used for BCs and cross-checks |
 | `run_mintime` / `run_transfer` / `run_ctf_sweep` | gain a `formulation` switch ('cartesian'|'mee') or thin MEE siblings — decide at plan time; prefer siblings to avoid destabilizing certified drivers |
 | `verify_pmp_2body` | MEE variant of the switching-function check (Campaign B's front-end pattern); per triage action 9, do NOT gate Phase-2 validation on the raw-dual primer metric until Campaign B (`DESIGN_dual_map.md`) closes — m_f/structure gates stand on their own here |
-| `GTO_tulip/PSR/` (ported, not new) | switching-function-steered mesh refinement, adapted from the tulip solver to the MEE solver — the adopted switch-smearing fix |
+| `GTO_tulip/direct/PSR/` (ported, not new) | switching-function-steered mesh refinement, adapted from the tulip solver to the MEE solver — the adopted switch-smearing fix |
 
 **Validation before use (non-negotiable).** Solve the 10 N / c_tf=1.5 case in
 MEE and require m_f within ~0.5 kg of the Cartesian 1376.74/1377.05 kg and the
@@ -405,7 +405,7 @@ Phase 0: ~1 day. Phase 1: ~2–3 days (mostly background solves). Phase 2:
   prograde-guard/feasibility-policy amendments and the Phase 2 rewrite) + the
   two full reviews, `2026-07-17_core_review_gpt56terra.md` and
   `2026-07-17_core_review_gemini.md`.
-- `GTO_tulip/PSR/` (PMP-Steered Refinement — ported into Phase 2
+- `GTO_tulip/direct/PSR/` (PMP-Steered Refinement — ported into Phase 2
   as the switch-smearing fix) and `GTO_tulip/LOW_THRUST_MINFUEL_CAMPAIGN.md`
   (the legacy ε-schedule fuel-bias precedent cited against Gemini's ε≈1e-4
   stopping-point alternative).

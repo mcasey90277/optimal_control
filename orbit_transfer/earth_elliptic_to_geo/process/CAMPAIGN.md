@@ -288,7 +288,7 @@ variable), `mee_seed.m`, `run_mintime_mee.m`/`run_transfer_mee.m`/
 `run_ladder.m` (per-thrust drivers + ladder orchestrator), `interp_warmstart.m`
 (mesh-refine handoff, renormalizes RTN beta), `psr_mee_refine.m` +
 `psr_switch_score_mee.m` + `psr_refine_sigma_mee.m` (PSR ported from
-`GTO_tulip/PSR/`), `mee_dual_to_costate.m` + `mee_primer_switch.m`
+`GTO_tulip/direct/PSR/`), `mee_dual_to_costate.m` + `mee_primer_switch.m`
 + `verify_pmp_mee.m` (PMP verifier, footnote 5), `fig_table3.m` +
 `fig_front_mee.m` (this section's deliverable figures).
 

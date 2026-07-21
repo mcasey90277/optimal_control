@@ -14,7 +14,7 @@ risk), `LOW_THRUST_MINFUEL_CAMPAIGN.md` (history).
 2. **Stale duplicate core solver.** Parent-root `casadi_minfuel_sundman.m` is
    the OLD API (no `warmTight`; 7.9 KB vs the library's 11.3 KB). It already
    caused one shadowing bug ("Too many input arguments"); it will cause more.
-3. **`sundman_minfuel/` mixes everything.** Library functions, 4 overlapping
+3. **`direct/sundman_minfuel/` mixes everything.** Library functions, 4 overlapping
    front drivers (`run_tf_sweep`, `run_tf_front`, `run_tf_2anchor`, `tf_step`)
    with *different* homotopy schedules, 15 `energy_*.mat`, result/plot files,
    and docs all in one flat dir.
@@ -28,20 +28,20 @@ risk), `LOW_THRUST_MINFUEL_CAMPAIGN.md` (history).
    LaTeX aux files, undecided untracked folders (`lieFiltering/`,
    `gauss_sum_curvature/`).
 
-**Not a problem:** `ms_band/` (lower-band multiple-shooting attack, other
+**Not a problem:** `indirect/ms_band/` (lower-band multiple-shooting attack, other
 terminal) is well-organized — own campaign doc + unit tests. Model to follow.
 
 ## Constraints (hard)
 
-- **Other terminal is live** in `ms_band/`, with `../sundman_minfuel` and
+- **Other terminal is live** in `indirect/ms_band/`, with `../sundman_minfuel` and
   `../../lowThrust_GTO_tulip` on its path, reading `cr3bp_lt_params`,
   `gto_tulip_endpoints`, and the dual `.mat`s. → NO renames/moves inside
-  `sundman_minfuel/` or `lowThrust_GTO_tulip/`, and no touching `ms_band/`,
+  `direct/sundman_minfuel/` or `lowThrust_GTO_tulip/`, and no touching `indirect/ms_band/`,
   until it is idle.
 - **MATLAB hold** (user-ordered): no solver runs. File moves and new code are
   fine; smoke-testing waits.
 - **Append-only artifacts:** certified `.mat`s are never modified, only moved
-  with path fixes (note: `movie/animate_sundman_minfuel.m` loads the PARENT
+  with path fixes (note: `direct/movie/animate_sundman_minfuel.m` loads the PARENT
   copy of `sundman_minfuel_certified.mat`; parent/lib copies verified
   identical, so dedupe must update that path in the same commit).
 
@@ -53,7 +53,7 @@ GTO_tulip/
 ├── LOW_THRUST_MINFUEL_CAMPAIGN.md # history (stays)
 ├── HONEST_EVALUATION_DV_TF_FRONT.md
 ├── CODE_CLEANUP_PLAN.md           # this file
-├── sundman_minfuel/               # CANONICAL LIBRARY (direct method)
+├── direct/sundman_minfuel/               # CANONICAL LIBRARY (direct method)
 │   ├── minfuel_config.m           # NEW: tfMin (explicit!), pSund, N, scheds
 │   ├── minfuel_at_tf.m            # NEW: THE per-t_f driver (see below)
 │   ├── aggregate_front.m          # NEW: combine+verify+plot, 3 marker classes
@@ -72,8 +72,8 @@ GTO_tulip/
 │       solve_tf_minfuel.m (superseded by minfuel_at_tf) + their .mats
 ├── attic/                         # parent legacy: fmincon-era solvers,
 │   Sundman prototypes, tf_continuation_*, old logs/mats, OLD core-solver copy
-├── movie/                         # unchanged (fix certified-.mat path)
-└── ms_band/                       # other terminal's — untouched
+├── direct/movie/                         # unchanged (fix certified-.mat path)
+└── indirect/ms_band/                       # other terminal's — untouched
 ```
 
 ## Code changes (the substance, beyond moving files)
@@ -122,7 +122,7 @@ GTO_tulip/
 - Attic the superseded `sundman_minfuel` drivers; migrate `energy_*.mat`,
   `ms_*.mat`, front `.mat`s/plots into `results/` subdirs.
 - Dedupe parent `sundman_minfuel_certified.mat` / `minfuel_from_energy_seed.mat`
-  (identical copies verified) and fix the `movie/` load path in the same
+  (identical copies verified) and fix the `direct/movie/` load path in the same
   commit.
 
 **Phase 2 — when MATLAB is unfrozen (validation):**
@@ -147,4 +147,4 @@ GTO_tulip/
    (`solve_tf_minfuel`, `run_tf_sweep/front/2anchor`, `build_energy_backbone`)
    now reference dead filenames — they are broken-by-migration and MUST be
    atticked in Phase 1 (left in place for now: the live lower-band terminal
-   has `sundman_minfuel/` on its path).
+   has `direct/sundman_minfuel/` on its path).

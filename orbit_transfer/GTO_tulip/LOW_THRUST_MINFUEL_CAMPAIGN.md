@@ -97,15 +97,15 @@ coasts, zero-crossings at the 25 switches) — scale-DEPENDENT, needs the
 duals de-scaled to node costates (undo the trapezoid weight, `τ_f`, `κ`), or,
 scale-free, decode the throttle-bound multipliers in `lamAll` directly; and an
 optional independent adjoint-ODE consistency check — **DONE (Jul 10 2026,
-`ms_band/verify_direct_pmp.m`)**: certifies the 1.12× solution consistent with
+`indirect/ms_band/verify_direct_pmp.m`)**: certifies the 1.12× solution consistent with
 a continuous PMP extremal and corrects its switch count (see the down-sweep
 table footnote above). See
-`sundman_minfuel/TIER1_PMP_CERTIFICATION_SCOPE.md` for the full plan and the
+`direct/sundman_minfuel/TIER1_PMP_CERTIFICATION_SCOPE.md` for the full plan and the
 (failed) continuous-costate route that motivated using the duals.
 
 ## ΔV–time front (tf-sweep) — a dense local-minimum landscape (Jul 9 2026)
 
-`sundman_minfuel/run_tf_sweep.m` maps the min-fuel ΔV vs transfer-time trade by
+`direct/sundman_minfuel/run_tf_sweep.m` maps the min-fuel ΔV vs transfer-time trade by
 t_f-continuation (fixed endpoints; only t_f varies, imposed through the carried
 time state; the smooth energy solution is continued across t_f and re-sharpened
 per t_f). Every point converges machine-tight and PMP-consistent (primer
@@ -253,7 +253,7 @@ from-scratch solves share. Current map of the front (machine-tight solutions,
 
 (1.12x switch count: see the Jul-10 adjudication — 10 PMP-certified switches +
 1 near-graze throttle dip miscounted by the s>0.5 threshold;
-`ms_band/MS_BAND_CAMPAIGN.md`.)
+`indirect/ms_band/MS_BAND_CAMPAIGN.md`.)
 
 Monotone ordering holds: 3.83(1.12) > 3.49(1.14) > 3.37(1.15) > 3.24(1.20) >
 3.14(1.25). The **switch count drops toward the band** (25→12 from 1.15× to
@@ -311,7 +311,7 @@ where a direct-collocation basin fragments and continuation jumps or hangs.
 ### ENERGY-BACKBONE floor/ceiling — and the band is hard even for ENERGY (Jul 12 2026)
 
 New empirical result, and it sharpens the "why" of the transition band. Built
-`PSR/gen_energy_seed.m` (one-command energy-backbone generator: walk the convex
+`direct/PSR/gen_energy_seed.m` (one-command energy-backbone generator: walk the convex
 ε=1 problem from the nearest existing backbone in small t_f steps, loose
 continuation + tight re-clean per rung, resumable). Two ends probed:
 
@@ -342,8 +342,8 @@ non-loose warm start, or a different continuation parameter), not a knob-turn.
 
 ### Indirect/multiple-shooting attack on the band — executed, band still open; verifier delivered (Jul 9-10 2026)
 
-Option 1 above was executed as a full campaign (`ms_band/`; see
-`ms_band/MS_BAND_CAMPAIGN.md` for the complete record). Findings:
+Option 1 above was executed as a full campaign (`indirect/ms_band/`; see
+`indirect/ms_band/MS_BAND_CAMPAIGN.md` for the complete record). Findings:
 
 - **Time-domain multiple shooting is structurally rank-deficient in the band.**
   At the 1.01× up-anchor (clean integration seed, eps=1 maximal smoothing) and
@@ -364,7 +364,7 @@ Option 1 above was executed as a full campaign (`ms_band/`; see
 - **The band therefore REMAINS OPEN.** Indirect reproduction of the 1.12× point
   is adjudicated CLOSED/BLOCKED; the transition band 1.01–1.11× is not reached
   by this campaign either.
-- **The durable payoff is `ms_band/verify_direct_pmp.m`** — an independent
+- **The durable payoff is `indirect/ms_band/verify_direct_pmp.m`** — an independent
   adjoint-ODE consistency verifier (no LM anywhere) that closes this doc's open
   Tier-1 item ("optional independent adjoint-ODE consistency check", below). It
   certifies the 1.12× direct solution as **consistent with a continuous PMP
@@ -372,7 +372,7 @@ Option 1 above was executed as a full campaign (`ms_band/`; see
   transversality |λ_m(σ_f)| = 1.7e-6 (relative gate). It also **corrects the
   1.12× switch count** (see the table footnote below).
 
-Full record: `ms_band/MS_BAND_CAMPAIGN.md`.
+Full record: `indirect/ms_band/MS_BAND_CAMPAIGN.md`.
 
 Infrastructure for the down-sweep: `build_energy_backbone.m` / `energy_step.m`
 (chained energy continuation, process-isolated), `solve_tf_minfuel.m` (re-clean
@@ -604,7 +604,7 @@ sharpen.**
 The core numerical objective is met. Remaining work is packaging and payoff:
 
 1. **Movie of the certified bang-bang solution** — the throttle/perigee-burn
-   structure over the 40 revs (reuse the `movie/` animators; the solution is
+   structure over the 40 revs (reuse the `direct/movie/` animators; the solution is
    `sundman_minfuel_certified.mat`, states in Sundman τ with time as X(8,:)).
 2. **tf sweep for the ΔV–time trade** — re-run the homotopy at several
    tf/tf_min values (larger tf ⇒ more coast ⇒ lower ΔV, more switches) to map
@@ -613,7 +613,7 @@ The core numerical objective is met. Remaining work is packaging and payoff:
 3. **Independent verification (Tier-1 PMP certification)** — check the 25-switch
    structure against the PMP switching function S = 1 − ‖λ_v‖c/m − λ_m sign
    changes as a cross-solver certificate. **Scoped + attempted Jul 8; full record
-   in `sundman_minfuel/TIER1_PMP_CERTIFICATION_SCOPE.md`.** FINDING: recovering
+   in `direct/sundman_minfuel/TIER1_PMP_CERTIFICATION_SCOPE.md`.** FINDING: recovering
    costates from the PRIMAL (trajectory + primer directions) fails — the
    homogeneous costate map amplifies ~5×10¹¹ over the 40 revs and rendezvous
    leaves no BC on λ_r,λ_v, so the recovery is ill-posed (three methods tried,
@@ -640,7 +640,7 @@ The core numerical objective is met. Remaining work is packaging and payoff:
 - Hermite-Simpson: `nlp_constraints_minfuel_hs.m`, `solve_minfuel_nlp_hs.m`.
 - CasADi+IPOPT: `casadi_minfuel_trap.m` (needs `~/casadi-3.7.0`).
 - **Sundman + homotopy (the solver that worked) — MODULARIZED into
-  `sundman_minfuel/`** (self-contained library, code-reviewed Jul 8):
+  `direct/sundman_minfuel/`** (self-contained library, code-reviewed Jul 8):
   `cr3bp_lt_params.m` (constants), `gto_tulip_endpoints.m` (BCs),
   `sundman_seed_map.m` (no-resample time→τ map), `casadi_minfuel_sundman.m`
   (core solver: Sundman-regularized, ε-parametrized energy→fuel objective,
@@ -652,7 +652,7 @@ The core numerical objective is met. Remaining work is packaging and payoff:
   `test_sundman_eps1_noresample.m`) remain in the parent as the development
   record / diagnostics.
 - tf-continuation: `tf_continuation_minfuel.m`, `tf_continuation_minfuel_fine.m`.
-- Movies + solutions: `movie/` (min-fuel leg, coarse 6-switch, 53-switch,
+- Movies + solutions: `direct/movie/` (min-fuel leg, coarse 6-switch, 53-switch,
   min-energy solo, three-way comparison; MP4 + GIF each).
 
 ## ZTL — Zhang-style thrust ladder (Prong Z, opened 2026-07-12)
@@ -660,8 +660,8 @@ The core numerical objective is met. Remaining work is packaging and payoff:
 After PSR banked the direct deliverable and every indirect route blocked,
 the campaign pivoted to running Zhang 2015's recipe WHOLE (the audit showed
 every prior failure used a strict subset of his four ingredients). Strategy:
-`ifs/PLAN_OF_ATTACK_3.md`; execution plan: `ifs/PLAN_PRONG_Z.md`; live
-results record: **`ztl/ZTL_RESULTS.md`** (P0 preflight findings: graze
+`indirect/ifs/PLAN_OF_ATTACK_3.md`; execution plan: `indirect/ifs/PLAN_PRONG_Z.md`; live
+results record: **`indirect/ztl/ZTL_RESULTS.md`** (P0 preflight findings: graze
 margin healthy at 1.15x; the 2025 thrust-ladder tfMin table was an artifact;
 min-time retired as continuation substrate — machinery-independent
 near-singularity; fixed-tf ladder needs no min-time table; the cold-seed
@@ -672,8 +672,8 @@ signal near 75 mN). Memory: ztl-p0-findings.
 ## GTO -> ELFO min-fuel ΔV-time FRONT: MAPPED (2026-07-15)
 
 The min-fuel campaign extended to the second target (lunar ELFO, proj7
-`im_elfo_optimum`). Full record: `elfo/ELFO_RETARGET.md`; pipeline lives in
-`elfo/` (self-contained sibling of PSR, two-primary free-tf solver
+`im_elfo_optimum`). Full record: `../GTO_ELFO/direct/elfo/ELFO_RETARGET.md`; pipeline lives in
+`../GTO_ELFO/direct/elfo/` (self-contained sibling of PSR, two-primary free-tf solver
 `casadi_energy_freetf` for the lunar-capture leg).
 
 **Result:** the GTO->ELFO min-fuel ΔV-time front is mapped over the energy band
@@ -687,10 +687,10 @@ many-switch bang-bang is hardest to resolve, and 1.65x sits AT the minimum, so
 the **optimum is at a fold**. Switch count non-monotone, peaks 50 @1.33x.
 
 **Infrastructure (terminal-runnable, crash-robust, resumable; on main):**
-`elfo/elfo_energy_sweep.sh` (energy seed band) -> `elfo/elfo_batch.sh 0 energy`
+`../GTO_ELFO/direct/elfo/elfo_energy_sweep.sh` (energy seed band) -> `../GTO_ELFO/direct/elfo/elfo_batch.sh 0 energy`
 (per-factor ε->0, one process/factor for MEX-crash isolation, watchdog, resume)
--> `elfo/elfo_collect_summary` -> `results/elfo_batch_summary_minEps0.mat`;
-post-hoc movies `elfo/elfo_movies.sh all`. Watchdog lesson: default 30 min too
+-> `../GTO_ELFO/direct/elfo/elfo_collect_summary` -> `results/elfo_batch_summary_minEps0.mat`;
+post-hoc movies `../GTO_ELFO/direct/elfo/elfo_movies.sh all`. Watchdog lesson: default 30 min too
 short mid-band; use `WATCHDOG_S=3600` (every timed-out factor keeps its ε-step
 checkpoint, so a re-run resumes). NEXT: solve ELFO min-time (anchors the factor
 scale + gives the 0-switch front endpoint). See memory `elfo-retarget-open`,

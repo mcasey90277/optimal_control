@@ -52,5 +52,5 @@ dedupe scheduled for cleanup Phase 1.
 ## Companions
 
 - Indirect (PMP shooting) counterpart + theory note + guided tutorial:
-  `../lowThrust_GTO_tulip/`
+  `indirect/lowThrust_GTO_tulip/`
 - Problem source: pumpkynPie `Demos/LunaNet Analysis/lowThrust_GTO_Tulip.m`

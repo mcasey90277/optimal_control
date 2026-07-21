@@ -34,9 +34,9 @@ terminal) is well-organized — own campaign doc + unit tests. Model to follow.
 ## Constraints (hard)
 
 - **Other terminal is live** in `indirect/ms_band/`, with `../sundman_minfuel` and
-  `../../lowThrust_GTO_tulip` on its path, reading `cr3bp_lt_params`,
+  `../lowThrust_GTO_tulip` on its path, reading `cr3bp_lt_params`,
   `gto_tulip_endpoints`, and the dual `.mat`s. → NO renames/moves inside
-  `direct/sundman_minfuel/` or `lowThrust_GTO_tulip/`, and no touching `indirect/ms_band/`,
+  `direct/sundman_minfuel/` or `indirect/lowThrust_GTO_tulip/`, and no touching `indirect/ms_band/`,
   until it is idle.
 - **MATLAB hold** (user-ordered): no solver runs. File moves and new code are
   fine; smoke-testing waits.

@@ -4,7 +4,7 @@
 transfer on the full ~40-revolution spiral, and what it would take to finish
 the many-switch case.** This is the synthesis; per-piece detail is in
 `MIN_ENERGY_NOTES.md`, `OVERNIGHT_STATUS.md`, and
-`../lowThrust_GTO_tulip/gto_tulip_mintime_theory.pdf` §6.
+`indirect/lowThrust_GTO_tulip/gto_tulip_mintime_theory.pdf` §6.
 
 ---
 
@@ -634,7 +634,7 @@ The core numerical objective is met. Remaining work is packaging and payoff:
   `solve_minfuel_nlp.m`, `NLP_lowThrust_GTO_Tulip_minfuel.m`,
   `costate_seed_from_nlp.m`.
 - Min-energy: `solve_energy_nlp.m`, `NLP_lowThrust_GTO_Tulip_energy.m`,
-  `costate_seed_from_nlp_energy.m` (+ indirect in `../lowThrust_GTO_tulip/`).
+  `costate_seed_from_nlp_energy.m` (+ indirect in `indirect/lowThrust_GTO_tulip/`).
 - Cone-eliminated (unit-direction): `lt_dynamics_dirthrottle.m`,
   `nlp_constraints_minfuel_ue.m`, `solve_minfuel_nlp_ue.m`.
 - Hermite-Simpson: `nlp_constraints_minfuel_hs.m`, `solve_minfuel_nlp_hs.m`.

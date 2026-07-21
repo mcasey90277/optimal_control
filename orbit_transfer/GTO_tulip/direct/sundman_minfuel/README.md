@@ -81,11 +81,11 @@ the library root: `sundman_minfuel_certified.mat` and
 `orchestrate/*.sh`** — the older drivers below (`solve_tf_minfuel`,
 `run_tf_sweep/front/2anchor`, `build_energy_backbone`) still reference the
 pre-migration filenames and are superseded (atticked in cleanup Phase 1; see
-`../CODE_CLEANUP_PLAN.md`).
+`../../process/CODE_CLEANUP_PLAN.md`).
 
 ## Notes
 - The full method write-up and the "two walls" (dynamics vs objective) analysis
-  are in `../LOW_THRUST_MINFUEL_CAMPAIGN.md`.
+  are in `../../process/LOW_THRUST_MINFUEL_CAMPAIGN.md`.
 - **ΔV–time front.** `run_tf_front.m` continues the certified basin in small
   t_f steps (cleaner than `run_tf_sweep.m`'s energy-continuation, which
   scatters). The optimal *family changes* with t_f, so no single basin threads

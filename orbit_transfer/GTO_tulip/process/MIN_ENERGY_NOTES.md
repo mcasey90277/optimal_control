@@ -9,7 +9,7 @@ eventually cracking min-fuel (energy -> fuel continuation).
 
 ## Files
 
-Indirect (PMP shooting), `indirect/lowThrust_GTO_tulip/`:
+Indirect (PMP shooting), `../indirect/lowThrust_GTO_tulip/`:
 - `lt_pmp_eom_energy.m`     — 14-state augmented dynamics; control
   u = sat(S_e), S_e = Tmax(||lam_v||/m + lam_m/c); costate ODEs identical
   to min-time/fuel (envelope theorem); complex-step safe (clamp branches on

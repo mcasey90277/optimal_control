@@ -218,4 +218,4 @@ formulation — noted as the future escalation, not attempted here.
 - ref [6] Caillau & Noailles, *Coplanar control of a satellite around the Earth*, ESAIM
   COCV 6, 2001 (benchmark constants incl. Isp).
 - Our machinery: `GTO_tulip/direct/sundman_minfuel/` (Sundman min-fuel engine),
-  `PSR/` (energy→fuel homotopy + PMP verification), `LOW_THRUST_MINFUEL_CAMPAIGN.md`.
+  `PSR/` (energy→fuel homotopy + PMP verification), `process/LOW_THRUST_MINFUEL_CAMPAIGN.md`.

@@ -392,6 +392,6 @@ door's own output (a default-endpoint 10 N run).
 ## Companions
 
 - Parent campaign (shared solver architecture, `sundman_minfuel` pattern):
-  `../GTO_tulip/`, esp. `LOW_THRUST_MINFUEL_CAMPAIGN.md`.
+  `../GTO_tulip/`, esp. `process/LOW_THRUST_MINFUEL_CAMPAIGN.md`.
 - Problem source: Haberkorn, Martinon & Gergaud, JGCD 27(6), 2004
   (`orbit_transfer/min_fuel_papers/Gergaud-Haberkorn-Martinon-JournalGuidance2004-preprint.pdf`).

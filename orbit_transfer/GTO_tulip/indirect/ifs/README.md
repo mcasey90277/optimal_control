@@ -135,7 +135,7 @@ min-time anchor. Full arc: `RESULTS_RUNG01_RUNG2.md`; plan:
 - Design spec: `../../docs/superpowers/specs/2026-07-11-ifs-design.md`
 - Full arc / diagnosed failure modes / gate numbers: `RESULTS.md` (this folder)
 - Campaign context (direct-side record, two-walls analysis this build's walls
-  echo): `../LOW_THRUST_MINFUEL_CAMPAIGN.md`
+  echo): `../../process/LOW_THRUST_MINFUEL_CAMPAIGN.md`
 - PSR sibling (the direct-side mesh-refinement stage IFS follows):
   `../sundman_minfuel/refine/` (`README.md`, `RESULTS.md`)
 - Diagnostics referenced in `RESULTS.md`: `../../.superpowers/sdd/ifs-diag-floor-report.md`,

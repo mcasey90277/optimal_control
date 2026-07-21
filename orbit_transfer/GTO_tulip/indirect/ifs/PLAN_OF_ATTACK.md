@@ -3,7 +3,7 @@
 Synthesis of the IFS docs (`README.md`, `RESULTS.md` incl. the post-merge
 scaled-SVD investigation), the GPT-5.6-sol methodology review
 (`reviews/gpt56sol_2026-07-11.md`), the campaign record
-(`../LOW_THRUST_MINFUEL_CAMPAIGN.md`), the PSR sibling
+(`../../process/LOW_THRUST_MINFUEL_CAMPAIGN.md`), the PSR sibling
 (`../sundman_minfuel/refine/`), and the two reference papers in
 `../../min_fuel_papers/`. Written so the next session can pick this up cold.
 

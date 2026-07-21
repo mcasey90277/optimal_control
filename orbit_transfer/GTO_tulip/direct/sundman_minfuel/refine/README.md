@@ -80,4 +80,4 @@ history = refine_loop(fullfile('..', 'results', 'minfuel', 'legacy_ms_f1120.mat'
   stabilization verdict, propellant drift, and the Option-2 escalation
   decision.
 - Design spec: `docs/superpowers/specs/2026-07-11-pmp-mesh-refine-design.md`.
-- Campaign record and next steps: `../../LOW_THRUST_MINFUEL_CAMPAIGN.md`.
+- Campaign record and next steps: `../../../process/LOW_THRUST_MINFUEL_CAMPAIGN.md`.

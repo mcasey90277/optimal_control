@@ -180,7 +180,7 @@ save it WITH `lamAll` (same save layout as `direct_build_minfuel`):
   speculative before it passes.
 - **Risk 2 — crawl arrives before lock (B2)**: the measured gap is itself the
   deliverable; if ε_lock unreachable, stop and pivot (regularized coords,
-  `../LOW_THRUST_MINFUEL_CAMPAIGN.md` thesis; Leomanni 2021 digest in
+  `../../process/LOW_THRUST_MINFUEL_CAMPAIGN.md` thesis; Leomanni 2021 digest in
   `PLAN_OF_ATTACK.md` §2).
 - **Risk 3 — structure slide at lock** (the mint cliff): guarded by the
   displacement discipline; if the locked count ≠ certified count and the
@@ -205,4 +205,4 @@ save it WITH `lamAll` (same save layout as `direct_build_minfuel`):
   refuted — calibrate trust accordingly): `CONSULT_GPT56_response.md` Q2.
 - Direct-side homotopy reference: Bertrand & Épénoy, OCAM 23(4), 2002;
   Zhang et al., JGCD 38(8), 2015 (`../min_fuel_papers/`).
-- Campaign context / two-walls analysis: `../LOW_THRUST_MINFUEL_CAMPAIGN.md`.
+- Campaign context / two-walls analysis: `../../process/LOW_THRUST_MINFUEL_CAMPAIGN.md`.

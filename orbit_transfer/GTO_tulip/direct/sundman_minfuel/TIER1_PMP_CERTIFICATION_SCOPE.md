@@ -10,7 +10,7 @@ risk): it either confirms the first-order PMP conditions or exposes a defect.
 
 Scoped 2026-07-08. This is Tier 1 of the two-tier plan; Tier 2 (independent
 Sundman-regularized indirect re-solve) is a separate, larger milestone. See
-[[minfuel-gto-tulip-solved]] and `../LOW_THRUST_MINFUEL_CAMPAIGN.md`.
+[[minfuel-gto-tulip-solved]] and `../../process/LOW_THRUST_MINFUEL_CAMPAIGN.md`.
 
 ---
 

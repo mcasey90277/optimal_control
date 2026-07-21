@@ -40,7 +40,7 @@
 % the rerun flag, to force a redo).
 %
 % REFERENCES:
-%   [1] ../LOW_THRUST_MINFUEL_CAMPAIGN.md  (campaign record; two-walls analysis)
+%   [1] ../../process/LOW_THRUST_MINFUEL_CAMPAIGN.md  (campaign record; two-walls analysis)
 %   [2] ../sundman_minfuel/refine/README.md + RESULTS.md  (PSR design + results)
 %   [3] ../ms_band/MS_BAND_CAMPAIGN.md  (verifier provenance, dual-map mode 'd')
 %   [4] Bertrand & Epenoy, OCAM 23(4), 2002 (energy->fuel homotopy)
@@ -357,7 +357,7 @@ dataFile = psr_export_data(finalSol, dataDir, struct('M', verifyOpts.M, 'epsMin'
 % means first-order extremality + tight feasibility + the complementary
 % transversal-crossing check (Sdot != 0 at switches, reported by
 % psr_second_order), and minimality evidence is comparative (homotopy family +
-% front monotonicity, see ../HONEST_EVALUATION_DV_TF_FRONT.md).
+% front monotonicity, see ../../process/HONEST_EVALUATION_DV_TF_FRONT.md).
 if bangBang
     % eps=0 bang-bang: FIRST-ORDER PMP extremality certificate.
     verifyFile = fullfile(resDir, sprintf('verify_pmp_psr_refined_%s.mat', tag));

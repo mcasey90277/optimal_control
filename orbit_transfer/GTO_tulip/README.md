@@ -21,11 +21,11 @@ flagship result is the **certified sharp bang-bang min-fuel solution**
 
 | doc | role |
 |---|---|
-| `LOW_THRUST_MINFUEL_CAMPAIGN.md` | Full campaign record: every method generation, what failed, why, and the winning recipe. Read first. |
-| `HONEST_EVALUATION_DV_TF_FRONT.md` | Candid assessment: what the certification does/doesn't prove, branch structure of the front, open problems. |
-| `CODE_CLEANUP_PLAN.md` | This reorganization (phased; Phase 0 done 2026-07-09). |
-| `MIN_ENERGY_NOTES.md` | Min-energy (homotopy root) derivation notes. |
-| `sundman_minfuel_solution_note.tex/.pdf` | 7-page technical note: OCP, homotopy, Sundman regularization, IPOPT. |
+| `process/LOW_THRUST_MINFUEL_CAMPAIGN.md` | Full campaign record: every method generation, what failed, why, and the winning recipe. Read first. |
+| `process/HONEST_EVALUATION_DV_TF_FRONT.md` | Candid assessment: what the certification does/doesn't prove, branch structure of the front, open problems. |
+| `process/CODE_CLEANUP_PLAN.md` | This reorganization (phased; Phase 0 done 2026-07-09). |
+| `process/MIN_ENERGY_NOTES.md` | Min-energy (homotopy root) derivation notes. |
+| `doc/sundman_minfuel_solution_note.tex/.pdf` | 7-page technical note: OCP, homotopy, Sundman regularization, IPOPT. |
 
 ## Entry points
 

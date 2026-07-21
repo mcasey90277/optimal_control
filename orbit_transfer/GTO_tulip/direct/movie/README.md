@@ -49,7 +49,7 @@ animate_three_way('movie')     % -> three_way_comparison.mp4 + .gif
 
 `animate_*('preview')` writes stills instead. The min-energy trajectory
 comes from the N=4000 direct solve (`energy_pipeline.mat`, defect 3e-4);
-see `../MIN_ENERGY_NOTES.md`.
+see `../../process/MIN_ENERGY_NOTES.md`.
 
 ## Regenerate
 

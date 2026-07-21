@@ -324,7 +324,7 @@ They prescribe different fixes:
   absorbing the smearing into physical fuel bias rather than KKT violation.
   **Rejected as the default.** Stopping short of ε=0 biases m_f, and our own
   tulip campaign explicitly *fixed* a legacy schedule that stopped at ε≈1e-3
-  for exactly this reason (see `GTO_tulip/LOW_THRUST_MINFUEL_CAMPAIGN.md`).
+  for exactly this reason (see `GTO_tulip/process/LOW_THRUST_MINFUEL_CAMPAIGN.md`).
   Recording the disagreement for the record: Gemini's option remains a
   fallback if PSR-on-MEE proves harder to port than expected, but it is not
   the plan of record.
@@ -406,6 +406,6 @@ Phase 0: ~1 day. Phase 1: ~2–3 days (mostly background solves). Phase 2:
   two full reviews, `2026-07-17_core_review_gpt56terra.md` and
   `2026-07-17_core_review_gemini.md`.
 - `GTO_tulip/direct/PSR/` (PMP-Steered Refinement — ported into Phase 2
-  as the switch-smearing fix) and `GTO_tulip/LOW_THRUST_MINFUEL_CAMPAIGN.md`
+  as the switch-smearing fix) and `GTO_tulip/process/LOW_THRUST_MINFUEL_CAMPAIGN.md`
   (the legacy ε-schedule fuel-bias precedent cited against Gemini's ε≈1e-4
   stopping-point alternative).

@@ -112,8 +112,8 @@ additions) and `verify_direct_pmp` (adjudication).
 
 ## Pointers
 
-- Campaign record + open problems (1.01–1.11× band): `../LOW_THRUST_MINFUEL_CAMPAIGN.md`
+- Campaign record + open problems (1.01–1.11× band): `../../process/LOW_THRUST_MINFUEL_CAMPAIGN.md`
 - PSR design + headline results: `../sundman_minfuel/refine/{README,RESULTS}.md`
 - Verifier provenance + dual-map adjudication: `../ms_band/MS_BAND_CAMPAIGN.md`
 - Indirect finishing (IFS, research-grade, open): `../ifs/`
-- Honest-evaluation notes on the dV-t_f front: `../HONEST_EVALUATION_DV_TF_FRONT.md`
+- Honest-evaluation notes on the dV-t_f front: `../../process/HONEST_EVALUATION_DV_TF_FRONT.md`

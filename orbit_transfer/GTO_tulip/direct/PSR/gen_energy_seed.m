@@ -37,7 +37,7 @@ function outFile = gen_energy_seed(targetFactor, opts)
 % SMOOTH problem too, not just bang-bang). Above 1.95x it also diverges (2.00x:
 % inf_du ~1e11, MUMPS OOM). Outside that band, expect failure without a finer
 % perigee mesh / tighter warm start / different continuation. See
-% ../LOW_THRUST_MINFUEL_CAMPAIGN.md "ENERGY-BACKBONE floor/ceiling".
+% ../../process/LOW_THRUST_MINFUEL_CAMPAIGN.md "ENERGY-BACKBONE floor/ceiling".
 %
 % RESUMABLE (important): every rung is saved as it succeeds and existing rungs
 % are skipped, so if a step dies -- especially the sporadic UNCATCHABLE CasADi/
@@ -49,7 +49,7 @@ function outFile = gen_energy_seed(targetFactor, opts)
 % REFERENCES:
 %   [1] ../sundman_minfuel/energy_step.m (the per-step recipe this mirrors)
 %   [2] ../sundman_minfuel/orchestrate/backbone_walk.sh (the shell walker)
-%   [3] ../LOW_THRUST_MINFUEL_CAMPAIGN.md ("Down-sweep CRACKED": energy backbone)
+%   [3] ../../process/LOW_THRUST_MINFUEL_CAMPAIGN.md ("Down-sweep CRACKED": energy backbone)
 
 if nargin < 2, opts = struct(); end
 if ~isfield(opts,'step'),    opts.step = 0.05;     end

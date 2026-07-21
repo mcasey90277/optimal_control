@@ -3,7 +3,7 @@
 **Date:** 2026-07-09 (written after the upper-band attack session)
 **Audience:** any AI or reviewer picking up this campaign. Read
 `LOW_THRUST_MINFUEL_CAMPAIGN.md` for the full history and
-`direct/sundman_minfuel/OPTIMALITY_VERIFICATION_PLAN.md` for the verification plan.
+`../direct/sundman_minfuel/OPTIMALITY_VERIFICATION_PLAN.md` for the verification plan.
 This document is the candid self-assessment: what is trustworthy, what is not,
 and what remains to build. Goals: (1) an **honest** ΔV vs t_f plot;
 (2) **direct AND indirect** methods working at every t_f for min-fuel.
@@ -11,7 +11,7 @@ and what remains to build. Goals: (1) an **honest** ΔV vs t_f plot;
 **Problem:** minimum-fuel low-thrust transfer, GTO → south-pole tulip orbit,
 Earth–Moon CR3BP, 15 kg / 25 mN / Isp 2100 s, ~40-rev spiral. Min-time
 baseline t_f = 6.290694 ND = 27.8845 d, ΔV 4.4665 km/s (never coasts).
-Factors below are t_f / t_f^min. Code: `direct/sundman_minfuel/` (CasADi + IPOPT,
+Factors below are t_f / t_f^min. Code: `../direct/sundman_minfuel/` (CasADi + IPOPT,
 Sundman-regularized trapezoidal collocation, Bertrand–Épénoy energy→fuel
 homotopy).
 
@@ -116,7 +116,7 @@ global one. The current plot is honest about extremality, not optimality.
 | 1.80 | 2.595 | 23 | same |
 | 1.85 | 2.667 | 22 | certified green — but dominated by the 1.75× feasible point → local, not global |
 
-Plot: `direct/sundman_minfuel/results/plots/front_full_verified.png`. Energy backbone
+Plot: `../direct/sundman_minfuel/results/plots/front_full_verified.png`. Energy backbone
 `energy_1.20…1.85.mat` all banked and machine-tight (the expensive part; any
 single-t_f sharpen off it is ~10–30 min).
 

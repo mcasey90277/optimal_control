@@ -207,7 +207,8 @@ and ~600+ switches, N in the tens of thousands, and the crash class of item 1.
 ready to run once item 1 unblocks the chain — see item 7 below.
 
 **0.2 N CERTIFIED (2026-07-20)** — `results/MEE_M2_0p2N.mat` (gitignored cache):
-`m_f=1377.29 kg`, 823 switches, 346.7 rev, defect **2.5e-13**, termErr 7.5e-36,
+`m_f=1377.29 kg`, 823 switches (8/rev; mesh-converged band ~866±5, see
+`process/P0_SWITCH_MESH_CONVERGENCE.md`), 346.7 rev, defect **2.5e-13**, termErr 7.5e-36,
 incДeg 0, IPOPT Solve_Succeeded, ε=0 bang-bang (edge 99.9%). Never attained
 before. **Recipe:** warm-chain from certified 0.5 N → rung-adaptive `dL` bound
 (feasibility) + `opts.liftDL` (block-banded KKT, no crash at n~30k) +

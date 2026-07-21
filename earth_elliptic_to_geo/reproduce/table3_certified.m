@@ -28,6 +28,15 @@ function cert = table3_certified(thrustN)
 %   [3] earth_elliptic_to_geo/process/DEEP_THRUST_LESSONS.md (0.2/0.1 N rungs,
 %       certified 2026-07-20 via drivers/reproduce_deep_rung.m; numbers pulled
 %       from the certified results/MEE_M2_0p{2,1}N.mat caches).
+%   [4] earth_elliptic_to_geo/process/P0_SWITCH_MESH_CONVERGENCE.md.
+%
+% DEEP-RUNG SWITCH-COUNT CAVEAT (P0, 2026-07-21): the .switches values for the
+% deep rungs (0.2 N = 823, 0.1 N = 1644) are 8-node/rev point estimates and are
+% mesh-UNDER-resolved LOWER BOUNDS. Ref [4] refines 0.2 N to a converged band
+% ~866+/-5 (823 is a ~5% undercount); mass and revs ARE mesh-converged. These
+% fields are retained as the as-certified-at-8/rev values (what verify_row and
+% the reproducer compare against); read deep-rung switch counts as bands, not
+% exact integers.
 
 if nargin < 1
     error('table3_certified:badInput', 'thrustN is required');

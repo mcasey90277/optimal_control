@@ -44,6 +44,12 @@ setup_paths          % adds module paths; the solver auto-adds CasADi from ~/cas
 | 0.2 | 1377.29   | 823  | 346.73 | 1673.55 | `R0law` + deep-rung recipe |
 | 0.1 | 1377.29   | 1644 | 693.60 | 3347.10 | `R0law` + deep-rung recipe |
 
+**Deep-rung switch counts are 8-node/rev point estimates (lower bounds).** The
+0.2/0.1 N `switches` above under-count: the P0 mesh study
+(`process/P0_SWITCH_MESH_CONVERGENCE.md`) refines 0.2 N to a converged band
+~866±5 (the 823 shown is a ~5% undercount), while mass (→1375.8 kg) and revs
+(346.7) are mesh-converged. Report deep-rung switch counts as bands.
+
 `m_f` is near-thrust-independent (~1377 kg) — the paper's Fig-23 result. The
 min-time·thrust product is ~constant: `t_{f,min} ≈ 223.14 / T` ND (the "R0 law",
 holds to <1% across the anchors), so `t_f` scales as `~1/T`.

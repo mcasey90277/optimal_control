@@ -13,6 +13,17 @@ the 2026-07-19 external code review (GPT-5.6-terra + Gemini 3.1 Pro):
   … 0.1 N=1377.29), as the paper's Fig-23 predicts. (Caches gitignored, like all
   campaign `.mat`.)
 
+**Switch-count mesh caveat (P0, 2026-07-21).** The switch counts above (823, 1644)
+are 8-node/rev point estimates. The primal mesh-convergence study
+`process/P0_SWITCH_MESH_CONVERGENCE.md` refined 0.2 N through 16/24/40 nodes/rev
+(all ε=0-certified): **mass converges to 1375.8 kg** (the 8/rev 1377.29 is +0.11%
+high) and **revs to 346.7** (mesh-invariant), but the **switch count converges to a
+band ~866 ± 5, not 823** — the 8/rev value is a ~5% *undercount* (it does not diverge
+with density: 24→40 rev goes down, staying in-band). Report deep-rung switch counts
+as bands, not exact integers; 0.1 N (not yet refined) is expected to follow suit. The
+external-review concern about 8/rev under-resolution is thereby resolved: the physics
+(mass, revs) is trustworthy, only the exact switch integer was mesh-sensitive.
+
 ## Reproduce it
 ```matlab
 setup_paths; addpath(fullfile(getenv('HOME'),'casadi-3.7.0'));   % MATLAB R2025b

@@ -125,7 +125,12 @@ separately when validating the solver core end to end.
   24 switches / 8.11 revs toward 19 switches / 7.32 revs (a basin change,
   not noise) while m_f moved only 0.31 kg — the paper's own reported
   structure (18 switches, 7.5 revs) sits between our two mesh resolutions.
-  Switch count should be read as a band, not a fixed integer.
+  Switch count should be read as a band, not a fixed integer. The P0
+  mesh-convergence certification (2026-07-21,
+  `process/P0_SWITCH_MESH_CONVERGENCE.md`) quantifies this for the 0.2 N deep
+  rung: the count converges to a band ~866±5 across 16/24/40 nodes/rev, while
+  the 8/rev point estimate (823) is a ~5% undercount — mass (1375.8 kg) and rev
+  count (346.7) are mesh-converged.
 - **Basin scatter is real and mirrors the paper's own Fig 18.** At fixed
   c_tf, a cold fresh solve can land in a different (better or worse) local
   optimum than a neighbor-chained warm start — up to ~22 kg apart at the

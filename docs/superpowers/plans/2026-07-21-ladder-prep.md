@@ -176,6 +176,11 @@ Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>"
 
 ### Task 2: `minfuel_config` override + nominal byte-path guard
 
+> **Amendment (2026-07-21, after Task-2 BLOCKED):** the test's whole-struct
+> `isequal` asserts are unsatisfiable — `cfg.fname`/`cfg.fparse` are anonymous
+> handles, never `isequal` across creations. As-built test compares structs
+> with handle fields stripped + `func2str` equality of the handles.
+
 **Files:**
 - Modify: `CC/minfuel_config.m` (signature `function cfg = minfuel_config()` → optional override)
 - Test: `CC/test_minfuel_config_override.m`

@@ -17,6 +17,18 @@ flagship result is the **certified sharp bang-bang min-fuel solution**
 
 Concrete open items live in `TODO.md`.
 
+## Three objectives, one pipeline
+
+Min-time / min-energy / min-fuel are **not separate codebases** — they are one
+homotopy chain through the same solver (which is why `direct/` is not split by
+objective):
+
+| objective | role in the chain | entry point |
+|---|---|---|
+| min-time | anchor: sets `t_f,min` (throttle ≡ 1 mode of the same core) | `direct/sundman_minfuel/gen_tulip_mintime` (direct); `indirect/min_time/` (PMP shooting) |
+| min-energy | homotopy root (the SAME fuel solver at ε=1; smooth, big basin) | `direct/sundman_minfuel/gen_tulip_energy_2p`, energy backbone |
+| min-fuel | target (ε=0, bang-bang), reached by the ε:1→0 sweep | `direct/sundman_minfuel/run_certified_minfuel`, `minfuel_at_tf` |
+
 ## Folder map
 
 | where | what |

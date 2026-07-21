@@ -20,6 +20,15 @@ Two standing goals (2026-07-21): **(a) keep perfecting the direct code,
 - [ ] **Front hygiene.** Keep `aggregate_front`'s honest 3-class front current
   as new t_f points land; switch counts reported as bands (mesh-sensitivity
   lesson from the earth_elliptic P0 study applies here too).
+- [ ] **Thrust ladder (Table-3 analog for the tulip).** Port the
+  `../earth_elliptic_to_geo/` ladder recipe — per-rung min-time anchor,
+  thrust-continuation warm-chaining, certified-only caching, R0-law check —
+  to the tulip problem: sweep T_max around the nominal 25 mN, map
+  t_f,min(T) and m_f(T), and test whether a T·t_f,min ≈ const law holds in
+  the CR3BP. Prior art: the indirect ztl campaign was a thrust-ladder
+  attempt (its P0 findings — ~75 mN sweet spot, fixed-t_f ladder argument —
+  constrain the design); the earth-GEO MEE ladder is the proven direct
+  machinery.
 
 ## (b) Indirect — get it working
 

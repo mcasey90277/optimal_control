@@ -13,6 +13,11 @@ mostly on the indirect side.
 - [ ] **Switch-count bands.** Report ELFO switch counts as mesh-convergence
   bands, not integers (lesson from earth_elliptic_to_geo's P0 study).
 - [ ] Keep `elfo_export_data` / movies current as new front points land.
+- [ ] **Thrust ladder.** Same goal as the tulip and earth-GEO campaigns: sweep
+  T_max around the nominal 25 mN with per-rung min-time anchors +
+  fixed-c_tf fuel solves (thrust-continuation warm-chaining, certified-only
+  caching), and check the T·t_f,min ≈ const law analog for the ELFO target.
+  Port the `../earth_elliptic_to_geo/` ladder recipe.
 
 ## Indirect — get it working
 

@@ -21,6 +21,17 @@ architecture, retargeted.
   indirect solve ("Route C") and an indirect min-fuel counterpart are open —
   see `TODO.md`.
 
+## Three objectives, one pipeline
+
+Min-time / min-energy / min-fuel share one solver core and form one homotopy
+chain (so `direct/` is not split by objective):
+
+| objective | role in the chain | entry point |
+|---|---|---|
+| min-time | anchor: `t_f,min` = 6.0962 ND (all-burn mode) | `direct/elfo/gen_elfo_mintime` |
+| min-energy | homotopy root (same fuel solver at ε=1) + gravity-homotopy seeds | `direct/elfo/gen_elfo_energy_gravhom` |
+| min-fuel | target (ε=0 bang-bang) via the ε:1→0 sweep | `direct/elfo/gen_elfo_minfuel`, `run_elfo_minfuel` |
+
 ## Folder map
 
 | where | what |

@@ -30,6 +30,24 @@ Two standing goals (2026-07-21): **(a) keep perfecting the direct code,
   constrain the design); the earth-GEO MEE ladder is the proven direct
   machinery.
 
+## 2026-07-21 review follow-ups (doc/reviews/2026-07-21_triage.md)
+
+Fixed same day: acceptance gates now require `Solve_Succeeded` (C1) and
+`certified` requires the requested homotopy endpoint (C2).
+
+- [ ] **Mesh-band study for the flagship (C3).** Re-solve the certified 1.15×
+  solution at ≥2 finer meshes; publish the switch count as a band (the
+  earth-campaign P0 protocol). Also relax `certify_minfuel_pmp`'s strict
+  integer PMP-crossing match (node-grazing switches fail it spuriously).
+- [ ] **Bound-saturation diagnostic + box widening (C4).** Port the earth
+  solver's `boundSaturation` warning into `casadi_minfuel_sundman`; widen the
+  [-12,12] velocity boxes before any ladder work.
+- [ ] **Ladder-prep trio (C5, feeds the thrust-ladder goal above):** per-rung
+  thrust parameterization + artifact fingerprints; adaptive `tauf0`/`cBox`/
+  state boxes; phase-correct cross-rung warm starts (steering-law
+  regeneration, not index-carried controls). Plus the `rF` fallback in
+  `gen_tulip_energy_2p` step_solve (C6).
+
 ## (b) Indirect — get it working
 
 Today: machinery built and validated, no certified indirect solve yet.

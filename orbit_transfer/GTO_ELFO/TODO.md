@@ -19,6 +19,24 @@ mostly on the indirect side.
   caching), and check the T·t_f,min ≈ const law analog for the ELFO target.
   Port the `../earth_elliptic_to_geo/` ladder recipe.
 
+## 2026-07-21 review follow-ups (doc/reviews/2026-07-21_triage.md)
+
+Fixed same day: factor semantics rebased on `tfMin_ELFO` with tf-nearest seed
+selection (C1); resume path certification-gated + single-trajectory saves
+(C2); acceptance gates require `Solve_Succeeded` (C3).
+
+- [ ] **tf-sweep tight re-clean (C4).** `gen_elfo_energy_tfsweep` banks
+  500-iter loose solves directly; add the tight re-clean before `save_point`,
+  as gravhom/fuel already do.
+- [ ] **Mesh-band repeat + filename hygiene (C5).** Repeat ≥1 front point at a
+  refined mesh and report switch counts as bands; parameterize N with t_f;
+  drop the switch integer from identity-bearing filenames at the next format
+  change.
+- [ ] **Ladder-prep trio (C6, feeds the thrust-ladder goal above):** per-rung
+  thrust + fingerprints/namespacing for seeds/checkpoints/rows; adaptive
+  `cBox`/mesh + bound-saturation diagnostics; gate the min-time anchor save
+  on full certification.
+
 ## Indirect — get it working
 
 - [ ] **Route C: ELFO min-time indirect.** The direct min-time anchor (Route B)

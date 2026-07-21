@@ -1,11 +1,17 @@
-function cfg = minfuel_config()
+function cfg = minfuel_config(over)
 % MINFUEL_CONFIG  Single source of truth for the min-fuel GTO->tulip campaign.
 %
 % Replaces the scattered magic numbers -- most importantly the minimum
 % transfer time, which was previously recovered by the fragile hack
 % `load(...,'tf'); tfMin = tf/1.15` in three different drivers.
 %
-% INPUTS:  none
+% INPUTS:
+%   over - (optional) struct of fields to override in the default cfg,
+%          applied AFTER all defaults (incl. derived fields) are built.
+%          e.g. minfuel_config(struct('thrustN',0.020)) overrides thrust
+%          for a ladder rung while leaving everything else (schedules,
+%          dirs, fname/fparse) at nominal. Omit or pass [] / struct()
+%          for the nominal (byte-identical) config.
 % OUTPUTS:
 %   cfg - struct:
 %     .tfMin        - minimum transfer time [ND], from the certified indirect
@@ -68,6 +74,12 @@ cfg.dirs = struct('root',r, 'energy',fullfile(r,'energy'), ...
 % factor encoded as milli-units: 1.20x -> f1200 (no %.2f collisions).
 cfg.fname  = @(kind,factor) sprintf('%s_f%04d.mat', kind, round(1000*factor));
 cfg.fparse = @(name) local_fparse(name);
+
+% --- optional override (ladder rungs): merge caller fields over the defaults ---
+if nargin >= 1 && ~isempty(over)
+    fo = fieldnames(over);
+    for ko = 1:numel(fo), cfg.(fo{ko}) = over.(fo{ko}); end
+end
 end
 
 % ---------------------------------------------------------------------------

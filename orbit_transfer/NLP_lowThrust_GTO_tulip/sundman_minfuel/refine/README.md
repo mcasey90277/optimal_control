@@ -51,7 +51,7 @@ Headline 1.15× demonstration (prepares `seed_1p15.mat` from
 refinement rounds):
 
 ```bash
-cd /Users/msc/Desktop/optimal_control/NLP_lowThrust_GTO_tulip/sundman_minfuel/refine
+cd /Users/msc/Desktop/optimal_control/orbit_transfer/NLP_lowThrust_GTO_tulip/sundman_minfuel/refine
 /Applications/MATLAB_R2025b.app/bin/matlab -batch "cd('$(pwd)'); run_headline_1p15" 2>&1 | grep -v -i "home license\|personal use\|academic, research\|organizational use" | tee headline_run.log
 ```
 

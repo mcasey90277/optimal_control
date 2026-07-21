@@ -1,16 +1,15 @@
 function setup_paths()
-% SETUP_PATHS  Add IFS dependencies to the MATLAB path.
+% SETUP_PATHS  IFS paths.
+% Adds: the DIRECT sundman_minfuel engine + its refine/ (cross-method edge:
+% prep_refine_seed etc.), ../ms_band, ../lowThrust_GTO_tulip (lt_pmp_eom*),
+% and the shared CR3BP lib (params + pumpkyn).
 %
-% Adds sundman_minfuel (cr3bp_lt_params, gto_tulip_endpoints, prep_refine_seed),
-% sundman_minfuel/refine, ms_band (sms_eom, sms_seed_duals, sms_problem),
-% lowThrust_GTO_tulip, and the pumpkyn parent (endpoint construction).
-%
-% INPUTS:  none
-% OUTPUTS: none (path side effect)
+% INPUTS: (none)   OUTPUTS: (none) - modifies the MATLAB path in-place
 here = fileparts(mfilename('fullpath'));
-addpath(fullfile(here, '..', 'sundman_minfuel'));
-addpath(fullfile(here, '..', 'sundman_minfuel', 'refine'));
+addpath(fullfile(here, '..', '..', 'direct', 'sundman_minfuel'));
+addpath(fullfile(here, '..', '..', 'direct', 'sundman_minfuel', 'refine'));
 addpath(fullfile(here, '..', 'ms_band'));
-addpath(fullfile(here, '..', '..', 'lowThrust_GTO_tulip'));
-addpath(fullfile(getenv('HOME'), 'Desktop', 'proj7', 'external', 'pumpkyn', 'src'));
+addpath(fullfile(here, '..', 'lowThrust_GTO_tulip'));
+addpath(fullfile(here, '..', '..', '..', 'cr3bp_common'));
+setup_cr3bp_common();
 end

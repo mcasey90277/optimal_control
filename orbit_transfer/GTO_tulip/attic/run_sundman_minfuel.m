@@ -6,7 +6,7 @@ if nargin<3||isempty(tfFactor), tfFactor=1.15; end
 if nargin<4||isempty(maxIter), maxIter=3000; end
 here=fileparts(mfilename('fullpath'));
 addpath(here); run(fullfile(here,'setup_paths.m'));
-addpath(fullfile(here,'..','lowThrust_GTO_tulip'));
+addpath(fullfile(here,'..','indirect','lowThrust_GTO_tulip'));
 muStar=0.012150585609624; lStar=389703.264829278; tStar=382981.289129055;
 m0kg=15; g0=9.80665*tStar^2/(1000*lStar);
 Tmax=(0.025/m0kg)*tStar^2/(lStar*1000); c=(2100/tStar)*g0;

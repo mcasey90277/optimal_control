@@ -4,9 +4,9 @@
 %   - a tulip reference arc
 % Saves everything to minfuel_movie_data.mat.
 
-addpath('/Users/msc/Desktop/optimal_control/orbit_transfer/lowThrust_GTO_tulip');
+addpath('/Users/msc/Desktop/optimal_control/orbit_transfer/GTO_tulip/indirect/lowThrust_GTO_tulip');
 addpath('/Users/msc/Desktop/optimal_control/orbit_transfer/GTO_tulip');
-run('/Users/msc/Desktop/optimal_control/orbit_transfer/GTO_tulip/sundman_minfuel/setup_paths.m');  % pumpkyn on path
+run('/Users/msc/Desktop/optimal_control/orbit_transfer/GTO_tulip/direct/sundman_minfuel/setup_paths.m');  % pumpkyn on path
 
 muStar = 0.012150585609624;
 lStar  = 389703.264829278;

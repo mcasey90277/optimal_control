@@ -3,7 +3,7 @@
 % and the dV-vs-transfer-time fronts, plus the certified trajectory+throttle.
 % Clean white-background PDFs/PNGs at 300 dpi.
 here = fileparts(mfilename('fullpath'));  cd(here);
-addpath('../../sundman_minfuel'); addpath('../../elfo');
+addpath('../../direct/sundman_minfuel'); addpath('../../../GTO_ELFO/direct/elfo'); addpath('../../../cr3bp_common');
 run('../../sundman_minfuel/setup_paths.m');
 p = cr3bp_lt_params(25e-3, 15, 2100);  mu = p.muStar;
 Earth = [-mu, 0];  Moon = [1-mu, 0];  outdir = here;

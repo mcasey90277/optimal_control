@@ -1,20 +1,10 @@
 function setup_paths()
-% SETUP_PATHS  Add the pumpkyn toolbox to the MATLAB path for this solver.
+% SETUP_PATHS  Direct Sundman min-fuel engine paths: self + shared CR3BP lib
+% (cr3bp_common: params/config/endpoints + pumpkyn).
 %
-% INPUTS:
-%   (none)
-%
-% OUTPUTS:
-%   (none) - modifies the MATLAB path in-place
-%
-% pumpkyn is used only for problem setup (GTO state construction, tulip
-% seed, ballistic propagation) and for the indirect warm-start option; the
-% NLP transcription and solve are entirely local code.
-
-pumpkynSrc = fullfile(getenv('HOME'), 'Desktop', 'proj7', 'external', ...
-                      'pumpkyn', 'src');
-if ~exist(fullfile(pumpkynSrc, '+pumpkyn'), 'dir')
-    error('setup_paths:missing', 'pumpkyn not found at %s', pumpkynSrc);
-end
-addpath(pumpkynSrc);
+% INPUTS: (none)   OUTPUTS: (none) - modifies the MATLAB path in-place
+here = fileparts(mfilename('fullpath'));
+addpath(here);
+addpath(fullfile(here, '..', '..', '..', 'cr3bp_common'));
+setup_cr3bp_common();
 end

@@ -32,7 +32,7 @@ here = fileparts(mfilename('fullpath'));  cd(here);  setup_paths();
 % sundman_seed_map + lt_dynamics are not vendored into PSR/lib. Append with
 % '-end' so PSR/lib's 14-arg casadi_minfuel_sundman keeps priority over the
 % stale 13-arg copies in sundman_minfuel/attic.
-addpath(fullfile(here,'..','sundman_minfuel'),'-end');
+addpath(fullfile(here,'..','..','..','..','GTO_tulip','direct','sundman_minfuel'),'-end');
 addpath(fullfile(here,'..','attic'),'-end');
 resDir = fullfile(here,'results');  if ~exist(resDir,'dir'), mkdir(resDir); end
 cfg = minfuel_config();

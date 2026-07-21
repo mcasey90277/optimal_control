@@ -1,7 +1,7 @@
 % TEST_INSERTION_STATES  Verify the insertion-point helper: the default criteria
 % reproduce exactly what the existing seeds hold (so the drift guards pass with
 % zero re-solve), and the alternate criteria return valid 6-states.
-here = fileparts(mfilename('fullpath'));  cd(here);  setup_paths();  addpath('../elfo');
+here = fileparts(mfilename('fullpath'));  cd(here);  setup_paths();  addpath('../../../GTO_ELFO/direct/elfo');
 E  = load('results/energy/energy_f1120.mat');           % a tulip backbone
 Ee = load('../elfo/results/energy_elfo_freetf.mat');    % the ELFO seed
 

@@ -1,19 +1,10 @@
 function setup_paths()
-% SETUP_PATHS  Add the pumpkyn toolbox to the MATLAB path for this tutorial.
+% SETUP_PATHS  Base indirect GTO->tulip campaign paths: self + shared CR3BP lib
+% (cr3bp_common brings pumpkyn, which this campaign's solvers use).
 %
-% INPUTS:
-%   (none)
-%
-% OUTPUTS:
-%   (none) - modifies the MATLAB path in-place
-%
-% The pumpkyn clone lives in the proj7 tree; only its src/ folder (which
-% holds the +pumpkyn package) is required here.
-
-pumpkynSrc = fullfile(getenv('HOME'), 'Desktop', 'proj7', 'external', ...
-                      'pumpkyn', 'src');
-if ~exist(fullfile(pumpkynSrc, '+pumpkyn'), 'dir')
-    error('setup_paths:missing', 'pumpkyn not found at %s', pumpkynSrc);
-end
-addpath(pumpkynSrc);
+% INPUTS: (none)   OUTPUTS: (none) - modifies the MATLAB path in-place
+here = fileparts(mfilename('fullpath'));
+addpath(here);
+addpath(fullfile(here, '..', '..', '..', 'cr3bp_common'));
+setup_cr3bp_common();
 end

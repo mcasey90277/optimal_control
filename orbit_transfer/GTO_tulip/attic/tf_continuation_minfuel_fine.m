@@ -25,7 +25,7 @@ if nargin < 3 || isempty(saveFile)
 end
 
 run(fullfile(here, 'setup_paths.m'));
-addpath(fullfile(here, '..', 'lowThrust_GTO_tulip'));
+addpath(fullfile(here, '..', 'indirect', 'lowThrust_GTO_tulip'));
 
 muStar = 0.012150585609624; lStar = 389703.264829278; tStar = 382981.289129055;
 m0kg = 15; g0 = 9.80665*tStar^2/(1000*lStar);

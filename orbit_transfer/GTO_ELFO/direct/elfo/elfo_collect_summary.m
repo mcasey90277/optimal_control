@@ -19,6 +19,8 @@ function res = elfo_collect_summary(epsMin, resDir)
 %   res - [1xN] struct array of the collected rows, sorted by factor
 
 here = fileparts(mfilename('fullpath'));
+if exist('minfuel_config','file') ~= 2, run(fullfile(here,'setup_paths.m')); end
+cfgE = minfuel_config();               % for the ELFO-anchor factor relabel below
 if nargin < 2 || isempty(resDir), resDir = fullfile(here, 'results'); end
 eTag = strrep(sprintf('%g', epsMin), '.', 'p');
 
@@ -35,6 +37,11 @@ for k = 1:numel(d)
         if ~isfield(r,'rv0'),       r.rv0 = NaN(1,6);   end
         if ~isfield(r,'rvf'),       r.rvf = NaN(1,6);   end
         if ~isfield(r,'insertion'), r.insertion = '';   end
+        % relabel factor vs the ELFO anchor from the stored PHYSICAL tf
+        % (2026-07-21 triage C1): legacy rows carry tulip-anchored factors.
+        if isfield(r,'tf') && isfinite(r.tf) && r.tf > 0
+            r.factor = r.tf / cfgE.tfMin_elfo;
+        end
         res(end+1) = r; %#ok<AGROW>
     end
 end

@@ -57,7 +57,10 @@ end
 S = load(solFile);
 out = S.out;  X = out.X;  U = out.U;  nN = size(X,2);
 sigma = S.sigma(:).';  tauf0 = S.tauf0;  rv0 = S.rv0;  rvf = S.rvf;  rvfC = rvf(:);
-target = S.target;  factor = S.factor;  epsMin = S.epsilon;  tf = S.tf;
+target = S.target;  epsMin = S.epsilon;  tf = S.tf;
+cfgE = minfuel_config();
+factor = S.tf / cfgE.tfMin_elfo;   % re-derive vs the ELFO anchor (2026-07-21
+                                   % triage C1; S.factor may be legacy tulip-anchored)
 moonZone = S.moonZone;  pSund = S.pSund;  qSund = S.qSund;
 
 % drift guard: the solution being exported must match the reconstructed
@@ -135,7 +138,7 @@ scal = struct('target',target,'factor',factor,'tf',S.tf,'tf_days',S.tf*tStar/864
               'epsMin',epsMin,'dV',dVtot,'prop_kg',m0kg*(1-mf),'mf',mf, ...
               'maxDefect',getfielddef(out,'maxDefect',NaN),'switches',numel(tauSwitch), ...
               'edge',mean(s>0.95|s<0.05));
-const = p;  const.tfMin = 6.2906939607;  const.moonZone = moonZone;  const.pSund = pSund;  const.qSund = qSund;
+const = p;  const.tfMin = cfgE.tfMin_elfo;  const.tfMin_tulip = cfgE.tfMin;  const.moonZone = moonZone;  const.pSund = pSund;  const.qSund = qSund;
 provenance = struct('date',datestr(now,'yyyy-mm-dd HH:MM:SS'), ... %#ok<TNOW1,DATST>
     'source',char(solFile),'gitHash',git_hash_local(here), ...
     'solver','casadi_energy_freetf (free-t_f, two-primary Sundman)', ...

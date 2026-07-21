@@ -8,7 +8,9 @@ function row = elfo_run_one(factor, opts)
 % and (b) directly. The ELFO analog of PSR/psr_run_one.m; wraps gen_elfo_minfuel.
 %
 % INPUTS:
-%   factor - t_f / tfMin (tfMin = tulip min-time 6.2907 ND, a shared scale) [scalar]
+%   factor - t_f / tfMin_ELFO (cfg.tfMin_elfo = 6.0962 ND, certified Route-B anchor;
+%            rebased 2026-07-21 -- older result rows carry tulip-anchored factors,
+%            relabeled at read time by elfo_collect_summary) [scalar]
 %   opts   - (optional) struct:
 %            .epsMin    homotopy endpoint [0]  (0 = bang-bang fuel, >0 = smooth)
 %            .maxIter   IPOPT cap (tight) [2000]
@@ -45,7 +47,7 @@ insertion = 'nearest';          % elfo: 'nearest'|'apolune'|'perilune'  (tulip: 
 % insertion = 'perilune';       % uncomment to use the perilune point (needs a matching seed)
 [rv0, rvf, insMeta] = insertion_states('elfo', insertion);
 
-tf   = factor * cfg.tfMin;
+tf   = factor * cfg.tfMin_elfo;   % ELFO-anchored (2026-07-21 triage C1)
 eTag = strrep(sprintf('%g', epsMin), '.', 'p');
 tag  = sprintf('f%04d_%s_minEps%s', round(1000*factor), insMeta.label, eTag);
 resultFile = fullfile(resDir, sprintf('elfo_result_%s.mat', tag));

@@ -30,9 +30,17 @@ function cfg = minfuel_config()
 here = fileparts(mfilename('fullpath'));
 
 % --- physics anchors --------------------------------------------------------
-% tfMin: certified indirect min-time answer (lowThrust_GTO_tulip solver),
-% cross-checked = X(8,end)/1.15 of sundman_minfuel_certified.mat to 1e-9.
-cfg.tfMin   = 6.2906939607;      % [ND]  (= 27.8845 days)
+% tfMin: the TULIP-target certified indirect min-time answer
+% (lowThrust_GTO_tulip solver), cross-checked = X(8,end)/1.15 of
+% sundman_minfuel_certified.mat to 1e-9. Tulip-campaign "factors" are
+% t_f/tfMin against THIS anchor.
+cfg.tfMin   = 6.2906939607;      % [ND]  (= 27.8845 days)  TULIP anchor
+% tfMin_elfo: the ELFO-target certified min-time anchor (Route B direct
+% all-burn, casadi_mintime_freetf + gen_elfo_mintime, 2026-07-15, machine-
+% tight + verified). ELFO-campaign "factors" are t_f/tfMin_elfo against THIS
+% anchor (2026-07-21 review triage C1 — before that date ELFO factors were
+% mislabeled against the tulip anchor; physical t_f values were correct).
+cfg.tfMin_elfo = 6.0961534862;   % [ND]  (= 27.02 days)   ELFO anchor
 cfg.pSund   = 1.5;               % Sundman power, dt/dtau = r1^1.5
 cfg.thrustN = 0.025;  cfg.m0kg = 15;  cfg.ispS = 2100;
 

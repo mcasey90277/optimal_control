@@ -42,10 +42,14 @@ p   = cr3bp_lt_params(cfg.thrustN, cfg.m0kg, cfg.ispS);
 %% ------------------------------------------------------------------------
 target   = 'ELFO';        % name tag written into the output filename
                           %   'ELFO' (this pipeline) | 'Tulip' (to tag a tulip run)
-factor   = 1.20;          % t_f / tfMin_tulip (tfMin=6.2906939607 ND). Selects the
-                          % ELFO energy seed at t_f = factor*tfMin. 1.20 = base seed.
-seedSpec = 'auto';        % 'auto' finds the ELFO energy seed for this factor, or
-                          % give an explicit /path/to/energy_seed.mat
+factor   = 1.238;         % t_f / tfMin_ELFO (cfg.tfMin_elfo = 6.0961534862 ND, the
+                          % certified Route-B anchor; rebased 2026-07-21, triage C1 —
+                          % factors before that date were tulip-anchored). 1.238
+                          % ~= the legacy base seed (t_f = 7.5488 ND).
+seedSpec = 'auto';        % 'auto' finds the seed whose PHYSICAL t_f is nearest
+                          % factor*tfMin_elfo (elfo_find_energy_seed; legacy
+                          % tulip-keyed seed files remain usable), or give an
+                          % explicit /path/to/energy_seed.mat
 epsMin   = 0;             % homotopy endpoint: 0 = bang-bang FUEL (default);
                           % >0 = smooth eps-optimal (e.g. 0.2) -- a regularized ramp
 doExport = true;          % stage 4: write data products to ../PSR_data (target-tagged)
@@ -68,18 +72,15 @@ looseIter= 500;           % IPOPT cap (loose probe)
 %% ------------------------------------------------------------------------
 %% Seed selection + output name
 %% ------------------------------------------------------------------------
-tf = factor * cfg.tfMin;
+tf = factor * cfg.tfMin_elfo;      % ELFO-anchored (triage C1)
 if strcmpi(seedSpec, 'auto')
-    seedFile = '';
-    cand = fullfile(resDir, sprintf('energy_elfo_f%04d.mat', round(1000*factor)));  % factor-keyed tf-grid seed
-    base = fullfile(resDir, 'energy_elfo_freetf.mat');                            % base seed (1.20x)
-    if isfile(cand)
-        seedFile = cand;
-    elseif isfile(base)
-        B = load(base, 'X');  if abs(B.X(8,end) - tf) < 0.02, seedFile = base; end
-    end
-    assert(~isempty(seedFile), ['no ELFO energy seed for factor %.3f (t_f=%.4f ND). ' ...
-        'Build one: gen_elfo_energy_tfsweep (grid) or gen_elfo_energy_gravhom (base at 1.20x).'], factor, tf);
+    % Select by PHYSICAL t_f, not filename key: legacy tulip-keyed seeds
+    % (energy_elfo_f####.mat) and new ELFO-keyed ones coexist safely.
+    [seedFile, tfSeed, relErr] = elfo_find_energy_seed(resDir, tf);
+    assert(~isempty(seedFile), ['no ELFO energy seed within 2%% of t_f=%.4f ND ' ...
+        '(factor %.3f x tfMin_ELFO). Build one: gen_elfo_energy_tfsweep (grid) ' ...
+        'or gen_elfo_energy_gravhom (base).'], tf, factor);
+    fprintf('seed: %s (t_f=%.4f ND, %.2f%% from request)\n', seedFile, tfSeed, 100*relErr);
 else
     seedFile = seedSpec;  assert(isfile(seedFile), 'seedSpec not found: %s', seedFile);
 end

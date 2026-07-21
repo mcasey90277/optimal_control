@@ -14,6 +14,8 @@ function p = cr3bp_lt_params(thrust_N, m0_kg, Isp_s)
 %   p - struct with fields:
 %       muStar,lStar,tStar - Earth-Moon CR3BP scale set [scalars]
 %       m0kg,Isp           - copies of the mass / Isp inputs
+%       thrustN            - input echo of thrust_N [N] (fingerprint use)
+%       ispS               - input echo of Isp_s [s], alias of .Isp (fingerprint use)
 %       g0                 - standard gravity, ND [scalar]
 %       c                  - exhaust velocity Isp*g0, ND [scalar]
 %       Tmax               - max thrust acceleration at m0, ND [scalar]
@@ -30,6 +32,8 @@ p.lStar  = 389703.264829278;      % km
 p.tStar  = 382981.289129055;      % s
 p.m0kg   = m0_kg;
 p.Isp    = Isp_s;
+p.thrustN = thrust_N;             % input echo (fingerprint + earth-campaign convention)
+p.ispS    = Isp_s;                % input echo (alias of .Isp for fingerprint use)
 p.g0     = 9.80665 * p.tStar^2 / (1000*p.lStar);        % ND
 p.c      = (Isp_s / p.tStar) * p.g0;                    % ND exhaust velocity
 p.Tmax   = (thrust_N / m0_kg) * p.tStar^2 / (p.lStar*1000);  % ND accel

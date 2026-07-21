@@ -54,7 +54,12 @@ cfg.schedNeighbor = [0.05 0.02 0.008 0.003 0.001 0];
 cfg.maxIter = 1500;
 
 % --- results layout ---------------------------------------------------------
-r = fullfile(here, 'results');
+% RESULTS TREE ANCHOR: this config moved from the sundman campaign into
+% cr3bp_common (2026-07-21 restructure); the campaign's results tree did NOT
+% move. Anchor dirs to the tulip sundman campaign explicitly -- a
+% here-relative 'results' would silently point at an empty cr3bp_common/
+% results/ (latent restructure bug caught by ladder-prep T1's regression).
+r = fullfile(here, '..', 'GTO_tulip', 'direct', 'sundman_minfuel', 'results');
 cfg.dirs = struct('root',r, 'energy',fullfile(r,'energy'), ...
                   'minfuel',fullfile(r,'minfuel'), 'fronts',fullfile(r,'fronts'), ...
                   'plots',fullfile(r,'plots'), 'logs',fullfile(r,'logs'));

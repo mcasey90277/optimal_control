@@ -48,14 +48,23 @@ Fixed same day: acceptance gates now require `Solve_Succeeded` (C1) and
   ΔV 3.3660 vs the published 25 / 3.3696 — same mass to ~0.1%, switch integer
   basin-sensitive even at fixed mesh. Also relax `certify_minfuel_pmp`'s strict
   integer PMP-crossing match (node-grazing switches fail it spuriously).
-- [ ] **Bound-saturation diagnostic + box widening (C4).** Port the earth
-  solver's `boundSaturation` warning into `casadi_minfuel_sundman`; widen the
-  [-12,12] velocity boxes before any ladder work.
-- [ ] **Ladder-prep trio (C5, feeds the thrust-ladder goal above):** per-rung
-  thrust parameterization + artifact fingerprints; adaptive `tauf0`/`cBox`/
-  state boxes; phase-correct cross-rung warm starts (steering-law
-  regeneration, not index-carried controls). Plus the `rF` fallback in
-  `gen_tulip_energy_2p` step_solve (C6).
+- [x] **Bound-saturation diagnostic + box widening (C4).** DONE (ladder-prep
+  T3): `casadi_minfuel_sundman` now emits `out.boundSat` + a saturation
+  warning; velocity/position boxes are opt-in-widenable via the trailing
+  `opts` arg (default byte-identical). The 20 mN tulip pilot's
+  `boundSatWorst=vBox` is the first lead this diagnostic produced.
+- [x] **Ladder-prep trio (C5/C6, feeds the thrust-ladder goal above):** DONE
+  (ladder-prep package, plan `docs/superpowers/plans/2026-07-21-ladder-prep.md`,
+  Tasks 1–6): per-rung thrust via `minfuel_config(over)` + `cr3bp_fingerprint`/
+  `check_cr3bp_fp`/`thrust_tag` on every cache boundary; `chain_rung_seed_tulip`
+  (time-rescale + no-resample re-map, fresh `tauf0`); `rF` fallback added to
+  `gen_tulip_energy_2p` step_solve. **Pilot gate:** ELFO 20 mN PASSED
+  (certified, defect 1.5e-15); tulip 20 mN was an HONEST FAILURE — fixed-τf
+  topology wall (chained 25 mN winding can't grow to the 20 mN/1.15× rev count;
+  the ε=1 energy step won't close). Full writeup:
+  `process/LADDER_PREP_PILOT_FINDINGS.md`. NEXT (ladder campaign): the cheap
+  widened-`vBox` disambiguation probe, then the θ-domain/Δθ-free spiral
+  reformulation if the wall is confirmed (tulip has no CR3BP MEE+ΔL analog).
 
 ## (b) Indirect — get it working
 

@@ -1,6 +1,11 @@
 # Thrust-Ladder Prep (P2) — Design Spec
 
-**Date:** 2026-07-21  **Status:** design approved (brainstorm); plan to follow.
+**Date:** 2026-07-21  **Status:** IMPLEMENTED 2026-07-21/22 (plan
+`docs/superpowers/plans/2026-07-21-ladder-prep.md`, Tasks 1–6, all committed).
+Pilot gate: ELFO 20 mN PASSED (certified, defect 1.5e-15); tulip 20 mN honest
+failure = fixed-τf topology wall confirmed empirically (§1 scope limit borne
+out). Machinery validated. Findings:
+`orbit_transfer/GTO_tulip/process/LADDER_PREP_PILOT_FINDINGS.md`.
 **Scope:** both CR3BP campaigns — `GTO_tulip` (sundman engine) and `GTO_ELFO`
 (freetf engine) — plus the shared `cr3bp_common/`. Source of requirements: the
 2026-07-21 review triages (`GTO_tulip/doc/reviews/2026-07-21_triage.md` C4–C6,

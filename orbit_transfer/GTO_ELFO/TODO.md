@@ -25,17 +25,23 @@ Fixed same day: factor semantics rebased on `tfMin_ELFO` with tf-nearest seed
 selection (C1); resume path certification-gated + single-trajectory saves
 (C2); acceptance gates require `Solve_Succeeded` (C3).
 
-- [ ] **tf-sweep tight re-clean (C4).** `gen_elfo_energy_tfsweep` banks
-  500-iter loose solves directly; add the tight re-clean before `save_point`,
-  as gravhom/fuel already do.
+- [x] **tf-sweep tight re-clean (C4).** DONE (ladder-prep T5): `solve_tf` now
+  tight-re-cleans a clean loose probe before banking.
 - [ ] **Mesh-band repeat + filename hygiene (C5).** Repeat ≥1 front point at a
   refined mesh and report switch counts as bands; parameterize N with t_f;
   drop the switch integer from identity-bearing filenames at the next format
-  change.
-- [ ] **Ladder-prep trio (C6, feeds the thrust-ladder goal above):** per-rung
-  thrust + fingerprints/namespacing for seeds/checkpoints/rows; adaptive
-  `cBox`/mesh + bound-saturation diagnostics; gate the min-time anchor save
-  on full certification.
+  change. (Still open — not part of ladder-prep.)
+- [x] **Ladder-prep trio (C6, feeds the thrust-ladder goal above):** DONE
+  (ladder-prep package, Tasks 1–6): per-rung thrust via `minfuel_config(over)`
+  + fingerprints on seeds/checkpoints/rows + `elfo_find_energy_seed` fp filter;
+  scaled `cBox`; `boundSat` on both freetf solvers; `gen_elfo_mintime` anchor
+  save gated on certification; `chain_rung_seed_elfo`. **Pilot gate: ELFO
+  20 mN PASSED** — certified=1, defect 1.5e-15, 11 switches, first certified
+  off-nominal rung in either campaign; certified at ~0.99× naive 1/T min-time
+  (first `T·t_f,min` deviation signal). Writeup:
+  `../GTO_tulip/process/LADDER_PREP_PILOT_FINDINGS.md`. ELFO can ladder the
+  near-nominal band now (the `cScale` slack avoids the winding wall the tulip
+  engine hit).
 
 ## Indirect — get it working
 

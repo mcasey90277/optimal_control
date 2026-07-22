@@ -28,7 +28,13 @@ Two standing goals (2026-07-21): **(a) keep perfecting the direct code,
   the CR3BP. Prior art: the indirect ztl campaign was a thrust-ladder
   attempt (its P0 findings — ~75 mN sweet spot, fixed-t_f ladder argument —
   constrain the design); the earth-GEO MEE ladder is the proven direct
-  machinery.
+  machinery. FIRST TASK — pumpkyn stress probe (ztl-style): run pumpkyn
+  `tfMin` at 22.5 and 20 mN, cold AND warm-chained from the 25 mN solution,
+  to find where the indirect single-shooting min-time substrate dies. Do not
+  block on it: per-rung anchors can be DIRECT all-burn solves (ELFO Route-B
+  precedent) or R0-law estimates (earth 0.5 N precedent) — min-time + high
+  revs is the regime where direct shines (no switch structure) and single
+  shooting is weakest (STM sensitivity grows with revs).
 
 ## 2026-07-21 review follow-ups (doc/reviews/2026-07-21_triage.md)
 

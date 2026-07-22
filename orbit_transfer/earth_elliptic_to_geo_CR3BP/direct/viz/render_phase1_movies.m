@@ -27,10 +27,15 @@ e2bRes = fullfile(here, '..', '..', '..', 'earth_elliptic_to_geo', 'direct', 're
 nDense = 8;                                % densify per segment (smooth curves)
 
 % --- 1. min-time (2-body certified, all-burn) --------------------------------
-S = load(fullfile(e2bRes, 'MEE_mintime_T10_npr15.mat'));
+% NOTE the 2-body campaign's mintime filenames are DECI-NEWTON keyed:
+% T100 = 10 N, T10 = 1.0 N (first render used the wrong rung; caught by the
+% mass-flow arithmetic in the frame check). Assert instead of trusting names.
+S = load(fullfile(e2bRes, 'MEE_mintime_T100.mat'));
+assert(S.out.thrustN == 10 && S.out.certified, ...
+    'render_phase1_movies:wrongRung', 'expected the certified 10 N min-time');
 o = S.out.solverOut;                       % driver-level out wraps the solver struct
 sg = linspace(0, 1, size(o.X,2)).';
-res = mee_res_to_cart_res(o.X, o.U, o.dL, sg, 10, 1.0, 1, nDense);
+res = mee_res_to_cart_res(o.X, o.U, o.dL, sg, S.out.thrustN, 1.0, 1, nDense);
 res.cfg.label = 'min-time (2-body)';
 transfer_movie(res, fullfile(movDir, 'movie_mintime_2body_T10N'));
 

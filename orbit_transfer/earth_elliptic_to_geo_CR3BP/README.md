@@ -16,6 +16,14 @@ Comparison baselines (from `../earth_elliptic_to_geo/`, all certified):
 | 0.2 N (mesh-converged, P0 study) | m_f = 1375.8 kg, ~866±5 switches, 346.7 rev |
 | R0 law | T·t_f,min ≈ 850 N·h across two thrust decades |
 
+## Entry point
+
+`direct/run_cr3bp_geo.m` — the front door: set parameters (thrust, lunar
+phase phi0, gain, epsMin (1=energy/0=fuel), endpoints, run name), run, and
+get the solved transfer + saved data products (states/controls/costates) +
+plots + optional movie. Validated end-to-end: reproduces the certified 10 N
+result (m_f=1377.1545 kg, 19 sw) exactly.
+
 ## Status
 
 **Phase 1 IN PROGRESS — 10 N bridged + certified.** The 10 N rung is fully

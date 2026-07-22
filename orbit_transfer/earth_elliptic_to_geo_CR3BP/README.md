@@ -37,7 +37,12 @@ earth_elliptic_to_geo_CR3BP/
   **two-primary gravity homotopy** in
   `../GTO_ELFO/direct/elfo/gen_elfo_energy_gravhom.m` — dial the Moon's mass
   from 0 to μ*, warm-starting each step — which bridges exactly this gap
-  (Earth-only solution → CR3BP solution).
+  (Earth-only solution → CR3BP solution). This is precisely the
+  **μ-continuation** of Bonnard–Caillau–Picot 2010 (`papers/Geometric_And_
+  Numerical_Techniques_In_3_Body_Low_Thrust_Transfers.pdf`, §4.4; traced to
+  Poincaré), which also supplies its convergence theory: the continuation
+  branch stays smooth exactly while the extremal stays clear of conjugate
+  points (their Prop 2.3).
 - **Dynamics/formulation:** the 2-body campaign's winning MEE/L-domain
   formulation assumes Earth-centered Keplerian structure; with the Moon it
   either gains a perturbation term (MEE Gauss + lunar acceleration) or is

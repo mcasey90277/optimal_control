@@ -26,7 +26,10 @@ Nothing built yet. Phases in intended order:
   10 N solution, dial Moon mass 0 → μ* (reuse the
   `gen_elfo_energy_gravhom` two-primary ladder pattern), then energy → fuel
   to a certified CR3BP min-fuel solution.
-- [ ] Compare vs 2-body: Δm_f, switch structure (as a mesh-band), R0-law drift.
+- [ ] Compare vs 2-body: Δm_f, switch structure (as a mesh-band), R0-law drift
+  — and against the ANALYTIC rev-count/thrust bound of Bonnard–Caillau–Picot
+  2010 Prop 3.4/3.7 (σ²(n,e) dominating the control quadratic form: an
+  l_f-vs-thrust-bound estimate, the R0 law's rigorous cousin).
 - [ ] Walk the thrust ladder down while it stays interesting (the Moon effect
   should grow as thrust drops and transfer time stretches).
 
@@ -35,6 +38,12 @@ Nothing built yet. Phases in intended order:
 - [ ] PMP shooting counterpart (costate dynamics gain the lunar-gradient
   terms), seeded from the direct solutions — same direct-seeded strategy as
   `../GTO_tulip/indirect/ifs/`.
+- [ ] **Second-order certification: conjugate-point (Jacobi-field) check**
+  along each converged extremal, verifying t_conj > t_f — upgrades "shooting
+  converged" to "locally optimal" (Bonnard–Caillau–Picot 2010 §2.3–2.4 +
+  their cotcot code ref [12]; the variational integration reuses the shooting
+  Jacobian machinery). Our current indirect checks are all first-order; this
+  closes that gap and should also back-port to `../GTO_tulip/indirect/ifs/`.
 
 ## Housekeeping
 

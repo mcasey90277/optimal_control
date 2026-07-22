@@ -168,9 +168,12 @@ assert(all(abs(delta([2 4 5 6 7])) < 1e-14), 'ex,hx,hy,m,t untouched');
 % (c) frame identities at the generic 3D state (analytic: |Nhat|=1, R.N=0)
 %     -- exercised inside the RHS; here we just confirm no NaN and mdot clean
 parP = par;  parP.pert = lunar_params(par, 0.7, 1);
-[dfull, ~] = lt_mee_rhs(Xr, Ur, parP);
-assert(all(isfinite(dfull)), 'finite with pert on');
-assert(abs(dfull(6) - d0(6)) < 1e-15, 'mdot has NO perturbation coupling');
+[dfull, Lfull] = lt_mee_rhs(Xr, Ur, parP);
+assert(all(isfinite(dfull)) && isfinite(Lfull), 'finite with pert on');
+% Amendment (2026-07-22, Task-2 BLOCKED cycle): compare PHYSICAL mdot -- the
+% d/dL quantity dXdL(6)=mdot/Ldot legitimately shifts because the pert moves
+% Ldot through fN; the invariant is on mdot itself.
+assert(abs(dfull(6)*Lfull - d0(6)*L0) < 1e-15, 'PHYSICAL mdot has NO perturbation coupling');
 fprintf('test_lt_mee_rhs_pert: ALL PASS\n');
 ```
 

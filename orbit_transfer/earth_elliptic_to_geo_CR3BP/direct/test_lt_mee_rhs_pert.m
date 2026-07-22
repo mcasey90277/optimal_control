@@ -34,4 +34,49 @@ parP = par;  parP.pert = lunar_params(par, 0.7, 1);
 [dfull, Lfull] = lt_mee_rhs(Xr, Ur, parP);
 assert(all(isfinite(dfull)) && isfinite(Lfull), 'finite with pert on');
 assert(abs(dfull(6)*Lfull - d0(6)*L0) < 1e-15, 'PHYSICAL mdot has NO perturbation coupling (d/dL*Ldot roundtrip)');
+% (d) transverse oracle: equatorial circular at L=pi/2, Moon on +x, t=0.
+%     r=[0;1;0], Rhat=[0;1;0], That=[-1;0;0], Nhat=[0;0;1].
+%     a_M = muM*((rM-r)/|rM-r|^3 - rM/DM^3), rM=[DM;0;0] => in-plane only.
+%     Gauss response at this state (P=1, Z=1, cL=0, sL=1, A1=0, A2=2):
+%     dP/dt += 2*aT; dex/dt += aR; dey/dt += 2*aT; dhx,dhy += 0; Ldot += 0.
+Xq = [1; 0; 0; 0; 0; 1; 0];  Uq = [0;1;0; 0];   % zero throttle isolates pert
+pq = par;  pq.L = pi/2;  pq.pert = lunar_params(par, 0, 1);
+[dqp, Lqp] = lt_mee_rhs(Xq, Uq, pq);
+pq0 = par; pq0.L = pi/2;
+[dq0, Lq0] = lt_mee_rhs(Xq, Uq, pq0);
+DM = pq.pert.DM;  muM = pq.pert.muM;
+dvec = [DM; -1; 0];  d3 = (dvec.'*dvec)^1.5;
+aM = muM*(dvec/d3 - [DM;0;0]/DM^3);            % inertial accel, z==0
+aRq = aM(2);  aTq = -aM(1);                     % Rhat=[0;1;0], That=[-1;0;0]
+assert(abs(Lqp - Lq0) < 1e-15, 'in-plane pert (aN=0) does not touch Ldot');
+dq = (dqp - dq0) * Lq0;                         % to d/dt (Ldot equal, just proven)
+assert(abs(dq(1) - 2*aTq) < 1e-12, 'dP/dt == 2*aT (transverse oracle)');
+assert(abs(dq(2) - aRq)   < 1e-12, 'dex/dt == aR at L=pi/2');
+assert(abs(dq(3) - 2*aTq) < 1e-12, 'dey/dt == 2*aT at L=pi/2');
+assert(all(abs(dq([4 5 6 7])) < 1e-14), 'hx,hy,m,t untouched (aN=0)');
+% (e) 3D frame check: closed-form Nhat vs numeric orbit normal r(L) x r(L+dL)
+%     at random 3D elliptic states (unit, orthogonal to Rhat, right orientation).
+rng(7);
+for kk = 1:5
+    Pv = 0.5 + rand;  exv = 0.6*(rand-0.5);  eyv = 0.6*(rand-0.5);
+    hxv = 0.8*(rand-0.5);  hyv = 0.8*(rand-0.5);  Lv = 2*pi*rand;
+    r1 = mee_pos_local(Pv, exv, eyv, hxv, hyv, Lv);
+    r2 = mee_pos_local(Pv, exv, eyv, hxv, hyv, Lv + 1e-5);
+    nNum = cross(r1, r2);  nNum = nNum / norm(nNum);
+    Xhv = 1 + hxv^2 + hyv^2;
+    nForm = [2*hyv; -2*hxv; 1 - hxv^2 - hyv^2] / Xhv;
+    assert(abs(norm(nForm)-1) < 1e-14, 'Nhat unit');
+    assert(abs(dot(nForm, r1/norm(r1))) < 1e-13, 'Nhat orthogonal to Rhat');
+    assert(dot(nForm, nNum) > 0.999999, 'Nhat matches numeric orbit normal (orientation)');
+end
 fprintf('test_lt_mee_rhs_pert: ALL PASS\n');
+
+function r = mee_pos_local(P, ex, ey, hx, hy, L)
+% Position from MEE (the same closed forms the RHS pert branch uses).
+cL = cos(L); sL = sin(L);
+Z = 1 + ex*cL + ey*sL;  rmag = P/Z;
+Xh = 1 + hx^2 + hy^2;  a2 = hx^2 - hy^2;
+r = [ (rmag/Xh)*(cL + a2*cL + 2*hx*hy*sL);
+      (rmag/Xh)*(sL - a2*sL + 2*hx*hy*cL);
+      (2*rmag/Xh)*(hx*sL - hy*cL) ];
+end

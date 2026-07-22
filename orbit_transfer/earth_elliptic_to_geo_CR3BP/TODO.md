@@ -34,7 +34,12 @@ Phase 0 + the 10 N rung of Phase 1 are done. Phases in intended order:
   are hours-long, not the seconds-long 10 N rung): repeat the T4→T5→T6
   pipeline per rung. The Moon effect should grow toward the sanity-bound
   ~11% tide/authority ratio predicted at 0.1 N (`sanity_bound.md`) — a
-  material (not decimal-dust) Δm_f is expected at the deep rungs.
+  material (not decimal-dust) Δm_f is expected at the deep rungs. **When
+  these land, `compare_vs_2body.m`'s switch-count column must gain an
+  explicit band marker** (not bare "N/N" integers) — table3_certified.m's
+  under-resolution caveat becomes live at 0.2/0.1 N, so spec sec 8 gate 4's
+  "never bare integers" wording stops being satisfied by the footnote alone
+  (final-review-report.md, gate-4 finding).
 - [ ] **φ₀ sweep experiment** (spec D6): the 10 N rung's Δm_f = +0.0545 kg
   SIGN ("the Moon HELPS") was measured at phi0 = 0 only. Sweep phi0 to
   check whether the sign is phase-dependent before generalizing "the Moon

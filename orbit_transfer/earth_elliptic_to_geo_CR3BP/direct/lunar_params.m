@@ -16,6 +16,19 @@ function pert = lunar_params(par, phi0, gain)
 %   pert - struct .muM (canonical, PHYSICAL value -- gain applied in the
 %          RHS, not here) .DM .nM (canonical) .phi0 .gain
 %
+% NOTE (amendment G): the governing Earth GM is the SOLVER's
+% par.muKm3s2 = 398600.47 km^3/s^2 (kepler_lt_params), not the spec's
+% 398600.4418 -- a 7e-8 relative difference. This function reads par.muKm3s2
+% (never a hardcoded spec constant), so 398600.47 is what actually
+% nondimensionalizes .muM/.nM above; test_lunar_params.m:7 bakes this value
+% into its mass-ratio assertion.
+%
+% NOTE (phi0 epoch convention): phi0 is "Moon at angle phi0 in the reference
+% plane when the seed's time-state t = X(7) is exactly 0" (spec D6). This is
+% only meaningful if the propagated state's initial t is 0 -- true for every
+% seed built from mee_seed (t0 = 0 by construction) but NOT independently
+% asserted anywhere in the bridge/solve pipeline.
+%
 % REFERENCES:
 %   [1] spec 2026-07-22-elliptic-geo-cr3bp-phase0-design.md sec 3 (constants:
 %       mu_M = 4902.800 km^3/s^2, D_EM = 384400 km; ratio 0.0123 consistent

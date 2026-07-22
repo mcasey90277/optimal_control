@@ -20,7 +20,10 @@ function [dXdL, Ldot] = lt_mee_rhs(X, U, par)
 %         term (direct + indirect), added to the RTN force of every Gauss
 %         equation including Ldot. Absent, empty, or par.pert.gain == 0
 %         takes the untouched nominal branch (bitwise-identical to the
-%         pre-2026-07-22 code).
+%         pre-2026-07-22 code). par.pert.phi0 is the Moon's reference-plane
+%         angle at X(7)==0 (t=0 epoch convention, spec D6) -- callers must
+%         seed with X(7,1)==0 for phi0 to mean what its name says (true for
+%         every mee_seed-built seed; not independently asserted here).
 %
 % OUTPUTS:
 %   dXdL - d/dL of state = (dX/dt)/Ldot [7x1]

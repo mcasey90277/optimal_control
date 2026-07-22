@@ -11,6 +11,14 @@
 %     converged switch-mesh count at these rungs -- see
 %     table3_certified.m's DEEP-RUNG SWITCH-COUNT CAVEAT and
 %     solve_cr3bp_minfuel.m's own switches docstring)
+%     NOTE: at 10 N the printed "sw 2b/cr3bp" column is bare integers
+%     (e.g. "19/19") with the mesh-band caveat carried only in the footnote
+%     below -- acceptable at 10 N because table3_certified.m's
+%     under-resolution caveat applies only to the 0.2/0.1 N rungs (counts
+%     ARE mesh-adequate here). Spec sec 8 gate 4's literal "never bare
+%     integers" wording will need the swStr format itself to carry a band
+%     marker (e.g. "~19/~19" or an explicit +/-N) once the deep rungs
+%     (1/0.2/0.1 N, TODO.md) are added to this table.
 %   - the NLP defect (best.maxDefect) as a certification sanity check
 %   - t_f in days and lunar months (t_f = 1.5*tfmin, campaign's c_tf,
 %     identical convention on both sides per spec D4)

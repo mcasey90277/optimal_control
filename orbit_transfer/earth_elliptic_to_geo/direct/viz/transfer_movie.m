@@ -73,8 +73,11 @@ text(axT, 0,0,0.05,'Earth','FontSize',9);
 xlim(axT,xl); ylim(axT,yl); zlim(axT,zl);
 xlabel(axT,'x (ND)'); ylabel(axT,'y'); zlabel(axT,'z');
 view(axT,-37,24); daspect(axT,[1 1 1]);
-title(axT, sprintf('LEO ellipse \\rightarrow GEO min-fuel  (T=%g N, c_{tf}=%.2f)', ...
-      res.cfg.thrustN, res.cfg.ctf));
+lbl = 'min-fuel';   % opt-in override (2026-07-22): res.cfg.label, for min-time/
+                     % energy renders from the CR3BP campaign; absent => original title
+if isfield(res.cfg,'label') && ~isempty(res.cfg.label), lbl = res.cfg.label; end
+title(axT, sprintf('LEO ellipse \\rightarrow GEO %s  (T=%g N, c_{tf}=%.2f)', ...
+      lbl, res.cfg.thrustN, res.cfg.ctf));
 
 hBurn = plot3(axT, nan,nan,nan,'-','Color',[0.85 0.15 0.15],'LineWidth',2.2);
 hCoast= plot3(axT, nan,nan,nan,'-','Color',[0.15 0.35 0.85],'LineWidth',2.0);

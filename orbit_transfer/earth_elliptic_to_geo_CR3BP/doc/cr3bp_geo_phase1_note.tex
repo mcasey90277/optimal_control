@@ -115,6 +115,33 @@ incorporating the Moon as a perturbation in this frame rather than moving
 to rotating-frame Cartesian coordinates, where the fixed independent-variable
 span freezes the revolution topology.
 
+\subsection{Fixing $t_f$: two inequivalent transcriptions}
+
+It is worth being precise about what ``fixed transfer time'' means here,
+because two formulations that both \emph{fix $t_f$} are not equivalent.
+The direct way is to make time (or a regularized time such as a Sundman
+variable) the independent variable and fix the mesh span: the horizon of
+the transcription itself is $[0, t_f]$. This is the formulation of our
+CR3BP GTO campaigns, and its cost is structural: with the independent-%
+variable span frozen, the trajectory's revolution count is frozen into the
+warm start's geometry --- the optimizer cannot add or shed a revolution,
+which is exactly the ``topology wall'' those campaigns meet under thrust
+continuation.
+
+What we do here is different: the independent variable is $L$ with a
+\emph{free} span $\Delta L$, physical time is demoted to a state with
+$\dot t = 1$, and the time budget enters only as a terminal
+\emph{constraint} $t(1) = t_f$ on that state. The same physical quantity
+is fixed, but as a boundary condition rather than as the mesh horizon ---
+so the optimizer retains the winding freedom while honoring the time
+budget exactly. The distinction parallels the MfMax family of indirect
+solvers \cite{HMG2004}: their v0 fixes both $t_f$ and the final longitude
+$L_f$; their v1 frees $t_f$ (with transversality) at fixed $L_f$; our
+formulation is the reciprocal of v1 --- $t_f$ fixed, $L_f$ free --- and it
+is this reciprocal choice that lets one solver family sweep the thrust
+ladder, where rev counts change by two orders of magnitude, without ever
+re-meshing in time.
+
 \subsection{Objective and homotopy}
 
 The physical objective is maximum final mass, equivalently minimum fuel:

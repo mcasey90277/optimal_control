@@ -70,8 +70,15 @@ tf = out.tf;  mf = out.mf;  cScale = out.cScale; %#ok<NASGU>
 maxDefect = out.maxDefect;  minR1 = out.minR1; %#ok<NASGU>
 insertion = insMeta.label; %#ok<NASGU>  provenance: the declared insertion criterion
 outFile = fullfile(resDir, sprintf('mintime_elfo_%s.mat', insMeta.label));
+% certification gate (2026-07-21 triage C6): the min-time ANCHOR feeds every
+% downstream rung's factor label, so an uncertified solve must never be saved.
+fp = cr3bp_fingerprint(p, struct('tf',out.tf,'insertion',insMeta.label)); %#ok<NASGU>
+assert(strcmp(out.ipoptStatus,'Solve_Succeeded') && out.maxDefect < 1e-6, ...
+    'gen_elfo_mintime:uncertified', ...
+    'min-time anchor NOT certified (status=%s, defect=%.2g) -- refusing to save', ...
+    out.ipoptStatus, out.maxDefect);
 save(outFile,'X','U','sigma','rv0','rvf','tauf0','tf','mf','cScale', ...
-     'maxDefect','minR1','pSund','qSund','moonZone','insertion');
+     'maxDefect','minR1','pSund','qSund','moonZone','insertion','fp');
 fprintf('  saved %s\n', outFile);
 
 % relabel: the mapped front in ELFO's own units

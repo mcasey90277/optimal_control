@@ -151,7 +151,15 @@ base = struct('moonZone',ctx.moonZone,'muGain',1,'tfTarget',tfTarget,'epsilon',1
 oL = base;  oL.maxIter = ctx.looseIter;  oL.warmTight = false;
 rL = casadi_energy_freetf(ctx.sigma,ctx.rv0,ctx.rvf,ctx.Tmax,ctx.cEx,ctx.muStar,Xk,Uk,ctx.tauf0,oL);
 if strcmp(rL.ipoptStatus,'Solve_Succeeded') && rL.maxDefect < 1e-6
-    Xn = rL.X;  Un = rL.U;  ok = true;  info = rL;  return
+    % tight re-clean before banking (2026-07-21 triage C4): a loose-only pass
+    % can bank a point that later fails the certification gate; re-clean here
+    % so every banked seed is tight-clean.
+    oR = base;  oR.maxIter = ctx.maxIter;  oR.warmTight = true;
+    rR = casadi_energy_freetf(ctx.sigma,ctx.rv0,ctx.rvf,ctx.Tmax,ctx.cEx,ctx.muStar,rL.X,rL.U,ctx.tauf0,oR);
+    if strcmp(rR.ipoptStatus,'Solve_Succeeded') && rR.maxDefect < 1e-6
+        Xn = rR.X;  Un = rR.U;  ok = true;  info = rR;  return
+    end
+    % re-clean failed: fall through to the tight-from-Xk fallback below
 end
 oF = base;  oF.maxIter = ctx.maxIter;  oF.warmTight = true;
 rF = casadi_energy_freetf(ctx.sigma,ctx.rv0,ctx.rvf,ctx.Tmax,ctx.cEx,ctx.muStar,Xk,Uk,ctx.tauf0,oF);

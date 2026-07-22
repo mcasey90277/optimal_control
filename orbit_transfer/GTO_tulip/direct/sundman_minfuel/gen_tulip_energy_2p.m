@@ -181,7 +181,15 @@ rT = casadi_energy_freetf(ctx.sigma,ctx.rv0,ctx.rvf,ctx.Tmax,ctx.cEx,ctx.muStar,
 if rT.success && rT.maxDefect < 1e-6
     Xn = rT.X;  Un = rT.U;  ok = true;  info = rT;
 else
-    ok = false;  Xn = Xk;  Un = Uk;  info = rT;
+    % re-clean failed after a good loose probe: try tight-from-Xk before
+    % declaring the step dead (2026-07-21 triage C6 fallback cascade)
+    oF2 = o;  oF2.maxIter = ctx.maxIter;  oF2.warmTight = true;
+    rF2 = casadi_energy_freetf(ctx.sigma,ctx.rv0,ctx.rvf,ctx.Tmax,ctx.cEx,ctx.muStar,Xk,Uk,ctx.tauf0,oF2);
+    if rF2.success && rF2.maxDefect < 1e-6
+        Xn = rF2.X;  Un = rF2.U;  ok = true;  info = rF2;
+    else
+        ok = false;  Xn = Xk;  Un = Uk;  info = rT;
+    end
 end
 end
 

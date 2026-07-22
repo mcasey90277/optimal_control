@@ -1,0 +1,445 @@
+\documentclass[11pt]{article}
+\usepackage[margin=1.1in]{geometry}
+\usepackage{amsmath,amssymb,bm}
+\usepackage{booktabs}
+\usepackage{siunitx}
+\usepackage[colorlinks=true,linkcolor=blue,citecolor=blue,urlcolor=blue]{hyperref}
+
+\newcommand{\ud}{\,\mathrm{d}}
+\newcommand{\vect}[1]{\bm{#1}}
+\newcommand{\Rhat}{\hat{\vect{R}}}
+\newcommand{\That}{\hat{\vect{T}}}
+\newcommand{\Nhat}{\hat{\vect{N}}}
+
+\title{Minimum-Fuel Elliptic-to-GEO Transfer with Lunar Gravity:\\
+Problem Formulation, Third-Body Incorporation, and the First Certified Result}
+\author{Michael Casey}
+\date{July 22, 2026}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+We extend a certified two-body low-thrust minimum-fuel campaign --- the
+Haberkorn--Martinon--Gergaud (HMG) elliptic-orbit-to-GEO benchmark --- to
+include the Moon's gravity at circular-restricted three-body (CR3BP)
+fidelity, while retaining the two-body campaign's winning formulation:
+modified equinoctial elements (MEE) with true longitude as the independent
+variable and a \emph{free} total longitude span. The Moon enters as an
+Earth-centered third-body perturbation (direct plus indirect terms) added to
+the Gauss variational equations as a pure acceleration. The three-body
+solution is reached by $\mu$-continuation from the certified two-body
+solution on the smooth energy objective, followed by an
+energy$\to$fuel homotopy at full lunar mass. At the 10\,N rung the certified
+result is $m_f = 1377.1545$\,kg against the two-body certified
+$1377.1000$\,kg: the Moon \emph{improves} the transfer by $+54.5$\,g
+($+0.004\%$) at the baseline lunar phase, in agreement with an a~priori
+tidal null model. This note records the optimal control problem, the lunar
+incorporation, the continuation strategy, and the certification basis.
+\end{abstract}
+
+\section{The benchmark problem}
+
+The underlying problem is the HMG-2004 benchmark \cite{HMG2004}: transfer a
+low-thrust spacecraft of initial mass $m_0 = 1500$\,kg from an inclined
+elliptic orbit
+\[
+P^0 = 11\,625~\text{km}, \qquad e^0 = 0.75, \qquad i^0 = 7^\circ,
+\qquad \text{(apogee start, } L_0 = \pi\text{)}
+\]
+to the geostationary orbit ($P_f = 42\,165$\,km, $e_f = 0$, $i_f = 0$),
+maximizing final mass at fixed transfer time $t_f = 1.5\,t_f^{\min}(T)$,
+where $t_f^{\min}(T)$ is the certified minimum time at thrust level $T$.
+The benchmark constants derive from Caillau--Noailles \cite{CN2001}
+($I_{sp} \simeq 1995$\,s; we use the campaign's 2000\,s convention). The
+two-body campaign certified the full thrust ladder $10 \to 0.1$\,N; at the
+10\,N rung considered here, $t_f = 33.3309$\,TU $= 5.290$\,d and the
+certified two-body final mass is $1377.1000$\,kg.
+
+The question posed to the three-body campaign is quantitative: \emph{how
+much does lunar gravity move the certified two-body answers} --- final
+mass, switch structure, and ultimately the ladder laws --- under identical
+boundary conditions and time budget?
+
+\section{The optimal control problem}
+
+\subsection{State, control, and dynamics}
+
+We work in modified equinoctial elements with true longitude $L$ as the
+independent variable. The state and control are
+\[
+X = \left[\,P,\ e_x,\ e_y,\ h_x,\ h_y,\ m,\ t\,\right]^{\!\top},
+\qquad
+U = \left[\,\vect{\beta};\ \delta\,\right],
+\quad \lVert \vect{\beta} \rVert = 1,\ \ \delta \in [0,1],
+\]
+where $(P, e_x, e_y, h_x, h_y)$ are the usual MEE
+($h_x = \tan\tfrac{i}{2}\cos\Omega$, $h_y = \tan\tfrac{i}{2}\sin\Omega$),
+$m$ is the mass, $t$ is carried as a state, $\vect{\beta}$ is the unit
+thrust direction in the local RTN (radial--transverse--normal) frame, and
+$\delta$ is the throttle. With canonical units $\mu_E = 1$,
+$\mathrm{LU} = 42\,165$\,km (so GEO circular speed is unity), the dynamics
+are the Gauss variational equations driven by the RTN specific force
+$\vect{f} = (f_R, f_T, f_N)$:
+\begin{equation}
+\label{eq:gauss}
+\begin{aligned}
+\dot P   &= \frac{2P}{Z}\sqrt{\tfrac{P}{\mu}}\; f_T, \\
+\dot e_x &= \sqrt{\tfrac{P}{\mu}}\,\tfrac{1}{Z}
+            \bigl( Z \sin L\, f_R + A_1 f_T - e_y (h_x \sin L - h_y \cos L) f_N \bigr), \\
+\dot e_y &= \sqrt{\tfrac{P}{\mu}}\,\tfrac{1}{Z}
+            \bigl( -Z \cos L\, f_R + A_2 f_T + e_x (h_x \sin L - h_y \cos L) f_N \bigr), \\
+\dot h_x &= \tfrac{1}{2}\sqrt{\tfrac{P}{\mu}}\,\tfrac{X_h}{Z} \cos L\, f_N, \qquad
+\dot h_y = \tfrac{1}{2}\sqrt{\tfrac{P}{\mu}}\,\tfrac{X_h}{Z} \sin L\, f_N, \\
+\dot L   &= \sqrt{\tfrac{\mu}{P^3}}\,Z^2
+            + \sqrt{\tfrac{P}{\mu}}\,\tfrac{1}{Z}\,(h_x \sin L - h_y \cos L)\, f_N, \\
+\dot m   &= -\tfrac{T_{\max}}{c}\,\delta, \qquad \dot t = 1,
+\end{aligned}
+\end{equation}
+with $Z = 1 + e_x\cos L + e_y \sin L$, $A_1 = e_x + (1{+}Z)\cos L$,
+$A_2 = e_y + (1{+}Z)\sin L$, $X_h = 1 + h_x^2 + h_y^2$, and exhaust
+velocity $c = I_{sp} g_0$. In the two-body problem the specific force is
+thrust alone, $\vect{f} = (T_{\max}/m)\,\delta\vect{\beta}$. All equations
+are divided by $\dot L$ to make $L$ the independent variable; every
+trajectory quantity is transcribed on a fixed grid
+$\sigma \in [0,1]$ with node longitudes $L_k = \pi + \sigma_k \Delta L$.
+
+\subsection{Free longitude span}
+
+The total swept longitude $\Delta L$ is a single scalar \emph{decision
+variable} of the problem --- the transfer's revolution count is chosen by
+the optimizer, not prescribed. This is the formulation feature that carried
+the two-body ladder through two thrust decades (rev counts from
+$\sim$7 to $\sim$700), and preserving it was the decisive argument for
+incorporating the Moon as a perturbation in this frame rather than moving
+to rotating-frame Cartesian coordinates, where the fixed independent-variable
+span freezes the revolution topology.
+
+\subsection{Objective and homotopy}
+
+The physical objective is maximum final mass, equivalently minimum fuel:
+\begin{equation}
+\min_{\delta(\cdot),\,\vect{\beta}(\cdot)} \int_0^{t_f} \delta \ud t ,
+\qquad t(1) = t_f \ \text{pinned}.
+\end{equation}
+The bang-bang structure of the $L^1$ objective is reached through the
+Bertrand--\'Ep\'enoy convex homotopy \cite{BE2002}
+\begin{equation}
+J_\varepsilon \;=\; \int_0^{t_f}
+\bigl[\, \delta \;-\; \varepsilon\, \delta(1-\delta) \,\bigr] \ud t,
+\qquad \varepsilon: 1 \to 0,
+\end{equation}
+whose $\varepsilon = 1$ member is the smooth energy problem and whose
+$\varepsilon = 0$ member is minimum fuel. Each member is transcribed by
+trapezoidal collocation on the $\sigma$ grid (193 segments at 10\,N,
+$\approx 25$ nodes per revolution) and solved as an NLP with
+CasADi\,+\,IPOPT, warm-started along the homotopy; a step is accepted only
+on \texttt{Solve\_Succeeded} with post-hoc numerically re-checked defects
+below $10^{-6}$ (in practice $\sim 10^{-15}$).
+
+\section{Incorporating the Moon}
+
+\subsection{Third-body acceleration with the indirect term}
+
+The Moon is added at CR3BP fidelity in the Earth-centered frame. Because
+that frame is non-inertial --- the Moon accelerates the Earth --- the
+perturbing acceleration must carry both the direct and the
+\emph{indirect} term:
+\begin{equation}
+\label{eq:thirdbody}
+\vect{a}_M(\vect{r}, t) \;=\; \mu_M \left[
+\frac{\vect{r}_M(t) - \vect{r}}{\lVert \vect{r}_M(t) - \vect{r} \rVert^{3}}
+\;-\;
+\frac{\vect{r}_M(t)}{\lVert \vect{r}_M(t) \rVert^{3}}
+\right],
+\end{equation}
+with $\mu_M/\mu_E = 0.012300$ ($\mu_M = 4902.800$\,km$^3$/s$^2$),
+consistent with the CR3BP mass parameter
+$\mu^\ast = 0.0121506$ via $\mu^\ast/(1-\mu^\ast)$. Omitting the indirect
+term is the classic third-body modeling error; near GEO the two terms are
+comparable in size, and their difference is the \emph{tidal} field that
+actually perturbs the transfer.
+
+\subsection{Circular lunar ephemeris}
+
+Faithful to the CR3BP idealization, the Moon moves on a circular orbit
+\emph{in the reference (equatorial) plane}:
+\begin{equation}
+\vect{r}_M(t) = D_{EM}
+\begin{bmatrix} \cos(n_M t + \varphi_0)\\ \sin(n_M t + \varphi_0)\\ 0 \end{bmatrix},
+\qquad
+n_M = \sqrt{\frac{\mu_E + \mu_M}{D_{EM}^{3}}},
+\end{equation}
+with $D_{EM} = 384\,400$\,km ($= 9.1166$\,LU) and sidereal period
+$2\pi/n_M = 27.28$\,d. The transfer's $7^\circ$ initial inclination is
+measured relative to this plane; the real Moon--equator obliquity
+($\sim$18--29$^\circ$) is deliberately not modeled at this stage. The lunar
+phase at departure, $\varphi_0$, is a first-class parameter recorded in
+every cached artifact; the baseline uses $\varphi_0 = 0$. Because $t$ is
+already a state of the L-domain formulation, the time-dependent ephemeris
+requires no structural change to the transcription --- the dynamics simply
+read the $t$ state.
+
+\subsection{Entry into the Gauss equations}
+
+At each node the Cartesian position is reconstructed from the MEE in closed
+form,
+\[
+\vect{r} = \frac{P/Z}{X_h}
+\begin{bmatrix}
+(1+\alpha^2)\cos L + 2 h_x h_y \sin L\\
+(1-\alpha^2)\sin L + 2 h_x h_y \cos L\\
+2\,(h_x \sin L - h_y \cos L)
+\end{bmatrix},
+\qquad \alpha^2 = h_x^2 - h_y^2,
+\]
+along with the RTN basis: $\Rhat = \vect{r}/r$, the orbit normal
+$\Nhat = [\,2h_y,\ -2h_x,\ 1 - h_x^2 - h_y^2\,]^{\top}/X_h$ (unit and
+orthogonal to $\Rhat$ identically), and $\That = \Nhat \times \Rhat$. The
+lunar acceleration \eqref{eq:thirdbody} is projected onto this triad and
+added to the thrust in the total specific force of \eqref{eq:gauss}:
+\begin{equation}
+f_R = \tfrac{T_{\max}}{m}\,\delta\beta_R + g\,(\Rhat\!\cdot\!\vect{a}_M),
+\qquad
+f_T = \tfrac{T_{\max}}{m}\,\delta\beta_T + g\,(\That\!\cdot\!\vect{a}_M),
+\qquad
+f_N = \tfrac{T_{\max}}{m}\,\delta\beta_N + g\,(\Nhat\!\cdot\!\vect{a}_M),
+\end{equation}
+where $g \in [0,1]$ is a continuation gain multiplying the lunar mass
+(\S\ref{sec:continuation}). Two coupling rules are essential and are
+enforced explicitly in the implementation: the perturbation enters
+\emph{every} Gauss equation including the $\dot L$ rate, and it contributes
+\emph{nothing} to $\dot m$ --- gravity costs no propellant.
+
+Implementation note: the perturbation is a strictly opt-in branch of the
+shared dynamics routine. When absent (or at $g = 0$) the code executes the
+\emph{character-identical} original two-body equations, so the certified
+two-body campaign is bitwise untouched --- a property enforced by
+regression gates rather than assumed. The correctness of the new frame
+mathematics is pinned by committed analytic oracles: a radial oracle
+(equatorial state with the Moon on the radial axis, for which only
+$\dot e_y$ may respond, by exactly $-a_R$), a transverse oracle at
+$L = \pi/2$, and a numerical check of $\Nhat$ against the
+finite-difference orbit normal at random three-dimensional states.
+
+\section{Solution strategy}
+\label{sec:continuation}
+
+\subsection{The pipeline, and the role of the min-time solution}
+
+The full numerical chain behind the certified result is:
+\begin{enumerate}
+\item \textbf{Min-time (two-body, inherited).} The minimum-time problem is
+  \emph{not} re-solved in this campaign. The two-body campaign's certified
+  min-time anchor $t_f^{\min}(10\,\mathrm{N})$ enters only through the
+  time budget $t_f = 1.5\,t_f^{\min}$ --- the standard fixed-time
+  convention that makes the fuel problem well-posed. No min-time
+  \emph{trajectory} is used as a seed anywhere in the chain.
+\item \textbf{Energy seed (two-body).} A constant-throttle,
+  tangential-steering trajectory is propagated from the initial orbit and
+  sampled on the $\sigma$ grid (the campaign's two-pass seed: a cheap
+  50-node probe fixes the revolution count, then a full-density sample at
+  $\approx 25$ nodes/rev). From this seed the smooth two-body
+  \emph{energy} problem ($\varepsilon = 1$, no Moon) is solved to full
+  convergence. This solve doubles as the certified-path regression gate.
+\item \textbf{$\mu$-continuation (gravity bridge).} The lunar gain is
+  walked $g: 0 \to 1$ on the energy objective, warm-starting each step
+  (\S\ref{sec:mubridge}).
+\item \textbf{$\varepsilon$-homotopy (sharpening).} At full lunar mass the
+  energy solution is continued $\varepsilon: 1 \to 0$ down to bang-bang
+  minimum fuel (\S\ref{sec:sharpen}).
+\end{enumerate}
+So the answer to ``min-time first, then min-energy, then fuel?'' is:
+\emph{min-time only as the inherited time anchor; energy solved from a
+propagated seed, not from a min-time trajectory; and two separate
+continuations --- first in the lunar mass at fixed $\varepsilon = 1$, then
+in $\varepsilon$ at fixed $g = 1$.} The ordering of the two continuations
+is deliberate and is the campaign's central methodological choice
+(\S\ref{sec:frompaper}): the physics is changed on the smooth objective,
+and the nonsmooth structure is resolved exactly once, at the final physics.
+
+\subsection{What we drew from Bonnard--Caillau--Picot}
+\label{sec:frompaper}
+
+Four specific things were taken from \cite{BCP2010}:
+\begin{itemize}
+\item \textbf{The $\mu$-continuation itself.} Their \S 4.4 computes
+  Earth--Moon transfers by continuation in the mass ratio from the Kepler
+  problem, traced to Poincar\'e --- precisely our gravity bridge, with the
+  gain $g$ playing the role of their $\mu$. Their Proposition~2.3 supplies
+  the convergence theory: the shooting/continuation branch is smooth exactly
+  while the extremal stays clear of conjugate points.
+\item \textbf{The benign-landscape rationale for bridging on energy.}
+  Their Theorem~3.5 shows the averaged energy problem is a Riemannian
+  geodesic flow with \emph{empty conjugate and cut loci} in the elliptic
+  domain $e \in [0,1)$ --- the theoretical explanation for why every
+  campaign in this repository has found the energy problem to be the
+  reliable continuation backbone, and the reason the Moon is dialed in at
+  $\varepsilon = 1$ rather than on the bang-bang fuel problem.
+\item \textbf{Conjugate-point certification (adopted as follow-up).} They
+  verify local optimality by integrating the Jacobi (variational) equation
+  and checking the first conjugate time exceeds $t_f$. Our indirect-side
+  verification is currently first-order only; the Jacobi-field check is the
+  recorded upgrade path (\S 8).
+\item \textbf{The $\sigma$-bound rev-count law.} Their
+  Propositions~3.4/3.7 bound the control sup-norm by an explicit function
+  of the geometry over the cumulated longitude --- an analytic
+  rev-count-versus-thrust relation that the deep-rung ladder results will
+  be compared against (the rigorous cousin of the campaign's empirical
+  $T \cdot t_f^{\min} \approx \mathrm{const}$ law).
+\end{itemize}
+What we did \emph{not} adopt: their averaging-based analytic initialization
+(our discrete two-body solutions are stronger seeds), and their
+rotating-frame Cartesian formulation --- correct for their Moon-bound
+targets, but our GEO target is Earth-bound throughout, which is exactly the
+regime where the MEE/perturbation formulation keeps its free-$\Delta L$
+advantage.
+
+\subsection{The two continuations in detail}
+
+The three-body minimum-fuel solution is reached by two continuations run in
+sequence, each warm-started and gated:
+
+\paragraph{1. $\mu$-continuation (gravity bridge).}\label{sec:mubridge}
+Starting from the certified two-body \emph{energy} solution
+($\varepsilon = 1$), the lunar gain is walked $g: 0 \to 1$
+(schedule $0.25, 0.5, 0.75, 1.0$, with adaptive bisection on failure). This
+is the classical continuation in the mass ratio traced to Poincar\'e and
+developed for low-thrust transfers by Bonnard--Caillau--Picot
+\cite{BCP2010}, whose convergence theory ties the smoothness of the
+continuation branch to conjugate-point clearance. The continuation is run
+on the energy objective deliberately: the averaged energy problem is a
+Riemannian geodesic flow free of conjugate and cut points in the elliptic
+domain \cite{BCP2010}, so its landscape is the benign one.
+
+\paragraph{2. $\varepsilon$-homotopy (sharpening) at full Moon.}\label{sec:sharpen}
+With $g = 1$ frozen, the standard energy$\to$fuel homotopy
+$\varepsilon: 1 \to 0$ is run with the perturbation active, reusing the
+two-body campaign's homotopy machinery unchanged. The bang-bang structure
+is thus resolved exactly once, at the final physics.
+
+Both stages checkpoint only accepted steps under a dedicated tag namespace
+with configuration fingerprints (thrust, mass, $I_{sp}$, $t_f$, $\mu_M$,
+$D_{EM}$, $n_M$, $\varphi_0$, $g$), so two-body and three-body caches can
+never silently cross-seed.
+
+\section{A priori null model}
+
+Before any solve, the expected size of the lunar effect is bounded by the
+tidal acceleration at GEO radius,
+$a_{\text{tide}} \approx 2\mu_M r / D_{EM}^3 \approx
+\SI{7.3e-6}{\meter\per\second\squared}$, compared with the thrust
+authority $T/m_0$:
+
+\begin{center}
+\begin{tabular}{cccc}
+\toprule
+rung & $T/m_0$ [\si{\meter\per\second\squared}] & tide/authority & $t_f$ [lunar months]\\
+\midrule
+10\,N  & $6.7\times 10^{-3}$ & $0.109\%$ & $0.19$\\
+1\,N   & $6.7\times 10^{-4}$ & $1.09\%$  & $\sim 2$\\
+0.1\,N & $6.7\times 10^{-5}$ & $10.9\%$  & $\sim 19$\\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\noindent
+At 10\,N the Moon is a $\sim 0.1\%$ actor over a fifth of a lunar month:
+the null model predicts a sub-$0.1$\,kg mass shift whose sign depends on
+geometry. The deep rungs are where the Moon becomes a $\sim 10\%$ actor
+acting over many lunar months --- the physically interesting regime, and
+the recorded next step.
+
+\section{Results at the 10 N rung}
+
+\paragraph{Bridge (energy objective).}
+Gate 1 (perturbation absent; certified-path regression):
+\texttt{Solve\_Succeeded}, defect $4.6\times 10^{-15}$, terminal error
+$\sim 10^{-36}$. Gate 2 ($g = 0$ with the perturbation wired in): solution
+drift $8.0\times 10^{-9}$ relative to gate 1 --- the hook itself introduces
+no physics. The gain walk then converged on the \emph{first attempt at
+every step}, with defects $4$--$6\times 10^{-15}$ and energy-stage final
+mass moving from $1359.68$ to $1359.72$\,kg across the walk --- a
+$+40$\,g effect at the energy stage, consistent with the null model.
+
+\paragraph{Certified minimum-fuel result.}
+The $\varepsilon$-homotopy reached $\varepsilon = 0$ with all
+certification metrics green (defect $4.2\times 10^{-15}$, unit-norm
+violation $<10^{-8}$, terminal error $<10^{-8}$, no active box bounds):
+\begin{center}
+\begin{tabular}{lcccc}
+\toprule
+ & $m_f$ [kg] & $\Delta m_f$ & switches$^{\ast}$ & $t_f$\\
+\midrule
+two-body (certified)   & $1377.1000$ & ---        & 19 & $5.290$\,d\\
+three-body (this work) & $1377.1545$ & $+0.0545$\,kg ($+0.004\%$) & 19 & $5.290$\,d\\
+\bottomrule
+\end{tabular}
+\end{center}
+{\footnotesize $^{\ast}$Nodal counts; switch counts are mesh-band
+quantities, not exact integers (campaign mesh-convergence protocol).}
+
+\medskip
+At the baseline lunar phase the Moon \emph{helps}: the transfer finishes
+$54.5$\,g heavier. The effect sits squarely inside the null-model band,
+and the bang-bang structure is unchanged at this rung. Whether the sign of
+$\Delta m_f$ is generic or specific to $\varphi_0 = 0$ is an open,
+recorded question --- at 10\,N the transfer spans only a fifth of a lunar
+month, so the Moon is nearly static during the transfer and the effect
+plausibly reverses with phase.
+
+\section{Certification basis and limitations}
+
+The three-body result is certified on solver metrics: full IPOPT
+convergence (\texttt{Solve\_Succeeded}, never
+\texttt{Solved\_To\_Acceptable\_Level}), post-hoc numerically re-checked
+collocation defects at $10^{-15}$, terminal and unit-norm errors below
+$10^{-8}$, homotopy endpoint $\varepsilon = 0$ reached, and no active
+state bounds. This is a deliberately weaker bar than the two-body
+campaign's, which additionally verified Pontryagin consistency through a
+primer-vector reconstruction: that verifier is \emph{invalid under lunar
+gravity} as currently written (it attributes all non-Keplerian
+acceleration to thrust; under the perturbation it requires subtraction of
+the zero-throttle ballistic rate), and a CR3BP-aware primer check is a
+recorded follow-up, together with a conjugate-point (Jacobi-field)
+second-order check in the style of \cite{BCP2010}.
+
+Further recorded limitations: the Moon-in-reference-plane idealization
+(true CR3BP geometry; real obliquity unmodeled); a single lunar phase
+$\varphi_0 = 0$ solved so far; and the deep rungs (1, 0.2, 0.1\,N), where
+the null model predicts effects two orders of magnitude larger, not yet
+run. The adaptive-bisection path of the gravity bridge was never exercised
+at 10\,N (all steps converged first-try) and is untested until a deeper
+rung stresses it.
+
+\begin{thebibliography}{9}
+
+\bibitem{HMG2004}
+T.~Haberkorn, P.~Martinon, J.~Gergaud,
+``Low-thrust minimum-fuel orbital transfer: a homotopic approach,''
+\emph{Journal of Guidance, Control, and Dynamics} 27(6), 2004.
+
+\bibitem{CN2001}
+J.-B.~Caillau, J.~Noailles,
+``Coplanar control of a satellite around the Earth,''
+\emph{ESAIM: Control, Optimisation and Calculus of Variations} 6, 2001.
+
+\bibitem{BE2002}
+R.~Bertrand, R.~\'Ep\'enoy,
+``New smoothing techniques for solving bang-bang optimal control problems,''
+\emph{Optimal Control Applications and Methods} 23(4), 2002.
+
+\bibitem{BCP2010}
+B.~Bonnard, J.-B.~Caillau, G.~Picot,
+``Geometric and numerical techniques in optimal control of two and
+three-body problems,''
+\emph{Communications in Information and Systems} 10(4), 239--278, 2010.
+
+\bibitem{Betts2010}
+J.~T.~Betts,
+\emph{Practical Methods for Optimal Control and Estimation Using Nonlinear
+Programming}, 2nd ed., SIAM, 2010.
+
+\end{thebibliography}
+
+\end{document}

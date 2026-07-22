@@ -46,25 +46,32 @@ function outFile = gen_elfo_energy_gravhom(opts)
 %          .maxIter  IPOPT cap (tight solves)                 [1500]
 %          .looseIter IPOPT cap (loose probe)                 [400]
 %          .resume   pick up from checkpoint if present       [true]
+%          .thrustN  thrust rung [N]; overrides cfg via minfuel_config [0.025]
 %
 % OUTPUTS:
-%   outFile - path to results/energy_elfo_freetf.mat: X[9x(N+1)],U,factor,tauf0,
-%             sigma,rv0,rvf(=ELFO),pSund,qSund,moonZone,muGain -- the GTO->ELFO
-%             energy seed / ready warm start for the ELFO fuel homotopy.
+%   outFile - path to results/energy_elfo_freetf<tTag>.mat: X[9x(N+1)],U,factor,
+%             tauf0,sigma,rv0,rvf(=ELFO),pSund,qSund,moonZone,muGain,fp -- the
+%             GTO->ELFO energy seed / ready warm start for the ELFO fuel
+%             homotopy. tTag = thrust_tag(thrustN) ('' at nominal 25 mN, so
+%             nominal filenames stay byte-identical).
 %
 % REFERENCES:
 %   [1] casadi_energy_freetf.m (the free-t_f two-primary solver this drives).
 %   [2] elfo/attic/gen_elfo_energy_backbone.m (the fixed-t_f predecessor + wall record).
 %   [3] elfo/ELFO_RETARGET.md (design-review verdict this implements).
+%   [4] docs/superpowers/specs/2026-07-21-ladder-prep-design.md sec 4 (thrust
+%       threading, cBox scaling, fingerprints).
 
 if nargin < 1, opts = struct(); end
 gd = @(f,d) getdef(opts,f,d);
 
 here = fileparts(mfilename('fullpath'));  cd(here);  setup_paths();
 resDir = fullfile(here,'results');  if ~exist(resDir,'dir'), mkdir(resDir); end
-ckptFile = fullfile(resDir,'energy_elfo_gravhom_ckpt.mat');
+thrustN = gd('thrustN', 0.025);
+tTag    = thrust_tag(thrustN);
+ckptFile = fullfile(resDir, sprintf('energy_elfo_gravhom_ckpt%s.mat', tTag));
 
-cfg = minfuel_config();
+cfg = minfuel_config(struct('thrustN', thrustN));
 p   = cr3bp_lt_params(cfg.thrustN, cfg.m0kg, cfg.ispS);
 factor = gd('factor', 1.20);
 E = load(fullfile(cfg.dirs.energy, cfg.fname('energy', factor)));
@@ -88,12 +95,21 @@ fprintf('=== GEN_ELFO_ENERGY_GRAVHOM: tulip(f=%.2f) -> ELFO (nearest) ===\n', fa
 fprintf('  N=%d  tf_ws=%.4f  ||rvf_elfo-rvf_tul||=%.4f ND\n', ...
         numel(sigma)-1, E.X(8,end), norm(rvf_elfo(:)-rvf_tul(:)));
 
+% cBox rung scaling (spec sec 4): a lower-thrust rung needs a longer physical
+% t_f for the same tau_f, so the cScale slack state must be able to stretch
+% proportionately more; Tfac=1 at nominal reproduces [0.15 6] exactly.
+Tfac  = 0.025/thrustN;
+cBoxD = [0.15*min(1,Tfac), 6*max(1,Tfac)];
+% cache fingerprint (2026-07-21 ladder-prep): travels with every save so a
+% stale/foreign-thrust cache fails loud downstream (check_cr3bp_fp).
+fp = cr3bp_fingerprint(p, struct('tf', E.X(8,end), 'factor', factor));
+
 ctx = struct('sigma',sigma,'rv0',rv0,'Tmax',p.Tmax,'cEx',p.c,'muStar',p.muStar, ...
     'tauf0',tauf0,'pSund',cfg.pSund,'qSund',gd('qSund',4),'moonZoneTgt',mz, ...
     'maxIter',gd('maxIter',1500),'looseIter',gd('looseIter',400), ...
     'step0',gd('step0',0.20),'stepMin',gd('stepMin',0.01), ...
     'tf0',E.X(8,end), ...                         % pin t_f here (well-posed energy)
-    'factor',factor,'rvf_elfo',rvf_elfo,'rvf_tul',rvf_tul);
+    'factor',factor,'rvf_elfo',rvf_elfo,'rvf_tul',rvf_tul,'cBox',cBoxD,'fp',fp);
 
 % one-change-per-leg parameterizations, each s in [0,1]. Order: gravity off
 % (single-primary, cleanest) -> clock on at mu=0 (benign re-mesh) -> retarget
@@ -125,7 +141,7 @@ if startLeg == 0
     if ~ok, error('gravhom:leg0','free-t_f conversion failed (def=%.2g)', info.maxDefect); end
     fprintf('  LEG0 OK def=%.2g tf=%.3f cS=%.3f edge=%.1f%%\n', ...
             info.maxDefect, info.tf, info.cScale, 100*info.edge);
-    legIdx = 1;  s = 0;  save(ckptFile,'legIdx','s','Xk','Uk','ctx');
+    legIdx = 1;  s = 0;  save(ckptFile,'legIdx','s','Xk','Uk','ctx','fp');
     startLeg = 1;  sStart = 0;
 end
 
@@ -144,8 +160,12 @@ insertion = insMeta.label; %#ok<NASGU>  provenance: the declared ELFO insertion 
 % gen_elfo_minfuel.m (all outside this task's touched-file set); retagging it
 % would require updating those readers too, which Task 4 leaves untouched (see
 % task-4-report.md concerns). The 'insertion' field still records the criterion.
-outFile = fullfile(resDir, 'energy_elfo_freetf.mat');
-save(outFile, 'X','U','factor','tauf0','sigma','rv0','rvf','pSund','qSund','moonZone','muGain','insertion');
+% It IS tagged with tTag=thrust_tag(thrustN) ('' at nominal 25 mN -> byte-
+% identical name): gen_elfo_minfuel/elfo_run_one (both touched by this same
+% task) resolve the same tagged name for a ladder rung.
+fp = ctx.fp; %#ok<NASGU>
+outFile = fullfile(resDir, sprintf('energy_elfo_freetf%s.mat', tTag));
+save(outFile, 'X','U','factor','tauf0','sigma','rv0','rvf','pSund','qSund','moonZone','muGain','insertion','fp');
 fprintf('GEN_ELFO_ENERGY_GRAVHOM DONE: %s\n', outFile);
 fprintf('  achieved tf=%.4f ND (%.2f d), mf=%.4f, edge=%.1f%%\n', ...
         X(8,end), X(8,end)*p.tStar/86400, X(7,end), 100*mean(U(4,:)>0.95|U(4,:)<0.05));
@@ -168,7 +188,8 @@ while s < 1 - 1e-9
         continue
     end
     Xk = Xn;  Uk = Un;  s = sTry;  nstep = nstep + 1;
-    save(ckptFile,'legIdx','s','Xk','Uk','ctx');
+    fp = ctx.fp; %#ok<NASGU>
+    save(ckptFile,'legIdx','s','Xk','Uk','ctx','fp');
     fprintf('  %s s=%.4f OK def=%.2g tf=%.3f cS=%.3f edge=%.1f%% (step %d)\n', ...
             legName, s, info.maxDefect, info.tf, info.cScale, 100*info.edge, nstep);
     if step < ctx.step0, step = min(2*step, ctx.step0); end
@@ -178,7 +199,7 @@ end
 % ===========================================================================
 function [ok, Xn, Un, info] = step_solve(ctx, rvf_s, oExtra, Xk, Uk)
 % One continuation step: loose probe -> tight fallback -> tight re-clean.
-base = struct('pSund',ctx.pSund,'qSund',ctx.qSund,'tfCapMult',6,'cBox',[0.15 6], ...
+base = struct('pSund',ctx.pSund,'qSund',ctx.qSund,'tfCapMult',6,'cBox',ctx.cBox, ...
               'tfTarget',ctx.tf0);              % PIN t_f (well-posed energy)
 o = setfields(base, oExtra);
 % (a) loose probe (fail-fast) -- a genuine continuation move

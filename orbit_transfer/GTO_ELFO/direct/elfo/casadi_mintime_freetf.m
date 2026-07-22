@@ -28,6 +28,11 @@ function out = casadi_mintime_freetf(sigma, rv0, rvf, Tmax, cEx, muStar, X0, U0,
 %   out - struct: .X [9x(N+1)] .U [3x(N+1)] .tauf .tf(=tfMin) .cScale .mf
 %         .maxDefect .maxUnit .minR1 .tMonotone (logical) .lamDef [9xN] .lamAll
 %         .primerAlignDeg .lamMassEnd .success .ipoptStatus
+%         .boundSat - struct('minSlack',s,'worst',label,'hit',logical): the
+%           tightest nonphysical-box slack (position/velocity/mass boxes at
+%           INTERIOR nodes -- BCs pin the endpoints by construction -- plus
+%           the cScale box); .hit true warns a box may be binding and should
+%           be widened via opts before trusting the result
 %
 % REFERENCES:
 %   [1] casadi_energy_freetf.m (the energy/fuel sibling this mirrors).
@@ -179,6 +184,28 @@ r1N   = sqrt((Xs(1,:)+muStar).^2 + Xs(2,:).^2 + Xs(3,:).^2);
 minR1 = min(r1N);
 tMonotone = all(diff(Xs(8,:)) > 0);
 
+% Bound-saturation diagnostic (2026-07-21 ladder-prep, spec sec 4; output-only,
+% no NLP change). Nonphysical boxes checked at INTERIOR nodes (BCs pin the
+% endpoints by construction); cScale is a constant slack state, so it is
+% checked against its own box directly (rBox/vBox/massLo/massHi/cBox are this
+% file's OWN box constants from lbX/ubX/cBox above -- NOT copied from another
+% solver).
+rBox = 3;  vBox = 12;  massLo = 0.3;  massHi = 1.0;
+Xi = Xs(:,2:end-1);
+slk = [ rBox - max(abs(Xi(1:3,:)),[],'all');            % position box
+        vBox - max(abs(Xi(4:6,:)),[],'all');            % velocity box
+        min(Xi(7,:),[],'all') - massLo;                 % mass lower
+        massHi - max(Xi(7,:),[],'all');                 % mass upper
+        min(Xs(9,end)-cBox(1), cBox(2)-Xs(9,end)) ];     % cScale (time-scale) box
+lbl = {'rBox','vBox','massLo','massHi','cBox'};
+[minSlack, iw] = min(slk);
+boundSat = struct('minSlack', minSlack, 'worst', lbl{iw}, 'hit', minSlack < 1e-4);
+if boundSat.hit
+    warning('casadi_mintime_freetf:boundSaturation', ...
+        'nonphysical box ''%s'' within %.2g of binding -- widen via opts before trusting', ...
+        lbl{iw}, max(minSlack,0));
+end
+
 out = struct('X', Xs, 'U', Us, 'tauf', tauf, 'tf', Xs(8,end), ...
              'cScale', Xs(9,end), 'mf', Xs(7,end), ...
              'maxDefect', max(abs(Dd(:))), ...
@@ -186,6 +213,7 @@ out = struct('X', Xs, 'U', Us, 'tauf', tauf, 'tf', Xs(8,end), ...
              'minR1', minR1, 'tMonotone', tMonotone, ...
              'lamDef', lamDef, 'lamAll', lamAll, ...
              'primerAlignDeg', primerAlignDeg, 'lamMassEnd', lamMassEnd, ...
+             'boundSat', boundSat, ...
              'success', success, 'ipoptStatus', status);
 end
 

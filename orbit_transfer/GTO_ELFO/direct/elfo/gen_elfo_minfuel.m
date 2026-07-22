@@ -15,29 +15,37 @@ function outFile = gen_elfo_minfuel(opts)
 %
 % INPUTS:
 %   opts - (optional) struct:
-%          .seedFile - energy seed .mat [results/energy_elfo_freetf.mat]
+%          .seedFile - energy seed .mat [results/energy_elfo_freetf<tTag>.mat]
 %          .target   - name tag baked into the OUTPUT filename ['ELFO']
 %          .epsMin   - homotopy endpoint: 0 = bang-bang fuel; >0 = smooth [0]
 %          .outFile  - explicit output path; [] -> derive canonical name  []
+%          .thrustN  - thrust rung [N]; overrides cfg via minfuel_config    [0.025]
 %          .step0[0.20] .stepMin[0.005] .maxIter[2000] .looseIter[500] .resume[true]
 %
 % OUTPUTS:
-%   outFile - results/minfuel_<target>_tf<fTag>_sw<k>_minEps<eTag>.mat, holding
-%             X[9x(N+1)],U,sigma,rv0,rvf,tauf0,tf,moonZone,pSund,qSund,epsilon,
-%             target,factor -- the GTO->target min-fuel (or smooth eps>0) solution.
+%   outFile - results/minfuel_<target>_tf<fTag>_sw<k>_minEps<eTag><tTag>.mat,
+%             holding X[9x(N+1)],U,sigma,rv0,rvf,tauf0,tf,moonZone,pSund,qSund,
+%             epsilon,target,factor,fp -- the GTO->target min-fuel (or smooth
+%             eps>0) solution. tTag = thrust_tag(thrustN) ('' at nominal 25 mN,
+%             so nominal filenames stay byte-identical).
 %
 % REFERENCES:
 %   [1] Bertrand & Epenoy (2002); [2] casadi_energy_freetf.m (the solver);
-%   [3] gen_elfo_energy_gravhom.m (the energy seed); [4] run_psr.m (tulip analog).
+%   [3] gen_elfo_energy_gravhom.m (the energy seed); [4] run_psr.m (tulip analog);
+%   [5] docs/superpowers/specs/2026-07-21-ladder-prep-design.md sec 4 (thrust
+%       threading, cBox scaling, fingerprints).
 
 if nargin < 1, opts = struct(); end
 gd = @(f,d) getdef(opts,f,d);
 
 here = fileparts(mfilename('fullpath'));  cd(here);  setup_paths();
 resDir = fullfile(here,'results');
-cfg = minfuel_config();  p = cr3bp_lt_params(cfg.thrustN, cfg.m0kg, cfg.ispS);
+thrustN = gd('thrustN', 0.025);
+tTag    = thrust_tag(thrustN);
+cfg = minfuel_config(struct('thrustN', thrustN));
+p   = cr3bp_lt_params(cfg.thrustN, cfg.m0kg, cfg.ispS);
 
-seedPath = gd('seedFile', fullfile(resDir,'energy_elfo_freetf.mat'));
+seedPath = gd('seedFile', fullfile(resDir, sprintf('energy_elfo_freetf%s.mat', tTag)));
 target   = gd('target', 'ELFO');
 epsMin   = gd('epsMin', 0);
 assert(isfile(seedPath), 'no energy seed at %s', seedPath);
@@ -50,23 +58,32 @@ if strcmpi(target, 'ELFO'), tfMinRef = cfg.tfMin_elfo; else, tfMinRef = cfg.tfMi
 factor = tf0 / tfMinRef;
 fTag   = strrep(sprintf('%.3f', factor), '.', 'p');       % 1.200 -> '1p200'
 eTag   = strrep(sprintf('%g', epsMin), '.', 'p');         % 0 -> '0', 0.2 -> '0p2'
-tag    = sprintf('%s_tf%s_minEps%s', target, fTag, eTag);
+tag    = sprintf('%s_tf%s_minEps%s%s', target, fTag, eTag, tTag);
 ckptFile = fullfile(resDir, sprintf('minfuel_%s_ckpt.mat', tag));
+% cache fingerprint (2026-07-21 ladder-prep): gates the checkpoint resume below
+% and travels with every save so a stale/foreign-thrust cache fails loud.
+fp = cr3bp_fingerprint(p, struct('tf', tf0, 'factor', factor));
+% cBox rung scaling (spec sec 4): a lower-thrust rung needs a longer physical
+% t_f for the same tau_f, so the cScale slack state must be able to stretch
+% proportionately more; Tfac=1 at nominal reproduces [0.15 6] exactly.
+Tfac = 0.025/thrustN;
+cBoxD = [0.15*min(1,Tfac), 6*max(1,Tfac)];
 
 ctx = struct('sigma',S.sigma,'rv0',S.rv0,'rvf',S.rvf,'Tmax',p.Tmax,'cEx',p.c, ...
     'muStar',p.muStar,'tauf0',S.tauf0,'pSund',S.pSund,'qSund',S.qSund, ...
-    'moonZone',S.moonZone,'tf0',tf0, ...
+    'moonZone',S.moonZone,'tf0',tf0,'cBox',cBoxD, ...
     'maxIter',gd('maxIter',2000),'looseIter',gd('looseIter',500), ...
     'step0',gd('step0',0.20),'stepMin',gd('stepMin',0.005));
 
-fprintf('=== GEN_ELFO_MINFUEL [%s]: eps 1->%g at tf=%.4f ND (%.2f d, %.3fx) ===\n', ...
-        target, epsMin, tf0, tf0*p.tStar/86400, factor);
+fprintf('=== GEN_ELFO_MINFUEL [%s]: eps 1->%g at tf=%.4f ND (%.2f d, %.3fx) thrustN=%.4g N ===\n', ...
+        target, epsMin, tf0, tf0*p.tStar/86400, factor, thrustN);
 
 % epsilon homotopy: s in [0,1] maps epsilon = 1 - s*(1-epsMin)
 Xk = S.X;  Uk = S.U;  s0 = 0;
 if gd('resume',true) && isfile(ckptFile)
     C = load(ckptFile);
     if abs(C.tf0 - tf0) < 1e-9 && C.s < 1-1e-9
+        check_cr3bp_fp(C, fp, ckptFile, tag);   % fail loud on a stale/foreign-thrust checkpoint
         Xk = C.Xk;  Uk = C.Uk;  s0 = C.s;
         fprintf('  RESUMED at eps=%.4f\n', 1 - s0*(1-epsMin));
     end
@@ -84,7 +101,7 @@ while s < 1 - 1e-9
         continue
     end
     Xk = Xn;  Uk = Un;  s = sTry;  nstep = nstep + 1;  finalInfo = info;
-    save(ckptFile,'s','Xk','Uk','tf0');
+    save(ckptFile,'s','Xk','Uk','tf0','fp');
     fprintf('  eps=%.4f OK def=%.2g sw=%d edge=%.1f%% mf=%.4f cS=%.3f (step %d)\n', ...
             epsilon, info.maxDefect, info.switches, 100*info.edge, info.mf, info.cScale, nstep);
     if step < ctx.step0, step = min(2*step, ctx.step0); end
@@ -93,7 +110,7 @@ end
 % for the data export; recompute once if the loop was fully resumed past.
 if isempty(finalInfo)
     oRe = struct('moonZone',ctx.moonZone,'muGain',1,'tfTarget',ctx.tf0,'epsilon',epsMin, ...
-                 'pSund',ctx.pSund,'qSund',ctx.qSund,'tfCapMult',6,'cBox',[0.15 6], ...
+                 'pSund',ctx.pSund,'qSund',ctx.qSund,'tfCapMult',6,'cBox',ctx.cBox, ...
                  'maxIter',ctx.maxIter,'warmTight',true);
     finalInfo = casadi_energy_freetf(ctx.sigma,ctx.rv0,ctx.rvf,ctx.Tmax,ctx.cEx,ctx.muStar,Xk,Uk,ctx.tauf0,oRe);
 end
@@ -114,12 +131,12 @@ tf = X(8,end);  moonZone = ctx.moonZone;  pSund = ctx.pSund;  qSund = ctx.qSund;
 epsilon = epsMin;  ss = U(4,:);  nSw = sum(abs(diff(ss>0.5))); %#ok<NASGU>
 userOut = gd('outFile','');
 if isempty(userOut)
-    outFile = fullfile(resDir, sprintf('minfuel_%s_tf%s_sw%d_minEps%s.mat', target, fTag, nSw, eTag));
+    outFile = fullfile(resDir, sprintf('minfuel_%s_tf%s_sw%d_minEps%s%s.mat', target, fTag, nSw, eTag, tTag));
 else
     outFile = userOut;
 end
 save(outFile, 'out','X','U','sigma','rv0','rvf','tauf0','tf','moonZone','pSund','qSund', ...
-     'epsilon','target','factor');
+     'epsilon','target','factor','fp');
 fprintf('GEN_ELFO_MINFUEL DONE: %s\n', outFile);
 fprintf('  %s eps=%g: switches=%d  edge=%.1f%%  mf=%.4f (prop %.1f%%)  tf=%.2f d (%.3fx)\n', ...
         target, epsMin, nSw, 100*mean(ss>0.95|ss<0.05), X(7,end), 100*(1-X(7,end)), ...
@@ -130,7 +147,7 @@ end
 function [ok, Xn, Un, info] = step_solve(ctx, epsilon, Xk, Uk)
 % One epsilon step: loose probe -> tight fallback -> tight re-clean.
 base = struct('moonZone',ctx.moonZone,'muGain',1,'tfTarget',ctx.tf0,'epsilon',epsilon, ...
-              'pSund',ctx.pSund,'qSund',ctx.qSund,'tfCapMult',6,'cBox',[0.15 6]);
+              'pSund',ctx.pSund,'qSund',ctx.qSund,'tfCapMult',6,'cBox',ctx.cBox);
 oL = base;  oL.maxIter = ctx.looseIter;  oL.warmTight = false;
 rL = casadi_energy_freetf(ctx.sigma,ctx.rv0,ctx.rvf,ctx.Tmax,ctx.cEx,ctx.muStar,Xk,Uk,ctx.tauf0,oL);
 if strcmp(rL.ipoptStatus,'Solve_Succeeded') && rL.maxDefect < 1e-6

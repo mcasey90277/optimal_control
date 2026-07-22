@@ -17,20 +17,23 @@ function row = elfo_run_one(factor, opts)
 %            .looseIter IPOPT cap (loose probe) [500]
 %            .resDir    seeds + results dir [elfo/results]
 %            .rerun     ignore an existing result row and re-solve [false]
+%            .thrustN   thrust rung [N]; overrides cfg via minfuel_config [0.025]
 %
 % OUTPUTS:
 %   row - [1x1] struct: factor, tf, tf_days, ok, epsReached, epsFloor, dV, prop,
-%         switches, edge, defect, ipoptStatus, dataFile, err. ALSO saved to
-%         <resDir>/elfo_result_f####_minEps#.mat (var `row`) so the shell walker
-%         can build a summary after crashes.
+%         switches, edge, defect, ipoptStatus, dataFile, err, fp. ALSO saved to
+%         <resDir>/elfo_result_f####_minEps#<tTag>.mat (var `row`) so the shell
+%         walker can build a summary after crashes. tTag = thrust_tag(thrustN)
+%         ('' at nominal 25 mN, so nominal filenames stay byte-identical).
 %
 % REFERENCES:
 %   [1] gen_elfo_minfuel.m (homotopy core); [2] run_elfo_minfuel.m (interactive
-%       entry); [3] PSR/psr_run_one.m (tulip analog); [4] elfo_batch.sh.
+%       entry); [3] PSR/psr_run_one.m (tulip analog); [4] elfo_batch.sh;
+%   [5] docs/superpowers/specs/2026-07-21-ladder-prep-design.md sec 4 (thrust
+%       threading, cBox scaling, fingerprints).
 
 here = fileparts(mfilename('fullpath'));
 cd(here);  setup_paths();
-cfg = minfuel_config();  p = cr3bp_lt_params(cfg.thrustN, cfg.m0kg, cfg.ispS);
 
 if nargin < 2, opts = struct(); end
 d = @(f,v) getdef(opts, f, v);
@@ -39,7 +42,12 @@ maxIter   = d('maxIter', 2000);
 looseIter = d('looseIter', 500);
 resDir    = d('resDir', fullfile(here,'results'));
 rerun     = d('rerun', false);
+thrustN   = d('thrustN', 0.025);
+tTag      = thrust_tag(thrustN);
 if ~exist(resDir,'dir'), mkdir(resDir); end
+
+cfg = minfuel_config(struct('thrustN', thrustN));
+p   = cr3bp_lt_params(cfg.thrustN, cfg.m0kg, cfg.ispS);
 
 % ---- INSERTION POINT (edit here to retarget) ---------------------------------
 insertion = 'nearest';          % elfo: 'nearest'|'apolune'|'perilune'  (tulip: 'campaign'|'maxydot'|'apoapsis')
@@ -49,13 +57,16 @@ insertion = 'nearest';          % elfo: 'nearest'|'apolune'|'perilune'  (tulip: 
 
 tf   = factor * cfg.tfMin_elfo;   % ELFO-anchored (2026-07-21 triage C1)
 eTag = strrep(sprintf('%g', epsMin), '.', 'p');
-tag  = sprintf('f%04d_%s_minEps%s', round(1000*factor), insMeta.label, eTag);
+tag  = sprintf('f%04d_%s_minEps%s%s', round(1000*factor), insMeta.label, eTag, tTag);
 resultFile = fullfile(resDir, sprintf('elfo_result_%s.mat', tag));
+% cache fingerprint (2026-07-21 ladder-prep): rides along in `row` so every
+% saved result row carries the thrust/physics provenance it was solved under.
+fp = cr3bp_fingerprint(p, struct('tf', tf, 'factor', factor));
 
 row = struct('factor',factor,'tf',tf,'tf_days',tf*p.tStar/86400,'ok',false, ...
     'epsReached',false,'epsFloor',NaN,'dV',NaN,'prop',NaN,'switches',NaN, ...
     'edge',NaN,'defect',NaN,'ipoptStatus','','dataFile','','err','', ...
-    'rv0',rv0(:).','rvf',rvf(:).','insertion',insMeta.label);
+    'rv0',rv0(:).','rvf',rvf(:).','insertion',insMeta.label,'fp',fp);
 
 % --- resumable: an existing row means this factor is done --------------------
 % Runs FIRST, before seed resolution / the no-seed early-return / the drift
@@ -76,9 +87,11 @@ if isfile(resultFile) && ~rerun
 end
 
 % --- resolve the factor-keyed energy seed (base-seed fallback near 1.20x) ----
-seed = fullfile(resDir, sprintf('energy_elfo_f%04d.mat', round(1000*factor)));
+% Both candidates carry this rung's tTag (thrust_tag(thrustN), '' at nominal
+% 25 mN) so a ladder rung never picks up another rung's seed by accident.
+seed = fullfile(resDir, sprintf('energy_elfo_f%04d%s.mat', round(1000*factor), tTag));
 if ~isfile(seed)
-    base = fullfile(resDir, 'energy_elfo_freetf.mat');
+    base = fullfile(resDir, sprintf('energy_elfo_freetf%s.mat', tTag));
     if isfile(base)
         B = load(base,'X');  if abs(B.X(8,end) - tf) < 0.02, seed = base; end
     end
@@ -101,7 +114,7 @@ fprintf('\n=== ELFO_RUN_ONE factor %.3f (epsMin=%g, seed=%s) ===\n', factor, eps
 %     at the sharpening wall -- catch it and record the eps-floor) -----------
 try
     outFile = gen_elfo_minfuel(struct('seedFile',seed,'target','ELFO','epsMin',epsMin, ...
-        'maxIter',maxIter,'looseIter',looseIter,'resume',~rerun));
+        'maxIter',maxIter,'looseIter',looseIter,'resume',~rerun,'thrustN',thrustN));
     L  = load(outFile);
     ss = L.U(4,:);  mf = L.X(7,end);
     row.ok         = true;

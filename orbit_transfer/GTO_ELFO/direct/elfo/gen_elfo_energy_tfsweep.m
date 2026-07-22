@@ -19,25 +19,33 @@ function outFile = gen_elfo_energy_tfsweep(opts)
 % INPUTS:
 %   opts - (optional): .factorLo[1.11] .factorHi[2.00] .factorStep[0.08]
 %          .factorStepMin[0.01] .maxIter[2000] .looseIter[500] .resume[true]
+%          .thrustN thrust rung [N]; overrides cfg via minfuel_config [0.025]
 %
 % OUTPUTS:
 %   outFile - results/energy_elfo_tfgrid_<insertionLabel>.mat: struct array
 %             .grid(tf, ok, mf, edge, switches, file), the band [tfLo tfHi],
 %             rv0, rvf, insertion (= insMeta.label). Per-tf seeds saved as
-%             results/energy_elfo_f<NNNN>.mat (NNNN = round(1000*factor)) --
-%             NOT insertion-tagged (shared name, see save_point note).
+%             results/energy_elfo_f<NNNN><tTag>.mat (NNNN = round(1000*factor),
+%             tTag = thrust_tag(thrustN), '' at nominal) -- NOT insertion-
+%             tagged (shared name, see save_point note), and each carries a
+%             fingerprint 'fp'.
 %
 % REFERENCES:
 %   [1] casadi_energy_freetf.m; [2] gen_elfo_energy_gravhom.m (the base seed);
-%   [3] minfuel-tf-grid-strategy (energy band wider than the fuel-convergent band).
+%   [3] minfuel-tf-grid-strategy (energy band wider than the fuel-convergent band);
+%   [4] docs/superpowers/specs/2026-07-21-ladder-prep-design.md sec 4 (thrust
+%       threading, cBox scaling, fingerprints).
 
 if nargin < 1, opts = struct(); end
 gd = @(f,d) getdef(opts,f,d);
 here = fileparts(mfilename('fullpath'));  cd(here);  setup_paths();
 resDir = fullfile(here,'results');
-cfg = minfuel_config();  p = cr3bp_lt_params(cfg.thrustN, cfg.m0kg, cfg.ispS);
+thrustN = gd('thrustN', 0.025);
+tTag    = thrust_tag(thrustN);
+cfg = minfuel_config(struct('thrustN', thrustN));
+p   = cr3bp_lt_params(cfg.thrustN, cfg.m0kg, cfg.ispS);
 
-S = load(fullfile(resDir,'energy_elfo_freetf.mat'));
+S = load(fullfile(resDir, sprintf('energy_elfo_freetf%s.mat', tTag)));
 
 % ---- INSERTION POINT (edit here to retarget) --------------------------------
 insertion = 'nearest';          % elfo: 'nearest'|'apolune'|'perilune'  (tulip: 'campaign'|'maxydot'|'apoapsis')
@@ -53,17 +61,22 @@ assert(norm(S.rvf(:).' - rvfDecl) < 1e-10 && norm(S.rv0(:).' - rv0Decl) < 1e-10,
     insMeta.label, norm(S.rvf(:).'-rvfDecl), norm(S.rv0(:).'-rv0Decl));
 
 tf0 = S.X(8,end);
+% cBox rung scaling (spec sec 4): tfsweep uses its OWN nominal pair [0.10 8]
+% (Tfac=1 at nominal reproduces it exactly).
+Tfac  = 0.025/thrustN;
+cBoxD = [0.10*min(1,Tfac), 8*max(1,Tfac)];
 ctx = struct('sigma',S.sigma,'rv0',S.rv0,'rvf',S.rvf,'Tmax',p.Tmax,'cEx',p.c, ...
     'muStar',p.muStar,'tauf0',S.tauf0,'pSund',S.pSund,'qSund',S.qSund, ...
     'moonZone',S.moonZone,'maxIter',gd('maxIter',2000),'looseIter',gd('looseIter',500), ...
-    'resDir',resDir,'tStar',p.tStar,'tfMin',cfg.tfMin_elfo,'insertion',insMeta.label);
+    'resDir',resDir,'tStar',p.tStar,'tfMin',cfg.tfMin_elfo,'insertion',insMeta.label, ...
+    'cBox',cBoxD,'p',p,'tTag',tTag);
 % factor band (factor = tf/tfMin), converted to ND for the continuation
 factorLo = gd('factorLo',1.11);  factorHi = gd('factorHi',2.00);  factorStep = gd('factorStep',0.08);
 tfLo = factorLo*cfg.tfMin_elfo;  tfHi = factorHi*cfg.tfMin_elfo;  tfStep = factorStep*cfg.tfMin_elfo;   % ELFO-anchored (triage C1)
 stepMin = gd('factorStepMin',0.01)*cfg.tfMin_elfo;
 
-fprintf('=== GEN_ELFO_ENERGY_TFSWEEP: tf band map from tf0=%.4f ND (%.2f d) ===\n', ...
-        tf0, tf0*p.tStar/86400);
+fprintf('=== GEN_ELFO_ENERGY_TFSWEEP: tf band map from tf0=%.4f ND (%.2f d) thrustN=%.4g N ===\n', ...
+        tf0, tf0*p.tStar/86400, thrustN);
 
 % base grid-point (always re-bank the converged base at tf0)
 save_point(ctx, S.X, S.U, tf0, true);
@@ -74,8 +87,8 @@ save_point(ctx, S.X, S.U, tf0, true);
 resume = gd('resume', true);
 upX = S.X;  upU = S.U;  upTf = tf0;   dnX = S.X;  dnU = S.U;  dnTf = tf0;
 if resume
-    [upTf, upX, upU, nUp] = furthest_banked(resDir, tf0, tfHi, +1, tf0, S.X, S.U);
-    [dnTf, dnX, dnU, nDn] = furthest_banked(resDir, tf0, tfLo, -1, tf0, S.X, S.U);
+    [upTf, upX, upU, nUp] = furthest_banked(resDir, tf0, tfHi, +1, tf0, S.X, S.U, tTag);
+    [dnTf, dnX, dnU, nDn] = furthest_banked(resDir, tf0, tfLo, -1, tf0, S.X, S.U, tTag);
     if nUp > 0, fprintf('  RESUME up   from tf=%.4f (%d banked up-seed(s))\n',   upTf, nUp); end
     if nDn > 0, fprintf('  RESUME down from tf=%.4f (%d banked down-seed(s))\n', dnTf, nDn); end
 end
@@ -86,15 +99,16 @@ sweep_dir(ctx, upX, upU, upTf, +tfStep, tfHi, stepMin);
 sweep_dir(ctx, dnX, dnU, dnTf, -tfStep, tfLo, stepMin);
 
 % --- summary: scan ALL banked per-factor seeds in the band --------------------
-grid = scan_grid(resDir, tfLo, tfHi, cfg.tfMin);
+grid = scan_grid(resDir, tfLo, tfHi, cfg.tfMin, tTag);
 [~,ord] = sort([grid.tf]);  grid = grid(ord);
 okv = [grid.ok];  tfs = [grid.tf];
 tfLoB = min(tfs(okv));  tfHiB = max(tfs(okv));
 rv0 = S.rv0;  rvf = S.rvf;  insertion = insMeta.label; %#ok<NASGU>
+fp = cr3bp_fingerprint(p, struct('factorLo',factorLo,'factorHi',factorHi)); %#ok<NASGU>
 % this summary file is write-only (no other file reads it back), so it is safe
 % to tag with the insertion label.
-outFile = fullfile(resDir, sprintf('energy_elfo_tfgrid_%s.mat', insMeta.label));
-save(outFile,'grid','tfLoB','tfHiB','rv0','rvf','insertion');
+outFile = fullfile(resDir, sprintf('energy_elfo_tfgrid_%s%s.mat', insMeta.label, tTag));
+save(outFile,'grid','tfLoB','tfHiB','rv0','rvf','insertion','fp');
 fprintf('\n--- ELFO ENERGY tf band = [%.4f, %.4f] ND (%.2f - %.2f d) ---\n', ...
         tfLoB, tfHiB, tfLoB*p.tStar/86400, tfHiB*p.tStar/86400);
 fprintf('  tf(ND)   tf(d)   ok  mf      edge   sw\n');
@@ -133,7 +147,7 @@ end
 % ===========================================================================
 function [ok, Xn, Un, info] = solve_tf(ctx, tfTarget, Xk, Uk)
 base = struct('moonZone',ctx.moonZone,'muGain',1,'tfTarget',tfTarget,'epsilon',1, ...
-              'pSund',ctx.pSund,'qSund',ctx.qSund,'tfCapMult',8,'cBox',[0.10 8]);
+              'pSund',ctx.pSund,'qSund',ctx.qSund,'tfCapMult',8,'cBox',ctx.cBox);
 oL = base;  oL.maxIter = ctx.looseIter;  oL.warmTight = false;
 rL = casadi_energy_freetf(ctx.sigma,ctx.rv0,ctx.rvf,ctx.Tmax,ctx.cEx,ctx.muStar,Xk,Uk,ctx.tauf0,oL);
 if strcmp(rL.ipoptStatus,'Solve_Succeeded') && rL.maxDefect < 1e-6
@@ -159,24 +173,30 @@ factor = tf/ctx.tfMin;
 % run_elfo_minfuel.m (outside this task's touched-file set); retagging would
 % require updating both readers consistently, which Task 4 leaves untouched
 % (see task-4-report.md concerns). The 'insertion' field still records the
-% criterion for provenance.
-file = fullfile(ctx.resDir, sprintf('energy_elfo_f%04d.mat', round(1000*factor)));
-save(file,'X','U','sigma','rv0','rvf','tauf0','tf','moonZone','pSund','qSund','insertion');
+% criterion for provenance. It IS tagged with ctx.tTag=thrust_tag(thrustN)
+% ('' at nominal 25 mN -> byte-identical name), which elfo_run_one.m (also
+% touched by this same task) resolves for a ladder rung.
+fp = cr3bp_fingerprint(ctx.p, struct('tf',tf,'factor',factor,'insertion',insertion)); %#ok<NASGU>
+file = fullfile(ctx.resDir, sprintf('energy_elfo_f%04d%s.mat', round(1000*factor), ctx.tTag));
+save(file,'X','U','sigma','rv0','rvf','tauf0','tf','moonZone','pSund','qSund','insertion','fp');
 ss = U(4,:);
 g = struct('tf',tf,'factor',factor,'ok',ok,'mf',X(7,end),'edge',mean(ss>0.95|ss<0.05), ...
            'switches',sum(abs(diff(ss>0.5))),'file',file);
 end
 
 % ===========================================================================
-function [tfS, XS, US, n] = furthest_banked(resDir, tfBase, tfLimit, sgn, tf0, X0, U0)
+function [tfS, XS, US, n] = furthest_banked(resDir, tfBase, tfLimit, sgn, tf0, X0, U0, tTag)
 % FURTHEST_BANKED  Furthest already-banked per-factor seed strictly beyond tfBase
 % toward tfLimit (in direction sgn). Returns its (tf, X, U) to resume the sweep,
 % or the base (tf0, X0, U0) if none is banked. n = number of in-range banked seeds.
-% Matches only energy_elfo_f<digits>.mat (NOT the base energy_elfo_freetf.mat).
+% Matches only energy_elfo_f<digits><tTag>.mat (NOT the base energy_elfo_freetf.mat,
+% and NOT another rung's tTag -- thrust_tag never contains regex metacharacters,
+% so it is safe to splice directly into the match pattern).
 tfS = tf0;  XS = X0;  US = U0;  n = 0;  best = [];
-d = dir(fullfile(resDir, 'energy_elfo_f*.mat'));
+d = dir(fullfile(resDir, sprintf('energy_elfo_f*%s.mat', tTag)));
+pat = sprintf('^energy_elfo_f\\d+%s\\.mat$', tTag);
 for k = 1:numel(d)
-    if isempty(regexp(d(k).name, '^energy_elfo_f\d+\.mat$', 'once')), continue; end
+    if isempty(regexp(d(k).name, pat, 'once')), continue; end
     L = load(fullfile(resDir, d(k).name), 'tf', 'X', 'U');
     if ~isfield(L, 'tf'), continue; end
     beyond = (sgn > 0 && L.tf > tfBase+1e-9 && L.tf <= tfLimit+1e-9) || ...
@@ -190,13 +210,15 @@ end
 end
 
 % ===========================================================================
-function grid = scan_grid(resDir, tfLo, tfHi, tfMin)
+function grid = scan_grid(resDir, tfLo, tfHi, tfMin, tTag)
 % SCAN_GRID  Build the tf-grid summary from every banked per-factor seed whose
 % tf falls in [tfLo, tfHi] (so the summary is complete across sweep restarts).
+% Matches only this rung's tTag (see FURTHEST_BANKED note on regex safety).
 grid = struct('tf',{},'factor',{},'ok',{},'mf',{},'edge',{},'switches',{},'file',{});
-d = dir(fullfile(resDir, 'energy_elfo_f*.mat'));
+d = dir(fullfile(resDir, sprintf('energy_elfo_f*%s.mat', tTag)));
+pat = sprintf('^energy_elfo_f\\d+%s\\.mat$', tTag);
 for k = 1:numel(d)
-    if isempty(regexp(d(k).name, '^energy_elfo_f\d+\.mat$', 'once')), continue; end
+    if isempty(regexp(d(k).name, pat, 'once')), continue; end
     f = fullfile(resDir, d(k).name);
     L = load(f, 'tf', 'X', 'U');
     if ~isfield(L, 'tf') || L.tf < tfLo-1e-9 || L.tf > tfHi+1e-9, continue; end

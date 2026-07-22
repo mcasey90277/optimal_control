@@ -1,0 +1,25 @@
+## Findings
+
+- **[CORRECTNESS]** `direct/core/homotopy_mee.m:57-66` — A cached failed eps step (`ok==false`) is loaded, then the loop continues to later eps values from the prior warm start; a later `eps=0` success becomes `best.certified=true` despite a broken continuation chain. Stop/error on cached failure, or resume retrying that exact step before advancing.
+- **[CORRECTNESS]** `direct/run_cr3bp_geo.m:72-75,219-229` — `fp` omits `x0Elems`, `maxIter`, actual seed mesh `N`, and input-trajectory identity. Same `runName` can silently reuse a different initial orbit/basin or solver configuration. Fingerprint resolved seed inputs plus hashes of `sigma/X0/U0/dL0`; reject missing fields rather than warning-and-trusting.
+- **[CORRECTNESS]** `direct/core/homotopy_mee.m:51-61,136-150` — Per-step caches are tag-only and explicitly trust absent/partial fingerprints. This is the previously observed stale-basin path and affects both front-door stage D and `solve_cr3bp_minfuel`. Version fingerprints and fail closed; include resolved schedule, solver controls, mesh size, physics, and warm-start hash.
+- **[CORRECTNESS]** `direct/bridge_mu_continuation.m:206-243` — Gain-walk resume identity excludes `gainSched`, `maxIter`, and seed/trajectory identity, so changed continuation paths reuse prior basin history. Add them to the fingerprint and validate cached `history` monotonicity/final gain.
+- **[CORRECTNESS]** `direct/run_cr3bp_geo.m:80-89` — The front door replaces the certified two-pass seed protocol with `max(60, round(nodesPerRev*infoP.nRev))` and has no `[6.5,9]` revolution-window assertion. Mesh sizing is a basin selector; use the campaign’s exact asserted protocol.
+- **[CORRECTNESS]** `direct/run_cr3bp_geo.m:212-216` — Certification checks only IPOPT status and defects, unlike the bridge/minfuel driver. Require `maxUnit < 1e-8`, `termErr < 1e-8`, and treat bound-saturation warnings as certification failures.
+- **[ROBUSTNESS]** `direct/run_cr3bp_geo.m:67-71` — Bare `catch` silently converts any `table3_recipes` implementation/data failure into an off-table fallback. Catch only the documented “unknown thrust” identifier; rethrow all other exceptions.
+- **[INTERFACE]** `direct/run_cr3bp_geo.m:55-60,80-81` — No front-door validation for finite scalar thrust/phase, `gain∈[0,1]`, `epsMin∈[0,1]`, positive finite target time, or `x0Elems`/`xfElems` exactly `5x1`. Invalid inputs fail later with opaque errors. Validate immediately with named errors.
+- **[ROBUSTNESS]** `direct/run_cr3bp_geo.m:144-163` — The default matching configuration has a known certified result (1377.1545 kg), but the front door emits no warning when a gate-passing solve lands materially below it. Add a narrowly scoped certified-reference registry and warn, e.g. below reference by >0.1 kg.
+- **[CORRECTNESS]** `direct/run_cr3bp_geo.m:168-169` — Cartesian conversion receives user `ctf`, not `tfTargetTU/cert.tfmin`; explicit `tfTargetTU` produces incorrect metadata/movie timing. Pass the resolved ratio, or make the converter accept `tfTargetTU` directly.
+- **[INTERFACE]** `direct/bridge_mu_continuation.m:86-89,226-259` — Documented `gainSched` constraints are not validated. Empty, nonascending, out-of-range, or nonterminal-1 schedules can crash at `history(end)` or produce/save a non-full-Moon artifact. Enforce finite strictly ascending values in `(0,1]`, ending at `1`.
+- **[INTERFACE]** `direct/bridge_mu_continuation.m:104-110` — The public multi-rung interface hard-codes the 10-N seed recipe. For other accepted Table-3 thrusts this silently changes basin selection. Load `table3_recipes(thrustN)` or restrict the API to 10 N.
+- **[ROBUSTNESS]** `direct/core/lt_mee_rhs.m:86` — The claimed `sep >= 8 LU` condition is not enforced. The smooth `+1e-12` guard silently changes the singular lunar force at close approach and has no tested/path-constrained validity envelope. State/document the enforced separation bound or add a close-approach constraint and test it.
+- **[ROBUSTNESS]** `direct/test_lt_mee_rhs_pert.m:48-49` — The transverse “exact oracle” uses unregularized `|d|^3`, while production uses `(d²+1e-12)^1.5`; it does not exactly test the built RHS. Use the same guarded expression and separately test the intended guard regime.
+- **[ROBUSTNESS]** `direct/test_lt_mee_rhs_pert.m:1-72` — No CasADi `MX` construction/evaluation covers the perturbation branch. Add an MX regression with `par.pert.gain>0`, since nominal MX coverage does not exercise the new symbolic graph.
+- **[INTERFACE]** `direct/run_cr3bp_geo.m:18-20,156` — `lamDef` is exported/documented as “discrete costates,” but it is `[7xN]` interval defect duals. Label it `defectDuals` and document conversion through `mee_dual_to_costate`; optionally save mapped nodal costates separately.
+
+## OVERALL VERDICT
+
+**Hold.**  
+1. Fail closed and fingerprint every cache/warm-start path.  
+2. Restore/assert the certified seed mesh protocol and add basin-reference warning.  
+3. Strengthen front-door validation/certification gates and fix explicit-`tfTargetTU` plotting metadata.

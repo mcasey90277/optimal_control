@@ -14,7 +14,12 @@ addpath(fullfile(here,'..','..','..','cr3bp_common'));  setup_cr3bp_common();
 cfg = minfuel_config(struct('thrustN', 0.020));
 p   = cr3bp_lt_params(cfg.thrustN, cfg.m0kg, cfg.ispS);
 C   = load('sundman_minfuel_certified.mat');
-tf  = C.out.X(8,end);
+% C-LAW t_f RESCALE (pilot-design fix, 2026-07-21): tfMin scales ~1/T, so the
+% SAME t_f at lower thrust can sit BELOW the new rung's min-time -- the first
+% pilot run requested 0.92x tfMin(20 mN) and was genuinely infeasible (defect
+% floor 5e-3 across all eps steps). Hold the FACTOR instead: scale t_f by
+% T_src/T_new, exactly as the ladder's rung chaining will.
+tf  = C.out.X(8,end) * (0.025 / cfg.thrustN);
 [sg, X0, U0, tauf0, fp] = chain_rung_seed_tulip(C, tf, p, struct('pilot','20mN')); %#ok<ASGLU>
 tag = thrust_tag(cfg.thrustN);
 saveFile = fullfile(here, 'results', sprintf('pilot_minfuel%s.mat', tag));

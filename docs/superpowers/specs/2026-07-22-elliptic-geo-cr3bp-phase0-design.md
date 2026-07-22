@@ -1,7 +1,8 @@
 # Elliptic→GEO with Lunar Gravity — Phase-0 Design Spec
 
-**Date:** 2026-07-22  **Status:** design approved (brainstorm 2026-07-21/22);
-plan to follow.
+**Date:** 2026-07-22  **Status:** Phase 1 implemented through the 10 N rung
+(plan 2026-07-22-elliptic-geo-cr3bp-phase1.md); deep rungs + phi0 sweep
+pending.
 **Campaign:** `orbit_transfer/earth_elliptic_to_geo_CR3BP/` (Goal 2 of the
 2026-07-21 orbit-transfer goals discussion).
 **Companion theory:** Bonnard–Caillau–Picot 2010,

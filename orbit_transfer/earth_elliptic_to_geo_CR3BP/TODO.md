@@ -1,37 +1,53 @@
 # earth_elliptic_to_geo_CR3BP — TODO
 
-Nothing built yet. Phases in intended order:
+Phase 0 + the 10 N rung of Phase 1 are done. Phases in intended order:
 
 ## Phase 0 — formulation decisions (design before code)
 
-- [ ] **Dynamics representation.** Choose: (a) MEE/L-domain solver from
+- [x] **Dynamics representation.** Decided: (a) MEE/L-domain solver from
   `../earth_elliptic_to_geo/` + lunar perturbation acceleration in the Gauss
-  equations (keeps the winning ΔL-free formulation and mesh behavior), vs
-  (b) Earth–Moon rotating-frame Cartesian (the `../GTO_tulip/` engine's
-  native form, Sundman-regularized). Decide with a short spec, not in code.
-- [ ] **Terminal set in the chosen frame.** Equatorial GEO: trivial in MEE
-  ([1;0;0;0;0]); a time-dependent circle in the rotating frame. Also decide
-  whether t_f conventions (t_f = c_tf·t_f,min) carry over unchanged.
-- [ ] **Params home.** New craft-specific CR3BP params (1500 kg, 10..0.1 N,
-  Isp ~2000 s, Earth–Moon μ*) — own file here, or generalize
-  `../cr3bp_common/cr3bp_lt_params` to take the craft as input.
-- [ ] **Moon model sanity bound.** Back-of-envelope first: lunar perturbing
-  acceleration along the spiral vs thrust accel (10 N/1500 kg ≈ 6.7e-3 m/s²
-  down to 0.1 N ≈ 6.7e-5 m/s²) — predicts where in the ladder the Moon
-  starts to matter, and gives the null hypothesis the solves must beat.
+  equations (D1, keeps the winning ΔL-free formulation and mesh behavior).
+  Option (b) rotating-frame Cartesian rejected — see spec sec 2 D1.
+- [x] **Terminal set in the chosen frame.** Decided: equatorial GEO stays the
+  trivial MEE target ([1;0;0;0;0]); t_f = c_tf·t_f,min convention carries
+  over unchanged, anchored to the 2-body t_f,min (spec sec 2 D4).
+- [x] **Params home.** Decided: own `lunar_params.m` file in `direct/`
+  (spec sec 2 D2/D3), not a generalized `cr3bp_common/cr3bp_lt_params`.
+- [x] **Moon model sanity bound.** Built: `direct/sanity_bound.m` +
+  `direct/results/sanity_bound.md` — tide/authority ratio 0.11% at 10 N
+  growing to 10.9% at 0.1 N (spec sec 7 null model).
 
 ## Phase 1 — direct
 
-- [ ] Gravity-homotopy bridge at 10 N: warm-start from the certified 2-body
-  10 N solution, dial Moon mass 0 → μ* (reuse the
-  `gen_elfo_energy_gravhom` two-primary ladder pattern), then energy → fuel
-  to a certified CR3BP min-fuel solution.
-- [ ] Compare vs 2-body: Δm_f, switch structure (as a mesh-band), R0-law drift
-  — and against the ANALYTIC rev-count/thrust bound of Bonnard–Caillau–Picot
-  2010 Prop 3.4/3.7 (σ²(n,e) dominating the control quadratic form: an
-  l_f-vs-thrust-bound estimate, the R0 law's rigorous cousin).
-- [ ] Walk the thrust ladder down while it stays interesting (the Moon effect
-  should grow as thrust drops and transfer time stretches).
+- [x] Gravity-homotopy bridge at 10 N: warm-started from the certified
+  2-body 10 N solution, Moon mass dialed 0 → μ* (`bridge_mu_continuation.m`,
+  T4), then energy → fuel eps-sharpened to a CERTIFIED CR3BP min-fuel
+  solution (`solve_cr3bp_minfuel.m`, T5;
+  `direct/results/minfuel_cr3bp_T10N_phi0.mat`).
+- [x] Compare vs 2-body: `direct/compare_vs_2body.m` (T6) —
+  Δm_f = +0.0545 kg (+0.00396%), 19/19 switches (nodal, mesh-band caveat),
+  maxDefect = 4.19e-15. Full table:
+  `direct/results/compare_vs_2body.md`. (The analytic
+  Bonnard–Caillau–Picot rev-count/thrust bound cross-check is still open —
+  folded into the deep-rung walk below.)
+- [ ] **Walk 1 N / 0.2 N / 0.1 N rungs** (background-length solves — these
+  are hours-long, not the seconds-long 10 N rung): repeat the T4→T5→T6
+  pipeline per rung. The Moon effect should grow toward the sanity-bound
+  ~11% tide/authority ratio predicted at 0.1 N (`sanity_bound.md`) — a
+  material (not decimal-dust) Δm_f is expected at the deep rungs.
+- [ ] **φ₀ sweep experiment** (spec D6): the 10 N rung's Δm_f = +0.0545 kg
+  SIGN ("the Moon HELPS") was measured at phi0 = 0 only. Sweep phi0 to
+  check whether the sign is phase-dependent before generalizing "the Moon
+  helps" into a campaign-wide claim.
+- [ ] **CR3BP-aware PMP/primer verification**: `mee_primer_switch.m` (the
+  2-body switching-function verifier) is NOT valid under lunar gravity as
+  used in `solve_cr3bp_minfuel.m` — its Hamiltonian/primer derivation
+  assumes `lt_mee_rhs`'s 2-body dXdt, and the lunar term is not
+  proportional to thrust. A CR3BP-aware version needs the zero-throttle
+  ballistic dXdt subtracted out of the costate/primer bracket first
+  (recorded reviewer finding, T5). Certification currently rests on the
+  four NLP metrics (defect/unit-norm/terminal-error/IPOPT status) plus the
+  bound-saturation check, not on primer agreement.
 
 ## Phase 2 — indirect
 

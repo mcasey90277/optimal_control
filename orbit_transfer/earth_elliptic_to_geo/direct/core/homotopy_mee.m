@@ -48,6 +48,16 @@ maxSolves   = d('maxSolves', 80);        % hard cap on adaptive solves
 liftDLh     = d('liftDL', false);
 scaleNLPh   = d('scaleNLP', false);
 
+% fpStrict (package-review A2/A3, 2026-07-22; default FALSE -> certified
+% 2-body path byte-identical): opt-in fail-closed cache discipline. With
+% fpStrict, (1) a loaded step cache with NO .fp or a field MISSING from .fp
+% ERRORS instead of warn-and-trust (see check_cache_fp below), and (2) a
+% loaded step cache whose .ok is false is discarded and RE-SOLVED rather than
+% accepted as the (failed) cached answer -- default path never discards a
+% cached failure, it just declines to advance best/Xk/Uk/dLk on it, same as
+% before this option existed.
+fpStrict = d('fpStrict', false);
+
 Xk = X0;  Uk = U0;  dLk = dL0;  best = [];
 if ~adaptiveEps
 tbl = zeros(numel(sched), 5);
@@ -58,12 +68,18 @@ for ke = 1:numel(sched)
         S  = load(stepFile);
         o  = S.o;  ok = S.ok;
         Xk = S.Xk;  Uk = S.Uk;  dLk = S.dLk;
-        check_cache_fp(S, fp, stepFile, tag);
-        if ok, best = o;  best.epsReached = e; end
-        tbl(ke,:) = [e, o.maxDefect, o.switches, o.edge, o.m_f_kg];
-        fprintf('  [cached] eps=%6.4f ok=%d defect=%.2e sw=%3d edge=%5.1f%% mf=%.2f kg\n', ...
-                e, ok, o.maxDefect, o.switches, 100*o.edge, o.m_f_kg);
-        continue;
+        check_cache_fp(S, fp, stepFile, tag, fpStrict);
+        if ~(fpStrict && ~ok)
+            if ok, best = o;  best.epsReached = e; end
+            tbl(ke,:) = [e, o.maxDefect, o.switches, o.edge, o.m_f_kg];
+            fprintf('  [cached] eps=%6.4f ok=%d defect=%.2e sw=%3d edge=%5.1f%% mf=%.2f kg\n', ...
+                    e, ok, o.maxDefect, o.switches, 100*o.edge, o.m_f_kg);
+            continue;
+        end
+        % fpStrict + cached failure (A3): do not trust a cached FAILED step --
+        % discard it and fall through to re-solve below, same as a cache miss.
+        fprintf(['  [fpStrict] eps=%6.4f cached step has ok=0 -- discarding ' ...
+                 'cache, re-solving\n'], e);
     end
     o = casadi_lt_mee(sigma, Xk, Uk, dLk, struct('par', opts.par, ...
         'mode', 'fixedtf', 'eps', e, 'tfTarget', opts.tfTarget, 'x0', opts.x0, ...
@@ -116,13 +132,14 @@ end
 end
 
 % ---------------------------------------------------------------------------
-function check_cache_fp(S, fp, file, tag)
+function check_cache_fp(S, fp, file, tag, fpStrict)
 % CHECK_CACHE_FP  Fail-loud cache-fingerprint guard (mirrors
 % run_transfer_mee.m's helper of the same name, and run_mintime_mee.m's
 % check_cache_fp_mt). If loaded per-eps-step cache struct S carries a .fp
 % field, compare it field-by-field against the current config fingerprint fp
 % and error, naming the first mismatched field and the offending file, on
-% any disagreement. BACKWARD COMPAT, two distinct cases:
+% any disagreement. BACKWARD COMPAT, two distinct cases (DEFAULT path,
+% fpStrict absent/false -- byte-identical to the pre-A2 behavior):
 %   (1) NO .fp AT ALL (pre-fingerprint-guard cache) -- WARN and trust as-is,
 %       no per-field comparison possible.
 %   (2) SCHEMA-OLDER .fp (Task 3): the cache HAS a .fp, but a field that
@@ -133,7 +150,20 @@ function check_cache_fp(S, fp, file, tag)
 %       error is preserved for fields present on BOTH sides with different
 %       values -- a genuine configuration drift under the same tag must
 %       still fail loudly.
+% fpStrict (package-review A2, opt-in, default false): promotes BOTH
+% backward-compat WARN cases above to hard ERRORs (id
+% 'homotopy_mee:fpStrictNoFingerprint' / 'homotopy_mee:fpStrictMissingField')
+% -- a cache with no fingerprint, or missing a currently-tracked field, is no
+% longer silently trusted; the caller must delete the stale cache or use a
+% new tag. Fields present on both sides with different values ALWAYS error,
+% fpStrict or not (that case was never a warn-and-trust).
+if nargin < 5 || isempty(fpStrict), fpStrict = false; end
 if ~isfield(S, 'fp')
+    if fpStrict
+        error('homotopy_mee:fpStrictNoFingerprint', ['%s has no cached config ' ...
+            'fingerprint -- fpStrict is set, so a cache cannot be trusted ' ...
+            'without one; delete the file or use a new tag'], file);
+    end
     warning('homotopy_mee:noCachedFingerprint', ['%s has no cached config ' ...
         'fingerprint (pre-fix cache) -- trusting it because tag=''%s'' ' ...
         'matches; use a new tag to regain fingerprint protection for this ' ...
@@ -144,6 +174,12 @@ flds = fieldnames(fp);
 for k = 1:numel(flds)
     f = flds{k};
     if ~isfield(S.fp, f)
+        if fpStrict
+            error('homotopy_mee:fpStrictMissingField', ['%s: field ''%s'' ' ...
+                'present in current fp but absent from cache -- fpStrict is ' ...
+                'set, so a schema-older cache cannot be trusted; delete the ' ...
+                'file or use a new tag'], file, f);
+        end
         warning('homotopy_mee:fpSchemaOlder', ['%s: field ''%s'' present in ' ...
             'current fp but absent from cache (schema evolution) -- trusting ' ...
             'as compatible under tag=''%s'''], file, f, tag);

@@ -25,6 +25,15 @@ function [dXdL, Ldot] = lt_mee_rhs(X, U, par)
 %         seed with X(7,1)==0 for phi0 to mean what its name says (true for
 %         every mee_seed-built seed; not independently asserted here).
 %
+% VALIDITY ENVELOPE (package review A11): the pert branch's d3 = (sep^2 +
+% 1e-12)^1.5 denominator guard (below) is inert -- i.e. numerically
+% negligible relative to the true separation-cubed -- ONLY for Earth-bound
+% transfers where spacecraft-Moon separation stays >= ~8 LU, the regime this
+% whole campaign (GTO->GEO) operates in. It is NOT a validated close-approach
+% or collision model; do not rely on this RHS below that separation. The
+% front door (run_cr3bp_geo.m) checks the realized minimum separation
+% post-solve and warns (id run_cr3bp_geo:moonApproach) if it drops under 2 LU.
+%
 % OUTPUTS:
 %   dXdL - d/dL of state = (dX/dt)/Ldot [7x1]
 %   Ldot - dL/dt [scalar]

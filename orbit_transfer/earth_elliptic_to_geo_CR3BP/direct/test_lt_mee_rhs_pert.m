@@ -45,7 +45,8 @@ pq = par;  pq.L = pi/2;  pq.pert = lunar_params(par, 0, 1);
 pq0 = par; pq0.L = pi/2;
 [dq0, Lq0] = lt_mee_rhs(Xq, Uq, pq0);
 DM = pq.pert.DM;  muM = pq.pert.muM;
-dvec = [DM; -1; 0];  d3 = (dvec.'*dvec)^1.5;
+dvec = [DM; -1; 0];
+d3 = (dvec.'*dvec + 1e-12)^1.5;   % SAME guarded expression as production (A12/GPT#14)
 aM = muM*(dvec/d3 - [DM;0;0]/DM^3);            % inertial accel, z==0
 aRq = aM(2);  aTq = -aM(1);                     % Rhat=[0;1;0], That=[-1;0;0]
 assert(abs(Lqp - Lq0) < 1e-15, 'in-plane pert (aN=0) does not touch Ldot');
@@ -69,6 +70,26 @@ for kk = 1:5
     assert(abs(dot(nForm, r1/norm(r1))) < 1e-13, 'Nhat orthogonal to Rhat');
     assert(dot(nForm, nNum) > 0.999999, 'Nhat matches numeric orbit normal (orientation)');
 end
+% (f) CasADi MX-graph parity (A12/GPT#15): lt_mee_rhs's pert branch must stay
+%     CasADi-clean -- casadi_lt_mee.m builds this exact RHS as an MX graph
+%     inside the NLP with par.pert.gain=1. Build X,U as casadi.MX.sym, run
+%     lt_mee_rhs through a casadi.Function, evaluate at a numeric point, and
+%     confirm it matches the plain numeric call to 1e-12.
+cp = getenv('CASADI_PATH');
+if isempty(cp), cp = fullfile(getenv('HOME'), 'casadi-3.7.0'); end
+addpath(cp);
+Xsym = casadi.MX.sym('X', 7);
+Usym = casadi.MX.sym('U', 4);
+parMX = par;  parMX.L = 0.9;  parMX.pert = lunar_params(par, 0.3, 1);
+[dXsym, Lsym] = lt_mee_rhs(Xsym, Usym, parMX);
+fCas = casadi.Function('fCas', {Xsym, Usym}, {dXsym, Lsym});
+Xnum = [1.1; 0.15; -0.08; 0.03; -0.02; 0.85; 3.0];
+Unum = [0.28; 0.6; 0.75; 0.55];
+[dXcasDM, LcasDM] = fCas(Xnum, Unum);   % CasADi multi-output call: request BOTH
+dXcas = full(dXcasDM);  Lcas = full(LcasDM);   % outputs directly (nargout=2)
+[dXplain, Lplain] = lt_mee_rhs(Xnum, Unum, parMX);
+assert(max(abs(dXcas - dXplain)) < 1e-12, 'CasADi MX graph matches plain numeric call (dXdL)');
+assert(abs(Lcas - Lplain) < 1e-12, 'CasADi MX graph matches plain numeric call (Ldot)');
 fprintf('test_lt_mee_rhs_pert: ALL PASS\n');
 
 function r = mee_pos_local(P, ex, ey, hx, hy, L)

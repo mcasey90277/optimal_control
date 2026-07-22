@@ -117,7 +117,8 @@ homDir = fullfile(resDir, 'homotopy');
 if ~exist(homDir, 'dir'), mkdir(homDir); end
 
 ho = struct('par', par, 'x0', X(:,1), 'tfTarget', tfTarget, 'maxIter', maxIter, ...
-    'resDir', homDir, 'tag', tag, 'fp', fpExpected);
+    'resDir', homDir, 'tag', tag, 'fp', fpExpected, ...
+    'fpStrict', true);   % A2: this driver opts in to fail-closed caches
 
 % Escalate casadi_lt_mee:boundSaturation to a hard error for the DURATION of
 % this call only, so a saturation fired at ANY of the ~14 sequential

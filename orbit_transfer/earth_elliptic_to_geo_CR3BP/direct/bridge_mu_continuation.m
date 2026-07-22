@@ -10,8 +10,10 @@ function out = bridge_mu_continuation(opts)
 %   2. Seed: two-pass mee_seed protocol, mirrored VERBATIM from
 %      run_transfer_mee.m lines 132-161 (cheap N=50 revs probe with its
 %      nRev window assert, then a full-density N=round(nodesPerRev*nRev)
-%      sample), using the 10 N rung's recipe values (table3_recipes:
-%      seedThr=0.4, betaMode='tangential', nodesPerRev=25, initElems=[]).
+%      sample), using opts.thrustN's OWN recipe values from table3_recipes
+%      (package review A10: per-rung seedThr/nodesPerRev, not the 10 N
+%      rung's values hardcoded regardless of thrustN; betaMode='tangential'
+%      and initElems=[] stay fixed, same as the front door).
 %   3. GATE 1 (pert absent): plain 2-body eps=1 energy solve at tfTarget --
 %      confirms the seed/solver stack is healthy before any lunar term is
 %      switched on (spec sec 8 gate 1 half; the byte-identical nominal RHS
@@ -88,6 +90,16 @@ gainSched = d('gainSched', [0.25 0.5 0.75 1.0]);
 maxIter   = d('maxIter', 1500);
 resumeOn  = d('resume', true);
 
+% A10: gainSched validation -- must be finite, strictly ascending, in (0,1],
+% and end at 1 (the walk's final accepted step must reach the full physical
+% Moon; a schedule that overshoots/omits 1 or is non-monotonic is a config bug,
+% not something the bisection-on-failure logic below is meant to paper over).
+gainSched = gainSched(:).';
+assert(~isempty(gainSched) && all(isfinite(gainSched)) && all(gainSched > 0) && ...
+    all(gainSched <= 1) && all(diff(gainSched) > 0) && gainSched(end) == 1, ...
+    'bridge:badGainSched', ['opts.gainSched must be finite, strictly ascending, ' ...
+    'every element in (0,1], and end at 1 (got %s)'], mat2str(gainSched));
+
 here   = fileparts(mfilename('fullpath'));
 resDir = fullfile(here, 'results');
 if ~exist(resDir, 'dir'), mkdir(resDir); end
@@ -102,11 +114,19 @@ phiTag = num_tag(phi0);
 tag    = sprintf('cr3bp_bridge_T%sN_phi%s', thrTag, phiTag);
 
 % --- Stage 1: seed (mirrors run_transfer_mee.m lines 132-161 VERBATIM) -----
-% 10 N rung recipe values (table3_recipes.m): npr=25, seedThr=0.4,
-% betaMode default 'tangential', initElems default [] (paper legacy state).
-seedThr     = 0.4;
+% A10: seed knobs sourced from the certified per-rung recipe registry
+% (table3_recipes), same as the front door (run_cr3bp_geo.m) -- this used to
+% hardcode the 10 N rung's own values regardless of opts.thrustN, silently
+% mis-seeding every OTHER rung. Off-table thrusts fall back to the campaign
+% defaults (0.4 / 25), identical fallback to the front door's.
+seedThr     = 0.4;  nodesPerRev = 25;
+try
+    rec = table3_recipes(thrustN);
+    seedThr = rec.fuel.seedThr;  nodesPerRev = rec.fuel.npr;
+catch ME
+    if ~strcmp(ME.identifier, 'table3_recipes:unknownThrust'), rethrow(ME); end
+end
 betaMode    = 'tangential';
-nodesPerRev = 25;
 initElems   = [];
 
 fpSeed = struct('thrustN', thrustN, 'm0kg', par.m0kg, 'ispS', par.ispS, ...
@@ -205,7 +225,7 @@ end
 % thrustN/tfTarget/phi0/... drift under the same tag is still caught.
 fpGWStatic = struct('thrustN', thrustN, 'm0kg', par.m0kg, 'ispS', par.ispS, ...
     'tfTarget', tfTarget, 'muM', par2.pert.muM, 'DM', par2.pert.DM, ...
-    'nM', par2.pert.nM, 'phi0', phi0);
+    'nM', par2.pert.nM, 'phi0', phi0, 'gainSched', gainSched, 'maxIter', maxIter);
 
 gainwalkFile = fullfile(resDir, [tag '_gainwalk.mat']);
 history  = struct('gain', {}, 'X', {}, 'U', {}, 'dL', {}, 'out', {});

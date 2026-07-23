@@ -33,7 +33,7 @@
 %% ------------------------------------------------------------------------
 %% 1. PARAMETERS  (edit this section only)
 %% ------------------------------------------------------------------------
-thrustN   = 10;          % max thrust [N] (certified t_f anchors exist for
+thrustN   = 5;          % max thrust [N] (certified t_f anchors exist for
                          %   10/5/2.5/1/0.5/0.2/0.1; other values need tfTargetTU)
 phi0      = 0;           % Moon phase at t=0 [rad]: 0 = Moon on +x (the perigee
                          %   direction; spacecraft departs apogee on -x side)
@@ -44,10 +44,19 @@ tfTargetTU= [];          % [] = auto from certified table; or explicit t_f [TU]
 x0Elems   = [];          % [] = HMG GTO start [P0;ex0;ey0;hx0;hy0] (P0=11625 km,
                          %   e=0.75 along +x, i=7 deg); or user [5x1] MEE
 xfElems   = [];          % [] = GEO target [1;0;0;0;0]; or user [5x1] MEE
-runName   = 'cr3bp_T10N_phi0_fuel';   % basename for ALL artifacts of this run
+%runName   = 'cr3bp_T10N_phi0_fuel';   % basename for ALL artifacts of this run
+runName   = 'cr3bp_T5N_phi0_fuel';   % basename for ALL artifacts of this run
 movieMode = true;        % true -> render <runName>_movie.mp4/.gif (adds ~2 min)
 rerun     = false;       % true -> ignore checkpoints, solve cold
 maxIter   = 1500;        % IPOPT cap per solve
+% Programmatic override hook (ladder driver): if the caller's workspace
+% defines LADDER_OVERRIDES (struct), its fields replace the defaults above.
+% Absent -> byte-identical interactive behavior.
+if exist('LADDER_OVERRIDES','var') && isstruct(LADDER_OVERRIDES)
+    ovf = fieldnames(LADDER_OVERRIDES);
+    for ovk = 1:numel(ovf), eval([ovf{ovk} ' = LADDER_OVERRIDES.(ovf{ovk});']); end %#ok<EVLDOT>
+    clear ovf ovk
+end
 
 %% ------------------------------------------------------------------------
 %% 2. SOLVE  (seed -> 2-body energy -> gain walk -> eps sharpen)

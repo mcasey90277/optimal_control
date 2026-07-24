@@ -70,3 +70,20 @@ Phase 0 + the 10 N rung of Phase 1 are done. Phases in intended order:
 
 - [ ] Create `direct/`/`indirect/` when the first code lands; keep this
   README/TODO current.
+
+## Stronger optimality evidence (added 2026-07-23, note sec 9-10)
+
+- [ ] **CR3BP-aware primer + PSR (one work package).** Subtract the
+  zero-throttle ballistic rate from the primer reconstruction so the
+  switching function is valid under lunar gravity; then PMP-steered
+  switch-time refinement (PSR) per the tulip pattern — needed before any
+  published switch-time claim, decisive at deep rungs.
+- [ ] **SOSC tier 1 (cheapest, machinery half-built):** finish the
+  2-body campaign's PLAN_sosc reduced-Hessian check on casadi_lt_mee's
+  returnModel registries; run it on the certified 10 N and 5 N solutions
+  (2-body and CR3BP).
+- [ ] **SOSC tier 2:** induced switching-time-problem Hessian
+  (Maurer-style bang-bang sufficient conditions) on the arc-parameterized
+  representation shared with PSR.
+- [ ] **SOSC tier 3:** Jacobi-field conjugate-point test with the Phase-2
+  indirect solver (BCP 2010 pattern).

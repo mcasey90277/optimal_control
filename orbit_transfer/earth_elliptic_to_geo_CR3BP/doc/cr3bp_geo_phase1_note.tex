@@ -3,6 +3,8 @@
 \usepackage{amsmath,amssymb,bm}
 \usepackage{booktabs}
 \usepackage{siunitx}
+\usepackage{tikz}
+\usetikzlibrary{arrows.meta,positioning}
 \usepackage[colorlinks=true,linkcolor=blue,citecolor=blue,urlcolor=blue]{hyperref}
 
 \newcommand{\ud}{\,\mathrm{d}}
@@ -285,6 +287,48 @@ is deliberate and is the campaign's central methodological choice
 (\S\ref{sec:frompaper}): the physics is changed on the smooth objective,
 and the nonsmooth structure is resolved exactly once, at the final physics.
 
+\begin{figure}[htb]
+\centering
+\begin{tikzpicture}[
+  node distance=5.5mm,
+  box/.style={rectangle, rounded corners=2pt, draw, fill=blue!7,
+              text width=0.56\textwidth, align=center, inner sep=5pt, font=\small},
+  gate/.style={font=\scriptsize\itshape, text width=0.32\textwidth, align=left},
+  arr/.style={-{Latex[length=2mm]}, thick}]
+\node[box] (anchor) {\textbf{Anchors (inherited)}\\
+  certified two-body $t_f^{\min}(T)$ $\Rightarrow$ $t_f = 1.5\,t_f^{\min}$};
+\node[box, below=of anchor] (seed) {\textbf{Two-pass recipe seed}\\
+  tangential constant-throttle propagation; probe fixes $n_{\mathrm{rev}}$,
+  full-density sample $N = \mathrm{npr}\cdot n_{\mathrm{rev}}$};
+\node[box, below=of seed] (e2b) {\textbf{Two-body energy solve}\\
+  $\varepsilon = 1$, $g = 0$ (also the certified-path regression gate)};
+\node[box, below=of e2b] (mu) {\textbf{$\mu$-continuation (gravity bridge)}\\
+  $g: 0 \to 0.25 \to 0.5 \to 0.75 \to 1$ on the energy objective,
+  warm-started; adaptive bisection on failure};
+\node[box, below=of mu] (eps) {\textbf{$\varepsilon$-homotopy (sharpening)}\\
+  $\varepsilon: 1 \to 0$ at $g = 1$ (Bertrand--\'Ep\'enoy), warm-started
+  per step};
+\node[box, below=of eps, fill=green!10] (out) {\textbf{Certified minimum-fuel solution}\\
+  states, controls, defect duals, fingerprint, plots, movie};
+\draw[arr] (anchor) -- (seed);
+\draw[arr] (seed) -- (e2b);
+\draw[arr] (e2b) -- (mu);
+\draw[arr] (mu) -- (eps);
+\draw[arr] (eps) -- (out);
+\node[gate, right=3mm of e2b.east] {gate: \texttt{Solve\_Succeeded} $\wedge$
+  defect $<10^{-6}$ $\wedge$ unit/terminal errors $<10^{-8}$};
+\node[gate, right=3mm of mu.east] {accepted steps only are checkpointed
+  (fingerprinted, fail-closed resume)};
+\node[gate, right=3mm of eps.east] {per-step caches; endpoint
+  $\varepsilon = 0$ required for certification};
+\end{tikzpicture}
+\caption{The Phase-1 solution pipeline. Every arrow is gated; every accepted
+step is checkpointed under a configuration fingerprint, so any stage can
+resume without recomputation and no stale configuration can silently
+warm-start another.}
+\label{fig:pipeline}
+\end{figure}
+
 \subsection{What we drew from Bonnard--Caillau--Picot}
 \label{sec:frompaper}
 
@@ -438,6 +482,97 @@ the null model predicts effects two orders of magnitude larger, not yet
 run. The adaptive-bisection path of the gravity bridge was never exercised
 at 10\,N (all steps converged first-try) and is untested until a deeper
 rung stresses it.
+
+\section{Direct versus indirect methods: a working position}
+
+\emph{This section is deliberately speculative} --- it records the position
+this repository's campaigns currently support, to be revised as evidence
+accumulates. The organizing axis we have found most predictive is
+\textbf{sensitivity versus combinatorics}: indirect (PMP shooting) methods
+degrade with \emph{arc sensitivity} --- the shooting Jacobian is a state
+transition matrix whose norm grows roughly exponentially with revolution
+count, amplified at each deep perigee pass --- while direct (collocation)
+methods degrade with \emph{combinatorial structure} (bang-bang switch
+discovery) and mesh resolution.
+
+The resulting division of labor:
+\begin{itemize}
+\item \textbf{Minimum time at low thrust (many revolutions): direct.}
+  All-burn means no switching structure, so collocation's weakness is
+  absent, while the long sensitive arc is single shooting's worst case.
+  Every certified min-time anchor in this repository is a direct solve.
+\item \textbf{Minimum fuel, structure unknown: direct + homotopy for
+  discovery.} The $\varepsilon$-continuation finds the bang-bang structure
+  without knowing it a priori. Caveat: switch \emph{counts} from a fixed
+  mesh are band quantities, not exact integers.
+\item \textbf{Precision and certification once seeded: indirect.} With the
+  structure known and costates seeded from a converged direct solution, a
+  shooting solve delivers machine-precision switch times and true costates
+  at negligible cost --- its weakness (initialization) having been paid by
+  the direct stage. The direct-seeded indirect finish is, in our view, the
+  right marriage.
+\item \textbf{The instructive exception} \cite{BCP2010}: indirect shooting
+  \emph{does} work at 50--60 revolutions when the objective is the smooth
+  energy one, the initializer is an averaged analytic solution, and the
+  continuation is conjugate-point-guarded --- i.e., high revolution count
+  kills \emph{cold or unguarded} shooting, and nonsmooth structure
+  compounds it, but neither is fatal alone.
+\end{itemize}
+For this campaign specifically: the Phase-1 pipeline is direct end-to-end;
+the indirect counterpart (Phase 2) is planned as a direct-seeded finisher
+whose payoff is precision switch times and a second-order certificate
+(\S\ref{sec:minimality}), not discovery.
+
+\section{Refinement and stronger optimality evidence}
+\label{sec:minimality}
+
+\subsection{Switch-time refinement (PSR): yes, eventually}
+
+Both sibling campaigns carry post-solution refinement (PSR) machinery: the
+two-body ladder used PSR rounds at its 0.5\,N rung, and the GTO--tulip
+campaign built PMP-steered mesh refinement in which the reconstructed
+switching function steers local mesh densification at each switch. The same
+step belongs in this campaign's future --- switch times from a uniform
+$\sigma$-mesh are only mesh-band accurate, and at deep rungs (hundreds of
+switches) the uniform mesh under-resolves switch clusters. One prerequisite
+gates it: PMP steering needs the switching function, and the two-body primer
+reconstruction is \emph{invalid under lunar gravity} until the ballistic
+third-body rate is subtracted (\S 8). The CR3BP-aware primer and PSR are
+therefore one work package: the corrected switching function both verifies
+the structure and steers its refinement.
+
+\subsection{Toward genuine local-minimality certificates}
+
+Everything certified so far is \emph{first-order}: IPOPT's KKT conditions,
+machine-tight defects, endpoint and structure checks. A converged extremal
+satisfying first-order conditions can still be a saddle or a local
+maximizer of the induced problem. The plan for genuinely second-order
+evidence has three tiers, in order of readiness:
+\begin{enumerate}
+\item \textbf{NLP-level SOSC (machinery partially built).} The shared
+  solver already exposes \texttt{returnModel} --- the live constraint and
+  variable registries assembled precisely for KKT/reduced-Hessian work, with
+  a design plan (\texttt{PLAN\_sosc.md}) in the two-body campaign. The
+  check: project the Lagrangian Hessian onto the null space of the active
+  constraints and verify positive definiteness. This certifies the
+  \emph{discretized} problem's minimality and is the cheapest tier to
+  finish.
+\item \textbf{Bang-bang second-order conditions via the induced
+  switching-time problem.} For bang-bang arcs the right continuous-time
+  frame (Maurer, Osmolovskii) reduces the OCP to a finite-dimensional
+  problem in the switch times; positive definiteness of that induced
+  Hessian, with no additional zeros of the switching function, is a genuine
+  sufficient condition. Naturally shared with PSR: both live on the
+  arc-parameterized representation.
+\item \textbf{Indirect-side conjugate-point test.} Integrate the Jacobi
+  (variational) equation along the extremal and verify no conjugate time in
+  $(0, t_f]$ \cite{BCP2010} --- the classical certificate, planned with the
+  Phase-2 indirect solver, and dependent on the same CR3BP-aware costate
+  reconstruction as PSR.
+\end{enumerate}
+Until these land, the honest statement remains: our solutions are
+first-order certified extremals whose optimality is corroborated by
+basin-reference checks and cross-formulation agreement, not proven minima.
 
 \begin{thebibliography}{9}
 

@@ -3,6 +3,7 @@
 \usepackage{amsmath,amssymb,bm}
 \usepackage{booktabs}
 \usepackage{siunitx}
+\usepackage{graphicx}
 \usepackage{tikz}
 \usetikzlibrary{arrows.meta,positioning}
 \usepackage[colorlinks=true,linkcolor=blue,citecolor=blue,urlcolor=blue]{hyperref}
@@ -575,6 +576,85 @@ the null model predicts effects two orders of magnitude larger, not yet
 run. The adaptive-bisection path of the gravity bridge was never exercised
 at 10\,N (all steps converged first-try) and is untested until a deeper
 rung stresses it.
+
+\section{Lunar-phase dependence of the Moon effect}
+\label{sec:phase}
+
+With the pipeline validated, the lunar phase at departure $\varphi_0$ ---
+deliberately a first-class, fingerprinted parameter (D6) --- was swept at
+the 10\,N rung: four solves at $\varphi_0 = 0, \pi/2, \pi, 3\pi/2$,
+everything else held fixed, each compared against the \emph{same-chain}
+two-body control ($g=0$ through the identical pipeline; $m_f^{2b} =
+1377.1025$\,kg). The same-chain baseline matters: certified results from
+different pipelines scatter across local basins by up to tens of kilograms,
+two orders of magnitude above the lunar signal, so only a baseline sharing
+the seed, mesh, and continuation path isolates the Moon.
+
+\begin{center}
+\begin{tabular}{cccc}
+\toprule
+$\varphi_0$ & $m_f$ [kg] & $\Delta m_f$ [g] & Moon\ldots\\
+\midrule
+$0$      & $1377.1545$ & $+52.0$ & helps\\
+$\pi/2$  & $1377.0462$ & $-56.3$ & hurts\\
+$\pi$    & $1377.1714$ & $+68.9$ & helps\\
+$3\pi/2$ & $1377.0497$ & $-52.8$ & hurts\\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\begin{figure}[htb]
+\centering
+\includegraphics[width=\textwidth]{figs/phi_sweep_dmf.png}
+\caption{Moon effect versus lunar phase at 10\,N ($c_{tf}=1.5$, same-chain
+baseline). Left: $\Delta m_f(\varphi_0)$ data with the
+mean{+}dipole{+}quadrupole fit; right: polar view of the same fit (radius
+offset by 100\,g), making the $\pi$-periodic quadrupole lobes along the
+$\varphi_0 = 0$--$\pi$ line --- the departure orbit's perigee--apogee line
+--- visible at a glance.}
+\label{fig:phisweep}
+\end{figure}
+
+\paragraph{The signature is a tidal quadrupole.}
+The effect \emph{flips sign} with phase and is $\pi$-periodic to leading
+order. The four quarter-phase samples decompose exactly into harmonics
+through second order:
+\[
+\Delta m_f(\varphi_0) \;\approx\;
+\underbrace{+3.0}_{\text{mean}}
+\;\underbrace{-\,8.5\cos\varphi_0 - 1.7\sin\varphi_0}_{\text{dipole}}
+\;\underbrace{+\,57.5\cos 2\varphi_0}_{\text{quadrupole}}
+\quad[\mathrm{g}].
+\]
+Quadrupole dominance is exactly what the physics prescribes: the tidal
+field --- the difference between the direct lunar attraction and the
+indirect (Earth-acceleration) term of Eq.~(3) --- derives from a potential
+proportional to $P_2(\cos\psi)$ and is therefore invariant under
+Moon\,$\to$\,$-$Moon reflection. At this rung the transfer spans only
+$0.19$ lunar months (the Moon sweeps $\sim 70^\circ$ during the transfer),
+so departure phase largely fixes the tidal geometry: the Moon along the
+perigee--apogee line (either end) aids the transfer; the Moon broadside
+hurts it. The smaller dipole term is the finite-distance correction the
+pure tide discards --- its sign (stronger benefit at $\varphi_0 = \pi$,
+Moon on the apogee side, where the trajectory's slow apogee arcs sit
+closest to the Moon) is physically sensible, though with four samples we
+do not press the interpretation further.
+
+\paragraph{Operational reading.}
+Peak-to-peak the phase choice is worth $\approx 125$\,g at 10\,N ---
+propellant obtained purely by choosing the departure epoch within the lunar
+month, at zero cost to the trajectory design. Whether this scales at lower
+thrust is a sharper question than it appears: as $t_f$ stretches past a
+lunar month (0.5\,N and below), the Moon phase-averages over the transfer
+and the quadrupole amplitude should collapse --- a concrete, testable
+prediction for the deep rungs.
+
+\paragraph{Caveats.}
+Four samples identify harmonics only through second order; components of
+order three and higher alias into the printed coefficients (a finer
+$\varphi_0$ grid is the recorded follow-up). The sweep is at a single rung
+and a single basin family, and each point carries the same first-order
+certificate as the rest of the campaign (\S 8).
 
 \section{Direct versus indirect methods: a working position}
 

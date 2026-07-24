@@ -671,6 +671,39 @@ lunar month (0.5\,N and below), the Moon phase-averages over the transfer
 and the quadrupole amplitude should collapse --- a concrete, testable
 prediction for the deep rungs.
 
+\paragraph{Control-law sensitivity: why identical-looking solutions carry
+different verdicts.}
+The four solutions are independent optimizations --- nothing constrains
+their control laws to agree --- and they do differ, but by strikingly
+little. All four share the same 19-switch bang-bang structure; measured
+against the $\varphi_0 = 0$ reference, switch crossing times shift by at
+most $1.3$ minutes on the $5.3$-day transfer (mean $\lesssim 0.3$ min), no
+node anywhere flips between burn and coast, and the largest nodal throttle
+difference is $0.04$. Notably, the $\varphi_0 = \pi$ law nearly coincides
+with $\varphi_0 = 0$ (maximum shift $0.2$ min) while the broadside phases
+shift most --- the quadrupole symmetry expressing itself at the level of
+the control law.
+
+The smallness is not an accident but a two-part consequence of optimality.
+First, the lunar term is $\sim 0.1\%$ of control authority at this rung and
+the switching function's zeros are regular (non-grazing), so an $O(\epsilon)$
+perturbation of the dynamics moves each zero by $O(\epsilon)$ --- minutes ---
+without creating or destroying switches. Second, and more fundamentally, by
+the envelope argument the re-optimized control contributes to the objective
+only at \emph{second} order: to first order the entire mass effect is
+already captured by the perturbation evaluated along the \emph{unperturbed}
+extremal, $\Delta m_f \approx \int_0^{t_f} \lambda^{\!\top}\,
+\delta\!f\,\mathrm{d}t$, with the minutes-scale control adjustments adding
+only an $O(\epsilon^2)$ correction. This is why the four panels of the
+accompanying comparison movie are visually indistinguishable while their
+outcomes differ by over $100$\,g peak-to-peak: the physics lives in the
+perturbing field acting along an essentially common trajectory, not in the
+(nearly unchanged) steering. It also underwrites the experimental design:
+the four chains share literally identical Moon-free stages (seed and
+two-body energy solve), so every reported difference is purely
+lunar-phase-driven. The measurement script is
+\texttt{direct/phase\_control\_sensitivity.m}.
+
 \paragraph{Caveats.}
 Four samples identify harmonics only through second order; components of
 order three and higher alias into the printed coefficients (a finer

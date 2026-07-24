@@ -24,6 +24,17 @@ get the solved transfer + saved data products (states/controls/costates) +
 plots + optional movie. Validated end-to-end: reproduces the certified 10 N
 result (m_f=1377.1545 kg, 19 sw) exactly.
 
+## Headline results (2026-07-23, same-chain baselines)
+
+**Moon effect vs thrust** (phi0=0): +52.0 g (10 N), +48.8 g (5 N), +49.7 g
+(2.5 N) — remarkably flat ~50 g across a 4x thrust range. **Moon effect vs
+lunar phase** (10 N): +52.0 / -56.3 / +68.9 / -52.8 g at phi0 = 0, pi/2, pi,
+3pi/2 — **pi-periodic (tidal-quadrupole symmetry): the lunar assist flips
+sign with phase**, with a measurable pi-vs-0 asymmetry (+69 vs +52 g, the
+finite-distance correction). Full table: `direct/results/compare_vs_2body.md`.
+Ladder solver recipe for rungs >=2.5 N: `liftDL=true` (arrowhead->banded KKT;
+cures the MUMPS factorization segfault) + `maxIter>=4000`.
+
 ## Status
 
 **Phase 1 IN PROGRESS — 10 N bridged + certified.** The 10 N rung is fully

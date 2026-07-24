@@ -47,9 +47,18 @@ function ver = verify_pmp_mee(out, par, sigma, opts)
 %      reports a coupling-strength diagnostic K_L/Ldot0 (should be small for
 %      "low thrust"; NOT assumed anywhere in the derivation, just reported).
 %
+% LUNAR-AWARE (task B, 2026-07-23): par.pert (lunar_params struct, CR3BP
+% campaign) is forwarded verbatim through to mee_primer_switch.m, which
+% subtracts the zero-throttle ballistic/lunar bracket out of its B(X)/pel
+% extraction and its S-formula G0 term (see that file's header amendment) --
+% this file's own pipeline/gates are UNCHANGED, since the fix lives entirely
+% inside the primer/switching reconstruction it calls. Absent par.pert (or
+% gain==0), everything here is byte-identical to the pre-2026-07-23 code.
+%
 % INPUTS:
 %   out   - casadi_lt_mee result struct [fields .X .U .dL .lamDef]
-%   par   - kepler_lt_params struct [.Tmax .c .mu]
+%   par   - kepler_lt_params struct [.Tmax .c .mu]; optional par.pert (lunar
+%           third body, opt-in, see LUNAR-AWARE note above)
 %   sigma - node grid used for the solve, monotonic [(N+1)x1]
 %   opts  - struct: .eps (homotopy parameter the solution was solved at;
 %           default 0 -- the switching-function derivation is exact ONLY at
@@ -71,6 +80,11 @@ function ver = verify_pmp_mee(out, par, sigma, opts)
 %                                         test remains future work)
 %     .KLoverLdot0Median .KLoverLdot0Max
 %                                       - |K_L/Ldot0| coupling-strength stats
+%     .A0overLdot0Median .A0overLdot0Max
+%                                       - |A0|/Ldot0 lunar-bracket coupling-
+%                                         strength stats (zero unless
+%                                         par.pert is active; honesty-only,
+%                                         see mee_primer_switch.m header)
 %     .maxSwitchAlignErr               - max |t of nearest S=0 crossing - t of
 %                                         nearest solver thr=0.5 switch| (H1
 %                                         pinpoint-zero check, physical time)
@@ -157,6 +171,9 @@ ver.tangentialResidNormRelMax    = max(RtanRel);
 ver.KLoverLdot0Median = median(abs(info.KLoverLdot0));
 ver.KLoverLdot0Max    = max(abs(info.KLoverLdot0));
 
+ver.A0overLdot0Median = median(info.A0overLdot0);
+ver.A0overLdot0Max    = max(info.A0overLdot0);
+
 % H1: pinpoint-zero check -- align S=0 crossings (in time) against the
 % solver's own thr=0.5 crossings
 t = X(7, :);
@@ -206,10 +223,12 @@ ver.tSwitch = tSwitch;
 
 fprintf(['verify_pmp_mee: primer median %.3f deg (mean %.3f) | sign agree ' ...
          '%.2f%% (burn %.1f%% coast %.1f%%) | tangentialResid median %.2e ' ...
-         'max %.2e | K_L/Ldot0 median %.2e max %.2e | switchAlignErr %.2e | ' ...
-         'singularArcNodes %d | lamM rel %.1e | pass=%d\n'], ...
+         'max %.2e | K_L/Ldot0 median %.2e max %.2e | A0/Ldot0 median %.2e ' ...
+         'max %.2e | switchAlignErr %.2e | singularArcNodes %d | lamM rel ' ...
+         '%.1e | pass=%d\n'], ...
     ver.primerMedianDeg, ver.primerMeanDeg, ver.overallSignPct, ...
     ver.burnSignPct, ver.coastSignPct, ver.tangentialResidNormRelMedian, ...
     ver.tangentialResidNormRelMax, ver.KLoverLdot0Median, ver.KLoverLdot0Max, ...
-    ver.maxSwitchAlignErr, ver.singularArcNodes, ver.lamMendRel, ver.pass);
+    ver.A0overLdot0Median, ver.A0overLdot0Max, ver.maxSwitchAlignErr, ...
+    ver.singularArcNodes, ver.lamMendRel, ver.pass);
 end

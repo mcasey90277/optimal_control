@@ -44,15 +44,23 @@ Phase 0 + the 10 N rung of Phase 1 are done. Phases in intended order:
   SIGN ("the Moon HELPS") was measured at phi0 = 0 only. Sweep phi0 to
   check whether the sign is phase-dependent before generalizing "the Moon
   helps" into a campaign-wide claim.
-- [ ] **CR3BP-aware PMP/primer verification**: `mee_primer_switch.m` (the
-  2-body switching-function verifier) is NOT valid under lunar gravity as
-  used in `solve_cr3bp_minfuel.m` — its Hamiltonian/primer derivation
-  assumes `lt_mee_rhs`'s 2-body dXdt, and the lunar term is not
-  proportional to thrust. A CR3BP-aware version needs the zero-throttle
-  ballistic dXdt subtracted out of the costate/primer bracket first
-  (recorded reviewer finding, T5). Certification currently rests on the
-  four NLP metrics (defect/unit-norm/terminal-error/IPOPT status) plus the
-  bound-saturation check, not on primer agreement.
+- [x] **CR3BP-aware PMP/primer verification** (task B, 2026-07-23,
+  `feat(verify): lunar-aware PMP verification + CR3BP campaign driver`):
+  `mee_primer_switch.m` now subtracts the zero-throttle ballistic/lunar
+  bracket out of its B(X)/pel extraction and its S-formula G0 term before
+  forming the primer vector and switching function (opt-in via `par.pert`,
+  byte-identical when absent); `verify_cr3bp_pmp.m` drives it on the
+  front-door artifacts. Ran it on the certified 10 N and 5 N CR3BP fuel
+  solutions: primer/sign GATE STILL FAILS (10 N: 32.4 deg / 78.4%; 5 N:
+  26.7 deg / 76.6%) — but this is the SAME pre-existing, already-tracked
+  eccentricity-correlated raw-`lam_g`/KKT-dual anomaly that already fails
+  the PURE 2-body certified solutions identically (`../earth_elliptic_to_geo/
+  TODO.md` sec "eccentricity-correlated" item, `.superpowers/sdd/
+  task-10-report.md`) — NOT a new lunar-specific defect. The lunar
+  coupling itself (`A0/Ldot0` diagnostic) is confirmed tiny (~1e-5) and its
+  removal changes the gate numbers by <0.1 deg. Certification still rests
+  on the four NLP metrics + bound-saturation check, not on primer
+  agreement, pending the raw-`lam_g` fix landing campaign-wide.
 
 ## Phase 2 — indirect
 
@@ -73,11 +81,18 @@ Phase 0 + the 10 N rung of Phase 1 are done. Phases in intended order:
 
 ## Stronger optimality evidence (added 2026-07-23, note sec 9-10)
 
-- [ ] **CR3BP-aware primer + PSR (one work package).** Subtract the
-  zero-throttle ballistic rate from the primer reconstruction so the
-  switching function is valid under lunar gravity; then PMP-steered
-  switch-time refinement (PSR) per the tulip pattern — needed before any
-  published switch-time claim, decisive at deep rungs.
+- [x] **CR3BP-aware primer** half DONE (task B, 2026-07-23, commit
+  `feat(verify): lunar-aware PMP verification + CR3BP campaign driver`):
+  ballistic rate subtracted from the primer reconstruction, opt-in via
+  `par.pert`, regression-clean on the 2-body suite; see the Phase-1 item
+  above for the honest gate numbers (still FAIL, pre-existing dual anomaly,
+  not lunar-specific).
+- [ ] **PSR half remains open.** PMP-steered switch-time refinement (PSR)
+  per the tulip pattern — needed before any published switch-time claim,
+  decisive at deep rungs. (Blocked in practice on the same raw-`lam_g`
+  dual anomaly above, since PSR consumes the same primer/switching
+  reconstruction this task made lunar-aware but did not make agree with
+  the solver's own switches.)
 - [ ] **SOSC tier 1 (cheapest, machinery half-built):** finish the
   2-body campaign's PLAN_sosc reduced-Hessian check on casadi_lt_mee's
   returnModel registries; run it on the certified 10 N and 5 N solutions

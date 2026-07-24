@@ -42,11 +42,14 @@ terms) added to the Gauss variational equations as a pure acceleration.
 The three-body solution is reached by lunar-gain continuation from the
 certified two-body solution on the smooth energy objective, followed by an
 energy$\to$fuel homotopy at full lunar mass. At the 10\,N rung the certified
-result is $m_f = 1377.1545$\,kg against the two-body certified
-$1377.1000$\,kg: the Moon \emph{improves} the transfer by $+54.5$\,g
-($+0.004\%$) at the baseline lunar phase, in agreement with an a~priori
-tidal null model. This note records the optimal control problem, the lunar
-incorporation, the continuation strategy, and the certification basis.
+result is $m_f = 1377.1545$\,kg against the \emph{same-chain} two-body
+control $1377.1025$\,kg ($\varphi_0 = 0$, identical seed/mesh/continuation
+path): the Moon \emph{improves} the transfer by $+52.0$\,g ($+0.004\%$) at
+the baseline lunar phase, a same-chain differenced value, in agreement with
+an a~priori tidal null model. The completed thrust ladder ($10 \to 0.1$\,N)
+shows this fixed-phase benefit declining from $+52.0$\,g to $+31.3$\,g. This
+note records the optimal control problem, the lunar incorporation, the
+continuation strategy, and the certification basis.
 \end{abstract}
 
 \section{The benchmark problem}
@@ -570,12 +573,17 @@ conjugate-point (Jacobi-field) second-order check in the style of
 (\S\ref{sec:secondorder}).
 
 Further recorded limitations: the Moon-in-reference-plane idealization
-(true CR3BP geometry; real obliquity unmodeled); a single lunar phase
-$\varphi_0 = 0$ solved so far; and the deep rungs (1, 0.2, 0.1\,N), where
-the null model predicts effects two orders of magnitude larger, not yet
-run. The adaptive-bisection path of the gravity bridge was never exercised
-at 10\,N (all steps converged first-try) and is untested until a deeper
-rung stresses it.
+(true CR3BP geometry; real obliquity unmodeled); the four-point lunar-phase
+sweep run only at the $10$\,N rung so far (\S\ref{sec:phase}), with no
+phase sweep yet at any deep rung; and, now that the full thrust ladder
+$10 \to 0.1$\,N has been run (\S\ref{sec:ladder}), what remains open is
+\emph{not} whether the deep rungs solve, but (i) a deep-rung $\varphi_0$
+sweep to test the phase-averaging interpretation of \S\ref{sec:ladder}
+against the observed fixed-phase decline, and (ii) stronger optimality
+evidence beyond the first-order certificate (\S\ref{sec:minimality}). The
+adaptive-bisection path of the gravity bridge was never exercised at
+10\,N (all steps converged first-try) and is untested until a deeper rung
+stresses it.
 
 \section{Lunar-phase dependence of the Moon effect}
 \label{sec:phase}
@@ -617,20 +625,29 @@ $\varphi_0 = 0$--$\pi$ line --- the departure orbit's perigee--apogee line
 
 \paragraph{The signature is a tidal quadrupole.}
 The effect \emph{flips sign} with phase and is $\pi$-periodic to leading
-order. The four quarter-phase samples decompose exactly into harmonics
-through second order:
+order. The four quarter-phase samples fix a mean+dipole+quadrupole fit:
 \[
 \Delta m_f(\varphi_0) \;\approx\;
 \underbrace{+3.0}_{\text{mean}}
-\;\underbrace{-\,8.5\cos\varphi_0 - 1.7\sin\varphi_0}_{\text{dipole}}
+\;\underbrace{-\,8.5\cos\varphi_0 - 1.75\sin\varphi_0}_{\text{dipole}}
 \;\underbrace{+\,57.5\cos 2\varphi_0}_{\text{quadrupole}}
 \quad[\mathrm{g}].
 \]
-Quadrupole dominance is exactly what the physics prescribes: the tidal
-field --- the difference between the direct lunar attraction and the
-indirect (Earth-acceleration) term of Eq.~(3) --- derives from a potential
-proportional to $P_2(\cos\psi)$ and is therefore invariant under
-Moon\,$\to$\,$-$Moon reflection. At this rung the transfer spans only
+Four cardinal samples at $\varphi_0 = 0, \pi/2, \pi, 3\pi/2$ cannot identify
+a $\sin 2\varphi_0$ quadrupole component: that harmonic vanishes identically
+at all four sample points, so the displayed fit sets its coefficient to
+zero \emph{by construction}, not because the data rule it out --- a finer
+$\varphi_0$ grid (already the recorded follow-up below) is required to
+measure it. Quadrupole dominance is what the physics prescribes \emph{at
+leading order}: the tidal field --- the difference between the direct
+lunar attraction and the indirect (Earth-acceleration) term of
+\eqref{eq:thirdbody} --- derives at leading order from a potential
+proportional to $P_2(\cos\psi)$, which is invariant under Moon\,$\to$\,$-$Moon
+reflection. The exact direct-plus-indirect field is \emph{not} itself even
+under that reflection at finite lunar distance; finite-distance odd terms
+(octupole and higher) are expected on top of the leading $P_2$ symmetry ---
+consistent with the nonzero cosine-dipole term observed above, which such
+odd terms would produce. At this rung the transfer spans only
 $0.19$ lunar months (the Moon sweeps $\sim 70^\circ$ during the transfer),
 so departure phase largely fixes the tidal geometry: the Moon along the
 perigee--apogee line (either end) aids the transfer; the Moon broadside
@@ -643,7 +660,12 @@ do not press the interpretation further.
 \paragraph{Operational reading.}
 Peak-to-peak the phase choice is worth $\approx 125$\,g at 10\,N ---
 propellant obtained purely by choosing the departure epoch within the lunar
-month, at zero cost to the trajectory design. Whether this scales at lower
+month, at zero cost \emph{within this fixed-model optimization} (the NLP
+objective, constraints, and time budget are unchanged across $\varphi_0$);
+departure-epoch changes are not necessarily free at the mission level ---
+launch-window, ground-station, or eclipse constraints can attach a real
+cost to shifting epoch that this model does not represent. Whether this
+scales at lower
 thrust is a sharper question than it appears: as $t_f$ stretches past a
 lunar month (0.5\,N and below), the Moon phase-averages over the transfer
 and the quadrupole amplitude should collapse --- a concrete, testable
@@ -654,7 +676,7 @@ Four samples identify harmonics only through second order; components of
 order three and higher alias into the printed coefficients (a finer
 $\varphi_0$ grid is the recorded follow-up). The sweep is at a single rung
 and a single basin family, and each point carries the same first-order
-certificate as the rest of the campaign (\S 8).
+certificate as the rest of the campaign (\S\ref{sec:certification}).
 
 \section{The thrust ladder: results, lessons, and conclusions}
 \label{sec:ladder}
@@ -693,23 +715,53 @@ nodal, mesh-band quantities).}
 \label{fig:ladder}
 \end{figure}
 
-\subsection{Two regimes, one consistent picture}
+\subsection{Two regimes: what is observed, what is hypothesized}
 
-Read together with \S\ref{sec:phase}, the ladder completes a two-regime
-description of lunar influence on this transfer family. While the transfer
-is short against the lunar month, the tidal geometry set at departure
-persists: the effect sits on the $\varphi_0$-dependent quadrupole
-(\S\ref{sec:phase}), and the plateau value $\approx 50$\,g is simply the
-$\varphi_0 = 0$ slice of that curve. As $t_f$ stretches past a lunar month
-the Moon sweeps many cycles during the transfer, the quadrupole
-contribution averages down, and what survives is a phase-independent
-secular benefit of order $30$\,g --- still comfortably nonzero at $19$
-lunar months. The corresponding operational statement: departure-epoch
-selection is worth $\sim 125$\,g peak-to-peak at the fast end of the
-ladder and, by this mechanism, approximately nothing at the slow end ---
-though the slow end keeps its secular $\sim 30$\,g regardless of epoch.
-A directly testable corollary (recorded, not yet run): a $\varphi_0$ sweep
-at $0.2$ or $0.1$\,N should show the quadrupole amplitude collapsed.
+Read together with \S\ref{sec:phase}, the ladder's fixed-phase
+($\varphi_0 = 0$) data support the following observations directly: the
+effect plateaus near $+50$\,g through roughly two to four lunar months of
+transfer time --- the $1.95$-month point is still $+49.3$\,g, so the
+plateau persists at least that far --- and then declines to $+31.3$\,g at
+$19.45$ months. The decline therefore sets in somewhere between the
+$3.89$-month ($+45.9$\,g) and $9.72$-month ($+36.8$\,g) points, \emph{not}
+at the one-lunar-month mark a naive reading of ``the plateau lasts about a
+month'' would suggest.
+
+The natural INTERPRETATION, read against \S\ref{sec:phase}'s quadrupole
+decomposition, is that while the transfer is short against the lunar month
+the $\varphi_0$-dependent quadrupole dominates and the plateau value is
+simply the $\varphi_0 = 0$ slice of that curve; as $t_f$ stretches past a
+lunar month the Moon sweeps many cycles during the transfer, the
+quadrupole contribution averages down, and what survives approaches a
+phase-independent secular benefit. This is an interpretation, not a
+second measurement: it remains untested until a $\varphi_0$ sweep is run
+at a deep rung (the testable corollary below), since the fixed-phase
+ladder by itself cannot distinguish ``quadrupole averaging to a floor''
+from any other mechanism producing the same $\varphi_0 = 0$ curve.
+
+The interpretation does \emph{not} let the $10$\,N phase-mean stand in for
+the deep-rung floor. \S\ref{sec:phase}'s harmonic fit gives a phase-mean of
+only $+3.0$\,g at $10$\,N, far below the observed $+31.3$\,g at $0.1$\,N;
+if the averaging picture is right, the phase-independent (secular)
+component of the Moon effect is \emph{not} constant down the ladder --- it
+must itself grow with transfer time, from a few grams' worth of secular
+signal at $10$\,N to something approaching the observed $31.3$\,g by
+$0.1$\,N. The deep-rung phase-mean is therefore a prediction to be
+checked against the sweep, not a quantity already implied by the $10$\,N
+decomposition.
+
+Two further statements follow from this interpretation and are flagged as
+PREDICTIONS, not measurements: that departure-epoch choice is worth
+approximately nothing at the slow end (because the quadrupole is
+predicted to have averaged away), and that the slow end keeps a secular
+benefit near the observed $31.3$\,g regardless of epoch (because that
+secular component is predicted to be phase-independent). Only the
+$31.3$\,g figure itself, at $\varphi_0 = 0$, is an observed fixed-phase
+value; peak-to-peak epoch sensitivity is $\sim 125$\,g at the fast ($10$\,N)
+end, also observed. A directly testable corollary (recorded, not yet run):
+a $\varphi_0$ sweep at $0.2$ or $0.1$\,N should show the quadrupole
+amplitude collapsed and its phase-mean approaching the observed
+fixed-phase value of $\approx 31$\,g.
 
 \subsection{Lessons learned}
 
@@ -730,13 +782,18 @@ at $0.2$ or $0.1$\,N should show the quadrupole amplitude collapsed.
   $7\times10^{-6}$, terminal error already tight) and certifies cleanly at
   $4000$; the deepest rungs used $10^4$. The same lesson the two-body
   campaign's deep rungs taught: an under-budgeted solve looks like a wall.
-\item \textbf{The predicted deep-rung wall did not exist.} The two-body
-  campaign needed dedicated machinery (adaptive-$\varepsilon$ bisection,
-  staged recovery) at $0.2$/$0.1$\,N; this campaign's front-door chain,
-  lifted and properly budgeted, carried both rungs through
-  $\varepsilon \to 0$ on the standard schedule. In hindsight a substantial
-  part of the historical deep-rung difficulty is attributable to the
-  unlifted formulation, not to the physics of sharpening.
+\item \textbf{The predicted deep-rung wall did not exist.} Our prior
+  two-body campaign needed dedicated machinery (adaptive-$\varepsilon$
+  bisection, staged recovery) at $0.2$/$0.1$\,N; this campaign's front-door
+  chain, lifted and properly budgeted, carried both rungs through
+  $\varepsilon \to 0$ on the standard schedule. The new results show that
+  wall was not intrinsic to sharpening: lifting was necessary to remove the
+  factorization failures reported above. But lifting, the larger iteration
+  budgets (previous lesson), and this campaign's revised front-door chain
+  were all changed at once, so this evidence is \emph{confounded} --- it
+  does not by itself isolate lifting's contribution from the budget or
+  chain changes. An unlifted, equally-budgeted A/B run on the same chain is
+  the clean test and has not been done.
 \item \textbf{Same-chain baselines are mandatory at this signal size.}
   Certified results from different pipelines scatter across local basins
   by up to $\sim 22$\,kg --- more than 400 times the $\sim 50$\,g lunar
@@ -761,8 +818,10 @@ For minimum-fuel elliptic$\to$GEO transfers at CR3BP fidelity: lunar
 gravity moves the optimal final mass at the $10^{-5}$ level (tens of
 grams on $1500$\,kg), with a structure that is now quantitatively mapped
 --- a departure-phase quadrupole of amplitude $\approx 57$\,g in the
-phase-coherent regime, decaying past one lunar month of transfer time to a
-phase-independent secular benefit of $\approx 30$\,g. At this problem's
+phase-coherent regime, observed declining from a $\sim 2$--$4$-month
+plateau to $+31.3$\,g at $19.45$ months --- consistent with, but not yet
+confirming, a phase-independent secular floor, which remains a hypothesis
+pending a deep-rung $\varphi_0$ sweep. At this problem's
 scale the Moon is thus a refinement, not a design driver; but the
 methodology result is broader: the Earth-centered MEE formulation with an
 opt-in third-body term, gain continuation on the energy objective, and the
@@ -771,7 +830,7 @@ of thrust, $19 \to 1724$ switches, and transfer times from five days to
 seventeen months --- with the free-$\Delta L$ (lifted) span identified as
 the load-bearing formulation choice at scale. The usual caveats stand:
 switch counts are nodal mesh-band quantities, certificates are first-order
-(\S 8), deep-rung defects grow to $5\times10^{-13}$ (seven orders inside
+(\S\ref{sec:certification}), deep-rung defects grow to $5\times10^{-13}$ (seven orders inside
 the gate), and all results live in one basin family per rung.
 
 \section{Direct versus indirect methods: a working position}

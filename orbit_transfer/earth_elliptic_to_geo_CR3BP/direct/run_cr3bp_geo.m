@@ -49,6 +49,8 @@ runName   = 'cr3bp_T5N_phi0_fuel';   % basename for ALL artifacts of this run
 movieMode = true;        % true -> render <runName>_movie.mp4/.gif (adds ~2 min)
 rerun     = false;       % true -> ignore checkpoints, solve cold
 maxIter   = 1500;        % IPOPT cap per solve
+ipoptExtra= struct();    % opt-in IPOPT overrides (e.g. mumps_mem_percent) merged
+                         %   over solver defaults; struct() = unchanged
 % Programmatic override hook (ladder driver): if the caller's workspace
 % defines LADDER_OVERRIDES (struct), its fields replace the defaults above.
 % Absent -> byte-identical interactive behavior.
@@ -158,7 +160,8 @@ S = load(ckSeed);  S.fp = fp;  save(ckSeed, '-struct', 'S');   % re-save with fp
 
 % --- stage B: two-body energy solve (eps=1, no Moon) -------------------------
 solveOpts = struct('par',par,'mode','fixedtf','eps',1,'tfTarget',tfTargetTU, ...
-    'x0',X0(:,1),'xf',xfElems,'maxIter',maxIter,'warmTight',false);
+    'x0',X0(:,1),'xf',xfElems,'maxIter',maxIter,'warmTight',false, ...
+    'ipoptExtra',ipoptExtra);
 ckE = fullfile(ckDir, [runName '_energy2b.mat']);
 if ~rerun && isfile(ckE)
     S = load(ckE);  check_fp_local(S, fp, ckE);  o = S.o;
@@ -212,6 +215,7 @@ if epsMin < 1
     end
     ho = struct('par',parG,'x0',Xk(:,1),'xf',xfElems,'tfTarget',tfTargetTU, ...
         'maxIter',maxIter,'sched',sched,'resDir',ckDir,'tag',[runName '_eps'],'fp',fp, ...
+        'ipoptExtra',ipoptExtra, ...
         'fpStrict',true);   % A2: E3B front door opts in to fail-closed caches
     [best, tbl] = homotopy_mee(sigma, Xk, Uk, dLk, ho); %#ok<ASGLU>
     assert(best.certified && abs(best.epsReached - epsMin) < 1e-12, ...

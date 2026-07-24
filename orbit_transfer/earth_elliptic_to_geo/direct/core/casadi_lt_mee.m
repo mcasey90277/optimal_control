@@ -321,6 +321,16 @@ if warmTight
     ip.warm_start_init_point = 'yes';
     ip.warm_start_bound_push = 1e-9;  ip.warm_start_mult_bound_push = 1e-9;
 end
+% Opt-in IPOPT option overrides (2026-07-23, CR3BP ladder MUMPS-factorization
+% segfault diagnosis): opts.ipoptExtra fields merge OVER the defaults above.
+% Absent => byte-identical solver configuration. First use: mumps_mem_percent
+% to pre-allocate factorization workspace so the dmumps_compre_new_ in-place
+% compression path (segfault site at N>~700 on this machine's bundled MUMPS,
+% crash-dump-confirmed) never executes.
+if isfield(opts, 'ipoptExtra') && ~isempty(opts.ipoptExtra)
+    ipxf = fieldnames(opts.ipoptExtra);
+    for ipk = 1:numel(ipxf), ip.(ipxf{ipk}) = opts.ipoptExtra.(ipxf{ipk}); end
+end
 opti.solver('ipopt', struct('print_time', printLvl > 0), ip);
 success = true;
 try

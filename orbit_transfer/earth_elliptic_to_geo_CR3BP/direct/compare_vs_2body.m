@@ -52,11 +52,14 @@ addpath(here);
 setup_paths;
 
 resDir  = fullfile(here, 'results');
-pattern = fullfile(resDir, 'minfuel_cr3bp_*.mat');
-files   = dir(pattern);
-
+% Two artifact generations (2026-07-23 methodology update, item C):
+%   (a) Task-5 artifacts   minfuel_cr3bp_*.mat        (S.best solver struct)
+%   (b) front-door products cr3bp_T*_fuel.mat         (products struct incl.
+%       phi-swept runs; *_2body_control.mat companions are BASELINES, not rows)
+files  = [dir(fullfile(resDir, 'minfuel_cr3bp_*.mat')); ...
+          dir(fullfile(resDir, 'cr3bp_T*_fuel.mat'))];
 assert(~isempty(files), 'compare_vs_2body:noArtifacts', ...
-    'No minfuel_cr3bp_*.mat artifacts found in %s -- run solve_cr3bp_minfuel first', resDir);
+    'No CR3BP artifacts found in %s -- run solve_cr3bp_minfuel or run_cr3bp_geo first', resDir);
 
 c_tf      = 1.5;      % campaign's t_f/t_fMin factor (spec D4; matches sanity_bound.m)
 monthDays = 27.32;    % sidereal lunar month [days]
@@ -66,11 +69,32 @@ rows = cell(n, 1);
 
 for k = 1:n
     S = load(fullfile(files(k).folder, files(k).name));
-    best = S.best;
-    fp   = S.fp;
-    prov = S.provenance;
+    fp = S.fp;
+    if isfield(S, 'best')                       % Task-5 format
+        mfC = S.best.m_f_kg;  swC = S.best.switches;
+        dfC = S.best.maxDefect;  epsR = S.best.epsReached;  certC = S.best.certified;
+        prov = S.provenance;  hasProvDmf = isfield(prov, 'dmf_kg');
+    else                                        % front-door products format
+        mfC = S.m_f_kg;  swC = S.switches;
+        dfC = S.provenance.maxDefect;  epsR = S.provenance.epsReached;
+        certC = true;   % the front door asserts full certification before saving
+        prov = S.provenance;  hasProvDmf = false;
+    end
 
     cert2body = table3_certified(fp.thrustN);
+
+    % Baseline preference (2026-07-23 methodology, from the 5 N basin-scatter
+    % lesson): a SAME-CHAIN gain=0 control beats table3_certified as the
+    % Moon-effect baseline (basin scatter across pipelines is up to ~22 kg,
+    % dwarfing the lunar signal). Fall back to table3 with its caveat.
+    tTag = strrep(sprintf('%g', fp.thrustN), '.', 'p');
+    ctrlFile = fullfile(resDir, sprintf('cr3bp_T%sN_2body_control.mat', tTag));
+    if isfile(ctrlFile)
+        C = load(ctrlFile, 'm_f_kg', 'switches');
+        mfB = C.m_f_kg;  swB = C.switches;  baseSrc = 'same-chain';
+    else
+        mfB = cert2body.m_f_kg;  swB = cert2body.switches;  baseSrc = 'table3';
+    end
 
     par  = kepler_lt_params(fp.thrustN, fp.m0kg, fp.ispS);
     pert = lunar_params(par, fp.phi0, fp.gain);
@@ -78,15 +102,16 @@ for k = 1:n
     row.file        = files(k).name;
     row.thrustN     = fp.thrustN;
     row.phi0        = fp.phi0;
-    row.mf_2body    = cert2body.m_f_kg;
-    row.mf_cr3bp    = best.m_f_kg;
-    row.dmf_kg      = best.m_f_kg - cert2body.m_f_kg;
-    row.dmf_pct     = 100 * row.dmf_kg / cert2body.m_f_kg;
-    row.sw_2body    = cert2body.switches;
-    row.sw_cr3bp    = best.switches;
-    row.maxDefect   = best.maxDefect;
-    row.epsReached  = best.epsReached;
-    row.certified   = best.certified;
+    row.mf_2body    = mfB;
+    row.baseSrc     = baseSrc;
+    row.mf_cr3bp    = mfC;
+    row.dmf_kg      = mfC - mfB;
+    row.dmf_pct     = 100 * row.dmf_kg / mfB;
+    row.sw_2body    = swB;
+    row.sw_cr3bp    = swC;
+    row.maxDefect   = dfC;
+    row.epsReached  = epsR;
+    row.certified   = certC;
 
     tfDays          = c_tf * cert2body.tfmin * par.TU_s / 86400;
     row.tfDays      = tfDays;
@@ -100,9 +125,10 @@ for k = 1:n
 
     rows{k} = row; %#ok<AGROW>
 
-    % Sanity echo tying dmf back to solve_cr3bp_minfuel's own provenance
-    % (must match to machine precision -- both computed the same subtraction).
-    if abs(row.dmf_kg - prov.dmf_kg) > 1e-9
+    % Sanity echo tying dmf back to the artifact's own provenance -- only
+    % meaningful for Task-5 artifacts (which recorded a table3-based dmf)
+    % AND only when this run also used the table3 baseline.
+    if hasProvDmf && strcmp(baseSrc, 'table3') && abs(row.dmf_kg - prov.dmf_kg) > 1e-9
         warning('compare_vs_2body:dmfMismatch', ...
             '%s: recomputed dmf_kg=%.6f differs from provenance.dmf_kg=%.6f', ...
             files(k).name, row.dmf_kg, prov.dmf_kg);
@@ -110,16 +136,16 @@ for k = 1:n
 end
 
 %% Print aligned table to stdout:
-hdr = sprintf('%6s %6s %11s %11s %10s %8s %14s %10s %10s %11s %10s', ...
-    'T [N]', 'phi0', 'mf_2body', 'mf_cr3bp', 'dmf [kg]', 'dmf [%]', ...
-    'sw 2b/cr3bp*', 'defect', 't_f [d]', 't_f [mo]', 'ratio [%]');
+hdr = sprintf('%6s %6s %11s %11s %11s %10s %8s %14s %10s %10s %11s %10s', ...
+    'T [N]', 'phi0', 'baseline', 'mf_base', 'mf_cr3bp', 'dmf [kg]', 'dmf [%]', ...
+    'sw b/cr3bp*', 'defect', 't_f [d]', 't_f [mo]', 'ratio [%]');
 sep = repmat('-', 1, numel(hdr));
 fprintf('%s\n%s\n', hdr, sep);
 for k = 1:n
     r = rows{k};
     swStr = sprintf('%d/%d', r.sw_2body, r.sw_cr3bp);
-    fprintf('%6.3g %6.3g %11.4f %11.4f %10.4f %8.5f %14s %10.3e %10.3f %11.4f %10.4f\n', ...
-        r.thrustN, r.phi0, r.mf_2body, r.mf_cr3bp, r.dmf_kg, r.dmf_pct, ...
+    fprintf('%6.3g %6.3g %11s %11.4f %11.4f %10.4f %8.5f %14s %10.3e %10.3f %11.4f %10.4f\n', ...
+        r.thrustN, r.phi0, r.baseSrc, r.mf_2body, r.mf_cr3bp, r.dmf_kg, r.dmf_pct, ...
         swStr, r.maxDefect, r.tfDays, r.tfMonths, r.ratioPct);
 end
 fprintf(['\n* switch counts are NODAL counts -- mesh-band caveat (P0 protocol): ' ...
@@ -144,15 +170,15 @@ fprintf(fid, ['Generated by `compare_vs_2body.m` (phase1 T6). Sources: certified
     '`table3_certified.m` (2-body) and `minfuel_cr3bp_*.mat` (Task-5 CR3BP\n' ...
     'certified solves) + `lunar_params.m` (null-model ratio, spec sec 7).\n' ...
     'c_tf = %g, lunar month = %g d.\n\n'], c_tf, monthDays);
-fprintf(fid, ['| T [N] | phi0 [rad] | m_f 2-body [kg] | m_f CR3BP [kg] | ' ...
-    'Delta m_f [kg] | Delta m_f [%%] | switches 2b/CR3BP* | maxDefect | ' ...
+fprintf(fid, ['| T [N] | phi0 [rad] | baseline | m_f base [kg] | m_f CR3BP [kg] | ' ...
+    'Delta m_f [kg] | Delta m_f [%%] | switches base/CR3BP* | maxDefect | ' ...
     't_f [days] | t_f [lunar months] | tide/authority [%%] |\n']);
-fprintf(fid, '|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|\n');
+fprintf(fid, '|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|\n');
 for k = 1:n
     r = rows{k};
     swStr = sprintf('%d/%d', r.sw_2body, r.sw_cr3bp);
-    fprintf(fid, '| %g | %g | %.4f | %.4f | %+.4f | %+.5f | %s | %.3e | %.3f | %.4f | %.4f |\n', ...
-        r.thrustN, r.phi0, r.mf_2body, r.mf_cr3bp, r.dmf_kg, r.dmf_pct, ...
+    fprintf(fid, '| %g | %g | %s | %.4f | %.4f | %+.4f | %+.5f | %s | %.3e | %.3f | %.4f | %.4f |\n', ...
+        r.thrustN, r.phi0, r.baseSrc, r.mf_2body, r.mf_cr3bp, r.dmf_kg, r.dmf_pct, ...
         swStr, r.maxDefect, r.tfDays, r.tfMonths, r.ratioPct);
 end
 fprintf(fid, ['\n*Switch counts are NODAL counts with a mesh-band caveat (P0 ' ...

@@ -8,10 +8,14 @@ c_tf = 1.5, lunar month = 27.32 d.
 | T [N] | phi0 [rad] | baseline | m_f base [kg] | m_f CR3BP [kg] | Delta m_f [kg] | Delta m_f [%] | switches base/CR3BP* | maxDefect | t_f [days] | t_f [lunar months] | tide/authority [%] |
 |---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
 | 10 | 0 | same-chain | 1377.1025 | 1377.1545 | +0.0520 | +0.00378 | 19/19 | 4.191e-15 | 5.290 | 0.1936 | 0.1092 |
+| 0.1 | 0 | same-chain | 1380.1986 | 1380.2299 | +0.0313 | +0.00227 | 1722/1724 | 4.722e-13 | 531.269 | 19.4461 | 10.9186 |
+| 0.2 | 0 | same-chain | 1377.3950 | 1377.4318 | +0.0367 | +0.00267 | 892/890 | 2.350e-13 | 265.634 | 9.7231 | 5.4593 |
+| 0.5 | 0 | same-chain | 1378.3676 | 1378.4135 | +0.0459 | +0.00333 | 357/357 | 1.136e-13 | 106.254 | 3.8892 | 2.1837 |
 | 10 | 0 | same-chain | 1377.1025 | 1377.1545 | +0.0520 | +0.00378 | 19/19 | 4.191e-15 | 5.290 | 0.1936 | 0.1092 |
 | 10 | 4.71239 | same-chain | 1377.1025 | 1377.0497 | -0.0528 | -0.00384 | 19/19 | 5.967e-15 | 5.290 | 0.1936 | 0.1092 |
 | 10 | 1.5708 | same-chain | 1377.1025 | 1377.0462 | -0.0563 | -0.00409 | 19/19 | 5.024e-15 | 5.290 | 0.1936 | 0.1092 |
 | 10 | 3.14159 | same-chain | 1377.1025 | 1377.1714 | +0.0689 | +0.00501 | 19/19 | 4.136e-15 | 5.290 | 0.1936 | 0.1092 |
+| 1 | 0 | same-chain | 1378.4270 | 1378.4763 | +0.0493 | +0.00357 | 178/178 | 5.393e-14 | 53.286 | 1.9504 | 1.0919 |
 | 2.5 | 0 | same-chain | 1378.4855 | 1378.5352 | +0.0497 | +0.00361 | 70/70 | 2.554e-14 | 21.250 | 0.7778 | 0.4367 |
 | 5 | 0 | same-chain | 1378.6607 | 1378.7095 | +0.0488 | +0.00354 | 36/36 | 1.205e-14 | 10.638 | 0.3894 | 0.2184 |
 
@@ -21,9 +25,13 @@ rungs (see `table3_certified.m`'s DEEP-RUNG SWITCH-COUNT CAVEAT); read as bands,
 **Certification status per row:**
 
 - `minfuel_cr3bp_T10N_phi0.mat`: certified=1, epsReached=0, maxDefect=4.191e-15 -- Moon HELPS (Delta m_f = +0.0520 kg = +0.00378%) at phi0=0 rad
+- `cr3bp_T0p1N_phi0_fuel.mat`: certified=1, epsReached=0, maxDefect=4.722e-13 -- Moon HELPS (Delta m_f = +0.0313 kg = +0.00227%) at phi0=0 rad
+- `cr3bp_T0p2N_phi0_fuel.mat`: certified=1, epsReached=0, maxDefect=2.350e-13 -- Moon HELPS (Delta m_f = +0.0367 kg = +0.00267%) at phi0=0 rad
+- `cr3bp_T0p5N_phi0_fuel.mat`: certified=1, epsReached=0, maxDefect=1.136e-13 -- Moon HELPS (Delta m_f = +0.0459 kg = +0.00333%) at phi0=0 rad
 - `cr3bp_T10N_phi0_fuel.mat`: certified=1, epsReached=0, maxDefect=4.191e-15 -- Moon HELPS (Delta m_f = +0.0520 kg = +0.00378%) at phi0=0 rad
 - `cr3bp_T10N_phi3Pi2_fuel.mat`: certified=1, epsReached=0, maxDefect=5.967e-15 -- Moon HURTS (Delta m_f = -0.0528 kg = -0.00384%) at phi0=4.71239 rad
 - `cr3bp_T10N_phiPi2_fuel.mat`: certified=1, epsReached=0, maxDefect=5.024e-15 -- Moon HURTS (Delta m_f = -0.0563 kg = -0.00409%) at phi0=1.5708 rad
 - `cr3bp_T10N_phiPi_fuel.mat`: certified=1, epsReached=0, maxDefect=4.136e-15 -- Moon HELPS (Delta m_f = +0.0689 kg = +0.00501%) at phi0=3.14159 rad
+- `cr3bp_T1N_phi0_fuel.mat`: certified=1, epsReached=0, maxDefect=5.393e-14 -- Moon HELPS (Delta m_f = +0.0493 kg = +0.00357%) at phi0=0 rad
 - `cr3bp_T2p5N_phi0_fuel.mat`: certified=1, epsReached=0, maxDefect=2.554e-14 -- Moon HELPS (Delta m_f = +0.0497 kg = +0.00361%) at phi0=0 rad
 - `cr3bp_T5N_phi0_fuel.mat`: certified=1, epsReached=0, maxDefect=1.205e-14 -- Moon HELPS (Delta m_f = +0.0488 kg = +0.00354%) at phi0=0 rad

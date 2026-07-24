@@ -26,8 +26,12 @@ result (m_f=1377.1545 kg, 19 sw) exactly.
 
 ## Headline results (2026-07-23, same-chain baselines)
 
-**Moon effect vs thrust** (phi0=0): +52.0 g (10 N), +48.8 g (5 N), +49.7 g
-(2.5 N) — remarkably flat ~50 g across a 4x thrust range. **Moon effect vs
+**Moon effect vs thrust** (phi0=0, COMPLETE LADDER): +52.0 / +48.8 / +49.7 /
++49.3 / +45.9 / +36.8 / +31.3 g at 10 / 5 / 2.5 / 1 / 0.5 / 0.2 / 0.1 N
+(t_f = 0.19 to 19.4 lunar months) — flat ~50 g through ~2 lunar months, then
+a GENTLE phase-averaged decay toward a nonzero ~30 g secular floor at 19
+months. All seven rungs certified through the front door (liftDL +
+maxIter recipe; the predicted deep-rung eps-wall never materialized). **Moon effect vs
 lunar phase** (10 N): +52.0 / -56.3 / +68.9 / -52.8 g at phi0 = 0, pi/2, pi,
 3pi/2 — **pi-periodic (tidal-quadrupole symmetry): the lunar assist flips
 sign with phase**, with a measurable pi-vs-0 asymmetry (+69 vs +52 g, the

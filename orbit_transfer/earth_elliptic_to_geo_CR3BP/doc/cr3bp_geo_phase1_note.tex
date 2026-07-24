@@ -22,16 +22,24 @@ Problem Formulation, Third-Body Incorporation, and the First Certified Result}
 \maketitle
 
 \begin{abstract}
-We extend a certified two-body low-thrust minimum-fuel campaign --- the
+We extend a certified\footnote{``Certified'' throughout means a
+solver-level, \emph{first-order} certificate: full IPOPT convergence
+(\texttt{Solve\_Succeeded}), post-hoc numerically re-checked collocation
+defects, and endpoint/structure gates --- not a proof of global (or even
+local) optimality. See \S\ref{sec:certification} for the exact basis and
+\S\ref{sec:minimality} for what a stronger certificate would require.}
+two-body low-thrust minimum-fuel campaign --- the
 Haberkorn--Martinon--Gergaud (HMG) elliptic-orbit-to-GEO benchmark --- to
 include the Moon's gravity at circular-restricted three-body (CR3BP)
-fidelity, while retaining the two-body campaign's winning formulation:
-modified equinoctial elements (MEE) with true longitude as the independent
-variable and a \emph{free} total longitude span. The Moon enters as an
-Earth-centered third-body perturbation (direct plus indirect terms) added to
-the Gauss variational equations as a pure acceleration. The three-body
-solution is reached by $\mu$-continuation from the certified two-body
-solution on the smooth energy objective, followed by an
+fidelity --- i.e.\ the ideal circular-restricted model expressed in a
+geocentric, non-rotating frame, not the traditional rotating-frame CR3BP
+formulation --- while retaining the two-body campaign's winning
+formulation: modified equinoctial elements (MEE) with true longitude as
+the independent variable and a \emph{free} total longitude span. The Moon
+enters as an Earth-centered third-body perturbation (direct plus indirect
+terms) added to the Gauss variational equations as a pure acceleration.
+The three-body solution is reached by lunar-gain continuation from the
+certified two-body solution on the smooth energy objective, followed by an
 energy$\to$fuel homotopy at full lunar mass. At the 10\,N rung the certified
 result is $m_f = 1377.1545$\,kg against the two-body certified
 $1377.1000$\,kg: the Moon \emph{improves} the transfer by $+54.5$\,g
@@ -41,6 +49,7 @@ incorporation, the continuation strategy, and the certification basis.
 \end{abstract}
 
 \section{The benchmark problem}
+\label{sec:benchmark}
 
 The underlying problem is the HMG-2004 benchmark \cite{HMG2004}: transfer a
 low-thrust spacecraft of initial mass $m_0 = 1500$\,kg from an inclined
@@ -80,9 +89,19 @@ where $(P, e_x, e_y, h_x, h_y)$ are the usual MEE
 $m$ is the mass, $t$ is carried as a state, $\vect{\beta}$ is the unit
 thrust direction in the local RTN (radial--transverse--normal) frame, and
 $\delta$ is the throttle. With canonical units $\mu_E = 1$,
-$\mathrm{LU} = 42\,165$\,km (so GEO circular speed is unity), the dynamics
-are the Gauss variational equations driven by the RTN specific force
-$\vect{f} = (f_R, f_T, f_N)$:
+$\mathrm{LU} = 42\,165$\,km (so GEO circular speed is unity), the induced
+time unit is $\mathrm{TU} = \sqrt{\mathrm{LU}^3/\mu_{E,\mathrm{km}}}
+\approx 13{,}714$\,s (with $\mu_{E,\mathrm{km}} = 398\,600.4418$\,km$^3$/s$^2$,
+consistent with $t_f = 33.3309$\,TU $= 5.290$\,d, \S\ref{sec:benchmark});
+every dimensional quantity used below --- the lunar acceleration $a_M$
+built from $\mu_M$ and $D_{EM}$ (native km, s), the thrust authority
+$T_{\max}/m$ and exhaust velocity $c$ (native m, s), and the time state
+$t$ itself --- is converted through this single (LU, TU) pair before
+entering the canonical equations. The dynamics that result are the Gauss
+variational equations driven by the RTN specific force
+$\vect{f} = (f_R, f_T, f_N)$, written here as ordinary \emph{time} rates
+$\dot X$ --- i.e., before the $\sigma$-domain transcription applied at the
+end of this subsection:
 \begin{equation}
 \label{eq:gauss}
 \begin{aligned}
@@ -101,10 +120,25 @@ $\vect{f} = (f_R, f_T, f_N)$:
 with $Z = 1 + e_x\cos L + e_y \sin L$, $A_1 = e_x + (1{+}Z)\cos L$,
 $A_2 = e_y + (1{+}Z)\sin L$, $X_h = 1 + h_x^2 + h_y^2$, and exhaust
 velocity $c = I_{sp} g_0$. In the two-body problem the specific force is
-thrust alone, $\vect{f} = (T_{\max}/m)\,\delta\vect{\beta}$. All equations
-are divided by $\dot L$ to make $L$ the independent variable; every
-trajectory quantity is transcribed on a fixed grid
-$\sigma \in [0,1]$ with node longitudes $L_k = \pi + \sigma_k \Delta L$.
+thrust alone, $\vect{f} = (T_{\max}/m)\,\delta\vect{\beta}$.
+
+To make $L$ the independent variable, every trajectory quantity is
+transcribed on a fixed grid $\sigma \in [0,1]$ with node longitudes
+$L_k = \pi + \sigma_k \Delta L$, i.e.\ $L = \pi + \sigma \Delta L$ and
+$dL/d\sigma = \Delta L$. By the chain rule, the state (and the time state
+$t$) are propagated in $\sigma$ as
+\begin{equation}
+\label{eq:sigmadomain}
+\frac{dX}{d\sigma} = \Delta L\,\frac{\dot X}{\dot L},
+\qquad
+\frac{dt}{d\sigma} = \frac{\Delta L}{\dot L},
+\end{equation}
+i.e.\ every rate in \eqref{eq:gauss} --- including $\dot t = 1$ --- is
+divided by $\dot L$ and scaled by $\Delta L$ before collocation. This
+division is well posed only if $\dot L > 0$ throughout the transfer
+(longitude increasing monotonically); that condition is enforced/checked
+in the implementation and holds for this GEO-bound, non-librating
+geometry.
 
 \subsection{Free longitude span}
 
@@ -114,8 +148,9 @@ the optimizer, not prescribed. This is the formulation feature that carried
 the two-body ladder through two thrust decades (rev counts from
 $\sim$7 to $\sim$700), and preserving it was the decisive argument for
 incorporating the Moon as a perturbation in this frame rather than moving
-to rotating-frame Cartesian coordinates, where the fixed independent-variable
-span freezes the revolution topology.
+to rotating-frame Cartesian coordinates, where a fixed independent-variable
+span makes it difficult in practice --- for a fixed mesh and warm start ---
+for the optimizer to add or shed a revolution.
 
 \subsection{Fixing $t_f$: two inequivalent transcriptions}
 
@@ -124,10 +159,12 @@ because two formulations that both \emph{fix $t_f$} are not equivalent.
 The direct way is to make time (or a regularized time such as a Sundman
 variable) the independent variable and fix the mesh span: the horizon of
 the transcription itself is $[0, t_f]$. This is the formulation of our
-CR3BP GTO campaigns, and its cost is structural: with the independent-%
-variable span frozen, the trajectory's revolution count is frozen into the
-warm start's geometry --- the optimizer cannot add or shed a revolution,
-which is exactly the ``topology wall'' those campaigns meet under thrust
+CR3BP GTO campaigns, and its practical cost is a conditioning/mesh
+limitation rather than a mathematical impossibility: with the
+independent-variable span fixed, the trajectory's revolution count is tied
+to the warm start's geometry, and it is difficult in practice for the
+optimizer to add or shed a revolution without re-meshing or a fresh warm
+start --- this is the ``topology wall'' those campaigns meet under thrust
 continuation.
 
 What we do here is different: the independent variable is $L$ with a
@@ -158,8 +195,12 @@ J_\varepsilon \;=\; \int_0^{t_f}
 \bigl[\, \delta \;-\; \varepsilon\, \delta(1-\delta) \,\bigr] \ud t,
 \qquad \varepsilon: 1 \to 0,
 \end{equation}
-whose $\varepsilon = 1$ member is the smooth energy problem and whose
-$\varepsilon = 0$ member is minimum fuel. Each member is transcribed by
+for $\varepsilon \in [0,1]$. At $\varepsilon = 1$ the integrand collapses
+to $\delta - \delta(1-\delta) = \delta^2$, so $J_1 = \int_0^{t_f}
+\delta^2\,\ud t$ --- a \emph{quadratic throttle (energy) surrogate}, which
+we refer to below by the shorthand ``energy problem/objective''; at
+$\varepsilon = 0$ the integrand is $\delta$ itself, i.e.\ minimum fuel.
+Each member is transcribed by
 trapezoidal collocation on the $\sigma$ grid (193 segments at 10\,N,
 $\approx 25$ nodes per revolution) and solved as an NLP with
 CasADi\,+\,IPOPT, warm-started along the homotopy; a step is accepted only
@@ -170,8 +211,11 @@ below $10^{-6}$ (in practice $\sim 10^{-15}$).
 
 \subsection{Third-body acceleration with the indirect term}
 
-The Moon is added at CR3BP fidelity in the Earth-centered frame. Because
-that frame is non-inertial --- the Moon accelerates the Earth --- the
+The Moon is added at CR3BP fidelity in the Earth-centered frame ---
+concretely, the ideal circular-restricted model expressed in a geocentric,
+non-rotating frame, \emph{not} the traditional rotating-frame CR3BP
+formulation or a real ephemeris model (see \S\ref{sec:lunareph} below).
+Because that frame is non-inertial --- the Moon accelerates the Earth --- the
 perturbing acceleration must carry both the direct and the
 \emph{indirect} term:
 \begin{equation}
@@ -190,6 +234,7 @@ comparable in size, and their difference is the \emph{tidal} field that
 actually perturbs the transfer.
 
 \subsection{Circular lunar ephemeris}
+\label{sec:lunareph}
 
 Faithful to the CR3BP idealization, the Moon moves on a circular orbit
 \emph{in the reference (equatorial) plane}:
@@ -234,8 +279,8 @@ f_T = \tfrac{T_{\max}}{m}\,\delta\beta_T + g\,(\That\!\cdot\!\vect{a}_M),
 \qquad
 f_N = \tfrac{T_{\max}}{m}\,\delta\beta_N + g\,(\Nhat\!\cdot\!\vect{a}_M),
 \end{equation}
-where $g \in [0,1]$ is a continuation gain multiplying the lunar mass
-(\S\ref{sec:continuation}). Two coupling rules are essential and are
+where $g \in [0,1]$ is the lunar-gain continuation parameter, multiplying
+the lunar force (\S\ref{sec:continuation}). Two coupling rules are essential and are
 enforced explicitly in the implementation: the perturbation enters
 \emph{every} Gauss equation including the $\dot L$ rate, and it contributes
 \emph{nothing} to $\dot m$ --- gravity costs no propellant.
@@ -246,10 +291,13 @@ shared dynamics routine. When absent (or at $g = 0$) the code executes the
 two-body campaign is bitwise untouched --- a property enforced by
 regression gates rather than assumed. The correctness of the new frame
 mathematics is pinned by committed analytic oracles: a radial oracle
-(equatorial state with the Moon on the radial axis, for which only
-$\dot e_y$ may respond, by exactly $-a_R$), a transverse oracle at
-$L = \pi/2$, and a numerical check of $\Nhat$ against the
-finite-difference orbit normal at random three-dimensional states.
+(circular equatorial state at $L = 0$ with the Moon on the radial axis,
+for which only $\dot e_y$ responds, by exactly $-\sqrt{P/\mu}\,a_R$ in the
+time domain of Eq.~\eqref{eq:gauss} --- the coefficient rescales, like
+every other rate, under the $\sigma$-domain division \eqref{eq:sigmadomain}),
+a transverse oracle at $L = \pi/2$, and a numerical check of $\Nhat$
+against the finite-difference orbit normal at random three-dimensional
+states.
 
 \section{Solution strategy}
 \label{sec:continuation}
@@ -271,7 +319,7 @@ The full numerical chain behind the certified result is:
   $\approx 25$ nodes/rev). From this seed the smooth two-body
   \emph{energy} problem ($\varepsilon = 1$, no Moon) is solved to full
   convergence. This solve doubles as the certified-path regression gate.
-\item \textbf{$\mu$-continuation (gravity bridge).} The lunar gain is
+\item \textbf{Lunar-gain continuation (gravity bridge).} The lunar gain is
   walked $g: 0 \to 1$ on the energy objective, warm-starting each step
   (\S\ref{sec:mubridge}).
 \item \textbf{$\varepsilon$-homotopy (sharpening).} At full lunar mass the
@@ -302,7 +350,7 @@ and the nonsmooth structure is resolved exactly once, at the final physics.
   full-density sample $N = \mathrm{npr}\cdot n_{\mathrm{rev}}$};
 \node[box, below=of seed] (e2b) {\textbf{Two-body energy solve}\\
   $\varepsilon = 1$, $g = 0$ (also the certified-path regression gate)};
-\node[box, below=of e2b] (mu) {\textbf{$\mu$-continuation (gravity bridge)}\\
+\node[box, below=of e2b] (mu) {\textbf{Lunar-gain continuation (gravity bridge)}\\
   $g: 0 \to 0.25 \to 0.5 \to 0.75 \to 1$ on the energy objective,
   warm-started; adaptive bisection on failure};
 \node[box, below=of mu] (eps) {\textbf{$\varepsilon$-homotopy (sharpening)}\\
@@ -334,30 +382,49 @@ warm-start another.}
 
 Four specific things were taken from \cite{BCP2010}:
 \begin{itemize}
-\item \textbf{The $\mu$-continuation itself.} Their \S 4.4 computes
-  Earth--Moon transfers by continuation in the mass ratio from the Kepler
-  problem, traced to Poincar\'e --- precisely our gravity bridge, with the
-  gain $g$ playing the role of their $\mu$. Their Proposition~2.3 supplies
-  the convergence theory: the shooting/continuation branch is smooth exactly
-  while the extremal stays clear of conjugate points.
+\item \textbf{The lunar-gain continuation, in the spirit of mass-ratio
+  continuation.} Their \S 4.4 computes Earth--Moon transfers by
+  continuation in the mass ratio from the Kepler problem, traced to
+  Poincar\'e. Our gravity bridge follows that lineage \emph{in spirit}
+  rather than literally: the gain $g$ scales only the lunar force in
+  Eq.~\eqref{eq:thirdbody}'s contribution to \eqref{eq:gauss}, while the
+  lunar mean motion $n_M$ keeps its full-mass CR3BP value throughout, so
+  intermediate steps $g \in (0,1)$ trace a homotopy path, not a physical
+  CR3BP solution at a reduced mass ratio --- only the $g = 1$ endpoint is
+  exact. Their Proposition~2.3 supplies convergence theory relevant to
+  this kind of bridge: conjugate-point clearance is a \emph{sufficient}
+  nondegeneracy condition for a smooth continuation branch, not an
+  if-and-only-if characterization in this generality (regularity of the
+  shooting map and endpoint-rank conditions matter too).
 \item \textbf{The benign-landscape rationale for bridging on energy.}
-  Their Theorem~3.5 shows the averaged energy problem is a Riemannian
-  geodesic flow with \emph{empty conjugate and cut loci} in the elliptic
-  domain $e \in [0,1)$ --- the theoretical explanation for why every
-  campaign in this repository has found the energy problem to be the
-  reliable continuation backbone, and the reason the Moon is dialed in at
-  $\varepsilon = 1$ rather than on the bang-bang fuel problem.
+  Their Theorem~3.5 proves the \emph{averaged} Kepler energy problem is a
+  Riemannian geodesic flow with \emph{empty conjugate and cut loci} in the
+  elliptic domain $e \in [0,1)$. That is a theorem about the
+  reduced/averaged Kepler problem, not about our unaveraged,
+  three-dimensional, time-dependent MEE problem with free $\Delta L$ and
+  collocation; we read it as a strong analogy for why energy-first
+  continuation is empirically benign here, not a theorem that certifies
+  our landscape. It is nonetheless the best theoretical account on hand
+  for why every campaign in this repository has found the energy problem
+  the reliable continuation backbone, and the reason the Moon is dialed in
+  at $\varepsilon = 1$ rather than on the bang-bang fuel problem.
 \item \textbf{Conjugate-point certification (adopted as follow-up).} They
-  verify local optimality by integrating the Jacobi (variational) equation
-  and checking the first conjugate time exceeds $t_f$. Our indirect-side
-  verification is currently first-order only; the Jacobi-field check is the
-  recorded upgrade path (\S 8).
+  verify local optimality, in their averaged-energy setting and its own
+  regularity hypotheses, by integrating the Jacobi (variational) equation
+  and checking the first conjugate time exceeds $t_f$. We attribute this
+  as the method used in their setting, not a standalone universal
+  certificate. Our indirect-side verification is currently first-order
+  only; the Jacobi-field check is the recorded upgrade path
+  (\S\ref{sec:secondorder}).
 \item \textbf{The $\sigma$-bound rev-count law.} Their
   Propositions~3.4/3.7 bound the control sup-norm by an explicit function
-  of the geometry over the cumulated longitude --- an analytic
-  rev-count-versus-thrust relation that the deep-rung ladder results will
-  be compared against (the rigorous cousin of the campaign's empirical
-  $T \cdot t_f^{\min} \approx \mathrm{const}$ law).
+  of the geometry over the cumulated longitude, under their stated
+  hypotheses. We treat this as a \emph{prospective comparison} --- to be
+  checked against those propositions' exact variables and hypotheses once
+  the deep-rung ladder results are in hand, not an inherited law for this
+  throttle-limited, fixed-time, free-winding formulation --- the rigorous
+  cousin of the campaign's empirical
+  $T \cdot t_f^{\min} \approx \mathrm{const}$ law.
 \end{itemize}
 What we did \emph{not} adopt: their averaging-based analytic initialization
 (our discrete two-body solutions are stronger seeds), and their
@@ -371,17 +438,25 @@ advantage.
 The three-body minimum-fuel solution is reached by two continuations run in
 sequence, each warm-started and gated:
 
-\paragraph{1. $\mu$-continuation (gravity bridge).}\label{sec:mubridge}
+\paragraph{1. Lunar-gain continuation (gravity bridge).}\label{sec:mubridge}
 Starting from the certified two-body \emph{energy} solution
 ($\varepsilon = 1$), the lunar gain is walked $g: 0 \to 1$
-(schedule $0.25, 0.5, 0.75, 1.0$, with adaptive bisection on failure). This
-is the classical continuation in the mass ratio traced to Poincar\'e and
-developed for low-thrust transfers by Bonnard--Caillau--Picot
-\cite{BCP2010}, whose convergence theory ties the smoothness of the
-continuation branch to conjugate-point clearance. The continuation is run
-on the energy objective deliberately: the averaged energy problem is a
-Riemannian geodesic flow free of conjugate and cut points in the elliptic
-domain \cite{BCP2010}, so its landscape is the benign one.
+(schedule $0.25, 0.5, 0.75, 1.0$, with adaptive bisection on failure). The
+gain $g$ scales only the lunar \emph{force} contribution to
+\eqref{eq:gauss}; the lunar mean motion $n_M$ retains its full-mass CR3BP
+value throughout, so intermediate steps $g \in (0,1)$ trace a homotopy
+path rather than a physical CR3BP solution at reduced mass ratio --- only
+the $g = 1$ endpoint is exact. This is done in the spirit of the classical
+continuation in the mass ratio traced to Poincar\'e and developed for
+low-thrust transfers by Bonnard--Caillau--Picot \cite{BCP2010}, whose
+convergence theory ties smoothness of that (literal mass-ratio)
+continuation branch to conjugate-point clearance as a sufficient
+condition. The continuation is run on the energy objective deliberately:
+BCP's Theorem~3.5 shows the \emph{averaged} energy problem is a Riemannian
+geodesic flow free of conjugate and cut points in the elliptic domain
+\cite{BCP2010} --- a strong analogy, not a proof, for our unaveraged
+setting, but the best account on hand for why the energy landscape is
+benign here too.
 
 \paragraph{2. $\varepsilon$-homotopy (sharpening) at full Moon.}\label{sec:sharpen}
 With $g = 1$ frozen, the standard energy$\to$fuel homotopy
@@ -396,7 +471,7 @@ never silently cross-seed.
 
 \section{A priori null model}
 
-Before any solve, the expected size of the lunar effect is bounded by the
+Before any solve, the expected size of the lunar effect is scaled by the
 tidal acceleration at GEO radius,
 $a_{\text{tide}} \approx 2\mu_M r / D_{EM}^3 \approx
 \SI{7.3e-6}{\meter\per\second\squared}$, compared with the thrust
@@ -416,8 +491,9 @@ rung & $T/m_0$ [\si{\meter\per\second\squared}] & tide/authority & $t_f$ [lunar 
 
 \noindent
 At 10\,N the Moon is a $\sim 0.1\%$ actor over a fifth of a lunar month:
-the null model predicts a sub-$0.1$\,kg mass shift whose sign depends on
-geometry. The deep rungs are where the Moon becomes a $\sim 10\%$ actor
+this is an order-of-magnitude scaling, not a rigorous bound, and it
+suggests a sub-$0.1$\,kg mass shift whose sign depends on geometry. The
+deep rungs are where the Moon becomes a $\sim 10\%$ actor
 acting over many lunar months --- the physically interesting regime, and
 the recorded next step.
 
@@ -436,7 +512,9 @@ $+40$\,g effect at the energy stage, consistent with the null model.
 \paragraph{Certified minimum-fuel result.}
 The $\varepsilon$-homotopy reached $\varepsilon = 0$ with all
 certification metrics green (defect $4.2\times 10^{-15}$, unit-norm
-violation $<10^{-8}$, terminal error $<10^{-8}$, no active box bounds):
+violation $<10^{-8}$, terminal error $<10^{-8}$, no unintended active
+state/control bounds beyond the expected throttle bounds
+$\delta \in \{0,1\}$):
 \begin{center}
 \begin{tabular}{lcccc}
 \toprule
@@ -460,20 +538,35 @@ month, so the Moon is nearly static during the transfer and the effect
 plausibly reverses with phase.
 
 \section{Certification basis and limitations}
+\label{sec:certification}
 
 The three-body result is certified on solver metrics: full IPOPT
 convergence (\texttt{Solve\_Succeeded}, never
 \texttt{Solved\_To\_Acceptable\_Level}), post-hoc numerically re-checked
 collocation defects at $10^{-15}$, terminal and unit-norm errors below
-$10^{-8}$, homotopy endpoint $\varepsilon = 0$ reached, and no active
-state bounds. This is a deliberately weaker bar than the two-body
-campaign's, which additionally verified Pontryagin consistency through a
-primer-vector reconstruction: that verifier is \emph{invalid under lunar
-gravity} as currently written (it attributes all non-Keplerian
-acceleration to thrust; under the perturbation it requires subtraction of
-the zero-throttle ballistic rate), and a CR3BP-aware primer check is a
-recorded follow-up, together with a conjugate-point (Jacobi-field)
-second-order check in the style of \cite{BCP2010}.
+$10^{-8}$, homotopy endpoint $\varepsilon = 0$ reached, and no unintended
+active state/control bounds beyond the expected throttle bounds. This is a
+deliberately weaker bar than the two-body campaign's, which additionally
+verifies Pontryagin consistency through a primer-vector reconstruction. A
+CR3BP-aware version of that verifier now exists
+(\texttt{mee\_primer\_switch.m}, commit \texttt{4353387}): it subtracts
+the zero-throttle ballistic/lunar bracket from the primer extraction and
+its switching-function term before comparing against the solver's own
+switches, and reduces identically to the pre-existing two-body formulas
+when the perturbation is absent. Run against the certified 10\,N and 5\,N
+CR3BP fuel solutions, the primer/switch gate still \emph{fails}
+($32.4^\circ$/$78.4\%$ at 10\,N; $26.7^\circ$/$76.6\%$ at 5\,N) --- but an
+A/B check isolating the lunar-specific coupling term (the
+$A_0/\dot L_0$ diagnostic, confirmed $\sim 10^{-5}$) shows removing it
+moves these numbers by less than $0.1^\circ$. The dominant cause is the
+same pre-existing, eccentricity-correlated raw-dual (KKT-multiplier)
+anomaly that already fails the pure two-body certified solutions
+identically; it is not a lunar-specific defect. Certification here
+therefore still rests on the four NLP metrics above, not on primer
+agreement, pending that campaign-wide dual-recovery fix landing; a
+conjugate-point (Jacobi-field) second-order check in the style of
+\cite{BCP2010} remains a further, separate follow-up
+(\S\ref{sec:secondorder}).
 
 Further recorded limitations: the Moon-in-reference-plane idealization
 (true CR3BP geometry; real obliquity unmodeled); a single lunar phase
@@ -485,17 +578,25 @@ rung stresses it.
 
 \section{Direct versus indirect methods: a working position}
 
-\emph{This section is deliberately speculative} --- it records the position
-this repository's campaigns currently support, to be revised as evidence
+\emph{This section is deliberately speculative} --- it records campaign
+\emph{observations}, not a categorical law, to be revised as evidence
 accumulates. The organizing axis we have found most predictive is
 \textbf{sensitivity versus combinatorics}: indirect (PMP shooting) methods
-degrade with \emph{arc sensitivity} --- the shooting Jacobian is a state
-transition matrix whose norm grows roughly exponentially with revolution
-count, amplified at each deep perigee pass --- while direct (collocation)
-methods degrade with \emph{combinatorial structure} (bang-bang switch
-discovery) and mesh resolution.
+have tended to degrade with \emph{arc sensitivity} --- the shooting
+Jacobian is a state transition matrix whose norm we have observed to grow
+roughly exponentially with revolution count, amplified at each deep
+perigee pass, \emph{in the single-shooting formulations tried so far} ---
+while direct (collocation) methods degrade with \emph{combinatorial
+structure} (bang-bang switch discovery) and mesh resolution. Shooting
+sensitivity is problem-, scaling-, and formulation-dependent, and is a
+known mitigable failure mode in the wider literature: multiple shooting
+and conjugate-point-guarded continuation (as in the exception below) both
+reduce it. We have not yet tried multiple shooting on this campaign's deep
+rungs; the observation above describes what single shooting has done here,
+not a proof that it must.
 
-The resulting division of labor:
+The resulting division of labor, as observed on this repository's
+campaigns to date:
 \begin{itemize}
 \item \textbf{Minimum time at low thrust (many revolutions): direct.}
   All-burn means no switching structure, so collocation's weakness is
@@ -507,16 +608,21 @@ The resulting division of labor:
   mesh are band quantities, not exact integers.
 \item \textbf{Precision and certification once seeded: indirect.} With the
   structure known and costates seeded from a converged direct solution, a
-  shooting solve delivers machine-precision switch times and true costates
-  at negligible cost --- its weakness (initialization) having been paid by
-  the direct stage. The direct-seeded indirect finish is, in our view, the
-  right marriage.
+  shooting solve has, in the cases run so far, delivered machine-precision
+  switch times and costates at low cost --- its weakness (initialization)
+  having been paid by the direct stage. This is not automatic: it requires
+  a correct multiplier/costate mapping from the direct solution's KKT
+  duals and a conditioning check on the resulting shooting Jacobian before
+  the result is trusted; neither is guaranteed by seeding alone. With those
+  checks passed, the direct-seeded indirect finish is, in our view, a
+  strong marriage.
 \item \textbf{The instructive exception} \cite{BCP2010}: indirect shooting
   \emph{does} work at 50--60 revolutions when the objective is the smooth
   energy one, the initializer is an averaged analytic solution, and the
   continuation is conjugate-point-guarded --- i.e., high revolution count
-  kills \emph{cold or unguarded} shooting, and nonsmooth structure
-  compounds it, but neither is fatal alone.
+  kills \emph{cold or unguarded single} shooting, and nonsmooth structure
+  compounds it, but neither is fatal alone, and standard mitigations
+  (multiple shooting, guarded continuation) are available.
 \end{itemize}
 For this campaign specifically: the Phase-1 pipeline is direct end-to-end;
 the indirect counterpart (Phase 2) is planned as a direct-seeded finisher
@@ -534,14 +640,23 @@ campaign built PMP-steered mesh refinement in which the reconstructed
 switching function steers local mesh densification at each switch. The same
 step belongs in this campaign's future --- switch times from a uniform
 $\sigma$-mesh are only mesh-band accurate, and at deep rungs (hundreds of
-switches) the uniform mesh under-resolves switch clusters. One prerequisite
-gates it: PMP steering needs the switching function, and the two-body primer
-reconstruction is \emph{invalid under lunar gravity} until the ballistic
-third-body rate is subtracted (\S 8). The CR3BP-aware primer and PSR are
-therefore one work package: the corrected switching function both verifies
-the structure and steers its refinement.
+switches) the uniform mesh under-resolves switch clusters. The prerequisite
+this once gated on --- a lunar-aware switching function --- is now built
+(\S\ref{sec:certification}, commit \texttt{4353387}): the primer/switch
+reconstruction correctly subtracts the ballistic third-body rate under
+lunar gravity. What remains open is \emph{not} lunar-specific: PSR consumes
+the same primer/switching reconstruction, and that reconstruction still
+disagrees with the solver's own switches by tens of degrees at both
+certified CR3BP rungs, because of the campaign-wide, eccentricity-
+correlated raw-dual (KKT-multiplier) anomaly that fails the pure two-body
+certified solutions identically (\S\ref{sec:certification}). PSR is
+therefore blocked in practice on that pre-existing anomaly, not on lunar
+awareness; the CR3BP-aware primer and PSR remain one work package, but the
+gating item has moved from ``make the switching function lunar-aware'' to
+``fix the raw-dual recovery the switching function depends on.''
 
 \subsection{Toward genuine local-minimality certificates}
+\label{sec:secondorder}
 
 Everything certified so far is \emph{first-order}: IPOPT's KKT conditions,
 machine-tight defects, endpoint and structure checks. A converged extremal
@@ -561,14 +676,24 @@ evidence has three tiers, in order of readiness:
   switching-time problem.} For bang-bang arcs the right continuous-time
   frame (Maurer, Osmolovskii) reduces the OCP to a finite-dimensional
   problem in the switch times; positive definiteness of that induced
-  Hessian, with no additional zeros of the switching function, is a genuine
-  sufficient condition. Naturally shared with PSR: both live on the
+  Hessian, together with no additional zeros of the switching function, is
+  a genuine sufficient condition \emph{under} the accompanying hypotheses
+  --- normality of the extremal, regular (strict, transversal) switching
+  with no singular arcs, the relevant endpoint constraint qualification,
+  and positivity/coercivity of the induced Hessian on the appropriate
+  critical cone. Absent those, positive definiteness plus no extra zeros
+  certifies only the topology-fixed, finite-dimensional switching-time
+  reduction, not the full OCP. Naturally shared with PSR: both live on the
   arc-parameterized representation.
 \item \textbf{Indirect-side conjugate-point test.} Integrate the Jacobi
   (variational) equation along the extremal and verify no conjugate time in
-  $(0, t_f]$ \cite{BCP2010} --- the classical certificate, planned with the
-  Phase-2 indirect solver, and dependent on the same CR3BP-aware costate
-  reconstruction as PSR.
+  $(0, t_f]$ \cite{BCP2010} --- not, by itself, a generic classical
+  certificate: it requires the associated strengthened Legendre condition
+  and endpoint regularity hypotheses from BCP's setting, and it certifies
+  \emph{weak} local optimality (optimality against nearby extremals of the
+  same structure), which is distinct from \emph{strong} local optimality
+  and from global minimality. Planned with the Phase-2 indirect solver, and
+  dependent on the same CR3BP-aware costate reconstruction as PSR.
 \end{enumerate}
 Until these land, the honest statement remains: our solutions are
 first-order certified extremals whose optimality is corroborated by

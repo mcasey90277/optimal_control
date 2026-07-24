@@ -56,8 +56,23 @@ resDir  = fullfile(here, 'results');
 %   (a) Task-5 artifacts   minfuel_cr3bp_*.mat        (S.best solver struct)
 %   (b) front-door products cr3bp_T*_fuel.mat         (products struct incl.
 %       phi-swept runs; *_2body_control.mat companions are BASELINES, not rows)
-files  = [dir(fullfile(resDir, 'minfuel_cr3bp_*.mat')); ...
-          dir(fullfile(resDir, 'cr3bp_T*_fuel.mat'))];
+filesA = dir(fullfile(resDir, 'minfuel_cr3bp_*.mat'));
+filesB = dir(fullfile(resDir, 'cr3bp_T*_fuel.mat'));
+% Dedup: a Task-5 artifact and a front-door product of the SAME config are the
+% same solve -- keep the front-door row only (2026-07-24, note-feeder hygiene).
+keepA = true(numel(filesA), 1);
+cfgB  = cell(numel(filesB), 1);
+for kd = 1:numel(filesB)
+    Fb = load(fullfile(filesB(kd).folder, filesB(kd).name), 'fp');
+    cfgB{kd} = sprintf('%g_%g_%g', Fb.fp.thrustN, Fb.fp.phi0, Fb.fp.gain);
+end
+for kd = 1:numel(filesA)
+    Fa = load(fullfile(filesA(kd).folder, filesA(kd).name), 'fp');
+    if any(strcmp(sprintf('%g_%g_%g', Fa.fp.thrustN, Fa.fp.phi0, Fa.fp.gain), cfgB))
+        keepA(kd) = false;
+    end
+end
+files = [filesA(keepA); filesB];
 assert(~isempty(files), 'compare_vs_2body:noArtifacts', ...
     'No CR3BP artifacts found in %s -- run solve_cr3bp_minfuel or run_cr3bp_geo first', resDir);
 

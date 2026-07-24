@@ -656,6 +656,124 @@ $\varphi_0$ grid is the recorded follow-up). The sweep is at a single rung
 and a single basin family, and each point carries the same first-order
 certificate as the rest of the campaign (\S 8).
 
+\section{The thrust ladder: results, lessons, and conclusions}
+\label{sec:ladder}
+
+The campaign's second sweep held $\varphi_0 = 0$ and walked the full HMG
+thrust ladder, $10 \to 0.1$\,N, each rung a complete front-door chain
+(recipe seed $\to$ two-body energy $\to$ lunar-gain continuation $\to$
+$\varepsilon$-homotopy) paired with its own same-chain $g=0$ control:
+
+\begin{center}
+\begin{tabular}{ccccc}
+\toprule
+$T$ [N] & $t_f$ [lunar mo] & switches & $\Delta m_f$ [g] & defect\\
+\midrule
+$10$  & $0.19$  & $19$   & $+52.0$ & $4\times10^{-15}$\\
+$5$   & $0.39$  & $36$   & $+48.8$ & $1\times10^{-14}$\\
+$2.5$ & $0.78$  & $70$   & $+49.7$ & $3\times10^{-14}$\\
+$1$   & $1.95$  & $178$  & $+49.3$ & $5\times10^{-14}$\\
+$0.5$ & $3.89$  & $357$  & $+45.9$ & $1\times10^{-13}$\\
+$0.2$ & $9.72$  & $890$  & $+36.8$ & $2\times10^{-13}$\\
+$0.1$ & $19.45$ & $1724$ & $+31.3$ & $5\times10^{-13}$\\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\begin{figure}[htb]
+\centering
+\includegraphics[width=\textwidth]{figs/ladder_dmf.png}
+\caption{Left: the Moon effect down the ladder against transfer time in
+lunar months (same-chain baselines throughout) --- a phase-coherent plateau
+near $50$\,g while $t_f \lesssim 2$ lunar months, then a gentle
+phase-averaged decay toward a nonzero secular floor ($\approx 30$\,g at
+$19$ months). Right: bang-bang structure growth, $19 \to 1724$ switches,
+tracking a $1/T$ reference across two thrust decades (switch counts are
+nodal, mesh-band quantities).}
+\label{fig:ladder}
+\end{figure}
+
+\subsection{Two regimes, one consistent picture}
+
+Read together with \S\ref{sec:phase}, the ladder completes a two-regime
+description of lunar influence on this transfer family. While the transfer
+is short against the lunar month, the tidal geometry set at departure
+persists: the effect sits on the $\varphi_0$-dependent quadrupole
+(\S\ref{sec:phase}), and the plateau value $\approx 50$\,g is simply the
+$\varphi_0 = 0$ slice of that curve. As $t_f$ stretches past a lunar month
+the Moon sweeps many cycles during the transfer, the quadrupole
+contribution averages down, and what survives is a phase-independent
+secular benefit of order $30$\,g --- still comfortably nonzero at $19$
+lunar months. The corresponding operational statement: departure-epoch
+selection is worth $\sim 125$\,g peak-to-peak at the fast end of the
+ladder and, by this mechanism, approximately nothing at the slow end ---
+though the slow end keeps its secular $\sim 30$\,g regardless of epoch.
+A directly testable corollary (recorded, not yet run): a $\varphi_0$ sweep
+at $0.2$ or $0.1$\,N should show the quadrupole amplitude collapsed.
+
+\subsection{Lessons learned}
+
+\begin{enumerate}
+\item \textbf{Formulation choice decides factorization viability.} Every
+  rung at or below $2.5$\,N ($N \gtrsim 700$ nodes) segfaulted inside the
+  bundled MUMPS at one reproducible instruction --- the in-place workspace
+  compression during numerical factorization. Neither single-threading
+  (which traded the crash for a quasi-hang) nor enlarged MUMPS workspace
+  cured it. The cure was already on the shelf: the solver's lifted
+  $\Delta L$ option, added by an earlier external review precisely because
+  the scalar span's dense column produces a bordered (``arrowhead'') KKT
+  hostile to sparse factorization at large $N$. Lifting is numerically
+  identical and block-banded; with it, the entire ladder ran without a
+  single factorization failure.
+\item \textbf{Iteration budget is decisive --- again.} The lifted cold
+  energy solve at $2.5$\,N stalls at $1500$ iterations (defect
+  $7\times10^{-6}$, terminal error already tight) and certifies cleanly at
+  $4000$; the deepest rungs used $10^4$. The same lesson the two-body
+  campaign's deep rungs taught: an under-budgeted solve looks like a wall.
+\item \textbf{The predicted deep-rung wall did not exist.} The two-body
+  campaign needed dedicated machinery (adaptive-$\varepsilon$ bisection,
+  staged recovery) at $0.2$/$0.1$\,N; this campaign's front-door chain,
+  lifted and properly budgeted, carried both rungs through
+  $\varepsilon \to 0$ on the standard schedule. In hindsight a substantial
+  part of the historical deep-rung difficulty is attributable to the
+  unlifted formulation, not to the physics of sharpening.
+\item \textbf{Same-chain baselines are mandatory at this signal size.}
+  Certified results from different pipelines scatter across local basins
+  by up to $\sim 22$\,kg --- more than 400 times the $\sim 50$\,g lunar
+  signal. Two rungs of this ladder landed in basins $9$--$14$\,kg better
+  than the two-body campaign's certified table rows. Every $\Delta m_f$
+  reported here is therefore differenced against a $g=0$ control run
+  through the identical seed, mesh, and continuation path.
+\item \textbf{Fail-loud caches carried their weight.} The fingerprinted,
+  fail-closed checkpoint system (built after an earlier review) refused
+  stale configurations on at least three occasions during the ladder ---
+  including twice against the authors' own scripting mistakes. Every
+  refusal was correct.
+\item \textbf{Per-rung process isolation.} Running each rung in its own
+  interpreter process converted an uncatchable library crash from a
+  campaign-killer into a per-rung retry, and made the crash forensics
+  (identical faulting instruction across five rungs) possible at all.
+\end{enumerate}
+
+\subsection{Conclusions}
+
+For minimum-fuel elliptic$\to$GEO transfers at CR3BP fidelity: lunar
+gravity moves the optimal final mass at the $10^{-5}$ level (tens of
+grams on $1500$\,kg), with a structure that is now quantitatively mapped
+--- a departure-phase quadrupole of amplitude $\approx 57$\,g in the
+phase-coherent regime, decaying past one lunar month of transfer time to a
+phase-independent secular benefit of $\approx 30$\,g. At this problem's
+scale the Moon is thus a refinement, not a design driver; but the
+methodology result is broader: the Earth-centered MEE formulation with an
+opt-in third-body term, gain continuation on the energy objective, and the
+standard $\varepsilon$-homotopy scaled \emph{unchanged} across two decades
+of thrust, $19 \to 1724$ switches, and transfer times from five days to
+seventeen months --- with the free-$\Delta L$ (lifted) span identified as
+the load-bearing formulation choice at scale. The usual caveats stand:
+switch counts are nodal mesh-band quantities, certificates are first-order
+(\S 8), deep-rung defects grow to $5\times10^{-13}$ (seven orders inside
+the gate), and all results live in one basin family per rung.
+
 \section{Direct versus indirect methods: a working position}
 
 \emph{This section is deliberately speculative} --- it records campaign

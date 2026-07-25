@@ -503,6 +503,7 @@ campaign/row, verdict, and what it changed in Part A or §1–§5.
 
 | file | role |
 |---|---|
+| `verify_common/doc/first_order_checks.pdf` (`.tex`) | **the explainer for Part A's generic layer**: every first-order check stated formally + intuitively, with per-campaign run commands, the annotated report block, thresholds table, and the I1/I2/I5 caveats carried verbatim |
 | `earth_elliptic_to_geo/process/DESIGN_sosc.md` §11–12 | NLP SOSC method evolution, `eig` vs `ldl`, threshold rationale |
 | `earth_elliptic_to_geo/process/PLAN_sosc.md` | original build plan |
 | `earth_elliptic_to_geo/direct/verify/sosc/` | the NLP-level implementation |

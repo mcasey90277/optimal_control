@@ -1,0 +1,666 @@
+\documentclass[11pt]{article}
+\usepackage[margin=1.1in]{geometry}
+\usepackage{amsmath,amssymb,amsthm}
+\usepackage{booktabs}
+\usepackage{enumitem}
+\usepackage[T1]{fontenc}
+\usepackage{xcolor}
+\usepackage{hyperref}
+\hypersetup{colorlinks=true, linkcolor=blue!50!black, citecolor=blue!50!black, urlcolor=blue!50!black}
+
+\newcommand{\vx}{\mathbf{x}}
+\newcommand{\vu}{\mathbf{u}}
+\newcommand{\vlam}{\boldsymbol{\lambda}}
+\newcommand{\vbeta}{\boldsymbol{\beta}}
+\newcommand{\Lag}{\mathcal{L}}
+\newcommand{\Ham}{H}
+\newcommand{\file}[1]{\texttt{#1}}
+\newcommand{\code}[1]{\texttt{#1}}
+\newtheorem{condition}{Condition}
+
+\title{First-Order Optimality Checks in \file{verify\_common}:\\
+Mathematics, Code, and Interpretation}
+\author{Michael Casey}
+\date{July 2026}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+\noindent\sloppy
+The \file{orbit\_transfer/verify\_common/} module implements one generic,
+automatic-differentiation--based first-order optimality checker
+(\file{foc\_check.m}) that runs identically on all four transfer campaigns
+(Earth two-body elliptic$\to$GEO, the same transfer in the Earth--Moon CR3BP,
+GTO$\to$tulip, GTO$\to$ELFO), plus a fixed-format report printer
+(\file{foc\_report.m}) that every production solve driver now emits. This note
+explains each check twice over: (a) the mathematics --- the formal necessary
+condition being tested and the intuition behind it --- and (b) the code --- how
+to run it on each campaign and how to read every line of the printed report.
+The checks run in \emph{report-only burn-in}: a FAIL is an advisory finding and
+never demotes a certified solution. The cross-campaign status of every check,
+including the honest caveats repeated here, lives in the register
+\file{OPTIMALITY\_CERTIFICATION.md} at the \file{orbit\_transfer} root.
+\end{abstract}
+
+\tableofcontents
+
+%=====================================================================
+\section{Setting and notation}
+\label{sec:setting}
+
+\subsection{The continuous problem}
+
+All four campaigns solve minimum-fuel (or minimum-time / minimum-energy)
+low-thrust transfer problems of the common form
+\begin{equation}
+\min_{\vbeta(\cdot),\,s(\cdot)}
+\; J \;=\; \int_{0}^{t_f} \ell\bigl(s(t)\bigr)\,dt,
+\qquad
+\dot\vx \;=\; f_0(\vx,t) \;+\; \frac{T_{\max}}{m}\,s\,B(\vx)\,\vbeta,
+\label{eq:ocp}
+\end{equation}
+with unit thrust direction $\|\vbeta\|=1$, throttle $s\in[0,1]$, mass flow
+$\dot m = -(T_{\max}/c)\,s$, fixed endpoints on the orbital state, free final
+mass, and (depending on campaign) fixed or free final time. At the fuel
+endpoint of the Bertrand--\'Ep\'enoy homotopy \cite{BertrandEpenoy2002} the
+running cost is $\ell(s)=s$, linear in the throttle, so Pontryagin's principle
+predicts \emph{bang-bang} control.
+
+Pontryagin's Minimum Principle (PMP) \cite{HMG2004,Lawden1963} introduces the
+costate $\vlam(t)$ and the Hamiltonian
+\begin{equation}
+\Ham(\vx,\vu,\vlam)
+\;=\; \vlam^{\!\top} \Bigl( f_0 + \tfrac{T_{\max}}{m}\,s\,B\vbeta \Bigr)
+\;+\; \lambda_m\,\dot m \;+\; \ell(s),
+\label{eq:ham}
+\end{equation}
+and asserts, along an optimal trajectory: costate dynamics
+$\dot\vlam = -\partial\Ham/\partial\vx$, the pointwise \emph{minimum condition}
+$\vu^\ast = \arg\min_{\vu\,\in\,\mathcal U}\Ham$, transversality at free
+terminal components, and constancy (autonomous case) or a terminal value
+condition (free $t_f$) on $\Ham$. Section~\ref{sec:checks} maps each of these
+onto a concrete numerical test.
+
+\subsection{The discrete problem the checks actually see}
+
+Each campaign transcribes \eqref{eq:ocp} by trapezoidal collocation on a mesh
+$0=\sigma_1<\dots<\sigma_{N+1}=1$ with steps $h_k=\sigma_{k+1}-\sigma_k$: the
+decision vector $z$ stacks the node states
+$X\in\mathbb R^{n_x\times(N+1)}$ (column-major), then the node controls
+$U\in\mathbb R^{n_u\times(N+1)}$, then any extra scalars (the Earth campaign's
+longitude span $\Delta L$). The dynamics enter as \emph{defect} equality
+constraints, one $n_x$-vector per interval,
+\begin{equation}
+d_k \;=\; x_{k+1}-x_k-\tfrac{h_k}{2}\,\Xi\,\bigl(F_k+F_{k+1}\bigr) \;=\;0,
+\qquad k=1,\dots,N,
+\label{eq:defect}
+\end{equation}
+where $\Xi$ is the campaign's clock factor ($\Delta L$, the Sundman span, or
+the \code{cScale} free-final-time slack state of Betts \cite{Betts2010}). The cone $\|\vbeta_k\|^2=1$, the throttle box
+$s_k\in[0,1]$, the state boxes, and the boundary conditions complete the
+nonlinear program (NLP)
+\begin{equation}
+\min_z\; f(z) \quad\text{s.t.}\quad g(z)\in[g_L,\,g_U].
+\label{eq:nlp}
+\end{equation}
+IPOPT returns a primal--dual pair $(z^\ast,\vlam_g)$. Everything in this note
+is computed \emph{at that pair}, by differentiating with CasADi the exact
+$f$ and $g$ that were solved --- never a hand-transcribed copy of the physics.
+That is the design principle of the layer: the checks cannot drift out of sync
+with the solver, because they differentiate the solver's own model.
+
+\paragraph{Campaign manifests.}
+What varies between campaigns is bookkeeping, not structure. A
+\emph{manifest} (\file{foc\_manifest.m}) records it:
+
+\begin{center}
+\small
+\begin{tabular}{@{}llllll@{}}
+\toprule
+manifest & $n_x$ (state) & $n_u$ & mass row & time row & horizon \\
+\midrule
+\code{earth\_mee}     & 7 $[P,e_x,e_y,h_x,h_y,m,t]$ & 4 & 6 & 7 & fixed $t_f$ \\
+\code{earth\_cr3bp}   & 7 (same; non-autonomous)      & 4 & 6 & 7 & fixed $t_f$ \\
+\code{tulip}          & 8 $[\mathbf r,\mathbf v,m,t]$ & 4 & 7 & 8 & fixed $\tau_f$ \\
+\code{elfo\_fuel}     & 9 $[\mathbf r,\mathbf v,m,t,c]$ & 4 & 7 & 8 & free $t_f$ (\code{cScale}) \\
+\code{elfo\_mintime}  & 9 (same)                      & 3 & 7 & 8 & free $t_f$ (\code{cScale}) \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\noindent
+Controls are $[\vbeta;s]$; the ELFO min-time solver pins $s\equiv1$ and carries
+only $\vbeta$ ($n_u=3$), so the manifest's empty \code{thrRow} switches the
+throttle-dependent checks off --- correctly, since an all-burn arc has no
+switching structure to test. Empty manifest fields always mean ``skip that
+check,'' never ``pretend it passed.''
+
+\subsection{Multipliers done right}
+\label{sec:duals}
+
+The single most important implementation rule: multipliers come from the raw
+low-level vector \code{opti.lam\_g}, indexed by \emph{constraint-row ranges
+recorded at build time} (the \code{creg} registry each solver attaches under
+\code{returnModel}). The convenience accessor \code{opti.dual()} returns duals
+in CasADi's \emph{canonicalized} constraint orientation, which for a
+row-wise-canonicalizing constraint (every collocation defect here) produces
+entry-wise sign corruption --- the root cause of a 10--60$^\circ$ ``primer
+anomaly'' that cost this project nine days of misdiagnosis in July 2026. The
+full post-mortem is
+\file{earth\_elliptic\_to\_geo/process/LESSONS\_DUAL\_EXTRACTION.md}; the
+minimal reproduction is
+\file{results/dual\_anomaly/diag\_optidual\_minimal.m}.
+
+One genuine ambiguity remains: CasADi/IPOPT's overall Lagrangian sign
+convention, $\Lag = f \pm \vlam_g^{\!\top} g$. It is resolved empirically,
+once, for the whole multiplier vector:
+\begin{equation}
+s^\ast \;=\; \arg\min_{s\in\{+1,-1\}}
+\bigl\| \nabla_z f + s\,A^{\!\top}\vlam_g \bigr\|_\infty,
+\qquad A = \partial g/\partial z .
+\label{eq:signres}
+\end{equation}
+A correct certificate drives one of the two residuals to machine precision and
+leaves the other $O(1)$, so the resolution is unambiguous in practice
+(e.g.\ $1.5\times10^{-14}$ vs $6.6$ on the Earth 10\,N row).
+
+%=====================================================================
+\section{The checks}
+\label{sec:checks}
+
+Each subsection states the condition formally, gives the intuition, names the
+code, and says how to read the report line. Thresholds are collected in
+Table~\ref{tab:thresholds} (Section~\ref{sec:report}).
+
+%---------------------------------------------------------------
+\subsection{KKT stationarity: the master residual}
+\label{sec:kkt}
+
+\begin{condition}[Lagrangian stationarity]
+At a local minimizer $z^\ast$ of \eqref{eq:nlp} with multipliers $\vlam_g$,
+\begin{equation}
+\nabla_z \Lag \;=\; \nabla_z f(z^\ast) + s^\ast A^{\!\top}\vlam_g \;=\; 0 .
+\label{eq:kkt}
+\end{equation}
+\end{condition}
+
+\paragraph{Formal content.}
+Equation~\eqref{eq:kkt} is the discrete image of \emph{several} continuous PMP
+conditions at once. Stationarity with respect to the state columns $x_k$
+\emph{is} the discrete adjoint recursion --- the trapezoidal transcription of
+$\dot\vlam=-\partial\Ham/\partial\vx$, including, in the CR3BP campaign, the
+explicit time-dependence terms $\partial\Ham/\partial t$ that make the problem
+non-autonomous. Stationarity with respect to a free horizon variable
+($\Delta L$, \code{cScale}) is the transversality-type condition attached to
+the free span. So a machine-small $\|\nabla_z\Lag\|_\infty$ certifies the
+costate dynamics and the horizon condition simultaneously, at collocation
+order, without either being coded explicitly.
+
+\paragraph{Intuition.}
+``No first-order descent direction exists that respects the constraints.'' If
+you could improve the objective by perturbing any state, control, or span
+variable while staying feasible to first order, some component of
+$\nabla_z\Lag$ would be nonzero. This is the strongest and least interpretable
+check: it says \emph{extremal}, loudly, but points at nothing physical when it
+fails.
+
+\paragraph{Code.}
+\file{foc\_check.m}, first block: builds
+$\nabla_z f$ and $A$ by CasADi AD from \code{opti.f}, \code{opti.g}, evaluates
+at the solved primal--dual pair, resolves the sign by \eqref{eq:signres}, and
+reports \code{rep.kktStatInf} $=\|\nabla_z\Lag\|_\infty$ and
+\code{rep.sLag} $=s^\ast$.
+
+\paragraph{Interpretation.}
+Healthy values are $10^{-14}$--$10^{-10}$; the observed range across all
+certified rows is $1.5\times10^{-14}$ to $6.9\times10^{-10}$. The gate is a
+deliberately loose $10^{-6}$: anything between $10^{-8}$ and $10^{-6}$
+suggests a sloppily converged dual (re-run the warm re-solve tighter);
+anything above $10^{-6}$ means the multipliers are \emph{not} a certificate
+and every downstream line of the report is meaningless --- fix this first.
+
+%---------------------------------------------------------------
+\subsection{The minimum condition, direction part: tangential
+$\partial\Lag/\partial\vbeta$}
+\label{sec:direction}
+
+\begin{condition}[Pointwise minimization over the thrust sphere]
+At each node with $s_k>0$, $\vbeta_k$ minimizes $\Ham$ over
+$\|\vbeta\|=1$, i.e.\ $\vbeta_k = -\,p_k/\|p_k\|$ where
+$p_k = B(x_k)^{\!\top}\vlam_{v,k}$ is the primer vector \cite{Lawden1963}.
+Equivalently, the \emph{tangential} component of the Hamiltonian gradient
+vanishes:
+\begin{equation}
+\bigl(I-\vbeta_k\vbeta_k^{\!\top}\bigr)\,
+\frac{\partial \Lag}{\partial \vbeta_k} \;=\; 0 .
+\label{eq:tangential}
+\end{equation}
+\end{condition}
+
+\paragraph{Formal content.}
+$\Ham$ is linear in $\vbeta$ at fixed throttle, so minimizing over the unit
+sphere aligns $\vbeta$ anti-parallel to the primer. The sphere constraint
+$\|\vbeta\|^2=1$ carries its own multiplier, which is purely \emph{radial}
+(its gradient is $2\vbeta$); projecting it out with $(I-\vbeta\vbeta^{\top})$
+leaves a quantity that must vanish independently of that multiplier's value.
+
+\paragraph{Intuition.}
+``The thrust points exactly where the costates say it should.'' Any tangential
+residual means rotating the thrust vector slightly would lower the Hamiltonian
+--- a first-order improvement the optimizer left on the table.
+
+\paragraph{Code.}
+\file{foc\_check.m} direction block: extracts the $\vbeta$-rows of the full
+Lagrangian gradient at each burn node, projects out the radial part, reports
+\code{rep.dirTanMax} / \code{rep.dirTanMed} over burn nodes.
+
+\paragraph{Interpretation --- with an honest caveat.}
+Values at machine precision ($10^{-17}$--$10^{-16}$ observed) are expected.
+Two limitations, recorded as pre-promotion items in the register's \S A6:
+(i) this residual is bounded by $\sqrt3\cdot$\code{kktStatInf} \emph{by
+construction} --- it is a readable projection of check~\ref{sec:kkt}, not an
+independent test; and (ii) tangential stationarity is \emph{sign-blind}:
+$\vbeta=+p/\|p\|$ (the Hamiltonian \emph{maximizer}) satisfies
+\eqref{eq:tangential} identically. Minimality of the direction is currently
+carried by the physical layer (primer-alignment angle in
+\file{verify\_pmp\_mee} / the solver's own \code{primerAlignDeg}) and by the
+sign law below, not by this line alone. A future revision will exclude the
+cone multiplier explicitly and test its sign.
+
+%---------------------------------------------------------------
+\subsection{The minimum condition, throttle part: the switching sign law}
+\label{sec:signlaw}
+
+\begin{condition}[Bang-bang law]
+Write $\Ham = \Ham_0 + s\,S(t)$ (affine in the throttle at fixed direction;
+$S$ is the \emph{switching function}). Along a fuel-optimal trajectory,
+\begin{equation}
+s^\ast(t) \;=\;
+\begin{cases}
+1, & S(t) < 0,\\
+0, & S(t) > 0,
+\end{cases}
+\qquad\text{singular arcs where } S\equiv 0 .
+\label{eq:banglaw}
+\end{equation}
+\end{condition}
+
+\paragraph{Formal content.}
+Because $\ell(s)=s$ is linear, the throttle minimizer sits at a \emph{bound},
+not at a stationary point --- testing $\partial\Ham/\partial s = 0$ would be
+the wrong condition. The discrete surrogate: form the Lagrangian gradient with
+the throttle-bound multiplier rows \emph{removed},
+\begin{equation}
+S^d_k \;=\;
+\Bigl[\nabla_z f + s^\ast A_{\setminus\mathrm{box}}^{\!\top}
+\vlam_{g,\setminus\mathrm{box}}\Bigr]_{s_k\text{-row}},
+\label{eq:Sd}
+\end{equation}
+which equals the continuous $S(\sigma_k)$ up to a \emph{positive} factor (the
+local trapezoid weight $w_k$ times the clock factor). Removing the bound rows
+matters: at an active bound, KKT makes the \emph{full} gradient row zero by
+absorbing $S^d_k$ into the bound multiplier --- the sign information lives
+precisely in what the bound multiplier had to absorb.
+
+\paragraph{Intuition.}
+$S$ is the marginal Hamiltonian cost of thrust: ``would one more Newton-second
+here help or hurt?'' Negative $\Rightarrow$ burn at full throttle; positive
+$\Rightarrow$ coast. The check asks whether the solver's actual on/off pattern
+agrees with its own multipliers' answer at \emph{every} node.
+
+\paragraph{Code.}
+\file{foc\_check.m} sign-law block: \code{rep.Sd} (the per-node values),
+\code{rep.signPct} $=100\cdot\#\{k: (S^d_k<0) \Leftrightarrow s_k>0.5\}/(N{+}1)$.
+Skipped (\code{'-{}-'}) when the manifest has no throttle row (min-time).
+
+\paragraph{Interpretation.}
+Gate: $\ge 99\%$. Certified rows read $100\%$. A few disagreeing nodes at
+exactly the switch times are tolerable mesh artifacts (a node can straddle a
+crossing); broad disagreement (the pre-fix era read 78\%) means the duals are
+corrupted or the solution is not extremal. Note the $\varepsilon$ caveat: at
+homotopy stages $\varepsilon>0$ the running cost is quadratic in $s$, the
+bang-bang law does not apply, and the line is advisory-only (printed with a
+caveat by the ELFO energy-seed run).
+
+%---------------------------------------------------------------
+\subsection{Costate extraction: interval duals to nodal costates}
+\label{sec:costates}
+
+\begin{condition}[Discrete costate consistency]
+The defect multipliers $\Lambda_k\in\mathbb R^{n_x}$ of \eqref{eq:defect} are
+the discrete costates of interval $k$; the continuous costate sampled at an
+interior node is their step-weighted average,
+\begin{equation}
+\vlam(\sigma_k) \;=\;
+\frac{h_{k-1}\Lambda_{k-1} + h_k \Lambda_k}{h_{k-1}+h_k},
+\qquad
+\vlam(\sigma_1)=\Lambda_1,\quad \vlam(\sigma_{N+1})=\Lambda_N .
+\label{eq:dualmap}
+\end{equation}
+\end{condition}
+
+\paragraph{Formal content and intuition.}
+A trapezoid defect couples nodes $k$ and $k{+}1$, so its multiplier ``lives on
+the interval,'' not at a node --- the same way a finite-volume flux lives on a
+face. The weighted average \eqref{eq:dualmap} is what the discrete adjoint
+recursion identifies with the nodal costate (derivation adjudicated in
+\file{process/DESIGN\_dual\_map.md}); on a uniform mesh it reduces to the
+plain average of the two neighboring interval duals. The one-sided endpoint
+values are the honest price of the scheme --- see the transversality caveat
+below.
+
+\paragraph{Code.}
+\file{foc\_dual\_to\_costate.m} (generic in $n_x$; unit-tested at $n_x=9$ on a
+non-uniform mesh). \file{foc\_check.m} applies it with the resolved sign:
+\code{rep.lam} $= [\vlam(\sigma_1),\dots,\vlam(\sigma_{N+1})]$. This array is
+an \emph{output for downstream consumers} (primer plots, PSR, the physical
+verifiers), not itself a gate.
+
+%---------------------------------------------------------------
+\subsection{Transversality: free final mass}
+\label{sec:transversality}
+
+\begin{condition}[Free-terminal-state transversality]
+The final mass is unconstrained and carries no terminal cost, so
+\begin{equation}
+\lambda_m(t_f) \;=\; 0 .
+\label{eq:transv}
+\end{equation}
+\end{condition}
+
+\paragraph{Intuition.}
+$\lambda_m$ prices mass: ``what is one more kilogram at time $t$ worth to the
+objective?'' At the end of the mission, leftover propellant buys nothing ---
+its shadow price must be zero. A nonzero $\lambda_m(t_f)$ means the solution
+is still trading mass against the objective at the final instant, i.e.\ it is
+not done optimizing.
+
+\paragraph{Code.}
+\code{rep.lamMassEndRel} $= |\lambda_m(\sigma_{N+1})| / \max_k
+|\lambda_m(\sigma_k)|$ --- \emph{relative}, because an absolute gate is
+scale-dependent across campaigns. Skipped when the manifest declares the mass
+not free at $t_f$.
+
+\paragraph{Interpretation --- with an honest caveat.}
+Gate: $\le 10^{-3}$. Most rows read $10^{-9}$--$10^{-4}$. Three rows (Earth
+5\,N at $3.2\times10^{-3}$, 2.5\,N at $1.3\times10^{-3}$, CR3BP 5\,N at
+$3.1\times10^{-3}$) miss the gate by $\sim3\times$ while their KKT residuals
+are machine-tight. Two candidate readings, both recorded in the register:
+(i) those are exactly the rows where warm re-solves find improved optima ---
+under-converged mass costates on under-optimized rungs; or (ii) a
+discretization artifact: by \eqref{eq:dualmap} the endpoint costate is the
+\emph{one-sided} interval value, $\lambda_m$ at $\approx t_f - h/2$, which
+carries an $O(h)\,|\dot\lambda_m|$ bias whenever the final arc burns. The
+cheap discriminator (endpoint extrapolation, or checking whether the final arc
+is a burn) is queued as pre-promotion work. Until then, treat marginal misses
+on this line as a flag to investigate, not as a verdict.
+
+%---------------------------------------------------------------
+\subsection{The time costate: Hamiltonian conditions in dual form}
+\label{sec:timecostate}
+
+\begin{condition}[Hamiltonian constancy / terminal value]
+With time carried as a state (row $t$ of $X$), its costate satisfies
+$\dot\lambda_t = -\,\partial\Ham/\partial t$ and $\Ham \equiv -\lambda_t$
+along the trajectory. Hence:
+\begin{enumerate}[label=(\roman*),nosep]
+\item autonomous dynamics, fixed $t_f$: $\lambda_t$ is \emph{constant}
+      (generally nonzero) --- $\Ham$ is a first integral;
+\item free $t_f$, objective $J=t(\tau_f)$ (min-time): transversality gives
+      $\lambda_t(t_f) = \pm 1$ (sign fixed by the Lagrangian convention), and
+      constancy then propagates that value backward;
+\item non-autonomous (CR3BP: the Moon's phase is an explicit function of
+      $t$): $\lambda_t$ is \emph{not} constant, and no constancy gate applies.
+\end{enumerate}
+\end{condition}
+
+\paragraph{Intuition.}
+$-\lambda_t$ \emph{is} the Hamiltonian, by the time-as-state trick: asking
+``is $\Ham$ conserved?'' becomes ``is one costate row flat?'' --- a far easier
+quantity to read off the NLP than a reconstructed $\Ham(t)$. The min-time
+value condition is the classic ``the Hamiltonian equals minus the marginal
+value of deadline time'': for $J=t_f$, one more second costs exactly one unit.
+
+\paragraph{Code.}
+\code{rep.lamTimeCoV} (coefficient of variation of $\lambda_t$ over the nodes)
+and \code{rep.lamTimeEnd}. This line is \emph{informational for every
+campaign} --- it carries no PASS/FAIL --- and \code{rep.horizonNote} states
+which case applies.
+
+\paragraph{Interpretation.}
+Earth fixed-$t_f$ rows show CoV $\sim10^{-9}$: textbook constancy. The ELFO
+min-time anchor reads $\lambda_t(t_f) = -1.000$ --- the exact theoretical
+free-$t_f$ transversality value, a strong independent confirmation obtained
+with no min-time--specific code. Its CoV of $5.7\times10^{-2}$, however, is
+\emph{not} small for an autonomous model; this is an open observation
+(candidate explanations: the two-primary Sundman clock + \code{cScale}
+structure distributes the horizon condition differently than the plain
+reading assumes, or the anchor's duals are less converged than its primal) ---
+see the register before leaning on that number.
+
+%---------------------------------------------------------------
+\subsection{Singular-arc detection}
+\label{sec:singular}
+
+\begin{condition}[No unexamined singular arcs]
+On any interval where $S\equiv0$, the bang-bang law \eqref{eq:banglaw} is
+silent and higher-order conditions (generalized Legendre--Clebsch) govern.
+The check: no run of $\ge 3$ consecutive nodes with
+$|S^d_k| < \max(10^{-6}\cdot\mathrm{scale},\,10^{-14})$,
+where scale is the median $|S^d|$ over coast nodes.
+\end{condition}
+
+\paragraph{Intuition.}
+A singular arc is a stretch where the marginal value of thrust is exactly
+zero --- the optimizer is indifferent, and intermediate throttle can be
+optimal. None are expected in these problems (and none have been seen:
+\code{singularArcNodes = 0} on every row), but a solver stuck on a flat of
+$S\approx0$ would silently produce garbage switch structure; this line makes
+that loud instead.
+
+\paragraph{Code/interpretation.}
+\code{rep.singularArcNodes}; gate is $=0$. A nonzero count means: do not trust
+the switch count or switch times of this row until the arc is examined with
+the higher-order conditions.
+
+%---------------------------------------------------------------
+\subsection{Regular switching: $\dot S\neq 0$ at every switch}
+\label{sec:sdot}
+
+\begin{condition}[Transversal crossings]
+At each throttle switch time $t_i$, the switching function crosses zero
+transversally: $\dot S(t_i)\neq 0$. This is ingredient (ii) of the
+Maurer--Osmolovskii sufficient conditions for a bang-bang local minimum
+\cite{OsmolovskiiMaurer2012}, and it is what makes switch times well-defined,
+isolated, and differentiable objects.
+\end{condition}
+
+\paragraph{Intuition.}
+A switch where $S$ merely \emph{grazes} zero is fragile: an arbitrarily small
+model perturbation can create, destroy, or slide it, and the finite-dimensional
+switching-time problem that any second-order certificate is built on loses its
+footing. Regular crossings are what let you speak of ``the 25 switches'' as a
+stable, countable structure.
+
+\paragraph{Code.}
+\code{rep.sdotMinRel} $=\min_i |S^d_{k_i+1}-S^d_{k_i}| / \mathrm{scale}$ over
+the switch nodes $k_i$; \code{rep.nSwitches}. Gate: $>10^{-3}$.
+
+\paragraph{Interpretation --- with the register's caveat.}
+Small values flag \emph{candidate} grazing --- e.g.\ tulip flagship
+$1.4\times10^{-7}$ (25 switches), ELFO $1.33\times$ front row
+$4.5\times10^{-5}$ (50 switches) --- consistent with the node-grazing-switch
+behavior the tulip campaign already suspected. But note the recorded
+discretization confound (register finding I1): $S^d_k$ carries the local
+trapezoid weight $w_k$ and the difference is not divided by the step, so on
+refined or PSR-split meshes (which densify \emph{exactly at switches}) the
+statistic shrinks with $h$ even for a perfectly regular crossing.
+Mesh-normalizing this line is required work before it can become a hard gate;
+until then read a FAIL here as ``inspect this switch on the mesh,'' not
+``the switch is degenerate.''
+
+%---------------------------------------------------------------
+\subsection{The second-order line: IPOPT native inertia ($\delta_w$)}
+\label{sec:inertia}
+
+Strictly beyond first order, but printed in the same report because it is
+free. IPOPT's inertia-controlled linear solver adds a Hessian regularization
+$\delta_w>0$ \emph{only} when the reduced Hessian is indefinite at the current
+iterate. If the solver converges with $\delta_w=0$ over its final iterations,
+no direction of negative curvature exists on the well-scaled barrier system at
+the final $\mu$: for $\varepsilon>0$ a strict local minimum of the NLP; at
+$\varepsilon=0$ (bang-bang, objective linear in throttle) a \emph{weak}
+(non-strict) local minimum --- strictness lives in the switching times, which
+is precisely the still-open Maurer curvature test. The interpreter is
+\file{foc\_ipopt\_inertia.m}, reading the $\delta_w$ history that every
+production solver now records (\code{out.regHistory}); verdicts are
+\code{LOCAL MIN} / \code{NOT CERTIFIED} / \code{NO-DATA}.
+
+%=====================================================================
+\section{Running the layer and reading the report}
+\label{sec:report}
+
+\subsection{Entry points per campaign}
+
+All commands assume MATLAB R2025b, run from the named folder, after
+\code{setup\_paths} and
+\code{addpath(fullfile(getenv('HOME'),'casadi-3.7.0'))}. Each entry point
+loads a certified artifact, \emph{warm re-solves at its saved primal} (to
+attach the live CasADi model and re-derive multipliers under the corrected
+extraction), guards that re-solve on the certified quantities (solver success,
+defect $\le10^{-8}$, one-sided final mass --- or non-degraded $t_f$ for
+min-time), then runs \code{foc\_check} and prints \code{foc\_report}.
+
+\begin{itemize}[leftmargin=2em]
+\item \textbf{Earth two-body} (\file{earth\_elliptic\_to\_geo/direct/}):\\
+\code{[rep, ver] = run\_foc\_mee('results/MEE\_M2\_10N.mat');}\\
+Ladder-wide sweep (all nine certified rows, generic + physical gates side by
+side): \code{T = run\_verify\_pmp\_all();}
+\item \textbf{Earth CR3BP} (\file{earth\_elliptic\_to\_geo\_CR3BP/direct/}):\\
+\code{ver = verify\_cr3bp\_pmp(struct('thrustN',10,'phi0',0));}
+(FOC block runs automatically; result in \code{ver.foc}).
+\item \textbf{GTO$\to$tulip} (\file{GTO\_tulip/direct/sundman\_minfuel/}):\\
+\code{rep = run\_foc\_tulip();} --- defaults to the certified 25-switch
+flagship; also runs the independent least-squares costate reconstruction
+(\code{certify\_minfuel\_pmp}) and records both in \code{rep.crossCheck}.
+\item \textbf{GTO$\to$ELFO} (\file{GTO\_ELFO/direct/elfo/}):
+\begin{small}
+\begin{verbatim}
+rep = run_foc_elfo('mintime', fullfile('results','mintime_elfo.mat'));
+rep = run_foc_elfo('fuel', ...
+       fullfile('results','minfuel_ELFO_tf1p330_sw50_minEps0.mat'));
+\end{verbatim}
+\end{small}
+\end{itemize}
+
+\noindent
+In addition, the production drivers (\code{run\_gergaud},
+\code{run\_cr3bp\_geo}, \code{run\_psr}, \code{run\_elfo\_minfuel},
+\code{gen\_elfo\_mintime}) emit the report automatically after a live
+certifying solve, try/catch-guarded so a report failure can never fail a
+solve. Each run also saves a sidecar
+\code{results/foc\_<tag>.mat} containing the full \code{rep} struct for later
+inspection.
+
+\subsection{Anatomy of the report}
+
+A real block, from the tulip flagship (July 2026):
+
+\begin{small}
+\begin{verbatim}
+========== FIRST-ORDER OPTIMALITY REPORT: sundman_minfuel_certified ==========
+ KKT stationarity  ||grad_x L||_inf :  5.746e-13   (sign s=+1)   PASS
+ Min condition (throttle sign law)  :    100.00 %                PASS
+ Transversality |lam_m(tf)| rel     :  5.239e-09                 PASS
+ Singular-arc nodes                 :          0                 PASS
+ Regular switching min|Sdot| rel    :  1.376e-07   (25 switches) FAIL
+ ADVISORY verdict: FAIL   (report-only burn-in: does not alter certified status)
+\end{verbatim}
+\end{small}
+
+\noindent
+Line-by-line: the row is a machine-tight extremal (\S\ref{sec:kkt}) whose
+thrust program agrees with its own multipliers everywhere
+(\S\ref{sec:signlaw}), has priced its propellant to zero at $t_f$
+(\S\ref{sec:transversality}), has no singular arcs (\S\ref{sec:singular}) ---
+and carries at least one switch whose crossing slope is suspiciously small
+(\S\ref{sec:sdot}; recall the mesh caveat before concluding physical
+grazing). The advisory verdict is the conjunction of the gated lines; here it
+is FAIL \emph{solely} because of the $\dot S$ line, and, per the burn-in
+policy, it changes nothing about the row's certified status --- it files a
+finding.
+
+The direction line (\S\ref{sec:direction}), the time-costate line
+(\S\ref{sec:timecostate}), the horizon note, and the $\delta_w$ line
+(\S\ref{sec:inertia}) appear when applicable; a \code{'-{}-'} status always
+means ``check skipped by the manifest or value not applicable,'' never a
+silent pass.
+
+\begin{table}[h]
+\centering
+\small
+\begin{tabular}{@{}llll@{}}
+\toprule
+report line & \code{rep} field & gate & skipped when \\
+\midrule
+KKT stationarity & \code{kktStatInf} & $\le 10^{-6}$ & never \\
+Min condition (direction) & \code{dirTanMax} & $\le 10^{-6}$ & \code{dirRows} empty \\
+Min condition (sign law) & \code{signPct} & $\ge 99\,\%$ & \code{thrRow} empty (min-time) \\
+Transversality (mass) & \code{lamMassEndRel} & $\le 10^{-3}$ & mass not free at $t_f$ \\
+Time-costate CoV / end & \code{lamTimeCoV}, \code{lamTimeEnd} & informational & \code{timeRow} empty \\
+Singular-arc nodes & \code{singularArcNodes} & $=0$ & \code{thrRow} empty \\
+Regular switching & \code{sdotMinRel} & $> 10^{-3}$ & \code{thrRow} empty \\
+IPOPT inertia $\delta_w$ & \code{ipopt.certLocalMin} & informational & no \code{regHistory} \\
+\bottomrule
+\end{tabular}
+\caption{Report lines, their \code{rep} fields, and default thresholds
+(\file{foc\_check.m} defaults; \file{foc\_report.m} prints matching labels).
+The advisory verdict \code{rep.pass} is the conjunction of the gated rows.}
+\label{tab:thresholds}
+\end{table}
+
+\subsection{Policy and provenance}
+
+The layer runs in \textbf{report-only burn-in}: \code{rep.pass} is advisory,
+every printed block carries the disclaimer, and no certified row can be
+demoted by a FAIL. Promotion to a hard gate is a recorded future decision,
+blocked on the \S A6 checklist of
+\file{orbit\_transfer/OPTIMALITY\_CERTIFICATION.md} (mesh-normalize
+$\dot S$; make the direction check independent and sign-aware; resolve the
+transversality endpoint bias). That register --- not this note --- is the
+living source of per-row results and open findings; this note explains what
+the instruments measure and how to hold them.
+
+\begin{thebibliography}{9}
+
+\bibitem{HMG2004}
+T.~Haberkorn, P.~Martinon, and J.~Gergaud,
+``Low-thrust minimum-fuel orbital transfer: a homotopic approach,''
+\emph{Journal of Guidance, Control, and Dynamics}, 27(6), 2004.
+
+\bibitem{BertrandEpenoy2002}
+R.~Bertrand and R.~\'Ep\'enoy,
+``New smoothing techniques for solving bang-bang optimal control problems ---
+numerical results and statistical interpretation,''
+\emph{Optimal Control Applications and Methods}, 23(4), 2002.
+
+\bibitem{Lawden1963}
+D.~F. Lawden,
+\emph{Optimal Trajectories for Space Navigation},
+Butterworths, London, 1963.
+
+\bibitem{OsmolovskiiMaurer2012}
+N.~P. Osmolovskii and H.~Maurer,
+\emph{Applications to Regular and Bang-Bang Control: Second-Order Necessary
+and Sufficient Optimality Conditions in Calculus of Variations and Optimal
+Control}, SIAM, Philadelphia, 2012.
+
+\bibitem{Betts2010}
+J.~T. Betts,
+\emph{Practical Methods for Optimal Control and Estimation Using Nonlinear
+Programming}, 2nd ed., SIAM, Philadelphia, 2010.
+
+\end{thebibliography}
+
+\end{document}

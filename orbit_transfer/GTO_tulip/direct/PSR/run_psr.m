@@ -414,6 +414,35 @@ save(dataFile, 'ipoptCert', '-append');
 fprintf('[stage 5b] IPOPT certificate appended to %s\n', dataFile);
 
 %% ------------------------------------------------------------------------
+%% 5c. FOC/KKT GATE  (generic first-order optimality report -- advisory)
+%% ------------------------------------------------------------------------
+% Task 8 (2026-07-25): the generic AD-based FOC/KKT gate (verify_common/
+% foc_check.m) run on THIS run's final solve, via run_foc_tulip.m -- a warm
+% re-solve of finalSol with opts.returnModel=true attached (Task 8's hook on
+% casadi_minfuel_sundman.m), so the live Opti model + constraint registry are
+% available for the AD Lagrangian-gradient check, alongside the independent
+% LS-reconstructed-costate cross-check (certify_minfuel_pmp.m). Advisory
+% only, try/catch-guarded so a FOC-gate hiccup never breaks the certified
+% pipeline. Skipped for eps>0 smooth runs: run_foc_tulip's re-solve (and its
+% certify_minfuel_pmp cross-check) are both derived for the eps=0 bang-bang
+% switching-function law, so re-solving a smooth primal at eps=0 would not be
+% "at the saved primal" at all -- it would probe a different homotopy point.
+% Homotopy-sweep calls (stages 2/3) are untouched by this addition.
+if bangBang
+    try
+        fprintf('\n[stage 5c] FOC/KKT GATE (generic first-order optimality report)...\n');
+        focRep = run_foc_tulip(finalSol);  %#ok<NASGU> (saved below)
+        save(dataFile, 'focRep', '-append');
+        fprintf('[stage 5c] FOC/KKT report appended to %s\n', dataFile);
+    catch focErr
+        warning('run_psr:focGateFailed', ...
+            'stage 5c FOC/KKT gate failed (advisory only, pipeline unaffected): %s', focErr.message);
+    end
+else
+    fprintf('\n[stage 5c] FOC/KKT GATE skipped: eps=%.3g smooth run (run_foc_tulip is eps=0-only).\n', epsMin);
+end
+
+%% ------------------------------------------------------------------------
 %% 6. CONTROL MOVIE  (transfer + control law, synced)
 %% ------------------------------------------------------------------------
 % Rotating CR3BP frame. Trajectory animated in bold, red = burn / blue =

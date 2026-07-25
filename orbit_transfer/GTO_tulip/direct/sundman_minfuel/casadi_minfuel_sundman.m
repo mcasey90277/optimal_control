@@ -45,6 +45,14 @@ function out = casadi_minfuel_sundman(sigma, tf, rv0, rvf, Tmax, c, muStar, X0, 
 %   opts    - (optional) struct: .vBox position/velocity... see below
 %           .vBox - velocity box half-width, ND [scalar, default 12]
 %           .rBox - position box half-width, ND [scalar, default 3]
+%           .returnModel - (default false) true -> ADDITIONALLY attach
+%           out.model = struct('opti',opti,'creg',creg) with the live solved
+%           CasADi Opti object and a constraint registry creg (struct array,
+%           fields .label[char] .rows[1xk] row range into opti.g) recording
+%           the 'defect', 'betaNorm', 'thrLo', 'thrHi' constraint groups, for
+%           the generic FOC/KKT gate (verify_common/foc_check.m). Purely
+%           additive: with the flag absent/false, X/U are byte-identical and
+%           out.model is absent (Task 8, 2026-07-25).
 %           Omit or pass [] / struct() for the nominal (byte-identical) bounds.
 %
 % OUTPUTS:
@@ -60,6 +68,12 @@ function out = casadi_minfuel_sundman(sigma, tf, rv0, rvf, Tmax, c, muStar, X0, 
 %           tightest nonphysical-box slack at INTERIOR nodes (BCs pin the
 %           endpoints by construction); .hit true warns the box may be
 %           binding and should be widened via opts before trusting the result
+%         .regHistory [1xnIter or []] - IPOPT's per-iteration Hessian
+%           regularization delta_w (st.iterations.regularization_size), or []
+%           if the CasADi build lacks it; interpret via
+%           verify_common/foc_ipopt_inertia.m (same field name/shape as
+%           PSR/lib/casadi_minfuel_sundman.m and psr_ipopt_certify.m expect)
+%         .model (opts.returnModel only) - struct('opti',opti,'creg',creg)
 %
 % REFERENCES:
 %   [1] Bertrand & Epenoy, "New smoothing techniques for solving bang-bang
@@ -67,6 +81,9 @@ function out = casadi_minfuel_sundman(sigma, tf, rv0, rvf, Tmax, c, muStar, X0, 
 %   [2] Sundman regularization of the two/three-body problem; e.g. dt = r dtau.
 %   [3] Andersson et al., "CasADi," Math. Prog. Comp. 11 (2019); Wachter &
 %       Biegler (IPOPT), Math. Prog. 106 (2006).
+%   [4] earth_elliptic_to_geo/direct/core/casadi_lt_mee.m (returnModel/creg
+%       registry pattern this mirrors); GTO_tulip/direct/PSR/lib/
+%       casadi_minfuel_sundman.m (regHistory capture pattern this mirrors).
 
 if nargin < 11 || isempty(pSund),  pSund  = 1.5;  end
 if nargin < 12 || isempty(maxIter), maxIter = 3000; end
@@ -75,6 +92,8 @@ if nargin < 14 || isempty(warmTight), warmTight = true; end  % see IPOPT opts
 if nargin < 15 || isempty(opts), opts = struct(); end
 vBox = 12;  if isfield(opts,'vBox') && ~isempty(opts.vBox), vBox = opts.vBox; end
 rBox = 3;   if isfield(opts,'rBox') && ~isempty(opts.rBox), rBox = opts.rBox; end
+returnModel = false;
+if isfield(opts,'returnModel') && ~isempty(opts.returnModel), returnModel = opts.returnModel; end
 cpath = getenv('CASADI_PATH');
 if isempty(cpath), cpath = fullfile(getenv('HOME'), 'casadi-3.7.0'); end
 addpath(cpath);
@@ -106,6 +125,11 @@ Gmap  = gint.map(nN);
 opti = Opti();
 X    = opti.variable(8, nN);
 U    = opti.variable(4, nN);
+% SOSC/FOC-gate registry (Task 8, additive only): records the row range each
+% subject_to group occupies in opti.g, purely for the generic FOC/KKT gate
+% (verify_common/foc_check.m) -- zero effect on the solve itself (bracketing
+% reads size(opti.g,1), never writes it).
+creg = struct('label',{},'rows',{});
 % tau-length is FIXED (from the warm start), NOT a decision variable: a free
 % scalar tau_f couples to every defect -> a dense KKT column -> catastrophic
 % MUMPS fill-in / OOM at large N. Fixed transfer time is still enforced
@@ -115,11 +139,15 @@ tauf = tauf0;
 F    = Fmap(X, U);                           % 8 x nN, = dX/dtau
 
 % trapezoidal defects in sigma: dX/dsigma = tauf * dX/dtau
+r0 = size(opti.g,1)+1;
 D = X(:,2:end) - X(:,1:end-1) - tauf*(repmat(dsig,8,1)/2).*(F(:,1:end-1) + F(:,2:end));
 opti.subject_to(D(:) == 0);
+if returnModel, creg(end+1) = struct('label','defect','rows',r0:size(opti.g,1)); end
 
 % unit-direction
+r0 = size(opti.g,1)+1;
 opti.subject_to((sum(U(1:3,:).^2, 1) - 1).' == 0);
+if returnModel, creg(end+1) = struct('label','betaNorm','rows',r0:size(opti.g,1)); end
 
 % bounds (explicit two-sided)
 lbX = repmat([-rBox;-rBox;-rBox;-vBox;-vBox;-vBox;0.3;0], 1, nN);
@@ -127,7 +155,12 @@ ubX = repmat([ rBox; rBox; rBox; vBox; vBox; vBox;1.0; 2*tf], 1, nN);
 opti.subject_to(X(:) >= lbX(:));   opti.subject_to(X(:) <= ubX(:));
 lbU = repmat([-1.1;-1.1;-1.1;0], 1, nN);
 ubU = repmat([ 1.1; 1.1; 1.1;1], 1, nN);
-opti.subject_to(U(:) >= lbU(:));   opti.subject_to(U(:) <= ubU(:));
+r0 = size(opti.g,1)+1;
+opti.subject_to(U(:) >= lbU(:));
+if returnModel, creg(end+1) = struct('label','thrLo','rows',r0:size(opti.g,1)); end
+r0 = size(opti.g,1)+1;
+opti.subject_to(U(:) <= ubU(:));
+if returnModel, creg(end+1) = struct('label','thrHi','rows',r0:size(opti.g,1)); end
 
 % boundary conditions (fixed transfer TIME via the t-state)
 opti.subject_to(X(1:6,1) == rv0(:));   opti.subject_to(X(7,1) == 1);   opti.subject_to(X(8,1) == 0);
@@ -184,12 +217,25 @@ else
 end
 opti.solver('ipopt', p);
 
-success = true;  status = 'solved';
+success = true;  status = 'solved';  regHistory = [];
 try
     sol = opti.solve();
     Xs = sol.value(X);  Us = sol.value(U);
     lamAll = full(sol.value(opti.lam_g));
     status = char(opti.return_status());
+    % IPOPT per-iteration Hessian regularization (delta_w). At a genuine local
+    % min IPOPT's inertia-controlled linear solver adds ZERO regularization at
+    % convergence -- the reduced Hessian is PD without correction. Captured
+    % here (ported from PSR/lib/casadi_minfuel_sundman.m, which had this but
+    % this file's fork had dropped it) so foc_ipopt_inertia / psr_ipopt_certify
+    % can read the native (well-scaled) 2nd-order verdict.
+    try
+        st = sol.stats();
+        if isfield(st,'iterations') && isfield(st.iterations,'regularization_size')
+            regHistory = st.iterations.regularization_size(:).';
+        end
+    catch  %#ok<CTCH>
+    end
 catch solveErr
     Xs = opti.debug.value(X);  Us = opti.debug.value(U);
     try
@@ -251,5 +297,9 @@ out = struct('X', Xs, 'U', Us, 'tauf', tauf, 'mf', Xs(7,end), ...
              'lamDef', lamDef, 'lamAll', lamAll, ...
              'primerAlignDeg', primerAlignDeg, 'lamMassEnd', lamMassEnd, ...
              'boundSat', boundSat, ...
-             'success', success, 'ipoptStatus', status);
+             'success', success, 'ipoptStatus', status, 'regHistory', regHistory);
+
+if returnModel
+    out.model = struct('opti', opti, 'creg', creg);
+end
 end

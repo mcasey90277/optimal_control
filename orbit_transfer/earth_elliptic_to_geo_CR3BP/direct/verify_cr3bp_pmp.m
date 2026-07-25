@@ -51,6 +51,9 @@ function ver = verify_cr3bp_pmp(opts)
 %     .fp               - the artifact's fingerprint struct           [struct]
 %     .switchStructure  - switch_structure.m output (primal cross-check) [struct]
 %     .hamiltonianCheck - hamiltonian_const_check.m output (see CAVEAT) [struct]
+%     .foc              - foc_check.m generic AD-based FOC/KKT report, with
+%                          .ipopt attached (foc_ipopt_inertia.m); only present
+%                          when refreshDuals=true (default) [struct or absent]
 %
 % REFERENCES:
 %   [1] earth_elliptic_to_geo/direct/verify/verify_pmp_mee.m,
@@ -64,6 +67,8 @@ function ver = verify_cr3bp_pmp(opts)
 %       the CAVEAT this task closes -- see its header comment).
 %   [5] earth_elliptic_to_geo_CR3BP/TODO.md ("CR3BP-aware primer + PSR" item;
 %       this file closes the primer half).
+%   [6] verify_common/foc_check.m, foc_manifest.m ('earth_cr3bp' entry sets
+%       autonomous=false; the generic FOC gate this file wires in).
 if nargin < 1 || isempty(opts), opts = struct(); end
 setup_paths();   % adds this folder + the 2-body campaign's core/lib/verify
 
@@ -114,7 +119,13 @@ fprintf('    T=%g N, m0=%g kg, Isp=%g s, gain=%.4f (lunar mass scale), phi0=%.4f
 refreshDuals = optdef(opts, 'refreshDuals', true);
 refreshInfo  = struct('refreshed', false);
 if refreshDuals
-    [outR, refreshInfo] = refresh_duals_cr3bp(S, par, optdef(opts, 'refreshOpts', struct()));
+    % returnModel=true is forced on regardless of what the caller's
+    % refreshOpts requested -- the generic AD-based FOC gate below
+    % (foc_check.m) needs the live CasADi opti/creg attached to this SAME
+    % refreshed point to differentiate the Lagrangian.
+    refreshOpts = optdef(opts, 'refreshOpts', struct());
+    refreshOpts.returnModel = true;
+    [outR, refreshInfo] = refresh_duals_cr3bp(S, par, refreshOpts);
     refreshInfo.refreshed = true;
     out = outR;
     fprintf(['    dual refresh: %s | defect %.2e | m_f rel change %.2e | node ' ...
@@ -131,6 +142,24 @@ end
 
 % --- primer/switching-function verification (the pert-aware suite) ---------
 ver = verify_pmp_mee(out, par, sigma, struct('eps', 0));
+
+% --- generic AD-based first-order (FOC/KKT) gate ----------------------------
+% Campaign-agnostic cross-check (verify_common/foc_check.m) on the SAME
+% refreshed point the primer gate above just used. earth_cr3bp's manifest
+% (foc_manifest.m) sets autonomous=false -- the Moon's motion makes lambda_t
+% genuinely non-constant here, so foc_report prints the time-costate line
+% without a PASS/FAIL ('--'); constancy is NOT gated, but the full
+% non-autonomous adjoint recursion IS still inside kktStatInf. Only runs when
+% refreshDuals=true attached a live CasADi model (out.model); the legacy
+% stale-dual path above already warns its gates are not meaningful, and
+% foc_check needs a model to differentiate.
+if refreshDuals
+    setup_verify_common_path();
+    rep = foc_check(out, sigma, foc_manifest('earth_cr3bp'), struct());
+    rep.ipopt = foc_ipopt_inertia(getfield_default(out, 'regHistory', []));
+    foc_report(rep, sprintf('cr3bp_T%sN_phi%s', num_tag(fp.thrustN), num_tag(fp.phi0)), resDir);
+    ver.foc = rep;
+end
 
 % --- primal (dual-free) switch-structure cross-check ------------------------
 sw = switch_structure(S.X, S.U, S.dL, S.sigma);
@@ -173,4 +202,25 @@ else
     s = strrep(sprintf('%g', v), '.', 'p');
 end
 s = strrep(s, '-', 'm');
+end
+
+% ---------------------------------------------------------------------------
+function setup_verify_common_path()
+% SETUP_VERIFY_COMMON_PATH  Add orbit_transfer/verify_common to the path.
+%
+% This campaign has no module_root.m (flat earth_elliptic_to_geo_CR3BP/
+% direct/ layout -- verify_cr3bp_pmp.m lives at the module top level, unlike
+% earth_elliptic_to_geo/direct/verify/'s nested module_root() pattern), so
+% this file's own directory plays the "module root" role directly: two
+% fileparts up from here reaches orbit_transfer/.
+here = fileparts(mfilename('fullpath'));
+vcDir = fullfile(fileparts(fileparts(here)), 'verify_common');
+addpath(vcDir);
+setup_verify_common();
+end
+
+% ---------------------------------------------------------------------------
+function v = getfield_default(s, f, dflt)
+% GETFIELD_DEFAULT  s.(f) if present and nonempty, else dflt.
+if isfield(s, f) && ~isempty(s.(f)), v = s.(f); else, v = dflt; end
 end

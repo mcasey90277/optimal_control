@@ -337,6 +337,20 @@ end
 fprintf('RUN_CR3BP_GEO done [%s]\n', runName);
 
 %% ------------------------------------------------------------------------
+%% 6. FOC/PMP verification pointer (not run automatically here)
+%% ------------------------------------------------------------------------
+% This front door already gates the solve chain on defect/unit-norm/
+% terminal-error (assert_gate, every stage). The live-solve first-order
+% report -- primer/switch gates PLUS the generic AD-based FOC/KKT check
+% (verify_common/foc_check.m, wired 2026-07-25) -- belongs to the verifier,
+% which warm re-solves this artifact to refresh its duals; that cost does
+% not belong in this already-expensive front door. Print a pointer instead
+% of invoking it.
+fprintf(['[run_cr3bp_geo] first-order optimality: run verify_cr3bp_pmp(struct(' ...
+         '''thrustN'',%g,''phi0'',%g)) for the primer/switch + generic FOC/KKT ' ...
+         'report (not run automatically here)\n'], thrustN, phi0);
+
+%% ------------------------------------------------------------------------
 function assert_gate(o, stage)
 % ASSERT_GATE  Certification gate: full convergence + tight defect/unit-norm/
 % terminal-error (A5: maxDefect alone can read machine precision while the

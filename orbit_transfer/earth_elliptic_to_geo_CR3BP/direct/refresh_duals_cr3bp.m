@@ -33,6 +33,11 @@ function [out, info] = refresh_duals_cr3bp(S, par, opts)
 %   opts - struct (optional): .massTol [1e-6] .feasTol [1e-8]
 %          .liftDL [true] .maxIter [fp.maxIter] .printLevel [0]
 %          .ipoptExtra [struct()] (MUMPS workspace overrides for deep rungs)
+%          .returnModel [false] (true -> casadi_lt_mee ALSO attaches
+%          out.model, the live opti/X/U/dL/creg the generic AD-based FOC gate
+%          (verify_common/foc_check.m) needs to differentiate the Lagrangian
+%          at this SAME refreshed point; false preserves the byte-identical
+%          legacy out shape for callers that only want the corrected duals)
 %
 % OUTPUTS:
 %   out  - casadi_lt_mee out-struct with corrected .lamDef [struct]
@@ -56,7 +61,8 @@ sopts = struct('par', par, 'mode', 'fixedtf', 'eps', 0, ...
     'tfTarget', fp.tfTarget, 'x0', S.X(:,1), 'xf', fp.xf(:), ...
     'maxIter', d('maxIter', fp.maxIter), 'warmTight', true, ...
     'printLevel', d('printLevel', 0), 'liftDL', d('liftDL', true), ...
-    'ipoptExtra', d('ipoptExtra', struct()));
+    'ipoptExtra', d('ipoptExtra', struct()), ...
+    'returnModel', d('returnModel', false));
 out = casadi_lt_mee(sigma, S.X, S.U, S.dL, sopts);
 
 mfSaved = S.X(6, end);

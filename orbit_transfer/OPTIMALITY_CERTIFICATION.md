@@ -55,6 +55,7 @@ not restated here.)
 | 6 | full KKT certificate — stationarity, dual feasibility, complementarity | `sosc_recover_kkt` + `sosc_kkt_residual`; `results/dual_anomaly/diag_t1_beta.m` |
 | 7 | no singular arc (no run of \|S\|≈0) | `verify_pmp_mee` H2 check |
 | 8 | **regular switching, Sdot != 0** — *Maurer ingredient (ii)* | `psr_second_order.m:278` (see gap G3) |
+| 9 | **generic AD-based full first-order gate — one instrument, all four campaigns**: KKT stationarity, min-condition tangential residual, sign law, transversality, singular-arc count, regular-switching Sdot != 0, all from the NLP's own `opti.lam_g` via manifest-driven complex-step/AD Lagrangian, printed+saved by a fixed-format standard report | `verify_common/foc_check.m` + `foc_report.m` + `foc_manifest.m` (built 2026-07-25, Tasks 1-5); wired into all four campaigns (Tasks 6-9): `run_foc_mee.m` (earth 2-body), `verify_cr3bp_pmp.m` (CR3BP), `run_foc_tulip.m` (tulip), `run_foc_elfo.m` (ELFO) |
 | — | primal, dual-free cross-checks (switch structure, edge fraction, bound saturation) | `switch_structure`, solver `boundSat` |
 
 **Note — two different costate sources.** The earth/CR3BP path reads the NLP's
@@ -63,6 +64,21 @@ own multipliers (`opti.lam_g`). The tulip path (`certify_minfuel_pmp`) instead
 recursion plus primer directions, with the scale pinned by S=0 at switches.
 The second is methodologically stronger (it does not consume the solver's
 duals) and is the partial answer to gap G1.
+
+**2026-07-25 update.** `foc_check` generalizes the first (raw-dual) approach
+into one manifest-driven instrument that now runs on all four campaigns,
+including tulip and ELFO. On the tulip flagship the two sources were run
+side by side on the *same* re-solved row (Task 8): raw-dual `foc_check` gives
+primerAlignDeg = 0.058°, signPct = 100.00% (PASS); the independent
+LS-reconstruction (`certify_minfuel_pmp`) gives primerDirErr = 2.000 (~180°),
+signMatchFrac = 40.44% (FAIL/REVIEW). The two **disagree** — recorded honestly
+as `rep.crossCheck.agree = false`, not adjudicated by suppressing either
+number. `certify_minfuel_pmp`'s own header already documents itself as
+`STATUS: PARTIAL` over the ~40-rev spiral (continuous-adjoint discretization
+error amplified ~1e11), so the disagreement is read as the LS side being the
+weaker of the two witnesses here, not as doubt on the raw-dual PASS — but this
+does not close G1: it is still one family of duals (the NLP's own) checked
+against a second family with a known precision limit, not an indirect solve.
 
 ## A2. The PMP necessary conditions — which do we actually check?
 
@@ -107,13 +123,28 @@ collocation order on the given mesh. Any claim aimed at a paper should say so.
 
 ## A3. Coverage matrix
 
+**Updated 2026-07-25 (Tasks 6-9): `foc_check`/`foc_report` now run on all four
+campaigns.** Columns "full KKT" and "Sdot ≠ 0" are the new green cells; both
+were previously the `verify_pmp_mee`-only physical layer, now backed by the
+generic AD instrument (A1 row 9) everywhere. "focPass" below is `foc_check`'s
+own advisory `rep.pass` — a strictly stricter bar than the campaigns' existing
+physical `pass` column (see A5); a FAIL here does not demote a certified row.
+
 | campaign / target | primer + sign law | switch alignment | transversality | H constancy | full KKT | Sdot ≠ 0 |
 |---|---|---|---|---|---|---|
-| earth 2-body (10 → 0.1 N, + 2 PSR) | **9/9 @ 0.000° / 100%** | yes | yes | yes (CoV ~1e-9) | yes (1.5e-14) | no |
-| earth CR3BP (lunar) | 10 N, 5 N pass; **rungs 2.5→0.1 N not run** | yes | yes | reported, informational (non-autonomous — correct) | not run | no |
-| GTO→tulip | yes, ~0.06° (independent reconstruction) | yes | reported | no | no | built, not a standing gate |
-| GTO→ELFO | **none** | none | none | no | no | no |
-| min-time anchors (free t_f) | direction only | n/a (all-burn) | n/a | no | no | n/a |
+| earth 2-body (10 → 0.1 N, + 2 PSR) | **9/9 @ 0.000° / 100%** | yes | **7/9 PASS** — 5N (3.189e-3) and 2.5N (1.265e-3) FAIL, marginal (~3x tol=1e-3), both rows' warm re-solve *improved* the point | yes (CoV ~1e-9) | **yes, 9/9 kktStat PASS** (1.2e-11 to 1.5e-14) | **yes, 9/9 PASS via `foc_check`** |
+| earth CR3BP (lunar) | **4/4 @ 100% sign** (10/5/1/0.5 N; 2.5/0.2/0.1 N **NOT RUN** — deferred, large-N warm re-solves too slow for this pipeline) | yes (4/4) | **3/4 PASS** — T5N FAILs (3.108e-3), same marginal pattern as earth 2-body | reported, informational (non-autonomous — correct; G6 still open, no new instrument) | **yes, 4/4 kktStat PASS** (1.2e-14 to 2.5e-13) | **yes, 4/4 PASS** |
+| GTO→tulip | raw-dual **PASS** (0.058°, 100%) on flagship; LS-reconstruction **FAIL** (2.00, 40.44%) — **DISAGREE**, recorded not adjudicated (see A1 note) | yes (raw-dual) | **PASS** (5.2e-9) | no (autonomous H_t checked separately elsewhere, not via foc_check) | **yes, PASS** (5.746e-13) on the 25-switch flagship | **run, FAILS** (sdotMinRel 1.4e-7 vs tol 1e-3 — node-grazing switch, not a costate defect); drags flagship `rep.pass` to FAIL alongside the borderline δ_w tail |
+| GTO→ELFO | **energy seed PASS** (100%, eps=1 report-only caveat); **front row (1.33x, 50sw) PASS** (100%, exact at eps=0); min-time n/a (all-burn) | yes (fuel rows) | **3/3 PASS** — energy seed 1.00e-05, min-time 9.62e-06, front row 6.00e-09 | no (autonomous CR3BP-rotating; G4/lamTimeCoV below is the closer analog for the free-tf leg) | **yes, 3/3 kktStat PASS** (5.89e-13, 7.25e-14, 1.075e-11) — **first-ever FOC gate on this campaign** | energy seed **PASS** (8 sw); front row **FAILS** (sdotMinRel 4.485e-05, 50 sw, near-graze — same pattern as tulip); min-time n/a (all-burn) |
+| min-time anchors (free t_f) | direction only, PASS on ELFO (3.30e-18 tan-max) | n/a (all-burn) | n/a (no free-mass transversality; see G4 instead) | n/a | **ELFO: yes, PASS** (7.25e-14); tulip min-time anchor not run this round | n/a |
+
+**G4 dual-form note (ELFO min-time anchor only):** `lamTimeEnd = -1.000` —
+lands exactly on the theoretical free-t_f transversality value
+λ_t(t_f)=±1, a genuine confirmation, not just a threshold pass. But
+`lamTimeCoV = 5.69e-2` (constancy of λ_t along an *autonomous* trajectory,
+where it should be ~0) is a real, non-trivial departure, twelve orders above
+the KKT-stationarity floor — **open observation**, not resolved (see Part B
+§4 LEAD-4).
 
 ## A4. Gaps — what we lack
 
@@ -122,24 +153,44 @@ collocation order on the given mesh. Any claim aimed at a paper should say so.
   to a non-extremal; it cannot catch an error shared with the transcription.
   Real fix: costates from an indirect solve (goal 6). Cheap partial fix: port
   tulip's least-squares reconstruction as a second opinion.
-- **G2 — coverage.** ELFO has no first-order gate at all; CR3BP is verified
-  only at 10 N and 5 N; tulip's certifier carries a known false negative
-  (strict integer PMP-crossing match fails on node-grazing switches — see the
-  tulip TODO C3).
-- **G3 — Sdot != 0 is not a standing gate.** It is computed, but inside
-  `psr_second_order.m`, whose headline verdict is NOT APPLICABLE (Part B, M2),
-  so it is not reported per row. This is a *required ingredient* of the
-  second-order sufficient condition — promoting it is cheap and directly
-  serves Part B §5.
-- **G4 — free-final-time Hamiltonian condition unchecked.** The min-time
-  anchors (`tfMin_tulip`, `tfMin_ELFO`, `run_mintime_mee`) are free-t_f
-  problems where H must take a specific value at t_f. Never verified.
+- **G2 — coverage. PARTIAL (2026-07-25).** ELFO now has a first-order gate
+  (3 artifacts on the nominal rung: energy seed, min-time anchor, 1.33x/50sw
+  front row) — the "none" cell is gone, but only one thrust rung is covered,
+  not a ladder. CR3BP is verified at 10/5/1/0.5 N (4 of 7 rungs); 2.5 N was
+  skipped (optional) and 0.2/0.1 N were explicitly **DEFERRED, NOT RUN**
+  (large-N warm re-solves too slow for this pipeline at the time). Tulip's
+  25-switch flagship is covered; the PSR front (stage 5c wiring exists but was
+  never exercised end-to-end — see Task 8 concern 1) and the min-time anchor
+  are not. Tulip's certifier still carries the known false negative on
+  node-grazing switches (see the tulip TODO C3) — now independently confirmed
+  by `foc_check`'s own `sdotMinRel` FAIL on the same flagship row.
+- **G3 — Sdot != 0. CLOSED as a standing report line (2026-07-25).**
+  `foc_check`/`foc_report` now compute and print `sdotMinRel` as a per-row
+  line on every campaign, not buried inside `psr_second_order.m`'s
+  NOT-APPLICABLE verdict — the *reporting* gap is closed. It is advisory
+  (folded into `rep.pass`, not a hard gate), and it already caught two real,
+  honestly-reported findings: the tulip flagship (1.4e-7 vs tol 1e-3, 25 sw)
+  and the ELFO 1.33x front row (4.485e-5, 50 sw) both fail it on node-grazing
+  switches — consistent with M2/near-degenerate bang-bang minima, not a new
+  defect.
+- **G4 — free-final-time Hamiltonian condition. PARTIAL, dual-form confirmed
+  on one anchor (2026-07-25).** `foc_check` reports the dual-form of this
+  condition (λ_t(t_f) vs its constancy) rather than the classical value test
+  H(t_f)=0; on the ELFO min-time anchor `lamTimeEnd = -1.000` lands exactly on
+  the theoretical λ_t(t_f)=±1 value — a genuine confirmation. But
+  `lamTimeCoV = 5.69e-2` (expected ~0 under this autonomous CR3BP model) is
+  open and unresolved (Part B §4 LEAD-4); the tulip min-time anchor
+  (`tfMin_tulip`) was not run this round. Still not the literal H(t_f)=0 value
+  test A2 calls for — G4 stays open as a derivation question even where the
+  dual-form check passes.
 - **G5 — no mesh bands on the gates.** Switch counts are known mesh-sensitive;
   the first-order gate values are reported as single numbers, not bands.
 - **G6 — the non-autonomous Hamiltonian test is abandoned rather than
-  generalized.** Under lunar gravity H is genuinely not constant, and the CR3BP
-  driver correctly refuses to gate on constancy — but it then checks nothing.
-  Test `dH/dt = ∂H/∂t` instead (see A2's correction on (d)).
+  generalized. Unchanged by Tasks 6-9.** Under lunar gravity H is genuinely
+  not constant, and the CR3BP driver correctly refuses to gate on
+  constancy — but it then checks nothing. `foc_check` does not build the
+  `dH/dt = ∂H/∂t` residual either (out of scope for Tasks 1-9); test that
+  instead (see A2's correction on (d)). Still open, no new instrument.
 - **G7 — normality / abnormal extremals never examined.** Invisible in the
   direct formulation (λ₀ ≡ 1 by construction); becomes a live question the
   moment an indirect solver exists.
@@ -162,28 +213,36 @@ global.
 
 **State: partially delivered.** Weak local minimality is certified on 12 of 17
 ε=0 tulip rows by IPOPT's native inertia; **strict** local minimality is
-certified nowhere, and three other campaigns have no second-order verdict at
-all.
+certified nowhere. **Update 2026-07-25 (LEAD-0 delivered):** the "three other
+campaigns have no second-order verdict at all" clause above is now stale —
+the native-inertia port (`foc_ipopt_inertia`) landed on earth 2-body, earth
+CR3BP, and ELFO in Tasks 6, 7 and 9. All three now carry a weak-local-min
+verdict per row wherever the first-order gate ran; none of them reach strict.
 
 ## 1. Status matrix
 
 | instrument | campaign | verdict | where |
 |---|---|---|---|
-| **IPOPT native inertia (δ_w)** | GTO_tulip | **DELIVERS** — wired into production PSR; 137/137 rows carry a verdict. **ε=0 (bang-bang): 12 certified / 5 not.** ε>0: 100 / 20 | `GTO_tulip/direct/PSR/psr_ipopt_certify.m`, called from `run_psr.m:410` + `psr_run_one.m:156`; verdicts stored as `ipoptCert` in `PSR_data/psr_data_*.mat` |
+| **IPOPT native inertia (δ_w)** | GTO_tulip | **DELIVERS** — wired into production PSR; 137/137 rows carry a verdict. **ε=0 (bang-bang): 12 certified / 5 not.** ε>0: 100 / 20. Flagship 25-switch row re-checked via the new generic port (`foc_ipopt_inertia`, Task 8): **NOT CERTIFIED** (δ_w tail max 1.8e-8, just above the 1e-8 tol) — borderline, consistent with the campaign's known weak/near-degenerate Hessian at fuel-optimal rungs | `GTO_tulip/direct/PSR/psr_ipopt_certify.m`, called from `run_psr.m:410` + `psr_run_one.m:156`; verdicts stored as `ipoptCert` in `PSR_data/psr_data_*.mat`. Generic port cross-check: `run_foc_tulip.m` |
+| **IPOPT native inertia (δ_w) — ported (LEAD-0, 2026-07-25)** | earth 2-body | **9-row ladder, mixed: LOCAL MIN at 10N / 0.2N / 0.1N (δ_w=0); NOT CERTIFIED at 5N (4.51e-05) / 2.5N (7.19e-05) / 1N (2.93e-04) / 0.5N (4.01e-05) / 1N-PSR (5.31e-03) / 0.5N-PSR (1.34e-05→1.77e-04)** | `verify_common/foc_ipopt_inertia.m`, wired via `run_foc_mee.m` + `run_verify_pmp_all.m` (Task 6) |
+| **IPOPT native inertia (δ_w) — ported (LEAD-0, 2026-07-25)** | earth CR3BP | **4/4 LOCAL MIN, δ_w=0** at all four covered rungs (10N/5N/1N/0.5N) — a clean weak-local-min certificate everywhere the first-order gate currently runs; 2.5/0.2/0.1 N not run (coverage gap, G2) | `verify_cr3bp_pmp.m` (Task 7) |
+| **IPOPT native inertia (δ_w) — ported (LEAD-0, 2026-07-25)** | GTO_ELFO | **energy seed: LOCAL MIN** (δ_w=0 tail); **min-time anchor: LOCAL MIN** (δ_w=0 tail); **front row (1.33x, 50sw): NOT CERTIFIED** (δ_w max 1.98e-06) — same near-degenerate pattern as the tulip flagship, first-ever second-order verdict on this campaign | `run_foc_elfo.m` (Task 9) |
 | NLP reduced-Hessian SOSC | earth 2-body | **WEAK_MIN** @10 N (270 flat directions); INCONCLUSIVE @5 / 2.5 N; ERROR @1 / 0.5 N; scale-skip above `maxNullDim=10000` | `earth_elliptic_to_geo/direct/verify/sosc/`, `process/DESIGN_sosc.md` §11–12 |
 | NLP SSOSC via KKT inertia | GTO_tulip | **NOT APPLICABLE (structural)** | `GTO_tulip/direct/PSR/psr_second_order.m` (FINDING, 2026-07-12) |
 | Maurer–Osmolovskii switching-time Hessian | GTO_tulip | **BLOCKED** (forward-flow conditioning) | `GTO_tulip/direct/PSR/psr_switch_hessian.m` (FINDING, 2026-07-12) |
-| any second-order | GTO_ELFO | not started | — |
-| any second-order | earth CR3BP | planned only (tiers 1–3) | `earth_elliptic_to_geo_CR3BP/TODO.md` |
 | conjugate point (Jacobi field) | all | not built; gated on an indirect solver | `BCP2010` §2.3–2.4; CR3BP TODO Phase 2 |
 
-**Net (corrected 2026-07-25):** second order is **not** at zero. The IPOPT
-native-inertia certificate delivers on the tulip, including on genuine ε=0
-bang-bang rows (12 of 17). An earlier version of this register said "zero
-delivered certificates" — that was wrong, and the miss is instructive: the
-instrument had **no FINDING block** (unlike the two blocked ones), so it was
-invisible to a survey that read headers. *An instrument that quietly works is
-easier to lose than one that loudly fails.*
+**Net (corrected 2026-07-25, twice now):** second order is **not** at zero,
+and it is no longer tulip-only. The IPOPT native-inertia certificate delivers
+on all four campaigns as of Tasks 6-9 (LEAD-0 closed) — weak local
+minimality per row wherever the first-order gate runs, mixed verdicts
+everywhere (some rows LOCAL MIN, some borderline NOT CERTIFIED). An earlier
+version of this register said "zero delivered certificates" on the tulip
+alone — that was wrong, and the miss is instructive: the instrument had **no
+FINDING block** (unlike the two blocked ones), so it was invisible to a
+survey that read headers. *An instrument that quietly works is easier to
+lose than one that loudly fails.* None of this reaches **strict** local
+minimality anywhere — that is still exclusively §5's open item.
 
 **What δ_w = 0 does and does not prove.** IPOPT's inertia-controlled linear
 solver adds Hessian regularization only when the reduced Hessian is indefinite;
@@ -289,16 +348,16 @@ rows improved on warm re-solve (5 N +0.235 kg, 2.5 N +0.51, 1 N +0.44, 1 N PSR
 tight. A second-order certificate computed at an under-converged point
 certifies nothing. Re-solve the six before certifying them.
 
-**LEAD-0 (cheapest win on the board) — port the IPOPT native-inertia
-certificate to the other three campaigns.** It is the one second-order
-instrument that actually delivers, and it is nearly free: it only reads the
-δ_w regularization history out of IPOPT's own stats (`casadi_minfuel_sundman`
-already captures it; `psr_ipopt_certify` only interprets it). Earth 2-body,
-earth CR3BP and ELFO have no equivalent and would gain a weak-local-min
-verdict per row for a few hours of plumbing. Note it also sidesteps the
-conditioning wall that defeats our own factorization (M3 / `psr_second_order`'s
-tolEig noise floor), because MUMPS tests inertia on the well-scaled system at
-every iteration.
+**LEAD-0 — DONE (2026-07-25).** Ported the IPOPT native-inertia certificate
+(`foc_ipopt_inertia`) to the other three campaigns via Tasks 6, 7, 9. It
+delivered exactly as predicted: a weak-local-min verdict per row for a few
+hours of plumbing, no new instrument needed — see Part B §1 for the per-row
+verdicts (earth 2-body mixed 3 LOCAL MIN / 6 NOT CERTIFIED across 9 rows;
+CR3BP clean 4/4 LOCAL MIN; ELFO 2 LOCAL MIN + 1 NOT CERTIFIED). It sidesteps
+the conditioning wall that defeats our own factorization (M3 /
+`psr_second_order`'s tolEig noise floor), because MUMPS tests inertia on the
+well-scaled system at every iteration — confirmed working identically on all
+three new campaigns, not just tulip.
 
 **LEAD-3 — M2 might be removable by construction.** If the throttle were
 *pinned* to its bounds on a frozen arc structure (rather than approached via
@@ -306,6 +365,25 @@ every iteration.
 This is close to what the switching-time reduction does anyway, so it may not
 be worth a separate build — but it has never been tried and it would reuse
 existing machinery.
+
+**LEAD-4 (new, 2026-07-25) — G4 dual-form partial: the ELFO min-time anchor's
+free-t_f condition is half-confirmed, half-open.** `foc_check` on
+`mintime_elfo.mat` (Task 9) gives `lamTimeEnd = -1.000e+00`, landing exactly
+on the theoretical free-t_f transversality value λ_t(t_f)=±1 — a genuine,
+notable confirmation that the raw-dual costate extraction is correct on this
+anchor. But `lamTimeCoV = 5.69e-02` — the coefficient of variation of λ_t
+along the trajectory, which should be ~0 under this autonomous CR3BP
+rotating-frame model — is a real, non-trivial departure, twelve orders above
+the kktStat floor (7.25e-14). Two candidate explanations, neither adjudicated:
+(1) the two-primary Sundman-clock + `cScale` free-t_f slack-state structure
+may distribute the horizon condition across the `cScale` adjoint rows
+differently than `foc_check`'s plain `lamTimeCoV` computation assumes —
+`foc_check`'s own `horizonNote` for `'freetf-cscale'` already flags this as
+"value-form H(tf) check ... informational, derivation pending"; (2) the
+duals may simply be less converged than the primal at a free-t_f slack
+state. Open — feeds directly into G4 and the eventual freetf-cscale
+horizon-condition derivation; should travel with the `-1.0` confirmation
+above, not be flattened to a bare PASS.
 
 ---
 
@@ -366,6 +444,10 @@ campaign/row, verdict, and what it changed in Part A or §1–§5.
 | (ongoing) | **IPOPT native inertia (δ_w)** | tulip PSR, 137 rows | **12/17 certified at ε=0**; 100/120 at ε>0 | second order is not at zero; weak local min for bang-bang |
 | 2026-07-25 | first-order PMP (primer/sign/alignment) | earth 9 rows + CR3BP 10/5 N | **PASS 0.000° / 100%** | Part A row 1–3 green for earth; makes Maurer ingredients (ii)/(iii) trustworthy |
 | 2026-07-25 | full KKT certificate from raw `lam_g` | earth 10 N | ‖∇ₓL‖∞ 1.5e-14, tangential ∂L/∂β 8e-17 | Part A row 6; also root-caused the dual bug |
+| 2026-07-25 (Task 6) | `foc_check`/`foc_report` full ladder | earth 2-body, 9 rows (10→0.1 N + 2 PSR) | **7/9 focPass** — 5N (3.189e-3) and 2.5N (1.265e-3) FAIL, transversality only, marginal (~3x tol); kktStat 1.2e-11 to 1.5e-14 all PASS; `foc_ipopt_inertia` mixed (3 LOCAL MIN / 6 NOT CERTIFIED) | A3 earth 2-body row; A1 row 9 first real catch of the generic layer; Part B §1 earth row; LEAD-0 (earth) done |
+| 2026-07-25 (Task 7) | `foc_check`/`foc_report` subset | earth CR3BP, 4 rows (10/5/1/0.5 N, φ0=0; 2.5N skipped, 0.2/0.1N DEFERRED not run) | **3/4 focPass** — T5N FAILs transversality only (3.108e-3), same marginal pattern as earth; kktStat 1.2e-14 to 2.5e-13 all PASS; `foc_ipopt_inertia` **4/4 LOCAL MIN** (δ_w=0) | A3 CR3BP row updated; G2 partially closed (4/7 rungs); Part B §1 CR3BP row; LEAD-0 (CR3BP) done |
+| 2026-07-25 (Task 8) | `foc_check`/`foc_report` + LS cross-check | GTO→tulip, 25-switch flagship (`sundman_minfuel_certified.mat`) | KKT stationarity **PASS** (5.746e-13); primer/sign **PASS** (raw dual, 0.058°/100%) vs LS-reconstruction **FAIL** (2.00/40.44%) — **DISAGREE**, recorded not adjudicated; overall `rep.pass` **FAIL** (sdotMinRel 1.4e-7 node-graze + δ_w tail 1.8e-8 borderline) | A1 note on the two-source disagreement; A3 tulip row; G1 gets new data, not closed; G3 standing-line closed; Part B §1 tulip row cross-checked with the generic port |
+| 2026-07-25 (Task 9) | `foc_check`/`foc_report`, first-ever ELFO gate | GTO→ELFO, 3 artifacts (energy seed, min-time anchor, 1.33x/50sw front row) | energy seed **ADVISORY PASS** (KKT 5.89e-13, eps=1 sign-law caveat); min-time anchor **ADVISORY PASS** (KKT 7.25e-14, `lamTimeEnd=-1.000` CONFIRMS G4 dual-form, `lamTimeCoV=5.69e-2` OPEN); front row **ADVISORY FAIL** (sdotMinRel 4.485e-5 near-graze + δ_w 1.98e-6 NOT CERTIFIED) | A3 ELFO row goes from "none" to 3/3 covered on the nominal rung; G2 partial; G4 partial-dual-form-confirmed; LEAD-4 opened; Part B §1 ELFO row; LEAD-0 (ELFO) done |
 
 ---
 

@@ -305,6 +305,17 @@ post-mortem `process/LESSONS_DUAL_EXTRACTION.md`. Minimal reproduction of the Ca
 `results/dual_anomaly/diag_optidual_minimal.m`. Full record:
 `process/DESIGN_dual_map.md` (status banner).
 
+**Note (2026-07-25, FOC gate layer Task 6):** the generic `foc_check`/
+`foc_report` layer (`verify_common/`, `run_foc_mee.m`) now gates what this
+item's `verify_pmp_mee` physical layer only reported. Full 9-row ladder run:
+**7/9 focPass** — the two misses (5 N: 3.189e-3, 2.5 N: 1.265e-3) fail
+*only* the free-mass transversality check, marginally (~3x the 1e-3 tol),
+with KKT stationarity machine-tight on both. This is a genuine new advisory
+finding, not a regression of the fix above — see
+`../OPTIMALITY_CERTIFICATION.md` A3/G3 and
+`.superpowers/sdd/2026-07-25-foc-gate-layer/task-6-report.md`. Still
+report-only burn-in: this does not demote any row's certified status.
+
 **Residual work:** banked `.mat` caches still hold stale duals — verification
 re-derives them by warm re-solve (`refresh_duals_mee.m`). Two consequences
 worth noting: (a) that guard is on certified quantities, not node drift,

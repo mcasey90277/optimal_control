@@ -104,11 +104,21 @@ certificates, and the indirect Phase 2.
   (FAIL) → **0.000° / 100.00%** (PASS) on the 2-body rungs, switch-alignment
   error 21.2 → 0.15. Record + minimal reproduction:
   `../earth_elliptic_to_geo/process/DESIGN_dual_map.md` status banner.
-- [ ] **Re-run `verify_cr3bp_pmp` on the certified 10 N / 5 N rows.** Banked
-  artifacts still hold stale duals; the driver now re-derives them by warm
-  re-solve (`direct/refresh_duals_cr3bp.m`, opt-out `refreshDuals=false`).
-  Record the new gate numbers, then update the note's §9-10 primer discussion,
-  which currently presents the pre-fix FAIL numbers as a standing limitation.
+- [x] **Re-run `verify_cr3bp_pmp` on the certified rows — DONE as a 4-row
+  subset (2026-07-25, FOC gate layer Task 7).** Ran `thrustN in {10,5,1,0.5}`
+  N at phi0=0 (per controller scope override, not the full 10/5/2.5/1/0.5/0.2/0.1
+  ladder): all four warm re-solves `Solve_Succeeded`, machine-tight defect,
+  primer/sign-law gate 100.00%/0.000 deg on all four (fresh numbers, not the
+  stale pre-fix duals). New generic `foc_check`/`foc_report` gate (Task 7)
+  layered on top: **3/4 focPass** — T5N FAILs solely on transversality
+  (3.108e-3 vs tol 1e-3, marginal, ~3x), same pattern as the earth 2-body
+  campaign's 5N/2.5N misses. **2.5 N skipped** (optional per scope), **0.2 N
+  and 0.1 N explicitly DEFERRED, NOT RUN** — their warm re-solves at ~30k
+  nodes were judged too slow for this pipeline and were never attempted.
+  Full details + per-row numbers: `.superpowers/sdd/2026-07-25-foc-gate-layer/task-7-report.md`;
+  register: `../OPTIMALITY_CERTIFICATION.md` A3/G2. The §9-10 primer
+  discussion still needs a pass to replace the pre-fix FAIL numbers with
+  these fresh ones — not done as part of this item.
 - [ ] **PSR half — now actionable, no longer blocked.** PMP-steered switch-time
   refinement per the tulip pattern; needed before any published switch-time
   claim, decisive at deep rungs. It consumes the same primer/switching

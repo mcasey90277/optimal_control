@@ -5,6 +5,22 @@ mostly on the indirect side.
 
 ## Direct — polish
 
+- [x] **First-ever FOC (first-order-condition) gate landed (2026-07-25, FOC
+  gate layer Task 9).** `run_foc_elfo.m` (new, `verify_common`-backed) runs
+  KKT stationarity / min-condition / sign-law / transversality / regular-
+  switching gates on three artifacts at the nominal 25 mN rung: energy seed
+  (ADVISORY PASS, KKT 5.89e-13, eps=1 sign-law caveat), min-time anchor
+  (ADVISORY PASS, KKT 7.25e-14 — `lamTimeEnd=-1.000` exactly confirms the
+  free-t_f dual-form transversality condition λ_t(t_f)=±1; `lamTimeCoV=5.69e-2`
+  left as an OPEN lead, see `../OPTIMALITY_CERTIFICATION.md` LEAD-4), and the
+  1.33×/50-switch front row (ADVISORY FAIL — sdotMinRel 4.485e-5 near-graze
+  switches + δ_w 1.98e-6 borderline, same weak-minimum pattern as the tulip
+  flagship, not a new defect). `foc_ipopt_inertia` (LEAD-0 port) also now
+  gives this campaign its first second-order verdict: energy seed + min-time
+  anchor LOCAL MIN, front row NOT CERTIFIED. Report-only burn-in — advisory,
+  does not gate certified status. Not yet covered: other thrust rungs, the
+  PSR-equivalent refinement path, and a full ladder sweep. Details:
+  `.superpowers/sdd/2026-07-25-foc-gate-layer/task-9-report.md`.
 - [ ] **Near-min-time end of the ΔV–t_f front.** The front is mapped and
   labeled against t_f,min = 6.0962 ND (27.02 d), but the transition region
   just above min-time deserves the same scrutiny the tulip front got (the

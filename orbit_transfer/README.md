@@ -46,6 +46,10 @@ records in `process/`, technical notes in `doc/`.
   campaign's `results/` (under `direct/`).
 - Cross-references between campaigns are deliberate and documented in each
   `setup_paths.m` header (e.g. GTO_ELFO reuses GTO_tulip's Sundman engine).
+- **Standard optimality report:** every production solve driver ends with
+  `foc_report` — the fixed-format first-order block + `foc_<tag>.mat`
+  sidecar; report-only burn-in, does not alter certified status. Core:
+  `verify_common/`.
 - **KKT multipliers: never `opti.dual()`.** It returns duals in CasADi's
   *canonicalized* constraint orientation, not the orientation of the `opti.g`
   row they pair with in `grad_f + A'*lam`, so for a row-wise-canonicalizing

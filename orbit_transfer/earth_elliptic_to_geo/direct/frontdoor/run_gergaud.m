@@ -105,7 +105,13 @@ function row = run_gergaud(opts)
 %
 % SIDE EFFECTS (unless returnOnly): writes results/gergaud_<tag>.png
 % (makePlot) and results/gergaud_<tag>.{mp4,gif} (makeMovie), tag =
-% mee_fuel_tag(thrustN) [+ endpoint hash suffix if custom].
+% mee_fuel_tag(thrustN) [+ endpoint hash suffix if custom]. Also prints an
+% advisory first-order-optimality (FOC) report line: for a genuine live
+% 'solve'-mode row that certified this session, actually runs
+% verify/run_foc_mee.m on the just-saved row (and its foc_<tag>.mat
+% sidecar); for 'auto' cache-hit or 'probe' paths, prints a pointer line
+% instead of paying for another re-solve. Try/catch-guarded, non-fatal,
+% report-only (does not alter row.certified).
 %
 % REFERENCES:
 %   [1] Haberkorn, Martinon, Gergaud, "Low Thrust Minimum-Fuel Orbital
@@ -245,6 +251,48 @@ inp = struct('thrustN', thrustN, 'tfmin_ND', tfmin_ND, 'ctf', nrm.ctf, 'tf_ND', 
     'note', note, 'm0kg', m0kg, 'ispS', ispS);
 row = gergaud_row(inp);
 fprintf('%s', gergaud_row_str(row));
+
+%% =======================================================================
+%% 5b. Advisory first-order optimality (FOC) report (non-fatal, try-guarded)
+%% =======================================================================
+% Thin, honest wiring onto verify/run_foc_mee.m (Task 6, foc-gate-layer):
+% only actually re-solves for a genuine live 'solve'-mode row that
+% certified this session (the file run_transfer_mee.m / psr_mee_refine.m
+% just wrote to resDir). Cached ('auto' cache-hit) and 'probe' paths print
+% a pointer line instead of paying for another re-solve -- 'probe' rungs
+% (0.2/0.1 N) are already the campaign's most expensive/uncertain, and a
+% cache-hit performed no solve this session at all. Never fatal: any
+% failure here is a one-line warning, not a thrown error, because this
+% report is advisory (report-only burn-in; does not alter row.certified).
+try
+    if usedCache
+        fprintf(['[run_gergaud] FOC report: run run_foc_mee(''%s'') for the standard report ' ...
+                 '(cached path -- no live solve this session)\n'], cacheFile);
+    elseif strcmpi(runMode, 'probe')
+        probeRowFile = fullfile(resDir, [fuelTag '.mat']);
+        fprintf(['[run_gergaud] FOC report: run run_foc_mee(''%s'') for the standard report ' ...
+                 '(probe path -- not run automatically here; deep-rung re-solves are costly)\n'], ...
+            probeRowFile);
+    elseif nrm.certified
+        if (thrustN <= 1 + 1e-9) && isDefaultEndpoints
+            focRowFile = fullfile(resDir, [fuelTag '_PSR_psr_final.mat']);
+            if ~isfile(focRowFile), focRowFile = fullfile(resDir, [fuelTag '.mat']); end
+        else
+            focRowFile = fullfile(resDir, [fuelTag '.mat']);
+        end
+        if isfile(focRowFile)
+            run_foc_mee(focRowFile);
+        else
+            fprintf(['[run_gergaud] FOC report: expected row file %s not found -- ' ...
+                     'skipping\n'], focRowFile);
+        end
+    else
+        fprintf('[run_gergaud] FOC report: solve did not certify -- no saved row to report on\n');
+    end
+catch ME
+    warning('run_gergaud:focReportFailed', '[run_gergaud] FOC report failed (non-fatal): %s', ...
+        ME.message);
+end
 
 if returnOnly
     return;

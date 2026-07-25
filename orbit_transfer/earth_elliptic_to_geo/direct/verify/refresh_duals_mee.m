@@ -44,6 +44,10 @@ function [out, par, sigma, info] = refresh_duals_mee(matPath, opts)
 %             .feasTol   max accepted re-solve maxDefect      [default 1e-8]
 %             .maxIter   IPOPT cap override      [default: the row's own]
 %             .printLevel                         [default 0]
+%             .returnModel  pass-through to casadi_lt_mee's returnModel opt --
+%                           when true, out.model.{opti,creg} is attached so
+%                           callers (run_foc_mee, run_verify_pmp_all) can feed
+%                           out straight into foc_check          [default false]
 %
 % OUTPUTS:
 %   out   - casadi_lt_mee result struct with the CORRECTED .lamDef [struct]
@@ -63,6 +67,7 @@ d = @(f,v) optdef(opts, f, v);
 massTol = d('massTol', 1e-6);
 feasTol = d('feasTol', 1e-8);
 prnt    = d('printLevel', 0);
+retModel = d('returnModel', false);
 
 saved = sosc_load_row(matPath);
 par   = kepler_lt_params(saved.thrustN, saved.m0kg, saved.ispS);
@@ -71,7 +76,8 @@ mIter = d('maxIter', saved.maxIter);
 
 sopts = struct('par', par, 'mode', 'fixedtf', 'eps', 0, ...
     'tfTarget', saved.tfTarget, 'x0', saved.X(:,1), 'xf', saved.xf, ...
-    'maxIter', mIter, 'warmTight', true, 'printLevel', prnt);
+    'maxIter', mIter, 'warmTight', true, 'printLevel', prnt, ...
+    'returnModel', retModel);
 out = casadi_lt_mee(sigma, saved.X, saved.U, saved.dL, sopts);
 
 drift   = max(abs(out.X(:) - saved.X(:)));

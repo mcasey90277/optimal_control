@@ -22,11 +22,20 @@ function T = run_verify_pmp_all(rowList)
 % (0.2 / 0.1 N carry ~10^4 nodes and can take a long time or hit the known
 % MUMPS scale walls).
 %
+% Each refresh additionally requests the CasADi model (returnModel=true) so
+% the generic AD-based first-order gate (verify_common/foc_check.m) can run
+% alongside the physical verify_pmp_mee.m check on the SAME refreshed point;
+% its standard report prints per row (foc_report.m, with the IPOPT-inertia
+% 2nd-order verdict attached) and a foc_<row>.mat sidecar is saved to
+% results/. The table's focPass column carries foc_check's advisory verdict
+% (report-only burn-in; does not alter certified status).
+%
 % INPUTS:
 %   rowList - optional cellstr of .mat basenames to override the default sweep
 % OUTPUTS:
-%   T - table: one row per rung with primer/sign/switch-alignment gates and
-%       the refresh forensics (also saved to results/verify_pmp_all.mat)
+%   T - table: one row per rung with primer/sign/switch-alignment gates, the
+%       generic FOC gate's advisory focPass, and the refresh forensics (also
+%       saved to results/verify_pmp_all.mat)
 %
 % REFERENCES:
 %   [1] verify/refresh_duals_mee.m (dual refresh + certified-quantity guard).
@@ -40,8 +49,13 @@ if nargin < 1 || isempty(rowList)
                'MEE_M2_1N_PSR_psr_final.mat', 'MEE_M2_0p5N_PSR_psr_final.mat'};
 end
 
+vcDir = fullfile(fileparts(fileparts(module_root())), 'verify_common');
+addpath(vcDir);
+setup_verify_common();
+manEarthMee = foc_manifest('earth_mee');
+
 tag = {};  status = {};  primer = [];  signPct = [];  swAlign = [];
-flipPct = [];  magDiff = [];  drift = [];  passed = [];
+flipPct = [];  magDiff = [];  drift = [];  passed = [];  focPass = [];
 
 for q = 1:numel(rowList)
     f = fullfile(resDir, rowList{q});
@@ -53,13 +67,13 @@ for q = 1:numel(rowList)
     end
     tag{end+1} = base; %#ok<AGROW>
     try
-        [outq, parq, sigq, infoq] = refresh_duals_mee(f);
+        [outq, parq, sigq, infoq] = refresh_duals_mee(f, struct('returnModel', true));
     catch ME
         fprintf('  REFRESH-FAIL (%s): %s\n', ME.identifier, ME.message);
         status{end+1} = 'REFRESH-FAIL'; %#ok<AGROW>
         primer(end+1)  = nan;  signPct(end+1) = nan;  swAlign(end+1) = nan; %#ok<AGROW>
         flipPct(end+1) = nan;  magDiff(end+1) = nan;  drift(end+1)   = nan; %#ok<AGROW>
-        passed(end+1)  = false; %#ok<AGROW>
+        passed(end+1)  = false; focPass(end+1) = false; %#ok<AGROW>
         continue
     end
     fprintf(['  refresh: %s | defect %.2e | m_f rel change %.2e | node drift ' ...
@@ -75,12 +89,21 @@ for q = 1:numel(rowList)
     magDiff(end+1) = infoq.magRelDiff;         %#ok<AGROW>
     drift(end+1)   = infoq.mfRelChange;        %#ok<AGROW>
     passed(end+1)  = v.pass;                   %#ok<AGROW>
+
+    repq = foc_check(outq, sigq, manEarthMee, struct());
+    if isfield(outq, 'regHistory') && ~isempty(outq.regHistory)
+        repq.ipopt = foc_ipopt_inertia(outq.regHistory);
+    else
+        repq.ipopt = foc_ipopt_inertia([]);
+    end
+    foc_report(repq, base, resDir);
+    focPass(end+1) = repq.pass; %#ok<AGROW>
 end
 
 T = table(tag(:), status(:), primer(:), signPct(:), swAlign(:), ...
-          flipPct(:), magDiff(:), drift(:), passed(:), ...
+          flipPct(:), magDiff(:), drift(:), passed(:), focPass(:), ...
     'VariableNames', {'row','status','primerMedDeg','signPct','swAlignErr', ...
-                      'dualSignFlipPct','magRelDiff','mfRelChange','pass'});
+                      'dualSignFlipPct','magRelDiff','mfRelChange','pass','focPass'});
 fprintf('\n===== PMP verification sweep =====\n');
 disp(T);
 save(fullfile(resDir, 'verify_pmp_all.mat'), 'T');

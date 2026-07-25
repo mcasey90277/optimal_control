@@ -47,9 +47,7 @@ out_text2 = evalc('foc_report(rep2, ''printonly'', '''')');
 assert(contains(out_text2, 'FIRST-ORDER OPTIMALITY REPORT'), ...
     'Test 2 FAIL: print-only missing header');
 
-sidecar_path2 = fullfile('', 'foc_printonly.mat');
 % should not exist in current dir
-[~,current_dir] = fileparts(pwd);
 assert(~isfile(fullfile(pwd, 'foc_printonly.mat')), ...
     'Test 2 FAIL: sidecar should not be created when resDir empty');
 

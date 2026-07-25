@@ -24,14 +24,12 @@ function foc_report(rep, tag, resDir)
 %           .checksRun        which checks executed [cellstr]
 %           .pass             advisory overall verdict [logical]
 %           (optional) .ipopt struct with .verdict [char] for 2nd-order check
+%   tag    - file basename for sidecar naming [char or string]
+%   resDir - results directory for optional sidecar save [char or string];
+%            if empty or omitted, only prints (no sidecar)
 %
 % OUTPUTS:
 %   (none) Prints report block to stdout; optionally saves sidecar .mat.
-%
-% ARGUMENTS:
-%   tag    - file basename for sidecar naming [char or string]
-%   resDir - results directory for optional sidecar save [char or string]
-%            If empty or omitted, only prints (no sidecar).
 %
 % REFERENCES:
 %   [1] orbit_transfer/verify_common/foc_check.m — FOC gate producing rep struct.

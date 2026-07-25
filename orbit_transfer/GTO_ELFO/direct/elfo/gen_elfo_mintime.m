@@ -81,6 +81,21 @@ save(outFile,'X','U','sigma','rv0','rvf','tauf0','tf','mf','cScale', ...
      'maxDefect','minR1','pSund','qSund','moonZone','insertion','fp');
 fprintf('  saved %s\n', outFile);
 
+% --- FOC/KKT GATE (generic first-order optimality report -- advisory) ------
+% Task 9 (2026-07-25): the generic AD-based FOC/KKT gate (verify_common/
+% foc_check.m) run on THIS run's just-certified min-time anchor, via
+% run_foc_elfo.m -- a warm re-solve of outFile with opts.returnModel=true
+% attached (Task 9's hook on casadi_mintime_freetf.m). Advisory only,
+% try/catch-guarded so a FOC-gate hiccup never breaks the certified anchor
+% save above (which has already happened by this point).
+try
+    fprintf('\n  FOC/KKT GATE (generic first-order optimality report)...\n');
+    run_foc_elfo('mintime', outFile);
+catch focErr
+    warning('gen_elfo_mintime:focGateFailed', ...
+        'FOC/KKT gate failed (advisory only, anchor save unaffected): %s', focErr.message);
+end
+
 % relabel: the mapped front in ELFO's own units
 fprintf('\n  RELABEL: factor_ELFO = tf / tfMin_ELFO,  tfMin_ELFO = %.4f ND (%.2f d)\n', ...
         out.tf, out.tf*p.tStar/86400);

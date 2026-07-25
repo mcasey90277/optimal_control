@@ -141,6 +141,32 @@ if doVerify
 end
 
 %% ------------------------------------------------------------------------
+%% 5c. FOC/KKT GATE  (generic first-order optimality report -- advisory)
+%% ------------------------------------------------------------------------
+% Task 9 (2026-07-25): the generic AD-based FOC/KKT gate (verify_common/
+% foc_check.m) run on THIS run's final solve, via run_foc_elfo.m -- a warm
+% re-solve of outFile with opts.returnModel=true attached (Task 9's hook on
+% casadi_energy_freetf.m), so the live Opti model + constraint registry are
+% available for the AD Lagrangian-gradient check. Advisory only, try/catch-
+% guarded so a FOC-gate hiccup never breaks the certified pipeline. Handles
+% both bang-bang (epsMin=0) and smooth (epsMin>0) rows: run_foc_elfo reads
+% epsilon from outFile itself and prints the sign-law caveat when epsilon>0
+% (the sign law is only exact at epsilon=0).
+try
+    fprintf('\n[stage 5c] FOC/KKT GATE (generic first-order optimality report)...\n');
+    focRep = run_foc_elfo('fuel', outFile);   %#ok<NASGU> (saved below)
+    if doExport
+        save(dataFile, 'focRep', '-append');
+        fprintf('[stage 5c] FOC/KKT report appended to %s\n', dataFile);
+    else
+        fprintf('[stage 5c] FOC/KKT report printed only (doExport=false, no data-product file to append to).\n');
+    end
+catch focErr
+    warning('run_elfo_minfuel:focGateFailed', ...
+        'stage 5c FOC/KKT gate failed (advisory only, pipeline unaffected): %s', focErr.message);
+end
+
+%% ------------------------------------------------------------------------
 %% 6. CONTROL MOVIE  (transfer + control law, synced; ELFO orbit backdrop)
 %% ------------------------------------------------------------------------
 if ~strcmpi(movieMode, 'none')

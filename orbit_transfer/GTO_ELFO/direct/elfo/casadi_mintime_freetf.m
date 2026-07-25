@@ -23,6 +23,16 @@ function out = casadi_mintime_freetf(sigma, rv0, rvf, Tmax, cEx, muStar, X0, U0,
 %   tauf0   - fixed total regularized length [scalar]
 %   opts    - (optional) struct: .pSund[1.5] .qSund[4] .moonZone[0.15]
 %             .cBox[[0.10 8]] .c0[1] .tfCapMult[4] .maxIter[3000] .warmTight[false]
+%             .returnModel - (default false) true -> ADDITIONALLY attach
+%             out.model = struct('opti',opti,'creg',creg) with the live solved
+%             CasADi Opti object and a constraint registry creg (struct array,
+%             fields .label[char] .rows[1xk] row range into opti.g) recording
+%             the 'defect', 'betaNorm' constraint groups (NO throttle rows --
+%             this solver is hard all-burn, s==1), for the generic FOC/KKT
+%             gate (verify_common/foc_check.m, foc_manifest('elfo_mintime')
+%             sets thrRow=[] so the sign-law/singular/Sdot checks skip
+%             correctly). Purely additive: with the flag absent/false, X/U
+%             are byte-identical and out.model is absent (Task 9, 2026-07-25).
 %
 % OUTPUTS:
 %   out - struct: .X [9x(N+1)] .U [3x(N+1)] .tauf .tf(=tfMin) .cScale .mf
@@ -33,11 +43,16 @@ function out = casadi_mintime_freetf(sigma, rv0, rvf, Tmax, cEx, muStar, X0, U0,
 %           INTERIOR nodes -- BCs pin the endpoints by construction -- plus
 %           the cScale box); .hit true warns a box may be binding and should
 %           be widened via opts before trusting the result
+%         .regHistory [1xnIter or []] - IPOPT's per-iteration Hessian
+%           regularization delta_w; interpret via foc_ipopt_inertia.m
+%         .model (opts.returnModel only) - struct('opti',opti,'creg',creg)
 %
 % REFERENCES:
 %   [1] casadi_energy_freetf.m (the energy/fuel sibling this mirrors).
 %   [2] Betts, "Practical Methods for Optimal Control," SIAM (2010) -- sparse
 %       free-final-time via a constant slack state.
+%   [3] GTO_tulip/direct/sundman_minfuel/casadi_minfuel_sundman.m (Task 8
+%       returnModel/creg + regHistory hook this mirrors).
 
 if nargin < 10 || isempty(opts), opts = struct(); end
 gd = @(f,d) getdef(opts,f,d);
@@ -49,6 +64,7 @@ c0       = gd('c0',       1);
 tfCapMult= gd('tfCapMult',4);
 maxIter  = gd('maxIter',  3000);
 warmTight= gd('warmTight',false);
+returnModel = gd('returnModel', false);
 
 cpath = getenv('CASADI_PATH');
 if isempty(cpath), cpath = fullfile(getenv('HOME'), 'casadi-3.7.0'); end
@@ -92,15 +108,24 @@ Fmap  = fdyn.map(nN);
 opti = Opti();
 X    = opti.variable(9, nN);
 U    = opti.variable(3, nN);
+% SOSC/FOC-gate registry (Task 9, additive only): records the row range each
+% subject_to group occupies in opti.g, purely for the generic FOC/KKT gate
+% (verify_common/foc_check.m) -- zero effect on the solve itself (bracketing
+% reads size(opti.g,1), never writes it). No throttle rows here (hard s==1).
+creg = struct('label',{},'rows',{});
 tauf = tauf0;                                 % FIXED (t_f floats via cScale)
 F    = Fmap(X, U);
 
 % trapezoidal defects in sigma: dX/dsigma = tauf * dX/dtau
+r0 = size(opti.g,1)+1;
 D = X(:,2:end) - X(:,1:end-1) - tauf*(repmat(dsig,9,1)/2).*(F(:,1:end-1) + F(:,2:end));
 opti.subject_to(D(:) == 0);
+if returnModel, creg(end+1) = struct('label','defect','rows',r0:size(opti.g,1)); end
 
 % unit steering direction
+r0 = size(opti.g,1)+1;
 opti.subject_to((sum(U(1:3,:).^2, 1) - 1).' == 0);
+if returnModel, creg(end+1) = struct('label','betaNorm','rows',r0:size(opti.g,1)); end
 
 % bounds (explicit two-sided); cScale in its box, t in [0, tfCap]
 lbX = repmat([-3;-3;-3;-12;-12;-12;0.3;0;    cBox(1)], 1, nN);
@@ -145,12 +170,22 @@ else
 end
 opti.solver('ipopt', p);
 
-success = true;  status = 'solved';
+success = true;  status = 'solved';  regHistory = [];
 try
     sol = opti.solve();
     Xs = sol.value(X);  Us = sol.value(U);
     lamAll = full(sol.value(opti.lam_g));
     status = char(opti.return_status());
+    % IPOPT per-iteration Hessian regularization (delta_w) -- see
+    % foc_ipopt_inertia.m / GTO_tulip/direct/sundman_minfuel/
+    % casadi_minfuel_sundman.m (Task 8 precedent this mirrors).
+    try
+        st = sol.stats();
+        if isfield(st,'iterations') && isfield(st.iterations,'regularization_size')
+            regHistory = st.iterations.regularization_size(:).';
+        end
+    catch  %#ok<CTCH>
+    end
 catch solveErr
     Xs = opti.debug.value(X);  Us = opti.debug.value(U);
     try
@@ -214,7 +249,11 @@ out = struct('X', Xs, 'U', Us, 'tauf', tauf, 'tf', Xs(8,end), ...
              'lamDef', lamDef, 'lamAll', lamAll, ...
              'primerAlignDeg', primerAlignDeg, 'lamMassEnd', lamMassEnd, ...
              'boundSat', boundSat, ...
-             'success', success, 'ipoptStatus', status);
+             'success', success, 'ipoptStatus', status, 'regHistory', regHistory);
+
+if returnModel
+    out.model = struct('opti', opti, 'creg', creg);
+end
 end
 
 % ---------------------------------------------------------------------------

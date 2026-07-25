@@ -47,7 +47,11 @@ function out = casadi_lt_mee(sigma, X0, U0, dL0, opts)
 %         .tfErr (|t(end)-tfTarget|, fixedtf only; NaN in mintime -- Task 7c
 %         diagnostic) .mf .m_f_kg .dV_kms .tf .switches .edge .lamDef [7xN]
 %         .LdotMin .incDeg (terminal inclination, deg -- should be ~0 for the
-%         h=0 equatorial default target). .model (opts.returnModel only) -
+%         h=0 equatorial default target). .regHistory [1xnIter or []] IPOPT's
+%         per-iteration Hessian regularization delta_w
+%         (st.iterations.regularization_size), or [] if the CasADi build
+%         lacks it (Task 5, LEAD-0); interpret via
+%         verify_common/foc_ipopt_inertia. .model (opts.returnModel only) -
 %         struct('opti',opti,'X',X,'U',U,'dL',dL,'creg',creg,'vreg',vreg);
 %         creg is a struct array, one per subject_to group, with fields
 %         label[char] kind['eq'|'ineqLo'|'ineqHi'] rows[1xk] (row range in
@@ -340,6 +344,9 @@ catch
     sol = opti.debug;  success = false;
 end
 st = opti.stats();
+% delta_w regularization history (IPOPT native inertia; verify_common
+% foc_ipopt_inertia interprets it -- LEAD-0 port of psr_ipopt_certify):
+try, regHistory = st.iterations.regularization_size(:).'; catch, regHistory = []; end
 status = st.return_status;
 success = success && any(strcmp(status, {'Solve_Succeeded', 'Solved_To_Acceptable_Level'}));
 
@@ -429,6 +436,7 @@ out = struct('X', Xs, 'U', Us, 'dL', dLs, 'success', success, ...
     'tf', Xs(7,end), 'switches', sum(abs(diff(burn))), ...
     'edge', mean(ss > 0.95 | ss < 0.05), 'lamDef', lamDef, ...
     'LdotMin', min(LdotN), 'incDeg', incDeg);
+out.regHistory = regHistory;
 
 if returnModel
     vreg = struct('Xrows',1:7,'Urows',1:4,'nNode',N+1);

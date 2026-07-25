@@ -25,6 +25,7 @@ assert(isequal(size(outA.X), [7 76]), 'fixedtf out.X size');
 assert(isequal(size(outA.U), [4 76]), 'fixedtf out.U size');
 assert(isscalar(outA.dL) && isfinite(outA.dL), 'fixedtf out.dL must be a finite scalar');
 assert(islogical(outA.success) || isnumeric(outA.success), 'fixedtf out.success must exist');
+assert(isfield(outA, 'regHistory'), 'fixedtf out missing field regHistory (Task 5 capture)');
 
 % (b) mintime mode, maxIter=5: same completeness + thr pin held.
 tB = tic;

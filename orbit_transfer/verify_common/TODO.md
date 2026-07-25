@@ -1,0 +1,189 @@
+# verify_common — TODO
+
+Companion to `README.md`. Structure follows the campaign TODOs (Done / Open by
+priority / Not-a-goal). Per-row results and the cross-campaign status live in
+`../OPTIMALITY_CERTIFICATION.md`, not here — this file tracks work on the
+**machinery**.
+
+---
+
+## Done
+
+### 2026-07-25 — the layer, built and wired (plan `2026-07-25-foc-gate-layer.md`)
+`foc_check` / `foc_manifest` / `foc_dual_to_costate` / `foc_ipopt_inertia` /
+`foc_report`, plus wiring into all four campaigns and the explainer
+`doc/first_order_checks.tex`. Coverage achieved on first run: Earth 2-body
+9/9 rows (7/9 advisory pass), Earth CR3BP 4-row subset (3/4), tulip flagship,
+ELFO three artifacts — **the ELFO campaign's first first-order gate of any
+kind**. LEAD-0 (IPOPT `δ_w` inertia) ported campaign-wide in the same pass.
+Report-only burn-in throughout.
+
+---
+
+## Open — ranked by priority
+
+### 1. Pre-promotion checklist (blocks turning burn-in into a hard gate)
+
+These are the register's §A6 items, now **specified** by the 2026-07-25
+three-way external review (GPT-5.6-terra + Gemini 3.1 Pro + host Claude;
+verbatim reviews archived in `doc/review_2026-07-25_*.md`). Until they are
+settled, a FAIL from this layer is a lead, not a verdict — and the layer
+cannot be promoted.
+
+**What the review validated** (so it does not get re-litigated): the
+switching-function recovery of Q1 is *exact* — the active bound multiplier
+cancels `Sd` identically, so zeroing its row recovers magnitude and sign —
+subject to the affine-throttle-cost conditions now in item 1.4; and the
+dual→costate map is the correct *stationarity* combination (both reviewers
+derived it, independently reproducing `DESIGN_dual_map`).
+
+- [ ] **1.1 Mesh-normalize the regularity statistic (register I1).** Both
+  reviewers independently confirmed the confound is real and that the current
+  readings (tulip 1.4e-7 / 25 sw, ELFO front row 4.5e-5 / 50 sw) **cannot
+  diagnose grazing**. Agreed fix — deweight, true divided difference,
+  non-dimensionalize:
+  ```matlab
+  h = diff(sigma(:).');
+  w = [h(1)/2, (h(1:end-1)+h(2:end))/2, h(end)/2];   % nodal trapezoid weights
+  Sun = rep.Sd ./ w;                                  % deweighted switching fn
+  swI = find(diff(burn) ~= 0);
+  D   = abs(Sun(swI+1) - Sun(swI)) ./ h(swI);         % |dS/dsigma|, mesh-invariant
+  Sref = median(abs(Sun(coastNodesAwayFromSwitches))); % exclude 1-node switch nbhd
+  R    = (sigma(end)-sigma(1)) * D / Sref;            % dimensionless
+  rep.sdotMinRel = min(R);
+  ```
+  Apply the same deweighting to the singular-arc test (item 1.3). **Threshold
+  caveat (GPT):** no threshold on a *single* mesh is defensible — assert
+  regularity only if `R` stays above the floor on **two** meshes. Recalibrate
+  the 1e-3 gate on deweighted data before trusting it.
+- [ ] **1.2 Make the direction check independent and sign-aware (register I2).**
+  **Correction to the previously recorded fix:** excluding the cone multiplier
+  before projecting does *not* restore independence — the projector annihilates
+  the radial term anyway, `P_b(q + 2*mu*b) = P_b q`. Genuine independence needs
+  a *different* gradient: build `q` from **defect duals only** (zero all other
+  multiplier rows) or from a separately reconstructed Hamiltonian, then compare
+  against the solved direction. For the min-vs-max branch, test the cone
+  multiplier's sign: with `L = L0 + mu*(b'b - 1)` and `q + 2*mu*b = 0`, the
+  minimizer has `b'q < 0` ⟺ `mu > 0` (reverse if the registered row is
+  `1 - b'b`). Report normalized anti-alignment `-b'q/||q||`, which is more
+  informative than tangency alone.
+- [ ] **1.3 Resolve the transversality endpoint bias (register I5).** Both
+  reviewers confirmed the mechanism and converged on the same cheap fix:
+  ```matlab
+  lam(:,end) = LamDef(:,N)   + h(N)/(h(N-1)+h(N)) * (LamDef(:,N)-LamDef(:,N-1));
+  lam(:,1)   = LamDef(:,1)   - h(1)/(h(1)+h(2))   * (LamDef(:,2)-LamDef(:,1));
+  ```
+  More principled alternative (GPT): form the exact discrete endpoint covector
+  `p_{N+1} = (I - (h_N/2)*D_{N+1})' * Lambda_N` plus terminal terms, whose mass
+  component is **zero by terminal-node stationarity** when the final mass is
+  genuinely free — report it as a discrete identity rather than an estimate.
+  Either way, stop treating the one-sided interval dual as `lambda_m(t_f)`.
+  Only after this can the three ~3×-tol misses be attributed (endpoint bias vs
+  under-converged rungs — currently confounded).
+- [ ] **1.4 Make the verdict ε-aware.** `foc_check` folds `signPct`, the
+  singular-arc count, and `sdotMinRel` into `rep.pass` **without knowing ε**.
+  At ε>0 the throttle cost is quadratic, `Sd` is the derivative of the smoothed
+  objective, interior `s` can legitimately give `Sd = 0`, and the bang-bang sign
+  law does not apply. Add a manifest field (`throttleCostKind = 'affine' |
+  'quadratic'`) or pass ε, and skip those three checks programmatically. The doc
+  already claims these are advisory at ε>0 — the code does not honor it.
+- [ ] **1.5 Relabel the δ_w verdict.** `certLocalMin` / "LOCAL MIN" overstates
+  what zero inertia correction over a barrier-iterate tail proves: it is not a
+  demonstration of reduced-Hessian positive definiteness on the critical cone,
+  and does not address barrier/active-set limiting behavior or strictness.
+  Relabel as an inertia-regularization *observation*, campaign-wide (the naming
+  is inherited from `psr_ipopt_certify.m`).
+
+### 2. Coverage holes
+
+- [ ] **CR3BP deep rungs (0.2 / 0.1 N) — NOT RUN.** Deferred at build time;
+  their warm re-solves are ~30k-node problems. 2.5 N also skipped. The CR3BP
+  row of the register's coverage matrix is a 4-row subset, stated as such.
+- [ ] **ELFO beyond the nominal 25 mN rung.** `run_foc_elfo` hardcodes
+  nominal-rung `cBox` / `tfCapMult` / `maxIter`; on another rung the warm
+  re-solve is a *different problem* and will trip the certified-quantity guard
+  opaquely. Thread the artifact's own `fp` config before any ELFO ladder work.
+- [ ] **Batch ELFO runs must isolate per process.** A combined single-process
+  sweep of three artifacts died silently mid-solve (this codebase's documented
+  MEX-fatal risk); re-run isolated, it converged cleanly. Mirror
+  `elfo_batch.sh`.
+
+### 3. Robustness and hygiene
+
+- [ ] **`foc_report` thresholds are hardcoded to `foc_check`'s defaults.** No
+  caller overrides them today, so labels and `rep.pass` agree — but a caller
+  passing custom `opts` would get per-line PASS/FAIL text that silently
+  disagrees with the verdict. Fix: record tolerances in `rep.tol` and have
+  `foc_report` read them. *(Flagged independently by GPT-5.6-terra.)*
+- [ ] **Harden the sign-resolution rule.** Choosing the smaller of
+  `||grad f ± A'lam||` is safe *at a converged KKT point* (the wrong branch
+  evaluates to `2*grad f`, which is large) — but GPT gives a valid
+  counterexample at a **non-converged** point (`g_f=1, A'lam=0.2` → the wrong
+  sign wins), and the sign is chosen *before* `kktStatInf` is gated. Add an
+  ambiguity guard: require the chosen residual to be both small **and**
+  decisively smaller than its opposite, else error "ambiguous dual convention"
+  rather than silently signing `rep.lam`. (Gemini judged the rule "100% safe";
+  that holds only post-convergence — hence the guard, not a rewrite.)
+- [ ] **Assert defect-row ordering, not just variable layout.** The layout
+  asserts confirm the X/U blocks numerically, but `reshape(lamAll(defRows), nx,
+  Nseg)` silently corrupts costates if a registry ever groups defect rows
+  non-interval-major. Store an explicit `creg.defectRowsByInterval` (nx×Nseg)
+  map and index through it. *(GPT.)*
+- [ ] **Input validation before differentiation:** `numel(sigma)==N1`, strictly
+  positive mesh steps, manifest indices in range, finite and nonzero direction
+  norms before `b/norm(b)`. *(GPT.)*
+- [ ] **`earth_mee` in `mintime` mode is unhandled.** That solver registers
+  `thrEq` (thr ≡ 1) with no `thrLo`/`thrHi`, while the manifest still sets
+  `thrRow = 4`, so `Sd` would retain the equality multiplier and `signPct`
+  would be meaningless. Unreachable today (`refresh_duals_mee` forces
+  `fixedtf`); add a `thrEq`-present guard so it fails loudly if reached.
+- [ ] **`dirTanMax` returns `[]` on an all-coast trajectory** with `dirRows`
+  set. Unreachable with pinned endpoints, and it errors rather than passing
+  silently, but it deserves an explicit guard if a coast-only manifest ever
+  appears.
+- [ ] **`man.autonomous` is declarative only** — nothing reads it. Either
+  consume it (gate Hamiltonian constancy where it is true) or keep it as
+  documentation, but do not let a future reader assume it routes behaviour.
+- [ ] **`run_gergaud` live-solve FOC branch** and the `run_psr` /
+  `run_elfo_minfuel` / `gen_elfo_mintime` wiring are static-checked only, not
+  exercised end-to-end (each costs a full pipeline run). All are try/catch
+  advisory, so failure degrades to a warning.
+
+### 4. Strengthening the checks themselves
+
+- [ ] **Independence (register G1).** Every gate here consumes the NLP's *own*
+  multipliers — self-consistency, not an independent witness. The tulip's
+  least-squares costate reconstruction is a second family and already
+  disagrees on the flagship (raw-dual 0.058°/100% vs LS 2.0/40%, the LS side
+  documented-unreliable over ~40 revs). A genuinely independent witness needs
+  costates from an indirect solve.
+- [ ] **Free-t_f Hamiltonian condition, value form (register G4, partial).**
+  The dual form is confirmed — the ELFO min-time anchor reads
+  `lamTimeEnd = -1.000`, exactly `lambda_t(t_f) = ±1`. But its
+  `lamTimeCoV = 5.69e-2` is **not** small for an autonomous model; open
+  candidates are the two-primary Sundman + `cScale` structure distributing the
+  horizon condition differently than the plain reading assumes, or
+  under-converged duals on that anchor. Derive the `freetf-cscale` horizon
+  condition properly and replace the placeholder `horizonNote`.
+- [ ] **Non-autonomous Hamiltonian test (register G6).** Under lunar gravity
+  `H` is genuinely not constant, and the layer correctly refuses to gate
+  constancy — but then checks nothing. Test `dH/dt = ∂H/∂t` instead; the
+  adjoint recursion for it is already inside `kktStatInf`.
+- [ ] **Mesh bands on the gate values.** Switch counts are known
+  mesh-sensitive; the gate numbers are reported as single values, not bands.
+
+---
+
+## Not a goal — intentional scope boundaries
+
+- **Replacing the physical verifiers.** `verify_pmp_mee` and
+  `certify_minfuel_pmp` carry the interpretability (primer angle in degrees,
+  the switching function in RTN, the Fig-16 plots) that a dimensionless
+  residual cannot. This layer is a **gate over** them, and their disagreement
+  is a useful signal — keep both.
+- **Second-order certification.** Belongs to Part B of the register. The one
+  second-order line printed here (`δ_w`) is a ported verdict, not new
+  machinery; the live path to *strict* local minimality is the STM
+  switching-time Hessian, which is not this module's job.
+- **Forking `foc_check` per campaign.** The entire point is one instrument.
+  New campaigns get a manifest.

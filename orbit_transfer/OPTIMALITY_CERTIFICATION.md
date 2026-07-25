@@ -254,6 +254,42 @@ promoting either to a hard gate should wait on these:
 Both are recorded here rather than fixed now — see the branch's final-review
 report for why they were scoped out of this fix wave.
 
+### External review of the checker itself (2026-07-25)
+
+The generic layer and its explainer were sent for three-way review
+(GPT-5.6-terra + Gemini 3.1 Pro + host Claude). Verbatim reviews:
+`verify_common/doc/review_2026-07-25_{gpt56terra,gemini31pro}.md`.
+Concrete fixes now specified in `verify_common/TODO.md` §1.
+
+**Validated** (do not re-litigate): the switching-function recovery is exact
+(the active bound multiplier cancels `Sd` identically, so zeroing its row
+recovers magnitude and sign); the dual→costate map is the correct
+*stationarity* combination, re-derived independently by both reviewers.
+
+**I1 sharpened.** Both reviewers judged the current readings (tulip 1.4e-7,
+ELFO front row 4.5e-5) **unable to diagnose grazing**, and converged on the
+same fix (deweight by nodal trapezoid weight → divided difference in σ →
+non-dimensionalize). GPT adds: no threshold on a *single* mesh is defensible —
+require stability across two meshes. The same deweighting is needed for the
+singular-arc test, which otherwise false-positives in densified regions.
+
+**I2 CORRECTED.** The previously recorded fix — "exclude the betaNorm dual
+before projecting" — does **not** work: the projector annihilates the radial
+term anyway, `P_b(q+2μb) = P_b q`. Independence requires building the gradient
+from a *different* source (defect duals only, or a separate Hamiltonian
+reconstruction). The branch test is the cone multiplier's sign (`μ>0` ⟺
+minimizer, under `L = L0 + μ(b'b−1)`).
+
+**I5 confirmed by both**, with an agreed extrapolation fix and a more
+principled discrete-endpoint-covector alternative whose mass component is zero
+by terminal-node stationarity.
+
+**New (not previously recorded):** the advisory verdict is **not ε-aware** —
+`signPct` / singular-arc / `sdotMinRel` are folded into `rep.pass` even on ε>0
+homotopy legs where the bang-bang law does not apply; and the `certLocalMin` /
+"LOCAL MIN" naming of the δ_w line overstates what zero inertia correction
+proves (relabel campaign-wide, including `psr_ipopt_certify.m`).
+
 ---
 
 # PART B — Second order (local minimality)

@@ -187,15 +187,31 @@ At a local minimizer $z^\ast$ of \eqref{eq:nlp} with multipliers $\vlam_g$,
 
 \paragraph{Formal content.}
 Equation~\eqref{eq:kkt} is the discrete image of \emph{several} continuous PMP
-conditions at once. Stationarity with respect to the state columns $x_k$
-\emph{is} the discrete adjoint recursion --- the trapezoidal transcription of
-$\dot\vlam=-\partial\Ham/\partial\vx$, including, in the CR3BP campaign, the
+conditions at once. Stationarity with respect to an interior state column
+$x_k$ yields
+\begin{equation}
+\frac{\Lambda_{k-1}-\Lambda_k}{w_k}
+\;=\; A_k^{\!\top}
+\underbrace{\frac{h_{k-1}\Lambda_{k-1}+h_k\Lambda_k}{h_{k-1}+h_k}}_{\textstyle \vlam(\sigma_k)},
+\qquad w_k=\tfrac{h_{k-1}+h_k}{2},
+\label{eq:adjoint}
+\end{equation}
+which is exactly the trapezoidal transcription of
+$\dot\vlam=-\partial\Ham/\partial\vx$ --- including, in the CR3BP campaign, the
 explicit time-dependence terms $\partial\Ham/\partial t$ that make the problem
-non-autonomous. Stationarity with respect to a free horizon variable
-($\Delta L$, \code{cScale}) is the transversality-type condition attached to
-the free span. So a machine-small $\|\nabla_z\Lag\|_\infty$ certifies the
-costate dynamics and the horizon condition simultaneously, at collocation
-order, without either being coded explicitly.
+non-autonomous --- and which is where the nodal map of
+\S\ref{sec:costates} comes from. Stationarity with respect to a free horizon
+variable ($\Delta L$, \code{cScale}) is the discrete condition attached to the
+free span. So a machine-small $\|\nabla_z\Lag\|_\infty$ certifies the costate
+dynamics and the horizon condition simultaneously, at collocation order,
+without either being coded explicitly.
+
+Two qualifications, from external review: \eqref{eq:adjoint} is the clean
+adjoint recursion only at nodes where no \emph{other} constraint acts (at
+boundary or path-constrained nodes the row also carries those multipliers);
+and the free-span row is a discrete NLP condition, which coincides with the
+physical $\Ham(t_f)$ transversality only once the reparameterization is
+carried through --- see \S\ref{sec:timecostate}.
 
 \paragraph{Intuition.}
 ``No first-order descent direction exists that respects the constraints.'' If
@@ -258,15 +274,30 @@ Lagrangian gradient at each burn node, projects out the radial part, reports
 \paragraph{Interpretation --- with an honest caveat.}
 Values at machine precision ($10^{-17}$--$10^{-16}$ observed) are expected.
 Two limitations, recorded as pre-promotion items in the register's \S A6:
-(i) this residual is bounded by $\sqrt3\cdot$\code{kktStatInf} \emph{by
-construction} --- it is a readable projection of check~\ref{sec:kkt}, not an
-independent test; and (ii) tangential stationarity is \emph{sign-blind}:
-$\vbeta=+p/\|p\|$ (the Hamiltonian \emph{maximizer}) satisfies
-\eqref{eq:tangential} identically. Minimality of the direction is currently
-carried by the physical layer (primer-alignment angle in
-\file{verify\_pmp\_mee} / the solver's own \code{primerAlignDeg}) and by the
-sign law below, not by this line alone. A future revision will exclude the
-cone multiplier explicitly and test its sign.
+
+(i) \emph{Not independent.} The residual is bounded by
+$\sqrt{n_\beta}\cdot$\code{kktStatInf} (here $n_\beta=3$, so $\sqrt3$) --- it
+is a readable projection of check~\ref{sec:kkt}, not a separate test.
+\textbf{External review correction (2026-07-25):} merely excluding the cone
+multiplier before projecting does \emph{not} fix this, because the projector
+annihilates the radial term anyway,
+$P_{\vbeta}(q+2\mu\vbeta)=P_{\vbeta}q$ with $P_{\vbeta}=I-\vbeta\vbeta^{\!\top}$.
+Genuine independence requires building $q_k$ from a \emph{different} gradient
+--- e.g.\ defect duals only, or a separately reconstructed Hamiltonian --- and
+comparing that against the solved direction.
+
+(ii) \emph{Sign-blind.} $\vbeta=+p/\|p\|$ (the Hamiltonian \emph{maximizer})
+satisfies \eqref{eq:tangential} identically. The branch is decided by the cone
+multiplier: writing $\Lag=\Lag_0+\mu(\vbeta^{\!\top}\vbeta-1)$ with
+$q+2\mu\vbeta=0$, the minimizer has $\vbeta^{\!\top}q<0$, equivalently
+$\mu>0$; the maximizer has $\mu<0$ (reverse if the registered row is
+$1-\vbeta^{\!\top}\vbeta$). Reporting the normalized anti-alignment
+$-\vbeta^{\!\top}q/\|q\|$ is more informative than tangency alone.
+
+Until both are addressed, minimality of the direction rests on the physical
+layer (primer-alignment angle in \file{verify\_pmp\_mee}, the solver's own
+\code{primerAlignDeg}) and on the sign law of \S\ref{sec:signlaw}, not on this
+line.
 
 %---------------------------------------------------------------
 \subsection{The minimum condition, throttle part: the switching sign law}
@@ -297,11 +328,17 @@ S^d_k \;=\;
 \vlam_{g,\setminus\mathrm{box}}\Bigr]_{s_k\text{-row}},
 \label{eq:Sd}
 \end{equation}
-which equals the continuous $S(\sigma_k)$ up to a \emph{positive} factor (the
-local trapezoid weight $w_k$ times the clock factor). Removing the bound rows
-matters: at an active bound, KKT makes the \emph{full} gradient row zero by
-absorbing $S^d_k$ into the bound multiplier --- the sign information lives
-precisely in what the bound multiplier had to absorb.
+which equals the continuous $S(\sigma_k)$ times a \emph{positive but
+node-dependent} factor --- the local trapezoid weight $w_k$ times the clock
+factor. Positivity means the \emph{sign} test in \eqref{eq:banglaw}, hence
+\code{signPct}, is exact. It does \emph{not} mean $S^d$ is a faithful sampling
+of $S$: because $w_k$ varies node to node, any statistic built on
+\emph{differences} of $S^d$ across the mesh inherits the weighting. That is
+the mechanism behind the regularity caveat in \S\ref{sec:sdot}, and it is why
+$S^d$ must be deweighted ($\widehat S_k = S^d_k/w_k$) before differencing.
+Removing the bound rows matters: at an active bound, KKT makes the \emph{full}
+gradient row zero by absorbing $S^d_k$ into the bound multiplier --- the sign
+information lives precisely in what the bound multiplier had to absorb.
 
 \paragraph{Intuition.}
 $S$ is the marginal Hamiltonian cost of thrust: ``would one more Newton-second
@@ -318,10 +355,27 @@ Skipped (\code{'-{}-'}) when the manifest has no throttle row (min-time).
 Gate: $\ge 99\%$. Certified rows read $100\%$. A few disagreeing nodes at
 exactly the switch times are tolerable mesh artifacts (a node can straddle a
 crossing); broad disagreement (the pre-fix era read 78\%) means the duals are
-corrupted or the solution is not extremal. Note the $\varepsilon$ caveat: at
-homotopy stages $\varepsilon>0$ the running cost is quadratic in $s$, the
-bang-bang law does not apply, and the line is advisory-only (printed with a
-caveat by the ELFO energy-seed run).
+corrupted or the solution is not extremal.
+
+\paragraph{Validity conditions (external review, 2026-07-25).}
+Both external reviewers confirmed the recovery \eqref{eq:Sd} is exact --- the
+active bound multiplier cancels $S^d_k$ identically, so removing its row
+recovers magnitude \emph{and} sign --- but only under stated conditions:
+the throttle cost must be \emph{affine} in $s$; the clock factor positive;
+the removed rows the \emph{complete} set of constraints acting directly on
+$s_k$; and the bound neither weakly active nor represented as coincident
+lower/upper bounds (where the dual split is non-unique). At $\varepsilon>0$
+the cost is quadratic in $s$ and $S^d$ is the derivative of the smoothed
+objective, not an affine switching function: interior $s$ can legitimately
+give $S^d=0$ and the sign carries no bang-bang implication.
+
+\textbf{Known gap.} \file{foc\_check.m} does not currently receive
+$\varepsilon$, so on an $\varepsilon>0$ leg it still folds \code{signPct},
+the singular-arc count, and \code{sdotMinRel} into the advisory verdict. The
+ELFO energy-seed run prints a caveat, but the verdict itself is not
+$\varepsilon$-aware. Recorded as pre-promotion work: the manifest should carry
+a throttle-cost kind (affine / quadratic) and skip these three checks
+programmatically when it is not affine.
 
 %---------------------------------------------------------------
 \subsection{Costate extraction: interval duals to nodal costates}
@@ -343,12 +397,25 @@ interior node is their step-weighted average,
 \paragraph{Formal content and intuition.}
 A trapezoid defect couples nodes $k$ and $k{+}1$, so its multiplier ``lives on
 the interval,'' not at a node --- the same way a finite-volume flux lives on a
-face. The weighted average \eqref{eq:dualmap} is what the discrete adjoint
-recursion identifies with the nodal costate (derivation adjudicated in
-\file{process/DESIGN\_dual\_map.md}); on a uniform mesh it reduces to the
-plain average of the two neighboring interval duals. The one-sided endpoint
-values are the honest price of the scheme --- see the transversality caveat
-below.
+face. The weighted average \eqref{eq:dualmap} is precisely the combination the
+discrete adjoint recursion \eqref{eq:adjoint} pairs with the node-$k$ Jacobian
+(equivalently, it is what appears in node-$k$ \emph{control} stationarity);
+on a uniform mesh it reduces to the plain average of the two neighbors.
+Derivation adjudicated in \file{process/DESIGN\_dual\_map.md}.
+
+\paragraph{A distinction worth keeping (external review, 2026-07-25).}
+The reviewers split here, and both were right about different questions.
+\eqref{eq:dualmap} is the correct \emph{stationarity combination}. It is
+\emph{not} the same thing as a linear \emph{interpolation} of interval-centred
+samples to the node, which would carry the crossed weights
+$(h_k\Lambda_{k-1}+h_{k-1}\Lambda_k)/(h_{k-1}+h_k)$. The two coincide on a
+uniform mesh and differ on a refined one. This matters because
+\code{rep.lam} is consumed \emph{both} ways: as a stationarity object (correct
+as implemented) and as sampled function values feeding
+\code{lamTimeCoV}, \code{lamTimeEnd}, and \code{lamMassEndRel} (where the
+interpolation reading, and the endpoint caveat below, apply). Note also that no
+exact nodal costate is recoverable from $\{\Lambda_k,h_k\}$ alone --- the exact
+discrete covector involves the dynamics Jacobian, cf.\ \eqref{eq:adjoint}.
 
 \paragraph{Code.}
 \file{foc\_dual\_to\_costate.m} (generic in $n_x$; unit-tested at $n_x=9$ on a
@@ -391,10 +458,23 @@ are machine-tight. Two candidate readings, both recorded in the register:
 under-converged mass costates on under-optimized rungs; or (ii) a
 discretization artifact: by \eqref{eq:dualmap} the endpoint costate is the
 \emph{one-sided} interval value, $\lambda_m$ at $\approx t_f - h/2$, which
-carries an $O(h)\,|\dot\lambda_m|$ bias whenever the final arc burns. The
-cheap discriminator (endpoint extrapolation, or checking whether the final arc
-is a burn) is queued as pre-promotion work. Until then, treat marginal misses
-on this line as a flag to investigate, not as a verdict.
+carries an $O(h)\,|\dot\lambda_m|$ bias whenever the final arc burns.
+
+\textbf{Both external reviewers independently confirmed reading (ii) is real},
+and converged on the same cheap fix --- extrapolate from the last two interval
+duals to the true endpoint,
+\begin{equation}
+\widehat\lambda(t_f)\;=\;\Lambda_N+\frac{h_N}{h_{N-1}+h_N}
+\bigl(\Lambda_N-\Lambda_{N-1}\bigr),
+\label{eq:endpointfix}
+\end{equation}
+with the symmetric formula at $\sigma_1$. The more principled alternative is to
+form the exact discrete endpoint covector
+$p_{N+1}=(I-\tfrac{h_N}{2}D_{N+1})^{\!\top}\Lambda_N$ plus terminal terms,
+whose mass component is zero by terminal-node stationarity when the final mass
+is genuinely free --- reported as a discrete identity rather than an estimate.
+Until one is implemented, treat marginal misses on this line as a flag to
+investigate, not a verdict: the two candidate explanations remain confounded.
 
 %---------------------------------------------------------------
 \subsection{The time costate: Hamiltonian conditions in dual form}
@@ -421,6 +501,20 @@ $-\lambda_t$ \emph{is} the Hamiltonian, by the time-as-state trick: asking
 quantity to read off the NLP than a reconstructed $\Ham(t)$. The min-time
 value condition is the classic ``the Hamiltonian equals minus the marginal
 value of deadline time'': for $J=t_f$, one more second costs exactly one unit.
+
+\paragraph{What this implementation does and does not establish
+(external review, 2026-07-25).}
+The identities $\Ham=-\lambda_t$ and $\lambda_t(t_f)=\pm1$ are classical for a
+plain time-augmented system. They are \emph{not} derived here for a
+Sundman-reparameterized system carrying a \code{cScale} free-time slack: that
+would require fixing an extended Hamiltonian and costate convention and
+propagating the reparameterization through them, which \file{foc\_check.m}
+itself flags as pending (its \code{freetf-cscale} \code{horizonNote}). What
+the code computes is the mapped defect-dual row and its statistics --- it never
+forms $\Ham$, never verifies the identity, and never gates the endpoint value.
+The ELFO reading $\lambda_t(t_f)=-1.000$ is therefore \emph{strong empirical
+evidence} that the identity carries through the reparameterization, not a
+verification of it. Completing that derivation is pre-promotion work.
 
 \paragraph{Code.}
 \code{rep.lamTimeCoV} (coefficient of variation of $\lambda_t$ over the nodes)
@@ -491,14 +585,33 @@ the switch nodes $k_i$; \code{rep.nSwitches}. Gate: $>10^{-3}$.
 Small values flag \emph{candidate} grazing --- e.g.\ tulip flagship
 $1.4\times10^{-7}$ (25 switches), ELFO $1.33\times$ front row
 $4.5\times10^{-5}$ (50 switches) --- consistent with the node-grazing-switch
-behavior the tulip campaign already suspected. But note the recorded
-discretization confound (register finding I1): $S^d_k$ carries the local
-trapezoid weight $w_k$ and the difference is not divided by the step, so on
-refined or PSR-split meshes (which densify \emph{exactly at switches}) the
-statistic shrinks with $h$ even for a perfectly regular crossing.
-Mesh-normalizing this line is required work before it can become a hard gate;
-until then read a FAIL here as ``inspect this switch on the mesh,'' not
-``the switch is degenerate.''
+behavior the tulip campaign already suspected. \textbf{But both external
+reviewers independently judged those two numbers unable to diagnose grazing},
+because of the recorded discretization confound (register finding I1): $S^d_k$
+carries the local trapezoid weight $w_k$ and the difference is not divided by
+the step, so on refined or PSR-split meshes (which densify \emph{exactly at
+switches}) the statistic shrinks with $h$ even for a perfectly regular
+crossing.
+
+The agreed replacement --- deweight, then take a true divided difference, then
+non-dimensionalize:
+\begin{equation}
+\widehat S_k=\frac{S^d_k}{w_k},\qquad
+D_i=\left|\frac{\widehat S_{k_i+1}-\widehat S_{k_i}}
+{\sigma_{k_i+1}-\sigma_{k_i}}\right|,\qquad
+R_i=\frac{(\sigma_{N+1}-\sigma_1)\,D_i}{S_{\mathrm{ref}}},
+\label{eq:sdotfix}
+\end{equation}
+with $w_1=h_1/2$, $w_k=(h_{k-1}+h_k)/2$, $w_{N+1}=h_N/2$, and
+$S_{\mathrm{ref}}$ the median $|\widehat S_j|$ over coast nodes outside a
+one-node neighborhood of any switch. Report $\min_i R_i$: dimensionless and
+invariant to local refinement for a smooth transversal crossing. One reviewer
+adds --- correctly --- that no threshold on a \emph{single} mesh is defensible;
+regularity should be asserted only if $R_i$ stays above the floor on two
+meshes. The same deweighting applies to the singular-arc test of
+\S\ref{sec:singular}, which otherwise reports false positives in densified
+regions. Until this lands, read a FAIL here as ``inspect this switch on the
+mesh,'' not ``the switch is degenerate.''
 
 %---------------------------------------------------------------
 \subsection{The second-order line: IPOPT native inertia ($\delta_w$)}
@@ -508,14 +621,25 @@ Strictly beyond first order, but printed in the same report because it is
 free. IPOPT's inertia-controlled linear solver adds a Hessian regularization
 $\delta_w>0$ \emph{only} when the reduced Hessian is indefinite at the current
 iterate. If the solver converges with $\delta_w=0$ over its final iterations,
-no direction of negative curvature exists on the well-scaled barrier system at
-the final $\mu$: for $\varepsilon>0$ a strict local minimum of the NLP; at
-$\varepsilon=0$ (bang-bang, objective linear in throttle) a \emph{weak}
-(non-strict) local minimum --- strictness lives in the switching times, which
-is precisely the still-open Maurer curvature test. The interpreter is
+no inertia correction was needed at those iterates. The interpreter is
 \file{foc\_ipopt\_inertia.m}, reading the $\delta_w$ history that every
 production solver now records (\code{out.regHistory}); verdicts are
 \code{LOCAL MIN} / \code{NOT CERTIFIED} / \code{NO-DATA}.
+
+\paragraph{How much this is worth (external review, 2026-07-25).}
+Read it as an \emph{inertia-regularization observation}, not a second-order
+certificate. $\delta_w=0$ over a tail says the correction was not applied at
+those \emph{barrier} iterates; it does not by itself prove positive
+definiteness of the final reduced Hessian on the critical cone, account for
+barrier/active-set limiting behavior, or establish strictness. Even read
+generously the ceiling is low: at $\varepsilon>0$ the problem is strictly
+convex in throttle (the easy case), and at $\varepsilon=0$ the barrier supplies
+the throttle-direction curvature, so the most it can support is a \emph{weak},
+non-strict local minimum --- strictness lives in the switching times, which is
+exactly the still-open Maurer curvature test. The \code{certLocalMin} /
+\code{LOCAL MIN} naming (inherited from the tulip campaign's
+\file{psr\_ipopt\_certify.m}) overstates this and should be relabeled
+campaign-wide.
 
 %=====================================================================
 \section{Running the layer and reading the report}

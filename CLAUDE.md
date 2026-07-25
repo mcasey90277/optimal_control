@@ -33,7 +33,7 @@ optimal_control/
 │   ├── lambert/                 # universal-variables Lambert (incl. multi-rev,
 │   │                            #   validated vs pyKep)
 │   ├── earth_elliptic_to_geo/   # GTO->GEO min-fuel (HMG-2004): direct/ (MEE campaign) + indirect/ (mfmax Fortran)
-│   ├── earth_elliptic_to_geo_CR3BP/  # elliptic->GEO WITH lunar gravity (CR3BP): README/TODO scoped, work not started
+│   ├── earth_elliptic_to_geo_CR3BP/  # elliptic->GEO WITH lunar gravity (CR3BP): CERTIFIED ladder 10->0.1 N, run_cr3bp_geo front door, reviewed note (doc/); Moon effect vs thrust (~50->30 g) + vs lunar phase (sign-flipping quadrupole)
 │   ├── GTO_tulip/               # CR3BP GTO->tulip; README at root, campaign docs in process/
 │   │   ├── direct/              #   sundman_minfuel (Sundman engine), PSR(+data), movie
 │   │   └── indirect/            #   lowThrust_GTO_tulip (base PMP shooting),
@@ -42,7 +42,8 @@ optimal_control/
 │   │   ├── direct/              #   elfo (CasADi campaign; reuses tulip Sundman engine)
 │   │   └── indirect/            #   placeholder (Route C future work)
 │   ├── min_fuel_paper/          # paper outline (co-author Koblick)
-│   └── min_fuel_papers/         # reference PDFs
+│   ├── min_fuel_papers/         # reference PDFs
+│   └── abstracts/               # conference abstract drafts
 ├── mpc/mpc_cart_pole/           # Model Predictive Control for cart-pole
 │   ├── mpc_cart_pole_demo.m     # MPC controller (N=50 horizon, 20Hz control)
 │   └── mpc_cart_pole_explained.tex  # Step-by-step code walkthrough

@@ -1,0 +1,9 @@
+Delivering the Constellation: Minimum-Fuel Low-Thrust Transfers from GTO to Lunar Tulip Orbits
+
+Tulip-shaped cislunar orbits have been shown to provide superior navigation geometry for the Moon's southern hemisphere, but a constellation is only as practical as the trajectories that populate it. This presentation addresses the delivery problem: minimum-fuel transfer of a rideshare smallsat from a geostationary transfer orbit to a tulip orbit using continuous low thrust.
+
+We model a 15 kg spacecraft with a 25 mN electric propulsion system (Isp 2100 s) in the Earth-Moon circular restricted three-body problem. The transfer -- roughly forty revolutions spiraling out of Earth's gravity well -- is solved by direct collocation with Sundman regularization, which resolves the severe near-perigee ill-conditioning of the eccentric spiral. A minimum-time solution anchors the transfer-time budget; a convex energy-to-fuel homotopy then discovers the optimal bang-bang thrust structure without a priori knowledge of its switching sequence; and a Pontryagin-steered refinement stage uses costates reconstructed from the transcription to sharpen switch times through targeted mesh densification.
+
+The certified solution at 1.15x minimum time (about 32 days) requires 3.37 km/s of delta-V and 2.26 kg of propellant -- fifteen percent of wet mass -- across roughly two dozen burn-coast arcs, with dynamics residuals at the 1e-14 level and independent verification against Pontryagin's necessary conditions. A complete delta-V-versus-transfer-time front is mapped, and the identical pipeline retargeted to an elliptical lunar frozen orbit provides a delivery-cost comparison between constellation architectures.
+
+These results demonstrate that southern-hemisphere PNT constellations are deliverable with small rideshare spacecraft, and the methodology generalizes directly to cislunar transfer design, constellation deployment, and replenishment planning.

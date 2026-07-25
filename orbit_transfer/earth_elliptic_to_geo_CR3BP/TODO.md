@@ -1,6 +1,8 @@
 # earth_elliptic_to_geo_CR3BP — TODO
 
-Phase 0 + the 10 N rung of Phase 1 are done. Phases in intended order:
+**Phase 1 COMPLETE (2026-07-24):** full certified ladder 10→0.1 N + 10 N φ₀
+sweep + note + movies. What remains: deep-rung φ₀ sweep, stronger optimality
+certificates, and the indirect Phase 2.
 
 ## Phase 0 — formulation decisions (design before code)
 
@@ -30,20 +32,28 @@ Phase 0 + the 10 N rung of Phase 1 are done. Phases in intended order:
   `direct/results/compare_vs_2body.md`. (The analytic
   Bonnard–Caillau–Picot rev-count/thrust bound cross-check is still open —
   folded into the deep-rung walk below.)
-- [ ] **Walk 1 N / 0.2 N / 0.1 N rungs** (background-length solves — these
-  are hours-long, not the seconds-long 10 N rung): repeat the T4→T5→T6
-  pipeline per rung. The Moon effect should grow toward the sanity-bound
-  ~11% tide/authority ratio predicted at 0.1 N (`sanity_bound.md`) — a
-  material (not decimal-dust) Δm_f is expected at the deep rungs. **When
-  these land, `compare_vs_2body.m`'s switch-count column must gain an
-  explicit band marker** (not bare "N/N" integers) — table3_certified.m's
-  under-resolution caveat becomes live at 0.2/0.1 N, so spec sec 8 gate 4's
-  "never bare integers" wording stops being satisfied by the footnote alone
-  (final-review-report.md, gate-4 finding).
-- [ ] **φ₀ sweep experiment** (spec D6): the 10 N rung's Δm_f = +0.0545 kg
-  SIGN ("the Moon HELPS") was measured at phi0 = 0 only. Sweep phi0 to
-  check whether the sign is phase-dependent before generalizing "the Moon
-  helps" into a campaign-wide claim.
+- [x] **Complete thrust ladder 10→0.1 N** (2026-07-24, commit `f3692b0`):
+  all 7 rungs certified via the front door + same-chain gain=0 controls;
+  Δm_f(T) = +52.0…+31.3 g. The predicted deep-rung ε-wall never appeared —
+  `liftDL=true` + `maxIter≥4000` carried 0.2 N (890 sw, 265 d) and 0.1 N
+  (1724 sw, 531 d) straight through (see the MUMPS/liftDL lesson, note §
+  thrust ladder). Interestingly the Moon effect did NOT grow toward the ~11%
+  sanity-bound ratio — it stays ~50 g then gently *declines*, the
+  phase-averaging picture.
+- [x] **φ₀ sweep at 10 N** (2026-07-24, commit `f3692b0` + note §phase,
+  fig `fig_phi_sweep.m`): +52.0/−56.3/+68.9/−52.8 g at 0/π/2/π/3π/2 —
+  π-periodic tidal quadrupole, the sign FLIPS with phase, so "the Moon
+  helps" is phase-specific not generic. Control-law sensitivity quantified
+  (`phase_control_sensitivity.m`): ≤1.3 min switch shifts, envelope
+  argument. Movies: `phase_quad_movie.m` (4-panel synced).
+- [ ] **Deep-rung φ₀ sweep** — the direct test of the phase-averaging
+  interpretation: at 0.2/0.1 N (t_f ≫ lunar month) the quadrupole amplitude
+  should collapse, leaving only the ~30 g secular floor. Recorded in the
+  note as the testable corollary.
+- [ ] **Switch-count band marker in `compare_vs_2body.m`** — now that
+  0.2/0.1 N are in the table (890/1724 nodal switches), the swStr column
+  should carry an explicit band marker, not bare "N/N" (spec sec 8 gate 4;
+  final-review-report.md gate-4 finding).
 - [x] **CR3BP-aware PMP/primer verification** (task B, 2026-07-23,
   `feat(verify): lunar-aware PMP verification + CR3BP campaign driver`):
   `mee_primer_switch.m` now subtracts the zero-throttle ballistic/lunar
@@ -74,12 +84,7 @@ Phase 0 + the 10 N rung of Phase 1 are done. Phases in intended order:
   Jacobian machinery). Our current indirect checks are all first-order; this
   closes that gap and should also back-port to `../GTO_tulip/indirect/ifs/`.
 
-## Housekeeping
-
-- [ ] Create `direct/`/`indirect/` when the first code lands; keep this
-  README/TODO current.
-
-## Stronger optimality evidence (added 2026-07-23, note sec 9-10)
+## Stronger optimality evidence (note sec 9-10)
 
 - [x] **CR3BP-aware primer** half DONE (task B, 2026-07-23, commit
   `feat(verify): lunar-aware PMP verification + CR3BP campaign driver`):

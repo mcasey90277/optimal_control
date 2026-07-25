@@ -10,7 +10,7 @@ reference material.
 | folder | problem | direct | indirect |
 |---|---|---|---|
 | `earth_elliptic_to_geo/` | elliptic (GTO-like) → GEO, Earth 2-body (HMG-2004 benchmark, 1500 kg, 10→0.1 N ladder) | **working, certified** — MEE/L-domain campaign, full Table-3 thrust ladder, `run_gergaud` front door | MfMax (Gergaud-group Fortran) built + validated as cross-check; our own MATLAB indirect is future work |
-| `earth_elliptic_to_geo_CR3BP/` | same transfer **with lunar gravity** (Earth–Moon CR3BP) | not started — README/TODO scope the plan | not started |
+| `earth_elliptic_to_geo_CR3BP/` | same transfer **with lunar gravity** (Earth–Moon CR3BP) | **working, certified** — full ladder 10→0.1 N, `run_cr3bp_geo` front door, reviewed technical note; Moon effect mapped vs thrust (~50→30 g) and vs lunar phase (sign-flipping quadrupole) | Phase 2, not started |
 | `GTO_tulip/` | GTO → south-pole tulip orbit, Earth–Moon CR3BP (15 kg, 25 mN) | **working, certified** — Sundman min-fuel engine, 25-switch flagship, ΔV–t_f front | built (ms_band, ifs, ztl, min_time) but not yet certified — the active goal |
 | `GTO_ELFO/` | GTO → ELFO lunar frozen orbit, Earth–Moon CR3BP | **working** — front mapped, min-time anchor certified | not started (Route C open) |
 
@@ -36,6 +36,7 @@ records in `process/`, technical notes in `doc/`.
 |---|---|
 | `min_fuel_papers/` | Source papers (HMG-2004 preprint, Caillau–Noailles 2001, Zhang 2015, MfMax manuals, …). |
 | `min_fuel_paper/` | Our min-fuel paper outline (co-author Koblick). |
+| `abstracts/` | Conference abstract drafts (e.g. cislunar-conference GTO→tulip transfer talk). |
 
 ## Conventions
 

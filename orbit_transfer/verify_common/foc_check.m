@@ -126,6 +126,9 @@ else
 end
 
 % --- (4) nodal costates (sign-resolved) --------------------------------------
+assert(numel(defRows) == nx*Nseg, ...
+    'foc_check: defect group has %d rows, expected nx*Nseg = %d -- creg mis-registered?', ...
+    numel(defRows), nx*Nseg);
 LamDef = reshape(lamAll(defRows), nx, Nseg);
 rep.lam = foc_dual_to_costate(s*LamDef, sg);
 checks{end+1} = 'costates';

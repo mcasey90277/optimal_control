@@ -55,7 +55,7 @@ not restated here.)
 | 6 | full KKT certificate — stationarity, dual feasibility, complementarity | `sosc_recover_kkt` + `sosc_kkt_residual`; `results/dual_anomaly/diag_t1_beta.m` |
 | 7 | no singular arc (no run of \|S\|≈0) | `verify_pmp_mee` H2 check |
 | 8 | **regular switching, Sdot != 0** — *Maurer ingredient (ii)* | `psr_second_order.m:278` (see gap G3) |
-| 9 | **generic AD-based full first-order gate — one instrument, all four campaigns**: KKT stationarity, min-condition tangential residual, sign law, transversality, singular-arc count, regular-switching Sdot != 0, all from the NLP's own `opti.lam_g` via manifest-driven complex-step/AD Lagrangian, printed+saved by a fixed-format standard report | `verify_common/foc_check.m` + `foc_report.m` + `foc_manifest.m` (built 2026-07-25, Tasks 1-5); wired into all four campaigns (Tasks 6-9): `run_foc_mee.m` (earth 2-body), `verify_cr3bp_pmp.m` (CR3BP), `run_foc_tulip.m` (tulip), `run_foc_elfo.m` (ELFO) |
+| 9 | **generic AD-based full first-order gate — one instrument, all four campaigns**: KKT stationarity, min-condition tangential residual, sign law, transversality, singular-arc count, regular-switching Sdot != 0, all from the NLP's own `opti.lam_g` via manifest-driven AD Lagrangian, printed+saved by a fixed-format standard report | `verify_common/foc_check.m` + `foc_report.m` + `foc_manifest.m` (built 2026-07-25, Tasks 1-5); wired into all four campaigns (Tasks 6-9): `run_foc_mee.m` (earth 2-body), `verify_cr3bp_pmp.m` (CR3BP), `run_foc_tulip.m` (tulip), `run_foc_elfo.m` (ELFO) |
 | — | primal, dual-free cross-checks (switch structure, edge fraction, bound saturation) | `switch_structure`, solver `boundSat` |
 
 **Note — two different costate sources.** The earth/CR3BP path reads the NLP's
@@ -89,12 +89,12 @@ from an informal list but which matter here.
 |---|---|
 | **(a) state dynamics** satisfied along the trajectory | YES — machine-tight, but **at the collocation nodes, to collocation order**. Not the same as satisfying the continuous ODE; see the caveat below |
 | **(b) costate dynamics** (adjoint equation) | **Implicitly** — KKT stationarity w.r.t. the state variables *is* the discrete adjoint recursion, now verified generically via `foc_check` on all four campaigns (2026-07-25): ‖∇ₓL‖∞ ranges 1.5e-14 .. 6.9e-10 across earth's 9 rows, 1.2e-14 .. 2.5e-13 across CR3BP's 4 rows, 5.7e-13 on the tulip flagship, 5.9e-13 .. 1.1e-11 across ELFO's 3 rows — all PASS. Tulip additionally enforces it explicitly by least-squares (independent of the solver's own duals, but disagrees with the raw-dual read on this same flagship — see A1's Task 8 note). **Nobody checks a continuous-time costate ODE residual** |
-| **(c) transversality** | λ_m(t_f)=0 now checked via `foc_check` on all four campaigns (earth 7/9 PASS, CR3BP 3/4 PASS, tulip PASS, ELFO 3/3 PASS — see A3); the earth/CR3BP misses are marginal (~3x tol) transversality-only findings, not a coverage gap. Terminal elements are fully pinned, so no condition there. In the L-domain, free ΔL supplies a transversality-type stationarity row — enforced by KKT, never *reported* as a PMP quantity |
+| **(c) transversality** | λ_m(t_f)=0 now checked via `foc_check` on all four campaigns (earth 7/9 PASS, CR3BP 3/4 PASS, tulip PASS, ELFO 3/3 PASS — see A3); the earth/CR3BP misses are marginal (~3x tol) transversality-only findings, not a coverage gap. **Finding I5 (final review, 2026-07-25):** all three misses (earth 5N/2.5N, CR3BP 5N) share the same signature — `lamMassEndRel` uses the one-sided interval-endpoint dual (λ at ~t_f − h/2), which carries an O(h)\|λ̇_m\| bias whenever the final arc burns; the ~3x-tol misses are consistent with that bias rather than a genuine transversality violation. Cheap discriminator (endpoint extrapolation, or a final-arc burn/coast check) recorded as pre-promotion work, not yet run. Terminal elements are fully pinned, so no condition there. In the L-domain, free ΔL supplies a transversality-type stationarity row — enforced by KKT, never *reported* as a PMP quantity |
 | **(d) Hamiltonian constancy / H≡0 for free t_f** | see the correction below — partially; the free-t_f case is now partially checked (G4): `foc_check`'s dual-form on the ELFO min-time anchor confirms λ_t(t_f)=−1.000, exactly the theoretical ±1 value, but leaves a genuine open anomaly (`lamTimeCoV`=5.7%, expected ~0) unresolved — see A4/LEAD-4. Still not the literal H(t_f)=0 value test |
 | ★ **(e) the minimum condition itself**: u\* = argmin over the admissible set, not merely ∂H/∂u = 0 | **YES, and it is our strongest check.** For control-affine dynamics with ‖β‖=1 and thr∈[0,1] the pointwise minimizer is exactly β = −p/‖p‖ with thr from sign(S) — so the primer-alignment + sign-law gates *are* the minimum condition. Note ∂H/∂u = 0 would be the wrong test: the throttle optimum is at a bound, not a stationary point |
 | ★ **(f) non-triviality / normality**: (λ₀,λ) ≢ 0, λ₀ ≥ 0; no abnormal extremal | **NOT CHECKED anywhere.** In the direct/NLP form λ₀ ≡ 1 by construction, so abnormality is not even representable — it becomes a real question only for the indirect solver (goal 6) |
 | ★ **(g) no singular arc** (else generalized Legendre–Clebsch / Kelley) | YES — H2 run-of-\|S\|≈0 check (earth) |
-| ★ **(h) regular switching, Ṡ ≠ 0** | computed and, as of 2026-07-25, a **standing per-row line in every `foc_report`** (G3 closed as a standing line — advisory, not yet a hard gate). Live findings from that line: tulip flagship 1.4e-7 vs tol 1e-3 (25 switches), ELFO 1.33x front row 4.5e-5 vs tol 1e-3 (50 switches) — both node-grazing, not costate defects |
+| ★ **(h) regular switching, Ṡ ≠ 0** | computed and, as of 2026-07-25, a **standing per-row line in every `foc_report`** (G3 closed as a standing line — advisory, not yet a hard gate). Live findings from that line: tulip flagship 1.4e-7 vs tol 1e-3 (25 switches), ELFO 1.33x front row 4.5e-5 vs tol 1e-3 (50 switches) — attributed to node-grazing, not costate defects — **but see finding I1 (final review, 2026-07-25): `Sd` carries the local trapezoid mesh weight and `sdotMinRel` is NOT mesh-normalized, so a small value on a refined/PSR-split mesh may be a DISCRETIZATION CONFOUND rather than physical grazing; not yet distinguished on either row** |
 | ★ **(i) Weierstrass–Erdmann corner conditions** (λ, H continuous across a switch) | satisfied *by construction* — control-affine, no active state constraints; worth stating, not worth testing |
 | ★ **(j) weak Legendre–Clebsch** ∂²H/∂u² ≥ 0 | vacuous at ε=0 (linear in throttle); meaningful only on the ε>0 homotopy legs |
 | ★ **(k) state-constraint jump conditions** | not applicable — the state boxes are inactive; the solver's `boundSat` diagnostic is what confirms that, and it is checked |
@@ -138,10 +138,10 @@ physical `pass` column (see A5); a FAIL here does not demote a certified row.
 
 | campaign / target | primer + sign law | switch alignment | transversality | H constancy | full KKT | Sdot ≠ 0 |
 |---|---|---|---|---|---|---|
-| earth 2-body (10 → 0.1 N, + 2 PSR) | **9/9 @ 0.000° / 100%** | yes | **7/9 PASS** — 5N (3.189e-3) and 2.5N (1.265e-3) FAIL, marginal (~3x tol=1e-3), both rows' warm re-solve *improved* the point | yes (CoV ~1e-9) | **yes, 9/9 kktStat PASS** (1.5e-14 .. 6.9e-10 across the 9 rows — max is the 1N-PSR row) | **yes, 9/9 PASS via `foc_check`** |
-| earth CR3BP (lunar) | **4/4 @ 100% sign** (10/5/1/0.5 N; 2.5/0.2/0.1 N **NOT RUN** — deferred, large-N warm re-solves too slow for this pipeline) | yes (4/4) | **3/4 PASS** — T5N FAILs (3.108e-3), same marginal pattern as earth 2-body | reported, informational (non-autonomous — correct; G6 still open, no new instrument) | **yes, 4/4 kktStat PASS** (1.2e-14 to 2.5e-13) | **yes, 4/4 PASS** |
-| GTO→tulip | raw-dual **PASS** (0.058°, 100%) on flagship; LS-reconstruction **FAIL** (2.00, 40.44%) — **DISAGREE**, recorded not adjudicated (see A1 note) | yes (raw-dual) | **PASS** (5.2e-9) | no (autonomous H_t checked separately elsewhere, not via foc_check) | **yes, PASS** (5.746e-13) on the 25-switch flagship | **run, FAILS** (sdotMinRel 1.4e-7 vs tol 1e-3 — node-grazing switch, not a costate defect); drags flagship `rep.pass` to FAIL alongside the borderline δ_w tail |
-| GTO→ELFO | **energy seed PASS** (100%, eps=1 report-only caveat); **front row (1.33x, 50sw) PASS** (100%, exact at eps=0); min-time n/a (all-burn) | yes (fuel rows) | **3/3 PASS** — energy seed 1.00e-05, min-time 9.62e-06, front row 6.00e-09 | no (autonomous CR3BP-rotating; G4/lamTimeCoV below is the closer analog for the free-tf leg) | **yes, 3/3 kktStat PASS** (5.89e-13, 7.25e-14, 1.075e-11) — **first-ever FOC gate on this campaign** | energy seed **PASS** (8 sw); front row **FAILS** (sdotMinRel 4.485e-05, 50 sw, near-graze — same pattern as tulip); min-time n/a (all-burn) |
+| earth 2-body (10 → 0.1 N, + 2 PSR) | **9/9 @ 0.000° / 100%** | yes | **7/9 PASS** — 5N (3.189e-3) and 2.5N (1.265e-3) FAIL, marginal (~3x tol=1e-3), both rows' warm re-solve *improved* the point — **see finding I5** (one-sided endpoint-dual bias, not yet ruled out) | yes (CoV ~1e-9) | **yes, 9/9 kktStat PASS** (1.5e-14 .. 6.9e-10 across the 9 rows — max is the 1N-PSR row) | **yes, 9/9 PASS via `foc_check`** |
+| earth CR3BP (lunar) | **4/4 @ 100% sign** (10/5/1/0.5 N; 2.5/0.2/0.1 N **NOT RUN** — deferred, large-N warm re-solves too slow for this pipeline) | yes (4/4) | **3/4 PASS** — T5N FAILs (3.108e-3), same marginal pattern as earth 2-body — **see finding I5** | reported, informational (non-autonomous — correct; G6 still open, no new instrument) | **yes, 4/4 kktStat PASS** (1.2e-14 to 2.5e-13) | **yes, 4/4 PASS** |
+| GTO→tulip | raw-dual **PASS** (0.058°, 100%) on flagship; LS-reconstruction **FAIL** (2.00, 40.44%) — **DISAGREE**, recorded not adjudicated (see A1 note) | yes (raw-dual) | **PASS** (5.2e-9) | no (autonomous H_t checked separately elsewhere, not via foc_check) | **yes, PASS** (5.746e-13) on the 25-switch flagship | **run, FAILS** (sdotMinRel 1.4e-7 vs tol 1e-3 — attributed to node-grazing switch, not a costate defect — **see finding I1**: `sdotMinRel` is not mesh-normalized, so this may be a discretization confound); drags flagship `rep.pass` to FAIL alongside the borderline δ_w tail |
+| GTO→ELFO | **energy seed PASS** (100%, eps=1 report-only caveat); **front row (1.33x, 50sw) PASS** (100%, exact at eps=0); min-time n/a (all-burn) | yes (fuel rows) | **3/3 PASS** — energy seed 1.00e-05, min-time 9.62e-06, front row 6.00e-09 | no (autonomous CR3BP-rotating; G4/lamTimeCoV below is the closer analog for the free-tf leg) | **yes, 3/3 kktStat PASS** (5.89e-13, 7.25e-14, 1.075e-11) — **first-ever FOC gate on this campaign** | energy seed **PASS** (8 sw); front row **FAILS** (sdotMinRel 4.485e-05, 50 sw, near-graze — same pattern as tulip — **see finding I1**); min-time n/a (all-burn) |
 | min-time anchors (free t_f) | direction only, PASS on ELFO (3.30e-18 tan-max) | n/a (all-burn) | n/a (no free-mass transversality; see G4 instead) | n/a | **ELFO: yes, PASS** (7.25e-14); tulip min-time anchor not run this round | n/a |
 
 **G4 dual-form note (ELFO min-time anchor only):** `lamTimeEnd = -1.000` —
@@ -176,9 +176,19 @@ the KKT-stationarity floor — **open observation**, not resolved (see Part B
   NOT-APPLICABLE verdict — the *reporting* gap is closed. It is advisory
   (folded into `rep.pass`, not a hard gate), and it already caught two real,
   honestly-reported findings: the tulip flagship (1.4e-7 vs tol 1e-3, 25 sw)
-  and the ELFO 1.33x front row (4.485e-5, 50 sw) both fail it on node-grazing
-  switches — consistent with M2/near-degenerate bang-bang minima, not a new
-  defect.
+  and the ELFO 1.33x front row (4.485e-5, 50 sw) both attributed to
+  node-grazing switches — consistent with M2/near-degenerate bang-bang
+  minima, not a new defect. **Finding I1 (final-review, 2026-07-25):** that
+  attribution is unverified. `Sd` (the discrete switching-function residual
+  the gate differences) carries the local trapezoid mesh weight, and
+  `sdotMinRel` is **not mesh-normalized** — it is not divided by the nodal
+  weight or differenced against `dsigma`. On a refined or PSR-split mesh a
+  small `sdotMinRel` value can therefore be a **DISCRETIZATION CONFOUND**
+  (finer mesh → smaller raw residual by construction) rather than physical
+  node-grazing. Neither the tulip flagship nor the ELFO front row has been
+  re-checked with a mesh-normalized `Sd`. Mesh-normalizing `Sd` (divide by
+  the nodal weight, difference by `dsigma`) is **REQUIRED work before G3 is
+  promoted from an advisory standing line to a hard gate.**
 - **G4 — free-final-time Hamiltonian condition. PARTIAL, dual-form confirmed
   on one anchor (2026-07-25).** `foc_check` reports the dual-form of this
   condition (λ_t(t_f) vs its constancy) rather than the classical value test
@@ -212,6 +222,37 @@ function.
 A2's caveat on (a); (ii) *strict* local minimality — Part B gives weak local
 minimality on part of the tulip set and nothing elsewhere; (iii) anything
 global.
+
+## A6. Before hard-gate promotion
+
+Findings from the final whole-branch review of the foc-gate-layer branch
+(2026-07-25) that are deliberately **not** coded yet — checker-semantics
+issues in `foc_check.m` itself, not campaign findings. G3 (Sdot != 0) and the
+direction-check row currently run as *advisory* lines feeding `rep.pass`;
+promoting either to a hard gate should wait on these:
+
+- **I1 — `sdotMinRel` is not mesh-normalized.** `Sd` (the discrete
+  switching-function residual) carries the local trapezoid mesh weight
+  uncorrected. On a refined or PSR-split mesh, a small `sdotMinRel` can be a
+  **discretization artifact** (finer mesh → smaller raw residual) rather than
+  genuine regular switching. Required fix: mesh-normalize `Sd` — divide by
+  the nodal weight, difference by `dsigma` — before this can be trusted as a
+  hard gate. Currently contaminates the tulip-flagship and ELFO-front-row
+  "node-grazing" reads (A3, A4/G3).
+- **I2 — the direction-check (`dirTanMax`/`dirTanMed`) is not an independent
+  check, and is sign-blind.** The tangential-residual computation is bounded
+  by `kktStat` *by construction* (it is the same stationarity condition
+  projected onto the tangent space of `‖β‖=1`), so a PASS here is not
+  independent evidence beyond the KKT-stationarity row — it is currently
+  reported as if it were a separate instrument. It is also **sign-blind to
+  the ±p/‖p‖ branch**: tangential-residual-only cannot distinguish the primer
+  direction from its antipode, so it can pass on a solution pointing the
+  thrust the wrong way. Needs (a) a `betaNorm`-dual exclusion so the
+  computation is not trivially guaranteed by the constraint it is meant to
+  check, and (b) a multiplier-sign test to close the ±p/‖p‖ ambiguity.
+
+Both are recorded here rather than fixed now — see the branch's final-review
+report for why they were scoped out of this fix wave.
 
 ---
 
@@ -450,10 +491,11 @@ campaign/row, verdict, and what it changed in Part A or §1–§5.
 | (ongoing) | **IPOPT native inertia (δ_w)** | tulip PSR, 137 rows | **12/17 certified at ε=0**; 100/120 at ε>0 | second order is not at zero; weak local min for bang-bang |
 | 2026-07-25 | first-order PMP (primer/sign/alignment) | earth 9 rows + CR3BP 10/5 N | **PASS 0.000° / 100%** | Part A row 1–3 green for earth; makes Maurer ingredients (ii)/(iii) trustworthy |
 | 2026-07-25 | full KKT certificate from raw `lam_g` | earth 10 N | ‖∇ₓL‖∞ 1.5e-14, tangential ∂L/∂β 8e-17 | Part A row 6; also root-caused the dual bug |
-| 2026-07-25 (Task 6) | `foc_check`/`foc_report` full ladder | earth 2-body, 9 rows (10→0.1 N + 2 PSR) | **7/9 focPass** — 5N (3.189e-3) and 2.5N (1.265e-3) FAIL, transversality only, marginal (~3x tol); kktStat 1.5e-14 .. 6.9e-10 across all 9 rows, all PASS; `foc_ipopt_inertia` mixed (3 LOCAL MIN / 6 NOT CERTIFIED) | A3 earth 2-body row; A1 row 9 first real catch of the generic layer; Part B §1 earth row; LEAD-0 (earth) done |
-| 2026-07-25 (Task 7) | `foc_check`/`foc_report` subset | earth CR3BP, 4 rows (10/5/1/0.5 N, φ0=0; 2.5N skipped, 0.2/0.1N DEFERRED not run) | **3/4 focPass** — T5N FAILs transversality only (3.108e-3), same marginal pattern as earth; kktStat 1.2e-14 to 2.5e-13 all PASS; `foc_ipopt_inertia` **4/4 LOCAL MIN** (δ_w=0) | A3 CR3BP row updated; G2 partially closed (4/7 rungs); Part B §1 CR3BP row; LEAD-0 (CR3BP) done |
-| 2026-07-25 (Task 8) | `foc_check`/`foc_report` + LS cross-check | GTO→tulip, 25-switch flagship (`sundman_minfuel_certified.mat`) | KKT stationarity **PASS** (5.746e-13); primer/sign **PASS** (raw dual, 0.058°/100%) vs LS-reconstruction **FAIL** (2.00/40.44%) — **DISAGREE**, recorded not adjudicated; overall `rep.pass` **FAIL** (sdotMinRel 1.4e-7 node-graze + δ_w tail 1.8e-8 borderline) | A1 note on the two-source disagreement; A3 tulip row; G1 gets new data, not closed; G3 standing-line closed; Part B §1 tulip row cross-checked with the generic port |
-| 2026-07-25 (Task 9) | `foc_check`/`foc_report`, first-ever ELFO gate | GTO→ELFO, 3 artifacts (energy seed, min-time anchor, 1.33x/50sw front row) | energy seed **ADVISORY PASS** (KKT 5.89e-13, eps=1 sign-law caveat); min-time anchor **ADVISORY PASS** (KKT 7.25e-14, `lamTimeEnd=-1.000` CONFIRMS G4 dual-form, `lamTimeCoV=5.69e-2` OPEN); front row **ADVISORY FAIL** (sdotMinRel 4.485e-5 near-graze + δ_w 1.98e-6 NOT CERTIFIED) | A3 ELFO row goes from "none" to 3/3 covered on the nominal rung; G2 partial; G4 partial-dual-form-confirmed; LEAD-4 opened; Part B §1 ELFO row; LEAD-0 (ELFO) done |
+| 2026-07-25 (Task 6) | `foc_check`/`foc_report` full ladder | earth 2-body, 9 rows (10→0.1 N + 2 PSR) | **7/9 focPass** — 5N (3.189e-3) and 2.5N (1.265e-3) FAIL, transversality only, marginal (~3x tol); kktStat 1.5e-14 .. 6.9e-10 across all 9 rows, all PASS; `foc_ipopt_inertia` mixed (3 LOCAL MIN / 6 NOT CERTIFIED) | A3 earth 2-body row; A1 row 9 first real catch of the generic layer; Part B §1 earth row; LEAD-0 (earth) done; **final review: 5N/2.5N misses now also flagged under finding I5 (one-sided endpoint-dual bias, unadjudicated)** |
+| 2026-07-25 (Task 7) | `foc_check`/`foc_report` subset | earth CR3BP, 4 rows (10/5/1/0.5 N, φ0=0; 2.5N skipped, 0.2/0.1N DEFERRED not run) | **3/4 focPass** — T5N FAILs transversality only (3.108e-3), same marginal pattern as earth; kktStat 1.2e-14 to 2.5e-13 all PASS; `foc_ipopt_inertia` **4/4 LOCAL MIN** (δ_w=0) | A3 CR3BP row updated; G2 partially closed (4/7 rungs); Part B §1 CR3BP row; LEAD-0 (CR3BP) done; **final review: T5N miss now also flagged under finding I5** |
+| 2026-07-25 (Task 8) | `foc_check`/`foc_report` + LS cross-check | GTO→tulip, 25-switch flagship (`sundman_minfuel_certified.mat`) | KKT stationarity **PASS** (5.746e-13); primer/sign **PASS** (raw dual, 0.058°/100%) vs LS-reconstruction **FAIL** (2.00/40.44%) — **DISAGREE**, recorded not adjudicated; overall `rep.pass` **FAIL** (sdotMinRel 1.4e-7 node-graze + δ_w tail 1.8e-8 borderline) | A1 note on the two-source disagreement; A3 tulip row; G1 gets new data, not closed; G3 standing-line closed; Part B §1 tulip row cross-checked with the generic port; **final review: the "node-graze" read on sdotMinRel is now finding I1 — unverified without mesh-normalizing `Sd`** |
+| 2026-07-25 (Task 9) | `foc_check`/`foc_report`, first-ever ELFO gate | GTO→ELFO, 3 artifacts (energy seed, min-time anchor, 1.33x/50sw front row) | energy seed **ADVISORY PASS** (KKT 5.89e-13, eps=1 sign-law caveat); min-time anchor **ADVISORY PASS** (KKT 7.25e-14, `lamTimeEnd=-1.000` CONFIRMS G4 dual-form, `lamTimeCoV=5.69e-2` OPEN); front row **ADVISORY FAIL** (sdotMinRel 4.485e-5 near-graze + δ_w 1.98e-6 NOT CERTIFIED) | A3 ELFO row goes from "none" to 3/3 covered on the nominal rung; G2 partial; G4 partial-dual-form-confirmed; LEAD-4 opened; Part B §1 ELFO row; LEAD-0 (ELFO) done; **final review: the front-row "near-graze" read is now finding I1 — unverified without mesh-normalizing `Sd`** |
+| 2026-07-25 (final review) | register amendments (this fix wave) | `OPTIMALITY_CERTIFICATION.md` itself | recorded findings **I1** (`sdotMinRel` not mesh-normalized — discretization confound possible on refined/PSR-split meshes), **I2** (direction-check tangential residual not independent of `kktStat` by construction, and sign-blind to the ±p/‖p‖ branch), **I5** (`lamMassEndRel` one-sided endpoint-dual O(h) bias plausibly explains all three transversality misses); fixed M7 wording | none of I1/I2/I5 changes any PASS/FAIL verdict above; they are pre-promotion leads, see new §A6 |
 
 ---
 

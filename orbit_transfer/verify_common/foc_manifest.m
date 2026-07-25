@@ -21,7 +21,15 @@ function man = foc_manifest(name)
 %          .thrRow            [int or []] row index of thrust magnitude (or [] if control-indexed)
 %          .massRow           [int or []] row index of mass in state
 %          .timeRow           [int or []] row index of time in state
-%          .autonomous        [logical] true if system is time-autonomous
+%          .autonomous        [logical] true if system is time-autonomous.
+%                             DECLARATIVE ONLY (final-review fix I3, 2026-07-25):
+%                             no code in foc_check.m/foc_report.m currently
+%                             reads this field -- it is metadata recorded for
+%                             a human/future consumer, not yet wired to any
+%                             gate. The time-costate line foc_report prints is
+%                             INFORMATIONAL for every campaign regardless of
+%                             this flag (no PASS/FAIL is computed from it for
+%                             any campaign, autonomous or not).
 %          .horizonKind       [char] 'fixedtf' | 'freetf-cscale' | 'none'
 %          .massFreeAtTf      [logical] true if final mass is a free variable
 %

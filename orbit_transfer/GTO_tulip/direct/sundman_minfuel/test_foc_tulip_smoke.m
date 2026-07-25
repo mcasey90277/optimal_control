@@ -9,7 +9,12 @@ here = fileparts(mfilename('fullpath'));  cd(here);
 addpath(here);
 addpath(fullfile(here, '..', '..', '..', 'cr3bp_common'));
 
-S = load(fullfile(here, 'sundman_minfuel_certified.mat'));
+cacheFile = fullfile(here, 'sundman_minfuel_certified.mat');
+if ~isfile(cacheFile)
+    fprintf('SKIPPED -- cache absent\n'); return;
+end
+
+S = load(cacheFile);
 p = cr3bp_lt_params(0.025, 15, 2100);
 pSund = 1.5;   if isfield(S,'pSund') && ~isempty(S.pSund), pSund = S.pSund; end
 tf = S.out.X(8,end);

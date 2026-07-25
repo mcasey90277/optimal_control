@@ -68,7 +68,8 @@ function ver = verify_cr3bp_pmp(opts)
 %   [5] earth_elliptic_to_geo_CR3BP/TODO.md ("CR3BP-aware primer + PSR" item;
 %       this file closes the primer half).
 %   [6] verify_common/foc_check.m, foc_manifest.m ('earth_cr3bp' entry sets
-%       autonomous=false; the generic FOC gate this file wires in).
+%       autonomous=false as DECLARATIVE metadata only -- not yet consumed by
+%       foc_check/foc_report; the generic FOC gate this file wires in).
 if nargin < 1 || isempty(opts), opts = struct(); end
 setup_paths();   % adds this folder + the 2-body campaign's core/lib/verify
 
@@ -146,11 +147,13 @@ ver = verify_pmp_mee(out, par, sigma, struct('eps', 0));
 % --- generic AD-based first-order (FOC/KKT) gate ----------------------------
 % Campaign-agnostic cross-check (verify_common/foc_check.m) on the SAME
 % refreshed point the primer gate above just used. earth_cr3bp's manifest
-% (foc_manifest.m) sets autonomous=false -- the Moon's motion makes lambda_t
-% genuinely non-constant here, so foc_report prints the time-costate line
-% without a PASS/FAIL ('--'); constancy is NOT gated, but the full
-% non-autonomous adjoint recursion IS still inside kktStatInf. Only runs when
-% refreshDuals=true attached a live CasADi model (out.model); the legacy
+% (foc_manifest.m) sets autonomous=false as DECLARATIVE metadata -- no code
+% in foc_check/foc_report currently reads that field. foc_report's
+% time-costate line is printed WITHOUT a PASS/FAIL ('--') for every campaign,
+% not specifically because of this flag; the Moon's motion does make lambda_t
+% genuinely non-constant here (constancy is not gated for any campaign), but
+% the full non-autonomous adjoint recursion IS still inside kktStatInf. Only
+% runs when refreshDuals=true attached a live CasADi model (out.model); the legacy
 % stale-dual path above already warns its gates are not meaningful, and
 % foc_check needs a model to differentiate.
 if refreshDuals

@@ -198,10 +198,24 @@ lbU = repmat([-1.1;-1.1;-1.1;0], 1, nN);
 ubU = repmat([ 1.1; 1.1; 1.1;1], 1, nN);
 r0 = size(opti.g,1)+1;
 opti.subject_to(U(:) >= lbU(:));
-if returnModel, creg(end+1) = struct('label','thrLo','rows',r0:size(opti.g,1)); end
+% M2 fix (final-review wave): U(:) is a SINGLE vectorized box constraint over
+% all 4 control rows (3 direction + 1 throttle), stacked column-major, so the
+% raw r0:size(opti.g,1) range covers all 4 rows/column, not just the throttle
+% row. Constraint content/order is untouched (still one subject_to over the
+% full U(:) box); only the creg METADATA is narrowed here to the throttle
+% sub-range -- row 4 of every 4-row column block, i.e. rows 4:4:end of this
+% range -- so foc_check's throttle-row bookkeeping (Sd/switching-function
+% sign check) doesn't get contaminated by the direction-vector bound rows.
+if returnModel
+    allRowsLo = r0:size(opti.g,1);
+    creg(end+1) = struct('label','thrLo','rows',allRowsLo(4:4:end));
+end
 r0 = size(opti.g,1)+1;
 opti.subject_to(U(:) <= ubU(:));
-if returnModel, creg(end+1) = struct('label','thrHi','rows',r0:size(opti.g,1)); end
+if returnModel
+    allRowsHi = r0:size(opti.g,1);
+    creg(end+1) = struct('label','thrHi','rows',allRowsHi(4:4:end));
+end
 
 % boundary conditions; cScale free (pinned by tfTarget below, if given)
 opti.subject_to(X(1:6,1) == rv0(:));   opti.subject_to(X(7,1) == 1);   opti.subject_to(X(8,1) == 0);

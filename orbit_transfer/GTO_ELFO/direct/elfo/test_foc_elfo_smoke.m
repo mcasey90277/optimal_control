@@ -12,7 +12,11 @@
 here = fileparts(mfilename('fullpath'));  cd(here);  setup_paths();
 
 %% ---- (1) casadi_energy_freetf.m, at the certified energy seed -------------
-S = load(fullfile(here, 'results', 'energy_elfo_freetf.mat'));
+energyCacheFile = fullfile(here, 'results', 'energy_elfo_freetf.mat');
+if ~isfile(energyCacheFile)
+    fprintf('SKIPPED -- cache absent\n'); return;
+end
+S = load(energyCacheFile);
 oBase = struct('moonZone', S.moonZone, 'pSund', S.pSund, 'qSund', S.qSund, ...
     'muGain', S.muGain, 'epsilon', 1, 'tfTarget', S.X(8,end), 'maxIter', 5, ...
     'warmTight', true);
@@ -40,7 +44,11 @@ fprintf('TEST_FOC_ELFO_SMOKE [energy]: PASS (X/U byte-identical; creg labels %s 
     strjoin(expectedE, ','));
 
 %% ---- (2) casadi_mintime_freetf.m, at the certified min-time anchor --------
-M = load(fullfile(here, 'results', 'mintime_elfo.mat'));
+mintimeCacheFile = fullfile(here, 'results', 'mintime_elfo.mat');
+if ~isfile(mintimeCacheFile)
+    fprintf('SKIPPED -- cache absent\n'); return;
+end
+M = load(mintimeCacheFile);
 mBase = struct('moonZone', M.moonZone, 'pSund', M.pSund, 'qSund', M.qSund, ...
     'maxIter', 5, 'warmTight', true);
 

@@ -252,6 +252,10 @@ inp = struct('thrustN', thrustN, 'tfmin_ND', tfmin_ND, 'ctf', nrm.ctf, 'tf_ND', 
 row = gergaud_row(inp);
 fprintf('%s', gergaud_row_str(row));
 
+if returnOnly
+    return;
+end
+
 %% =======================================================================
 %% 5b. Advisory first-order optimality (FOC) report (non-fatal, try-guarded)
 %% =======================================================================
@@ -264,6 +268,11 @@ fprintf('%s', gergaud_row_str(row));
 % cache-hit performed no solve this session at all. Never fatal: any
 % failure here is a one-line warning, not a thrown error, because this
 % report is advisory (report-only burn-in; does not alter row.certified).
+% NOTE (I4, final-review fix wave): this block is placed AFTER the
+% returnOnly early return above -- a returnOnly call (test hook) must
+% skip this entirely, since it exists only to print/re-solve a report for
+% an interactive/full run, not the cache/probe pointer-line metadata that
+% returnOnly callers want.
 try
     if usedCache
         fprintf(['[run_gergaud] FOC report: run run_foc_mee(''%s'') for the standard report ' ...
@@ -292,10 +301,6 @@ try
 catch ME
     warning('run_gergaud:focReportFailed', '[run_gergaud] FOC report failed (non-fatal): %s', ...
         ME.message);
-end
-
-if returnOnly
-    return;
 end
 
 %% =======================================================================

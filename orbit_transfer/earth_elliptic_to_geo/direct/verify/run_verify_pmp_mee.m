@@ -15,7 +15,8 @@
 %          results/MEE_M2_1N_PSR_psr_final.mat, both already committed
 %          certified caches -- no NLP solve happens here)
 % OUTPUTS: none (prints both verify_pmp_mee gate tables to stdout; writes
-%          results/verify_pmp_mee_10N.mat, results/verify_pmp_mee_1N.mat
+%          results/verify_pmp_mee_MEE_M2_10N.mat,
+%          results/verify_pmp_mee_MEE_M2_1N_PSR.mat
 %          [ver structs] and results/MEE_M2_10N_fig_switching.png,
 %          results/MEE_M2_1N_PSR_fig_switching.png)
 %

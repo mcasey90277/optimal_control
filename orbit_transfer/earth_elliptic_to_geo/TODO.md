@@ -155,6 +155,18 @@ file's own DEPRECATED header).
 
 ### 0. SOSC certificate — deep-rung scalability + deferred minors
 
+> **Cross-campaign context: `../OPTIMALITY_CERTIFICATION.md`.** Two claims in
+> this item are disputed there. (a) The "recovery fails at 1 N / 0.5 N" wall
+> below is contradicted by 2026-07-25 evidence — `verify/refresh_duals_mee.m`
+> ran essentially the same warm re-solve at both rungs and succeeded (defects
+> 8.27e-14 and 1.83e-13, well inside `recoverOK`'s 1e-8 bar), so the ERROR
+> verdicts likely come from the *downstream* inertia/null-space wall instead;
+> re-test before building a scalable recovery (register LEAD-1). (b) Pushing
+> this NLP-level certificate deeper has a low ceiling regardless: min-fuel
+> bang-bang extremals are weak, non-strict minima, so WEAK_MIN is the honest
+> best case (register M1). The live second-order path is the STM
+> switching-time Hessian (register §5), not deeper NLP SOSC.
+
 **Files:** `direct/verify/sosc/sosc_inertia.m`, `sosc_recover_kkt.m`, `recertify_table3.m`.
 
 **What:** the certificate certifies 10 N cleanly (WEAK_MIN) but stops at the deep
@@ -269,17 +281,37 @@ both `casadi_lt_mee` calls in `solve_psr_round`; then drop the `~isDefaultEndpoi
 guard in `run_gergaud`. Re-validate the certified 1 N / 0.5 N PSR results are
 byte-unchanged for the default (GEO) target before removing the guard.
 
-### 4. PMP dual/primer anomaly — the escalate-branch probe
+### 4. PMP dual/primer anomaly — RESOLVED 2026-07-25
 
-**Files:** `verify_pmp_mee.m`, `mee_dual_to_costate.m`.
+**Files:** `core/casadi_lt_mee.m`, `cartesian_legacy/casadi_lt_2body.m`,
+`verify/refresh_duals_mee.m` (new), `verify/run_verify_pmp_all.m` (new),
+`results/dual_anomaly/diag_{t1_beta,rawdual,optidual_minimal}.m` (new).
 
-**What:** the first-order PMP gates fail (primer misalignment 10–60°,
-eccentricity-correlated) because the **raw IPOPT duals** fail cone-elided KKT
-stationarity at high eccentricity — proven not a verifier bug by an independent
-KKT re-derivation. Primal certifications are unaffected (they never use the duals).
+**Root cause:** `opti.dual(con)` returns the multiplier for CasADi's
+*canonicalized* constraint orientation, not the orientation of the `opti.g`
+row it pairs with in `grad_f + A'*lam`. The collocation defect canonicalizes
+per row, so the corruption was entry-wise — identical magnitudes, ~44–60% of
+entries sign-flipped. It was never a physics, transcription, scaling or
+dual-map defect; the suspected "raw IPOPT duals fail KKT stationarity" framing
+above was itself wrong, since the raw `lam_g` satisfies stationarity to
+1.5e-14. The eccentricity correlation was real (measured +0.93) but a symptom.
 
-**Fix path (Campaign B):** recover the raw `lam_g` via `nlpsol` bypassing
-`opti.dual` (suspected incomplete `opti.dual` un-scaling). See `process/DESIGN_dual_map.md`.
+**Fix:** take defect duals from `opti.lam_g` by recorded `opti.g` row range.
+Gates go 32.370° / 78.35% (FAIL) → **0.000° / 100.00%** (PASS) at 10 N, and
+pass on **9/9** certified rows (full 10 → 0.1 N ladder + both PSR rows; 1 N
+PSR 59.967° → 0.000°) plus CR3BP 10 N and 5 N. Sweep driver
+`verify/run_verify_pmp_all.m`; regression guard `tests/test_dual_extraction.m`;
+post-mortem `process/LESSONS_DUAL_EXTRACTION.md`. Minimal reproduction of the CasADi behavior:
+`results/dual_anomaly/diag_optidual_minimal.m`. Full record:
+`process/DESIGN_dual_map.md` (status banner).
+
+**Residual work:** banked `.mat` caches still hold stale duals — verification
+re-derives them by warm re-solve (`refresh_duals_mee.m`). Two consequences
+worth noting: (a) that guard is on certified quantities, not node drift,
+because these are weak minima and the solver slides within the flat optimal
+set; (b) the re-solve sometimes lands on a *better* nearby optimum (5 N
++0.235 kg, 2.5 N +0.5 kg), an independent confirmation of item 7(b)'s
+"campaign under-optimized the warm-chained rungs" finding.
 
 ### 5. Map the full Fig-23 front (multiple c_tf per thrust)
 

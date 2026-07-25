@@ -558,19 +558,37 @@ the zero-throttle ballistic/lunar bracket from the primer extraction and
 its switching-function term before comparing against the solver's own
 switches, and reduces identically to the pre-existing two-body formulas
 when the perturbation is absent. Run against the certified 10\,N and 5\,N
-CR3BP fuel solutions, the primer/switch gate still \emph{fails}
-($32.4^\circ$/$78.4\%$ at 10\,N; $26.7^\circ$/$76.6\%$ at 5\,N) --- but an
+CR3BP fuel solutions, the primer/switch gate initially \emph{failed}
+($32.4^\circ$/$78.4\%$ at 10\,N; $26.7^\circ$/$76.6\%$ at 5\,N), while an
 A/B check isolating the lunar-specific coupling term (the
-$A_0/\dot L_0$ diagnostic, confirmed $\sim 10^{-5}$) shows removing it
-moves these numbers by less than $0.1^\circ$. The dominant cause is the
-same pre-existing, eccentricity-correlated raw-dual (KKT-multiplier)
-anomaly that already fails the pure two-body certified solutions
-identically; it is not a lunar-specific defect. Certification here
-therefore still rests on the four NLP metrics above, not on primer
-agreement, pending that campaign-wide dual-recovery fix landing; a
-conjugate-point (Jacobi-field) second-order check in the style of
-\cite{BCP2010} remains a further, separate follow-up
-(\S\ref{sec:secondorder}).
+$A_0/\dot L_0$ diagnostic, confirmed $\sim 10^{-5}$) showed removing it
+moved those numbers by less than $0.1^\circ$ --- establishing that the
+dominant cause was the same pre-existing, eccentricity-correlated raw-dual
+(KKT-multiplier) anomaly that failed the pure two-body certified solutions
+identically, and not a lunar-specific defect.
+
+That anomaly has since been resolved, and the diagnosis above was correct:
+it was not physics at all. The optimizer's convenience dual accessor returns
+multipliers in the modelling layer's \emph{canonicalized} constraint
+orientation rather than the orientation of the constraint row they pair with
+in the stationarity condition $\nabla f + A^{\!\top}\lambda = 0$. Because the
+collocation defect canonicalizes row by row, the stored duals carried
+entry-wise sign corruption --- magnitudes exact, roughly half the signs
+inverted --- which is precisely the signature of a structured, physics-like
+rotation. Sourcing the defect duals instead from the raw low-level multiplier
+vector, indexed by the defect group's own constraint-row range, is correct by
+construction. Two independent checks confirm it: assembling the full
+Lagrangian gradient from the raw multipliers gives
+$\lVert\nabla_x\mathcal{L}\rVert_\infty = 1.5\times10^{-14}$ with the
+tangential control-stationarity residual on burn arcs at $8\times10^{-17}$;
+and the rebuilt primer takes the gate to $0.000^\circ$ with $100.00\%$
+switching-sign agreement on the CR3BP 10\,N row (and on every two-body rung
+from 10\,N to 0.2\,N), with switch-alignment error dropping from
+$2.1\times10^{1}$ to $1.5\times10^{-1}$. The four NLP metrics above remain
+the primal certification; the first-order Pontryagin gate is now an
+\emph{independent} check that these solutions also pass. A conjugate-point
+(Jacobi-field) second-order check in the style of \cite{BCP2010} remains a
+further, separate follow-up (\S\ref{sec:secondorder}).
 
 Further recorded limitations: the Moon-in-reference-plane idealization
 (true CR3BP geometry; real obliquity unmodeled); the four-point lunar-phase
@@ -934,16 +952,19 @@ switches) the uniform mesh under-resolves switch clusters. The prerequisite
 this once gated on --- a lunar-aware switching function --- is now built
 (\S\ref{sec:certification}, commit \texttt{4353387}): the primer/switch
 reconstruction correctly subtracts the ballistic third-body rate under
-lunar gravity. What remains open is \emph{not} lunar-specific: PSR consumes
-the same primer/switching reconstruction, and that reconstruction still
-disagrees with the solver's own switches by tens of degrees at both
-certified CR3BP rungs, because of the campaign-wide, eccentricity-
-correlated raw-dual (KKT-multiplier) anomaly that fails the pure two-body
-certified solutions identically (\S\ref{sec:certification}). PSR is
-therefore blocked in practice on that pre-existing anomaly, not on lunar
-awareness; the CR3BP-aware primer and PSR remain one work package, but the
-gating item has moved from ``make the switching function lunar-aware'' to
-``fix the raw-dual recovery the switching function depends on.''
+lunar gravity. The second prerequisite --- that the reconstruction actually
+agree with the solver's own switches --- was for a time the binding one: PSR
+consumes the same primer/switching reconstruction, which disagreed by tens
+of degrees at both certified CR3BP rungs. That disagreement has since been
+traced to the dual-extraction defect described in \S\ref{sec:certification}
+(a constraint-orientation mismatch in the optimizer's convenience dual
+accessor, not a property of the trajectories) and corrected. With duals taken
+from the raw multiplier vector, the reconstruction now reproduces the
+solver's switches to a switch-alignment error of $1.5\times10^{-1}$ against a
+primer misalignment of $0.000^\circ$. Both prerequisites are therefore met
+and PSR is unblocked; it is scheduled work rather than a blocked item, and
+remains required before any switch-time claim at the deep rungs, where a
+uniform mesh under-resolves switch clusters.
 
 \subsection{Toward genuine local-minimality certificates}
 \label{sec:secondorder}

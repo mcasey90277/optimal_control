@@ -36,16 +36,32 @@ function ver = verify_pmp_mee(out, par, sigma, opts)
 %      distribution) -- NOTE: despite the similar name, this is NOT
 %      process/DESIGN_dual_map.md's multi-group Lagrangian-residual T1 test (that
 %      test assembles the FULL NLP Lagrangian gradient from ALL dual groups
-%      -- defect, cone, terminal/equality, bound multipliers -- and is not
-%      built here; this transcription has no cone constraint on beta to
-%      begin with, since ||beta||=1 is enforced by construction, not as an
-%      NLP constraint with its own multiplier). This quantity is
+%      -- defect, cone, terminal/equality, bound multipliers). That test IS
+%      now built, separately, as results/dual_anomaly/diag_t1_beta.m, and it
+%      is what root-caused the dual anomaly (2026-07-25; see the DUALS note
+%      below). CORRECTION to an earlier version of this header:
+%      casadi_lt_mee.m DOES impose ||beta||^2 == 1 as a genuine NLP
+%      constraint with its own multiplier (its betaNorm group) -- it is NOT
+%      "enforced by construction" as previously claimed here. That
+%      multiplier is purely RADIAL (grad_beta ||beta||^2 = 2*beta), so it
+%      drops out of the tangential comparison used both here and in
+%      diag_t1_beta.m, which is why the primer test remains well posed.
+%      This quantity is
 %      mathematically the same information as the primer misalignment angle
 %      recast in norm form (both come from decomposing primerVec against the
 %      burn direction beta), reported separately by explicit request. The
 %      full multi-group Lagrangian-residual T1 remains future work. Also
 %      reports a coupling-strength diagnostic K_L/Ldot0 (should be small for
 %      "low thrust"; NOT assumed anywhere in the derivation, just reported).
+%
+% DUALS (2026-07-25, Campaign B RESOLVED). This verifier consumes out.lamDef.
+% Feed it duals sourced from opti.lam_g -- NOT from opti.dual(), which returns
+% multipliers in CasADi's canonicalized constraint orientation and is
+% entry-wise sign-corrupted for this defect (the single root cause of the
+% long-standing 10-60 deg "eccentricity-correlated" primer failures in this
+% campaign AND the CR3BP one). casadi_lt_mee.m now does this for fresh solves;
+% for a banked .mat, refresh via verify/refresh_duals_mee.m first. Handing
+% this function stale duals will reproduce the old FAIL numbers exactly.
 %
 % LUNAR-AWARE (task B, 2026-07-23): par.pert (lunar_params struct, CR3BP
 % campaign) is forwarded verbatim through to mee_primer_switch.m, which

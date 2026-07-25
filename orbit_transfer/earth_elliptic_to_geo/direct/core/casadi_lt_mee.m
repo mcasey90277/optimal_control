@@ -139,16 +139,17 @@ end
 dXdL = [dXdLc{:}];      % [7x(N+1)] MX
 Ldot = [Ldotc{:}];      % [1x(N+1)] MX
 
-% collocation defects in sigma (KEEP HANDLES for the duals); dX/dsigma =
-% DeltaL*dXdL, so DeltaL scales the defect exactly like tau_f would
+% collocation defects in sigma; dX/dsigma = DeltaL*dXdL, so DeltaL scales the
+% defect exactly like tau_f would. defRows records the opti.g row range this
+% group occupies -- that range, NOT opti.dual(), is how the defect duals are
+% recovered below (see the lamDef extraction and its comment).
 r0 = size(opti.g,1)+1;
-conDef = cell(1, N);
 for k = 1:N
     dexpr = X(:,k+1) - X(:,k) - (dsig(k)/2)*dLnode(k)*(dXdL(:,k) + dXdL(:,k+1));
     if scaleNLP, dexpr(7) = dexpr(7)/tScaleNLP; end   % scale time-row defect (see scaleNLP)
-    conDef{k} = dexpr == 0;
-    opti.subject_to(conDef{k});
+    opti.subject_to(dexpr == 0);
 end
+defRows = r0:size(opti.g,1);
 if returnModel, creg(end+1) = addc('defect','eq',r0,0,1:N); end
 
 % Ldot degeneracy guard at every node
@@ -353,9 +354,32 @@ for k = 1:N
     dk = Xs(:,k+1) - Xs(:,k) - (dsig(k)/2)*dLs*(fn(:,k) + fn(:,k+1));
     dmax = max(dmax, max(abs(dk)));
 end
+% Defect duals, sourced from the RAW low-level multiplier vector opti.lam_g by
+% row range -- NOT from opti.dual(conDef{k}).
+%
+% ROOT CAUSE OF THE CAMPAIGN-B PMP ANOMALY (resolved 2026-07-25, evidence in
+% results/dual_anomaly/diag_t1_beta.m + diag_rawdual.m). On the certified 10 N
+% row, opti.dual(conDef{k}) and opti.lam_g(defRows) have IDENTICAL magnitudes
+% (max 5.668e+01 both) but differ in SIGN entry-by-entry. opti.lam_g is the
+% correct one, established two independent ways:
+%   (i) assembling the full NLP Lagrangian gradient from opti.lam_g gives
+%       ||grad_x L||_inf = 1.5e-14, and the tangential (radial-projected-out)
+%       dL/dbeta on burn nodes is 8e-17 -- i.e. beta-stationarity holds to
+%       machine precision, so these ARE the true KKT multipliers;
+%   (ii) rebuilding the primer from them takes verify_pmp_mee's gates from
+%       32.370 deg / 78.35% sign agreement (FAIL) to 0.000 deg / 100.00%
+%       (PASS), with switch-alignment error 2.12e+01 -> 1.53e-01.
+% The old opti.dual() path is what produced the long-standing 10-60 deg
+% "eccentricity-correlated" primer misalignment (measured corr = +0.93 with
+% eccentricity) across BOTH this campaign and earth_elliptic_to_geo_CR3BP --
+% the correlation was real but was a symptom of sign-corrupted duals, not of
+% any physics or transcription defect. Do not revert to opti.dual() here.
+% (Dropping the per-constraint opti.dual() loop is also a speed win at the
+% deep rungs, where N runs to tens of thousands.)
 lamDef = nan(7, N);
 try
-    for k = 1:N, lamDef(:,k) = sol.value(opti.dual(conDef{k})); end
+    lamAll = full(sol.value(opti.lam_g));
+    lamDef = reshape(lamAll(defRows), 7, N);
 catch
 end
 ss = Us(4,:);

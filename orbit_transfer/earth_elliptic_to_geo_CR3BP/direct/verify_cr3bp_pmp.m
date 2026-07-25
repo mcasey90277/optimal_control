@@ -97,12 +97,37 @@ par = kepler_lt_params(fp.thrustN, fp.m0kg, fp.ispS);
 par.pert = struct('muM', fp.muM, 'DM', fp.DM, 'nM', fp.nM, ...
                    'phi0', fp.phi0, 'gain', fp.gain);
 
-out   = struct('X', S.X, 'U', S.U, 'dL', S.dL, 'lamDef', S.defectDuals);
 sigma = S.sigma;
 
 fprintf('\n=== verify_cr3bp_pmp: %s ===\n', matFile);
 fprintf('    T=%g N, m0=%g kg, Isp=%g s, gain=%.4f (lunar mass scale), phi0=%.4f rad\n', ...
     fp.thrustN, fp.m0kg, fp.ispS, fp.gain, fp.phi0);
+
+% --- dual refresh (2026-07-25) ----------------------------------------------
+% The artifact's stored defectDuals were extracted via opti.dual(), which
+% returns multipliers in CasADi's canonicalized constraint orientation and is
+% therefore entry-wise sign-corrupted -- the single root cause of this
+% campaign's primer/sign gate failures (and the 2-body campaign's). Re-derive
+% them by warm re-solving at the saved primal; see refresh_duals_cr3bp.m.
+% opts.refreshDuals=false restores the legacy stale-dual path for forensics
+% ONLY -- the gates are not meaningful on that path.
+refreshDuals = optdef(opts, 'refreshDuals', true);
+refreshInfo  = struct('refreshed', false);
+if refreshDuals
+    [outR, refreshInfo] = refresh_duals_cr3bp(S, par, optdef(opts, 'refreshOpts', struct()));
+    refreshInfo.refreshed = true;
+    out = outR;
+    fprintf(['    dual refresh: %s | defect %.2e | m_f rel change %.2e | node ' ...
+             'drift %.2e | dual signs flipped %.1f%% | |dual| rel diff %.2e\n'], ...
+        refreshInfo.ipoptStatus, refreshInfo.maxDefect, refreshInfo.mfRelChange, ...
+        refreshInfo.drift, 100*refreshInfo.signFlipFrac, refreshInfo.magRelDiff);
+else
+    warning('verify_cr3bp_pmp:staleDuals', ...
+        ['refreshDuals=false: using the artifact''s stored opti.dual-sourced ' ...
+         'defectDuals, which are known sign-corrupted. Primer/sign gates ' ...
+         'below are NOT meaningful.']);
+    out = struct('X', S.X, 'U', S.U, 'dL', S.dL, 'lamDef', S.defectDuals);
+end
 
 % --- primer/switching-function verification (the pert-aware suite) ---------
 ver = verify_pmp_mee(out, par, sigma, struct('eps', 0));
@@ -113,7 +138,10 @@ fprintf(['[switch_structure] nSwitch=%d | revs=%.3f | duty=%.4f | ' ...
          'nodesPerRev=%.2f\n'], sw.nSwitch, sw.revs, sw.duty, sw.nodesPerRev);
 
 % --- Hamiltonian (time-costate constancy) diagnostic; see HAMILTONIAN CAVEAT
-resWrap = struct('fuel', struct('lamDef', S.defectDuals, 'dL', S.dL), 'sigma', S.sigma);
+% (uses the SAME duals the primer gates just used -- refreshed unless the
+% caller explicitly opted out -- so the two diagnostics cannot disagree about
+% which multiplier set they describe)
+resWrap = struct('fuel', struct('lamDef', out.lamDef, 'dL', out.dL), 'sigma', S.sigma);
 chk = hamiltonian_const_check(resWrap);
 
 passStr = 'FAIL';  if ver.pass, passStr = 'PASS'; end
@@ -129,6 +157,7 @@ ver.matFile          = matFile;
 ver.fp               = fp;
 ver.switchStructure  = sw;
 ver.hamiltonianCheck = chk;
+ver.dualRefresh      = refreshInfo;
 end
 
 % ---------------------------------------------------------------------------

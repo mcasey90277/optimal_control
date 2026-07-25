@@ -61,12 +61,13 @@ for k = 1:N+1
 end
 kapAll = [kapCell{:}];
 
-% collocation defects (KEEP HANDLES for the duals)
-conDef = cell(1, N);
+% collocation defects; defRows records the opti.g row range for dual recovery
+% (see the lamDef extraction below -- duals come from opti.lam_g, not opti.dual)
+r0def = size(opti.g,1) + 1;
 for k = 1:N
-    conDef{k} = X(:,k+1) - X(:,k) - (dtau(k)/2)*(f{k} + f{k+1}) == 0;
-    opti.subject_to(conDef{k});
+    opti.subject_to(X(:,k+1) - X(:,k) - (dtau(k)/2)*(f{k} + f{k+1}) == 0);
 end
+defRows = r0def:size(opti.g,1);
 
 % control cone + throttle (NEVER chain a<=x<=b -- MATLAB gotcha)
 for k = 1:N+1
@@ -174,9 +175,16 @@ for k = 1:N
     dk = Xs(:,k+1) - Xs(:,k) - (dtau(k)/2)*(fn(:,k) + fn(:,k+1));
     dmax = max(dmax, max(abs(dk)));
 end
+% Defect duals from the RAW multiplier vector opti.lam_g, NOT opti.dual().
+% Same root cause and fix as core/casadi_lt_mee.m -- opti.dual() returns
+% sign-corrupted multipliers (identical magnitudes, entry-wise sign flips),
+% which is what produced this solver's original 13-24 deg primer anomaly and
+% opened Campaign B. See that file's comment and results/dual_anomaly/
+% {diag_t1_beta,diag_rawdual}.m for the evidence.
 lamDef = nan(9, N);
 try
-    for k = 1:N, lamDef(:,k) = sol.value(opti.dual(conDef{k})); end
+    lamAll = full(sol.value(opti.lam_g));
+    lamDef = reshape(lamAll(defRows), 9, N);
 catch
 end
 ss = Us(4,:);

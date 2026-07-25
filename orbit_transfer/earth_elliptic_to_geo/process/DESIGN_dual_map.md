@@ -1,5 +1,46 @@
 # DESIGN — Campaign B: Resolve the PMP dual/primer anomaly
 
+> **STATUS: RESOLVED 2026-07-25.** Root cause = **H2(new), confirmed**: the
+> corruption was in the dual EXTRACTION. `opti.dual(con)` returns the
+> multiplier for CasADi's *canonicalized* constraint orientation, not the
+> orientation of the `opti.g` row it pairs with in `grad_f + A'*lam`. The
+> collocation defect canonicalizes per row, so the corruption was entry-wise:
+> identical magnitudes, ~44–60% of entries sign-flipped. **Fix:** record the
+> defect group's `opti.g` row range at build time and take duals from
+> `opti.lam_g(defRows)` (`core/casadi_lt_mee.m`, `cartesian_legacy/
+> casadi_lt_2body.m`). **Result:** `verify_pmp_mee` goes from 32.370° /
+> 78.35% sign agreement (FAIL) to **0.000° / 100.00%** (PASS), switch
+> alignment 21.2 → 0.15. Confirmed on **9/9** certified rows (the whole
+> 10 → 0.1 N ladder plus both PSR rows; 1 N PSR 59.967° → 0.000°) and on the
+> CR3BP 10 N and 5 N rows. Sweep: `verify/run_verify_pmp_all.m`.
+>
+> Evidence, all reproducible from committed scripts:
+> - `results/dual_anomaly/diag_t1_beta.m` — the §3 T1 test, finally built:
+>   full Lagrangian from raw `lam_g` gives `‖∇ₓL‖∞ = 1.5e-14` and tangential
+>   `∂L/∂β` on burn nodes = **8e-17**, so β-stationarity holds exactly and the
+>   `mee_primer_switch` derivation was never at fault. Also eliminated the one
+>   remaining structural suspect: all 194 `Ldot`-guard multipliers are zero.
+>   First quantitative measurement of the long-quoted characterization:
+>   `corr(primer angle, eccentricity) = +0.93`.
+> - `results/dual_anomaly/diag_rawdual.m` — the fix test, and the structural
+>   fingerprint (magnitudes equal, signs differ).
+> - `results/dual_anomaly/diag_optidual_minimal.m` — **minimal reproduction**
+>   on a 3-variable NLP: the same constraint written `x - c == 0`, `c - x == 0`
+>   and `x == c` yields stationarity residual 0.0 / 10.0 / 0.0 from
+>   `opti.dual`, while `opti.lam_g` is correct in all three.
+>
+> Both T0 (scaling off) and T2 (8-state elimination) were rendered moot and
+> were never run: T1 localized the mechanism outright. Note the §2 hypothesis
+> ranking was right — H1(new) (scaling cross-talk) is dead, H2(new)
+> (extraction convention) is the answer.
+>
+> **Banked `.mat` caches still carry stale duals** — the fix affects fresh
+> solves only. Repair path: `verify/refresh_duals_mee.m` (2-body) and
+> `../earth_elliptic_to_geo_CR3BP/direct/refresh_duals_cr3bp.m` (CR3BP), which
+> warm re-solve at the saved primal. Sweep driver: `verify/run_verify_pmp_all.m`.
+>
+> The rest of this document is preserved as the pre-resolution design record.
+
 **Goal.** Turn the open finding — a reproducible 10–24° primer misalignment in the
 KKT duals of `casadi_lt_2body` solutions — into a *resolved* mechanism with a
 verified dual-to-costate map, restoring campaign-grade first-order PMP

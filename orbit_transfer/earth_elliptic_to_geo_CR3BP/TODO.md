@@ -92,12 +92,39 @@ certificates, and the indirect Phase 2.
   `par.pert`, regression-clean on the 2-body suite; see the Phase-1 item
   above for the honest gate numbers (still FAIL, pre-existing dual anomaly,
   not lunar-specific).
-- [ ] **PSR half remains open.** PMP-steered switch-time refinement (PSR)
-  per the tulip pattern — needed before any published switch-time claim,
-  decisive at deep rungs. (Blocked in practice on the same raw-`lam_g`
-  dual anomaly above, since PSR consumes the same primer/switching
-  reconstruction this task made lunar-aware but did not make agree with
-  the solver's own switches.)
+- [x] **Dual anomaly RESOLVED (2026-07-25) — this UNBLOCKS the PSR half.**
+  Root cause was never lunar-specific and never physics: `opti.dual()` returns
+  multipliers in CasADi's *canonicalized* constraint orientation rather than
+  the orientation of the `opti.g` row they pair with in `grad_f + A'*lam`, so
+  the defect duals were entry-wise sign-corrupted (identical magnitudes,
+  ~44–60% of signs flipped). Task B's read — "the SAME pre-existing anomaly
+  that fails the pure 2-body rows identically, NOT a new lunar-specific
+  defect" — was exactly right. Fixed in the shared `casadi_lt_mee.m` (duals
+  now from `opti.lam_g` by row range); `verify_pmp_mee` goes 32.370° / 78.35%
+  (FAIL) → **0.000° / 100.00%** (PASS) on the 2-body rungs, switch-alignment
+  error 21.2 → 0.15. Record + minimal reproduction:
+  `../earth_elliptic_to_geo/process/DESIGN_dual_map.md` status banner.
+- [ ] **Re-run `verify_cr3bp_pmp` on the certified 10 N / 5 N rows.** Banked
+  artifacts still hold stale duals; the driver now re-derives them by warm
+  re-solve (`direct/refresh_duals_cr3bp.m`, opt-out `refreshDuals=false`).
+  Record the new gate numbers, then update the note's §9-10 primer discussion,
+  which currently presents the pre-fix FAIL numbers as a standing limitation.
+- [ ] **PSR half — now actionable, no longer blocked.** PMP-steered switch-time
+  refinement per the tulip pattern; needed before any published switch-time
+  claim, decisive at deep rungs. It consumes the same primer/switching
+  reconstruction, which now agrees with the solver's own switches.
+> **Before acting on the three tiers below, read
+> `../OPTIMALITY_CERTIFICATION.md`.** Tiers 1 and 2 have already been BUILT in
+> other campaigns and both are blocked for structural reasons that apply here
+> too: the NLP reduced-Hessian route returns WEAK_MIN at best (min-fuel
+> bang-bang extremals are weak, non-strict minima), its KKT-inertia repair is
+> NOT APPLICABLE (the ε→0 throttle parks near, not at, its bounds, so strict
+> complementarity fails), and the tulip's Maurer switching-time Hessian is
+> BLOCKED by forward-flow conditioning. The live path is the STM /
+> multiple-shooting switching-time Hessian specified in that register §5 —
+> which is campaign-agnostic and would close this row for CR3BP without a
+> CR3BP-specific build. The tier list below is retained as the original plan.
+
 - [ ] **SOSC tier 1 (cheapest, machinery half-built):** finish the
   2-body campaign's PLAN_sosc reduced-Hessian check on casadi_lt_mee's
   returnModel registries; run it on the certified 10 N and 5 N solutions

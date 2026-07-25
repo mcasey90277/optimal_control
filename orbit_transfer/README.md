@@ -46,3 +46,24 @@ records in `process/`, technical notes in `doc/`.
   campaign's `results/` (under `direct/`).
 - Cross-references between campaigns are deliberate and documented in each
   `setup_paths.m` header (e.g. GTO_ELFO reuses GTO_tulip's Sundman engine).
+- **KKT multipliers: never `opti.dual()`.** It returns duals in CasADi's
+  *canonicalized* constraint orientation, not the orientation of the `opti.g`
+  row they pair with in `grad_f + A'*lam`, so for a row-wise-canonicalizing
+  constraint (every collocation defect here) they come back sign-corrupted
+  entry by entry. Record the group's `opti.g` row range at build time and
+  index `opti.lam_g`. This cost two campaigns nine days of misdiagnosis in
+  July 2026 — full post-mortem, the reusable
+  "is-it-the-duals-or-my-derivation" diagnostic, and the weak-minimum
+  warm-restart rules in
+  **`earth_elliptic_to_geo/process/LESSONS_DUAL_EXTRACTION.md`**.
+
+## Cross-campaign registers and lessons
+
+Read before repeating an old mistake:
+
+| file | what |
+|---|---|
+| `OPTIMALITY_CERTIFICATION.md` | **live register** for goal-1 certification, both orders. **Part A (first order)** — instrument list + per-campaign **coverage matrix** (which gate runs on which transfer) + the five standing gaps. **Part B (second order)** — every experiment, the three blocking mechanisms, what is ruled out, open leads, and the decision on what to build next. Consult it *before* planning any optimality work: first-order coverage holes are invisible without the matrix (ELFO has no gate at all), and two campaigns have already built second-order instruments a third was about to re-plan |
+| `earth_elliptic_to_geo/process/LESSONS_DUAL_EXTRACTION.md` | the `opti.dual` trap; how to tell a dual bug from a physics bug; why a physics-shaped correlation isn't evidence of physics; weak-minimum warm-restart guards |
+| `earth_elliptic_to_geo/process/DEEP_THRUST_LESSONS.md` | making deep low-thrust rungs converge (maxIter, `liftDL`, why `scaleNLP` hurts) |
+| `GTO_tulip/process/LADDER_PREP_PILOT_FINDINGS.md` | fixed-tau_f topology wall; why ELFO can ladder and the tulip cannot |

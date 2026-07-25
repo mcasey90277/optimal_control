@@ -28,27 +28,38 @@
 %   [4] .superpowers/sdd/task-10-report.md (gate numbers this reproduces).
 resDir  = fullfile(module_root(), 'results');
 
-%% --- 10 N M2 case (results/MEE_M2_10N.mat: struct 'res') -------------------
-S1  = load(fullfile(resDir, 'MEE_M2_10N.mat'));
-res = S1.res;
-out10   = res.fuel;
-sigma10 = res.sigma;
-par10   = kepler_lt_params(res.fp.thrustN, res.fp.m0kg, res.fp.ispS);
+% DUAL REFRESH (2026-07-25). The caches store lamDef as it was extracted at
+% solve time, via opti.dual(conDef{k}) -- the entry-wise sign-corrupted path
+% that WAS the Campaign-B primer anomaly (root cause + minimal reproduction:
+% results/dual_anomaly/diag_optidual_minimal.m). casadi_lt_mee.m now sources
+% duals from opti.lam_g, but that fixes fresh solves only, so each row is
+% warm re-solved here at its saved primal to re-derive correct duals
+% (refresh_duals_mee.m, which refuses to proceed if the primal drifts). The
+% certified PRIMAL numbers -- mass, switches, defect -- are untouched by any
+% of this; only the dual-dependent PMP gates change.
+rows = { 'MEE_M2_10N.mat',              'MEE_M2_10N',     '10 N M2'
+         'MEE_M2_1N_PSR_psr_final.mat', 'MEE_M2_1N_PSR',  '1 N PSR' };
+verOut = cell(size(rows,1), 1);
 
-fprintf('\n=== verify_pmp_mee: 10 N M2 (results/MEE_M2_10N.mat) ===\n');
-ver10 = verify_pmp_mee(out10, par10, sigma10, struct('eps', 0));
-save(fullfile(resDir, 'verify_pmp_mee_10N.mat'), 'ver10');
-fig_switching(ver10, out10, 'MEE_M2_10N', resDir);
-
-%% --- 1 N PSR case (results/MEE_M2_1N_PSR_psr_final.mat: struct 'out') ------
-S2  = load(fullfile(resDir, 'MEE_M2_1N_PSR_psr_final.mat'));
-out1    = S2.out.finalOut;
-sigma1  = S2.out.finalSigma;
-par1    = kepler_lt_params(S2.fpFinal.thrustN, S2.fpFinal.m0kg, S2.fpFinal.ispS);
-
-fprintf('\n=== verify_pmp_mee: 1 N PSR (results/MEE_M2_1N_PSR_psr_final.mat) ===\n');
-ver1 = verify_pmp_mee(out1, par1, sigma1, struct('eps', 0));
-save(fullfile(resDir, 'verify_pmp_mee_1N.mat'), 'ver1');
-fig_switching(ver1, out1, 'MEE_M2_1N_PSR', resDir);
+for q = 1:size(rows,1)
+    matPath = fullfile(resDir, rows{q,1});
+    tag     = rows{q,2};
+    fprintf('\n=== verify_pmp_mee: %s (results/%s) ===\n', rows{q,3}, rows{q,1});
+    try
+        [outq, parq, sigmaq, infoq] = refresh_duals_mee(matPath);
+    catch ME
+        fprintf(['  DUAL REFRESH FAILED (%s): %s\n  Row NOT verified -- the ' ...
+                 'certified primal is unaffected.\n'], ME.identifier, ME.message);
+        continue
+    end
+    fprintf(['  dual refresh: %s | defect %.2e | m_f rel change %.2e | node ' ...
+             'drift %.2e | dual signs flipped %.1f%% | |dual| rel diff %.2e\n'], ...
+        infoq.ipoptStatus, infoq.maxDefect, infoq.mfRelChange, infoq.drift, ...
+        100*infoq.maxSignFlipFrac, infoq.magRelDiff);
+    verq = verify_pmp_mee(outq, parq, sigmaq, struct('eps', 0));
+    verOut{q} = verq;
+    save(fullfile(resDir, sprintf('verify_pmp_mee_%s.mat', tag)), 'verq', 'infoq');
+    fig_switching(verq, outq, tag, resDir);
+end
 
 fprintf('\nrun_verify_pmp_mee: done.\n');

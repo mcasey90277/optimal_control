@@ -11,12 +11,15 @@ function history = run_headline_1p15()
 %   [1] docs/superpowers/specs/2026-07-11-pmp-mesh-refine-design.md
 
 here = fileparts(mfilename('fullpath'));  addpath(here);
-addpath(fullfile(here, '..', '..', 'ms_band'));   % ms_band/setup_paths does NOT add ms_band itself
-old = cd(fullfile(here, '..', '..', 'ms_band'));  c = onCleanup(@() cd(old));
-setup_paths();  cd(old);
+% One campaign setup (2026-07-26 flatten): direct/setup_paths adds lib, certify,
+% viz, cr3bp_common AND the indirect ms_band verifier. This used to cd into
+% ms_band to borrow its setup_paths via '../../ms_band' -- a path that stopped
+% resolving when ms_band moved to indirect/ on 2026-07-21.
+addpath(fullfile(here, '..'));  setup_paths();
 
 src  = fullfile(here, '..', 'lib', 'sundman_minfuel_certified.mat');
-seed = fullfile(here, 'seed_1p15.mat');
+cfgH = minfuel_config();
+seed = fullfile(cfgH.dirs.root, 'seed_1p15.mat');   % generated cache -> results/
 if ~isfile(seed), prep_refine_seed(src, seed); end
 
 opts = struct('maxRounds', 4, 'tag', 'headline_1p15', 'K', 8, 'maxAdd', 40);

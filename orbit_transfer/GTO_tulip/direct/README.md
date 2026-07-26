@@ -38,6 +38,40 @@ because thrust is an open problem here; see below):
 EPSMIN=1 ./run_tulip_front.sh     # min-energy sweep
 ```
 
+## Verifying the campaign
+
+Fast (seconds each, no solves) — run these after any structural change:
+
+```matlab
+cd GTO_tulip/direct; setup_paths
+test_artifact_paths      % every literal .mat path in the campaign resolves
+test_run_gto_tulip       % front-door guards + ONE copy of each shared name
+test_minfuel_lib         % library guardrails
+test_ladder_prep_tulip   % fingerprint / chain-helper rules
+test_refine_sigma, test_warmstart_on_mesh, test_pmp_refine_indicator
+```
+
+Slow, but the one that actually proves the campaign still works:
+
+```matlab
+best = run_certified_minfuel(1500, '/tmp/repro_check.mat');   % ~30 min
+% expect m_f ~0.8491, dV ~3.365 km/s, 2.26 kg, defect ~1e-14, certified=1
+```
+
+Pass an explicit `saveFile` as above: with no second argument it **overwrites
+the published reference**. And judge it on mass/ΔV, not the switch count — a
+re-solve is not bit-identical to the published artifact. Three measured
+re-solves (2026-07-21, 2026-07-26 ×1) all land on **24** switches vs the
+published 25, with mass agreeing to ~0.1%. The switch integer is basin-sensitive
+even at fixed mesh; TODO C3 tracks turning it into a published band.
+
+**Run the slow one after any move or path change.** The 2026-07-26 flatten
+passed every fast test while `run_certified_minfuel` was broken — its seed load
+still pointed at the pre-flatten location, and nothing else loads that file.
+`test_artifact_paths` was written to close exactly that gap and now catches this
+class in seconds, but it only checks *literal* paths; the reproduction is still
+the ground truth.
+
 ## Layout
 
 ```

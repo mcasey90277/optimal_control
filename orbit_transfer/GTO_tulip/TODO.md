@@ -108,7 +108,13 @@ Fixed same day: acceptance gates now require `Solve_Succeeded` (C1) and
   earth-campaign P0 protocol). LIVE EVIDENCE (2026-07-21 gate-hardening
   regression): a fresh re-solve of the certified recipe landed 24 switches /
   ΔV 3.3660 vs the published 25 / 3.3696 — same mass to ~0.1%, switch integer
-  basin-sensitive even at fixed mesh. Also relax `certify_minfuel_pmp`'s strict
+  basin-sensitive even at fixed mesh. **CONFIRMED again 2026-07-26** (post-flatten
+  reproduction): 24 switches, m_f 0.849279, ΔV 3.3644 km/s, 2.2608 kg, defect
+  1.3e-14, certified. Three data points now say the same thing — mass and ΔV
+  reproduce to ~0.1%, the switch INTEGER does not. Report it as a band. Note the
+  2026-07-26 re-solve was *marginally better* than the published artifact
+  (m_f 0.849279 vs 0.849066), so the published 25-switch row is not the best
+  point in its own neighbourhood either. Also relax `certify_minfuel_pmp`'s strict
   integer PMP-crossing match (node-grazing switches fail it spuriously).
 - [x] **Bound-saturation diagnostic + box widening (C4).** DONE (ladder-prep
   T3): `casadi_minfuel_sundman` now emits `out.boundSat` + a saturation

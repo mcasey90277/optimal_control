@@ -13,7 +13,7 @@ here = fileparts(mfilename('fullpath'));  cd(here);  setup_paths();
 addpath(fullfile(here,'..','..','..','cr3bp_common'));  setup_cr3bp_common();
 cfg = minfuel_config(struct('thrustN', 0.020));
 p   = cr3bp_lt_params(cfg.thrustN, cfg.m0kg, cfg.ispS);
-C   = load('sundman_minfuel_certified.mat');
+C   = load(fullfile(here, 'sundman_minfuel_certified.mat'));   % explicit, not cwd-relative
 % C-LAW t_f RESCALE (pilot-design fix, 2026-07-21): tfMin scales ~1/T, so the
 % SAME t_f at lower thrust can sit BELOW the new rung's min-time -- the first
 % pilot run requested 0.92x tfMin(20 mN) and was genuinely infeasible (defect

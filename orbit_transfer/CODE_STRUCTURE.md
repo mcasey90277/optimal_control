@@ -333,3 +333,106 @@ and is provably inert on well-conditioned input (`max(n,1e-12) == n` whenever
   candidate turned out to be a doc-referenced figure script or a cross-campaign
   callee (`hamiltonian_const_check` is called by CR3BP; `cart_to_elements` by
   tests). Never delete on a single-folder graph; confirm repo-wide.
+
+## 5. Design checklist for a homotopy min-fuel OCP
+
+Read this before building or seriously modifying a campaign. It is deliberately
+*not* a code generator (see the note at the end): the transcription was never
+the hard part, and every attempt to share the skeleton across campaigns
+measured worse than sharing nothing.
+
+### The four recurring decisions
+
+**(a) Independent variable — put the mesh where the stiffness is.**
+
+| campaign | choice | why |
+|---|---|---|
+| earth, CR3BP-GEO | true longitude `L` (MEE) | separates slow shape from the fast angle; survives hundreds of revolutions |
+| tulip, ELFO | Sundman pseudo-time `τ`, `dt/dτ = r₁^1.5` | auto-concentrates nodes at perigee; tames the `1/r₁³` Hessian terms |
+
+Uniform-in-time discretization fails both problems for the same reason: the
+mesh you need at perigee is ruinous everywhere else.
+
+**(b) Horizon — and the dense-column trap that decides how you get it.**
+
+This is the decision that has cost the most, and there is one general rule
+behind all three answers:
+
+> **A free scalar coupled to every node produces a dense column in the KKT
+> matrix, and the sparse factorization dies at the node counts these problems
+> need.** Both working answers are the same trick: replicate the scalar per
+> node and tie the copies with *local* continuity constraints. Same
+> formulation, banded instead of arrowhead.
+
+| campaign | answer | what it bought / cost |
+|---|---|---|
+| tulip | `τ_f` **fixed**; `t(τ_f) = t_f` as a terminal condition | banded KKT — but the winding number cannot grow, which is exactly why its thrust ladder hits a topology wall |
+| ELFO | free time via slack **state** `cScale`, `dc/dτ = 0` | banded *and* revolutions can grow — its 20 mN rung certified where tulip's failed |
+| earth, CR3BP-GEO | free `ΔL` scalar, then **`liftDL`** (per-node replication) | the naive scalar segfaulted MUMPS at ≥2.5 N; `liftDL` fixed it with no change of formulation |
+
+**(c) Where the ε=1 seed comes from.** The homotopy needs a smooth root, and
+getting one is problem-specific:
+
+- **two-pass probe** (earth, CR3BP-GEO): cheap `N=50` solve reads the
+  revolution count, then sample at full density.
+- **banked energy backbone** (tulip): pre-solved min-energy solutions per `t_f`
+  (available 1.12–1.95; below that the *backbone itself* will not converge).
+- **gravity homotopy** (ELFO): four legs bringing lunar gravity up, because the
+  target sits deep in the Moon's well.
+- **μ-continuation** (CR3BP-GEO): solve two-body, then walk `gain: 0 → 1`.
+- **neighbour seeding** (all): rescale a solved *bang-bang* solution to a nearby
+  `t_f` and re-sharpen lightly. Far cheaper — this is how a front is walked.
+
+**(d) Which dimension you can ladder in — decided by (b).**
+
+You can walk a **thrust** ladder only if your formulation lets the revolution
+count grow: a lower-thrust rung needs more revolutions.
+
+- **earth** and **CR3BP-GEO** have walked full ladders, 10 N → 0.1 N (free `ΔL`).
+- **ELFO** has one certified off-nominal rung (20 mN, `cScale`) — the
+  formulation permits it, but a full ladder has not been demonstrated.
+- **tulip** cannot: its 20 mN pilot was an honest failure against the fixed-`τ_f`
+  topology wall, so it ladders in `t_f` instead. If a thrust ladder is a goal, decide (b) with that in mind — it
+is not a knob you can add later without reformulating.
+
+### Traps, each with the campaign that paid for it
+
+1. **`opti.dual()` returns canonicalized-orientation duals.** Index
+   `opti.lam_g` by the constraint's own row range instead. Cost: a 10°–60°
+   primer misalignment that resisted explanation for nine days across two
+   campaigns; the fix took it to 0.000° and the sign law to 100%.
+2. **`maxIter` under-iteration silently collapses the deep-ε tail.** The run
+   *looks* converged; the switching structure is simply unresolved. (earth deep
+   rungs; CR3BP needs ≥4000.)
+3. **`scaleNLP` is harmful** — it fights IPOPT's own automatic scaling. (earth)
+4. **Renormalize interpolated thrust directions, but floor the norm.**
+   Linear interpolation between near-antipodal unit vectors collapses toward
+   zero: exactly antipodal gives `NaN` straight into IPOPT, near-antipodal gives
+   a confident unit vector made of round-off. (earth `interp_warmstart`; guard
+   ported from tulip's `warmstart_on_mesh`.)
+5. **Certify only at the *requested* ε.** A clean intermediate step is a clean
+   intermediate step, not a certified result. (tulip, triage C2)
+6. **Never save an uncertified iterate** — it poisons neighbour-seed lookups
+   later. (tulip `minfuel_at_tf`)
+7. **Expect multiple basins.** Distinct seed routes at *identical* `t_f`
+   converge to genuinely different extremals: measured ΔV spreads 0.02% to
+   **9.84%**, in one case 17 switches apart, all ε=0 and machine-tight. Build
+   the front as an envelope (`min` per factor), and treat a single-route sweep
+   as an upper bound. (tulip)
+8. **Fingerprint every cache boundary.** A nominal-thrust seed must not be
+   served to an off-nominal request. (ELFO)
+9. **Endpoints from exactly one function.** `insertion_states` exists so every
+   pipeline starts and ends at literally the same numbers; a transfer to
+   slightly-wrong endpoints still converges and still looks valid.
+10. **The switch count is not a reproducible quantity; mass and ΔV are.** Three
+    tulip re-solves of the certified recipe give 24 switches against the
+    published 25, with mass agreeing to ~0.1%. Report it as a band.
+
+### Why this is a checklist and not a skill
+
+A code-generating skill would emit the easy 60% — the collocation loop and the
+`s − ε·s(1−s)` objective — and leave every decision above to the user. It could
+not be gated (what is the byte-identity check on a generated solver?), and it
+would go stale silently: a generator written a week before this section would
+today still be emitting the `opti.dual` bug from trap 1. Decisions and traps
+transfer between campaigns; skeletons do not.

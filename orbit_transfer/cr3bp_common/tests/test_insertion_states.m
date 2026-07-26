@@ -121,7 +121,12 @@ fprintf('  defaults: tulip->campaign, elfo->nearest\n');
 % backbones ever disagree, every drift guard downstream fires -- so catch it
 % here, where the message can say why.
 ot     = fullfile(here, '..', '..');                     % orbit_transfer/
-seedT  = fullfile(ot, 'GTO_tulip', 'direct', 'sundman_minfuel', 'results', 'energy', 'energy_f1120.mat');
+% Derive the tulip seed location from minfuel_config rather than hardcoding it.
+% This line named .../direct/sundman_minfuel/results/... and broke silently when
+% the 2026-07-26 flatten moved that tree to direct/results -- exactly the class of
+% breakage this file exists to catch, in this file. cfg.dirs follows the move.
+cfgS   = minfuel_config();
+seedT  = fullfile(cfgS.dirs.energy, cfgS.fname('energy', 1.12));
 seedE  = fullfile(ot, 'GTO_ELFO',  'direct', 'elfo', 'results', 'energy_elfo_freetf.mat');
 
 for s = {seedT, 'tulip'; seedE, 'elfo'}.'

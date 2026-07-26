@@ -18,9 +18,21 @@ function [rv0, rvf, meta] = insertion_states(target, criterion)
 % (Option A). Using an alternate criterion requires a matching energy seed --
 % the consumer drivers' drift guard will fail loudly until one exists.
 %
+% LOCATION: lives in cr3bp_common because every function it calls
+% (cr3bp_lt_params, gto_tulip_endpoints, gto_elfo_endpoints) is a sibling here.
+% It was in GTO_tulip/direct/sundman_minfuel until 2026-07-26, which forced the
+% ELFO campaign to put all 34 files of tulip's direct engine on its path to
+% reach this one function -- and carried two addpath calls that had both gone
+% stale in the 2026-07-21 reorg (one pointed at a directory that no longer
+% exists and warned on every ELFO endpoint call; the other added
+% sundman_minfuel for gto_tulip_endpoints, which lives here). Both are gone:
+% resolving this file at all means cr3bp_common is already on the path.
+%
 % REFERENCES:
 %   [1] gto_tulip_endpoints.m (max-ydot tulip point + trace);
 %   [2] gto_elfo_endpoints.m  (ELFO apolune/perilune/nearest).
+%   [3] cr3bp_common/tests/test_insertion_states.m (endpoint gate: pins all six
+%       target/criterion outputs to the values measured before the move).
 
 if nargin < 2 || isempty(criterion)
     switch lower(target)
@@ -41,8 +53,6 @@ rv0 = [0.00349629072294633, -0.0072962582600817, 0, ...
 % [r0,v0] = pumpkyn.cr3bp.orb2eci(muEarth, [sma,ecc,0,-25*pi/180,0,0], 2);
 % rv0 = pumpkyn.cr3bp.fromPCI(0, [r0,v0], muStar, tStar, lStar, 1);
 
-here = fileparts(mfilename('fullpath'));
-
 % --- insertion (rendezvous) state -------------------------------------------
 switch lower(target)
   case 'tulip'
@@ -52,17 +62,16 @@ switch lower(target)
                -0.16004281347248, 0.0665702939657711, -0.260455693516549];
         label = 'tulipCampaign';
       case 'maxydot'
-        addpath(here);  [~, rvf] = gto_tulip_endpoints(p);      % max-ydot
+        [~, rvf] = gto_tulip_endpoints(p);                      % max-ydot
         label = 'tulipMaxYdot';
       case 'apoapsis'
-        addpath(here);  [~, ~, tr] = gto_tulip_endpoints(p);
+        [~, ~, tr] = gto_tulip_endpoints(p);
         [~, idx] = min(vecnorm(tr(:,4:6), 2, 2));               % slowest point
         rvf = tr(idx, 1:6);
         label = 'tulipApoapsis';
       otherwise, error('insertion_states:crit','unknown tulip criterion %s', criterion);
     end
   case 'elfo'
-    addpath(fullfile(here, '..', 'elfo'));                      % gto_elfo_endpoints
     switch lower(criterion)
       case 'nearest'
         [~, rvfTul] = insertion_states('tulip', 'campaign');    % ref = tulip campaign

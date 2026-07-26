@@ -110,7 +110,56 @@ pattern — into a file every campaign *already* loads — not into a new one.
 
 | item | why | gate |
 |---|---|---|
-| **`insertion_states` → `cr3bp_common`** | lets ELFO drop a 34-file path dependency it uses for one function, and removes a `casadi_minfuel_sundman` shadowing surface | ELFO + tulip smoke |
+| ~~**`insertion_states` → `cr3bp_common`**~~ **DONE 2026-07-26** | ELFO dropped the 34-file path dependency; **verified with `requiredFilesAndProducts`: all 7 ELFO entry points now reach 0 files in `GTO_tulip`** | `cr3bp_common/tests/test_insertion_states.m` — six endpoints pinned *and* checked against the certified seeds |
+
+#### What the move turned up
+
+The function was already a pure `cr3bp_common` client — all three of its callees
+(`cr3bp_lt_params`, `gto_tulip_endpoints`, `gto_elfo_endpoints`) live there — so
+both of its own `addpath` calls were wrong, and the 2026-07-21 reorg had made one
+of them point at a directory that no longer exists. **Every ELFO endpoint call
+had been emitting `Name is nonexistent or not a directory` since then.** Both
+lines are gone; the gate asserts no path warning returns.
+
+The old `sundman_minfuel/test_insertion_states.m` had been **broken since the
+same reorg** — it loaded `'../elfo/results/energy_elfo_freetf.mat'`, a path that
+stopped existing when ELFO moved — so it failed at load and had not run for five
+days. Merged into the new gate with corrected paths; its seed comparison is the
+half with real authority and is preserved.
+
+#### OPEN DECISION — PSR runs the upstream solver, not its vendored copy
+
+Found while doing the above, and **not** resolved here because it changes
+behaviour on a certified pipeline.
+
+`PSR/lib` was vendored 2026-07-12 and verified self-contained. On **2026-07-15**
+the insertion-points feature added `addpath(../sundman_minfuel)` to all three PSR
+entry points to reach `insertion_states`. `addpath` prepends, so that one line
+put the upstream folder ahead of `PSR/lib`. Measured:
+
+| path state | `casadi_minfuel_sundman` resolves to |
+|---|---|
+| `PSR/setup_paths` alone | `PSR/lib/` — as designed |
+| after the entry-point `addpath` (what actually runs) | **upstream** |
+
+So `PSR/lib/casadi_minfuel_sundman.m` and `PSR/lib/minfuel_at_tf.m` are **dead
+code**, and PSR has been running the upstream solver for eleven days. The
+vendoring did not fail loudly — an unrelated later feature silently overrode it.
+
+`insertion_states` is now vendored into `PSR/lib` and the `addpath` is retained,
+so **PSR's behaviour is unchanged by this work**. What remains is a genuine
+choice:
+
+- **(a) Restore isolation** — drop the `addpath`. The two dead files go live,
+  i.e. PSR's solver silently reverts to the 2026-07-12 snapshot. Requires
+  re-running the certified PSR result.
+- **(b) Accept reality** — delete the two dead vendored files and document PSR
+  as depending on upstream for the solver. No behaviour change, but PSR is no
+  longer self-contained.
+
+Do **not** take either as cleanup. `test_psr_vendor_drift` now pins the
+resolution of all six load-bearing names, so this cannot flip again unnoticed
+in either direction (negative-tested).
 | **certified-quantity guard** → one function | **8+ copies** (`refresh_duals_mee`, `refresh_duals_cr3bp`, `run_foc_tulip`, `run_foc_elfo`, three earth drivers …) | byte-identity |
 | **`optdef` vs per-campaign `getdef`/`gd`** | one utility, four local reimplementations | byte-identity |
 | **Fix stale headers** — ELFO's `setup_paths` claims a reuse that does not happen; CR3BP's README calls functions "pipeline stages" the front door never calls | misleads the next reader | none needed |

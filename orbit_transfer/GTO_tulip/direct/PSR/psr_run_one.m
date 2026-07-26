@@ -34,7 +34,7 @@ function row = psr_run_one(factor, opts)
 
 here = fileparts(mfilename('fullpath'));
 addpath(here);  setup_paths();
-addpath(fullfile(here, '..', 'sundman_minfuel'));   % insertion_states (single-source; PSR vendors the rest)
+addpath(fullfile(here, '..', 'sundman_minfuel'));   % upstream solver (NOT insertion_states -- see PSR/lib/README.md)
 cfg = minfuel_config();
 
 if nargin < 2, opts = struct(); end

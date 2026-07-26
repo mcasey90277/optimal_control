@@ -58,7 +58,7 @@ if ~isfield(opts,'force'),   opts.force = false;   end
 
 here = fileparts(mfilename('fullpath'));
 addpath(here);  setup_paths();
-addpath(fullfile(here, '..', 'sundman_minfuel'));   % insertion_states (single-source; PSR vendors the rest)
+addpath(fullfile(here, '..', 'sundman_minfuel'));   % upstream solver (NOT insertion_states -- see PSR/lib/README.md)
 cfg  = minfuel_config();
 p    = cr3bp_lt_params(cfg.thrustN, cfg.m0kg, cfg.ispS);
 edir = cfg.dirs.energy;

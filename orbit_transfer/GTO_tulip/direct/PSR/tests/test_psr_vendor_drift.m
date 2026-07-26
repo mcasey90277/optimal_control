@@ -13,15 +13,18 @@
 % every run, with the gate never once executing, undetected for a day.
 %
 % The defect was never the vendoring. It was that no test compared the copies.
-% This test is that comparison. It does NOT consolidate anything and does not
-% touch the path: it reads files by absolute path, so PSR's self-containment
-% guarantee is untouched.
+% This test is that comparison. It consolidates nothing; the drift half reads
+% files by absolute path, and the resolution half saves and restores the path
+% exactly, so PSR's isolation is unaffected either way.
 %
-% All 19 .m files in PSR/lib are copies of something. This test asserts:
-%   * the 15 that are byte-identical to their origin STAY byte-identical;
+% All 20 .m files in PSR/lib are copies of something. This test asserts:
+%   * the 16 that are byte-identical to their origin STAY byte-identical;
 %   * the 4 known-divergent ones are still divergent for the recorded reason,
 %     and it names them, so "expected drift" can never quietly become
-%     "unnoticed drift".
+%     "unnoticed drift";
+%   * the PATH RESOLUTION of the shadowed pair does not silently flip -- see
+%     the second half. Byte-identity alone is not enough: two of these files
+%     are dead code, and a one-line addpath change would bring them to life.
 %
 % If this test fails, do NOT just re-copy the file. Decide deliberately:
 % either port the upstream change into PSR (and re-run the certified PSR
@@ -61,14 +64,17 @@ IDENTICAL = {
     'verify_direct_pmp',     msBand
     'beta_from_duals',       msBand
     'gto_tulip_endpoints',   common
+    'insertion_states',      common
 };
 
 % name -> {origin, why it is allowed to differ}
 KNOWN_DIVERGENT = {
     'casadi_minfuel_sundman', fullfile(tulipD,'sundman_minfuel'), ...
-        'upstream gained returnModel/creg, vBox/rBox, boundSat; PSR frozen at the 2026-07-12 snapshot'
+        ['DEAD CODE -- shadowed by the entry-point addpath(../sundman_minfuel), ' ...
+         'so PSR runs the UPSTREAM copy. Divergence is therefore harmless today ' ...
+         'AND un-shadowing it would change PSR''s solver. See PSR/lib/README.md']
     'minfuel_at_tf',          fullfile(tulipD,'sundman_minfuel'), ...
-        'PSR-owned variant'
+        'DEAD CODE -- shadowed by the same addpath; PSR runs the upstream copy'
     'cr3bp_lt_params',        common, ...
         'PSR-owned variant'
     'minfuel_config',         common, ...
@@ -123,9 +129,112 @@ for k = 1:size(KNOWN_DIVERGENT,1)
     end
 end
 
+%% ------------------------------------------------------------------------
+%% Path resolution: which copy actually EXECUTES
+%% ------------------------------------------------------------------------
+% Byte-identity is only half the guarantee. The other half is which copy the
+% path picks -- and on 2026-07-15 that silently flipped for two files when the
+% insertion-points feature added addpath(../sundman_minfuel) to every PSR entry
+% point. addpath PREPENDS, so the upstream folder went in front of PSR/lib.
+%
+% This half pins the resolution that real runs get, so a future addpath edit
+% cannot quietly swap PSR's solver in either direction. Both outcomes are
+% failures worth catching:
+%   * upstream -> PSR/lib would swap the certified pipeline onto the frozen
+%     2026-07-12 solver snapshot;
+%   * PSR/lib -> upstream for a file expected local would bypass a PSR-owned
+%     variant (refine_loop, verify_direct_pmp, minfuel_config).
+% The path/cwd juggling lives in a local FUNCTION, not inline: its onCleanup
+% then fires on return -- including on error -- whereas an onCleanup created in
+% a script's workspace survives until the variable is cleared, and would leave
+% the caller in PSR/ with a mutated path.
+upstream = fullfile(tulipD, 'sundman_minfuel');
+% name -> folder the ENTRY-POINT path state must resolve it to
+EXPECT_RESOLUTION = {
+    'casadi_minfuel_sundman', upstream,  'shadowed: PSR runs the upstream solver'
+    'minfuel_at_tf',          upstream,  'shadowed: PSR runs the upstream driver'
+    'insertion_states',       psrLib,    'vendored here; upstream no longer defines it'
+    'refine_loop',            psrLib,    'PSR-owned variant must win'
+    'verify_direct_pmp',      psrLib,    'PSR-owned variant must win'
+    'minfuel_config',         psrLib,    'PSR-owned variant (repointed dirs) must win'
+};
+
+fprintf('\n  path resolution under a real entry-point path state:\n');
+resolved = resolveUnderEntryPointPath(fullfile(here, '..'), EXPECT_RESOLUTION(:,1));
+
+for k = 1:size(EXPECT_RESOLUTION,1)
+    nm = EXPECT_RESOLUTION{k,1};  wantDir = EXPECT_RESOLUTION{k,2};  why = EXPECT_RESOLUTION{k,3};
+    got = resolved{k};
+    if isempty(got)
+        nBad = nBad + 1;
+        msgs{end+1} = sprintf('%s does not resolve at all under PSR''s entry-point path.', nm); %#ok<AGROW>
+        fprintf('    %-24s NOT FOUND <--\n', nm);  continue
+    end
+    % Compare canonicalised folders, not strings: '..' segments differ by caller.
+    gotDir = canon(fileparts(got));
+    if strcmp(gotDir, canon(wantDir))
+        fprintf('    %-24s %-9s (%s)\n', nm, folderTag(gotDir, psrLib), why);
+    else
+        nBad = nBad + 1;
+        fprintf('    %-24s RESOLUTION CHANGED <--\n', nm);
+        msgs{end+1} = sprintf(['%s now resolves to %s but must resolve to %s (%s). ' ...
+            'An addpath change has swapped which copy executes -- this changes ' ...
+            'behaviour on a certified pipeline. Do not "fix" the test; decide ' ...
+            'deliberately and re-run the certified PSR result.'], ...
+            nm, gotDir, canon(wantDir), why); %#ok<AGROW>
+    end
+end
+
 if nBad > 0
     error('test_psr_vendor_drift:drift', ...
         'PSR/lib vendor drift, %d issue(s):\n  - %s\n', nBad, strjoin(msgs, '\n  - '));
 end
-fprintf('\ntest_psr_vendor_drift: ALL PASS (%d identical, %d known-divergent)\n', ...
-        size(IDENTICAL,1), size(KNOWN_DIVERGENT,1));
+fprintf('\ntest_psr_vendor_drift: ALL PASS (%d identical, %d known-divergent, %d resolutions pinned)\n', ...
+        size(IDENTICAL,1), size(KNOWN_DIVERGENT,1), size(EXPECT_RESOLUTION,1));
+
+function c = canon(p)
+% CANON  Resolve '..' segments so folder comparisons are textual-safe.
+% INPUTS:  p - folder path [char]
+% OUTPUTS: c - canonical absolute path [char]
+d = dir(p);
+if isempty(d), c = p; else, c = d(1).folder; end
+end
+
+function t = folderTag(d, psrLib)
+% FOLDERTAG  Short label for which side a resolution landed on.
+% INPUTS:  d - canonical folder [char]; psrLib - PSR/lib folder [char]
+% OUTPUTS: t - 'PSR/lib' or 'upstream' [char]
+if strcmp(d, canon(psrLib)), t = 'PSR/lib'; else, t = 'upstream'; end
+end
+
+function locs = resolveUnderEntryPointPath(psrRoot, names)
+% RESOLVEUNDERENTRYPOINTPATH  which() each name under PSR's real entry-point
+% path state, then restore the caller's path and cwd exactly.
+%
+% Reproduces what run_psr / psr_run_one / gen_energy_seed do: setup_paths
+% followed by addpath(../sundman_minfuel). Being a function, its onCleanup
+% fires on return or on error, so the caller never inherits the mutated state.
+%
+% INPUTS:
+%   psrRoot - the PSR/ directory [char]
+%   names   - function names to resolve [Nx1 cell of char]
+%
+% OUTPUTS:
+%   locs    - full path of each resolved file, '' if unresolved [Nx1 cell]
+oldPath = path();  oldDir = pwd;
+cleanup = onCleanup(@() restoreState(oldPath, oldDir)); %#ok<NASGU>
+
+cd(psrRoot);
+addpath(psrRoot);  setup_paths();
+addpath(fullfile(psrRoot, '..', 'sundman_minfuel'));   % as every entry point does
+
+locs = cell(numel(names), 1);
+for k = 1:numel(names), locs{k} = which(names{k}); end
+end
+
+function restoreState(oldPath, oldDir)
+% RESTORESTATE  Restore the caller's path and cwd exactly.
+% INPUTS:  oldPath - path string to restore [char]; oldDir - cwd [char]
+% OUTPUTS: none
+path(oldPath);  cd(oldDir);
+end

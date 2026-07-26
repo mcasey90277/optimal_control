@@ -1,23 +1,57 @@
 # PSR/lib — vendored machinery
 
 These are **copies** of the machinery the PSR pipeline depends on, brought in on
-**2026-07-12 (from git 5c0bdbc)** so that PSR is self-contained: `run_psr`,
-`psr_export_data`, and `psr_movie` reach only `PSR/`, `PSR/lib/`, and the
-external `pumpkyn` toolbox — nothing in `ms_band/` or `sundman_minfuel/`.
-(Verified with `matlab.codetools.requiredFilesAndProducts` under
-`restoredefaultpath`.)
+**2026-07-12 (from git 5c0bdbc)** so that PSR would be self-contained: `run_psr`,
+`psr_export_data`, and `psr_movie` reaching only `PSR/`, `PSR/lib/`, and the
+external `pumpkyn` toolbox. That was verified at the time with
+`matlab.codetools.requiredFilesAndProducts` under `restoredefaultpath`.
 
 The originals were **kept in place** (copy, not move) so the IFS folder and the
 `ms_band` / `sundman_minfuel` campaign scripts keep working unchanged.
 
-## Manifest (19 files)
+## ⚠ Self-containment was lost on 2026-07-15 — read this before trusting the manifest
+
+**It is no longer true that PSR reaches nothing in `sundman_minfuel/`.** Three
+days after the vendoring, the insertion-points feature (commits `5089931`,
+`a35a8ba`) added
+
+```matlab
+addpath(fullfile(here, '..', 'sundman_minfuel'));
+```
+
+to `run_psr`, `psr_run_one` and `gen_energy_seed`, to reach `insertion_states`.
+`addpath` **prepends**, so that one line put the entire upstream folder *ahead*
+of `PSR/lib` on the path. Measured 2026-07-26 on `run_psr`'s own path setup:
+
+| name | resolves to | consequence |
+|---|---|---|
+| `casadi_minfuel_sundman` | **upstream** `sundman_minfuel/` | the vendored copy is **dead code** |
+| `minfuel_at_tf` | **upstream** `sundman_minfuel/` | the vendored copy is **dead code** |
+| `cr3bp_lt_params`, `minfuel_config`, `gto_tulip_endpoints`, `sms_*`, `refine_*` | `PSR/lib/` | as designed (upstream has no such file, or it is elsewhere) |
+
+So PSR has been running the **upstream** solver since 2026-07-15, not the
+frozen 2026-07-12 snapshot this directory implies. The vendoring did not fail
+loudly; it was quietly overridden by a later, unrelated feature.
+
+As of 2026-07-26 `insertion_states` moved to `cr3bp_common` and is **vendored
+here** (file 20), so it is no longer the reason for that `addpath` — the
+upstream *solver* now is, and the comment on each of the three call sites says
+so. Removing the `addpath` would make the two dead files live again, i.e. it
+would silently swap PSR's solver back to the frozen snapshot. **That is a
+behaviour change on a certified pipeline and must not be done as cleanup.**
+It is recorded as an open decision in `orbit_transfer/CODE_STRUCTURE.md`.
+
+`PSR/tests/test_psr_vendor_drift.m` guards every file listed below.
+
+## Manifest (20 files)
 
 | file | origin | role |
 |---|---|---|
-| `casadi_minfuel_sundman.m` | sundman_minfuel | direct solver (CasADi+IPOPT, Sundman trapezoid); NLP dual extraction |
+| `casadi_minfuel_sundman.m` | sundman_minfuel | direct solver (CasADi+IPOPT, Sundman trapezoid); NLP dual extraction. **DEAD — shadowed by the upstream copy; see the warning above** |
 | `cr3bp_lt_params.m` | sundman_minfuel | physics constants (muStar, lStar, tStar, Tmax, c, m0kg, Isp) |
-| `gto_tulip_endpoints.m` | sundman_minfuel | GTO start + south-pole tulip target (uses pumpkyn) |
-| `minfuel_at_tf.m` | sundman_minfuel | canonical per-t_f driver (energy→fuel homotopy) |
+| `gto_tulip_endpoints.m` | cr3bp_common | GTO start + south-pole tulip target (uses pumpkyn) |
+| `insertion_states.m` | cr3bp_common | **added 2026-07-26.** Single source for the GTO departure + tulip/ELFO insertion states. Vendored when it moved out of `sundman_minfuel` into `cr3bp_common`, which PSR does not put on its path (doing so would shadow the PSR-owned `cr3bp_lt_params` / `minfuel_config` variants) |
+| `minfuel_at_tf.m` | sundman_minfuel | canonical per-t_f driver (energy→fuel homotopy). **DEAD — shadowed by the upstream copy; see the warning above** |
 | `minfuel_config.m` | sundman_minfuel | campaign constants + schedules. **EDITED**: `dirs` repointed to `../../sundman_minfuel/results` (energy backbones referenced in place) |
 | `refine_loop.m` | sundman_minfuel/refine | PSR refinement loop. **PSR-owned** (carries the `outDir`/`solFile` additions) |
 | `pmp_refine_indicator.m` | sundman_minfuel/refine | PMP switch-localization score (the refinement steer) |
@@ -62,14 +96,26 @@ silently-dead feature:
 
 - `casadi_minfuel_sundman.m` here carries the `regHistory` capture but **not**
   the `returnModel` / `creg` constraint-registry hook added upstream on
-  2026-07-25. `verify_common/foc_check.m` requires that hook, so **the generic
-  FOC gate cannot run inside the PSR pipeline** and `run_psr` prints a pointer
-  instead of attempting it.
-- Under PSR's own `setup_paths` the vendored copies WIN the path resolution
-  (verified: `which -all` shows only `PSR/lib/`). In a session that has also
-  called `sundman_minfuel/setup_paths`, they still win. So PSR always runs
-  these files, never the upstream ones — which is the intent, but means
-  upstream fixes do **not** reach PSR until deliberately ported.
+  2026-07-25. That is why this copy could not serve the generic FOC gate — but
+  it is *not* why the gate does not run in PSR. The gate does not run because
+  `run_foc_tulip` and the whole `verify_common` layer sit outside PSR's path
+  boundary, so the call threw "Undefined function". `run_psr` now prints a
+  pointer instead of attempting it.
+
+- **Which copy wins depends on the path state, and the two states disagree.**
+  Measured 2026-07-26:
+
+  | path state | `casadi_minfuel_sundman` resolves to |
+  |---|---|
+  | `PSR/setup_paths` alone | `PSR/lib/` ✅ as designed |
+  | after the entry-point `addpath(../sundman_minfuel)` | **upstream** ❌ |
+
+  An earlier note here claimed "PSR always runs these files, never the upstream
+  ones." That was measured in the first state and is **wrong for real runs**:
+  `run_psr`, `psr_run_one` and `gen_energy_seed` — every entry point — perform
+  that `addpath` themselves, so the second state is the one that executes.
+  `insertion_states` is unaffected: upstream no longer defines it, so the
+  vendored copy here wins in both states.
 
 Before folding these back into the shared sources, the tulip TODO's standing
 rule applies: do it **with a reproduce-the-certified-result gate**, not as a

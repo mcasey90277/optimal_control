@@ -50,7 +50,7 @@
 %% ------------------------------------------------------------------------
 here = fileparts(mfilename('fullpath'));
 cd(here);  setup_paths();
-addpath(fullfile(here, '..', 'sundman_minfuel'));   % insertion_states (single-source; PSR vendors the rest)
+addpath(fullfile(here, '..', 'sundman_minfuel'));   % upstream solver (NOT insertion_states -- see PSR/lib/README.md)
 resDir  = fullfile(here, 'results');          % pipeline intermediates
 dataDir = fullfile(here, '..', 'PSR_data');   % exported data products (stage 4)
 if ~exist(resDir, 'dir'), mkdir(resDir); end
@@ -429,15 +429,17 @@ fprintf('[stage 5b] IPOPT certificate appended to %s\n', dataFile);
 % "at the saved primal" at all -- it would probe a different homotopy point.
 % Homotopy-sweep calls (stages 2/3) are untouched by this addition.
 % CORRECTED 2026-07-26 -- this stage previously CALLED run_foc_tulip(finalSol)
-% and never once worked. PSR is deliberately self-contained (PSR/lib/README.md:
-% run_psr reaches only PSR/, PSR/lib/ and pumpkyn, verified with
-% requiredFilesAndProducts under restoredefaultpath). run_foc_tulip and the
-% whole verify_common layer sit OUTSIDE that boundary, so under PSR's own
-% setup_paths the call threw "Undefined function" and the surrounding catch
-% swallowed it into an advisory warning on every run. Two independent reasons
-% it could not have worked: the function is off-path, and the vendored
-% PSR/lib/casadi_minfuel_sundman.m carries regHistory but not the
-% returnModel/creg hook foc_check requires.
+% and never once worked: run_foc_tulip and the whole verify_common layer sit
+% outside PSR's path boundary, so the call threw "Undefined function" and the
+% surrounding catch swallowed it into an advisory warning on every run.
+%
+% An earlier version of this note gave a SECOND reason -- that the vendored
+% PSR/lib/casadi_minfuel_sundman.m lacks the returnModel/creg hook foc_check
+% requires. That reason does not hold, and is withdrawn: line 53 above adds
+% ../sundman_minfuel, and addpath PREPENDS, so casadi_minfuel_sundman actually
+% resolves to the UPSTREAM copy, which does have the hook. The vendored copy is
+% shadowed dead code. Being off-path is the whole explanation.
+% See PSR/lib/README.md for the measured resolution table.
 %
 % Printing a pointer is the honest form: it preserves the isolation the README
 % promises and tells the user exactly how to obtain the report.

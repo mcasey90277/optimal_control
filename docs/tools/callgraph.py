@@ -20,7 +20,7 @@ METHOD AND ITS LIMITS -- read before trusting the output:
     In the earth survey this mattered: hamiltonian_const_check looked orphaned
     here and is in fact called by the CR3BP campaign.
 """
-import os, re, sys, json, collections
+import os, re, sys, json, hashlib, collections
 
 
 def strip_comments(src):
@@ -38,11 +38,18 @@ def strip_comments(src):
 
 
 def build(root):
-    files = {}
+    # NOTE: keyed by basename, so DUPLICATE basenames collapse to one entry and
+    # their callers are merged onto whichever copy os.walk saw last. That
+    # silently misattributes hubs in any tree that vendors copies -- it did
+    # exactly that on GTO_tulip, where PSR/lib duplicates 14 files verbatim.
+    # duplicates() below reports them; always read that section first.
+    files, dupes = {}, collections.defaultdict(list)
     for dp, _, fns in os.walk(root):
         for fn in fns:
             if fn.endswith('.m'):
+                dupes[fn[:-2]].append(os.path.join(dp, fn))
                 files[fn[:-2]] = os.path.join(dp, fn)
+    build.dupes = {n: ps for n, ps in dupes.items() if len(ps) > 1}
     names = set(files)
     calls = collections.defaultdict(set)
     for n, p in files.items():
@@ -74,6 +81,13 @@ def main():
     entry = [n for n in sorted(nontest) if not (callers[n] - tests)]
     orphan = [n for n in entry if not calls[n]]
     print('=== %s: %d non-test, %d test ===' % (root, len(nontest), len(tests)))
+    if build.dupes:
+        print('\n-- !! DUPLICATE BASENAMES (%d): hub counts below are MERGED across'
+              ' these copies and are not trustworthy for them --' % len(build.dupes))
+        for n, ps in sorted(build.dupes.items()):
+            hs = {hashlib.md5(open(q, 'rb').read()).hexdigest() for q in ps}
+            print('   %-26s %-10s %s' % (n, 'IDENTICAL' if len(hs) == 1 else 'DIFFER',
+                                         ' | '.join(q.replace(root + '/', '') for q in ps)))
     print('\n-- ENTRY POINTS (%d) --' % len(entry))
     for n in entry:
         print('   %-34s %-20s calls %d' % (n, area[n], len(calls[n])))

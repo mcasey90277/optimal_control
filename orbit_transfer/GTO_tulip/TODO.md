@@ -16,8 +16,15 @@ Two standing goals (2026-07-21): **(a) keep perfecting the direct code,
   duplicate `direct/sundman_minfuel/` and `../cr3bp_common/`. Deliberately left
   intact during the 2026-07-21 restructure (behavior risk); fold into the
   shared sources with a reproduce-the-certified-result gate when touched.
-  **Measured 2026-07-26 (do not re-investigate):** of the five names that exist
-  in both places, only `gto_tulip_endpoints.m` is byte-identical;
+  **Measured 2026-07-26, then CORRECTED the same day — see
+  `doc/EXECUTION_PATHS.md` §1 for the full table.** The first count below
+  compared PSR/lib against only `sundman_minfuel/` and `cr3bp_common/` and so
+  UNDERSTATED the duplication: PSR/lib also vendors 5 files from
+  `sundman_minfuel/refine/` and 9 from the **indirect** `ms_band/`. True total:
+  **21 duplicate basenames, 14 of them byte-identical** — i.e. the safe,
+  mechanical consolidation targets I concluded did not exist here do exist,
+  and there are 14. Of the five names in the original comparison,
+  only `gto_tulip_endpoints.m` is byte-identical;
   `casadi_minfuel_sundman.m`, `cr3bp_lt_params.m`, `minfuel_config.m` and
   `minfuel_at_tf.m` all DIFFER. Under PSR's own `setup_paths` the vendored
   copies win the path resolution (`which -all` shows one hit, in `PSR/lib/`),

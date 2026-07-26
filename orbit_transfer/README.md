@@ -67,6 +67,7 @@ Read before repeating an old mistake:
 
 | file | what |
 |---|---|
+| `CODE_STRUCTURE.md` | **survey synthesis + extraction plan.** Consolidates the four campaign `doc/EXECUTION_PATHS.md` surveys: the measured comparison of the three code-sharing strategies this repo has tried (extend / vendor / fork), the standing rules derived from it, and a risk-ranked, gated extraction plan. Read before any refactor or library work |
 | `OPTIMALITY_CERTIFICATION.md` | **live register** for goal-1 certification, both orders. **Part A (first order)** — instrument list + per-campaign **coverage matrix** (which gate runs on which transfer) + the five standing gaps. **Part B (second order)** — every experiment, the three blocking mechanisms, what is ruled out, open leads, and the decision on what to build next. Consult it *before* planning any optimality work: first-order coverage holes are invisible without the matrix (until 2026-07-25 ELFO had no gate at all — the FOC layer now covers all four campaigns, unevenly), and two campaigns have already built second-order instruments a third was about to re-plan |
 | `earth_elliptic_to_geo/process/LESSONS_DUAL_EXTRACTION.md` | the `opti.dual` trap; how to tell a dual bug from a physics bug; why a physics-shaped correlation isn't evidence of physics; weak-minimum warm-restart guards |
 | `earth_elliptic_to_geo/process/DEEP_THRUST_LESSONS.md` | making deep low-thrust rungs converge (maxIter, `liftDL`, why `scaleNLP` hurts) |

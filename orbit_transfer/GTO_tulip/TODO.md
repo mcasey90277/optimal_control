@@ -20,11 +20,31 @@ Two standing goals (2026-07-21): **(a) keep perfecting the direct code,
   (`minfuel_at_tf`) and the `run_certified_minfuel` chain both reach 25
   switches, machine-tight, at the SAME t_f, but different local optima:
   m_f 0.847086 vs 0.849066 (ΔV 3.4176 vs 3.3696 km/s, +0.0297 kg). The seed
-  route decides the basin. Open questions: is the flagship the global optimum,
-  does the same split exist at other factors on the front (the aggregated
-  ΔV–t_f front is built from the energy-backbone route, so it may sit
-  systematically ~1% high), and should `minfuel_at_tf` adopt a keep-best-mass
-  policy across routes (cf. the earth campaign's razor-thin-basin lesson).
+  route decides the basin.
+
+  **MEASURED 2026-07-26 across every banked multi-route factor.** The spread is
+  real, is NOT confined to 1.15, and is far larger than first estimated:
+
+  | factor | routes (switches) | ΔV spread |
+  |---|---|---|
+  | 1.150 | certified-chain (25) vs energy (25) | **1.43%** |
+  | 1.300 | en (42) vs nb (42) | **0.76%** |
+  | 1.350 | en (29) vs nb (28) | 0.06% |
+  | 1.400 | en (26) vs nb (26) | 0.02% |
+  | 1.450 | dn (43) vs nb (26) | **9.84%** |
+
+  All are ε=0, machine-tight (defect ≤5e-14), ~99.6% bang-bang, at identical
+  t_f and endpoints — genuinely distinct extremals, not convergence noise. The
+  1.450 pair differs by 17 switches.
+
+  **The published front is NOT biased by this** — the earlier worry that it
+  "may sit systematically ~1% high" is REFUTED: `aggregate_front` builds its
+  envelope as `min(ΔV)` per factor over *all* points, so it already takes the
+  best known. Open questions that remain: is any of these the global optimum;
+  is there a cheap route-diversity policy (`minfuel_at_tf` keep-best-mass
+  across routes, cf. the earth campaign's razor-thin-basin lesson); and does
+  the spread correlate with switch count rather than factor (1.450's 43-vs-26
+  suggests topology, not tolerance).
   `run_gto_tulip` now cross-checks and reports the basin, so this cannot pass
   unnoticed, but the underlying question is unresolved. **Related evidence:**
   the C3 mesh-band item below already recorded a re-solve landing 24 switches /

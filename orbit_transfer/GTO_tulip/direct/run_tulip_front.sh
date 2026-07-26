@@ -14,7 +14,17 @@
 # fails on every rung.
 #
 # What DOES work for this campaign is the t_f factor, and the Delta-V/t_f front
-# is the campaign's mapped result. Energy backbones exist for factors
+# is the campaign's mapped result.
+#
+# THIS SWEEP PRODUCES AN UPPER BOUND ON Delta-V, NOT THE FRONT. It runs ONE
+# seed route (the energy backbone) per factor. Measured 2026-07-26, distinct
+# seed routes at the SAME t_f converge to genuinely different extremals -- all
+# eps=0 and machine-tight -- differing by 0.02% to 9.84% in Delta-V (worst case
+# factor 1.450: 43 switches vs 26). The published front is the lower envelope
+# over ALL routes, which aggregate_front computes as min(dV) per factor. So:
+#   * use this sweep to POPULATE the front cheaply;
+#   * then run aggregate_front, which takes the best point per factor;
+#   * do not quote a single-route sweep as the front. Energy backbones exist for factors
 # 1.12 - 1.95; the band 1.01-1.11 approaching min-time is the other open
 # problem and is deliberately NOT in the default sweep.
 #
@@ -75,3 +85,5 @@ echo "FRONT SWEEP DONE $(date '+%F %T')" | tee -a "$SUMMARY"
 echo
 echo "Summary: $SUMMARY"
 echo "Aggregate the certified rows into a front with: aggregate_front.m"
+echo "NOTE: this was a SINGLE-route sweep -- an upper bound on dV, not the"
+echo "      envelope. aggregate_front takes min(dV) per factor over all routes."

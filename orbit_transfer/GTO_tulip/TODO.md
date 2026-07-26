@@ -38,27 +38,24 @@ Two standing goals (2026-07-21): **(a) keep perfecting the direct code,
   a near-min-time conditioning wall, not just bang-bang structure). Candidate
   attacks: direct continuation from the min-time anchor downward, or the
   indirect band campaign below.
-- [ ] **PSR/lib de-dup.** `direct/PSR/lib/` vendors 20 files that partially
-  duplicate `direct/sundman_minfuel/` and `../cr3bp_common/`. Deliberately left
-  intact during the 2026-07-21 restructure (behavior risk); fold into the
-  shared sources with a reproduce-the-certified-result gate when touched.
-  **Measured 2026-07-26, then CORRECTED the same day — see
-  `doc/EXECUTION_PATHS.md` §1 for the full table.** The first count below
-  compared PSR/lib against only `sundman_minfuel/` and `cr3bp_common/` and so
-  UNDERSTATED the duplication: PSR/lib also vendors 5 files from
-  `sundman_minfuel/refine/` and 9 from the **indirect** `ms_band/`. True total:
-  **21 duplicate basenames, 14 of them byte-identical** — i.e. the safe,
-  mechanical consolidation targets I concluded did not exist here do exist,
-  and there are 14. Of the five names in the original comparison,
-  only `gto_tulip_endpoints.m` is byte-identical;
-  `casadi_minfuel_sundman.m`, `cr3bp_lt_params.m`, `minfuel_config.m` and
-  `minfuel_at_tf.m` all DIFFER. Under PSR's own `setup_paths` the vendored
-  copies win the path resolution (`which -all` shows one hit, in `PSR/lib/`),
-  and they still win in a session that has also called
-  `sundman_minfuel/setup_paths`. So PSR always runs the frozen copies — the
-  isolation works as designed, but upstream fixes do NOT reach PSR. That is
-  what silently broke stage 5c (below). The other 15 files are PSR-only and
-  are not duplication at all.
+- [x] **PSR/lib de-dup — DONE 2026-07-26, by dissolving it.** The 2026-07-26
+  flatten merged `sundman_minfuel/` and `PSR/` into one `direct/` campaign with
+  a single front door, and deleted the 20 vendored files outright. There is now
+  exactly one copy of every shared name, asserted by
+  `direct/tests/test_run_gto_tulip.m` check 3.
+
+  The de-dup was safe precisely because the vendoring had already stopped
+  working: an `addpath` added on 2026-07-15 put the upstream folder ahead of
+  `PSR/lib`, so PSR had been running the UPSTREAM solver for eleven days while
+  its README claimed self-containment, and `casadi_minfuel_sundman` /
+  `minfuel_at_tf` in `PSR/lib` were dead code. Removing dead code is not a
+  behaviour change — which is why no re-certification was required.
+
+  The PMP verifier (`verify_direct_pmp`, `sms_*`) was NOT re-vendored: it lives
+  in `indirect/ms_band/` and `direct/setup_paths.m` names it. The direct
+  pipeline checking itself with the independent indirect instrument is a real
+  dependency, not duplication.
+
 - [ ] **Front hygiene.** Keep `aggregate_front`'s honest 3-class front current
   as new t_f points land; switch counts reported as bands (mesh-sensitivity
   lesson from the earth_elliptic P0 study applies here too).

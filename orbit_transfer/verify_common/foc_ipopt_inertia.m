@@ -18,7 +18,7 @@ function ic = foc_ipopt_inertia(regHistory, opts)
 % only reads a regHistory vector the caller already has (from a solver's own
 % out.regHistory, captured at solve time). Interpretation logic (tail window,
 % tolerance, verdict phrasing) is ported from
-% GTO_tulip/direct/PSR/psr_ipopt_certify.m -- see that file's REFERENCES for
+% GTO_tulip/direct/certify/psr_ipopt_certify.m -- see that file's REFERENCES for
 % the IPOPT inertia-correction citation. That function additionally handles
 % the no-regHistory-stored fallback (warm re-solve); this generic version
 % assumes the caller already has (or does not have) the history in hand and
@@ -47,7 +47,7 @@ function ic = foc_ipopt_inertia(regHistory, opts)
 %       (IPOPT)," Math. Prog. 106 (2006) -- inertia correction (delta_w).
 %   [2] Nocedal & Wright, Numerical Optimization 2e, Ch. 19 (interior point,
 %       second-order conditions via inertia).
-%   [3] GTO_tulip/direct/PSR/psr_ipopt_certify.m (the campaign-specific
+%   [3] GTO_tulip/direct/certify/psr_ipopt_certify.m (the campaign-specific
 %       precedent this interpreter is ported from; two of its verdict
 %       phrasings are mirrored verbatim below).
 

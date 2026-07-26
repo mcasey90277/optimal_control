@@ -41,7 +41,7 @@ T = run_verify_pmp_all();          % whole ladder, generic + physical side by si
 % Earth CR3BP             (earth_elliptic_to_geo_CR3BP/direct/)
 ver = verify_cr3bp_pmp(struct('thrustN',10,'phi0',0));   % result in ver.foc
 
-% GTO->tulip              (GTO_tulip/direct/sundman_minfuel/)
+% GTO->tulip              (GTO_tulip/direct/)
 rep = run_foc_tulip();             % + LS-vs-raw-dual costate cross-check
 
 % GTO->ELFO               (GTO_ELFO/direct/elfo/)

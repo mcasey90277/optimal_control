@@ -51,7 +51,7 @@ function out = casadi_mintime_freetf(sigma, rv0, rvf, Tmax, cEx, muStar, X0, U0,
 %   [1] casadi_energy_freetf.m (the energy/fuel sibling this mirrors).
 %   [2] Betts, "Practical Methods for Optimal Control," SIAM (2010) -- sparse
 %       free-final-time via a constant slack state.
-%   [3] GTO_tulip/direct/sundman_minfuel/casadi_minfuel_sundman.m (Task 8
+%   [3] GTO_tulip/direct/lib/casadi_minfuel_sundman.m (Task 8
 %       returnModel/creg + regHistory hook this mirrors).
 
 if nargin < 10 || isempty(opts), opts = struct(); end
@@ -161,7 +161,7 @@ try
     lamAll = full(sol.value(opti.lam_g));
     status = char(opti.return_status());
     % IPOPT per-iteration Hessian regularization (delta_w) -- see
-    % foc_ipopt_inertia.m / GTO_tulip/direct/sundman_minfuel/
+    % foc_ipopt_inertia.m / GTO_tulip/direct/lib/
     % casadi_minfuel_sundman.m (Task 8 precedent this mirrors).
     try
         st = sol.stats();

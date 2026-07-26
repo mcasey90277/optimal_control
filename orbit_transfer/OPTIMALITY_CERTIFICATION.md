@@ -114,7 +114,7 @@ constraints act; or any independence from the transcription (G1).
 **The primal/dual asymmetry.** On the primal side the discrete-vs-continuous
 gap has been *measured*: forward-integrating the exact direct control from x₀
 over ~40 revs diverges by ‖r‖~3, ‖v‖~5 while the defects read 1e-14
-(`GTO_tulip/direct/PSR/psr_switch_hessian.m`). **Read that correctly** — it is
+(`GTO_tulip/direct/certify/psr_switch_hessian.m`). **Read that correctly** — it is
 a statement about IVP conditioning over 40 revs (the same wall that defeats
 indirect single shooting), NOT evidence that the collocation solution poorly
 approximates the continuous BVP solution. The affirmative evidence runs the
@@ -468,13 +468,13 @@ verdict per row wherever the first-order gate ran; none of them reach strict.
 
 | instrument | campaign | verdict | where |
 |---|---|---|---|
-| **IPOPT native inertia (δ_w)** | GTO_tulip | **DELIVERS** — wired into production PSR; 137/137 rows carry a verdict. **ε=0 (bang-bang): 12 certified / 5 not.** ε>0: 100 / 20. Flagship 25-switch row re-checked via the new generic port (`foc_ipopt_inertia`, Task 8): **NOT CERTIFIED** (δ_w tail max 1.8e-8, just above the 1e-8 tol) — borderline, consistent with the campaign's known weak/near-degenerate Hessian at fuel-optimal rungs | `GTO_tulip/direct/PSR/psr_ipopt_certify.m`, called from `run_psr.m:410` + `psr_run_one.m:156`; verdicts stored as `ipoptCert` in `PSR_data/psr_data_*.mat`. Generic port cross-check: `run_foc_tulip.m` |
+| **IPOPT native inertia (δ_w)** | GTO_tulip | **DELIVERS** — wired into production PSR; 137/137 rows carry a verdict. **ε=0 (bang-bang): 12 certified / 5 not.** ε>0: 100 / 20. Flagship 25-switch row re-checked via the new generic port (`foc_ipopt_inertia`, Task 8): **NOT CERTIFIED** (δ_w tail max 1.8e-8, just above the 1e-8 tol) — borderline, consistent with the campaign's known weak/near-degenerate Hessian at fuel-optimal rungs | `GTO_tulip/direct/certify/psr_ipopt_certify.m`, called from `run_gto_tulip.m stage 5c` + `run_one.m`; verdicts stored as `ipoptCert` in `direct/data/psr_data_*.mat`. Generic port cross-check: `run_foc_tulip.m` |
 | **IPOPT native inertia (δ_w) — ported (LEAD-0, 2026-07-25)** | earth 2-body | **9-row ladder, mixed: LOCAL MIN at 10N / 0.2N / 0.1N (δ_w=0); NOT CERTIFIED at 5N (4.51e-05) / 2.5N (7.19e-05) / 1N (2.93e-04) / 0.5N (4.01e-05) / 1N-PSR (5.31e-03) / 0.5N-PSR (1.34e-05→1.77e-04)** | `verify_common/foc_ipopt_inertia.m`, wired via `run_foc_mee.m` + `run_verify_pmp_all.m` (Task 6) |
 | **IPOPT native inertia (δ_w) — ported (LEAD-0, 2026-07-25)** | earth CR3BP | **4/4 LOCAL MIN, δ_w=0** at all four covered rungs (10N/5N/1N/0.5N) — a clean weak-local-min certificate everywhere the first-order gate currently runs; 2.5/0.2/0.1 N not run (coverage gap, G2) | `verify_cr3bp_pmp.m` (Task 7) |
 | **IPOPT native inertia (δ_w) — ported (LEAD-0, 2026-07-25)** | GTO_ELFO | **energy seed: LOCAL MIN** (δ_w=0 tail); **min-time anchor: LOCAL MIN** (δ_w=0 tail); **front row (1.33x, 50sw): NOT CERTIFIED** (δ_w max 1.98e-06) — same near-degenerate pattern as the tulip flagship, first-ever second-order verdict on this campaign | `run_foc_elfo.m` (Task 9) |
 | NLP reduced-Hessian SOSC | earth 2-body | **WEAK_MIN** @10 N (270 flat directions); INCONCLUSIVE @5 / 2.5 N; ERROR @1 / 0.5 N; scale-skip above `maxNullDim=10000` | `earth_elliptic_to_geo/direct/verify/sosc/`, `process/DESIGN_sosc.md` §11–12 |
-| NLP SSOSC via KKT inertia | GTO_tulip | **NOT APPLICABLE (structural)** | `GTO_tulip/direct/PSR/psr_second_order.m` (FINDING, 2026-07-12) |
-| Maurer–Osmolovskii switching-time Hessian | GTO_tulip | **BLOCKED** (forward-flow conditioning) | `GTO_tulip/direct/PSR/psr_switch_hessian.m` (FINDING, 2026-07-12) |
+| NLP SSOSC via KKT inertia | GTO_tulip | **NOT APPLICABLE (structural)** | `GTO_tulip/direct/certify/psr_second_order.m` (FINDING, 2026-07-12) |
+| Maurer–Osmolovskii switching-time Hessian | GTO_tulip | **BLOCKED** (forward-flow conditioning) | `GTO_tulip/direct/certify/psr_switch_hessian.m` (FINDING, 2026-07-12) |
 | conjugate point (Jacobi field) | all | not built; gated on an indirect solver | `BCP2010` §2.3–2.4; CR3BP TODO Phase 2 |
 
 **Net (corrected 2026-07-25, twice now):** second order is **not** at zero,
@@ -708,7 +708,7 @@ campaign/row, verdict, and what it changed in Part A or §1–§5.
 | `earth_elliptic_to_geo/process/DESIGN_sosc.md` §11–12 | NLP SOSC method evolution, `eig` vs `ldl`, threshold rationale |
 | `earth_elliptic_to_geo/process/PLAN_sosc.md` | original build plan |
 | `earth_elliptic_to_geo/direct/verify/sosc/` | the NLP-level implementation |
-| `GTO_tulip/direct/PSR/psr_second_order.m` | KKT-inertia test + M2 finding |
-| `GTO_tulip/direct/PSR/psr_switch_hessian.m` | Maurer test + M3 finding + the STM fix spec |
+| `GTO_tulip/direct/certify/psr_second_order.m` | KKT-inertia test + M2 finding |
+| `GTO_tulip/direct/certify/psr_switch_hessian.m` | Maurer test + M3 finding + the STM fix spec |
 | `earth_elliptic_to_geo/process/LESSONS_DUAL_EXTRACTION.md` | why the first-order side is now trustworthy |
 | `earth_elliptic_to_geo_CR3BP/TODO.md` | CR3BP tier plan (supersede with §1 before acting on it) |

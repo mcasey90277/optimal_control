@@ -49,7 +49,7 @@ function [rep, info] = run_foc_elfo(kind, matFile)
 %   [1] verify_common/foc_check.m, foc_report.m, foc_ipopt_inertia.m.
 %   [2] casadi_energy_freetf.m / casadi_mintime_freetf.m (Task 9 returnModel/
 %       creg + regHistory hook).
-%   [3] GTO_tulip/direct/sundman_minfuel/run_foc_tulip.m (Task 8 wrapper shape
+%   [3] GTO_tulip/direct/lib/run_foc_tulip.m (Task 8 wrapper shape
 %       this mirrors: warm re-solve at saved primal + certified-quantity
 %       guard + foc_check + rep.ipopt + foc_report). The tulip driver's
 %       LS-reconstructed-costate cross-check (certify_minfuel_pmp.m) is

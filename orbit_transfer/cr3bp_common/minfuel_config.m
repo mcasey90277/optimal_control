@@ -65,7 +65,7 @@ cfg.maxIter = 1500;
 % move. Anchor dirs to the tulip sundman campaign explicitly -- a
 % here-relative 'results' would silently point at an empty cr3bp_common/
 % results/ (latent restructure bug caught by ladder-prep T1's regression).
-r = fullfile(here, '..', 'GTO_tulip', 'direct', 'sundman_minfuel', 'results');
+r = fullfile(here, '..', 'GTO_tulip', 'direct', 'results');
 cfg.dirs = struct('root',r, 'energy',fullfile(r,'energy'), ...
                   'minfuel',fullfile(r,'minfuel'), 'fronts',fullfile(r,'fronts'), ...
                   'plots',fullfile(r,'plots'), 'logs',fullfile(r,'logs'));

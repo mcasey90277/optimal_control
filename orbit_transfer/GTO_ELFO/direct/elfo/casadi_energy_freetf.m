@@ -106,7 +106,7 @@ function out = casadi_energy_freetf(sigma, rv0, rvf, Tmax, cEx, muStar, X0, U0, 
 %       free-final-time via a constant slack state.
 %   [3] Sundman regularization; two-primary min-distance clock.
 %   [4] casadi_minfuel_sundman.m (the fixed-t_f single-primary predecessor).
-%   [5] GTO_tulip/direct/sundman_minfuel/casadi_minfuel_sundman.m (Task 8
+%   [5] GTO_tulip/direct/lib/casadi_minfuel_sundman.m (Task 8
 %       returnModel/creg + regHistory hook this mirrors).
 
 if nargin < 10 || isempty(opts), opts = struct(); end
@@ -251,7 +251,7 @@ try
     lamAll = full(sol.value(opti.lam_g));
     status = char(opti.return_status());
     % IPOPT per-iteration Hessian regularization (delta_w) -- see
-    % foc_ipopt_inertia.m / GTO_tulip/direct/sundman_minfuel/
+    % foc_ipopt_inertia.m / GTO_tulip/direct/lib/
     % casadi_minfuel_sundman.m (Task 8 precedent this mirrors).
     try
         st = sol.stats();

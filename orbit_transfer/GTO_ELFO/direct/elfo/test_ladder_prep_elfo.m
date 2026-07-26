@@ -17,5 +17,18 @@ w = warning('off','all');
 [sfB,~,~] = elfo_find_energy_seed(fullfile(here,'results'), S.X(8,end), 0.02, fp20);
 warning(w);
 assert(~isempty(sfA), 'legacy seed eligible under nominal fp');
-assert(isempty(sfB), 'legacy (nominal) seed must NOT satisfy a 20 mN request');
+% The 20 mN request must never be served by a NOMINAL seed. This used to assert
+% isempty(sfB) -- "nothing is returned" as a proxy for "nominal seeds are
+% rejected". That proxy expired when the 20 mN pilot succeeded and banked
+% energy_elfo_f1200_T20mN.mat: the filter now correctly RETURNS a seed, and the
+% old assertion failed on the campaign's own progress rather than on a defect.
+% Assert the property that was actually meant.
+if ~isempty(sfB)
+    B = load(sfB);
+    assert(isfield(B,'fp') && abs(B.fp.thrustN - 0.020) < 1e-12, ...
+        ['a 20 mN request was served by a seed whose fingerprint is not 20 mN ' ...
+         '(%s) -- the thrust filter is not doing its job'], sfB);
+    assert(~strcmp(sfB, fullfile(here,'results','energy_elfo_f1200.mat')), ...
+        'the nominal legacy seed was returned for a 20 mN request');
+end
 fprintf('test_ladder_prep_elfo: ALL PASS\n');

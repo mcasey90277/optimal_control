@@ -10,7 +10,7 @@ flagship result is the **certified sharp bang-bang min-fuel solution**
 ## Goals
 
 1. **Perfect the direct code** — close the remaining direct open items (the
-   1.01–1.11× near-min-time band, PSR/lib de-dup).
+   1.01–1.11× near-min-time band).
 2. **Get the indirect code working** — a certified indirect (PMP shooting)
    solve of the same problem; today the indirect campaigns are built but stall
    short of certification.
@@ -25,17 +25,15 @@ objective):
 
 | objective | role in the chain | entry point |
 |---|---|---|
-| min-time | anchor: sets `t_f,min` (throttle ≡ 1 mode of the same core) | `direct/sundman_minfuel/gen_tulip_mintime` (direct); `indirect/min_time/` (PMP shooting) |
-| min-energy | homotopy root (the SAME fuel solver at ε=1; smooth, big basin) | `direct/sundman_minfuel/gen_tulip_energy_2p`, energy backbone |
-| min-fuel | target (ε=0, bang-bang), reached by the ε:1→0 sweep | `direct/sundman_minfuel/run_gto_tulip` (front door); `run_certified_minfuel`, `minfuel_at_tf` |
+| min-time | anchor: sets `t_f,min` (throttle ≡ 1 mode of the same core) | `direct/lib/gen_tulip_mintime` (direct); `indirect/min_time/` (PMP shooting) |
+| min-energy | homotopy root (the SAME fuel solver at ε=1; smooth, big basin) | `direct/run_gto_tulip` with `epsMin=1`; `direct/lib/gen_tulip_energy_2p` |
+| min-fuel | target (ε=0, bang-bang), reached by the ε:1→0 sweep | `direct/run_gto_tulip` (**the front door**, `epsMin=0`); `run_certified_minfuel` |
 
 ## Folder map
 
 | where | what |
 |---|---|
-| `direct/sundman_minfuel/` | **THE canonical direct library** — Sundman-regularized CasADi+IPOPT solver, energy→fuel homotopy, energy-backbone continuation, PMP certification, front aggregation. Start at `direct/sundman_minfuel/README.md`. |
-| `direct/PSR/` | PMP-Steered Refinement deliverable (switch-aware mesh refinement; vendors its own frozen `lib/`). `PSR_data/` holds its gitignored caches. |
-| `direct/movie/` | Trajectory animations (certified solution with running ΔV meter). |
+| `direct/` | **The whole direct campaign, one front door.** `run_gto_tulip` (solve → optional PSR refine → export → verify → movie), `lib/` (solver, homotopy, seeds, refine algorithm), `certify/` (PMP + second-order), `viz/`, `tests/`, `results/`, `data/`. Start at `direct/README.md`. Flattened 2026-07-26 from the old `sundman_minfuel/` + `PSR/` split — see that README for why. |
 | `indirect/lowThrust_GTO_tulip/` | Base indirect campaign: PMP shooting w/ complex-step Jacobians, theory note + guided tutorial (`gto_tulip_mintime_theory.pdf`, `building_the_gto_tulip_solvers.pdf`). |
 | `indirect/ms_band/` | Indirect multiple-shooting attack on the hard 1.01–1.11× transition band (own campaign doc + unit tests). |
 | `indirect/ifs/` | IFS — Indirect Finishing Solve: direct-seeded indirect certification machinery. `IFS_data/` holds its gitignored caches. |
@@ -64,7 +62,8 @@ Shared problem definition (`cr3bp_lt_params`, `minfuel_config`,
 **Start here — the front door** (house `run_gergaud` / `run_cr3bp_geo` pattern):
 
 ```matlab
-cd direct/sundman_minfuel
+cd direct
+setup_paths
 edit run_gto_tulip             % set factor / epsMin in section 1, then run
 ```
 
@@ -115,9 +114,9 @@ test_minfuel_lib               % cheap no-solve guardrail checks
 ladders — it sweeps `t_f`, *not* thrust, for the reason in the table above):
 
 ```bash
-direct/sundman_minfuel/run_tulip_front.sh              # default band, min-fuel
-direct/sundman_minfuel/run_tulip_front.sh 1.15 1.20    # just these factors
-EPSMIN=1 direct/sundman_minfuel/run_tulip_front.sh     # min-energy sweep
+direct/run_tulip_front.sh              # default band, min-fuel
+direct/run_tulip_front.sh 1.15 1.20    # just these factors
+EPSMIN=1 direct/run_tulip_front.sh     # min-energy sweep
 ```
 
 Process-isolated per factor, resumable, and a failed factor is recorded rather
@@ -127,8 +126,8 @@ Batch orchestration (process isolation + watchdog + retry — required because
 of sporadic uncatchable CasADi/IPOPT MEX crashes):
 
 ```bash
-direct/sundman_minfuel/orchestrate/backbone_walk.sh 1.15 1.20 1.25 1.30   # energy chain
-direct/sundman_minfuel/orchestrate/sharpen_batch.sh 2 1.30 1.35 1.40      # parallel sharpen
+direct/orchestrate/backbone_walk.sh 1.15 1.20 1.25 1.30   # energy chain
+direct/orchestrate/sharpen_batch.sh 2 1.30 1.35 1.40      # parallel sharpen
 ```
 
 The folder root deliberately holds only `README.md` and `TODO.md`; campaign

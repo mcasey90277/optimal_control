@@ -1,7 +1,7 @@
 % TEST_FOC_ELFO_SMOKE  Byte-identity regression for the Task 9 returnModel hook
 % on BOTH ELFO solvers: casadi_energy_freetf.m and casadi_mintime_freetf.m.
 %
-% Same pattern as GTO_tulip/direct/sundman_minfuel/test_foc_tulip_smoke.m
+% Same pattern as GTO_tulip/direct/lib/test_foc_tulip_smoke.m
 % (Task 8): two tiny (maxIter=5) warm re-solves of a certified row -- one
 % WITHOUT opts.returnModel, one WITH -- must produce IDENTICAL X/U (the
 % registry bookkeeping only reads size(opti.g,1); it must never perturb the

@@ -142,9 +142,10 @@ else
     fp = fpBase;
     save(probeFile, 'infoP', 'fp');
 end
-assert(infoP.nRev >= 6.5 && infoP.nRev <= 9, 'run_transfer_mee:revsOutOfRange', ...
-    'seedThr=%.3f gives nRev=%.3f, outside the required [6.5,9] window -- adjust cfg.seedThr', ...
-    seedThr, infoP.nRev);
+revWin = mee_seed_rev_window();   % shared with bridge_mu_continuation (CR3BP)
+assert(infoP.nRev >= revWin(1) && infoP.nRev <= revWin(2), 'run_transfer_mee:revsOutOfRange', ...
+    'seedThr=%.3f gives nRev=%.3f, outside the required [%.3g,%.3g] window -- adjust cfg.seedThr', ...
+    seedThr, infoP.nRev, revWin(1), revWin(2));
 N = round(nodesPerRev * infoP.nRev);
 fp = fpBase;  fp.N = N;
 

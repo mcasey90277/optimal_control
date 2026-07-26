@@ -164,4 +164,39 @@ fprintf(['test_warmstart_mee: Part 2 (run_transfer_mee.m cfg.warmStart, live, ma
     'true 7.326 revs at 20/rev), report.certified=%d (not required), revs=%.3f, no exception\n'], ...
     wallSec, Nachieved, Nachieved, out.report.certified, out.report.revs);
 
+% --- (e) DEGENERATE-BRACKET GUARD (added 2026-07-26) -----------------------
+% The renormalization checked in (d) divides by the interpolant's norm, and
+% that norm collapses toward zero between NEARLY ANTIPODAL source directions --
+% which is what beta does when it rotates fast across a throttle switch on a
+% coarse source mesh. Measured before the guard: the exactly-antipodal bracket
+% returned NaN, and a near-antipodal one returned a confident unit vector whose
+% direction was pure round-off. Both went straight into IPOPT as a warm start,
+% silently. The guard floors the norm and falls back to the nearest SOURCE node
+% to the left -- a real unit direction from the converged trajectory.
+Xdeg = zeros(7, 2);
+Udeg = [ 1 -1;                 % exactly antipodal AND exactly representable,
+         0  0;                 % so the midpoint is exactly [0;0;0]
+         0  0;
+         1  1 ];
+Wdeg = interp_warmstart(Xdeg, Udeg, 1.0, [0; 1], [0; 0.5; 1]);
+
+assert(all(isfinite(Wdeg.U(:))), ...
+    ['test_warmstart_mee (e): interp_warmstart produced a non-finite warm start on an ' ...
+     'antipodal beta bracket -- this is handed directly to IPOPT.']);
+assert(abs(norm(Wdeg.U(1:3,2)) - 1) < 1e-12, ...
+    'test_warmstart_mee (e): fallback direction is not a unit vector (|beta| = %.3g)', ...
+    norm(Wdeg.U(1:3,2)));
+assert(norm(Wdeg.U(1:3,2) - Udeg(1:3,1)) < 1e-12, ...
+    ['test_warmstart_mee (e): collapsed bracket should fall back to the nearest SOURCE ' ...
+     'node to the left ([%g %g %g]), got [%g %g %g]'], Udeg(1:3,1), Wdeg.U(1:3,2));
+
+% The guard must not disturb well-conditioned brackets: endpoints stay exact.
+assert(norm(Wdeg.U(1:3,1) - Udeg(1:3,1)) < 1e-12 && ...
+       norm(Wdeg.U(1:3,3) - Udeg(1:3,2)) < 1e-12, ...
+    'test_warmstart_mee (e): the guard perturbed the source endpoints');
+
+fprintf(['test_warmstart_mee: (e) degenerate-bracket guard PASS -- antipodal bracket ' ...
+         'returns a finite unit direction (%.0f%% finite), endpoints preserved\n'], ...
+        100*mean(isfinite(Wdeg.U(:))));
+
 fprintf('test_warmstart_mee: ALL PASS (Part 1 + Part 2)\n');

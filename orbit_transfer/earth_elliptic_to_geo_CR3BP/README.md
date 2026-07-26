@@ -93,10 +93,16 @@ earth_elliptic_to_geo_CR3BP/
 the front door calls them. It does not — measured 2026-07-26, `run_cr3bp_geo`
 inlines stages A–D itself and references neither. They are a *callable-stage*
 implementation of the same sequence, reached only by `verify_cr3bp_pmp.m` and
-`compare_vs_2body.m`. Deciding which is authoritative (so the other can
-delegate) is a Tier-2 item in `orbit_transfer/CODE_STRUCTURE.md`; until then,
-treat `run_cr3bp_geo` as the campaign's front door and these two as the
-analysis path.
+`compare_vs_2body.m`.
+
+**Which is authoritative — decided 2026-07-26: `run_cr3bp_geo`.** It is what
+`run_cr3bp_ladder.sh` drives, so it produced the certified 10 → 0.1 N ladder.
+The staged pair is the Phase-1 development path that produced the
+`gate1`/`gate2`/`gainwalk` artifacts. Making the front door delegate to it would
+require re-running every certified rung to re-certify — not worth removing one
+campaign's duplicated sequence. Full reasoning, and why an equivalence check is
+*not* cheaply available from the banked artifacts, in
+`orbit_transfer/CODE_STRUCTURE.md` Tier 2.
 
 The one shared-core edit lives upstream: `../earth_elliptic_to_geo/direct/
 core/lt_mee_rhs.m` gained the opt-in `par.pert` lunar third-body branch

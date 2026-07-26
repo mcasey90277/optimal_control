@@ -36,8 +36,19 @@ function W = interp_warmstart(Xsrc, Usrc, dLsrc, sigmaSrc, sigmaDst)
 %          sigmaSrc - source sigma grid, [0,1] [Msrc x 1]
 %          sigmaDst - destination sigma grid, [0,1] [Mdst x 1]
 % OUTPUTS: W - struct: .X [7 x Mdst] (linear-interpolated), .U [4 x Mdst]
-%          (rows 1-3 linear-interpolated then renormalized to unit norm,
-%          row 4 nearest-interpolated), .dL [scalar, = dLsrc unchanged]
+%          (rows 1-3 linear-interpolated then renormalized to unit norm, with a
+%          degenerate-bracket fallback -- see the guard below, row 4
+%          nearest-interpolated), .dL [scalar, = dLsrc unchanged]
+%
+% NOT THE SAME FUNCTION as the tulip campaign's warmstart_on_mesh.m, despite
+% both being "warm start onto a new mesh" (compared deliberately 2026-07-26,
+% CODE_STRUCTURE.md Tier 2). That one serves a different requirement: it copies
+% every ORIGINAL node verbatim and fills only inserted nodes (the no-resample
+% discipline), on an 8-state Sundman transcription, with pchip and a
+% step-hold-left throttle. This one resamples ALL nodes of a 7-state MEE
+% trajectory with linear/nearest. The interpolation policies are deliberate on
+% both sides and merging them would serve neither -- only the degenerate-bracket
+% guard was worth porting, and it has been.
 %
 % REFERENCES: [1] run_transfer_mee.m (cfg.warmStart path, one of two
 %   ladder-critical callers). [2] run_mintime_mee.m (cfg.warmStartAnchor
@@ -52,7 +63,30 @@ W.X = interp1(sigmaSrc, Xsrc.', sigmaDst, 'linear').';
 
 Ubeta = interp1(sigmaSrc, Usrc(1:3,:).', sigmaDst, 'linear').';
 betaNorm = sqrt(sum(Ubeta.^2, 1));
-Ubeta = Ubeta ./ betaNorm;   % restore |beta|=1 (see LATENT BUG FIX above)
+
+% DEGENERATE-BRACKET GUARD (added 2026-07-26, ported from the tulip campaign's
+% warmstart_on_mesh.m). The renormalization above fixes the sub-unit interpolant,
+% but on its own it divides by a norm that can be zero or near-zero: linear
+% interpolation between two nearly ANTIPODAL unit directions collapses toward the
+% origin, which is exactly what beta does when it rotates fast across a throttle
+% switch on a coarse source mesh. Measured on this function before the guard:
+%   exactly antipodal  ([1 0 0], [-1 0 0])  -> beta = [NaN NaN NaN]
+%   near-antipodal     (pi - 1e-16 apart)   -> a confident-looking UNIT vector
+%                                              whose direction is pure round-off
+% The first hands IPOPT a NaN warm start; the second hands it an arbitrary
+% direction that looks valid. Both are silent. The floor stops the NaN, and the
+% fallback replaces a collapsed interpolant with the nearest source node's ACTUAL
+% direction -- a real unit vector from the converged trajectory, which is a far
+% better warm start than anything recoverable from the vanished interpolant.
+betaFloor = 1e-12;   % stops 0/0; below 1e-8 the direction is round-off anyway
+Ubeta = Ubeta ./ max(betaNorm, betaFloor);
+
+collapsed = find(betaNorm < 1e-8);
+for q = collapsed
+    kk = find(sigmaSrc(:) <= sigmaDst(q), 1, 'last');   % nearest source node LEFT
+    kk = min(max(kk, 1), size(Usrc, 2));
+    Ubeta(:, q) = Usrc(1:3, kk);
+end
 
 Uthr = interp1(sigmaSrc, Usrc(4,:).', sigmaDst, 'nearest').';
 

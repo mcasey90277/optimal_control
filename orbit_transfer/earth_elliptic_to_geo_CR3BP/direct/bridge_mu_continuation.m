@@ -7,10 +7,13 @@ function out = bridge_mu_continuation(opts)
 % Pipeline (spec sec 6 Phase-1 step 3; plan Task 4):
 %   1. Certified lookup (table3_certified) sets tfTarget = 1.5*tfmin (same
 %      physical t_f convention as the 2-body ladder, spec D4).
-%   2. Seed: two-pass mee_seed protocol, mirrored VERBATIM from
-%      run_transfer_mee.m lines 132-161 (cheap N=50 revs probe with its
-%      nRev window assert, then a full-density N=round(nodesPerRev*nRev)
-%      sample), using opts.thrustN's OWN recipe values from table3_recipes
+%   2. Seed: two-pass mee_seed protocol -- same physics as run_transfer_mee.m
+%      (cheap N=50 revs probe, the shared mee_seed_rev_window() assert, then a
+%      full-density N=round(nodesPerRev*nRev) sample), but NOT verbatim from
+%      it: the orchestration around those lines has diverged, and the header
+%      used to claim otherwise with a line-number reference that would rot on
+%      the next edit to that file. See the Stage-1 comment below.
+%      Uses opts.thrustN's OWN recipe values from table3_recipes
 %      (package review A10: per-rung seedThr/nodesPerRev, not the 10 N
 %      rung's values hardcoded regardless of thrustN; betaMode='tangential'
 %      and initElems=[] stay fixed, same as the front door).
@@ -113,7 +116,16 @@ thrTag = num_tag(thrustN);
 phiTag = num_tag(phi0);
 tag    = sprintf('cr3bp_bridge_T%sN_phi%s', thrTag, phiTag);
 
-% --- Stage 1: seed (mirrors run_transfer_mee.m lines 132-161 VERBATIM) -----
+% --- Stage 1: seed (two-pass: cheap revs probe, then full-density sample) --
+% NOT verbatim from run_transfer_mee.m, despite what this comment used to
+% claim (corrected 2026-07-26). The four physics-bearing lines are the same
+% -- N=50 probe, rev-window assert, N = round(nodesPerRev*nRev) -- but the
+% surrounding orchestration has genuinely diverged: this copy sources its
+% knobs from the table3_recipes registry and gates its cache reads on
+% opts.resume, while the earth driver takes knobs from cfg and reads the
+% cache unconditionally. Only the rev window is shared, via
+% mee_seed_rev_window(); see CODE_STRUCTURE.md Tier 2 for why the protocol
+% itself is deliberately not extracted.
 % A10: seed knobs sourced from the certified per-rung recipe registry
 % (table3_recipes), same as the front door (run_cr3bp_geo.m) -- this used to
 % hardcode the 10 N rung's own values regardless of opts.thrustN, silently
@@ -144,9 +156,10 @@ else
     fp = fpSeed;
     save(probeFile, 'infoP', 'fp');
 end
-assert(infoP.nRev >= 6.5 && infoP.nRev <= 9, 'bridge_mu_continuation:revsOutOfRange', ...
-    'seedThr=%.3f gives nRev=%.3f, outside the required [6.5,9] window -- adjust seedThr', ...
-    seedThr, infoP.nRev);
+revWin = mee_seed_rev_window();   % shared with run_transfer_mee (earth)
+assert(infoP.nRev >= revWin(1) && infoP.nRev <= revWin(2), 'bridge_mu_continuation:revsOutOfRange', ...
+    'seedThr=%.3f gives nRev=%.3f, outside the required [%.3g,%.3g] window -- adjust seedThr', ...
+    seedThr, infoP.nRev, revWin(1), revWin(2));
 N = round(nodesPerRev * infoP.nRev);
 fpSeedN = fpSeed;  fpSeedN.N = N;
 

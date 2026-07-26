@@ -206,13 +206,88 @@ should keep.
 The four *names* for one function are a readability wart, not a defect. If it
 ever bothers anyone, rename in place — do not centralize.
 
-### Tier 2 — real work, real gates
+### Tier 2 — real work, real gates — **resolved 2026-07-26**
 
-| item | why it is harder |
+All three turned out to be **refusals with a smaller real fix inside them**. That
+is the useful outcome of a Tier-2 item: the comparison is the deliverable, and
+in two of three cases it found a defect the consolidation would have papered
+over.
+
+| item | outcome |
 |---|---|
-| **Two-pass seed protocol** — 3 copies, one carrying an explicit *"mirrored VERBATIM from run_transfer_mee.m lines 132-161"* comment | crosses the earth/CR3BP boundary; needs a reproduce gate on both 10 N rows |
-| **CR3BP's double pipeline** — `run_cr3bp_geo` inlines stages A–D while `bridge_mu_continuation` + `solve_cr3bp_minfuel` implement the same sequence as callable stages | must decide which is authoritative before either can delegate |
-| **`warmstart_on_mesh` (tulip) vs `interp_warmstart` (earth)** | two implementations of one idea in *different transcriptions* — needs genuine comparison, not a move |
+| Two-pass seed protocol | **not extracted**; shared the physics constant instead; false provenance claim corrected |
+| CR3BP double pipeline | **front door declared authoritative**; not restructured |
+| `warmstart_on_mesh` vs `interp_warmstart` | **not merged** — different requirements; **ported a robustness guard that fixes a NaN** |
+
+#### Two-pass seed: share the constant, not the protocol
+
+Three copies, but only two are close — `run_cr3bp_geo` deliberately uses a
+different guard (relative error against the registry's certified rev count,
+probe re-run every call). And the pair that claimed to be identical is not:
+`bridge_mu_continuation`'s *"mirrored VERBATIM from run_transfer_mee.m lines
+132-161"* is false. It has since gained a `table3_recipes` knob lookup and
+`resume`-gated cache reads, while the earth driver takes knobs from `cfg` and
+reads its cache unconditionally. (It also pointed at line numbers in another
+file — a reference guaranteed to rot.) Comment corrected.
+
+What they genuinely share is **four lines**: an `N = 50` probe, the rev-window
+assert, and `N = round(nodesPerRev * nRev)`. Extracting those would need a
+seven-argument helper — longer than the body, and it would drag each caller's
+caching policy into a shared signature. **Refused.**
+
+But the window and the N formula are *physics*, and silently diverging them
+would give the two campaigns different admissible seeds. So the window alone
+moved to `earth/direct/lib/mee_seed_rev_window.m`, which CR3BP already reaches.
+A shared **definition**, not a shared algorithm — standing rule 2.
+
+#### CR3BP double pipeline: the front door is authoritative
+
+Both paths have certification history, which is why this was deferred. The
+deciding evidence is provenance, not code:
+
+- `run_cr3bp_ladder.sh` invokes **`run_cr3bp_geo`** — so the front door produced
+  the certified 10 → 0.1 N ladder, the campaign's headline result.
+- `bridge_mu_continuation` + `solve_cr3bp_minfuel` produced the Phase-1
+  development artifacts (`gate1`, `gate2`, `gainwalk`) and are reached today
+  only by `verify_cr3bp_pmp` and `compare_vs_2body`.
+
+An equivalence check was attempted and is **not cheaply available**: the staged
+path's banked artifacts stop at the energy/gain stages (`cr3bp_bridge_T10N_phi0_gate2`
+carries `gain: 0` and m_f = 0.906449 as an *energy* solve) while the front door's
+`cr3bp_T10N_phi0_fuel` is min-fuel (m_f = 0.918103). Different problems — the
+difference is not a discrepancy, and comparing them would require a real
+`solve_cr3bp_minfuel` run.
+
+**Decision: `run_cr3bp_geo` is the authoritative pipeline**; the staged pair is
+the Phase-1 development and analysis path. Making the front door *delegate* to
+it is deliberately NOT done: the gate would be a full re-run of every certified
+rung, and the benefit is removing a duplicated sequence in one campaign. The
+option is preserved, and the cost is now written down.
+
+#### The two warm-starts are not the same function — and comparing them found a bug
+
+| | `interp_warmstart` (earth) | `warmstart_on_mesh` (tulip) |
+|---|---|---|
+| state | 7 (MEE) | 8 (Cartesian/Sundman) |
+| original nodes | **resampled** | **copied verbatim** (no-resample discipline) |
+| state / direction | linear | pchip |
+| throttle | `nearest` | step-hold to the **left** |
+| degenerate bracket | *(none — see below)* | norm floor + fallback |
+
+Different requirements, not two solutions to one problem. **Not merged.**
+
+The comparison earned its keep anyway. Earth's renormalization — itself added as
+a "LATENT BUG FIX" — divides by a norm that collapses between nearly
+**antipodal** directions, which is exactly what `beta` does across a throttle
+switch on a coarse source mesh. Measured on the shipped function:
+
+- exactly antipodal → `beta = [NaN NaN NaN]`, handed straight to IPOPT;
+- near-antipodal → a confident-looking **unit vector whose direction is pure
+  round-off**.
+
+Both silent. Tulip guards both. The guard is now ported, with a regression test,
+and is provably inert on well-conditioned input (`max(n,1e-12) == n` whenever
+`n > 1e-12`).
 
 ### Never
 

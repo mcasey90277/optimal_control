@@ -16,12 +16,10 @@ function foc_report(rep, tag, resDir)
 %           .lam              nodal costates [nx x (N+1)] [numeric]
 %           .lamTimeCoV       time-costate coefficient of variation [scalar]
 %           .lamTimeEnd       time-costate value at final node [scalar]
-%           .lamMassEndMapped free-mass transversality residual (relative), Hager-
-%                             mapped terminal covector -- THE GATED VALUE [scalar]
-%           .lamMassEndRel    same, endpoint-extrapolated interval dual (I5),
-%                             printed as an attribution companion [scalar]
-%           .lamMassEndRelOneSided same, raw one-sided interval dual (legacy),
-%                             printed as an attribution companion [scalar]
+%           .lamMassEndMapped free-mass transversality residual (relative),
+%                             Hager-mapped terminal covector [scalar]
+%           .derivedFromKKT   names of reported lines that are PROJECTIONS of
+%                             kktStatInf, not independent tests [cellstr]
 %           .singularArcNodes count of >=3-node near-zero switching runs [scalar]
 %           .sdotMinRel       minimum relative |Sdot| at switches [scalar]
 %           .nSwitches        number of burn/coast sign changes [scalar]
@@ -63,39 +61,38 @@ sdotMin = 1e-3;   % minimum regular-switching relative Sdot
 % --- Header ----------------------------------------------------------------
 fprintf('\n========== FIRST-ORDER OPTIMALITY REPORT: %s ==========\n', tag);
 
-% --- KKT Stationarity ------------------------------------------------------
+% --- MASTER RESIDUAL, and the two lines that are projections of it ----------
+% Grouping matters and is not cosmetic. The tangential direction residual and
+% the mapped terminal covector are, by construction, a projection and a single
+% ENTRY of the same vector whose max-norm is kktStatInf (see foc_check.m
+% sections (3) and (6)). Neither can fail unless kktStat already has, so
+% printing them flush with the structural checks would overstate how much
+% independent evidence this report carries. They are indented under it.
 s_kkt = make_status_str(rep.kktStatInf, tolStat, '<=');
 fprintf(' KKT stationarity  ||grad_x L||_inf : %10.3e   (sign s=%+d)   %s\n', ...
     rep.kktStatInf, rep.sLag, s_kkt);
 
-% --- Direction: Tangential min condition -----------------------------------
 s_dir = make_status_str(rep.dirTanMax, tolStat, '<=');
-fprintf(' Min condition (direction) tan max  : %10.3e                 %s\n', ...
+fprintf('   |- min condition, direction tan  : %10.3e                 %s\n', ...
     rep.dirTanMax, s_dir);
 
-% --- Throttle sign-law (sign-pct) ------------------------------------------
+s_trans = '--';
+if ~isnan(rep.lamMassEndMapped)
+    s_trans = make_status_str(rep.lamMassEndMapped, tolTrans, '<=');
+end
+fprintf('   |- transversality |lam_m(tf)|    : %10.3e                 %s\n', ...
+    rep.lamMassEndMapped, s_trans);
+
+% --- STRUCTURAL CHECKS (genuinely independent of the master residual) -------
 if isnan(rep.signPct)
     s_sign = '--';
 else
     s_sign = make_status_str(rep.signPct, tolSign, '>=');
 end
-fprintf(' Min condition (throttle sign law)  : %9.2f %%                %s\n', ...
+fprintf(' Bang-bang sign law (S<0 <=> burn)  : %9.2f %%                %s\n', ...
     rep.signPct, s_sign);
 
-% --- Transversality: free-mass at terminal time (mapped terminal covector) -
-% GATED VALUE is the Hager-mapped terminal covector (finding I5's principled
-% fix): its mass component is exact by the discrete KKT system when the
-% final mass is genuinely free, unlike the raw/extrapolated interval duals
-% below, which carry an O(h) endpoint-representation offset by construction.
-if isnan(rep.lamMassEndMapped)
-    s_trans = '--';
-else
-    s_trans = make_status_str(rep.lamMassEndMapped, tolTrans, '<=');
-end
-fprintf(' Transversality |lam_m(tf)| mapped   : %10.3e                 %s\n', ...
-    rep.lamMassEndMapped, s_trans);
-
-% --- Time-costate behavior -------------------------------------------------
+% --- INFORMATIONAL (reported, never gated) ---------------------------------
 if isnan(rep.lamTimeCoV)
     fprintf(' Time-costate CoV (H-const dual)    :         --   end %+.3e\n', ...
         rep.lamTimeEnd);
@@ -122,22 +119,7 @@ end
 fprintf(' Regular switching min|Sdot| rel    : %10.3e   (%d switches) %s\n', ...
     rep.sdotMinRel, rep.nSwitches, s_sdot);
 
-% --- attribution lines (external-review findings I1/I5, 2026-07-25) ---------
-% Print the two superseded statistics beside the gated one so a marginal miss
-% can be ATTRIBUTED rather than merely moved: a large gap between mapped and
-% raw/extrapolated means the old number was an endpoint-representation
-% artifact, a small gap means the finding is real (all three converge).
-if isfield(rep,'lamMassEndRel') && ~isnan(rep.lamMassEndRel)
-    fprintf('   ^ transversality, extrapolated (I5): %10.3e\n', rep.lamMassEndRel);
-end
-if isfield(rep,'lamMassEndRelOneSided') && ~isnan(rep.lamMassEndRelOneSided)
-    fprintf('   ^ transversality, legacy one-sided : %10.3e\n', ...
-        rep.lamMassEndRelOneSided);
-end
-if isfield(rep,'sdotMinRelLegacy') && ~isnan(rep.sdotMinRelLegacy) && ~isnan(rep.sdotMinRel)
-    fprintf('   ^ regular switching, legacy raw    : %10.3e   [I1 mesh fix]\n', ...
-        rep.sdotMinRelLegacy);
-end
+% --- notes ------------------------------------------------------------------
 if isfield(rep,'bangBangChecksRun') && ~rep.bangBangChecksRun && ~isempty(rep.Sd)
     fprintf([' NOTE: throttle cost is %s, not affine -- sign law, singular-arc and\n' ...
              '       regular-switching checks SKIPPED (bang-bang law does not apply).\n'], ...

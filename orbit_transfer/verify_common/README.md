@@ -67,11 +67,12 @@ decision, blocked on the pre-promotion checklist in
 
 Two consequences worth internalizing:
 
-- A FAIL is a **finding to investigate**, not a verdict on the solution. Three
-  such findings exist today (marginal transversality on mid-ladder rungs,
-  small Ṡ at some switches, the tulip LS-vs-dual cross-check disagreement) and
-  all three have recorded caveats about whether the *checker* or the
-  *solution* is at fault.
+- A FAIL is a **finding to investigate**, not a verdict on the solution — and
+  the burn-in's own record argues for suspicion: of the five advisory failures
+  this layer has produced, **all five turned out to be its own artifacts**
+  (two mesh-normalization, three endpoint-representation). The one standing
+  disagreement is the tulip LS-vs-raw-dual cross-check, where the LS side is
+  independently documented as unreliable over ~40 revs.
 - Conversely, a PASS here is first-order only. It certifies **extremal**, not
   **minimal** — see Part B of the register.
 
@@ -89,6 +90,20 @@ Two consequences worth internalizing:
 - `foc_check`'s layout and manifest-semantic asserts (X-block-then-U-block;
   mass non-increasing; time non-decreasing) exist so a wrong manifest fails
   **loudly** rather than producing plausible nonsense. Keep them.
+
+## Which file says what
+
+Three documents, deliberately non-overlapping — check the right one before
+adding to any of them:
+
+| file | owns | does NOT own |
+|---|---|---|
+| `doc/first_order_checks.tex` | the **mathematics**: what each condition is, why, and how to read its report line. Present tense; corrections live in its provenance appendix | per-row results, open work |
+| `../OPTIMALITY_CERTIFICATION.md` | the **cross-campaign status**: coverage matrix, per-row numbers, blocking mechanisms, open leads, decision record. Both orders | how an instrument works (link the header), module-local chores |
+| `TODO.md` | **work on this module**: pre-promotion checklist, coverage holes, robustness items | results (they belong in the register) |
+
+Function headers remain authoritative for how a given function works. None of
+the three restates a derivation that lives in a header.
 
 ## Related
 

@@ -62,9 +62,14 @@ man = struct('name','toy_freemass', 'nx',2, 'nu',1, 'dirRows',[], 'thrRow',[], .
 rep = foc_check(out, sg, man, struct());
 
 fprintf('test_foc_terminal_covector: N=%d (coarse)\n', N);
-fprintf('  mapped        |lam_v(tf)| rel : %.3e\n', rep.lamMassEndMapped);
-fprintf('  extrapolated  |lam_v(tf)| rel : %.3e   [I5]\n', rep.lamMassEndRel);
-fprintf('  raw one-sided |lam_v(tf)| rel : %.3e   [legacy]\n', rep.lamMassEndRelOneSided);
+% The naive comparison statistic is computed HERE rather than carried as a
+% vestigial field in production: foc_check used to report the raw one-sided
+% interval dual and an extrapolation of it, both superseded by the mapped
+% covector and removed 2026-07-26. The distinction still deserves a
+% regression test, so the test reconstructs the naive number itself.
+lamRawEnd = abs(rep.lam(man.massRow, end)) / max(abs(rep.lam(man.massRow,:)));
+fprintf('  mapped   |lam_m(tf)| rel : %.3e\n', rep.lamMassEndMapped);
+fprintf('  raw dual |lam_m(tf)| rel : %.3e   (superseded statistic)\n', lamRawEnd);
 
 % (a) the mapped covector's mass component is the exact discrete object and
 % must sit at KKT-stationarity floor, independent of mesh coarseness.
@@ -72,13 +77,13 @@ assert(rep.lamMassEndMapped < 1e-8, ...
     'test_foc_terminal_covector: mapped terminal covector should be ~0 by KKT stationarity, got %.3e', ...
     rep.lamMassEndMapped);
 
-% (b) the raw one-sided interval dual must be demonstrably LARGER on this
-% coarse mesh -- proving the two genuinely differ and that "mapped" is not
-% just a relabeling of the same number.
-assert(rep.lamMassEndMapped * 10 < rep.lamMassEndRelOneSided, ...
-    ['test_foc_terminal_covector: mapped (%.3e) should be more than 10x smaller ' ...
-     'than the raw one-sided dual (%.3e) on this deliberately coarse (N=%d) mesh -- ' ...
-     'if this fails the O(h) endpoint offset was not reproduced, try a coarser N'], ...
-    rep.lamMassEndMapped, rep.lamMassEndRelOneSided, N);
+% (b) the naive raw interval dual must be demonstrably LARGER on this coarse
+% mesh -- proving the two genuinely differ and that "mapped" is not a
+% relabeling of the same number.
+assert(rep.lamMassEndMapped < lamRawEnd/10, ...
+    ['test_foc_terminal_covector: mapped (%.3e) should be >10x smaller than ' ...
+     'the raw one-sided dual (%.3e) on this deliberately coarse (N=%d) mesh -- ' ...
+     'if this fails the O(h) endpoint offset was not reproduced; try a coarser N'], ...
+    rep.lamMassEndMapped, lamRawEnd, N);
 
 fprintf('test_foc_terminal_covector: ALL PASS\n');

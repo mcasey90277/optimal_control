@@ -41,8 +41,18 @@ for q = 1:numel(Ns)
     out = struct('X', full(sol.value(X)), 'U', full(sol.value(U)), ...
                  'model', struct('opti', opti, 'creg', creg));
     rep = foc_check(out, sg, foc_manifest('toy'), struct());
-    R(q) = rep.sdotMinRel;  Rleg(q) = rep.sdotMinRelLegacy;  nsw(q) = rep.nSwitches;
-    fprintf('  N=%4d : nSwitch=%d  sdotMinRel=%.4e   (legacy %.4e)\n', ...
+    R(q)   = rep.sdotMinRel;
+    nsw(q) = rep.nSwitches;
+    % The un-normalised LEGACY statistic is reconstructed HERE rather than
+    % carried as a vestigial production field (removed 2026-07-26 once the
+    % confound was confirmed). Keeping it in the test preserves the
+    % two-directional assertion below, which is what makes this a regression
+    % test rather than a tautology.
+    burnQ = rep.Sd < 0;
+    swQ   = find(diff(burnQ) ~= 0);
+    Rleg(q) = min(abs(rep.Sd(swQ+1) - rep.Sd(swQ))) / ...
+              max(median(abs(rep.Sd(~burnQ))), 1e-30);
+    fprintf('  N=%4d : nSwitch=%d  sdotMinRel=%.4e   (legacy raw %.4e)\n', ...
             Ns(q), nsw(q), R(q), Rleg(q));
 end
 

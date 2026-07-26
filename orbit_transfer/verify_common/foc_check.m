@@ -166,70 +166,60 @@ assert(numel(defRows) == nx*Nseg, ...
     'foc_check: defect group has %d rows, expected nx*Nseg = %d -- creg mis-registered?', ...
     numel(defRows), nx*Nseg);
 LamDef = reshape(lamAll(defRows), nx, Nseg);
-% lam    = the stationarity combination (one-sided endpoints)
-% lamX   = same, endpoints linearly extrapolated to the true boundary (I5).
-% Endpoint-valued checks gate on lamX and report lam alongside, so the two can
-% be compared and any marginal miss attributed (endpoint bias vs under-
-% converged duals) instead of merely moved.
-[rep.lam, lamX] = foc_dual_to_costate(s*LamDef, sg);
+% The stationarity combination (one-sided at the endpoints). Endpoint-VALUED
+% checks do not use this -- see (6): they read the mapped covector off gL.
+rep.lam = foc_dual_to_costate(s*LamDef, sg);
 checks{end+1} = 'costates';
 
 % --- (5) time-costate behavior (Hamiltonian conditions in dual form) ---------
 if ~isempty(man.timeRow)
     lt = rep.lam(man.timeRow,:);
     rep.lamTimeCoV = std(lt)/max(abs(mean(lt)),1e-30);
-    rep.lamTimeEnd = lamX(man.timeRow, end);        % endpoint-corrected (I5)
-    rep.lamTimeEndOneSided = lt(end);               % legacy, for comparison
+    rep.lamTimeEnd = lt(end);
     checks{end+1} = 'lamTime';
 else
-    rep.lamTimeCoV = NaN;  rep.lamTimeEnd = NaN;  rep.lamTimeEndOneSided = NaN;
+    rep.lamTimeCoV = NaN;  rep.lamTimeEnd = NaN;
 end
 
 % --- (6) transversality: free final mass -> lam_m(tf)=0 ----------------------
-% MAPPED TERMINAL COVECTOR (finding I5's principled fix, Hager 2000 [4]). The
-% raw one-sided interval dual (lamMassEndRelOneSided) and its I5 linear
-% extrapolation (lamMassEndRel) both approximate lambda_m(t_f) from Lambda_N,
-% the multiplier of the LAST DEFECT INTERVAL -- but Lambda_N behaves like a
-% sample near sigma_end - h_N/2, not a value AT the endpoint, an O(h)*|lamdot|
-% offset by construction (see foc_dual_to_costate.m header). That is a
-% representation artifact of "which single number stands for lambda_m(t_f)",
-% not evidence about the solution.
-%
-% The exact discrete object is the mapped/transformed terminal covector:
+% MAPPED TERMINAL COVECTOR (Hager 2000 [4]). The exact discrete object is
 %
 %   lamHat_f = (h_N/2)*L_x(N+1) + (I - (h_N/2)*f_x(N+1))' * Lambda_N
 %
-% i.e. the running-cost quadrature weight at the final node plus the last
-% defect row's OWN Jacobian block transposed against its own multiplier. Its
-% mass component is EXACTLY ZERO under the discrete KKT system whenever the
-% final mass is genuinely free (man.massFreeAtTf) with no terminal cost or
-% constraint touching it: with nothing else in the model depending on
-% X(massRow,N+1), the full-Lagrangian gradient gL (already assembled at (1),
-% the same object rep.kktStatInf takes the max-norm of) has, at that one
-% entry, gL(massRow,N+1) = s*lamHat_f_mass identically -- by definition of
-% gL = grad(f) + s*A'*lam, since grad(f)'s only dependence on X(:,N+1) is the
-% (h_N/2)*L(X(:,N+1)) quadrature term and A's only dependence on X(:,N+1) at
-% that row is the last defect block's own Jacobian (I - (h_N/2)*f_x(N+1)).
+% whose mass component is EXACTLY ZERO under the discrete KKT system whenever
+% the final mass is genuinely free (man.massFreeAtTf) with no terminal cost or
+% constraint touching it. Rather than re-derive f_x/L_x by hand (forbidden --
+% AD from the solved opti.f/opti.g, never a hand derivation), read it directly
+% off the assembled Lagrangian gradient at the terminal-node mass index:
+% grad(f)'s only dependence on X(:,N+1) is the (h_N/2)*L quadrature term, and
+% A's only dependence there is the last defect block's Jacobian, so that one
+% entry of gL IS s*lamHat_f_mass. This is also the most robust form -- gL
+% already sums any OTHER constraint touching X(massRow,N+1) (an active box
+% bound, say), which a hand reconstruction would silently miss.
 %
-% So rather than re-derive f_x/L_x by hand (forbidden -- see file header:
-% AD from the same opti.f/opti.g that were solved, never a hand derivation),
-% the mapped covector's mass component is read directly off gL at the
-% terminal-node mass index: no new differentiation, just indexing a quantity
-% this function already computes and already trusts. This is also the most
-% ROBUST formulation available -- reconstructing (I - h_N/2 f_x)'*Lambda_N
-% from parts would silently miss any OTHER constraint that happens to touch
-% X(massRow,N+1) (e.g. an active box bound), whereas gL already sums every
-% such contribution by construction.
+% CONSEQUENCE, stated plainly: this quantity is one ENTRY of the very vector
+% whose max-norm is rep.kktStatInf. It is therefore bounded by it (up to the
+% normalisation below) and CANNOT fail unless kktStat already has. It is a
+% readable projection of the master residual, not an independent test -- the
+% same structural situation as the direction check at (3). Both are listed in
+% rep.derivedFromKKT and the report groups them under the master residual
+% rather than beside the structural checks. Do not present either as
+% independent evidence.
+%
+% Superseded and REMOVED 2026-07-25 (kept only in the record, not the code):
+% the raw one-sided interval dual and its linear extrapolation. Both estimated
+% lambda_m(t_f) from Lambda_N, which behaves like a sample near
+% sigma_end - h_N/2 rather than a value at the endpoint -- an O(h) endpoint
+% REPRESENTATION offset, not evidence about the solution. They produced a
+% spurious 1.265e-03 "finding" on the earth 2.5 N row that the mapped covector
+% resolves to 2.27e-18. History: verify_common/doc/first_order_checks.tex and
+% OPTIMALITY_CERTIFICATION.md.
 if ~isempty(man.massRow) && man.massFreeAtTf
-    lm    = rep.lam(man.massRow,:);
-    scale = max(abs(lm));
-    rep.lamMassEndRel        = abs(lamX(man.massRow,end)) / max(scale,1e-30);
-    rep.lamMassEndRelOneSided = abs(lm(end))              / max(scale,1e-30);
-    xix = @(rows,k) (k-1)*nx + rows;
+    scale = max(abs(rep.lam(man.massRow,:)));
+    xix   = @(rows,k) (k-1)*nx + rows;
     rep.lamMassEndMapped = abs(gL(xix(man.massRow, N1))) / max(scale,1e-30);
     checks{end+1} = 'transversality';
 else
-    rep.lamMassEndRel = NaN;  rep.lamMassEndRelOneSided = NaN;
     rep.lamMassEndMapped = NaN;
 end
 
@@ -250,12 +240,14 @@ end
 % R is dimensionless and invariant to local refinement for a smooth crossing.
 % Sref excludes a one-node neighbourhood of every switch so the scale is not
 % contaminated by the crossing itself. The legacy value is retained as
-% rep.sdotMinRelLegacy purely so the two can be compared on the same row.
+% (The legacy un-normalised statistic was retained during burn-in for
+% attribution and has been REMOVED now that the confound is confirmed: it
+% differed by 8 orders on the tulip flagship, 1.376e-07 vs 2.701e+01.)
 %
 % CAVEAT that survives this fix (GPT): no threshold on a SINGLE mesh is
 % defensible. Regularity should be asserted only if R stays above the floor on
 % two meshes; the sdotMin gate is provisional until recalibrated.
-rep.singularArcNodes = NaN;  rep.sdotMinRel = NaN;  rep.sdotMinRelLegacy = NaN;
+rep.singularArcNodes = NaN;  rep.sdotMinRel = NaN;
 rep.nSwitches = 0;  rep.Sdeweighted = [];
 if ~isempty(man.thrRow)
     hs = diff(sg(:).');
@@ -288,7 +280,6 @@ if bangBang
         ka = max(swI,1);  kb = min(swI+1,N1);
         D  = abs(rep.Sdeweighted(kb) - rep.Sdeweighted(ka)) ./ max(sg(kb).' - sg(ka).', 1e-30);
         rep.sdotMinRel = min( (sg(end)-sg(1)) * D / Sref );
-        rep.sdotMinRelLegacy = min(abs(rep.Sd(kb) - rep.Sd(ka))) / max(median(abs(rep.Sd(~burn))),1e-30);
     end
     checks = [checks, {'singularArc','sdotRegular'}];
 end
@@ -305,6 +296,10 @@ switch man.horizonKind
         rep.horizonNote = 'no horizon check applicable';
 end
 rep.checksRun = checks;
+% Which reported lines are PROJECTIONS of rep.kktStatInf rather than
+% independent tests (see (3) and (6)). Consumers should not count these as
+% separate evidence; foc_report groups them under the master residual.
+rep.derivedFromKKT = {'dirTangential','transversality'};
 
 % --- advisory verdict (REPORT-ONLY burn-in) ----------------------------------
 % Every ok* is NaN-tolerant: a skipped check (manifest field empty, or the

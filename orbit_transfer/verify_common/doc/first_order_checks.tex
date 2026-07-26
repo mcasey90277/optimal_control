@@ -42,7 +42,7 @@ never demotes a certified solution. This revision incorporates a three-way
 external review of the layer (2026-07-25) and the fixes it produced ---
 $\varepsilon$-awareness, mesh-normalized switch regularity, an
 endpoint-corrected transversality, and, superseding that last one, the exact
-\textbf{mapped terminal covector} (Hager 2000, Task 0 of the 2026-07-25
+\textbf{mapped terminal covector} (Hager 2000, the
 mesh-convergence-study) --- together with the attribution those fixes made
 possible. Of the five advisory failures the external review's fix pass first
 attributed, four were discretization artifacts and the report at that time
@@ -325,7 +325,7 @@ Two limitations, recorded as pre-promotion items in the register's \S A6:
 (i) \emph{Not independent.} The residual is bounded by
 $\sqrt{n_\beta}\cdot$\code{kktStatInf} (here $n_\beta=3$, so $\sqrt3$) --- it
 is a readable projection of check~\ref{sec:kkt}, not a separate test.
-\textbf{External review correction (2026-07-25):} merely excluding the cone
+Note that merely excluding the cone
 multiplier before projecting does \emph{not} fix this, because the projector
 annihilates the radial term anyway,
 $P_{\vbeta}(q+2\mu\vbeta)=P_{\vbeta}q$ with $P_{\vbeta}=I-\vbeta\vbeta^{\!\top}$.
@@ -404,7 +404,7 @@ exactly the switch times are tolerable mesh artifacts (a node can straddle a
 crossing); broad disagreement (the pre-fix era read 78\%) means the duals are
 corrupted or the solution is not extremal.
 
-\paragraph{Validity conditions (external review, 2026-07-25).}
+\paragraph{Validity conditions.}
 Both external reviewers confirmed the recovery \eqref{eq:Sd} is exact --- the
 active bound multiplier cancels $S^d_k$ identically, so removing its row
 recovers magnitude \emph{and} sign --- but only under stated conditions:
@@ -416,7 +416,7 @@ the cost is quadratic in $s$ and $S^d$ is the derivative of the smoothed
 objective, not an affine switching function: interior $s$ can legitimately
 give $S^d=0$ and the sign carries no bang-bang implication.
 
-\textbf{Fixed 2026-07-25.} \file{foc\_check.m} now resolves a throttle-cost
+\file{foc\_check.m} resolves a throttle-cost
 kind --- \code{opts.eps} (affine iff $\varepsilon=0$) overrides
 \code{opts.throttleCostKind}, which overrides the manifest's own field --- and
 \emph{skips} the whole bang-bang family (\code{signPct}, singular-arc count,
@@ -454,7 +454,7 @@ discrete adjoint recursion \eqref{eq:adjoint} pairs with the node-$k$ Jacobian
 on a uniform mesh it reduces to the plain average of the two neighbors.
 Derivation adjudicated in \file{process/DESIGN\_dual\_map.md}.
 
-\paragraph{A distinction worth keeping (external review, 2026-07-25).}
+\paragraph{A distinction worth keeping.}
 The reviewers split here, and both were right about different questions.
 \eqref{eq:dualmap} is the correct \emph{stationarity combination}. It is
 \emph{not} the same thing as a linear \emph{interpolation} of interval-centred
@@ -547,7 +547,7 @@ $\code{kktStatInf}$ is gated everywhere else.
 \end{equation}
 
 \paragraph{Interpretation, and the retraction that motivated building
-\eqref{eq:mappedcovector} (Task 0, 2026-07-25 mesh-convergence-study).}
+\eqref{eq:mappedcovector} .}
 Gate: $\le 10^{-3}$. When this check first shipped (I5 fix-pass block, same
 date), three rows missed by $\sim3\times$ on the one-sided/extrapolated
 statistic while their KKT residuals were machine-tight: Earth 5\,N and CR3BP
@@ -693,7 +693,7 @@ stable, countable structure.
 the switch nodes $k_i$; \code{rep.nSwitches}. Gate: $>10^{-3}$.
 
 \paragraph{Interpretation --- with the register's caveat.}
-\textbf{Fixed 2026-07-25 --- and the original readings were artifacts.} The
+\textbf{The un-normalized form of this statistic was an artifact.} The
 un-normalized statistic reported tulip flagship $1.4\times10^{-7}$ (25
 switches) and ELFO $1.33\times$ front row $4.5\times10^{-5}$ (50 switches),
 which looked like confirmation of the node-grazing-switch behavior the tulip
@@ -751,7 +751,7 @@ no inertia correction was needed at those iterates. The interpreter is
 production solver now records (\code{out.regHistory}); verdicts are
 \code{LOCAL MIN} / \code{NOT CERTIFIED} / \code{NO-DATA}.
 
-\paragraph{How much this is worth (external review, 2026-07-25).}
+\paragraph{How much this is worth.}
 Read it as an \emph{inertia-regularization observation}, not a second-order
 certificate. $\delta_w=0$ over a tail says the correction was not applied at
 those \emph{barrier} iterates; it does not by itself prove positive
@@ -916,6 +916,49 @@ transversality endpoint-bias item is now \textbf{closed} by the mapped
 covector \eqref{eq:mappedcovector} (Task 0, 2026-07-25). That register --- not this note --- is the
 living source of per-row results and open findings; this note explains what
 the instruments measure and how to hold them.
+
+\appendix
+\section{Provenance of the corrections}
+\label{sec:provenance}
+
+This note is written in the present tense: it states what the layer does now.
+Several of those statements replaced earlier, wrong ones, and the corrections
+are recorded here rather than interleaved with the mathematics.
+
+The layer was built 2026-07-25 and reviewed twice before this revision --- once
+on the code and this document (GPT-5.6-terra + Gemini 3.1 Pro), once on the
+design of a follow-on mesh-convergence study. Both reviews are archived
+alongside this file. What they changed:
+
+\begin{itemize}[leftmargin=1.4em,nosep]
+\item \textbf{Switch regularity} was computed from a statistic carrying the
+      local quadrature weight and not divided by the step, so it shrank under
+      refinement even for a perfectly transversal switch. Its two ``grazing''
+      readings were artifacts.
+\item \textbf{Free-mass transversality} was read from the raw last-interval
+      dual, and later from a linear extrapolation of it. Both estimate
+      $\lambda_m(t_f)$ from an object that behaves like a sample at
+      $\approx t_f - h/2$; the resulting $O(h)$ offset produced a spurious
+      finding that the mapped covector \eqref{eq:mappedcovector} resolves to
+      the KKT floor.
+\item \textbf{The bang-bang checks were not $\varepsilon$-aware}, so they were
+      folded into the verdict on smoothed homotopy legs where the switching
+      law does not apply.
+\item \textbf{Two reported lines are projections of the master residual}
+      (\S\ref{sec:direction}, \S\ref{sec:transversality}); the report now
+      groups them beneath it rather than beside the structural checks.
+\end{itemize}
+
+\noindent
+The common thread is worth stating, because it outlived every individual fix:
+each wrong conclusion came from measuring the discretization with a statistic
+derived from that same discretization. The instrument's own error rate exceeded
+the solutions' --- of five advisory failures it produced, all five were its own
+artifacts. The layer's defensible role is therefore narrower than its output
+suggests: it verifies that the multipliers we hold belong to the model we
+believe was solved, and it translates NLP quantities into PMP language. It is
+not, and cannot be, independent evidence about the physics; that requires a
+costate source outside the NLP.
 
 \begin{thebibliography}{9}
 

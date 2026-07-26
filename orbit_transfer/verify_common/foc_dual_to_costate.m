@@ -1,4 +1,4 @@
-function [lam, lamX] = foc_dual_to_costate(LamDef, sigma)
+function lam = foc_dual_to_costate(LamDef, sigma)
 % FOC_DUAL_TO_COSTATE  Interval defect duals -> nodal costate, step-weighted.
 %
 % Trapezoid defect constraints couple node k and node k+1:
@@ -31,11 +31,6 @@ function [lam, lamX] = foc_dual_to_costate(LamDef, sigma)
 %          at the two endpoint columns [nx x (N+1)]. This is the STATIONARITY
 %          combination: the object the discrete adjoint recursion pairs with
 %          the node-k Jacobian. Use it for anything derived from stationarity.
-%   lamX - identical to lam except the two endpoint columns, which are
-%          linearly extrapolated to the true endpoints [nx x (N+1)]. Use it
-%          when the costate is consumed as a sampled FUNCTION VALUE at an
-%          endpoint -- notably free-final-mass transversality. See the
-%          endpoint block below for why the two differ and by how much.
 %
 % REFERENCES:
 %   [1] earth_elliptic_to_geo/process/DESIGN_dual_map.md sec "[CORRECTNESS]" (the
@@ -44,12 +39,12 @@ function [lam, lamX] = foc_dual_to_costate(LamDef, sigma)
 %       midpoint dual map, the method precedent).
 %   [3] verify_common/doc/review_2026-07-25_{gpt56terra,gemini31pro}.md
 %       (external review: both reviewers independently derived the
-%       stationarity map above AND flagged the one-sided endpoint bias,
-%       converging on the lamX extrapolation as the cheap fix; GPT also
-%       notes the principled alternative -- the exact discrete endpoint
-%       covector (I - (h_N/2) D_{N+1})' Lam_N plus terminal terms, whose
-%       mass component is zero by terminal-node stationarity when the final
-%       mass is genuinely free. Not implemented here; recorded in TODO.md.)
+%       stationarity map above. NOTE: they also flagged that the ONE-SIDED
+%       endpoint columns carry an O(h) representation offset. Do NOT patch
+%       that here -- endpoint-VALUED conditions (free-mass transversality)
+%       are handled correctly in foc_check.m section (6) via the mapped
+%       terminal covector, read off the Lagrangian gradient. An earlier
+%       extrapolation fix in this file was superseded by that and removed.)
 
 sigma = sigma(:).';
 N  = size(LamDef, 2);
@@ -61,30 +56,5 @@ lam = zeros(nx, N + 1);
 lam(:, 1) = LamDef(:, 1);   lam(:, N + 1) = LamDef(:, N);
 for k = 2:N
     lam(:, k) = (h(k-1)*LamDef(:, k-1) + h(k)*LamDef(:, k)) / (h(k-1) + h(k));
-end
-
-% --- second output: endpoint-corrected copy (finding I5, external review) -----
-% lam(:,1) and lam(:,end) above are ONE-SIDED: they hand back the interval
-% dual itself, which behaves like a sample at ~sigma_1 + h_1/2 and
-% ~sigma_end - h_N/2 rather than at the endpoints. That is an O(h)*|lamdot|
-% bias wherever the costate is changing at the boundary -- e.g. a final burn
-% arc -- and it is the leading suspect for the marginal free-final-mass
-% transversality misses seen on the mid-ladder rungs.
-%
-% lamX is identical to lam EXCEPT at the two endpoint columns, which are
-% linearly extrapolated from the two nearest interval duals using their
-% midpoint spacing (both external reviewers, 2026-07-25, independently
-% recommended this same formula):
-%
-%   lamX(:,end) = Lam_N + h_N/(h_{N-1}+h_N) * (Lam_N - Lam_{N-1})
-%   lamX(:,1)   = Lam_1 - h_1/(h_1+h_2)     * (Lam_2 - Lam_1)
-%
-% Callers gate on lamX and report lam alongside, so the two can be compared
-% and the misses attributed (endpoint bias vs genuinely under-converged
-% duals). With N < 2 there is nothing to extrapolate from and lamX == lam.
-lamX = lam;
-if N >= 2
-    lamX(:, N + 1) = LamDef(:, N) + (h(N)   / (h(N-1) + h(N))) * (LamDef(:, N) - LamDef(:, N-1));
-    lamX(:, 1)     = LamDef(:, 1) - (h(1)   / (h(1)   + h(2))) * (LamDef(:, 2) - LamDef(:, 1));
 end
 end

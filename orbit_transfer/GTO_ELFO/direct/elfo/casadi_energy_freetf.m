@@ -234,34 +234,14 @@ opti.minimize(Jobj);
 opti.set_initial(X, X0);
 opti.set_initial(U, U0);
 
-p = struct;
-p.print_time      = true;
-p.ipopt.max_iter  = maxIter;
-p.ipopt.tol       = 1e-7;
-p.ipopt.constr_viol_tol = 1e-7;
-p.ipopt.acceptable_tol  = 1e-5;
-p.ipopt.acceptable_iter = 15;
-p.ipopt.nlp_scaling_method = 'gradient-based';
-p.ipopt.linear_solver = 'mumps';
-p.ipopt.print_level = 5;
-if warmTight
-    % TIGHT: re-solve AT a converged point (sharpen). Hug bounds, small barrier.
-    p.ipopt.mu_strategy                 = 'monotone';
-    p.ipopt.warm_start_init_point       = 'yes';
-    p.ipopt.mu_init                     = 1e-4;
-    p.ipopt.warm_start_bound_push       = 1e-9;
-    p.ipopt.warm_start_bound_frac       = 1e-9;
-    p.ipopt.warm_start_slack_bound_push = 1e-9;
-    p.ipopt.warm_start_slack_bound_frac = 1e-9;
-    p.ipopt.warm_start_mult_bound_push  = 1e-9;
-else
-    % LOOSE: a genuine continuation move (a muGain step, or a t_f-floating
-    % re-solve). Monotone barrier, default bound push, larger initial barrier so
-    % IPOPT has room to move (tight pinning makes inf_du blow up on a real step).
-    p.ipopt.mu_strategy           = 'monotone';
-    p.ipopt.warm_start_init_point = 'yes';
-    p.ipopt.mu_init               = 0.1;
-end
+% IPOPT options: single source in cr3bp_common (Tier-0 extraction 2026-07-26).
+% These ~20 assignments were byte-identical across this file,
+% casadi_energy_freetf and casadi_mintime_freetf; the helper's header explains
+% the two warm-start regimes and why the earth campaign and PSR/lib are
+% deliberately NOT sharing it. Gate: cr3bp_common/tests/test_cr3bp_ipopt_opts.m
+% asserts the helper reproduces the former inline struct exactly.
+p = cr3bp_ipopt_opts(maxIter, warmTight);
+
 opti.solver('ipopt', p);
 
 success = true;  status = 'solved';  regHistory = [];

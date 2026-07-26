@@ -52,17 +52,59 @@ The outcomes are not close:
 
 ## 2. Extraction plan, ranked by risk
 
-### Tier 0 — no behaviour can change (do these first)
+### Tier 0 — no behaviour can change — **DONE 2026-07-26**
 
-| item | scale | gate |
-|---|---|---|
-| **`psr_vendor_check` drift test** — assert each of the 14 byte-identical `PSR/lib` files still matches its origin; fail loudly on drift | 14 files | the test *is* the gate |
-| **CasADi path bootstrap** → one helper | **12 copies** repo-wide | byte-identity of results |
-| **IPOPT options block** → `ipopt_opts(profile)` | **all 5 solvers**; 41 identical lines | byte-identity of results |
+| item | scale | gate | outcome |
+|---|---|---|---|
+| **`psr_vendor_check` drift test** | 15 identical + 4 known-divergent | the test *is* the gate | **DONE** — `PSR/tests/test_psr_vendor_drift.m` |
+| **IPOPT options block** → `cr3bp_ipopt_opts` | **3 CR3BP solvers** (not 5 — see below) | byte-identity of the options struct | **DONE** — `cr3bp_common/cr3bp_ipopt_opts.m` |
+| **CasADi path bootstrap** → one helper | 12 copies repo-wide | — | **REFUSED — see below** |
 
 The drift test is deliberately listed *instead of* consolidating `PSR/lib`.
 PSR's self-containment is a deliberate, verified design; the defect was never
-the vendoring, it was that nothing noticed the drift.
+the vendoring, it was that nothing noticed the drift. It found 15 byte-identical
+files (the survey's count of 14 was one low) and was negative-tested by
+injecting a line into `sms_pack.m`.
+
+#### The IPOPT block was 3 solvers, not 5
+
+The survey said "all 5 solvers; 41 identical lines." Measured before extracting:
+the **three CR3BP-family Sundman solvers** (`casadi_minfuel_sundman`,
+`casadi_energy_freetf`, `casadi_mintime_freetf`) share **20 identical option
+assignments** — the only difference was one *redundant* `mu_strategy='monotone'`
+in tulip, overridden by both arms of its own `warmTight` branch.
+
+`earth/casadi_lt_mee` shares **zero**. It carries `mumps_pivot_order = 0`, the
+AMD-ordering workaround for a hard METIS crash at its problem sizes. Forcing one
+helper across both families would either impose that workaround where it is not
+wanted or dilute it into a flag. The "41 lines" figure came from an
+ELFO-vs-tulip comparison and was never true of the earth solver.
+
+Gate: `cr3bp_common/tests/test_cr3bp_ipopt_opts.m` reconstructs the
+pre-extraction inline struct verbatim and asserts `isequal` in both warm-start
+regimes — which is why **no certified row had to be re-solved** to justify the
+change. Also verified: the helper resolves under each campaign's own
+`setup_paths` from `restoredefaultpath`, and IPOPT accepts every option name in
+both regimes at a real `opti.solver` call.
+
+#### The CasADi bootstrap consolidation is REFUSED
+
+Listed as Tier 0 on the assumption it was free. It is not, and the survey did
+not check the one thing that decides it: **no folder is on all four campaigns'
+paths.** `cr3bp_common` serves tulip and ELFO only; earth reaches only its own
+subfolders and cannot see it; PSR reaches nothing outside itself by design.
+
+So a shared bootstrap helper would have to live somewhere new and be added to
+every campaign's path — **creating exactly the kind of cross-cutting dependency
+this survey concluded is the expensive mistake** — to remove three lines per
+solver. Worse, the bootstrap is *inside each solver* rather than in
+`setup_paths` for a reason: it makes a solver callable without campaign setup.
+Hoisting it into a helper would move that dependency from "reads an env var" to
+"needs another file on the path," which is strictly worse for the one property
+the current form buys.
+
+Left as is, deliberately. If it ever moves, it should move by the winning
+pattern — into a file every campaign *already* loads — not into a new one.
 
 ### Tier 1 — small, one gate each
 

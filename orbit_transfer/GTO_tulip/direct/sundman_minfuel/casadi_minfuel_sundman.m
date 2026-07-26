@@ -190,45 +190,14 @@ opti.minimize(IntF - epsilon*IntS);
 opti.set_initial(X, X0);
 opti.set_initial(U, U0);
 
-p = struct;
-p.print_time      = true;
-p.ipopt.max_iter  = maxIter;
-p.ipopt.tol       = 1e-7;
-p.ipopt.constr_viol_tol = 1e-7;
-p.ipopt.acceptable_tol  = 1e-5;
-p.ipopt.acceptable_iter = 15;
-p.ipopt.mu_strategy = 'monotone';
-p.ipopt.nlp_scaling_method = 'gradient-based';
-p.ipopt.linear_solver = 'mumps';
-p.ipopt.print_level = 5;
-if warmTight
-    % TIGHT warm start -- for RE-SOLVING AT a near-bang-bang solution (the
-    % homotopy sharpening steps). The throttle is pinned at its bounds; IPOPT's
-    % default bound_push (0.01) would shove every s off its bound at startup, a
-    % disruption that triggers restoration and a false "locally infeasible"
-    % exit. Hug the bounds and start from a small barrier so the seed is
-    % honored. WRONG for a genuine move (e.g. a t_f-continuation step): these
-    % settings starve IPOPT's ability to explore and inf_du blows up.
-    p.ipopt.mu_strategy                 = 'monotone';
-    p.ipopt.warm_start_init_point       = 'yes';
-    p.ipopt.mu_init                     = 1e-4;
-    p.ipopt.warm_start_bound_push       = 1e-9;
-    p.ipopt.warm_start_bound_frac       = 1e-9;
-    p.ipopt.warm_start_slack_bound_push = 1e-9;
-    p.ipopt.warm_start_slack_bound_frac = 1e-9;
-    p.ipopt.warm_start_mult_bound_push  = 1e-9;
-else
-    % LOOSE warm start -- for a genuine continuation move (e.g. the eps=1 energy
-    % re-solve at a shifted t_f). The wedge under the tight settings came from
-    % warm_start_bound_push=1e-9 pinning variables to their bounds (inf_du then
-    % blew up to ~1e5). Here we keep the monotone barrier (clean, tight
-    % convergence -- adaptive oscillates and stops at "acceptable") but give
-    % IPOPT room to move: honor the primal warm start with the DEFAULT bound
-    % push and a larger initial barrier.
-    p.ipopt.mu_strategy           = 'monotone';
-    p.ipopt.warm_start_init_point = 'yes';
-    p.ipopt.mu_init               = 0.1;
-end
+% IPOPT options: single source in cr3bp_common (Tier-0 extraction 2026-07-26).
+% These ~20 assignments were byte-identical across this file,
+% casadi_energy_freetf and casadi_mintime_freetf; the helper's header explains
+% the two warm-start regimes and why the earth campaign and PSR/lib are
+% deliberately NOT sharing it. Gate: cr3bp_common/tests/test_cr3bp_ipopt_opts.m
+% asserts the helper reproduces the former inline struct exactly.
+p = cr3bp_ipopt_opts(maxIter, warmTight);
+
 opti.solver('ipopt', p);
 
 success = true;  status = 'solved';  regHistory = [];

@@ -18,6 +18,16 @@ ELFO three artifacts — **the ELFO campaign's first first-order gate of any
 kind**. LEAD-0 (IPOPT `δ_w` inertia) ported campaign-wide in the same pass.
 Report-only burn-in throughout.
 
+### 2026-07-25 (Task 0, mesh-convergence-study) — mapped terminal covector, item 1.3 fully closed
+Built the Hager (2000) mapped/transformed terminal covector (`rep.lamMassEndMapped`,
+`foc_check.m` §(6)) and made it the gated transversality quantity, superseding
+the I5 linear-extrapolation partial fix (kept as a reported-only companion
+alongside the legacy raw one-sided dual). Re-ran earth 10/5/2.5 N and the
+tulip flagship: all four land at KKT-stationarity floor (1e-17 .. 1e-25),
+**retracting** the earth-2.5N transversality finding that the I5 fix could
+not resolve — see `OPTIMALITY_CERTIFICATION.md` §A6 RETRACTION block. Test:
+`tests/test_foc_terminal_covector.m`.
+
 ---
 
 ## Open — ranked by priority
@@ -88,19 +98,29 @@ derived it, independently reproducing `DESIGN_dual_map`).
   minimizer has `b'q < 0` ⟺ `mu > 0` (reverse if the registered row is
   `1 - b'b`). Report normalized anti-alignment `-b'q/||q||`, which is more
   informative than tangency alone.
-- [x] **1.3 Resolve the transversality endpoint bias (register I5). DONE 2026-07-25.** Both
-  reviewers confirmed the mechanism and converged on the same cheap fix:
+- [x] **1.3 Resolve the transversality endpoint bias (register I5). DONE 2026-07-25**
+  (extrapolation, cheap fix) **+ SUPERSEDED 2026-07-25 (Task 0, mesh-convergence-
+  study, principled fix).** Both reviewers confirmed the mechanism and first
+  converged on the cheap linear-extrapolation fix:
   ```matlab
   lam(:,end) = LamDef(:,N)   + h(N)/(h(N-1)+h(N)) * (LamDef(:,N)-LamDef(:,N-1));
   lam(:,1)   = LamDef(:,1)   - h(1)/(h(1)+h(2))   * (LamDef(:,2)-LamDef(:,1));
   ```
-  More principled alternative (GPT): form the exact discrete endpoint covector
-  `p_{N+1} = (I - (h_N/2)*D_{N+1})' * Lambda_N` plus terminal terms, whose mass
-  component is **zero by terminal-node stationarity** when the final mass is
-  genuinely free — report it as a discrete identity rather than an estimate.
-  Either way, stop treating the one-sided interval dual as `lambda_m(t_f)`.
-  Only after this can the three ~3×-tol misses be attributed (endpoint bias vs
-  under-converged rungs — currently confounded).
+  still live in `foc_dual_to_costate.m` as `lamX`/`rep.lamMassEndRel`, reported
+  but no longer gated. The **more principled alternative** GPT also named —
+  the exact discrete endpoint/mapped covector (Hager 2000, "Runge-Kutta
+  Methods in Optimal Control and the Transformed Adjoint System," Numer. Math.
+  87, 247-282), `lamHat_f = (h_N/2)*L_x(N+1) + (I - (h_N/2)*f_x(N+1))' *
+  Lambda_N`, whose mass component is **zero by terminal-node stationarity**
+  when the final mass is genuinely free — is now BUILT and is what
+  `foc_check.m` gates on (`rep.lamMassEndMapped`, section (6); implemented by
+  reading the already-assembled full-Lagrangian gradient `gL` at the
+  terminal-node mass index, no new AD). It resolved what the extrapolation
+  fix could not: earth 2.5 N's transversality "finding" (1.265e-3, unchanged
+  by the I5 extrapolation because the final arc coasts) reads 2.268e-18 under
+  the mapped covector — RETRACTED, see `OPTIMALITY_CERTIFICATION.md` §A6
+  RETRACTION block. Regression test:
+  `verify_common/tests/test_foc_terminal_covector.m`.
 - [x] **1.4 Make the verdict ε-aware. DONE 2026-07-25.** `foc_check` folds `signPct`, the
   singular-arc count, and `sdotMinRel` into `rep.pass` **without knowing ε**.
   At ε>0 the throttle cost is quadratic, `Sd` is the derivative of the smoothed

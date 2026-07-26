@@ -39,11 +39,18 @@ condition being tested and the intuition behind it --- and (b) the code --- how
 to run it on each campaign and how to read every line of the printed report.
 The checks run in \emph{report-only burn-in}: a FAIL is an advisory finding and
 never demotes a certified solution. This revision incorporates a three-way
-external review of the layer (2026-07-25) and the three fixes it produced ---
-$\varepsilon$-awareness, mesh-normalized switch regularity, and an
-endpoint-corrected transversality --- together with the attribution those
-fixes made possible: of five outstanding advisory failures, four were
-discretization artifacts and one is real. The cross-campaign status of every
+external review of the layer (2026-07-25) and the fixes it produced ---
+$\varepsilon$-awareness, mesh-normalized switch regularity, an
+endpoint-corrected transversality, and, superseding that last one, the exact
+\textbf{mapped terminal covector} (Hager 2000, Task 0 of the 2026-07-25
+mesh-convergence-study) --- together with the attribution those fixes made
+possible. Of the five advisory failures the external review's fix pass first
+attributed, four were discretization artifacts and the report at that time
+recorded the fifth (Earth 2.5\,N transversality) as genuinely real; the
+mapped covector \textbf{retracted that finding too} --- see
+\S\ref{sec:transversality} --- so \textbf{all five were ultimately
+artifacts of the checking instrument, none a defect in the solutions
+checked}. The cross-campaign status of every
 check lives in the register \file{OPTIMALITY\_CERTIFICATION.md} at the
 \file{orbit\_transfer} root.
 \end{abstract}
@@ -487,62 +494,98 @@ its shadow price must be zero. A nonzero $\lambda_m(t_f)$ means the solution
 is still trading mass against the objective at the final instant, i.e.\ it is
 not done optimizing.
 
-\paragraph{Code.}
-\code{rep.lamMassEndRel} $= |\lambda_m(\sigma_{N+1})| / \max_k
-|\lambda_m(\sigma_k)|$ --- \emph{relative}, because an absolute gate is
-scale-dependent across campaigns. Skipped when the manifest declares the mass
-not free at $t_f$.
+\paragraph{Code --- the mapped terminal covector (Hager 2000), gated.}
+The line is gated on \code{rep.lamMassEndMapped}, the discrete
+\emph{mapped/transformed terminal covector}
+\cite{hager2000transformed} (sec.\ 3--4):
+\begin{equation}
+\widehat\lambda_f \;=\; \frac{h_N}{2}\,L_x(N{+}1)
+\;+\;\Bigl(I-\frac{h_N}{2}\,f_x(N{+}1)\Bigr)^{\!\top}\Lambda_N ,
+\label{eq:mappedcovector}
+\end{equation}
+i.e.\ the running-cost quadrature weight at the final node plus the last
+defect row's own Jacobian block transposed against its own multiplier. Its
+mass component is \emph{exactly zero under the discrete KKT system} whenever
+the final mass is genuinely free (\code{man.massFreeAtTf}) with nothing else
+in the model touching $X(\text{massRow},N{+}1)$: with that entry untouched by
+any other cost or constraint, the full-Lagrangian gradient $g_L$ already
+assembled for \S\ref{sec:kkt} satisfies $g_L(\text{massRow},N{+}1) =
+s\,\widehat\lambda_{f,\text{mass}}$ \emph{identically}, by the definition
+$g_L=\nabla f + s\,A^{\!\top}\lambda$. \code{foc\_check.m} therefore reads
+\eqref{eq:mappedcovector}'s mass component directly off $g_L$ at the
+terminal-node mass index --- no new differentiation, and no hand-derived
+$f_x$ or $L_x$ (forbidden by this module's own AD-from-the-solved-model rule):
+the quantity is already computed and already trusted, it is the same object
+$\code{kktStatInf}$ takes the max-norm of. This is also the most
+\emph{robust} formulation available: reconstructing
+$(I-\tfrac{h_N}{2}f_x)^{\!\top}\Lambda_N$ from parts would silently miss any
+\emph{other} constraint touching that entry (e.g.\ an active box bound),
+whereas $g_L$ sums every such contribution by construction.
+\code{rep.lamMassEndMapped} $= |\widehat\lambda_{f,\text{mass}}| / \max_k
+|\lambda_m(\sigma_k)|$ --- relative, same scale convention as before.
+\code{rep.lamMassEndRel} (the \eqref{eq:endpointfix} extrapolation, ``I5'')
+and \code{rep.lamMassEndRelOneSided} (the raw one-sided interval dual) are
+retained as \emph{reported, not gated} attribution companions. All three are
+skipped when the manifest declares the mass not free at $t_f$.
 
-\paragraph{Interpretation --- with an honest caveat.}
-Gate: $\le 10^{-3}$. Most rows read $10^{-9}$--$10^{-4}$. Three rows (Earth
-5\,N at $3.2\times10^{-3}$, 2.5\,N at $1.3\times10^{-3}$, CR3BP 5\,N at
-$3.1\times10^{-3}$) miss the gate by $\sim3\times$ while their KKT residuals
-are machine-tight. Two candidate readings, both recorded in the register:
-(i) those are exactly the rows where warm re-solves find improved optima ---
-under-converged mass costates on under-optimized rungs; or (ii) a
-discretization artifact: by \eqref{eq:dualmap} the endpoint costate is the
-\emph{one-sided} interval value, $\lambda_m$ at $\approx t_f - h/2$, which
-carries an $O(h)\,|\dot\lambda_m|$ bias whenever the final arc burns.
+\paragraph{Why the raw and extrapolated readings were never the right object.}
+Both \code{lamMassEndRelOneSided} and its \eqref{eq:endpointfix} extrapolation
+are read off $\Lambda_N$, the multiplier of the \emph{last defect interval} ---
+by \eqref{eq:dualmap} that behaves like a sample of $\lambda_m$ near $t_f -
+h_N/2$, not a value \emph{at} $t_f$, an $O(h)\,|\dot\lambda_m|$
+representation offset by construction whenever the final arc burns. Linear
+extrapolation \eqref{eq:endpointfix} corrects that offset to first order but
+is still an \emph{estimate} of $\lambda_m(t_f)$ built from $\Lambda_N$ alone;
+\eqref{eq:mappedcovector} is not an estimate of anything --- it is the exact
+first-order-optimality identity for that one state row, gated the same way
+$\code{kktStatInf}$ is gated everywhere else.
 
-\textbf{Both external reviewers independently confirmed reading (ii) is real},
-and converged on the same cheap fix --- extrapolate from the last two interval
-duals to the true endpoint,
 \begin{equation}
 \widehat\lambda(t_f)\;=\;\Lambda_N+\frac{h_N}{h_{N-1}+h_N}
 \bigl(\Lambda_N-\Lambda_{N-1}\bigr),
 \label{eq:endpointfix}
 \end{equation}
-with the symmetric formula at $\sigma_1$. \textbf{Implemented 2026-07-25}
-(\file{foc\_dual\_to\_costate.m} second output \code{lamX}): the gate now uses
-$\widehat\lambda(t_f)$ and \emph{reports the one-sided value beside it}, so a
-marginal miss can be attributed rather than merely moved.
 
-\paragraph{What that attribution found.} The two competing explanations
-separated cleanly:
+\paragraph{Interpretation, and the retraction that motivated building
+\eqref{eq:mappedcovector} (Task 0, 2026-07-25 mesh-convergence-study).}
+Gate: $\le 10^{-3}$. When this check first shipped (I5 fix-pass block, same
+date), three rows missed by $\sim3\times$ on the one-sided/extrapolated
+statistic while their KKT residuals were machine-tight: Earth 5\,N and CR3BP
+5\,N moved from $\sim3\times10^{-3}$ to $\sim5$--$6\times10^{-4}$ under
+\eqref{eq:endpointfix} and were read as the endpoint bias, now resolved ---
+but Earth 2.5\,N's reading did \emph{not} move at all
+($1.265\times10^{-3}$ both ways, its final arc coasting), and was recorded as
+\textbf{the one genuine first-order finding in the whole first-order
+register}. That conclusion does not survive \eqref{eq:mappedcovector}:
+
 \begin{center}
 \small
-\begin{tabular}{@{}llll@{}}
+\begin{tabular}{@{}lllll@{}}
 \toprule
-row & one-sided & endpoint-corrected & reading \\
+row & mapped (gated) & extrapolated (I5) & one-sided (legacy) & reading \\
 \midrule
-Earth 5\,N   & $3.189\times10^{-3}$ & $\mathbf{5.215\times10^{-4}}$ & endpoint bias; now PASS \\
-CR3BP 5\,N   & $3.108\times10^{-3}$ & $\mathbf{6.437\times10^{-4}}$ & endpoint bias; now PASS \\
-Earth 2.5\,N & $1.265\times10^{-3}$ & $1.265\times10^{-3}$ & \textbf{unchanged --- genuinely real} \\
+Earth 10\,N & $1.242\times10^{-25}$ & $1.635\times10^{-10}$ & $1.939\times10^{-10}$ & floor, as before \\
+Earth 5\,N  & $1.405\times10^{-17}$ & $5.215\times10^{-4}$ & $3.189\times10^{-3}$ & floor \\
+\textbf{Earth 2.5\,N} & $\mathbf{2.268\times10^{-18}}$ & $1.265\times10^{-3}$ & $1.265\times10^{-3}$ & \textbf{floor --- RETRACTED} \\
+Tulip flagship & $1.192\times10^{-24}$ & $3.229\times10^{-9}$ & $5.239\times10^{-9}$ & floor \\
 \bottomrule
 \end{tabular}
 \end{center}
 \noindent
-The 2.5\,N row not moving \emph{at all} is the confirmation, not an anomaly:
-the bias exists only where $\lambda_m$ is still changing at $t_f$, i.e.\ where
-the final arc \emph{burns}. A row whose final arc coasts has
-$\dot\lambda_m\approx0$ there and is untouched by \eqref{eq:endpointfix} --- so
-its miss is a property of the solution, not of the discretization. That points
-back at explanation (i): 2.5\,N is one of the rows a warm re-solve improves.
-
-The more principled alternative remains open: form the exact discrete endpoint
-covector $p_{N+1}=(I-\tfrac{h_N}{2}D_{N+1})^{\!\top}\Lambda_N$ plus terminal
-terms, whose mass component is zero by terminal-node stationarity when the
-final mass is genuinely free --- a discrete identity rather than an estimate.
+All four rows --- burning or coasting arcs, tight or marginal on the old
+statistic --- land at the same $10^{-17}$--$10^{-25}$ KKT-stationarity floor
+under the mapped covector, 14+ orders of magnitude inside the $10^{-3}$ gate.
+The earth-2.5\,N ``genuine finding'' was never a property of that solution:
+it was a property of \emph{which statistic stood in for} $\lambda_m(t_f)$.
+$\Lambda_N$ and its linear extrapolant are not $\lambda_m(t_f)$ itself, only
+approximations to it, and at 2.5\,N the local curvature of $\lambda_m$ near
+$t_f$ was large enough that neither approximation got within three orders of
+the true (zero) value --- while \eqref{eq:mappedcovector}, being exact rather
+than an approximation, has no such failure mode. \textbf{The finding is
+retracted}; see \file{OPTIMALITY\_CERTIFICATION.md} \S A6's RETRACTION block
+for the full record, and \file{tests/test\_foc\_terminal\_covector.m} for the
+regression test (a coarse-mesh toy where the two statistics are shown to
+differ by construction, not by tuning).
 
 %---------------------------------------------------------------
 \subsection{The time costate: Hamiltonian conditions in dual form}
@@ -771,44 +814,59 @@ inspection.
 
 \subsection{Anatomy of the report}
 
-A real block, from the Earth 2.5\,N row (July 2026) --- chosen deliberately
-because reading a \emph{failing} report correctly is the skill this section
-needs to teach:
+A real block, from the Earth 2.5\,N row, re-run after \eqref{eq:mappedcovector}
+landed (Task 0, 2026-07-25 mesh-convergence-study). This row is chosen
+deliberately for a different reason than an earlier version of this note gave
+it: it is the row whose report block \emph{changed verdict} under this fix,
+and walking through why is the skill this section needs to teach.
 
 \begin{small}
 \begin{verbatim}
 ========== FIRST-ORDER OPTIMALITY REPORT: MEE_M2_2p5N ==========
- KKT stationarity  ||grad_x L||_inf :  1.166e-11   (sign s=+1)   PASS
+ KKT stationarity  ||grad_x L||_inf :  5.042e-10   (sign s=+1)   PASS
+ Min condition (direction) tan max  :  6.813e-15                 PASS
  Min condition (throttle sign law)  :    100.00 %                PASS
- Transversality |lam_m(tf)| rel     :  1.265e-03                 FAIL
+ Transversality |lam_m(tf)| mapped   :  2.268e-18                 PASS
  Singular-arc nodes                 :          0                 PASS
  Regular switching min|Sdot| rel    :  7.247e+00   (76 switches) PASS
-   ^ transversality, legacy one-sided :  1.265e-03   [I5 endpoint fix]
+   ^ transversality, extrapolated (I5):  1.265e-03
+   ^ transversality, legacy one-sided :  1.265e-03
    ^ regular switching, legacy raw    :  9.888e-03   [I1 mesh fix]
- ADVISORY verdict: FAIL   (report-only burn-in: does not alter certified status)
+ ADVISORY verdict: PASS   (report-only burn-in: does not alter certified status)
 \end{verbatim}
 \end{small}
 
 \noindent
 Line-by-line: the row is a machine-tight extremal (\S\ref{sec:kkt}) whose
 thrust program agrees with its own multipliers at every node
-(\S\ref{sec:signlaw}), has no singular arcs (\S\ref{sec:singular}), and whose
-76 switches all cross transversally (\S\ref{sec:sdot}) --- but it has
-\emph{not} priced its propellant to zero at $t_f$
-(\S\ref{sec:transversality}). The advisory verdict is the conjunction of the
-gated lines, so it is FAIL solely on that one; per the burn-in policy this
-changes nothing about the row's certified status --- it files a finding.
+(\S\ref{sec:signlaw}), has no singular arcs (\S\ref{sec:singular}), whose
+76 switches all cross transversally (\S\ref{sec:sdot}), and whose propellant
+\emph{is} priced to zero at $t_f$ to $2\times10^{-18}$
+(\S\ref{sec:transversality}) --- an ADVISORY PASS across the board.
 
-\paragraph{Reading the two \texttt{\^{}} attribution lines.} These carry the
-diagnosis. The regular-switching line moved $9.888\times10^{-3}\to7.247$ under
-the I1 mesh normalization --- a large move, so the legacy number was a
-discretization artifact and there was never a grazing problem here. The
-transversality line did \emph{not} move ($1.265\times10^{-3}$ both ways), so
-the I5 endpoint bias is \emph{not} the explanation and the miss is real. A
-large gap means ``the old number was an artifact''; a zero gap means ``this
-finding survives correction.'' That is what turns a FAIL from an alarm into a
-diagnosis --- and it is why both values are printed rather than the corrected
-one alone.
+\paragraph{The lesson: this exact row used to FAIL, and the two
+\texttt{\^{}} companions explain why the fix had to be a different
+\emph{instrument}, not a better threshold.} Before \eqref{eq:mappedcovector}
+existed, this row's gated transversality line read the extrapolated value
+(``I5,'' now demoted to a companion): $1.265\times10^{-3}$ --- a FAIL, and,
+critically, \emph{unchanged from the raw one-sided dual beside it}. Compare
+that to the regular-switching companion above, which moved
+$9.888\times10^{-3}\to7.247$ under the I1 mesh normalization: a large move
+between a legacy statistic and its corrected replacement is exactly the
+pattern that says ``the old number was a discretization artifact, trust the
+new one.'' The transversality companions show the \emph{opposite} pattern ---
+extrapolated and raw agree with each other to all four significant figures ---
+which is precisely what made the earlier finding look genuinely real: the two
+best available approximations to $\lambda_m(t_f)$ agreed on a nonzero value,
+so no companion-line comparison \emph{internal to that approximation family}
+could have caught the problem. What the mapped line above shows is that both
+approximations were simply the wrong family: $\Lambda_N$ and its linear
+extrapolant sample $\lambda_m$ \emph{near} $t_f$, not the exact terminal
+covector \eqref{eq:mappedcovector}, and no amount of refining the sampling
+scheme substitutes for reading the exact discrete identity. The moral for
+this whole layer: a companion pair that agrees with each other is evidence
+the finding is real \emph{within that instrument} --- it is not evidence
+there isn't a better instrument.
 
 The direction line (\S\ref{sec:direction}), the time-costate line
 (\S\ref{sec:timecostate}), the horizon note, and the $\delta_w$ line
@@ -826,13 +884,14 @@ report line & \code{rep} field & gate & skipped when \\
 KKT stationarity & \code{kktStatInf} & $\le 10^{-6}$ & never \\
 Min condition (direction) & \code{dirTanMax} & $\le 10^{-6}$ & \code{dirRows} empty \\
 Min condition (sign law) & \code{signPct} & $\ge 99\,\%$ & \code{thrRow} empty (min-time) \\
-Transversality (mass) & \code{lamMassEndRel} & $\le 10^{-3}$ & mass not free at $t_f$ \\
+Transversality (mass), mapped & \code{lamMassEndMapped} & $\le 10^{-3}$ & mass not free at $t_f$ \\
 Time-costate CoV / end & \code{lamTimeCoV}, \code{lamTimeEnd} & informational & \code{timeRow} empty \\
 Singular-arc nodes & \code{singularArcNodes} & $=0$ & \code{thrRow} empty \\
 Regular switching & \code{sdotMinRel} & $> 10^{-3}$ & \code{thrRow} empty \\
 IPOPT inertia $\delta_w$ & \code{ipopt.certLocalMin} & informational & no \code{regHistory} \\
 \midrule
 \multicolumn{4}{@{}l@{}}{\emph{attribution companions (printed beside the gated value)}}\\
+transversality, extrapolated (I5) & \code{lamMassEndRel} & --- & as above \\
 transversality, one-sided & \code{lamMassEndRelOneSided} & --- & as above \\
 regular switching, raw & \code{sdotMinRelLegacy} & --- & as above \\
 deweighted switching fn & \code{Sdeweighted} & --- & \code{thrRow} empty \\
@@ -852,8 +911,9 @@ every printed block carries the disclaimer, and no certified row can be
 demoted by a FAIL. Promotion to a hard gate is a recorded future decision,
 blocked on the \S A6 checklist of
 \file{orbit\_transfer/OPTIMALITY\_CERTIFICATION.md} (mesh-normalize
-$\dot S$; make the direction check independent and sign-aware; resolve the
-transversality endpoint bias). That register --- not this note --- is the
+$\dot S$; make the direction check independent and sign-aware). The
+transversality endpoint-bias item is now \textbf{closed} by the mapped
+covector \eqref{eq:mappedcovector} (Task 0, 2026-07-25). That register --- not this note --- is the
 living source of per-row results and open findings; this note explains what
 the instruments measure and how to hold them.
 
@@ -885,6 +945,12 @@ Control}, SIAM, Philadelphia, 2012.
 J.~T. Betts,
 \emph{Practical Methods for Optimal Control and Estimation Using Nonlinear
 Programming}, 2nd ed., SIAM, Philadelphia, 2010.
+
+\bibitem{hager2000transformed}
+W.~W. Hager,
+``Runge-Kutta methods in optimal control and the transformed adjoint
+system,''
+\emph{Numerische Mathematik}, 87(2), 247--282, 2000.
 
 \end{thebibliography}
 

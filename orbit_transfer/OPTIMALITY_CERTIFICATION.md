@@ -89,7 +89,7 @@ from an informal list but which matter here.
 |---|---|
 | **(a) state dynamics** satisfied along the trajectory | YES — machine-tight, but **at the collocation nodes, to collocation order**. Not the same as satisfying the continuous ODE; see the caveat below |
 | **(b) costate dynamics** (adjoint equation) | **Implicitly, and DISCRETELY only** — see the note below the table on what this does and does not establish. **Implicitly** — KKT stationarity w.r.t. the state variables *is* the discrete adjoint recursion, now verified generically via `foc_check` on all four campaigns (2026-07-25): ‖∇ₓL‖∞ ranges 1.5e-14 .. 6.9e-10 across earth's 9 rows, 1.2e-14 .. 2.5e-13 across CR3BP's 4 rows, 5.7e-13 on the tulip flagship, 5.9e-13 .. 1.1e-11 across ELFO's 3 rows — all PASS. Tulip additionally enforces it explicitly by least-squares (independent of the solver's own duals, but disagrees with the raw-dual read on this same flagship — see A1's Task 8 note). **Nobody checks a continuous-time costate ODE residual** |
-| **(c) transversality** | λ_m(t_f)=0 now checked via `foc_check` on all four campaigns (earth 7/9 PASS, CR3BP 3/4 PASS, tulip PASS, ELFO 3/3 PASS — see A3); the earth/CR3BP misses are marginal (~3x tol) transversality-only findings, not a coverage gap. **Finding I5 (final review, 2026-07-25):** all three misses (earth 5N/2.5N, CR3BP 5N) share the same signature — `lamMassEndRel` uses the one-sided interval-endpoint dual (λ at ~t_f − h/2), which carries an O(h)\|λ̇_m\| bias whenever the final arc burns; the ~3x-tol misses are consistent with that bias rather than a genuine transversality violation. Cheap discriminator (endpoint extrapolation, or a final-arc burn/coast check) recorded as pre-promotion work, not yet run. Terminal elements are fully pinned, so no condition there. In the L-domain, free ΔL supplies a transversality-type stationarity row — enforced by KKT, never *reported* as a PMP quantity |
+| **(c) transversality** | λ_m(t_f)=0 checked via `foc_check` on all four campaigns, now on the **mapped terminal covector** (Hager 2000; Task 0, 2026-07-25 mesh-convergence-study, see A6/RETRACTION below) rather than the raw/extrapolated interval dual. Terminal elements are fully pinned, so no condition there. In the L-domain, free ΔL supplies a transversality-type stationarity row — enforced by KKT, never *reported* as a PMP quantity. **Finding I5 SUPERSEDED, formerly-real earth-2.5N miss RETRACTED** — see A6 |
 | **(d) Hamiltonian constancy / H≡0 for free t_f** | see the correction below — partially; the free-t_f case is now partially checked (G4): `foc_check`'s dual-form on the ELFO min-time anchor confirms λ_t(t_f)=−1.000, exactly the theoretical ±1 value, but leaves a genuine open anomaly (`lamTimeCoV`=5.7%, expected ~0) unresolved — see A4/LEAD-4. Still not the literal H(t_f)=0 value test |
 | ★ **(e) the minimum condition itself**: u\* = argmin over the admissible set, not merely ∂H/∂u = 0 | **YES, and it is our strongest check.** For control-affine dynamics with ‖β‖=1 and thr∈[0,1] the pointwise minimizer is exactly β = −p/‖p‖ with thr from sign(S) — so the primer-alignment + sign-law gates *are* the minimum condition. Note ∂H/∂u = 0 would be the wrong test: the throttle optimum is at a bound, not a stationary point |
 | ★ **(f) non-triviality / normality**: (λ₀,λ) ≢ 0, λ₀ ≥ 0; no abnormal extremal | **NOT CHECKED anywhere.** In the direct/NLP form λ₀ ≡ 1 by construction, so abnormality is not even representable — it becomes a real question only for the indirect solver (goal 6) |
@@ -162,7 +162,7 @@ physical `pass` column (see A5); a FAIL here does not demote a certified row.
 
 | campaign / target | primer + sign law | switch alignment | transversality | H constancy | full KKT | Sdot ≠ 0 |
 |---|---|---|---|---|---|---|
-| earth 2-body (10 → 0.1 N, + 2 PSR) | **9/9 @ 0.000° / 100%** | yes | **8/9 PASS** (re-swept 2026-07-25 under the I5 endpoint correction). 5N moved 3.189e-3 → **5.215e-4** and now PASSES: it *was* the one-sided endpoint bias. **2.5N is unchanged at 1.265e-3 and remains the single genuine first-order finding** in the whole set — its final arc coasts, so the endpoint bias cannot apply, and it is one of the rows a warm re-solve improves | yes (CoV ~1e-9) | **yes, 9/9 kktStat PASS** (1.5e-14 .. 6.9e-10 across the 9 rows — max is the 1N-PSR row) | **yes, 9/9 PASS** — mesh-normalized (I1); values 2.1 .. 1.0e2 across the ladder |
+| earth 2-body (10 → 0.1 N, + 2 PSR) | **9/9 @ 0.000° / 100%** | yes | **9/9 PASS on the mapped terminal covector** (Task 0, 2026-07-25 mesh-convergence-study). 10N/5N/2.5N re-run: `lamMassEndMapped` = 1.242e-25 / 1.405e-17 / **2.268e-18** — all at KKT-stationarity floor, `tolTrans`=1e-3 cleared by 14-18 orders of magnitude. **The former "2.5N is the single genuine first-order finding" verdict is RETRACTED** — its raw/extrapolated readings (1.265e-3, unchanged by I5) were themselves the representation artifact, not the solution; see A6/RETRACTION | yes (CoV ~1e-9) | **yes, 9/9 kktStat PASS** (1.5e-14 .. 6.9e-10 across the 9 rows — max is the 1N-PSR row) | **yes, 9/9 PASS** — mesh-normalized (I1); values 2.1 .. 1.0e2 across the ladder |
 | earth CR3BP (lunar) | **4/4 @ 100% sign** (10/5/1/0.5 N; 2.5/0.2/0.1 N **NOT RUN** — deferred, large-N warm re-solves too slow for this pipeline) | yes (4/4) | **4/4 PASS** (re-run 2026-07-25): T5N moved 3.108e-3 → **6.437e-4** under the I5 endpoint correction — same artifact as earth 5N, now resolved | reported, informational (non-autonomous — correct; G6 still open, no new instrument) | **yes, 4/4 kktStat PASS** (1.2e-14 to 2.5e-13) | **yes, 4/4 PASS** |
 | GTO→tulip | raw-dual **PASS** (0.058°, 100%) on flagship; LS-reconstruction **FAIL** (2.00, 40.44%) — **DISAGREE**, recorded not adjudicated (see A1 note) | yes (raw-dual) | **PASS** (5.2e-9) | no (autonomous H_t checked separately elsewhere, not via foc_check) | **yes, PASS** (5.746e-13) on the 25-switch flagship | **PASS** (re-run 2026-07-25): 1.376e-7 → **2.701e+01** under the I1 mesh normalization. The earlier reading was **entirely a mesh artifact** — the 25 switches are transversal, and the "node-grazing" attribution recorded here is **RETRACTED**. Flagship `rep.pass` is now PASS |
 | GTO→ELFO | **energy seed PASS** (100%, eps=1 report-only caveat); **front row (1.33x, 50sw) PASS** (100%, exact at eps=0); min-time n/a (all-burn) | yes (fuel rows) | **3/3 PASS** — energy seed 1.00e-05, min-time 9.62e-06, front row 6.00e-09 | no (autonomous CR3BP-rotating; G4/lamTimeCoV below is the closer analog for the free-tf leg) | **yes, 3/3 kktStat PASS** (5.89e-13, 7.25e-14, 1.075e-11) — **first-ever FOC gate on this campaign** | energy seed **PASS** (8 sw); front row **FAILS** (sdotMinRel 4.485e-05, 50 sw, near-graze — same pattern as tulip — **see finding I1**); min-time n/a (all-burn) |
@@ -294,7 +294,7 @@ now **attributed** rather than merely moved.
 | ELFO front 1.33× (50 sw) | Ṡ regularity | 4.485e-05 | **1.193e+02** | **mesh artifact** → PASS |
 | earth 5 N | transversality | 3.189e-03 | **5.215e-04** | **endpoint bias** → PASS |
 | CR3BP 5 N | transversality | 3.108e-03 | **6.437e-04** | **endpoint bias** → PASS |
-| earth 2.5 N | transversality | 1.265e-03 | 1.265e-03 | **REAL** — unchanged |
+| earth 2.5 N | transversality | 1.265e-03 | 1.265e-03 | **REAL** — unchanged (**RETRACTED 2026-07-25, Task 0 — see the RETRACTION block below: this was itself a representation artifact, not a solution defect**) |
 | ELFO energy seed (ε=1) | sign law etc. | PASS incl. "100%" | PASS, 3 checks `--` | **false PASS removed** |
 
 **Of five outstanding advisory FAILs, four were discretization artifacts and
@@ -311,7 +311,11 @@ one is real.** Two corrections to things previously recorded here as findings:
    miss is a property of the solution, not the discretization. That points back
    at the under-optimized-rung explanation — 2.5 N is one of the rows a warm
    re-solve improves. It is now the **only** genuine first-order finding in the
-   whole set.
+   whole set. **This conclusion does not survive Task 0 (2026-07-25) — the
+   I5 extrapolation, though itself an improvement, was still an
+   *approximation* to λ_m(t_f), and approximating the wrong thing more
+   carefully does not make it the right thing: the exact discrete object was
+   never Lambda_N or any function of it alone. See the RETRACTION block below.**
 
 **Caveat that survives (do not over-read the new PASSes).** GPT's point stands:
 no threshold on a *single* mesh establishes transversality of a switch.
@@ -330,6 +334,71 @@ normalized statistic holds (ratio 1.02) while the legacy one falls by 4.1
 blindness — note the *previously recorded fix was wrong*, see above), the
 sign-resolution ambiguity guard, the δ_w relabel, and three robustness asserts.
 Tracked in `verify_common/TODO.md` §1.2, §1.5, §3.
+
+### RETRACTION — mapped terminal covector supersedes I5, earth 2.5 N finding withdrawn (Task 0, 2026-07-25 mesh-convergence-study)
+
+The I5 fix above (endpoint extrapolation) was recorded, correctly at the time,
+as a *partial* fix — both external reviewers also named a more principled
+alternative: the exact discrete **mapped/transformed terminal covector**
+(Hager, "Runge-Kutta Methods in Optimal Control and the Transformed Adjoint
+System," Numer. Math. 87, 247-282, 2000),
+
+    lamHat_f = (h_N/2)*L_x(N+1) + (I - (h_N/2)*f_x(N+1))' * Lambda_N
+
+whose mass component is **exactly zero by the discrete KKT system** whenever
+the final mass is genuinely free with no terminal cost/constraint on it — not
+an estimate of λ_m(t_f), but the same full-Lagrangian-gradient identity
+`kktStatInf` already certifies elsewhere, read at one specific row/node. It is
+now implemented in `foc_check.m` §(6) as `rep.lamMassEndMapped` (reusing the
+already-assembled `gL`, no new differentiation — see the file for the
+derivation) and **gates** transversality; `rep.lamMassEndRel` (I5
+extrapolation) and `rep.lamMassEndRelOneSided` (raw one-sided dual) are
+retained as reported-only attribution companions. Regression test:
+`verify_common/tests/test_foc_terminal_covector.m`.
+
+**Re-run of the affected rows** (warm re-solve, live model, same procedure as
+every other `foc_check` row):
+
+| row | mapped (gated) | extrapolated (I5) | raw one-sided (legacy) |
+|---|---|---|---|
+| earth 10 N | 1.242e-25 | 1.635e-10 | 1.939e-10 |
+| earth 5 N | 1.405e-17 | 5.215e-04 | 3.189e-03 |
+| **earth 2.5 N (the open finding)** | **2.268e-18** | 1.265e-03 | 1.265e-03 |
+| tulip flagship (25 sw) | 1.192e-24 | 3.229e-09 | 5.239e-09 |
+
+**The decisive number: earth 2.5 N's mapped transversality is 2.268e-18** —
+14 orders of magnitude inside `tolTrans`=1e-3, and at the same machine-KKT
+floor as every other row in the table (`kktStatInf` for this row is 5.0e-10).
+**The "single genuine first-order finding" recorded above (I5 fix-pass block,
+A3 earth-2-body row) is RETRACTED.** It was never a property of the 2.5 N
+solution — it was a property of the *statistic*: Lambda_N (and its I5 linear
+extrapolant, exact only for a linear costate locally) is not λ_m(t_f), it is
+a sample near sigma_end − h_N/2, and at 2.5 N the final arc's λ_m is moving
+fast enough there that neither the raw dual nor its linear extrapolation gets
+within 3 orders of the true (zero) endpoint value. The I5 extrapolation was a
+real improvement over the raw dual in general (it resolved the earth-5N and
+CR3BP-5N misses correctly, for the correct reason — see the FIX PASS table
+above, unchanged) — it was simply the wrong tool for a row where the local
+extrapolation itself carries residual curvature error. The mapped covector
+has no such failure mode: it is exact by construction regardless of how fast
+λ_m is moving at t_f, which is why all four rows above — burning or coasting,
+tight or marginal — land at floor together.
+
+**Consequence for A3/A6 above:** every "PASS (I5 endpoint bias)" and the one
+"REAL (unchanged)" verdict recorded in the FIX PASS + ATTRIBUTION table and
+the A3 earth-2-body coverage-matrix cell predate this fix and are superseded
+by the mapped-covector re-run in this block, not by further edits to the
+historical text (kept as a record of what was believed and why, per this
+file's own append-don't-rewrite convention, §"Scope discipline").
+
+**What this changes and does not change.** It closes the one open
+first-order finding in Part A with no primal/solution implications — the 2.5
+N certified row itself is untouched, only the *instrument that reads its
+transversality* changed. It does NOT retroactively validate M1/M2/M3 (Part
+B, second order) or any claim beyond transversality; those remain as
+recorded. It also sharpens the general lesson already half-stated by I5: a
+one-sided or linearly-extrapolated dual is never legitimately called
+λ(t_f) — only the mapped covector is.
 
 ### External review of the checker itself (2026-07-25)
 
@@ -359,7 +428,10 @@ minimizer, under `L = L0 + μ(b'b−1)`).
 
 **I5 confirmed by both**, with an agreed extrapolation fix and a more
 principled discrete-endpoint-covector alternative whose mass component is zero
-by terminal-node stationarity.
+by terminal-node stationarity. **DONE (Task 0, 2026-07-25 mesh-convergence-
+study): the principled alternative is now built and gated — see the
+RETRACTION block below, which also withdraws the earth-2.5N finding this
+extrapolation fix could not resolve.**
 
 **New (not previously recorded):** the advisory verdict is **not ε-aware** —
 `signPct` / singular-arc / `sdotMinRel` are folded into `rep.pass` even on ε>0
@@ -611,6 +683,7 @@ campaign/row, verdict, and what it changed in Part A or §1–§5.
 | 2026-07-25 (Task 8) | `foc_check`/`foc_report` + LS cross-check | GTO→tulip, 25-switch flagship (`sundman_minfuel_certified.mat`) | KKT stationarity **PASS** (5.746e-13); primer/sign **PASS** (raw dual, 0.058°/100%) vs LS-reconstruction **FAIL** (2.00/40.44%) — **DISAGREE**, recorded not adjudicated; overall `rep.pass` **FAIL** (sdotMinRel 1.4e-7 node-graze + δ_w tail 1.8e-8 borderline) | A1 note on the two-source disagreement; A3 tulip row; G1 gets new data, not closed; G3 standing-line closed; Part B §1 tulip row cross-checked with the generic port; **final review: the "node-graze" read on sdotMinRel is now finding I1 — unverified without mesh-normalizing `Sd`** |
 | 2026-07-25 (Task 9) | `foc_check`/`foc_report`, first-ever ELFO gate | GTO→ELFO, 3 artifacts (energy seed, min-time anchor, 1.33x/50sw front row) | energy seed **ADVISORY PASS** (KKT 5.89e-13, eps=1 sign-law caveat); min-time anchor **ADVISORY PASS** (KKT 7.25e-14, `lamTimeEnd=-1.000` CONFIRMS G4 dual-form, `lamTimeCoV=5.69e-2` OPEN); front row **ADVISORY FAIL** (sdotMinRel 4.485e-5 near-graze + δ_w 1.98e-6 NOT CERTIFIED) | A3 ELFO row goes from "none" to 3/3 covered on the nominal rung; G2 partial; G4 partial-dual-form-confirmed; LEAD-4 opened; Part B §1 ELFO row; LEAD-0 (ELFO) done; **final review: the front-row "near-graze" read is now finding I1 — unverified without mesh-normalizing `Sd`** |
 | 2026-07-25 (final review) | register amendments (this fix wave) | `OPTIMALITY_CERTIFICATION.md` itself | recorded findings **I1** (`sdotMinRel` not mesh-normalized — discretization confound possible on refined/PSR-split meshes), **I2** (direction-check tangential residual not independent of `kktStat` by construction, and sign-blind to the ±p/‖p‖ branch), **I5** (`lamMassEndRel` one-sided endpoint-dual O(h) bias plausibly explains all three transversality misses); fixed M7 wording | none of I1/I2/I5 changes any PASS/FAIL verdict above; they are pre-promotion leads, see new §A6 |
+| 2026-07-25 (Task 0, mesh-convergence-study) | **mapped terminal covector** (Hager 2000) — `foc_check.m` §(6), `rep.lamMassEndMapped`, now gated | earth 10/5/2.5 N, GTO→tulip flagship (warm re-solve, live model) | mapped transversality: 10N 1.242e-25, 5N 1.405e-17, **2.5N 2.268e-18**, tulip 1.192e-24 — all at KKT-stationarity floor, 14+ orders inside `tolTrans`=1e-3 | **RETRACTS** the "earth 2.5N is the single genuine first-order finding" verdict (I5 fix-pass block, A3 earth-2-body row) — see new "RETRACTION" block in §A6; I5 (`lamMassEndRel`) and the raw one-sided dual retained as reported-only companions; regression test `verify_common/tests/test_foc_terminal_covector.m` |
 
 ---
 

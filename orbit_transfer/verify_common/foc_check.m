@@ -40,7 +40,12 @@ function rep = foc_check(out, sigma, man, opts)
 %         .lam              nodal costates [nx x (N+1)]
 %         .lamTimeCoV       time-costate coefficient of variation
 %         .lamTimeEnd       time-costate value at the final node
-%         .lamMassEndRel    free-final-mass transversality residual (relative)
+%         .lamMassEndMapped free-final-mass transversality residual (relative),
+%                           Hager-mapped terminal covector -- THE GATED VALUE
+%         .lamMassEndRel    same, endpoint-extrapolated interval dual (I5) --
+%                           reported alongside, not gated
+%         .lamMassEndRelOneSided same, raw one-sided interval dual (legacy) --
+%                           reported alongside, not gated
 %         .singularArcNodes count of >=3-node near-zero switching-function runs
 %         .sdotMinRel       minimum relative |Sdot| across detected switches
 %         .nSwitches        number of burn/coast sign changes
@@ -55,6 +60,9 @@ function rep = foc_check(out, sigma, man, opts)
 %       (tangential dL/dbeta stationarity diagnostic, the method precedent).
 %   [3] verify_common/OPTIMALITY_CERTIFICATION.md sec A2 (generic FOC gate
 %       design: manifest-driven routing, advisory verdict).
+%   [4] Hager, W.W., "Runge-Kutta Methods in Optimal Control and the
+%       Transformed Adjoint System," Numer. Math. 87, 247-282, 2000 (the
+%       mapped/transformed terminal covector gated in section (6) below).
 
 import casadi.*
 if nargin < 4, opts = struct(); end
@@ -178,14 +186,51 @@ else
 end
 
 % --- (6) transversality: free final mass -> lam_m(tf)=0 ----------------------
+% MAPPED TERMINAL COVECTOR (finding I5's principled fix, Hager 2000 [4]). The
+% raw one-sided interval dual (lamMassEndRelOneSided) and its I5 linear
+% extrapolation (lamMassEndRel) both approximate lambda_m(t_f) from Lambda_N,
+% the multiplier of the LAST DEFECT INTERVAL -- but Lambda_N behaves like a
+% sample near sigma_end - h_N/2, not a value AT the endpoint, an O(h)*|lamdot|
+% offset by construction (see foc_dual_to_costate.m header). That is a
+% representation artifact of "which single number stands for lambda_m(t_f)",
+% not evidence about the solution.
+%
+% The exact discrete object is the mapped/transformed terminal covector:
+%
+%   lamHat_f = (h_N/2)*L_x(N+1) + (I - (h_N/2)*f_x(N+1))' * Lambda_N
+%
+% i.e. the running-cost quadrature weight at the final node plus the last
+% defect row's OWN Jacobian block transposed against its own multiplier. Its
+% mass component is EXACTLY ZERO under the discrete KKT system whenever the
+% final mass is genuinely free (man.massFreeAtTf) with no terminal cost or
+% constraint touching it: with nothing else in the model depending on
+% X(massRow,N+1), the full-Lagrangian gradient gL (already assembled at (1),
+% the same object rep.kktStatInf takes the max-norm of) has, at that one
+% entry, gL(massRow,N+1) = s*lamHat_f_mass identically -- by definition of
+% gL = grad(f) + s*A'*lam, since grad(f)'s only dependence on X(:,N+1) is the
+% (h_N/2)*L(X(:,N+1)) quadrature term and A's only dependence on X(:,N+1) at
+% that row is the last defect block's own Jacobian (I - (h_N/2)*f_x(N+1)).
+%
+% So rather than re-derive f_x/L_x by hand (forbidden -- see file header:
+% AD from the same opti.f/opti.g that were solved, never a hand derivation),
+% the mapped covector's mass component is read directly off gL at the
+% terminal-node mass index: no new differentiation, just indexing a quantity
+% this function already computes and already trusts. This is also the most
+% ROBUST formulation available -- reconstructing (I - h_N/2 f_x)'*Lambda_N
+% from parts would silently miss any OTHER constraint that happens to touch
+% X(massRow,N+1) (e.g. an active box bound), whereas gL already sums every
+% such contribution by construction.
 if ~isempty(man.massRow) && man.massFreeAtTf
     lm    = rep.lam(man.massRow,:);
     scale = max(abs(lm));
     rep.lamMassEndRel        = abs(lamX(man.massRow,end)) / max(scale,1e-30);
     rep.lamMassEndRelOneSided = abs(lm(end))              / max(scale,1e-30);
+    xix = @(rows,k) (k-1)*nx + rows;
+    rep.lamMassEndMapped = abs(gL(xix(man.massRow, N1))) / max(scale,1e-30);
     checks{end+1} = 'transversality';
 else
     rep.lamMassEndRel = NaN;  rep.lamMassEndRelOneSided = NaN;
+    rep.lamMassEndMapped = NaN;
 end
 
 % --- (7) singular arcs + regular switching (Sdot != 0) -----------------------
@@ -265,9 +310,9 @@ rep.checksRun = checks;
 % Every ok* is NaN-tolerant: a skipped check (manifest field empty, or the
 % bang-bang family skipped because the throttle cost is not affine) must
 % neither pass nor fail the verdict -- it drops out.
-okSign  = isnan(rep.signPct)        || rep.signPct >= tolSign;
-okTrans = isnan(rep.lamMassEndRel)  || rep.lamMassEndRel <= tolTrans;
-okSdot  = isnan(rep.sdotMinRel)     || rep.sdotMinRel > sdotMin;
+okSign  = isnan(rep.signPct)          || rep.signPct >= tolSign;
+okTrans = isnan(rep.lamMassEndMapped) || rep.lamMassEndMapped <= tolTrans;
+okSdot  = isnan(rep.sdotMinRel)       || rep.sdotMinRel > sdotMin;
 okSing  = isnan(rep.singularArcNodes) || rep.singularArcNodes == 0;
 rep.pass = rep.kktStatInf <= tolStat && rep.dirTanMax <= tolStat && ...
            okSign && okTrans && okSing && okSdot;

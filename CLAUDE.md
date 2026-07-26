@@ -35,7 +35,11 @@ optimal_control/
 │   ├── earth_elliptic_to_geo/   # GTO->GEO min-fuel (HMG-2004): direct/ (MEE campaign) + indirect/ (mfmax Fortran)
 │   ├── earth_elliptic_to_geo_CR3BP/  # elliptic->GEO WITH lunar gravity (CR3BP): CERTIFIED ladder 10->0.1 N, run_cr3bp_geo front door, reviewed note (doc/); Moon effect vs thrust (~50->30 g) + vs lunar phase (sign-flipping quadrupole)
 │   ├── GTO_tulip/               # CR3BP GTO->tulip; README at root, campaign docs in process/
-│   │   ├── direct/              #   sundman_minfuel (Sundman engine), PSR(+data), movie
+│   │   ├── direct/              #   FLATTENED 2026-07-26 into ONE campaign, one front
+│   │   │                        #   door: run_gto_tulip.m (solve -> optional PSR refine
+│   │   │                        #   -> export -> verify -> movie) + lib/ certify/ viz/
+│   │   │                        #   tests/ results/ data/. Was sundman_minfuel/ + PSR/,
+│   │   │                        #   which read as rival pipelines but never were.
 │   │   └── indirect/            #   lowThrust_GTO_tulip (base PMP shooting),
 │   │                            #   ms_band, ifs(+data), ztl, min_time
 │   ├── GTO_ELFO/                # CR3BP GTO->ELFO

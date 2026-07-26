@@ -160,9 +160,51 @@ choice:
 Do **not** take either as cleanup. `test_psr_vendor_drift` now pins the
 resolution of all six load-bearing names, so this cannot flip again unnoticed
 in either direction (negative-tested).
-| **certified-quantity guard** → one function | **8+ copies** (`refresh_duals_mee`, `refresh_duals_cr3bp`, `run_foc_tulip`, `run_foc_elfo`, three earth drivers …) | byte-identity |
-| **`optdef` vs per-campaign `getdef`/`gd`** | one utility, four local reimplementations | byte-identity |
-| **Fix stale headers** — ELFO's `setup_paths` claims a reuse that does not happen; CR3BP's README calls functions "pipeline stages" the front door never calls | misleads the next reader | none needed |
+| ~~**certified-quantity guard** → one function~~ **DONE 2026-07-26** | **4 files / 5 instances**, not "8+" — `psr_mee_refine`'s hits were a refinement-loop stop-reason string | `verify_common/tests/test_certified_guard.m` (all 3 refusals, both directions) + 8/8 `verify_common` tests + 4 campaign smokes |
+| **`optdef` vs per-campaign `getdef`/`gd`** | **REFUSED — see below** | — |
+| ~~**Fix stale headers**~~ **DONE 2026-07-26** | ELFO `setup_paths` rewritten (the claimed `casadi_minfuel_sundman`/`minfuel_at_tf` reuse never happened); CR3BP README's "pipeline stages" corrected | none needed |
+
+#### The certified-quantity guard: the divergence was not real
+
+Two sites tested `out.success` alone, two also whitelisted the IPOPT status —
+which looked like exactly the silent divergence this survey warns about. It was
+not. `casadi_lt_mee` folds the whitelist *into* `out.success` itself, while the
+Sundman solvers set `success = true` on any non-throwing solve, so their callers
+had to apply it. All five sites were behaviourally equivalent; the shared guard
+applies the whitelist unconditionally (no-op for the former, required for the
+latter).
+
+The one **real** difference it had to generalize over is which way is better:
+min-fuel maximizes `m_f`, min-time minimizes `t_f`. `spec.better` is validated,
+never defaulted — a mislabelled direction inverts the whole gate, refusing good
+points and accepting degraded ones.
+
+Fallout worth noting: this extraction is what surfaced that
+`test_foc_check_10N` had been throwing `Unrecognized field name` since
+`b3c6eaf` rather than gating anything. A consolidation that forces you to
+actually run the affected tests finds things a read-through does not.
+
+#### `optdef`/`getdef` consolidation is REFUSED
+
+Measured before deciding: **27 definitions** across 4 names (`getdef` ×17,
+`getfield_default` ×5, `local_default` ×2, `fcdef` ×1, plus the shared
+`optdef`). Normalizing whitespace and comments, they collapse to **4 distinct
+bodies that differ only in the parameter name** (`d` vs `dflt`):
+
+```matlab
+if isfield(s, f) && ~isempty(s.(f)), v = s.(f); else, v = dflt; end
+```
+
+So there is **no divergence and no hazard** — nothing to fix. Consolidating
+would delete ~54 trivial lines while adding a path dependency to 27 files,
+including `casadi_energy_freetf` and `casadi_mintime_freetf`, which today have
+none. That is the same trade refused for the CasADi bootstrap in Tier 0, and it
+is refused here for the same reason: a local one-line subfunction buys
+self-containment for free, and self-containment is the property these files
+should keep.
+
+The four *names* for one function are a readability wart, not a defect. If it
+ever bothers anyone, rename in place — do not centralize.
 
 ### Tier 2 — real work, real gates
 

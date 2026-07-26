@@ -80,13 +80,23 @@ earth_elliptic_to_geo_CR3BP/
 └── direct/         MEE+lunar-pert campaign:
     ├── run_cr3bp_geo.m          front door; run_cr3bp_ladder.sh (ladder)
     ├── lunar_params.m           Moon constants in canonical units
-    ├── bridge_mu_continuation.m, solve_cr3bp_minfuel.m   pipeline stages
+    ├── bridge_mu_continuation.m, solve_cr3bp_minfuel.m   callable stages (see below)
     ├── compare_vs_2body.m, sanity_bound.m                analysis
     ├── verify_cr3bp_pmp.m, test_cr3bp_consistency.m      verification
     ├── viz/         fig_phi_sweep, fig_ladder_dmf, phase_quad_movie, render_ladder_outputs
     └── results/     .mat products (gitignored), figures, movies
     (indirect/ — Phase 2, not started)
 ```
+
+**Two implementations of the same sequence.** `bridge_mu_continuation.m` and
+`solve_cr3bp_minfuel.m` were labelled "pipeline stages" here, which reads as if
+the front door calls them. It does not — measured 2026-07-26, `run_cr3bp_geo`
+inlines stages A–D itself and references neither. They are a *callable-stage*
+implementation of the same sequence, reached only by `verify_cr3bp_pmp.m` and
+`compare_vs_2body.m`. Deciding which is authoritative (so the other can
+delegate) is a Tier-2 item in `orbit_transfer/CODE_STRUCTURE.md`; until then,
+treat `run_cr3bp_geo` as the campaign's front door and these two as the
+analysis path.
 
 The one shared-core edit lives upstream: `../earth_elliptic_to_geo/direct/
 core/lt_mee_rhs.m` gained the opt-in `par.pert` lunar third-body branch

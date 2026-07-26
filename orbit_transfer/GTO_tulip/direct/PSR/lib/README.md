@@ -52,3 +52,25 @@ here. The origins as of the copy were git 5c0bdbc.
   there. If that tree is ever moved, update `minfuel_config.m` `dirs`.
 - **pumpkyn toolbox**: `proj7/external/pumpkyn/src` (third-party, shared).
   Added to the path by `PSR/setup_paths`.
+
+## Divergence from the originals (recorded 2026-07-26)
+
+These are a **frozen snapshot**, and they have since diverged from the
+`sundman_minfuel/` originals. That is the design working as intended, but it
+has one consequence worth stating explicitly, because it has already caused a
+silently-dead feature:
+
+- `casadi_minfuel_sundman.m` here carries the `regHistory` capture but **not**
+  the `returnModel` / `creg` constraint-registry hook added upstream on
+  2026-07-25. `verify_common/foc_check.m` requires that hook, so **the generic
+  FOC gate cannot run inside the PSR pipeline** and `run_psr` prints a pointer
+  instead of attempting it.
+- Under PSR's own `setup_paths` the vendored copies WIN the path resolution
+  (verified: `which -all` shows only `PSR/lib/`). In a session that has also
+  called `sundman_minfuel/setup_paths`, they still win. So PSR always runs
+  these files, never the upstream ones — which is the intent, but means
+  upstream fixes do **not** reach PSR until deliberately ported.
+
+Before folding these back into the shared sources, the tulip TODO's standing
+rule applies: do it **with a reproduce-the-certified-result gate**, not as a
+tidy-up.

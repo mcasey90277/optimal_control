@@ -1,3 +1,14 @@
+% RETIRED to attic 2026-07-26. Two reasons, both recorded before this move:
+%   (1) Its own README (indirect/min_time/README.md) already logged it as a
+%       failed attempt -- "does not converge / scale (t_f plunges, infeasible
+%       at usable N)" -- and the ELFO min-time anchor was subsequently
+%       CERTIFIED by a different route (casadi_mintime_freetf, Route B).
+%   (2) It was BROKEN as it stood: its addpath pointed at ../attic, i.e.
+%       GTO_tulip/indirect/attic, which does not exist. None of its four
+%       declared dependencies (build_guess, solve_tfmin_nlp, nlp_constraints,
+%       lt_dynamics) resolved; they live here in GTO_tulip/attic.
+% Now that it sits beside them, the addpath below is redundant but harmless.
+%
 % DIRECT_MINTIME_ELFO  Direct (collocation) min-time GTO->ELFO by homotoping the
 % target from the tulip. Uses the existing fmincon direct min-time NLP
 % (attic/solve_tfmin_nlp: minimize tf, always-burn, trapezoid collocation).

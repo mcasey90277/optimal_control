@@ -6,7 +6,8 @@ function setup_paths()
 % guarded so it is a safe no-op if a subfolder is absent.
 r = fileparts(mfilename('fullpath'));
 subs = {'core','coords','drivers','psr','verify',fullfile('verify','sosc'), ...
-        'frontdoor','reproduce','viz','cartesian_legacy','lib','tests','attic'};
+        'frontdoor','reproduce','viz','cartesian_legacy','lib','tests'};   % NB: the module attic lives at
+                                     % ../attic and is deliberately OFF-path
 addpath(r);
 for k = 1:numel(subs)
     d = fullfile(r, subs{k});

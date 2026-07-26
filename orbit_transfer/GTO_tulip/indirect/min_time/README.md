@@ -38,7 +38,7 @@ here.
   `ztl_ms_solve_tr` trust-region solver, `prob.resFun`).
 - `mintime_ms_elfo.m` — homotope the MS target tulip→ELFO (predictor–corrector).
 - `elfo_mintime.m` — single-shooting version of the tulip→ELFO homotopy.
-- `direct_mintime_elfo.m` — DIRECT (fmincon `solve_tfmin_nlp`) attempt.
+- `direct_mintime_elfo.m` — DIRECT (fmincon `solve_tfmin_nlp`) attempt. **RETIRED to `../../attic/` 2026-07-26**: recorded here as non-converging, superseded by the certified `casadi_mintime_freetf` Route-B anchor, and in any case broken (its addpath pointed at a folder that does not exist, so none of its dependencies resolved).
 
 ## Results (2026-07-13)
 

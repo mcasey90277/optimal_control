@@ -12,11 +12,20 @@ Two standing goals (2026-07-21): **(a) keep perfecting the direct code,
   a near-min-time conditioning wall, not just bang-bang structure). Candidate
   attacks: direct continuation from the min-time anchor downward, or the
   indirect band campaign below.
-- [ ] **PSR/lib de-dup.** `direct/PSR/lib/` vendors ~20 files (params, refine
-  suite, sms_* set) that partially duplicate `direct/sundman_minfuel/` and
-  `../cr3bp_common/`. Deliberately left intact during the 2026-07-21
-  restructure (behavior risk); fold into the shared sources with a
-  reproduce-the-certified-result gate when touched.
+- [ ] **PSR/lib de-dup.** `direct/PSR/lib/` vendors 20 files that partially
+  duplicate `direct/sundman_minfuel/` and `../cr3bp_common/`. Deliberately left
+  intact during the 2026-07-21 restructure (behavior risk); fold into the
+  shared sources with a reproduce-the-certified-result gate when touched.
+  **Measured 2026-07-26 (do not re-investigate):** of the five names that exist
+  in both places, only `gto_tulip_endpoints.m` is byte-identical;
+  `casadi_minfuel_sundman.m`, `cr3bp_lt_params.m`, `minfuel_config.m` and
+  `minfuel_at_tf.m` all DIFFER. Under PSR's own `setup_paths` the vendored
+  copies win the path resolution (`which -all` shows one hit, in `PSR/lib/`),
+  and they still win in a session that has also called
+  `sundman_minfuel/setup_paths`. So PSR always runs the frozen copies — the
+  isolation works as designed, but upstream fixes do NOT reach PSR. That is
+  what silently broke stage 5c (below). The other 15 files are PSR-only and
+  are not duplication at all.
 - [ ] **Front hygiene.** Keep `aggregate_front`'s honest 3-class front current
   as new t_f points land; switch counts reported as bands (mesh-sensitivity
   lesson from the earth_elliptic P0 study applies here too).
@@ -35,6 +44,29 @@ Two standing goals (2026-07-21): **(a) keep perfecting the direct code,
   precedent) or R0-law estimates (earth 0.5 N precedent) — min-time + high
   revs is the regime where direct shines (no switch structure) and single
   shooting is weakest (STM sensitivity grows with revs).
+
+## 2026-07-26 prune findings
+
+- [x] **`run_psr` stage 5c never worked — FIXED.** The FOC/KKT gate added
+  2026-07-25 called `run_foc_tulip(finalSol)` from inside PSR. PSR is
+  self-contained by design, `run_foc_tulip` and `verify_common` are outside its
+  path boundary, so the call threw `Undefined function` and the surrounding
+  catch turned it into an advisory warning on **every** run — the gate never
+  executed once. (Its reviewer had flagged the wiring as "static-checked only,
+  not exercised live"; that risk was real.) Now prints a pointer telling the
+  user to run the report from `sundman_minfuel`, which preserves the isolation
+  `PSR/lib/README.md` promises. Second, independent reason it could not have
+  worked: the vendored solver lacks the `returnModel`/`creg` hook `foc_check`
+  needs.
+- [x] **`indirect/min_time/direct_mintime_elfo.m` retired to `attic/`.** Its
+  own README already logged it as non-converging and it was superseded by the
+  certified `casadi_mintime_freetf` Route-B anchor — and it was broken besides:
+  its `addpath` pointed at `indirect/attic`, which does not exist, so none of
+  its four dependencies resolved.
+- [ ] **Attic is 1.6 MB / 30 files and off-path** (verified: nothing on any
+  campaign path resolves into it). Left as the archival record it is meant to
+  be; `attic/README.md` documents it. Prune further only if it starts costing
+  something.
 
 ## 2026-07-21 review follow-ups (doc/reviews/2026-07-21_triage.md)
 

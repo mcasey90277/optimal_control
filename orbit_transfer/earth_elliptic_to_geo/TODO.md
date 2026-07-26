@@ -336,6 +336,13 @@ already accept `ctf`, so this is a sweep, not new machinery.
 plot the multi-curve front. Watch the basin scatter documented in `process/CAMPAIGN.md`
 (take the best certified point per `(T,c_tf)`).
 
+### 6a. Housekeeping done 2026-07-26 (prune pass)
+
+- [x] `direct/setup_paths.m` listed an `attic` subfolder that resolves to
+  `direct/attic` — a folder that has never existed, so the entry was a
+  guarded no-op. Removed; the real module attic lives at `../attic` and is
+  deliberately off-path (it now has a README saying so).
+
 ### 6. Housekeeping minors (deferred from the front-door review)
 
 Low-risk items logged during the subagent-driven build, none affecting certified

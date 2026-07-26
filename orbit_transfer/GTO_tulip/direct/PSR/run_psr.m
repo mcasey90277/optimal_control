@@ -428,18 +428,27 @@ fprintf('[stage 5b] IPOPT certificate appended to %s\n', dataFile);
 % switching-function law, so re-solving a smooth primal at eps=0 would not be
 % "at the saved primal" at all -- it would probe a different homotopy point.
 % Homotopy-sweep calls (stages 2/3) are untouched by this addition.
+% CORRECTED 2026-07-26 -- this stage previously CALLED run_foc_tulip(finalSol)
+% and never once worked. PSR is deliberately self-contained (PSR/lib/README.md:
+% run_psr reaches only PSR/, PSR/lib/ and pumpkyn, verified with
+% requiredFilesAndProducts under restoredefaultpath). run_foc_tulip and the
+% whole verify_common layer sit OUTSIDE that boundary, so under PSR's own
+% setup_paths the call threw "Undefined function" and the surrounding catch
+% swallowed it into an advisory warning on every run. Two independent reasons
+% it could not have worked: the function is off-path, and the vendored
+% PSR/lib/casadi_minfuel_sundman.m carries regHistory but not the
+% returnModel/creg hook foc_check requires.
+%
+% Printing a pointer is the honest form: it preserves the isolation the README
+% promises and tells the user exactly how to obtain the report.
 if bangBang
-    try
-        fprintf('\n[stage 5c] FOC/KKT GATE (generic first-order optimality report)...\n');
-        focRep = run_foc_tulip(finalSol);  %#ok<NASGU> (saved below)
-        save(dataFile, 'focRep', '-append');
-        fprintf('[stage 5c] FOC/KKT report appended to %s\n', dataFile);
-    catch focErr
-        warning('run_psr:focGateFailed', ...
-            'stage 5c FOC/KKT gate failed (advisory only, pipeline unaffected): %s', focErr.message);
-    end
+    fprintf(['\n[stage 5c] FOC/KKT GATE: not run here. PSR is self-contained by\n' ...
+             '           design; verify_common lies outside its path boundary.\n' ...
+             '           For the first-order report on this solution, run from\n' ...
+             '           GTO_tulip/direct/sundman_minfuel:\n' ...
+             '               setup_paths; run_foc_tulip(''%s'')\n'], finalSol);
 else
-    fprintf('\n[stage 5c] FOC/KKT GATE skipped: eps=%.3g smooth run (run_foc_tulip is eps=0-only).\n', epsMin);
+    fprintf('\n[stage 5c] FOC/KKT GATE: n/a, eps=%.3g smooth run (the gate is eps=0-only).\n', epsMin);
 end
 
 %% ------------------------------------------------------------------------

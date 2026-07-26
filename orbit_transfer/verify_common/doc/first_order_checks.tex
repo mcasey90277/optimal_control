@@ -218,6 +218,41 @@ and the free-span row is a discrete NLP condition, which coincides with the
 physical $\Ham(t_f)$ transversality only once the reparameterization is
 carried through --- see \S\ref{sec:timecostate}.
 
+\paragraph{Is verifying KKT stationarity the same as verifying the costate
+dynamics? Discretely yes --- and that is weaker than it sounds.}
+\eqref{eq:adjoint} is an identity, not an approximation: the state-block
+stationarity rows \emph{are} the discrete adjoint equations. But the costate
+is \emph{defined} to be the multiplier, so the multipliers satisfy the
+recursion by construction; we are not independently computing a costate and
+testing it against an ODE. What the residual genuinely certifies is (i) that
+the solver reached a KKT point rather than stopping early, and (ii) that the
+multipliers in hand belong to the model we believe was solved --- which is
+exactly what exposed the \code{opti.dual} corruption
+(\S\ref{sec:duals}). It is silent on whether the discrete adjoint
+\emph{approximates the continuous} one; that is a consistency/order question
+governed by the mesh, invisible to the residual.
+
+\paragraph{A caution about reading forward-integration failures.} The
+analogous primal gap has been measured: re-integrating the exact direct
+control from $\vx_0$ over $\sim$40 revs diverges by $\|r\|\sim3$,
+$\|v\|\sim5$ while the defects read $10^{-14}$. This must \emph{not} be read
+as ``the collocation solution is far from the continuous one.'' It is a
+statement about the conditioning of an \emph{initial}-value problem over 40
+revs --- the same instability that defeats indirect single shooting on this
+problem --- whereas collocation solves a \emph{boundary}-value problem
+stabilized by its terminal condition. Closeness in the BVP sense does not imply
+closeness under forward propagation from a common initial state; that
+distinction is the reason multiple shooting exists. The affirmative evidence
+that the discrete solutions do approximate the continuous optimum is
+cross-formulation agreement: the MEE/$L$-domain and Cartesian/Sundman stacks
+share no independent variable, state vector, mesh or regularization, yet agree
+at 10\,N on final mass to $\sim$0.03\% (1377.10 vs 1376.74\,kg), both inside
+the published benchmark band \cite{HMG2004}. What genuinely remains uncertain
+is finer: individual switch \emph{times} at deep rungs (0.2\,N runs
+$\sim$3 nodes per switch, which is why switch counts are reported as
+mesh bands), and the costates, for which no mesh-convergence study has ever
+been run.
+
 \paragraph{Intuition.}
 ``No first-order descent direction exists that respects the constraints.'' If
 you could improve the objective by perturbing any state, control, or span

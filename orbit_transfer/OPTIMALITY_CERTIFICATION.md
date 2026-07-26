@@ -88,7 +88,7 @@ from an informal list but which matter here.
 | condition | status |
 |---|---|
 | **(a) state dynamics** satisfied along the trajectory | YES — machine-tight, but **at the collocation nodes, to collocation order**. Not the same as satisfying the continuous ODE; see the caveat below |
-| **(b) costate dynamics** (adjoint equation) | **Implicitly** — KKT stationarity w.r.t. the state variables *is* the discrete adjoint recursion, now verified generically via `foc_check` on all four campaigns (2026-07-25): ‖∇ₓL‖∞ ranges 1.5e-14 .. 6.9e-10 across earth's 9 rows, 1.2e-14 .. 2.5e-13 across CR3BP's 4 rows, 5.7e-13 on the tulip flagship, 5.9e-13 .. 1.1e-11 across ELFO's 3 rows — all PASS. Tulip additionally enforces it explicitly by least-squares (independent of the solver's own duals, but disagrees with the raw-dual read on this same flagship — see A1's Task 8 note). **Nobody checks a continuous-time costate ODE residual** |
+| **(b) costate dynamics** (adjoint equation) | **Implicitly, and DISCRETELY only** — see the note below the table on what this does and does not establish. **Implicitly** — KKT stationarity w.r.t. the state variables *is* the discrete adjoint recursion, now verified generically via `foc_check` on all four campaigns (2026-07-25): ‖∇ₓL‖∞ ranges 1.5e-14 .. 6.9e-10 across earth's 9 rows, 1.2e-14 .. 2.5e-13 across CR3BP's 4 rows, 5.7e-13 on the tulip flagship, 5.9e-13 .. 1.1e-11 across ELFO's 3 rows — all PASS. Tulip additionally enforces it explicitly by least-squares (independent of the solver's own duals, but disagrees with the raw-dual read on this same flagship — see A1's Task 8 note). **Nobody checks a continuous-time costate ODE residual** |
 | **(c) transversality** | λ_m(t_f)=0 now checked via `foc_check` on all four campaigns (earth 7/9 PASS, CR3BP 3/4 PASS, tulip PASS, ELFO 3/3 PASS — see A3); the earth/CR3BP misses are marginal (~3x tol) transversality-only findings, not a coverage gap. **Finding I5 (final review, 2026-07-25):** all three misses (earth 5N/2.5N, CR3BP 5N) share the same signature — `lamMassEndRel` uses the one-sided interval-endpoint dual (λ at ~t_f − h/2), which carries an O(h)\|λ̇_m\| bias whenever the final arc burns; the ~3x-tol misses are consistent with that bias rather than a genuine transversality violation. Cheap discriminator (endpoint extrapolation, or a final-arc burn/coast check) recorded as pre-promotion work, not yet run. Terminal elements are fully pinned, so no condition there. In the L-domain, free ΔL supplies a transversality-type stationarity row — enforced by KKT, never *reported* as a PMP quantity |
 | **(d) Hamiltonian constancy / H≡0 for free t_f** | see the correction below — partially; the free-t_f case is now partially checked (G4): `foc_check`'s dual-form on the ELFO min-time anchor confirms λ_t(t_f)=−1.000, exactly the theoretical ±1 value, but leaves a genuine open anomaly (`lamTimeCoV`=5.7%, expected ~0) unresolved — see A4/LEAD-4. Still not the literal H(t_f)=0 value test |
 | ★ **(e) the minimum condition itself**: u\* = argmin over the admissible set, not merely ∂H/∂u = 0 | **YES, and it is our strongest check.** For control-affine dynamics with ‖β‖=1 and thr∈[0,1] the pointwise minimizer is exactly β = −p/‖p‖ with thr from sign(S) — so the primer-alignment + sign-law gates *are* the minimum condition. Note ∂H/∂u = 0 would be the wrong test: the throttle optimum is at a bound, not a stationary point |
@@ -98,6 +98,30 @@ from an informal list but which matter here.
 | ★ **(i) Weierstrass–Erdmann corner conditions** (λ, H continuous across a switch) | satisfied *by construction* — control-affine, no active state constraints; worth stating, not worth testing |
 | ★ **(j) weak Legendre–Clebsch** ∂²H/∂u² ≥ 0 | vacuous at ε=0 (linear in throttle); meaningful only on the ε>0 homotopy legs |
 | ★ **(k) state-constraint jump conditions** | not applicable — the state boxes are inactive; the solver's `boundSat` diagnostic is what confirms that, and it is checked |
+
+**On (b): what "verifying the costate dynamics" actually means here.** KKT
+stationarity in the state block *is* the discrete adjoint recursion — not an
+approximation of it, the same equations. But that makes the check
+near-tautological rather than powerful: we DEFINE the costate to be the
+multiplier, so the multipliers satisfy the recursion by construction. What it
+genuinely buys is (i) the solver reached a KKT point and (ii) the multipliers
+we hold belong to the model we think we solved — which is precisely what
+caught the `opti.dual` corruption. What it does NOT establish: the
+*continuous* adjoint ODE (that is a consistency/order question governed by the
+mesh, invisible to the residual); a clean recursion at nodes where other
+constraints act; or any independence from the transcription (G1).
+
+**The primal/dual asymmetry.** On the primal side the discrete-vs-continuous
+gap has been *measured*: forward-integrating the exact direct control from x₀
+over ~40 revs diverges by ‖r‖~3, ‖v‖~5 while the defects read 1e-14
+(`GTO_tulip/direct/PSR/psr_switch_hessian.m`). **Read that correctly** — it is
+a statement about IVP conditioning over 40 revs (the same wall that defeats
+indirect single shooting), NOT evidence that the collocation solution poorly
+approximates the continuous BVP solution. The affirmative evidence runs the
+other way: two entirely independent transcriptions agree at 10 N to ~0.03%
+(MEE 1377.10 vs Cartesian 1376.74 kg), both inside HMG-2004's published band.
+On the dual side, the analogous gap has **never been measured**. Recorded as a
+lead in `verify_common/TODO.md` §4.
 
 **Correction worth being precise about, on (d).** Three distinct cases, and we
 conflate them at our peril:

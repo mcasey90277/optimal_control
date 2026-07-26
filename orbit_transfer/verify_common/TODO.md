@@ -190,6 +190,31 @@ derived it, independently reproducing `DESIGN_dual_map`).
   `H` is genuinely not constant, and the layer correctly refuses to gate
   constancy — but then checks nothing. Test `dH/dt = ∂H/∂t` instead; the
   adjoint recursion for it is already inside `kktStatInf`.
+- [ ] **Continuous-residual check on the costates (the unmeasured half).**
+  Every dual-side check we run is *discrete*: KKT stationarity IS the discrete
+  adjoint recursion, so verifying it is near-tautological given that we DEFINE
+  the costate to be the multiplier. It confirms the solver converged and that
+  the multipliers belong to the model we think we solved (which is exactly what
+  caught the `opti.dual` bug) — but it is silent on whether the discrete
+  adjoint approximates the continuous one.
+  **The asymmetry worth acting on:** on the PRIMAL side that discrete-vs-
+  continuous gap has been measured — `../GTO_tulip/direct/PSR/psr_switch_hessian.m`
+  forward-integrates the exact direct control from x0 over ~40 revs and diverges
+  by ‖r‖~3, ‖v‖~5 while the defects read 1e-14. (That number is a statement
+  about IVP CONDITIONING over 40 revs — the same wall that defeats indirect
+  single shooting — NOT evidence the collocation solution is a poor
+  approximation of the continuous BVP solution; cross-formulation agreement
+  says otherwise: MEE 1377.10 vs Cartesian 1376.74 kg at 10 N, both inside
+  HMG-2004's published band.) On the DUAL side the analogous gap has never been
+  measured at all.
+  **Cheap experiment:** interpolate λ(σ) from `rep.lam`, differentiate the
+  interpolant, evaluate −∂H/∂x independently along the trajectory (AD on the
+  same RHS the solver used), and report the residual — as a mesh-refinement
+  study, not a single-mesh number. It can fail where KKT stationarity cannot,
+  because it asks whether the transcription's adjoint approximates the
+  continuous one rather than whether it is self-consistent. Pairs naturally
+  with the switch-time mesh-band work, since both are "how much of the fine
+  structure is real?" questions.
 - [ ] **Mesh bands on the gate values.** Switch counts are known
   mesh-sensitive; the gate numbers are reported as single values, not bands.
 

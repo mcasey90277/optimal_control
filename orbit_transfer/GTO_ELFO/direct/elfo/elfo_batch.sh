@@ -5,7 +5,7 @@
 # factors, ONE per factor, each in its OWN `matlab -batch` process so the sporadic
 # UNCATCHABLE CasADi/IPOPT MEX FATAL crash (~1 in 10 solves; a try/catch cannot
 # catch it) takes down only THAT factor -- the sweep continues. The ELFO sibling
-# of PSR/psr_batch.sh.
+# of PSR/run_batch.sh.
 #
 # ============================ HOW TO RUN ============================
 #   cd /Users/msc/Desktop/optimal_control/orbit_transfer/GTO_ELFO/direct/elfo

@@ -1,12 +1,12 @@
-function row = psr_run_one(factor, opts)
+function row = run_one(factor, opts)
 % PSR_RUN_ONE  Run the PSR pipeline for ONE t_f factor (the batch unit of work).
 %
 % The per-factor pipeline extracted so it can be called (a) in a loop by
-% run_psr_batch.m, and (b) as a standalone `matlab -batch` process by
-% psr_batch.sh -- the crash-robust shell walker. Running each factor in its own
+% run_batch.m, and (b) as a standalone `matlab -batch` process by
+% run_batch.sh -- the crash-robust shell walker. Running each factor in its own
 % process is what lets the sporadic UNCATCHABLE CasADi/IPOPT MEX FATAL crash
 % (~1 in 10 solves) kill only that factor instead of the whole sweep (a MATLAB
-% try/catch cannot catch a MEX FATAL). Mirrors run_psr.m's stages 2-6.
+% try/catch cannot catch a MEX FATAL). Mirrors run_gto_tulip.m's stages 2-6.
 %
 % INPUTS:
 %   factor - t_f / t_f_min [scalar]
@@ -29,8 +29,8 @@ function row = psr_run_one(factor, opts)
 %         <dataDir>/psr_result_f####_minEps#.mat (var `row`) so the shell walker
 %         can collect a summary after crashes.
 %
-% REFERENCES: run_psr.m (single-factor driver), run_psr_batch.m (in-process
-%   sweep), psr_batch.sh (crash-robust per-process sweep).
+% REFERENCES: run_gto_tulip.m (single-factor driver), run_batch.m (in-process
+%   sweep), run_batch.sh (crash-robust per-process sweep).
 
 here = fileparts(mfilename('fullpath'));
 addpath(here);  setup_paths();
@@ -72,8 +72,8 @@ row = struct('factor',factor,'ok',false,'dV',NaN,'prop',NaN,'switches',NaN, ...
     'rv0',rv0(:).','rvf',rvf(:).','insertion',insMeta.label);
 % NOTE: resultFile/directFile/seedFile/refinedFile (above) are NOT tagged with
 % the insertion label -- doing so consistently would also require updating
-% PSR/run_psr.m (the parallel single-run entry point that builds the same
-% filenames from the same `tag` formula) and psr_collect_summary.m's glob, all
+% PSR/run_gto_tulip.m (the parallel single-run entry point that builds the same
+% filenames from the same `tag` formula) and collect_summary.m's glob, all
 % outside a clean, fully-traced edit for this task; see task-4-report.md.
 resultFile = fullfile(dataDir, sprintf('psr_result_%s.mat', tag));
 
@@ -82,7 +82,7 @@ fprintf('\n=== PSR_RUN_ONE factor %.3f (epsMin=%.3g, seed=%s) ===\n', factor, ep
 % drift guard: locate the same seed minfuel_at_tf is about to load and
 % confirm it matches the declared insertion point ('energy' / explicit-file
 % seedSpec cases; 'neighbor' isn't wired through this driver's opts, so it
-% is left to minfuel_at_tf's own error -- see run_psr.m for the full case;
+% is left to minfuel_at_tf's own error -- see run_gto_tulip.m for the full case;
 % cross-criterion collisions for 'neighbor' are additionally closed by
 % Task 4's criterion-tagged output filenames). Runs UNCONDITIONALLY, before
 % the cache-skip check below, so a retargeted insertion is caught even when
@@ -139,7 +139,7 @@ end
 
 % --- stage 4: costate + data export -----------------------------------------
 fprintf('[4] export...\n');
-row.dataFile = psr_export_data(finalSol, dataDir, struct('M',verifyOpts.M,'epsMin',epsMin,'quiet',true));
+row.dataFile = export_data(finalSol, dataDir, struct('M',verifyOpts.M,'epsMin',epsMin,'quiet',true));
 
 % --- stage 5: first-order PMP verify (bang-bang only; optional) -------------
 if bangBang && runVerify
@@ -152,7 +152,7 @@ end
 
 % --- stage 5b: IPOPT-native local-min certificate ---------------------------
 fprintf('[5b] IPOPT local-min certificate...\n');
-ic = psr_ipopt_certify(finalSol, struct('eps',epsMin,'verbose',false));
+ic = ipopt_certify(finalSol, struct('eps',epsMin,'verbose',false));
 row.certLocalMin = ic.certLocalMin;
 ipoptCert = ic; %#ok<NASGU>
 save(row.dataFile, 'ipoptCert', '-append');
@@ -161,7 +161,7 @@ save(row.dataFile, 'ipoptCert', '-append');
 if ~strcmp(movieMode,'none')
     fprintf('[6] movie (%s)...\n', movieMode);
     ttl = sprintf('PSR GTO\\rightarrowtulip t_f=%.2fx (eps=%.3g)', factor, epsMin);
-    psr_movie(finalSol, fullfile(resDir, ['psr_movie_' tag]), ttl, movieMode);
+    control_movie(finalSol, fullfile(resDir, ['control_movie_' tag]), ttl, movieMode);
 end
 
 row.ok = true;

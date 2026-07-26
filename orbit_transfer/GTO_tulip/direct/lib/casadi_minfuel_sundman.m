@@ -72,7 +72,7 @@ function out = casadi_minfuel_sundman(sigma, tf, rv0, rvf, Tmax, c, muStar, X0, 
 %           regularization delta_w (st.iterations.regularization_size), or []
 %           if the CasADi build lacks it; interpret via
 %           verify_common/foc_ipopt_inertia.m (same field name/shape as
-%           PSR/lib/casadi_minfuel_sundman.m and psr_ipopt_certify.m expect)
+%           PSR/lib/casadi_minfuel_sundman.m and ipopt_certify.m expect)
 %         .model (opts.returnModel only) - struct('opti',opti,'creg',creg)
 %
 % REFERENCES:
@@ -210,7 +210,7 @@ try
     % min IPOPT's inertia-controlled linear solver adds ZERO regularization at
     % convergence -- the reduced Hessian is PD without correction. Captured
     % here (ported from PSR/lib/casadi_minfuel_sundman.m, which had this but
-    % this file's fork had dropped it) so foc_ipopt_inertia / psr_ipopt_certify
+    % this file's fork had dropped it) so foc_ipopt_inertia / ipopt_certify
     % can read the native (well-scaled) 2nd-order verdict.
     try
         st = sol.stats();

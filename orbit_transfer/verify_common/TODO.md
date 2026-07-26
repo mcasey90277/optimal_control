@@ -133,7 +133,7 @@ derived it, independently reproducing `DESIGN_dual_map`).
   demonstration of reduced-Hessian positive definiteness on the critical cone,
   and does not address barrier/active-set limiting behavior or strictness.
   Relabel as an inertia-regularization *observation*, campaign-wide (the naming
-  is inherited from `psr_ipopt_certify.m`).
+  is inherited from `ipopt_certify.m`).
 
 ### 2. Coverage holes
 
@@ -218,7 +218,7 @@ derived it, independently reproducing `DESIGN_dual_map`).
   caught the `opti.dual` bug) — but it is silent on whether the discrete
   adjoint approximates the continuous one.
   **The asymmetry worth acting on:** on the PRIMAL side that discrete-vs-
-  continuous gap has been measured — `../GTO_tulip/direct/PSR/psr_switch_hessian.m`
+  continuous gap has been measured — `../GTO_tulip/direct/PSR/switch_hessian.m`
   forward-integrates the exact direct control from x0 over ~40 revs and diverges
   by ‖r‖~3, ‖v‖~5 while the defects read 1e-14. (That number is a statement
   about IVP CONDITIONING over 40 revs — the same wall that defeats indirect

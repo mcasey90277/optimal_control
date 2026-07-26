@@ -24,7 +24,7 @@
 %      + DATA EXPORT  trajectory + costates and save ALL products (mesh, state,
 %                     control, costates, switching function, switch times,
 %                     certificate, provenance) to ../IFS_data/.
-%   6. MOVIE        - control movie (reuses PSR/psr_movie): rotating-frame
+%   6. MOVIE        - control movie (reuses PSR/control_movie): rotating-frame
 %                     transfer colored burn/coast, primer thrust arrows,
 %                     throttle strip, running Delta-V.
 %
@@ -47,8 +47,14 @@
 %% ------------------------------------------------------------------------
 here = fileparts(mfilename('fullpath'));
 cd(here);  setup_paths();
-addpath(fullfile(here, '..', 'PSR'));          % psr_movie for stage 6
-addpath(fullfile(here, '..', 'PSR', 'lib'));   % cr3bp_lt_params etc.
+% Stage 6 borrows the direct campaign's control_movie. These two addpaths used
+% to name '../PSR' and '../PSR/lib' -- i.e. indirect/PSR, which has NEVER
+% existed (PSR lived under direct/), so they have been dead since ifs moved to
+% indirect/ on 2026-07-21 and stage 6 could not have run. Corrected 2026-07-26
+% to the real locations after the direct/ flatten.
+addpath(fullfile(here, '..', '..', 'direct', 'viz'));   % control_movie for stage 6
+addpath(fullfile(here, '..', '..', 'direct', 'lib'));   % solver-side helpers
+addpath(fullfile(here, '..', '..', '..', 'cr3bp_common'));  % cr3bp_lt_params etc.
 resDir  = fullfile(here, 'results');           % pipeline intermediates
 dataDir = fullfile(here, '..', 'IFS_data');    % exported data products (stage 5)
 if ~exist(resDir, 'dir'), mkdir(resDir); end
@@ -177,7 +183,7 @@ end
 % residual, which is the honest picture of a non-converged indirect finish).
 fprintf('\n[stage 5] RECONSTRUCT + DATA EXPORT...\n');
 recon = ifs_reconstruct(out.Z, prob, 4000);
-% movie-consumable seed-layout file (psr_movie reads out.X/out.U, sigma, rvf)
+% movie-consumable seed-layout file (control_movie reads out.X/out.U, sigma, rvf)
 mov = struct('out', recon.out, 'sigma', recon.sigma, 'tauf0', recon.tauf0, ...
              'rv0', recon.rv0, 'rvf', recon.rvf, 'factor', recon.factor);
 save(reconFile, '-struct', 'mov');
@@ -193,13 +199,13 @@ fprintf('[stage 5] switches(recon)=%d  reconFile=%s\n[stage 5] data product: %s\
         recon.out.switches, reconFile, dataFile);
 
 %% ------------------------------------------------------------------------
-%% 6. CONTROL MOVIE  (transfer + control law, synced -- reuses PSR/psr_movie)
+%% 6. CONTROL MOVIE  (transfer + control law, synced -- reuses PSR/control_movie)
 %% ------------------------------------------------------------------------
 if ~strcmp(movieMode, 'none')
     fprintf('\n[stage 6] CONTROL MOVIE (%s)...\n', movieMode);
     titleStr = sprintf('IFS min-fuel GTO\\rightarrowtulip, t_f = %.2fx min-time (%d-switch, indirect)', ...
                        factor, recon.out.switches);
-    psr_movie(reconFile, fullfile(resDir, ['ifs_movie_' tag]), titleStr, movieMode);
+    control_movie(reconFile, fullfile(resDir, ['ifs_movie_' tag]), titleStr, movieMode);
 end
 
 fprintf('\n=== IFS PIPELINE DONE (factor %.3f). Intermediates: %s  Data products: %s ===\n', ...

@@ -1,4 +1,4 @@
-function psr_homotopy_movie(framesFile, outStem, opts)
+function homotopy_movie(framesFile, outStem, opts)
 % PSR_HOMOTOPY_MOVIE  Animate the throttle sharpening as epsilon: 1 -> 0.
 %
 % Renders the energy->fuel homotopy captured by PSR_HOMOTOPY_FRAMES as a
@@ -12,7 +12,7 @@ function psr_homotopy_movie(framesFile, outStem, opts)
 % labeled continuously. Reads only the cache, so re-rendering never re-solves.
 %
 % INPUTS:
-%   framesFile - .mat from psr_homotopy_frames (vars `frames`, `meta`) [char]
+%   framesFile - .mat from homotopy_frames (vars `frames`, `meta`) [char]
 %   outStem    - output basename WITHOUT extension; writes <outStem>.mp4 and
 %                <outStem>.gif [char]
 %   opts       - (optional) struct:
@@ -24,7 +24,7 @@ function psr_homotopy_movie(framesFile, outStem, opts)
 % OUTPUTS: none (files written; paths printed)
 %
 % REFERENCES:
-%   [1] PSR/psr_homotopy_frames.m (the capture that feeds this).
+%   [1] PSR/homotopy_frames.m (the capture that feeds this).
 %   [2] ~/.claude/skills/matlab-polished-graphics (polish patterns applied).
 
 if nargin < 3, opts = struct(); end

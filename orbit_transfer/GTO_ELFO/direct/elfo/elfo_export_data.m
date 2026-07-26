@@ -1,8 +1,8 @@
 function dataFile = elfo_export_data(solFile, dataDir, opts)
 % ELFO_EXPORT_DATA  Data products for a GTO->ELFO (free-t_f two-primary) min-fuel
-% solution -- the ELFO analog of PSR/psr_export_data.
+% solution -- the ELFO analog of PSR/export_data.
 %
-% Writes ONE self-contained data-product .mat that mirrors psr_export_data's
+% Writes ONE self-contained data-product .mat that mirrors export_data's
 % layout (mesh / traj / ctrl / costate / pmp / scal / const / provenance), with
 % two model differences that MATTER:
 %   (1) Costates come from the SOLVER'S OWN KKT duals (out.lamDef, the two-primary
@@ -30,7 +30,7 @@ function dataFile = elfo_export_data(solFile, dataDir, opts)
 %             loaded solution's rv0/rvf -- see below).
 %
 % REFERENCES:
-%   [1] PSR/psr_export_data.m (the tulip analog this mirrors).
+%   [1] PSR/export_data.m (the tulip analog this mirrors).
 %   [2] casadi_energy_freetf.m (the two-primary solver whose costates are used).
 
 if nargin < 2 || isempty(dataDir)
@@ -148,7 +148,7 @@ provenance = struct('date',datestr(now,'yyyy-mm-dd HH:MM:SS'), ... %#ok<TNOW1,DA
 fTag = strrep(sprintf('%.3f', factor), '.', 'p');
 eTag = strrep(sprintf('%g', epsMin), '.', 'p');
 insertion = insMeta.label; %#ok<NASGU>
-% tag inserted BEFORE _minEps (matching PSR/psr_export_data.m's placement);
+% tag inserted BEFORE _minEps (matching PSR/export_data.m's placement);
 % nothing globs this ELFO data-product family today, so this is a free choice,
 % kept consistent with the tulip exporter for uniformity.
 dataFile = fullfile(dataDir, sprintf('psr_data_%s_tf%s_sw%d_%s_minEps%s.mat', ...

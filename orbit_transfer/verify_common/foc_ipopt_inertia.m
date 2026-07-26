@@ -10,7 +10,7 @@ function ic = foc_ipopt_inertia(regHistory, opts)
 % Hessian is positive definite WITHOUT correction there -- i.e. the
 % second-order sufficient conditions hold at that point. That is a clean,
 % conditioning-robust local-minimality certificate: it needs no ill-conditioned
-% KKT-Hessian reconstruction of our own (contrast psr_second_order.m, which
+% KKT-Hessian reconstruction of our own (contrast second_order_nlp.m, which
 % factorizes an explicit KKT matrix and is unreliable over a many-rev spiral,
 % cond ~1e9-1e16).
 %
@@ -18,7 +18,7 @@ function ic = foc_ipopt_inertia(regHistory, opts)
 % only reads a regHistory vector the caller already has (from a solver's own
 % out.regHistory, captured at solve time). Interpretation logic (tail window,
 % tolerance, verdict phrasing) is ported from
-% GTO_tulip/direct/certify/psr_ipopt_certify.m -- see that file's REFERENCES for
+% GTO_tulip/direct/certify/ipopt_certify.m -- see that file's REFERENCES for
 % the IPOPT inertia-correction citation. That function additionally handles
 % the no-regHistory-stored fallback (warm re-solve); this generic version
 % assumes the caller already has (or does not have) the history in hand and
@@ -47,7 +47,7 @@ function ic = foc_ipopt_inertia(regHistory, opts)
 %       (IPOPT)," Math. Prog. 106 (2006) -- inertia correction (delta_w).
 %   [2] Nocedal & Wright, Numerical Optimization 2e, Ch. 19 (interior point,
 %       second-order conditions via inertia).
-%   [3] GTO_tulip/direct/certify/psr_ipopt_certify.m (the campaign-specific
+%   [3] GTO_tulip/direct/certify/ipopt_certify.m (the campaign-specific
 %       precedent this interpreter is ported from; two of its verdict
 %       phrasings are mirrored verbatim below).
 

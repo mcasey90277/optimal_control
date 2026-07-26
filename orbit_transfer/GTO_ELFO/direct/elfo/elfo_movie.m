@@ -34,7 +34,7 @@ function elfo_movie(solFile, outStem, titleStr, mode, bgTrace)
 % REFERENCES:
 %   [1] movie/animate_sundman_minfuel.m (layout + Delta-V meter design).
 %   [2] elfo/run_elfo_minfuel.m stage 6 (pipeline caller).
-%   [3] Copy of PSR/psr_movie.m (already generalized to render either transfer;
+%   [3] Copy of PSR/control_movie.m (already generalized to render either transfer;
 %       kept as a separate file so elfo/ has no dependency on PSR/).
 
 if nargin < 4 || isempty(mode), mode = 'preview'; end

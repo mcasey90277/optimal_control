@@ -1,4 +1,4 @@
-function so = psr_second_order(solFile, opts)
+function so = second_order_nlp(solFile, opts)
 % PSR_SECOND_ORDER  Second-order local-minimality certificate for a PSR solution.
 %
 % Upgrades the pipeline's first-order (PMP extremality) certificate toward
@@ -118,7 +118,7 @@ nN = size(X,2);  N = nN - 1;
 n  = 12*nN;                                   % [X(:); U(:)]
 tf = X(8,end);
 assert(isfield(S.out,'lamAll') && numel(S.out.lamAll) >= 1, ...
-    'psr_second_order:noDuals', 'out.lamAll (NLP multipliers) required');
+    'second_order_nlp:noDuals', 'out.lamAll (NLP multipliers) required');
 lamAll = S.out.lamAll(:);
 p = cr3bp_lt_params(0.025, 15, 2100);
 Tmax = p.Tmax;  c = p.c;  muStar = p.muStar;  pSund = 1.5;
@@ -181,11 +181,11 @@ gfun = Function('gg', {xs},     {gs});
 gLfun= Function('gL', {xs, ls}, {gradient(Lag, xs)});
 
 wstar = [X(:); U(:)];
-assert(numel(lamAll) == M, 'psr_second_order:dualCount', ...
+assert(numel(lamAll) == M, 'second_order_nlp:dualCount', ...
     'lamAll has %d entries but the NLP has %d constraints -- reconstruction/mesh mismatch', ...
     numel(lamAll), M);
 
-vp('psr_second_order: n=%d vars, M=%d constraints (nN=%d)\n', n, M, nN);
+vp('second_order_nlp: n=%d vars, M=%d constraints (nN=%d)\n', n, M, nN);
 
 % ---- self-validation: feasibility + Lagrangian stationarity -----------------
 % Classify rows from Opti's OWN canonical bounds (lbg/ubg), not a hardcoded
@@ -200,7 +200,7 @@ so.statResid = norm(gLnum, inf);  so.maxEqInfeas = maxEqInfeas;
 vp('  self-check: max eq infeasibility %.2e, ineq violation %.2e, ||gradL||inf %.2e\n', ...
    maxEqInfeas, ineqViol, so.statResid);
 if maxEqInfeas > 1e-5 || ineqViol > 1e-5 || so.statResid > opts.statTol
-    error('psr_second_order:selfCheck', ...
+    error('second_order_nlp:selfCheck', ...
         ['reconstruction/solution self-check FAILED (eqInfeas %.2e, ineqViol %.2e, ' ...
          '||gradL||inf %.2e) -- not a feasible KKT point of this NLP; refusing to certify'], ...
         maxEqInfeas, ineqViol, so.statResid);

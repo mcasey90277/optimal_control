@@ -29,7 +29,7 @@ function recon = ifs_reconstruct(Z, prob, nptsTotal)
 %     .S   [1xnN] switching function 1 - ||lamV||c/m - lamM
 %     .tauSwitch [1xk]
 %
-% REFERENCES: ifs_certify.m (arc-propagation pattern), PSR/psr_movie.m (layout).
+% REFERENCES: ifs_certify.m (arc-propagation pattern), PSR/control_movie.m (layout).
 
 if nargin < 3 || isempty(nptsTotal), nptsTotal = 4000; end
 k = prob.k;

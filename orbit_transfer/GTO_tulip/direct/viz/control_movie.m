@@ -1,4 +1,4 @@
-function psr_movie(solFile, outStem, titleStr, mode, bgTrace)
+function control_movie(solFile, outStem, titleStr, mode, bgTrace)
 % PSR_MOVIE  Control movie for a PSR (or any Sundman min-fuel) solution.
 %
 % Renders the GTO->tulip transfer in the rotating CR3BP frame with the control
@@ -33,7 +33,7 @@ function psr_movie(solFile, outStem, titleStr, mode, bgTrace)
 %
 % REFERENCES:
 %   [1] movie/animate_sundman_minfuel.m (layout + Delta-V meter design).
-%   [2] PSR/run_psr.m section 5 (pipeline caller).
+%   [2] PSR/run_gto_tulip.m section 5 (pipeline caller).
 
 if nargin < 4 || isempty(mode), mode = 'preview'; end
 

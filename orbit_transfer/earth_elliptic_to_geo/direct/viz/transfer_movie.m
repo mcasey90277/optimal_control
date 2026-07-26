@@ -6,7 +6,7 @@ function transfer_movie(matFile, outStem)
 % thrust-direction arrow on the spacecraft during burns, a synced bang-bang
 % throttle strip, a running Delta-V accumulation curve, and a bold Delta-V
 % meter. Playback is uniform in PHYSICAL time (X(8,:)), matching the
-% campaign's Earth-Moon transfer movies (PSR/psr_movie.m house style).
+% campaign's Earth-Moon transfer movies (PSR/control_movie.m house style).
 %
 % INPUTS:
 %   matFile - EITHER a path to a run_transfer results .mat holding a `res`
@@ -20,7 +20,7 @@ function transfer_movie(matFile, outStem)
 % OUTPUTS: none (files written; paths printed)
 %
 % REFERENCES:
-%   [1] GTO_tulip/direct/PSR/psr_movie.m (house-style movie this file
+%   [1] GTO_tulip/direct/PSR/control_movie.m (house-style movie this file
 %       is restyled to match: layout, colors, Delta-V meter design).
 %   [2] memory: matlab-movie-diagonal-streaks (fixed divisible-by-16 frame ->
 %       no H.264 shear).

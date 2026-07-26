@@ -5,7 +5,7 @@
 % direct campaign -- 15 kg, 25 mN, Isp 2100 s, ~40-rev spiral, Sundman-
 % regularized mesh dt/dtau = r1^1.5.
 %
-% RENAMED FROM run_psr.m ON 2026-07-26, because the old name described stage 3.
+% RENAMED FROM run_gto_tulip.m ON 2026-07-26, because the old name described stage 3.
 % This script has always been the campaign's front door: stage 2 calls
 % minfuel_at_tf, the canonical per-t_f driver, and PSR refinement is one
 % OPTIONAL stage of six. Naming it after that stage, and filing it under a
@@ -141,7 +141,7 @@ seedFactor = NaN;                % only used when seedSpec = 'neighbor'
 % NOTE: epsMin > 0 yields a SMOOTH control, so the bang-bang-specific stages are
 % auto-skipped -- stage 3 (switch-localization refinement) and stage 5 (bang-bang
 % PMP verification) do not apply. Stages 4 (export) and 6 (movie) still run on
-% the direct solution, and psr_second_order.m (NLP SSOSC) applies cleanly to a
+% the direct solution, and second_order_nlp.m (NLP SSOSC) applies cleanly to a
 % smooth eps>0 solution (run it manually on the direct file).
 epsMin     = 0;                    % homotopy endpoint: 0 = bang-bang (the campaign objective)
 % epsilon schedule [] = default by seed type (cfg.schedSharpen for 'energy':
@@ -394,7 +394,7 @@ if ~bangBang
     fprintf('  (smooth eps=%.3g solution: costates are from the dual map of a NON-bang-bang\n', epsMin);
     fprintf('   control -- the switching-function / beta diagnostics are not physically meaningful)\n');
 end
-dataFile = psr_export_data(finalSol, dataDir, struct('M', verifyOpts.M, 'epsMin', epsMin));
+dataFile = export_data(finalSol, dataDir, struct('M', verifyOpts.M, 'epsMin', epsMin));
 
 %% ------------------------------------------------------------------------
 %% 5. VERIFY  (first-order PMP certificate -- extremality)
@@ -413,18 +413,18 @@ dataFile = psr_export_data(finalSol, dataDir, struct('M', verifyOpts.M, 'epsMin'
 % the solution satisfies the Pontryagin necessary conditions (an EXTREMAL)
 % at its mesh's O(h^2) resolution. It does NOT prove local minimality.
 %
-% SECOND-ORDER (local minimality): psr_second_order.m implements the NLP-level
+% SECOND-ORDER (local minimality): second_order_nlp.m implements the NLP-level
 % reduced-Hessian (SSOSC) test via a KKT-inertia factorization. FINDING
 % (2026-07-12): it is NOT APPLICABLE to the eps=0 bang-bang output -- the fuel
 % objective is linear in the throttle, the solver leaves the throttle near (not
 % at) its bounds, the active set is ambiguous, and the reduced Hessian is
 % structurally degenerate. The correct bang-bang certifier is the SWITCHING-TIME
 % (Maurer-Osmolovskii) reduced Hessian (k x k over the switch times) -- the
-% recommended next build; psr_second_order does apply cleanly to a REGULARIZED
+% recommended next build; second_order_nlp does apply cleanly to a REGULARIZED
 % (eps>0) solution. Until a switching-time certificate lands, "certified" here
 % means first-order extremality + tight feasibility + the complementary
 % transversal-crossing check (Sdot != 0 at switches, reported by
-% psr_second_order), and minimality evidence is comparative (homotopy family +
+% second_order_nlp), and minimality evidence is comparative (homotopy family +
 % front monotonicity, see ../../process/HONEST_EVALUATION_DV_TF_FRONT.md).
 if bangBang
     % eps=0 bang-bang: FIRST-ORDER PMP extremality certificate.
@@ -447,10 +447,10 @@ if bangBang
     fprintf('[stage 5] verify summary appended to %s\n', dataFile);
 else
     % eps>0 SMOOTH control: the bang-bang PMP certificate does not apply. Run the
-    % NLP-level SECOND-ORDER test (psr_second_order, SSOSC via KKT inertia), which
+    % NLP-level SECOND-ORDER test (second_order_nlp, SSOSC via KKT inertia), which
     % DOES apply to a regularized solution -- this is the local-minimality probe.
     fprintf('\n[stage 5] SECOND-ORDER (NLP SSOSC) on the smooth eps=%.3g solution...\n', epsMin);
-    so = psr_second_order(finalSol, struct('eps', epsMin));
+    so = second_order_nlp(finalSol, struct('eps', epsMin));
     fprintf(['[stage 5] certLocalMin=%d  In(K)=(%d,%d,%d) (expect (%d,%d,0))  ' ...
              'activeBnd=%d  statResid=%.1e\n'], so.certLocalMin, so.nPos, so.nNeg, ...
              so.nZero, so.n, so.mActive, so.nActiveBnd, so.statResid);
@@ -465,7 +465,7 @@ end
 %% ------------------------------------------------------------------------
 % This is the conditioning-robust second-order certificate for BOTH bang-bang
 % and smooth solutions. Reconstructing the KKT Hessian ourselves and
-% factorizing it (psr_second_order.m) fails on this 40-rev problem -- the matrix
+% factorizing it (second_order_nlp.m) fails on this 40-rev problem -- the matrix
 % is so ill-conditioned (cond ~1e9-1e16) that the LDL pivot signs near the noise
 % floor are unreliable, faking hundreds of tiny "negative" eigenvalues. IPOPT
 % avoids that entirely: its inertia-controlled linear solver checks the KKT
@@ -475,7 +475,7 @@ end
 % the delta_w history captured by casadi_minfuel_sundman (or re-solves if the
 % solution file predates that capture).
 fprintf('\n[stage 5b] LOCAL-MIN CERTIFICATE (IPOPT native inertia, delta_w)...\n');
-ic = psr_ipopt_certify(finalSol, struct('eps', epsMin));
+ic = ipopt_certify(finalSol, struct('eps', epsMin));
 fprintf('[stage 5b] certLocalMin=%d\n[stage 5b] %s\n', ic.certLocalMin, ic.verdict);
 ipoptCert = ic;
 save(dataFile, 'ipoptCert', '-append');
@@ -533,14 +533,14 @@ end
 if ~strcmp(movieMode, 'none')
     fprintf('\n[stage 6] CONTROL MOVIE (%s)...\n', movieMode);
     if bangBang
-        nsw = numel(psr_switch_times(finalSol));       % throttle-crossing count
+        nsw = numel(switch_times(finalSol));       % throttle-crossing count
         titleStr = sprintf('PSR min-fuel GTO\\rightarrowtulip, t_f = %.2fx min-time (%d-switch bang-bang)', ...
                            factor, nsw);
     else
         titleStr = sprintf('PSR GTO\\rightarrowtulip, t_f = %.2fx min-time (smooth \\epsilon=%.3g control)', ...
                            factor, epsMin);
     end
-    psr_movie(finalSol, fullfile(resDir, ['psr_movie_' tag]), titleStr, movieMode);
+    control_movie(finalSol, fullfile(resDir, ['control_movie_' tag]), titleStr, movieMode);
 end
 
 fprintf('\n=== PSR PIPELINE DONE (factor %.3f). Intermediates: %s  Data products: %s ===\n', ...

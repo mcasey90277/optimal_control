@@ -1,10 +1,10 @@
-function res = psr_collect_summary(epsMin, dataDir)
+function res = collect_summary(epsMin, dataDir)
 % PSR_COLLECT_SUMMARY  Build the PSR batch summary from per-factor result rows.
 %
 % Scans <dataDir>/psr_result_f####_minEps<e>.mat (each holding one `row` struct
-% saved by psr_run_one) for the given epsMin, prints a summary table, and saves
+% saved by run_one) for the given epsMin, prints a summary table, and saves
 % <dataDir>/psr_batch_summary_minEps<e>_<insertionLabel>.mat. Used by
-% psr_batch.sh (after a crash-robust per-process sweep) and by run_psr_batch.m.
+% run_batch.sh (after a crash-robust per-process sweep) and by run_batch.m.
 %
 % Each `row` (since Task 4) carries rv0, rvf, insertion (= insMeta.label); rows
 % saved before Task 4 lack these and are backfilled (NaN(1,6) / '') so older
@@ -38,7 +38,7 @@ for k = 1:numel(d)
     end
 end
 if isempty(res)
-    fprintf('psr_collect_summary: no result rows for epsMin=%.3g in %s\n', epsMin, dataDir);
+    fprintf('collect_summary: no result rows for epsMin=%.3g in %s\n', epsMin, dataDir);
     return
 end
 [~, ord] = sort([res.factor]);  res = res(ord);

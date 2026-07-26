@@ -76,11 +76,11 @@ the ground truth.
 
 ```
 direct/
-├── run_gto_tulip.m      THE front door (was run_psr.m)
+├── run_gto_tulip.m      THE front door (was PSR/run_psr.m)
 ├── run_one.m            function-call route (returns a struct)
 ├── run_batch.m          multi-factor batch driver
 ├── run_certified_minfuel.m   reproduce the flagship 1.15× result
-├── run_tulip_front.sh, psr_batch.sh, orchestrate/   sweep + batch shells
+├── run_tulip_front.sh, run_batch.sh, orchestrate/   sweep + batch shells
 ├── setup_paths.m        the ONE path setup for this campaign
 ├── lib/                 solver, homotopy, seeds, minfuel_at_tf, refine algorithm
 ├── certify/             PMP verification, second-order (SSOSC), front aggregation

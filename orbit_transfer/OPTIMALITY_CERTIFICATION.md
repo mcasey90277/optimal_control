@@ -54,7 +54,7 @@ not restated here.)
 | 5 | Hamiltonian constancy (λ_t const ⇔ H_t conserved; autonomous only) | `hamiltonian_const_check`, `hamiltonian_along_traj` |
 | 6 | full KKT certificate — stationarity, dual feasibility, complementarity | `sosc_recover_kkt` + `sosc_kkt_residual`; `results/dual_anomaly/diag_t1_beta.m` |
 | 7 | no singular arc (no run of \|S\|≈0) | `verify_pmp_mee` H2 check |
-| 8 | **regular switching, Sdot != 0** — *Maurer ingredient (ii)* | `psr_second_order.m:278` (see gap G3) |
+| 8 | **regular switching, Sdot != 0** — *Maurer ingredient (ii)* | `second_order_nlp.m:278` (see gap G3) |
 | 9 | **generic AD-based full first-order gate — one instrument, all four campaigns**: KKT stationarity, min-condition tangential residual, sign law, transversality, singular-arc count, regular-switching Sdot != 0, all from the NLP's own `opti.lam_g` via manifest-driven AD Lagrangian, printed+saved by a fixed-format standard report | `verify_common/foc_check.m` + `foc_report.m` + `foc_manifest.m` (built 2026-07-25, Tasks 1-5); wired into all four campaigns (Tasks 6-9): `run_foc_mee.m` (earth 2-body), `verify_cr3bp_pmp.m` (CR3BP), `run_foc_tulip.m` (tulip), `run_foc_elfo.m` (ELFO) |
 | — | primal, dual-free cross-checks (switch structure, edge fraction, bound saturation) | `switch_structure`, solver `boundSat` |
 
@@ -114,7 +114,7 @@ constraints act; or any independence from the transcription (G1).
 **The primal/dual asymmetry.** On the primal side the discrete-vs-continuous
 gap has been *measured*: forward-integrating the exact direct control from x₀
 over ~40 revs diverges by ‖r‖~3, ‖v‖~5 while the defects read 1e-14
-(`GTO_tulip/direct/certify/psr_switch_hessian.m`). **Read that correctly** — it is
+(`GTO_tulip/direct/certify/switch_hessian.m`). **Read that correctly** — it is
 a statement about IVP conditioning over 40 revs (the same wall that defeats
 indirect single shooting), NOT evidence that the collocation solution poorly
 approximates the continuous BVP solution. The affirmative evidence runs the
@@ -145,7 +145,7 @@ conflate them at our peril:
   first-order check to the whole CR3BP campaign. (Recorded as G6.)
 
 **Caveat on (a) that we should not soften.** We satisfy the *discrete* defects
-to ~1e-14, not the continuous ODE. `psr_switch_hessian`'s blocked finding is
+to ~1e-14, not the continuous ODE. `switch_hessian`'s blocked finding is
 the hard evidence: re-integrating the exact direct control from x₀ over ~40
 revs diverges by ‖r‖~3, ‖v‖~5. So "dynamics satisfied at every time point" is
 true of the transcription, and only true of the continuous problem up to
@@ -196,7 +196,7 @@ the KKT-stationarity floor — **open observation**, not resolved (see Part B
   by `foc_check`'s own `sdotMinRel` FAIL on the same flagship row.
 - **G3 — Sdot != 0. CLOSED as a standing report line (2026-07-25).**
   `foc_check`/`foc_report` now compute and print `sdotMinRel` as a per-row
-  line on every campaign, not buried inside `psr_second_order.m`'s
+  line on every campaign, not buried inside `second_order_nlp.m`'s
   NOT-APPLICABLE verdict — the *reporting* gap is closed. It is advisory
   (folded into `rep.pass`, not a hard gate), and it already caught two real,
   honestly-reported findings: the tulip flagship (1.4e-7 vs tol 1e-3, 25 sw)
@@ -450,7 +450,7 @@ extrapolation fix could not resolve.**
 `signPct` / singular-arc / `sdotMinRel` are folded into `rep.pass` even on ε>0
 homotopy legs where the bang-bang law does not apply; and the `certLocalMin` /
 "LOCAL MIN" naming of the δ_w line overstates what zero inertia correction
-proves (relabel campaign-wide, including `psr_ipopt_certify.m`).
+proves (relabel campaign-wide, including `ipopt_certify.m`).
 
 ---
 
@@ -468,13 +468,13 @@ verdict per row wherever the first-order gate ran; none of them reach strict.
 
 | instrument | campaign | verdict | where |
 |---|---|---|---|
-| **IPOPT native inertia (δ_w)** | GTO_tulip | **DELIVERS** — wired into production PSR; 137/137 rows carry a verdict. **ε=0 (bang-bang): 12 certified / 5 not.** ε>0: 100 / 20. Flagship 25-switch row re-checked via the new generic port (`foc_ipopt_inertia`, Task 8): **NOT CERTIFIED** (δ_w tail max 1.8e-8, just above the 1e-8 tol) — borderline, consistent with the campaign's known weak/near-degenerate Hessian at fuel-optimal rungs | `GTO_tulip/direct/certify/psr_ipopt_certify.m`, called from `run_gto_tulip.m stage 5c` + `run_one.m`; verdicts stored as `ipoptCert` in `direct/data/psr_data_*.mat`. Generic port cross-check: `run_foc_tulip.m` |
+| **IPOPT native inertia (δ_w)** | GTO_tulip | **DELIVERS** — wired into production PSR; 137/137 rows carry a verdict. **ε=0 (bang-bang): 12 certified / 5 not.** ε>0: 100 / 20. Flagship 25-switch row re-checked via the new generic port (`foc_ipopt_inertia`, Task 8): **NOT CERTIFIED** (δ_w tail max 1.8e-8, just above the 1e-8 tol) — borderline, consistent with the campaign's known weak/near-degenerate Hessian at fuel-optimal rungs | `GTO_tulip/direct/certify/ipopt_certify.m`, called from `run_gto_tulip.m stage 5c` + `run_one.m`; verdicts stored as `ipoptCert` in `direct/data/psr_data_*.mat`. Generic port cross-check: `run_foc_tulip.m` |
 | **IPOPT native inertia (δ_w) — ported (LEAD-0, 2026-07-25)** | earth 2-body | **9-row ladder, mixed: LOCAL MIN at 10N / 0.2N / 0.1N (δ_w=0); NOT CERTIFIED at 5N (4.51e-05) / 2.5N (7.19e-05) / 1N (2.93e-04) / 0.5N (4.01e-05) / 1N-PSR (5.31e-03) / 0.5N-PSR (1.34e-05→1.77e-04)** | `verify_common/foc_ipopt_inertia.m`, wired via `run_foc_mee.m` + `run_verify_pmp_all.m` (Task 6) |
 | **IPOPT native inertia (δ_w) — ported (LEAD-0, 2026-07-25)** | earth CR3BP | **4/4 LOCAL MIN, δ_w=0** at all four covered rungs (10N/5N/1N/0.5N) — a clean weak-local-min certificate everywhere the first-order gate currently runs; 2.5/0.2/0.1 N not run (coverage gap, G2) | `verify_cr3bp_pmp.m` (Task 7) |
 | **IPOPT native inertia (δ_w) — ported (LEAD-0, 2026-07-25)** | GTO_ELFO | **energy seed: LOCAL MIN** (δ_w=0 tail); **min-time anchor: LOCAL MIN** (δ_w=0 tail); **front row (1.33x, 50sw): NOT CERTIFIED** (δ_w max 1.98e-06) — same near-degenerate pattern as the tulip flagship, first-ever second-order verdict on this campaign | `run_foc_elfo.m` (Task 9) |
 | NLP reduced-Hessian SOSC | earth 2-body | **WEAK_MIN** @10 N (270 flat directions); INCONCLUSIVE @5 / 2.5 N; ERROR @1 / 0.5 N; scale-skip above `maxNullDim=10000` | `earth_elliptic_to_geo/direct/verify/sosc/`, `process/DESIGN_sosc.md` §11–12 |
-| NLP SSOSC via KKT inertia | GTO_tulip | **NOT APPLICABLE (structural)** | `GTO_tulip/direct/certify/psr_second_order.m` (FINDING, 2026-07-12) |
-| Maurer–Osmolovskii switching-time Hessian | GTO_tulip | **BLOCKED** (forward-flow conditioning) | `GTO_tulip/direct/certify/psr_switch_hessian.m` (FINDING, 2026-07-12) |
+| NLP SSOSC via KKT inertia | GTO_tulip | **NOT APPLICABLE (structural)** | `GTO_tulip/direct/certify/second_order_nlp.m` (FINDING, 2026-07-12) |
+| Maurer–Osmolovskii switching-time Hessian | GTO_tulip | **BLOCKED** (forward-flow conditioning) | `GTO_tulip/direct/certify/switch_hessian.m` (FINDING, 2026-07-12) |
 | conjugate point (Jacobi field) | all | not built; gated on an indirect solver | `BCP2010` §2.3–2.4; CR3BP TODO Phase 2 |
 
 **Net (corrected 2026-07-25, twice now):** second order is **not** at zero,
@@ -493,7 +493,7 @@ minimality anywhere — that is still exclusively §5's open item.
 solver adds Hessian regularization only when the reduced Hessian is indefinite;
 converging with δ_w = 0 over the final iterations therefore means no negative
 curvature *on the well-scaled barrier system at the final μ*. Three caveats,
-all in `psr_ipopt_certify.m`'s own header and none of them fatal:
+all in `ipopt_certify.m`'s own header and none of them fatal:
 - it is a statement about the **barrier subproblem** at small μ, not exactly
   the original NLP's critical cone;
 - at **ε > 0** the problem is strictly convex in throttle, so this is a strict
@@ -549,7 +549,7 @@ not correspond to a nearby *continuous* trajectory under forward integration,
 so the reduced problem's base point is infeasible (`||c|| ~ 20`), the reduced
 gradient is not ~0, and any Hessian there is meaningless.
 
-To its credit `psr_switch_hessian.m` **detects** this via a `baseFeas`
+To its credit `switch_hessian.m` **detects** this via a `baseFeas`
 self-check and returns BLOCKED rather than a bogus certificate. This is the
 same conditioning wall that defeats indirect shooting (`ifs`, `ms_band`) — it
 is a property of long multi-rev flows, not of the second-order test.
@@ -600,7 +600,7 @@ hours of plumbing, no new instrument needed — see Part B §1 for the per-row
 verdicts (earth 2-body mixed 3 LOCAL MIN / 6 NOT CERTIFIED across 9 rows;
 CR3BP clean 4/4 LOCAL MIN; ELFO 2 LOCAL MIN + 1 NOT CERTIFIED). It sidesteps
 the conditioning wall that defeats our own factorization (M3 /
-`psr_second_order`'s tolEig noise floor), because MUMPS tests inertia on the
+`second_order_nlp`'s tolEig noise floor), because MUMPS tests inertia on the
 well-scaled system at every iteration — confirmed working identically on all
 three new campaigns, not just tulip.
 
@@ -636,7 +636,7 @@ above, not be flattened to a bare PASS.
 
 **Build the STM / multiple-shooting switching-time Hessian.**
 
-`psr_switch_hessian.m`'s own header already specifies it: keep the collocation
+`switch_hessian.m`'s own header already specifies it: keep the collocation
 trajectory as the (feasible) base, obtain switch-time sensitivities from the
 state-transition matrix,
 
@@ -708,7 +708,7 @@ campaign/row, verdict, and what it changed in Part A or §1–§5.
 | `earth_elliptic_to_geo/process/DESIGN_sosc.md` §11–12 | NLP SOSC method evolution, `eig` vs `ldl`, threshold rationale |
 | `earth_elliptic_to_geo/process/PLAN_sosc.md` | original build plan |
 | `earth_elliptic_to_geo/direct/verify/sosc/` | the NLP-level implementation |
-| `GTO_tulip/direct/certify/psr_second_order.m` | KKT-inertia test + M2 finding |
-| `GTO_tulip/direct/certify/psr_switch_hessian.m` | Maurer test + M3 finding + the STM fix spec |
+| `GTO_tulip/direct/certify/second_order_nlp.m` | KKT-inertia test + M2 finding |
+| `GTO_tulip/direct/certify/switch_hessian.m` | Maurer test + M3 finding + the STM fix spec |
 | `earth_elliptic_to_geo/process/LESSONS_DUAL_EXTRACTION.md` | why the first-order side is now trustworthy |
 | `earth_elliptic_to_geo_CR3BP/TODO.md` | CR3BP tier plan (supersede with §1 before acting on it) |

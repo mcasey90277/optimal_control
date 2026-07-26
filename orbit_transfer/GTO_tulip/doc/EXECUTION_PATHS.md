@@ -71,10 +71,10 @@ run_psr   [PSR — the direct min-fuel refinement pipeline]
   minfuel_at_tf .......... [PSR/lib]  -> casadi_minfuel_sundman, cr3bp_lt_params
   prep_refine_seed ....... [PSR/lib]  -> casadi_minfuel_sundman
   refine_loop ............ [PSR/lib]  (rounds: score -> refine sigma -> re-solve)
-  psr_ipopt_certify ...... [PSR]      2nd-order delta_w observation
+  ipopt_certify ...... [PSR]      2nd-order delta_w observation
   [stage 5c FOC gate] .... prints a pointer; verify_common is outside PSR's
                            path boundary by design (fixed 2026-07-26)
-  psr_export_data / psr_movie
+  export_data / control_movie
 ```
 
 Note `run_psr` crosses into `sundman_minfuel` for exactly one function
@@ -97,7 +97,7 @@ about `PSR/lib` covering the *machinery*, not about zero external references.
    will silently miss PSR again.
 3. **53 of 64 non-test direct files are unreached by any test** (~83%).
 4. **7 orphan candidates, all in `movie/`** (`animate_*`, `gen_compare_data`,
-   `psr_homotopy_movie`) — manual renderers. Fourth campaign running where the
+   `homotopy_movie`) — manual renderers. Fourth campaign running where the
    folder-local orphan list is all figure/movie scripts; the pattern is now
    reliable enough to state as a rule.
 5. **Tool defect found and fixed here.** `callgraph.py` keyed by basename, so

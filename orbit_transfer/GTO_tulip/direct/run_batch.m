@@ -1,7 +1,7 @@
-% RUN_PSR_BATCH  Sweep the PSR pipeline over many t_f factors (in one process).
+% RUN_BATCH  Sweep the PSR pipeline over many t_f factors (in one process).
 %
-% The in-process batch sibling of run_psr.m: run the full PSR pipeline
-% (psr_run_one) for a VECTOR of t_f factors, or factors='energy' to auto-run
+% The in-process batch sibling of run_gto_tulip.m: run the full PSR pipeline
+% (run_one) for a VECTOR of t_f factors, or factors='energy' to auto-run
 % every factor that has a min-energy seed on disk, at a single homotopy endpoint
 % epsMin. Each factor writes the SAME data product as run_psr
 % (PSR_data/psr_data_tf####_minEps#.mat, incl. the ipoptCert), optionally a
@@ -10,11 +10,11 @@
 % *** CRASH NOTE ***  This runs every factor in ONE MATLAB process, so the
 % sporadic UNCATCHABLE CasADi/IPOPT MEX FATAL crash (~1 in 10 solves) kills the
 % WHOLE sweep (a try/catch cannot catch a MEX FATAL). For a long or unattended
-% sweep use the shell walker **psr_batch.sh** instead -- it runs each factor in
+% sweep use the shell walker **run_batch.sh** instead -- it runs each factor in
 % its own process so a crash kills only that factor. Both are resumable (stages
-% skip when outputs exist) and share psr_run_one / psr_collect_summary.
+% skip when outputs exist) and share run_one / collect_summary.
 %
-% Edit section 1, then run. (`./psr_batch.sh <epsMin> energy` is the robust
+% Edit section 1, then run. (`./run_batch.sh <epsMin> energy` is the robust
 % terminal equivalent.)
 
 %% ------------------------------------------------------------------------
@@ -54,14 +54,14 @@ if ischar(factors) || isstring(factors)
     d = dir(fullfile(cfg.dirs.energy, 'energy_f*.mat'));
     fv = arrayfun(@(e) cfg.fparse(e.name), d);
     factors = sort(fv(~isnan(fv)));
-    fprintf('run_psr_batch: %d factors with energy seeds: %s\n', numel(factors), mat2str(factors,4));
+    fprintf('run_batch: %d factors with energy seeds: %s\n', numel(factors), mat2str(factors,4));
 else
     factors = sort(double(factors(:)).');
 end
 assert(~isempty(factors), 'no factors to run');
 
 %% ------------------------------------------------------------------------
-%% 3. Sweep  (psr_run_one per factor; try/catch keeps a CATCHABLE failure from
+%% 3. Sweep  (run_one per factor; try/catch keeps a CATCHABLE failure from
 %%           killing the sweep -- but a MEX FATAL still kills all; use the shell)
 %% ------------------------------------------------------------------------
 opts = struct('epsMin',epsMin, 'seedSpec',seedSpec, 'movieMode',movieMode, ...
@@ -74,7 +74,7 @@ for i = 1:nF
     f = factors(i);
     fprintf('\n########## [%d/%d] factor %.3f ##########\n', i, nF, f);
     try
-        psr_run_one(f, opts);
+        run_one(f, opts);
     catch ME
         fprintf('  FACTOR %.3f FAILED: %s\n', f, ME.message);
         tag = sprintf('f%04d_minEps%s', round(1000*f), eTag);
@@ -87,4 +87,4 @@ end
 %% ------------------------------------------------------------------------
 %% 4. Summary
 %% ------------------------------------------------------------------------
-psr_collect_summary(epsMin, dataDir);
+collect_summary(epsMin, dataDir);

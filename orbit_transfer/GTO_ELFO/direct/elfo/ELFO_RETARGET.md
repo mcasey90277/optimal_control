@@ -232,7 +232,7 @@ eps-reached / switches / mf. Output = the ELFO min-fuel convergence map.
                    primer-alignment PMP diagnostic + best-effort switching fn --
                    NOT the tulip single-primary dual-map, which would be wrong here)
   stage 5 VERIFY  independent endpoint + solver-free defect (verify_elfo_seed)
-  stage 6 MOVIE   psr_movie (generalized: reads the 9-state free-tf layout + an
+  stage 6 MOVIE   control_movie (generalized: reads the 9-state free-tf layout + an
                   ELFO orbit backdrop; the tulip pipeline is untouched)
 All outputs carry the TARGET tag ('ELFO'/'Tulip'): solution
 `minfuel_ELFO_tf1p200_sw34_minEps0.mat`, data `psr_data_ELFO_...`, movie

@@ -1,9 +1,9 @@
-function [sigSw, arcU, sigGrid] = psr_switch_times(solFile)
+function [sigSw, arcU, sigGrid] = switch_times(solFile)
 % PSR_SWITCH_TIMES  Bang-bang switch locations (in the Sundman mesh variable).
 %
 % Returns the throttle switch points of a bang-bang solution as sub-node
 % crossings of s = 0.5 on the solution's own sigma mesh, plus the per-arc
-% throttle pattern. Shared by the movie title and psr_switch_hessian.
+% throttle pattern. Shared by the movie title and switch_hessian.
 %
 % INPUTS:
 %   solFile - solution .mat (or struct) in seed layout: out.U [4xnN], sigma
@@ -13,7 +13,7 @@ function [sigSw, arcU, sigGrid] = psr_switch_times(solFile)
 %             switches; arc 1 = [sigma(1), sigSw(1)], etc.)
 %   sigGrid - [1xnN] the sigma mesh (row)
 %
-% REFERENCES: PSR/psr_second_order.m, PSR/run_psr.m stage 6.
+% REFERENCES: PSR/second_order_nlp.m, PSR/run_gto_tulip.m stage 6.
 
 if ischar(solFile) || isstring(solFile), S = load(solFile); else, S = solFile; end
 s   = S.out.U(4, :);

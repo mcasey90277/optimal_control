@@ -23,7 +23,7 @@ shared files can change ELFO results.
 3. `run_elfo_minfuel.m` -- end-to-end entry: solve -> export -> verify -> movie.
    - `elfo_export_data.m` -- costates from the two-primary KKT duals.
    - `verify_elfo_seed.m` -- solver-free seed verification.
-   - `elfo_movie.m` -- control movie (copy of PSR's generalized psr_movie).
+   - `elfo_movie.m` -- control movie (copy of PSR's generalized control_movie).
 4. `gto_elfo_endpoints.m` / `probe_elfo_target.m` -- ELFO endpoints + geometry.
 
 ## Smoke tests

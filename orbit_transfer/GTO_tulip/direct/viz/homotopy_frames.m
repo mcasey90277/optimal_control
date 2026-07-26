@@ -1,4 +1,4 @@
-function framesFile = psr_homotopy_frames(factor, opts)
+function framesFile = homotopy_frames(factor, opts)
 % PSR_HOMOTOPY_FRAMES  Capture the throttle + metrics at every epsilon of the
 % energy->fuel homotopy, for the min-fuel movie.
 %
@@ -46,11 +46,11 @@ epsList = d('epsList', [1.0 0.85 0.7 0.6 0.5 0.42 0.35 0.28 0.22 0.18 0.14 ...
                         0.013 0.010 0.007 0.005 0.003 0.002 0.001 0]);
 maxIter = d('maxIter', cfg.maxIter);
 tag     = sprintf('f%04d', round(1000*factor));
-outFile = d('outFile', fullfile(here, 'results', ['psr_homotopy_frames_' tag '.mat']));
+outFile = d('outFile', fullfile(here, 'results', ['homotopy_frames_' tag '.mat']));
 
 % --- seed: the min-energy backbone solution at this factor -------------------
 seedFile = fullfile(cfg.dirs.energy, cfg.fname('energy', factor));
-assert(isfile(seedFile), 'psr_homotopy_frames:noSeed', ...
+assert(isfile(seedFile), 'homotopy_frames:noSeed', ...
     'no energy backbone seed %s -- run the energy sweep first', seedFile);
 E = load(seedFile);                         % sigma, rv0, rvf, tauf0, X, U
 sigma = E.sigma;  rv0 = E.rv0;  rvf = E.rvf;  tauf0 = E.tauf0;
@@ -93,7 +93,7 @@ for ke = 1:numel(epsList)
     end
 end
 
-assert(~isempty(frames), 'psr_homotopy_frames:noConverged', ...
+assert(~isempty(frames), 'homotopy_frames:noConverged', ...
     'no epsilon step converged tight -- nothing to animate');
 
 meta = struct('factor', factor, 'tf_days', tf*p.tStar/86400, 'tfMin', cfg.tfMin, ...

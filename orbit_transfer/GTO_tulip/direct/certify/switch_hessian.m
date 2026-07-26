@@ -1,8 +1,8 @@
-function so = psr_switch_hessian(solFile, opts)
+function so = switch_hessian(solFile, opts)
 % PSR_SWITCH_HESSIAN  Switching-time (Maurer-Osmolovskii) 2nd-order test.
 %
 % The correct local-minimality certificate for a BANG-BANG solution -- the one
-% psr_second_order.m cannot give because the raw NLP Hessian is degenerate for
+% second_order_nlp.m cannot give because the raw NLP Hessian is degenerate for
 % a linear-in-throttle objective. A bang-bang extremal's second-order behaviour
 % lives in its SWITCHING TIMES, so this reduces the (infinite-dim) problem to a
 % finite k-dimensional one over the k switch times and tests the projected
@@ -89,7 +89,7 @@ function so = psr_switch_hessian(solFile, opts)
 %       SSC in Calculus of Variations and Optimal Control," SIAM, 2012.
 %   [2] Maurer, Buskens, Kim, Kaya, "Optimization methods for the verification
 %       of second-order sufficient conditions for bang-bang controls," 2005.
-%   [3] PSR/psr_second_order.m (the NLP-level test this complements).
+%   [3] PSR/second_order_nlp.m (the NLP-level test this complements).
 
 if nargin < 2, opts = struct(); end
 if ~isfield(opts,'odeRelTol'), opts.odeRelTol = 1e-9;  end
@@ -108,7 +108,7 @@ p = cr3bp_lt_params(0.025, 15, 2100);
 Tmax = p.Tmax; c = p.c; muStar = p.muStar; pSund = 1.5;
 rv0 = S.rv0(:); rvf = S.rvf(:); tauf0 = S.tauf0;
 tf  = S.out.X(8,end);
-[sigSw, arcU, sigGrid] = psr_switch_times(S);
+[sigSw, arcU, sigGrid] = switch_times(S);
 k = numel(sigSw);
 alphaNom = S.out.U(1:3, :);                     % frozen direction field (in sigma)
 nomEdges = [sigGrid(1), sigSw, sigGrid(end)];   % NOMINAL arc edges (real, fixed)
@@ -116,7 +116,7 @@ X0 = [rv0; 1; 0];
 odeO = odeset('RelTol', opts.odeRelTol, 'AbsTol', opts.odeAbsTol);
 ws = warning('off','MATLAB:ode113:IntegrationTolNotMet');
 cleanup = onCleanup(@() warning(ws));
-vp('psr_switch_hessian: k=%d switches\n', k);
+vp('switch_hessian: k=%d switches\n', k);
 
 % ---- flow: [c(7); J] as a function of the (complex) switch times ------------
     function [cc, J] = flow(sigVec)
@@ -170,7 +170,7 @@ so.redGradNorm = norm(gRed);  so.nu = nu;
 vp('  base feasibility ||c||=%.2e   reduced-gradient ||dJ+nu''dc||=%.2e   cond(dc)=%.2e\n', ...
    so.baseFeas, so.redGradNorm, so.condDc);
 if so.redGradNorm > opts.gTol
-    warning('psr_switch_hessian:notStationary', ...
+    warning('switch_hessian:notStationary', ...
         ['reduced gradient %.2e > %.1e: the switch times are not first-order ' ...
          'optimal for this (frozen-direction) reduced problem -- Hessian verdict ' ...
          'is unreliable (base solution / direction-freezing mismatch)'], ...

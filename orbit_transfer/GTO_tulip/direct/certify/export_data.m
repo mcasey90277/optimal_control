@@ -1,4 +1,4 @@
-function dataFile = psr_export_data(solFile, dataDir, opts)
+function dataFile = export_data(solFile, dataDir, opts)
 % PSR_EXPORT_DATA  Generate costates + save the PSR data products to PSR_data.
 %
 % Takes a converged direct/PSR solution (seed layout .mat) and writes ONE
@@ -69,7 +69,7 @@ function dataFile = psr_export_data(solFile, dataDir, opts)
 %   [1] ms_band/sms_seed_duals.m (mode-'d' dual->costate map, adjudicated
 %       2026-07-10) + ms_band/beta_from_duals.m (scale fit).
 %   [2] ifs/ifs_seed.m (the IFS consumer of this layout).
-%   [3] PSR/run_psr.m section 4 (pipeline caller).
+%   [3] PSR/run_gto_tulip.m section 4 (pipeline caller).
 
 if nargin < 3, opts = struct(); end
 if ~isfield(opts,'M'),      opts.M = 40;       end
@@ -79,9 +79,9 @@ if ~exist(dataDir, 'dir'), mkdir(dataDir); end
 
 % ---- declared insertion point (provenance + filename tag) -------------------
 % This exporter is tulip-only (no target parameter), so the criterion is the
-% pipeline's declared default ('campaign' -- see PSR/run_psr.m, psr_run_one.m).
+% pipeline's declared default ('campaign' -- see PSR/run_gto_tulip.m, run_one.m).
 % Reconstructed here (rather than threaded through opts) so this file's only
-% callers (run_psr.m, psr_run_one.m) need no changes; the drift-guard assert
+% callers (run_gto_tulip.m, run_one.m) need no changes; the drift-guard assert
 % below still catches a criterion mismatch loudly instead of silently
 % mislabeling the export.
 here = fileparts(mfilename('fullpath'));
@@ -101,7 +101,7 @@ rvfC   = rvf(:);      % column view for residuals (legacy files store 1x6 rows;
 % silently mislabeling the export with the wrong 'insertion' tag).
 assert(norm(rvf(:).' - rvfDecl) < 1e-10 && norm(rv0(:).' - rv0Decl) < 1e-10, ...
     'insertion:drift', ['solution endpoints differ from the reconstructed %s ' ...
-    'insertion (rvf %.2e, rv0 %.2e) -- psr_export_data assumes the tulip ' ...
+    'insertion (rvf %.2e, rv0 %.2e) -- export_data assumes the tulip ' ...
     'campaign default; update it if the pipeline default has changed'], ...
     insMeta.label, norm(rvf(:).'-rvfDecl), norm(rv0(:).'-rv0Decl));
 X = out.X;  U = out.U;  nN = size(X, 2);
@@ -118,7 +118,7 @@ tf  = X(8, end);
 lam  = info.Y16(9:16, :);
 tauN = info.tauN;                              % Sundman variable at nodes
 if info.spreadPct > 5
-    warning('psr_export_data:betaSpread', ...
+    warning('export_data:betaSpread', ...
         ['beta-fit spread %.1f%% > 5%% -- the dual->costate scale is poorly ' ...
          'determined for this solution (cf. the 1.85x failure); treat the ' ...
          'costate layer with suspicion'], info.spreadPct);
@@ -171,7 +171,7 @@ const = p;  const.tfMin = cfg.tfMin;
 provenance = struct('date', char(datetime('now','Format','yyyy-MM-dd HH:mm')), ...
     'source', char(solFile), 'gitHash', git_hash(fileparts(mfilename('fullpath'))), ...
     'dualMap', sprintf('sms_seed_duals mode d, M=%d, beta=%.6g', opts.M, info.beta), ...
-    'pipeline', 'PSR/run_psr.m');
+    'pipeline', 'PSR/run_gto_tulip.m');
 
 % ---- write, seed-compatible layer + products together -------------------------
 fTag = strrep(sprintf('%.3f', factor), '.', 'p');
@@ -186,7 +186,7 @@ save(dataFile, 'out', 'sigma', 'tauf0', 'rv0', 'rvf', 'factor', 'insertion', ...
      'mesh', 'traj', 'ctrl', 'costate', 'pmp', 'scal', 'const', 'provenance');
 
 if ~opts.quiet
-    fprintf(['psr_export_data: wrote %s\n' ...
+    fprintf(['export_data: wrote %s\n' ...
              '  k=%d (dual-S; throttle raw %d)  beta=%.4g (spread %.2f%%)\n' ...
              '  transversality lamM(sigf)=%.2e  term rv err=(%.2e, %.2e)  S-sign %.1f%%\n'], ...
             dataFile, ctrl.nSwitchS, ctrl.nSwitchThrottle, info.beta, ...

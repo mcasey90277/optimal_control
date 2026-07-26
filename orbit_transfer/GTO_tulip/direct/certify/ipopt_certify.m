@@ -1,7 +1,7 @@
-function ic = psr_ipopt_certify(solFile, opts)
+function ic = ipopt_certify(solFile, opts)
 % PSR_IPOPT_CERTIFY  Local-minimality certificate from IPOPT's NATIVE inertia.
 %
-% The robust second-order certifier for this problem. psr_second_order.m
+% The robust second-order certifier for this problem. second_order_nlp.m
 % reconstructs the KKT Hessian and factorizes it OURSELVES -- and over a 40-rev
 % spiral that matrix is so ill-conditioned (cond ~1e9-1e16) that the LDL pivot
 % signs near the noise floor are unreliable, producing hundreds of spurious
@@ -54,7 +54,7 @@ function ic = psr_ipopt_certify(solFile, opts)
 %       (IPOPT)," Math. Prog. 106 (2006) -- inertia correction (delta_w).
 %   [2] Nocedal & Wright, Numerical Optimization 2e, Ch. 19 (interior point,
 %       second-order conditions via inertia).
-%   [3] PSR/psr_second_order.m (the ill-conditioned reconstruction this replaces
+%   [3] PSR/second_order_nlp.m (the ill-conditioned reconstruction this replaces
 %       for certification).
 
 if nargin < 2, opts = struct(); end
@@ -78,11 +78,11 @@ if isfield(S.out,'regHistory') && ~isempty(S.out.regHistory)
     ic.converged = true;      % a saved solution is a converged one
     if isfield(S.out,'maxDefect'), ic.defect = S.out.maxDefect; else, ic.defect = NaN; end
     ic.fromResolve = false;
-    vp('psr_ipopt_certify: read delta_w history from the solution''s own solve (%d iters)\n', numel(reg));
+    vp('ipopt_certify: read delta_w history from the solution''s own solve (%d iters)\n', numel(reg));
 else
     % Fallback: warm-start IPOPT AT the solution and re-converge (warmTight
     % honours the near-bang bounds, so no mint-cliff slide at eps=0).
-    vp('psr_ipopt_certify: no stored regHistory -> warm re-solve at eps=%.3g...\n', opts.eps);
+    vp('ipopt_certify: no stored regHistory -> warm re-solve at eps=%.3g...\n', opts.eps);
     o = casadi_minfuel_sundman(S.sigma, tf, S.rv0, S.rvf, p.Tmax, p.c, p.muStar, ...
             S.out.X, S.out.U, S.tauf0, 1.5, opts.maxIter, opts.eps, true);
     ic.converged = o.success && o.maxDefect < 1e-6;
@@ -97,7 +97,7 @@ if isempty(reg)
     ic.regTail = []; ic.regTailMax = NaN;
     ic.verdict = ['NO SIGNAL: IPOPT regularization history unavailable from the ' ...
         'solver stats (CasADi build without regularization_size) -- cannot read the ' ...
-        'native inertia; fall back to psr_second_order or re-solve with logging.'];
+        'native inertia; fall back to second_order_nlp or re-solve with logging.'];
     vp('  %s\n', ic.verdict);
     return
 end

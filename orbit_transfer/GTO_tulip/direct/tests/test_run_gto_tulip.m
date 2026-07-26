@@ -93,4 +93,32 @@ assert(isfolder(cfgT_.dirs.energy) && nBB > 0, ...
      'moved results tree have gone out of sync'], cfgT_.dirs.energy);
 fprintf('  artifacts : certified reference in lib/, %d backbones under results/\n', nBB);
 
+%% 5. Every function's declared name matches its filename --------------------
+% MATLAB dispatches on the FILENAME, so a file renamed without updating its
+% `function` line still runs when called by the new name -- and silently breaks
+% every caller using the old one. The 2026-07-26 flatten did exactly that:
+% psr_run_one.m became run_one.m while still declaring psr_run_one, and
+% run_batch.sh went on calling the old name. Nothing caught it, because no test
+% invokes the batch drivers.
+campDir = fileparts(tstDir_);
+mfiles  = dir(fullfile(campDir, '**', '*.m'));
+mfiles  = mfiles(~contains({mfiles.folder}, [filesep 'attic']));
+mism = {};
+for q = 1:numel(mfiles)
+    fp  = fullfile(mfiles(q).folder, mfiles(q).name);
+    txt = fileread(fp);
+    dec = regexp(txt, '^\s*function\s+(?:[^=\n]*=\s*)?([A-Za-z]\w*)\s*\(', 'tokens', 'once', 'lineanchors');
+    if isempty(dec), continue    % scripts have no declaration
+    end
+    [~, stem] = fileparts(mfiles(q).name);
+    if ~strcmp(dec{1}, stem)
+        mism{end+1} = sprintf('%s declares %s()', mfiles(q).name, dec{1}); %#ok<AGROW>
+    end
+end
+assert(isempty(mism), ...
+    ['%d file(s) declare a function name that does not match the filename. ' ...
+     'Callers using the declared name will fail:\n  %s'], ...
+    numel(mism), strjoin(mism, sprintf('\n  ')));
+fprintf('  names     : every function declaration matches its filename\n');
+
 fprintf('\ntest_run_gto_tulip: ALL PASS (no solves run)\n');

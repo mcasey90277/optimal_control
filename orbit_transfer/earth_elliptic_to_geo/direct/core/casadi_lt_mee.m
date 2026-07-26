@@ -345,7 +345,7 @@ catch
 end
 st = opti.stats();
 % delta_w regularization history (IPOPT native inertia; verify_common
-% foc_ipopt_inertia interprets it -- LEAD-0 port of psr_ipopt_certify):
+% foc_ipopt_inertia interprets it -- LEAD-0 port of ipopt_certify):
 try, regHistory = st.iterations.regularization_size(:).'; catch, regHistory = []; end
 status = st.return_status;
 success = success && any(strcmp(status, {'Solve_Succeeded', 'Solved_To_Acceptable_Level'}));

@@ -5,7 +5,7 @@ function res = elfo_collect_summary(epsMin, resDir)
 % saved by elfo_run_one) for the given epsMin, prints the tf-grid convergence
 % table (which factors reach eps=0 vs stall, switches, the dV-time front), and
 % saves <resDir>/elfo_batch_summary_minEps<e>_<insertionLabel>.mat. Used by
-% elfo_batch.sh. The ELFO analog of PSR/psr_collect_summary.m.
+% elfo_batch.sh. The ELFO analog of PSR/collect_summary.m.
 %
 % Each `row` (since Task 4) carries rv0, rvf, insertion (= insMeta.label); rows
 % saved before Task 4 lack these and are backfilled (NaN(1,6) / '') so older

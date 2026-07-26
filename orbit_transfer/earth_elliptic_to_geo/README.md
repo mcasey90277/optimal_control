@@ -1,5 +1,9 @@
 # earth_elliptic_to_geo — min-fuel low-thrust orbit-transfer pipeline
 
+> **Start with `doc/earth_geo_guide.pdf`** — the campaign guide: transfer problem,
+> OCP, why MEE with longitude as the independent variable, the free `ΔL` span and
+> `liftDL`, pipeline flow diagram, how to run, status and lessons.
+
 Direct-method (collocation NLP) reproduction of the **minimum-fuel** low-thrust
 Earth orbit transfer of Haberkorn, Martinon & Gergaud, *"Low thrust minimum-fuel
 orbital transfer: a homotopic approach,"* JGCD 27(6), 2004 — a 1500 kg satellite

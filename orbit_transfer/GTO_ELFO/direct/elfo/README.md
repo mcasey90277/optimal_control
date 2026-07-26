@@ -1,5 +1,9 @@
 # elfo/ — GTO -> ELFO direct min-fuel pipeline
 
+> **Start with `../../doc/gto_elfo_guide.pdf`** — the campaign guide: transfer
+> problem, OCP, the free-time (`cScale`) discretization and why it differs from
+> the tulip solver, pipeline flow diagram, how to run, and current status.
+
 Self-contained deliverable for the minimum-fuel low-thrust GTO -> ELFO transfer
 in the Earth-Moon CR3BP. Sibling of `PSR/` (the GTO -> tulip deliverable).
 

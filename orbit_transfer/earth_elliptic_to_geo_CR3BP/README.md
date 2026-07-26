@@ -1,5 +1,10 @@
 # earth_elliptic_to_geo_CR3BP — elliptic → GEO with lunar gravity
 
+> **Start with `doc/cr3bp_geo_guide.pdf`** — the operational guide: pipeline flow
+> diagram (seed → 2-body energy → μ-continuation → ε-homotopy), every parameter,
+> how to run a rung or the ladder, and the deep-rung recipe. The physics is derived
+> in `doc/cr3bp_geo_phase1_note.pdf`.
+
 **Goal.** Re-solve the low-thrust minimum-fuel elliptic-orbit → GEO transfer
 (the Haberkorn–Martinon–Gergaud benchmark: 1500 kg, P⁰=11625 km, e⁰=0.75,
 i⁰=7° → equatorial GEO, thrust ladder 10 → 0.1 N) **with the Moon's gravity

@@ -138,9 +138,9 @@ physical `pass` column (see A5); a FAIL here does not demote a certified row.
 
 | campaign / target | primer + sign law | switch alignment | transversality | H constancy | full KKT | Sdot ≠ 0 |
 |---|---|---|---|---|---|---|
-| earth 2-body (10 → 0.1 N, + 2 PSR) | **9/9 @ 0.000° / 100%** | yes | **7/9 PASS** — 5N (3.189e-3) and 2.5N (1.265e-3) FAIL, marginal (~3x tol=1e-3), both rows' warm re-solve *improved* the point — **see finding I5** (one-sided endpoint-dual bias, not yet ruled out) | yes (CoV ~1e-9) | **yes, 9/9 kktStat PASS** (1.5e-14 .. 6.9e-10 across the 9 rows — max is the 1N-PSR row) | **yes, 9/9 PASS via `foc_check`** |
-| earth CR3BP (lunar) | **4/4 @ 100% sign** (10/5/1/0.5 N; 2.5/0.2/0.1 N **NOT RUN** — deferred, large-N warm re-solves too slow for this pipeline) | yes (4/4) | **3/4 PASS** — T5N FAILs (3.108e-3), same marginal pattern as earth 2-body — **see finding I5** | reported, informational (non-autonomous — correct; G6 still open, no new instrument) | **yes, 4/4 kktStat PASS** (1.2e-14 to 2.5e-13) | **yes, 4/4 PASS** |
-| GTO→tulip | raw-dual **PASS** (0.058°, 100%) on flagship; LS-reconstruction **FAIL** (2.00, 40.44%) — **DISAGREE**, recorded not adjudicated (see A1 note) | yes (raw-dual) | **PASS** (5.2e-9) | no (autonomous H_t checked separately elsewhere, not via foc_check) | **yes, PASS** (5.746e-13) on the 25-switch flagship | **run, FAILS** (sdotMinRel 1.4e-7 vs tol 1e-3 — attributed to node-grazing switch, not a costate defect — **see finding I1**: `sdotMinRel` is not mesh-normalized, so this may be a discretization confound); drags flagship `rep.pass` to FAIL alongside the borderline δ_w tail |
+| earth 2-body (10 → 0.1 N, + 2 PSR) | **9/9 @ 0.000° / 100%** | yes | **8/9 PASS** (re-swept 2026-07-25 under the I5 endpoint correction). 5N moved 3.189e-3 → **5.215e-4** and now PASSES: it *was* the one-sided endpoint bias. **2.5N is unchanged at 1.265e-3 and remains the single genuine first-order finding** in the whole set — its final arc coasts, so the endpoint bias cannot apply, and it is one of the rows a warm re-solve improves | yes (CoV ~1e-9) | **yes, 9/9 kktStat PASS** (1.5e-14 .. 6.9e-10 across the 9 rows — max is the 1N-PSR row) | **yes, 9/9 PASS** — mesh-normalized (I1); values 2.1 .. 1.0e2 across the ladder |
+| earth CR3BP (lunar) | **4/4 @ 100% sign** (10/5/1/0.5 N; 2.5/0.2/0.1 N **NOT RUN** — deferred, large-N warm re-solves too slow for this pipeline) | yes (4/4) | **4/4 PASS** (re-run 2026-07-25): T5N moved 3.108e-3 → **6.437e-4** under the I5 endpoint correction — same artifact as earth 5N, now resolved | reported, informational (non-autonomous — correct; G6 still open, no new instrument) | **yes, 4/4 kktStat PASS** (1.2e-14 to 2.5e-13) | **yes, 4/4 PASS** |
+| GTO→tulip | raw-dual **PASS** (0.058°, 100%) on flagship; LS-reconstruction **FAIL** (2.00, 40.44%) — **DISAGREE**, recorded not adjudicated (see A1 note) | yes (raw-dual) | **PASS** (5.2e-9) | no (autonomous H_t checked separately elsewhere, not via foc_check) | **yes, PASS** (5.746e-13) on the 25-switch flagship | **PASS** (re-run 2026-07-25): 1.376e-7 → **2.701e+01** under the I1 mesh normalization. The earlier reading was **entirely a mesh artifact** — the 25 switches are transversal, and the "node-grazing" attribution recorded here is **RETRACTED**. Flagship `rep.pass` is now PASS |
 | GTO→ELFO | **energy seed PASS** (100%, eps=1 report-only caveat); **front row (1.33x, 50sw) PASS** (100%, exact at eps=0); min-time n/a (all-burn) | yes (fuel rows) | **3/3 PASS** — energy seed 1.00e-05, min-time 9.62e-06, front row 6.00e-09 | no (autonomous CR3BP-rotating; G4/lamTimeCoV below is the closer analog for the free-tf leg) | **yes, 3/3 kktStat PASS** (5.89e-13, 7.25e-14, 1.075e-11) — **first-ever FOC gate on this campaign** | energy seed **PASS** (8 sw); front row **FAILS** (sdotMinRel 4.485e-05, 50 sw, near-graze — same pattern as tulip — **see finding I1**); min-time n/a (all-burn) |
 | min-time anchors (free t_f) | direction only, PASS on ELFO (3.30e-18 tan-max) | n/a (all-burn) | n/a (no free-mass transversality; see G4 instead) | n/a | **ELFO: yes, PASS** (7.25e-14); tulip min-time anchor not run this round | n/a |
 
@@ -219,7 +219,10 @@ no singular arcs, and switch times consistent with the reconstructed switching
 function.
 
 **Cannot:** (i) that the continuous ODE is satisfied to the same accuracy — see
-A2's caveat on (a); (ii) *strict* local minimality — Part B gives weak local
+A2's caveat on (a); (ii) that any individual switch is *proven* transversal —
+the mesh-normalized Ṡ statistic shows no evidence of grazing, but a
+single-mesh threshold cannot establish regularity (two-mesh confirmation is
+pre-promotion work, §A6); (iii) *strict* local minimality — Part B gives weak local
 minimality on part of the tulip set and nothing elsewhere; (iii) anything
 global.
 

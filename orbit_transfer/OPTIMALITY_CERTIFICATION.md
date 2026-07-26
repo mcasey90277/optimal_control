@@ -298,20 +298,33 @@ now **attributed** rather than merely moved.
 | ELFO energy seed (ε=1) | sign law etc. | PASS incl. "100%" | PASS, 3 checks `--` | **false PASS removed** |
 
 **Of five outstanding advisory FAILs, four were discretization artifacts and
-one is real.** Two corrections to things previously recorded here as findings:
+one is real.** *(Superseded 2026-07-25 by Task 0 of the mesh-convergence plan:
+**all five were artifacts.** See the correction under item 2 and the Task-0
+block below.)* Two corrections to things previously recorded here as findings:
 
 1. **The tulip "node-grazing switches" reading was an artifact.** It had been
    recorded as the FOC layer quantifying a behaviour the tulip campaign already
    suspected. Properly mesh-normalized the flagship reads 27 — comfortably
    transversal. The suspicion may hold on other grounds; this layer was never
    evidence for it.
-2. **The transversality misses split.** The endpoint bias only appears where
-   λ_m is still moving at t_f — i.e. where the final arc *burns*. Both 5 N rows
-   moved and pass; 2.5 N (final arc coasting) did not move **at all**, so its
-   miss is a property of the solution, not the discretization. That points back
-   at the under-optimized-rung explanation — 2.5 N is one of the rows a warm
-   re-solve improves. It is now the **only** genuine first-order finding in the
-   whole set. **This conclusion does not survive Task 0 (2026-07-25) — the
+2. ~~**The transversality misses split.**~~ **THIS ITEM IS RETRACTED IN FULL
+   (Task 0, 2026-07-25).** It read: *the endpoint bias only appears where λ_m
+   is still moving at t_f — i.e. where the final arc burns; both 5 N rows moved
+   and pass, 2.5 N (final arc coasting) did not move at all, so its miss is a
+   property of the solution … the only genuine first-order finding in the whole
+   set.*
+   **Every part of that is wrong**, and instructively so. Under the correct
+   statistic — the Hager-mapped terminal covector — **all** rows land at the
+   KKT floor regardless of final-arc type: 10 N 1.24e-25, 5 N 1.41e-17,
+   **2.5 N 2.27e-18**, tulip flagship 1.19e-24. There is no burn/coast split
+   because there was never a transversality violation to split.
+   **The methodological lesson is the point:** the burn-vs-coast story was a
+   physically plausible mechanism constructed on top of two *mis-defined*
+   statistics (the raw interval dual and its extrapolation). It explained the
+   numbers, so it was recorded as confirmation. A satisfying mechanism that
+   fits wrong measurements is more dangerous than an unexplained anomaly,
+   because it stops the search. The extrapolation "fixing" 5 N was not
+   evidence for the mechanism — it was one wrong number moving nearer zero. **This conclusion does not survive Task 0 (2026-07-25) — the
    I5 extrapolation, though itself an improvement, was still an
    *approximation* to λ_m(t_f), and approximating the wrong thing more
    carefully does not make it the right thing: the exact discrete object was

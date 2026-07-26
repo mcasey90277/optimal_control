@@ -3,6 +3,13 @@ function test_warmstart_on_mesh()
 %
 % INPUTS:  none
 % OUTPUTS: none (prints ALL PASS or asserts)
+% Self-bootstrap: this test lives in tests/, which has no setup_paths of its
+% own, so it must put the campaign on the path rather than relying on the
+% caller having done it. Found by a full-suite sweep 2026-07-26 -- the test
+% passed when run from direct/ after setup_paths and failed cold from tests/.
+here_ = fileparts(mfilename('fullpath'));
+addpath(fullfile(here_, '..'));  setup_paths();
+
 here = fileparts(mfilename('fullpath'));  addpath(here);
 sigma = linspace(0, 1, 6).';                 % 5 intervals, 6 nodes
 X = [ (1:6);  (11:16);  (21:26);  (31:36); ...

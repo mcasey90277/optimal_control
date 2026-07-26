@@ -110,6 +110,25 @@ end
 fprintf(' Regular switching min|Sdot| rel    : %10.3e   (%d switches) %s\n', ...
     rep.sdotMinRel, rep.nSwitches, s_sdot);
 
+% --- attribution lines (external-review findings I1/I5, 2026-07-25) ---------
+% Print the corrected statistic beside the legacy one so a marginal miss can be
+% ATTRIBUTED rather than merely moved: a large gap means the old number was a
+% discretization artifact, a small gap means the finding is real.
+if isfield(rep,'lamMassEndRelOneSided') && ~isnan(rep.lamMassEndRelOneSided) ...
+        && ~isnan(rep.lamMassEndRel)
+    fprintf('   ^ transversality, legacy one-sided : %10.3e   [I5 endpoint fix]\n', ...
+        rep.lamMassEndRelOneSided);
+end
+if isfield(rep,'sdotMinRelLegacy') && ~isnan(rep.sdotMinRelLegacy) && ~isnan(rep.sdotMinRel)
+    fprintf('   ^ regular switching, legacy raw    : %10.3e   [I1 mesh fix]\n', ...
+        rep.sdotMinRelLegacy);
+end
+if isfield(rep,'bangBangChecksRun') && ~rep.bangBangChecksRun && ~isempty(rep.Sd)
+    fprintf([' NOTE: throttle cost is %s, not affine -- sign law, singular-arc and\n' ...
+             '       regular-switching checks SKIPPED (bang-bang law does not apply).\n'], ...
+        rep.throttleCostKind);
+end
+
 % --- Horizon note ----------------------------------------------------------
 fprintf(' Horizon: %s\n', rep.horizonNote);
 

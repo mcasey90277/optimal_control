@@ -134,7 +134,11 @@ case 'fuel'
                  'published row.\n'], matFile, mfSaved, out.mf);
     end
 
-    rep = foc_check(out, S.sigma, man, struct());
+    % Pass the epsilon this row was re-solved at: foc_check skips the
+    % bang-bang family (sign law / singular arc / regular switching) when
+    % the throttle cost is not affine, instead of folding meaningless
+    % numbers into the advisory verdict (external review, 2026-07-25).
+    rep = foc_check(out, S.sigma, man, struct('eps', epsilon));
     rep.ipopt = foc_ipopt_inertia(getfield_default(out, 'regHistory', []));
 
     if epsilon > 0

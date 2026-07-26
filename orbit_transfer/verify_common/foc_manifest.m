@@ -40,7 +40,8 @@ function man = foc_manifest(name)
 %   [4] casadi_mintime_freetf.m header state/control layout (2026-07-25)
 
 base = struct('dirRows',[1 2 3], 'thrRow',4, 'autonomous',true, ...
-              'horizonKind','fixedtf', 'massFreeAtTf',true);
+              'horizonKind','fixedtf', 'massFreeAtTf',true, ...
+              'throttleCostKind','affine');
 switch lower(name)
     case 'earth_mee'
         man = base; man.name='earth_mee'; man.nx=7; man.nu=4; man.massRow=6; man.timeRow=7;
@@ -56,7 +57,7 @@ switch lower(name)
     case 'toy'   % 1D double-integrator bang-bang used by test_foc_check_toy
         man = struct('name','toy','nx',2,'nu',1,'dirRows',[],'thrRow',1, ...
             'massRow',[],'timeRow',[],'autonomous',true,'horizonKind','none', ...
-            'massFreeAtTf',false);
+            'massFreeAtTf',false,'throttleCostKind','affine');
     otherwise, error('foc_manifest:unknown', 'unknown campaign %s', name);
 end
 end

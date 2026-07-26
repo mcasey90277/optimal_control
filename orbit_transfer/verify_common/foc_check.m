@@ -98,6 +98,30 @@ defRows = rowsOf('defect');
 assert(~isempty(defRows), 'foc_check: creg must register a ''defect'' group');
 
 % --- (2) burn mask + throttle-block switching function -----------------------
+% BANG-BANG APPLICABILITY (finding: verdict was not eps-aware, external review
+% 2026-07-25). The sign law, the singular-arc test and the regular-switching
+% test are all statements about an AFFINE-in-throttle cost. On an eps>0
+% homotopy leg the cost is quadratic in thr, Sd is the derivative of the
+% SMOOTHED objective rather than a switching function, an interior throttle can
+% legitimately give Sd=0, and the sign of Sd carries no bang-bang implication.
+% Previously these three checks ran anyway and were folded into rep.pass --
+% e.g. the ELFO energy seed (eps=1) reported "sign law 100%" and an ADVISORY
+% PASS, a number with no meaning at that eps. They are now SKIPPED (NaN,
+% reported as '--') unless the throttle cost is affine.
+%
+% Resolution order: opts.eps (if given, affine iff eps==0) overrides
+% opts.throttleCostKind, which overrides the manifest's own field.
+epsGiven = fcdef(opts, 'eps', []);
+if ~isempty(epsGiven)
+    thrKind = 'affine';  if epsGiven ~= 0, thrKind = 'quadratic'; end
+else
+    thrKind = fcdef(opts, 'throttleCostKind', ...
+                    fcdef(man, 'throttleCostKind', 'affine'));
+end
+rep.throttleCostKind = thrKind;
+bangBang = ~isempty(man.thrRow) && strcmp(thrKind, 'affine');
+rep.bangBangChecksRun = bangBang;
+
 if ~isempty(man.thrRow)
     thr = U(man.thrRow,:);  burn = thr > 0.5;
     lamNB = lamAll;  lamNB([rowsOf('thrLo'), rowsOf('thrHi')]) = 0;
@@ -105,10 +129,14 @@ if ~isempty(man.thrRow)
     Sd = zeros(1,N1);
     for k = 1:N1, Sd(k) = gNB(uix(man.thrRow,k)); end
     rep.Sd = Sd;
-    rep.signPct = 100*mean((Sd < 0) == burn);      % S<0 <=> full thrust
+else
+    burn = true(1,N1);  rep.Sd = [];   % min-time: all-burn, no throttle row
+end
+if bangBang
+    rep.signPct = 100*mean((rep.Sd < 0) == burn);   % S<0 <=> full thrust
     checks{end+1} = 'signLaw';
 else
-    burn = true(1,N1);  rep.Sd = [];  rep.signPct = NaN;   % min-time: all-burn
+    rep.signPct = NaN;
 end
 
 % --- (3) minimum condition, direction part: tangential dL/dbeta --------------
@@ -130,43 +158,92 @@ assert(numel(defRows) == nx*Nseg, ...
     'foc_check: defect group has %d rows, expected nx*Nseg = %d -- creg mis-registered?', ...
     numel(defRows), nx*Nseg);
 LamDef = reshape(lamAll(defRows), nx, Nseg);
-rep.lam = foc_dual_to_costate(s*LamDef, sg);
+% lam    = the stationarity combination (one-sided endpoints)
+% lamX   = same, endpoints linearly extrapolated to the true boundary (I5).
+% Endpoint-valued checks gate on lamX and report lam alongside, so the two can
+% be compared and any marginal miss attributed (endpoint bias vs under-
+% converged duals) instead of merely moved.
+[rep.lam, lamX] = foc_dual_to_costate(s*LamDef, sg);
 checks{end+1} = 'costates';
 
 % --- (5) time-costate behavior (Hamiltonian conditions in dual form) ---------
 if ~isempty(man.timeRow)
     lt = rep.lam(man.timeRow,:);
     rep.lamTimeCoV = std(lt)/max(abs(mean(lt)),1e-30);
-    rep.lamTimeEnd = lt(end);
+    rep.lamTimeEnd = lamX(man.timeRow, end);        % endpoint-corrected (I5)
+    rep.lamTimeEndOneSided = lt(end);               % legacy, for comparison
     checks{end+1} = 'lamTime';
 else
-    rep.lamTimeCoV = NaN;  rep.lamTimeEnd = NaN;
+    rep.lamTimeCoV = NaN;  rep.lamTimeEnd = NaN;  rep.lamTimeEndOneSided = NaN;
 end
 
 % --- (6) transversality: free final mass -> lam_m(tf)=0 ----------------------
 if ~isempty(man.massRow) && man.massFreeAtTf
-    lm = rep.lam(man.massRow,:);
-    rep.lamMassEndRel = abs(lm(end))/max(abs(lm));
+    lm    = rep.lam(man.massRow,:);
+    scale = max(abs(lm));
+    rep.lamMassEndRel        = abs(lamX(man.massRow,end)) / max(scale,1e-30);
+    rep.lamMassEndRelOneSided = abs(lm(end))              / max(scale,1e-30);
     checks{end+1} = 'transversality';
 else
-    rep.lamMassEndRel = NaN;
+    rep.lamMassEndRel = NaN;  rep.lamMassEndRelOneSided = NaN;
 end
 
 % --- (7) singular arcs + regular switching (Sdot != 0) -----------------------
-rep.singularArcNodes = 0;  rep.sdotMinRel = NaN;  rep.nSwitches = 0;
+% MESH NORMALIZATION (finding I1, external review 2026-07-25). Sd_k carries the
+% local trapezoid quadrature weight w_k, so Sd ~ w_k * S(sigma_k): it is NOT a
+% faithful sampling of S. The old statistic differenced Sd across a switch
+% WITHOUT dividing by the step, so it shrank with mesh refinement even for a
+% perfectly transversal crossing -- and PSR-refined meshes densify exactly AT
+% switches, which is where it bites hardest. Both reviewers judged the readings
+% it produced (1.4e-7 tulip, 4.5e-5 ELFO) unable to diagnose grazing.
+%
+% Corrected statistic: deweight, take a true divided difference in sigma, then
+% non-dimensionalize by the total span and a coast-side scale:
+%     Shat_k = Sd_k / w_k
+%     D_i    = |Shat(k_i+1) - Shat(k_i)| / (sigma(k_i+1) - sigma(k_i))
+%     R_i    = (sigma_end - sigma_1) * D_i / Sref
+% R is dimensionless and invariant to local refinement for a smooth crossing.
+% Sref excludes a one-node neighbourhood of every switch so the scale is not
+% contaminated by the crossing itself. The legacy value is retained as
+% rep.sdotMinRelLegacy purely so the two can be compared on the same row.
+%
+% CAVEAT that survives this fix (GPT): no threshold on a SINGLE mesh is
+% defensible. Regularity should be asserted only if R stays above the floor on
+% two meshes; the sdotMin gate is provisional until recalibrated.
+rep.singularArcNodes = NaN;  rep.sdotMinRel = NaN;  rep.sdotMinRelLegacy = NaN;
+rep.nSwitches = 0;  rep.Sdeweighted = [];
 if ~isempty(man.thrRow)
-    coastS = abs(rep.Sd(~burn));
-    scaleS = median(coastS(coastS>0));  if isempty(scaleS)||isnan(scaleS), scaleS = max(abs(rep.Sd)); end
-    nearZ = abs(rep.Sd) < max(1e-6*scaleS, 1e-14);
+    hs = diff(sg(:).');
+    w  = [hs(1)/2, (hs(1:end-1) + hs(2:end))/2, hs(end)/2];   % nodal weights [1xN1]
+    Shat = rep.Sd ./ w;
+    rep.Sdeweighted = Shat;
+
+    swI = find(diff(burn) ~= 0);  rep.nSwitches = numel(swI);
+
+    % coast-side scale, excluding a one-node neighbourhood of each switch
+    nearSw = false(1,N1);
+    for q = 1:numel(swI)
+        nearSw(max(swI(q)-1,1):min(swI(q)+2,N1)) = true;
+    end
+    cand = abs(Shat(~burn & ~nearSw));
+    cand = cand(cand > 0);
+    if isempty(cand), cand = abs(Shat(~burn)); cand = cand(cand > 0); end
+    if isempty(cand), Sref = max(abs(Shat)); else, Sref = median(cand); end
+    if isempty(Sref) || isnan(Sref) || Sref == 0, Sref = max(max(abs(Shat)), 1e-30); end
+end
+if bangBang
+    rep.singularArcNodes = 0;
+    nearZ = abs(rep.Sdeweighted) < max(1e-6*Sref, 1e-14);   % deweighted (I1)
     runL = 0;
     for k = 1:N1
         if nearZ(k), runL = runL+1; else, runL = 0; end
         if runL >= 3, rep.singularArcNodes = rep.singularArcNodes + 1; end
     end
-    swI = find(diff(burn) ~= 0);  rep.nSwitches = numel(swI);
     if ~isempty(swI)
-        sdot = abs(rep.Sd(min(swI+1,N1)) - rep.Sd(max(swI,1))) / max(scaleS,1e-30);
-        rep.sdotMinRel = min(sdot);
+        ka = max(swI,1);  kb = min(swI+1,N1);
+        D  = abs(rep.Sdeweighted(kb) - rep.Sdeweighted(ka)) ./ max(sg(kb).' - sg(ka).', 1e-30);
+        rep.sdotMinRel = min( (sg(end)-sg(1)) * D / Sref );
+        rep.sdotMinRelLegacy = min(abs(rep.Sd(kb) - rep.Sd(ka))) / max(median(abs(rep.Sd(~burn))),1e-30);
     end
     checks = [checks, {'singularArc','sdotRegular'}];
 end
@@ -185,11 +262,15 @@ end
 rep.checksRun = checks;
 
 % --- advisory verdict (REPORT-ONLY burn-in) ----------------------------------
-okSign  = isempty(man.thrRow) || rep.signPct >= tolSign;
-okTrans = isnan(rep.lamMassEndRel) || rep.lamMassEndRel <= tolTrans;
-okSdot  = isnan(rep.sdotMinRel) || rep.sdotMinRel > sdotMin;
+% Every ok* is NaN-tolerant: a skipped check (manifest field empty, or the
+% bang-bang family skipped because the throttle cost is not affine) must
+% neither pass nor fail the verdict -- it drops out.
+okSign  = isnan(rep.signPct)        || rep.signPct >= tolSign;
+okTrans = isnan(rep.lamMassEndRel)  || rep.lamMassEndRel <= tolTrans;
+okSdot  = isnan(rep.sdotMinRel)     || rep.sdotMinRel > sdotMin;
+okSing  = isnan(rep.singularArcNodes) || rep.singularArcNodes == 0;
 rep.pass = rep.kktStatInf <= tolStat && rep.dirTanMax <= tolStat && ...
-           okSign && okTrans && rep.singularArcNodes == 0 && okSdot;
+           okSign && okTrans && okSing && okSdot;
 end
 
 function v = fcdef(o, f, dflt)

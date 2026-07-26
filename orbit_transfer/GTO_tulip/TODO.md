@@ -79,6 +79,64 @@ Two standing goals (2026-07-21): **(a) keep perfecting the direct code,
 - [ ] **Front hygiene.** Keep `aggregate_front`'s honest 3-class front current
   as new t_f points land; switch counts reported as bands (mesh-sensitivity
   lesson from the earth_elliptic P0 study applies here too).
+- [ ] **Free-span reformulation — the unblock for the thrust ladder.** The tulip
+  solver holds `τ_f` FIXED (a free scalar would make a dense KKT column and kill
+  the MUMPS factorization at N≈4000). The cost is that a chained seed's winding
+  number cannot grow, so a lower-thrust rung — which needs MORE revolutions —
+  cannot be reached. The 20 mN pilot failed there, at the ε=1 energy step. This
+  is a topology wall, not tuning.
+
+  **What is reusable, measured 2026-07-26.**
+
+  *Not* the earth CR3BP campaign, despite it having walked a full 10 N → 0.1 N
+  ladder on a free `ΔL` span. Its parameterization is **Earth-centred MEE**, and
+  the tulip target sits **28,303 km from the Moon** — inside the lunar SOI
+  (~66,000 km). Earth-centred elements are the wrong coordinates for the arrival
+  leg. Only the *principle* transfers: a free scalar coupled to every node must
+  be replicated per node and tied by local continuity constraints (`liftDL`).
+
+  **ELFO is the real reuse, and it is close to a drop-in.**
+  `casadi_energy_freetf` already has BOTH things the tulip solver lacks:
+  1. **free time via the `cScale` slack state** (Betts) — banded KKT, and the
+     revolution count can grow. This is what let ELFO's 20 mN rung CERTIFY where
+     tulip's failed, in the same dynamical setting.
+  2. **the two-primary Sundman clock** `κ = (r1^-q + (r2/D)^-q)^(-p/q)` — and the
+     tulip campaign needs this independently of the ladder: its single-primary
+     `κ = r1^1.5` gives a COARSE mesh at the arrival leg (r1 ≈ 398,000 km) which
+     is exactly where the Moon dominates and the dynamics are fastest.
+
+  Critically, `casadi_energy_freetf(sigma, rv0, rvf, ...)` takes the endpoints as
+  **arguments**, and `insertion_states('tulip','campaign')` supplies tulip's. So
+  the solver can be pointed at this transfer without modification.
+
+  **Phased plan.**
+  - **P0 (cheap, decides everything).** Run the ELFO free-t_f solver on TULIP
+    endpoints at nominal 25 mN and the certified 1.15× horizon. Does it close at
+    ε=1? If yes, tulip gains a free-span solver essentially for free and the
+    ladder becomes an ELFO-style chain. If no, learn where it breaks before
+    committing to anything larger.
+  - **P1 Seeding.** P0 needs an ε=1 root in the 9-state free-t_f, two-primary
+    representation. The existing tulip energy backbone is 8-state, single-primary
+    — its node placement does NOT transfer (the two-primary clock redistributes
+    the mesh, so the no-resample discipline is violated). Either re-map with an
+    explicit resample and accept the defect hit, or build a tulip analogue of
+    `gen_elfo_energy_gravhom`.
+  - **P2 Ladder.** With P0/P1 done, chain rungs by HOLDING THE FACTOR, not t_f
+    (t_f,min scales ~1/T, so the same t_f at lower thrust can sit below the new
+    rung's minimum time — the first 20 mN pilot attempt was genuinely infeasible
+    for exactly this reason). `chain_rung_seed_tulip` already does the
+    time-rescale; it would need the 9-state layout.
+  - **P3 Gate.** Certified rung = ε=0 reached, machine-tight defect, clean
+    `boundSat`, fingerprint recorded — the ladder-prep gates already exist.
+
+  **Risks to name up front.** ELFO's success does not guarantee tulip's: the
+  targets differ in geometry (the tulip insertion is a high-inclination
+  south-pole orbit). Adding `cScale` changes the state dimension, so every
+  downstream consumer of the tulip 8-state layout (refine, PMP verifier, export,
+  movies) needs auditing. And a second tulip solver would be a FORK — if it is
+  built, `test_solver_fork_parity` should be extended to cover it rather than
+  letting a third copy drift.
+
 - [ ] **Thrust ladder (Table-3 analog for the tulip).** Port the
   `../earth_elliptic_to_geo/` ladder recipe — per-rung min-time anchor,
   thrust-continuation warm-chaining, certified-only caching, R0-law check —

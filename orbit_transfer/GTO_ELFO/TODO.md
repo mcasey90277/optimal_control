@@ -5,6 +5,28 @@ mostly on the indirect side.
 
 ## Direct — polish
 
+- [ ] **Narrow the tulip path dependency (survey 2026-07-26,
+  `doc/EXECUTION_PATHS.md`).** `setup_paths` adds all 34 files of
+  `GTO_tulip/direct/sundman_minfuel` to reach exactly **one** function,
+  `insertion_states`. Move that function into `cr3bp_common` (where
+  `gto_tulip_endpoints` and `gto_elfo_endpoints` already live) and drop the
+  tulip path. Removes a real shadowing surface: today an ELFO session that has
+  also touched PSR carries two definitions of `casadi_minfuel_sundman`.
+- [ ] **Fix the stale `setup_paths` header.** It claims the campaign "reuses
+  casadi_minfuel_sundman / insertion_states / minfuel_at_tf, retargeted to
+  ELFO". Measured: only `insertion_states` is called. The solver was FORKED
+  (`casadi_energy_freetf`, `casadi_mintime_freetf`), not retargeted. The
+  comment will mislead the next reader into thinking the solver is shared.
+- [ ] **Extract the incidental duplication, not the solver.** `casadi_energy_freetf`
+  shares **122 identical code lines (76%)** with tulip's
+  `casadi_minfuel_sundman`, including a **41-line identical IPOPT options
+  block**. Do NOT merge the solvers — the 24% that differs is the substantive
+  part (9th `cScale` state, free t_f, two-primary clock, gravity homotopy) and
+  merging risks two campaigns' certified results. DO extract the options block
+  and the 6-line CasADi path bootstrap, which are incidental and appear in
+  every solver in the repo.
+
+
 - [x] **First-ever FOC (first-order-condition) gate landed (2026-07-25, FOC
   gate layer Task 9).** `run_foc_elfo.m` (new, `verify_common`-backed) runs
   KKT stationarity / min-condition / sign-law / transversality / regular-

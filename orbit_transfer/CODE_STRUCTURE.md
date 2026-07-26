@@ -307,8 +307,18 @@ and is provably inert on well-conditioned input (`max(n,1e-12) == n` whenever
   precedents already exist.** `run_gergaud` (parameter block, run modes) and
   `run_cr3bp_geo` (thrust, lunar gain 0→1, ε, `t_f` in one editable section),
   with ladder shells in `run_cr3bp_ladder.sh`, `reproduce_table3.sh` and
-  `elfo_{batch,energy_sweep,movies}.sh`. **Only `GTO_tulip` lacks a front
-  door** — that is the whole of the remaining work for this goal.
+  `elfo_{batch,energy_sweep,movies}.sh`. **DONE 2026-07-26** — `GTO_tulip` was
+  the last campaign without one and now has `direct/sundman_minfuel/run_gto_tulip.m`
+  plus `run_tulip_front.sh`.
+
+  The tulip front door departs from the others in one respect, deliberately:
+  its sweep script walks **t_f, not thrust**. Thrust is the dimension that works
+  for the earth and CR3BP campaigns; for the tulip it is an open problem (the
+  20 mN pilot failed against a fixed-τ_f topology wall), so `run_gto_tulip`
+  *refuses* off-nominal thrust with that explanation rather than running a solve
+  known to fail. It likewise refuses factors below ~1.12, where the ε=1 energy
+  backbone itself will not converge. A front door whose knobs silently fail is
+  worse than one that says which knobs are real.
 - **LaTeX per campaign — last.** Template: `cr3bp_geo_phase1_note.tex`
   (reviewed, near-publishable). The `EXECUTION_PATHS.md` files are the raw
   material for the "how to run it" sections. Writing these before the tier-0/1

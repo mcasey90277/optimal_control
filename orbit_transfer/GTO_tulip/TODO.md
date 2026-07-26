@@ -6,6 +6,32 @@ Two standing goals (2026-07-21): **(a) keep perfecting the direct code,
 
 ## (a) Direct — perfect what works
 
+- [x] **Front door.** DONE 2026-07-26: `direct/sundman_minfuel/run_gto_tulip.m`
+  (house `run_gergaud` / `run_cr3bp_geo` pattern) + `run_tulip_front.sh`,
+  guarded by `test_run_gto_tulip.m` (no-solve). This was the last campaign
+  without one. It drives `minfuel_at_tf` rather than re-implementing the chain,
+  and **refuses** the two knobs that name open problems below — off-nominal
+  thrust (topology wall) and factors under ~1.12 (no energy backbone) — with
+  messages that route to the relevant script and findings doc. The sweep script
+  walks **t_f, not thrust**, for the same reason.
+
+- [ ] **Two certified optima at t_f = 1.150×, 1.43% apart in ΔV.** Found
+  2026-07-26 while smoke-testing the new front door. The energy-backbone route
+  (`minfuel_at_tf`) and the `run_certified_minfuel` chain both reach 25
+  switches, machine-tight, at the SAME t_f, but different local optima:
+  m_f 0.847086 vs 0.849066 (ΔV 3.4176 vs 3.3696 km/s, +0.0297 kg). The seed
+  route decides the basin. Open questions: is the flagship the global optimum,
+  does the same split exist at other factors on the front (the aggregated
+  ΔV–t_f front is built from the energy-backbone route, so it may sit
+  systematically ~1% high), and should `minfuel_at_tf` adopt a keep-best-mass
+  policy across routes (cf. the earth campaign's razor-thin-basin lesson).
+  `run_gto_tulip` now cross-checks and reports the basin, so this cannot pass
+  unnoticed, but the underlying question is unresolved. **Related evidence:**
+  the C3 mesh-band item below already recorded a re-solve landing 24 switches /
+  ΔV 3.3660 ("basin-sensitive even at fixed mesh") — that one differed by
+  ~0.1%, this one by 1.43%, so the spread is wider than a switch-integer
+  wobble and the two should be investigated together.
+
 - [ ] **Close the 1.01–1.11× near-min-time band.** The certified front starts
   at 1.12×; the energy backbone itself is only generatable for
   t_f ≈ 1.12×–1.95× (the band is hard even for the SMOOTH energy problem —

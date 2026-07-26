@@ -42,10 +42,6 @@ function rep = foc_check(out, sigma, man, opts)
 %         .lamTimeEnd       time-costate value at the final node
 %         .lamMassEndMapped free-final-mass transversality residual (relative),
 %                           Hager-mapped terminal covector -- THE GATED VALUE
-%         .lamMassEndRel    same, endpoint-extrapolated interval dual (I5) --
-%                           reported alongside, not gated
-%         .lamMassEndRelOneSided same, raw one-sided interval dual (legacy) --
-%                           reported alongside, not gated
 %         .singularArcNodes count of >=3-node near-zero switching-function runs
 %         .sdotMinRel       minimum relative |Sdot| across detected switches
 %         .nSwitches        number of burn/coast sign changes

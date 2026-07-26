@@ -34,6 +34,10 @@ assert(outRow.success && outRow.maxDefect < 1e-8, ...
 
 rep = foc_check(outRow, saved.sigma, foc_manifest('earth_mee'), struct());
 assert(rep.kktStatInf < 1e-6);        assert(rep.dirTanMax < 1e-6);
-assert(rep.signPct == 100);           assert(rep.lamMassEndRel < 1e-3);
+assert(rep.signPct == 100);           assert(rep.lamMassEndMapped < 1e-3);
+% lamMassEndMapped, not lamMassEndRel: b3c6eaf made the Hager-mapped terminal
+% covector THE GATED VALUE and stopped producing the interval-dual variants,
+% but did not update this line -- so this test threw 'Unrecognized field name'
+% instead of gating anything, from 2026-07-25 until it was caught on 07-26.
 assert(rep.singularArcNodes == 0);    assert(rep.pass);
 fprintf('test_foc_check_10N: ALL PASS (Sdot min rel %.2e, nSw %d)\n', rep.sdotMinRel, rep.nSwitches);

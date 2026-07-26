@@ -80,50 +80,36 @@ sopts = struct('par', par, 'mode', 'fixedtf', 'eps', 0, ...
     'returnModel', retModel);
 out = casadi_lt_mee(sigma, saved.X, saved.U, saved.dL, sopts);
 
-drift   = max(abs(out.X(:) - saved.X(:)));
-mfSaved = saved.X(6, end);
-mfRel   = abs(out.X(6,end) - mfSaved) / max(abs(mfSaved), 1e-30);
-info = struct('drift', drift, 'ipoptStatus', out.ipoptStatus, ...
-              'maxDefect', out.maxDefect, 'tag', saved.tag, ...
-              'mfRelChange', mfRel, 'mfSaved', mfSaved, 'mfResolved', out.X(6,end));
+% verify_common bootstrap: certified_guard lives there, and three of this
+% function's callers (run_foc_mee, run_verify_pmp_mee, verify_pmp_mee) do not
+% put verify_common on the path. Self-bootstrapping here -- the same pattern
+% run_foc_tulip / run_foc_elfo already use -- keeps this function callable from
+% any of them, and costs a caller that already did it nothing.
+if isempty(which('certified_guard'))
+    addpath(fullfile(fileparts(fileparts(fileparts(fileparts(mfilename('fullpath'))))), 'verify_common'));
+end
 
-if ~out.success
-    error('refresh_duals_mee:resolveFailed', ...
-        ['%s: warm re-solve did not succeed (%s) -- cannot refresh duals. ' ...
-         'The certified primal is unaffected; only PMP verification is ' ...
-         'blocked for this row.'], saved.tag, out.ipoptStatus);
-end
-if out.maxDefect > feasTol
-    error('refresh_duals_mee:notFeasible', ...
-        ['%s: warm re-solve maxDefect %.3e > feasTol %.3e -- the recovered ' ...
-         'point is not machine-tight, so its multipliers are not a usable ' ...
-         'KKT certificate.'], saved.tag, out.maxDefect, feasTol);
-end
-% The mass check is ONE-SIDED, matching this campaign's established convention
-% for reproduced rows (reproduce/verify_row.m: minimum fuel means MAXIMIZE
-% final mass, so a higher mass can never be a failure -- it is an improvement,
-% flagged and reported). Empirically the warm re-solve does sometimes find a
-% slightly better nearby optimum (5 N: m_f 0.909695 -> 0.909852, +0.235 kg on
-% a 1500 kg wet mass), which is the same "campaign under-optimized that rung"
-% effect the Table-3 reproducer engine already documented at 10 N. Verifying
-% PMP conditions on the improved point is legitimate -- it is a machine-tight
-% extremal of the SAME problem (same thrust, same pinned t_f, same endpoints)
-% -- but it is no longer bit-for-bit the published row, so info.improved is
-% set and every driver prints it.
-info.improved = false;
-if out.X(6,end) < mfSaved - massTol*max(abs(mfSaved), 1)
-    error('refresh_duals_mee:massDegraded', ...
-        ['%s: warm re-solve final mass DROPPED %.3e relative (%.6f -> ' ...
-         '%.6f) -- the recovered point is worse than the certified one; ' ...
-         'refusing to verify against it.'], ...
-        saved.tag, mfRel, mfSaved, out.X(6,end));
-elseif mfRel > massTol
-    info.improved = true;
-    fprintf(['  [refresh_duals_mee] NOTE %s: warm re-solve improved m_f by ' ...
-             '%.3e relative (%.6f -> %.6f). Verifying the IMPROVED extremal; ' ...
-             'gates below describe that point, not the published row.\n'], ...
-        saved.tag, mfRel, mfSaved, out.X(6,end));
-end
+% --- certified-quantity guard (shared: verify_common/certified_guard.m) ------
+% Success class + machine-tight defect + the ONE-SIDED mass check whose
+% convention originated in this campaign (reproduce/verify_row.m: minimum fuel
+% means MAXIMIZE final mass, so a higher mass is an improvement, never a
+% failure). Extracted 2026-07-26; behaviour unchanged -- casadi_lt_mee already
+% folds the IPOPT status whitelist into out.success, so applying it again in
+% the shared guard is a no-op here.
+mfSaved = saved.X(6, end);
+info = certified_guard( ...
+    struct('success', out.success, 'ipoptStatus', out.ipoptStatus, ...
+           'maxDefect', out.maxDefect, 'value', out.X(6,end)), ...
+    struct('caller','refresh_duals_mee', 'label', saved.tag, 'saved', mfSaved, ...
+           'name','m_f', 'errName','mass', 'better','higher', ...
+           'feasTol', feasTol, 'tol', massTol));
+% Field names this function has always exported (run_verify_pmp_all and
+% run_verify_pmp_mee read .mfRelChange and .drift by name).
+info.drift       = max(abs(out.X(:) - saved.X(:)));
+info.tag         = saved.tag;
+info.mfRelChange = info.relChange;
+info.mfSaved     = mfSaved;
+info.mfResolved  = out.X(6,end);
 
 % forensics: how much did the corrected extraction actually change? Pull the
 % cache's own (stale, opti.dual-sourced) duals straight from the .mat -- they

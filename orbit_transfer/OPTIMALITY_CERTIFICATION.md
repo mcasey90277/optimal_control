@@ -254,6 +254,56 @@ promoting either to a hard gate should wait on these:
 Both are recorded here rather than fixed now — see the branch's final-review
 report for why they were scoped out of this fix wave.
 
+
+### FIX PASS + ATTRIBUTION (2026-07-25, commit `6b9c4a7`)
+
+Three of the review's items are now **shipped**, and — because each corrected
+check reports its legacy value beside it — the outstanding advisory FAILs are
+now **attributed** rather than merely moved.
+
+| row | check | legacy | corrected | attribution |
+|---|---|---|---|---|
+| tulip flagship (25 sw) | Ṡ regularity | 1.376e-07 | **2.701e+01** | **mesh artifact** → PASS |
+| ELFO front 1.33× (50 sw) | Ṡ regularity | 4.485e-05 | **1.193e+02** | **mesh artifact** → PASS |
+| earth 5 N | transversality | 3.189e-03 | **5.215e-04** | **endpoint bias** → PASS |
+| CR3BP 5 N | transversality | 3.108e-03 | **6.437e-04** | **endpoint bias** → PASS |
+| earth 2.5 N | transversality | 1.265e-03 | 1.265e-03 | **REAL** — unchanged |
+| ELFO energy seed (ε=1) | sign law etc. | PASS incl. "100%" | PASS, 3 checks `--` | **false PASS removed** |
+
+**Of five outstanding advisory FAILs, four were discretization artifacts and
+one is real.** Two corrections to things previously recorded here as findings:
+
+1. **The tulip "node-grazing switches" reading was an artifact.** It had been
+   recorded as the FOC layer quantifying a behaviour the tulip campaign already
+   suspected. Properly mesh-normalized the flagship reads 27 — comfortably
+   transversal. The suspicion may hold on other grounds; this layer was never
+   evidence for it.
+2. **The transversality misses split.** The endpoint bias only appears where
+   λ_m is still moving at t_f — i.e. where the final arc *burns*. Both 5 N rows
+   moved and pass; 2.5 N (final arc coasting) did not move **at all**, so its
+   miss is a property of the solution, not the discretization. That points back
+   at the under-optimized-rung explanation — 2.5 N is one of the rows a warm
+   re-solve improves. It is now the **only** genuine first-order finding in the
+   whole set.
+
+**Caveat that survives (do not over-read the new PASSes).** GPT's point stands:
+no threshold on a *single* mesh establishes transversality of a switch.
+Regularity should be asserted only if the normalized statistic stays above the
+floor on **two** meshes, and the 1e-3 gate is provisional until recalibrated on
+deweighted data. The Ṡ PASSes therefore mean "no evidence of grazing," not
+"proven regular" — which matters, since this is Maurer ingredient (ii) and any
+second-order certificate will lean on it.
+
+**Regression lock:** `verify_common/tests/test_foc_mesh_invariance.m` asserts
+the property in both directions on the toy problem — across a 4× refinement the
+normalized statistic holds (ratio 1.02) while the legacy one falls by 4.1
+(exactly the refinement factor, i.e. it was reporting `h`).
+
+**Still open from the review:** I2 (direction-check independence + sign
+blindness — note the *previously recorded fix was wrong*, see above), the
+sign-resolution ambiguity guard, the δ_w relabel, and three robustness asserts.
+Tracked in `verify_common/TODO.md` §1.2, §1.5, §3.
+
 ### External review of the checker itself (2026-07-25)
 
 The generic layer and its explainer were sent for three-way review
@@ -527,6 +577,8 @@ campaign/row, verdict, and what it changed in Part A or §1–§5.
 | (ongoing) | **IPOPT native inertia (δ_w)** | tulip PSR, 137 rows | **12/17 certified at ε=0**; 100/120 at ε>0 | second order is not at zero; weak local min for bang-bang |
 | 2026-07-25 | first-order PMP (primer/sign/alignment) | earth 9 rows + CR3BP 10/5 N | **PASS 0.000° / 100%** | Part A row 1–3 green for earth; makes Maurer ingredients (ii)/(iii) trustworthy |
 | 2026-07-25 | full KKT certificate from raw `lam_g` | earth 10 N | ‖∇ₓL‖∞ 1.5e-14, tangential ∂L/∂β 8e-17 | Part A row 6; also root-caused the dual bug |
+| 2026-07-25 | **external three-way review of the FOC layer itself** | `verify_common` core + explainer | recovery + dual map VALIDATED; I1/I2/I5 sharpened; 2 new findings (ε-awareness, δ_w naming) | reviews archived in `verify_common/doc/`; drove the fix pass below |
+| 2026-07-25 | **FOC fix pass** (ε-aware verdict, mesh-normalized Ṡ, endpoint-corrected transversality) | tulip flagship, ELFO front + energy seed, earth 10/5/2.5 N, CR3BP 5 N | **4 of 5 advisory FAILs were artifacts; 1 real (earth 2.5 N transversality)** | tulip grazing claim RETRACTED; §A6 fix-pass block |
 | 2026-07-25 (Task 6) | `foc_check`/`foc_report` full ladder | earth 2-body, 9 rows (10→0.1 N + 2 PSR) | **7/9 focPass** — 5N (3.189e-3) and 2.5N (1.265e-3) FAIL, transversality only, marginal (~3x tol); kktStat 1.5e-14 .. 6.9e-10 across all 9 rows, all PASS; `foc_ipopt_inertia` mixed (3 LOCAL MIN / 6 NOT CERTIFIED) | A3 earth 2-body row; A1 row 9 first real catch of the generic layer; Part B §1 earth row; LEAD-0 (earth) done; **final review: 5N/2.5N misses now also flagged under finding I5 (one-sided endpoint-dual bias, unadjudicated)** |
 | 2026-07-25 (Task 7) | `foc_check`/`foc_report` subset | earth CR3BP, 4 rows (10/5/1/0.5 N, φ0=0; 2.5N skipped, 0.2/0.1N DEFERRED not run) | **3/4 focPass** — T5N FAILs transversality only (3.108e-3), same marginal pattern as earth; kktStat 1.2e-14 to 2.5e-13 all PASS; `foc_ipopt_inertia` **4/4 LOCAL MIN** (δ_w=0) | A3 CR3BP row updated; G2 partially closed (4/7 rungs); Part B §1 CR3BP row; LEAD-0 (CR3BP) done; **final review: T5N miss now also flagged under finding I5** |
 | 2026-07-25 (Task 8) | `foc_check`/`foc_report` + LS cross-check | GTO→tulip, 25-switch flagship (`sundman_minfuel_certified.mat`) | KKT stationarity **PASS** (5.746e-13); primer/sign **PASS** (raw dual, 0.058°/100%) vs LS-reconstruction **FAIL** (2.00/40.44%) — **DISAGREE**, recorded not adjudicated; overall `rep.pass` **FAIL** (sdotMinRel 1.4e-7 node-graze + δ_w tail 1.8e-8 borderline) | A1 note on the two-source disagreement; A3 tulip row; G1 gets new data, not closed; G3 standing-line closed; Part B §1 tulip row cross-checked with the generic port; **final review: the "node-graze" read on sdotMinRel is now finding I1 — unverified without mesh-normalizing `Sd`** |

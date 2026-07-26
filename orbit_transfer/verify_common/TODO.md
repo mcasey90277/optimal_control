@@ -30,6 +30,27 @@ verbatim reviews archived in `doc/review_2026-07-25_*.md`). Until they are
 settled, a FAIL from this layer is a lead, not a verdict — and the layer
 cannot be promoted.
 
+**Outcome of the 2026-07-25 fix pass (items 1.1, 1.3, 1.4 — shipped, commit
+`6b9c4a7`).** The fixes were built to *attribute* the outstanding advisory
+FAILs, not merely move them, so each check now reports the corrected value
+beside the legacy one:
+
+| finding | legacy | corrected | attribution |
+|---|---|---|---|
+| tulip flagship Ṡ | 1.376e-07 | **2.701e+01** | **mesh artifact** — switches are transversal; flagship now advisory PASS |
+| earth 5 N transversality | 3.189e-03 | **5.215e-04** | **endpoint bias** — now PASS |
+| earth 2.5 N transversality | 1.265e-03 | **1.265e-03** | **REAL** — unchanged, so not the endpoint bias |
+| ELFO energy seed (ε=1) | PASS incl. "sign law 100%" | PASS, 3 checks `--` | false PASS removed |
+
+The 2.5 N result is the informative one: the endpoint bias only appears when
+λ_m is still moving at t_f (a final *burn* arc), so a row whose final arc
+coasts is untouched by the fix — which is exactly what happened. Its miss is
+therefore a genuine property of that solution, pointing back at the
+under-optimized-rung explanation (it is one of the rows warm re-solves
+improve). `test_foc_mesh_invariance` locks 1.1 in both directions: across a 4×
+refinement the normalized statistic holds (ratio 1.02) while the legacy one
+falls by 4.1 — i.e. it was reporting `h`.
+
 **What the review validated** (so it does not get re-litigated): the
 switching-function recovery of Q1 is *exact* — the active bound multiplier
 cancels `Sd` identically, so zeroing its row recovers magnitude and sign —
@@ -37,7 +58,7 @@ subject to the affine-throttle-cost conditions now in item 1.4; and the
 dual→costate map is the correct *stationarity* combination (both reviewers
 derived it, independently reproducing `DESIGN_dual_map`).
 
-- [ ] **1.1 Mesh-normalize the regularity statistic (register I1).** Both
+- [x] **1.1 Mesh-normalize the regularity statistic (register I1). DONE 2026-07-25.** Both
   reviewers independently confirmed the confound is real and that the current
   readings (tulip 1.4e-7 / 25 sw, ELFO front row 4.5e-5 / 50 sw) **cannot
   diagnose grazing**. Agreed fix — deweight, true divided difference,
@@ -67,7 +88,7 @@ derived it, independently reproducing `DESIGN_dual_map`).
   minimizer has `b'q < 0` ⟺ `mu > 0` (reverse if the registered row is
   `1 - b'b`). Report normalized anti-alignment `-b'q/||q||`, which is more
   informative than tangency alone.
-- [ ] **1.3 Resolve the transversality endpoint bias (register I5).** Both
+- [x] **1.3 Resolve the transversality endpoint bias (register I5). DONE 2026-07-25.** Both
   reviewers confirmed the mechanism and converged on the same cheap fix:
   ```matlab
   lam(:,end) = LamDef(:,N)   + h(N)/(h(N-1)+h(N)) * (LamDef(:,N)-LamDef(:,N-1));
@@ -80,7 +101,7 @@ derived it, independently reproducing `DESIGN_dual_map`).
   Either way, stop treating the one-sided interval dual as `lambda_m(t_f)`.
   Only after this can the three ~3×-tol misses be attributed (endpoint bias vs
   under-converged rungs — currently confounded).
-- [ ] **1.4 Make the verdict ε-aware.** `foc_check` folds `signPct`, the
+- [x] **1.4 Make the verdict ε-aware. DONE 2026-07-25.** `foc_check` folds `signPct`, the
   singular-arc count, and `sdotMinRel` into `rep.pass` **without knowing ε**.
   At ε>0 the throttle cost is quadratic, `Sd` is the derivative of the smoothed
   objective, interior `s` can legitimately give `Sd = 0`, and the bang-bang sign

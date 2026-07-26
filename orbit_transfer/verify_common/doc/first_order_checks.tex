@@ -38,9 +38,14 @@ explains each check twice over: (a) the mathematics --- the formal necessary
 condition being tested and the intuition behind it --- and (b) the code --- how
 to run it on each campaign and how to read every line of the printed report.
 The checks run in \emph{report-only burn-in}: a FAIL is an advisory finding and
-never demotes a certified solution. The cross-campaign status of every check,
-including the honest caveats repeated here, lives in the register
-\file{OPTIMALITY\_CERTIFICATION.md} at the \file{orbit\_transfer} root.
+never demotes a certified solution. This revision incorporates a three-way
+external review of the layer (2026-07-25) and the three fixes it produced ---
+$\varepsilon$-awareness, mesh-normalized switch regularity, and an
+endpoint-corrected transversality --- together with the attribution those
+fixes made possible: of five outstanding advisory failures, four were
+discretization artifacts and one is real. The cross-campaign status of every
+check lives in the register \file{OPTIMALITY\_CERTIFICATION.md} at the
+\file{orbit\_transfer} root.
 \end{abstract}
 
 \tableofcontents
@@ -369,13 +374,17 @@ the cost is quadratic in $s$ and $S^d$ is the derivative of the smoothed
 objective, not an affine switching function: interior $s$ can legitimately
 give $S^d=0$ and the sign carries no bang-bang implication.
 
-\textbf{Known gap.} \file{foc\_check.m} does not currently receive
-$\varepsilon$, so on an $\varepsilon>0$ leg it still folds \code{signPct},
-the singular-arc count, and \code{sdotMinRel} into the advisory verdict. The
-ELFO energy-seed run prints a caveat, but the verdict itself is not
-$\varepsilon$-aware. Recorded as pre-promotion work: the manifest should carry
-a throttle-cost kind (affine / quadratic) and skip these three checks
-programmatically when it is not affine.
+\textbf{Fixed 2026-07-25.} \file{foc\_check.m} now resolves a throttle-cost
+kind --- \code{opts.eps} (affine iff $\varepsilon=0$) overrides
+\code{opts.throttleCostKind}, which overrides the manifest's own field --- and
+\emph{skips} the whole bang-bang family (\code{signPct}, singular-arc count,
+\code{sdotMinRel}) when the cost is not affine, reporting \code{'-{}-'} for
+each and printing a NOTE. Every term in the advisory verdict is NaN-tolerant,
+so a skipped check neither passes nor fails. Before this, the ELFO energy seed
+($\varepsilon=1$) reported ``sign law 100\%'' and an ADVISORY PASS resting
+partly on a meaningless number; it now passes on \code{kktStat} and
+transversality alone, which are the conditions that actually apply at
+$\varepsilon=1$.
 
 %---------------------------------------------------------------
 \subsection{Costate extraction: interval duals to nodal costates}
@@ -468,13 +477,37 @@ duals to the true endpoint,
 \bigl(\Lambda_N-\Lambda_{N-1}\bigr),
 \label{eq:endpointfix}
 \end{equation}
-with the symmetric formula at $\sigma_1$. The more principled alternative is to
-form the exact discrete endpoint covector
-$p_{N+1}=(I-\tfrac{h_N}{2}D_{N+1})^{\!\top}\Lambda_N$ plus terminal terms,
-whose mass component is zero by terminal-node stationarity when the final mass
-is genuinely free --- reported as a discrete identity rather than an estimate.
-Until one is implemented, treat marginal misses on this line as a flag to
-investigate, not a verdict: the two candidate explanations remain confounded.
+with the symmetric formula at $\sigma_1$. \textbf{Implemented 2026-07-25}
+(\file{foc\_dual\_to\_costate.m} second output \code{lamX}): the gate now uses
+$\widehat\lambda(t_f)$ and \emph{reports the one-sided value beside it}, so a
+marginal miss can be attributed rather than merely moved.
+
+\paragraph{What that attribution found.} The two competing explanations
+separated cleanly:
+\begin{center}
+\small
+\begin{tabular}{@{}llll@{}}
+\toprule
+row & one-sided & endpoint-corrected & reading \\
+\midrule
+Earth 5\,N   & $3.189\times10^{-3}$ & $\mathbf{5.215\times10^{-4}}$ & endpoint bias; now PASS \\
+CR3BP 5\,N   & $3.108\times10^{-3}$ & $\mathbf{6.437\times10^{-4}}$ & endpoint bias; now PASS \\
+Earth 2.5\,N & $1.265\times10^{-3}$ & $1.265\times10^{-3}$ & \textbf{unchanged --- genuinely real} \\
+\bottomrule
+\end{tabular}
+\end{center}
+\noindent
+The 2.5\,N row not moving \emph{at all} is the confirmation, not an anomaly:
+the bias exists only where $\lambda_m$ is still changing at $t_f$, i.e.\ where
+the final arc \emph{burns}. A row whose final arc coasts has
+$\dot\lambda_m\approx0$ there and is untouched by \eqref{eq:endpointfix} --- so
+its miss is a property of the solution, not of the discretization. That points
+back at explanation (i): 2.5\,N is one of the rows a warm re-solve improves.
+
+The more principled alternative remains open: form the exact discrete endpoint
+covector $p_{N+1}=(I-\tfrac{h_N}{2}D_{N+1})^{\!\top}\Lambda_N$ plus terminal
+terms, whose mass component is zero by terminal-node stationarity when the
+final mass is genuinely free --- a discrete identity rather than an estimate.
 
 %---------------------------------------------------------------
 \subsection{The time costate: Hamiltonian conditions in dual form}
@@ -582,18 +615,27 @@ stable, countable structure.
 the switch nodes $k_i$; \code{rep.nSwitches}. Gate: $>10^{-3}$.
 
 \paragraph{Interpretation --- with the register's caveat.}
-Small values flag \emph{candidate} grazing --- e.g.\ tulip flagship
-$1.4\times10^{-7}$ (25 switches), ELFO $1.33\times$ front row
-$4.5\times10^{-5}$ (50 switches) --- consistent with the node-grazing-switch
-behavior the tulip campaign already suspected. \textbf{But both external
-reviewers independently judged those two numbers unable to diagnose grazing},
-because of the recorded discretization confound (register finding I1): $S^d_k$
-carries the local trapezoid weight $w_k$ and the difference is not divided by
-the step, so on refined or PSR-split meshes (which densify \emph{exactly at
-switches}) the statistic shrinks with $h$ even for a perfectly regular
-crossing.
+\textbf{Fixed 2026-07-25 --- and the original readings were artifacts.} The
+un-normalized statistic reported tulip flagship $1.4\times10^{-7}$ (25
+switches) and ELFO $1.33\times$ front row $4.5\times10^{-5}$ (50 switches),
+which looked like confirmation of the node-grazing-switch behavior the tulip
+campaign already suspected. Both external reviewers independently judged those
+numbers \emph{unable to diagnose grazing}, because $S^d_k$ carries the local
+trapezoid weight $w_k$ and the difference was not divided by the step: on
+refined or PSR-split meshes (which densify \emph{exactly at switches}) the
+statistic shrinks with $h$ even for a perfectly regular crossing. They were
+right --- under the corrected statistic the same two rows read
+$\mathbf{2.70\times10^{1}}$ and $\mathbf{1.19\times10^{2}}$, comfortably
+transversal, and both now PASS. \emph{The grazing reading was entirely a mesh
+artifact.}
 
-The agreed replacement --- deweight, then take a true divided difference, then
+A dedicated regression test (\file{tests/test\_foc\_mesh\_invariance.m}) locks
+this in both directions on the toy problem: across a $4\times$ refinement the
+normalized statistic holds ($2.727\to2.775$, ratio $1.02$) while the legacy one
+falls $4.82\times10^{-2}\to1.18\times10^{-2}$ --- a ratio of $4.1$, i.e.\ it was
+reporting $h$.
+
+The replacement --- deweight, then take a true divided difference, then
 non-dimensionalize:
 \begin{equation}
 \widehat S_k=\frac{S^d_k}{w_k},\qquad
@@ -605,13 +647,18 @@ R_i=\frac{(\sigma_{N+1}-\sigma_1)\,D_i}{S_{\mathrm{ref}}},
 with $w_1=h_1/2$, $w_k=(h_{k-1}+h_k)/2$, $w_{N+1}=h_N/2$, and
 $S_{\mathrm{ref}}$ the median $|\widehat S_j|$ over coast nodes outside a
 one-node neighborhood of any switch. Report $\min_i R_i$: dimensionless and
-invariant to local refinement for a smooth transversal crossing. One reviewer
-adds --- correctly --- that no threshold on a \emph{single} mesh is defensible;
-regularity should be asserted only if $R_i$ stays above the floor on two
-meshes. The same deweighting applies to the singular-arc test of
-\S\ref{sec:singular}, which otherwise reports false positives in densified
-regions. Until this lands, read a FAIL here as ``inspect this switch on the
-mesh,'' not ``the switch is degenerate.''
+invariant to local refinement for a smooth transversal crossing. The same
+deweighting is applied to the singular-arc test of \S\ref{sec:singular}, which
+otherwise reports false positives in densified regions.
+
+\textbf{Caveat that survives the fix.} One reviewer adds --- correctly --- that
+no threshold on a \emph{single} mesh is defensible: $R_i$ being large on one
+mesh does not establish transversality. Regularity should be asserted only if
+$R_i$ stays above the floor on \emph{two} meshes, and the $10^{-3}$ gate is
+provisional until recalibrated on deweighted data. So the current PASSes on
+this line mean ``no evidence of grazing,'' not ``proven regular'' --- which
+matters, because this is Maurer ingredient~(ii) and a second-order certificate
+will lean on it.
 
 %---------------------------------------------------------------
 \subsection{The second-order line: IPOPT native inertia ($\delta_w$)}
@@ -689,31 +736,44 @@ inspection.
 
 \subsection{Anatomy of the report}
 
-A real block, from the tulip flagship (July 2026):
+A real block, from the Earth 2.5\,N row (July 2026) --- chosen deliberately
+because reading a \emph{failing} report correctly is the skill this section
+needs to teach:
 
 \begin{small}
 \begin{verbatim}
-========== FIRST-ORDER OPTIMALITY REPORT: sundman_minfuel_certified ==========
- KKT stationarity  ||grad_x L||_inf :  5.746e-13   (sign s=+1)   PASS
+========== FIRST-ORDER OPTIMALITY REPORT: MEE_M2_2p5N ==========
+ KKT stationarity  ||grad_x L||_inf :  1.166e-11   (sign s=+1)   PASS
  Min condition (throttle sign law)  :    100.00 %                PASS
- Transversality |lam_m(tf)| rel     :  5.239e-09                 PASS
+ Transversality |lam_m(tf)| rel     :  1.265e-03                 FAIL
  Singular-arc nodes                 :          0                 PASS
- Regular switching min|Sdot| rel    :  1.376e-07   (25 switches) FAIL
+ Regular switching min|Sdot| rel    :  7.247e+00   (76 switches) PASS
+   ^ transversality, legacy one-sided :  1.265e-03   [I5 endpoint fix]
+   ^ regular switching, legacy raw    :  9.888e-03   [I1 mesh fix]
  ADVISORY verdict: FAIL   (report-only burn-in: does not alter certified status)
 \end{verbatim}
 \end{small}
 
 \noindent
 Line-by-line: the row is a machine-tight extremal (\S\ref{sec:kkt}) whose
-thrust program agrees with its own multipliers everywhere
-(\S\ref{sec:signlaw}), has priced its propellant to zero at $t_f$
-(\S\ref{sec:transversality}), has no singular arcs (\S\ref{sec:singular}) ---
-and carries at least one switch whose crossing slope is suspiciously small
-(\S\ref{sec:sdot}; recall the mesh caveat before concluding physical
-grazing). The advisory verdict is the conjunction of the gated lines; here it
-is FAIL \emph{solely} because of the $\dot S$ line, and, per the burn-in
-policy, it changes nothing about the row's certified status --- it files a
-finding.
+thrust program agrees with its own multipliers at every node
+(\S\ref{sec:signlaw}), has no singular arcs (\S\ref{sec:singular}), and whose
+76 switches all cross transversally (\S\ref{sec:sdot}) --- but it has
+\emph{not} priced its propellant to zero at $t_f$
+(\S\ref{sec:transversality}). The advisory verdict is the conjunction of the
+gated lines, so it is FAIL solely on that one; per the burn-in policy this
+changes nothing about the row's certified status --- it files a finding.
+
+\paragraph{Reading the two \texttt{\^{}} attribution lines.} These carry the
+diagnosis. The regular-switching line moved $9.888\times10^{-3}\to7.247$ under
+the I1 mesh normalization --- a large move, so the legacy number was a
+discretization artifact and there was never a grazing problem here. The
+transversality line did \emph{not} move ($1.265\times10^{-3}$ both ways), so
+the I5 endpoint bias is \emph{not} the explanation and the miss is real. A
+large gap means ``the old number was an artifact''; a zero gap means ``this
+finding survives correction.'' That is what turns a FAIL from an alarm into a
+diagnosis --- and it is why both values are printed rather than the corrected
+one alone.
 
 The direction line (\S\ref{sec:direction}), the time-costate line
 (\S\ref{sec:timecostate}), the horizon note, and the $\delta_w$ line
@@ -736,6 +796,12 @@ Time-costate CoV / end & \code{lamTimeCoV}, \code{lamTimeEnd} & informational & 
 Singular-arc nodes & \code{singularArcNodes} & $=0$ & \code{thrRow} empty \\
 Regular switching & \code{sdotMinRel} & $> 10^{-3}$ & \code{thrRow} empty \\
 IPOPT inertia $\delta_w$ & \code{ipopt.certLocalMin} & informational & no \code{regHistory} \\
+\midrule
+\multicolumn{4}{@{}l@{}}{\emph{attribution companions (printed beside the gated value)}}\\
+transversality, one-sided & \code{lamMassEndRelOneSided} & --- & as above \\
+regular switching, raw & \code{sdotMinRelLegacy} & --- & as above \\
+deweighted switching fn & \code{Sdeweighted} & --- & \code{thrRow} empty \\
+throttle-cost kind & \code{throttleCostKind}, \code{bangBangChecksRun} & --- & never \\
 \bottomrule
 \end{tabular}
 \caption{Report lines, their \code{rep} fields, and default thresholds

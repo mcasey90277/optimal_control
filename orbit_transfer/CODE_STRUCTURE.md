@@ -56,7 +56,7 @@ The outcomes are not close:
 
 | item | scale | gate | outcome |
 |---|---|---|---|
-| **`psr_vendor_check` drift test** | 15 identical + 4 known-divergent | the test *is* the gate | **DONE** — `PSR/tests/test_psr_vendor_drift.m` |
+| **`psr_vendor_check` drift test** | 15 identical + 4 known-divergent | the test *is* the gate | **SUPERSEDED** — served its purpose, then the 2026-07-26 flatten dissolved `PSR/lib` entirely and the test with it |
 | **IPOPT options block** → `cr3bp_ipopt_opts` | **3 CR3BP solvers** (not 5 — see below) | byte-identity of the options struct | **DONE** — `cr3bp_common/cr3bp_ipopt_opts.m` |
 | **CasADi path bootstrap** → one helper | 12 copies repo-wide | — | **REFUSED — see below** |
 
@@ -127,7 +127,7 @@ stopped existing when ELFO moved — so it failed at load and had not run for fi
 days. Merged into the new gate with corrected paths; its seed comparison is the
 half with real authority and is preserved.
 
-#### OPEN DECISION — PSR runs the upstream solver, not its vendored copy
+#### ~~OPEN DECISION~~ RESOLVED 2026-07-26 — PSR ran the upstream solver, not its vendored copy
 
 Found while doing the above, and **not** resolved here because it changes
 behaviour on a certified pipeline.
@@ -146,20 +146,21 @@ So `PSR/lib/casadi_minfuel_sundman.m` and `PSR/lib/minfuel_at_tf.m` are **dead
 code**, and PSR has been running the upstream solver for eleven days. The
 vendoring did not fail loudly — an unrelated later feature silently overrode it.
 
-`insertion_states` is now vendored into `PSR/lib` and the `addpath` is retained,
-so **PSR's behaviour is unchanged by this work**. What remains is a genuine
-choice:
+**Resolved by taking (b), later the same day**, as part of the flatten: the
+whole of `PSR/lib` was deleted and there is now exactly one copy of everything.
+That was safe precisely *because* of the finding above — the vendored solver was
+already dead code, so removing it changed no behaviour and required no
+re-certification. Had the vendoring still been live, this would have been a
+re-run-the-certified-result job.
 
-- **(a) Restore isolation** — drop the `addpath`. The two dead files go live,
-  i.e. PSR's solver silently reverts to the 2026-07-12 snapshot. Requires
-  re-running the certified PSR result.
-- **(b) Accept reality** — delete the two dead vendored files and document PSR
-  as depending on upstream for the solver. No behaviour change, but PSR is no
-  longer self-contained.
+The alternative, (a) restore isolation by dropping the `addpath`, was rejected:
+it would have silently reverted PSR's solver to the 2026-07-12 snapshot,
+discarding eleven days of upstream fixes, on a certified pipeline.
 
-Do **not** take either as cleanup. `test_psr_vendor_drift` now pins the
-resolution of all six load-bearing names, so this cannot flip again unnoticed
-in either direction (negative-tested).
+The guard moved with the decision. `test_psr_vendor_drift` is gone along with
+the directory it guarded; `GTO_tulip/direct/tests/test_run_gto_tulip.m` check 3
+now asserts that no shared name resolves to more than one file, which is the
+same invariant stated positively.
 | ~~**certified-quantity guard** → one function~~ **DONE 2026-07-26** | **4 files / 5 instances**, not "8+" — `psr_mee_refine`'s hits were a refinement-loop stop-reason string | `verify_common/tests/test_certified_guard.m` (all 3 refusals, both directions) + 8/8 `verify_common` tests + 4 campaign smokes |
 | **`optdef` vs per-campaign `getdef`/`gd`** | **REFUSED — see below** | — |
 | ~~**Fix stale headers**~~ **DONE 2026-07-26** | ELFO `setup_paths` rewritten (the claimed `casadi_minfuel_sundman`/`minfuel_at_tf` reuse never happened); CR3BP README's "pipeline stages" corrected | none needed |

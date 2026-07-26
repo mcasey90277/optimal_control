@@ -195,9 +195,13 @@ and solved by IPOPT with exact sparse AD derivatives.
   \draw[fl] (mt) -- (gh); \draw[fl] (gh) -- (bb);
   \draw[fl] (bb) -- (mf); \draw[fl] (mf) -- (ex); \draw[fl] (ex) -- (fc);
 \end{tikzpicture}
-\caption{The ELFO pipeline. Unlike the tulip campaign there is no single
-six-stage front door; the stages are separate drivers, chained by banked
-artifacts and orchestrated for sweeps by shell scripts.}
+\caption{The ELFO pipeline. The generators above build the seed layer once;
+\file{run\_elfo\_minfuel} is then the campaign's front door and carries the
+same six-stage shape as its tulip sibling --- parameters, solve, refine
+(deferred: PSR is single-primary tulip machinery), export, verify (including
+the generic FOC gate), movie --- with \texttt{movieMode} and \texttt{rerun}
+flags and per-stage resume. \file{elfo\_run\_one} is the function-call route
+that \file{elfo\_batch.sh} drives for sweeps.}
 \label{fig:elfopipe}
 \end{figure}
 

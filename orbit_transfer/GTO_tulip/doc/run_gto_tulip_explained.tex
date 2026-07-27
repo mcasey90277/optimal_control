@@ -1,0 +1,305 @@
+\documentclass[11pt]{article}
+\usepackage[margin=1.05in]{geometry}
+\usepackage{amsmath,amssymb,bm}
+\usepackage{booktabs}
+\usepackage{siunitx}
+\usepackage{listings}
+\usepackage{xcolor}
+\usepackage[colorlinks=true,linkcolor=blue,citecolor=blue,urlcolor=blue]{hyperref}
+
+\newcommand{\file}[1]{\texttt{#1}}
+
+\definecolor{cmt}{rgb}{0.30,0.45,0.30}
+\definecolor{kw}{rgb}{0.10,0.10,0.70}
+\lstset{language=Matlab, basicstyle=\ttfamily\footnotesize,
+        commentstyle=\color{cmt}\itshape, keywordstyle=\color{kw},
+        frame=single, framesep=4pt, backgroundcolor=\color{gray!6},
+        columns=fullflexible, breaklines=true, showstringspaces=false,
+        numbers=left, numberstyle=\tiny\color{gray!70}, xleftmargin=18pt}
+
+\title{\file{run\_gto\_tulip.m} Explained:\\ A Block-by-Block Walkthrough}
+\author{Michael Casey}
+\date{July 27, 2026}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+A code walkthrough of the GTO~$\to$~tulip front door, block by block: what each
+piece does, why it is written that way, and which lines encode a decision that
+cost something to learn. Companion to \file{gto\_tulip\_guide}, which covers the
+optimal control problem and the discretization; this document covers the
+\emph{script}. Line numbers refer to the file as of 2026-07-27.
+\end{abstract}
+
+\tableofcontents
+
+%=======================================================================
+\section{Shape of the file}
+%=======================================================================
+
+The script has seven blocks. Only the second is meant to be edited.
+
+\begin{center}
+\begin{tabular}{llp{6.4cm}}
+\toprule
+lines & block & role \\
+\midrule
+1--60    & header      & the contract, and the two knobs that are refused \\
+61--70   & \textbf{0. paths}   & one \file{setup\_paths}, output folders, campaign config \\
+71--226  & \textbf{1. parameters} & \emph{edit this section only}; override hook; derived names \\
+227--353 & \textbf{2. direct solve} & seed guards, $\varepsilon$-schedule, \file{minfuel\_at\_tf}, basin check \\
+354--405 & \textbf{3. PSR refine}   & optional switch-time sharpening \\
+406--432 & \textbf{4. export}       & costates + data products \\
+433--496 & \textbf{5. verify}       & PMP certificate, FOC/KKT gate \\
+497--581 & \textbf{6. movie}        & control movie \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+Stages 3--6 are optional and each skips itself when its output already exists,
+so re-running resumes rather than restarts.
+
+%=======================================================================
+\section{Block 0: paths and output folders}
+%=======================================================================
+
+\begin{lstlisting}
+here = fileparts(mfilename('fullpath'));
+cd(here);  setup_paths();
+resDir  = fullfile(here, 'results');   % pipeline intermediates
+dataDir = fullfile(here, 'data');      % exported data products (stage 4)
+if ~exist(resDir, 'dir'), mkdir(resDir); end
+cfg = minfuel_config();                % campaign constants
+\end{lstlisting}
+
+Four things worth noticing in six lines.
+
+\paragraph{\file{mfilename}, not \file{pwd}.} Every path is derived from the
+script's own location, so the file works regardless of where MATLAB happens to
+be. This matters more than it looks: several tests in this repository broke
+because they assumed a working directory.
+
+\paragraph{One \file{setup\_paths}.} Before the 2026-07-26 flatten there were
+two, for what was actually one pipeline plus its library. There is now exactly
+one, and it adds \file{lib}, \file{certify}, \file{viz}, \file{tests},
+\file{cr3bp\_common}, and the indirect \file{ms\_band} verifier.
+
+\paragraph{\file{cfg} is the single source of truth.} \file{minfuel\_config}
+owns $t_{f,\min}$, the $\varepsilon$ schedules, the results directories and the
+filename rules. Nothing here hardcodes a campaign constant.
+
+\paragraph{The \file{mkdir} placement is a known trap.} It runs \emph{before}
+the override hook in block~1, so a caller who overrides \texttt{resDir} gets a
+path that was never created. Redirecting output means creating the directory
+yourself.
+
+%=======================================================================
+\section{Block 1: parameters}
+%=======================================================================
+
+\subsection{The knobs}
+
+\begin{lstlisting}
+thrustN = 0.025;      % [N] max thrust. 0.025 = campaign nominal
+factor  = 1.15;       % t_f / t_f_min
+insertion = 'campaign';   % tulip insertion criterion
+seedSpec  = 'energy';     % 'energy' | 'neighbor' | '/path/to/result.mat'
+epsMin    = 0;            % 1 = min-ENERGY, 0 = min-FUEL
+maxIter   = cfg.maxIter;
+refineOpts = struct('maxRounds',4, 'K',8, 'maxAdd',40);
+movieMode  = 'movie';
+rerunDirect = false;  rerunRefine = false;  rerunVerify = false;
+\end{lstlisting}
+
+\texttt{epsMin} is the one that changes the physics: it is the endpoint of the
+Bertrand--\'Epenoy homotopy, so $1$ gives a smooth minimum-energy control and
+$0$ the bang-bang minimum-fuel one. Everything between is a partially sharpened
+solution.
+
+\texttt{thrustN} was added 2026-07-27, when the thrust ladder turned out to be
+reachable. Off-nominal values need a seed at that thrust; see
+\S\ref{sec:seedresolve}.
+
+\subsection{The override hook}
+
+\begin{lstlisting}
+if exist('TULIP_OVERRIDES','var') && isstruct(TULIP_OVERRIDES)
+    ovf = fieldnames(TULIP_OVERRIDES);
+    for ovk = 1:numel(ovf)
+        eval([ovf{ovk} ' = TULIP_OVERRIDES.(ovf{ovk});']);
+    end
+    clear ovf ovk
+end
+\end{lstlisting}
+
+This is why the script does \emph{not} begin with \texttt{clear}: a batch driver
+sets \texttt{TULIP\_OVERRIDES} in the caller's workspace and runs the script,
+and a \texttt{clear} would destroy it. The \texttt{eval} is deliberate --- it
+assigns whatever fields the caller supplies, so no list needs maintaining in two
+places. Absent the struct, behaviour is byte-identical to an interactive run.
+
+\subsection{Derived names, and why the tag carries two numbers}
+
+\begin{lstlisting}
+eTag        = strrep(sprintf('%g', epsMin), '.', 'p');  % 0 -> '0'
+tag         = sprintf('f%04d_minEps%s', round(1000*factor), eTag);
+directFile  = fullfile(resDir, ['psr_direct_'  tag '.mat']);
+seedFile    = fullfile(resDir, ['psr_seed_'    tag '.mat']);
+refinedFile = fullfile(resDir, ['psr_refined_' tag '.mat']);
+\end{lstlisting}
+
+The names are a deterministic function of the parameters, which is what makes
+per-stage resume safe: a stage tests \texttt{isfile(directFile)} and skips if it
+exists. A free-form run name would break that --- two different runs could
+collide and one would silently resume from the other's output.
+
+The tag carries \emph{both} \texttt{factor} and \texttt{epsMin} because an
+earlier factor-only tag let an $\varepsilon>0$ run silently reuse the
+$\varepsilon=0$ solution. Encoding the factor in milli-units (\texttt{f1150})
+rather than \texttt{\%.2f} avoids collisions at $0.001$ granularity.
+
+%=======================================================================
+\section{Block 2: the direct solve}
+%=======================================================================
+
+\subsection{Guards before the solve}
+\label{sec:seedresolve}
+
+Two preconditions fire before any solver is called, so a bad request fails in
+seconds rather than twenty minutes in.
+
+\paragraph{Off-nominal thrust resolves to a ladder rung.}
+\begin{lstlisting}
+isNominal = abs(thrustN - cfg.thrustN) < 1e-15;
+if ~isNominal && strcmpi(seedSpec, 'energy')
+    lad = fullfile(resDir, 'ladder', sprintf('tulip_T%s_f%04d_eps0.mat', ...
+                   thrust_tag(thrustN), round(1000*factor)));
+    if ~isfile(lad), error('run_gto_tulip:noRung', ...); end
+    seedSpec = lad;
+end
+\end{lstlisting}
+The energy backbones are nominal-thrust by construction, so they cannot seed an
+off-nominal run --- the fingerprint check inside \file{minfuel\_at\_tf} would
+(correctly) refuse them. Produce a rung with \file{run\_tulip\_ladder} first;
+this script then finds it automatically.
+
+\paragraph{Missing backbone names the open problem.} If no backbone exists at
+the requested factor, the error lists what \emph{is} on disk and states that
+below ${\sim}1.12$ this is the open near-minimum-time band --- not a file
+somebody forgot to generate. The distinction saves a pointless search.
+
+\subsection{The schedule is truncated, not rebuilt}
+
+\begin{lstlisting}
+if isempty(sched)
+    if strcmp(seedSpec,'energy'), baseSched = cfg.schedSharpen;
+    else,                         baseSched = cfg.schedNeighbor; end
+else
+    baseSched = sched;
+end
+effSched = [baseSched(baseSched > epsMin), epsMin];
+\end{lstlisting}
+
+Keeping the campaign's certified step sequence and cutting it at
+\texttt{epsMin} --- rather than generating a fresh schedule --- means a partial
+run is a genuine \emph{prefix} of the full one. An $\varepsilon$-optimal
+solution is then a waypoint of the min-fuel run, not a different homotopy.
+
+\subsection{The solve itself}
+
+\begin{lstlisting}
+args = {'seedFactor', seedFactor, 'sched', effSched, 'thrustN', thrustN, ...
+        'outFile', directFile, 'maxIter', maxIter, 'branch', 'psr'};
+outDirect = minfuel_at_tf(factor, 'seed', seedSpec, args{:});
+assert(outDirect.certified, ...);
+\end{lstlisting}
+
+The script does not implement the chain; \file{minfuel\_at\_tf} does. That is
+deliberate --- it is the campaign's canonical per-$t_f$ driver, so every run
+inherits its seed-fingerprint check, its schedule policy, its certification gate
+and its provenance stamping. ``Certified'' there means the homotopy \emph{reached
+the requested} $\varepsilon$ with a tight solve; an uncertified attempt is
+returned but never written, because a loose iterate must not become a neighbour
+seed later.
+
+\subsection{The basin check}
+
+\begin{lstlisting}
+certRef = fullfile(here, 'lib', 'sundman_minfuel_certified.mat');
+if isfile(certRef)
+    K = load(certRef);
+    if abs(K.out.X(8,end) - outDirect.X(8,end)) < 1e-9   % same t_f
+        dmf = outDirect.mf - K.out.mf;
+        ...
+    end
+end
+\end{lstlisting}
+
+This block exists because of a measurement. At factor $1.150$, two different
+seed routes both converge machine-tight to 25 switches at the \emph{same} $t_f$
+and land on \emph{different} local optima ($m_f = 0.847086$ versus $0.849066$).
+Later runs found the spread reaches \SI{9.84}{\percent} in $\Delta V$ at other
+factors, and that the continuation \emph{path} selects the basin as well as the
+seed route. Without this printout a run at the flagship factor would report
+numbers a few percent off the campaign headline and look perfectly healthy.
+Higher $m_f$ is better --- minimum fuel means maximum final mass.
+
+%=======================================================================
+\section{Blocks 3--6: the optional stages}
+%=======================================================================
+
+\paragraph{3. PSR refinement.} PMP-steered mesh refinement: the switching
+function locates where each switch is worst resolved, nodes are \emph{added}
+there, and the problem is re-solved. One-directional by design --- it never
+coarsens and never resamples existing nodes, because resampling reintroduces a
+${\sim}10^{-2}$ defect floor. It sharpens switch times below the original mesh
+width; it does not establish that the base mesh was adequate.
+
+\paragraph{4. Export.} Writes the data products --- mesh, trajectory, control,
+costates, switching function, switch times, transversality errors, provenance.
+The file doubles as a ready-made seed for the indirect campaign, which is why
+its layout is fixed.
+
+\paragraph{5. Verify.} The first-order PMP certificate (extremality, not
+minimality) plus the campaign-agnostic FOC/KKT gate from \file{verify\_common}.
+Both are advisory and \texttt{try}-guarded so a gate hiccup cannot break a
+certified pipeline. Note what this does \emph{not} give: second-order
+optimality, which is unestablished everywhere in this repository.
+
+\paragraph{6. Movie.} The control movie in the rotating frame --- trajectory
+coloured by throttle state, primer arrows during burns, synced throttle strip
+and running $\Delta V$. Playback is uniform in \emph{physical} time, scheduled
+on the carried time state $X(8,:)$, because the Sundman mesh is deliberately
+non-uniform in time.
+
+%=======================================================================
+\section{Reading the output}
+%=======================================================================
+
+\begin{center}
+\begin{tabular}{lp{8.2cm}}
+\toprule
+line & what to check \\
+\midrule
+\texttt{CERTIFIED} & $1$ means the homotopy reached the requested $\varepsilon$
+  tight. $0$ means the result was \emph{not saved} --- do not quote it. \\
+\texttt{max defect} & should be ${\sim}10^{-14}$. Anything above $10^{-6}$ is
+  not a usable KKT certificate. \\
+\texttt{basin check} & says which optimum you landed in. ``WORSE'' is not a
+  failure; it means quote \file{run\_certified\_minfuel} instead. \\
+\texttt{switches} & treat as a \emph{band}, not a number. Three measured
+  re-solves of the flagship give 24 against the published 25 while mass agrees
+  to ${\sim}0.1\%$. \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\paragraph{A caution that applies to the whole script.} Passing tests and a
+clean run do not prove the campaign works. After the 2026-07-26 restructure
+every fast test passed while the flagship reproduction was broken by a single
+stale artifact path. Run \file{run\_certified\_minfuel} (with an explicit save
+path --- with no second argument it overwrites the published reference) after
+any structural change.
+
+\end{document}

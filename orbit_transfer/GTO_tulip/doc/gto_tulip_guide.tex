@@ -204,6 +204,76 @@ roughly $48{,}000$ variables and $36{,}000$ equality constraints. It is
 assembled and solved with CasADi + IPOPT, with exact sparse first and second
 derivatives by algorithmic differentiation.
 
+\subsection{The mesh is inherited, not chosen}
+\label{sec:mesh}
+
+This is the single most important thing to understand before asking whether a
+solution is converged, and it is easy to miss because no parameter announces it.
+
+\paragraph{What actually sets the node placement.} Three quantities define the
+discretization: the node count $N$, the normalized grid
+$\sigma_k \in [0,1]$, and the total regularized length $\tau_f$. \emph{None of
+them is a parameter of the front door.} All three are read off the energy
+backbone at the requested $t_f$:
+\begin{center}
+\file{results/energy/energy\_f\#\#\#\#.mat} $\;\longrightarrow\;$
+\texttt{sigma}, \texttt{tauf0}, and $N=\mathrm{numel}(\texttt{sigma})$
+\end{center}
+and every downstream solve at that $t_f$ --- the tight re-clean, all thirteen
+$\varepsilon$ steps, any neighbour-seeded continuation --- inherits them
+unchanged. The flagship runs at $N=4001$ because that is what the backbone has,
+not because $4001$ was chosen or justified.
+
+\paragraph{Where the nodes land, mathematically.} With $\tau = \sigma\,\tau_f$
+and the Sundman law $\ud t/\ud\tau = \kappa = r_1^{\,p}$, a uniform $\sigma$
+grid of spacing $\Delta\sigma = 1/N$ gives physical time steps
+\begin{equation}
+\Delta t_k \;\simeq\; \tau_f\,\kappa(\vect{x}_k)\,\Delta\sigma
+\;=\; \frac{\tau_f}{N}\, r_1(\vect{x}_k)^{p} ,
+\qquad p = \tfrac{3}{2}.
+\label{eq:dtk}
+\end{equation}
+So node density in \emph{time} scales as $r_1^{-3/2}$: dense at perigee, sparse
+at apogee. In arc length, $\ud s = \|\vect{v}\|\ud t$, and near perigee
+$\|\vect{v}\|\sim r_1^{-1/2}$, so $\ud s/\ud\sigma \sim r_1$ --- the mesh is
+still finest exactly where the dynamics are fastest. For context, $p=1$ would
+make the grid uniform in eccentric anomaly and $p=2$ uniform in true anomaly;
+$p=3/2$ sits deliberately between the two.
+
+Equation~\eqref{eq:dtk} is worth reading carefully, because it says the mesh
+adapts to the trajectory's \emph{geometry} --- through $r_1$ --- and to nothing
+else. It does not adapt to the \emph{solution}: the switching structure, where
+the control is discontinuous and accuracy is hardest to obtain, has no influence
+on where nodes are placed.
+
+\paragraph{Why it is frozen: the no-resample discipline.} Interpolating a
+converged solution onto a different mesh does not merely lose a little accuracy
+--- it reintroduces a defect floor of order $10^{-2}$ that pins IPOPT in
+restoration and never clears. The campaign's working recipe is therefore to map
+a collocation-feasible solution into $\tau$ using its \emph{own} nodes, with no
+interpolation anywhere. That discipline is what makes the $\varepsilon$ homotopy
+work at all, and its unavoidable consequence is that $N$ cannot be varied
+downstream: changing $N$ means resampling, and resampling is the thing that was
+outlawed.
+
+\paragraph{The consequence, stated plainly.} There is no mesh knob, and that is
+not an oversight --- it follows from the no-resample rule. But it means
+\textbf{the question ``is this mesh adequate?'' cannot be answered from inside
+the pipeline}, because there is nothing to vary. Answering it requires
+generating backbones at several densities with \file{gen\_tulip\_energy\_2p} and
+comparing solutions across them: observed order of accuracy, and whether final
+mass and switch times converge. That study is specified and has not been run, so
+at present the honest position is that $N=4001$ is \emph{sufficient in practice}
+and \emph{unjustified in theory}.
+
+\paragraph{The one mechanism that does change the mesh.} PSR refinement
+(stage~3) is the exception, and it is deliberately one-directional: it measures
+where the PMP switching function localizes each switch worst, \emph{adds} nodes
+in those intervals, and re-solves --- always starting from the backbone, never
+coarsening, never resampling the existing nodes. It sharpens switch times below
+the original mesh width. It does not, and is not intended to, establish that the
+underlying mesh was adequate to begin with.
+
 %=======================================================================
 \section{The solution pipeline}
 %=======================================================================

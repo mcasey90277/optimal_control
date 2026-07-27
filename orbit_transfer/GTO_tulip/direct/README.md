@@ -90,6 +90,54 @@ direct/
 └── data/                exported data products
 ```
 
+## The mesh is inherited, not chosen — read before touching discretization
+
+**There is no mesh parameter anywhere in this pipeline, and that is structural,
+not an oversight.**
+
+`N`, the normalized grid `sigma`, and the total regularized length `tauf0` are
+all read off the energy backbone at the requested `t_f`
+(`results/energy/energy_f####.mat`). Every downstream solve — the tight
+re-clean, all 13 ε steps, any neighbour-seeded continuation — inherits them
+unchanged. The flagship runs at **N = 4001 because that is what the backbone
+has**, not because 4001 was chosen or justified.
+
+Node placement follows from the Sundman law. With `dt/dτ = κ = r₁^1.5` and a
+uniform σ grid,
+
+```
+Δt_k  ≈  (tauf0 / N) · r₁(x_k)^1.5
+```
+
+so density in time goes as `r₁^-1.5` — dense at perigee, sparse at apogee. The
+mesh therefore adapts to the trajectory's **geometry** and to nothing else. It
+does **not** adapt to the solution: the switching structure, where the control
+is discontinuous and accuracy is hardest, has no influence on node placement.
+
+**Why it is frozen — the no-resample discipline.** Interpolating a converged
+solution onto a different mesh reintroduces a ~1e-2 defect floor that pins IPOPT
+in restoration and never clears. The recipe is to map a collocation-feasible
+solution into τ using its *own* nodes, no interpolation. That is what makes the
+ε homotopy work, and its consequence is that `N` cannot be varied downstream:
+changing `N` means resampling, and resampling is the thing that was outlawed.
+
+**What this costs us.** *"Is this mesh adequate?"* **cannot be answered from
+inside the pipeline** — there is nothing to vary. Answering it means generating
+backbones at several densities with `gen_tulip_energy_2p` and comparing across
+them (observed order of accuracy; do m_f and switch times converge). That study
+is specified in `docs/superpowers/plans/2026-07-25-mesh-convergence-study.md`
+and **has not been run**. The honest position today: N = 4001 is *sufficient in
+practice* and *unjustified in theory*.
+
+**The one mechanism that changes the mesh** is PSR refinement (stage 3), and it
+is one-directional by design: it finds where the PMP switching function
+localizes a switch worst, **adds** nodes there, and re-solves — always from the
+backbone, never coarsening, never resampling existing nodes. It sharpens switch
+times below the original mesh width. It does not establish that the underlying
+mesh was adequate.
+
+Full mathematical treatment: `../doc/gto_tulip_guide.pdf` §3.4.
+
 ## Why it looks like this (2026-07-26 flatten)
 
 It used to be `sundman_minfuel/` and `PSR/` side by side, which read as two

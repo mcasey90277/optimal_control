@@ -55,7 +55,8 @@ Shared problem definition (`cr3bp_lt_params`, `minfuel_config`,
 | `process/HONEST_EVALUATION_DV_TF_FRONT.md` | Candid assessment: what the certification does/doesn't prove, branch structure of the front, open problems. |
 | `process/CODE_CLEANUP_PLAN.md` | This reorganization (phased; Phase 0 done 2026-07-09). |
 | `process/MIN_ENERGY_NOTES.md` | Min-energy (homotopy root) derivation notes. |
-| **`doc/gto_tulip_guide.tex/.pdf`** | **Start here** — 7-page working guide: transfer problem, OCP, discretization (why Sundman, why fixed $\tau_f$), pipeline flow diagram, how to run, what is certified, what is not solved. |
+| **`doc/gto_tulip_guide.tex/.pdf`** | **Start here** — 9-page working guide: transfer problem, OCP, discretization (why Sundman, why fixed $\tau_f$, why the mesh is inherited), pipeline flow diagram, how to run, what is certified, what is not solved. |
+| **`doc/run_gto_tulip_explained.tex/.pdf`** | Block-by-block walkthrough of the front-door *script*: each of its seven blocks, why it is written that way, and which lines encode a hard-won decision. Read after the guide. |
 | `doc/sundman_minfuel_solution_note.tex/.pdf` | 7-page technical note: OCP, homotopy, Sundman regularization, IPOPT. |
 
 ## Entry points

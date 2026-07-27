@@ -235,6 +235,26 @@ Two standing goals (2026-07-21): **(a) keep perfecting the direct code,
     topology change, and this campaign has already been shown to have multiple
     certified optima at one t_f.
 
+  - **Ladder front door built + run 2026-07-27 (`run_tulip_ladder.m`).** Six
+    rungs 25 → 20 mN in 4% geometric steps, every one machine-tight, final rung
+    sharpened to ε=0.
+
+    **THIRD confirmation of basin multiplicity, and the sharpest.** At IDENTICAL
+    t_f (9.0429), thrust and endpoints, the ladder's 20 mN result differs from
+    the 1 mN-step chain run earlier the same day:
+
+    | continuation path | m_f | ΔV | prop | sw |
+    |---|---|---|---|---|
+    | 1 mN steps (A1/B2) | 0.859722 | 3.1127 km/s | 2.1042 kg | 11 |
+    | 4% geometric (ladder) | **0.865477** | **2.9753 km/s** | **2.0178 kg** | 10 |
+
+    4.4% in ΔV, 86 g of propellant, and the ladder's is BETTER. The first two
+    confirmations showed the SEED ROUTE selects the basin; this one shows the
+    **continuation path** does too — same endpoints, same horizon, only the
+    intermediate rung spacing differs. Consequence: a single-path ladder is an
+    upper bound on ΔV, not the front. Build ladders as envelopes over paths, the
+    way `aggregate_front` already does over routes.
+
   - **Descent — RUN 2026-07-27. Ceiling found, and there are TWO stacked
     limits, not one.**
 

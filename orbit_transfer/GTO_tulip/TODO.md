@@ -166,6 +166,47 @@ Two standing goals (2026-07-21): **(a) keep perfecting the direct code,
     topology. Note the earlier 20 mN pilot failure used the fixed-t_f solver at
     fixed N too, so it does not discriminate between these either.
 
+  - **A1 — RUN 2026-07-26. THE 20 mN RUNG CLOSES. Neither explanation was
+    needed: it was the CONTINUATION STEP SIZE.** Both the original pilot and my
+    P0b jumped 25 → 20 mN in one 20% step. Walking the same path in ~4% steps,
+    chaining each converged rung into the next (single-primary + `cScale`,
+    ε=1, N=4001 throughout, one process per rung):
+
+    | rung | status | maxDefect | cScale |
+    |---|---|---|---|
+    | 24 mN | Solve_Succeeded | 1.44e-14 | 1.0145 |
+    | 23 mN | Solve_Succeeded | 2.98e-14 | 1.0199 |
+    | 22 mN | Solve_Succeeded | 3.00e-14 | 1.0219 |
+    | 21 mN | Solve_Succeeded | 3.46e-14 | 1.0211 |
+    | **20 mN** | **Solve_Succeeded** | **2.33e-14** | 1.0222 |
+
+    Every rung machine-tight, at the SAME node count that failed in one jump.
+    So there is no resolution wall at 20 mN and no evidence of a topology wall
+    either — the recorded "fixed-τ_f topology wall" was, at least at this rung,
+    an artifact of an oversized continuation step.
+
+    **What is NOT yet established, and matters:**
+    1. **This is ε=1 (energy) only.** A certified min-fuel rung needs ε→0, and
+       the energy band has always been wider than the ε=0-convergent band in
+       this campaign. The pilot's recorded failure was also *at the ε=1 step*,
+       so the comparison is apples-to-apples — but a certified 20 mN min-fuel
+       rung does not exist yet.
+    2. **Two variables changed at once.** A1 used small steps AND `cScale`; the
+       pilot used a big step AND fixed τ_f. Which mattered is not separated.
+       `cScale` stayed within 2% of 1.0 on every rung, which weakly suggests it
+       is NOT doing the work — the discriminating run is small-step continuation
+       with the ORIGINAL fixed-τ_f `casadi_minfuel_sundman`. If that also reaches
+       20 mN, no reformulation is needed at all and the free-span item can be
+       closed.
+
+    **Consequence for the plan.** The free-span reformulation is no longer
+    justified by the 20 mN evidence. Do not build it. Next: (i) the fixed-τ_f
+    small-step control run, (ii) ε→0 sharpening at 20 mN, (iii) extend the
+    continuation downward to find where it actually breaks — with the
+    expectation that the real ceiling is set by nodes/rev in Cartesian
+    (~100/rev vs MEE's ~25), putting the practical floor near 5–10 mN rather
+    than earth's 0.1 N.
+
     **Also measured:** the two-primary clock cannot be reached by warm-starting
     from a single-primary mesh (defect 0.35, Restoration Failed). Any move to
     the two-primary clock needs its own seed — a tulip analogue of

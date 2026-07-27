@@ -110,11 +110,66 @@ Two standing goals (2026-07-21): **(a) keep perfecting the direct code,
   the solver can be pointed at this transfer without modification.
 
   **Phased plan.**
-  - **P0 (cheap, decides everything).** Run the ELFO free-t_f solver on TULIP
-    endpoints at nominal 25 mN and the certified 1.15× horizon. Does it close at
-    ε=1? If yes, tulip gains a free-span solver essentially for free and the
-    ladder becomes an ELFO-style chain. If no, learn where it breaks before
-    committing to anything larger.
+  - **P0 — RUN 2026-07-26. Result: `cScale` transplants cleanly; the two-primary
+    clock does not.** Pointed `casadi_energy_freetf` at tulip endpoints, nominal
+    25 mN, the certified 1.15× horizon, seeded with the existing 8-state
+    single-primary energy backbone (the solver appends `cScale` itself, so no
+    seed conversion was needed — the state-dimension obstacle P1 assumed turned
+    out not to exist for P0):
+
+    | variant | iters | status | maxDefect |
+    |---|---|---|---|
+    | single-primary (`moonZone ≤ 0`) + `cScale` | 199 | **Optimal Solution Found** | **6.8e-14** |
+    | two-primary (`moonZone = 0.15`) | 1403 | **Restoration Failed** | 3.5e-01 |
+
+    The control is machine-tight and hits t_f exactly with `cScale = 1.0051`, so
+    adding the free-time slack state to this transfer costs nothing. The
+    two-primary failure is not marginal — defect 0.35 means genuinely infeasible,
+    confirming the predicted node-placement incompatibility: a mesh laid out by
+    `κ = r₁^1.5` cannot be warm-started into a clock that wants nodes
+    redistributed toward the Moon.
+
+    The two-primary clock was assumed necessary for tulip (coarse mesh at the
+    arrival leg). P0 shows it is not necessary at nominal thrust — so the ladder
+    was attempted next with single-primary + `cScale`.
+
+  - **P0b — RUN 2026-07-26. `cScale` alone does NOT clear the wall.** Chained the
+    same backbone to 20 mN holding the FACTOR (t_f 7.234 → 9.043 ND), same mesh
+    (4001 nodes, same σ, same τ_f), single-primary, ε=1:
+
+    | iter | inf_pr | inf_du | lg(rg) |
+    |---|---|---|---|
+    | 0 | 7.4e-03 | 8.2e-02 | — |
+    | 154 | 1.3e-01 | 1.1e+03 | — |
+    | 454 | 1.1e-01 | 5.4e+12 | 8.9 |
+    | 848 | 6.2e-02 | 3.6e+14 | 11.2 |
+
+    Primal infeasibility never came below ~2e-2, dual infeasibility diverged
+    through fourteen orders of magnitude, and IPOPT piled on Hessian
+    regularization (lg(rg) → 11) before MATLAB died with a **fatal MEX error** at
+    iteration 848 — the campaign's known sporadic CasADi/IPOPT crash, and the
+    reason every batch script runs one process per item. The 15 mN case never
+    started. **The rung did not close.**
+
+    **Two competing explanations, not yet separated:**
+    1. **Resolution, not topology.** `cScale` scales `dx/dτ = c·κ·f`, so it *does*
+       buy geometric arc per unit τ — the winding number can grow. But the node
+       budget did not: ~25% more revolutions were asked of the same 4001 nodes,
+       so each revolution is under-resolved and the defects cannot be met. If
+       this is the cause, the fix is **scale N with the revolution count**, not
+       reformulate. Cheap to test.
+    2. **Genuine span limitation.** Fixed τ_f caps the arc regardless of `c`, and
+       free span (free τ_f, or a Δθ-domain formulation) is genuinely required.
+
+    Explanation 1 is the cheaper hypothesis and should be tested first: re-run
+    20 mN at N scaled by t_f (≈5000 nodes) before concluding anything about
+    topology. Note the earlier 20 mN pilot failure used the fixed-t_f solver at
+    fixed N too, so it does not discriminate between these either.
+
+    **Also measured:** the two-primary clock cannot be reached by warm-starting
+    from a single-primary mesh (defect 0.35, Restoration Failed). Any move to
+    the two-primary clock needs its own seed — a tulip analogue of
+    `gen_elfo_energy_gravhom` — and is a separate question from the ladder.
   - **P1 Seeding.** P0 needs an ε=1 root in the 9-state free-t_f, two-primary
     representation. The existing tulip energy backbone is 8-state, single-primary
     — its node placement does NOT transfer (the two-primary clock redistributes

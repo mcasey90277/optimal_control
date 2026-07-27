@@ -199,8 +199,46 @@ Two standing goals (2026-07-21): **(a) keep perfecting the direct code,
        20 mN, no reformulation is needed at all and the free-span item can be
        closed.
 
-    **Consequence for the plan.** The free-span reformulation is no longer
-    justified by the 20 mN evidence. Do not build it. Next: (i) the fixed-τ_f
+  - **B1/B2 — RUN 2026-07-26. BOTH variables mattered, and the 20 mN rung is
+    now a min-fuel solution.**
+
+    **B1, the discriminator** — same ~4% continuation with the ORIGINAL
+    fixed-τ_f `casadi_minfuel_sundman` (no `cScale`):
+    24 mN ok (2.9e-14), 23 mN ok (3.8e-14), 22 mN ok (5.6e-14), **21 mN FAILS**.
+
+    So neither single explanation was right. Step size mattered — fixed-τ_f
+    reaches 22 mN in small steps where a single 25→20 jump failed outright. And
+    `cScale` mattered — fixed-τ_f stops at 21 mN while the free-time formulation
+    continued to 20 mN. The fixed-τ_f limitation is real, just **further down
+    than the pilot suggested and not a wall at 20 mN**.
+
+    **B2, ε→0 at 20 mN** from the A1 energy solution, campaign schedule, 13 steps,
+    every one converged:
+
+    | | m_f | ΔV | propellant | switches | defect |
+    |---|---|---|---|---|---|
+    | 25 mN (published) | 0.849066 | 3.3696 km/s | 2.2640 kg | 25 | 2.0e-14 |
+    | **20 mN (new)** | **0.859722** | **3.1127 km/s** | **2.1042 kg** | 11 | 4.5e-14 |
+
+    Physically consistent: lower thrust → longer t_f (9.043 vs 7.234 ND) → less
+    propellant and lower ΔV, moving toward the low-thrust limit.
+
+    **What this is and is NOT.** It reached ε=0 machine-tight, which meets the
+    `minfuel_at_tf` definition of certified. It has NOT been through the
+    campaign's full gate set — no `boundSat` check, no fingerprint recorded, no
+    `certify_minfuel_pmp` PMP propagation, no FOC gate. And it was produced by
+    the ELFO solver with `moonZone=-1`, not by tulip's own machinery. Call it a
+    certified-quality solve pending gating, not a gated campaign rung.
+
+    The 11-switch count is worth checking rather than assuming: the 25 mN
+    reference has 25. Fewer, longer arcs at lower thrust is plausible but is a
+    topology change, and this campaign has already been shown to have multiple
+    certified optima at one t_f.
+
+    **Consequence for the plan.** The thrust ladder is NOT blocked. The
+    free-span reformulation is not justified — do not build it. Next: gate this
+    rung properly (boundSat, fingerprint, PMP, FOC), then continue the
+    continuation downward to find the real ceiling. Next: (i) the fixed-τ_f
     small-step control run, (ii) ε→0 sharpening at 20 mN, (iii) extend the
     continuation downward to find where it actually breaks — with the
     expectation that the real ceiling is set by nodes/rev in Cartesian

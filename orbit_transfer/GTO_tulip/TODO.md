@@ -235,10 +235,57 @@ Two standing goals (2026-07-21): **(a) keep perfecting the direct code,
     topology change, and this campaign has already been shown to have multiple
     certified optima at one t_f.
 
-    **Consequence for the plan.** The thrust ladder is NOT blocked. The
-    free-span reformulation is not justified — do not build it. Next: gate this
-    rung properly (boundSat, fingerprint, PMP, FOC), then continue the
-    continuation downward to find the real ceiling. Next: (i) the fixed-τ_f
+  - **Descent — RUN 2026-07-27. Ceiling found, and there are TWO stacked
+    limits, not one.**
+
+    | | lowest reached | evidence |
+    |---|---|---|
+    | ε=1 **energy** | **19.5 mN** | defect 5.1e-14, revs 21.1, 190 nodes/rev |
+    | ε=0 **min-fuel** | **20 mN** | defect 4.5e-14, 11 sw, 2.1042 kg, ΔV 3.1127 km/s |
+
+    5% steps stopped at 19 mN; halving to 2.5% bought one more rung (19.5 mN)
+    and then stopped at 19.01 mN. But 19.5 mN **will not sharpen** — the ε
+    homotopy fails at its FIRST step (ε=0.6, defect 2.2e-04, edge 1.6%). So the
+    fuel ceiling (20 mN) sits above the energy ceiling (19.5 mN), which is this
+    campaign's long-recorded pattern: the energy band is wider than the
+    ε=0-convergent band.
+
+    **The energy ceiling is NOT resolution.** 190 nodes/rev at 19.5 mN is
+    generous, not starved — so "add nodes" is not the fix, and node count is not
+    the argument for MEE phasing.
+
+    **Likely cause of the energy ceiling: the t_f rule, not the formulation.**
+    Rungs hold the factor by scaling t_f as `T_src/T_new`, i.e. assuming
+    `t_f,min ∝ 1/T` exactly. That is an approximation, and the error compounds
+    on the way down — by ~19 mN the requested t_f may sit BELOW the true
+    `t_f,min(19 mN)`, which is genuinely infeasible. Four things support it:
+    (a) the pilot findings already recorded this exact mode ("the first pilot
+    run requested 0.92× tfMin(20 mN) and was genuinely infeasible");
+    (b) the failure signature is infeasibility, not stiffness — `inf_pr` never
+    descends while `inf_du` diverges to 7e11; (c) it is not resolution; and
+    (d) **`cScale` climbs monotonically across the whole descent** — 1.0145
+    (24 mN) → 1.0222 (20) → 1.0258 (19.5) — i.e. the free time scale is
+    progressively stretching, exactly what it does when the requested horizon
+    gets tight. That last signal is only visible BECAUSE the free-time state
+    exists; the fixed-τ_f solver had no way to express "I need more time", which
+    may be why it quit earlier still, at 21 mN.
+
+    **Cheap test before any build:** re-run 19 mN with more t_f margin (factor
+    1.25). If it closes, the ceiling was the scaling law. The fix is what the
+    earth campaign already does — per-rung SOLVED min-time anchors
+    (`table3_certified` records `anchorSource:'solved'`) instead of a 1/T law.
+    Note this would NOT move the fuel ceiling, which is a separate ε-sharpening
+    wall.
+
+    Artifacts: `results/ladder_2026_07_27/` (rung solutions + summaries);
+    movie `results/minfuel_tulip_20mN.{mp4,gif}`, stills `_early/_mid/_late.png`.
+
+    **Consequence for the plan.** The thrust ladder is NOT blocked — 25 → 20 mN
+    is a 20% reduction on an item recorded as walled since 2026-07-21. The
+    free-span reformulation is not justified; do not build it. Next: (i) the
+    t_f-margin test above, (ii) gate the 20 mN rung properly (boundSat,
+    fingerprint, PMP, FOC), (iii) port `cScale` into `casadi_minfuel_sundman` as
+    an OPT-IN branch before any rung is banked as a campaign artifact. Next: (i) the fixed-τ_f
     small-step control run, (ii) ε→0 sharpening at 20 mN, (iii) extend the
     continuation downward to find where it actually breaks — with the
     expectation that the real ceiling is set by nodes/rev in Cartesian

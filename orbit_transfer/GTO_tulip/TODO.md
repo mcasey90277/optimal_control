@@ -270,12 +270,29 @@ Two standing goals (2026-07-21): **(a) keep perfecting the direct code,
     exists; the fixed-τ_f solver had no way to express "I need more time", which
     may be why it quit earlier still, at 21 mN.
 
-    **Cheap test before any build:** re-run 19 mN with more t_f margin (factor
-    1.25). If it closes, the ceiling was the scaling law. The fix is what the
-    earth campaign already does — per-rung SOLVED min-time anchors
-    (`table3_certified` records `anchorSource:'solved'`) instead of a 1/T law.
-    Note this would NOT move the fuel ceiling, which is a separate ε-sharpening
-    wall.
+    **TESTED 2026-07-27 — HYPOTHESIS REFUTED.** Ran it as two clean steps:
+    (A) stretch 20 mN from factor 1.15 → 1.25 at fixed thrust — **converged**,
+    defect 2.6e-14; (B) step 20 → 19 mN at the wider horizon — **failed
+    identically** to the 1.15 case (`inf_pr` starts 4.8e-02 and never descends,
+    `inf_du` → 1.4e11, MEX crash, no artifact). Giving the rung ~9% more
+    transfer time changes nothing.
+
+    So the ~19 mN energy ceiling is **not** the scaling law. Also withdrawn: the
+    `cScale`-climbs-when-tight argument. Step A gave the rung MORE time and
+    `cScale` still rose (1.0222 → 1.0297) — since `c = t_f / ∫κ dτ`, it rises
+    whenever t_f outpaces the τ-integral, which happens both when the horizon is
+    tight AND when a longer one is simply requested. It is not a tightness gauge
+    and should not be read as one.
+
+    **What is left.** Not resolution (190 nodes/rev), not t_f margin (tested),
+    not step size at this scale (2.5% steps also stop). Both solvers wall in the
+    same neighbourhood — fixed-τ_f at 21 mN, free-time at ~19.5 mN — which
+    points at something about the PROBLEM near 19–21 mN rather than either
+    formulation: plausibly a topology change (revolution count or lunar-encounter
+    geometry) that smooth continuation cannot cross. Untested. The next probes
+    would be (i) inspect how the trajectory geometry changes across 22 → 20 mN
+    in the solutions we have, and (ii) try a discrete jump with a re-generated
+    backbone at 19 mN rather than continuation.
 
     Artifacts: `results/ladder_2026_07_27/` (rung solutions + summaries);
     movie `results/minfuel_tulip_20mN.{mp4,gif}`, stills `_early/_mid/_late.png`.

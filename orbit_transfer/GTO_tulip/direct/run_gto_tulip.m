@@ -77,7 +77,17 @@ cfg = minfuel_config();          % campaign constants: tfMin, schedules, dirs
 % indirect min-time). The campaign's validated band for this pipeline is
 % factor >= 1.12 (below ~1.12 the direct solver itself struggles; the
 % 1.01-1.11 "transition band" is an open research problem, see [1]).
-factor = 1.15;                   % t_f / t_f_min. Backbones exist 1.12-1.95;
+% ---- max thrust ------------------------------------------------------------
+% NOMINAL is 25 mN, and that is what the energy backbones and every certified
+% campaign result use. Off-nominal thrust IS now supported (2026-07-27), but it
+% needs a seed at that thrust, because the backbones are nominal-thrust by
+% construction. Produce one first with run_tulip_ladder, which chains 25 mN down
+% in small steps; this script will then find that rung automatically when
+% seedSpec = 'energy'. Measured ceiling: ~20 mN for min-fuel. Below that nothing
+% converges yet -- see ../TODO.md before lowering it.
+thrustN = 0.025;                 % [N] max thrust. 0.025 = campaign nominal
+
+factor = 1.80;                   % t_f / t_f_min. Backbones exist 1.12-1.95;
                                  %   1.15 is the certified reference.
                                  %   (Was 2.00 -- a mid-experiment value with no
                                  %   backbone, so the default run errored. Reset to
@@ -249,11 +259,35 @@ if ~isempty(guardSeedFile) && isfile(guardSeedFile)
         insMeta.label, norm(S.rvf(:).'-rvf), norm(S.rv0(:).'-rv0));
 end
 
+% Off-nominal thrust: the nominal energy backbone is the WRONG seed (its
+% fingerprint carries 25 mN and check_cr3bp_fp would refuse it). Redirect to the
+% matching ladder rung, and say plainly how to make one if it is absent.
+isNominal = abs(thrustN - cfg.thrustN) < 1e-15;
+if ~isNominal && strcmpi(seedSpec, 'energy')
+    lad = fullfile(resDir, 'ladder', sprintf('tulip_T%s_f%04d_eps0.mat', ...
+                   thrust_tag(thrustN), round(1000*factor)));
+    if ~isfile(lad)
+        avail = dir(fullfile(resDir, 'ladder', 'tulip_T*_eps0.mat'));
+        error('run_gto_tulip:noRung', ...
+            ['thrustN = %.4g N is off-nominal and no ladder rung exists at ' ...
+             'factor %.3f (looked for %s).\n' ...
+             'Rungs on disk: %s\n' ...
+             'The energy backbones are NOMINAL-thrust, so they cannot seed this. ' ...
+             'Run run_tulip_ladder first (it chains 25 mN down in ~4%% steps); ' ...
+             'this script will then pick the rung up automatically.'], ...
+            thrustN, factor, lad, ...
+            strjoin({avail.name}, ', '));
+    end
+    seedSpec = lad;
+    fprintf('  off-nominal thrust %.4g N -> seeding from ladder rung %s\n', ...
+            thrustN, lad);
+end
+
 % Backbone availability, checked BEFORE the solve so the failure names the
 % cause. Below ~1.12 the eps=1 energy backbone itself will not converge (the
 % near-min-time conditioning wall), so a missing file there is an OPEN PROBLEM,
 % not a missing run. Folded in from the short-lived second front door.
-if strcmpi(seedSpec, 'energy')
+if strcmpi(seedSpec, 'energy') && isNominal
     ef = fullfile(cfg.dirs.energy, cfg.fname('energy', factor));
     if ~isfile(ef)
         have  = dir(fullfile(cfg.dirs.energy, 'energy_f*.mat'));
@@ -283,7 +317,7 @@ else
     end
     effSched = [baseSched(baseSched > epsMin), epsMin];
     % seedFactor is ignored unless seedSpec = 'neighbor' (minfuel_at_tf checks)
-    args = {'seedFactor', seedFactor, 'sched', effSched, ...
+    args = {'seedFactor', seedFactor, 'sched', effSched, 'thrustN', thrustN, ...
             'outFile', directFile, 'maxIter', maxIter, 'branch', 'psr'};
     outDirect = minfuel_at_tf(factor, 'seed', seedSpec, args{:});
     assert(outDirect.certified, ...

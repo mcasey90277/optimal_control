@@ -24,6 +24,11 @@ function out = minfuel_at_tf(factor, varargin)
 %     'seedFactor' - factor of the neighbor solution        [required for 'neighbor']
 %     'sched'      - homotopy epsilon schedule override     [default by seed type]
 %     'maxIter'    - IPOPT iteration cap                    [default cfg.maxIter]
+%     'thrustN'    - max thrust [N] for an off-nominal (ladder) rung
+%                    [default cfg.thrustN = campaign nominal]. Off-nominal
+%                    requires an explicit seed file: the energy backbones are
+%                    nominal-thrust, and the fingerprint check will refuse a
+%                    mismatched seed rather than silently warm-start wrong.
 %     'branch'     - branch tag recorded in meta + filename suffix, e.g.
 %                    'up','dn','en'                          [default 'en'|'nb']
 %     'outFile'    - output path override                   [default results/minfuel/]
@@ -44,6 +49,15 @@ here = fileparts(mfilename('fullpath'));  addpath(here);
 addpath(fullfile(here, '..', '..', '..', 'cr3bp_common'));  % cr3bp_fingerprint/check_cr3bp_fp
 cfg  = minfuel_config();
 op   = parse_opts(varargin, cfg);
+% Off-nominal thrust (ladder rungs). Default is the campaign's nominal value, so
+% omitting 'thrustN' is byte-identical to the pre-2026-07-27 behaviour. Only
+% thrustN is overridden -- schedules, dirs and filename rules stay nominal.
+% NOTE the energy-backbone seed path is nominal-thrust by construction; an
+% off-nominal request must pass an explicit seed file (a ladder rung). The
+% fingerprint check below enforces that rather than trusting the caller.
+if abs(op.thrustN - cfg.thrustN) > 1e-15
+    cfg = minfuel_config(struct('thrustN', op.thrustN));
+end
 p    = cr3bp_lt_params(cfg.thrustN, cfg.m0kg, cfg.ispS);
 tf   = factor * cfg.tfMin;
 fp   = cr3bp_fingerprint(p, struct('tf', tf, 'factor', factor));
@@ -144,6 +158,7 @@ end
 function op = parse_opts(args, cfg)
 % Name-value option parsing with seed-dependent defaults.
 op = struct('seedKind','energy','seedFactor',NaN,'sched',[],'maxIter',cfg.maxIter, ...
+            'thrustN',cfg.thrustN, ...
             'branch','','outFile','','save',true,'seedFile','');
 for k = 1:2:numel(args)
     switch lower(args{k})
@@ -154,6 +169,7 @@ for k = 1:2:numel(args)
         case 'seedfactor', op.seedFactor = args{k+1};
         case 'sched',      op.sched      = args{k+1};
         case 'maxiter',    op.maxIter    = args{k+1};
+        case 'thrustn',    op.thrustN    = args{k+1};
         case 'branch',     op.branch     = args{k+1};
         case 'outfile',    op.outFile    = args{k+1};
         case 'save',       op.save       = args{k+1};

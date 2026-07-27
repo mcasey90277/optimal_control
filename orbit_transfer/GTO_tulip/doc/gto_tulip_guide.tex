@@ -225,14 +225,30 @@ unchanged. The flagship runs at $N=4001$ because that is what the backbone has,
 not because $4001$ was chosen or justified.
 
 \paragraph{Where the nodes land, mathematically.} With $\tau = \sigma\,\tau_f$
-and the Sundman law $\ud t/\ud\tau = \kappa = r_1^{\,p}$, a uniform $\sigma$
-grid of spacing $\Delta\sigma = 1/N$ gives physical time steps
+and the Sundman law $\ud t/\ud\tau = \kappa = r_1^{\,p}$, the physical step over
+interval $k$ is
 \begin{equation}
-\Delta t_k \;\simeq\; \tau_f\,\kappa(\vect{x}_k)\,\Delta\sigma
-\;=\; \frac{\tau_f}{N}\, r_1(\vect{x}_k)^{p} ,
+\Delta t_k \;\simeq\; \tau_f\,\kappa(\vect{x}_k)\,\Delta\sigma_k
+\;=\; \tau_f\, r_1(\vect{x}_k)^{p}\,\Delta\sigma_k ,
 \qquad p = \tfrac{3}{2}.
 \label{eq:dtk}
 \end{equation}
+\emph{Both} factors matter, and the second is easy to overlook: the $\sigma$
+grid is \textbf{not uniform}. Measured across every energy backbone,
+$\max\Delta\sigma_k / \min\Delta\sigma_k \approx 1.6\times10^{8}$ with
+coefficient of variation $0.50$ --- and the grid is bit-identical at every
+$t_f$. It is not a designed grid at all: it is inherited unchanged from the
+no-resample map of the original time-mesh seed, and has been carried forward
+into every backbone and every ladder rung since. The mesh is, quite literally,
+a fossil of the first solution this campaign ever produced.
+
+This has a practical consequence for anyone checking the discretization.
+Plotting $\Delta t_k$ against $r_1$ does \emph{not} test the Sundman law,
+because it conflates $\kappa$ with $\Delta\sigma_k$; the exponent it returns is
+meaningless. The correct test divides the spacing out and fits
+$\Delta t_k/\Delta\sigma_k \propto r_1^{\,p}$, which recovers $p = 1.500$ against
+a nominal $1.5$ to three decimals. \file{certify/mesh\_diagnostic.m} does this
+and reports both quantities separately.
 So node density in \emph{time} scales as $r_1^{-3/2}$: dense at perigee, sparse
 at apogee. In arc length, $\ud s = \|\vect{v}\|\ud t$, and near perigee
 $\|\vect{v}\|\sim r_1^{-1/2}$, so $\ud s/\ud\sigma \sim r_1$ --- the mesh is

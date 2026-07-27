@@ -102,17 +102,28 @@ re-clean, all 13 ε steps, any neighbour-seeded continuation — inherits them
 unchanged. The flagship runs at **N = 4001 because that is what the backbone
 has**, not because 4001 was chosen or justified.
 
-Node placement follows from the Sundman law. With `dt/dτ = κ = r₁^1.5` and a
-uniform σ grid,
+Node placement has **two** factors, and the second is easy to miss:
 
 ```
-Δt_k  ≈  (tauf0 / N) · r₁(x_k)^1.5
+Δt_k  ≈  tauf0 · r₁(x_k)^1.5 · Δσ_k
+          \_____ Sundman ____/   \_ the grid _/
 ```
 
-so density in time goes as `r₁^-1.5` — dense at perigee, sparse at apogee. The
-mesh therefore adapts to the trajectory's **geometry** and to nothing else. It
-does **not** adapt to the solution: the switching structure, where the control
-is discontinuous and accuracy is hardest, has no influence on node placement.
+**The σ grid is NOT uniform.** Measured: `max(Δσ)/min(Δσ) ≈ 1.6e8`, CV 0.50, and
+**bit-identical across every backbone regardless of t_f**. It was never designed
+— it is inherited unchanged from the no-resample map of the original time-mesh
+seed, and has been carried into every backbone and ladder rung since. The mesh
+is a fossil of the first solution this campaign produced.
+
+Consequence when checking it: plotting `Δt` against `r₁` does **not** test the
+Sundman law (it conflates κ with Δσ and returns a meaningless exponent). Divide
+the spacing out — `Δt/Δσ ∝ r₁^p` recovers p = 1.500 vs nominal 1.5.
+`certify/mesh_diagnostic.m` does this and reports both separately.
+
+The mesh adapts to the trajectory's **geometry** (through r₁) and to the frozen
+seed spacing, and to nothing else. It does **not** adapt to the solution: the
+switching structure, where the control is discontinuous and accuracy is hardest,
+has no influence on node placement.
 
 **Why it is frozen — the no-resample discipline.** Interpolating a converged
 solution onto a different mesh reintroduces a ~1e-2 defect floor that pins IPOPT

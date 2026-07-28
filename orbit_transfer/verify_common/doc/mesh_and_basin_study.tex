@@ -1,0 +1,579 @@
+\documentclass[11pt]{article}
+\usepackage[margin=1in]{geometry}
+\usepackage{amsmath,amssymb}
+\usepackage{booktabs}
+\usepackage{longtable}
+\usepackage{hyperref}
+\usepackage{xcolor}
+\hypersetup{colorlinks=true, linkcolor=blue, urlcolor=blue}
+
+\title{Mesh Convergence and Basin Selection in Direct-Collocation\\
+       Low-Thrust Orbit Transfers}
+\author{M.\ Casey}
+\date{Begun 2026--07--27; last revised \today}
+
+\newcommand{\mf}{m_f}
+\newcommand{\dV}{\Delta V}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+We set out to answer a question that none of our existing verification
+machinery addresses: \emph{is the collocation mesh we solve on fine enough
+that the discrete solution is a faithful approximation of the continuous
+optimal control problem?} The interior-point solver certifies the nonlinear
+program, and our first-order optimality layer certifies the Karush--Kuhn--Tucker
+conditions \emph{of that program}, but neither says anything about the gap
+between the program and the continuous problem it discretizes. That gap is
+discretization error. We measure it by solving the same problem on a ladder of
+successively finer meshes and observing the rate at which the answer settles.
+
+The measurement produced a partly unexpected result. The production meshes are
+broadly adequate: where a clean order could be extracted, the final mass
+converges at first order with a remaining extrapolated error of roughly
+$0.35$~kg out of $1370$~kg. What limits accuracy instead is \emph{which local
+minimum the solver reaches}. Every certified row we examined is beaten on its
+own mesh---by $1.0$ to $6.0$~kg---by a solution found from a different starting
+guess. The problem is non-convex, its basins are separated by very small
+changes in the initial guess, and basin selection outweighs discretization
+error in every case measured, by a factor of roughly four to one hundred.
+\end{abstract}
+
+\tableofcontents
+
+\section{Introduction}
+\label{sec:intro}
+
+\subsection{What is already verified, and what is not}
+
+Our low-thrust transfer campaigns solve minimum-fuel optimal control problems
+by direct collocation: the continuous problem is discretized on a mesh of
+nodes, the dynamics are enforced as algebraic \emph{defect} constraints between
+adjacent nodes, and the resulting large sparse nonlinear program (NLP) is
+handed to an interior-point solver. Three layers of verification are already in
+place, and it is worth being precise about what each one does and does not
+establish.
+
+\begin{enumerate}
+  \item \textbf{The solver's own convergence test.} IPOPT reports
+  \texttt{Solve\_Succeeded} when its primal and dual infeasibilities fall below
+  tolerance. This establishes that a stationary point of the NLP was found.
+  \item \textbf{Feasibility of the discretization.} We check that the maximum
+  defect is at machine precision (typically $10^{-14}$ or smaller). This
+  establishes that the discrete trajectory satisfies the discrete dynamics.
+  \item \textbf{First-order optimality.} Our \texttt{foc\_check} layer assembles
+  the Lagrangian gradient by automatic differentiation and verifies KKT
+  stationarity, the Pontryagin primer-vector alignment, transversality, and the
+  sign law on the multipliers.
+\end{enumerate}
+
+Every one of these is a statement about the \emph{nonlinear program}. None is a
+statement about the continuous optimal control problem. A solution can pass all
+three and still differ from the true continuous optimum, because the mesh is
+too coarse to represent it. Nothing in the repository measured that gap. This
+document records the study that does.
+
+\subsection{The two questions, which turn out to be different}
+
+The study began with one question and ended with two, and keeping them separate
+is the single most important organizational point in this document.
+
+\begin{description}
+  \item[Q1 (discretization).] Is the production mesh fine enough? Equivalently:
+  if we refined it indefinitely, how much would the answer move?
+  \item[Q2 (basin selection).] Is the solution we certified even the best
+  solution \emph{of the mesh we already have}?
+\end{description}
+
+These are independent. A row can be perfectly mesh-converged and still sit in
+an inferior local minimum, because the minimum-fuel bang-bang problem is
+non-convex. Conversely a row can be in the best available basin and still be
+under-resolved. The study was designed to answer Q1; in the course of answering
+it we were forced to answer Q2, and Q2 turned out to carry the larger error.
+
+\section{The mesh, and what mesh convergence means}
+\label{sec:mesh}
+
+\subsection{Our meshes are not uniform in time}
+
+A point that recurs throughout this document: none of our meshes is uniform in
+physical time, and this is deliberate.
+
+The Earth-centred campaign uses modified equinoctial elements with the true
+longitude $L$ as the independent variable, so a uniform grid in the normalized
+variable $\sigma \in [0,1]$ is uniform in longitude, not in time. The
+cislunar campaigns use a Sundman regularization, replacing time $t$ by a
+variable $\tau$ with
+\begin{equation}
+  \frac{dt}{d\tau} = \kappa(r) = r_1^{\,p}, \qquad p = 1.5,
+  \label{eq:sundman}
+\end{equation}
+where $r_1$ is the distance to the primary. Physical time is carried as an
+additional state. A uniform grid in $\tau$ therefore clusters nodes near
+perigee automatically, which is exactly where the dynamics are stiff.
+
+The practical consequence is that the local step size in physical time varies
+enormously across a single transfer. Measured on the Earth $10$~N row, the
+physical step varies by a factor of $36$ from its smallest to its largest value
+even though $\sigma$ is perfectly uniform. Any statement of the form ``the mesh
+spacing is $h = 1/N$'' is therefore wrong for our problems, and any tolerance
+built from a \emph{global} step size will be simultaneously too tight in one
+region and too loose in another. Throughout this study we report physical local
+step sizes and use per-node tolerances.
+
+\subsection{The refinement experiment}
+
+The logic of a mesh-convergence study is simple. Take a converged solution on
+the production mesh. Re-solve the identical continuous problem---same boundary
+conditions, same transfer time, same thrust---on meshes with $2\times$,
+$4\times$ and $8\times$ as many nodes. Then look at how a quantity of interest,
+say the final mass $\mf$, behaves across the ladder.
+
+If $\mf$ barely moves, the production mesh was already fine enough. If it moves
+substantially at every refinement, we are not converged and the production
+number carries an error we have not accounted for.
+
+Two refinements of that basic logic matter, and both were learned the hard way.
+
+\paragraph{It is the \emph{rate}, not the size, of the change that matters.}
+Knowing that the answer moved by $\delta$ between two meshes tells you very
+little on its own. What tells you something is how $\delta$ shrinks as the mesh
+refines, because that rate is what lets you extrapolate to the answer you would
+obtain at infinite resolution. This is the subject of
+Section~\ref{sec:richardson}. Two mesh levels give you a change; three or four
+give you a rate and hence an error bar. This is why the study specifies four
+levels rather than two.
+
+\paragraph{The comparison is only valid on a single solution branch.} The entire
+argument silently assumes that the thing being compared across meshes is the
+\emph{same solution}, merely represented more finely. If the solver lands in a
+different local minimum at one of the levels, then the differences being
+tabulated are differences between unrelated answers and the extracted ``rate''
+is meaningless. As Section~\ref{sec:results} records, this is not a hypothetical
+concern: it happened in two of our three rows.
+
+\subsection{Warm chaining, and the risk it carries}
+
+Each level of the ladder is solved starting from the previous, coarser
+solution, interpolated onto the finer grid. This is deliberate. Our basins are
+separated by very small perturbations---an earlier campaign study documented
+the $10$~N case flipping between $19$ and $24$ switches on a relative change of
+$2\times10^{-5}$ in the transfer time---so cold-solving each level
+independently would risk landing on unrelated branches and comparing apples to
+oranges.
+
+The cost of chaining is the mirror image of its benefit: a level can inherit an
+unconverged or inferior structure from its predecessor and still pass every
+gate, because passing a gate proves only that the level is stationary for
+\emph{its own} NLP, not that all levels lie on the same continuous branch.
+Detecting that requires an independent check, described in
+Section~\ref{sec:basin}.
+
+\section{Richardson extrapolation and the observed order}
+\label{sec:richardson}
+
+This section explains the method referred to elsewhere as ``Richardson,''
+because it is the machinery that converts a sequence of mesh solutions into an
+error bar.
+
+\subsection{The idea}
+
+Suppose a computed quantity $f_h$, obtained on a mesh of characteristic
+spacing $h$, approximates an exact value $f_0$ with an error that behaves like
+a power of $h$:
+\begin{equation}
+  f_h = f_0 + C h^p + \mathcal{O}(h^{p+1}),
+  \label{eq:expansion}
+\end{equation}
+for some constant $C$ and some exponent $p > 0$ called the \emph{order of
+accuracy}. Equation~\eqref{eq:expansion} is an assumption, not a theorem, and
+Section~\ref{sec:richardson-limits} discusses when it fails for us.
+
+Evaluate the quantity on three meshes whose spacings shrink by a constant
+refinement ratio $r$ (we use $r=2$, doubling the node count each time):
+$h$, $h/r$, $h/r^2$, giving values $f_1, f_2, f_3$. Substituting
+\eqref{eq:expansion} and taking differences eliminates $f_0$:
+\begin{align}
+  f_1 - f_2 &= C h^p \left( 1 - r^{-p} \right), \\
+  f_2 - f_3 &= C h^p r^{-p} \left( 1 - r^{-p} \right),
+\end{align}
+so the ratio of successive differences depends only on $r$ and $p$:
+\begin{equation}
+  \frac{f_1 - f_2}{f_2 - f_3} = r^{p}
+  \qquad\Longrightarrow\qquad
+  \boxed{\;p = \frac{\ln\!\left| (f_1-f_2)/(f_2-f_3) \right|}{\ln r}\;}
+  \label{eq:order}
+\end{equation}
+This $p$ is the \emph{observed order of accuracy}. It is measured, not assumed,
+and comparing it against the order the scheme is supposed to achieve is itself
+a diagnostic.
+
+\subsection{Extrapolating to the limit}
+
+With $p$ in hand, \eqref{eq:expansion} can be solved for $f_0$:
+\begin{equation}
+  f_0 \;\approx\; f_3 + \frac{f_3 - f_2}{r^{p} - 1}.
+  \label{eq:richardson}
+\end{equation}
+This is the \emph{Richardson extrapolate}: an estimate of the answer at
+infinite resolution, obtained from finite-resolution runs. Its practical value
+here is that $|f_0 - f_{\text{production}}|$ is an \emph{error bar on the
+production number}---precisely the quantity we lacked.
+
+A worked instance from Section~\ref{sec:results}: the $1$~N row gives
+$\mf = 1371.587,\ 1371.913,\ 1372.052$~kg on the $2\times$, $4\times$ and
+$8\times$ meshes. The differences are $+0.326$ and $+0.139$, whose ratio is
+$2.34$, so $p = \ln(2.34)/\ln 2 = 1.23$. Extrapolating,
+$f_0 \approx 1372.052 + 0.139/(2^{1.23}-1) = 1372.156$~kg. The finest mesh is
+thus about $0.10$~kg short of the limit.
+
+\subsection{Where it must not be used}
+\label{sec:richardson-limits}
+
+Equation~\eqref{eq:expansion} assumes a smooth asymptotic error expansion in
+$h$. Several quantities in our problems violate that assumption, and applying
+the formula to them yields confident nonsense. Our implementation therefore
+maintains an explicit permitted/forbidden classification and \emph{refuses} to
+report an order where it is forbidden.
+
+\begin{description}
+  \item[Forbidden: integer counts.] The number of thrust switches is an
+  integer. It has no asymptotic expansion; it must \emph{stabilize}, and if it
+  does not, that is a finding about the solution's topology rather than a
+  convergence rate.
+  \item[Forbidden: solver diagnostics.] KKT residuals, multiplier sign
+  percentages and similar readouts measure the NLP and the solution process,
+  not the continuous problem. They are tracked and reported but never given a
+  convergence verdict alongside physical quantities.
+  \item[Forbidden: anything measured across a branch change.] If the topology
+  changes between levels, the differences are not samples of one smooth
+  expansion.
+  \item[Forbidden: quantities pinned by constraints.] The terminal element
+  error, for instance, is enforced as an equality in the NLP, so it reads
+  solver tolerance by construction ($\sim 10^{-35}$ in our runs) and can never
+  measure discretization error. Classifying it as a physical observable would
+  earn it a meaningless ``converged'' verdict.
+\end{description}
+
+Two further guards are built into the estimator. If successive differences flip
+sign or stop shrinking, the sequence is not settling and no order is reported.
+And with four levels rather than three, two overlapping three-level windows can
+be computed; their mutual agreement is the evidence that an asymptotic regime
+has actually been reached, which no single window can supply.
+
+\section{Basin selection}
+\label{sec:basin}
+
+\subsection{Why a non-convex problem has this failure mode}
+
+The minimum-fuel problem is non-convex. At the end of the
+energy-to-fuel homotopy the throttle is bang-bang: it takes only the values $0$
+and $1$, switching between them at a finite set of times. Solutions are
+therefore organized into families distinguished by discrete structure---the
+number of thrust arcs and their approximate placement. Within a family the
+solution varies smoothly; between families it does not. An interior-point
+solver converges to a stationary point in whichever family its initial guess
+lies nearest, and it has no mechanism for discovering that a different family
+would have been better.
+
+The consequence is that ``converged'' and ``optimal'' are different claims.
+Our certification establishes the first. Nothing in the pipeline established
+the second.
+
+\subsection{Distinguishing a basin effect from a resolution effect}
+
+These two effects are easy to confuse, because both appear as ``the answer
+changed when I refined the mesh.'' The test that separates them is a
+\emph{down-projection}:
+
+\begin{quote}
+Take the solution obtained on the fine mesh. Interpolate it \emph{down} onto
+the original production mesh. Re-solve there. If the fine-mesh structure
+survives at production resolution and is better, then the fine mesh did not
+resolve anything the coarse mesh could not represent---it merely escaped to a
+different basin, and that basin was reachable at the original resolution all
+along.
+\end{quote}
+
+This is a clean discriminator because the comparison is made on an identical
+grid, so nothing about it can be a discretization effect.
+
+\subsection{The basin probe}
+
+Generalizing the down-projection gives the tool used in
+Section~\ref{sec:results}: re-solve a certified row on \emph{its own} mesh from
+a set of different seeds, and compare. Because the grid never changes, any
+improvement is attributable to basin selection alone. The seeds used are:
+
+\begin{itemize}
+  \item the certified solution itself, as a baseline;
+  \item down-projections of each finer mesh-ladder level;
+  \item the throttle profile shifted by a small number of nodes---a structured
+  nudge that moves the \emph{switch times}, which is the coordinate the basins
+  actually differ in, and which proved far more effective than random
+  perturbation (at $\varepsilon = 0$ a random perturbation typically falls
+  straight back into the same basin);
+  \item for the cislunar campaigns, a re-solve with a looser barrier
+  initialization, which is not a seed change at all but a different solver
+  path.
+\end{itemize}
+
+Throughout, \emph{better} means higher final mass: minimum fuel maximizes
+$\mf$, so a higher mass at machine-tight feasibility is strictly an
+improvement, never a failure.
+
+\section{Results}
+\label{sec:results}
+
+\subsection{What was run}
+
+The Earth-centred ladder (``Tier A'') re-solved three certified rows---thrust
+levels $10$~N, $2.5$~N and $1$~N---at node-count multipliers
+$1, 2, 4, 8$, warm-chained coarse to fine. The $1$~N row at $8\times$ carries
+$13{,}920$ intervals. All twelve levels converged, with defects between
+$5.5\times10^{-15}$ and $9.7\times10^{-14}$; total wall time was $80.3$
+minutes. All artifacts are written under a \texttt{MESH\_} prefix into an
+isolated directory so that a study solve cannot overwrite a production cache.
+
+\subsection{Tier A: the mesh ladder}
+
+\begin{table}[h]
+\centering
+\small
+\begin{tabular}{lrrrrl}
+\toprule
+Row & $N$ ($1\times\!\to\!8\times$) & $\mf$ per level (kg) & differences & $p$ windows & verdict \\
+\midrule
+$10$~N  & $193\to1544$   & $1377.101\,/\,1377.110\,/\,1377.118\,/\,1377.875$
+        & $+0.0086,\ +0.0077,\ +0.757$ & $0.16,\ -6.62$ & not converged \\
+$2.5$~N & $708\to5664$   & $1370.157\,/\,1371.612\,/\,1372.610\,/\,1375.794$
+        & $+1.46,\ +1.00,\ +3.18$      & $0.54,\ -1.67$ & not converged \\
+$1$~N   & $1740\to13920$ & $1370.603\,/\,1371.587\,/\,1371.913\,/\,1372.052$
+        & $+0.984,\ +0.326,\ +0.139$   & $1.60,\ 1.23$  & \textbf{converged} \\
+\bottomrule
+\end{tabular}
+\caption{Tier A mesh ladder. Switch counts: $10$~N $19/20/20/18$;
+$2.5$~N $76/75/75/75$; $1$~N $173/171/171/171$.}
+\end{table}
+
+\paragraph{One clean order, and it is first order.} Only the $1$~N row was in a
+position to yield an order: its differences shrink monotonically, its two
+sliding windows agree to within $13\%$, and its switch count is stable from
+$2\times$ onward. The observed order is $p = 1.23$, trending toward $1$.
+
+This matters theoretically. Before the study, two external reviewers disagreed
+about what to expect. One argued for $p \approx 1$: on a mesh whose breakpoints
+are not aligned with the switches, one switch-crossing interval carries the
+wrong throttle over a time of order $h$ against an order-one jump in the
+right-hand side, and that single interval's $\mathcal{O}(h)$ error dominates
+every smooth arc's $\mathcal{O}(h^2)$. The other argued for $p \approx 2$,
+on the grounds that the throttle is a continuous NLP variable so an
+intermediate node value can encode a sub-interval switch location, and that
+errors of alternating sign across many switches partially cancel in an
+integrated quantity. The measurement supports the first hypothesis. We recorded
+both as competing falsifiable predictions before running, precisely so that the
+result would discriminate rather than confirm whichever had been written down
+first.
+
+The practical reading of first order is unwelcome: error scales as $h$, so
+buying one additional decimal digit of accuracy costs a factor of ten in node
+count. That is the quantitative argument for switch-aligned meshes.
+
+\paragraph{Two rows did not converge.} Both $10$~N and $2.5$~N had their
+$8\times$ difference \emph{grow} rather than shrink. At $10$~N the switch count
+also dropped from $20$ to $18$ and the level took $179.5$~s against $11.7$~s at
+$4\times$---fifteen times longer, far above the empirical $N^{1.88}$ scaling,
+because the solver was doing something other than refining. At $2.5$~N the
+switch count did \emph{not} change, yet the mass still jumped by $3.18$~kg.
+
+\subsection{The down-projection test}
+
+Applying the discriminator of Section~\ref{sec:basin} to the $10$~N row settles
+what happened.
+
+\begin{table}[h]
+\centering
+\small
+\begin{tabular}{lrrr}
+\toprule
+On the same $193$-node production mesh & $\mf$ (kg) & switches & $\dV$ (km/s) \\
+\midrule
+seeded from the row itself (certified) & $1377.101235$ & $19$ & $1.676631$ \\
+seeded from the $8\times$ solution     & $\mathbf{1378.116718}$ & $\mathbf{18}$ & $\mathbf{1.662173}$ \\
+\bottomrule
+\end{tabular}
+\caption{The $18$-switch structure survives projection onto the production
+mesh and is $1.015$~kg better there. Both solves reported
+\texttt{Solve\_Succeeded} with defects below $10^{-14}$.}
+\end{table}
+
+The $8\times$ level did not resolve something the coarse mesh could not
+represent. It escaped a basin, and the better basin is reachable at production
+resolution. Asking whether the change was ``real or a solver artifact'' poses a
+false choice: the $8\times$ solution is a genuine converged optimum, and it is
+not a mesh phenomenon.
+
+\subsection{The basin probe on the Earth rows}
+
+\begin{table}[h]
+\centering
+\small
+\begin{tabular}{llrrrr}
+\toprule
+Row & best seed & $\mf$ certified (kg) & $\mf$ best (kg) & gain (kg) & switches \\
+\midrule
+$10$~N  & down-proj.\ $8\times$ & $1377.101$ & $1378.117$ & $+1.015$ & $19 \to 18$ \\
+$2.5$~N & down-proj.\ $8\times$ & $1369.791$ & $1375.762$ & $+5.971$ & $76 \to 69$ \\
+$1$~N   & down-proj.\ $4\times$ & $1370.357$ & $1371.811$ & $+1.454$ & $171 \to 177$ \\
+\bottomrule
+\end{tabular}
+\caption{Every certified Earth row is beaten on its own mesh, and in every case
+the winner also has lower $\dV$.}
+\end{table}
+
+Three observations sharpen this.
+
+\begin{enumerate}
+  \item \textbf{A trivial perturbation suffices.} At $10$~N, shifting the
+  throttle profile by a \emph{single node} reaches an $18$-switch solution
+  $0.224$~kg better than certified. The better basin is not exotic; it was
+  simply never sought.
+  \item \textbf{Switch count is not a reliable branch indicator.} The $2.5$~N
+  ladder kept $75$ switches throughout, which made its jump look like it might
+  not be a topology change. Down-projected onto the production mesh it lands at
+  $69$ switches and $+5.97$~kg. It was a different branch all along.
+  \item \textbf{Re-solving a row from its own seed does not reproduce its
+  cached value.} For $2.5$~N the cache reads $1369.791$~kg, the probe's
+  baseline gives $1370.296$, and the ladder's $1\times$ level gives $1370.157$.
+  These differ only in trivial seed handling---whether the seed's thrust
+  direction is re-normalized to unit length and its throttle clipped into
+  $[0,1]$. A seed change at the $10^{-12}$ level moves the answer by half a
+  kilogram. ``The certified value'' is therefore more precisely ``the value
+  this particular solve path happened to reach.''
+\end{enumerate}
+
+\subsection{Reconciling the two questions}
+
+Combining the ladder and the probe gives the study's central result.
+
+\begin{table}[h]
+\centering
+\small
+\begin{tabular}{lrrl}
+\toprule
+Row & basin gain on own mesh & residual mesh error & dominant source \\
+\midrule
+$10$~N  & $+1.015$~kg & $0.009$~kg          & basin, by $\sim\!100\times$ \\
+$2.5$~N & $+5.971$~kg & never converged     & basin \\
+$1$~N   & $+1.454$~kg & $\sim\!0.35$~kg     & basin, by $\sim\!4\times$ \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+The $1$~N entry deserves comment because it corrects an earlier reading of our
+own data. The ladder placed the production row $1.55$~kg below the Richardson
+limit of $1372.156$~kg, which invited the conclusion that the $1$~N mesh was
+inadequate. The basin probe reaches $1371.811$~kg \emph{on the production
+mesh}, only $0.345$~kg from that limit. Roughly $1.21$~kg of the apparent
+``mesh error'' was therefore basin error, reachable without refining anything.
+The decomposition is indicative rather than exact---the Richardson limit was
+itself extrapolated from a ladder that crossed a topology change---but the
+ordering is robust.
+
+\textbf{In every row examined, basin selection outweighs discretization error.}
+The most useful outcome of a mesh-convergence study was to establish that the
+mesh was not the problem.
+
+\subsection{Cislunar campaigns: tulip and ELFO}
+\label{sec:cr3bp}
+
+\emph{In progress.} The basin probe has been ported to the Sundman-regularized
+CR3BP formulation and is being run against the GTO$\to$tulip flagship
+($4001$ nodes, $25$ switches) and the GTO$\to$ELFO $1.33\times$ front row
+($50$ switches). Because no mesh ladder has been run for these campaigns, the
+down-projection seed family is unavailable; the seeds are the certified
+solution, throttle shifts of $\pm1$ and $\pm8$ nodes, and a re-solve under a
+looser barrier initialization. Results will be recorded here.
+
+\section{Consequences and open items}
+\label{sec:consequences}
+
+\paragraph{Published numbers are pessimistic.} The Earth rows understate
+achievable final mass by $0.07\%$ ($10$~N), $0.11\%$ ($1$~N) and $0.44\%$
+($2.5$~N). The last is well above anything that could be quoted as numerical
+noise. Every improvement came with lower $\dV$ as well, so these are not
+trade-offs.
+
+\paragraph{A basin-search step belongs in the certification path.} At present
+``certified'' means converged, feasible and first-order optimal---not best
+found. The probe costs three to fifteen minutes per row.
+
+\paragraph{Switch counts should not be quoted as properties of the problem.}
+They vary with basin and with mesh: $18/19/20$ at $10$~N, $171/173/177$ at
+$1$~N. They are properties of a particular solve.
+
+\paragraph{Open items.}
+\begin{itemize}
+  \item Complete the cislunar probes (Section~\ref{sec:cr3bp}).
+  \item Establish whether the order measured at $1$~N carries to the Sundman
+  and longitude-domain transcriptions.
+  \item Test the falsifiable claim that switch-aligned mesh refinement recovers
+  second order: it should do so \emph{only if} the refinement makes switches
+  true retained breakpoints, rather than merely clustering nodes near them.
+  \item Re-examine whether the $2.5$~N row can be made to converge once it is
+  started from its best known basin.
+\end{itemize}
+
+\section*{Reproducing this}
+\addcontentsline{toc}{section}{Reproducing this}
+
+\begin{longtable}{ll}
+\toprule
+Component & Path (under \texttt{orbit\_transfer/}) \\
+\midrule
+\endhead
+Sub-grid switch location   & \texttt{verify\_common/mesh/mesh\_switch\_times.m} \\
+Cross-mesh switch matching & \texttt{verify\_common/mesh/mesh\_match\_switches.m} \\
+Order and Richardson       & \texttt{verify\_common/mesh/mesh\_order.m} \\
+Mesh ladder (Earth)        & \texttt{verify\_common/mesh/mesh\_ladder\_mee.m} \\
+Collection and report      & \texttt{verify\_common/mesh/mesh\_collect.m}, \texttt{mesh\_report.m} \\
+Tier A driver              & \texttt{verify\_common/mesh/run\_mesh\_study\_mee.m} \\
+Basin probe (Earth)        & \texttt{verify\_common/mesh/mesh\_basin\_probe.m} \\
+Basin probe (CR3BP)        & \texttt{verify\_common/mesh/mesh\_basin\_probe\_cr3bp.m} \\
+Running record             & \texttt{verify\_common/doc/mesh\_study\_tierA\_results.md} \\
+Plan                       & \texttt{docs/superpowers/plans/2026-07-25-mesh-convergence-study.md} \\
+\bottomrule
+\end{longtable}
+
+\begin{thebibliography}{9}
+\bibitem{roache}
+P.~J. Roache, \emph{Verification and Validation in Computational Science and
+Engineering}, Hermosa, 1998. (Observed order of accuracy and the grid
+convergence index.)
+
+\bibitem{hager}
+W.~W. Hager, ``Runge--Kutta Methods in Optimal Control and the Transformed
+Adjoint System,'' \emph{Numerische Mathematik} \textbf{87} (2000) 247--282.
+
+\bibitem{dhv}
+A.~L. Dontchev, W.~W. Hager and V.~M. Veliov, ``Second-Order Runge--Kutta
+Approximations in Control Constrained Optimal Control,'' \emph{SIAM Journal on
+Numerical Analysis} \textbf{38} (2000) 202--226.
+
+\bibitem{agamawi}
+Y.~M. Agamawi, W.~W. Hager and A.~V. Rao, ``Mesh Refinement Method for Solving
+Bang-Bang Optimal Control Problems Using Direct Collocation,''
+arXiv:1905.11895.
+
+\bibitem{bertrand}
+R.~Bertrand and R.~\'Ep\'enoy, ``New Smoothing Techniques for Solving
+Bang--Bang Optimal Control Problems,'' \emph{Optimal Control Applications and
+Methods} \textbf{23} (2002) 171--197.
+
+\bibitem{betts}
+J.~T. Betts, \emph{Practical Methods for Optimal Control Using Nonlinear
+Programming}, 2nd ed., SIAM, 2010.
+\end{thebibliography}
+
+\end{document}

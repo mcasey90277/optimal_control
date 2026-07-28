@@ -248,7 +248,7 @@ mass) form.
 
 ---
 
-### Task 1a: Sub-grid switch-time extraction (NEW 2026-07-27 — prerequisite)
+### Task 1a: Sub-grid switch-time extraction — **COMPLETE 2026-07-27** ✅ (NEW, prerequisite)
 
 **Why this task exists.** The Global Constraint added after the second review
 forbids reading switch locations by thresholding the nodal throttle. Nothing in
@@ -301,7 +301,7 @@ The matcher in Task 1 consumes times, so extraction must come first.
 
 ---
 
-### Task 1: Switch matching across meshes
+### Task 1: Switch matching across meshes — **COMPLETE 2026-07-27** ✅
 
 **Files:**
 - Create: `orbit_transfer/verify_common/mesh/mesh_match_switches.m`
@@ -352,7 +352,7 @@ function t = tbOf(~, ~), t = 2; end
 
 ---
 
-### Task 2: Observed order + Richardson estimator
+### Task 2: Observed order + Richardson estimator — **COMPLETE 2026-07-27** ✅
 
 **Files:**
 - Create: `orbit_transfer/verify_common/mesh/mesh_order.m`

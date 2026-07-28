@@ -54,12 +54,14 @@ the ladder failed, and it produced a sharp answer.
 Section~\ref{sec:phase3} reports it: the residual is the local truncation
 error of the trapezoidal rule, scaling as $h^3$ with a coefficient fixed by the
 orbital dynamics, peaking at apogee, and essentially independent of the
-bang-bang switch structure. Converting that residual into kilograms, and then
-verifying the conversion by predicting and making a mesh change, yields the
-number the study opened by asking for: the $10$~N production mesh carries
-$0.233$~kg of discretization error, $1.7\times10^{-4}$ of the final mass, which
-is about one quarter of the $1.015$~kg available on the same mesh from a better
-choice of local minimum.
+bang-bang switch structure. An attempt to convert that residual into kilograms then failed review for the
+second time, and Section~\ref{sec:corrections2} records why. What survives is a
+\emph{lower bound}: two $10$~N solutions at identical node count, differing only
+in node placement, have final masses $0.1456$~kg apart. A defensible point
+estimate of the discretization error remains out of reach, and the reason is
+now understood---these solutions are so basin-fragile that a $2\%$ change in the
+mesh reorganizes their switch structure, which is itself the study's most
+robust result.
 \end{abstract}
 
 \tableofcontents
@@ -101,9 +103,9 @@ and one at $1$~N reading $1.228$. Consequently:
   are withdrawn.} The $10$~N figure rested on a ``within-branch mesh error'' of
   $0.009$~kg whose two levels have $19$ and $20$ switches---not within-branch
   at all. The $1$~N figure rested on the withdrawn decomposition.
-  (Section~\ref{sec:phase3} later re-establishes a dominance ratio of $4.4$ at
-  $10$~N by direct single-branch measurement. The retraction stands: the
-  original number was unsupported by the evidence then available.)
+  (A later attempt to re-establish a dominance ratio of $4.4$ at $10$~N was
+  itself withdrawn---see Section~\ref{sec:corrections2}. No supported dominance
+  ratio exists.)
   \item \textbf{``The production meshes are broadly adequate'' is
   withdrawn.} No branch-matched convergence estimate exists for any row.
 \end{itemize}
@@ -905,62 +907,126 @@ $0.776$~kg against a measured $0.146$~kg. Equation~\eqref{eq:sens} is an
 order-of-magnitude indicator, not a calibrated error bar, and should not be
 leaned on as one.
 
-\subsection{The measured error bar}
+\subsection{The attempted error bar, and why it does not stand}
 
-Two solutions on the same branch, at the same node count, differing only in
-node placement, with $\sum h^3$ of $2.668$ and $1.003$ and final masses
-$0.1456$~kg apart. Taking $E = k\sum h^3$---an assumption supported by the
-\emph{independent} measurement $R_x/h^3 = 0.171/0.171/0.163$ rather than fitted
-here---gives $k = 0.0874$~kg per unit and
+Two solutions on the same node count, differing only in node placement, with
+$\sum h^3$ of $2.668$ and $1.003$ and final masses $0.1456$~kg apart. Taking
+$E = k\sum h^3$ gives $k = 0.0874$~kg per unit and a production-mesh error of
+$0.233$~kg. \textbf{That number was reported as the study's deliverable and is
+withdrawn}; Section~\ref{sec:corrections2} gives the reasoning.
 
-\begin{table}[h]
-\centering\small
-\begin{tabular}{lr}
-\toprule
-discretization error of the production mesh & $\mathbf{0.233}$~\textbf{kg} \quad($1.7\times10^{-4}$ relative) \\
-discretization error after redistribution & $0.088$~kg \\
-first-order estimate, for comparison & $1.237$~kg (overpredicts $5.3\times$) \\
-basin gain on the same row & $1.015$~kg \quad---\quad $\mathbf{4.4\times}$ \textbf{the mesh error} \\
-\bottomrule
-\end{tabular}
-\end{table}
+What survives the withdrawal is weaker but sound. Both solutions understate the
+achievable mass---this is the direction established by the sign resolution
+above---so their difference bounds the worse one from below:
 
-This is the number the study set out to obtain. Unlike every earlier attempt it
-rests on a same-branch comparison with the branch verified, not on an
-extrapolation across a topology change. It also restores, in defensible form,
-the claim withdrawn in Section~\ref{sec:corrections}: \textbf{basin selection
-does dominate discretization error---by roughly a factor of four, not the
-factor of one hundred that was retracted.}
+\begin{quote}
+The $10$~N production mesh carries \textbf{at least} $0.1456$~kg of mass
+discretization error, conditional on the two solutions lying on one branch.
+\end{quote}
 
-\paragraph{Prediction 2's miss is itself a result.} The worst cell got eight
-times \emph{worse} under redistribution. So the coefficient $C$ in
-$E \approx C h^3$ is \emph{not} phase-independent: making $h$ uniform removes
-the apogee penalty but creates a worse cell elsewhere, most plausibly at
-perigee where a now-larger step meets rapidly varying dynamics. Uniform-in-time
-is therefore not the optimal mesh; equidistributing $Ch^3$ would require $C$
-measured per orbital phase. The mass improved regardless, because the total
-fell even as the worst cell rose.
+That is a lower bound, not a point estimate, and it still carries a conditional.
+
+\section{Corrections after the Phase 3 review}
+\label{sec:corrections2}
+
+The Phase 3 results were sent for external review with the measurements and
+figures attached. Both reviewers returned \textbf{not defensible}, naming the
+same weakest link.
+
+\paragraph{The model was falsified by our own data.} $E = k\sum h^3$ factors a
+single constant out of $\sum_i C_i h_i^3$, which assumes the local coefficient
+is phase-independent. The redistribution experiment measured the worst cell
+getting \emph{eight times worse}, which establishes the opposite. The $0.233$~kg
+is therefore an artifact of the two particular grids compared, and two points
+cannot distinguish that model from $E\propto(\sum h^3)^p$ or from a model with a
+nonzero asymptote---both of which extrapolate very differently.
+
+\paragraph{Switch count is not branch identity.} The comparison rested on
+$19\to19$ switches. This document itself records a row that held $75$ switches
+\emph{across} a genuine branch change; the constraint was stated in one section
+and disregarded in another.
+
+\paragraph{A state residual is not an objective error.} The $R_x/h^3$
+constancy was offered as independent support for the objective-error model. It
+is a scaling of the \emph{state} residual, and the only bridge to objective
+error is the first-order sensitivity sum---which had already failed by a factor
+of $5.3$.
+
+\paragraph{That failure is worse than miscalibration.} The reviewers' reading,
+which we accept: with bang-bang control on a mesh whose breakpoints are not
+switch-aligned, the objective is \emph{non-smooth} in node placement, so a
+smooth adjoint sensitivity does not compute a poorly-scaled gradient---it
+computes a fictitious one. $\sum_k\lambda_k^{\!\top}d_k$ is not applicable here
+at all.
+
+\paragraph{Consequently withdrawn:} the $0.233$~kg point estimate; the
+``basin dominates by $4.4\times$'' ratio, which loses its denominator; and
+``the production mesh is good enough,'' which was never given an acceptance
+tolerance against which ``enough'' could be judged.
+
+\paragraph{One finding was challenged and survived.} A reviewer objected that
+the median dilutes sparse switch spikes into a large population of smooth
+cells. Re-tested on sums, switch cells carry $16.2\%$, $15.3\%$ and $10.5\%$ of
+the total residual against population shares of $9.8\%$, $10.7\%$ and $9.8\%$:
+mildly over-represented, not dominant, and the over-representation \emph{shrinks}
+as switches multiply. The objection was fair; Finding~3.3 stands.
+
+\paragraph{And one claim of ours was correctly demolished.} We had inferred
+that basin fragility increases with switch count, because the two deeper rows
+voided. Both reviewers objected that the same perturbation is a far larger
+shock to a $171$-switch mesh than to a $19$-switch one. Testing at a $15\%$
+blend: a $2\%$ change in $\sum h^3$ still flipped $76\to75$. The claim is
+withdrawn, and what replaces it is sharper---these rows are \emph{knife-edge},
+and essentially any mesh change reorganizes them.
+
+\subsection{The recurring error, which is the transferable lesson}
+
+This study has now made the same class of mistake twice.
+
+\begin{enumerate}
+  \item Phase~2 fitted Richardson orders across a branch change, when the
+  study's own policy forbade exactly that.
+  \item Phase~3 extrapolated $E = k\sum h^3$ assuming a phase-independent
+  coefficient, when the study's own measurement had already falsified
+  phase-independence.
+\end{enumerate}
+
+In both cases the contradicting evidence was \emph{already in hand and already
+written down in the same document}. The failure was never missing data; it was
+failing to apply our own stated constraint to our own new claim. The Phase~2
+remedy was to move the rule out of a comment and into the arithmetic, where it
+could not be forgotten. The analogous remedy here is a check that refuses to
+report an extrapolated error whenever the measured spread of the local
+coefficient exceeds a threshold---which, on this data, it plainly does.
 
 \section{Experiments still to run}
 \label{sec:next}
 
 \begin{enumerate}
-  \item \textbf{Objective sensitivity, $\Delta J \approx \sum_k \lambda_k^{\!\top} R_k$.}
-  The costate \emph{is} the sensitivity of the objective to a state
-  perturbation, and both the costates and the residual map are already in hand.
-  This converts a residual into kilograms and is the missing link to the
-  question the study opened with.
-  \item \textbf{Mesh redistribution.} Re-solve $10$~N at the \emph{same} node
-  count with nodes redistributed to equidistribute $h^3$, and measure whether
-  the residual falls and whether $m_f$ moves by the amount item 1 predicts.
-  Items 1 and 2 together form a closed falsifiable loop: predict, then perturb,
-  then check the prediction.
-  \item \textbf{Cislunar adapters.} Both need their own: the tulip builds its
-  dynamics inline with no reusable right-hand side and stores no duals, and
-  ELFO uses a free-$t_f$ two-primary nine-state solver.
-  \item \textbf{External review} of the Phase 3 conclusions, with the measured
-  residuals and figures attached rather than intentions.
+  \item \textbf{A branch-identity test that is not switch count.} Everything
+  downstream needs this: matched switch \emph{times}, arc correspondence, and
+  state/costate proximity between two meshes. Without it no same-branch
+  comparison can be claimed, and both retractions in this document trace back
+  to its absence.
+  \item \textbf{Three or more same-branch meshes} spanning a range of
+  $\sum h^3$, with competing error models fitted and compared rather than one
+  assumed. Two points can support a bound; they cannot support a model.
+  \item \textbf{A fixed-structure multi-phase formulation}, with switch times as
+  explicit variables. This makes branch identity structural rather than
+  detected, and it simultaneously supplies the switch-aligned mesh whose order
+  the study has been trying to measure indirectly throughout.
+  \item \textbf{Cislunar adapters} for the tulip and ELFO campaigns, each of
+  which needs its own: the tulip builds its dynamics inline with no reusable
+  right-hand side and stores no duals, and ELFO uses a free-$t_f$ two-primary
+  nine-state solver.
 \end{enumerate}
+
+\noindent The basin thread is not on this list because it is no longer a
+measurement problem. Every certified row examined is beaten on its own mesh by a
+different starting guess, a one-node perturbation suffices to find the better
+one, and nothing in the certification path looks. That is an operational change,
+and on the evidence assembled here it is worth more than another digit on the
+mesh.
 
 \section*{Reproducing this}
 \addcontentsline{toc}{section}{Reproducing this}

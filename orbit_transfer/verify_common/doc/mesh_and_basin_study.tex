@@ -54,7 +54,12 @@ the ladder failed, and it produced a sharp answer.
 Section~\ref{sec:phase3} reports it: the residual is the local truncation
 error of the trapezoidal rule, scaling as $h^3$ with a coefficient fixed by the
 orbital dynamics, peaking at apogee, and essentially independent of the
-bang-bang switch structure.
+bang-bang switch structure. Converting that residual into kilograms, and then
+verifying the conversion by predicting and making a mesh change, yields the
+number the study opened by asking for: the $10$~N production mesh carries
+$0.233$~kg of discretization error, $1.7\times10^{-4}$ of the final mass, which
+is about one quarter of the $1.015$~kg available on the same mesh from a better
+choice of local minimum.
 \end{abstract}
 
 \tableofcontents
@@ -96,6 +101,9 @@ and one at $1$~N reading $1.228$. Consequently:
   are withdrawn.} The $10$~N figure rested on a ``within-branch mesh error'' of
   $0.009$~kg whose two levels have $19$ and $20$ switches---not within-branch
   at all. The $1$~N figure rested on the withdrawn decomposition.
+  (Section~\ref{sec:phase3} later re-establishes a dominance ratio of $4.4$ at
+  $10$~N by direct single-branch measurement. The retraction stands: the
+  original number was unsupported by the evidence then available.)
   \item \textbf{``The production meshes are broadly adequate'' is
   withdrawn.} No branch-matched convergence estimate exists for any row.
 \end{itemize}
@@ -819,6 +827,119 @@ kilograms. The conversion is the first item in Section~\ref{sec:next}.
 \paragraph{Anything about basins.} The Pontryagin conditions are
 \emph{necessary}: every local extremal satisfies them. The $10$~N solution that
 is $1.015$~kg worse than its neighbour passes this check cleanly.
+
+\subsection{Step 1: converting the residual to kilograms}
+
+The residual is local and dimensionless; the question was always in kilograms.
+The bridge is the multiplier. The discrete solution satisfies its own defect
+constraints exactly, but measured against the exact flow each interval carries
+a signed residual $d_k$, so the discrete solution is the exact solution of a
+problem whose defect constraints are displaced by $d_k$. The multiplier of
+defect $k$ is by definition $\partial J^*/\partial(\text{defect }k)$, hence to
+first order
+\begin{equation}
+  \Delta J \;\approx\; \sum_k \lambda_k^{\!\top} d_k .
+  \label{eq:sens}
+\end{equation}
+No fresh adjoint propagation is needed---the nonlinear program already computed
+these sensitivities, which also avoids the backward instability that forced
+per-interval propagation in the first place.
+
+\begin{table}[h]
+\centering\small
+\begin{tabular}{lrrrrr}
+\toprule
+row & $\mf$ (kg) & implied $|\Delta m|$ & no-cancel bound & cancellation & relative \\
+\midrule
+$10$~N  & 1377.101 & 1.237 & 3.517 & 2.8 & $9.0\times10^{-4}$ \\
+$2.5$~N & 1370.296 & 5.714 & 8.264 & 1.4 & $4.2\times10^{-3}$ \\
+$1$~N   & 1370.798 & 4.046 & 6.634 & 1.6 & $3.0\times10^{-3}$ \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Reporting the signed sum beside the sum of magnitudes measures how much the
+per-interval errors cancel, and that ratio is a direct test of H2, which held
+that alternating-sign errors across many switches would partially cancel in an
+integrated quantity. Measured, cancellation removes only a factor of 1.4--2.8,
+and it is \emph{weakest} on the rows with the \emph{most} switches---the
+opposite of the argument's prediction. H2's cancellation mechanism does not
+operate here.
+
+\subsection{Step 2: mesh redistribution, and the closed loop}
+
+Equation~\eqref{eq:sens} is a first-order estimate; whether it is quantitatively
+right is a separate question, and the way to answer it is to predict a change
+and then make it. Given the measured $E \propto h^3$, the redistribution that
+minimizes $\sum h^3$ at fixed node count and fixed horizon is $h$ constant---a
+mesh uniform in physical \emph{time} rather than in longitude. Predictions were
+computed and recorded \emph{before} the re-solve.
+
+\begin{table}[h]
+\centering\small
+\begin{tabular}{clll}
+\toprule
+\# & prediction & measured & \\
+\midrule
+1 & $\sum h^3$ drops $2.68\times$ & $2.66\times$ & \textbf{hit} \\
+2 & residual falls by the same factor & median $1.47\times$, max $8\times$ \emph{worse} & \textbf{miss} \\
+4 & $\Delta m \approx 0.776$~kg & $+0.146$~kg & \textbf{miss}, $5.3\times$ \\
+5 & switch count stays 19 & $19 \to 19$ & \textbf{hit} \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+The step-size range collapsed from $36.2\times$ to $1.6\times$, and the switch
+count held---so this is a \emph{single-branch} comparison, and the objection
+that defeated Phase~2 does not apply to it.
+
+\paragraph{The sign was inverted, and is now settled.} Step~1's estimate implied
+the discrete solution \emph{overstates} achievable mass, so a better mesh should
+lower $\mf$. It \emph{rose}, $1377.101235 \to 1377.246863$. The discrete
+solution understates achievable mass and improving the mesh raises it, agreeing
+with the direction seen in the ladder. This was settled by perturbation rather
+than by arguing about multiplier conventions.
+
+\paragraph{The first-order estimate overpredicts by a factor of five.} Predicted
+$0.776$~kg against a measured $0.146$~kg. Equation~\eqref{eq:sens} is an
+order-of-magnitude indicator, not a calibrated error bar, and should not be
+leaned on as one.
+
+\subsection{The measured error bar}
+
+Two solutions on the same branch, at the same node count, differing only in
+node placement, with $\sum h^3$ of $2.668$ and $1.003$ and final masses
+$0.1456$~kg apart. Taking $E = k\sum h^3$---an assumption supported by the
+\emph{independent} measurement $R_x/h^3 = 0.171/0.171/0.163$ rather than fitted
+here---gives $k = 0.0874$~kg per unit and
+
+\begin{table}[h]
+\centering\small
+\begin{tabular}{lr}
+\toprule
+discretization error of the production mesh & $\mathbf{0.233}$~\textbf{kg} \quad($1.7\times10^{-4}$ relative) \\
+discretization error after redistribution & $0.088$~kg \\
+first-order estimate, for comparison & $1.237$~kg (overpredicts $5.3\times$) \\
+basin gain on the same row & $1.015$~kg \quad---\quad $\mathbf{4.4\times}$ \textbf{the mesh error} \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+This is the number the study set out to obtain. Unlike every earlier attempt it
+rests on a same-branch comparison with the branch verified, not on an
+extrapolation across a topology change. It also restores, in defensible form,
+the claim withdrawn in Section~\ref{sec:corrections}: \textbf{basin selection
+does dominate discretization error---by roughly a factor of four, not the
+factor of one hundred that was retracted.}
+
+\paragraph{Prediction 2's miss is itself a result.} The worst cell got eight
+times \emph{worse} under redistribution. So the coefficient $C$ in
+$E \approx C h^3$ is \emph{not} phase-independent: making $h$ uniform removes
+the apogee penalty but creates a worse cell elsewhere, most plausibly at
+perigee where a now-larger step meets rapidly varying dynamics. Uniform-in-time
+is therefore not the optimal mesh; equidistributing $Ch^3$ would require $C$
+measured per orbital phase. The mass improved regardless, because the total
+fell even as the worst cell rose.
 
 \section{Experiments still to run}
 \label{sec:next}

@@ -321,13 +321,36 @@ fragility, because the SAME perturbation is a far larger shock to a 171-switch
 mesh than to a 19-switch one. To test that, the redistribution was repeated at
 a 15% blend:
 
-| row | blend | Σh³ change | switches | verdict |
+| row | blend | Σh³ | switches | verdict |
 |---|---|---|---|---|
-| 2.5 N | 0.15 | 13.0 → 13.3 (**2%**) | 76 → **75** | VOID |
+| 2.5 N | 0.15 | 13.0 → 13.3 (**+2%**) | 76 → **75** | VOID |
+| 2.5 N | 0.35 | 13.0 → 20.7 (**+59%**) | 76 → **71** | VOID |
+| 1 N | 0.15 | 34.1 → 35.9 (**+5%**) | 171 → **169** | VOID |
+| 1 N | 0.35 | 34.1 → 46.2 (**+35%**) | 171 → **169** | VOID |
+| 2.5 N | 1.00 | 13.0 → 5.0 (−62%) | 76 → **75** | VOID |
+| 1 N | 1.00 | 34.1 → 12.6 (−63%) | 171 → **169** | VOID |
 
-A **2% change in Σh³ still flipped the branch.** So the voiding is not a
-function of perturbation size, and the reviewers' objection is upheld: the
-claim that fragility scales with switch count is **withdrawn**.
+**No blend level holds the branch on either deeper row.** Node displacements
+from 15% to 100% of the way, in both directions of Σh³, all reorganize the
+switch structure. The reviewers' objection is upheld and the claim that
+fragility scales with switch count is **withdrawn**; what stands is that these
+rows are knife-edge to node placement, full stop.
+
+### A flaw in this experiment's own design, found by running it
+
+**Σh³ is NOT monotonic in the blend parameter — it rises before it falls.**
+A 35% blend gives a Σh³ *59% larger* than the production mesh, while the full
+blend gives one 62% *smaller*. Linearly interpolating the σ-coordinates between
+two grids does not interpolate the resulting step distribution: the intermediate
+grid is aligned with neither, and is worse than both.
+
+That invalidates the framing of "blend" as a milder version of the same
+perturbation. It is a mild NODE DISPLACEMENT but not a small change in the
+quantity the error model cares about — and an earlier note here described the
+0.15 case as a small perturbation on the strength of its 2% Σh³ change, which
+was a coincidence of where the non-monotonic curve happened to cross. A
+correctly graded experiment would parameterize by Σh³ directly and solve for
+the grid achieving each target.
 
 What replaces it is arguably more interesting. These rows are *knife-edge*:
 essentially any mesh change reorganizes them. That is not a nuisance obstructing

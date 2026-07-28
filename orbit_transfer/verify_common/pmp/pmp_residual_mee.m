@@ -55,6 +55,13 @@ function R = pmp_residual_mee(matPath, opts)
 %       .lamTimeCoV      coefficient of variation of the time costate
 %       .selfDefect .gatePass   the self-validating gate
 %       .switchTimes     physical switch times
+%       .RlamRel         [1xN] costate residual RELATIVE to local |lam|. The
+%                        raw .Rlam is an absolute norm and costates are
+%                        sensitivities that can be enormous, so only this
+%                        normalized form is interpretable.
+%       .rOrb .rCell     orbital radius at nodes / interval midpoints, so the
+%                        residual can be read against orbit PHASE
+%       .revs .nodesPerRev .switchesPerRev
 %       .nArcs
 %
 % REFERENCES:
@@ -149,6 +156,26 @@ for a = 1:nArcs
     R.defectCell(i1:i2-1) = Ra.defectCell;
     selfD = max(selfD, Ra.selfDefect);
 end
+% --- normalization and orbital context --------------------------------------
+% R_lam is an ABSOLUTE norm and costates are sensitivities, which can be
+% enormous -- a residual of 13.9 against a costate of 1e5 is relatively tiny.
+% Interpreting the raw number is therefore meaningless; normalize by the local
+% costate magnitude (mean of the interval's two endpoints).
+lamMag = vecnorm(lam, 2, 1);
+lamCell = 0.5*(lamMag(1:end-1) + lamMag(2:end));
+R.lamMag  = lamMag;
+R.RlamRel = R.Rlam ./ max(lamCell, realmin);
+
+% Orbital radius from the MEE state, so residuals can be read against orbit
+% PHASE rather than only against time. In MEE with p = X(1),
+%   r = p / (1 + ex*cos(L) + ey*sin(L)),   L = pi + sigma*DeltaL.
+Lnode = pi + sigma * dL;
+R.rOrb = X(1,:) ./ (1 + X(2,:).*cos(Lnode) + X(3,:).*sin(Lnode));
+R.rCell = 0.5*(R.rOrb(1:end-1) + R.rOrb(2:end));
+R.revs        = dL / (2*pi);
+R.nodesPerRev = (N1-1) / R.revs;
+R.switchesPerRev = sw.n / R.revs;
+
 R.selfDefect = selfD;
 R.gatePass   = selfD <= 1e-8;
 R.nArcs = nArcs;

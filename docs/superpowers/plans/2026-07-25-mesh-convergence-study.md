@@ -429,7 +429,24 @@ fprintf('test_mesh_order: ALL PASS\n');
 
 ---
 
-### Task 5: Tier A — earth order study (the core measurement)
+### Task 5: Tier A — earth order study — **RUN 2026-07-27** (Steps 1-2 done, Step 3 partial) ⚠
+
+**Result: `verify_common/doc/mesh_study_tierA_results.md`.** 12/12 levels
+converged in 80.3 min. ONE of three rows produced a usable order — 1 N,
+**p = 1.228** (windows 1.596 -> 1.228, consistent; switches stable at 171),
+supporting **H1**. Richardson limit 1372.156 kg, leaving the production-
+resolution row 1.55 kg short. 10 N and 2.5 N are NOT-CONVERGED: both had their
+x8 delta GROW, 10 N with a topology change (20 -> 18 switches) and 2.5 N
+without one (75 throughout) yet still +3.18 kg. Refinement raised final mass
+and lowered dV in all 9 refinement steps with no exceptions, so the certified
+rows are conservative. Switch TIMES are not converged in any row.
+
+**Still open from Step 3:** the branch check on 10 N and 2.5 N (re-solve the
+finest level from an independent seed) before their x8 jumps can be attributed
+to discretization rather than basin escape. Until that runs, no campaign-wide
+order statement is warranted.
+
+### Task 5 (original): Tier A — earth order study (the core measurement)
 
 **Files:**
 - Create: `orbit_transfer/verify_common/mesh/run_mesh_study_mee.m`

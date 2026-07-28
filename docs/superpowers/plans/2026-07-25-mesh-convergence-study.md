@@ -19,32 +19,60 @@ IPOPT certifies the *NLP*; `verify_common` certifies first-order conditions *of 
 - **Four meshes (1,2,4,8) for an order estimate; three at absolute minimum.** Three levels give a single fragile slope; four give sliding three-level slopes whose mutual consistency is the evidence of an asymptotic regime. Two meshes support only a stability statement ("changed by X"), never an order. Any table cell reporting `p` from two meshes is a bug.
 - **Warm-chain up the ladder** (coarse → fine), because these basins are razor-thin (the 10 N `c_tf` case flips 19↔24 switches on a 2e-5 change in `t_f`). **Per-level gates are NOT sufficient to detect warm-chain bias** (external review): passing `Solve_Succeeded` + defect + `foc_check` only proves each level is stationary for its OWN NLP, not that all levels lie on the same continuous branch. Every headline row therefore also gets a **branch check**: re-solve the finest level from an INDEPENDENTLY constructed seed (not the warm chain), and compare objective, switch topology, and the dense trajectory. A differing switch count at comparable objective is a **branch finding**, not a solver failure.
 - **Refinement preserves the relative node distribution.** Scale node count by the factor; do not switch a Sundman or PSR mesh to uniform. The mesh's *character* is part of the method being measured.
+- **Switch times are extracted by interpolated zero-crossing of the switching function, NEVER by thresholding the nodal throttle.** Reading a switch as "the first node where `s > 0.5`" quantizes its location to the grid *by construction*, so the study would measure `p ≈ 1` for switch times no matter what the underlying solution does — confirming hypothesis H1 circularly and proving nothing. Locate each switch as the zero of the switching function (or, where only the throttle is available, the linearly interpolated crossing of `s = 0.5` between adjacent nodes) and report it in **physical time**. A switch-time order fitted from thresholded node indices is a bug, not a measurement.
 - MATLAB house header convention (purpose / INPUTS with sizes / OUTPUTS with sizes / REFERENCES); never `i` or `j` as loop variables.
 - Cache-dependent tests SKIP (not fail) when a `.mat` is absent.
 - Run each module from its own folder after that module's `setup_paths`; tests add CasADi via `addpath(fullfile(getenv('HOME'),'casadi-3.7.0'))`.
 
-## Theoretical expectations (REVISED after external review, 2026-07-25)
+## Theoretical expectations (REVISED twice: 2026-07-25 and 2026-07-27)
 
-**These were wrong in the first draft and are the reason the plan was reviewed
-before execution.** Full review: `verify_common/doc/review_2026-07-25_meshplan_gpt56terra.md`.
+**The first draft asserted p≈2 everywhere; the 2026-07-25 review replaced that
+with p≈1 everywhere. Both were single confident predictions, and the two
+reviewers DISAGREE.** Reviews:
+`verify_common/doc/review_2026-07-25_meshplan_gpt56terra.md` (argues p≈1) and
+`verify_common/doc/review_2026-07-27_meshplan_gemini31pro.md` (argues p≈1 is
+too pessimistic for final mass and switch times).
 
-**The governing fact:** on a mesh whose breakpoints are NOT aligned with the
-switches, one switch-crossing interval carries the wrong throttle over `O(h)`
-of time against an `O(1)` jump in the RHS. That single interval's `O(h)` error
-dominates every smooth arc's `O(h^2)`. So:
+**This table therefore states COMPETING FALSIFIABLE PREDICTIONS, not a single
+expected answer.** The study exists to discriminate between them. A row with
+two hypotheses is not indecision — it is the measurement's actual purpose, and
+it is what stops a confirmatory reading of the result.
 
-| quantity | unaligned uniform mesh | switches as true breakpoints |
-|---|---|---|
-| state trajectory (global norm) | **O(h)** | O(h²) |
-| final mass, ΔV | **O(h)** | O(h²) |
-| switch **times** | **O(h)** — the location is grid-quantized | O(h²) *only* if the switch is an optimized event/phase boundary with Ṡ≠0 |
-| switch **count** | must **stabilize**; no order exists | same |
-| mapped terminal covector (Task 0) | **exactly 0** to KKT tolerance — not a convergence observable | same |
-| raw defect multipliers | **O(h)** generically | O(h²) only for a properly covector-mapped multiplier on smooth arcs |
-| ~~terminal state error~~ | **DROPPED** — with terminal equalities in the NLP this is identically solver tolerance, not an observable. Replaced by terminal error of the *independently propagated* control |
+**The pessimistic argument (H1):** on a mesh whose breakpoints are NOT aligned
+with the switches, one switch-crossing interval carries the wrong throttle over
+`O(h)` of time against an `O(1)` jump in the RHS. That single interval's `O(h)`
+error dominates every smooth arc's `O(h^2)`.
 
-**Predicting p≈1 rather than p≈2 is the single most important correction**: a
-measured p≈1 on a uniform mesh is the *expected, healthy* result, not a defect.
+**The optimistic argument (H2):** the throttle is a CONTINUOUS NLP variable in
+[0,1], so at a switch the optimizer can hold one node at an intermediate value,
+encoding a sub-interval switch location rather than snapping to the grid.
+Furthermore the objective is a quantity the optimizer directly controls and
+evaluates by second-order quadrature, and the sign of the per-switch error
+alternates across 25–360 switches, so integrated quantities may cancel to a
+better effective rate than the trajectory norm.
+
+| quantity | H1 (switch interval dominates) | H2 (sub-grid placement / cancellation) | switches as true breakpoints |
+|---|---|---|---|
+| state trajectory (global norm) | **O(h)** | O(h) — H2 makes no claim here | O(h²) |
+| final mass, ΔV | **O(h)** | **O(h²)** — optimizer-controlled, 2nd-order quadrature, alternating-sign cancellation | O(h²) |
+| switch **times** | **O(h)** — grid-quantized | **O(h²)** — intermediate node encodes sub-grid location | O(h²) *only* if the switch is an optimized event/phase boundary with Ṡ≠0 |
+| switch **count** | must **stabilize**; no order exists | same | same |
+| mapped terminal covector (Task 0) | **exactly 0** to KKT tolerance — not a convergence observable | same | same |
+| raw defect multipliers | **O(h)** generically | same | O(h²) only for a properly covector-mapped multiplier on smooth arcs |
+| ~~terminal state error~~ | **DROPPED** — with terminal equalities in the NLP this is identically solver tolerance, not an observable. Replaced by terminal error of the *independently propagated* control | | |
+
+**Reading rule.** Report the measured `p` against BOTH columns and name which
+hypothesis it supports. Do NOT record p≈1 as "expected and healthy" — that
+phrasing (present in the previous revision) would wave through a genuinely
+under-converged mass. Equally, do not record p≈2 as vindication without
+checking that the switch topology was stable across the levels that produced
+it.
+
+**Switch-time extraction is a PREREQUISITE, not a detail.** See the Global
+Constraint below: if switch times are read by thresholding the nodal throttle,
+they are grid-quantized *by construction* and the study will measure p≈1
+whatever the solution does — confirming H1 circularly. Extraction must resolve
+sub-interval locations before any switch-time order is reported.
 
 **PSR claim, stated falsifiably:** PSR may improve constants and recover second
 order **only if it makes switches true retained breakpoints**, aligned to o(h)
@@ -63,9 +91,25 @@ badly misleading. Therefore:
   measured across a branch/topology change.
 - **Primary estimator instead:** an **arc-by-arc propagation defect** —
   reconstruct the control, locate its switches, integrate each arc accurately,
-  and compare against the collocation solution locally, reporting per-cell
-  error with switch cells called out. This is local by construction and so
-  does NOT hit the 40-rev forward-shooting conditioning wall.
+  and compare against the collocation solution. This is local by construction
+  and so does NOT hit the 40-rev forward-shooting conditioning wall.
+
+  **NORMALIZATION IS MANDATORY AND WAS AMBIGUOUS IN THE PREVIOUS REVISION.**
+  The earlier wording ("reporting per-cell error") specifies the *local
+  truncation error*, which for trapezoidal collocation is one order HIGHER than
+  the global discretization error — `O(h^3)` per cell against `O(h^2)` global.
+  Fitting an order to raw per-cell error inflates every reported `p` by +1 and
+  would have invalidated the whole study. Two admissible forms, and the
+  implementation must state in its header WHICH it uses:
+
+  1. **Per-cell, normalized:** divide each cell's integrated error by that
+     cell's own physical step `h_k` before fitting. Recovers `O(h^2)`.
+  2. **Per-arc:** integrate across a whole inter-switch arc, whose physical
+     length does NOT shrink with `h`, and compare at the arc's end. This
+     accumulates to the global rate directly and needs no normalization.
+
+  Report per-cell error UNNORMALIZED only as a diagnostic map (to show WHERE
+  error concentrates, with switch cells called out); never fit an order to it.
 
 **Diagnostics are not physical observables.** `kktStatInf`, `signPct`,
 `sdotMinRel` and the raw dual readings are solver/discretization diagnostics.
@@ -125,6 +169,23 @@ This is cheap, it is the principled alternative the FIRST code review already
 named, and it likely **retracts** the earth 2.5 N "finding". It must precede
 the study, otherwise the study measures the convergence of a mis-defined
 quantity.
+
+**SIGN IS UNSETTLED — the test must discriminate it.** The 2026-07-27 review
+argues the quadrature term enters as `-(h_N/2)*L_x(N+1)`, not `+`. The sign
+depends on the adjoint convention, and this plan does not settle it by
+assertion: Step 3 mandates obtaining every ingredient by AD from the same
+`opti.f`/`opti.g` rather than hand-coding a convention, and Step 1's test
+(mapped `< 1e-8` while the raw interval dual is `> 10x` larger) fails loudly
+under a wrong sign. **If Step 1 fails, try the opposite sign BEFORE concluding
+the mapping is wrong**, and record which convention the AD-derived KKT system
+actually uses.
+
+**Objective form, verified 2026-07-27:** the MEE objective is a pure Lagrange
+integral of throttle (`casadi_lt_mee.m:284`, `sum((dsig/2).*(w_k + w_{k+1}))`),
+with NO terminal mass term. Mass therefore does not appear in the cost, and the
+"mass component is exactly zero" claim is not undermined by the min-fuel
+objective. Re-verify this if a campaign ever switches to a Mayer (max final
+mass) form.
 
 **Files:**
 - Modify: `orbit_transfer/verify_common/foc_check.m`
@@ -330,4 +391,4 @@ fprintf('test_mesh_order: ALL PASS\n');
 - **Placeholders:** none — every task carries either real test code or an explicit algorithm. The one soft spot is Task 6's per-campaign adapters, deliberately left as "mirror Task 3's structure" rather than pre-generalized.
 - **Type consistency:** `mesh_match_switches` → `m.pairs/.unmatchedA/.unmatchedB/.dt/.maxAbsDt`; `mesh_order` → `o.p/.rich/.dLast/.rel/.monotone`; `mesh_ladder_mee` → `L(k).factor/.N/.out/.rep/.wall`; `mesh_collect` → `S.q.<name>.vals/.order` + `S.switchStability`. Used consistently in Tasks 4–6.
 
-**Known risk:** the theoretical expectations table is the interpretive frame for everything, and it is my weakest area here. If the expected orders are wrong, correct measurements will be misread. That table is the primary target of external review before execution.
+**Known risk (updated 2026-07-27):** the theoretical expectations table is the interpretive frame for everything. It has now been reviewed twice by independent external models, **which disagree on it** — GPT-5.6-terra argues p≈1 for mass and switch times, Gemini 3.1 Pro argues those two should reach p≈2. That disagreement has been folded into the table as competing hypotheses H1/H2 rather than resolved by a third opinion, because the measurement is what settles it. The residual risk is no longer "the frame may be wrong" but "the measurement may be built so it can only confirm one branch" — which is why switch-time extraction and arc-defect normalization are now Global Constraints rather than implementation details.

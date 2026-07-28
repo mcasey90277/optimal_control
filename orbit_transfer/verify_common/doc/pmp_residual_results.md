@@ -204,6 +204,75 @@ the argument predicts. H2's cancellation mechanism does not operate here.
    0.913865 at 1 N), so the analysis characterizes that better extremal, not
    the published row. This is the seed-sensitivity effect appearing again.
 
+## Step 2 result — mesh redistribution: the closed loop
+
+Predictions were computed and printed BEFORE the re-solve. Earth 10 N,
+**same node count** (193 intervals), nodes redistributed to be uniform in
+physical TIME — which is what minimizes `Σh³` at fixed `N` and `T`, and is
+therefore the optimal redistribution given the measured `E ∝ h³`.
+
+| # | prediction | measured | verdict |
+|---|---|---|---|
+| 1 | `Σh³` drops **2.68x** | **2.66x** | **HIT** |
+| 2 | residual falls by ~the same factor | median 1.47x, **max 0.13x (WORSE)** | **MISS** |
+| 3 | implied \|Δm\| falls 1.237 → 0.461 kg | — | — |
+| 4 | measured Δm ≈ **0.776 kg** | **+0.146 kg** | **MISS, 5.3x** |
+| 5 | switch count stays 19 | **19 → 19** | **HIT** |
+
+`h` range collapsed from 36.2x to 1.6x, so the redistribution did exactly what
+it was designed to do. Switch count held, so the mass comparison is on ONE
+BRANCH and is not confounded — the objection that defeated Phase 2 does not
+apply here.
+
+### The SIGN is now resolved, and it was inverted
+
+Step 1's estimate came out negative, which would have meant the discrete
+solution OVERSTATES achievable mass, so a better mesh should give a LOWER
+`m_f`. **`m_f` rose**, 1377.101235 → 1377.246863. The multiplier-convention
+sign in the first-order estimate was inverted: the discrete solution
+UNDERSTATES achievable mass, and improving the mesh raises it. That direction
+agrees with what Tier A saw, and it is now established by perturbation rather
+than by convention-chasing.
+
+### The first-order estimate OVERPREDICTS by ~5x
+
+Predicted 0.776 kg, measured 0.146 kg. This is the same defect flagged in
+Step 1's caveat (a), where the 1 N estimate ran 2.6x above the ladder's total
+observed movement. It is now measured directly on a controlled, single-branch
+perturbation: **the sensitivity estimate is good for order of magnitude and
+not usable as a calibrated error bar.**
+
+### The deliverable — a measured error bar for the production mesh
+
+Two solutions on the same branch, same node count, differing only in node
+placement, with `Σh³` of 2.668 and 1.003 and masses differing by 0.1456 kg.
+Taking `E = k·Σh³`, which the measured constancy of `R_x/h³` supports:
+
+| | value |
+|---|---|
+| `k` | 0.0874 kg per unit `Σh³` |
+| **error of the production mesh** | **0.233 kg** (1.7e-04 relative) |
+| error of the redistributed mesh | 0.088 kg |
+| first-order estimate, for comparison | 1.237 kg (overpredicts 5.3x) |
+| basin gain on this row | 1.015 kg — **4.4x the mesh error** |
+
+**This is the number the study set out to obtain**, and unlike every earlier
+attempt it rests on a same-branch comparison with the branch verified, not on
+an extrapolation across a topology change. Caveats: two points and one
+assumption (`E ∝ Σh³`), though that assumption is supported by the independent
+`R_x/h³ = 0.171/0.171/0.163` measurement rather than fitted here.
+
+### Prediction 2's miss is a real finding
+
+The residual median improved only 1.47x, and the **maximum got 8x WORSE**
+(1.05e-02 → 8.38e-02). Making `h` uniform in time removes the apogee penalty
+but evidently creates a worse worst-cell somewhere else — most likely at
+perigee, where a now-larger `h` meets rapidly varying dynamics, i.e. the
+coefficient `C` in `E ≈ C·h³` is NOT phase-independent after all. Uniform-in-time
+is therefore not the optimal mesh; equidistributing `C·h³` would need `C`
+measured per phase. The mass still improved because the total fell even as the
+worst cell rose.
+
 ## Experiments still to run
 
 1. **Objective sensitivity: ΔJ ≈ Σ λᵀ·R.** The costate IS the sensitivity of

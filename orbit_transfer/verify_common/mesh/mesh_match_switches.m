@@ -25,8 +25,16 @@ function m = mesh_match_switches(tA, tB, tol)
 %   tB  - switch times on mesh B, physical units, monotonic increasing [1xq]
 %         (by convention A is the coarser mesh and B the finer, which fixes
 %          the sign of m.dt below; nothing enforces it)
-%   tol - matching window in the same physical units [scalar]. A pair further
-%         apart than this is not formed.
+%   tol - matching window in the same physical units. Either a scalar, or a
+%         PER-SWITCH vector [1xp] giving each tA(i) its own window. The vector
+%         form is what the study uses: the physical step of a mesh that is
+%         uniform in longitude or in a Sundman variable varies by 36-39x across
+%         a transfer (measured, earth 10 N), so a single global window is at
+%         once too loose where the mesh is fine in time and too tight where it
+%         is coarse. A median-based scalar window was measured to spuriously
+%         refuse a genuine pair whose switch had moved 0.382 while the median
+%         step was 0.156. A pair further apart than ITS OWN window is not
+%         formed.
 %
 % OUTPUTS:
 %   m - struct:
@@ -47,10 +55,12 @@ function m = mesh_match_switches(tA, tB, tol)
 
 tA = tA(:).';
 tB = tB(:).';
-assert(isscalar(tol) && isfinite(tol) && tol > 0, ...
-    'mesh_match_switches:tol', 'tol must be a positive finite scalar');
-
+tol = tol(:).';
 p = numel(tA);  q = numel(tB);
+assert(~isempty(tol) && all(isfinite(tol)) && all(tol > 0), ...
+    'mesh_match_switches:tol', 'tol entries must be positive and finite');
+assert(isscalar(tol) || numel(tol) == p, 'mesh_match_switches:tol', ...
+    'tol must be scalar or have one entry per tA switch (%d), got %d', p, numel(tol));
 m = struct('pairs', zeros(0,2), 'unmatchedA', [], 'unmatchedB', [], ...
            'dt', [], 'maxAbsDt', NaN, 'n', 0);
 
@@ -65,6 +75,19 @@ end
 % Full cost matrix, then repeated global minimum. p and q are switch counts
 % (25-360 here), so the dense matrix is trivially small.
 D = abs(tA(:) - tB(:).');          % [p x q]
+
+% Mask out every pair that exceeds ITS OWN window up front. Doing this before
+% the greedy loop (rather than testing the running minimum against a scalar) is
+% what makes a per-switch window correct: with a vector tol, the globally
+% smallest remaining distance may be inadmissible while some larger distance is
+% still inside its own, larger, window -- so the loop must not stop at the
+% first inadmissible minimum.
+if isscalar(tol)
+    D(D > tol) = inf;
+else
+    D(D > repmat(tol(:), 1, q)) = inf;
+end
+
 freeA = true(1,p);  freeB = true(1,q);
 pairs = zeros(0,2);
 
@@ -73,8 +96,8 @@ while true
     Dm(~freeA, :) = inf;
     Dm(:, ~freeB) = inf;
     [best, lin] = min(Dm(:));
-    if ~isfinite(best) || best > tol
-        break                       % nothing left inside the window
+    if ~isfinite(best)
+        break                       % nothing admissible left
     end
     [ia, ib] = ind2sub(size(Dm), lin);
     pairs(end+1, :) = [ia, ib];     %#ok<AGROW> -- bounded by min(p,q)

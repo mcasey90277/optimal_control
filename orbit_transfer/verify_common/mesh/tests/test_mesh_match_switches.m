@@ -58,4 +58,38 @@ assert(isempty(m.pairs), 'f: no pairs possible against an empty A');
 assert(isempty(m.unmatchedA) && numel(m.unmatchedB) == 2, 'f: both B entries unmatched');
 assert(isnan(m.maxAbsDt), 'f: maxAbsDt undefined with no pairs -> NaN');
 
+% ---- (g) PER-SWITCH tolerance -------------------------------------------
+% The case that motivated the vector form: two switches with very different
+% local mesh density. A1 sits where the mesh is coarse in time and its partner
+% has moved 0.30; A2 sits where the mesh is fine and its partner moved 0.02.
+% A single scalar window cannot accept the first without also accepting a
+% 0.30 drift at the second -- which would pair unlike switches. Per-switch
+% windows [0.5, 0.05] accept both correctly.
+tA = [1 5];  tB = [1.30 5.02];
+m = mesh_match_switches(tA, tB, [0.5 0.05]);
+assert(m.n == 2, 'g: both should pair under per-switch windows, got %d', m.n);
+assert(max(abs(m.dt - [0.30 0.02])) < 1e-12, 'g: dt = [0.30 0.02], got [%.4g %.4g]', m.dt);
+
+% and the tight window really does bite: shrink A1's window below its drift
+m = mesh_match_switches(tA, tB, [0.1 0.05]);
+assert(m.n == 1 && isequal(m.pairs, [2 2]), 'g: only A2 should pair when A1''s window is 0.1');
+assert(isequal(m.unmatchedA, 1) && isequal(m.unmatchedB, 1), 'g: A1 and B1 unmatched');
+
+% ---- (h) a scalar window must behave exactly as before ------------------
+% Regression guard on the masking rewrite: scalar tol is the vector case with
+% one repeated entry, and must give identical results.
+m1 = mesh_match_switches([1 2 3], [1.01 1.99 3.02], 0.1);
+m2 = mesh_match_switches([1 2 3], [1.01 1.99 3.02], [0.1 0.1 0.1]);
+assert(isequal(m1.pairs, m2.pairs) && max(abs(m1.dt - m2.dt)) < 1e-15, ...
+    'h: scalar and equivalent vector tolerance must agree exactly');
+
+% ---- (i) a vector tolerance of the wrong length is rejected -------------
+ok = false;
+try
+    mesh_match_switches([1 2 3], [1 2 3], [0.1 0.1]);
+catch err
+    ok = contains(err.identifier, 'tol');
+end
+assert(ok, 'i: a tol vector not matching numel(tA) must be rejected');
+
 fprintf('test_mesh_match_switches: ALL PASS\n');

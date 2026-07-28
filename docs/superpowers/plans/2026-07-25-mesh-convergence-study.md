@@ -396,7 +396,7 @@ fprintf('test_mesh_order: ALL PASS\n');
 
 ---
 
-### Task 3: Earth mesh ladder
+### Task 3: Earth mesh ladder — **COMPLETE 2026-07-27** ✅ (smoked on earth 10 N)
 
 **Files:**
 - Create: `orbit_transfer/verify_common/mesh/mesh_ladder_mee.m`
@@ -412,13 +412,14 @@ fprintf('test_mesh_order: ALL PASS\n');
 
 ---
 
-### Task 4: Collection and report
+### Task 4: Collection and report — **COMPLETE 2026-07-27** ✅
 
 **Files:**
 - Create: `orbit_transfer/verify_common/mesh/mesh_collect.m`, `mesh_report.m`
 - Test: `orbit_transfer/verify_common/mesh/tests/test_mesh_collect.m`
 
 **Interfaces:**
+- **CORRECTIONS MADE DURING IMPLEMENTATION (2026-07-27):** (a) `lamMassEndRel` does not exist — Task 0 removed it; the field is `lamMassEndMapped`. (b) `termErr` is classed DIAGNOSTIC, not physical: the terminal elements are equality-constrained, so it reads solver tolerance by construction (measured 1.6e-35 -> 2.6e-36 on the 10 N ladder) and would otherwise have earned a meaningless CONVERGED verdict — consistent with this plan's own expectations table, which drops it. (c) the switch-matching window is PER-SWITCH (2x that switch's own local step), not a scalar; `mesh_match_switches` was extended to accept a vector.
 - Produces: `S = mesh_collect(L)` — from a ladder, assemble per-quantity series and orders. Quantities: `mf`, `dV_kms`, `termErr`, `nSwitches`, `switchTimes` (matched pairwise against the FINEST level via `mesh_match_switches`, tolerance = 2× the coarsest mesh's local step in physical time), `kktStatInf`, `lamMassEndRel`, `lamTimeCoV`, `sdotMinRel`, `signPct`. Each gets a `mesh_order` result. Returns `S.q.<name> = struct('vals',..,'order',..)` plus `S.switchStability` (counts per level, matched/unmatched tallies).
 - Produces: `mesh_report(S, tag, resDir)` — fixed-format table: quantity | values per level | observed p | Richardson | verdict. Verdicts: `CONVERGED` (monotone, p within [1,3]), `STABLE` (integer quantity unchanged), `NOT-CONVERGED` (non-monotone or p outside range), `O(h)-CONSISTENT` (for the dual-side anomalies: value shrinking at ≈ the refinement ratio), `INSUFFICIENT` (fewer than 3 levels). Save `mesh_<tag>.mat`.
 

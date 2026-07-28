@@ -1,6 +1,30 @@
 # Phase 3 results — continuous PMP residuals (2026-07-28)
 
-> **BOTTOM LINE.** The per-interval residual of the earth MEE solutions is the
+> **RETRACTION 2026-07-28 (post-review).** The "0.233 kg production-mesh error"
+> reported below is **WITHDRAWN as a measurement** and downgraded to a
+> conditional model estimate. Both external reviewers returned NOT DEFENSIBLE
+> on the same grounds, and they are right:
+>
+> - `E = k·Σh³` factors a single constant out of `Σ Cᵢhᵢ³`, i.e. assumes the
+>   local coefficient is phase-independent — which **this study's own data
+>   falsifies**, since redistribution made the worst cell 8x worse. The 0.233 kg
+>   is then an artifact of the two particular grids compared.
+> - `19 → 19` switches does **not** establish same-branch. Our own 2.5 N row held
+>   75 switches ACROSS a real branch change.
+> - The `R_x/h³` constancy is a **state-residual** scaling and does not
+>   establish **objective-error** scaling; the only bridge between them is the
+>   first-order estimator, which failed by 5.3x.
+> - Gemini adds a stronger reading of that failure: with bang-bang control on an
+>   unaligned grid the objective is **non-smooth** in node placement, so a smooth
+>   adjoint sensitivity is not miscalibrated but *theoretically invalid* here.
+>
+> **What survives:** two same-node-count 10 N solutions differ in mass by
+> **0.1456 kg**. Since mass rose toward the limit, that is a defensible **LOWER
+> BOUND** on the production mesh's mass error at 10 N — not a point estimate.
+> The "basin dominates by 4.4x" claim is withdrawn with the denominator.
+> Full review: `review_2026-07-28_phase3_results.md`.
+>
+> **BOTTOM LINE (as originally written).** The per-interval residual of the earth MEE solutions is the
 > **local truncation error of the trapezoidal rule** — `median R_x / h^3` is
 > 0.171 / 0.171 / 0.163 across the 10 N, 2.5 N and 1 N rows, constant to 5%
 > while revolutions, switches and node count all vary 9x. It is **not** driven
@@ -120,6 +144,23 @@ step, with a coefficient set by the **orbital dynamics** — not by thrust level
 not by control structure. The campaign fixes nodes-per-revolution (26.3 / 25.4
 / 25.2), so the same steps recur at the same orbital phases in every row and
 the same residual follows.
+
+### Finding 3 re-tested with SUMS, after review (Gemini's objection)
+
+Gemini objected that a MEDIAN dilutes sparse switch spikes into a large
+population of smooth cells. Re-tested with sums, which is what an integrated
+error actually cares about:
+
+| row | switch cells | share of total ΣR_x | population share | mean sw/int |
+|---|---|---|---|---|
+| 10 N | 19 | **16.2%** | 9.8% | 1.77 |
+| 2.5 N | 76 | **15.3%** | 10.7% | 1.50 |
+| 1 N | 171 | **10.5%** | 9.8% | 1.08 |
+
+The objection is fair but the conclusion **survives**: switch cells carry
+10–16% of the total residual against a 10–11% population share. They are
+mildly over-represented, not dominant, and the over-representation SHRINKS as
+switches multiply. Finding 3 stands on sums as well as medians.
 
 ### Consequence: the earlier prediction is properly closed out
 

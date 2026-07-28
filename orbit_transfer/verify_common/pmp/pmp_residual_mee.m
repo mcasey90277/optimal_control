@@ -143,6 +143,7 @@ if isfinite(d('maxArcs', Inf)), nArcs = min(nArcs, d('maxArcs', Inf)); end
 R.Rx   = nan(1, N1-1);
 R.Rlam = nan(1, N1-1);
 R.defectCell = nan(1, N1-1);
+R.dx   = nan(7, N1-1);
 selfD  = 0;
 for a = 1:nArcs
     i1 = edges(a);  i2 = edges(a+1);
@@ -154,6 +155,7 @@ for a = 1:nArcs
     R.Rx(i1:i2-1)   = Ra.Rx_interp;
     R.Rlam(i1:i2-1) = Ra.Rlam_interp;
     R.defectCell(i1:i2-1) = Ra.defectCell;
+    R.dx(:, i1:i2-1) = Ra.dx;
     selfD = max(selfD, Ra.selfDefect);
 end
 % --- normalization and orbital context --------------------------------------
@@ -180,6 +182,12 @@ R.selfDefect = selfD;
 R.gatePass   = selfD <= 1e-8;
 R.nArcs = nArcs;
 R.sigma = sigma;  R.X = X;  R.U = U;  R.lam = lam;
+% The INTERVAL defect multipliers, kept raw. The objective-sensitivity estimate
+% must use these -- lamDef(:,k) is by definition dJ*/d(defect k) -- and not the
+% node-averaged costates, which are a different object built for the PMP
+% comparison.
+R.lamDef = lamSign * out.lamDef;
+R.par    = par;
 R.hPhys = diff(tN);
 
 if verbose

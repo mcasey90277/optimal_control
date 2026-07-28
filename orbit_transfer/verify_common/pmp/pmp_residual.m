@@ -73,6 +73,11 @@ function R = pmp_residual(sg, X, U, lam, fFun, LFun, opts)
 %       .Rx_pmp .Rlam_pmp  same under the PMP control law (NaN if not run)
 %       .H           [1x(N+1)] Hamiltonian at each node
 %       .Hvar        max|H - mean(H)| / max(|H|)  -- constancy diagnostic
+%       .dx          [nx x N] SIGNED primal residual per interval, oriented
+%                    (discrete node) - (exact flow from the previous node).
+%                    .Rx_interp is its column norm. The sign is required for
+%                    the objective-sensitivity estimate, which dots it with the
+%                    defect multiplier.
 %       .hLocal      [1xN] independent-variable step per interval
 %       .defectCell  [1xN] per-interval norm of the recomputed DISCRETE defect.
 %                    Plotted against .Rx it is the study's most direct picture:
@@ -168,6 +173,7 @@ end
 
 R.Rx_interp   = nan(1,N);  R.Rlam_interp = nan(1,N);
 R.Rx_pmp      = nan(1,N);  R.Rlam_pmp    = nan(1,N);
+R.dx          = nan(nx,N);          % SIGNED primal residual, per interval
 R.hLocal      = diff(sg);
 
 odeOpt = odeset('RelTol', relTol, 'AbsTol', absTol);
@@ -180,7 +186,13 @@ for k = 1:N
         uOf = @(s) U(:,k) + (s - a)/(b - a) * (U(:,k+1) - U(:,k));
         [~, Z] = ode113(@(s,z) local_rhs(s, z, nx, uOf, fEval, adjFn), [a b], z0, odeOpt);
         zp = Z(end,:).';
-        R.Rx_interp(k)   = norm(zp(1:nx)      - zEnd(1:nx));
+        % SIGNED, oriented as (discrete) - (true flow): the amount by which the
+        % discrete solution's next node departs from where the exact dynamics
+        % would have carried it. This is the quantity the defect multiplier
+        % prices, so the sign must be kept -- a norm cannot be dotted with a
+        % costate, and cancellation between intervals is itself a result.
+        R.dx(:,k)        = zEnd(1:nx) - zp(1:nx);
+        R.Rx_interp(k)   = norm(R.dx(:,k));
         R.Rlam_interp(k) = norm(zp(nx+1:end)  - zEnd(nx+1:end));
     end
     if doPMP

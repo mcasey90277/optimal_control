@@ -144,6 +144,66 @@ Converting it needs a sensitivity argument — see next steps.
 satisfies them. The 10 N solution that is 1.015 kg worse than its neighbour
 passes this check cleanly. The basin finding stands separate.
 
+## Step 1 result — the residual converts to KILOGRAMS
+
+`pmp_objective_error.m`. The discrete solution satisfies its own defect
+constraints exactly; measured against the exact flow each interval carries a
+signed residual `d_k`, so the discrete solution solves a problem whose defect
+constraints are displaced by `d_k`. The multiplier of defect k IS
+`dJ*/d(defect k)`, so to first order `ΔJ ≈ Σ_k lamDef(:,k)ᵀ d_k`. No extra
+adjoint propagation — the NLP already computed the sensitivities, which also
+avoids the backward instability that forced per-interval propagation.
+
+| row | m_f (kg) | implied \|Δm\| (kg) | no-cancel bound | cancellation | relative |
+|---|---|---|---|---|---|
+| 10 N | 1377.101 | **1.237** | 3.517 | 2.8 | 9.0e-04 |
+| 2.5 N | 1370.296 | **5.714** | 8.264 | 1.4 | 4.2e-03 |
+| 1 N | 1370.798 | **4.046** | 6.634 | 1.6 | 3.0e-03 |
+
+### Finding 1.1 — the magnitudes are comparable to the basin gains
+
+Independently measured basin gains on the same rows were **+1.015**, **+5.971**
+and **+1.454** kg. Against implied mesh errors of 1.237, 5.714 and 4.046 kg,
+the two effects are the SAME ORDER — and at 2.5 N they agree to within 5%.
+
+**This is an observation, not a claimed relationship.** The two quantities
+measure different things (distance to a better local optimum on the same mesh,
+versus distance to the continuous solution). Their similarity may reflect a
+common underlying scale or may be coincidence. It is recorded because it is
+striking and because it bears directly on the earlier, now-withdrawn claim that
+basin error dominates discretization error: on these numbers they are
+comparable, not separated by orders of magnitude.
+
+### Finding 1.2 — cancellation is WEAK, which tests H2 directly
+
+The cancellation ratio (no-cancel bound over actual) is **2.8 / 1.4 / 1.6**.
+H2 argued that alternating-sign errors across many switches would partially
+cancel in an integrated quantity, giving the objective a better effective rate
+than the trajectory. Measured, the per-interval contributions largely
+REINFORCE: cancellation removes only a factor of 1.4–2.8, and it is WEAKEST on
+the rows with the most switches (2.5 N and 1 N), which is the opposite of what
+the argument predicts. H2's cancellation mechanism does not operate here.
+
+### THREE CAVEATS, none of them small
+
+1. **The estimate overpredicts against the ladder.** Tier A observed the 1 N
+   mass move 1.45 kg across the whole 1x→8x ladder with 0.10 kg of Richardson
+   remainder — about 1.55 kg total. The first-order estimate says 4.05 kg,
+   roughly 2.6x larger. Either higher-order terms reduce it, or the ladder
+   never converged far enough to show the full error, or the sensitivity
+   argument has a flaw. **Unresolved**, and the mesh-redistribution experiment
+   is what discriminates.
+2. **The SIGN is not yet established.** All three come out negative under the
+   current multiplier convention, which would mean the discrete solution
+   OVERSTATES achievable mass — the opposite direction from the basin effect,
+   so the two would partly offset. That is a materially different story from
+   the one in Section "basin", and it must not be asserted until the sign is
+   fixed empirically.
+3. **At 2.5 N and 1 N the residuals describe an IMPROVED point.** The dual
+   refresh reported `m_f` rising (0.913194 → 0.913531 at 2.5 N; 0.913572 →
+   0.913865 at 1 N), so the analysis characterizes that better extremal, not
+   the published row. This is the seed-sensitivity effect appearing again.
+
 ## Experiments still to run
 
 1. **Objective sensitivity: ΔJ ≈ Σ λᵀ·R.** The costate IS the sensitivity of

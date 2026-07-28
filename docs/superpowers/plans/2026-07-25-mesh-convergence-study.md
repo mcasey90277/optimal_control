@@ -138,11 +138,13 @@ event-location problem, not an ordinary Richardson observable).
 
 ```
 orbit_transfer/verify_common/mesh/
+├── mesh_switch_times.m       # sub-grid switch LOCATION (prerequisite for any order)
 ├── mesh_match_switches.m     # pair switches across meshes by physical time
 ├── mesh_order.m              # observed order + Richardson from >=3 levels
 ├── mesh_ladder_mee.m         # earth: re-solve a banked row at k x nodes, warm-chained
 ├── mesh_collect.m            # assemble per-quantity series from a ladder's outputs
 ├── mesh_report.m             # the study table (orders, Richardson values, verdicts)
+│   #   tests/test_mesh_switch_times.m accompanies the extractor
 ├── run_mesh_study_mee.m      # Tier A driver (earth rows)
 ├── run_mesh_spot.m           # Tier B driver (single 1x/2x stability check, any campaign)
 └── tests/
@@ -155,7 +157,34 @@ Campaign-side: no production file is modified by this plan.
 
 ---
 
-### Task 0: Mapped terminal covector — may settle the open anomaly outright
+### Task 0: Mapped terminal covector — **COMPLETE 2026-07-26** ✅
+
+**Status verified 2026-07-27, before resuming the plan.** All seven steps are
+done and committed: `a8f7b61 fix(foc): mapped terminal covector for
+transversality (Hager covector mapping)`, refined by `b3c6eaf`. Evidence:
+- `foc_check.m` §(6) produces and **gates** `rep.lamMassEndMapped`.
+- `verify_common/tests/test_foc_terminal_covector.m` PASSES (re-run 2026-07-27:
+  mapped 0.000e+00 vs raw one-sided dual 2.564e-02 at N=20).
+- Step 6 retraction landed: `OPTIMALITY_CERTIFICATION.md` §A6 RETRACTION —
+  earth 2.5 N went **1.265e-03 → 2.268e-18**; the "single genuine first-order
+  finding" verdict is withdrawn.
+
+**Two deviations from the plan as written, both improvements — record them:**
+1. **The formula is never evaluated.** Rather than forming `lamHat_f` from the
+   expression below, the implementation reads the entry directly off the
+   assembled Lagrangian gradient `gL` at the terminal mass index. This makes
+   the 2026-07-27 review's sign objection moot — there is no hand-chosen sign
+   to get wrong — and it also captures any OTHER constraint touching
+   `X(massRow,N+1)` that a hand reconstruction would miss.
+2. **It is NOT an independent test, and the code says so** (`foc_check.m:196`):
+   the gated quantity is one ENTRY of the vector whose max-norm is
+   `rep.kktStatInf`, so it cannot fail unless KKT stationarity already has. It
+   is a readable projection of the master residual. Do not present it as
+   independent evidence, in this study or in the register.
+
+*Original task text retained below for the record.*
+
+### Task 0 (original): Mapped terminal covector — may settle the open anomaly outright
 
 **Rationale.** Our transversality check reads the *raw* last-interval defect
 multiplier, which is `O(h)` by construction — a known endpoint representation
@@ -216,6 +245,59 @@ mass) form.
   explainer, and note that the I5 extrapolation was a partial fix superseded
   by the exact mapping.
 - [ ] **Step 7: Commit** `fix(foc): mapped terminal covector for transversality (Hager covector mapping)`
+
+---
+
+### Task 1a: Sub-grid switch-time extraction (NEW 2026-07-27 — prerequisite)
+
+**Why this task exists.** The Global Constraint added after the second review
+forbids reading switch locations by thresholding the nodal throttle. Nothing in
+the repo satisfies that constraint today: `foc_check.m:254` locates switches as
+`swI = find(diff(burn) ~= 0)` — a nodal INDEX from exactly that thresholding —
+and reports only `rep.nSwitches`, no times at all. Feeding those indices into an
+order fit would measure `p ≈ 1` for switch times whatever the solution does.
+The matcher in Task 1 consumes times, so extraction must come first.
+
+**Files:**
+- Create: `orbit_transfer/verify_common/mesh/mesh_switch_times.m`
+- Test: `orbit_transfer/verify_common/mesh/tests/test_mesh_switch_times.m`
+
+**Interfaces:**
+- Produces: `s = mesh_switch_times(sg, tNode, burn, Shat)` — `sg` [N1×1] the
+  independent-variable grid, `tNode` [N1×1] physical time at each node (the
+  carried time state; pass `sg` itself if the domain IS time), `burn` [1×N1]
+  logical throttle state, `Shat` [1×N1] the de-weighted switching function
+  (`rep.Sdeweighted`) or `[]`. Returns `s.tSw` [1×k] switch times in physical
+  units, `s.sgSw` [1×k], `s.n`, `s.method` (`'switchfn'` | `'throttle'`),
+  `s.bracket` [k×2 node indices], `s.subGridFrac` [1×k] the crossing's
+  fractional position within its bracket.
+- **Preferred estimator is the zero of `Shat`**, not the throttle: `Shat` is
+  smooth and crosses zero transversally at a regular switch, so linear
+  interpolation of it is a genuine sub-grid locator. The throttle crossing
+  `s = 0.5` is the FALLBACK when `Shat` is unavailable, and must be recorded as
+  such in `s.method` so a report can never silently mix the two.
+- `s.subGridFrac` is the evidence that extraction is not grid-quantized: values
+  clustered at 0 or 1 mean the estimator has collapsed back onto nodes.
+
+- [ ] **Step 1: Write the failing test** (analytic brackets, no solves):
+  (a) a linear `Shat` crossing zero at a known point strictly between two
+  nodes is recovered to `< 1e-12`, and the recovered `sgSw` differs from BOTH
+  bracketing nodes by more than `0.1*h` — the anti-quantization assertion;
+  (b) with a NON-UNIFORM `tNode`, `tSw` equals the correspondingly interpolated
+  physical time, not the uniform-grid guess;
+  (c) `Shat = []` falls back to the throttle crossing and sets
+  `s.method='throttle'`;
+  (d) a burn profile with no transition returns `s.n == 0` and empty arrays;
+  (e) two adjacent switches one interval apart are both found (not merged).
+- [ ] **Step 2: Run to verify it fails** — undefined function.
+- [ ] **Step 3: Implement** with the house header. Bracket each switch by the
+  `burn` transition, then locate the crossing INSIDE that bracket by linear
+  interpolation of `Shat` (or of `throttle - 0.5`). Guard the degenerate case
+  where `Shat` does not change sign across the bracket: fall back to the
+  throttle crossing for that switch and flag it, rather than returning a node
+  index silently.
+- [ ] **Step 4: Run — ALL PASS.**
+- [ ] **Step 5: Commit** `feat(mesh): sub-grid switch-time extraction (zero-crossing, not thresholding)`
 
 ---
 

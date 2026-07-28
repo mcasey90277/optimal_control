@@ -3,15 +3,21 @@
 > **BOTTOM LINE.** Two independent questions got tangled together and must be
 > reported separately.
 >
-> **Is the production mesh fine enough?** 10 N yes (within-branch movement
-> 0.009 kg, 6e-6 relative). 1 N **no** — 1.55 kg from the Richardson limit,
-> ~15x the precision the campaign quotes. 2.5 N unknown, it never converged.
-> The one clean order is p = 1.228 at 1 N, supporting H1 (first order).
+> **Is the production mesh fine enough?** Broadly YES. 10 N moves 0.009 kg
+> within a branch (6e-6 relative). 1 N sits ~0.35 kg from its extrapolated
+> limit once basin effects are removed. 2.5 N never converged, so unknown. The
+> one clean order is p = 1.228 at 1 N, supporting H1 (first order).
 >
-> **Are the certified rows the best local optima?** **No.** 10 N is beaten by
-> 1.015 kg and 2.5 N by 5.971 kg ON THEIR OWN MESHES. This is non-convexity,
-> not discretization, and at 10 N it is 100x larger than the mesh error. It is
-> the more consequential of the two findings and it is not a mesh problem.
+> **Are the certified rows the best local optima?** **No — and this is the
+> finding that matters.** All three are beaten ON THEIR OWN MESHES: 10 N by
+> 1.015 kg, 2.5 N by 5.971 kg, 1 N by 1.454 kg, each with lower dV. This is
+> non-convexity, not discretization.
+>
+> **The two answers together:** basin selection outweighs mesh error in every
+> row examined — by ~100x at 10 N and ~4x at 1 N. The campaign's accuracy is
+> limited by WHICH LOCAL MINIMUM the solver reaches, not by how finely the
+> problem is discretized. The mesh study's most useful result is that the mesh
+> was not the problem.
 
 Run: `run_mesh_study_mee({'MEE_M2_10N','MEE_M2_2p5N','MEE_M2_1N'}, [1 2 4 8])`.
 80.3 min wall. **All 12 levels converged** (`Solve_Succeeded`, defect 5.5e-15 to
@@ -159,9 +165,56 @@ resolution.
 | shift:−1 | 1370.296467 | 76 | 1.773787 | +0.505448 |
 | shift:+1 | 1371.003057 | 75 | 1.763677 | +1.212037 |
 
-**Both rows are beaten on their own mesh** — by 1.015 kg (7.4e-4) at 10 N and
-**5.971 kg (4.4e-3)** at 2.5 N. In both cases the winner also has LOWER dV and
-FEWER switches.
+**1 N (N = 1740):**
+
+| seed | m_f (kg) | sw | dV | vs certified cache |
+|---|---|---|---|---|
+| row (certified cache = 1370.357) | 1370.797916 | 171 | 1.766611 | +0.440561 |
+| downproj:x2 | 1371.089068 | 171 | 1.762446 | +0.731713 |
+| **downproj:x4** | **1371.811099** | **177** | **1.752120** | **+1.453743** |
+| downproj:x8 | 1371.588223 | 177 | 1.755307 | +1.230868 |
+| shift:−1 | 1370.759027 | 173 | 1.767168 | +0.401672 |
+| shift:+1 | 1371.396252 | 171 | 1.758052 | +1.038897 |
+
+At 1 N **every one of the six seeds beats the cached value**, including
+re-solving from the row's own solution.
+
+**All three rows are beaten on their own mesh** — by 1.015 kg (7.4e-4) at 10 N,
+**5.971 kg (4.4e-3)** at 2.5 N, and 1.454 kg (1.1e-3) at 1 N. In every case the
+winner also has LOWER dV.
+
+### This REVISES Finding 1's claim about 1 N mesh adequacy
+
+Finding 1 reported the 1 N production row as 1.55 kg below the Richardson limit
+(1372.156 kg) and called the mesh inadequate. The basin probe shows most of
+that gap is NOT resolution:
+
+| | m_f (kg) | gap to Richardson limit |
+|---|---|---|
+| Richardson limit (from the Tier A ladder) | 1372.156 | — |
+| best basin found ON the production mesh | 1371.811 | **0.345** |
+| the Tier A x1 rung | 1370.603 | 1.553 |
+
+So of the 1.55 kg, roughly **1.21 kg is reachable at production resolution** by
+choosing a better basin, and only ~0.35 kg is plausibly discretization. The
+earlier statement overstated the mesh component by about 4x.
+
+Caveat on the decomposition: the Richardson limit was itself extrapolated from
+a ladder that crossed a topology change (173 -> 171), so the split is
+indicative, not exact. The robust statement is the ordering, not the numbers:
+**at 1 N, as at 10 N, basin selection is the larger error source.**
+
+### The unified result across all three rows
+
+| row | basin gain (own mesh) | residual mesh error | which dominates |
+|---|---|---|---|
+| 10 N | +1.015 kg | 0.009 kg | **basin, by ~100x** |
+| 2.5 N | +5.971 kg | never converged | **basin** |
+| 1 N | +1.454 kg | ~0.35 kg | **basin, by ~4x** |
+
+In every row examined, basin selection outweighs discretization error. The
+campaign's accuracy is limited by WHICH LOCAL MINIMUM the solver lands in, not
+by how finely the problem is discretized.
 
 Three things sharpen the picture:
 

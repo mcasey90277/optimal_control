@@ -1,0 +1,364 @@
+\documentclass[11pt]{article}
+\usepackage[margin=1in]{geometry}
+\usepackage{amsmath,amssymb}
+\usepackage{booktabs}
+\usepackage{longtable}
+\usepackage{hyperref}
+\hypersetup{colorlinks=true, linkcolor=blue, urlcolor=blue}
+
+\title{Low-Thrust Orbit-Transfer Campaigns: Taking Stock\\
+       \large Four problems, what is firm, what is open, and what to do next}
+\author{M.\ Casey}
+\date{\today}
+
+\newcommand{\mf}{m_f}
+\newcommand{\dV}{\Delta V}
+\newcommand{\camp}[1]{\texttt{#1}}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+Four low-thrust transfer campaigns now exist side by side: elliptic$\to$GEO in
+the two-body problem, the same transfer with lunar gravity, GTO$\to$tulip, and
+GTO$\to$ELFO. All four are solved by direct collocation; three carry certified
+thrust ladders; one carries an externally reviewed physics result. This
+document states what is firm, what has been withdrawn, what remains open in
+each, and---the question that prompted it---whether to bank the direct work and
+begin indirect methods, or whether something closer to hand is worth more.
+
+The recommendation is neither. The highest-value next step is a
+\emph{fixed-structure multi-phase formulation with switch times as explicit
+decision variables}, because it is not a detour from indirect methods but the
+bridge to them: it resolves the branch-identity failure that invalidated two
+separate measurement attempts, it supplies the switch-aligned mesh whose order
+we have been trying to measure indirectly, and switch times as variables
+\emph{is} the indirect structure, solved by a well-conditioned NLP rather than
+by shooting. Separately and immediately, a basin sweep is cheap and improves
+published numbers, because every certified row examined is beaten on its own
+mesh.
+\end{abstract}
+
+\tableofcontents
+
+\section{The four campaigns at a glance}
+
+\begin{table}[h]
+\centering\small
+\begin{tabular}{llll}
+\toprule
+campaign & direct & indirect & front door \\
+\midrule
+elliptic$\to$GEO (2-body) & certified ladder $10\to0.1$~N & reference only & \camp{run\_gergaud} \\
+elliptic$\to$GEO (CR3BP)  & certified ladder $10\to0.1$~N & not started & \camp{run\_cr3bp\_geo} \\
+GTO$\to$tulip             & flagship + ladder $25\to20$~mN & \textbf{stalled} & \camp{run\_gto\_tulip} \\
+GTO$\to$ELFO              & $\dV$--$t_f$ front + min-time anchor & not started & \camp{run\_elfo\_minfuel} \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+All four share a verification layer (\camp{verify\_common}): an AD-assembled
+first-order optimality gate, a Hager-mapped terminal covector for
+transversality, and IPOPT inertia readings. Two share a Sundman-regularized
+CR3BP formulation; two share the modified-equinoctial L-domain formulation.
+
+\section{Campaign 1: elliptic$\to$GEO, two-body}
+
+\subsection{What is firm}
+
+\begin{itemize}
+  \item \textbf{A certified min-fuel thrust ladder from $10$~N to $0.1$~N},
+  nine rows including two PSR-refined, every one machine-tight
+  ($\sim10^{-14}$ defect).
+  \item \textbf{Reproduction of the reference paper's Table 3}: final masses
+  $\sim\!1377$~kg against the published $1370$--$1375$, with minimum transfer
+  time matching exactly. The deep rungs ($0.2$, $0.1$~N) required a documented
+  recipe---\camp{maxIter} is decisive, and \camp{scaleNLP} is actively harmful
+  because it fights IPOPT's own scaling.
+  \item \textbf{First-order optimality: $9/9$ rows pass}, with primer
+  misalignment $0.000^\circ$, sign law $100\%$, KKT stationarity between
+  $1.5\times10^{-14}$ and $6.9\times10^{-10}$.
+  \item \textbf{The \camp{opti.dual} bug and its fix.} Duals read through
+  CasADi's canonicalized orientation were sign-corrupted; reading
+  \camp{opti.lam\_g} by constraint row range fixed a $32.4^\circ$ primer
+  anomaly to $0.000^\circ$ across two campaigns.
+  \item \textbf{This is the campaign where the new machinery works.} The PMP
+  residual checker, the basin probe and the redistribution test all run here.
+\end{itemize}
+
+\subsection{What is open}
+
+The $0.5$~N minimum-time wall; the $\sim\!20^\circ$ dual anomaly at the
+$10$--$60^\circ$ range (partially explained by the \camp{opti.dual} fix); and
+the finding below, which is new and unwelcome.
+
+\subsection{The finding that changes how these numbers should be read}
+
+Re-solving a certified row \emph{on its own unmodified mesh} from a different
+starting guess finds a better solution in every case examined:
+
+\begin{table}[h]
+\centering\small
+\begin{tabular}{lrrr}
+\toprule
+row & certified $\mf$ & best found & gain \\
+\midrule
+$10$~N  & $1377.101$~kg & $1378.117$~kg & $+1.015$~kg \\
+$2.5$~N & $1369.791$~kg & $1375.762$~kg & $+5.971$~kg \\
+$1$~N   & $1370.357$~kg & $1371.811$~kg & $+1.454$~kg \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Each winner also has lower $\dV$ and, in two of three cases, fewer switches. At
+$10$~N a \emph{one-node shift of the throttle profile} is enough to reach a
+better basin. ``Certified'' currently means converged, feasible and
+first-order optimal---not best found.
+
+\section{Campaign 2: elliptic$\to$GEO with lunar gravity (CR3BP)}
+
+\subsection{What is firm}
+
+This is the campaign with a publishable result.
+
+\begin{itemize}
+  \item \textbf{A full certified ladder $10\to0.1$~N} with lunar third-body
+  perturbation, driven by one front door.
+  \item \textbf{The Moon's effect mapped against thrust}: roughly $50$~g flat
+  at high thrust falling to a $\sim\!30$~g secular floor.
+  \item \textbf{The Moon's effect mapped against lunar phase}, which is the
+  interesting part: a $\pi$-periodic tidal quadrupole whose \emph{sign flips},
+  measured at $+52$, $-56$, $+69$, $-53$~g across four phases. Whether the Moon
+  helps or hurts depends on where it is.
+  \item \textbf{An externally reviewed technical note} (two rounds, GPT-5.6 and
+  Gemini) judged publishable, with figures and a four-panel phase movie.
+  \item \textbf{A hard-won solver lesson}: the MUMPS segfault on deep rungs is
+  cured by \camp{liftDL} (turning an arrowhead KKT into a banded one) together
+  with $\camp{maxIter}\ge4000$.
+\end{itemize}
+
+\subsection{What is open}
+
+The deep-rung $\phi_0$ sweep (only $10$~N has the full phase map); stronger
+optimality certificates; and the indirect phase, which has not begun.
+
+\section{Campaign 3: GTO$\to$tulip}
+
+\subsection{What is firm}
+
+\begin{itemize}
+  \item \textbf{The flagship min-fuel solution is certified}: a sharp
+  many-switch full-spiral transfer, $25$ switches, $2.264$~kg propellant,
+  $\dV = 3.370$~km/s, defect $2.4\times10^{-14}$. It required a Sundman
+  regularization plus an energy$\to$fuel homotopy plus a no-resample seed map.
+  \item \textbf{A thrust ladder from $25$ to $20$~mN}, which unblocked a
+  problem recorded for months as a ``fixed-$\tau_f$ topology wall.'' It was not
+  a wall; it was continuation step size, and both free-time and step-size
+  changes were needed.
+  \item \textbf{$\dV$--$t_f$ fronts mapped} for this and the ELFO target.
+  \item \textbf{The direct campaign was flattened} into one front door with
+  \camp{lib/certify/viz/tests}, replacing two folders that read as rival
+  pipelines.
+  \item \textbf{The flagship survives a basin probe}---the only row examined
+  that does. Six seeds all return $\mf = 0.84906583$ with $25$ switches to
+  $10^{-10}$. \emph{Caveat}: the seed family here excludes the down-projection
+  seeds that beat every earth row, so this shows local robustness, not
+  optimality.
+\end{itemize}
+
+\subsection{What is open, and one item is a basin problem}
+
+\begin{itemize}
+  \item \textbf{The $1.01$--$1.11\times$ near-minimum-time band} remains
+  unsolved, for both the bang-bang and the smooth energy problem---a
+  conditioning wall, not a bang-bang artifact.
+  \item \textbf{Two certified optima at $t_f = 1.150\times$, $1.43\%$ apart in
+  $\dV$.} Two routes reach $25$ switches, both machine-tight, at the same
+  $t_f$, with $\mf$ of $0.847086$ and $0.849066$. This is the basin problem,
+  already recorded in this campaign's own TODO before the earth work found the
+  same thing systematically.
+  \item \textbf{The indirect campaign is stalled}: multiple shooting reaches
+  $1.12\times$ with ten certified switches, but the indirect finishing solve
+  stalls at $\|R\|\sim0.023$ on terminal-cluster conditioning.
+\end{itemize}
+
+\section{Campaign 4: GTO$\to$ELFO}
+
+\subsection{What is firm}
+
+\begin{itemize}
+  \item \textbf{The min-fuel $\dV$--time front is mapped}, eleven $t_f$ rows at
+  $\varepsilon = 0$.
+  \item \textbf{Minimum time is anchored}: $t_{f,\min} = 6.0962$ ND
+  $= 27.02$~days, machine-tight, by a hard all-burn route.
+  \item \textbf{The solver is a genuine fork, not a retarget}: the lunar
+  capture leg needs a two-primary Sundman clock
+  $\kappa = (r_1^{-q} + (r_2/D)^{-q})^{-p/q}$ that a single-primary
+  Earth clock cannot resolve, plus free $t_f$ and a ninth slack state.
+\end{itemize}
+
+\subsection{What is open}
+
+The indirect route has not started. The campaign carries a path dependency on
+the tulip folder to reach exactly \emph{one} function, and its solver shares
+$122$ identical lines ($76\%$) with the tulip's---incidental duplication worth
+extracting, but the solvers are genuinely different and should not be merged.
+The new PMP and basin machinery has \textbf{not} been run here: it needs its
+own adapter for the nine-state two-primary formulation, and a first attempt
+failed because it called the wrong solver.
+
+\section{Cross-cutting: the verification layers}
+
+\subsection{What is firm}
+
+\begin{itemize}
+  \item \textbf{The first-order optimality gate} runs on all four campaigns:
+  AD-assembled KKT stationarity, primer alignment, transversality on a mapped
+  terminal covector, dual sign law, singular-arc and switching-regularity
+  checks.
+  \item \textbf{The mapped terminal covector retracted a false finding.} The
+  earth $2.5$~N row's ``genuine first-order miss'' of $1.265\times10^{-3}$
+  resolved to $2.27\times10^{-18}$ once the covector was mapped properly; the
+  original reading was a representation artifact.
+  \item \textbf{A continuous PMP residual checker}, validated against an
+  analytic extremal to $10^{-16}$ and demonstrated sensitive to a deliberately
+  misplaced switch at thirteen orders of separation.
+\end{itemize}
+
+\subsection{What the residual checker established}
+
+On the earth rows, the per-interval residual is the local truncation error of
+the trapezoidal rule: $R_x/h^3$ is $0.171$, $0.171$, $0.163$ across rows whose
+revolutions, switches and node counts each vary ninefold. It peaks at
+\emph{apogee} by $16$--$19\times$, because the mesh is uniform in longitude and
+apogee carries the longest time-steps. Switch cells carry $10$--$16\%$ of the
+total residual against a $\sim\!10\%$ population share---mildly
+over-represented, not dominant.
+
+The solution satisfies the equations it was \emph{solved against} some
+$7\times10^{11}$ times better than the continuous equations. That gap is
+discretization error, visible without any ladder.
+
+\subsection{What was withdrawn, and why it matters}
+
+Two separate attempts to turn that into a number failed external review:
+
+\begin{enumerate}
+  \item Richardson orders fitted \emph{across} a switch-topology change,
+  violating the study's own stated policy.
+  \item An error model $E = k\sum h^3$ extrapolated from two points, assuming a
+  phase-independent coefficient that the same experiment had already falsified.
+\end{enumerate}
+
+Both times the contradicting evidence was already written down in the same
+document. \textbf{The failure was never missing data; it was not applying our
+own stated constraint to our own new claim.} What survives is a
+\emph{lower bound}: two $10$~N solutions at identical node count differing only
+in node placement have masses $0.1456$~kg apart.
+
+\section{Unanswered questions}
+
+\begin{enumerate}
+  \item \textbf{Is any production mesh adequate, quantitatively?} Unresolved
+  for all four campaigns. A lower bound exists at earth $10$~N only.
+  \item \textbf{What is the observed order of these transcriptions?} Unknown.
+  Every attempt crossed a branch change.
+  \item \textbf{Do the certified rows represent the best available optima?}
+  Demonstrably \emph{no} for the three earth rows; unknown elsewhere; the tulip
+  flagship survives a weak probe and has a known duplicate optimum at a
+  different $t_f$.
+  \item \textbf{Why do near-minimum-time transfers resist solution?} The
+  $1.01$--$1.11\times$ band fails for the smooth energy problem too, so it is
+  conditioning rather than bang-bang structure. Unexplained.
+  \item \textbf{Can indirect methods be made to work at scale here?} The one
+  serious attempt stalled on conditioning at $\|R\|\sim0.023$.
+\end{enumerate}
+
+\section{Recommended next steps}
+\label{sec:rec}
+
+\subsection{The question posed: bank and go indirect, or something closer?}
+
+Going straight to indirect methods for all four problems would repeat a known
+failure. The tulip indirect campaign already stalled on terminal-cluster
+conditioning, and nothing has changed that would make the same approach work on
+three more problems. Indirect methods need good seeds and exact switch
+structure; we currently produce neither reliably.
+
+\subsection{Recommendation 1 (immediate, cheap): a basin sweep}
+
+Every certified earth row is beaten on its own mesh by $1.0$ to $6.0$~kg, found
+by perturbations as trivial as a one-node throttle shift. The tulip campaign
+independently records two certified optima $1.43\%$ apart in $\dV$. The probe
+costs three to fifteen minutes per row and already exists.
+
+This is not a research question. It is an operational gap: ``certified'' means
+converged, not best-found, and closing it improves published numbers directly.
+The $2.5$~N row looks $\sim\!6$~kg pessimistic, which is $0.4\%$---well above
+anything quotable as numerical noise.
+
+\subsection{Recommendation 2 (strategic): fixed-structure multi-phase with
+switch times as variables}
+
+This is the item worth building, and it is worth more than it first appears
+because it resolves four separate problems at once.
+
+\begin{enumerate}
+  \item \textbf{Branch identity becomes structural.} Both withdrawn results
+  trace to being unable to prove two solutions are the same solution. With the
+  switch sequence fixed by construction, they are the same by definition, and
+  mesh convergence becomes measurable.
+  \item \textbf{It supplies the switch-aligned mesh} whose order the study has
+  been trying to infer indirectly. The toy validation already showed the
+  mechanism: a true retained breakpoint is a \emph{duplicated} node, which is
+  exactly what a phase boundary provides.
+  \item \textbf{It is the bridge to indirect methods, not a detour.} Switch
+  times as explicit decision variables \emph{is} the indirect structure---the
+  same switching conditions the Pontryagin formulation imposes---but solved by
+  a well-conditioned NLP instead of by shooting. It produces exactly the seeds
+  the stalled indirect campaign lacked.
+  \item \textbf{Every external reviewer independently pointed at it}, across
+  two separate review rounds and two different questions.
+\end{enumerate}
+
+\subsection{Recommendation 3 (after 2): indirect methods, seeded}
+
+With exact switch times and well-conditioned multi-phase solutions in hand, the
+indirect route becomes a finishing step rather than a cold start---which is
+what the stalled campaign was attempting without them. Start with the earth
+two-body problem, where the reference implementation exists for comparison.
+
+\subsection{What not to do}
+
+\begin{itemize}
+  \item \textbf{Do not chase the optimal mesh.} Node redistribution improves the
+  smaller error term. The measured basin gains exceed any plausible mesh error.
+  \item \textbf{Do not extend the mesh ladder.} It cannot hold a branch;
+  six perturbations of the deeper rows all reorganized their switch structure,
+  in both directions and at every magnitude tried.
+  \item \textbf{Do not merge the tulip and ELFO solvers.} They share $76\%$ of
+  their lines and differ in the part that matters---the two-primary clock and
+  free final time. Extract the incidental duplication only.
+\end{itemize}
+
+\section*{Sources}
+\addcontentsline{toc}{section}{Sources}
+
+\begin{longtable}{ll}
+\toprule
+subject & path (under \camp{orbit\_transfer/}) \\
+\midrule
+\endhead
+mesh, basin and PMP study & \camp{verify\_common/doc/mesh\_and\_basin\_study.tex} \\
+Tier A ladder results & \camp{verify\_common/doc/mesh\_study\_tierA\_results.md} \\
+PMP residual results & \camp{verify\_common/doc/pmp\_residual\_results.md} \\
+external reviews (5 rounds) & \camp{verify\_common/doc/review\_2026-07-2*.md} \\
+optimality register & \camp{OPTIMALITY\_CERTIFICATION.md} \\
+per-campaign open work & \camp{<campaign>/TODO.md} \\
+tulip min-fuel history & \camp{GTO\_tulip/process/LOW\_THRUST\_MINFUEL\_CAMPAIGN.md} \\
+deep-thrust recipe & \camp{earth\_elliptic\_to\_geo/process/DEEP\_THRUST\_LESSONS.md} \\
+CR3BP-GEO note & \camp{earth\_elliptic\_to\_geo\_CR3BP/doc/cr3bp\_geo\_phase1\_note.tex} \\
+\bottomrule
+\end{longtable}
+
+\end{document}

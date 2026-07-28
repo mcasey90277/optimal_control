@@ -492,3 +492,243 @@ order statement is warranted.
 - **Type consistency:** `mesh_match_switches` → `m.pairs/.unmatchedA/.unmatchedB/.dt/.maxAbsDt`; `mesh_order` → `o.p/.rich/.dLast/.rel/.monotone`; `mesh_ladder_mee` → `L(k).factor/.N/.out/.rep/.wall`; `mesh_collect` → `S.q.<name>.vals/.order` + `S.switchStability`. Used consistently in Tasks 4–6.
 
 **Known risk (updated 2026-07-27):** the theoretical expectations table is the interpretive frame for everything. It has now been reviewed twice by independent external models, **which disagree on it** — GPT-5.6-terra argues p≈1 for mass and switch times, Gemini 3.1 Pro argues those two should reach p≈2. That disagreement has been folded into the table as competing hypotheses H1/H2 rather than resolved by a third opinion, because the measurement is what settles it. The residual risk is no longer "the frame may be wrong" but "the measurement may be built so it can only confirm one branch" — which is why switch-time extraction and arc-defect normalization are now Global Constraints rather than implementation details.
+
+---
+
+# PHASE 2 — after the 2026-07-28 reasoning review
+
+**Why this section exists, and why it is written BEFORE the runs.** Phase 1's
+recurring failure was not execution — every solve converged — but
+interpretation: numbers were produced and their meaning decided afterwards.
+Two claims did not survive external review. The antidote is pre-registration:
+each step below states what would count as success, what would count as
+failure, and what specific number we expect, **before** the run. A criterion
+invented after seeing the result is not a criterion.
+
+**Standing rule for Phase 2.** No result may be reported against a criterion
+that was written or revised after that result was seen. If a criterion turns
+out to be wrong, say so explicitly, state the corrected criterion, and mark
+the affected result as re-judged rather than silently re-scored.
+
+---
+
+## Step 1 — Branch-matched ladder (BLOCKING)
+
+**Question.** What is the discretization error of a production-resolution
+solution, measured along the single branch that solution lies on?
+
+**Why it blocks everything.** Phase 1 produced no valid mesh-error estimate for
+any row: 10 N had zero branch-consistent windows, 2.5 N and 1 N one each. Until
+one exists, the study's founding question is unanswered and no statement about
+mesh adequacy is admissible.
+
+**Target row.** Earth 10 N, seeded from the KNOWN BETTER 18-switch solution
+(1378.116718 kg on 193 nodes), not the certified 19-switch row. Chosen because
+its full ladder was 209 s, and because two points on the 18-switch branch
+already exist, giving a falsifiable prediction (below).
+
+**Deliverable — a sentence we must be able to complete:**
+> For the 10 N row on the 18-switch branch, the final mass at production
+> resolution is X kg; the extrapolated converged value for that branch is
+> Y kg; the production number therefore carries a discretization error of
+> |X − Y| kg.
+
+### Preconditions (failing any makes the run VOID, not negative)
+
+| # | check | threshold |
+|---|---|---|
+| P1 | every level converges | `Solve_Succeeded` and `maxDefect <= 1e-8` |
+| P2 | switch count identical | all four levels equal |
+| P3 | switches correspond 1:1 | zero unmatched in EITHER direction vs the finest, per-switch window |
+| P4 | switch displacement shrinks | max matched drift decreasing level to level |
+
+P2 alone is explicitly NOT sufficient: the 2.5 N row held 75 switches across a
+genuine branch change. P3 and P4 are what actually establish branch identity,
+and even they are necessary-not-sufficient (see the open question below).
+
+### Outcomes
+
+- **SUCCESS** — P1–P4 hold; `nValidWindows >= 2`; windows agree within 25% of
+  their mean; differences monotone and shrinking in magnitude. Then `p` and the
+  Richardson limit are admissible and the deliverable sentence can be written.
+- **PARTIAL** — P1–P4 hold but only one valid window, or windows disagree by
+  more than 25%. Report a *local effective order* with no asymptotic claim, and
+  escalate to Step 2.
+- **FAILURE** — the branch cannot be held even when explicitly seeded to hold
+  it. This is a SUBSTANTIVE NEGATIVE RESULT, not a null: it would mean the
+  production solution has no continuously trackable counterpart under
+  refinement, and would put in doubt whether a branch-matched error bar is
+  obtainable for this problem class at all. Report it as a finding.
+
+### Plausibility guards on the number
+
+- `p` in roughly [0.8, 2.4]. H1 predicts 1, H2 predicts 2. A value near 0.5 or
+  near 3 means something other than discretization drives the sequence — do not
+  report it as an order.
+- The extrapolation must be bounded: `|limit - finest| < |finest - coarsest|`.
+  A correction larger than the total observed movement is not trustworthy.
+
+### PRE-REGISTERED PREDICTION
+
+Two points on the 18-switch branch are already in hand:
+
+| N | m_f (kg) |
+|---|---|
+| 193 | 1378.116718 |
+| 1544 | 1377.874577 |
+
+The difference is **−0.242141 kg**: mass DECREASES with refinement on this
+branch. Fitting `m(h) = m0 + C h^p` through the pair:
+
+| assumed p | extrapolated limit |
+|---|---|
+| p = 1 | **1377.840 kg** |
+| p = 2 | **1377.871 kg** |
+
+**Prediction: the branch-matched Richardson limit lands in 1377.84–1377.87 kg,
+and the production value of 1378.117 kg overstates the branch's converged mass
+by 0.25–0.28 kg.** Landing outside that window means either the two points are
+not on one branch or something else drives the sequence; either is informative.
+
+Note the direction is DOWNWARD, opposite to Phase 1's weakened claim that
+refinement raises mass. This run tests that too.
+
+Caveat on the prediction's status: the two points came from different solve
+paths, so it is a prior, not a derivation.
+
+### Open design question to resolve before running
+
+Warm-chaining from a better basin may simply re-introduce the escape problem at
+a deeper level. If a level jumps despite being seeded on-branch, that is
+outcome FAILURE above — but distinguish "the solver left the branch" from "the
+seed was inadequate" by also trying a down-projection of the jumped level back
+onto the previous grid.
+
+---
+
+## Step 2 — Extend the ladder to 16x
+
+**Question.** Does the window sequence stabilize, and near which value?
+
+**Runs only if Step 1 returns SUCCESS or PARTIAL.** 10 N at 16x is ~3100
+intervals; the 8x rung took 179.5 s, so budget ~10 min.
+
+- **SUCCESS** — three or more valid windows on one branch, with
+  `|p_finest − p_previous| < 0.25`, and the settled value within 0.3 of either
+  1 or 2. Report which hypothesis it supports, naming the margin.
+- **PARTIAL** — windows still drifting by more than 0.25. Report that no
+  asymptotic order was reached at 16x and STOP escalating; going to 32x is not
+  justified by the value of the answer.
+- **FAILURE** — the branch breaks at 16x. Report the resolution at which
+  branch identity was lost, which is itself a useful number.
+
+**What we are looking for:** `p` settling near 1 (H1: the switch-crossing
+interval dominates) or near 2 (H2: sub-grid switch placement plus cancellation).
+A settled value between 1.3 and 1.7 supports NEITHER and should be reported as
+such rather than rounded toward whichever is more convenient.
+
+---
+
+## Step 3 — Port the basin probe to the ELFO solver
+
+**Question.** Does the ELFO front row have a better basin?
+
+This is a code fix first. ELFO uses a free-t_f two-primary solver
+(`casadi_energy_freetf`, 9 states including a time-scaling slack, two-primary
+Sundman clock) — not the tulip's fixed-t_f single-primary 8-state
+`casadi_minfuel_sundman`. The probe assumed one CR3BP solver where there are
+two.
+
+- **SUCCESS (mechanical)** — all seeds run to completion, each either
+  converging or failing with a genuine SOLVER reason. A shape/wiring error on
+  any seed is a failure of this step, not a result.
+- **SUCCESS (scientific)** — a baseline-vs-best comparison exists, of the same
+  form as the Earth and tulip probes.
+- Either outcome — better basin found, or not — is a legitimate result, PROVIDED
+  the mechanical criterion passed. Report which.
+
+**Guard against the tulip caveat:** as with the tulip, the seed family here
+excludes down-projections. A null result must be reported as "survives THESE
+seeds", never as robustness.
+
+---
+
+## Step 4 — Cislunar mesh ladder
+
+**Question.** Can the tulip null result be made to face the adversary that beat
+every Earth row?
+
+The tulip flagship survived six seeds, but the down-projection seed family —
+which won at every Earth row — was unavailable because no cislunar ladder
+exists. Both external reviewers independently flagged this as the reason the
+null is weak.
+
+**Cost warning, stated in advance:** the tulip mesh is 4001 nodes; 8x would be
+32,008. Budget for 2x and 4x only unless 2x proves cheap. Declare the cap
+reached rather than silently truncating.
+
+- **SUCCESS** — at least two finer levels converge, are down-projected onto the
+  4001-node production grid, and re-solved there. Then either the flagship is
+  beaten (a finding, matching the Earth pattern) or it survives its strongest
+  available adversary (a materially stronger null than the current one).
+- **FAILURE** — no finer level converges. Report the ceiling; the tulip null
+  then stands permanently qualified as "survives weak seeds only".
+
+---
+
+## Step 5 — Per-row reproducibility scale
+
+**Question.** How much does a row's answer move under changes that SHOULD be
+immaterial?
+
+This is what makes "the certified rows are pessimistic by X kg" defensible.
+Phase 1 asserted a 1e-12 seed perturbation moved 2.5 N by 0.5 kg; the size of
+the perturbation was never measured, and external review flagged that
+projection onto the unit-direction and box constraints can amplify a small raw
+change. A gain must be read against a MEASURED per-row scale.
+
+**Method.** For each row, re-solve from the certified solution under K >= 5
+nominally-immaterial variations: seed renormalization on/off, throttle clipping
+on/off, `warmTight` on/off, and two IPOPT option variants. Record the spread in
+final mass. Also record the actual norm of the seed change in each case, so
+"a 1e-12 change" is a measurement rather than a description.
+
+- **SUCCESS** — a spread `sigma_row` per row, plus the measured seed-change
+  norms. A reported gain is then admissible only if it exceeds `5 * sigma_row`.
+- **What we expect:** 10 N small (its baseline reproduced exactly), 2.5 N large
+  (~0.5 kg). If 10 N's spread turns out large too, the +1.015 kg gain needs
+  re-examination.
+- **FAILURE** — no meaningful spread can be defined because variants fail to
+  converge. Report which variants are unusable.
+
+---
+
+## Step 6 — Switch-aligned refinement (the falsifiable PSR claim)
+
+**Question.** Does making switches true retained breakpoints recover second
+order?
+
+The claim as stated in Phase 1: PSR-style refinement improves the order **only
+if** it makes switches true breakpoints aligned to o(h), not merely dense
+neighbourhoods around them. This is the largest piece of work in Phase 2 and
+should not start until Steps 1–2 have established a baseline order to compare
+against.
+
+- **SUCCESS** — a branch-matched ladder with switches enforced as retained
+  breakpoints yields `p` at least 0.5 higher than the unaligned ladder on the
+  same row and branch, with both ladders passing Step 1's P1–P4.
+- **FAILURE** — alignment does not raise `p`. This REFUTES the claim, which is
+  a genuine result and must be reported as such rather than attributed to
+  implementation difficulty.
+- **VOID** — the aligned ladder cannot hold its branch. Then the comparison was
+  never made; do not report a verdict.
+
+---
+
+## Phase 2 exit
+
+Phase 2 is complete when either (a) the deliverable sentence of Step 1 is
+written with a defensible error bar and Step 5's scale makes the basin gains
+admissible, or (b) Step 1 returns FAILURE and that failure is documented as the
+answer to whether branch-matched error bars are obtainable for this problem
+class.

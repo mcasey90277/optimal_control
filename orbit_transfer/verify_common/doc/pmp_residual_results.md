@@ -314,6 +314,44 @@ is therefore not the optimal mesh; equidistributing `C·h³` would need `C`
 measured per phase. The mass still improved because the total fell even as the
 worst cell rose.
 
+## The blend probe — and the retraction of "basin fragility rises with switch count"
+
+Both reviewers objected that voiding 2.5 N and 1 N proved nothing about
+fragility, because the SAME perturbation is a far larger shock to a 171-switch
+mesh than to a 19-switch one. To test that, the redistribution was repeated at
+a 15% blend:
+
+| row | blend | Σh³ change | switches | verdict |
+|---|---|---|---|---|
+| 2.5 N | 0.15 | 13.0 → 13.3 (**2%**) | 76 → **75** | VOID |
+
+A **2% change in Σh³ still flipped the branch.** So the voiding is not a
+function of perturbation size, and the reviewers' objection is upheld: the
+claim that fragility scales with switch count is **withdrawn**.
+
+What replaces it is arguably more interesting. These rows are *knife-edge*:
+essentially any mesh change reorganizes them. That is not a nuisance obstructing
+the mesh measurement — it is the same phenomenon as the basin finding
+(a one-node throttle shift reaching a better optimum at 10 N), showing up in a
+second, independent way.
+
+## THE RECURRING ERROR, worth naming
+
+This study has now made the same class of mistake **twice**:
+
+1. **Phase 2:** fitted Richardson orders across a branch change, when the
+   study's own policy forbade it.
+2. **Phase 3:** extrapolated `E = k·Σh³` assuming a phase-independent
+   coefficient, when the study's own measurement (worst cell 8x worse under
+   redistribution) had already falsified phase-independence.
+
+Both times the contradicting evidence was **already in hand and already
+written down** in the same document. The failure was not missing data; it was
+not applying our own stated constraint to our own new claim. The Phase 2 fix
+was to move the rule from a comment into the arithmetic. The analogous fix here
+would be a check that refuses to report an extrapolated error whenever the
+measured spread of the local coefficient exceeds some threshold.
+
 ## Experiments still to run
 
 1. **Objective sensitivity: ΔJ ≈ Σ λᵀ·R.** The costate IS the sensitivity of

@@ -133,6 +133,28 @@ spec = {
  'dirTanMax',        @(o,r) r.dirTanMax,       'diagnostic', false, 'primer misalign (max)',   'deg'
 };
 
+% BRANCH MASK. A difference between two levels is admissible for an order fit
+% only if both levels lie on the SAME solution branch. Switch count is a
+% necessary-but-not-sufficient proxy for that (equal counts do not prove equal
+% switch ORDERING or placement -- the 2.5 N row is this study's own
+% counterexample, holding 75 switches across a genuine branch change). It is
+% used here as the available conservative filter: it never admits a difference
+% that crossed a count change, though it may admit one that crossed a subtler
+% reorganization. Computed BEFORE the quantity loop so every series is filtered
+% the same way.
+swPerLevel = nan(1,nL);
+for k = 1:nL
+    try, swPerLevel(k) = L(k).out.switches; catch, swPerLevel(k) = NaN; end
+end
+validDiff = true(1, max(nL-1,1));
+for k = 1:nL-1
+    if isfinite(swPerLevel(k)) && isfinite(swPerLevel(k+1))
+        validDiff(k) = (swPerLevel(k) == swPerLevel(k+1));
+    end
+end
+S.validDiff  = validDiff;
+S.swPerLevel = swPerLevel;
+
 S.q = struct();
 for row = 1:size(spec,1)
     name = spec{row,1};  get = spec{row,2};
@@ -146,7 +168,7 @@ for row = 1:size(spec,1)
             vals(k) = NaN;                  % quantity absent on this level
         end
     end
-    o = mesh_order(vals, S.factors);
+    o = mesh_order(vals, S.factors, validDiff);
     if ~spec{row,4}                          % Richardson forbidden here
         o.p = NaN;  o.rich = NaN;  o.pWindows = nan(size(o.pWindows));
         o.windowsConsistent = false;
@@ -208,7 +230,7 @@ mv = st.maxAbsDt(1:end-1);
 o  = struct('p',NaN,'rich',NaN,'dLast',NaN,'rel',NaN,'monotone',false, ...
             'pWindows',[],'windowsConsistent',false,'r',NaN);
 if numel(mv) >= 2
-    oo = mesh_order(mv, S.factors(1:numel(mv)));
+    oo = mesh_order(mv, S.factors(1:numel(mv)), validDiff(1:numel(mv)-1));
     o.dLast = oo.dLast;  o.rel = oo.rel;  o.monotone = oo.monotone;  o.r = oo.r;
 end
 S.q.switchDrift = struct('vals', [mv NaN], 'order', o, 'class', 'physical', ...

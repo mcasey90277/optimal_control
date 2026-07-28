@@ -67,4 +67,23 @@ catch err
 end
 assert(ok, 'h: a non-constant refinement ratio must be rejected, not averaged');
 
+% ---- (i) a window spanning a BRANCH CHANGE is refused ------------------
+% The regression this guards: the 1 N study computed a window across a
+% 173 -> 171 switch-count change and then cited its agreement with a valid
+% window as evidence of an asymptotic regime. The policy existed only as a
+% header comment and nothing enforced it. Now it is arithmetic.
+vals = L0 + C*h4.^2;                      % a clean 2nd-order series
+o = mesh_order(vals, [1 2 4 8], [false true true]);   % first difference invalid
+assert(isnan(o.pWindows(1)), 'i: a window using an invalid difference must be NaN');
+assert(abs(o.pWindows(2) - 2) < 1e-9, 'i: the clean window should still read 2');
+assert(o.nValidWindows == 1, 'i: expected 1 valid window, got %d', o.nValidWindows);
+assert(~o.windowsConsistent, ...
+    'i: ONE window cannot be "consistent" -- it agrees with itself trivially');
+assert(~o.monotone, 'i: monotonicity is not claimable across a branch change');
+assert(abs(o.p - 2) < 1e-9, 'i: p must come from the finest VALID window');
+
+% (j) every window invalid -> no order at all
+o = mesh_order(vals, [1 2 4 8], [false true false]);
+assert(isnan(o.p) && o.nValidWindows == 0, 'j: no valid window -> no order');
+
 fprintf('test_mesh_order: ALL PASS\n');

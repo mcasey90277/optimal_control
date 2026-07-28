@@ -29,18 +29,79 @@ between the program and the continuous problem it discretizes. That gap is
 discretization error. We measure it by solving the same problem on a ladder of
 successively finer meshes and observing the rate at which the answer settles.
 
-The measurement produced a partly unexpected result. The production meshes are
-broadly adequate: where a clean order could be extracted, the final mass
-converges at first order with a remaining extrapolated error of roughly
-$0.35$~kg out of $1370$~kg. What limits accuracy instead is \emph{which local
-minimum the solver reaches}. Every certified row we examined is beaten on its
-own mesh---by $1.0$ to $6.0$~kg---by a solution found from a different starting
-guess. The problem is non-convex, its basins are separated by very small
-changes in the initial guess, and basin selection outweighs discretization
-error in every case measured, by a factor of roughly four to one hundred.
+The measurement produced a partly unexpected result, and a first draft of this
+document over-claimed it in a way that external review caught; see
+Section~\ref{sec:corrections}. What we can establish is this. \emph{No} row
+yielded an established asymptotic order, because every mesh ladder crossed a
+change in the discrete switch structure and an order fitted across such a
+change is meaningless. Mesh adequacy therefore remains unestablished. What is
+firmly established instead concerns \emph{which local minimum the solver
+reaches}: every certified Earth row we examined is beaten \emph{on its own
+unmodified mesh}---by $1.0$ to $6.0$~kg, with lower $\Delta V$ as well---by a
+solution reached from a different starting guess. That comparison is made at
+fixed discretization, so it cannot be a discretization effect. The problem is
+non-convex, its basins are reachable from very small changes in the initial
+guess, and basin search is demonstrably a higher-yield intervention than mesh
+refinement. Whether it \emph{dominates} discretization error quantitatively is
+not something this study established.
 \end{abstract}
 
 \tableofcontents
+
+\section{Corrections after external review}
+\label{sec:corrections}
+
+The first draft of this document was reviewed by two independent language
+models tasked with attacking its \emph{reasoning} rather than its prose. Both
+identified the same fatal flaw, independently, and both named it the single
+weakest link. It is recorded here rather than quietly fixed, because the error
+is instructive: the study broke its own stated rule, and nothing in the code
+prevented it.
+
+\paragraph{The error.} Section~\ref{sec:richardson-limits} states that
+Richardson extrapolation must not be applied across a branch change. The $1$~N
+ladder has switch counts $173, 171, 171, 171$: the first difference spans a
+change in the discrete structure. The first sliding window, $p = 1.596$, was
+computed across it anyway, and the agreement between that window and the valid
+one ($p = 1.228$) was then cited as evidence that an asymptotic regime had been
+reached. Only \emph{one} valid window exists, and a single window agrees with
+itself trivially.
+
+\paragraph{What was retracted.} Enforcing the rule in code (rather than in a
+comment) gives: zero valid windows at $10$~N, one at $2.5$~N reading $-1.67$,
+and one at $1$~N reading $1.228$. Consequently:
+
+\begin{itemize}
+  \item \textbf{``$p = 1.228$ supports H1 over H2'' is withdrawn.} One local
+  effective order on one branch cannot distinguish asymptotic first order from
+  pre-asymptotic behaviour of a second-order scheme. The H1/H2 question is
+  open.
+  \item \textbf{The $1$~N error decomposition ($1.21$~kg basin, $0.35$~kg
+  mesh) is withdrawn.} It subtracted a Richardson limit extrapolated on the
+  $171$-switch branch from a production result on the $177$-switch branch.
+  Both reviewers called this incoherent, and they are right: it is arithmetic,
+  not an identifiable decomposition.
+  \item \textbf{The dominance ratios ($\sim\!100\times$, $\sim\!4\times$)
+  are withdrawn.} The $10$~N figure rested on a ``within-branch mesh error'' of
+  $0.009$~kg whose two levels have $19$ and $20$ switches---not within-branch
+  at all. The $1$~N figure rested on the withdrawn decomposition.
+  \item \textbf{``The production meshes are broadly adequate'' is
+  withdrawn.} No branch-matched convergence estimate exists for any row.
+\end{itemize}
+
+\paragraph{What survives, and why.} The basin results are unaffected, because
+they never depended on any convergence argument. They compare solutions of the
+\emph{same} nonlinear program on the \emph{same} grid, all machine-feasible,
+and observe that some have higher final mass than the certified one. That is a
+direct observation, not an extrapolation.
+
+\paragraph{The process lesson.} The Richardson restriction had been written
+down, reviewed, and agreed---and was then violated by the author of the rule,
+because it lived in a header comment while the arithmetic did not enforce it.
+\texttt{mesh\_order} now takes an explicit per-difference validity mask and
+refuses any window spanning a branch change; \texttt{mesh\_collect} builds
+that mask from the switch counts. A rule that is not executable is a rule that
+will be broken.
 
 \section{Introduction}
 \label{sec:intro}
@@ -357,13 +418,34 @@ $1$~N   & $1740\to13920$ & $1370.603\,/\,1371.587\,/\,1371.913\,/\,1372.052$
 $2.5$~N $76/75/75/75$; $1$~N $173/171/171/171$.}
 \end{table}
 
-\paragraph{One clean order, and it is first order.} Only the $1$~N row was in a
-position to yield an order: its differences shrink monotonically, its two
-sliding windows agree to within $13\%$, and its switch count is stable from
-$2\times$ onward. The observed order is $p = 1.23$, trending toward $1$.
+\paragraph{Order estimates, after enforcing branch consistency.} Applying the
+rule of Section~\ref{sec:richardson-limits} in code---no window may span a
+change in switch count---leaves very little standing:
 
-This matters theoretically. Before the study, two external reviewers disagreed
-about what to expect. One argued for $p \approx 1$: on a mesh whose breakpoints
+\begin{center}
+\small
+\begin{tabular}{lccc}
+\toprule
+Row & switch counts & valid windows & $p$ \\
+\midrule
+$10$~N  & $19/20/20/18$    & $0$ & none \\
+$2.5$~N & $76/75/75/75$    & $1$ & $-1.67$ (differences grew) \\
+$1$~N   & $173/171/171/171$& $1$ & $1.228$ \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\textbf{No row has an established asymptotic order.} The $1$~N value of
+$1.228$ is a single local effective order on the $171$-switch branch. It is
+below $2$, but one window cannot distinguish asymptotic first order from
+pre-asymptotic behaviour of a second-order scheme, and it cannot support a
+statement about a ``trend.'' Its accompanying Richardson value, $1372.156$~kg,
+is a limit for that branch only.
+
+The H1/H2 question therefore remains open, which is worth stating plainly
+because the first draft claimed to have settled it. Before the study, two
+external reviewers disagreed about what to expect. One argued for
+$p \approx 1$: on a mesh whose breakpoints
 are not aligned with the switches, one switch-crossing interval carries the
 wrong throttle over a time of order $h$ against an order-one jump in the
 right-hand side, and that single interval's $\mathcal{O}(h)$ error dominates
@@ -371,14 +453,12 @@ every smooth arc's $\mathcal{O}(h^2)$. The other argued for $p \approx 2$,
 on the grounds that the throttle is a continuous NLP variable so an
 intermediate node value can encode a sub-interval switch location, and that
 errors of alternating sign across many switches partially cancel in an
-integrated quantity. The measurement supports the first hypothesis. We recorded
-both as competing falsifiable predictions before running, precisely so that the
-result would discriminate rather than confirm whichever had been written down
-first.
-
-The practical reading of first order is unwelcome: error scales as $h$, so
-buying one additional decimal digit of accuracy costs a factor of ten in node
-count. That is the quantitative argument for switch-aligned meshes.
+integrated quantity. We recorded both as competing falsifiable predictions before running, precisely
+so that the result would discriminate rather than confirm whichever had been
+written down first. The measurement does not discriminate: one window on one
+branch is not enough. Settling it requires continuing a \emph{single} branch
+to $16\times$ and beyond, and verifying branch identity by matched switch
+times rather than by switch count alone.
 
 \paragraph{Two rows did not converge.} Both $10$~N and $2.5$~N had their
 $8\times$ difference \emph{grow} rather than shrink. At $10$~N the switch count
@@ -455,55 +535,78 @@ Three observations sharpen this.
 
 \subsection{Reconciling the two questions}
 
-Combining the ladder and the probe gives the study's central result.
+A first draft tabulated ``basin gain'' against ``residual mesh error'' and
+concluded that basin selection dominates by factors of four to one hundred.
+That table has been withdrawn (Section~\ref{sec:corrections}): it compared a
+discrete jump between distinct local minima against a continuum residual, and
+worse, both of its mesh-error entries were invalid---the $10$~N figure spanned
+a $19\to20$ switch change, and the $1$~N figure came from the withdrawn
+cross-branch subtraction.
 
-\begin{table}[h]
-\centering
-\small
-\begin{tabular}{lrrl}
-\toprule
-Row & basin gain on own mesh & residual mesh error & dominant source \\
-\midrule
-$10$~N  & $+1.015$~kg & $0.009$~kg          & basin, by $\sim\!100\times$ \\
-$2.5$~N & $+5.971$~kg & never converged     & basin \\
-$1$~N   & $+1.454$~kg & $\sim\!0.35$~kg     & basin, by $\sim\!4\times$ \\
-\bottomrule
-\end{tabular}
-\end{table}
+What can be said without any convergence argument at all is this:
 
-The $1$~N entry deserves comment because it corrects an earlier reading of our
-own data. The ladder placed the production row $1.55$~kg below the Richardson
-limit of $1372.156$~kg, which invited the conclusion that the $1$~N mesh was
-inadequate. The basin probe reaches $1371.811$~kg \emph{on the production
-mesh}, only $0.345$~kg from that limit. Roughly $1.21$~kg of the apparent
-``mesh error'' was therefore basin error, reachable without refining anything.
-The decomposition is indicative rather than exact---the Richardson limit was
-itself extrapolated from a ladder that crossed a topology change---but the
-ordering is robust.
+\begin{quote}
+For all three Earth production problems, changing only the initial guess found
+feasible solutions better by $1.015$, $5.971$ and $1.454$~kg respectively, each
+with lower $\dV$, on the unmodified production mesh.
+\end{quote}
 
-\textbf{In every row examined, basin selection outweighs discretization error.}
-The most useful outcome of a mesh-convergence study was to establish that the
-mesh was not the problem.
+This is an observation about the nonlinear programs we actually solve, not an
+extrapolation, and it is unaffected by the retractions. It establishes that
+basin search is an immediately higher-yield intervention than mesh refinement.
+It does \emph{not} establish a quantitative error budget in which basin error
+is shown to exceed discretization error, because no valid branch-matched
+discretization error has been measured for any row.
+
+Obtaining one is straightforward in principle and is the natural next
+experiment: take the \emph{best known} production solution for a row, continue
+\emph{it} up the ladder holding its branch, verify branch identity by matched
+switch times rather than by count, and extrapolate along that single branch.
 
 \subsection{Cislunar campaigns: tulip and ELFO}
 \label{sec:cr3bp}
 
-\emph{In progress.} The basin probe has been ported to the Sundman-regularized
-CR3BP formulation and is being run against the GTO$\to$tulip flagship
-($4001$ nodes, $25$ switches) and the GTO$\to$ELFO $1.33\times$ front row
-($50$ switches). Because no mesh ladder has been run for these campaigns, the
-down-projection seed family is unavailable; the seeds are the certified
-solution, throttle shifts of $\pm1$ and $\pm8$ nodes, and a re-solve under a
-looser barrier initialization. Results will be recorded here.
+\paragraph{Tulip flagship: a null result, with a caveat that matters.} All six
+seeds---the certified solution, throttle shifts of $-8$, $-1$, $+1$ and $+8$
+nodes, and a re-solve under a looser barrier initialization---returned to
+$\mf = 0.84906583$ with $25$ switches, agreeing to $10^{-10}$ or better. The
+flagship survives this probe, in sharp contrast to every Earth row, where a
+single-node shift was sometimes enough to find a better basin.
+
+The caveat is that \emph{this seed family is the weak one}. No mesh ladder has
+been run for the cislunar campaigns, so the down-projection seeds are
+unavailable---and those were the winning seed at every single Earth row. Both
+external reviewers made the same point independently: a null result under
+perturbations that are known to be weaker than the ones that worked elsewhere
+establishes local robustness, not optimality. Concluding that this row is
+robustly optimal requires subjecting it to the same adversary: run a cislunar
+mesh ladder, down-project each level, and verify the flagship resists.
+
+\paragraph{ELFO: not yet run.} The first attempt failed on all seeds because
+the probe called the wrong solver. The ELFO campaign does not use the tulip's
+fixed-$t_f$, single-primary, $8$-state formulation; it uses a free-$t_f$
+two-primary solver with a $9$-state vector (the ninth being a time-scaling
+slack) and a two-primary Sundman clock
+$\kappa = (r_1^{-q} + (r_2/D)^{-q})^{-p/q}$, needed because a single-primary
+Earth clock cannot resolve the lunar capture leg. The probe assumed one CR3BP
+solver where there are two.
 
 \section{Consequences and open items}
 \label{sec:consequences}
 
 \paragraph{Published numbers are pessimistic.} The Earth rows understate
 achievable final mass by $0.07\%$ ($10$~N), $0.11\%$ ($1$~N) and $0.44\%$
-($2.5$~N). The last is well above anything that could be quoted as numerical
-noise. Every improvement came with lower $\dV$ as well, so these are not
-trade-offs.
+($2.5$~N), each with lower $\dV$ as well, so these are not trade-offs. One
+qualification: at $2.5$~N, re-solving the row from its own solution---differing
+only in whether the seed's thrust direction was renormalized and its throttle
+clipped---moves the answer by $0.5$~kg. A gain must be read against that
+per-row reproducibility scale, not against a single global one. The $2.5$~N
+gain of $5.971$~kg clears its own scale by an order of magnitude; the $10$~N
+gain of $1.015$~kg sits on a row whose baseline reproduced exactly, so its
+local scale is far smaller. The document previously described the perturbation
+as ``a $10^{-12}$ seed change''; that was not measured, and projection onto the
+unit-direction and box constraints can amplify a small raw change, so the
+characterization is withdrawn.
 
 \paragraph{A basin-search step belongs in the certification path.} At present
 ``certified'' means converged, feasible and first-order optimal---not best
@@ -513,17 +616,23 @@ found. The probe costs three to fifteen minutes per row.
 They vary with basin and with mesh: $18/19/20$ at $10$~N, $171/173/177$ at
 $1$~N. They are properties of a particular solve.
 
-\paragraph{Open items.}
-\begin{itemize}
-  \item Complete the cislunar probes (Section~\ref{sec:cr3bp}).
-  \item Establish whether the order measured at $1$~N carries to the Sundman
-  and longitude-domain transcriptions.
-  \item Test the falsifiable claim that switch-aligned mesh refinement recovers
-  second order: it should do so \emph{only if} the refinement makes switches
-  true retained breakpoints, rather than merely clustering nodes near them.
-  \item Re-examine whether the $2.5$~N row can be made to converge once it is
-  started from its best known basin.
-\end{itemize}
+\paragraph{Open items, in priority order.}
+\begin{enumerate}
+  \item \textbf{A branch-matched ladder.} Continue the \emph{best known}
+  production solution for one row up the ladder holding its branch, verifying
+  branch identity by matched switch times rather than switch count. Without
+  this there is no valid mesh-error estimate for any row, and the study's
+  first question remains unanswered.
+  \item \textbf{Extend that ladder to $16\times$} to settle H1 versus H2. One
+  window cannot.
+  \item \textbf{Port the probe to the ELFO solver} and run it.
+  \item \textbf{A cislunar mesh ladder}, so the tulip null can be tested
+  against the down-projection seeds that beat every Earth row.
+  \item \textbf{A per-row reproducibility scale}, measured rather than
+  assumed, so that a reported gain can be read against it.
+  \item Test the falsifiable claim that switch-aligned refinement recovers
+  second order---only if it makes switches true retained breakpoints.
+\end{enumerate}
 
 \section*{Reproducing this}
 \addcontentsline{toc}{section}{Reproducing this}

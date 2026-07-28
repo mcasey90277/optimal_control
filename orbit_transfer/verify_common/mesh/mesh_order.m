@@ -1,4 +1,4 @@
-function o = mesh_order(vals, factors)
+function o = mesh_order(vals, factors, validDiff)
 % MESH_ORDER  Observed order of accuracy and Richardson limit from a mesh ladder.
 %
 % Given a quantity evaluated at L successive refinement levels (coarse to
@@ -28,6 +28,19 @@ function o = mesh_order(vals, factors)
 %   vals    - the quantity at each level, coarse to fine [1xL], L >= 2
 %   factors - node-count multipliers, coarse to fine [1xL], e.g. [1 2 4 8].
 %             The ratio between successive factors must be CONSTANT.
+%   validDiff - (optional) logical [1x(L-1)], one entry per SUCCESSIVE
+%             DIFFERENCE, false where that difference spans a solution-branch
+%             change. Any window using an invalid difference is refused (NaN).
+%             Default: all true.
+%
+%             THIS ARGUMENT EXISTS BECAUSE THE POLICY ABOVE WAS ONCE ONLY A
+%             COMMENT. The 2026-07-28 external review found the 1 N study had
+%             computed a window across a 173 -> 171 switch-count change and
+%             then used the agreement of that window with a valid one as
+%             evidence of an asymptotic regime -- violating this function's
+%             own documented restriction, which nothing enforced. A rule that
+%             lives only in a header is a rule that will be broken; it is now
+%             enforced in the arithmetic.
 %
 % OUTPUTS:
 %   o - struct:
@@ -39,7 +52,9 @@ function o = mesh_order(vals, factors)
 %       .rel              .dLast relative to |v_L| [scalar]
 %       .monotone         true if successive differences share a sign and are
 %                         shrinking in magnitude [logical]
-%       .pWindows         sliding three-level slopes, [1x(L-2)]; empty if L < 3
+%       .nValidWindows    how many sliding windows were branch-consistent
+%       .pWindows         sliding three-level slopes, [1x(L-2)]; empty if L < 3;
+%                         NaN in any window spanning a branch change
 %       .windowsConsistent  true if all .pWindows agree within 25% of their
 %                         mean -- the evidence that an asymptotic regime was
 %                         actually reached, which a single slope cannot give
@@ -54,6 +69,10 @@ function o = mesh_order(vals, factors)
 vals    = vals(:).';
 factors = factors(:).';
 L = numel(vals);
+if nargin < 3 || isempty(validDiff), validDiff = true(1, max(L-1,1)); end
+validDiff = logical(validDiff(:).');
+assert(numel(validDiff) == L-1, 'mesh_order:validDiff', ...
+    'validDiff needs one entry per difference (%d), got %d', L-1, numel(validDiff));
 assert(L >= 2, 'mesh_order:levels', 'need at least 2 levels, got %d', L);
 assert(numel(factors) == L, 'mesh_order:size', ...
     'factors has %d entries, vals has %d', numel(factors), L);
@@ -69,11 +88,14 @@ d = diff(vals);                       % L-1 successive differences
 
 o = struct('p', NaN, 'rich', NaN, ...
            'dLast', abs(d(end)), 'rel', abs(d(end)) / max(abs(vals(end)), realmin), ...
-           'monotone', false, 'pWindows', [], 'windowsConsistent', false, 'r', r);
+           'monotone', false, 'pWindows', [], 'windowsConsistent', false, ...
+           'nValidWindows', 0, 'r', r);
 
 % Monotone: same sign throughout AND shrinking in magnitude. Either failure
 % means the sequence is not settling, whatever a slope formula would say.
-if all(d > 0) || all(d < 0)
+% Monotonicity, like the order, is only meaningful along ONE branch, so a
+% ladder that crossed one cannot claim it however tidy the numbers look.
+if all(validDiff) && (all(d > 0) || all(d < 0))
     o.monotone = all(diff(abs(d)) < 0);   % magnitudes strictly shrinking
 end
 
@@ -87,17 +109,29 @@ end
 nw = L - 2;
 pw = nan(1, nw);
 for k = 1:nw
-    d1 = d(k);  d2 = d(k+1);
-    pw(k) = local_slope(d1, d2, r);
+    if ~(validDiff(k) && validDiff(k+1))
+        continue                      % window spans a branch change -> refuse
+    end
+    pw(k) = local_slope(d(k), d(k+1), r);
 end
-o.pWindows = pw;
+o.pWindows      = pw;
+o.nValidWindows = sum(isfinite(pw));
 
-if all(isfinite(pw))
-    mu = mean(pw);
-    o.windowsConsistent = abs(mu) > 0 && max(abs(pw - mu)) <= 0.25 * abs(mu);
+% Consistency is evidence only when there is more than one window to be
+% consistent WITH. A single window agrees with itself trivially; reporting that
+% as "consistent" is what let a one-window result be read as an established
+% asymptotic order.
+if o.nValidWindows >= 2 && all(isfinite(pw(isfinite(pw))))
+    pv = pw(isfinite(pw));
+    mu = mean(pv);
+    o.windowsConsistent = abs(mu) > 0 && max(abs(pv - mu)) <= 0.25 * abs(mu);
 end
 
-o.p = pw(end);                        % the finest window is the reported order
+fin = find(isfinite(pw), 1, 'last');
+if isempty(fin)
+    o.p = NaN;  return
+end
+o.p = pw(fin);                        % the finest VALID window
 if isfinite(o.p)
     denom = r^o.p - 1;
     if abs(denom) > eps

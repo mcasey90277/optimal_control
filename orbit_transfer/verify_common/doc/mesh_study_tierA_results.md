@@ -45,19 +45,57 @@ for them.
   jumped +3.18 kg and −0.045 km/s at ×8. A large improvement with the switch
   count unchanged.
 
-## Finding 3 — refinement systematically increases final mass, in every row
+## Finding 3 — refinement increases final mass, but the claim is WEAKER than it first looked
 
-Every level of every row moved mass UP and ΔV DOWN. The direction is
-consistent across 9 refinement steps with no exceptions. Physically this is
-what one expects: a coarse mesh mislocates switches and therefore burns for
-slightly the wrong duration, which wastes propellant.
+Every level of every row moved mass UP and ΔV DOWN, across 9 refinement steps
+with no exceptions. The physical story is that a coarse mesh mislocates
+switches and burns for slightly the wrong duration, wasting propellant.
 
-**Consequence for the campaign: the certified rows are conservative.** They
-understate achievable final mass — by ~1.55 kg at 1 N (Richardson), and by at
-least 0.77 kg at 10 N and 3.18 kg at 2.5 N (the observed ×8 improvement, which
-is a lower bound since neither row converged). None of this invalidates a
-headline number quoted to 0.1 kg at 10 N, where the pre-jump deltas are 6e-6
-relative; it matters at 2.5 N and 1 N, where the movement is ~0.1%.
+**CAVEAT ADDED AFTER THE DOWN-PROJECTION TEST (see Finding 5): most of those
+steps also crossed a topology change, so they are not clean measurements of
+refinement at fixed structure.** 10 N went 19 -> 20 -> 20 -> 18, so EVERY one
+of its steps spans a topology change. Within a FIXED 18-switch structure the
+direction actually REVERSES: 1378.117 kg at 193 nodes against 1377.875 kg at
+1544 nodes, i.e. refinement LOWERS mass by 0.24 kg.
+
+The claim survives only where topology held: 1 N at x2/x4/x8 (171 switches
+throughout, deltas +0.326, +0.139) and 2.5 N at x2/x4/x8 (75 switches). Those
+are the rows the statement rests on; 10 N does not support it at all.
+
+**Consequence for the campaign:** at 1 N the certified row understates
+achievable mass by ~1.55 kg (Richardson). At 10 N the shortfall is real but
+its cause is basin selection, not mesh resolution.
+
+## Finding 5 — the 10 N x8 "branch change" is a BASIN effect, not a resolution effect
+
+**The decisive test.** Take the x8 solution (18 switches, 1377.875 kg), project
+it onto the x1 PRODUCTION grid (193 nodes), and re-solve there. If the
+18-switch structure needs a fine mesh, it collapses back. It does not:
+
+| on the SAME 193-node production mesh | m_f (kg) | sw | dV (km/s) |
+|---|---|---|---|
+| seeded from the row itself (certified) | 1377.101235 | 19 | 1.676631 |
+| seeded from the x8 solution | **1378.116718** | **18** | **1.662173** |
+
+Both `Solve_Succeeded`, both machine-tight (defect 4.8e-15 and 6.3e-15).
+**The better structure exists at production resolution and is 1.015 kg better
+there** (+7.4e-4 relative), with 0.014 km/s less dV.
+
+So the x8 rung did not resolve something the coarse mesh could not represent.
+It ESCAPED A BASIN, and once the better basin is known it is reachable at
+coarse resolution. Framing this as "real or a solver artifact" is a false
+choice: the x8 solution is a genuine converged optimum AND it is not a mesh
+phenomenon.
+
+**Two consequences, and the first is bigger than the mesh study.**
+
+1. **The certified 10 N row is not the best solution of its own
+   discretization** — it is 1.015 kg short at its own node count. This is a
+   campaign finding independent of any mesh question, and it is 100x larger
+   than 10 N's within-branch mesh error (0.009 kg).
+2. **For 10 N, basin selection dominates mesh error by two orders of
+   magnitude.** Refining the mesh is the wrong lever there; searching basins is
+   the right one.
 
 ## Finding 4 — switch TIMES are not mesh-converged anywhere
 

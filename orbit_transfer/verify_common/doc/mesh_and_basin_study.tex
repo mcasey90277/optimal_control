@@ -7,8 +7,8 @@
 \usepackage{xcolor}
 \hypersetup{colorlinks=true, linkcolor=blue, urlcolor=blue}
 
-\title{Mesh Convergence and Basin Selection in Direct-Collocation\\
-       Low-Thrust Orbit Transfers}
+\title{Discretization Error, Basin Selection, and Pontryagin Residuals\\
+       in Direct-Collocation Low-Thrust Orbit Transfers}
 \author{M.\ Casey}
 \date{Begun 2026--07--27; last revised \today}
 
@@ -44,6 +44,17 @@ non-convex, its basins are reachable from very small changes in the initial
 guess, and basin search is demonstrably a higher-yield intervention than mesh
 refinement. Whether it \emph{dominates} discretization error quantitatively is
 not something this study established.
+
+The investigation then changed method. Because mesh convergence is inherently
+\emph{comparative}---it needs two solutions and therefore a proof they are the
+same---we replaced it with an \emph{absolute} measurement of a single
+solution: does the interpolated trajectory satisfy the continuous Pontryagin
+necessary conditions, and to what residual? That measurement succeeded where
+the ladder failed, and it produced a sharp answer.
+Section~\ref{sec:phase3} reports it: the residual is the local truncation
+error of the trapezoidal rule, scaling as $h^3$ with a coefficient fixed by the
+orbital dynamics, peaking at apogee, and essentially independent of the
+bang-bang switch structure.
 \end{abstract}
 
 \tableofcontents
@@ -632,6 +643,202 @@ $1$~N. They are properties of a particular solve.
   assumed, so that a reported gain can be read against it.
   \item Test the falsifiable claim that switch-aligned refinement recovers
   second order---only if it makes switches true retained breakpoints.
+\end{enumerate}
+
+
+\section{Phase 3: continuous Pontryagin residuals}
+\label{sec:phase3}
+
+\subsection{The redirection, and why it works}
+
+Every difficulty in Sections~\ref{sec:mesh}--\ref{sec:results} has one root.
+Mesh convergence is a \emph{comparative} measurement: it needs two or more
+solutions, and therefore a proof that they are the same solution merely
+represented more finely. That proof is what could not be supplied---each ladder
+crossed a change in the discrete switch structure, and external review found
+that no tightening of criteria would fix it, because the underlying
+continuation cannot hold a branch.
+
+The redirection asks an \emph{absolute} question of a \emph{single} solution:
+
+\begin{quote}
+Take the converged trajectory, read it as a continuous object, and ask whether
+it satisfies the continuous necessary conditions of the indirect (Pontryagin)
+formulation---and to what residual.
+\end{quote}
+
+Nothing is compared, so no branch-identity question arises. It also closes a
+gap external review called blocking: \texttt{Solve\_Succeeded} plus a nodal
+defect bound verifies only that the solver solved \emph{the transcription}, and
+nothing in the repository asked whether the result approximates a continuous
+extremal.
+
+\subsection{What we hoped to learn}
+
+Three things, in decreasing order of confidence that they were obtainable:
+
+\begin{enumerate}
+  \item \textbf{Whether the discrete solution is close to a continuous
+  extremal at all}, and by how much it misses. This is the question the defect
+  was silently assumed to answer and does not.
+  \item \textbf{Where the error lives.} A residual computed per interval is a
+  \emph{map}, not a scalar, so it localizes the difficulty---which is far more
+  actionable than a single number.
+  \item \textbf{Whether the bang-bang structure is the dominant error source},
+  as hypothesis H1 asserts. This had been argued in both directions by external
+  reviewers and never measured.
+\end{enumerate}
+
+\subsection{Method, and the two constraints that shape it}
+
+The conditions checked are the primal dynamics, the costate dynamics, the
+boundary values, transversality, the minimum condition $u = \arg\min_u H$,
+constancy of the conserved quantity, switching regularity, and the multiplier
+sign conditions. Of these the costate ODE was checked by \emph{nothing} before,
+and the minimum condition only at nodes.
+
+\paragraph{Propagation is per interval, never global.} The costate dynamics are
+exponentially unstable; a single forward shot from $\lambda(0)$ across a
+many-revolution transfer diverges and measures nothing. Each interval is
+instead integrated from the solution's own values at its left node and compared
+at its right node, so nothing accumulates.
+
+\paragraph{The dynamics are the transcription's own.} The right-hand side is
+reused directly and $\partial H/\partial x$ taken from it by automatic
+differentiation. The check must be independent in \emph{integration}, not in
+the definition of the physics: a re-derived right-hand side would test the
+author's algebra rather than the mesh. A self-validating gate recomputes the
+transcription's own defects from the reused right-hand side and aborts if they
+do not reproduce; a residual computed with the wrong dynamics is worse than no
+residual, because it looks like evidence.
+
+\subsection{P3.1: validation against an analytic extremal}
+
+The double integrator $\min\int_0^2 u\,dt$ with $\dot x = v$, $\dot v = u$,
+$u\in[0,1]$, $x(2)=1$, $v(2)$ free has the closed-form extremal
+$t_s = 2-\sqrt2$, $\lambda_x = -1/\sqrt2$, $H = 1-\sqrt2$.
+
+\begin{table}[h]
+\centering\small
+\begin{tabular}{lr}
+\toprule
+check & result \\
+\midrule
+self-gate, both arcs & $1.7\times10^{-17}$ / $8.3\times10^{-17}$ \\
+primal residual $R_x$ & $\max\ 1.5\times10^{-16}$ \\
+costate residual $R_\lambda$ & $\max\ 1.1\times10^{-15}$ \\
+Hamiltonian & $-0.414213562373$, analytic to 12 digits, CoV $1.5\times10^{-15}$ \\
+unaligned grid, straddling interval & $\mathbf{1.71\times10^{-3}}$ \\
+unaligned grid, elsewhere & $3.3\times10^{-16}$ \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Both halves are required. The first shows the checker is \emph{correct}; the
+second that it is \emph{sensitive}, with thirteen orders of separation and the
+peak at the right index. A checker passing the first but missing the second
+would be blind to the only error the study cares about.
+
+A structural lesson emerged here rather than being assumed: at a bang-bang
+switch the control is genuinely double-valued, so a single shared node cannot
+carry both $u=1$ and $u=0$. A \emph{true} retained breakpoint is a
+\textbf{duplicated} node---which is exactly what a multi-phase formulation
+provides, and is the concrete mechanism behind the switch-alignment idea.
+
+\subsection{P3.2--P3.3: the three earth rows}
+
+All self-gates reproduce the solver's own reported defect
+($6.245$ vs $6.273\times10^{-15}$ at $10$~N; $8.266\times10^{-14}$ exactly at
+$1$~N). The conserved quantity for this transcription is the \emph{time
+costate}---$H_\sigma$ is not constant, since the Gauss equations carry $\sigma$
+explicitly through $L = \pi + \sigma\Delta L$---and $\lambda_t$ holds to
+CoV $2.3\times10^{-8}$ in every row.
+
+\paragraph{The headline gap.} The median discrete defect is
+$5.0\times10^{-16}$; the median continuous residual is $3.7\times10^{-4}$. The
+solution satisfies the equations it was \emph{solved against} roughly
+$7\times10^{11}$ times better than the continuous equations we care about.
+
+\paragraph{Finding 3.1 (a correction).} The raw $R_\lambda$ reaching $13.9$ was
+flagged as possibly alarming. It is an \emph{absolute} norm and costates are
+sensitivities with $|\lambda|$ of $24$--$264$. Normalized, the median relative
+costate residual is $4.6\times10^{-6}$, $7.7\times10^{-6}$ and
+$1.4\times10^{-6}$ across the three rows; one interval anywhere reaches 22\%.
+
+\paragraph{Finding 3.2: the peak is at apogee.} Median $R_x$ in the
+apogee-most decile against the perigee-most decile is $16.5\times$ ($10$~N),
+$19.2\times$ ($2.5$~N) and $18.2\times$ ($1$~N). The mechanism: the mesh is
+uniform in true \emph{longitude}, and near apogee the angular rate is slow, so
+a fixed $\Delta L$ spans a long $\Delta t$. The longest time-steps sit at
+apogee, and that is where a trapezoid hurts most.
+
+\paragraph{Finding 3.3: it tracks neither switches nor revolutions.}
+
+\begin{table}[h]
+\centering\small
+\begin{tabular}{lrrrrrr}
+\toprule
+row & revs & switches & sw/rev & nodes/rev & median $R_x$ & \textbf{median $R_x/h^3$} \\
+\midrule
+$10$~N  & 7.33  & 19  & 2.59 & 26.3 & $3.73\times10^{-4}$ & $\mathbf{0.171}$ \\
+$2.5$~N & 27.82 & 76  & 2.73 & 25.4 & $4.61\times10^{-4}$ & $\mathbf{0.171}$ \\
+$1$~N   & 69.18 & 171 & 2.47 & 25.2 & $4.65\times10^{-4}$ & $\mathbf{0.163}$ \\
+\bottomrule
+\end{tabular}
+\caption{The median residual is flat while revolutions, switches and node count
+each vary by a factor of nine. Normalized by $h^3$ it is constant to 5\%.}
+\end{table}
+
+That is precisely the local truncation error of the trapezoidal rule,
+$\mathcal{O}(h^3)$ per step, with a coefficient set by the \emph{orbital
+dynamics} rather than by thrust level or control structure. The campaign fixes
+nodes per revolution, so the same steps recur at the same orbital phases in
+every row and the same residual follows.
+
+\subsection{What Phase 3 established}
+
+\begin{itemize}
+  \item The pre-registered prediction that residuals would concentrate at
+  switch intervals \textbf{failed}: switch cells are only $3.6\times$ the
+  interior median at $10$~N, and the largest residual is an interior cell.
+  Findings 3.2 and 3.3 say what happens instead.
+  \item H1's mechanism---one switch-crossing interval swamping the smooth
+  arcs---is not what drives the error in these problems.
+  \item Judged by \emph{error equidistribution} rather than by angular
+  resolution, the mesh over-resolves perigee and under-resolves apogee. That is
+  a concrete target for node placement, and it points \emph{away} from
+  switch-aligned refinement as the lever.
+\end{itemize}
+
+\subsection{What Phase 3 does not deliver}
+
+\paragraph{A mass error bar.} The residual is local and per interval. It
+establishes that the mesh is mis-allocated; it does not say what that costs in
+kilograms. The conversion is the first item in Section~\ref{sec:next}.
+
+\paragraph{Anything about basins.} The Pontryagin conditions are
+\emph{necessary}: every local extremal satisfies them. The $10$~N solution that
+is $1.015$~kg worse than its neighbour passes this check cleanly.
+
+\section{Experiments still to run}
+\label{sec:next}
+
+\begin{enumerate}
+  \item \textbf{Objective sensitivity, $\Delta J \approx \sum_k \lambda_k^{\!\top} R_k$.}
+  The costate \emph{is} the sensitivity of the objective to a state
+  perturbation, and both the costates and the residual map are already in hand.
+  This converts a residual into kilograms and is the missing link to the
+  question the study opened with.
+  \item \textbf{Mesh redistribution.} Re-solve $10$~N at the \emph{same} node
+  count with nodes redistributed to equidistribute $h^3$, and measure whether
+  the residual falls and whether $m_f$ moves by the amount item 1 predicts.
+  Items 1 and 2 together form a closed falsifiable loop: predict, then perturb,
+  then check the prediction.
+  \item \textbf{Cislunar adapters.} Both need their own: the tulip builds its
+  dynamics inline with no reusable right-hand side and stores no duals, and
+  ELFO uses a free-$t_f$ two-primary nine-state solver.
+  \item \textbf{External review} of the Phase 3 conclusions, with the measured
+  residuals and figures attached rather than intentions.
 \end{enumerate}
 
 \section*{Reproducing this}

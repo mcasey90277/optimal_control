@@ -495,7 +495,26 @@ order statement is warranted.
 
 ---
 
-# PHASE 2 — after the 2026-07-28 reasoning review
+# PHASE 2 — SHELVED 2026-07-28 (superseded by Phase 3)
+
+> **STATUS: SHELVED, not abandoned.** The Phase 2 exit criteria were reviewed
+> before any run -- the point of pre-registration -- and BOTH reviewers
+> returned NO, with six blocking issues found independently. The decisive one:
+> the ladder cannot hold a solution branch, and no amount of
+> criteria-tightening fixes that. Getting past it needs a fixed-structure
+> multi-phase reformulation with switch times as explicit NLP variables --
+> substantial new machinery for a question of moderate value.
+>
+> **What Phase 2 got right and keeps:** the diagnosis. Mesh convergence is a
+> COMPARATIVE measurement -- it needs two or more solutions and therefore a
+> branch-identity proof. Every difficulty traced back to that.
+>
+> Phase 3 asks an ABSOLUTE question instead, of a single solution, so the
+> branch problem does not arise. Phase 2 text is retained as the record of
+> what was tried. Review:
+> `verify_common/doc/review_2026-07-28_phase2_criteria.md`.
+
+# PHASE 2 (shelved) — after the 2026-07-28 reasoning review
 
 **Why this section exists, and why it is written BEFORE the runs.** Phase 1's
 recurring failure was not execution — every solve converged — but
@@ -732,3 +751,93 @@ written with a defensible error bar and Step 5's scale makes the basin gains
 admissible, or (b) Step 1 returns FAILURE and that failure is documented as the
 answer to whether branch-matched error bars are obtainable for this problem
 class.
+
+
+---
+
+# PHASE 3 — Continuous PMP residuals of a direct solution
+
+**The question.** Take a converged direct-collocation solution, interpolate it
+to a continuous trajectory, and ask: does it satisfy the CONTINUOUS necessary
+conditions of the indirect (Pontryagin) formulation, and to what residual?
+
+**Why this replaces Phase 2.** A PMP residual is computed from ONE solution.
+Nothing is compared, so there is no branch-identity problem -- the obstacle
+that blocked Phase 2 does not arise. It also closes the gap the 2026-07-28
+review called blocking: `Solve_Succeeded` plus a nodal defect bound verifies
+only that IPOPT solved the transcription, and nothing checks that the result
+approximates a continuous extremal.
+
+## The conditions to check
+
+| # | condition | status today |
+|---|---|---|
+| a | primal dynamics `dX/dsigma = f` | NEW as a continuous residual (nodal defect exists) |
+| b | costate dynamics `dlam/dsigma = -dH/dX` | **NEW -- nothing checks this** |
+| c | boundary values | partly (`foc_check`) |
+| d | transversality | exists (mapped covector) |
+| e | **minimum condition** `u = argmin H` | partly, AT NODES only (`verify_pmp_mee`) |
+| f | **Hamiltonian constancy** | partly (earth `H_t`) |
+| g | switching regularity `Sdot != 0` | partly (`foc_check.sdotMinRel`) |
+| h | multiplier sign conditions | partly (`foc_check.signPct`) |
+
+(a)-(d) are the two-point boundary value problem; **(e) is what makes it
+OPTIMAL rather than merely feasible**. All of this is FIRST ORDER -- none of it
+is second-order sufficiency.
+
+## Two non-negotiable design constraints
+
+**LOCAL PROPAGATION ONLY.** The costate dynamics are exponentially unstable.
+This repo has hit that twice -- the 40-rev forward-shooting wall and the IFS
+wall at ||R|| ~ 0.023. A global shot from lam(0) blows up and measures nothing.
+Propagate per INTERVAL, each starting from the solution's own values, compare
+at the right end, no accumulation. This also yields a residual MAP over time,
+which localizes where the discretization struggles.
+
+**REUSE THE TRANSCRIPTION'S OWN RHS.** The check must be independent in
+INTEGRATION, not in the physics. Re-deriving the dynamics would test my algebra
+rather than the mesh. Use `lt_mee_rhs`, and take `dH/dX` by AD from it.
+
+**Self-validating gate.** Before reporting any residual, recompute the
+transcription's own trapezoidal defects from the stored X, U with the rebuilt
+RHS and confirm they reproduce the stored `maxDefect` to ~1e-12. If not, the
+wiring is wrong and the run ABORTS. A residual computed with the wrong dynamics
+is worse than none.
+
+## Exit criteria (pre-registered)
+
+**P3.1 -- toy validation. GATES EVERYTHING ELSE.** The double-integrator
+bang-bang toy has an analytic extremal.
+- SUCCESS: residuals at the ANALYTIC solution are at integrator tolerance
+  (< 1e-10), and residuals at the DISCRETE solution are non-zero and shrink on
+  a finer grid.
+- FAILURE: large residuals at the analytic solution means the checker is wrong
+  and nothing downstream is interpretable. Do not proceed to a campaign row.
+
+**P3.2 -- earth 10 N production row.**
+- Report per interval: `R_x`, `R_lam`, Hamiltonian variation, and the
+  continuous minimum-condition residuals.
+- SUCCESS is a REPORT, not a threshold. No pass mark is pre-registered because
+  none is defensible yet (see scope note).
+- Expected: residuals concentrated at switch-crossing intervals. If instead
+  uniform, the bang-bang structure is not the dominant error source and H1's
+  mechanism is wrong.
+
+**P3.3 -- cross-row comparison** at 2.5 N and 1 N. Looking for whether residual
+per unit thrust grows with switch count. A RELATIVE claim across rows needs no
+absolute threshold, which is why it is the first genuinely defensible
+conclusion available.
+
+## SCOPE NOTE
+
+**Delivers:** an absolute, per-solution measure of consistency with the
+continuous necessary conditions. No branch problem, no extrapolation.
+
+**Does NOT deliver a mass error bar.** Converting a residual into "m_f is
+accurate to X kg" needs a sensitivity argument that is not part of this phase.
+Do not report a residual as if it were an error bar.
+
+**Says NOTHING about basins.** PMP conditions are NECESSARY -- every local
+extremal satisfies them. The 10 N solution that is 1.015 kg worse than its
+neighbour will pass cleanly. The basin finding stands separate and remains the
+more consequential result.

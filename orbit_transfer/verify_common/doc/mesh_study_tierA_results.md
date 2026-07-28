@@ -1,5 +1,18 @@
 # Tier A results — earth MEE order study (2026-07-27)
 
+> **BOTTOM LINE.** Two independent questions got tangled together and must be
+> reported separately.
+>
+> **Is the production mesh fine enough?** 10 N yes (within-branch movement
+> 0.009 kg, 6e-6 relative). 1 N **no** — 1.55 kg from the Richardson limit,
+> ~15x the precision the campaign quotes. 2.5 N unknown, it never converged.
+> The one clean order is p = 1.228 at 1 N, supporting H1 (first order).
+>
+> **Are the certified rows the best local optima?** **No.** 10 N is beaten by
+> 1.015 kg and 2.5 N by 5.971 kg ON THEIR OWN MESHES. This is non-convexity,
+> not discretization, and at 10 N it is 100x larger than the mesh error. It is
+> the more consequential of the two findings and it is not a mesh problem.
+
 Run: `run_mesh_study_mee({'MEE_M2_10N','MEE_M2_2p5N','MEE_M2_1N'}, [1 2 4 8])`.
 80.3 min wall. **All 12 levels converged** (`Solve_Succeeded`, defect 5.5e-15 to
 9.7e-14). Artifacts under `earth_elliptic_to_geo/direct/results/mesh_study/`
@@ -117,6 +130,58 @@ consistent with O(h) — H1 again, and far from H2's O(h²).
 
 1 N is the exception that proves the mechanism: it is the row whose topology
 stabilized, and it is the only one whose matched count rises with refinement.
+
+## Finding 6 — BASIN PROBE: the certified rows are NOT the best optima of their own meshes
+
+`mesh_basin_probe.m` re-solves a row on **its own production mesh**, varying
+only the SEED. Same grid every time, so any improvement is basin selection, not
+resolution.
+
+**10 N (N = 193):**
+
+| seed | m_f (kg) | sw | dV | vs certified |
+|---|---|---|---|---|
+| row (certified) | 1377.101235 | 19 | 1.676631 | — |
+| downproj:x2 | 1377.101235 | 19 | 1.676631 | +0.000000 |
+| downproj:x4 | 1377.081101 | 20 | 1.676917 | −0.020134 |
+| **downproj:x8** | **1378.116718** | **18** | **1.662173** | **+1.015483** |
+| shift:−1 | 1377.325519 | 18 | 1.673437 | +0.224284 |
+| shift:+1 | 1377.058148 | 19 | 1.677244 | −0.043087 |
+
+**2.5 N (N = 708):**
+
+| seed | m_f (kg) | sw | dV | vs certified |
+|---|---|---|---|---|
+| row (certified cache = 1369.791) | 1370.296488 | 76 | 1.773787 | +0.505469 |
+| downproj:x2 | 1373.277693 | 67 | 1.731163 | +3.486674 |
+| downproj:x4 | 1372.432875 | 71 | 1.743232 | +2.641856 |
+| **downproj:x8** | **1375.762176** | **69** | **1.695711** | **+5.971156** |
+| shift:−1 | 1370.296467 | 76 | 1.773787 | +0.505448 |
+| shift:+1 | 1371.003057 | 75 | 1.763677 | +1.212037 |
+
+**Both rows are beaten on their own mesh** — by 1.015 kg (7.4e-4) at 10 N and
+**5.971 kg (4.4e-3)** at 2.5 N. In both cases the winner also has LOWER dV and
+FEWER switches.
+
+Three things sharpen the picture:
+
+1. **A trivial perturbation finds a better basin.** At 10 N, `shift:−1` — the
+   throttle profile moved by ONE node — reaches an 18-switch solution 0.224 kg
+   better than certified. The better basin is not exotic or hard to reach; the
+   campaign simply never looked.
+2. **This settles 2.5 N's branch question.** Its x8 ladder rung kept 75
+   switches, which made the jump look like it might not be a topology change.
+   Down-projected onto the production mesh it lands at 69 switches and
+   +5.97 kg, so it WAS a different branch. Switch count alone is not a reliable
+   branch indicator.
+3. **Re-solving a row from its OWN seed does not reproduce its cached mass.**
+   2.5 N's cache says 1369.791 kg; re-solving from that same solution gives
+   1370.296 (+0.505), and the Tier A x1 rung gave 1370.157. The three differ
+   only in trivial seed handling — the ladder re-unitizes beta and clips the
+   throttle into its box, the probe does not. **A seed change at the 1e-12
+   level moves the answer by ~0.5 kg.** That is the razor-thin basin structure
+   showing up directly, and it means "the certified value" is really "the value
+   this particular solve path happened to reach".
 
 ## What this does NOT establish
 

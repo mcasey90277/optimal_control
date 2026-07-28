@@ -49,9 +49,13 @@ function R = pmp_residual(sg, X, U, lam, fFun, LFun, opts)
 %   X     - states at nodes [nx x (N+1)]
 %   U     - controls at nodes [nu x (N+1)]
 %   lam   - costates at nodes [nx x (N+1)], already mapped from the NLP duals
-%   fFun  - casadi.Function (x,u) -> dX/dsigma [nx x 1]
-%   LFun  - casadi.Function (x,u) -> running-cost integrand dJ/dsigma [1x1];
-%           pass [] for a pure Mayer problem (then dL/dx = 0)
+%   fFun  - casadi.Function (x,u) -> dX/dsigma, or (x,u,s) when the dynamics
+%           depend EXPLICITLY on the independent variable [nx x 1]. The arity
+%           is detected, not declared. The MEE transcription is the
+%           non-autonomous case: its node longitude is L = pi + sigma*DeltaL,
+%           so the Gauss equations carry sigma explicitly.
+%   LFun  - casadi.Function (x,u) or (x,u,s) -> running-cost integrand
+%           dJ/dsigma [1x1]; pass [] for a pure Mayer problem (dL/dx = 0)
 %   opts  - struct (optional):
 %           .relTol .absTol   integrator tolerances [default 1e-12, 1e-14]
 %           .variant  'interp' | 'pmp' | 'both'    [default 'both']
@@ -70,6 +74,10 @@ function R = pmp_residual(sg, X, U, lam, fFun, LFun, opts)
 %       .H           [1x(N+1)] Hamiltonian at each node
 %       .Hvar        max|H - mean(H)| / max(|H|)  -- constancy diagnostic
 %       .hLocal      [1xN] independent-variable step per interval
+%       .defectCell  [1xN] per-interval norm of the recomputed DISCRETE defect.
+%                    Plotted against .Rx it is the study's most direct picture:
+%                    how much better the solution satisfies the discrete
+%                    equations than the continuous ones.
 %       .selfDefect  max trapezoidal defect recomputed from the caller's fFun
 %       .gatePass    logical: selfDefect <= opts.defectTol
 %       .nx .nu .N
@@ -105,24 +113,34 @@ assert(size(lam,1) == nx, 'pmp_residual:size', 'lam must have %d rows', nx);
 
 import casadi.*
 
+% Arity detection: a non-autonomous transcription passes (x,u,s). Wrapping the
+% autonomous case rather than branching everywhere keeps one code path below.
+fNonAut = (fFun.n_in() >= 3);
+LNonAut = ~isempty(LFun) && (LFun.n_in() >= 3);
+
 % --- AD-derived adjoint right-hand side --------------------------------------
 xs = MX.sym('x', nx);  us = MX.sym('u', nu);  ls = MX.sym('l', nx);
-fx = fFun(xs, us);
+ss = MX.sym('s', 1);
+if fNonAut, fx = fFun(xs, us, ss); else, fx = fFun(xs, us); end
 Hs = ls.' * fx;
-if ~isempty(LFun), Hs = Hs + LFun(xs, us); end
+if ~isempty(LFun)
+    if LNonAut, Hs = Hs + LFun(xs, us, ss); else, Hs = Hs + LFun(xs, us); end
+end
 dHdx  = jacobian(Hs, xs).';                 % [nx x 1]
-adjFn = Function('adj', {xs, us, ls}, {-dHdx});
-HFn   = Function('H',   {xs, us, ls}, {Hs});
+adjFn = Function('adj', {xs, us, ls, ss}, {-dHdx});
+HFn   = Function('H',   {xs, us, ls, ss}, {Hs});
+fEval = Function('fe',  {xs, us, ss}, {fx});
 
 % --- SELF-VALIDATING GATE ----------------------------------------------------
 % Recompute the transcription's own trapezoidal defects with the supplied fFun.
 fN = zeros(nx, N1);
-for k = 1:N1, fN(:,k) = full(fFun(X(:,k), U(:,k))); end
+for k = 1:N1, fN(:,k) = full(fEval(X(:,k), U(:,k), sg(k))); end
 defects = zeros(nx, N);
 for k = 1:N
     h = sg(k+1) - sg(k);
     defects(:,k) = X(:,k+1) - X(:,k) - (h/2)*(fN(:,k) + fN(:,k+1));
 end
+R.defectCell = vecnorm(defects, 2, 1);      % per-interval discrete defect norm
 R.selfDefect = max(abs(defects(:)));
 R.gatePass   = R.selfDefect <= defectTol;
 if ~R.gatePass
@@ -135,7 +153,7 @@ end
 
 % --- Hamiltonian at the nodes ------------------------------------------------
 H = zeros(1, N1);
-for k = 1:N1, H(k) = full(HFn(X(:,k), U(:,k), lam(:,k))); end
+for k = 1:N1, H(k) = full(HFn(X(:,k), U(:,k), lam(:,k), sg(k))); end
 R.H    = H;
 R.Hvar = max(abs(H - mean(H))) / max(max(abs(H)), realmin);
 
@@ -160,14 +178,14 @@ for k = 1:N
 
     if doInterp
         uOf = @(s) U(:,k) + (s - a)/(b - a) * (U(:,k+1) - U(:,k));
-        [~, Z] = ode113(@(s,z) local_rhs(s, z, nx, uOf, fFun, adjFn), [a b], z0, odeOpt);
+        [~, Z] = ode113(@(s,z) local_rhs(s, z, nx, uOf, fEval, adjFn), [a b], z0, odeOpt);
         zp = Z(end,:).';
         R.Rx_interp(k)   = norm(zp(1:nx)      - zEnd(1:nx));
         R.Rlam_interp(k) = norm(zp(nx+1:end)  - zEnd(nx+1:end));
     end
     if doPMP
         uOf = @(s) [];   % placeholder; the PMP law needs z, handled in local_rhs
-        [~, Z] = ode113(@(s,z) local_rhs_pmp(s, z, nx, uPMP, fFun, adjFn), [a b], z0, odeOpt);
+        [~, Z] = ode113(@(s,z) local_rhs_pmp(s, z, nx, uPMP, fEval, adjFn), [a b], z0, odeOpt);
         zp = Z(end,:).';
         R.Rx_pmp(k)   = norm(zp(1:nx)     - zEnd(1:nx));
         R.Rlam_pmp(k) = norm(zp(nx+1:end) - zEnd(nx+1:end));
@@ -197,21 +215,21 @@ end
 end
 
 % ---------------------------------------------------------------------------
-function dz = local_rhs(s, z, nx, uOf, fFun, adjFn)
+function dz = local_rhs(s, z, nx, uOf, fEval, adjFn)
 % LOCAL_RHS  Augmented [state; costate] flow with a PRESCRIBED control.
 % INPUTS: s - independent var; z [2nx x 1]; nx; uOf(s) control; fFun; adjFn
 % OUTPUTS: dz [2nx x 1]
 x = z(1:nx);  l = z(nx+1:end);  u = uOf(s);
-dz = [full(fFun(x,u)); full(adjFn(x,u,l))];
+dz = [full(fEval(x,u,s)); full(adjFn(x,u,l,s))];
 end
 
 % ---------------------------------------------------------------------------
-function dz = local_rhs_pmp(~, z, nx, uPMP, fFun, adjFn)
+function dz = local_rhs_pmp(s, z, nx, uPMP, fEval, adjFn)
 % LOCAL_RHS_PMP  Augmented flow with the control recomputed from the costate by
 % the minimum condition, rather than taken from the stored solution.
 % INPUTS: z [2nx x 1]; nx; uPMP(x,lam); fFun; adjFn   OUTPUTS: dz [2nx x 1]
 x = z(1:nx);  l = z(nx+1:end);  u = uPMP(x, l);
-dz = [full(fFun(x,u)); full(adjFn(x,u,l))];
+dz = [full(fEval(x,u,s)); full(adjFn(x,u,l,s))];
 end
 
 % ---------------------------------------------------------------------------

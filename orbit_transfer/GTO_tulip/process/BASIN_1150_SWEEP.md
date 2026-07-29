@@ -62,6 +62,49 @@ count is not even fixed across them: 24, 25 and 26 all appear at the same t_f.
   (`run_foc_tulip`, `verify_pmp`). It is a better solution, not yet a certified
   row.
 
+## CERTIFIED 2026-07-29 — the winner passes at parity with the flagship
+
+Both run through `run_foc_tulip` on the identical code path:
+
+| gate | winner (24 sw) | flagship (25 sw) |
+|---|---|---|
+| KKT stationarity | 5.54e-13 | 4.89e-13 |
+| primer misalign, max | 4.83e-18 | 5.25e-18 |
+| primer misalign, median | 3.46e-20 | 3.48e-20 |
+| dual sign law | 100% | 100% |
+| min regular Sdot | 28.32 | 27.01 |
+| singular arc nodes | 0 | 0 |
+| mapped transversality | 4.18e-25 | 3.97e-25 |
+| **advisory verdict** | **PASS** | **PASS** |
+
+The winner is a certified row. It can replace the flagship as the published
+solution at this t_f.
+
+### The 1.999 primer error was a red herring
+
+`certify_minfuel_pmp` printed a primer direction error of **1.999** for the
+winner — near-anti-parallel, which looked alarming. The flagship prints
+**2.000** on the same path. It is the *diagnostic*, not the solutions: that
+number comes from the PARTIAL continuous-adjoint recovery, which self-declares
+as REVIEW-not-PASS and carries a known global costate sign ambiguity. `foc_check`'s
+own primer measure, taken from the NLP's exact KKT duals, is ~5e-18 for both.
+
+### An open item this confirms, and a suspicion it refutes
+
+`lamTimeCoV` is **0.056 (winner) and 0.054 (flagship)** — about 5%, against the
+earth campaign's 2.2e-8. When my own PMP adapter reported 5.4% I suspected my
+step-weighted dual→costate map, given this campaign's 1.6e8 σ-step ratio.
+**That suspicion is refuted**: `foc_check` reaches the same number by a
+different code path. The time costate genuinely varies ~5% in the tulip
+campaign, and that is a real open question for its verification section.
+
+### A latent bug found in passing
+
+`run_foc_tulip` writes its sidecar to `certify/results`, which does not exist in
+the repo, so the call fails at the last line after all the work is done. The
+directory has been created; the driver should create it or write alongside the
+artifact.
+
 ## Consequences
 
 - **The flagship should not be published as-is.** The paper's honest position:

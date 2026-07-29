@@ -15,7 +15,18 @@ Two standing goals (2026-07-21): **(a) keep perfecting the direct code,
   messages that route to the relevant script and findings doc. The sweep script
   walks **t_f, not thrust**, for the same reason.
 
-- [ ] **Two certified optima at t_f = 1.150×, 1.43% apart in ΔV.** Found
+- [x] **RESOLVED 2026-07-29 — there are at least SIX optima, not two, and the
+  flagship is beaten.** A 13-seed sweep on the flagship's own mesh found
+  converged optima at m_f 0.84708554, 0.84797502, 0.84805124, 0.84906583,
+  0.84988608 and 0.85008728, with switch counts of 24, 25 AND 26 at the same
+  t_f. The best (24 switches, from the 14-switch artifact) beats the certified
+  flagship by **15.3 g of propellant, 0.677%**. Distinct seeds stay in distinct
+  basins, so these are real and separate. Record:
+  `process/BASIN_1150_SWEEP.md`. **Open follow-up:** certify the winner through
+  `run_foc_tulip`/`verify_pmp` before it replaces the flagship, and re-run the
+  sweep across the ΔV–t_f front, which is probably an envelope over a much
+  richer structure.
+- [ ] ~~**Two certified optima at t_f = 1.150×, 1.43% apart in ΔV.**~~ Found
   2026-07-26 while smoke-testing the new front door. The energy-backbone route
   (`minfuel_at_tf`) and the `run_certified_minfuel` chain both reach 25
   switches, machine-tight, at the SAME t_f, but different local optima:

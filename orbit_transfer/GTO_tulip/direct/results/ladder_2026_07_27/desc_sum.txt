@@ -1,0 +1,5 @@
+UNKNOWN 0.019000 attempt 1 -- retrying
+CRASH 0.019000 attempt 2 -- retrying
+CRASH 0.019000 attempt 3 -- retrying
+STOP at 0.019000
+DONE

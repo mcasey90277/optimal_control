@@ -60,12 +60,14 @@ if nargin < 2 || isempty(outFile)
     outFile = fullfile(d, [n '_scene.mp4']);
 end
 if nargin < 3 || isempty(figSize), figSize = [100 100 1440 1080]; end
-% The demo uses [90 0], which suits its POLAR tulip orbit. Our transfer is
-% dominated by the Earth-bound spiral, which lies near the x-y plane -- viewed
-% edge-on it collapses to a line (verified: the first render looked like a
-% horizontal streak). An oblique view shows both the spiral and the
-% out-of-plane arrival at the south-pole tulip.
-if nargin < 5 || isempty(viewAzEl), viewAzEl = [-40 26]; end
+% DEFAULT MATCHES THE DEMO: [90 0], as in
+% proj7/visualization/record_constellation_animation.m. Note this is edge-on to
+% the Earth-bound spiral, which dominates our transfer, so the spiral reads as a
+% near-horizontal band rather than as loops -- that is inherent to the view, not
+% a bug. It does put the camera in the Moon's plane, which is what makes the
+% lunar arrival legible. Pass e.g. [-40 26] for an oblique view that opens the
+% spiral out instead.
+if nargin < 5 || isempty(viewAzEl), viewAzEl = [90 0]; end
 
 FPS         = 20;
 PUMPKYN_PIE = fullfile(getenv('HOME'),'Desktop','proj7','external','pumpkynPie');

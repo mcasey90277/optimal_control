@@ -375,6 +375,56 @@ was to move the rule from a comment into the arithmetic. The analogous fix here
 would be a check that refuses to report an extrapolated error whenever the
 measured spread of the local coefficient exceeds some threshold.
 
+## The tulip adapter (2026-07-29) — the earth findings REPLICATE on a different transcription
+
+`pmp_residual_tulip.m`, on the GTO→tulip flagship. Self-gate matches the
+solver **exactly** (1.976e-14 both).
+
+| finding | earth (MEE, uniform-in-longitude) | tulip (Sundman CR3BP) |
+|---|---|---|
+| switch cells' share of ΣR_x | 10–16% (population ~10%) | **0.02%** (population 0.6%) |
+| where the residual peaks | **apogee**, 16–19× | **perigee**, 8× |
+| discrete vs continuous ratio | ~7e11 | ~7e10 |
+
+**The central result replicates and strengthens**: switch structure is not the
+error driver. On the tulip, switch cells carry *less* than their population
+share.
+
+**Where the error sits is set by the mesh, and the two campaigns are
+opposites.** Earth is uniform in longitude, so the longest time-steps are at
+apogee; the tulip is Sundman-regularized (κ = r₁^1.5), so the short steps are
+at perigee — and perigee is still 8× worse. Neither mesh equidistributes error;
+each concentrates it somewhere different.
+
+**A new observation with a design consequence.** The tulip's single largest
+residual sits at r₁ = 1.0010 — **lunar distance** — near the end of the
+transfer, where the *single-primary* Sundman clock does not regularize the
+Moon's influence at all. That is independent support, reached from a different
+direction, for the ELFO campaign's decision to fork to a two-primary clock
+κ = (r₁^−q + (r₂/D)^−q)^(−p/q).
+
+Do NOT compare `R_x/h³` across the two campaigns (23827 vs 0.171): different
+non-dimensionalizations and different problems, so the constants are not
+commensurable.
+
+### A suspicion of mine, refuted
+
+`lamTimeCoV` came out at 5.4% on the tulip against the earth's 2.2e-8. I
+suspected my own step-weighted dual→costate map, given this campaign's 1.6e8
+σ-step ratio. **Refuted**: the campaign's own `foc_check` independently reports
+0.056 and 0.054 for the two tulip rows by a different code path. The time
+costate genuinely varies ~5% here. Real open item, not my bug — and the last
+thing blocking the tulip paper's verification section.
+
+### The gate paid for itself a third time
+
+The first version omitted the `tauf0` factor: the collocation runs on σ ∈ [0,1]
+and the solver's own defect line reads `dX/dσ = tauf·dX/dτ`. Recomputed defect
+came out 1.628 against 1.976e-14 and the run aborted. Without the gate I would
+have reported H_τ CoV = 7.3 as a drifting conserved quantity and
+R_x/h³ = 1.8e8 as a dramatic cross-campaign difference — both artifacts of one
+missing scale factor, both looking like findings.
+
 ## Experiments still to run
 
 1. **Objective sensitivity: ΔJ ≈ Σ λᵀ·R.** The costate IS the sensitivity of

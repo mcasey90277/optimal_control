@@ -159,11 +159,17 @@ optimality certificates; and the indirect phase, which has not begun.
   \item \textbf{The direct campaign was flattened} into one front door with
   \camp{lib/certify/viz/tests}, replacing two folders that read as rival
   pipelines.
-  \item \textbf{The flagship survives a basin probe}---the only row examined
-  that does. Six seeds all return $\mf = 0.84906583$ with $25$ switches to
-  $10^{-10}$. \emph{Caveat}: the seed family here excludes the down-projection
-  seeds that beat every earth row, so this shows local robustness, not
-  optimality.
+  \item \textbf{The flagship has been DISPLACED (2026-07-29).} A thirteen-seed
+  sweep on the flagship's own mesh found \textbf{at least six local optima} at
+  $t_f = 1.150\times$, spanning $24$, $25$ \emph{and} $26$ switches. The best
+  found---$24$ switches, reached from the campaign's own $14$-switch
+  artifact---gives $\mf = 12.751309$~kg against the flagship's $12.735987$~kg:
+  \textbf{15.3~g less propellant, $0.677\%$}. It certifies at parity with the
+  flagship on every gate (KKT $5.5\times10^{-13}$, primer $4.8\times10^{-18}$,
+  sign law $100\%$, both ADVISORY PASS), so it is a certified row and not merely
+  a better number. Record: \camp{process/BASIN\_1150\_SWEEP.md}.
+  \emph{The campaign's own TODO had recorded two optima; it was an undercount
+  by a factor of three.}
 \end{itemize}
 
 \subsection{What is open, and one item is a basin problem}
@@ -180,6 +186,14 @@ optimality certificates; and the indirect phase, which has not begun.
   \item \textbf{The indirect campaign is stalled}: multiple shooting reaches
   $1.12\times$ with ten certified switches, but the indirect finishing solve
   stalls at $\|R\|\sim0.023$ on terminal-cluster conditioning.
+  \item \textbf{The time costate varies by $\sim\!5\%$} ($\lambda_t$ CoV
+  $0.056$ and $0.054$ on the two rows), against $2.2\times10^{-8}$ in the earth
+  campaign. Confirmed by two independent code paths, so it is a property of the
+  campaign and not a mapping artifact. This is the last item blocking a
+  verification section in the tulip paper.
+  \item \textbf{The $\dV$--$t_f$ front is probably an envelope} over a much
+  richer structure. If one $t_f$ carries six optima, the front as mapped is a
+  lower bound on achievable performance rather than a characterization of it.
 \end{itemize}
 
 \section{Campaign 4: GTO$\to$ELFO}
@@ -238,6 +252,20 @@ over-represented, not dominant.
 The solution satisfies the equations it was \emph{solved against} some
 $7\times10^{11}$ times better than the continuous equations. That gap is
 discretization error, visible without any ladder.
+
+\paragraph{This replicates on the tulip, and strengthens.} A Sundman-CR3BP
+adapter (self-gate matching the solver exactly at $1.976\times10^{-14}$) finds
+switch cells carrying $0.02\%$ of the total residual against a $0.6\%$
+population share---\emph{less} than their share, where on earth they were
+mildly over-represented. Where the residual peaks is set by the mesh and the
+two campaigns are opposites: earth is uniform in longitude and peaks at apogee
+($16$--$19\times$), the tulip is Sundman-regularized and peaks at perigee
+($8\times$). Neither mesh equidistributes error.
+
+The tulip's single largest residual sits at $r_1 = 1.0010$---\emph{lunar
+distance}---where the single-primary Sundman clock does not regularize the
+Moon's influence. That is independent support, from a different direction, for
+the ELFO campaign's fork to a two-primary clock.
 
 \subsection{What was withdrawn, and why it matters}
 

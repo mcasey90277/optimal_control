@@ -1,0 +1,42 @@
+Delivering the Constellation: Minimum-Fuel Low-Thrust Transfers from GTO to Lunar Tulip Orbits
+
+Tulip-shaped cislunar orbits offer superior navigation geometry over the Moon's
+southern hemisphere, but a constellation is only as practical as the
+trajectories that populate it. This presentation addresses the delivery
+problem: moving a rideshare smallsat from geostationary transfer orbit to a
+tulip orbit on continuous low thrust, for the least propellant.
+
+We model a 15 kg spacecraft with 25 mN of electric propulsion (Isp 2100 s) in
+the Earth-Moon circular restricted three-body problem. The transfer spirals out
+of Earth's gravity well over roughly forty revolutions. We solve it by direct
+collocation, with three ingredients that make the problem tractable. A Sundman
+regularization changes the independent variable so that the mesh follows the
+spacecraft through perigee, where the eccentric spiral is otherwise severely
+ill-conditioned. A continuation from a smooth energy-optimal problem to the
+true minimum-fuel problem then finds the bang-bang thrust structure on its own,
+with no assumption about how many burns there are or where they fall. Finally, a
+Pontryagin-steered refinement uses costates recovered from the transcription to
+place mesh points where the switches actually are.
+
+At 1.15 times the minimum transfer time -- about 32 days -- the certified
+solution needs 3.35 km/s and 2.25 kg of propellant, fifteen percent of wet mass,
+across roughly two dozen burn-coast arcs. Dynamics residuals sit at the 1e-14
+level, and the solution passes an independent check against Pontryagin's
+first-order necessary conditions. We map the full delta-V versus transfer-time
+front, and retarget the same pipeline to an elliptical lunar frozen orbit to
+compare delivery costs between constellation architectures.
+
+One methodological result deserves emphasis, because it affects how such
+transfers should be reported. These solutions are not unique. At a single
+transfer time we find at least six distinct local optima, differing in both
+propellant and in the number of burns. A systematic search over starting
+guesses improves the front by up to 53 grams at short transfer times, while
+leaving it unchanged for longer ones -- the solution landscape fragments as the
+transfer time approaches its minimum, and settles once there is time to spare.
+A single converged trajectory, however tight its residuals, is therefore an
+upper bound on propellant rather than the answer; we report the best found under
+a documented and reproducible search.
+
+These results show that southern-hemisphere PNT constellations are deliverable
+with small rideshare spacecraft, and the method carries over directly to
+cislunar transfer design, constellation deployment, and replenishment planning.

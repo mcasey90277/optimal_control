@@ -1,0 +1,50 @@
+Lunar PNT: Minimum-Time Low-Thrust Transfers from a Distant Retrograde Orbit
+to Lunar Tulip Orbits
+
+Tulip-shaped cislunar orbits offer superior navigation geometry over the Moon's
+southern hemisphere, where sustained surface operations are planned and where
+conventional relay architectures provide the weakest coverage. A constellation
+in such orbits is only useful if its satellites can be delivered there
+affordably, so we address the deployment problem: moving a navigation and relay
+satellite from a distant retrograde orbit, a stable and accessible staging point
+in cislunar space, into its operational tulip orbit on continuous low thrust, in
+the shortest possible time.
+
+We model a 150 kg spacecraft with 70 mN of electric propulsion and a specific
+impulse of 900 seconds, flying in the Earth-Moon circular restricted three-body
+problem. Both the departure orbit and the target are periodic solutions of that
+model: a distant retrograde orbit about the Moon, and a seven-petal tulip orbit
+whose apoapses hang over the southern hemisphere.
+
+The transfer is solved by indirect optimal control. Pontryagin's minimum
+principle converts the minimum-time problem into a two-point boundary value
+problem in which the thrust direction is given exactly by the primer vector and
+the thrust magnitude sits at its upper bound throughout, since there is no
+incentive to coast when time is the cost. What remains is eight unknowns --
+seven initial costates and the transfer duration -- recovered by shooting on the
+terminal conditions. Because the control law is analytic rather than
+discretized, the resulting trajectory satisfies the first-order necessary
+conditions of optimality by construction, and the transfer time is exact rather
+than the outcome of a mesh.
+
+The minimum-time transfer takes about 17.8 days. It requires 0.75 km/s of
+delta-V and 12.2 kg of propellant, roughly eight percent of the wet mass, at an
+average thrust acceleration near 0.05 cm/s squared. The trajectory spirals away
+from the distant retrograde orbit under continuous thrust and is captured
+directly onto the tulip, with no coast phase and no impulsive maneuver anywhere
+in the sequence.
+
+A constellation follows from the same trajectory. Every satellite flies an
+identical transfer, so a staggered schedule of departures from the shared
+staging orbit delivers all of them onto the tulip orbit at a common formation
+epoch. The arrival phasing is not arbitrary: we adopt the optimized phasing
+derived in our recent work on tulip-orbit constellations for lunar south-pole
+navigation and direct-to-Earth relay (arXiv:2607.10482), so the deployment
+places each spacecraft directly into its operational slot. Deployment therefore
+requires one trajectory design and a release schedule rather than a separate
+optimization for each spacecraft, and a replacement satellite launched later
+reaches station on the same 17.8-day arc.
+
+These results show that a southern-hemisphere PNT constellation can be deployed
+from a single cislunar staging orbit using low thrust, with each satellite
+reaching its station in under three weeks.

@@ -1,0 +1,18 @@
+Lunar PNT: Minimum-Time Low-Thrust Transfers from a Distant Retrograde Orbit
+to Lunar Tulip Orbits
+
+Tulip-shaped cislunar orbits offer superior navigation geometry over the Moon's
+southern hemisphere. We addresses the deployment problem: moving
+a navigation/relay satellite from a distant retrograde orbit, a natural staging
+point in cislunar space, into its tulip orbit on continuous low thrust, as
+quickly as possible.
+
+We model a 150 kg spacecraft with 70 mN of electric propulsion (Isp 900 s) in
+the Earth-Moon circular restricted three-body problem. 
+
+The minimum-time transfer takes about 17.8 days and requires 0.75 km/s of
+delta-V and 12.2 kg of propellant. Applying the same transfer to a staggered
+departure schedule optimized for Lunar Southern Hemisphere PNT results in a phased tulip-constellation. 
+
+These results show that a southern-hemisphere PNT constellation can be deployed
+from a single cislunar staging orbit using low thrust, in under three weeks.

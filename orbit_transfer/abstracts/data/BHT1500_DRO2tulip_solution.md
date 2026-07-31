@@ -1,7 +1,18 @@
 # BHT-1500 DRO→tulip minimum-time solution (2026-07-31)
 
-Reproduces the V3 abstract numbers. Run in `proj7/external/pumpkynPie` after
-`startup()`.
+**Reproduce with:** `bht1500_continuation.m` in this directory. It lives in the
+optimal_control tree and writes nothing into pumpkyn or pumpkynPie; it only
+cd's there to call `startup()`.
+
+```matlab
+addpath('orbit_transfer/abstracts/data');
+out = bht1500_continuation();
+```
+
+**Verified 2026-07-31**, run fresh from this repo copy: tf_ND agrees to 3.7e-11,
+delta-V to 4.4e-05 km/s, propellant to 1.9e-04 kg, costates to 4.5e-07, same
+four continuation steps, same zero failures. The small residual differences are
+rounding in the values recorded below, not solver drift.
 
 ## Thruster — verified against https://www.busek.com/hall-thrusters
 

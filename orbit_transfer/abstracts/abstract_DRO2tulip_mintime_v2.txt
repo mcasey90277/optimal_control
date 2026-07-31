@@ -15,10 +15,9 @@ problem. Both the departure orbit and the target are periodic solutions of that
 model: a distant retrograde orbit about the Moon, and a seven-petal tulip orbit
 whose apoapses hang over the southern hemisphere.
 
-The transfer is solved by indirect optimal control: Pontryagin's minimum
-principle turns the minimum-time problem into a two-point boundary value
-problem in which the thrust direction is given exactly by the primer vector and
-the thrust magnitude sits at its upper bound throughout.  The resulting trajectory satisfies the first-order necessary
+The transfer is solved by indirect optimal control: the minimum-time problem is converted 
+into a two-point boundary value
+problem.   The resulting trajectory satisfies the first-order necessary
 conditions of optimality. The numerical methods are informed by the indirect
 approach of Zhang, Topputo, Bernelli-Zazzera and Zhao ("Low-Thrust Minimum-Fuel
 Optimization in the Circular Restricted Three-Body Problem," Journal of
@@ -27,10 +26,7 @@ analogous low-thrust transfer problem in the same dynamical model.
 
 The minimum-time transfer takes about 17.8 days. It requires 0.75 km/s of
 delta-V and 12.2 kg of propellant, roughly eight percent of the wet mass, at an
-average thrust acceleration near 0.05 cm/s squared. The trajectory spirals away
-from the distant retrograde orbit under continuous thrust and is captured
-directly onto the tulip, with no coast phase and no impulsive maneuver anywhere
-in the sequence.
+average thrust acceleration near 0.05 cm/s squared.  
 
 A constellation follows from the same trajectory. Every satellite flies an
 identical transfer, so a staggered schedule of departures from the shared

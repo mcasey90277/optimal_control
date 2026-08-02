@@ -8,17 +8,16 @@ function out = casadi_mintime_dro(rv0, rvf, Tmax, c, muStar, N, X0, U0, tf0, opt
 % it is the one place the direct method's dual-to-costate mapping can be checked
 % against a second opinion rather than against itself.
 %
-% NO SUNDMAN REGULARIZATION -- and this was originally justified by the shape of
-% the transfer (1.18 revolutions about the Moon, Earth distance never below 0.85,
-% closest approach ~4650 km) rather than by measurement. THAT JUSTIFICATION WAS
-% WRONG. Measuring the true continuous-time error afterwards (certify/dro_residual)
-% found worst-interval errors of 12,600 km at N = 400 and 1,100 km at N = 1600 --
-% on the WELL-BEHAVED solutions, not just the pathological deep-flyby one. A
-% uniform-in-time mesh does not resolve this transfer at any density tried.
+% NO SUNDMAN REGULARIZATION -- originally justified by the SHAPE of the transfer
+% (1.18 revolutions about the Moon, closest approach ~4650 km) rather than by
+% measurement, which was the wrong way to decide it. Measuring the continuous
+% error afterwards (certify/dro_residual) showed the second-order scheme does not
+% resolve this transfer at any density tried.
 %
-% The first remedy applied is the fourth-order scheme below (opts.scheme). A
-% Sundman change of variable, or a mesh concentrated near periselene, remain
-% open alternatives. Do not restore the old claim: see FINDINGS.md.
+% The remedy applied was the fourth-order scheme below (opts.scheme), and it was
+% sufficient: 3.3 m worst-interval POSITION error at N = 1600. A Sundman change
+% of variable and a periselene-concentrated mesh remain untried, and are now
+% OPTIONAL rather than necessary. Do not restore the old claim: see FINDINGS.md.
 %
 % FREE FINAL TIME BY NORMALIZED TIME, WITH t_f LIFTED. The independent variable
 % is s in [0,1] and dX/ds = t_f * f(X,U). A single scalar t_f couples to every
@@ -55,9 +54,11 @@ function out = casadi_mintime_dro(rv0, rvf, Tmax, c, muStar, N, X0, U0, tf0, opt
 %              .scheme  ['trapezoid'] or 'hermite-simpson'. Trapezoid is second
 %                       order and is the historical default, kept so the record
 %                       in FINDINGS.md still reproduces. Hermite-Simpson is
-%                       fourth order at the same node count and the same
-%                       constraint count -- it is what the accuracy gate
-%                       (certify/certify_dro_mintime) requires.
+%                       fourth order at the same NODE count -- but NOT the same
+%                       constraint count: the separated form below adds 7N
+%                       interpolation equalities and 4N midpoint controls with
+%                       their own norm and bound constraints. It is what the
+%                       accuracy gate (certify/certify_dro_mintime) requires.
 %              .minAltKm [] minimum altitude above the LUNAR SURFACE, km. Empty
 %                       (default) leaves the problem UNCONSTRAINED, which
 %                       reproduces the original ill-posed sweep. Any finite
@@ -204,8 +205,8 @@ end
 opti.subject_to(X(1:6,1) == rv0(:));
 opti.subject_to(X(7,1) == 1);
 opti.subject_to(X(1:6,end) == rvf(:));
-opti.subject_to(TF(:) > 0);
-opti.subject_to(X(7,:).' > 0.05);          % mass stays physical
+opti.subject_to(TF(:) >= 1e-3);   % non-strict: an NLP cannot impose '>'
+opti.subject_to(X(7,:).' >= 0.05);         % mass stays physical (non-strict)
 
 % --- minimum-altitude path constraint ---------------------------------------
 % WITHOUT THIS THE PROBLEM IS ILL-POSED. Nothing else in the formulation stops
@@ -242,14 +243,21 @@ end
 opti.minimize(TF(1));
 
 % --- warm start -------------------------------------------------------------
+% Seed the state and the control INDEPENDENTLY. The earlier version built both
+% inside 'if isempty(X0)', so a caller supplying U0 but not X0 had its U0
+% silently discarded, and a caller supplying X0 but not U0 reached
+% set_initial(U,[]) and failed.
 if isempty(X0)
-    % Crude: linear in state, mass ramped, thrust along the chord. Deliberately
-    % NOT the indirect answer -- if this converges to the same t_f, the two
-    % methods agree independently rather than by construction.
+    % Crude: linear in state, mass ramped. Deliberately NOT the indirect answer
+    % -- if this converges to the same t_f, the two methods agree independently
+    % rather than by construction.
     X0 = zeros(7,nN);
     for k = 1:6, X0(k,:) = linspace(rv0(k), rvf(k), nN); end
     X0(7,:) = linspace(1, 0.92, nN);
+end
+if isempty(U0)
     ch = rvf(1:3) - rv0(1:3);  ch = ch/max(norm(ch),eps);
+    if ~(norm(ch) > 0.5), ch = [1;0;0]; end      % degenerate endpoints
     U0 = [repmat(ch(:),1,nN); ones(1,nN)];
 end
 if isempty(tf0), tf0 = 4.0; end   % also covers a caller who supplies X0 but not tf0
@@ -265,16 +273,22 @@ if ~isempty(Xm)
     % while the compressed form, whose Xm was consistent by construction,
     % stayed at 4.01734. A warm start must be feasible for the constraints that
     % define it, or it is not a warm start.
-    F0 = zeros(7, nN);
-    for kk = 1:nN, F0(:,kk) = full(fdyn(X0(:,kk), U0(:,kk))); end
+    F0 = full(F(X0, U0));            % F is fdyn.map(nN); no MATLAB-level loop
     h0 = tf0*repmat(ds,7,1);
     opti.set_initial(Xm, 0.5*(X0(:,1:end-1) + X0(:,2:end)) ...
                          + (h0/8).*(F0(:,1:end-1) - F0(:,2:end)));
 end
 if ~isempty(Um)
     Um0 = 0.5*(U0(:,1:end-1) + U0(:,2:end));
-    nrm = max(vecnorm(Um0(1:3,:),2,1), eps);       % re-normalize: averaging two
-    Um0(1:3,:) = Um0(1:3,:) ./ nrm;                % unit vectors does not give one
+    nrm = vecnorm(Um0(1:3,:),2,1);
+    % Averaging two unit vectors does not give a unit vector, and averaging two
+    % OPPOSED ones gives zero -- which would leave the midpoint direction
+    % violating its own norm constraint at the start. Fall back to the left
+    % node's direction in that case rather than dividing by eps.
+    bad = nrm < 1e-8;
+    Um0(1:3,bad) = U0(1:3,find(bad));
+    nrm(bad) = 1;
+    Um0(1:3,:) = Um0(1:3,:) ./ max(nrm, eps);
     opti.set_initial(Um, Um0);
 end
 
@@ -302,20 +316,28 @@ out.success = ok && any(strcmp(out.ipoptStatus, ...
 % same rule the NLP imposed -- a trapezoid check on a Hermite-Simpson solution
 % would report the difference between the two schemes, not a solver error.
 out.scheme = scheme;
-out.Um = [];
+out.Um = [];  out.Xm = [];
 if ~isempty(Um), out.Um = full(sol.value(Um)); end
+if ~isempty(Xm), out.Xm = full(sol.value(Xm)); end
 Fn = zeros(7,nN);
 for k = 1:nN, Fn(:,k) = full(fdyn(out.X(:,k), out.U(:,k))); end
 hn = out.tf*repmat(ds,7,1);
 if isempty(out.Um)
     Dn = out.X(:,2:end) - out.X(:,1:end-1) - (hn/2).*(Fn(:,1:end-1)+Fn(:,2:end));
 else
-    Xmn = 0.5*(out.X(:,1:end-1)+out.X(:,2:end)) + (hn/8).*(Fn(:,1:end-1)-Fn(:,2:end));
-    Fmn = zeros(7,N);
-    for k = 1:N, Fmn(:,k) = full(fdyn(Xmn(:,k), out.Um(:,k))); end
+    % Use the SOLVER'S Xm, not a rebuilt interpolant. Rebuilding it algebraically
+    % would satisfy the interpolation constraint by construction and so would
+    % hide any violation of it -- the check would be checking itself.
+    Xmn = out.Xm;
+    Fmap = fdyn.map(N);
+    Fmn = full(Fmap(Xmn, out.Um));
     Dn = out.X(:,2:end) - out.X(:,1:end-1) - (hn/6).*(Fn(:,1:end-1) + 4*Fmn + Fn(:,2:end));
+    % and report the interpolation residual separately
+    XmRef = 0.5*(out.X(:,1:end-1)+out.X(:,2:end)) + (hn/8).*(Fn(:,1:end-1)-Fn(:,2:end));
+    out.maxInterp = max(abs(XmRef(:) - out.Xm(:)));
 end
 out.maxDefect = max(abs(Dn(:)));
+if ~isfield(out,'maxInterp'), out.maxInterp = 0; end
 out.maxUnit   = max(abs(vecnorm(out.U(1:3,:),2,1) - 1));
 if ~isempty(out.Um)
     out.maxUnit = max(out.maxUnit, max(abs(vecnorm(out.Um(1:3,:),2,1) - 1)));

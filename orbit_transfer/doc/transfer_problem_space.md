@@ -72,7 +72,7 @@ For each transfer problem: **2 methods × 3 flavors = 6 cells.**
 | GTO → ELFO | ✅ min-fuel front + min-time anchor | not started | |
 | elliptic → GEO (2-body) | ✅ certified ladder | reference only | |
 | elliptic → GEO (CR3BP) | ✅ certified ladder | not started | |
-| DRO → tulip | ✅ **min-time CERTIFIED** (2026-08-02) | ✅ min-time (Darin's demo) | **the two methods AGREE**: direct t_f = 4.0152501 vs indirect 4.0152425, 6 sig figs, worst true error 0.32 km |
+| DRO → tulip | ✅ **min-time CERTIFIED** (2026-08-02) | ✅ min-time (Darin's demo) | **the two methods AGREE**: direct t_f = 4.0152501 vs indirect 4.0152425, 5 sig figs, 3.3 m worst position error. Agreement is on t_f + endpoints; a trajectory/costate comparison is still to do |
 
 ### The expansion
 
@@ -101,8 +101,8 @@ the natural place to test the coordination question from `direct_vs_indirect.md`
 in reverse: does a direct solve reproduce the known indirect answer?
 
 **Answered 2026-08-02: yes, but only at fourth order.** Hermite-Simpson at
-N = 1600 gives t_f = 4.0152501 against the indirect 4.0152425 — six significant
-figures — with a worst-interval true error of 0.32 km. Second-order trapezoidal
+N = 1600 gives t_f = 4.0152501 against the indirect 4.0152425 — five significant
+figures — with a worst-interval POSITION error of 3.3 m and 42 m end to end. Second-order trapezoidal
 collocation never got closer than 3% and was inaccurate by 1,100-12,600 km while
 reporting defects of 1e-14.
 
@@ -112,12 +112,14 @@ Two lessons generalize beyond this pair:
    trajectory.** Measured gap on this problem: 1e7. Every campaign here quotes
    1e-14 defects as evidence of a good solve; that evidence is necessary and
    nowhere near sufficient. Measure the continuous residual.
-2. **The unconstrained min-time problem has no minimum.** An intermediate
-   fourth-order rung returned a converged solve with a node 719.6 km INSIDE the
-   Moon. Refining the mesh is not monotone improvement when the problem is
-   ill-posed — better resolution pursues an unbounded objective more
-   effectively. Any transfer with a close approach to a primary needs a path
-   constraint before its "minimum time" means anything.
+2. **Refinement is not monotone.** N=400 -> 800 made the answer worse by every
+   measure (and put a node 719.6 km inside the Moon); only N=1600 landed on the
+   reference. Any single mesh density, including the one with a 1e-14 defect,
+   would have misled. NOTE: we twice concluded from such rows that the
+   unconstrained problem is ill-posed, and twice the evidence was discretization
+   error — the N=800 solve has a 3127 km position error, so it is not a
+   trajectory. The conjecture is open; a path constraint is still prudent
+   engineering.
 
 Still open: the costate comparison itself. The certified direct solution is the
 input it always needed, and it has never been possible before now.

@@ -86,13 +86,17 @@ On the N = 800, 442 km solution:
 | quantity | value |
 |---|---|
 | NLP defect (trapezoid equations) | 1.4e-14 |
-| continuous residual, median | 2.1e-07 |
-| **continuous residual, max** | **1.5** |
-| ratio median-continuous / discrete | 1.5e+07 |
+| **worst-interval POSITION error** | **1441 km** |
+| worst-interval VELOCITY error | 1568 m/s |
 | lunar altitude at the worst interval | 504 km |
 
-A residual of O(1) in ND units is hundreds of thousands of km. **The 442 km
-trajectory is not physical.**
+**The 442 km trajectory is not physical.**
+
+> CORRECTED 2026-08-02 after external review. This table originally reported a
+> "continuous residual, max 1.5 ND = 1e5 km". That was the norm of the FULL
+> seven-component state difference — position, velocity AND mass fraction —
+> multiplied by lStar and labelled km. Dimensionally invalid. The real position
+> error is 1441 km: still disqualifying, but not what was claimed.
 
 ### It is a clean power law, so the mechanism is understood
 
@@ -147,7 +151,7 @@ intervals is the expensive route — which is the argument for regularization.
 Open: which of Sundman / periselene-concentrated mesh / higher-order collocation
 is right here. Untested.
 
-### Corollary 2: the ill-posedness claim loses its evidence
+### Corollary 2: the ill-posedness claim loses its evidence — and lost it TWICE
 
 The demonstration of ill-posedness was the 442 km solution being FASTER than the
 reference. That solution is invalid, so it demonstrates nothing. The three rows
@@ -159,6 +163,18 @@ only at grazing, and a floor is prudent regardless. But **we have NOT
 demonstrated the ill-posedness.** Doing so requires a discretization that
 resolves periselene, then showing t_f still falls monotonically as the floor is
 lowered. Not run.
+
+**AND THEN WE MADE THE SAME MISTAKE AGAIN.** Later the same day the claim was
+re-established on the Hermite-Simpson N=800 result — a converged solve with a
+node 719.6 km inside the Moon. External review pointed out that this solution
+has a **3,127 km position error**, so it is not a trajectory of the continuous
+problem either, and a node inside the Moon in an infeasible DISCRETE solution
+proves nothing about the continuous one. Withdrawn again.
+
+Twice, one section apart, on the same class of evidence. The lesson is worth
+more than the claim: **no conclusion about the continuous problem may be drawn
+from a converged NLP whose continuous residual has not been measured** — not
+about optimality, not about feasibility, not about well-posedness.
 
 ## The minimum-altitude path constraint
 
@@ -230,18 +246,24 @@ First certified direct min-time DRO->tulip solution.
 
 ```
 ===== CERTIFICATION: DRO->tulip min-time (hermite-simpson, N = 1600) =====
-G1  continuous accuracy (worst interval)        3.2230e-01 km  (tol 1.0)   PASS
-G2  agreement with the indirect reference t_f   1.8997e-06     (tol 1e-4)  PASS
-G3  NLP defect                                  3.3307e-16     (tol 1e-9)  PASS
-G4  control unit-norm error                     2.2204e-16                 PASS
-G5  terminal boundary error                     0.0000e+00                 PASS
-G6  throttle saturation (min u)                 1.0000e+00                 PASS
+G1   local POSITION accuracy (worst interval)      3.2946e-03 km  (tol 1.0)   PASS
+G1v  local VELOCITY accuracy (worst interval)      8.4152e-04 m/s (tol 1.0)   PASS
+G1b  GLOBAL POSITION accuracy (flown end to end)   4.1773e-02 km  (tol 1.0)   PASS
+G1bv GLOBAL VELOCITY accuracy (end to end)         1.8498e-03 m/s (tol 1.0)   PASS
+G2   agreement with the indirect reference t_f     1.8997e-06     (tol 1e-4)  PASS
+G3   NLP defect                                    2.9143e-16     (tol 1e-9)  PASS
+G4   control unit-norm error                       2.2204e-16                 PASS
+G5   terminal boundary error                       0.0000e+00                 PASS
+G6*  throttle saturation, ADVISORY (min u)         1.0000e+00                 PASS
+G8   lifted-time spread                            0.0000e+00                 PASS
+G9   Hermite interpolation residual                4.4409e-16                 PASS
     t_f = 4.0152501 ND = 17.798 days   vs indirect 4.0152425
-    min node altitude 4673.3 km, worst interval at 4673 km
+    local POSITION error: max 3.3 m, sum 26.8 m, global 41.8 m (mild accumulation)
+    control reconstruction: min direction norm 1.0000, throttle overshoot 8.2e-09
 ```
 
-**The direct method independently reproduces the indirect t_f to 6 significant
-figures**, with worst-interval true error 0.32 km. That is the cross-validation
+**The direct method independently reproduces the indirect t_f to 5 significant
+figures**, with 3.3 m worst-interval position error and 42 m end-to-end. That is the cross-validation
 this campaign was built for, and it had never been possible before: the earlier
 trapezoid answers were off by 3-80% and inaccurate by 1,100-12,600 km.
 
@@ -249,11 +271,11 @@ trapezoid answers were off by 3-80% and inaccurate by 1,100-12,600 km.
 
 Hermite-Simpson, seeded from the indirect reference, unconstrained:
 
-| N | t_f | rel err | worst true error | min node altitude |
+| N | t_f | rel err | worst POSITION error | min node altitude |
 |---|---|---|---|---|
-| 400 | 4.6808938 | 1.66e-01 | 761 km | 4818 km |
-| 800 | 4.1628670 | 3.68e-02 | **1,017,917 km** | **-719.6 km (INSIDE THE MOON)** |
-| 1600 | **4.0152501** | **1.90e-06** | **0.32 km** | 4673 km |
+| 400 | 4.6808938 | 1.66e-01 | 7.38 km | 4818 km |
+| 800 | 4.1628670 | 3.68e-02 | **3127 km** | **-719.6 km (INSIDE THE MOON)** |
+| 1600 | **4.0152501** | **1.90e-06** | **0.0033 km (3.3 m)** | 4673 km |
 
 The N=800 solve returned Solve_Succeeded with an HS defect at machine precision
 and **a node 719.6 km beneath the lunar surface**.
@@ -304,6 +326,14 @@ originally offered. The concern was right; the first proof was not.
 
 ## Next
 
+0. **Untried suggestions from the 2026-08-02 external review, recorded so they
+   are not lost:** replace `opti.minimize(TF(1))` with `minimize(mean(TF))` so
+   the cost gradient is spread across the lifted copies instead of loaded onto
+   one (Gemini: better KKT conditioning; not tried, since changing the objective
+   risks perturbing a certified result); and add a Betts-style polynomial
+   residual alongside the re-integration, which is far cheaper and mirrors the
+   mesh-refinement math, as a complement rather than a replacement.
+
 1. **Redo the accuracy ladder WITH the altitude floor on.** The unconstrained
    problem is not a valid accuracy testbed — its minimizing sequence passes
    through the Moon. Accuracy and well-posedness turned out not to be separable
@@ -318,8 +348,9 @@ originally offered. The concern was right; the first proof was not.
    G2b optimizer quality (free t_f with a floor, require a well-resolved
    solution).
 4. **Mesh refinement and Sundman are now OPTIONAL, not required.** Fourth order
-   alone reached 0.32 km. Either remains worth trying as a cheaper route to the
-   same accuracy at lower N, but neither is on the critical path any more.
+   alone reached 3.3 m worst-interval position error. Either remains worth
+   trying as a cheaper route to the same accuracy at lower N, but neither is on
+   the critical path any more.
 5. **The cell this campaign was built for is now unblocked:** compare the direct
    duals against the indirect costates via the Hager covector mapping. It needed
    a trustworthy direct solution sitting on the reference, and the certified

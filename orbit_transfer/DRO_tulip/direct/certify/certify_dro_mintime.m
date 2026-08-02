@@ -81,6 +81,19 @@ verbose   = d('verbose', true);
 
 lStar = p.lStar;  mu = p.muStar;
 
+% G2 compares against pumpkyn.cr3bp.tfMin, which has NO path-constraint
+% capability. Once a floor is imposed the constrained problem has no indirect
+% reference at all, so G2 is not merely loose -- it is meaningless. Disable it.
+floorImposed = isfield(o,'minAltKm') && ~isnan(o.minAltKm);
+if floorImposed && ~isempty(tfRef)
+    tfRef = [];
+    if verbose
+        fprintf(['\n  [G2 disabled: an altitude floor is imposed and the indirect\n' ...
+                 '   reference solves the UNCONSTRAINED problem, so it is not a\n' ...
+                 '   reference for this one.]\n']);
+    end
+end
+
 %% the measurement
 R = dro_residual(o, mu, Tmax, c);
 worstKm  = R.RrMax * lStar;                       % POSITION only (see dro_residual)
@@ -126,8 +139,20 @@ G(end+1) = add('G4','control unit-norm error', o.maxUnit, 1e-8, ...
                o.maxUnit <= 1e-8, '-');
 G(end+1) = add('G5','terminal boundary error', o.termErr, 1e-9, ...
                o.termErr <= 1e-9, '-');
-G(end+1) = add('G6','throttle saturation (min u; min-time expects 1)', ...
+% G6 is ADVISORY. Full throttle is an empirical property of the extremals found
+% here, not a theorem: minimum-time problems can admit legitimate coast arcs,
+% particularly under path constraints. It is reported, and excluded from passAll.
+G(end+1) = add('G6*','throttle saturation, ADVISORY (min u)', ...
                o.thrMin, 1-1e-6, o.thrMin >= 1-1e-6, '-');
+
+if isfield(o,'tfSpread')
+    G(end+1) = add('G8','lifted-time spread (all copies equal)', o.tfSpread, ...
+                   1e-10, o.tfSpread <= 1e-10, '-');
+end
+if isfield(o,'maxInterp') && ~isempty(o.maxInterp) && o.maxInterp > 0
+    G(end+1) = add('G9','Hermite interpolation residual', o.maxInterp, ...
+                   1e-9, o.maxInterp <= 1e-9, '-');
+end
 
 % the floor, if one was imposed, checked BETWEEN nodes as well as at them
 if isfield(o,'minAltKm') && ~isnan(o.minAltKm)
@@ -136,9 +161,12 @@ if isfield(o,'minAltKm') && ~isnan(o.minAltKm)
                    o.minAltKm, trueMinKm >= o.minAltKm, 'km');
 end
 
-pass = G(strcmp({G.id},'G1')).pass;
-if ~isempty(globTolKm), pass = pass && G(strcmp({G.id},'G1b')).pass; end
-if ~isempty(tfRef),     pass = pass && G(strcmp({G.id},'G2')).pass; end
+% THE VERDICT INCLUDES EVERY MANDATORY GATE. An earlier version keyed the verdict
+% on G1 and G2 alone while printing the word CERTIFIED, so a solution could be
+% declared certified while failing terminal feasibility or the altitude floor.
+% Advisory gates (id ending in '*') are reported but excluded.
+isAdv = cellfun(@(x) endsWith(x,'*'), {G.id});
+pass    = all([G(~isAdv).pass]);
 passAll = all([G.pass]);
 
 C = struct('pass',pass, 'passAll',passAll, 'gates',G, 'resid',R, ...
@@ -154,7 +182,9 @@ if verbose
         fprintf('%-4s %-48s %12.4e %12.4e  %s\n', G(k).id, G(k).name, ...
             G(k).value, G(k).tol, local_mark(G(k).pass));
     end
-    fprintf('  worst interval sits at %.0f km lunar altitude\n', worstAltKm);
+    fprintf('  worst-error interval sits at %.0f km lunar altitude\n', worstAltKm);
+    fprintf('  control reconstruction (%s): min direction norm %.4f, throttle overshoot %.2e\n', ...
+        R.scheme, R.minDirNorm, R.thrOvershoot);
     fprintf('  t_f = %.6f ND = %.3f days\n', o.tf, o.tf*p.tStar/86400);
     fprintf('  local POSITION error: max %.4f km, sum %.4f km', worstKm, sum(R.Rr)*lStar);
     if ~isnan(globKm)
@@ -166,7 +196,12 @@ if verbose
         fprintf('\n');
     end
     if pass
-        fprintf('  VERDICT: CERTIFIED (accuracy and agreement gates all pass)\n');
+        fprintf(['  VERDICT: CERTIFIED -- accurate to the stated tolerances, and\n' ...
+                 '           (where checked) agreeing with the reference extremal.\n' ...
+                 '           This certifies TRANSCRIPTION ACCURACY and reproduction\n' ...
+                 '           of a LOCAL extremal. It does not certify global\n' ...
+                 '           optimality, and it says nothing about whether the\n' ...
+                 '           underlying OCP is well posed.\n']);
     else
         fprintf('  VERDICT: NOT CERTIFIED -- this t_f is not an answer\n');
     end
@@ -223,7 +258,9 @@ for k = 1:numel(t)-1
     else
         uOf = @(tt) ua + ((tt-a)/h)*(ub-ua);
     end
-    [~,Z] = ode113(@(tt,z) local_f(z, uOf(tt), mu, Tmax, c), linspace(a,b,9), o.X(:,k), odeo);
+    % 65 samples, not 9. The floor is active at periselene, where the trajectory
+    % turns fastest, and a coarse sample can step straight over the minimum.
+    [~,Z] = ode113(@(tt,z) local_f(z, uOf(tt), mu, Tmax, c), linspace(a,b,65), o.X(:,k), odeo);
     rr = vecnorm(Z(:,1:3) - [1-mu 0 0], 2, 2);
     amin = min(amin, min(rr)*lStar - rMoonKm);
 end

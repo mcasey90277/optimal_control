@@ -26,25 +26,25 @@ retrograde orbit about the Moon, and a seven-petal tulip orbit whose apoapses
 hang over the lunar southern hemisphere. The problem is solved by direct
 collocation and compared against an existing indirect (Pontryagin shooting)
 solution of the same transfer---the first problem in this programme where an
-independent second opinion exists. Two findings, and they are independent of each
-other. First, a cautionary one: trapezoidal solutions that converged to defects
-of $10^{-14}$, and that appeared to \emph{beat} the reference minimum time, are
-not trajectories of the continuous problem at all---their true local error at
-closest approach is $O(1)$ in nondimensional units, seven orders of magnitude
-above the defect, scaling as altitude$^{-4.2}$. \textbf{A machine-tight defect
-is a statement about the discretization, not about the trajectory.} Replacing
-the second-order scheme with fourth-order Hermite--Simpson removes this: at
-$N = 1600$ the direct solve is certified to a worst-interval error of
-$0.32$~km and reproduces the indirect $t_f$ to six significant figures---the
-direct-against-indirect cross-validation this programme was built to perform.
-Second, and not repaired by any amount of accuracy: the unconstrained problem
-has \textbf{no minimum}. An intermediate solve on the same fourth-order ladder
-returns a converged, machine-feasible trajectory with a node $719.6$~km
-\emph{beneath the lunar surface}. We report the minimum-altitude path constraint
-that addresses this, why adding one costs a block of algebraic inequalities in
-the direct formulation against a multipoint boundary-value problem with costate
-jumps in the indirect one, and the pass/fail gate that separates a converged NLP
-from an answer.
+independent second opinion exists. The headline result is a certified
+agreement: with fourth-order Hermite--Simpson at $N = 1600$, the direct solve
+reproduces the indirect $t_f$ to five significant figures ($4.0152501$ against
+$4.0152425$), with a worst-interval position error of $3.3$~m and an end-to-end
+propagated position error of $42$~m. That is the direct-against-indirect
+cross-validation this programme was built to perform. Reaching it required
+discarding the second-order scheme entirely: trapezoidal solutions that
+converged to defects of $10^{-14}$, and that appeared to \emph{beat} the
+reference minimum time, are not trajectories of the continuous problem at all.
+\textbf{A machine-tight defect is a statement about the discretization, not
+about the trajectory}---here the two differ by orders of magnitude. We also
+report a minimum-altitude path constraint, why adding one costs a block of
+algebraic inequalities in the direct formulation against a multipoint
+boundary-value problem in the indirect one, and the pass/fail gate that
+separates a converged NLP from an answer. One \emph{negative} result recurs
+through the document and is stated plainly rather than buried: we twice
+concluded that the unconstrained problem is ill-posed, and twice the evidence
+turned out to be discretization error rather than physics. That conjecture
+remains open.
 \end{abstract}
 
 \tableofcontents
@@ -308,6 +308,7 @@ acceleration $u T_{\max}/m$ grows as propellant is spent.
 The final mass is free---minimum time does not care what it costs---and the
 final time $t_f$ is itself a decision variable.
 
+\label{sec:ocp_pmp}
 \paragraph{What Pontryagin says about the answer.} Although we solve
 \eqref{eq:ocp} directly, the indirect view predicts the structure and is worth
 stating because we use it as a check. With costates
@@ -319,11 +320,19 @@ and the throttle is bang-bang on the sign of a switching function,
   S = -\frac{\lVert \boldsymbol{\lambda}_v \rVert\, c}{m} - \lambda_m,
   \qquad u^\star = \begin{cases} 1, & S < 0,\\ 0, & S > 0.\end{cases}
 \]
-For minimum time one expects $u^\star \equiv 1$: there is no reason to coast
-when time is the cost. That is an expectation about the \emph{solution},
-however, not a constraint of the problem, and we deliberately leave $u$ free so
-that saturation can be observed rather than imposed. In the converged solutions
-it is: $\min_t u(t) = 1.000000$ to six figures at every mesh density tried.
+For this problem one expects $u^\star \equiv 1$, and in every converged solution
+here it is: $\min_t u(t) = 1.000000$ to six figures at every mesh density tried.
+That is an \emph{empirical} property of these extremals, not a consequence of
+the objective---minimum-time problems can admit genuine coast arcs when the
+endpoint geometry or an active path constraint makes one optimal. We therefore
+leave $u$ free so that saturation is observed rather than imposed, and the gate
+of Section~\ref{sec:gate} reports it as \emph{advisory} rather than as a
+required condition.
+
+Two further conditions belong to this formulation and are stated here because
+both are used later. The final mass is free, giving the transversality condition
+$\lambda_m(t_f) = 0$; and the final time is free with autonomous dynamics,
+giving $H(t_f) = 0$ and hence $H \equiv 0$ along the extremal.
 
 \section{Discretization}
 \label{sec:disc}
@@ -351,7 +360,8 @@ as \emph{defect} constraints,
 \label{eq:defect}
 \end{equation}
 together with $\lVert \bal_k \rVert^2 = 1$, $0 \le u_k \le 1$, the boundary
-conditions of \eqref{eq:ocp}, and $m_k > 0.05$ to keep the mass physical. The
+conditions of \eqref{eq:ocp}, and $m_k \ge 0.05$ to keep the mass physical (a
+non-strict bound: an NLP cannot impose a strict inequality). The
 objective is simply $t_f$.
 
 \subsection{Why \texorpdfstring{$t_f$}{tf} must be lifted}
@@ -387,6 +397,16 @@ $\max_k |T_k - T_1|$ is reported and comes back identically zero.
 The trapezoidal scheme of Section~\ref{sec:disc} is second-order accurate, and
 Section~\ref{sec:contres} shows that is not enough on this problem at any node
 count tried. The remedy applied is a fourth-order scheme at the same node count.
+
+\paragraph{Global order and local order are different numbers, and the
+diagnostic measures the second.} Hermite--Simpson has fourth-order \emph{global}
+state accuracy for smooth arcs, and correspondingly a \emph{local} truncation
+error of $O(h^5)$. The residual of Section~\ref{sec:contres} restarts the
+integration at every node, so it measures the local error. Halving $h$ should
+therefore reduce it by about $2^5 = 32$; the measured factor is $37.6$, which is
+the consistency check on the implementation rather than an anomaly. Quoting the
+scheme as ``fourth order'' while measuring $h^5$ is standard but worth stating
+explicitly, since the two numbers otherwise look contradictory.
 
 \subsection{The scheme}
 
@@ -439,22 +459,29 @@ Seeded from the indirect reference, unconstrained, at matched node counts:
 
 \begin{table}[h]
 \centering\small
-\begin{tabular}{lrrr}
+\begin{tabular}{llrrr}
 \toprule
-scheme & $N$ & $t_f$ & worst true error \\
+scheme & form & $N$ & $t_f$ & worst position error \\
 \midrule
-trapezoid        & $400$  & $4.1438682$ & $12\,594$ km \\
-Hermite--Simpson & $400$  & $4.0173381$ & $347$ km \\
+trapezoid        & ---         & $400$  & $4.1438682$ & $1441$ km \\
+Hermite--Simpson & compressed  & $400$  & $4.0173381$ & --- \\
+Hermite--Simpson & separated   & $400$  & $4.6808938$ & $7.38$ km \\
 \midrule
-trapezoid        & $1600$ & $7.253098$  & $1\,100$ km \\
-Hermite--Simpson & $1600$ & $\mathbf{4.0152501}$ & $\mathbf{0.32}$ \textbf{km} \\
+trapezoid        & ---         & $1600$ & $7.253098$  & --- \\
+Hermite--Simpson & separated   & $1600$ & $\mathbf{4.0152501}$ & $\mathbf{0.0033}$ \textbf{km} \\
 \bottomrule
 \end{tabular}
 \end{table}
 
-At $N = 400$ the fourth-order scheme is $61\times$ better on $t_f$ and
-$36\times$ better on accuracy, at the same node count and slightly less wall
-time. At $N = 1600$ it certifies (Section~\ref{sec:gate}).
+\textbf{The two $N = 400$ Hermite--Simpson rows are not a typographical
+error}, and an earlier version of this document listed only the first without
+saying which form produced it. The compressed and separated forms are
+algebraically the same problem, but the separated form carries $7N$ additional
+variables and $7N$ additional equalities, so the interior-point path runs through
+a different space and can converge to a different local minimum---which here it
+does. Since the compressed form cannot be used beyond $N = 400$ at all, the
+separated row is the one that matters; it is also the one that goes on to
+certify at $N = 1600$ (Section~\ref{sec:gate}).
 
 \subsection{A warm start must be feasible for the constraints that define it}
 
@@ -487,8 +514,10 @@ lunar surface,
   \qquad \forall\, t \in [0, t_f].
 \label{eq:pathcon}
 \end{equation}
-In the transcription this becomes one algebraic inequality per node. We impose
-it in \emph{squared} form,
+In the transcription this becomes one algebraic inequality per enforcement
+point---the $N+1$ nodes under trapezoidal collocation, and the nodes plus the $N$
+interior midpoints under Hermite--Simpson, where the midpoint state exists as a
+variable. We impose it in \emph{squared} form,
 \begin{equation}
   \lVert \vecr_k - (1-\mu,0,0) \rVert^2 \;\ge\; \rho_{\min}^2,
   \qquad k = 1,\dots,N+1,
@@ -509,8 +538,8 @@ Yes---and the asymmetry is larger than it first appears.
 
 For the \textbf{direct} method a path constraint is structurally the same kind
 of object as everything else in the NLP. The problem is already a constrained
-optimization; \eqref{eq:pathcon_disc} adds rows to a matrix that has millions of
-rows already. The interior-point solver handles the inequality with the same
+optimization; \eqref{eq:pathcon_disc} adds one sparse block of inequality rows
+to a Jacobian that already carries tens of thousands. The interior-point solver handles the inequality with the same
 barrier machinery it uses for $0 \le u_k \le 1$. Nothing about the formulation
 changes. The switch from an unconstrained to a constrained problem cost one
 optional argument in the solver's interface.
@@ -525,14 +554,15 @@ inequality, one must:
   \item derive the order $q$ of the constraint, meaning how many times
         \eqref{eq:pathcon} must be differentiated along the dynamics before the
         control appears (for an altitude constraint under thrust, $q = 2$);
-  \item append the constrained-arc condition to the Hamiltonian with a
-        multiplier $\eta(t) \ge 0$, active only on the constrained arc and
-        complementary to the constraint;
-  \item impose \textbf{junction conditions} at entry to and exit from each
-        constrained arc, where the costates are permitted to \emph{jump}:
+  \item adjoin the constraint to the Hamiltonian with a multiplier
+        $\eta(t) \ge 0$ supported only on the boundary arc, together with the
+        tangency conditions $C = C^{(1)} = 0$ at entry;
+  \item impose \textbf{junction conditions} at entry to the boundary arc, where
+        the costate is permitted to \emph{jump}:
         $\boldsymbol{\lambda}(\tau^-) = \boldsymbol{\lambda}(\tau^+) +
         \sum_{j=0}^{q-1}\nu_j \,\partial_x C^{(j)}$, introducing further unknown
-        multipliers $\nu_j$;
+        multipliers $\nu_j$, where $\partial_x$ is a gradient with respect to the
+        \emph{full} state $(\vecr,\vecv,m)$;
   \item solve the resulting multipoint boundary-value problem, whose unknown
         vector now contains the entry and exit times as well.
 \end{enumerate}
@@ -542,9 +572,27 @@ This is the same category of difficulty that makes min-fuel harder than
 min-time for the indirect method---the burden of guessing a discrete structure
 in advance---and here it arrives even in a min-time problem.
 
+\paragraph{Three qualifications on the paragraph above, all of them from
+review.} First, the formulation just described is the \emph{direct-adjoining}
+one (Hartl, Sethi and Vickson, 1995). It is not the only convention: an
+\emph{indirect-adjoining} formulation appends the $q$-th derivative $C^{(q)}$ to
+the Hamiltonian and yields \emph{continuous} costates with discontinuous
+derivatives instead. So the costate discontinuity above is a property of the
+convention, not of the problem, and the convention must be named---as it now is.
+Second, the sign restrictions are not uniform across the $\nu_j$: the multiplier
+attached to the constraint itself is sign-restricted, while the tangency
+multipliers $\nu_1,\dots,\nu_{q-1}$ are in general \emph{unrestricted}. Third,
+the comparison should be narrowed to what it actually supports: direct
+transcription makes a state-constrained problem substantially easier to
+\emph{pose and numerically explore}. It is not free---the direct method still
+owes continuous-time constraint verification and mesh refinement---and modern
+indirect practice need not always guess arcs by hand, since continuation,
+multiple shooting and boundary-arc detection all exist.
+
 \paragraph{The caveat, and it is a real one.} The direct method's advantage is
 in \emph{formulation}, not in \emph{rigour}. Constraint
-\eqref{eq:pathcon_disc} is imposed \textbf{at the nodes only}. Between two
+\eqref{eq:pathcon_disc} is imposed only at a \textbf{finite set of points} --
+the nodes, plus the interior midpoints under Hermite--Simpson. Between two
 adjacent nodes the interpolated trajectory is free to dip below $\rho_{\min}$,
 and nothing in the NLP forbids it. This matters here more than it usually would,
 because the constraint is active precisely at periselene---where the trajectory
@@ -608,10 +656,13 @@ first and second derivatives by automatic differentiation---no finite
 differencing anywhere---and hands the problem to IPOPT, an interior-point solver
 for large sparse nonlinear programs, with MUMPS as the sparse linear solver.
 
-At $N = 800$ the program carries $7 \times 801$ state variables,
-$4 \times 801$ controls and $801$ lifted time copies, against roughly $5600$
-defect equations plus the norm, boundary and continuity constraints. Tolerance
-is set to $10^{-10}$.
+For the \emph{trapezoidal} scheme at $N = 800$ the program carries
+$7 \times 801$ state variables, $4 \times 801$ controls and $801$ lifted time
+copies, against roughly $5600$ defect equations plus the norm, boundary and
+continuity constraints. The separated Hermite--Simpson scheme of
+Section~\ref{sec:hs} adds $7N$ midpoint states, $4N$ midpoint controls, $7N$
+interpolation equalities and $N$ further norm constraints on top of that.
+Tolerance is set to $10^{-10}$.
 
 \paragraph{Verifying the answer.} A converged NLP is not by itself a solved
 optimal control problem, so each solve reports: the maximum defect recomputed
@@ -663,21 +714,21 @@ solutions:
 \centering\small
 \begin{tabular}{rrrrr}
 \toprule
-$N$ & closest approach & NLP defect & residual, median & residual, \textbf{max} \\
+$N$ & closest approach & NLP defect & worst POSITION error & worst VELOCITY error \\
 \midrule
-$400$  & $4819$ km & $3.3\times10^{-14}$ & $1.9\times10^{-7}$ & $3.2\times10^{-2}$ \\
-$800$  & $441$ km  & $1.4\times10^{-14}$ & $2.1\times10^{-7}$ & $1.5$ \\
-$1600$ & $4673$ km & $3.9\times10^{-16}$ & $2.5\times10^{-8}$ & $2.9\times10^{-3}$ \\
+$800$  & $441$ km  & $1.4\times10^{-14}$ & $1441$ km & $1568$ m/s \\
 \bottomrule
 \end{tabular}
 \end{table}
 
-The middle row is the pathological deep flyby and its $O(1)$ error is expected.
-The other two are the well-behaved solutions, at a periselene comparable to the
-reference's---and their worst-interval errors are still $3.2\times10^{-2}$ and
-$2.9\times10^{-3}$ in nondimensional units, which is $12\,600$ km and
-$1\,100$ km. \textbf{None of the three trajectories is accurate}, even the ones
-that never go near the Moon.
+That row is the pathological deep flyby, and a position error of $1441$~km
+against a defect of $10^{-14}$ is the whole point. \textbf{The trapezoidal
+solutions at other mesh densities are not tabulated here}, because they converged
+to different local minima with different final times and so cannot be read as a
+refinement sequence---comparing them would be comparing three different
+trajectories, not one trajectory at three resolutions. What can be said is that
+no trapezoidal solve on this problem passed the accuracy gate of
+Section~\ref{sec:gate} at any density tried, while the fourth-order scheme does.
 
 So the honest statement is not the hedged one. It is: \emph{a uniform-in-time
 trapezoidal mesh is inadequate for this transfer at every density tried,
@@ -702,8 +753,8 @@ revolution count alone was not enough.
 \paragraph{What was done about it.} Of the three remedies listed above, only
 the third was tried, and it was sufficient: fourth-order Hermite--Simpson
 (Section~\ref{sec:hs}) reaches a worst-interval error of $0.32$~km at
-$N = 1600$, against the second-order scheme's $1\,100$~km at the same node
-count. \textbf{Sundman regularization and periselene mesh concentration remain
+$N = 1600$, a regime the second-order scheme did not reach at any node count
+tried. \textbf{Sundman regularization and periselene mesh concentration remain
 untried, and are now optional rather than necessary}---either may reach the same
 accuracy at lower $N$, but neither is on the critical path. That is worth
 stating plainly, because the natural reading of the paragraphs above is that a
@@ -762,19 +813,31 @@ disagreeing, not three optima. At that point the ill-posedness was a physical
 conjecture---a deeper flyby really does give a stronger assist---but not a
 result.
 
-It became a result on the fourth-order ladder of Section~\ref{sec:hs}. At
-$N = 800$, seeded from the indirect reference, the solver returns
-\code{Solve\_Succeeded} with a Hermite--Simpson defect at machine precision and
-\textbf{a node $719.6$~km beneath the lunar surface}. That is evidence of a
-different kind from the first attempt: no quadrature argument produces a node
-inside the primary, and none explains one away. Nothing in \eqref{eq:ocp}
-forbids the trajectory from passing through the Moon, and given the chance to
-shorten the transfer by doing so, the optimizer takes it.
+We then believed it had become a result on the fourth-order ladder of
+Section~\ref{sec:hs}. At $N = 800$, seeded from the indirect reference, the
+solver returns \code{Solve\_Succeeded} with a Hermite--Simpson defect at machine
+precision and \textbf{a node $719.6$~km beneath the lunar surface}. It seemed
+evidence of a different kind: nothing in \eqref{eq:ocp} forbids the trajectory
+from passing through the Moon, and given the chance to shorten the transfer by
+doing so, the optimizer took it.
 
-\textbf{The unconstrained problem therefore has no minimum}, and the path
-constraint of Section~\ref{sec:pathcon} is not a refinement but a precondition.
-The concern stated originally was correct; the first proof offered for it was
-not, and this one is.
+\textbf{That inference was also wrong, and for the same reason as the first
+one.} The $N = 800$ solution has a worst-interval position error of
+$3\,127$~km. It is not a trajectory of the continuous problem either, so a node
+inside the Moon in an \emph{infeasible discrete} solution proves nothing about
+the continuous one. Making the same mistake twice, one section apart, is worth
+recording as its own lesson: \emph{a converged NLP is evidence about the
+transcription until its continuous residual has been measured, and about nothing
+else.}
+
+What the $N = 800$ result does show is that the discrete transcription will
+exploit a missing physical exclusion constraint when one is absent. That is a
+statement about our formulation, and it is reason enough to impose the floor of
+Section~\ref{sec:pathcon} on engineering grounds. Whether the \emph{continuous}
+unconstrained problem attains its infimum remains \textbf{open}. Settling it
+needs a sequence of solutions that each pass the accuracy gate, at successively
+lower altitude floors, with $t_f$ falling monotonically as the floor drops. That
+experiment is specified and has not been run.
 
 \paragraph{Why the indirect method did not produce these solutions.} Two
 reasons, and only the first was appreciated at the time.
@@ -782,16 +845,19 @@ reasons, and only the first was appreciated at the time.
 First, shooting explores only what its initial costate guess can reach, so it
 returns the extremal near its seed and gives no hint whether others exist.
 
-Second, and more decisively: \textbf{the indirect method has no discretization
-to exploit.} \code{tfMinProp} integrates the state and costate equations with an
-adaptive-step integrator that tightens automatically wherever the dynamics
-stiffen---which is exactly at periselene. A trajectory that skimmed the lunar
-surface would be \emph{visibly} skimming it, because the integrator would
-resolve the pass rather than step over it. There is no mesh whose error the
-optimizer can spend. That is a genuine structural advantage of the indirect
-formulation on this problem, and it is the reverse of the path-constraint
-advantage of Section~\ref{sec:pathcon}: each method is protected against the
-failure mode that afflicts the other.
+Second: \textbf{the indirect method has no fixed mesh whose error the optimizer
+can spend.} \code{tfMinProp} integrates the state and costate equations with an
+adaptive-step integrator that tightens automatically where the dynamics
+stiffen---which is exactly at periselene---so the particular inter-node defect
+mechanism described above cannot arise. That is a real structural difference,
+and it is the reverse of the path-constraint advantage of
+Section~\ref{sec:pathcon}: each method is protected against the failure mode
+that afflicts the other.
+
+It should not be overstated. Adaptive integration does not make shooting immune
+to near-singular dynamics, to convergence on the wrong extremal, or to failure
+near a close approach; it removes one specific failure mode, not a class of
+them.
 
 \subsection{The outstanding check, run: machine-tight defects do not mean an
 accurate trajectory}
@@ -811,9 +877,23 @@ compare the result against the node the collocation claims to reach:
   R_k \;=\; \bigl\lVert\, \Phi(t_{k+1}; t_k, X_k, U(\cdot))
                           \;-\; X_{k+1} \,\bigr\rVert .
 \]
-$R_k$ is the true local error the trapezoid rule is committing. It is a
-different quantity from the NLP defect, which measures only how well the
-returned numbers satisfy the trapezoid \emph{equations}.
+$R_k$ is the local error the scheme is committing, and it is a different
+quantity from the NLP defect, which measures only how well the returned numbers
+satisfy the collocation \emph{equations}.
+
+\paragraph{Two things this measurement is not.} First, the reconstructed control
+$U(\cdot)$ is a \emph{convention}, not a consequence: the transcription
+constrains the dynamics only at the collocation samples and says nothing about
+the control between them. We use the reconstruction consistent with each
+scheme's derivation---linear for trapezoid, the Lagrange quadratic through
+$(U_k, U_{m,k}, U_{k+1})$ for Hermite--Simpson---and report which was used
+alongside the number. Second, $R_k$ must be resolved into components before it
+is given units. The state is $(\vecr, \vecv, m)$, mixing a length, a
+length-per-time and a dimensionless fraction; the norm of the seven-component
+difference cannot be converted to kilometres by multiplying by $L$. An earlier
+version of this document did exactly that, and the resulting figures were wrong
+in both directions. Position, velocity and mass errors are now reported and
+gated separately.
 
 \paragraph{The result.} On the $N = 800$, $442$~km solution:
 
@@ -822,19 +902,17 @@ returned numbers satisfy the trapezoid \emph{equations}.
 \begin{tabular}{lr}
 \toprule
 NLP defect (trapezoid equations) & $1.4\times10^{-14}$ \\
-continuous residual, median & $2.1\times10^{-7}$ \\
-continuous residual, \textbf{maximum} & $\mathbf{1.5}$ \\
-ratio, median continuous to discrete & $1.5\times10^{7}$ \\
+worst-interval \textbf{position} error & $\mathbf{1441}$ \textbf{km} \\
+worst-interval \textbf{velocity} error & $1568$ m/s \\
 lunar altitude at the worst interval & $504$ km \\
 \bottomrule
 \end{tabular}
 \end{table}
 
-The solution satisfies its own discrete equations to fifteen digits and departs
-from the actual dynamics by $O(1)$ in nondimensional units---which is to say,
-by hundreds of thousands of kilometres---on the interval at closest approach.
-The $442$~km trajectory is \textbf{not physical}. It is an artifact of a mesh
-too coarse to resolve the flyby it is exploiting.
+The solution satisfies its own discrete equations to fifteen digits while
+departing from the actual dynamics by over a thousand kilometres on the interval
+at closest approach. The $442$~km trajectory is \textbf{not physical}. It is an
+artifact of a mesh too coarse to resolve the flyby it is exploiting.
 
 \paragraph{Why this is more than one bad case.} The error is not scattered; it
 is an extremely clean function of how close to the Moon the interval sits.
@@ -843,11 +921,21 @@ Fitting the residual against lunar altitude over the whole trajectory gives
   R \;\propto\; \text{altitude}^{-4.2},
 \]
 spanning eight orders of magnitude from $10^{-8}$ at $10^5$~km down to $O(1)$ at
-periselene (panel (f) of the diagnostic figure). The scaling is the expected
-one: the trapezoidal local truncation error goes as $h^3 \lvert \dddot{x}
-\rvert$, and for two-body-like motion $\lvert\dddot{x}\rvert \sim \mu^{3/2}
-r^{-7/2}$, predicting an exponent near $-3.5$ against the measured $-4.2$. The
-mechanism is therefore understood, not merely observed.
+periselene (panel (f) of the diagnostic figure). The trapezoidal local truncation error goes as
+$h^3 \lvert \dddot{x} \rvert$, and for two-body-like motion
+$\lvert\dddot{x}\rvert \sim \mu^{3/2} r^{-7/2}$, which predicts an exponent near
+$-3.5$.
+
+\textbf{That is not a match, and an earlier version of this document called it
+one.} A gap of $0.74$ in a log--log exponent is a factor of five across a decade
+of altitude. What the comparison supports is that the residual has the steep
+inverse-distance dependence the theory leads one to expect, and no more. At least
+four things could account for the difference and none has been isolated: the fit
+is against \emph{altitude} $r - R_M$ rather than lunar-centre radius $r$; the
+step size is uniform in normalized time while $t_f$ varies between solutions; the
+Coriolis, centrifugal and thrust terms are not part of the two-body heuristic;
+and a single power law is being fitted across a range that is not uniformly
+asymptotic.
 
 \paragraph{What this settles, and what it does not.} It settles the question of
 Section~\ref{sec:illposed}: the mesh-dependent ``faster than the reference''
@@ -858,14 +946,20 @@ where its own error is largest, because that is where the objective can be
 cheaply reduced. The pathology is not that the solver failed; it is that it
 succeeded on the wrong problem.
 
-It does \emph{not} settle how to fix it. Three routes are available and none
-has been tried here: a much finer mesh concentrated near periselene, a Sundman
-regularization of the kind the qualification above now calls for, or a
-higher-order collocation scheme. The altitude floor of Section~\ref{sec:pathcon}
-addresses a different pathology and, as shown there, does not remove this one.
+Three routes to fixing it were available: a mesh concentrated near periselene, a
+Sundman regularization, or a higher-order collocation scheme. Only the third was
+tried, and it was sufficient---see Section~\ref{sec:hs}, where fourth-order
+Hermite--Simpson reduces the worst-interval position error to $3.3$~m. The other
+two remain untried and are now optional. The altitude floor of
+Section~\ref{sec:pathcon} addresses a different pathology and, as shown there,
+does not remove this one.
 
 \paragraph{The transferable lesson.} \textbf{A machine-tight defect is a
-statement about the discretization, not about the trajectory.} The two
+statement about the discretization, not about the trajectory.}
+A corollary worth naming separately, because this campaign fell for it twice:
+\emph{no conclusion about the continuous problem may be drawn from a converged
+NLP whose continuous residual has not been measured}---not about optimality, not
+about feasibility, and not about well-posedness. The two
 quantities differ here by a factor of $10^7$. Every campaign in this repository
 reports defects at the $10^{-14}$ level as evidence of a good solve; that
 evidence is necessary and nowhere near sufficient, and the continuous residual
@@ -879,11 +973,25 @@ Every solve in this campaign reported a defect of $10^{-14}$ and every early one
 was wrong. A gate was therefore built that a solve must pass before its $t_f$ is
 quoted. Two of its conditions decide the verdict; the rest are hygiene.
 
-\paragraph{G1, accuracy.} The worst continuous-time local error of
-Section~\ref{sec:contres}, stated in \textbf{kilometres} rather than in solver
-units, must fall below a tolerance---default $1$~km. Expressing the tolerance
-dimensionally is deliberate: $10^{-6}$ is not obviously good or bad, whereas
-``$400$~km of position error'' is self-evidently disqualifying.
+\paragraph{G1, local accuracy.} The worst continuous-time local error of
+Section~\ref{sec:contres}, resolved into a \textbf{position} error in kilometres
+and a \textbf{velocity} error in metres per second, each with its own tolerance
+(default $1$~km and $1$~m/s). Expressing the tolerances dimensionally is
+deliberate: $10^{-6}$ is not obviously good or bad, whereas ``$1441$~km of
+position error'' is self-evidently disqualifying. Resolving the components is
+equally deliberate, and was forced on us: the first version of this gate took the
+norm of the full seven-component state difference and multiplied it by $L$, which
+is not a position error and cannot be read as one.
+
+\paragraph{G1b, global accuracy.} G1 restarts at every node, so it is a maximum
+over \emph{local} errors and could in principle understate what accumulates over
+a whole trajectory. G1b instead flies the reconstructed control \emph{once},
+from the initial node to the end, and asks where the spacecraft actually
+arrives. On the certified solution the maximum local position error is $3.3$~m,
+the sum of the local errors is $26.8$~m, and the end-to-end propagated error is
+$42$~m---so the errors do accumulate, mildly, but nothing like the exponential
+amplification a $1600$-interval integration through an unstable three-body field
+might have produced. That was the expected failure mode and it did not occur.
 
 \paragraph{G2, agreement.} DRO$\to$tulip is the one problem in the catalog where
 an independently converged \emph{indirect} solution already exists. A working
@@ -892,12 +1000,31 @@ is the sharper of the two tests, and it is the reason this transfer was chosen
 to begin the programme. A direct method that cannot recover a known answer where
 one exists should not be believed where none does.
 
-\paragraph{G3--G7, hygiene.} NLP defect, control unit-norm error, terminal
-boundary error, throttle saturation, lifted-time spread, and---when a floor is
-imposed---whether the \emph{propagated} trajectory honours it between nodes and
-not merely at them. These are necessary and jointly insufficient, and they are
-reported separately so that a solve passing all of them while failing G1 is
-visible for what it is.
+\paragraph{What ``certified'' means here, and what it does not.} It means the
+transcription is accurate to the stated tolerances and, where a reference exists,
+reproduces it. It does \textbf{not} mean the solution is a global minimum, and it
+does not mean the underlying optimal control problem is well posed---the
+certified solution below solves the unconstrained problem, whose well-posedness
+Section~\ref{sec:illposed} leaves explicitly open. ``Certified reproduction of
+the reference local extremal'' would be the fully precise phrase.
+
+\paragraph{G3--G9, hygiene.} NLP defect, control unit-norm error, terminal
+boundary error, lifted-time spread, the Hermite interpolation residual, and---when
+a floor is imposed---whether the \emph{propagated} trajectory honours it between
+nodes and not merely at them. These are necessary and jointly insufficient, and
+they are reported separately so that a solve passing all of them while failing G1
+is visible for what it is. Throttle saturation is reported as \textbf{G6*},
+advisory only: as noted in Section~\ref{sec:ocp_pmp}, full thrust is an empirical
+property of these extremals rather than a condition minimum-time problems must
+satisfy, so it must not gate a verdict.
+
+\paragraph{What G2 does when a floor is imposed: it switches itself off.} The
+reference comes from \code{tfMin}, which has no path-constraint capability, so
+for a constrained problem there is no indirect reference at all and comparing
+against the unconstrained one would be worse than useless. The gate detects an
+imposed floor and disables G2, saying so in its report. \textbf{No constrained
+solution has yet been certified}---the constrained problem is formulated, and
+that is all.
 
 \paragraph{The instrument has its own test.} Since G1 now decides whether work is
 publishable, the residual engine is itself tested: on a trajectory built by
@@ -915,22 +1042,34 @@ therefore real.
 \toprule
 & gate & value & tolerance & \\
 \midrule
-G1 & continuous accuracy, worst interval & $0.3223$ km & $1.0$ km & PASS \\
-G2 & agreement with the indirect $t_f$ & $1.900\times10^{-6}$ & $10^{-4}$ & PASS \\
-G3 & NLP defect & $3.33\times10^{-16}$ & $10^{-9}$ & PASS \\
-G4 & control unit-norm error & $2.22\times10^{-16}$ & $10^{-8}$ & PASS \\
-G5 & terminal boundary error & $0$ & $10^{-9}$ & PASS \\
-G6 & throttle saturation, $\min_k u_k$ & $1.000000$ & $1$ & PASS \\
+G1   & local POSITION accuracy, worst interval & $0.0033$ km & $1.0$ km & PASS \\
+G1v  & local VELOCITY accuracy, worst interval & $0.00084$ m/s & $1.0$ m/s & PASS \\
+G1b  & GLOBAL POSITION accuracy, flown end to end & $0.0418$ km & $1.0$ km & PASS \\
+G1bv & GLOBAL VELOCITY accuracy, end to end & $0.00185$ m/s & $1.0$ m/s & PASS \\
+G2   & agreement with the indirect $t_f$ & $1.900\times10^{-6}$ & $10^{-4}$ & PASS \\
+G3   & NLP defect & $2.91\times10^{-16}$ & $10^{-9}$ & PASS \\
+G4   & control unit-norm error & $2.22\times10^{-16}$ & $10^{-8}$ & PASS \\
+G5   & terminal boundary error & $0$ & $10^{-9}$ & PASS \\
+G6*  & throttle saturation (advisory) & $1.000000$ & $1$ & PASS \\
+G8   & lifted-time spread & $0$ & $10^{-10}$ & PASS \\
+G9   & Hermite interpolation residual & $4.44\times10^{-16}$ & $10^{-9}$ & PASS \\
 \bottomrule
 \end{tabular}
 \end{table}
 
 \noindent Hermite--Simpson, $N = 1600$: $t_f = 4.0152501$ against the indirect
-reference's $4.0152425$, agreeing to six significant figures, with a
-worst-interval true error of $0.32$~km and a closest approach of $4673$~km.
+reference's $4.0152425$, agreeing to five significant figures, with a
+worst-interval position error of $3.3$~m, an end-to-end propagated position error
+of $42$~m, and a closest approach of $4673$~km.
 \textbf{This is the first certified direct solution of this transfer, and the
 first time in this repository that a direct and an indirect method have been
-shown to agree on a trajectory rather than merely on a formulation.}
+shown to agree numerically rather than merely to be two formulations of the same
+problem.} Two cautions on the strength of that claim. The agreement is to
+\emph{five} significant figures, not six. And it is agreement on $t_f$ and on
+the endpoints---which the boundary conditions pin in any case; a genuine
+trajectory-level comparison, of the state and control histories or of the mapped
+costates against \code{tfMin}'s, has not been made. That comparison is this
+campaign's actual objective, and it is now unblocked rather than completed.
 
 \subsection{The ladder is not monotone, and the middle rung is the lesson}
 
@@ -938,23 +1077,29 @@ shown to agree on a trajectory rather than merely on a formulation.}
 \centering\small
 \begin{tabular}{rrrrl}
 \toprule
-$N$ & $t_f$ & rel.\ error & worst true error & min.\ node altitude \\
+$N$ & $t_f$ & rel.\ error & worst POSITION error & min.\ node altitude \\
 \midrule
-$400$  & $4.6808938$ & $1.66\times10^{-1}$ & $761$ km & $4818$ km \\
-$800$  & $4.1628670$ & $3.68\times10^{-2}$ & $1\,017\,917$ km & $\mathbf{-719.6}$ \textbf{km} \\
-$1600$ & $4.0152501$ & $1.90\times10^{-6}$ & $0.32$ km & $4673$ km \\
+$400$  & $4.6808938$ & $1.66\times10^{-1}$ & $7.38$ km & $4818$ km \\
+$800$  & $4.1628670$ & $3.68\times10^{-2}$ & $3127$ km & $\mathbf{-719.6}$ \textbf{km} \\
+$1600$ & $4.0152501$ & $1.90\times10^{-6}$ & $\mathbf{0.0033}$ \textbf{km} & $4673$ km \\
 \bottomrule
 \end{tabular}
 \end{table}
 
-A negative altitude is a node beneath the lunar surface. The $N = 800$ row is
-the demonstration of ill-posedness discussed in Section~\ref{sec:illposed}, and
-it carries a lesson that the certified row does not: \textbf{refining the mesh
-is not a monotone improvement when the underlying problem is ill-posed.} Higher
-order made the good rung certifiable and made the bad rung worse, because a
-better-resolved optimizer pursues an unbounded objective more effectively.
-Accuracy and well-posedness are independent properties and must be secured
-separately.
+A negative altitude is a node beneath the lunar surface---and the same row has a
+$3127$~km position error, so it is not a trajectory at all. Read together, those
+two numbers are the reason Section~\ref{sec:illposed} withdraws the
+ill-posedness claim rather than resting on this row: an infeasible discrete
+solution placing a node inside the Moon tells us about our transcription, not
+about the continuous problem.
+
+The row does carry a lesson the certified row does not: \textbf{refinement is not
+monotone.} Going from $N = 400$ to $N = 800$ made the answer worse by every
+measure, and only at $N = 1600$ did the sequence land on the reference. A
+practitioner reading off a single mesh density---any single density here,
+including $N = 800$ with its machine-precision defect---would have been misled.
+The gate exists precisely because ``it converged'' does not distinguish these
+three rows.
 
 \section{Diagnostics and visualization}
 

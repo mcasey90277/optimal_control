@@ -17,11 +17,22 @@ function R = dro_residual(o, muStar, Tmax, c, opts)
 % This is the local error the scheme is committing. It is the number that decides
 % whether a direct solution is physical.
 %
-% CONTROL RECONSTRUCTION IS SCHEME-DEPENDENT, and getting it wrong makes an
-% accurate scheme look inaccurate. Trapezoidal collocation implies a control
-% linear in time across the interval. Hermite-Simpson implies a quadratic
-% through the two node controls and the midpoint control. Both are handled;
-% the scheme is read from o.scheme, defaulting to trapezoid.
+% THE CONTROL BETWEEN NODES IS A CHOSEN CONVENTION, NOT A CONSEQUENCE. This
+% matters and the earlier version of this comment got it wrong. The transcription
+% constrains the dynamics only AT the collocation samples; it says nothing about
+% the control between them, so there is no such thing as "the" intersample
+% control. What we reconstruct here is the convention CONSISTENT WITH each
+% scheme's derivation: linear for trapezoid, and for Hermite-Simpson the
+% Lagrange quadratic through the two node controls and the midpoint control,
+% since Simpson's rule is derived by assuming the integrand is quadratic through
+% those three samples. A different convention would give a different -- also
+% defensible -- residual. Report the convention alongside the number.
+%
+% Two artifacts of the convention are measured and returned rather than hidden:
+% the reconstructed direction can shrink toward zero between unit samples
+% (.minDirNorm), and the reconstructed throttle can overshoot [0,1]
+% (.thrOvershoot). Both are silently repaired inside the RHS; large values mean
+% the reconstruction, not the solution, is what is being measured.
 %
 % INPUTS:
 %   o      - solution struct from casadi_mintime_dro. Uses .X [7x(N+1)],
@@ -42,7 +53,13 @@ function R = dro_residual(o, muStar, Tmax, c, opts)
 %       .Rx [1xN] the combined 7-component norm, retained for continuity but
 %       DIMENSIONALLY MEANINGLESS -- do not convert it to km. .RxMax .RxMed,
 %       .kWorst (index of the worst interval), .tMid [1xN] interval midtimes,
-%       .scheme (what was assumed), .relTol .absTol
+%       .scheme (the reconstruction convention used)
+%       .minDirNorm  smallest reconstructed direction norm (1 = healthy; near 0
+%                    means the quadratic passed close to the origin and the
+%                    reconstructed direction is meaningless there)
+%       .thrOvershoot largest excursion of the reconstructed throttle outside
+%                    [0,1] (0 = healthy)
+%       .relTol .absTol
 %
 % REFERENCES:
 %   [1] Betts, "Practical Methods for Optimal Control", Ch. 4 -- discretization
@@ -59,6 +76,7 @@ hasMid = strncmp(scheme,'hermite',7) && isfield(o,'Um') && ~isempty(o.Um);
 t  = o.s(:).' * o.tf;
 N  = numel(t) - 1;
 Rx = nan(1,N);  Rr = nan(1,N);  Rv = nan(1,N);  Rm = nan(1,N);
+minDir = inf;  thrOver = 0;
 odeo = odeset('RelTol',relTol,'AbsTol',absTol);
 
 for k = 1:N
@@ -70,6 +88,12 @@ for k = 1:N
     else
         ua = o.U(:,k);  ub = o.U(:,k+1);
         uOf = @(tt) ua + ((tt-a)/h)*(ub-ua);
+    end
+    % reconstruction health, sampled across the interval
+    for w = [0.25 0.5 0.75]
+        uw = uOf(a + w*h);
+        minDir = min(minDir, norm(uw(1:3)));
+        thrOver = max(thrOver, max(0, max(uw(4)-1, -uw(4))));
     end
     [~, Z] = ode113(@(tt,z) local_rhs(z, uOf(tt), muStar, Tmax, c), [a b], o.X(:,k), odeo);
     e = Z(end,:).' - o.X(:,k+1);
@@ -94,6 +118,7 @@ R = struct('Rx',Rx, 'RxMax',RxMax, 'RxMed',median(Rx), 'kWorst',kWorst, ...
            'Rv',Rv, 'RvMax',max(Rv), 'RvMed',median(Rv), ...
            'Rm',Rm, 'RmMax',max(Rm), ...
            'tMid',0.5*(t(1:end-1)+t(2:end)), 'scheme',scheme, ...
+           'minDirNorm',minDir, 'thrOvershoot',thrOver, ...
            'relTol',relTol, 'absTol',absTol);
 end
 

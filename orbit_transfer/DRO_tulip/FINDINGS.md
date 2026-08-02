@@ -471,6 +471,17 @@ Code: `direct/certify/costate_compare.m`. Figure:
 `direct/results/hs_N1600_duals.mat` (requires `opts.returnModel = true`, which
 is what builds the constraint-row registry that locates the defect multipliers).
 
+## The pumpkyn-style companion script (2026-08-03)
+
+`direct/run_dro_tulip_ps.m` — one straight-line script in the style of
+`demos/lowThrustDRO2Tulip.m`: same constants, same endpoint construction, same
+figures. It runs the indirect solve for the reference, the direct HS N=1600
+solve warm-started from it, prints the side-by-side comparison, and renders the
+showMoon scene with both trajectories overlaid. Verified: reproduces the demo's
+own propellant (12.196 kg) and dV (0.7485 km/s) exactly, and the comparison
+numbers above (2.92 s, 0.396 km, 0.0056 m/s at matched s). The heavy machinery
+(sweeps, gates, movies) stays in `run_dro_tulip.m`.
+
 ## Next
 
 0. **Untried suggestions from the 2026-08-02 external review, recorded so they

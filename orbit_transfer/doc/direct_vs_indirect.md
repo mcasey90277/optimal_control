@@ -33,7 +33,10 @@ before anything can be refined.
   position error, 42 m end to end, certified. (The agreement is on t_f and the
   pinned endpoints. The COSTATE-level comparison has since been done and also
   succeeded — primer exact to 1.2e-06 deg, costate directions to ~0.0006 deg,
-  scale factor 0.99999. The two methods find the same extremal.) This is the repo's only method-vs-method agreement on a
+  scale factor 0.99999, and the STATE histories agree to 0.396 km peak once a
+  2.9 s phasing offset in t_f is removed — over an 89,000 km, 17.8-day transfer.
+  The two methods find the same extremal. Figures:
+  DRO_tulip/direct/results/dvi_N1600_{state,costate}.png.) This is the repo's only method-vs-method agreement on a
   *trajectory* rather than on a formulation. It required fourth order: the
   second-order twin was 3-80% off while reporting 1e-14 defects.
 - **Indirect is the natural fit and it works.** `pumpkyn.cr3bp.tfMin` solves

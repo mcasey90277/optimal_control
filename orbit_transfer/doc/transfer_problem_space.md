@@ -124,8 +124,10 @@ Two lessons generalize beyond this pair:
 **The costate comparison is DONE (2026-08-02) and it succeeded.** The direct NLP
 duals reproduce the indirect costates: primer exact to 1.2e-06 deg, lambda_v and
 lambda_r directions agreeing to ~0.0006 deg median, and a scale factor of
-0.99999 — the same normalization, not merely proportional. So the two methods
-find the same EXTREMAL, not just the same final time. See DRO_tulip/FINDINGS.md.
+0.99999 — the same normalization, not merely proportional — and the state
+histories agree to 0.396 km peak once the 2.9 s t_f phasing offset is removed.
+So the two methods find the same EXTREMAL, not just the same final time. See
+DRO_tulip/FINDINGS.md and direct/results/dvi_N1600_{state,costate}.png.
 
 ---
 

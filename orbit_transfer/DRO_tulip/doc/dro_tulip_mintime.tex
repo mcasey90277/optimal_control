@@ -40,7 +40,12 @@ about the trajectory}---here the two differ by orders of magnitude. We also
 report a minimum-altitude path constraint, why adding one costs a block of
 algebraic inequalities in the direct formulation against a multipoint
 boundary-value problem in the indirect one, and the pass/fail gate that
-separates a converged NLP from an answer. One \emph{negative} result recurs
+separates a converged NLP from an answer. The comparison the campaign was built
+for is then carried out in full: the direct NLP multipliers, mapped to costates,
+reproduce the indirect costate field to $6\times10^{-4}$ degrees in direction
+and to a scale factor of $0.99999$, and the state histories agree to $0.4$~km
+once a $2.9$-second phasing offset is removed---the two methods find the same
+extremal, not merely the same final time. One \emph{negative} result recurs
 through the document and is stated plainly rather than buried: we twice
 concluded that the unconstrained problem is ill-posed, and twice the evidence
 turned out to be discretization error rather than physics. That conjecture
@@ -1065,11 +1070,12 @@ of $42$~m, and a closest approach of $4673$~km.
 first time in this repository that a direct and an indirect method have been
 shown to agree numerically rather than merely to be two formulations of the same
 problem.} Two cautions on the strength of that claim. The agreement is to
-\emph{five} significant figures, not six. And it is agreement on $t_f$ and on
-the endpoints---which the boundary conditions pin in any case; a genuine
-trajectory-level comparison, of the state and control histories or of the mapped
-costates against \code{tfMin}'s, has not been made. That comparison is this
-campaign's actual objective, and it is now unblocked rather than completed.
+\emph{five} significant figures, not six. And on its own it is agreement on
+$t_f$ and on the endpoints---which the boundary conditions pin in any case. The
+genuine trajectory- and costate-level comparison is the campaign's actual
+objective, and it has since been carried out: see
+Section~\ref{sec:costatecmp}, where the two methods are shown to agree on the
+state history to $0.4$~km and on the costate field to $6\times10^{-4}$ degrees.
 
 \subsection{The ladder is not monotone, and the middle rung is the lesson}
 
@@ -1100,6 +1106,119 @@ practitioner reading off a single mesh density---any single density here,
 including $N = 800$ with its machine-precision defect---would have been misled.
 The gate exists precisely because ``it converged'' does not distinguish these
 three rows.
+
+\section{The comparison itself: the two methods find the same extremal}
+\label{sec:costatecmp}
+
+Everything to this point certifies the direct solution against the
+\emph{dynamics}. This section certifies it against the \emph{other method},
+which is what DRO$\to$tulip was chosen for: it is the one problem in the catalog
+where an independently converged indirect solution exists, so the covector
+mapping can be tested against a second opinion instead of against itself.
+
+\subsection{Costates: mapping, and results}
+
+For defect constraints $D_k = 0$ with multipliers $\nu_k$, stationarity of the
+Lagrangian with respect to the interior states is exactly the discrete adjoint
+recursion, so $\nu_k \to \lambda(t_k)$ as the mesh refines, with no $h$-scaling
+for this defect form (Hager 2000). Two ambiguities remain and are
+\emph{measured rather than assumed}: the sign convention is resolved against the
+solution's own thrust direction---a primal quantity, free of any dual
+convention---and the scale by comparing magnitudes, with the real test being
+whether the fitted factor is \emph{constant} in time.
+
+\begin{table}[h]
+\centering\small
+\begin{tabular}{lr}
+\toprule
+primer from duals vs the solution's own thrust & max $1.2\times10^{-6}$ deg \\
+direct vs indirect $\boldsymbol{\lambda}_v$ direction & median $0.0006$ deg, max $0.033$ deg \\
+direct vs indirect $\boldsymbol{\lambda}_r$ direction & median $0.0006$ deg, max $0.086$ deg \\
+scale factor, $\boldsymbol{\lambda}_v$ & $0.999991$ (CoV $4.1\times10^{-5}$) \\
+scale factor, $\boldsymbol{\lambda}_r$ & $0.999995$ \\
+terminal covector (Hager) vs indirect $\lambda(t_f)$ & $4.96\times10^{-4}$ relative \\
+transversality $\lambda_m(t_f)$ & $8.2\times10^{-5}$ \\
+Hamiltonian, median $\lvert\lambda^{\mathsf T}f + 1\rvert$ & $9.8\times10^{-6}$ \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Three results are stronger than one would design for. The primer alignment is
+\emph{exact} to $10^{-6}$ degrees, because KKT stationarity for the midpoint
+control is literally the PMP minimum condition
+$\bal = -\boldsymbol{\lambda}_v/\lVert\boldsymbol{\lambda}_v\rVert$. The scale
+factor is $1.000$, not merely constant---the two methods land in the \emph{same}
+normalization, which nothing required. And $\boldsymbol{\lambda}_r$ matches too,
+which is the sterner test: it couples to the trajectory only indirectly and is
+the classic weak spot of shooting.
+
+The terminal covector is read from the terminal \emph{boundary} multipliers
+rather than extrapolated: stationarity with respect to $X_{N+1}$ gives
+$\lambda(t_f) = -\nu_\psi$ to leading order, the Hager terminal correction.
+
+\subsection{State: the raw difference is phasing, not shape}
+
+\begin{table}[h]
+\centering\small
+\begin{tabular}{lr}
+\toprule
+max position difference, matched \emph{absolute} time & $3.311$ km \\
+max position difference, matched \emph{fractional} time & $\mathbf{0.396}$ \textbf{km} \\
+median, fractional & $0.230$ km \\
+max velocity difference & $0.341$ m/s \\
+max mass-fraction difference & $3.2\times10^{-10}$ \\
+thrust direction difference & median $5.3\times10^{-4}$ deg \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+The two solutions differ in $t_f$ by $7.63\times10^{-6}$~ND $= 2.92$~s. At the
+trajectory's speed range ($0.143$--$1.135$ km/s) that offset alone predicts an
+along-track displacement of $0.42$--$3.32$~km---and the observed maximum at
+matched absolute time is $3.311$~km, the top of that range. Comparing at matched
+fractional time $s = t/t_f$ removes the phasing and leaves $0.396$~km of genuine
+shape difference over an $89{,}000$~km, $17.8$-day transfer, at the level of the
+remaining discretization error rather than of any disagreement between methods.
+
+\subsection{A third misattribution, caught by its own test}
+
+The Hamiltonian condition $\lambda^{\mathsf T}f \equiv -1$ holds to
+$10^{-5}$ over the interior but deviates by $O(1)$ on the last few intervals. We
+first attributed that to a terminal covector-mapping artifact. \textbf{The
+explanation is wrong}, and the test that refutes it is one line: on this
+transfer the closest lunar approach occurs at interval $1599$ of $1600$, so
+``the boundary'' and ``periselene'' are the same place. Fitting
+$\lvert\lambda^{\mathsf T}f+1\rvert$ against altitude on the first $1560$
+intervals gives altitude$^{-4.7}$, and the last eight intervals sit at
+$1.1\times$ that prediction---no excess. The deviation is ordinary truncation
+error at periselene, which happens to sit at $t_f$.
+
+That is the third time this document has attributed an effect to the wrong
+cause by failing to separate two confounded variables. The comparison figures
+therefore carry lunar altitude on a second axis in every panel that varies with
+time, so the confound is visible rather than remembered.
+
+\subsection{Figures}
+
+\code{results/dvi\_N1600\_state.png} overlays the two trajectories and shows the
+position difference both raw and phasing-removed, the velocity, mass and
+thrust-direction differences, and the difference against altitude.
+\code{results/dvi\_N1600\_costate.png} overlays $\boldsymbol{\lambda}_r$,
+$\boldsymbol{\lambda}_v$ and $\lambda_m$ (direct solid, indirect dashed---they
+are indistinguishable, including the large $\boldsymbol{\lambda}_r$ excursions),
+with the direction agreement, the scale factor, and the Hamiltonian condition.
+Generator: \code{viz/plot\_direct\_vs\_indirect.m}; the numbers come from
+\code{certify/costate\_compare.m}.
+
+\subsection{What this closes, and what it opens}
+
+The claim ``the two methods agree,'' earlier reduced to $t_f$ plus pinned
+endpoints, is now trajectory- and costate-level: same state history, same primer
+field, same costate directions, same normalization. It also demonstrates the
+mechanism the costate-catalog programme needs---a direct solve yields costates
+accurate to $\sim10^{-3}$ degrees against a converged indirect answer, far
+better than any hand-built guess---validated here on the one problem where the
+validation was possible, for use on the problems where it is not.
 
 \section{Diagnostics and visualization}
 
@@ -1181,6 +1300,7 @@ $t_f$ with a floor) are different questions and deserve different gates.
 \begin{tabular}{ll}
 \toprule
 front door & \code{DRO\_tulip/direct/run\_dro\_tulip.m} \\
+pumpkyn-style companion & \code{DRO\_tulip/direct/run\_dro\_tulip\_ps.m} \\
 endpoints & \code{DRO\_tulip/direct/lib/dro\_tulip\_endpoints.m} \\
 solver & \code{DRO\_tulip/direct/lib/casadi\_mintime\_dro.m} \\
 gate & \code{DRO\_tulip/direct/certify/certify\_dro\_mintime.m} \\

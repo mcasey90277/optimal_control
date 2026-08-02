@@ -54,6 +54,13 @@ before anything can be refined.
 
 **Rule of thumb: revolution count, not the objective, decides.** Few revs →
 indirect. Tens of revs → direct.
+- **Cold-start caveat (2026-08-03, DRO→tulip):** the direct method's accuracy
+  survives a cold start but its basin selection does not — crude-seeded HS at
+  the certifying mesh converged to a physical, G1-passing extremal **19% slower**
+  than the reference, with nothing in the solver output flagging it. Three
+  meshes gave three different basins. Seeding/continuation is required
+  equipment for the direct method, exactly as a costate guess is for the
+  indirect one — the symmetry is real.
 
 ### Min-energy
 

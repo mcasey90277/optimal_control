@@ -471,6 +471,56 @@ Code: `direct/certify/costate_compare.m`. Figure:
 `direct/results/hs_N1600_duals.mat` (requires `opts.returnModel = true`, which
 is what builds the constraint-row registry that locates the defect multipliers).
 
+## COLD-START TEST (2026-08-03): accuracy survives, basin selection does not
+
+Same solver, same Hermite-Simpson scheme, same meshes — but the crude internal
+seed (states linear between endpoints, mass ramp 1→0.92, thrust along the chord,
+tf0 = 4.0; zero content from the indirect solve, duals unseeded):
+
+| N | t_f | vs ref | worst POS error | min node alt | G1 | G2 |
+|---|---|---|---|---|---|---|
+| 400 | 4.3806738 | +9.1% | 5.23 km | 4819 km | fail | fail |
+| 800 | 4.4506628 | +10.8% | 6954 km | **-343 km (inside Moon)** | fail | fail |
+| 1600 | 4.7832984 | **+19.1%** | **0.0078 km** | 4680 km | **PASS** | fail |
+
+Reference (indirect, and the warm-started certified direct): t_f = 4.0152.
+
+### What each row says
+
+- **N=1600 is the decisive one.** The cold solve produced a genuinely accurate,
+  physical extremal — 7.8 m worst-interval position error, G1 PASS, safe
+  periselene — that is **19% slower than the reference**. The accuracy machinery
+  works cold; **basin selection does not.** The direct method cold-finds *a*
+  minimum-time extremal, not *the best known one*.
+- **N=800 dove through the Moon from a cold seed too** (-343 km vs the
+  warm-started run's -719.6 km). The N=800 mesh finding the unconstrained
+  problem's hole is a property of the discretization + formulation, not of the
+  seed. Third independent instance.
+- **Three meshes, three different basins** (4.38 / 4.45-invalid / 4.78). Mesh
+  density acts as a de facto random seed for basin selection.
+
+### Consequences
+
+1. **Seeding or continuation is required equipment on catalog pairs, not a
+   convenience.** A cold direct solve certifies on accuracy while silently
+   leaving 19% of the objective on the table — and nothing in the solver output
+   distinguishes that from success. Only G2 (an independent reference) exposed
+   it, and catalog pairs will not have one.
+2. **This sharpens what the certified agreement means.** Warm-started from the
+   indirect neighborhood, the direct method refines to the same extremal to
+   0.4 km / 6e-4 deg. Cold, it does not find that neighborhood. The two-method
+   agreement is a statement about refinement, not about global search.
+3. **The indirect answer is the best known on this problem** — faster than
+   everything the cold direct method found at any mesh. Worth remembering when
+   tempted to treat the direct method as the global-search half of the
+   partnership: on this problem neither method searches globally; the indirect
+   one simply arrived with better converged costates (Darin's walk-down).
+4. Caveat recorded: tf0 = 4.0 is a round number but was chosen knowing the
+   answer is ~4. A tf0 sweep (2/3/5/6/8) would test how much that one scalar
+   steers the basin; not yet run.
+
+Data: `direct/results/cold_hs_N{400,800,1600}.mat`.
+
 ## The pumpkyn-style companion script (2026-08-03)
 
 `direct/run_dro_tulip_ps.m` — one straight-line script in the style of

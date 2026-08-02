@@ -1,0 +1,102 @@
+You are reviewing MATLAB + CasADi code for a low-thrust orbit-transfer optimal
+control campaign. The problem: minimum-time transfer from a Distant Retrograde
+Orbit to a "tulip" orbit in the Earth-Moon Circular Restricted Three-Body
+Problem (CR3BP), solved by DIRECT COLLOCATION (transcription to an NLP, solved
+by IPOPT with MUMPS). Nondimensional units: mu = 0.012150585609624, distances
+in units of L = 389703.26 km, time in units of T = 382981.29 s.
+
+State x = [r(3); v(3); m(1)] where m is a MASS FRACTION starting at 1.
+Control u = [alpha(3); thr(1)] where alpha is a UNIT vector (thrust direction)
+and thr in [0,1] is the throttle. Dynamics: CR3BP gravity + centrifugal +
+Coriolis + thrust acceleration thr*Tmax/m along alpha; mdot = -(Tmax/c)*thr.
+
+Free final time is handled by normalizing s = t/tf in [0,1] so dX/ds = tf*f, and
+tf is LIFTED (replicated per node with continuity constraints) because a single
+scalar tf produces a dense KKT column that kills MUMPS.
+
+=========================  WHAT I NEED CHECKED  =========================
+
+THE THREE HIGHEST-VALUE QUESTIONS, in priority order. Please answer each
+explicitly and separately, even if your answer is "correct as written":
+
+Q1. HERMITE-SIMPSON CORRECTNESS AND ORDER (in casadi_mintime_dro.m, the
+    'hermite-simpson' branch). I use the SEPARATED form:
+        interpolation:  Xm - (Xk + Xk1)/2 - (h/8)*(fk - fk1) = 0
+        defect:         Xk1 - Xk - (h/6)*(fk + 4*f(Xm,Um) + fk1) = 0
+    with h = tf * ds_k, and Um (the midpoint control) a FREE decision variable
+    carrying its own unit-norm constraint and throttle bounds.
+    (a) Are these two equations correct as written, including signs and the
+        factors 1/8 and 1/6?
+    (b) Is the implementation genuinely FOURTH-ORDER accurate?
+    (c) EMPIRICAL PUZZLE I CANNOT EXPLAIN: refining N from 400 to 800 reduced
+        the measured true local error from 761 km to 20.3 km. That is a factor
+        of 37.6 for a 2x refinement, i.e. observed order ~5.2, which is BETTER
+        than fourth order. Is this (i) simply pre-asymptotic behaviour, (ii) a
+        sign that I am measuring the wrong thing, or (iii) evidence that the
+        local truncation error (h^5) rather than the global error (h^4) is what
+        my measurement captures? I believe (iii) may be the answer but I am not
+        certain, and if it is, my documentation calling this "fourth order"
+        while measuring h^5 is confusing at best.
+    (d) Is making Um a free variable (rather than the average of its neighbours)
+        correct and necessary? My stated reasons: averaging costs the scheme its
+        order, and the average of two unit vectors is not a unit vector.
+
+Q2. CONTROL RECONSTRUCTION IN THE ERROR MEASUREMENT (dro_residual.m). This
+    function is the instrument that decides whether a solution is acceptable,
+    so an error here silently corrupts every judgement. For each interval it
+    integrates the TRUE dynamics with ode113 at 1e-11/1e-13 from the left node
+    and compares against the right node.
+    THE CRITICAL ASSUMPTION: for Hermite-Simpson I reconstruct the control as
+    the LAGRANGE QUADRATIC through (u_k at w=0, u_m at w=1/2, u_k+1 at w=1):
+        u(w) = (2w-1)(w-1)*ua + 4w(1-w)*um + w(2w-1)*ub
+    (a) Is that the control representation Hermite-Simpson actually implies?
+    (b) Is the quadratic basis itself algebraically correct? Verify it
+        reproduces ua, um, ub at w = 0, 1/2, 1.
+    (c) For trapezoidal collocation I assume a LINEAR control. Correct?
+    (d) The reconstructed alpha is re-normalized to unit length inside the RHS.
+        Does that introduce an inconsistency with what the NLP actually solved?
+    (e) Is comparing a re-integrated interval against the right node the right
+        error metric at all, or should this be a residual of the interpolating
+        polynomial (Betts-style) instead? What are the tradeoffs?
+
+Q3. GATE DESIGN (certify_dro_mintime.m). Two gates decide the verdict:
+    G1 accuracy: worst continuous-time local error < 1 km (tolerance stated in
+       KILOMETRES deliberately, not in nondimensional solver units).
+    G2 agreement: |tf - tf_ref|/tf_ref < 1e-4, where tf_ref comes from an
+       independently converged INDIRECT (Pontryagin shooting) solution.
+    (a) Is G1 a sound criterion? Note it is a max over per-interval LOCAL
+        errors, which is NOT the same as the global error of the trajectory.
+        Should it be a sum, or an accumulated/propagated error instead? I
+        suspect max-of-local UNDERSTATES the true global error and I would like
+        this checked.
+    (b) G2 has a known design flaw I am aware of: the indirect reference is
+        itself only a LOCAL optimum, and once a minimum-altitude path constraint
+        is imposed there is no indirect reference at all (the indirect solver
+        has no path-constraint capability). How would you restructure G2?
+    (c) Any gate that is missing? Any gate that is vacuous as written?
+
+=========================  KNOWN-OPEN, DO NOT REDISCOVER  ================
+
+Please do NOT spend the review on these; they are already diagnosed:
+  - Basin instability: at N=400 the solver converges to tf=4.6809, at N=800 to
+    tf=4.1629 (which puts a node 719.6 km INSIDE the Moon), at N=1600 to
+    tf=4.0152501 which matches the indirect reference to 6 significant figures
+    and passes both gates. The unconstrained problem is genuinely ill-posed --
+    nothing forbids passing through the Moon -- and we know it.
+  - N=3200 has not been run.
+  - The minimum-altitude path constraint binds at NODES ONLY (and at midpoints
+    under Hermite-Simpson). We know it is not a continuous guarantee.
+
+DO flag anything else you find, including MATLAB-specific issues, CasADi misuse,
+indexing errors, and dead or unreachable code.
+
+Format each finding as:
+- **[SEVERITY]** `file:line` — Issue description. Concrete fix recommendation.
+
+Where SEVERITY is one of:
+  CORRECTNESS — wrong math, wrong result, or will break at runtime
+  ROBUSTNESS  — edge case, numerical instability, or overflow risk
+  EFFICIENCY  — unnecessary computation, missed vectorization
+  STYLE       — documentation, naming, conventions
+
+Begin with your explicit answers to Q1, Q2, Q3, then the findings list.

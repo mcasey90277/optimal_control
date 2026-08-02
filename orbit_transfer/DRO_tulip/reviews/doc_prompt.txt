@@ -1,0 +1,90 @@
+You are reviewing a technical LaTeX document (17 pp) on a minimum-time low-thrust
+orbit transfer from a Distant Retrograde Orbit to a "tulip" orbit in the
+Earth-Moon Circular Restricted Three-Body Problem, solved by direct collocation
+and cross-validated against an existing indirect (Pontryagin shooting) solution.
+
+The audience is a working engineer/researcher in astrodynamics and optimal
+control. The document is a lab record intended to be publishable-adjacent: it
+should be correct first, readable second.
+
+=========================  WHAT I NEED CHECKED  =========================
+
+THREE SPECIFIC HIGH-RISK ITEMS. Please address each explicitly and separately,
+even if your verdict is "correct as written":
+
+R1. STATE-CONSTRAINED PONTRYAGIN THEORY. This is the claim I am least confident
+    in and it is the one most likely to be wrong. In the section "Is this a
+    genuine advantage of the direct method?" I assert that adding a pure state
+    path constraint rho(t) >= rho_min to the INDIRECT formulation requires:
+      (i)   guessing the constrained-arc structure a priori;
+      (ii)  deriving the constraint ORDER q -- I claim q = 2 for an altitude
+            constraint under thrust, reasoning that rho must be differentiated
+            twice before the control appears;
+      (iii) appending an eta(t) >= 0 multiplier active only on the constrained
+            arc, complementary to the constraint;
+      (iv)  JUNCTION CONDITIONS at entry/exit where the costates JUMP, which I
+            write as
+              lambda(tau^-) = lambda(tau^+) + sum_{j=0}^{q-1} nu_j * dC^(j)/dx
+      (v)   solving a multipoint BVP whose unknowns include the junction times.
+    I wrote this from memory, NOT from a source. Please check:
+    (a) Is q = 2 correct for this constraint and these dynamics?
+    (b) Is the junction/jump condition stated correctly -- the sign, the
+        direction (is the jump at entry or exit, or both?), the summation range,
+        and the sign restriction on nu_j?
+    (c) Is the claim that the costates are DISCONTINUOUS correct, or is that
+        convention-dependent? I am aware some formulations (direct adjoining vs
+        indirect adjoining, Hartl-Sethi-Vickson) differ, and I do not say which
+        I am using. Should I?
+    (d) Is the overall claim -- that path constraints are structurally cheaper
+        for the direct method than the indirect method -- fair, or overstated?
+
+R2. AN EXPONENT I MAY BE GLOSSING. I report that the measured discretization
+    error scales as R ~ altitude^(-4.24) and say this "matches" the theoretical
+    prediction of -3.5 derived from trapezoidal local truncation error
+    h^3 * |d3x/dt3| with |d3x/dt3| ~ mu^1.5 * r^(-3.5).
+    (a) Is the -3.5 derivation correct?
+    (b) Is a gap of 0.74 in a log-log exponent honestly describable as a match?
+        If not, what should the document say instead? What could account for the
+        difference (e.g. that the velocity and higher derivatives also vary, or
+        that the fit spans a non-power-law regime)?
+
+R3. NARRATIVE COHERENCE OF A DOUBLE REVERSAL. The document contains, in this
+    order: (1) a claim that the problem is ill-posed; (2) a RETRACTION of that
+    claim when its evidence turned out to be a numerical artifact; (3) a
+    RE-ESTABLISHMENT of the claim on different and stronger evidence (a
+    converged solve placing a trajectory node 719.6 km beneath the lunar
+    surface). Similarly, an early lesson "no Sundman regularization is needed
+    here" is later REFUTED by measurement, and then partly softened again when
+    fourth-order collocation turns out to suffice without any regularization.
+    (a) Does this read coherently to someone encountering it fresh, or does it
+        read as an author contradicting themselves?
+    (b) Is the honesty worth the confusion, or should the final state be stated
+        up front with the history relegated to a clearly-marked appendix?
+    (c) Are there any places where an EARLIER section still asserts something a
+        LATER section overturns, without a forward pointer? That is the specific
+        failure mode I am worried about. Please look for it systematically.
+
+=========================  ALSO CHECK  =========================
+
+- Mathematical correctness throughout: the CR3BP equations of motion, the
+  nondimensionalization section (scale factors, conversion table, the
+  propulsion conversions), the collocation defect equations, the
+  Hermite-Simpson equations, the Pontryagin/primer-vector statements.
+- Unit consistency (km vs ND, seconds vs days, N vs m/s^2).
+- Whether any numerical claim in the text contradicts another numerical claim
+  elsewhere in the same document.
+- Structure, section ordering, and whether anything essential is missing for a
+  reader to reproduce the work.
+- Overclaiming or hedging: places where the evidence presented does not support
+  the strength of the statement, in EITHER direction.
+
+Format each finding as:
+- **[SEVERITY]** `section or line reference` — Issue. Concrete fix.
+
+Where SEVERITY is one of:
+  CORRECTNESS — wrong math, wrong physics, or a false statement
+  CLARITY     — correct but confusing, ambiguous, or badly placed
+  COMPLETENESS— something a reader needs that is missing
+  STYLE       — wording, convention, formatting
+
+Begin with your explicit verdicts on R1, R2, R3, then the findings list.

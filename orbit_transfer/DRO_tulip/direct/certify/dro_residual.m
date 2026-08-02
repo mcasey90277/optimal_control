@@ -36,7 +36,11 @@ function R = dro_residual(o, muStar, Tmax, c, opts)
 %                     measurement reports its own integrator error.
 %
 % OUTPUTS:
-%   R - struct: .Rx [1xN] per-interval residual, .RxMax .RxMed,
+%   R - struct: .Rr/.RrMax/.RrMed  POSITION error [ND length; x lStar for km]
+%       .Rv/.RvMax/.RvMed  VELOCITY error [ND; x lStar/tStar for km/s]
+%       .Rm/.RmMax         mass-fraction error [dimensionless]
+%       .Rx [1xN] the combined 7-component norm, retained for continuity but
+%       DIMENSIONALLY MEANINGLESS -- do not convert it to km. .RxMax .RxMed,
 %       .kWorst (index of the worst interval), .tMid [1xN] interval midtimes,
 %       .scheme (what was assumed), .relTol .absTol
 %
@@ -54,7 +58,7 @@ hasMid = strncmp(scheme,'hermite',7) && isfield(o,'Um') && ~isempty(o.Um);
 
 t  = o.s(:).' * o.tf;
 N  = numel(t) - 1;
-Rx = nan(1,N);
+Rx = nan(1,N);  Rr = nan(1,N);  Rv = nan(1,N);  Rm = nan(1,N);
 odeo = odeset('RelTol',relTol,'AbsTol',absTol);
 
 for k = 1:N
@@ -68,11 +72,27 @@ for k = 1:N
         uOf = @(tt) ua + ((tt-a)/h)*(ub-ua);
     end
     [~, Z] = ode113(@(tt,z) local_rhs(z, uOf(tt), muStar, Tmax, c), [a b], o.X(:,k), odeo);
-    Rx(k) = norm(Z(end,:).' - o.X(:,k+1));
+    e = Z(end,:).' - o.X(:,k+1);
+    Rx(k) = norm(e);            % mixed norm -- dimensionally meaningless, see below
+    Rr(k) = norm(e(1:3));       % POSITION only, convertible to km
+    Rv(k) = norm(e(4:6));       % VELOCITY only, convertible to km/s
+    Rm(k) = abs(e(7));          % mass fraction
 end
 
+% SEPARATE THE COMPONENTS, and this is not pedantry. The original version of
+% this function returned only the 7-component norm and the caller multiplied it
+% by lStar to get "kilometres". That is dimensionally invalid: it converts a
+% quantity built from position (ND length), velocity (ND length/time) and mass
+% fraction (dimensionless) as though all three were lengths. External review
+% caught it. On the certified N = 1600 solution the mixed norm was dominated by
+% the VELOCITY component, so the headline "0.32 km" was not a position error at
+% all. Callers should use Rr/Rv/Rm and convert each with its own scale.
 [RxMax, kWorst] = max(Rx);
+[RrMax, kWorstR] = max(Rr);
 R = struct('Rx',Rx, 'RxMax',RxMax, 'RxMed',median(Rx), 'kWorst',kWorst, ...
+           'Rr',Rr, 'RrMax',RrMax, 'RrMed',median(Rr), 'kWorstR',kWorstR, ...
+           'Rv',Rv, 'RvMax',max(Rv), 'RvMed',median(Rv), ...
+           'Rm',Rm, 'RmMax',max(Rm), ...
            'tMid',0.5*(t(1:end-1)+t(2:end)), 'scheme',scheme, ...
            'relTol',relTol, 'absTol',absTol);
 end

@@ -361,31 +361,103 @@ Three things are stronger than expected:
    trajectory only indirectly and is the classic weak spot of shooting (it is
    where the IFS null direction sat, at 83%), so it is the sterner test.
 
-### The one discrepancy, run to ground
+### The one discrepancy, run to ground — and my first explanation was wrong
 
-Raw Hamiltonian CoV is 5.6e-02, which looks like a failure of the free-final-time
-condition (H_PMP = 1 + lambda'f == 0, i.e. lambda'f == -1). It is not.
-
-The deviation is confined to the **last ~8 intervals of 1600**:
+Raw Hamiltonian CoV is 5.6e-02, against a condition that wants `lambda'f == -1`
+identically (H_PMP = 1 + lambda'f = 0 for free t_f). The deviation is confined to
+the last ~8 intervals of 1600:
 
 | interval set | median abs(H+1) | max abs(H+1) | CoV |
 |---|---|---|---|
 | all | 9.80e-06 | 1.024 | 5.6e-02 |
-| trim 5 each end | 9.37e-06 | 0.903 | 3.5e-02 |
-| trim 10 | 8.87e-06 | 0.173 | 6.2e-03 |
-| trim 20 | 8.09e-06 | 0.023 | 2.5e-03 |
+| trim 10 each end | 8.87e-06 | 0.173 | 6.2e-03 |
+| trim 20 each end | 8.09e-06 | 0.023 | 2.5e-03 |
 
-Worst eight: k = 1592..1599. **A terminal covector-mapping artifact.** The final
-node carries the endpoint equality constraints, so its stationarity mixes defect
-multipliers with boundary multipliers, and the naive "nu_k is lambda at the
-midpoint of interval k" reading cannot separate them. This is exactly the
-terminal correction the Hager mapping supplies, and `foc_check` already applies
-it elsewhere in this repo for the same reason. **Not applied here yet** — until
-it is, the last ~1% of intervals are uninformative.
+**I first attributed this to a terminal covector-mapping artifact** — the final
+node carrying the endpoint equalities and contaminating the last multipliers —
+and wrote that into the source and this file. **It is wrong.**
 
-Note the deviation also scales as altitude^-4.66, the same power law as the
-discretization error, so part of it is ordinary truncation error rather than
-boundary contamination.
+The test that refutes it: on this transfer the CLOSEST LUNAR APPROACH occurs at
+**interval 1599 of 1600**, i.e. at the very end. Boundary and close approach are
+confounded, and I attributed the deviation to the boundary without separating
+them. Fitting |H+1| against altitude on intervals 1..1560 gives
+
+    |H+1| ~ altitude^-4.73
+
+and the blocks near the end come in at 0.5-1.1x that prediction:
+
+| block | median actual | altitude-law prediction | excess |
+|---|---|---|---|
+| core 1..N-40 | 8.09e-06 | 1.02e-05 | 0.8x |
+| N-39..N-20 | 1.59e-03 | 2.92e-03 | 0.5x |
+| N-19..N-8 | 3.56e-02 | 5.22e-02 | 0.7x |
+| **LAST 8** | **7.88e-01** | **7.40e-01** | **1.1x** |
+
+No excess anywhere. **The end-interval deviation is ordinary truncation error at
+periselene**, which on this trajectory happens to sit at t_f. Trimming the ends
+does not remove an artifact — it removes the hardest part of the problem.
+
+Third time this campaign has attributed something to the wrong cause by not
+separating two confounded variables. Worth naming as a habit to break: when an
+effect appears "at the end", check whether anything else is also at the end.
+
+
+### STATE agreement, and why the raw number is misleading
+
+The costate comparison above is the strong claim; the state comparison is the
+one a reader asks for first, and it was NOT part of the original certification —
+that rested on t_f plus endpoints, which the boundary conditions pin anyway.
+
+| quantity | value |
+|---|---|
+| max position difference, matched ABSOLUTE time | 3.311 km |
+| max position difference, matched FRACTIONAL time | **0.396 km** |
+| median, fractional | 0.230 km |
+| max velocity difference | 0.341 m/s |
+| max mass-fraction difference | 3.2e-10 |
+| thrust direction difference | median 5.3e-04 deg, max 0.101 deg |
+
+**The raw 3.3 km is almost entirely a phasing offset, not a shape difference.**
+The two solutions differ in t_f by 7.63e-06 ND = **2.92 seconds**. At the
+trajectory's speed range (0.143–1.135 km/s) that alone predicts an along-track
+displacement of 0.42–3.32 km, and the observed maximum is 3.311 km — the top of
+the predicted range. Re-sampling at matched fractional time s = t/t_f removes it
+and leaves 0.396 km, a factor of 8.4 smaller.
+
+So: same trajectory to ~0.4 km peak / 0.23 km median over an 89,000 km,
+17.8-day transfer, with the residual difference dominated by the last few
+percent of the arc where the close approach sits.
+
+### The Hager terminal covector (applied 2026-08-02)
+
+lambda(t_f) is now read from the TERMINAL BOUNDARY multipliers rather than
+extrapolated from the interval multipliers. Stationarity w.r.t. X(:,end) gives
+nu_N'*dD_N/dX_end + nu_psi'*dpsi/dX_end = 0 with dD_N/dX_end = I + O(h), so
+lambda(t_f) = -nu_psi to leading order. Requires `opts.returnModel = true`,
+which is what registers the boundary constraint rows.
+
+| check | value |
+|---|---|
+| lambda_v(t_f) angle to the indirect terminal costate | 1.57e-02 deg |
+| relative error, full 6-vector | 4.96e-04 |
+
+Note what it does NOT fix: the Hamiltonian deviation in the last intervals,
+which is truncation error at periselene (see above), not a boundary artifact.
+Applying the correction was still right — it is the correct reading of
+lambda(t_f) — but it was proposed on a wrong diagnosis.
+
+### Figures
+
+- `direct/results/dvi_N1600_state.png` — trajectory overlay; position difference
+  raw and phasing-removed; velocity; mass; thrust direction; difference vs
+  altitude. Every panel that rises at late time also carries lunar altitude, so
+  the two can be told apart by eye — the confound that produced a wrong
+  diagnosis here is now visible in the plot itself.
+- `direct/results/dvi_N1600_costate.png` — lambda_r, lambda_v and lambda_m
+  overlaid (direct solid, indirect dashed; they are indistinguishable, including
+  the large lambda_r excursions at 13.5 and 17.8 days); direction agreement;
+  scale factor; Hamiltonian condition against altitude.
+- Generator: `direct/viz/plot_direct_vs_indirect.m`.
 
 ### What this settles
 

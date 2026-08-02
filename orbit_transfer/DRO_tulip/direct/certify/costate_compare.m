@@ -133,11 +133,29 @@ K.scaleCoV = std(ratio)/max(abs(mean(ratio)), eps);
 K.ratio    = ratio;
 
 % --- transversality and Hamiltonian ----------------------------------------
-% lambda_m at t_f: the multipliers live at interval midpoints, so the terminal
-% value must be extrapolated from the last two rather than read off the last.
-K.lamMEnd = lamDm(end) + (lamDm(end)-lamDm(end-1)) * ...
+% --- THE HAGER TERMINAL COVECTOR ------------------------------------------
+% lambda(t_f) read from the TERMINAL BOUNDARY multipliers rather than
+% extrapolated from the interval multipliers. Stationarity w.r.t. X(:,end) is
+%   nu_N' dD_N/dX_end + nu_psi' dpsi/dX_end = 0,  dD_N/dX_end = I + O(h),
+% so lambda(t_f) = -nu_psi to leading order. Only the first six components are
+% constrained (position and velocity); the mass is free, so its terminal costate
+% must come out of the recursion as zero -- that IS the transversality condition
+% lambda_m(t_f) = 0, and it is checked rather than assumed.
+K.lamMEndExtrap = lamDm(end) + (lamDm(end)-lamDm(end-1)) * ...
             (t(end)-tMid(end)) / max(tMid(end)-tMid(end-1), eps);
+K.lamMEnd = K.lamMEndExtrap;      % kept as the default reported value
 K.lamMEndRaw = lamDm(end);
+K.lamTermHager = [];  K.lamTermAngDeg = NaN;  K.lamTermRelErr = NaN;
+if isfield(o,'lamBCf') && numel(o.lamBCf) == 6
+    lamT = sgn * (-o.lamBCf(:));                    % same sign convention as above
+    K.lamTermHager = lamT;
+    lamIT = interp1(tauInd(:), lamInd, t(end), 'spline').';   % indirect at t_f
+    a = lamT(4:6)/max(norm(lamT(4:6)),eps);
+    b = lamIT(4:6)/max(norm(lamIT(4:6)),eps);
+    K.lamTermAngDeg = real(acosd(max(-1,min(1, a.'*b))));
+    K.lamTermRelErr = norm(lamT - lamIT(1:6)) / max(norm(lamIT(1:6)), eps);
+    K.lamTermIndirect = lamIT(1:6);
+end
 
 % Hamiltonian, evaluated at the SOLVER'S midpoint state and control -- not at a
 % fabricated average of the neighbouring nodes, which is a point the NLP never
@@ -154,23 +172,24 @@ for k = 1:N
 end
 K.H = H;  K.Hmean = mean(H);  K.HCoV = std(H)/max(abs(mean(H)), eps);
 
-% INTERIOR vs BOUNDARY. For minimum time with J = t_f the PMP Hamiltonian is
-% H_PMP = 1 + lambda'f and the free-final-time condition is H_PMP == 0, i.e.
-% lambda'f == -1 identically. Measured here the median is -1 to ~1e-5, but the
-% last handful of intervals deviate by O(1).
+% WHERE THE HAMILTONIAN DEVIATION COMES FROM, and the first answer was wrong.
+% For minimum time with J = t_f the PMP Hamiltonian is H_PMP = 1 + lambda'f and
+% the free-final-time condition is H_PMP == 0, i.e. lambda'f == -1 identically.
+% Measured: the median is -1 to ~1e-5, but the last few intervals deviate by O(1).
 %
-% That is a MAPPING artifact at the terminal boundary, not a disagreement. The
-% final node carries the endpoint equality constraints, so its stationarity
-% condition mixes the defect multipliers with the boundary multipliers, and the
-% naive reading used here -- 'nu_k is lambda at the midpoint of interval k' --
-% has no way to separate them. The Hager covector mapping supplies exactly this
-% terminal correction; foc_check applies it elsewhere in this repository for the
-% same reason. Until it is applied here, the last ~1% of intervals should be
-% treated as uninformative rather than as evidence.
+% That was first attributed to a terminal covector-mapping artifact -- the final
+% node carrying the endpoint equalities, contaminating the last multipliers.
+% THAT EXPLANATION IS WRONG, and the test that refutes it is simple: on this
+% transfer the CLOSEST LUNAR APPROACH occurs at interval 1599 of 1600, i.e. at
+% the very end. Boundary and close approach are confounded. Fitting |H+1|
+% against altitude on intervals 1..N-40 gives |H+1| ~ alt^-4.73, and the last
+% eight intervals come in at 1.1x that prediction -- no excess. The deviation is
+% ordinary truncation error at periselene, which merely happens to sit at t_f.
 %
-% Measured on the certified N=1600 solution: trimming 20 intervals from each end
-% drops max|H+1| from 1.02 to 0.023 and the CoV from 5.6e-2 to 2.5e-3, while the
-% median is unchanged at 9.8e-6. The contamination is confined to k >= N-8.
+% Consequence: trimming the ends does not "remove an artifact", it removes the
+% hardest part of the trajectory. The trimmed statistics are reported because
+% they separate the easy bulk from the hard tail, NOT because the tail is
+% spurious.
 nTrim = max(1, round(0.0125*N));
 ii = (1+nTrim):(N-nTrim);
 K.nTrim      = nTrim;
@@ -207,14 +226,22 @@ if verbose
         median(K.lamRAngDeg), max(K.lamRAngDeg));
     fprintf('    lambda_r scale factor  : %.6g   (lambda_v gave %.6g)\n', ...
         K.lamRScale, K.scale);
-    fprintf('\n  transversality lambda_m(t_f) = %+.4e  (PMP wants 0)\n', K.lamMEnd);
+    fprintf('\n  TERMINAL COVECTOR (Hager: read from the boundary multipliers)\n');
+    if isempty(K.lamTermHager)
+        fprintf('    not available -- re-solve with opts.returnModel = true\n');
+    else
+        fprintf('    lambda_v(t_f) angle to indirect : %.4e deg\n', K.lamTermAngDeg);
+        fprintf('    ||lambda(t_f) - indirect||/||.|| : %.4e\n', K.lamTermRelErr);
+    end
+    fprintf('  transversality lambda_m(t_f) = %+.4e  (PMP wants 0)\n', K.lamMEnd);
     fprintf(['  Hamiltonian lambda''f (PMP wants identically -1 for min-time):\n' ...
              '    median |H+1| over all intervals      : %.3e\n' ...
              '    INTERIOR (trimming %d from each end) : mean %+.6f, CoV %.3e, max|H+1| %.3e\n' ...
              '    all intervals                        : mean %+.6f, CoV %.3e\n'], ...
         K.HdevMedian, K.nTrim, K.HmeanInt, K.HCoVInt, K.HdevMaxInt, K.Hmean, K.HCoV);
-    fprintf(['    (the end-interval deviation is a terminal covector-mapping\n' ...
-             '     artifact -- see the note in the source -- not a disagreement)\n']);
+    fprintf(['    (the end-interval deviation is TRUNCATION ERROR AT PERISELENE,\n' ...
+             '     which on this transfer sits at t_f -- not a boundary artifact;\n' ...
+             '     see the note in the source for the test that showed this)\n']);
 end
 end
 

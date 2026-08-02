@@ -75,6 +75,9 @@ function out = casadi_mintime_dro(rv0, rvf, Tmax, c, muStar, N, X0, U0, tf0, opt
 %         .altActive (true if the constraint is within 1 km of binding)
 %         .ipoptStatus .maxDefect .maxUnit .termErr .thrMin (lowest throttle --
 %         the saturation check) .mf .lamDef [7xN] defect multipliers
+%         .lamBCf [6x1] TERMINAL boundary multipliers -- the Hager terminal
+%         covector, i.e. lambda(t_f) up to sign; .lamBC0 [7x1] initial ones.
+%         All three require opts.returnModel = true.
 %         .tfSpread (max deviation across the lifted copies -- should be ~0)
 %         .model (opts.returnModel only)
 %
@@ -202,9 +205,20 @@ if ~isempty(Um)
     end
 end
 
+r0 = size(opti.g,1)+1;
 opti.subject_to(X(1:6,1) == rv0(:));
 opti.subject_to(X(7,1) == 1);
+if retModel, creg(end+1) = struct('label','bc0','rows',r0:size(opti.g,1)); end
+
+% The TERMINAL boundary rows are registered separately because their multipliers
+% are the Hager terminal covector: stationarity of the Lagrangian with respect to
+% X(:,end) reads  nu_N'*dD_N/dX_end + nu_psi'*dpsi/dX_end = 0, and since
+% dD_N/dX_end = I + O(h), the terminal costate is -nu_psi to leading order. That
+% is a cleaner reading of lambda(t_f) than extrapolating the interval
+% multipliers, and it is what foc_check uses elsewhere in this repository.
+r0 = size(opti.g,1)+1;
 opti.subject_to(X(1:6,end) == rvf(:));
+if retModel, creg(end+1) = struct('label','bcf','rows',r0:size(opti.g,1)); end
 opti.subject_to(TF(:) >= 1e-3);   % non-strict: an NLP cannot impose '>'
 opti.subject_to(X(7,:).' >= 0.05);         % mass stays physical (non-strict)
 
@@ -357,8 +371,12 @@ try
     lamAll = full(sol.value(opti.lam_g));
     kd = find(strcmp({creg.label},'defect'), 1);   % NOT creg(1): Hermite-Simpson
     out.lamDef = reshape(lamAll(creg(kd).rows), 7, N);   % registers interp first
+    kf = find(strcmp({creg.label},'bcf'), 1);
+    if ~isempty(kf), out.lamBCf = lamAll(creg(kf).rows); else, out.lamBCf = []; end
+    k0 = find(strcmp({creg.label},'bc0'), 1);
+    if ~isempty(k0), out.lamBC0 = lamAll(creg(k0).rows); else, out.lamBC0 = []; end
 catch
-    out.lamDef = [];
+    out.lamDef = [];  out.lamBCf = [];  out.lamBC0 = [];
 end
 if retModel, out.model = struct('opti',opti,'creg',creg,'X',X,'U',U,'TF',TF); end
 end

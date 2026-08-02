@@ -26,15 +26,175 @@ retrograde orbit about the Moon, and a seven-petal tulip orbit whose apoapses
 hang over the lunar southern hemisphere. The problem is solved by direct
 collocation and compared against an existing indirect (Pontryagin shooting)
 solution of the same transfer---the first problem in this programme where an
-independent second opinion exists. Two lessons came out of the first solves.
-The Sundman regularization that our Earth-departure campaigns require is
-\emph{not} needed here, and the reason is measurable. More consequentially, the
-problem as ordinarily posed is \textbf{ill-posed}: without a minimum lunar
-altitude constraint, ``the minimum time'' is not a number but a family
-parameterized by flyby depth.
+independent second opinion exists. Three lessons came out. First, the problem as
+ordinarily posed is \textbf{ill-posed}: without a minimum lunar altitude
+constraint, ``the minimum time'' is not a number but a family parameterized by
+flyby depth, bounded below only by the lunar surface. Second, adding that path
+constraint costs one block of algebraic inequalities in the direct formulation
+against a multipoint boundary-value problem with costate jumps in the indirect
+one---a concrete asymmetry between the methods. Third, and most cautionary: the
+mesh-dependent solutions that appeared to \emph{beat} the reference minimum time
+are not better optima but quadrature error being optimized against. Their
+trapezoidal defects are $10^{-14}$ while their true local error at periselene is
+$O(1)$, a discrepancy of seven orders of magnitude, scaling as
+altitude$^{-4.2}$. A machine-tight defect is a statement about the
+discretization, not about the trajectory.
 \end{abstract}
 
 \tableofcontents
+
+\section{The CR3BP frame and its coordinates}
+\label{sec:frame}
+
+Every number in this document lives in one particular reference frame, and the
+frame is not inertial. It is worth being precise about it before any orbit is
+described, because two of the terms in the equations of motion exist only
+because of the frame's rotation.
+
+\paragraph{The construction.} The circular restricted three-body problem
+idealizes the Earth and the Moon---the two \emph{primaries}---as moving on
+circular orbits about their common barycentre with constant angular rate
+$n = \sqrt{G(M_E+M_M)/L^3}$, and the spacecraft as a massless third body that
+feels both but perturbs neither. ``Restricted'' is exactly that massless
+assumption; ``circular'' is the assumption that the Moon's real eccentricity of
+$0.055$ can be ignored.
+
+Now spin the coordinate frame at that same rate $n$. In the rotating frame the
+two primaries stand \emph{still}. That is the whole point of the construction:
+a problem with two moving attractors becomes a problem with two fixed ones, at
+the price of two fictitious accelerations.
+
+\paragraph{Axes and origin.} The origin is the Earth--Moon barycentre. Then
+
+\begin{itemize}
+  \item $\hat{x}$ points from the Earth toward the Moon, along the line joining
+        the primaries;
+  \item $\hat{z}$ is along the orbital angular momentum of the primaries, i.e.
+        the normal to their orbit plane---so positive $z$ is lunar north;
+  \item $\hat{y} = \hat{z} \times \hat{x}$ completes the right-handed set, and
+        points along the Moon's direction of travel.
+\end{itemize}
+
+With the mass ratio
+\[
+  \mu = \frac{M_M}{M_E + M_M} = 0.012150585609624,
+\]
+the primaries sit permanently at
+\[
+  \vecr_{\!E} = (-\mu,\,0,\,0), \qquad \vecr_{\!M} = (1-\mu,\,0,\,0),
+\]
+one nondimensional unit apart. Throughout, $d = \lVert\vecr - \vecr_{\!E}\rVert$
+is the distance to the Earth and $\rho = \lVert\vecr - \vecr_{\!M}\rVert$ the
+distance to the Moon; the ``lunar altitude'' quoted everywhere below is
+$\rho L - R_M$ with $R_M = 1737.4$~km.
+
+\paragraph{What the frame costs.} A frame rotating at rate $n\hat z$ introduces
+centrifugal and Coriolis accelerations. Nondimensionalized so that $n = 1$
+(Section~\ref{sec:units}), the centrifugal term is $(x, y, 0)$---it appears
+folded into $\mathbf{g}$ in \eqref{eq:vdot}, which is why the first two rows of
+$\mathbf{g}$ begin with a bare $x$ and $y$---and the Coriolis term is
+$\mathbf{h}(\vecv) = (2\dot y,\, -2\dot x,\, 0)$. Neither is a force; both are
+bookkeeping for having chosen a rotating frame. They are also the reason the
+CR3BP admits the five Lagrange equilibria and the whole zoo of periodic families
+that the endpoints of this transfer are drawn from.
+
+\paragraph{A caution about what the pictures show.} A trajectory that looks
+like a tidy closed loop in this frame is, in the inertial frame, a rosette; and
+a trajectory that appears to loop \emph{backward} around the Moon (the
+``retrograde'' in DRO) may be perfectly prograde inertially. All plots and
+movies in this document are rotating-frame plots unless stated otherwise.
+
+\section{From dimensional to nondimensional units}
+\label{sec:units}
+
+The CR3BP is customarily nondimensionalized so that three quantities equal one:
+the distance between the primaries, their total mass, and their angular rate.
+This is not cosmetic. It puts positions, velocities and times all within an
+order of magnitude of unity, which is what lets an interior-point NLP solver
+work at a single tolerance across the whole state vector instead of fighting a
+$10^{5}$~km position against a $10^{-3}$~km/s velocity.
+
+\paragraph{The three scale factors.} Everything follows from a length, a time
+and a mass:
+\[
+  L = 389703.264829278~\text{km}, \qquad
+  T = 382981.289129055~\text{s}, \qquad
+  M = M_E + M_M ,
+\]
+with $T = \sqrt{L^3 / GM}$ chosen precisely so that the primaries' angular rate
+is $n = 1/T$, i.e.\ unity in the new units. These are the values \code{pumpkyn}
+uses, and we adopt them verbatim so that our direct solutions and its indirect
+ones are solutions of the \emph{same} problem---a shared constant set is a
+precondition for the cross-validation this campaign exists to perform.
+
+Two derived scales do most of the work:
+\[
+  V = \frac{L}{T} = 1.0175517~\text{km/s},
+  \qquad
+  A = \frac{L}{T^2} = 2.656923~\text{mm/s}^2 .
+\]
+
+\paragraph{The conversions.} To go from dimensional (left) to nondimensional
+(right):
+
+\begin{center}
+\begin{tabular}{llll}
+\toprule
+Quantity & Dimensional & Divide by & Nondimensional \\
+\midrule
+Position       & $\tilde{\vecr}$ [km]      & $L$     & $\vecr = \tilde{\vecr}/L$ \\
+Velocity       & $\tilde{\vecv}$ [km/s]    & $V$     & $\vecv = \tilde{\vecv}T/L$ \\
+Time           & $\tilde{t}$ [s]           & $T$     & $t = \tilde{t}/T$ \\
+Acceleration   & $\tilde{a}$ [km/s$^2$]    & $A$     & $a = \tilde{a}T^2/L$ \\
+Mass           & $\tilde{m}$ [kg]          & $m_0$   & $m = \tilde{m}/m_0$ \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+Note the last row: mass is scaled by the \emph{initial wet mass}, not by $M$, so
+$m$ is a mass fraction beginning at $1$. This is why \eqref{eq:mdot} carries no
+separate $m_0$.
+
+\paragraph{Useful reference values.} One nondimensional time unit is
+$T = 4.4327$~days, so a full revolution of the primaries, $2\pi$ in these
+units, is $27.851$~days. The lunar radius is
+$R_M/L = 4.458264\times10^{-3}$, and the $441$~km closest approach reported in
+Section~\ref{sec:illposed} is $\rho = 5.58989\times10^{-3}$---which is worth
+internalizing, because a lunar \emph{impact} and a healthy $10\,000$~km flyby
+differ only in the third decimal place of a state variable whose other
+components are of order unity. That numerical near-degeneracy is exactly why
+the constraint of Section~\ref{sec:pathcon} is needed.
+
+\paragraph{Propulsion, which is the fiddly one.} The propulsion parameters need
+care because they mix mass, force and time. Standard gravity becomes a
+nondimensional number,
+\[
+  g_0^{\text{ND}} = \frac{9.80665~\text{m/s}^2 \cdot T^2}{1000\,L} = 3690.98 ,
+\]
+and then, for a thruster of maximum thrust $F$ [N] on a wet mass $m_0$ [kg] with
+specific impulse $I_{sp}$ [s],
+\[
+  T_{\max} = \frac{F}{m_0}\cdot\frac{T^2}{1000\,L},
+  \qquad
+  c = \frac{I_{sp}}{T} \cdot g_0^{\text{ND}} .
+\]
+The first is an \emph{acceleration} at unit mass fraction, not a force; the
+second is the exhaust velocity. For the $70$~mN, $900$~s, $150$~kg case used
+throughout this document,
+\[
+  T_{\max} = 0.1756418 \;(\,= 0.4667~\text{mm/s}^2\,),
+  \qquad
+  c = 8.673746 \;(\,= 8.826~\text{km/s}\,),
+\]
+and the sanity check on the second is immediate: $I_{sp}g_0 = 900 \times 9.80665
+= 8826$~m/s, recovered exactly by multiplying $c$ by $V$. Any conversion of this
+kind should be checked by round-tripping one such known quantity; it is the
+cheapest bug filter available.
+
+\paragraph{Reading results back out.} The two numbers most often wanted
+dimensionally are the transfer duration, $t_f T / 86400$ in days, and the
+$\Delta V$, which follows from the ideal rocket equation applied to the mass
+fraction: $\Delta V = c\,V \ln(1/m(t_f))$ in km/s.
 
 \section{The two orbits}
 
@@ -213,6 +373,138 @@ and the arrowhead becomes \textbf{banded}. With the lift in place the same
 problem solves in $6.8$ seconds. As a check, the spread
 $\max_k |T_k - T_1|$ is reported and comes back identically zero.
 
+\section{Adding a path constraint}
+\label{sec:pathcon}
+
+Section~\ref{sec:illposed} shows that this problem needs a minimum-altitude
+constraint to be well posed. This section is about how one is added, why the
+direct method makes it nearly free, and---honestly---what adding it did and did
+not fix.
+
+\subsection{The constraint, and its transcription}
+
+The requirement is a \emph{state path constraint}: at every instant of the
+transfer, the spacecraft must stay above a chosen altitude $h_{\min}$ over the
+lunar surface,
+\begin{equation}
+  \rho(t) \;\ge\; \rho_{\min} \;=\; \frac{R_M + h_{\min}}{L},
+  \qquad \forall\, t \in [0, t_f].
+\label{eq:pathcon}
+\end{equation}
+In the transcription this becomes one algebraic inequality per node. We impose
+it in \emph{squared} form,
+\begin{equation}
+  \lVert \vecr_k - (1-\mu,0,0) \rVert^2 \;\ge\; \rho_{\min}^2,
+  \qquad k = 1,\dots,N+1,
+\label{eq:pathcon_disc}
+\end{equation}
+which avoids the square root---whose gradient is undefined at $\rho = 0$ and
+poorly scaled near it---and keeps the constraint a smooth quadratic in the
+position variables. Its gradient, $2(\vecr_k - \vecr_{\!M})$, is exact and
+well conditioned everywhere the constraint could plausibly be active.
+
+That is the entire implementation: four lines of CasADi, one extra block of
+$N+1$ rows in the constraint Jacobian, no change to the objective, the dynamics,
+the boundary conditions, or the solver settings.
+
+\subsection{Is this a genuine advantage of the direct method?}
+
+Yes---and the asymmetry is larger than it first appears.
+
+For the \textbf{direct} method a path constraint is structurally the same kind
+of object as everything else in the NLP. The problem is already a constrained
+optimization; \eqref{eq:pathcon_disc} adds rows to a matrix that has millions of
+rows already. The interior-point solver handles the inequality with the same
+barrier machinery it uses for $0 \le u_k \le 1$. Nothing about the formulation
+changes. The switch from an unconstrained to a constrained problem cost one
+optional argument in the solver's interface.
+
+For the \textbf{indirect} method the same constraint changes the mathematical
+object being solved. Under Pontryagin's principle with a pure state
+inequality, one must:
+\begin{enumerate}
+  \item guess, \emph{a priori}, the \textbf{structure} of the solution---how
+        many constrained arcs there are and in what order they appear, since
+        this determines the number of unknowns in the shooting problem;
+  \item derive the order $q$ of the constraint, meaning how many times
+        \eqref{eq:pathcon} must be differentiated along the dynamics before the
+        control appears (for an altitude constraint under thrust, $q = 2$);
+  \item append the constrained-arc condition to the Hamiltonian with a
+        multiplier $\eta(t) \ge 0$, active only on the constrained arc and
+        complementary to the constraint;
+  \item impose \textbf{junction conditions} at entry to and exit from each
+        constrained arc, where the costates are permitted to \emph{jump}:
+        $\boldsymbol{\lambda}(\tau^-) = \boldsymbol{\lambda}(\tau^+) +
+        \sum_{j=0}^{q-1}\nu_j \,\partial_x C^{(j)}$, introducing further unknown
+        multipliers $\nu_j$;
+  \item solve the resulting multipoint boundary-value problem, whose unknown
+        vector now contains the entry and exit times as well.
+\end{enumerate}
+The shooting problem grows, it acquires discrete structure that must be guessed
+before it can be solved, and the costate trajectory is no longer continuous.
+This is the same category of difficulty that makes min-fuel harder than
+min-time for the indirect method---the burden of guessing a discrete structure
+in advance---and here it arrives even in a min-time problem.
+
+\paragraph{The caveat, and it is a real one.} The direct method's advantage is
+in \emph{formulation}, not in \emph{rigour}. Constraint
+\eqref{eq:pathcon_disc} is imposed \textbf{at the nodes only}. Between two
+adjacent nodes the interpolated trajectory is free to dip below $\rho_{\min}$,
+and nothing in the NLP forbids it. This matters here more than it usually would,
+because the constraint is active precisely at periselene---where the trajectory
+has its greatest curvature and where, as Section~\ref{sec:contres} shows, the
+collocation is at its least accurate. A direct solution that reports
+$\min_k \rho_k = \rho_{\min}$ should be read as ``the nodes clear the floor,''
+not ``the trajectory clears the floor.'' The honest check is to re-integrate the
+converged solution at high accuracy and measure the true minimum---which is what
+the diagnostic of Section~\ref{sec:contres} does.
+
+Against that, the indirect formulation, once its structure is guessed correctly,
+enforces \eqref{eq:pathcon} \emph{exactly} on the constrained arc, because the
+arc is integrated as a boundary of the feasible set rather than sampled. So the
+trade is the familiar one in this repository: the direct method makes the
+problem easy to \emph{pose} and gives an approximate answer; the indirect method
+makes it hard to pose and gives an exact one.
+
+\subsection{What happened when we imposed it}
+
+The floor is exposed as \code{opts.minAltKm} in \code{run\_dro\_tulip.m}, empty
+by default so that the ill-posed baseline still reproduces. Before running the
+first test we recorded a prediction: with a floor in place, $t_f$ should stop
+depending on $N$, and should \emph{rise} as the floor rises, a shallower flyby
+being a weaker gravity assist.
+
+\textbf{The prediction failed}, and the way it failed is informative. At
+$h_{\min} = 100$~km:
+
+\begin{center}
+\begin{tabular}{rrrrl}
+\toprule
+$N$ & $t_f$ & achieved min.\ alt.\ [km] & max defect & status \\
+\midrule
+$400$  & $4.357303$  & $1048$ & $1.4\times10^{-14}$ & Solve\_Succeeded \\
+$800$  & $4.724866$  & $4680$ & $3.1\times10^{-16}$ & Solve\_Succeeded \\
+$1600$ & $24.65$     & $646$  & $1.2$               & Max\_Iterations \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+Two things are visible. First, the constraint was \textbf{never active}: every
+converged solution clears $100$~km by a factor of ten or more, so
+\eqref{eq:pathcon_disc} holds strictly and its multipliers are zero. Second, and
+despite that, the answers are \emph{different from the unconstrained ones}
+($4.144$, $3.881$, $7.253$ at the same three meshes). An inactive inequality
+cannot change a local minimum---but it can, and evidently did, change which
+local minimum the interior-point method \emph{walks to}, because IPOPT's barrier
+terms depend on the distance to every inequality including the inactive ones.
+
+The mesh dependence therefore did not collapse. That is the correct diagnosis of
+what the altitude floor does and does not buy: it removes the \emph{unbounded}
+family of ever-deeper flybys, which is a genuine repair of the ill-posedness,
+but it does not by itself remove the multiplicity of local minima that the
+solver can land in. Those are two different pathologies, and this experiment
+separated them.
+
 \section{Solution by IPOPT}
 
 The transcription is built with CasADi's \code{Opti} layer, which supplies exact
@@ -264,7 +556,22 @@ trajectory before choosing the transcription.} The reference solution was
 available and took minutes to interrogate; that interrogation determined the
 formulation.
 
+\paragraph{A necessary qualification, added after the diagnostics ran.} The
+statement above is correct \emph{about the reference trajectory}, and about any
+solution with a comparable periselene. It is \textbf{not} correct about the
+deep-flyby branch the direct method finds. Panel (c) of the diagnostic figure
+measures both notions of mesh spacing on the $442$~km solution: the grid is
+uniform in time to a ratio of $1.000$, but the lunar angle swept per interval
+varies by a factor of $\mathbf{353}$ between the cruise and the close approach.
+The mesh has, in other words, no idea the flyby is happening. That is precisely
+the condition a Sundman regularization exists to fix. So the accurate form of
+the lesson is: \emph{no regularization is needed for this transfer at a sane
+periselene, and one would be needed if a deep flyby were to be resolved
+properly.} The original claim was drawn from the reference alone, and the
+reference does not visit the regime that breaks it.
+
 \subsection{Without a minimum-altitude constraint the problem is ill-posed}
+\label{sec:illposed}
 
 This is the consequential finding. Sweeping the mesh density gives:
 
@@ -316,34 +623,156 @@ That is a concrete illustration of a general pattern this programme keeps
 encountering: \textbf{the two methods fail differently, which is precisely why
 running both is informative.}
 
-\subsection{An outstanding check}
+\subsection{The outstanding check, run: machine-tight defects do not mean an
+accurate trajectory}
+\label{sec:contres}
 
-It has \emph{not} yet been established that the $442$ km solution is genuinely
-feasible. A direct method enforces the dynamics only at nodes and never
-evaluates the trajectory between them, so a mesh too coarse to resolve a close
-approach can permit a trajectory that ``cuts the corner.'' The test is to
-reconstruct the control, propagate it with a high-accuracy integrator, and check
-that the nodes are reproduced. Until that runs, the honest statement is that the
-formulation converges machine-tight to solutions that undercut the reference by
-exploiting closer flybys, and whether those solutions are physical is unverified.
+The previous version of this document listed an open question: whether the
+$442$~km solution is \emph{genuinely} feasible, given that a direct method
+enforces the dynamics only at the nodes and never looks between them. That
+check has now been run, and the answer is a clean no.
+
+\paragraph{The measurement.} Take the converged solution. For each interval
+$[t_k, t_{k+1}]$, start at the node state $X_k$, apply the control linearly
+interpolated between $U_k$ and $U_{k+1}$, and integrate the \emph{true}
+equations of motion with \code{ode113} at tolerances $10^{-11}/10^{-13}$. Then
+compare the result against the node the collocation claims to reach:
+\[
+  R_k \;=\; \bigl\lVert\, \Phi(t_{k+1}; t_k, X_k, U(\cdot))
+                          \;-\; X_{k+1} \,\bigr\rVert .
+\]
+$R_k$ is the true local error the trapezoid rule is committing. It is a
+different quantity from the NLP defect, which measures only how well the
+returned numbers satisfy the trapezoid \emph{equations}.
+
+\paragraph{The result.} On the $N = 800$, $442$~km solution:
+
+\begin{table}[h]
+\centering\small
+\begin{tabular}{lr}
+\toprule
+NLP defect (trapezoid equations) & $1.4\times10^{-14}$ \\
+continuous residual, median & $2.1\times10^{-7}$ \\
+continuous residual, \textbf{maximum} & $\mathbf{1.5}$ \\
+ratio, median continuous to discrete & $1.5\times10^{7}$ \\
+lunar altitude at the worst interval & $504$ km \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+The solution satisfies its own discrete equations to fifteen digits and departs
+from the actual dynamics by $O(1)$ in nondimensional units---which is to say,
+by hundreds of thousands of kilometres---on the interval at closest approach.
+The $442$~km trajectory is \textbf{not physical}. It is an artifact of a mesh
+too coarse to resolve the flyby it is exploiting.
+
+\paragraph{Why this is more than one bad case.} The error is not scattered; it
+is an extremely clean function of how close to the Moon the interval sits.
+Fitting the residual against lunar altitude over the whole trajectory gives
+\[
+  R \;\propto\; \text{altitude}^{-4.2},
+\]
+spanning eight orders of magnitude from $10^{-8}$ at $10^5$~km down to $O(1)$ at
+periselene (panel (f) of the diagnostic figure). The scaling is the expected
+one: the trapezoidal local truncation error goes as $h^3 \lvert \dddot{x}
+\rvert$, and for two-body-like motion $\lvert\dddot{x}\rvert \sim \mu^{3/2}
+r^{-7/2}$, predicting an exponent near $-3.5$ against the measured $-4.2$. The
+mechanism is therefore understood, not merely observed.
+
+\paragraph{What this settles, and what it does not.} It settles the question of
+Section~\ref{sec:illposed}: the mesh-dependent ``faster than the reference''
+solutions are not a discovery of better optima, they are quadrature error being
+optimized against. A minimum-time solver handed a discretization that
+under-resolves periselene will drive the trajectory into exactly the region
+where its own error is largest, because that is where the objective can be
+cheaply reduced. The pathology is not that the solver failed; it is that it
+succeeded on the wrong problem.
+
+It does \emph{not} settle how to fix it. Three routes are available and none
+has been tried here: a much finer mesh concentrated near periselene, a Sundman
+regularization of the kind the qualification above now calls for, or a
+higher-order collocation scheme. The altitude floor of Section~\ref{sec:pathcon}
+addresses a different pathology and, as shown there, does not remove this one.
+
+\paragraph{The transferable lesson.} \textbf{A machine-tight defect is a
+statement about the discretization, not about the trajectory.} The two
+quantities differ here by a factor of $10^7$. Every campaign in this repository
+reports defects at the $10^{-14}$ level as evidence of a good solve; that
+evidence is necessary and nowhere near sufficient, and the continuous residual
+is cheap enough---one \code{ode113} call per interval---that there is no excuse
+for not measuring it.
+
+\section{Diagnostics and visualization}
+
+Stage 4 of \code{run\_dro\_tulip.m} is optional and off by default. It runs on
+one chosen solve from the sweep and produces the following.
+
+\paragraph{The six-panel diagnostic} (\code{opts.plots = true}), ordered by what
+a reader should check first:
+\begin{enumerate}
+  \item[(a)] the trajectory, Moon-centred, with the lunar disc and the altitude
+        floor drawn to scale---so that whether the constraint bites is visible
+        rather than inferred;
+  \item[(b)] lunar altitude against time, on a log axis, with the floor marked;
+  \item[(c)] mesh spacing, measured two ways: $\Delta t$ per interval, and the
+        lunar angle swept per interval. The first is flat by construction, the
+        second is the one that matters, and their disagreement is the
+        Sundman argument of the qualification above;
+  \item[(d)] the continuous-time residual $R_k$ of Section~\ref{sec:contres},
+        against the NLP defect drawn as a dashed line for scale;
+  \item[(e)] the throttle, which for minimum time should saturate at unity
+        throughout---anything else is a finding;
+  \item[(f)] residual against lunar altitude, the panel that exhibits the
+        power law.
+\end{enumerate}
+
+\paragraph{Two movies} (\code{opts.movies}), both written at $1280\times720$
+so that H.264 does not shear the frames:
+\begin{itemize}
+  \item \code{'traj'}: a Moon-centred rotating-frame movie in base MATLAB only,
+        with the departure DRO and arrival tulip for context, the lunar disc and
+        altitude floor to scale, a fading tail behind the spacecraft, and a live
+        readout of elapsed time and lunar altitude. This one always runs.
+  \item \code{'scene'}: the \code{pumpkynPie}-lit scene---starfield, shaded
+        Moon, Earth---driven by \emph{our} direct solution rather than the
+        indirect one, built by calling \code{pumpkynPie.plot.SatelliteAnimator}.
+        Nothing is written into \code{pumpkyn} or \code{pumpkynPie}. If that
+        class is not on the path the function returns cleanly and the caller
+        falls back to \code{'traj'}.
+\end{itemize}
+In both, the path between collocation nodes is drawn by spline interpolation, at
+six samples per interval. That is a \emph{rendering} choice and is stated as
+such: it makes the curve smooth without asserting that the sub-node path is
+dynamically correct---which, per Section~\ref{sec:contres}, near periselene it
+emphatically is not.
 
 \section*{Reproducing this}
 \addcontentsline{toc}{section}{Reproducing this}
 
 \begin{verbatim}
     addpath('orbit_transfer/DRO_tulip/direct');
-    R = run_dro_tulip();
+
+    R = run_dro_tulip();                        % the baseline record
+
+    R = run_dro_tulip(struct( ...               % with everything on
+            'minAltKm', 500, ...                %   altitude floor, km
+            'plots',    true, ...               %   six-panel diagnostic
+            'movies',   'both'));               %   'traj' | 'scene' | 'both'
 \end{verbatim}
 
-One call regenerates the reference characterization, the mesh sweep and the
-lunar-approach table. Requires \code{pumpkynPie} and \code{pumpkyn}---which must
-be updated together---and CasADi 3.7.0.
+The first call regenerates the reference characterization, the mesh sweep and
+the lunar-approach table. Requires \code{pumpkynPie} and \code{pumpkyn}---which
+must be updated together---and CasADi 3.7.0. Leaving \code{minAltKm} empty is
+what reproduces the ill-posed baseline of Section~\ref{sec:illposed}, so the
+default is deliberately the unconstrained one.
 
 \begin{tabular}{ll}
 \toprule
 front door & \code{DRO\_tulip/direct/run\_dro\_tulip.m} \\
 endpoints & \code{DRO\_tulip/direct/lib/dro\_tulip\_endpoints.m} \\
 solver & \code{DRO\_tulip/direct/lib/casadi\_mintime\_dro.m} \\
+diagnostics & \code{DRO\_tulip/direct/viz/plot\_dro\_diagnostics.m} \\
+movies & \code{DRO\_tulip/direct/viz/dro\_\{traj,scene\}\_movie.m} \\
 running record & \code{DRO\_tulip/FINDINGS.md} \\
 indirect reference & \code{pumpkynPie/demos/lowThrustDRO2Tulip.m} \\
 \bottomrule

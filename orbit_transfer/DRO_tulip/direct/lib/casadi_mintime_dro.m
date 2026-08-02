@@ -47,9 +47,19 @@ function out = casadi_mintime_dro(rv0, rvf, Tmax, c, muStar, N, X0, U0, tf0, opt
 %   opts     - struct (optional):
 %              .maxIter [3000]  .printLevel [0]  .returnModel [false]
 %              .thrLock [false] true pins thr == 1 (the classical min-time form)
+%              .minAltKm [] minimum altitude above the LUNAR SURFACE, km. Empty
+%                       (default) leaves the problem UNCONSTRAINED, which
+%                       reproduces the original ill-posed sweep. Any finite
+%                       value adds the path constraint below.
+%              .lStarKm [389703.264829278] characteristic length, for the km
+%                       conversion
+%              .rMoonKm [1737.4] lunar radius
 %
 % OUTPUTS:
 %   out - struct: .X [7x(N+1)] .U [4x(N+1)] .tf .s (the grid) .success
+%         .minAltKm (the constraint applied, NaN if none)
+%         .altMinKm (the ACHIEVED minimum altitude at the nodes)
+%         .altActive (true if the constraint is within 1 km of binding)
 %         .ipoptStatus .maxDefect .maxUnit .termErr .thrMin (lowest throttle --
 %         the saturation check) .mf .lamDef [7xN] defect multipliers
 %         .tfSpread (max deviation across the lifted copies -- should be ~0)
@@ -65,6 +75,9 @@ maxIter  = g('maxIter', 3000);
 prnt     = g('printLevel', 0);
 retModel = g('returnModel', false);
 thrLock  = g('thrLock', false);
+minAltKm = g('minAltKm', []);
+lStarKm  = g('lStarKm', 389703.264829278);
+rMoonKm  = g('rMoonKm', 1737.4);
 
 import casadi.*
 nN = N + 1;
@@ -120,6 +133,31 @@ opti.subject_to(X(1:6,end) == rvf(:));
 opti.subject_to(TF(:) > 0);
 opti.subject_to(X(7,:).' > 0.05);          % mass stays physical
 
+% --- minimum-altitude path constraint ---------------------------------------
+% WITHOUT THIS THE PROBLEM IS ILL-POSED. Nothing else in the formulation stops
+% the trajectory approaching the Moon, and a deeper flyby buys a stronger
+% gravity assist, so inf t_f is approached as the trajectory grazes the lunar
+% surface -- 'the minimum time' is a family parameterized by flyby altitude, not
+% a number. Measured: an unconstrained solve at N = 800 returned t_f BELOW the
+% indirect reference by flying a 442 km pass against the reference's 4674 km.
+%
+% Imposed SQUARED, which avoids a square root whose derivative blows up as the
+% radius shrinks -- precisely where the constraint is active.
+%
+% NOTE WHAT THIS DOES AND DOES NOT GUARANTEE. Like every constraint in a
+% collocation transcription it binds AT THE NODES ONLY. Between nodes the
+% trajectory is never evaluated, so a mesh too coarse to resolve the periselene
+% can still permit an excursion below the floor. Verify with a high-accuracy
+% propagation of the reconstructed control before trusting a tight case.
+rhoMinND = NaN;
+if ~isempty(minAltKm)
+    rhoMinND = (rMoonKm + minAltKm) / lStarKm;
+    dMoon2 = sum((X(1:3,:) - [1-muStar; 0; 0]).^2, 1).';
+    r0 = size(opti.g,1)+1;
+    opti.subject_to(dMoon2 >= rhoMinND^2);
+    if retModel, creg(end+1) = struct('label','minAlt','rows',r0:size(opti.g,1)); end
+end
+
 opti.minimize(TF(1));
 
 % --- warm start -------------------------------------------------------------
@@ -166,6 +204,13 @@ out.maxDefect = max(abs(Dn(:)));
 out.maxUnit   = max(abs(vecnorm(out.U(1:3,:),2,1) - 1));
 out.termErr   = norm(out.X(1:6,end) - rvf(:));
 out.thrMin    = min(out.U(4,:));
+r2n = vecnorm(out.X(1:3,:) - [1-muStar;0;0], 2, 1);
+out.altMinKm  = min(r2n)*lStarKm - rMoonKm;
+out.minAltKm  = NaN;  out.altActive = false;
+if ~isempty(minAltKm)
+    out.minAltKm  = minAltKm;
+    out.altActive = (out.altMinKm - minAltKm) < 1;   % within 1 km of binding
+end
 out.mf        = out.X(7,end);
 try
     lamAll = full(sol.value(opti.lam_g));

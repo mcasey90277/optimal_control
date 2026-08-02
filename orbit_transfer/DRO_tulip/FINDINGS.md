@@ -67,25 +67,141 @@ This is **basin multiplicity in a third independent context**, after min-fuel
 GTO→tulip (six optima at one t_f) and min-fuel earth (every certified row
 beaten). It is not a min-fuel phenomenon.
 
-## What must be checked before any of this is claimed
+## RESOLVED (2026-08-02): the fast solutions are quadrature error, not better optima
 
-**Whether the 442 km solution is genuinely feasible or is exploiting the
-discretization.** A direct method can "cut the corner" at a close approach if
-the mesh is too coarse to resolve it — the trajectory between nodes is never
-evaluated. The test is to reconstruct the control and propagate it with a
-high-accuracy integrator, which is exactly what `verify_common/pmp/` does. If
-the propagated trajectory does not reproduce the nodes, the fast solution is an
-artifact and the finding is about mesh adequacy instead.
+The open question above — whether the 442 km solution is genuinely feasible or
+is exploiting the discretization — has been answered. **It is exploiting the
+discretization.**
 
-Until that runs, the honest statement is: *the direct formulation converges
-machine-tight to solutions that undercut the reference by exploiting closer
-lunar flybys; whether those are physical is unverified.*
+### The measurement
+
+For each interval, start at node `X_k`, apply the control linearly interpolated
+between `U_k` and `U_{k+1}`, integrate the TRUE dynamics with `ode113` at
+1e-11/1e-13, and compare against `X_{k+1}`. That is the true local error the
+trapezoid rule commits — a different quantity from the NLP defect, which only
+says how well the returned numbers satisfy the trapezoid *equations*.
+
+On the N = 800, 442 km solution:
+
+| quantity | value |
+|---|---|
+| NLP defect (trapezoid equations) | 1.4e-14 |
+| continuous residual, median | 2.1e-07 |
+| **continuous residual, max** | **1.5** |
+| ratio median-continuous / discrete | 1.5e+07 |
+| lunar altitude at the worst interval | 504 km |
+
+A residual of O(1) in ND units is hundreds of thousands of km. **The 442 km
+trajectory is not physical.**
+
+### It is a clean power law, so the mechanism is understood
+
+Residual vs lunar altitude over the whole trajectory fits
+
+    R ~ altitude^(-4.24)
+
+spanning eight orders of magnitude, 1e-8 at 1e5 km down to O(1) at periselene.
+Trapezoidal LTE goes as `h^3` times the third derivative of position, and for
+two-body-like motion that derivative scales as `mu^1.5 * r^-3.5`, predicting an
+exponent near -3.5 against the measured -4.24. Observed, explained, not a
+one-off.
+
+### What it means
+
+A minimum-time solver handed a mesh that under-resolves periselene will drive
+the trajectory into exactly the region where its own error is largest, because
+that is where the objective can be cheaply reduced. The solver did not fail; it
+succeeded on the wrong problem.
+
+**Transferable lesson, and it applies to every campaign in this repo: a
+machine-tight defect is a statement about the discretization, not about the
+trajectory.** Here the two differ by 1e7. Every campaign quotes 1e-14 defects as
+evidence of a good solve. That evidence is necessary and nowhere near
+sufficient. The continuous residual costs one `ode113` call per interval.
+
+### Corollary: the "no Sundman needed" lesson needs qualifying
+
+It was drawn from the reference trajectory, and it is right about the reference.
+It is wrong about the deep-flyby branch. Diagnostic panel (c) measures mesh
+spacing two ways on the 442 km solution: uniform in TIME to a ratio of 1.000,
+but **353x non-uniform in the lunar angle swept per interval**. The mesh has no
+idea the flyby is happening — precisely the condition Sundman exists to fix.
+
+Accurate form: *no regularization is needed for this transfer at a sane
+periselene; one would be needed to resolve a deep flyby properly.*
+
+## The minimum-altitude path constraint
+
+Built 2026-08-02, exposed as `opts.minAltKm` in `run_dro_tulip.m` (empty by
+default, so the ill-posed baseline still reproduces). Imposed in squared form,
+`||r_k - r_Moon||^2 >= rho_min^2`, one row per node — avoids the square root's
+undefined gradient at rho = 0 and keeps an exact, well-scaled gradient
+`2(r_k - r_Moon)`.
+
+**Is a path constraint a direct-method advantage? Yes**, and the asymmetry is
+larger than it looks. Direct: four lines of CasADi, N+1 extra Jacobian rows, the
+same barrier machinery already handling `0 <= u <= 1`, nothing else changes.
+Indirect: guess the constrained-arc structure a priori, derive the constraint
+order (q = 2 here), append an `eta(t) >= 0` multiplier active only on the arc,
+impose junction conditions where the **costates jump**, and solve a multipoint
+BVP whose unknowns now include entry/exit times. The direct method turns a
+change of mathematical object into a change of argument list.
+
+**The caveat is real:** the constraint binds AT NODES ONLY. Between nodes the
+trajectory may dip below the floor freely. That matters here more than usual,
+because the constraint is active exactly at periselene, which is where the
+collocation is least accurate (above). `min_k rho_k = rho_min` means "the nodes
+clear the floor", not "the trajectory clears the floor".
+
+### A pre-registered prediction that FAILED
+
+Stated before running: with a floor, t_f should stop depending on N and should
+RISE as the floor rises. Measured at 100 km:
+
+| N | t_f | achieved alt km | defect | status |
+|---|---|---|---|---|
+| 400 | 4.357303 | 1048 | 1.4e-14 | Solve_Succeeded |
+| 800 | 4.724866 | 4680 | 3.1e-16 | Solve_Succeeded |
+| 1600 | 24.65 | 646 | 1.2 | Max_Iterations |
+
+and at 500 km: N=400 gives 4.143868 (4818 km, converged, identical to the
+unconstrained N=400); N=800 gives 9.574640 (1940 km) but Max_Iterations at
+defect 4.3e-04, i.e. NOT converged.
+
+Two observations. **The constraint was never active** — every converged run
+clears the floor by 10x or more, so its multipliers are zero. **Yet the answers
+differ from the unconstrained ones** (4.144 / 3.881 / 7.253 at the same meshes).
+An inactive inequality cannot move a local minimum, but it can change which one
+the interior-point method walks to, because the barrier terms depend on distance
+to every inequality including the inactive ones.
+
+So the N-dependence did NOT collapse. That separates two pathologies that were
+being conflated: the floor removes the *unbounded* family of ever-deeper flybys
+(a genuine repair), but it does not remove the *multiplicity* of local minima.
+Different diseases, different cures.
+
+## Diagnostics and movies (stage 4 of run_dro_tulip)
+
+Off by default. `opts.plots` gives a six-panel figure: (a) Moon-centred
+trajectory with lunar disc and floor to scale, (b) altitude vs time, (c) mesh
+spacing in time AND in lunar angle swept, (d) continuous-time residual against
+the NLP defect, (e) throttle, (f) residual vs altitude (the power law).
+`opts.movies` gives `'traj'` (Moon-centred, base MATLAB only, always runs) and
+`'scene'` (the pumpkynPie-lit starfield scene via
+`pumpkynPie.plot.SatelliteAnimator`, driven by OUR direct solution; falls back
+to `'traj'` if the class is absent). Nothing is written into pumpkyn/pumpkynPie.
+Both render at 1280x720 (multiple of 16, per the H.264 shear lesson) and draw
+the sub-node path by spline — a rendering choice, not a claim that the sub-node
+path is dynamically correct.
 
 ## Next
 
-1. **Propagation check** on the N = 800 solution (above).
-2. **Add a minimum lunar altitude path constraint** and re-run the N sweep. With
-   the problem well-posed, the N-dependence should collapse.
+1. **Fix the discretization, then redo the sweep.** Three untried routes: a mesh
+   concentrated near periselene, a Sundman regularization, or higher-order
+   collocation. Until one is in place, the t_f values in the table above are not
+   converged answers to the continuous problem.
+2. Re-run the altitude sweep with the fixed discretization — the prediction above
+   deserves a second, fair test on a mesh that can resolve the flyby.
 3. Then the cell this was built for: **compare the direct duals against the
    indirect costates** via the Hager covector mapping — the cross-validation the
    repo has never been able to do.

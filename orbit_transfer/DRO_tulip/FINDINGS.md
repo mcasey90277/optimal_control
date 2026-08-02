@@ -521,6 +521,59 @@ Reference (indirect, and the warm-started certified direct): t_f = 4.0152.
 
 Data: `direct/results/cold_hs_N{400,800,1600}.mat`.
 
+## THE FLOOR EXPERIMENT (2026-08-03): 500 km, warm and cold, all meshes
+
+Floor chosen far below the reference periselene (4,673 km) so it should be
+INACTIVE in the reference basin — it exists to close the through-the-Moon hole.
+G2 auto-disables under a floor (tfMin has no path-constraint capability).
+
+| seed | N | t_f | POS err km | node alt | TRUE alt (between nodes) | status |
+|---|---|---|---|---|---|---|
+| warm | 400 | 4.6808938 | 7.4 | 4819 | 4674 | converged |
+| warm | 800 | 4.6850952 | 0.23 | 4678 | 4673 | converged |
+| warm | 1600 | 4.6853523 | **0.0071** | 4678 | 4673 | converged |
+| cold | 400 | 3.6979385 | 983 | 577 | 506 | converged, unresolved |
+| cold | 800 | 4.3884674 | 119 | **500** | **380 — VIOLATES floor** | converged, unresolved |
+| cold | 1600 | 18.83 | 53,500 | 2220 | −1559 | **Max_Iterations** |
+
+### Four findings
+
+1. **The floor closes the hole.** Warm N=800, which unconstrained went 719.6 km
+   inside the Moon, lands in the legitimate 4.685 basin.
+2. **An INACTIVE floor still ejects the solver from the reference basin.** Warm
+   N=1600 — same seed (the indirect trajectory itself), same mesh that
+   certified unconstrained at t_f=4.0152501 — converged to 4.6853523 with the
+   floor 4,178 km slack. Interior-point barrier terms involve distance to every
+   inequality, active or not; even starting ON the reference trajectory did not
+   hold the basin. Reproduces the 100 km trapezoid observation at the
+   certifying mesh with the 4th-order scheme.
+3. **The constrained optimum wants to ride the floor, and undercuts the
+   reference.** Cold N=400 found t_f=3.698 (−8% vs the unconstrained reference)
+   riding at 506 km — physics, not artifact: bounded family, minimizer on the
+   boundary. But no mesh resolved it: 983 km error at N=400; at N=800 the nodes
+   sit exactly at 500 km while the TRUE trajectory dips to 380 km — **the
+   node-only enforcement caveat measured, a 120 km violation**; at N=1600 the
+   solver could not converge at all in 8000 iterations.
+4. **Bottom line: the constrained problem has NO certified solution.** Warm
+   rows are well-resolved but in the wrong basin; cold rows chase the right
+   (floor-riding) structure but cannot resolve it on a uniform mesh.
+
+### What would fix it (untried)
+
+- Reference basin under the floor: warm-start from the CONVERGED UNCONSTRAINED
+  N=1600 solution (already feasible for the discrete dynamics) and/or IPOPT
+  warm-start options (`warm_start_init_point yes`, small `mu_init`) so the
+  barrier does not restart at 0.1 and shove the iterate.
+- Floor-riding branch: this is where the periselene-concentrated mesh or
+  Sundman regularization — optional for the unconstrained problem — becomes
+  NECESSARY. The active-constraint arc sits exactly where a uniform mesh is
+  weakest. Until then, "min-time with a 500 km floor" has no trustworthy value;
+  we only know it is somewhere at or below ~3.7 ND if the floor-riding branch
+  is real, and that the reference basin (4.685 under the floor barrier path) is
+  an upper bound.
+
+Data: `direct/results/floor500_{warm,cold}_N{400,800,1600}.mat`.
+
 ## The pumpkyn-style companion script (2026-08-03)
 
 `direct/run_dro_tulip_ps.m` — one straight-line script in the style of

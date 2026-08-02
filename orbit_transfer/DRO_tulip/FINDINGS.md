@@ -224,6 +224,84 @@ Both render at 1280x720 (multiple of 16, per the H.264 shear lesson) and draw
 the sub-node path by spline — a rendering choice, not a claim that the sub-node
 path is dynamically correct.
 
+## CERTIFIED (2026-08-02): Hermite-Simpson N=1600 reproduces the indirect answer
+
+First certified direct min-time DRO->tulip solution.
+
+```
+===== CERTIFICATION: DRO->tulip min-time (hermite-simpson, N = 1600) =====
+G1  continuous accuracy (worst interval)        3.2230e-01 km  (tol 1.0)   PASS
+G2  agreement with the indirect reference t_f   1.8997e-06     (tol 1e-4)  PASS
+G3  NLP defect                                  3.3307e-16     (tol 1e-9)  PASS
+G4  control unit-norm error                     2.2204e-16                 PASS
+G5  terminal boundary error                     0.0000e+00                 PASS
+G6  throttle saturation (min u)                 1.0000e+00                 PASS
+    t_f = 4.0152501 ND = 17.798 days   vs indirect 4.0152425
+    min node altitude 4673.3 km, worst interval at 4673 km
+```
+
+**The direct method independently reproduces the indirect t_f to 6 significant
+figures**, with worst-interval true error 0.32 km. That is the cross-validation
+this campaign was built for, and it had never been possible before: the earlier
+trapezoid answers were off by 3-80% and inaccurate by 1,100-12,600 km.
+
+### The ladder is NOT monotone, and the middle rung went through the Moon
+
+Hermite-Simpson, seeded from the indirect reference, unconstrained:
+
+| N | t_f | rel err | worst true error | min node altitude |
+|---|---|---|---|---|
+| 400 | 4.6808938 | 1.66e-01 | 761 km | 4818 km |
+| 800 | 4.1628670 | 3.68e-02 | **1,017,917 km** | **-719.6 km (INSIDE THE MOON)** |
+| 1600 | **4.0152501** | **1.90e-06** | **0.32 km** | 4673 km |
+
+The N=800 solve returned Solve_Succeeded with an HS defect at machine precision
+and **a node 719.6 km beneath the lunar surface**.
+
+### This DEMONSTRATES the ill-posedness — the earlier retraction is itself retracted
+
+The ill-posedness claim was retracted earlier today because its only evidence
+(the 442 km trapezoid solution) was an accuracy artifact. The N=800 HS result is
+different in kind: a converged solve places a node INSIDE the Moon in order to
+shorten the transfer. No quadrature argument is needed to reject it, and no
+quadrature argument explains it away. **The unconstrained problem genuinely has
+no minimum** — nothing in the formulation stops the trajectory from passing
+through the primary.
+
+So: ill-posedness DEMONSTRATED, by a stronger piece of evidence than the one
+originally offered. The concern was right; the first proof was not.
+
+### Consequences
+
+1. **Order alone does not fix ill-posedness.** Fourth order made the N=1600 rung
+   certifiable, and made the N=800 rung dive through the Moon more decisively.
+   Accuracy and well-posedness are independent problems.
+2. **The altitude floor and the accuracy study are not separate work items.**
+   The unconstrained problem should not be used as the accuracy testbed at all;
+   its minimizing sequence is not converging to anything physical.
+3. **G2 needs rethinking for the CONSTRAINED problem.** It compares against
+   pumpkyn's tfMin, which has no path constraint, so there is no indirect
+   reference once a floor is imposed. Proposed split: G2a transcription fidelity
+   (fix t_f = t_f_ref, solve for feasibility, require the trajectory to match the
+   reference to G1 accuracy) and G2b optimizer quality (free t_f with a floor,
+   require a well-resolved solution). Not yet built.
+
+### Method notes worth keeping
+
+- **Separated, not compressed, Hermite-Simpson.** The compressed form (midpoint
+  interpolant substituted into f) solves at N=400 and kills MATLAB SILENTLY at
+  N=800 — deep expression graph, MUMPS dies. Same failure and cure as the t_f
+  lift and liftDL: lift Xm to a variable with an explicit interpolation
+  constraint.
+- **A warm start should be feasible for the constraints that define it.** Seeding
+  Xm with the plain midpoint average violates the interpolation constraint. NOTE:
+  fixing this did NOT change the N=400 answer (4.6808938 either way) — the
+  hypothesis that it explained the basin difference was WRONG. It did change
+  N=800. Recorded because the reasoning was wrong even though the change was
+  right.
+- The residual engine has its own test (certify/tests/test_dro_residual.m, 3/3):
+  8.3e-16 on an exactly-integrated trajectory, injected 1e-5 error read at 1.0e-5.
+
 ## Next
 
 1. **Fix the discretization, then redo the sweep.** Three untried routes: a mesh

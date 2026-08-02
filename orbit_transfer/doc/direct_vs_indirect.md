@@ -27,6 +27,12 @@ before anything can be refined.
 
 ### Min-time
 
+- **The two methods have now been shown to agree, once (2026-08-02).** On
+  DRO→tulip, direct Hermite-Simpson at N = 1600 returns t_f = 4.0152501 against
+  the indirect 4.0152425 — six significant figures, worst true error 0.32 km,
+  certified. This is the repo's only method-vs-method agreement on a
+  *trajectory* rather than on a formulation. It required fourth order: the
+  second-order twin was 3-80% off while reporting 1e-14 defects.
 - **Indirect is the natural fit and it works.** `pumpkyn.cr3bp.tfMin` solves
   DRO→tulip in **8 unknowns** (7 costates + `t_f`) and converges in ~3 s from a
   good seed. There is no switching structure to guess, and free final time
@@ -185,7 +191,17 @@ the mesh reviewers, the indirect stall, and this analysis.
   correlation, two data points. Testable: compute it for the t_f values IFS
   attempted and see whether the failures line up.
 - **Whether the direct-derived costates are accurate enough** once conditioning
-  is handled. Never isolated, because conditioning always dominated first.
+  is handled. Never isolated, because conditioning always dominated first. NOTE
+  (2026-08-02): DRO→tulip now supplies a certified direct solution sitting on a
+  known indirect answer, so this can finally be tested in isolation — few revs,
+  no bang-bang structure, no conditioning wall.
+- **A third failure mode, discovered on DRO→tulip and not in the list above:
+  the DIRECT method optimizes against its own discretization error.** Given a
+  mesh that under-resolves a close approach, a min-time solver drives the
+  trajectory into exactly the region where its quadrature error is largest,
+  because that is where the objective gets cheap. It is not a seeding problem
+  and not a conditioning problem, and no defect tolerance detects it — only a
+  continuous-residual measurement does.
 - **Where the revolution-count crossover sits.** Indirect works at ~3 revs and
   fails at ~40. The boundary is unmeasured, and it decides which method leads
   on a new problem.

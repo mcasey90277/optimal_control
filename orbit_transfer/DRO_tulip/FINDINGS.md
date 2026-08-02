@@ -304,12 +304,24 @@ originally offered. The concern was right; the first proof was not.
 
 ## Next
 
-1. **Fix the discretization, then redo the sweep.** Three untried routes: a mesh
-   concentrated near periselene, a Sundman regularization, or higher-order
-   collocation. Until one is in place, the t_f values in the table above are not
-   converged answers to the continuous problem.
-2. Re-run the altitude sweep with the fixed discretization — the prediction above
-   deserves a second, fair test on a mesh that can resolve the flyby.
-3. Then the cell this was built for: **compare the direct duals against the
-   indirect costates** via the Hager covector mapping — the cross-validation the
-   repo has never been able to do.
+1. **Redo the accuracy ladder WITH the altitude floor on.** The unconstrained
+   problem is not a valid accuracy testbed — its minimizing sequence passes
+   through the Moon. Accuracy and well-posedness turned out not to be separable
+   work items.
+2. **N = 3200 never ran** — the ladder was stopped one rung early, right after
+   N = 1600 certified. Worth finishing to confirm the order estimate and to see
+   whether the deep-flyby attractor reappears at higher resolution.
+3. **Split G2 for the constrained problem.** pumpkyn's `tfMin` has no path
+   constraint, so once a floor is imposed there is no indirect reference to
+   compare against. Proposed: G2a transcription fidelity (fix t_f = t_f_ref,
+   solve for feasibility, require a match to the reference at G1 accuracy) and
+   G2b optimizer quality (free t_f with a floor, require a well-resolved
+   solution).
+4. **Mesh refinement and Sundman are now OPTIONAL, not required.** Fourth order
+   alone reached 0.32 km. Either remains worth trying as a cheaper route to the
+   same accuracy at lower N, but neither is on the critical path any more.
+5. **The cell this campaign was built for is now unblocked:** compare the direct
+   duals against the indirect costates via the Hager covector mapping. It needed
+   a trustworthy direct solution sitting on the reference, and the certified
+   N = 1600 Hermite-Simpson solve is exactly that. This has never been possible
+   in this repo before.

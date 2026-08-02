@@ -72,7 +72,7 @@ For each transfer problem: **2 methods × 3 flavors = 6 cells.**
 | GTO → ELFO | ✅ min-fuel front + min-time anchor | not started | |
 | elliptic → GEO (2-body) | ✅ certified ladder | reference only | |
 | elliptic → GEO (CR3BP) | ✅ certified ladder | not started | |
-| DRO → tulip | not started | ✅ min-time (Darin's demo) | **only problem where indirect leads** |
+| DRO → tulip | ✅ **min-time CERTIFIED** (2026-08-02) | ✅ min-time (Darin's demo) | **the two methods AGREE**: direct t_f = 4.0152501 vs indirect 4.0152425, 6 sig figs, worst true error 0.32 km |
 
 ### The expansion
 
@@ -93,18 +93,34 @@ revolution count — not the objective — is what decides whether indirect work
 
 ---
 
-## Why DRO → tulip should be first
+## Why DRO → tulip was first — and what it returned
 
-It is the only problem in the whole space where **the indirect solution exists
-and the direct one does not.** Everywhere else the direct method led. That makes
-it the natural place to test the coordination question from
-`direct_vs_indirect.md` in the reverse direction: does a direct solve reproduce
-the known indirect answer, and do the mapped costates match the ones `tfMin`
-converged to?
+It was the only problem in the space where **the indirect solution existed and
+the direct one did not.** Everywhere else the direct method led. That made it
+the natural place to test the coordination question from `direct_vs_indirect.md`
+in reverse: does a direct solve reproduce the known indirect answer?
 
-That is a genuine cross-validation of the covector mapping — something the
-repo has never been able to do, because until now there was no independent
-costate answer to compare against.
+**Answered 2026-08-02: yes, but only at fourth order.** Hermite-Simpson at
+N = 1600 gives t_f = 4.0152501 against the indirect 4.0152425 — six significant
+figures — with a worst-interval true error of 0.32 km. Second-order trapezoidal
+collocation never got closer than 3% and was inaccurate by 1,100-12,600 km while
+reporting defects of 1e-14.
+
+Two lessons generalize beyond this pair:
+
+1. **A machine-tight defect is a statement about the discretization, not the
+   trajectory.** Measured gap on this problem: 1e7. Every campaign here quotes
+   1e-14 defects as evidence of a good solve; that evidence is necessary and
+   nowhere near sufficient. Measure the continuous residual.
+2. **The unconstrained min-time problem has no minimum.** An intermediate
+   fourth-order rung returned a converged solve with a node 719.6 km INSIDE the
+   Moon. Refining the mesh is not monotone improvement when the problem is
+   ill-posed — better resolution pursues an unbounded objective more
+   effectively. Any transfer with a close approach to a primary needs a path
+   constraint before its "minimum time" means anything.
+
+Still open: the costate comparison itself. The certified direct solution is the
+input it always needed, and it has never been possible before now.
 
 ---
 

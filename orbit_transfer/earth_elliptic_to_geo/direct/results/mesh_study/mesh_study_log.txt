@@ -1,0 +1,21 @@
+2026-07-27 17:45:54  
+===== Tier A start: rows {MEE_M2_10N, MEE_M2_2p5N, MEE_M2_1N}, factors [1  2  4  8] =====
+2026-07-27 17:45:54  MEE_M2_10N     starting ladder [1  2  4  8]
+2026-07-27 17:49:23    MEE_M2_10N   x1   N=193    OK      wall     2.5 s  m_f 1377.101235  sw 19
+2026-07-27 17:49:23    MEE_M2_10N   x2   N=386    OK      wall     9.3 s  m_f 1377.109848  sw 20
+2026-07-27 17:49:23    MEE_M2_10N   x4   N=772    OK      wall    11.7 s  m_f 1377.117536  sw 20
+2026-07-27 17:49:23    MEE_M2_10N   x8   N=1544   OK      wall   179.5 s  m_f 1377.874577  sw 18
+2026-07-27 17:49:23  MEE_M2_10N     done in 209.0 s (ok)
+2026-07-27 17:49:23  MEE_M2_2p5N    starting ladder [1  2  4  8]
+2026-07-27 18:13:03    MEE_M2_2p5N  x1   N=708    OK      wall    26.9 s  m_f 1370.156899  sw 76
+2026-07-27 18:13:03    MEE_M2_2p5N  x2   N=1416   OK      wall    62.5 s  m_f 1371.612013  sw 75
+2026-07-27 18:13:03    MEE_M2_2p5N  x4   N=2832   OK      wall   307.5 s  m_f 1372.610498  sw 75
+2026-07-27 18:13:03    MEE_M2_2p5N  x8   N=5664   OK      wall   972.4 s  m_f 1375.793760  sw 75
+2026-07-27 18:13:03  MEE_M2_2p5N    done in 1419.2 s (ok)
+2026-07-27 18:13:03  MEE_M2_1N      starting ladder [1  2  4  8]
+2026-07-27 19:05:56    MEE_M2_1N    x1   N=1740   OK      wall   106.3 s  m_f 1370.603320  sw 173
+2026-07-27 19:05:56    MEE_M2_1N    x2   N=3480   OK      wall   322.1 s  m_f 1371.587322  sw 171
+2026-07-27 19:05:56    MEE_M2_1N    x4   N=6960   OK      wall   796.2 s  m_f 1371.912916  sw 171
+2026-07-27 19:05:56    MEE_M2_1N    x8   N=13920  OK      wall  1696.3 s  m_f 1372.051933  sw 171
+2026-07-27 19:05:56  MEE_M2_1N      done in 3173.4 s (ok)
+2026-07-27 19:05:56  ===== Tier A end: 3/3 rows ok =====

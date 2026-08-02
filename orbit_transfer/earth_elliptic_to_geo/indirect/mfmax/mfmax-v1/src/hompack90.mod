@@ -1,0 +1,65 @@
+G95 module created on Tue Nov 27 15:58:37 2007 from HOMPACK90.f
+If you edit this, you'll get what you deserve.
+module-version 6
+(() () () () () () () () () () () () () () () () () () () () ())
+
+()
+
+()
+
+()
+
+()
+
+(2 'colpos' 'hompack90_global' 1 ((VARIABLE UNKNOWN UNKNOWN UNKNOWN NONE
+NONE ALLOCATABLE DIMENSION) (INTEGER 4) 0 0 () (1 DEFERRED () ()) '' ()
+())
+3 'fixpqf' 'hompack90' 1 ((PROCEDURE UNKNOWN MODULE-PROC DECL NONE NONE
+SUBROUTINE) (PROCEDURE 0) 0 0 (4 NONE 5 NONE 6 NONE 7 NONE 8 NONE 9 NONE
+10 NONE 11 NONE 12 NONE 13 NONE 14 NONE 15 NONE) () '' () ())
+16 'hompack90' 'hompack90' 1 ((MODULE UNKNOWN UNKNOWN UNKNOWN NONE NONE)
+(UNKNOWN) 0 0 () () '' () ())
+17 'hompack90_global' 'hompack90_global' 1 ((MODULE UNKNOWN UNKNOWN
+UNKNOWN NONE NONE) (UNKNOWN) 0 0 () () '' () ())
+18 'ipar' 'hompack90_global' 1 ((VARIABLE UNKNOWN UNKNOWN UNKNOWN NONE
+NONE ALLOCATABLE DIMENSION) (INTEGER 4) 0 0 () (1 DEFERRED () ()) '' ()
+())
+19 'par' 'hompack90_global' 1 ((VARIABLE UNKNOWN UNKNOWN UNKNOWN NONE
+NONE ALLOCATABLE DIMENSION) (REAL 8) 0 0 () (1 DEFERRED () ()) '' () ())
+20 'pp' 'hompack90_global' 1 ((VARIABLE UNKNOWN UNKNOWN UNKNOWN NONE
+NONE ALLOCATABLE DIMENSION) (REAL 8) 0 0 () (1 DEFERRED () ()) '' () ())
+21 'qrsparse' 'hompack90_global' 1 ((VARIABLE UNKNOWN UNKNOWN UNKNOWN
+NONE NONE ALLOCATABLE DIMENSION) (REAL 8) 0 0 () (1 DEFERRED () ()) '' ()
+())
+22 'rowpos' 'hompack90_global' 1 ((VARIABLE UNKNOWN UNKNOWN UNKNOWN NONE
+NONE ALLOCATABLE DIMENSION) (INTEGER 4) 0 0 () (1 DEFERRED () ()) '' ()
+())
+15 'arclen' '' 23 ((VARIABLE UNKNOWN UNKNOWN UNKNOWN NONE NONE DUMMY) (
+REAL 8) 0 0 () () '' () ())
+14 'nfe' '' 23 ((VARIABLE UNKNOWN UNKNOWN UNKNOWN NONE NONE DUMMY) (
+INTEGER 4) 0 0 () () '' () ())
+13 'sspar' '' 23 ((VARIABLE UNKNOWN UNKNOWN UNKNOWN NONE NONE DIMENSION
+DUMMY) (REAL 8) 0 0 () (1 EXPLICIT (CONSTANT (INTEGER 4) 0 '1') (
+CONSTANT (INTEGER 4) 0 '4')) '' () ())
+12 'a' '' 23 ((VARIABLE UNKNOWN UNKNOWN UNKNOWN NONE NONE DIMENSION
+DUMMY) (REAL 8) 0 0 () (1 ASSUMED_SHAPE () ()) '' () ())
+11 'trace' '' 23 ((VARIABLE UNKNOWN UNKNOWN UNKNOWN NONE NONE DUMMY) (
+INTEGER 4) 0 0 () () '' () ())
+10 'ansae' '' 23 ((VARIABLE UNKNOWN UNKNOWN UNKNOWN NONE NONE DUMMY) (
+REAL 8) 0 0 () () '' () ())
+9 'ansre' '' 23 ((VARIABLE UNKNOWN UNKNOWN UNKNOWN NONE NONE DUMMY) (
+REAL 8) 0 0 () () '' () ())
+8 'arcae' '' 23 ((VARIABLE UNKNOWN UNKNOWN UNKNOWN NONE NONE DUMMY) (
+REAL 8) 0 0 () () '' () ())
+7 'arcre' '' 23 ((VARIABLE UNKNOWN UNKNOWN UNKNOWN NONE NONE DUMMY) (
+REAL 8) 0 0 () () '' () ())
+6 'iflag' '' 23 ((VARIABLE UNKNOWN UNKNOWN UNKNOWN NONE NONE DUMMY) (
+INTEGER 4) 0 0 () () '' () ())
+5 'y' '' 23 ((VARIABLE UNKNOWN UNKNOWN UNKNOWN NONE NONE DIMENSION DUMMY)
+(REAL 8) 0 0 () (1 ASSUMED_SHAPE () ()) '' () ())
+4 'n' '' 23 ((VARIABLE UNKNOWN UNKNOWN UNKNOWN NONE NONE DUMMY) (
+INTEGER 4) 0 0 () () '' () ())
+)
+
+('colpos' 0 2 'fixpqf' 0 3 'hompack90' 0 16 'hompack90_global' 0 17 'ipar'
+0 18 'par' 0 19 'pp' 0 20 'qrsparse' 0 21 'rowpos' 0 22)

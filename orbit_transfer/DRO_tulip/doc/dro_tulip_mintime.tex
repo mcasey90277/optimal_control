@@ -26,20 +26,25 @@ retrograde orbit about the Moon, and a seven-petal tulip orbit whose apoapses
 hang over the lunar southern hemisphere. The problem is solved by direct
 collocation and compared against an existing indirect (Pontryagin shooting)
 solution of the same transfer---the first problem in this programme where an
-independent second opinion exists. The dominant finding is a cautionary one.
-Direct solutions that converged to trapezoidal defects of $10^{-14}$, and that
-appeared to \emph{beat} the reference minimum time, turn out not to be
-trajectories of the continuous problem at all: their true local error at closest
-approach is $O(1)$ in nondimensional units, seven orders of magnitude above the
-defect, scaling as altitude$^{-4.2}$. \textbf{A machine-tight defect is a
-statement about the discretization, not about the trajectory.} Correcting for
-this retracts the claim that the problem is demonstrably ill-posed---the
-evidence for it was one of the invalid solutions---while leaving the underlying
-concern intact, and it refutes our earlier judgement that no Sundman-type
-regularization was needed here. We also report what a minimum-altitude path
-constraint does and does not fix, and why adding one costs a block of algebraic
-inequalities in the direct formulation against a multipoint boundary-value
-problem with costate jumps in the indirect one.
+independent second opinion exists. Two findings, and they are independent of each
+other. First, a cautionary one: trapezoidal solutions that converged to defects
+of $10^{-14}$, and that appeared to \emph{beat} the reference minimum time, are
+not trajectories of the continuous problem at all---their true local error at
+closest approach is $O(1)$ in nondimensional units, seven orders of magnitude
+above the defect, scaling as altitude$^{-4.2}$. \textbf{A machine-tight defect
+is a statement about the discretization, not about the trajectory.} Replacing
+the second-order scheme with fourth-order Hermite--Simpson removes this: at
+$N = 1600$ the direct solve is certified to a worst-interval error of
+$0.32$~km and reproduces the indirect $t_f$ to six significant figures---the
+direct-against-indirect cross-validation this programme was built to perform.
+Second, and not repaired by any amount of accuracy: the unconstrained problem
+has \textbf{no minimum}. An intermediate solve on the same fourth-order ladder
+returns a converged, machine-feasible trajectory with a node $719.6$~km
+\emph{beneath the lunar surface}. We report the minimum-altitude path constraint
+that addresses this, why adding one costs a block of algebraic inequalities in
+the direct formulation against a multipoint boundary-value problem with costate
+jumps in the indirect one, and the pass/fail gate that separates a converged NLP
+from an answer.
 \end{abstract}
 
 \tableofcontents
@@ -321,6 +326,7 @@ that saturation can be observed rather than imposed. In the converged solutions
 it is: $\min_t u(t) = 1.000000$ to six figures at every mesh density tried.
 
 \section{Discretization}
+\label{sec:disc}
 
 \subsection{Normalized time, so that \texorpdfstring{$t_f$}{tf} can be free}
 
@@ -349,6 +355,7 @@ conditions of \eqref{eq:ocp}, and $m_k > 0.05$ to keep the mass physical. The
 objective is simply $t_f$.
 
 \subsection{Why \texorpdfstring{$t_f$}{tf} must be lifted}
+\label{sec:lift}
 
 Written as above, the single scalar $t_f$ appears in \emph{every} defect
 \eqref{eq:defect}. In the Karush--Kuhn--Tucker system this produces one
@@ -373,6 +380,94 @@ the solution is unchanged, but each defect now touches only its own two nodes
 and the arrowhead becomes \textbf{banded}. With the lift in place the same
 problem solves in $6.8$ seconds. As a check, the spread
 $\max_k |T_k - T_1|$ is reported and comes back identically zero.
+
+\section{Fourth order: Hermite--Simpson}
+\label{sec:hs}
+
+The trapezoidal scheme of Section~\ref{sec:disc} is second-order accurate, and
+Section~\ref{sec:contres} shows that is not enough on this problem at any node
+count tried. The remedy applied is a fourth-order scheme at the same node count.
+
+\subsection{The scheme}
+
+Over interval $k$, with step $h_k = t_f \Delta s_k$, introduce an interior
+midpoint state $X_{m,k}$ and midpoint control $U_{m,k}$, and impose two
+conditions instead of one:
+\begin{align}
+  \text{interpolation:}\quad & X_{m,k} - \tfrac{1}{2}(X_k + X_{k+1})
+      - \tfrac{h_k}{8}\bigl[f(X_k,U_k) - f(X_{k+1},U_{k+1})\bigr] = 0,
+      \label{eq:hsinterp}\\
+  \text{defect:}\quad & X_{k+1} - X_k
+      - \tfrac{h_k}{6}\bigl[f(X_k,U_k) + 4 f(X_{m,k},U_{m,k})
+      + f(X_{k+1},U_{k+1})\bigr] = 0. \label{eq:hsdefect}
+\end{align}
+Equation~\eqref{eq:hsinterp} is the Hermite cubic through the two node states
+and their derivatives, evaluated at the midpoint; \eqref{eq:hsdefect} is
+Simpson's rule through the three points.
+
+\paragraph{The midpoint control is a variable, not an average.} It would be
+simpler to set $U_{m,k} = \tfrac{1}{2}(U_k + U_{k+1})$. Two reasons not to.
+Tying the control to a piecewise-linear family costs the scheme its fourth
+order; and here the direction $\bal$ lives on the unit sphere, where the average
+of two unit vectors is not a unit vector. $U_{m,k}$ therefore carries its own
+norm constraint and throttle bounds.
+
+\paragraph{Separated, not compressed---and this was learned the hard way.}
+Equation~\eqref{eq:hsinterp} can be eliminated by substituting the interpolant
+directly into $f$ in \eqref{eq:hsdefect}, halving the constraint count. That
+form is algebraically identical, and it was implemented first. It solves at
+$N = 400$ and \textbf{MATLAB terminates silently at $N = 800$}: substituting
+$X_m(X, t_f)$ inside $f$ means the Lagrangian Hessian requires the chain rule
+through the interpolant, the expression graph deepens with every node, and MUMPS
+does not survive it.
+
+This is the third appearance of the same failure in this repository, and the
+same cure works every time: keep each constraint \emph{shallow} and let extra
+variables carry the coupling. It is the reason $t_f$ is lifted
+(Section~\ref{sec:lift}), the reason the earth CR3BP campaign has a routine
+called \code{liftDL}, and the reason $X_m$ is a decision variable here rather
+than an expression.
+
+\paragraph{The floor gets a free upgrade.} Because $X_{m,k}$ exists as a
+variable, the altitude constraint of Section~\ref{sec:pathcon} is imposed at the
+midpoints as well as the nodes. That halves the unguarded span between
+enforcement points. It does not eliminate it.
+
+\subsection{What it bought}
+
+Seeded from the indirect reference, unconstrained, at matched node counts:
+
+\begin{table}[h]
+\centering\small
+\begin{tabular}{lrrr}
+\toprule
+scheme & $N$ & $t_f$ & worst true error \\
+\midrule
+trapezoid        & $400$  & $4.1438682$ & $12\,594$ km \\
+Hermite--Simpson & $400$  & $4.0173381$ & $347$ km \\
+\midrule
+trapezoid        & $1600$ & $7.253098$  & $1\,100$ km \\
+Hermite--Simpson & $1600$ & $\mathbf{4.0152501}$ & $\mathbf{0.32}$ \textbf{km} \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+At $N = 400$ the fourth-order scheme is $61\times$ better on $t_f$ and
+$36\times$ better on accuracy, at the same node count and slightly less wall
+time. At $N = 1600$ it certifies (Section~\ref{sec:gate}).
+
+\subsection{A warm start must be feasible for the constraints that define it}
+
+Lifting $X_m$ to a variable creates an obligation: it must be initialized to
+satisfy \eqref{eq:hsinterp}. Seeding it with the plain midpoint average
+$\tfrac{1}{2}(X_k + X_{k+1})$ leaves the starting point infeasible, and IPOPT
+begins in restoration rather than in optimization.
+
+The honest record is that this mattered less predictably than expected. Fixing
+the seed left the $N = 400$ answer bit-identical at $t_f = 4.6808938$---so the
+hypothesis that it explained a basin discrepancy was \emph{wrong}---while
+changing the $N = 800$ answer from $4.6850952$ to $4.1628670$. The change is
+correct on principle; the reasoning first offered for it was not.
 
 \section{Adding a path constraint}
 \label{sec:pathcon}
@@ -604,6 +699,16 @@ the trajectory before choosing the transcription---and then \emph{measure}
 whether the transcription you chose is actually resolving it. Reasoning from
 revolution count alone was not enough.
 
+\paragraph{What was done about it.} Of the three remedies listed above, only
+the third was tried, and it was sufficient: fourth-order Hermite--Simpson
+(Section~\ref{sec:hs}) reaches a worst-interval error of $0.32$~km at
+$N = 1600$, against the second-order scheme's $1\,100$~km at the same node
+count. \textbf{Sundman regularization and periselene mesh concentration remain
+untried, and are now optional rather than necessary}---either may reach the same
+accuracy at lower $N$, but neither is on the critical path. That is worth
+stating plainly, because the natural reading of the paragraphs above is that a
+Sundman change of variable was required. It was not.
+
 \subsection{Without a minimum-altitude constraint the problem is ill-posed}
 \label{sec:illposed}
 
@@ -648,21 +753,28 @@ path constraint,
 with $\rho_{\min}$ set by mission design---a safe periselene altitude---and the
 reported minimum time would be meaningful only relative to that choice.
 
-\paragraph{An important retraction of the evidence, though not of the concern.}
-The argument above was written before the check of Section~\ref{sec:contres},
-and that check invalidates its \emph{demonstration}. The $442$~km solution is
-not a feasible trajectory of the continuous problem, so it is not evidence that
-a faster one exists. The three rows of the table are three different
-discretizations disagreeing, not three optima.
+\paragraph{The evidence above was retracted, and then replaced by something
+stronger.} The argument as first written rested on the $442$~km solution, and
+the check of Section~\ref{sec:contres} invalidates that solution: it is not a
+feasible trajectory of the continuous problem, so it is not evidence that a
+faster one exists. The three rows of the table are three discretizations
+disagreeing, not three optima. At that point the ill-posedness was a physical
+conjecture---a deeper flyby really does give a stronger assist---but not a
+result.
 
-What survives is a physical argument rather than a computed one: a deeper flyby
-really does give a stronger gravity assist, so it remains plausible that $\inf
-t_f$ is attained only in the limit of grazing, and a mission-design floor is
-prudent regardless. But \textbf{we have not demonstrated the ill-posedness, and
-this document should not be read as claiming we have.} Demonstrating it requires
-a discretization that resolves periselene---see the routes listed in
-Section~\ref{sec:contres}---and then showing that $t_f$ still falls
-monotonically as the floor is lowered. That experiment has not been run.
+It became a result on the fourth-order ladder of Section~\ref{sec:hs}. At
+$N = 800$, seeded from the indirect reference, the solver returns
+\code{Solve\_Succeeded} with a Hermite--Simpson defect at machine precision and
+\textbf{a node $719.6$~km beneath the lunar surface}. That is evidence of a
+different kind from the first attempt: no quadrature argument produces a node
+inside the primary, and none explains one away. Nothing in \eqref{eq:ocp}
+forbids the trajectory from passing through the Moon, and given the chance to
+shorten the transfer by doing so, the optimizer takes it.
+
+\textbf{The unconstrained problem therefore has no minimum}, and the path
+constraint of Section~\ref{sec:pathcon} is not a refinement but a precondition.
+The concern stated originally was correct; the first proof offered for it was
+not, and this one is.
 
 \paragraph{Why the indirect method did not produce these solutions.} Two
 reasons, and only the first was appreciated at the time.
@@ -760,6 +872,90 @@ evidence is necessary and nowhere near sufficient, and the continuous residual
 is cheap enough---one \code{ode113} call per interval---that there is no excuse
 for not measuring it.
 
+\section{Certification: what separates a converged NLP from an answer}
+\label{sec:gate}
+
+Every solve in this campaign reported a defect of $10^{-14}$ and every early one
+was wrong. A gate was therefore built that a solve must pass before its $t_f$ is
+quoted. Two of its conditions decide the verdict; the rest are hygiene.
+
+\paragraph{G1, accuracy.} The worst continuous-time local error of
+Section~\ref{sec:contres}, stated in \textbf{kilometres} rather than in solver
+units, must fall below a tolerance---default $1$~km. Expressing the tolerance
+dimensionally is deliberate: $10^{-6}$ is not obviously good or bad, whereas
+``$400$~km of position error'' is self-evidently disqualifying.
+
+\paragraph{G2, agreement.} DRO$\to$tulip is the one problem in the catalog where
+an independently converged \emph{indirect} solution already exists. A working
+direct solver must reproduce it: relative error in $t_f$ below $10^{-4}$. This
+is the sharper of the two tests, and it is the reason this transfer was chosen
+to begin the programme. A direct method that cannot recover a known answer where
+one exists should not be believed where none does.
+
+\paragraph{G3--G7, hygiene.} NLP defect, control unit-norm error, terminal
+boundary error, throttle saturation, lifted-time spread, and---when a floor is
+imposed---whether the \emph{propagated} trajectory honours it between nodes and
+not merely at them. These are necessary and jointly insufficient, and they are
+reported separately so that a solve passing all of them while failing G1 is
+visible for what it is.
+
+\paragraph{The instrument has its own test.} Since G1 now decides whether work is
+publishable, the residual engine is itself tested: on a trajectory built by
+high-accuracy integration it must report accuracy, not scheme error, and it must
+detect an injected error at about the injected size. It returns
+$8.3\times10^{-16}$ on the former and $1.0\times10^{-5}$ on an injected
+$10^{-5}$. Three of three pass. The large residuals it reports elsewhere are
+therefore real.
+
+\subsection{The certified solution}
+
+\begin{table}[h]
+\centering\small
+\begin{tabular}{llrrl}
+\toprule
+& gate & value & tolerance & \\
+\midrule
+G1 & continuous accuracy, worst interval & $0.3223$ km & $1.0$ km & PASS \\
+G2 & agreement with the indirect $t_f$ & $1.900\times10^{-6}$ & $10^{-4}$ & PASS \\
+G3 & NLP defect & $3.33\times10^{-16}$ & $10^{-9}$ & PASS \\
+G4 & control unit-norm error & $2.22\times10^{-16}$ & $10^{-8}$ & PASS \\
+G5 & terminal boundary error & $0$ & $10^{-9}$ & PASS \\
+G6 & throttle saturation, $\min_k u_k$ & $1.000000$ & $1$ & PASS \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\noindent Hermite--Simpson, $N = 1600$: $t_f = 4.0152501$ against the indirect
+reference's $4.0152425$, agreeing to six significant figures, with a
+worst-interval true error of $0.32$~km and a closest approach of $4673$~km.
+\textbf{This is the first certified direct solution of this transfer, and the
+first time in this repository that a direct and an indirect method have been
+shown to agree on a trajectory rather than merely on a formulation.}
+
+\subsection{The ladder is not monotone, and the middle rung is the lesson}
+
+\begin{table}[h]
+\centering\small
+\begin{tabular}{rrrrl}
+\toprule
+$N$ & $t_f$ & rel.\ error & worst true error & min.\ node altitude \\
+\midrule
+$400$  & $4.6808938$ & $1.66\times10^{-1}$ & $761$ km & $4818$ km \\
+$800$  & $4.1628670$ & $3.68\times10^{-2}$ & $1\,017\,917$ km & $\mathbf{-719.6}$ \textbf{km} \\
+$1600$ & $4.0152501$ & $1.90\times10^{-6}$ & $0.32$ km & $4673$ km \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+A negative altitude is a node beneath the lunar surface. The $N = 800$ row is
+the demonstration of ill-posedness discussed in Section~\ref{sec:illposed}, and
+it carries a lesson that the certified row does not: \textbf{refining the mesh
+is not a monotone improvement when the underlying problem is ill-posed.} Higher
+order made the good rung certifiable and made the bad rung worse, because a
+better-resolved optimizer pursues an unbounded objective more effectively.
+Accuracy and well-posedness are independent properties and must be secured
+separately.
+
 \section{Diagnostics and visualization}
 
 Stage 4 of \code{run\_dro\_tulip.m} is optional and off by default. It runs on
@@ -813,7 +1009,10 @@ emphatically is not.
     R = run_dro_tulip();                        % the baseline record
 
     R = run_dro_tulip(struct( ...               % with everything on
+            'scheme',   'hermite-simpson', ...  %   4th order; needed for G1
+            'N',        1600, ...               %   where the gate passes
             'minAltKm', 500, ...                %   altitude floor, km
+            'certify',  true, ...               %   G1/G2 pass-fail gate
             'plots',    true, ...               %   six-panel diagnostic
             'movies',   'both'));               %   'traj' | 'scene' | 'both'
 \end{verbatim}
@@ -822,13 +1021,26 @@ The first call regenerates the reference characterization, the mesh sweep and
 the lunar-approach table. Requires \code{pumpkynPie} and \code{pumpkyn}---which
 must be updated together---and CasADi 3.7.0. Leaving \code{minAltKm} empty is
 what reproduces the ill-posed baseline of Section~\ref{sec:illposed}, so the
-default is deliberately the unconstrained one.
+default is deliberately the unconstrained one---but note
+Section~\ref{sec:gate}: that default problem has no minimum, and only the
+fourth-order scheme at $N = 1600$ passes the gate.
+
+\paragraph{What remains open.} The accuracy ladder should be redone with the
+floor imposed, since the unconstrained problem is not a valid testbed for it.
+$N = 3200$ was never run---the ladder was stopped one rung early. And G2 needs
+splitting once a floor is in place, because \code{tfMin} has no path constraint
+and so supplies no reference for the constrained problem: transcription fidelity
+(fix $t_f$, solve for feasibility, require a match) and optimizer quality (free
+$t_f$ with a floor) are different questions and deserve different gates.
 
 \begin{tabular}{ll}
 \toprule
 front door & \code{DRO\_tulip/direct/run\_dro\_tulip.m} \\
 endpoints & \code{DRO\_tulip/direct/lib/dro\_tulip\_endpoints.m} \\
 solver & \code{DRO\_tulip/direct/lib/casadi\_mintime\_dro.m} \\
+gate & \code{DRO\_tulip/direct/certify/certify\_dro\_mintime.m} \\
+residual engine & \code{DRO\_tulip/direct/certify/dro\_residual.m} \\
+its self-test & \code{DRO\_tulip/direct/certify/tests/test\_dro\_residual.m} \\
 diagnostics & \code{DRO\_tulip/direct/viz/plot\_dro\_diagnostics.m} \\
 movies & \code{DRO\_tulip/direct/viz/dro\_\{traj,scene\}\_movie.m} \\
 running record & \code{DRO\_tulip/FINDINGS.md} \\

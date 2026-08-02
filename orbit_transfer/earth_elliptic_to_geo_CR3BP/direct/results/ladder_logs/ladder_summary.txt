@@ -1,0 +1,14 @@
+CR3BP thrust ladder 2026-07-23 05:23:34  rungs: 5 2.5 1 0.5 0.2 0.1
+RUNG  T=5 N -> cr3bp_T5N_phi0_fuel  (05:23:34)
+PASS  T=5 N    m_f=1378.7095 kg  dV=1.6537 km/s  switches=36  defect=1.20e-14
+RUNG  T=2.5 N -> cr3bp_T2p5N_phi0_fuel  (06:26:23)
+FAIL  T=2.5 N  rc=137  [  3] 0x0000000110e853cc /Applications/MATLAB_R2025b.app/bin/maca64/libmwmcr.dylib+00480204 _Z19mnPrintErrorMessageRKNSt3__112basic_stringIcNS_11char_traitsIcEENS_9allocatorIcEEEE+00011664 [  4] 0x0000000110e83324 /Applications/MATLAB_R2025b.app/bin/maca64/libmwmcr.dylib+00471844 _Z19mnPrintErrorMessageRKNSt3__112basic_stringIcNS_11char_traitsIcEENS_9allocatorIcEEEE+00003304 
+RUNG  T=1 N -> cr3bp_T1N_phi0_fuel  (07:25:55)
+FAIL  T=1 N  rc=137  [  3] 0x00000001116e53cc /Applications/MATLAB_R2025b.app/bin/maca64/libmwmcr.dylib+00480204 _Z19mnPrintErrorMessageRKNSt3__112basic_stringIcNS_11char_traitsIcEENS_9allocatorIcEEEE+00011664 [  4] 0x00000001116e3324 /Applications/MATLAB_R2025b.app/bin/maca64/libmwmcr.dylib+00471844 _Z19mnPrintErrorMessageRKNSt3__112basic_stringIcNS_11char_traitsIcEENS_9allocatorIcEEEE+00003304 
+RUNG  T=0.5 N -> cr3bp_T0p5N_phi0_fuel  (07:32:06)
+FAIL  T=0.5 N  rc=137  [  3] 0x000000010d0093cc /Applications/MATLAB_R2025b.app/bin/maca64/libmwmcr.dylib+00480204 _Z19mnPrintErrorMessageRKNSt3__112basic_stringIcNS_11char_traitsIcEENS_9allocatorIcEEEE+00011664 [  4] 0x000000010d007324 /Applications/MATLAB_R2025b.app/bin/maca64/libmwmcr.dylib+00471844 _Z19mnPrintErrorMessageRKNSt3__112basic_stringIcNS_11char_traitsIcEENS_9allocatorIcEEEE+00003304 
+RUNG  T=0.2 N -> cr3bp_T0p2N_phi0_fuel  (07:39:32)
+FAIL  T=0.2 N  rc=137  [  3] 0x0000000110ab53cc /Applications/MATLAB_R2025b.app/bin/maca64/libmwmcr.dylib+00480204 _Z19mnPrintErrorMessageRKNSt3__112basic_stringIcNS_11char_traitsIcEENS_9allocatorIcEEEE+00011664 [  4] 0x0000000110ab3324 /Applications/MATLAB_R2025b.app/bin/maca64/libmwmcr.dylib+00471844 _Z19mnPrintErrorMessageRKNSt3__112basic_stringIcNS_11char_traitsIcEENS_9allocatorIcEEEE+00003304 
+RUNG  T=0.1 N -> cr3bp_T0p1N_phi0_fuel  (07:43:43)
+FAIL  T=0.1 N  rc=137  [  3] 0x00000001114993cc /Applications/MATLAB_R2025b.app/bin/maca64/libmwmcr.dylib+00480204 _Z19mnPrintErrorMessageRKNSt3__112basic_stringIcNS_11char_traitsIcEENS_9allocatorIcEEEE+00011664 [  4] 0x0000000111497324 /Applications/MATLAB_R2025b.app/bin/maca64/libmwmcr.dylib+00471844 _Z19mnPrintErrorMessageRKNSt3__112basic_stringIcNS_11char_traitsIcEENS_9allocatorIcEEEE+00003304 
+LADDER DONE 2026-07-23 07:49:03

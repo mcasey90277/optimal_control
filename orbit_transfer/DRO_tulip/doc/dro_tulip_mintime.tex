@@ -1,0 +1,352 @@
+\documentclass[11pt]{article}
+\usepackage[margin=1in]{geometry}
+\usepackage{amsmath,amssymb}
+\usepackage{booktabs}
+\usepackage{hyperref}
+\hypersetup{colorlinks=true, linkcolor=blue, urlcolor=blue}
+
+\title{Minimum-Time Low-Thrust Transfer from a Distant Retrograde Orbit\\
+       to a Lunar Tulip Orbit\\
+       \large Formulation, discretization, and what the first solves taught us}
+\author{M.\ Casey}
+\date{\today}
+
+\newcommand{\vecr}{\mathbf{r}}
+\newcommand{\vecv}{\mathbf{v}}
+\newcommand{\bal}{\boldsymbol{\alpha}}
+\newcommand{\code}[1]{\texttt{#1}}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+We pose and solve the minimum-time low-thrust transfer between two periodic
+orbits of the Earth--Moon circular restricted three-body problem: a distant
+retrograde orbit about the Moon, and a seven-petal tulip orbit whose apoapses
+hang over the lunar southern hemisphere. The problem is solved by direct
+collocation and compared against an existing indirect (Pontryagin shooting)
+solution of the same transfer---the first problem in this programme where an
+independent second opinion exists. Two lessons came out of the first solves.
+The Sundman regularization that our Earth-departure campaigns require is
+\emph{not} needed here, and the reason is measurable. More consequentially, the
+problem as ordinarily posed is \textbf{ill-posed}: without a minimum lunar
+altitude constraint, ``the minimum time'' is not a number but a family
+parameterized by flyby depth.
+\end{abstract}
+
+\tableofcontents
+
+\section{The two orbits}
+
+Both endpoints are periodic solutions of the Earth--Moon circular restricted
+three-body problem (CR3BP), drawn from catalogs in \code{pumpkynPie} and closed
+by natural-parameter continuation before use.
+
+\subsection{The distant retrograde orbit (departure)}
+
+A \emph{distant retrograde orbit} (DRO) is a planar, closed orbit about the
+smaller primary---here the Moon---traversed \emph{retrograde} in the rotating
+frame, meaning the spacecraft circulates opposite to the Moon's motion about the
+Earth--Moon barycentre. ``Distant'' refers to its size relative to the secondary:
+these orbits stand well off the Moon and are strongly influenced by both bodies.
+
+Their defining practical property is \textbf{stability}. Unlike halo and
+Lyapunov orbits, which are unstable and require continual station-keeping, DROs
+of moderate size are linearly stable, so a spacecraft parked in one stays there.
+That makes a DRO a natural \emph{staging point}: a place to accumulate
+spacecraft cheaply before dispersing them to operational orbits.
+
+The departure orbit used here has nondimensional period $\tau_0 = 1$ and initial
+state
+\[
+  \vecr_0 = (0.9145255582,\; 0,\; 0), \qquad
+  \vecv_0 = (0,\; 0.4921644867,\; 0),
+\]
+in the rotating barycentric frame, nondimensionalized so that the Earth--Moon
+separation, the system's mean motion, and the total mass are unity.
+
+\subsection{The tulip orbit (arrival)}
+
+A \emph{tulip orbit} is a multi-petal periodic orbit of the CR3BP whose ground
+track traces a flower-like pattern, with $N_p$ petals arranged about the Moon
+and apoapses concentrated over one lunar hemisphere. The family is indexed by
+petal count $N_p$ and by a hemisphere sign; we take $N_p = 7$ and the southern
+branch.
+
+Their interest is navigational. A constellation in southern-hemisphere tulip
+orbits provides sustained high-elevation geometry over the lunar south pole,
+where surface operations are planned and where conventional relay architectures
+give the weakest coverage. That geometric advantage is the subject of separate
+work (arXiv:2607.10482); here the tulip is simply the destination.
+
+The arrival orbit has period $\tau_f = 5 \cdot 2\pi/6$. The arrival
+\emph{point} on that orbit is a design choice, not a given: we adopt the
+convention of the reference implementation and select the phase whose velocity
+direction is most opposed to the departure velocity, giving
+\[
+  \vecr_f = (0.9772215792,\; -0.0017264861,\; 0.0129258427),
+\]
+\[
+  \vecv_f = (-0.4221963472,\; -0.9757277486,\; -0.2816581452).
+\]
+
+\section{The dynamics}
+
+In the rotating barycentric frame, nondimensionalized, with mass ratio
+$\mu = 0.012150585609624$, the Earth sits at $(-\mu,0,0)$ and the Moon at
+$(1-\mu,0,0)$. Write the distances to each primary as
+\[
+  d = \lVert \vecr - (-\mu,0,0) \rVert, \qquad
+  \rho = \lVert \vecr - (1-\mu,0,0) \rVert .
+\]
+The controlled equations of motion for position $\vecr$, velocity $\vecv$ and
+mass fraction $m$ are
+\begin{align}
+  \dot{\vecr} &= \vecv, \label{eq:rdot}\\
+  \dot{\vecv} &= \mathbf{g}(\vecr) + \mathbf{h}(\vecv)
+                 + \frac{u\,T_{\max}}{m}\,\bal, \label{eq:vdot}\\
+  \dot{m}     &= -\frac{T_{\max}}{c}\,u, \label{eq:mdot}
+\end{align}
+where the gravity-plus-centrifugal and Coriolis terms are
+\[
+  \mathbf{g}(\vecr) =
+  \begin{pmatrix}
+    x - (1-\mu)\dfrac{x+\mu}{d^3} - \mu\dfrac{x-1+\mu}{\rho^3}\\[2mm]
+    y - (1-\mu)\dfrac{y}{d^3} - \mu\dfrac{y}{\rho^3}\\[2mm]
+    \phantom{y} - (1-\mu)\dfrac{z}{d^3} - \mu\dfrac{z}{\rho^3}
+  \end{pmatrix},
+  \qquad
+  \mathbf{h}(\vecv) = \begin{pmatrix} 2\dot y \\ -2\dot x \\ 0 \end{pmatrix}.
+\]
+Here $T_{\max}$ is the maximum thrust acceleration at unit mass fraction and $c$
+the exhaust velocity, both nondimensional. The controls are the thrust
+\emph{direction} $\bal$, a unit vector, and the \emph{throttle} $u \in [0,1]$.
+
+Note that $m$ is a mass \emph{fraction}, starting at unity, so the thrust
+acceleration $u T_{\max}/m$ grows as propellant is spent.
+
+\section{The optimal control problem}
+
+\begin{equation}
+\begin{aligned}
+  \min_{\bal(\cdot),\,u(\cdot),\,t_f} \quad & t_f \\
+  \text{subject to}\quad
+   & \eqref{eq:rdot}\text{--}\eqref{eq:mdot} \quad \text{on } [0,t_f], \\
+   & \lVert \bal(t) \rVert = 1, \qquad u(t) \in [0,1], \\
+   & \vecr(0) = \vecr_0,\quad \vecv(0) = \vecv_0,\quad m(0) = 1, \\
+   & \vecr(t_f) = \vecr_f,\quad \vecv(t_f) = \vecv_f .
+\end{aligned}
+\label{eq:ocp}
+\end{equation}
+
+The final mass is free---minimum time does not care what it costs---and the
+final time $t_f$ is itself a decision variable.
+
+\paragraph{What Pontryagin says about the answer.} Although we solve
+\eqref{eq:ocp} directly, the indirect view predicts the structure and is worth
+stating because we use it as a check. With costates
+$(\boldsymbol{\lambda}_r, \boldsymbol{\lambda}_v, \lambda_m)$, the optimal
+thrust direction is anti-parallel to the \emph{primer vector},
+$\bal^\star = -\boldsymbol{\lambda}_v / \lVert \boldsymbol{\lambda}_v \rVert$,
+and the throttle is bang-bang on the sign of a switching function,
+\[
+  S = -\frac{\lVert \boldsymbol{\lambda}_v \rVert\, c}{m} - \lambda_m,
+  \qquad u^\star = \begin{cases} 1, & S < 0,\\ 0, & S > 0.\end{cases}
+\]
+For minimum time one expects $u^\star \equiv 1$: there is no reason to coast
+when time is the cost. That is an expectation about the \emph{solution},
+however, not a constraint of the problem, and we deliberately leave $u$ free so
+that saturation can be observed rather than imposed. In the converged solutions
+it is: $\min_t u(t) = 1.000000$ to six figures at every mesh density tried.
+
+\section{Discretization}
+
+\subsection{Normalized time, so that \texorpdfstring{$t_f$}{tf} can be free}
+
+Collocation needs a fixed integration interval, but $t_f$ is unknown. Introduce
+$s = t/t_f \in [0,1]$; then for any state $X$,
+\[
+  \frac{dX}{ds} = t_f \, f(X,U),
+\]
+and $t_f$ becomes an ordinary decision variable multiplying the dynamics.
+
+\subsection{Trapezoidal collocation}
+
+Partition $[0,1]$ into $N$ intervals with nodes
+$0 = s_1 < \cdots < s_{N+1} = 1$, $\Delta s_k = s_{k+1}-s_k$, and carry the
+state $X_k = (\vecr_k, \vecv_k, m_k) \in \mathbb{R}^7$ and control
+$U_k = (\bal_k, u_k) \in \mathbb{R}^4$ at every node. The dynamics are imposed
+as \emph{defect} constraints,
+\begin{equation}
+  X_{k+1} - X_k
+  - t_f\,\frac{\Delta s_k}{2}\Bigl[ f(X_k,U_k) + f(X_{k+1},U_{k+1}) \Bigr] = 0,
+  \qquad k = 1,\dots,N,
+\label{eq:defect}
+\end{equation}
+together with $\lVert \bal_k \rVert^2 = 1$, $0 \le u_k \le 1$, the boundary
+conditions of \eqref{eq:ocp}, and $m_k > 0.05$ to keep the mass physical. The
+objective is simply $t_f$.
+
+\subsection{Why \texorpdfstring{$t_f$}{tf} must be lifted}
+
+Written as above, the single scalar $t_f$ appears in \emph{every} defect
+\eqref{eq:defect}. In the Karush--Kuhn--Tucker system this produces one
+\textbf{dense column}: an arrowhead structure whose factorization fills in
+catastrophically.
+
+This is not a theoretical concern. The first implementation used a scalar $t_f$
+and MATLAB terminated with a fatal error immediately after IPOPT printed the
+Jacobian structure, at only $N = 400$. The same hazard is documented in two
+sibling campaigns: the GTO$\to$tulip solver avoids it by fixing its regularized
+horizon outright, and the Earth CR3BP campaign cured it with a technique its
+authors call \code{liftDL}.
+
+The cure is to \emph{lift} $t_f$: replicate it as a per-node variable $T_k$ and
+impose local continuity,
+\begin{equation}
+  T_{k+1} - T_k = 0, \qquad k = 1,\dots,N,
+\label{eq:lift}
+\end{equation}
+using $T_k$ in defect $k$. The continuity constraints force all $T_k$ equal, so
+the solution is unchanged, but each defect now touches only its own two nodes
+and the arrowhead becomes \textbf{banded}. With the lift in place the same
+problem solves in $6.8$ seconds. As a check, the spread
+$\max_k |T_k - T_1|$ is reported and comes back identically zero.
+
+\section{Solution by IPOPT}
+
+The transcription is built with CasADi's \code{Opti} layer, which supplies exact
+first and second derivatives by automatic differentiation---no finite
+differencing anywhere---and hands the problem to IPOPT, an interior-point solver
+for large sparse nonlinear programs, with MUMPS as the sparse linear solver.
+
+At $N = 800$ the program carries $7 \times 801$ state variables,
+$4 \times 801$ controls and $801$ lifted time copies, against roughly $5600$
+defect equations plus the norm, boundary and continuity constraints. Tolerance
+is set to $10^{-10}$.
+
+\paragraph{Verifying the answer.} A converged NLP is not by itself a solved
+optimal control problem, so each solve reports: the maximum defect recomputed
+from the returned trajectory; the worst deviation of $\lVert\bal_k\rVert$ from
+unity; the terminal boundary error; the lifted-time spread; and
+$\min_k u_k$. Typical values are a defect of $10^{-14}$ to $10^{-16}$, a unit
+error of $10^{-12}$, and a terminal error of exactly zero.
+
+\section{Lessons learned}
+
+\subsection{No Sundman regularization is needed here, and we can say why}
+
+Our Earth-departure campaigns cannot be solved without a Sundman
+regularization---a change of independent variable $dt/d\tau = \kappa(r)$ that
+stretches the mesh through perigee, where an eccentric spiral's dynamics are
+violently stiff. It would have been natural to carry that machinery over.
+
+Characterizing the reference solution first showed it is unnecessary:
+
+\begin{table}[h]
+\centering\small
+\begin{tabular}{lr}
+\toprule
+revolutions about the Moon & $1.18$ \\
+Earth distance & $0.8535$ -- $1.1122$ (never approaches Earth) \\
+closest lunar approach & $0.0164$ ND $\approx 4674$ km altitude \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Slightly over one revolution, with no Earth passage at all. The stiffness that
+forces regularization on a forty-revolution Earth spiral is simply absent, and
+plain time-domain collocation is the appropriate tool. Importing the
+regularization would have been machinery adopted out of habit rather than need.
+
+The general lesson is worth stating separately: \textbf{characterize the
+trajectory before choosing the transcription.} The reference solution was
+available and took minutes to interrogate; that interrogation determined the
+formulation.
+
+\subsection{Without a minimum-altitude constraint the problem is ill-posed}
+
+This is the consequential finding. Sweeping the mesh density gives:
+
+\begin{table}[h]
+\centering\small
+\begin{tabular}{lrrrr}
+\toprule
+$N$ & $t_f$ & vs.\ reference & max defect & closest lunar approach \\
+\midrule
+$400$  & $4.143868$ & $+3.2\%$  & $3.3\times10^{-14}$ & $4819$ km \\
+$\mathbf{800}$  & $\mathbf{3.881410}$ & $\mathbf{-3.3\%}$ & $1.4\times10^{-14}$ & $\mathbf{442}$ \textbf{km} \\
+$1600$ & $7.253098$ & $+80.6\%$ & $3.9\times10^{-16}$ & $4674$ km \\
+\midrule
+reference (indirect) & $4.015243$ & --- & --- & $4674$ km \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Every one of these is machine-feasible, yet $t_f$ varies non-monotonically with
+the mesh, and one of them is \emph{faster than the reference minimum}. A
+minimum cannot be beaten---so the reference is a \textbf{local} minimum, not a
+global one.
+
+The final column explains how. The fast solution buys its speed with a far
+deeper lunar gravity assist: a $442$ km altitude pass against the reference's
+$4674$ km. Nothing in \eqref{eq:ocp} forbids this. As the flyby is drawn closer
+the assist strengthens and the transfer time falls, so
+\[
+  \inf t_f \quad\text{is approached as the trajectory grazes the lunar surface,}
+\]
+and ``the minimum-time transfer'' is not a single trajectory but a
+\textbf{family parameterized by flyby altitude}, bounded below only by the Moon
+itself.
+
+The problem is therefore ill-posed as ordinarily written. It needs a path
+constraint,
+\[
+  \lVert \vecr(t) - \vecr_{\text{Moon}} \rVert \;\ge\; \rho_{\min},
+\]
+with $\rho_{\min}$ set by mission design---a safe periselene altitude---and the
+reported minimum time is meaningful only relative to that choice.
+
+\paragraph{Why the indirect method did not reveal this.} Shooting explores only
+what its initial costate guess can reach. The deep-flyby solutions exist but sit
+in basins that a reasonable guess does not enter, so the indirect solution
+returns a well-behaved local optimum and gives no hint that better ones exist.
+The direct method, seeded crudely and with the mesh varied, wanders into them.
+That is a concrete illustration of a general pattern this programme keeps
+encountering: \textbf{the two methods fail differently, which is precisely why
+running both is informative.}
+
+\subsection{An outstanding check}
+
+It has \emph{not} yet been established that the $442$ km solution is genuinely
+feasible. A direct method enforces the dynamics only at nodes and never
+evaluates the trajectory between them, so a mesh too coarse to resolve a close
+approach can permit a trajectory that ``cuts the corner.'' The test is to
+reconstruct the control, propagate it with a high-accuracy integrator, and check
+that the nodes are reproduced. Until that runs, the honest statement is that the
+formulation converges machine-tight to solutions that undercut the reference by
+exploiting closer flybys, and whether those solutions are physical is unverified.
+
+\section*{Reproducing this}
+\addcontentsline{toc}{section}{Reproducing this}
+
+\begin{verbatim}
+    addpath('orbit_transfer/DRO_tulip/direct');
+    R = run_dro_tulip();
+\end{verbatim}
+
+One call regenerates the reference characterization, the mesh sweep and the
+lunar-approach table. Requires \code{pumpkynPie} and \code{pumpkyn}---which must
+be updated together---and CasADi 3.7.0.
+
+\begin{tabular}{ll}
+\toprule
+front door & \code{DRO\_tulip/direct/run\_dro\_tulip.m} \\
+endpoints & \code{DRO\_tulip/direct/lib/dro\_tulip\_endpoints.m} \\
+solver & \code{DRO\_tulip/direct/lib/casadi\_mintime\_dro.m} \\
+running record & \code{DRO\_tulip/FINDINGS.md} \\
+indirect reference & \code{pumpkynPie/demos/lowThrustDRO2Tulip.m} \\
+\bottomrule
+\end{tabular}
+
+\end{document}

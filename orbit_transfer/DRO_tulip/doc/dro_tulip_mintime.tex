@@ -26,19 +26,20 @@ retrograde orbit about the Moon, and a seven-petal tulip orbit whose apoapses
 hang over the lunar southern hemisphere. The problem is solved by direct
 collocation and compared against an existing indirect (Pontryagin shooting)
 solution of the same transfer---the first problem in this programme where an
-independent second opinion exists. Three lessons came out. First, the problem as
-ordinarily posed is \textbf{ill-posed}: without a minimum lunar altitude
-constraint, ``the minimum time'' is not a number but a family parameterized by
-flyby depth, bounded below only by the lunar surface. Second, adding that path
-constraint costs one block of algebraic inequalities in the direct formulation
-against a multipoint boundary-value problem with costate jumps in the indirect
-one---a concrete asymmetry between the methods. Third, and most cautionary: the
-mesh-dependent solutions that appeared to \emph{beat} the reference minimum time
-are not better optima but quadrature error being optimized against. Their
-trapezoidal defects are $10^{-14}$ while their true local error at periselene is
-$O(1)$, a discrepancy of seven orders of magnitude, scaling as
-altitude$^{-4.2}$. A machine-tight defect is a statement about the
-discretization, not about the trajectory.
+independent second opinion exists. The dominant finding is a cautionary one.
+Direct solutions that converged to trapezoidal defects of $10^{-14}$, and that
+appeared to \emph{beat} the reference minimum time, turn out not to be
+trajectories of the continuous problem at all: their true local error at closest
+approach is $O(1)$ in nondimensional units, seven orders of magnitude above the
+defect, scaling as altitude$^{-4.2}$. \textbf{A machine-tight defect is a
+statement about the discretization, not about the trajectory.} Correcting for
+this retracts the claim that the problem is demonstrably ill-posed---the
+evidence for it was one of the invalid solutions---while leaving the underlying
+concern intact, and it refutes our earlier judgement that no Sundman-type
+regularization was needed here. We also report what a minimum-altitude path
+constraint does and does not fix, and why adding one costs a block of algebraic
+inequalities in the direct formulation against a multipoint boundary-value
+problem with costate jumps in the indirect one.
 \end{abstract}
 
 \tableofcontents
@@ -526,7 +527,7 @@ error of $10^{-12}$, and a terminal error of exactly zero.
 
 \section{Lessons learned}
 
-\subsection{No Sundman regularization is needed here, and we can say why}
+\subsection{We assumed no Sundman regularization was needed. That was wrong.}
 
 Our Earth-departure campaigns cannot be solved without a Sundman
 regularization---a change of independent variable $dt/d\tau = \kappa(r)$ that
@@ -556,19 +557,52 @@ trajectory before choosing the transcription.} The reference solution was
 available and took minutes to interrogate; that interrogation determined the
 formulation.
 
-\paragraph{A necessary qualification, added after the diagnostics ran.} The
-statement above is correct \emph{about the reference trajectory}, and about any
-solution with a comparable periselene. It is \textbf{not} correct about the
-deep-flyby branch the direct method finds. Panel (c) of the diagnostic figure
-measures both notions of mesh spacing on the $442$~km solution: the grid is
-uniform in time to a ratio of $1.000$, but the lunar angle swept per interval
-varies by a factor of $\mathbf{353}$ between the cruise and the close approach.
-The mesh has, in other words, no idea the flyby is happening. That is precisely
-the condition a Sundman regularization exists to fix. So the accurate form of
-the lesson is: \emph{no regularization is needed for this transfer at a sane
-periselene, and one would be needed if a deep flyby were to be resolved
-properly.} The original claim was drawn from the reference alone, and the
-reference does not visit the regime that breaks it.
+\paragraph{This lesson was wrong, and the measurement that refutes it.} The
+argument above reasons from the \emph{shape} of the reference trajectory---few
+revolutions, no Earth passage---to the adequacy of a uniform mesh. That
+inference does not hold, and the continuous residual of
+Section~\ref{sec:contres} measures by how much. Applied to all three converged
+solutions:
+
+\begin{table}[h]
+\centering\small
+\begin{tabular}{rrrrr}
+\toprule
+$N$ & closest approach & NLP defect & residual, median & residual, \textbf{max} \\
+\midrule
+$400$  & $4819$ km & $3.3\times10^{-14}$ & $1.9\times10^{-7}$ & $3.2\times10^{-2}$ \\
+$800$  & $441$ km  & $1.4\times10^{-14}$ & $2.1\times10^{-7}$ & $1.5$ \\
+$1600$ & $4673$ km & $3.9\times10^{-16}$ & $2.5\times10^{-8}$ & $2.9\times10^{-3}$ \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+The middle row is the pathological deep flyby and its $O(1)$ error is expected.
+The other two are the well-behaved solutions, at a periselene comparable to the
+reference's---and their worst-interval errors are still $3.2\times10^{-2}$ and
+$2.9\times10^{-3}$ in nondimensional units, which is $12\,600$ km and
+$1\,100$ km. \textbf{None of the three trajectories is accurate}, even the ones
+that never go near the Moon.
+
+So the honest statement is not the hedged one. It is: \emph{a uniform-in-time
+trapezoidal mesh is inadequate for this transfer at every density tried,
+including at a sane periselene.} Something is needed---a Sundman-type change of
+independent variable, a mesh concentrated near closest approach, or a
+higher-order scheme---and which of the three is best is an open question, not a
+settled one.
+
+Panel (c) of the diagnostic figure shows why a uniform mesh cannot be rescued
+by density alone: on the $442$~km solution the grid is uniform in time to a
+ratio of $1.000$, but the lunar angle swept per interval varies by a factor of
+$\mathbf{353}$ between cruise and closest approach. The mesh has no idea the
+flyby is happening. Adding nodes everywhere to fix an error that lives in a few
+intervals is the expensive way to solve the problem, which is precisely the
+argument for regularization.
+
+The general lesson stands, but its application here was backwards: characterize
+the trajectory before choosing the transcription---and then \emph{measure}
+whether the transcription you chose is actually resolving it. Reasoning from
+revolution count alone was not enough.
 
 \subsection{Without a minimum-altitude constraint the problem is ill-posed}
 \label{sec:illposed}
@@ -606,22 +640,46 @@ and ``the minimum-time transfer'' is not a single trajectory but a
 \textbf{family parameterized by flyby altitude}, bounded below only by the Moon
 itself.
 
-The problem is therefore ill-posed as ordinarily written. It needs a path
-constraint,
+The problem would therefore be ill-posed as ordinarily written. It would need a
+path constraint,
 \[
   \lVert \vecr(t) - \vecr_{\text{Moon}} \rVert \;\ge\; \rho_{\min},
 \]
 with $\rho_{\min}$ set by mission design---a safe periselene altitude---and the
-reported minimum time is meaningful only relative to that choice.
+reported minimum time would be meaningful only relative to that choice.
 
-\paragraph{Why the indirect method did not reveal this.} Shooting explores only
-what its initial costate guess can reach. The deep-flyby solutions exist but sit
-in basins that a reasonable guess does not enter, so the indirect solution
-returns a well-behaved local optimum and gives no hint that better ones exist.
-The direct method, seeded crudely and with the mesh varied, wanders into them.
-That is a concrete illustration of a general pattern this programme keeps
-encountering: \textbf{the two methods fail differently, which is precisely why
-running both is informative.}
+\paragraph{An important retraction of the evidence, though not of the concern.}
+The argument above was written before the check of Section~\ref{sec:contres},
+and that check invalidates its \emph{demonstration}. The $442$~km solution is
+not a feasible trajectory of the continuous problem, so it is not evidence that
+a faster one exists. The three rows of the table are three different
+discretizations disagreeing, not three optima.
+
+What survives is a physical argument rather than a computed one: a deeper flyby
+really does give a stronger gravity assist, so it remains plausible that $\inf
+t_f$ is attained only in the limit of grazing, and a mission-design floor is
+prudent regardless. But \textbf{we have not demonstrated the ill-posedness, and
+this document should not be read as claiming we have.} Demonstrating it requires
+a discretization that resolves periselene---see the routes listed in
+Section~\ref{sec:contres}---and then showing that $t_f$ still falls
+monotonically as the floor is lowered. That experiment has not been run.
+
+\paragraph{Why the indirect method did not produce these solutions.} Two
+reasons, and only the first was appreciated at the time.
+
+First, shooting explores only what its initial costate guess can reach, so it
+returns the extremal near its seed and gives no hint whether others exist.
+
+Second, and more decisively: \textbf{the indirect method has no discretization
+to exploit.} \code{tfMinProp} integrates the state and costate equations with an
+adaptive-step integrator that tightens automatically wherever the dynamics
+stiffen---which is exactly at periselene. A trajectory that skimmed the lunar
+surface would be \emph{visibly} skimming it, because the integrator would
+resolve the pass rather than step over it. There is no mesh whose error the
+optimizer can spend. That is a genuine structural advantage of the indirect
+formulation on this problem, and it is the reverse of the path-constraint
+advantage of Section~\ref{sec:pathcon}: each method is protected against the
+failure mode that afflicts the other.
 
 \subsection{The outstanding check, run: machine-tight defects do not mean an
 accurate trajectory}

@@ -119,16 +119,46 @@ trajectory.** Here the two differ by 1e7. Every campaign quotes 1e-14 defects as
 evidence of a good solve. That evidence is necessary and nowhere near
 sufficient. The continuous residual costs one `ode113` call per interval.
 
-### Corollary: the "no Sundman needed" lesson needs qualifying
+### Corollary 1: the "no Sundman needed" lesson is REFUTED, not merely qualified
 
-It was drawn from the reference trajectory, and it is right about the reference.
-It is wrong about the deep-flyby branch. Diagnostic panel (c) measures mesh
-spacing two ways on the 442 km solution: uniform in TIME to a ratio of 1.000,
-but **353x non-uniform in the lunar angle swept per interval**. The mesh has no
-idea the flyby is happening — precisely the condition Sundman exists to fix.
+Residual measured on all three converged solutions:
 
-Accurate form: *no regularization is needed for this transfer at a sane
-periselene; one would be needed to resolve a deep flyby properly.*
+| N | closest approach | NLP defect | R median | **R max** | R max in km |
+|---|---|---|---|---|---|
+| 400 | 4819 km | 3.3e-14 | 1.9e-07 | **3.2e-02** | ~12,600 |
+| 800 | 441 km | 1.4e-14 | 2.1e-07 | **1.5** | ~1e5 |
+| 1600 | 4673 km | 3.9e-16 | 2.5e-08 | **2.9e-03** | ~1,100 |
+
+The middle row is the pathological deep flyby. **The other two are the
+well-behaved solutions at a sane periselene — and they are inaccurate too**,
+by 12,600 km and 1,100 km at the worst interval.
+
+So the claim is not "right about the reference, wrong about the deep flyby".
+It is simply wrong: **a uniform-in-time trapezoidal mesh is inadequate for this
+transfer at every density tried.** The original reasoning went from trajectory
+SHAPE (few revs, no Earth passage) to mesh adequacy, and that inference does not
+hold. We never measured it until now.
+
+Density alone will not rescue a uniform mesh: panel (c) shows the grid is
+uniform in TIME to a ratio of 1.000 but **353x non-uniform in lunar angle swept
+per interval**. Adding nodes everywhere to fix error that lives in a few
+intervals is the expensive route — which is the argument for regularization.
+
+Open: which of Sundman / periselene-concentrated mesh / higher-order collocation
+is right here. Untested.
+
+### Corollary 2: the ill-posedness claim loses its evidence
+
+The demonstration of ill-posedness was the 442 km solution being FASTER than the
+reference. That solution is invalid, so it demonstrates nothing. The three rows
+of the mesh table are three discretizations disagreeing, not three optima.
+
+What survives is a physical argument, not a computed one: a deeper flyby really
+does give a stronger assist, so it remains plausible that inf t_f is attained
+only at grazing, and a floor is prudent regardless. But **we have NOT
+demonstrated the ill-posedness.** Doing so requires a discretization that
+resolves periselene, then showing t_f still falls monotonically as the floor is
+lowered. Not run.
 
 ## The minimum-altitude path constraint
 

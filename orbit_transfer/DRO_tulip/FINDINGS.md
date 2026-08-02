@@ -546,6 +546,12 @@ always; global optimality is claimed by nobody.)
    intrinsic sensitivity; the ~1500x error amplification along this trajectory
    is real but the input error shrinks faster).
 
+**The seed lineage is entirely cold.** Step 1 was the crude straight-line seed
+(linear states, chord thrust, tf0=4.0); every later step was seeded from its
+predecessor. No indirect state, costate, or t_f entered the chain at any point
+— the direct method beat the indirect method's converged answer with no help
+from it.
+
 So: the floor experiment discovered the basin, Sundman resolved it, the
 refinement ladder certified it, and the G1b global gate — added only after
 external review — is what forced the honesty at each step.

@@ -45,11 +45,16 @@ for is then carried out in full: the direct NLP multipliers, mapped to costates,
 reproduce the indirect costate field to $6\times10^{-4}$ degrees in direction
 and to a scale factor of $0.99999$, and the state histories agree to $0.4$~km
 once a $2.9$-second phasing offset is removed---the two methods find the same
-extremal, not merely the same final time. One \emph{negative} result recurs
-through the document and is stated plainly rather than buried: we twice
-concluded that the unconstrained problem is ill-posed, and twice the evidence
-turned out to be discretization error rather than physics. That conjecture
-remains open.
+extremal, not merely the same final time. Finally, a Sundman-regularized variant of the
+transcription (nodes concentrated toward periselene by $dt/d\tau = S\rho^{1.5}$)
+discovers and certifies a \textbf{flyable extremal $4.9\%$ faster than the
+indirect reference} ($t_f = 3.8169913$ vs $4.0152425$, periselene $3\,954$~km,
+all gates including the end-to-end propagated error at $0.46$~km)---so the
+reference extremal is not the best known flyable solution to its own problem.
+One \emph{negative} result recurs through the document and is stated plainly
+rather than buried: we twice concluded that the unconstrained problem is
+ill-posed, and twice the evidence turned out to be discretization error rather
+than physics. That conjecture remains open.
 \end{abstract}
 
 \tableofcontents
@@ -1219,6 +1224,110 @@ mechanism the costate-catalog programme needs---a direct solve yields costates
 accurate to $\sim10^{-3}$ degrees against a converged indirect answer, far
 better than any hand-built guess---validated here on the one problem where the
 validation was possible, for use on the problems where it is not.
+
+\section{Sundman regularization, and a faster extremal than the reference}
+\label{sec:sundman}
+
+This section reports the campaign's most consequential result: a certified,
+flyable extremal \textbf{4.9\% faster} than the indirect reference. It was found
+by accident, in the best tradition of accidents---by a failed experiment, a
+regularization built to rescue it, and the accuracy gates refusing to let
+either overclaim.
+
+\subsection{The regularization}
+
+The uniform-in-$t$ mesh's weakness has appeared throughout this document: nodes
+are thinnest, in the dynamical sense, exactly at periselene. The classical cure
+is Sundman's change of independent variable. Implemented here
+(\code{opts.sundman}): a variable $\tau \in [0,1]$ with
+\[
+  \frac{dt}{d\tau} = S\,\kappa(\rho), \qquad \kappa = \rho^{\,p},\quad p = 1.5,
+\]
+with $\rho$ the \emph{lunar} distance, physical time $t$ carried as an eighth
+state with $t(0) = 0$, the lifted per-node variable becoming the pseudo-time
+span $S$, and the objective becoming $t(\tau{=}1)$. Because $\kappa$ multiplies
+the whole right-hand side, the transcription machinery is untouched---only the
+state dimension and the objective move. Warm starts supplied on a time-uniform
+grid are automatically re-sampled to uniform pseudo-time, without which a warm
+start concentrates nodes in exactly the wrong places.
+
+Validation before use: on the \emph{unconstrained} problem, warm-started,
+Sundman at $N = 800$ reproduces the reference $t_f$ to seven digits with a
+worst-interval position error of $0.16$~m---twenty times better than the
+uniform mesh achieved at $N = 1600$, at half the node count, with the mesh
+automatically concentrated $46{:}1$ toward periselene.
+
+\subsection{The discovery chain}
+
+\begin{enumerate}
+  \item The $500$~km floor experiment's cold-started $N = 400$ solve converged
+        to a \emph{floor-riding} extremal at $t_f \approx 3.70$---below the
+        reference---but hopelessly under-resolved ($983$~km error), and finer
+        uniform meshes failed entirely on that branch.
+  \item A Sundman re-solve seeded from that solution converged to
+        $t_f = 3.8169912$ at $N = 800$---and drifted \emph{off} the floor to a
+        periselene of $3\,954$~km. The deep flyby was a stepping stone, not the
+        destination: the floor-riding solution guided the search into a basin
+        that neither the reference-seeded nor the cold solves had found.
+  \item Refinement at $N = 800 \to 1600 \to 3200 \to 6400$ held $t_f$ fixed to
+        eight digits while the \emph{global} single-shot error collapsed
+        $29.4 \to 7.3 \to 1.8 \to 0.46$~km---a factor of four per doubling, the
+        signature of discretization error rather than intrinsic sensitivity.
+        (The sensitivity is real: along this trajectory local errors amplify
+        ${\sim}1500\times$ end-to-end, against ${\sim}1.5\times$ along the
+        reference. It is the \emph{input} to that amplification that
+        refinement shrinks.)
+\end{enumerate}
+
+\subsection{The certified result}
+
+\begin{table}[h]
+\centering\small
+\begin{tabular}{lrr}
+\toprule
+ & new extremal & indirect reference \\
+\midrule
+$t_f$ & $\mathbf{3.8169913}$ ND $= 16.92$ d & $4.0152425$ ND $= 17.80$ d \\
+periselene & $3\,954$ km & $4\,673$ km \\
+$\Delta V$ & $0.7100$ km/s & $0.7485$ km/s \\
+worst local position error & $4\times10^{-8}$ ND & --- \\
+global single-shot error & $0.457$ km, $0.045$ m/s & $0.042$ km \\
+gates & 11/11 pass & 11/11 pass \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\noindent\textbf{The indirect reference is therefore no longer the best known
+flyable solution to this problem}: same endpoints, same physics, a comfortable
+periselene, $4.9\%$ faster and $5.1\%$ cheaper. As always, certification means
+a verified \emph{local} extremal; global optimality is claimed by nobody.
+
+\paragraph{The seed lineage is entirely cold, and that matters.} Step 1 of the
+chain started from the crude internal seed---states \emph{linear} between the
+endpoints, thrust along the chord, $t_f^0 = 4.0$---and every later step was
+seeded from its predecessor in the chain. No indirect state, costate, or final
+time entered at any point. The direct method therefore found a better answer
+than the indirect method's converged solution \emph{with no help from it},
+which is the strongest form of the independence this campaign set out to test:
+not merely reproducing the indirect answer from its own seed
+(Section~\ref{sec:gate}), but beating it from a bad one.
+
+\paragraph{Was the altitude constraint active?} A $500$~km floor was in place
+for every solve in the chain, and at the converged solution it is
+\textbf{inactive by a margin of $3\,454$~km} (G7 verifies the propagated
+trajectory clears it between nodes). The new extremal is consequently also an
+extremal of the \emph{unconstrained} problem---it beats the reference with no
+help from the constraint. The floor's contribution was to the \emph{search}:
+it created the intermediate floor-riding solution that led here. A constraint
+can do its work without ever binding at the answer.
+
+\paragraph{Implication for the phasing programme.} At the demo phasing itself,
+the minimum over known extremals is now $3.8170$, not $4.0152$: a single
+indirect solve under-reports the family even at its own anchor point. The
+costate map of the new basin (via the covector mapping of
+Section~\ref{sec:costatecmp}) supplies \code{tfMin} with a seed for its
+indirect twin---the direct-to-indirect handoff on an answer the indirect
+method did not already have.
 
 \section{Diagnostics and visualization}
 

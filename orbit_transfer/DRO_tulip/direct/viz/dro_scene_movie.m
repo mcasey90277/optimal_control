@@ -50,7 +50,10 @@ params = struct('muStar', mu, 'lStar', p.lStar, 'tStar', p.tStar);
 epoch  = juliandate(datetime(2030,1,1,0,0,0));
 
 % --- densify the transfer, and build the two terminal orbits ---------------
-tN = o.s(:).' * o.tf;
+% Node times: uniform s*tf normally; the solver's own PHYSICAL times under
+% Sundman, where the mesh is non-uniform in t by design.
+if isfield(o,'tNodes') && ~isempty(o.tNodes), tN = o.tNodes(:).';
+else, tN = o.s(:).' * o.tf; end
 tD = linspace(tN(1), tN(end), nDense*(numel(tN)-1) + 1).';
 XD = interp1(tN, o.X(1:6,:).', tD, 'spline');            % nD x 6
 jdD = epoch + tD*p.tStar/86400;

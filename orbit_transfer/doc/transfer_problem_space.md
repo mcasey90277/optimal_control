@@ -72,7 +72,7 @@ For each transfer problem: **2 methods × 3 flavors = 6 cells.**
 | GTO → ELFO | ✅ min-fuel front + min-time anchor | not started | |
 | elliptic → GEO (2-body) | ✅ certified ladder | reference only | |
 | elliptic → GEO (CR3BP) | ✅ certified ladder | not started | |
-| DRO → tulip | ✅ **min-time CERTIFIED** (2026-08-02) | ✅ min-time (Darin's demo) | **the two methods AGREE**: direct t_f = 4.0152501 vs indirect 4.0152425, 5 sig figs, 3.3 m worst position error. Agreement is on t_f + endpoints; a trajectory/costate comparison is still to do |
+| DRO → tulip | ✅ **min-time CERTIFIED**, and a **NEW faster basin found+certified 2026-08-03: t_f=3.8170 vs 4.0152, periselene 3954 km, cold lineage** | ✅ min-time (Darin's demo — now known to be a beaten local extremal) | **the two methods AGREE**: direct t_f = 4.0152501 vs indirect 4.0152425, 5 sig figs, 3.3 m worst position error. Agreement is on t_f + endpoints; a trajectory/costate comparison is still to do |
 
 ### The expansion
 

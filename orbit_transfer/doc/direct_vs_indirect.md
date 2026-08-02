@@ -27,6 +27,14 @@ before anything can be refined.
 
 ### Min-time
 
+- **UPDATE 2026-08-03: the direct method has now BEATEN the indirect answer on
+  this problem.** A Sundman-regularized direct solve, seeded through an entirely
+  cold lineage (straight-line seed -> floor-riding intermediate -> refinement
+  ladder), certified a flyable extremal at t_f = 3.8169913 vs the indirect
+  reference's 4.0152425 — 4.9% faster, periselene 3,954 km, all 11 gates
+  including 0.46 km global. The indirect reference is a LOCAL extremal that a
+  single shooting solve had no way to know was beaten. See
+  DRO_tulip/FINDINGS.md "CERTIFIED ... 4.9% FASTER".
 - **The two methods have now been shown to agree, once (2026-08-02).** On
   DRO→tulip, direct Hermite-Simpson at N = 1600 returns t_f = 4.0152501 against
   the indirect 4.0152425 — five significant figures, 3.3 m worst-interval

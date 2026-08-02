@@ -50,7 +50,10 @@ mu = p.muStar;  lStar = p.lStar;  tStar = p.tStar;
 rMoonKm = 1737.4;
 
 % --- densify by spline, Moon-centred, in km --------------------------------
-tN = o.s(:).' * o.tf;
+% Node times: uniform s*tf normally; the solver's own PHYSICAL times under
+% Sundman, where the mesh is non-uniform in t by design.
+if isfield(o,'tNodes') && ~isempty(o.tNodes), tN = o.tNodes(:).';
+else, tN = o.s(:).' * o.tf; end
 tD = linspace(tN(1), tN(end), nDense*(numel(tN)-1) + 1);
 XD = interp1(tN, o.X(1:3,:).', tD, 'spline').';           % 3 x nD
 xs = (XD(1,:) - (1-mu))*lStar;  ys = XD(2,:)*lStar;  zs = XD(3,:)*lStar;

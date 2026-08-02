@@ -214,7 +214,8 @@ function [er, ev] = local_global_error(o, mu, Tmax, c)
 % to the end and return the terminal state error. This is the physically
 % meaningful number: 'if you flew this control, where would you arrive?'
 % INPUTS: o; mu; Tmax; c   OUTPUTS: e (ND norm of the terminal 6-state error)
-t = o.s(:).' * o.tf;
+if isfield(o,'tNodes') && ~isempty(o.tNodes), t = o.tNodes(:).';
+else, t = o.s(:).' * o.tf; end
 odeo = odeset('RelTol',1e-12,'AbsTol',1e-14);
 hasMid = isfield(o,'Um') && ~isempty(o.Um);
 z = o.X(:,1);
@@ -245,7 +246,8 @@ function amin = local_true_min_alt(o, mu, Tmax, c, lStar, rMoonKm)
 % LOCAL_TRUE_MIN_ALT  Minimum lunar altitude of the PROPAGATED trajectory, not
 % of the nodes. A collocation floor binds at nodes only; this is what checks it.
 % INPUTS: o; mu; Tmax; c; lStar; rMoonKm   OUTPUTS: amin [km]
-t = o.s(:).' * o.tf;
+if isfield(o,'tNodes') && ~isempty(o.tNodes), t = o.tNodes(:).';
+else, t = o.s(:).' * o.tf; end
 odeo = odeset('RelTol',1e-11,'AbsTol',1e-13);
 amin = inf;
 hasMid = isfield(o,'Um') && ~isempty(o.Um);

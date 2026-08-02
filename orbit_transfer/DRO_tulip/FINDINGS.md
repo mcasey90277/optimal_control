@@ -521,6 +521,51 @@ Reference (indirect, and the warm-started certified direct): t_f = 4.0152.
 
 Data: `direct/results/cold_hs_N{400,800,1600}.mat`.
 
+## CERTIFIED (2026-08-03): a flyable extremal 4.9% FASTER than the indirect reference
+
+**t_f = 3.8169913 ND = 16.919 days, periselene 3,954 km, dV 0.7100 km/s** —
+against the indirect reference's 4.0152425 / 4,673 km / 0.7485 km/s. All eleven
+gates pass at Sundman N=6400: local error 4e-8 ND, **global single-shot
+0.457 km / 0.045 m/s**, floor honoured between nodes, terminal error 2e-14.
+
+**The indirect reference is no longer the best known flyable solution to this
+problem.** Same endpoints, same physics, comfortable altitude — 4.9% faster and
+5.1% cheaper. (Certification means transcription-accurate LOCAL extremal, as
+always; global optimality is claimed by nobody.)
+
+### Provenance — the discovery chain matters
+
+1. The 500 km floor experiment's cold N=400 solve found a floor-riding basin at
+   t_f≈3.70 — unresolved (983 km error), but pointing at real physics.
+2. Sundman-regularized re-solve seeded from it converged to t_f=3.8169912 at
+   N=800 — and drifted OFF the floor to 3,954 km. The deep flyby was never
+   needed; the solver used the floor solution as a stepping stone to a basin
+   the reference-seeded and cold solves never found.
+3. Refinement N=800→1600→3200→6400: t_f stable to 8 digits throughout; global
+   miss 29.4 → 7.3 → 1.8 → 0.457 km (×4 per doubling — discretization, not
+   intrinsic sensitivity; the ~1500x error amplification along this trajectory
+   is real but the input error shrinks faster).
+
+So: the floor experiment discovered the basin, Sundman resolved it, the
+refinement ladder certified it, and the G1b global gate — added only after
+external review — is what forced the honesty at each step.
+
+### Immediate consequences
+
+- **For Darin's phasing map:** at the demo phasing itself, the map value is at
+  most 3.8170, not 4.0152. Single indirect solves under-report the family even
+  at their own anchor point.
+- **Next: close the loop.** Map this solve's duals to costates, seed tfMin,
+  and obtain the indirect twin of the NEW basin — the direct->indirect handoff
+  in production for the first time on an answer the indirect method did not
+  already have. That entry (pair, thrust, basin) goes into the catalog.
+- The Sundman option (opts.sundman, kappa = rho_Moon^1.5, time as 8th state,
+  auto re-sampling of time-uniform seeds) is now the recommended mode for
+  anything that goes near the Moon: it reproduced the reference to 7 digits at
+  HALF the mesh (N=800, 0.16 m local) before finding this.
+
+Data: `direct/results/sundman_floor500_N{800,1600,3200,6400}.mat`.
+
 ## THE FLOOR EXPERIMENT (2026-08-03): 500 km, warm and cold, all meshes
 
 Floor chosen far below the reference periselene (4,673 km) so it should be

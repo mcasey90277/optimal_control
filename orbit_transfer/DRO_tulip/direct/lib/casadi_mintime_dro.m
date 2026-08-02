@@ -66,6 +66,15 @@ function out = casadi_mintime_dro(rv0, rvf, Tmax, c, muStar, N, X0, U0, tf0, opt
 %              .lStarKm [389703.264829278] characteristic length, for the km
 %                       conversion
 %              .rMoonKm [1737.4] lunar radius
+%              .sundman [false] Sundman regularization: independent variable
+%                       tau with dt/dtau = S*kappa, kappa = rho^p, rho the
+%                       LUNAR distance. Physical time becomes an 8th state,
+%                       the lifted variable becomes the pseudo-time span S,
+%                       and the objective is t(end). Concentrates nodes at
+%                       periselene (~200x at a 500 km pass vs cruise), which
+%                       the floor-riding branch needs: on a uniform-in-time
+%                       mesh it failed at every density tried.
+%              .sundmanP [1.5] the exponent p in kappa = rho^p
 %
 % OUTPUTS:
 %   out - struct: .X [7x(N+1)] .U [4x(N+1)] .tf .s (the grid) .success
@@ -92,6 +101,8 @@ prnt     = g('printLevel', 0);
 retModel = g('returnModel', false);
 thrLock  = g('thrLock', false);
 scheme   = lower(g('scheme', 'trapezoid'));
+sundman  = g('sundman', false);
+sundP    = g('sundmanP', 1.5);
 minAltKm = g('minAltKm', []);
 lStarKm  = g('lStarKm', 389703.264829278);
 rMoonKm  = g('rMoonKm', 1737.4);
@@ -112,11 +123,30 @@ gr = [r(1) - (1-muStar)*(r(1)+muStar)/d3 - muStar*(r(1)-1+muStar)/r3;
            - (1-muStar)*r(3)/d3          - muStar*r(3)/r3];
 hv = [2*v(2); -2*v(1); 0];
 acc = gr + hv + (th*Tmax/m)*al;
-fdyn = Function('f', {x,u}, {[v; acc; -(Tmax/c)*th]});
+if sundman
+    % 8-state form: x = [r; v; m; t]. dX/dtau = kappa(rho) * [f7; 1], scaled by
+    % the lifted span S below exactly as tf scales the plain form. Note kappa
+    % multiplies the WHOLE right-hand side, so the transcription machinery is
+    % unchanged -- only the state dimension and the objective move.
+    x8 = MX.sym('x8', 8);
+    r8 = x8(1:3);  v8 = x8(4:6);  m8 = x8(7);
+    dd8 = sqrt((r8(1)+muStar)^2 + r8(2)^2 + r8(3)^2 + 1e-12);
+    rr8 = sqrt((r8(1)-1+muStar)^2 + r8(2)^2 + r8(3)^2 + 1e-12);
+    gr8 = [r8(1) - (1-muStar)*(r8(1)+muStar)/dd8^3 - muStar*(r8(1)-1+muStar)/rr8^3;
+           r8(2) - (1-muStar)*r8(2)/dd8^3          - muStar*r8(2)/rr8^3;
+                 - (1-muStar)*r8(3)/dd8^3          - muStar*r8(3)/rr8^3];
+    f7  = [v8; gr8 + [2*v8(2); -2*v8(1); 0] + (u(4)*Tmax/m8)*u(1:3); -(Tmax/c)*u(4)];
+    kap = rr8^sundP;
+    fdyn = Function('f', {x8,u}, {kap*[f7; 1]});
+    ns = 8;
+else
+    fdyn = Function('f', {x,u}, {[v; acc; -(Tmax/c)*th]});
+    ns = 7;
+end
 
 % --- NLP --------------------------------------------------------------------
 opti = Opti();
-X  = opti.variable(7, nN);
+X  = opti.variable(ns, nN);
 U  = opti.variable(4, nN);
 TF = opti.variable(1, nN);            % lifted final time, one copy per node
 creg = struct('label',{},'rows',{});
@@ -129,7 +159,7 @@ case 'trapezoid'
     % Second order. dX/ds = tf*f, integrated by the trapezoid rule. The control
     % is implicitly linear across each interval.
     D = X(:,2:end) - X(:,1:end-1) ...
-        - repmat(TF(1:end-1),7,1).*(repmat(ds,7,1)/2).*(Fv(:,1:end-1) + Fv(:,2:end));
+        - repmat(TF(1:end-1),ns,1).*(repmat(ds,ns,1)/2).*(Fv(:,1:end-1) + Fv(:,2:end));
 
 case 'hermite-simpson'
     % FOURTH order, in the SEPARATED form: the interior midpoint state Xm is a
@@ -154,16 +184,16 @@ case 'hermite-simpson'
     % family and cost the scheme its fourth order; and here the control lives on
     % a sphere, where the average of two unit vectors is not a unit vector. Um
     % carries its own norm and throttle constraints below.
-    hND = repmat(TF(1:end-1),7,1).*repmat(ds,7,1);       % 7 x N, the ND step
+    hND = repmat(TF(1:end-1),ns,1).*repmat(ds,ns,1);     % ns x N, the ND step
     Um  = opti.variable(4, N);
-    Xm  = opti.variable(7, N);
+    Xm  = opti.variable(ns, N);
     Fm  = fdyn.map(N);
     Fmv = Fm(Xm, Um);
     rI = size(opti.g,1)+1;
     % reshape needs EXPLICIT dimensions here -- CasADi has no MX overload for
     % the MATLAB '[]' placeholder.
     HSI = Xm - 0.5*(X(:,1:end-1) + X(:,2:end)) - (hND/8).*(Fv(:,1:end-1) - Fv(:,2:end));
-    opti.subject_to(reshape(HSI, 7*N, 1) == 0);
+    opti.subject_to(reshape(HSI, ns*N, 1) == 0);
     if retModel, creg(end+1) = struct('label','hsInterp','rows',rI:size(opti.g,1)); end
     D = X(:,2:end) - X(:,1:end-1) - (hND/6).*(Fv(:,1:end-1) + 4*Fmv + Fv(:,2:end));
 
@@ -219,6 +249,7 @@ if retModel, creg(end+1) = struct('label','bc0','rows',r0:size(opti.g,1)); end
 r0 = size(opti.g,1)+1;
 opti.subject_to(X(1:6,end) == rvf(:));
 if retModel, creg(end+1) = struct('label','bcf','rows',r0:size(opti.g,1)); end
+if sundman, opti.subject_to(X(8,1) == 0); end          % physical time starts at 0
 opti.subject_to(TF(:) >= 1e-3);   % non-strict: an NLP cannot impose '>'
 opti.subject_to(X(7,:).' >= 0.05);         % mass stays physical (non-strict)
 
@@ -254,7 +285,11 @@ if ~isempty(minAltKm)
     if retModel, creg(end+1) = struct('label','minAlt','rows',r0:size(opti.g,1)); end
 end
 
-opti.minimize(TF(1));
+if sundman
+    opti.minimize(X(8,end));      % minimize PHYSICAL time; TF is the pseudo-span
+else
+    opti.minimize(TF(1));
+end
 
 % --- warm start -------------------------------------------------------------
 % Seed the state and the control INDEPENDENTLY. The earlier version built both
@@ -275,6 +310,26 @@ if isempty(U0)
     U0 = [repmat(ch(:),1,nN); ones(1,nN)];
 end
 if isempty(tf0), tf0 = 4.0; end   % also covers a caller who supplies X0 but not tf0
+
+if sundman && size(X0,1) == 7
+    % A 7-row seed is sampled uniformly in TIME; the tau domain is uniform in
+    % PSEUDO-time sigma with dsigma = dt/kappa. Re-sample the seed at uniform
+    % sigma, append physical time as the 8th row, and hand TF the total span --
+    % otherwise the warm start concentrates nodes in exactly the wrong places.
+    tSeed  = linspace(0, tf0, size(X0,2));
+    rhoS   = max(vecnorm(X0(1:3,:) - [1-muStar;0;0], 2, 1), 1e-8);
+    sigCum = cumtrapz(tSeed, rhoS.^(-sundP));
+    sigU   = linspace(0, sigCum(end), nN);
+    Xr     = interp1(sigCum, X0.', sigU, 'spline').';
+    tr     = interp1(sigCum, tSeed, sigU, 'spline');
+    Ur     = interp1(sigCum, U0.', sigU, 'spline').';
+    nr     = max(vecnorm(Ur(1:3,:),2,1), eps);
+    Ur(1:3,:) = Ur(1:3,:) ./ nr;
+    Ur(4,:)   = min(max(Ur(4,:),0),1);
+    X0 = [Xr; tr];  U0 = Ur;  tf0 = sigCum(end);
+elseif sundman && size(X0,1) ~= 8
+    error('casadi_mintime_dro:seed','sundman seed must have 7 or 8 rows');
+end
 opti.set_initial(X, X0);
 opti.set_initial(U, U0);
 opti.set_initial(TF, tf0*ones(1,nN));
@@ -288,7 +343,7 @@ if ~isempty(Xm)
     % stayed at 4.01734. A warm start must be feasible for the constraints that
     % define it, or it is not a warm start.
     F0 = full(F(X0, U0));            % F is fdyn.map(nN); no MATLAB-level loop
-    h0 = tf0*repmat(ds,7,1);
+    h0 = tf0*repmat(ds,ns,1);
     opti.set_initial(Xm, 0.5*(X0(:,1:end-1) + X0(:,2:end)) ...
                          + (h0/8).*(F0(:,1:end-1) - F0(:,2:end)));
 end
@@ -317,10 +372,21 @@ try
 catch
     sol = opti.debug;  ok = false;
 end
-out.X  = full(sol.value(X));
+Xall   = full(sol.value(X));
 out.U  = full(sol.value(U));
-out.tf = full(sol.value(TF(1)));
-out.tfSpread = max(abs(full(sol.value(TF)) - out.tf));
+out.sundman = sundman;
+if sundman
+    out.X      = Xall(1:7,:);
+    out.tNodes = Xall(8,:);              % PHYSICAL time at the tau nodes
+    out.tf     = out.tNodes(end);
+    out.span   = full(sol.value(TF(1)));  % the pseudo-time span S
+    out.tfSpread = max(abs(full(sol.value(TF)) - out.span));
+else
+    out.X  = Xall;
+    out.tf = full(sol.value(TF(1)));
+    out.tNodes = [];                      % uniform: s*tf, callers derive it
+    out.tfSpread = max(abs(full(sol.value(TF)) - out.tf));
+end
 out.s  = s;
 out.ipoptStatus = opti.stats().return_status;
 out.success = ok && any(strcmp(out.ipoptStatus, ...
@@ -333,11 +399,12 @@ out.scheme = scheme;
 out.Um = [];  out.Xm = [];
 if ~isempty(Um), out.Um = full(sol.value(Um)); end
 if ~isempty(Xm), out.Xm = full(sol.value(Xm)); end
-Fn = zeros(7,nN);
-for k = 1:nN, Fn(:,k) = full(fdyn(out.X(:,k), out.U(:,k))); end
-hn = out.tf*repmat(ds,7,1);
+Fn = zeros(ns,nN);
+for k = 1:nN, Fn(:,k) = full(fdyn(Xall(:,k), out.U(:,k))); end
+if sundman, hscale = out.span; else, hscale = out.tf; end
+hn = hscale*repmat(ds,ns,1);
 if isempty(out.Um)
-    Dn = out.X(:,2:end) - out.X(:,1:end-1) - (hn/2).*(Fn(:,1:end-1)+Fn(:,2:end));
+    Dn = Xall(:,2:end) - Xall(:,1:end-1) - (hn/2).*(Fn(:,1:end-1)+Fn(:,2:end));
 else
     % Use the SOLVER'S Xm, not a rebuilt interpolant. Rebuilding it algebraically
     % would satisfy the interpolation constraint by construction and so would
@@ -345,9 +412,9 @@ else
     Xmn = out.Xm;
     Fmap = fdyn.map(N);
     Fmn = full(Fmap(Xmn, out.Um));
-    Dn = out.X(:,2:end) - out.X(:,1:end-1) - (hn/6).*(Fn(:,1:end-1) + 4*Fmn + Fn(:,2:end));
+    Dn = Xall(:,2:end) - Xall(:,1:end-1) - (hn/6).*(Fn(:,1:end-1) + 4*Fmn + Fn(:,2:end));
     % and report the interpolation residual separately
-    XmRef = 0.5*(out.X(:,1:end-1)+out.X(:,2:end)) + (hn/8).*(Fn(:,1:end-1)-Fn(:,2:end));
+    XmRef = 0.5*(Xall(:,1:end-1)+Xall(:,2:end)) + (hn/8).*(Fn(:,1:end-1)-Fn(:,2:end));
     out.maxInterp = max(abs(XmRef(:) - out.Xm(:)));
 end
 out.maxDefect = max(abs(Dn(:)));

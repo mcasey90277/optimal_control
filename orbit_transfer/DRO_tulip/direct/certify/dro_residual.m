@@ -73,7 +73,13 @@ scheme = 'trapezoid';
 if isfield(o,'scheme') && ~isempty(o.scheme), scheme = lower(o.scheme); end
 hasMid = strncmp(scheme,'hermite',7) && isfield(o,'Um') && ~isempty(o.Um);
 
-t  = o.s(:).' * o.tf;
+% Node times: uniform s*tf normally; the solver's own PHYSICAL times under
+% Sundman, where the mesh is deliberately non-uniform in t.
+if isfield(o,'tNodes') && ~isempty(o.tNodes)
+    t = o.tNodes(:).';
+else
+    t = o.s(:).' * o.tf;
+end
 N  = numel(t) - 1;
 Rx = nan(1,N);  Rr = nan(1,N);  Rv = nan(1,N);  Rm = nan(1,N);
 minDir = inf;  thrOver = 0;

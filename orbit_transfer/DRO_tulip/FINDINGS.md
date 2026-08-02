@@ -324,6 +324,81 @@ originally offered. The concern was right; the first proof was not.
 - The residual engine has its own test (certify/tests/test_dro_residual.m, 3/3):
   8.3e-16 on an exactly-integrated trajectory, injected 1e-5 error read at 1.0e-5.
 
+## COSTATE COMPARISON (2026-08-02): the direct duals ARE the indirect costates
+
+This is what the campaign was built for. Every other transfer here has one
+method's answer only, so direct-derived costates can be checked for
+self-consistency but never against an independent second opinion. DRO->tulip is
+the exception: `tfMinProp` returns the whole indirect costate history.
+
+Mapping: for defect constraints D_k = 0 with multipliers nu_k, stationarity of
+the Lagrangian w.r.t. the interior states IS the discrete adjoint recursion, so
+nu_k -> lambda(t_k) with no h-scaling (Hager 2000). Sign and scale were
+**measured, not assumed** — sign resolved against the primal control (a
+dual-convention-free quantity), scale by comparing magnitudes.
+
+### Results, N=1600 Hermite-Simpson
+
+| quantity | value |
+|---|---|
+| primer from duals vs the solution's own thrust direction | **max 1.2e-06 deg** |
+| direct vs indirect lambda_v direction | median 0.0006 deg, max 0.033 deg |
+| direct vs indirect lambda_r direction | median 0.0006 deg, max 0.086 deg |
+| **scale factor lambda_v** | **0.999991** (CoV 4.1e-05) |
+| **scale factor lambda_r** | **0.999995** |
+| transversality lambda_m(t_f) | 8.2e-05 (indirect: 7.1e-10) |
+| Hamiltonian, median abs(lambda'f + 1) | 9.8e-06 |
+
+Three things are stronger than expected:
+
+1. **The primer is exact to 1.2e-06 deg.** Not approximately — the KKT
+   stationarity condition for the midpoint control IS the minimum condition
+   alpha = -lambda_v/||lambda_v||, so the duals reproduce it identically.
+2. **The scale factor is 1.000, not merely constant.** The two methods do not
+   just agree up to normalization; they land in the *same* normalization. That
+   was not designed in and it is not required by anything.
+3. **lambda_r matches too** — median 0.0006 deg. lambda_r couples to the
+   trajectory only indirectly and is the classic weak spot of shooting (it is
+   where the IFS null direction sat, at 83%), so it is the sterner test.
+
+### The one discrepancy, run to ground
+
+Raw Hamiltonian CoV is 5.6e-02, which looks like a failure of the free-final-time
+condition (H_PMP = 1 + lambda'f == 0, i.e. lambda'f == -1). It is not.
+
+The deviation is confined to the **last ~8 intervals of 1600**:
+
+| interval set | median abs(H+1) | max abs(H+1) | CoV |
+|---|---|---|---|
+| all | 9.80e-06 | 1.024 | 5.6e-02 |
+| trim 5 each end | 9.37e-06 | 0.903 | 3.5e-02 |
+| trim 10 | 8.87e-06 | 0.173 | 6.2e-03 |
+| trim 20 | 8.09e-06 | 0.023 | 2.5e-03 |
+
+Worst eight: k = 1592..1599. **A terminal covector-mapping artifact.** The final
+node carries the endpoint equality constraints, so its stationarity mixes defect
+multipliers with boundary multipliers, and the naive "nu_k is lambda at the
+midpoint of interval k" reading cannot separate them. This is exactly the
+terminal correction the Hager mapping supplies, and `foc_check` already applies
+it elsewhere in this repo for the same reason. **Not applied here yet** — until
+it is, the last ~1% of intervals are uninformative.
+
+Note the deviation also scales as altitude^-4.66, the same power law as the
+discretization error, so part of it is ordinary truncation error rather than
+boundary contamination.
+
+### What this settles
+
+The earlier claim that "the two methods agree" rested on t_f and the pinned
+endpoints, and had to be walked back as not being trajectory-level agreement.
+**It now is.** The two methods find the same extremal — same primer field, same
+costate directions, same normalization — not merely the same final time.
+
+Code: `direct/certify/costate_compare.m`. Figure:
+`direct/results/costate_compare_N1600.png`. Data:
+`direct/results/hs_N1600_duals.mat` (requires `opts.returnModel = true`, which
+is what builds the constraint-row registry that locates the defect multipliers).
+
 ## Next
 
 0. **Untried suggestions from the 2026-08-02 external review, recorded so they
@@ -351,8 +426,9 @@ originally offered. The concern was right; the first proof was not.
    alone reached 3.3 m worst-interval position error. Either remains worth
    trying as a cheaper route to the same accuracy at lower N, but neither is on
    the critical path any more.
-5. **The cell this campaign was built for is now unblocked:** compare the direct
-   duals against the indirect costates via the Hager covector mapping. It needed
-   a trustworthy direct solution sitting on the reference, and the certified
-   N = 1600 Hermite-Simpson solve is exactly that. This has never been possible
-   in this repo before.
+5. ~~The cell this campaign was built for~~ **DONE 2026-08-02 — see the costate
+   comparison above.** Follow-on: apply the Hager TERMINAL correction so the last
+   ~1% of intervals become informative, and port `costate_compare` to the other
+   campaigns as a costate-catalog seeding check (it is the mechanism
+   [[goal-costate-catalog]] needs: a direct solve now demonstrably produces
+   costates good to 1e-3 deg, which is far better than any hand-built guess).

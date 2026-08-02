@@ -121,8 +121,11 @@ Two lessons generalize beyond this pair:
    trajectory. The conjecture is open; a path constraint is still prudent
    engineering.
 
-Still open: the costate comparison itself. The certified direct solution is the
-input it always needed, and it has never been possible before now.
+**The costate comparison is DONE (2026-08-02) and it succeeded.** The direct NLP
+duals reproduce the indirect costates: primer exact to 1.2e-06 deg, lambda_v and
+lambda_r directions agreeing to ~0.0006 deg median, and a scale factor of
+0.99999 — the same normalization, not merely proportional. So the two methods
+find the same EXTREMAL, not just the same final time. See DRO_tulip/FINDINGS.md.
 
 ---
 

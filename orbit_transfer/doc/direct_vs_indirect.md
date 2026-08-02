@@ -31,7 +31,9 @@ before anything can be refined.
   DRO→tulip, direct Hermite-Simpson at N = 1600 returns t_f = 4.0152501 against
   the indirect 4.0152425 — five significant figures, 3.3 m worst-interval
   position error, 42 m end to end, certified. (The agreement is on t_f and the
-  pinned endpoints; a trajectory- or costate-level comparison is still to do.) This is the repo's only method-vs-method agreement on a
+  pinned endpoints. The COSTATE-level comparison has since been done and also
+  succeeded — primer exact to 1.2e-06 deg, costate directions to ~0.0006 deg,
+  scale factor 0.99999. The two methods find the same extremal.) This is the repo's only method-vs-method agreement on a
   *trajectory* rather than on a formulation. It required fourth order: the
   second-order twin was 3-80% off while reporting 1e-14 defects.
 - **Indirect is the natural fit and it works.** `pumpkyn.cr3bp.tfMin` solves

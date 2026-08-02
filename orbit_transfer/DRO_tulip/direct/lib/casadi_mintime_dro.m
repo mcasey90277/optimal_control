@@ -8,12 +8,17 @@ function out = casadi_mintime_dro(rv0, rvf, Tmax, c, muStar, N, X0, U0, tf0, opt
 % it is the one place the direct method's dual-to-costate mapping can be checked
 % against a second opinion rather than against itself.
 %
-% NO SUNDMAN REGULARIZATION, and that is deliberate. The GTO->tulip campaign
-% needs it because a ~40-revolution Earth spiral passes deep perigee. Measured
-% on this transfer: 1.18 revolutions about the Moon, Earth distance never below
-% 0.85, closest lunar approach 0.0164 (~4650 km altitude). Plain time-domain
-% collocation is appropriate; adding a regularization would be machinery
-% imported for its own sake.
+% NO SUNDMAN REGULARIZATION -- and this was originally justified by the shape of
+% the transfer (1.18 revolutions about the Moon, Earth distance never below 0.85,
+% closest approach ~4650 km) rather than by measurement. THAT JUSTIFICATION WAS
+% WRONG. Measuring the true continuous-time error afterwards (certify/dro_residual)
+% found worst-interval errors of 12,600 km at N = 400 and 1,100 km at N = 1600 --
+% on the WELL-BEHAVED solutions, not just the pathological deep-flyby one. A
+% uniform-in-time mesh does not resolve this transfer at any density tried.
+%
+% The first remedy applied is the fourth-order scheme below (opts.scheme). A
+% Sundman change of variable, or a mesh concentrated near periselene, remain
+% open alternatives. Do not restore the old claim: see FINDINGS.md.
 %
 % FREE FINAL TIME BY NORMALIZED TIME, WITH t_f LIFTED. The independent variable
 % is s in [0,1] and dX/ds = t_f * f(X,U). A single scalar t_f couples to every
@@ -47,6 +52,12 @@ function out = casadi_mintime_dro(rv0, rvf, Tmax, c, muStar, N, X0, U0, tf0, opt
 %   opts     - struct (optional):
 %              .maxIter [3000]  .printLevel [0]  .returnModel [false]
 %              .thrLock [false] true pins thr == 1 (the classical min-time form)
+%              .scheme  ['trapezoid'] or 'hermite-simpson'. Trapezoid is second
+%                       order and is the historical default, kept so the record
+%                       in FINDINGS.md still reproduces. Hermite-Simpson is
+%                       fourth order at the same node count and the same
+%                       constraint count -- it is what the accuracy gate
+%                       (certify/certify_dro_mintime) requires.
 %              .minAltKm [] minimum altitude above the LUNAR SURFACE, km. Empty
 %                       (default) leaves the problem UNCONSTRAINED, which
 %                       reproduces the original ill-posed sweep. Any finite
@@ -57,6 +68,7 @@ function out = casadi_mintime_dro(rv0, rvf, Tmax, c, muStar, N, X0, U0, tf0, opt
 %
 % OUTPUTS:
 %   out - struct: .X [7x(N+1)] .U [4x(N+1)] .tf .s (the grid) .success
+%         .scheme, and .Um [4xN] midpoint controls (hermite-simpson only, else [])
 %         .minAltKm (the constraint applied, NaN if none)
 %         .altMinKm (the ACHIEVED minimum altitude at the nodes)
 %         .altActive (true if the constraint is within 1 km of binding)
@@ -75,6 +87,7 @@ maxIter  = g('maxIter', 3000);
 prnt     = g('printLevel', 0);
 retModel = g('returnModel', false);
 thrLock  = g('thrLock', false);
+scheme   = lower(g('scheme', 'trapezoid'));
 minAltKm = g('minAltKm', []);
 lStarKm  = g('lStarKm', 389703.264829278);
 rMoonKm  = g('rMoonKm', 1737.4);
@@ -106,9 +119,55 @@ creg = struct('label',{},'rows',{});
 
 F = fdyn.map(nN);
 Fv = F(X, U);
+Um = [];  Xm = [];
+switch scheme
+case 'trapezoid'
+    % Second order. dX/ds = tf*f, integrated by the trapezoid rule. The control
+    % is implicitly linear across each interval.
+    D = X(:,2:end) - X(:,1:end-1) ...
+        - repmat(TF(1:end-1),7,1).*(repmat(ds,7,1)/2).*(Fv(:,1:end-1) + Fv(:,2:end));
+
+case 'hermite-simpson'
+    % FOURTH order, in the SEPARATED form: the interior midpoint state Xm is a
+    % decision variable constrained to the Hermite interpolant, rather than an
+    % expression substituted into the dynamics.
+    %
+    %   interpolation:  Xm - (Xk + Xk1)/2 - (h/8)(fk - fk1) = 0
+    %   defect:         Xk1 - Xk - (h/6)(fk + 4 f(Xm,Um) + fk1) = 0
+    %
+    % WHY SEPARATED AND NOT COMPRESSED. The compressed form -- substituting the
+    % interpolant directly into f -- is algebraically identical and carries half
+    % the equations, and it was tried first. It solves at N = 400 and MATLAB
+    % dies SILENTLY at N = 800: nesting Xm(X,TF) inside f means the Lagrangian
+    % Hessian needs the chain rule through the interpolant, the expression graph
+    % deepens with every node, and MUMPS does not survive it. That is the same
+    % failure, and the same cure, as the lift of t_f above and as liftDL in the
+    % earth CR3BP campaign: keep every constraint SHALLOW and let extra
+    % variables carry the coupling. Do not "simplify" this back.
+    %
+    % The midpoint CONTROL is likewise a genuine variable, not the average of
+    % its neighbours. Averaging would tie the control to a piecewise-linear
+    % family and cost the scheme its fourth order; and here the control lives on
+    % a sphere, where the average of two unit vectors is not a unit vector. Um
+    % carries its own norm and throttle constraints below.
+    hND = repmat(TF(1:end-1),7,1).*repmat(ds,7,1);       % 7 x N, the ND step
+    Um  = opti.variable(4, N);
+    Xm  = opti.variable(7, N);
+    Fm  = fdyn.map(N);
+    Fmv = Fm(Xm, Um);
+    rI = size(opti.g,1)+1;
+    % reshape needs EXPLICIT dimensions here -- CasADi has no MX overload for
+    % the MATLAB '[]' placeholder.
+    HSI = Xm - 0.5*(X(:,1:end-1) + X(:,2:end)) - (hND/8).*(Fv(:,1:end-1) - Fv(:,2:end));
+    opti.subject_to(reshape(HSI, 7*N, 1) == 0);
+    if retModel, creg(end+1) = struct('label','hsInterp','rows',rI:size(opti.g,1)); end
+    D = X(:,2:end) - X(:,1:end-1) - (hND/6).*(Fv(:,1:end-1) + 4*Fmv + Fv(:,2:end));
+
+otherwise
+    error('casadi_mintime_dro:scheme', ...
+        'unknown scheme ''%s''; use ''trapezoid'' or ''hermite-simpson''.', scheme);
+end
 r0 = size(opti.g,1)+1;
-D = X(:,2:end) - X(:,1:end-1) ...
-    - repmat(TF(1:end-1),7,1).*(repmat(ds,7,1)/2).*(Fv(:,1:end-1) + Fv(:,2:end));
 opti.subject_to(D(:) == 0);
 if retModel, creg(end+1) = struct('label','defect','rows',r0:size(opti.g,1)); end
 
@@ -125,6 +184,21 @@ if thrLock
 else
     opti.subject_to(U(4,:).' >= 0);
     opti.subject_to(U(4,:).' <= 1);
+end
+
+if ~isempty(Um)
+    % The midpoint control gets the same treatment as the node controls --
+    % otherwise it is free to leave the unit sphere and the interpolated
+    % direction stops meaning anything.
+    r0 = size(opti.g,1)+1;
+    opti.subject_to((sum(Um(1:3,:).^2,1) - 1).' == 0);
+    if retModel, creg(end+1) = struct('label','betaNormMid','rows',r0:size(opti.g,1)); end
+    if thrLock
+        opti.subject_to(Um(4,:).' == 1);
+    else
+        opti.subject_to(Um(4,:).' >= 0);
+        opti.subject_to(Um(4,:).' <= 1);
+    end
 end
 
 opti.subject_to(X(1:6,1) == rv0(:));
@@ -155,6 +229,13 @@ if ~isempty(minAltKm)
     dMoon2 = sum((X(1:3,:) - [1-muStar; 0; 0]).^2, 1).';
     r0 = size(opti.g,1)+1;
     opti.subject_to(dMoon2 >= rhoMinND^2);
+    % Under Hermite-Simpson the interior midpoint state is a computable
+    % expression, so the floor can be enforced there too. That halves the
+    % unguarded span without adding a variable -- it does not eliminate it.
+    if ~isempty(Xm)
+        dMid2 = sum((Xm(1:3,:) - [1-muStar; 0; 0]).^2, 1).';
+        opti.subject_to(dMid2 >= rhoMinND^2);
+    end
     if retModel, creg(end+1) = struct('label','minAlt','rows',r0:size(opti.g,1)); end
 end
 
@@ -175,6 +256,15 @@ end
 opti.set_initial(X, X0);
 opti.set_initial(U, U0);
 opti.set_initial(TF, tf0*ones(1,nN));
+if ~isempty(Xm)
+    opti.set_initial(Xm, 0.5*(X0(:,1:end-1) + X0(:,2:end)));
+end
+if ~isempty(Um)
+    Um0 = 0.5*(U0(:,1:end-1) + U0(:,2:end));
+    nrm = max(vecnorm(Um0(1:3,:),2,1), eps);       % re-normalize: averaging two
+    Um0(1:3,:) = Um0(1:3,:) ./ nrm;                % unit vectors does not give one
+    opti.set_initial(Um, Um0);
+end
 
 opti.solver('ipopt', struct('print_time',false), ...
     struct('print_level',prnt,'max_iter',maxIter,'tol',1e-10, ...
@@ -196,14 +286,31 @@ out.ipoptStatus = opti.stats().return_status;
 out.success = ok && any(strcmp(out.ipoptStatus, ...
     {'Solve_Succeeded','Solved_To_Acceptable_Level'}));
 
-% diagnostics
+% diagnostics. The defect is recomputed from the RETURNED numbers using the
+% same rule the NLP imposed -- a trapezoid check on a Hermite-Simpson solution
+% would report the difference between the two schemes, not a solver error.
+out.scheme = scheme;
+out.Um = [];
+if ~isempty(Um), out.Um = full(sol.value(Um)); end
 Fn = zeros(7,nN);
 for k = 1:nN, Fn(:,k) = full(fdyn(out.X(:,k), out.U(:,k))); end
-Dn = out.X(:,2:end) - out.X(:,1:end-1) - out.tf*(repmat(ds,7,1)/2).*(Fn(:,1:end-1)+Fn(:,2:end));
+hn = out.tf*repmat(ds,7,1);
+if isempty(out.Um)
+    Dn = out.X(:,2:end) - out.X(:,1:end-1) - (hn/2).*(Fn(:,1:end-1)+Fn(:,2:end));
+else
+    Xmn = 0.5*(out.X(:,1:end-1)+out.X(:,2:end)) + (hn/8).*(Fn(:,1:end-1)-Fn(:,2:end));
+    Fmn = zeros(7,N);
+    for k = 1:N, Fmn(:,k) = full(fdyn(Xmn(:,k), out.Um(:,k))); end
+    Dn = out.X(:,2:end) - out.X(:,1:end-1) - (hn/6).*(Fn(:,1:end-1) + 4*Fmn + Fn(:,2:end));
+end
 out.maxDefect = max(abs(Dn(:)));
 out.maxUnit   = max(abs(vecnorm(out.U(1:3,:),2,1) - 1));
+if ~isempty(out.Um)
+    out.maxUnit = max(out.maxUnit, max(abs(vecnorm(out.Um(1:3,:),2,1) - 1)));
+end
 out.termErr   = norm(out.X(1:6,end) - rvf(:));
 out.thrMin    = min(out.U(4,:));
+if ~isempty(out.Um), out.thrMin = min(out.thrMin, min(out.Um(4,:))); end
 r2n = vecnorm(out.X(1:3,:) - [1-muStar;0;0], 2, 1);
 out.altMinKm  = min(r2n)*lStarKm - rMoonKm;
 out.minAltKm  = NaN;  out.altActive = false;
@@ -214,7 +321,8 @@ end
 out.mf        = out.X(7,end);
 try
     lamAll = full(sol.value(opti.lam_g));
-    out.lamDef = reshape(lamAll(creg(1).rows), 7, N);
+    kd = find(strcmp({creg.label},'defect'), 1);   % NOT creg(1): Hermite-Simpson
+    out.lamDef = reshape(lamAll(creg(kd).rows), 7, N);   % registers interp first
 catch
     out.lamDef = [];
 end

@@ -35,6 +35,13 @@ function R = run_dro_tulip(opts)
 %                    the original ill-posed sweep in ../FINDINGS.md. Set it to
 %                    make the problem well posed -- e.g. 100 for an aggressive
 %                    pass, 500 for a conservative one.       [default []]
+%          .scheme   'trapezoid' (2nd order, the historical default that
+%                    reproduces ../FINDINGS.md) or 'hermite-simpson' (4th order
+%                    at the same node count). The accuracy gate below is only
+%                    reachable with the latter.       [default 'trapezoid']
+%          .certify  run the pass/fail gate on every solve. This is what
+%                    decides whether a t_f may be quoted as an answer -- a
+%                    machine-tight defect does not.    [default true]
 %          .save     write results/*.mat           [default true]
 %          .plots    six-panel diagnostic figure (trajectory, altitude, grid
 %                    spacing, CONTINUOUS-time residual, throttle, residual vs
@@ -64,6 +71,8 @@ IspS    = d('ispS', 900);
 m0      = d('m0kg', 150);
 doSave  = d('save', true);
 minAltKm= d('minAltKm', []);
+scheme  = d('scheme', 'trapezoid');
+doCert  = d('certify', true);
 doPlots = d('plots', false);
 movies  = d('movies', 'none');
 vizN    = d('vizN', []);
@@ -72,6 +81,7 @@ verbose = d('verbose', true);
 here = fileparts(mfilename('fullpath'));
 addpath(fullfile(here,'lib'));
 addpath(fullfile(here,'viz'));
+addpath(fullfile(here,'certify'));
 addpath(fullfile(getenv('HOME'),'casadi-3.7.0'));
 cwd0 = pwd;  cleaner = onCleanup(@() cd(cwd0)); %#ok<NASGU>
 cd(fullfile(getenv('HOME'),'Desktop','proj7','external','pumpkynPie'));  startup();
@@ -123,7 +133,7 @@ sols = cell(1, numel(Ns));
 for k = 1:numel(Ns)
     N = Ns(k);  t0 = tic;
     o = casadi_mintime_dro(rv0, rvf, Tmax, c, mu, N, [], [], [], ...
-            struct('maxIter',3000,'minAltKm',minAltKm));
+            struct('maxIter',3000,'minAltKm',minAltKm,'scheme',scheme));
     w = toc(t0);
     sols{k} = o;
     r2 = vecnorm(o.X(1:3,:) - [1-mu;0;0], 2, 1);
@@ -138,6 +148,30 @@ for k = 1:numel(Ns)
     if doSave
         rd = fullfile(here,'results');  if ~isfolder(rd), mkdir(rd); end
         save(fullfile(rd, sprintf('mintime_N%d.mat', N)), 'o','rv0','rvf','p','Tmax','c','-v7.3');
+    end
+end
+
+%% 3b. certification -- the gate that decides whether a t_f is an answer
+if doCert
+    if verbose
+        fprintf(['\n===== CERTIFICATION =====\n' ...
+                 '  G1 accuracy: worst continuous-time error, km (tol 1.0)\n' ...
+                 '  G2 agreement: relative error against the indirect t_f (tol 1e-4)\n']);
+        fprintf('%-7s %14s %14s %14s %s\n','N','t_f','G1 worst km','G2 rel err','verdict');
+    end
+    for k = 1:numel(Ns)
+        C = certify_dro_mintime(sols{k}, p, Tmax, c, ...
+                struct('tfRef', ref.tf, 'verbose', false));
+        R.cert(k) = C; %#ok<AGROW>
+        if verbose
+            fprintf('%-7d %14.7f %14.1f %14.2e %s\n', Ns(k), sols{k}.tf, ...
+                C.worstKm, C.tfErrRel, local_verdict(C.pass));
+        end
+    end
+    if verbose && ~any(arrayfun(@(x) x.pass, R.cert))
+        fprintf(['  NO SOLVE CERTIFIED. These t_f values are not answers to the\n' ...
+                 '  continuous problem -- see ../FINDINGS.md. Try\n' ...
+                 '  opts.scheme = ''hermite-simpson'' with a finer mesh.\n']);
     end
 end
 
@@ -203,6 +237,13 @@ if any(strcmpi(movies, {'scene','both'}))
     end
     R.movieFiles{end+1} = f;
 end
+end
+
+% ---------------------------------------------------------------------------
+function s = local_verdict(p)
+% LOCAL_VERDICT  'CERTIFIED'/'not certified' for the gate report.
+% INPUTS: p (logical)   OUTPUTS: s [char]
+if p, s = 'CERTIFIED'; else, s = 'not certified'; end
 end
 
 % ---------------------------------------------------------------------------

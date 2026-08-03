@@ -1,6 +1,18 @@
 function S = sweep_phasing(opts)
 % SWEEP_PHASING  Map the DRO->tulip min-time family over departure/arrival phase.
 %
+% STATUS 2026-08-03: HARNESS VALIDATED, SOLVER KERNEL INCOMPLETE. The walk,
+% logging, checkpointing, budgets and verification all work; the anchor
+% converges and edges fail cleanly and cheaply. What remains is the shooting
+% kernel: the bounded finite-difference fsolve below cannot close
+% DEPARTURE-phase steps, because a departure perturbation is amplified
+% ~1e3x through the flow (measured: a 5e-4 phase step gives an O(1) seed
+% residual), and closing that needs the analytic STM Jacobian that
+% pumpkyn's tfMin carries internally. NEXT BUILD: propagate the augmented
+% state+STM via tfMinEoM, assemble the same Jacobian tfMin uses, and hand it
+% to the capped fsolve via SpecifyObjectiveGradient. Until then, runs die at
+% the anchor's departure edges by design rather than by hanging.
+%
 % Darin's program (call of 2026-08-03): map the indirect method's costates over
 % essentially all initial and final orbit phasings, so the extremal FAMILY is
 % seen rather than sampled -- single point solves land in arbitrary basins, as
@@ -83,6 +95,7 @@ tauT     = d('tauTulip', 5*2*pi/6);  pmT = d('pmTulip', -1);
 thrustN  = d('thrustN', 0.07); ispS     = d('ispS', 900);
 m0       = d('m0kg', 150);
 termTol  = d('termTol', 1e-7); maxTries = d('maxTries', 4);
+edgeBudget = d('edgeBudget', 40);
 foldTol  = d('foldTol', 0.05); foldPass = d('foldPass', true);
 perisFloorKm = d('perisFloorKm', 500);
 saveMat  = d('saveMat', true); doPlots  = d('plots', true);
@@ -144,6 +157,15 @@ TRIES = zeros(nD,nA); state = zeros(nD,nA);  % 0 open, 1 converged, -1 dead
 % call (the first version of this harness tried, and the anchor itself failed).
 % local_continue bisects the phase step until each sub-step converges, exactly
 % the adaptive walk bht1500_continuation.m uses for thrust.
+here0 = fileparts(mfilename('fullpath'));
+rd0 = fullfile(here0,'results');  if ~isfolder(rd0), mkdir(rd0); end
+logFile  = fullfile(rd0, sprintf('sweep_tau%g_%dx%d_progress.txt', tauDRO, nD, nA));
+ckptFile = fullfile(rd0, sprintf('sweep_tau%g_%dx%d_ckpt.mat', tauDRO, nD, nA));
+log_ = @(varargin) local_filelog(logFile, verbose, varargin{:});
+log_('sweep start: %dx%d grid, edge budget %d solves, anchor (%.3f, %.3f)\n', ...
+    nD, nA, edgeBudget, sD(iD0), sA(iA0));
+hMem = 0.01;                    % step memory, seeded at the measured safe step
+nSolves = 0;
 queue = {struct('iD',iD0,'iA',iA0,'pfD',0,'pfA',fA0,'lam',lamAnchor)};
 nbr   = [1 0; -1 0; 0 1; 0 -1];
 
@@ -153,9 +175,10 @@ while ~isempty(queue)
     if state(iD,iA) ~= 0, continue, end
     TRIES(iD,iA) = TRIES(iD,iA) + 1;
 
-    [ok, sol, res, peris, revs, mf] = local_continue( ...
+    [ok, sol, res, peris, revs, mf, hMem, nUsed] = local_continue( ...
         q.pfD, q.pfA, q.lam, sD(iD), sA(iA), depState, arrState, ...
-        Tmax, c, muStar, termTol, lStar, rMoonKm, 6);
+        Tmax, c, muStar, termTol, lStar, rMoonKm, hMem, edgeBudget);
+    nSolves = nSolves + nUsed;
 
     if ok
         state(iD,iA) = 1;
@@ -170,12 +193,15 @@ while ~isempty(queue)
                     'pfD',sD(iD),'pfA',sA(iA),'lam',sol); %#ok<AGROW>
             end
         end
-        if verbose
-            fprintf('  (%2d,%2d) tf=%.4f peris=%7.0f km  [%d/%d]\n', ...
-                iD, iA, sol(8), peris, nnz(state==1), nD*nA);
+        log_('  (%2d,%2d) tf=%.4f peris=%7.0f km  [%d/%d, %d solves]\n', ...
+            iD, iA, sol(8), peris, nnz(state==1), nD*nA, nSolves);
+        if mod(nnz(state==1), 5) == 0                   % periodic checkpoint
+            save(ckptFile, 'TF','LAM','PERIS','REVS','DV','RESID','TRIES','sD','sA');
         end
     elseif TRIES(iD,iA) >= maxTries
         state(iD,iA) = -1;                    % dead; stop re-queueing it
+        log_('  (%2d,%2d) DEAD after %d tries [%d solves total]\n', iD, iA, ...
+            TRIES(iD,iA), nSolves);
     end
     % a failed-but-alive point is NOT re-queued here -- it re-enters when
     % another neighbour converges and pushes it again with a fresh seed
@@ -206,7 +232,7 @@ if foldPass && any(FOLD(:))
                 if isnan(TF(jD,jA)), continue, end
                 [ok, sol] = local_continue(sD(jD), sA(jA), LAM(:,jD,jA), ...
                     sD(iD), sA(iA), depState, arrState, ...
-                    Tmax, c, muStar, termTol, lStar, rMoonKm, 4);
+                    Tmax, c, muStar, termTol, lStar, rMoonKm, hMem, edgeBudget);
                 if ~ok, continue, end
                 if sol(8) < TF(iD,iA) - 1e-6
                     % a faster verified extremal: promote it, demote the old
@@ -280,34 +306,55 @@ end
 end
 
 % ---------------------------------------------------------------------------
-function [ok, sol, res, perisKm, revs, mf] = local_continue( ...
+function [ok, sol, res, perisKm, revs, mf, hOut, nUsed] = local_continue( ...
     fDa, fAa, lamA, fDb, fAb, depState, arrState, ...
-    Tmax, c, muStar, termTol, lStar, rMoonKm, maxDepth)
-% LOCAL_CONTINUE  Walk the costates from phase pair (fDa,fAa) to (fDb,fAb).
+    Tmax, c, muStar, termTol, lStar, rMoonKm, hInit, budget)
+% LOCAL_CONTINUE  March the costates from phase pair (fDa,fAa) to (fDb,fAb).
 %
-% Try the full step first. If the solve fails verification, split the phase
-% step in half (shortest way around the circle in each coordinate) and recurse:
-% converge to the midpoint, then from the midpoint to the target. maxDepth = 5
-% permits up to 32 sub-steps per grid edge, each an independent solve+verify.
-% This is the 2-D generalization of bht1500_continuation.m's thrust walk.
+% ITERATIVE adaptive march, not recursive bisection -- the bisection version
+% re-attempted the full remaining span at every level, and a 6x6 pilot burned
+% 6.75 CPU-hours without finishing. This version: take steps of size h along
+% the shortest circular path, halving h on failure and growing it 1.5x on
+% success, starting from hInit (the STEP MEMORY: the caller passes the last
+% successful step of the previous edge, so known-hard terrain is entered at a
+% workable step instead of rediscovering it). A per-edge solve BUDGET bounds
+% the cost of unreachable targets.
 %
-% INPUTS:  fDa,fAa - converged phases; lamA [8x1] their costates
-%          fDb,fAb - target phases; depState/arrState - phase -> state handles
-%          Tmax; c; muStar; termTol; lStar; rMoonKm; maxDepth [scalar]
-% OUTPUTS: as local_solve_verify, for the TARGET point
-res = inf;  perisKm = NaN;  revs = NaN;  mf = NaN;
-rvf = arrState(fAb);  rv0 = depState(fDb);
-[ok, sol, res, perisKm, revs, mf] = local_solve_verify( ...
-    rv0(1:6), rvf(1:6), lamA, Tmax, c, muStar, termTol, lStar, rMoonKm);
-if ok || maxDepth <= 0, return, end
-% bisect along the shortest circular path in each phase
-fDm = fDa + (mod(fDb - fDa + 0.5, 1) - 0.5)/2;
-fAm = fAa + (mod(fAb - fAa + 0.5, 1) - 0.5)/2;
-[okm, solm] = local_continue(fDa, fAa, lamA, fDm, fAm, depState, arrState, ...
-    Tmax, c, muStar, termTol, lStar, rMoonKm, maxDepth-1);
-if ~okm, ok = false; sol = nan(8,1); return, end
-[ok, sol, res, perisKm, revs, mf] = local_continue(fDm, fAm, solm, fDb, fAb, ...
-    depState, arrState, Tmax, c, muStar, termTol, lStar, rMoonKm, maxDepth-1);
+% INPUTS:  as before, plus hInit (starting step, phase units) and budget
+%          (max solve+verify calls for this edge)
+% OUTPUTS: as before, plus hOut (last successful step) and nUsed (solves spent)
+res = inf;  perisKm = NaN;  revs = NaN;  mf = NaN;  sol = nan(8,1);
+dD = mod(fDb - fDa + 0.5, 1) - 0.5;          % shortest way around the torus
+dA = mod(fAb - fAa + 0.5, 1) - 0.5;
+L  = max(abs(dD), abs(dA));
+hMin = 5e-4;
+% CAP THE STEP. Growth after success is how the march re-finds fast terrain,
+% but an over-large attempt that FAILS costs a full non-converging fsolve
+% (60-90 s) -- far more than the several small successes it hoped to save.
+% Measured safe step ~0.009; cap just above it.
+hMax = 0.02;
+h  = min([max(hInit, hMin), max(L, hMin), hMax]);
+lam = lamA;  pos = 0;  nUsed = 0;  ok = false;  hOut = h;
+tEdge = tic;  edgeSec = 240;          % wall-time budget per edge
+degenerate = (L < hMin);                      % same node: one verifying solve,
+if degenerate, L = max(L, eps); end           % and do NOT export h as memory
+while pos < L
+    pos2 = min(pos + h, L);
+    fD = fDa + dD*(pos2/L);  fA = fAa + dA*(pos2/L);
+    rv0 = depState(fD);  rvf = arrState(fA);
+    [okS, solS, res, perisKm, revs, mf] = local_solve_verify( ...
+        rv0(1:6), rvf(1:6), lam, Tmax, c, muStar, termTol, lStar, rMoonKm);
+    nUsed = nUsed + 1;
+    if okS
+        pos = pos2;  lam = solS;  sol = solS;
+        if ~degenerate, hOut = h; end
+        h = min([h*1.5, hMax, L - pos + eps]);
+        ok = (pos >= L);
+    else
+        h = h/2;
+        if h < hMin || nUsed >= budget || toc(tEdge) > edgeSec, return, end
+    end
+end
 end
 
 % ---------------------------------------------------------------------------
@@ -322,7 +369,18 @@ function [ok, sol, res, perisKm, revs, mf] = local_solve_verify( ...
 sol = nan(8,1);  res = inf;  perisKm = NaN;  revs = NaN;  mf = NaN;
 try
     w = warning('off','all');  cleanW = onCleanup(@() warning(w)); %#ok<NASGU>
-    sol = pumpkyn.cr3bp.tfMin(rv0, rvf, lamSeed, Tmax, c, muStar);
+    % BOUNDED SHOOTING, not pumpkyn.cr3bp.tfMin. tfMin hardcodes
+    % MaxIterations = 100 with no options passthrough, so one hard call near a
+    % barrier burns up to ~900 propagations (many MINUTES) before giving up --
+    % measured: two pilot attempts spent an hour on the anchor's first edges.
+    % A warm continuation step either converges in <15 iterations or it is not
+    % going to; solve the SAME residual (terminal state + H(t_f) = 0, all
+    % dynamics via pumpkyn's own tfMinProp/tfMinEoM) with our own capped
+    % fsolve. Pumpkyn is not modified.
+    fo = optimoptions('fsolve','Display','off','MaxIterations',15, ...
+        'FunctionTolerance',1e-24,'StepTolerance',1e-14);
+    sol = fsolve(@(z) local_shootres(z, rv0, rvf, Tmax, c, muStar), ...
+                 lamSeed(:), fo);
     if ~all(isfinite(sol)) || sol(8) <= 0, ok = false; return, end
     [~, rv] = pumpkyn.cr3bp.tfMinProp(sol(8), [rv0, 1, sol(1:7)'], Tmax, c, muStar);
     res = norm(rv(end,1:6) - rvf);
@@ -358,4 +416,30 @@ function v = local_default(s, f, dflt)
 % LOCAL_DEFAULT  s.(f) if present and nonempty, else dflt.
 % INPUTS: s; f; dflt   OUTPUTS: v
 if isstruct(s) && isfield(s,f) && ~isempty(s.(f)), v = s.(f); else, v = dflt; end
+end
+
+% ---------------------------------------------------------------------------
+function local_filelog(f, echo, varargin)
+% LOCAL_FILELOG  Append-and-flush progress logging. MATLAB -batch buffers
+% stdout, which left a 6.75-CPU-hour pilot completely opaque; a file append is
+% visible from outside at every step. INPUTS: f; echo (also fprintf); varargin
+fid = fopen(f, 'a');
+if fid > 0, fprintf(fid, varargin{:}); fclose(fid); end
+if echo, fprintf(varargin{:}); end
+end
+
+% ---------------------------------------------------------------------------
+function r = local_shootres(z, rv0, rvf, Tmax, c, muStar)
+% LOCAL_SHOOTRES  The min-time shooting residual, pumpkyn dynamics throughout.
+% z = [lambda0 (7); tf]. Residual: terminal position+velocity error (6), the
+% free-final-mass transversality lambda_m(t_f) = 0, and the free-final-time
+% condition H(t_f) = 0 -- identical to tfMin's shootingResidual.
+% INPUTS: z [8x1]; rv0, rvf [1x6]; Tmax; c; muStar   OUTPUTS: r [8x1]
+[~, rv] = pumpkyn.cr3bp.tfMinProp(z(8), [rv0, 1, z(1:7)'], Tmax, c, muStar);
+[~, Ht] = pumpkyn.cr3bp.tfMinEoM(z(8), rv(end,1:14)', Tmax, c, muStar);
+% EIGHT equations for eight unknowns, matching tfMin's own shootingResidual:
+% terminal state (6), free-final-mass transversality lambda_m(tf) = 0, and
+% free-final-time H(tf) = 0. The first version omitted the lambda_m row and
+% handed fsolve an underdetermined system -- every call failed instantly.
+r = [rv(end,1:6)' - rvf(:); rv(end,14); Ht];
 end

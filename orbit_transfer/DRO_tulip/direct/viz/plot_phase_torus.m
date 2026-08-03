@@ -118,4 +118,45 @@ title(sprintf(['flat torus: green pass (t_f shown) / orange near-miss / red fail
     'both axes periodic']));
 exportgraphics(f2, [outStem '_flat.png'], 'Resolution', 140);
 fprintf('  flat   -> %s_flat.png\n', outStem);
+
+%% ---- figure 3: the t_f-VALUE map ----------------------------------------
+% The actual product: t_f over the torus, colormapped on the PASSED cells.
+% Untried cells light grey; tried-but-failed cells white with a red cross, so
+% holes in the map read as "unresolved", never as data.
+f3 = figure('Color','w','Position',[60 60 880 720]);
+hold on
+tfOK = TFdisp(pass & tried);
+if isempty(tfOK), tfLo = 0; tfHi = 1; else
+    tfLo = min(tfOK);  tfHi = max(tfOK);
+    if tfHi <= tfLo, tfHi = tfLo + eps(tfLo); end
+end
+cmap = turbo(256);
+for kD = 1:nD
+    for kA = 1:nA
+        x = mod(sD(kD),1);  y = mod(sA(kA),1);
+        px = [x-1/(2*nD), y-1/(2*nA), 1/nD, 1/nA];
+        if tried(kD,kA) && pass(kD,kA)
+            w = (TFdisp(kD,kA) - tfLo)/(tfHi - tfLo);
+            col = cmap(1 + round(w*255), :);
+            rectangle('Position',px,'FaceColor',col,'EdgeColor',[1 1 1]*0.5,'LineWidth',0.3);
+            text(x, y, sprintf('%.2f', TFdisp(kD,kA)), 'HorizontalAlignment','center', ...
+                'FontSize',8, 'Color','w', 'FontWeight','bold');
+        elseif tried(kD,kA)
+            rectangle('Position',px,'FaceColor',[1 1 1],'EdgeColor',[0.85 0.2 0.15],'LineWidth',0.8);
+            plot(x, y, 'x', 'Color',[0.85 0.2 0.15], 'MarkerSize',7, 'LineWidth',1.2);
+        else
+            rectangle('Position',px,'FaceColor',[0.88 0.88 0.88],'EdgeColor',[1 1 1]*0.6,'LineWidth',0.3);
+        end
+    end
+end
+axis([-0.5/nD 1-0.5/nD+1/nD -0.5/nA 1-0.5/nA+1/nA]);  axis square
+xlabel('departure phase s_D (wraps)');  ylabel('arrival phase s_A (wraps)');
+colormap(f3, cmap);
+cb = colorbar;  caxis([tfLo tfHi]);
+cb.Label.String = sprintf('t_f [ND]   (%.1f - %.1f days)', ...
+    tfLo*4.4327, tfHi*4.4327);
+title({'minimum transfer time over the phasing torus (map resolution)', ...
+       'colored where solved;  red x = tried, unresolved;  grey = untried'});
+exportgraphics(f3, [outStem '_tfmap.png'], 'Resolution', 140);
+fprintf('  tf map -> %s_tfmap.png\n', outStem);
 end

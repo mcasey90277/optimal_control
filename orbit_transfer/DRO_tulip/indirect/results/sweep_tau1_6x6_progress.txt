@@ -1,8 +1,2 @@
 sweep start: 6x6 grid, edge budget 40 solves, anchor (0.000, 0.075)
   ( 1, 1) tf=4.0152 peris=   4673 km  [1/36, 1 solves]
-sweep start: 6x6 grid, edge budget 40 solves, anchor (0.000, 0.075)
-  ( 1, 1) tf=4.0152 peris=   4673 km  [1/36, 1 solves]
-sweep start: 6x6 grid, edge budget 40 solves, anchor (0.000, 0.075)
-  ( 1, 1) tf=4.0152 peris=   4673 km  [1/36, 1 solves]
-sweep start: 6x6 grid, edge budget 40 solves, anchor (0.000, 0.075)
-  ( 1, 1) tf=4.0152 peris=   4673 km  [1/36, 1 solves]

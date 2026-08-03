@@ -1,17 +1,12 @@
 function S = sweep_phasing(opts)
 % SWEEP_PHASING  Map the DRO->tulip min-time family over departure/arrival phase.
 %
-% STATUS 2026-08-03: HARNESS VALIDATED, SOLVER KERNEL INCOMPLETE. The walk,
-% logging, checkpointing, budgets and verification all work; the anchor
-% converges and edges fail cleanly and cheaply. What remains is the shooting
-% kernel: the bounded finite-difference fsolve below cannot close
-% DEPARTURE-phase steps, because a departure perturbation is amplified
-% ~1e3x through the flow (measured: a 5e-4 phase step gives an O(1) seed
-% residual), and closing that needs the analytic STM Jacobian that
-% pumpkyn's tfMin carries internally. NEXT BUILD: propagate the augmented
-% state+STM via tfMinEoM, assemble the same Jacobian tfMin uses, and hand it
-% to the capped fsolve via SpecifyObjectiveGradient. Until then, runs die at
-% the anchor's departure edges by design rather than by hanging.
+% STATUS 2026-08-03 (2): STM-JACOBIAN KERNEL INSTALLED. The bounded shooter
+% now solves with the analytic Jacobian assembled from pumpkyn's augmented
+% propagation (see local_shootres), which is what departure-phase steps
+% require -- their initial-state perturbations are amplified ~1e3x through
+% the flow and finite differencing never closed one. Each Newton iteration
+% costs ONE augmented propagation instead of nine plain ones.
 %
 % Darin's program (call of 2026-08-03): map the indirect method's costates over
 % essentially all initial and final orbit phasings, so the extremal FAMILY is
@@ -327,27 +322,40 @@ res = inf;  perisKm = NaN;  revs = NaN;  mf = NaN;  sol = nan(8,1);
 dD = mod(fDb - fDa + 0.5, 1) - 0.5;          % shortest way around the torus
 dA = mod(fAb - fAa + 0.5, 1) - 0.5;
 L  = max(abs(dD), abs(dA));
-hMin = 5e-4;
-% CAP THE STEP. Growth after success is how the march re-finds fast terrain,
-% but an over-large attempt that FAILS costs a full non-converging fsolve
-% (60-90 s) -- far more than the several small successes it hoped to save.
-% Measured safe step ~0.009; cap just above it.
-hMax = 0.02;
+hMin = 2e-4;
+% CAP THE STEP -- ANISOTROPICALLY. Arrival-phase steps only move the target
+% and tolerate 0.02. Departure-phase steps perturb the initial state, which
+% the flow amplifies ~1e3x; measured with the tangent predictor: a 5e-4 step
+% closes in one corrector call, 0.01 still wanders into integrator-stalling
+% trials. Any edge with a departure component gets the tight cap.
+if abs(dD) > 1e-12, hMax = 1.5e-3; else, hMax = 0.02; end
 h  = min([max(hInit, hMin), max(L, hMin), hMax]);
-lam = lamA;  pos = 0;  nUsed = 0;  ok = false;  hOut = h;
-tEdge = tic;  edgeSec = 240;          % wall-time budget per edge
+lam = lamA;  pos = 0;  nUsed = 0;  ok = false;  hOut = hInit;   % NOT h: the degenerate anchor edge clamps h to hMin and must not export it
+tEdge = tic;  edgeSec = 900;          % wall-time budget per edge (departure edges are ~300 small steps)
+% Predictor state at the current converged point: J and B from one augmented
+% propagation, plus the endpoints they were computed at.
+rvP = depState(fDa);  rfP = arrState(fAa);
+[~, Jp, Bp] = sweep_phasing_shoot(lam, rvP(1:6), rfP(1:6), Tmax, c, muStar);
 degenerate = (L < hMin);                      % same node: one verifying solve,
 if degenerate, L = max(L, eps); end           % and do NOT export h as memory
 while pos < L
     pos2 = min(pos + h, L);
     fD = fDa + dD*(pos2/L);  fA = fAa + dA*(pos2/L);
     rv0 = depState(fD);  rvf = arrState(fA);
+    % TANGENT PREDICTOR: pre-correct the costates for the endpoint shift, so
+    % the corrector starts from an O(step^2) residual instead of the raw
+    % O(step * 1e3-amplification) one that stalled every departure edge.
+    dR = Bp*(rv0(1:6) - rvP(1:6)).' - [(rvf(1:6) - rfP(1:6)).'; 0; 0];
+    lamPred = lam - Jp\dR;
+    if ~all(isfinite(lamPred)), lamPred = lam; end
     [okS, solS, res, perisKm, revs, mf] = local_solve_verify( ...
-        rv0(1:6), rvf(1:6), lam, Tmax, c, muStar, termTol, lStar, rMoonKm);
+        rv0(1:6), rvf(1:6), lamPred, Tmax, c, muStar, termTol, lStar, rMoonKm);
     nUsed = nUsed + 1;
     if okS
         pos = pos2;  lam = solS;  sol = solS;
         if ~degenerate, hOut = h; end
+        rvP = rv0;  rfP = rvf;                       % refresh predictor state
+        [~, Jp, Bp] = sweep_phasing_shoot(lam, rvP(1:6), rfP(1:6), Tmax, c, muStar);
         h = min([h*1.5, hMax, L - pos + eps]);
         ok = (pos >= L);
     else
@@ -369,18 +377,19 @@ function [ok, sol, res, perisKm, revs, mf] = local_solve_verify( ...
 sol = nan(8,1);  res = inf;  perisKm = NaN;  revs = NaN;  mf = NaN;
 try
     w = warning('off','all');  cleanW = onCleanup(@() warning(w)); %#ok<NASGU>
-    % BOUNDED SHOOTING, not pumpkyn.cr3bp.tfMin. tfMin hardcodes
-    % MaxIterations = 100 with no options passthrough, so one hard call near a
-    % barrier burns up to ~900 propagations (many MINUTES) before giving up --
-    % measured: two pilot attempts spent an hour on the anchor's first edges.
-    % A warm continuation step either converges in <15 iterations or it is not
-    % going to; solve the SAME residual (terminal state + H(t_f) = 0, all
-    % dynamics via pumpkyn's own tfMinProp/tfMinEoM) with our own capped
-    % fsolve. Pumpkyn is not modified.
-    fo = optimoptions('fsolve','Display','off','MaxIterations',15, ...
-        'FunctionTolerance',1e-24,'StepTolerance',1e-14);
-    sol = fsolve(@(z) local_shootres(z, rv0, rvf, Tmax, c, muStar), ...
-                 lamSeed(:), fo);
+    % HYBRID: OUR PREDICTOR + PUMPKYN'S CORRECTOR. The history, condensed:
+    % raw tfMin stalls for hours when seeded far (wild trials wander into
+    % near-singular lunar passes); our capped Newton is safe and cheap but
+    % stalls at ~1e-3 -- the STM from the augmented propagation carries a
+    % ~1e-3 relative accuracy floor, enough for the first contraction and not
+    % for the last ones. tfMin's internal analytic-Jacobian fsolve
+    % demonstrably polishes to 1e-9 WHEN SEEDED CLOSE. So: the tangent
+    % predictor plus one capped-Newton contraction produce a near seed, and
+    % tfMin finishes. Each half exists because the other half's weakness is
+    % measured. (evalc: tfMin hardcodes Display iter.)
+    zN = local_newton(lamSeed(:), rv0, rvf, Tmax, c, muStar);
+    if ~all(isfinite(zN)) || zN(8) <= 0, zN = lamSeed(:); end
+    evalc('sol = pumpkyn.cr3bp.tfMin(rv0, rvf, zN, Tmax, c, muStar);');
     if ~all(isfinite(sol)) || sol(8) <= 0, ok = false; return, end
     [~, rv] = pumpkyn.cr3bp.tfMinProp(sol(8), [rv0, 1, sol(1:7)'], Tmax, c, muStar);
     res = norm(rv(end,1:6) - rvf);
@@ -429,17 +438,29 @@ if echo, fprintf(varargin{:}); end
 end
 
 % ---------------------------------------------------------------------------
-function r = local_shootres(z, rv0, rvf, Tmax, c, muStar)
-% LOCAL_SHOOTRES  The min-time shooting residual, pumpkyn dynamics throughout.
-% z = [lambda0 (7); tf]. Residual: terminal position+velocity error (6), the
-% free-final-mass transversality lambda_m(t_f) = 0, and the free-final-time
-% condition H(t_f) = 0 -- identical to tfMin's shootingResidual.
-% INPUTS: z [8x1]; rv0, rvf [1x6]; Tmax; c; muStar   OUTPUTS: r [8x1]
-[~, rv] = pumpkyn.cr3bp.tfMinProp(z(8), [rv0, 1, z(1:7)'], Tmax, c, muStar);
-[~, Ht] = pumpkyn.cr3bp.tfMinEoM(z(8), rv(end,1:14)', Tmax, c, muStar);
-% EIGHT equations for eight unknowns, matching tfMin's own shootingResidual:
-% terminal state (6), free-final-mass transversality lambda_m(tf) = 0, and
-% free-final-time H(tf) = 0. The first version omitted the lambda_m row and
-% handed fsolve an underdetermined system -- every call failed instantly.
-r = [rv(end,1:6)' - rvf(:); rv(end,14); Ht];
+function z = local_newton(z, rv0, rvf, Tmax, c, muStar)
+% LOCAL_NEWTON  Damped Newton on the shooting residual, step-norm capped.
+% INPUTS: z [8x1] seed; rv0, rvf [1x6]; Tmax; c; muStar
+% OUTPUTS: z [8x1] (best iterate found; caller verifies independently)
+[r, J] = sweep_phasing_shoot(z, rv0, rvf, Tmax, c, muStar);
+rn = norm(r);
+for it = 1:3
+    if rn < 1e-11, return, end
+    dz = -J\r;
+    if ~all(isfinite(dz)), return, end
+    ndz = norm(dz);
+    if ndz > 0.5, dz = dz*(0.5/ndz); end          % the cap that keeps trials sane
+    accepted = false;
+    al = 1;
+    for ls = 1:4                                   % backtracking line search;
+        rt = sweep_phasing_shoot(z + al*dz, rv0, rvf, Tmax, c, muStar);  % plain, cheap
+        if norm(rt) < rn
+            z = z + al*dz;  accepted = true;  break
+        end
+        al = al/2;
+    end
+    if ~accepted, return, end
+    [r, J] = sweep_phasing_shoot(z, rv0, rvf, Tmax, c, muStar);
+    rn = norm(r);
+end
 end

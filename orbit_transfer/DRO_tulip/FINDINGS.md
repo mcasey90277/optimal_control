@@ -572,6 +572,46 @@ external review — is what forced the honesty at each step.
 
 Data: `direct/results/sundman_floor500_N{800,1600,3200,6400}.mat`.
 
+## THE FLOOR-COST CURVE, COMPLETE (2026-08-03): cheap until the arrival geometry says no
+
+Floor-ramp continuation from the 3.817 basin (Sundman N=800, every rung
+constraint-ACTIVE, POS errors ~0.2 m):
+
+| floor km | t_f | cost vs unconstrained |
+|---|---|---|
+| (natural 3954) | 3.8169913 | — |
+| 4000 | 3.8169992 | +3 s |
+| 4500 | 3.8180227 | +6.6 min |
+| 4600 | 3.8184141 | +9.1 min |
+| 4700+ | — | UNREACHABLE (3 solver configs failed) |
+
+**Safety margin is nearly free** — until it abruptly isn't. The wall has two
+layers, both set by the ARRIVAL GEOMETRY, not by the solver:
+
+1. **Hard ceiling = the arrival endpoint's own altitude: 4,818.5 km.** The
+   arrival state on the tulip is a fixed boundary condition; any floor above it
+   makes the problem infeasible by construction. The 6000/8000/10000 km floor
+   failures were CORRECT infeasibility detections — misdiagnosed at the time as
+   restoration failures from bad seeds. (Second wrong diagnosis of the day
+   corrected; the first was the "terminal covector artifact".)
+2. **Practical ceiling ≈ 4,6xx km — the terminal-approach squeeze.** Every
+   converged solution's closest approach occurs just before arrival: the
+   natural approach dips ~140-220 km below the endpoint altitude before
+   landing on it. At floor 4600 (218 km of dip allowance) continuation works in
+   seconds; at 4700 (118 km) it fails under default barrier, reference-seeded,
+   and mu_init=1e-6 warm-started configurations alike.
+
+**The tie-in to the phasing sweep is the punchline:** both ceilings are
+functions of the ARRIVAL PHASE. Pick a different arrival point on the tulip and
+the endpoint altitude — hence the maximum enforceable floor — moves. "How much
+lunar clearance can this transfer guarantee?" is a question about arrival
+phasing, which is exactly the axis Darin's sweep varies. The sweep's periselene
+channel should therefore also record the ARRIVAL-POINT altitude per phasing:
+it is the feasibility ceiling for any altitude policy.
+
+Data: floor_ramp_sundman_N800.mat, rampA_f4600.mat; failures logged in
+scratch (floorhi/ramp2/probe4700).
+
 ## THE FLOOR EXPERIMENT (2026-08-03): 500 km, warm and cold, all meshes
 
 Floor chosen far below the reference periselene (4,673 km) so it should be

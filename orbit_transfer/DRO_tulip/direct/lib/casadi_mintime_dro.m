@@ -75,6 +75,10 @@ function out = casadi_mintime_dro(rv0, rvf, Tmax, c, muStar, N, X0, U0, tf0, opt
 %                       the floor-riding branch needs: on a uniform-in-time
 %                       mesh it failed at every density tried.
 %              .sundmanP [1.5] the exponent p in kappa = rho^p
+%              .muInit  [] IPOPT initial barrier parameter, for NEAR-FEASIBLE
+%                       warm starts (e.g. 1e-6). Default lets IPOPT use 0.1,
+%                       which re-inflates the barrier and can eject a warm
+%                       iterate from its basin -- see the floor experiments.
 %
 % OUTPUTS:
 %   out - struct: .X [7x(N+1)] .U [4x(N+1)] .tf .s (the grid) .success
@@ -106,6 +110,7 @@ sundP    = g('sundmanP', 1.5);
 minAltKm = g('minAltKm', []);
 lStarKm  = g('lStarKm', 389703.264829278);
 rMoonKm  = g('rMoonKm', 1737.4);
+muInit   = g('muInit', []);
 
 import casadi.*
 nN = N + 1;
@@ -361,9 +366,21 @@ if ~isempty(Um)
     opti.set_initial(Um, Um0);
 end
 
-opti.solver('ipopt', struct('print_time',false), ...
-    struct('print_level',prnt,'max_iter',maxIter,'tol',1e-10, ...
-           'acceptable_tol',1e-8,'linear_solver','mumps'));
+ip = struct('print_level',prnt,'max_iter',maxIter,'tol',1e-10, ...
+            'acceptable_tol',1e-8,'linear_solver','mumps');
+if ~isempty(muInit)
+    % For NEAR-FEASIBLE warm starts. IPOPT's default mu_init = 0.1 re-inflates
+    % the barrier and shoves a warm iterate away from the seed basin -- measured
+    % on this problem: an INACTIVE floor ejected a reference-seeded solve, and a
+    % 27 km constraint violation failed to restore. A small initial barrier
+    % keeps the early steps local to the seed.
+    ip.mu_init = muInit;
+    ip.mu_strategy = 'monotone';
+    ip.warm_start_init_point = 'yes';
+    ip.warm_start_bound_push = min(1e-6, muInit);
+    ip.warm_start_slack_bound_push = min(1e-6, muInit);
+end
+opti.solver('ipopt', struct('print_time',false), ip);
 
 out = struct();
 try

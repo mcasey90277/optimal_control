@@ -69,6 +69,11 @@ indep   = d('independent',false);
 % ORBIT PARAMETERS AS OPTIONS -- future sweeps vary these (the period axis is
 % Darin's third dimension), and every data product must record which orbits it
 % belongs to. Defaults reproduce the original DRO(tau0=1) -> tulip(7,-1) pair.
+% REFERENCE-GUIDED RE-SOLVE (Mike's shortcut): when a previous run's results
+% are supplied, attempt ONLY the cells that run proved green -- failed attempts
+% produce no reusable product, so re-running them buys nothing but audit
+% completeness. refPass = logical [nD x nA] from the prior map.
+refMat  = d('refMat', '');
 tauDRO  = d('tauDRO', 1.0);
 NpT     = d('NpTulip', 7);
 tauT    = d('tauTulip', 5*2*pi/6);
@@ -137,6 +142,12 @@ seeds = cell(nD,nA);
 TRIES = zeros(nD,nA);
 nbr = [1 0; -1 0; 0 1; 0 -1];
 nAttempt = 0;
+refPass = true(nD,nA);
+if ~isempty(refMat)
+    RM = load(refMat);
+    if isfield(RM,'S'), refPass = RM.S.PASS; else, refPass = RM.PASS; end
+    log_('reference-guided: attempting only the %d cells the reference run proved green\n', nnz(refPass));
+end
 mode = lower(d('mode','waves'));
 wave0Iter = d('wave0Iter',500);
 maxTriesW = d('maxTriesW',4);
@@ -254,7 +265,9 @@ case 'waves'
         maxIter, stride, numel(1:stride:nD)*numel(1:stride:nA));
     for iD = 1:stride:nD
         for iA = 1:stride:nA
-            try_node(iD, iA, [], maxIter, 'w0');
+            if refPass(iD,iA)
+                try_node(iD, iA, [], maxIter, 'w0');
+            end
         end
     end
     log_('WAVE 0 done: %d/%d pass. WAVE 1: multi-source chaining, full budget %d\n', ...
@@ -269,7 +282,7 @@ case 'waves'
         q = queue{1};  queue(1) = [];
         for kk = 1:4
             jD = mod(q(1)-1+nbr(kk,1), nD)+1;  jA = mod(q(2)-1+nbr(kk,2), nA)+1;
-            if ~PASS(jD,jA) && TRIES(jD,jA) < maxTriesW
+            if refPass(jD,jA) && ~PASS(jD,jA) && TRIES(jD,jA) < maxTriesW
                 if try_node(jD, jA, seeds{q(1),q(2)}, maxIter, 'w1')
                     queue{end+1} = [jD jA]; %#ok<AGROW>
                 end

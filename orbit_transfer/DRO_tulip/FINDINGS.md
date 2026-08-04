@@ -521,6 +521,62 @@ Reference (indirect, and the warm-started certified direct): t_f = 4.0152.
 
 Data: `direct/results/cold_hs_N{400,800,1600}.mat`.
 
+## THE PHASING MAP, COMPLETE (2026-08-04): 132/144 cells, 11.3 hours
+
+The 12x12 torus sweep finished: **132 of 144 phasing pairs solved and
+continuously verified** (flown-control gate <100 km / 10 m/s at N=800), 8 cold
+openers + 124 warm-flood conversions, 262 total attempts, 676 min wall.
+
+### The headline numbers
+
+- **Global minimum of the map: t_f = 3.6566 ND = 16.21 days at
+  (s_D, s_A) = (0.083, 0.409)**, dV 0.679 km/s, periselene 6,469 km, flown miss
+  0.89 km. That is 8.9% faster than the indirect reference (4.0152) and 4.2%
+  faster than the certified 3.8170 -- pending its own certification ladder.
+- Two cost valleys: s_A ~ 0.41 and s_A ~ 0.66 (t_f 3.66-3.79 across many
+  departure phases); ridges at s_A ~ 0.16 (5.7-5.9). Departure phase matters
+  WEAKLY almost everywhere -- rows are near-uniform in s_D -- consistent with
+  the departure axis being dynamically benign.
+- **The 12 unsolved cells form exactly ONE ROW: s_A = 0.075** -- the demo's own
+  arrival phase, the fastest point on the tulip (vArr = 1.119 km/s). Every cold
+  seed and every warm start from adjacent rows failed all 4 tries there. The
+  deepest crease of the map is precisely the slot the original heuristic chose.
+  And we know solutions EXIST there: the two certified transfers (4.0152,
+  3.8170) live at (0, 0.075) -- found earlier via the indirect seed and the
+  floor-chain, routes the sweep does not use. Red means "unreachable by this
+  sweep's seeds", not "no solution".
+- 3 fast-arrival cells (vArr 0.74) DID open warm -- cold-seed difficulty was
+  seed-conditioned, exactly as Mike suspected; only the vArr 1.12 column
+  resisted everything.
+- The costate catalog now holds **132 entries** (LAM0 in dsweep_12x12.mat):
+  sign-resolved [lambda0; tf] per cell via the validated covector mapping.
+
+### What the waves measured
+
+- wave 0 (chord seed, full budget, 6x6 sublattice): 8/36 = 22% -- matches the
+  transect's cold statistics.
+- wave 1 (multi-source trajectory flood, half-size steps, <=4 tries/cell):
+  124 conversions, most in 5-30 s; conversions kept landing deep into the
+  retry tail (4th-neighbor attempts).
+- Engineering ledger for production sweeps: FOUR budget layers were needed
+  (solver iterations, solver CPU via IPOPT max_cpu_time, per-edge wall, and
+  never-fly-garbage verification screening) -- each because a different stack
+  layer could stall unboundedly.
+
+### Follow-ups queued
+
+1. Certification ladder on the map minimum (3.6566) and spot-winners.
+2. The red row: solve its cells from the two existing certified solutions as
+   seeds (the route that works there), completing the torus.
+3. Re-solve the two suboptimal-basin outliers (7.51 at (0.417,0.409), 6.21)
+   from their best neighbors -- best-per-cell keeps improvements.
+4. Seed-sensitivity pass (dual-coast) now optional: only one row needs it.
+5. The period axis (Darin's third dimension).
+
+Figures: results/phase_torus_12x12_{torus.fig,torus.png,flat.png,tfmap.png}.
+Data: results/dsweep_12x12.mat (map + catalog). Clean front door:
+run_phase_sweep_ps.m; industrial: sweep_phasing_direct.m.
+
 ## CERTIFIED (2026-08-03): a flyable extremal 4.9% FASTER than the indirect reference
 
 **t_f = 3.8169913 ND = 16.919 days, periselene 3,954 km, dV 0.7100 km/s** —

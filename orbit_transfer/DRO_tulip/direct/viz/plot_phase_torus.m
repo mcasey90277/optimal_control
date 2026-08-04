@@ -29,7 +29,14 @@ nearm0 = tried0 & ~pass0 & D.GLOBKM < 100*100;  % within 100x of the 100-km gate
 % DISPLAY GRID, decoupled from the data grid: a 1xN transect must not paint
 % the whole departure circle -- untried rows stay grey. Data points map to
 % their nearest display cell (circular distance).
-nD = max(numel(sDdat), 18);  nA = max(numel(sAdat), 18);
+% Use the data's own resolution when it is a genuine 2-D grid; only inflate
+% the display grid for transect-style data (a single row or column), where
+% painting full rings would misrepresent coverage.
+if numel(sDdat) >= 4 && numel(sAdat) >= 4
+    nD = numel(sDdat);  nA = numel(sAdat);
+else
+    nD = max(numel(sDdat), 18);  nA = max(numel(sAdat), 18);
+end
 sD = (0:nD-1).'/nD;  sA = (0:nA-1).'/nA;
 tried = false(nD,nA);  pass = tried;  nearm = tried;  TFdisp = nan(nD,nA);
 for a = 1:numel(sDdat)

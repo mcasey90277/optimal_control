@@ -157,11 +157,16 @@ try
     else,               X0 = seedIn.X; U0 = seedIn.U; tf0 = seedIn.tf; end
     sol = casadi_mintime_dro(rv0(1:6), rvf(1:6), Tmax, c, muStar, N, X0, U0, tf0, ...
             struct('maxIter',maxIts, 'scheme','hermite-simpson', ...
-                   'sundman',true, 'minAltKm',floorKm));
-    chk = certify_dro_mintime(sol, struct('muStar',muStar,'lStar',lStar,'tStar',tStar), ...
+                   'sundman',true, 'minAltKm',floorKm, 'maxCpuSec',300));
+    if sol.success && sol.maxDefect < 1e-9      % never fly garbage: verification
+        chk = certify_dro_mintime(sol, ...       % integrations are unbounded on
+            struct('muStar',muStar,'lStar',lStar,'tStar',tStar), ...  % junk iterates
             Tmax, c, struct('tfRef',[], 'verbose',false, 'posTolKm',inf));
-    flownKm = chk.globKm;
-    flownMs = chk.gates(strcmp({chk.gates.id},'G1bv')).value;
+        flownKm = chk.globKm;
+        flownMs = chk.gates(strcmp({chk.gates.id},'G1bv')).value;
+    else
+        flownKm = Inf;  flownMs = Inf;
+    end
     green = sol.success && flownKm < gateKm && flownMs < gateMs && sol.maxDefect < 1e-9;
     if green && (~PASS(kD,kA) || sol.tf < TF(kD,kA))
         TF(kD,kA) = sol.tf;  PASS(kD,kA) = true;  GLOBKM(kD,kA) = flownKm;

@@ -1,0 +1,12 @@
+DIRECT SWEEP 1x18, N=800, sundman HS  (anchor at sD=0.000 sA=0.075)
+  (1,1) tf=43.58439 dV=11.2985 peris= -1721 arrAlt=  4819 vArr=1.119 glob=9023769.497km fail [1/18, 227s]
+  (1,2) tf=4.35907 dV=0.8156 peris=  2066 arrAlt= 33599 vArr=0.176 glob=19.537km PASS [2/18, 99s]
+  (1,18) tf=25.68039 dV=5.9196 peris= -1737 arrAlt= 34345 vArr=0.180 glob=6231699.999km fail [3/18, 279s]
+  (1,3) tf=6.22713 dV=1.1107 peris=   614 arrAlt= 24371 vArr=0.373 glob=15199.289km fail [4/18, 209s]
+  (1,17) tf=5.44312 dV=1.0307 peris=  3657 arrAlt= 29833 vArr=0.267 glob=7.451km PASS [5/18, 114s]
+  (1,4) tf=3.99232 dV=0.7440 peris=  8305 arrAlt= 21460 vArr=0.429 glob=9.880km PASS [6/18, 71s]
+  (1,16) tf=4.58676 dV=0.8604 peris=   500 arrAlt= 17987 vArr=0.503 glob=7.477km PASS [7/18, 149s]
+  (1,5) tf=35.90577 dV=4.9803 peris= -1737 arrAlt= 32359 vArr=0.196 glob=48817.607km fail [8/18, 224s]
+  (1,15) tf=14.45228 dV=3.0559 peris=   500 arrAlt= 34269 vArr=0.168 glob=552750.142km fail [9/18, 158s]
+  (1,6) tf=41.87396 dV=3.4119 peris= -1736 arrAlt=  6792 vArr=0.952 glob=6860600.483km fail [10/18, 495s]
+  (1,14) tf=53.27711 dV=16.0083 peris= -1737 arrAlt= 15318 vArr=0.581 glob=6481114.307km fail [11/18, 220s]

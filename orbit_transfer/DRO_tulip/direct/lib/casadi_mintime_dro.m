@@ -75,6 +75,8 @@ function out = casadi_mintime_dro(rv0, rvf, Tmax, c, muStar, N, X0, U0, tf0, opt
 %                       the floor-riding branch needs: on a uniform-in-time
 %                       mesh it failed at every density tried.
 %              .sundmanP [1.5] the exponent p in kappa = rho^p
+%              .maxCpuSec [] IPOPT max_cpu_time -- the fail-fast wall bound
+%                       that iteration budgets cannot provide
 %              .muInit  [] IPOPT initial barrier parameter, for NEAR-FEASIBLE
 %                       warm starts (e.g. 1e-6). Default lets IPOPT use 0.1,
 %                       which re-inflates the barrier and can eject a warm
@@ -111,6 +113,7 @@ minAltKm = g('minAltKm', []);
 lStarKm  = g('lStarKm', 389703.264829278);
 rMoonKm  = g('rMoonKm', 1737.4);
 muInit   = g('muInit', []);
+maxCpuSec= g('maxCpuSec', []);
 
 import casadi.*
 nN = N + 1;
@@ -368,6 +371,12 @@ end
 
 ip = struct('print_level',prnt,'max_iter',maxIter,'tol',1e-10, ...
             'acceptable_tol',1e-8,'linear_solver','mumps');
+if ~isempty(maxCpuSec)
+    % Iteration budgets do not bound WALL time: a restoration-heavy point can
+    % take many seconds PER iteration (measured: one 1500-iteration solve ran
+    % 3+ hours). For sweep fail-fast behaviour, cap the solver's own clock.
+    ip.max_cpu_time = maxCpuSec;
+end
 if ~isempty(muInit)
     % For NEAR-FEASIBLE warm starts. IPOPT's default mu_init = 0.1 re-inflates
     % the barrier and shoves a warm iterate away from the seed basin -- measured

@@ -112,98 +112,166 @@ seed0.tf = sol(8);
 log_('DIRECT SWEEP %dx%d, N=%d, sundman HS  (anchor at sD=%.3f sA=%.3f)\n', ...
     nD, nA, N, sD(1), sA(1));
 
-%% BFS over the grid, trajectory-space warm starts
+%% the wave engine
+% WAVE 0 (Mike's triage): every grid point gets one CHEAP cold attempt -- the
+% crude chord seed under a TIGHT iteration budget, so easy points convert in
+% ~their usual few hundred iterations and grinders fail fast instead of
+% burning an hour. The passes are the patch openers.
+% WAVE 1: multi-source BFS -- every pass seeds its neighbours trajectory-wise
+% (the measured-strong regime inside patches; the creases stop the flood, and
+% where it stops IS the fold-line map). Up to maxTriesW attempts per point,
+% one from each solved neighbour.
+% Plots refresh at every checkpoint so the torus picture is always current.
 TF = nan(nD,nA); MF = TF; DV = TF; PERIS = TF; ARRALT = TF;
 GLOBKM = TF; GLOBMS = TF; DEFECT = TF; WALL = TF; ARRSPD = TF; PASS = false(nD,nA);
 LAM0 = nan(8,nD,nA);
 seeds = cell(nD,nA);
-state = zeros(nD,nA);
-queue = {struct('iD',1,'iA',1,'seed',seed0,'pfD',sD(1),'pfA',sA(1))};
+TRIES = zeros(nD,nA);
 nbr = [1 0; -1 0; 0 1; 0 -1];
-nDone = 0;
+nAttempt = 0;
+mode = lower(d('mode','waves'));
+wave0Iter = d('wave0Iter',500);
+maxTriesW = d('maxTriesW',4);
 
-while ~isempty(queue)
-    q = queue{1};  queue(1) = [];
-    iD = q.iD;  iA = q.iA;
-    if state(iD,iA) ~= 0, continue, end
-    state(iD,iA) = 1;                        % one attempt per point (direct is robust;
-    rv0 = dep(sD(iD));  rvf = arr(sA(iA));   %  failures recorded, not retried endlessly)
-    t0 = tic;
-    try
-        % SUB-STEPPED PHASE MARCH from the parent phasing to the target. One
-        % 1/18 arrival step moves the tulip target ~160,000 km -- measured to
-        % defeat any warm start outright (the solver wanders to 60-80 ND
-        % monsters). So the edge is walked adaptively: try the full step; on a
-        % gate-fail, halve the phase step and chain gate-checked intermediate
-        % solves as seed carriers. Same medicine as the costate march, but in
-        % trajectory space, where steps demonstrably chain.
-        if indep
-            o = casadi_mintime_dro(rv0(1:6), rvf(1:6), Tmax, c, muStar, N, ...
-                    [], [], [], struct('maxIter',maxIter,'scheme','hermite-simpson', ...
-                    'sundman',true,'returnModel',true,'minAltKm',floorKm));
-            C = certify_dro_mintime(o, struct('muStar',muStar,'lStar',lStar,'tStar',tStar), ...
-                    Tmax, c, struct('tfRef',[],'verbose',false,'posTolKm',inf));
-        else
-            [o, C] = local_phase_march(q.pfD, q.pfA, q.seed, sD(iD), sA(iA), ...
-                dep, arr, Tmax, c, muStar, N, maxIter, floorKm, ...
-                globTolKm, globTolMs, lStar, tStar);
-        end
-        w = toc(t0);
-        r2 = vecnorm(o.X(1:3,:) - [1-muStar;0;0], 2, 1);
-        TF(iD,iA) = o.tf;  MF(iD,iA) = o.mf;
-        DV(iD,iA) = c*lStar/tStar*log(1/o.mf);
-        PERIS(iD,iA)  = min(r2)*lStar - rMoonKm;
-        ARRALT(iD,iA) = norm(rvf(1:3) - [1-muStar 0 0])*lStar - rMoonKm;
-        ARRSPD(iD,iA) = norm(rvf(4:6))*lStar/tStar;      % km/s: the difficulty hypothesis variable
-        GLOBKM(iD,iA) = C.globKm;  GLOBMS(iD,iA) = C.gates(strcmp({C.gates.id},'G1bv')).value;
-        DEFECT(iD,iA) = o.maxDefect;  WALL(iD,iA) = w;
-        PASS(iD,iA) = o.success && C.globKm < globTolKm && GLOBMS(iD,iA) < globTolMs ...
-                      && o.maxDefect < 1e-9;
-        % THE CATALOG ENTRY: sign-resolved initial costates from the duals.
-        % Sign convention resolved against the primal control (dual-free).
-        if ~isempty(o.lamDef)
-            lamD = o.lamDef;
-            aS = o.Um(1:3,1)/max(norm(o.Um(1:3,1)),eps);
-            sgn = 1;  if (-lamD(4:6,1)/max(norm(lamD(4:6,1)),eps)).'*aS < 0, sgn = -1; end
-            LAM0(:,iD,iA) = [sgn*lamD(:,1); o.tf];
-        end
-        % uniform-time resample of this solution = the neighbours' warm start
-        tu = linspace(0, o.tf, N+1);
-        sd.X = interp1(o.tNodes, o.X.', tu, 'spline').';
-        sd.U = interp1(o.tNodes, o.U.', tu, 'spline').';
-        nrm = max(vecnorm(sd.U(1:3,:),2,1), eps);
-        sd.U(1:3,:) = sd.U(1:3,:)./nrm;  sd.U(4,:) = min(max(sd.U(4,:),0),1);
-        sd.tf = o.tf;
-        seeds{iD,iA} = sd;
-        % SEED HYGIENE (pilot finding: junk begets junk). A gated-fail node's
-        % own trajectory must not warm-start its neighbours; hand the parent's
-        % seed onward instead.
-        if PASS(iD,iA), sdPush = sd; else, sdPush = q.seed; end
-        nDone = nDone + 1;
-        log_('  (%d,%d) tf=%.5f dV=%.4f peris=%6.0f arrAlt=%6.0f vArr=%.3f glob=%.3fkm %s [%d/%d, %.0fs]\n', ...
-            iD, iA, o.tf, DV(iD,iA), PERIS(iD,iA), ARRALT(iD,iA), ARRSPD(iD,iA), C.globKm, ...
-            local_pf(PASS(iD,iA)), nDone, nD*nA, w);
-        for kk = 1:4
-            jD = mod(iD-1+nbr(kk,1), nD)+1;  jA = mod(iA-1+nbr(kk,2), nA)+1;
-            if state(jD,jA) == 0
-                if PASS(iD,iA), pfD = sD(iD); pfA = sA(iA); else, pfD = q.pfD; pfA = q.pfA; end
-                queue{end+1} = struct('iD',jD,'iA',jA,'seed',sdPush,'pfD',pfD,'pfA',pfA); %#ok<AGROW>
+    function okOut = try_node(iD, iA, seedIn, iterCap, tag)
+        % one gated solve attempt at grid point (iD,iA); records everything.
+        okOut = false;
+        rv0 = dep(sD(iD));  rvf = arr(sA(iA));
+        t0 = tic;
+        try
+            if isempty(seedIn)
+                X0 = [];  U0 = [];  tf0 = [];
+            else
+                X0 = seedIn.X;  U0 = seedIn.U;  tf0 = seedIn.tf;
             end
+            cpuCap = 600;
+            o = casadi_mintime_dro(rv0(1:6), rvf(1:6), Tmax, c, muStar, N, ...
+                    X0, U0, tf0, struct('maxIter',iterCap,'scheme','hermite-simpson', ...
+                    'sundman',true,'returnModel',true,'minAltKm',floorKm, ...
+                    'maxCpuSec',cpuCap));
+            % NEVER FLY GARBAGE. The continuous verification integrates the
+            % returned trajectory, and for an unconverged iterate those
+            % integrations crawl near the singularity UNBOUNDED (measured: one
+            % junk point held the sweep 38 minutes after its solver cap). If
+            % the NLP itself did not converge cleanly, the point is already
+            % fail on primal evidence -- skip verification outright.
+            if o.success && o.maxDefect < 1e-9
+                C = certify_dro_mintime(o, struct('muStar',muStar,'lStar',lStar,'tStar',tStar), ...
+                        Tmax, c, struct('tfRef',[],'verbose',false,'posTolKm',inf));
+            else
+                C = struct('globKm', Inf, 'gates', struct('id','G1bv','value',Inf));
+            end
+            w = toc(t0);
+            gOK = o.success && C.globKm < globTolKm && ...
+                  C.gates(strcmp({C.gates.id},'G1bv')).value < globTolMs && o.maxDefect < 1e-9;
+            % keep the BEST result per point: a pass always beats a fail; among
+            % passes, smaller t_f wins (basin bookkeeping happens downstream)
+            better = gOK && (~PASS(iD,iA) || o.tf < TF(iD,iA));
+            if isnan(TF(iD,iA)) || better
+                r2 = vecnorm(o.X(1:3,:) - [1-muStar;0;0], 2, 1);
+                TF(iD,iA) = o.tf;  MF(iD,iA) = o.mf;
+                DV(iD,iA) = c*lStar/tStar*log(1/o.mf);
+                PERIS(iD,iA)  = min(r2)*lStar - rMoonKm;
+                ARRALT(iD,iA) = norm(rvf(1:3) - [1-muStar 0 0])*lStar - rMoonKm;
+                ARRSPD(iD,iA) = norm(rvf(4:6))*lStar/tStar;
+                GLOBKM(iD,iA) = C.globKm;
+                GLOBMS(iD,iA) = C.gates(strcmp({C.gates.id},'G1bv')).value;
+                DEFECT(iD,iA) = o.maxDefect;  WALL(iD,iA) = w;
+                PASS(iD,iA) = gOK;
+                if ~isempty(o.lamDef)
+                    lamD = o.lamDef;
+                    aS = o.Um(1:3,1)/max(norm(o.Um(1:3,1)),eps);
+                    sg = 1;  if (-lamD(4:6,1)/max(norm(lamD(4:6,1)),eps)).'*aS < 0, sg = -1; end
+                    LAM0(:,iD,iA) = [sg*lamD(:,1); o.tf];
+                end
+                if gOK
+                    tu = linspace(0, o.tf, N+1);
+                    sd2.X = interp1(o.tNodes, o.X.', tu, 'spline').';
+                    sd2.U = interp1(o.tNodes, o.U.', tu, 'spline').';
+                    nr2 = max(vecnorm(sd2.U(1:3,:),2,1), eps);
+                    sd2.U(1:3,:) = sd2.U(1:3,:)./nr2;
+                    sd2.U(4,:) = min(max(sd2.U(4,:),0),1);
+                    sd2.tf = o.tf;
+                    seeds{iD,iA} = sd2;
+                end
+            end
+            log_('  [%s] (%2d,%2d) tf=%.5f dV=%.4f peris=%6.0f vArr=%.3f glob=%.2fkm %s (%.0fs)\n', ...
+                tag, iD, iA, o.tf, c*lStar/tStar*log(1/o.mf), ...
+                min(vecnorm(o.X(1:3,:)-[1-muStar;0;0],2,1))*lStar-rMoonKm, ...
+                norm(rvf(4:6))*lStar/tStar, C.globKm, local_pf(gOK), w);
+            okOut = gOK;
+        catch ME
+            log_('  [%s] (%2d,%2d) ERROR after %.0fs: %s\n', tag, iD, iA, toc(t0), ME.message);
         end
-        if mod(nDone,3) == 0
+        TRIES(iD,iA) = TRIES(iD,iA) + 1;
+        nAttempt = nAttempt + 1;
+        if mod(nAttempt,3) == 0
             save(ckptF,'TF','MF','DV','PERIS','ARRALT','ARRSPD','GLOBKM','GLOBMS', ...
-                 'DEFECT','PASS','WALL','LAM0','sD','sA');
+                 'DEFECT','PASS','WALL','LAM0','sD','sA','TRIES');
+            try
+                plot_phase_torus(ckptF, fullfile(rd, sprintf('phase_torus_%dx%d', nD, nA)));
+                close all
+            catch, end
         end
-    catch ME
-        log_('  (%d,%d) FAILED after %.0fs: %s\n', iD, iA, toc(t0), ME.message);
-        for kk = 1:4                          % still expand so the map routes around
-            jD = mod(iD-1+nbr(kk,1), nD)+1;  jA = mod(iA-1+nbr(kk,2), nA)+1;
-            if state(jD,jA) == 0
-                queue{end+1} = struct('iD',jD,'iA',jA,'seed',q.seed, ...
-                    'pfD',q.pfD,'pfA',q.pfA); %#ok<AGROW>
+    end
+
+switch mode
+case 'waves'
+    % Wave 0's job is to OPEN each patch, not to solve every point: knock on a
+    % coarse sublattice with the FULL budget (measured: cold greens need well
+    % over 500 iterations -- a tight budget over all points finds none), and
+    % let wave 1 flood the full grid from whatever opens.
+    stride = d('wave0Stride',2);
+    log_('WAVE 0: cold chord seed, full budget %d, sublattice stride %d (%d points)\n', ...
+        maxIter, stride, numel(1:stride:nD)*numel(1:stride:nA));
+    for iD = 1:stride:nD
+        for iA = 1:stride:nA
+            try_node(iD, iA, [], maxIter, 'w0');
+        end
+    end
+    log_('WAVE 0 done: %d/%d pass. WAVE 1: multi-source chaining, full budget %d\n', ...
+        nnz(PASS), nD*nA, maxIter);
+    queue = {};
+    for iD = 1:nD
+        for iA = 1:nA
+            if PASS(iD,iA), queue{end+1} = [iD iA]; end %#ok<AGROW>
+        end
+    end
+    while ~isempty(queue)
+        q = queue{1};  queue(1) = [];
+        for kk = 1:4
+            jD = mod(q(1)-1+nbr(kk,1), nD)+1;  jA = mod(q(2)-1+nbr(kk,2), nA)+1;
+            if ~PASS(jD,jA) && TRIES(jD,jA) < maxTriesW
+                if try_node(jD, jA, seeds{q(1),q(2)}, maxIter, 'w1')
+                    queue{end+1} = [jD jA]; %#ok<AGROW>
+                end
             end
         end
     end
+case 'independent'
+    for iD = 1:nD
+        for iA = 1:nA
+            try_node(iD, iA, [], maxIter, 'ind');
+        end
+    end
+case 'chain'
+    % legacy anchor-seeded flood (single-hop; the sub-stepped march is retired
+    % -- it cannot cross creases and costs too much failing to)
+    try_node(1, 1, seed0, maxIter, 'ch');
+    queue = {[1 1]};
+    while ~isempty(queue)
+        q = queue{1};  queue(1) = [];
+        for kk = 1:4
+            jD = mod(q(1)-1+nbr(kk,1), nD)+1;  jA = mod(q(2)-1+nbr(kk,2), nA)+1;
+            if ~PASS(jD,jA) && TRIES(jD,jA) < maxTriesW && ~isempty(seeds{q(1),q(2)})
+                if try_node(jD, jA, seeds{q(1),q(2)}, maxIter, 'ch')
+                    queue{end+1} = [jD jA]; %#ok<AGROW>
+                end
+            end
+        end
+    end
+otherwise
+    error('sweep_phasing_direct:mode','unknown mode %s', mode);
 end
 
 S = struct('sD',sD,'sA',sA,'TF',TF,'MF',MF,'DV',DV,'PERIS',PERIS,'ARRALT',ARRALT, ...
@@ -221,48 +289,6 @@ if nOK > 0
     [tfBest, ib] = min(fly(:));  [bD,bA] = ind2sub([nD nA], ib);
     log_('fastest GATED point: tf=%.6f at (sD,sA)=(%.3f,%.3f), peris %.0f km, arrAlt %.0f km\n', ...
         tfBest, sD(bD), sA(bA), PERIS(bD,bA), ARRALT(bD,bA));
-end
-end
-
-% ---------------------------------------------------------------------------
-function [o, C] = local_phase_march(pfD, pfA, seed, fDt, fAt, dep, arr, ...
-    Tmax, c, muStar, N, maxIter, floorKm, globTolKm, globTolMs, lStar, tStar)
-% LOCAL_PHASE_MARCH  Adaptive phase-space continuation between two phasings,
-% every sub-step a full gate-checked direct solve, seeds chained.
-% INPUTS:  parent phases + seed; target phases; handles and solver params
-% OUTPUTS: o, C for the TARGET phasing (the final accepted solve; if the march
-%          dies early, the last attempt at wherever it died -- caller gates it)
-dD = mod(fDt - pfD + 0.5, 1) - 0.5;
-dA = mod(fAt - pfA + 0.5, 1) - 0.5;
-L  = max(abs(dD), abs(dA));  if L == 0, L = eps; end
-hMin = 1/160;  budget = 14;  tEdge = tic;
-pos = 0;  h = L;  nUsed = 0;
-while pos < L
-    pos2 = min(pos + h, L);
-    fD = pfD + dD*(pos2/L);  fA = pfA + dA*(pos2/L);
-    rv0 = dep(fD);  rvf = arr(fA);
-    o = casadi_mintime_dro(rv0(1:6), rvf(1:6), Tmax, c, muStar, N, ...
-            seed.X, seed.U, seed.tf, ...
-            struct('maxIter',maxIter,'scheme','hermite-simpson', ...
-                   'sundman',true,'returnModel',true,'minAltKm',floorKm));
-    C = certify_dro_mintime(o, struct('muStar',muStar,'lStar',lStar,'tStar',tStar), ...
-            Tmax, c, struct('tfRef',[],'verbose',false,'posTolKm',inf));
-    nUsed = nUsed + 1;
-    okS = o.success && C.globKm < globTolKm && ...
-          C.gates(strcmp({C.gates.id},'G1bv')).value < globTolMs && o.maxDefect < 1e-9;
-    if okS
-        pos = pos2;
-        tu = linspace(0, o.tf, N+1);
-        seed.X = interp1(o.tNodes, o.X.', tu, 'spline').';
-        seed.U = interp1(o.tNodes, o.U.', tu, 'spline').';
-        nrm = max(vecnorm(seed.U(1:3,:),2,1), eps);
-        seed.U(1:3,:) = seed.U(1:3,:)./nrm;  seed.U(4,:) = min(max(seed.U(4,:),0),1);
-        seed.tf = o.tf;
-        h = min(h*2, L - pos + eps);
-    else
-        h = h/2;
-        if h < hMin || nUsed >= budget || toc(tEdge) > 1800, return, end
-    end
 end
 end
 

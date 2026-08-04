@@ -1,0 +1,135 @@
+WAVE 2: indirect polish of 132 green cells
+  ( 1, 2) ERROR 0s: Objective function is returning undefined values at initial point. FSOLVE cannot continue.
+  ( 1, 3) ERROR 0s: Objective function is returning undefined values at initial point. FSOLVE cannot continue.
+  ( 1, 4) ERROR 0s: Objective function is returning undefined values at initial point. FSOLVE cannot continue.
+  ( 1, 5) ERROR 0s: Objective function is returning undefined values at initial point. FSOLVE cannot continue.
+  ( 1, 6) ERROR 0s: Objective function is returning undefined values at initial point. FSOLVE cannot continue.
+  ( 1, 7) ERROR 0s: Objective function is returning undefined values at initial point. FSOLVE cannot continue.
+  ( 1, 8) ERROR 0s: Objective function is returning undefined values at initial point. FSOLVE cannot continue.
+  ( 1, 9) ERROR 0s: Objective function is returning undefined values at initial point. FSOLVE cannot continue.
+  ( 1,10) ERROR 0s: Objective function is returning undefined values at initial point. FSOLVE cannot continue.
+  ( 1,11) ERROR 0s: Objective function is returning undefined values at initial point. FSOLVE cannot continue.
+  ( 1,12) ERROR 0s: Objective function is returning undefined values at initial point. FSOLVE cannot continue.
+  ( 2, 2) ERROR 0s: Objective function is returning undefined values at initial point. FSOLVE cannot continue.
+  ( 2, 3) ERROR 0s: Objective function is returning undefined values at initial point. FSOLVE cannot continue.
+  ( 2, 4) ERROR 0s: Objective function is returning undefined values at initial point. FSOLVE cannot continue.
+  ( 2, 5) ERROR 0s: Objective function is returning undefined values at initial point. FSOLVE cannot continue.
+  ( 2, 6) ERROR 0s: Objective function is returning undefined values at initial point. FSOLVE cannot continue.
+  ( 2, 7) ERROR 0s: Objective function is returning undefined values at initial point. FSOLVE cannot continue.
+  ( 2, 8) ERROR 0s: Objective function is returning undefined values at initial point. FSOLVE cannot continue.
+  ( 2, 9) ERROR 0s: Objective function is returning undefined values at initial point. FSOLVE cannot continue.
+  ( 2,10) ERROR 0s: Objective function is returning undefined values at initial point. FSOLVE cannot continue.
+  ( 2,11) ERROR 0s: Objective function is returning undefined values at initial point. FSOLVE cannot continue.
+  ( 2,12) ERROR 0s: Objective function is returning undefined values at initial point. FSOLVE cannot continue.
+  ( 3, 2) ERROR 0s: Objective function is returning undefined values at initial point. FSOLVE cannot continue.
+  ( 3, 3) ERROR 0s: Objective function is returning undefined values at initial point. FSOLVE cannot continue.
+  ( 3, 4) ERROR 0s: Objective function is returning undefined values at initial point. FSOLVE cannot continue.
+  ( 3, 5) ERROR 0s: Objective function is returning undefined values at initial point. FSOLVE cannot continue.
+  ( 3, 6) ERROR 0s: Objective function is returning undefined values at initial point. FSOLVE cannot continue.
+  ( 3, 7) ERROR 0s: Objective function is returning undefined values at initial point. FSOLVE cannot continue.
+  ( 3, 8) ERROR 0s: Objective function is returning undefined values at initial point. FSOLVE cannot continue.
+  ( 3, 9) ERROR 0s: Objective function is returning undefined values at initial point. FSOLVE cannot continue.
+  ( 3,10) ERROR 0s: Objective function is returning undefined values at initial point. FSOLVE cannot continue.
+  ( 3,11) ERROR 0s: Objective function is returning undefined values at initial point. FSOLVE cannot continue.
+  ( 3,12) ERROR 0s: Objective function is returning undefined values at initial point. FSOLVE cannot continue.
+  ( 4, 2) ERROR 0s: Objective function is returning undefined values at initial point. FSOLVE cannot continue.
+  ( 4, 3) ERROR 0s: Objective function is returning undefined values at initial point. FSOLVE cannot continue.
+  ( 4, 4) ERROR 0s: Objective function is returning undefined values at initial point. FSOLVE cannot continue.
+  ( 4, 5) ERROR 0s: Objective function is returning undefined values at initial point. FSOLVE cannot continue.
+  ( 4, 6) ERROR 0s: Objective function is returning undefined values at initial point. FSOLVE cannot continue.
+  ( 4, 7) ERROR 0s: Objective function is returning undefined values at initial point. FSOLVE cannot continue.
+  ( 4, 8) ERROR 0s: Objective function is returning undefined values at initial point. FSOLVE cannot continue.
+  ( 4, 9) ERROR 0s: Objective function is returning undefined values at initial point. FSOLVE cannot continue.
+  ( 4,10) ERROR 0s: Objective function is returning undefined values at initial point. FSOLVE cannot continue.
+  ( 4,11) ERROR 0s: Objective function is returning undefined values at initial point. FSOLVE cannot continue.
+  ( 4,12) ERROR 0s: Objective function is returning undefined values at initial point. FSOLVE cannot continue.
+  ( 5, 2) ERROR 0s: Objective function is returning undefined values at initial point. FSOLVE cannot continue.
+  ( 5, 3) ERROR 0s: Objective function is returning undefined values at initial point. FSOLVE cannot continue.
+  ( 5, 4) ERROR 0s: Objective function is returning undefined values at initial point. FSOLVE cannot continue.
+  ( 5, 5) ERROR 0s: Objective function is returning undefined values at initial point. FSOLVE cannot continue.
+  ( 5, 6) ERROR 0s: Objective function is returning undefined values at initial point. FSOLVE cannot continue.
+  ( 5, 7) ERROR 0s: Objective function is returning undefined values at initial point. FSOLVE cannot continue.
+  ( 5, 8) ERROR 0s: Objective function is returning undefined values at initial point. FSOLVE cannot continue.
+  ( 5, 9) ERROR 0s: Objective function is returning undefined values at initial point. FSOLVE cannot continue.
+  ( 5,10) ERROR 0s: Objective function is returning undefined values at initial point. FSOLVE cannot continue.
+  ( 5,11) ERROR 0s: Objective function is returning undefined values at initial point. FSOLVE cannot continue.
+  ( 5,12) ERROR 0s: Objective function is returning undefined values at initial point. FSOLVE cannot continue.
+  ( 6, 2) ERROR 0s: Objective function is returning undefined values at initial point. FSOLVE cannot continue.
+  ( 6, 3) ERROR 0s: Objective function is returning undefined values at initial point. FSOLVE cannot continue.
+  ( 6, 4) ERROR 0s: Objective function is returning undefined values at initial point. FSOLVE cannot continue.
+  ( 6, 5) ERROR 0s: Objective function is returning undefined values at initial point. FSOLVE cannot continue.
+  ( 6, 6) ERROR 0s: Objective function is returning undefined values at initial point. FSOLVE cannot continue.
+  ( 6, 7) ERROR 0s: Objective function is returning undefined values at initial point. FSOLVE cannot continue.
+  ( 6, 8) ERROR 0s: Objective function is returning undefined values at initial point. FSOLVE cannot continue.
+  ( 6, 9) ERROR 0s: Objective function is returning undefined values at initial point. FSOLVE cannot continue.
+  ( 6,10) ERROR 0s: Objective function is returning undefined values at initial point. FSOLVE cannot continue.
+  ( 6,11) ERROR 0s: Objective function is returning undefined values at initial point. FSOLVE cannot continue.
+  ( 6,12) ERROR 0s: Objective function is returning undefined values at initial point. FSOLVE cannot continue.
+  ( 7, 2) ERROR 0s: Objective function is returning undefined values at initial point. FSOLVE cannot continue.
+  ( 7, 3) ERROR 0s: Objective function is returning undefined values at initial point. FSOLVE cannot continue.
+  ( 7, 4) ERROR 0s: Objective function is returning undefined values at initial point. FSOLVE cannot continue.
+  ( 7, 5) ERROR 0s: Objective function is returning undefined values at initial point. FSOLVE cannot continue.
+  ( 7, 6) ERROR 0s: Objective function is returning undefined values at initial point. FSOLVE cannot continue.
+  ( 7, 7) ERROR 0s: Objective function is returning undefined values at initial point. FSOLVE cannot continue.
+  ( 7, 8) ERROR 0s: Objective function is returning undefined values at initial point. FSOLVE cannot continue.
+  ( 7, 9) ERROR 0s: Objective function is returning undefined values at initial point. FSOLVE cannot continue.
+  ( 7,10) ERROR 0s: Objective function is returning undefined values at initial point. FSOLVE cannot continue.
+  ( 7,11) ERROR 0s: Objective function is returning undefined values at initial point. FSOLVE cannot continue.
+  ( 7,12) ERROR 0s: Objective function is returning undefined values at initial point. FSOLVE cannot continue.
+  ( 8, 2) ERROR 0s: Objective function is returning undefined values at initial point. FSOLVE cannot continue.
+  ( 8, 3) ERROR 0s: Objective function is returning undefined values at initial point. FSOLVE cannot continue.
+  ( 8, 4) ERROR 0s: Objective function is returning undefined values at initial point. FSOLVE cannot continue.
+  ( 8, 5) ERROR 0s: Objective function is returning undefined values at initial point. FSOLVE cannot continue.
+  ( 8, 6) ERROR 0s: Objective function is returning undefined values at initial point. FSOLVE cannot continue.
+  ( 8, 7) ERROR 0s: Objective function is returning undefined values at initial point. FSOLVE cannot continue.
+  ( 8, 8) ERROR 0s: Objective function is returning undefined values at initial point. FSOLVE cannot continue.
+  ( 8, 9) ERROR 0s: Objective function is returning undefined values at initial point. FSOLVE cannot continue.
+  ( 8,10) ERROR 0s: Objective function is returning undefined values at initial point. FSOLVE cannot continue.
+  ( 8,11) ERROR 0s: Objective function is returning undefined values at initial point. FSOLVE cannot continue.
+  ( 8,12) ERROR 0s: Objective function is returning undefined values at initial point. FSOLVE cannot continue.
+  ( 9, 2) ERROR 0s: Objective function is returning undefined values at initial point. FSOLVE cannot continue.
+  ( 9, 3) ERROR 0s: Objective function is returning undefined values at initial point. FSOLVE cannot continue.
+  ( 9, 4) ERROR 0s: Objective function is returning undefined values at initial point. FSOLVE cannot continue.
+  ( 9, 5) ERROR 0s: Objective function is returning undefined values at initial point. FSOLVE cannot continue.
+  ( 9, 6) ERROR 0s: Objective function is returning undefined values at initial point. FSOLVE cannot continue.
+  ( 9, 7) ERROR 0s: Objective function is returning undefined values at initial point. FSOLVE cannot continue.
+  ( 9, 8) ERROR 0s: Objective function is returning undefined values at initial point. FSOLVE cannot continue.
+  ( 9, 9) ERROR 0s: Objective function is returning undefined values at initial point. FSOLVE cannot continue.
+  ( 9,10) ERROR 0s: Objective function is returning undefined values at initial point. FSOLVE cannot continue.
+  ( 9,11) ERROR 0s: Objective function is returning undefined values at initial point. FSOLVE cannot continue.
+  ( 9,12) ERROR 0s: Objective function is returning undefined values at initial point. FSOLVE cannot continue.
+  (10, 2) ERROR 0s: Objective function is returning undefined values at initial point. FSOLVE cannot continue.
+  (10, 3) ERROR 0s: Objective function is returning undefined values at initial point. FSOLVE cannot continue.
+  (10, 4) ERROR 0s: Objective function is returning undefined values at initial point. FSOLVE cannot continue.
+  (10, 5) ERROR 0s: Objective function is returning undefined values at initial point. FSOLVE cannot continue.
+  (10, 6) ERROR 0s: Objective function is returning undefined values at initial point. FSOLVE cannot continue.
+  (10, 7) ERROR 0s: Objective function is returning undefined values at initial point. FSOLVE cannot continue.
+  (10, 8) ERROR 0s: Objective function is returning undefined values at initial point. FSOLVE cannot continue.
+  (10, 9) ERROR 0s: Objective function is returning undefined values at initial point. FSOLVE cannot continue.
+  (10,10) ERROR 0s: Objective function is returning undefined values at initial point. FSOLVE cannot continue.
+  (10,11) ERROR 0s: Objective function is returning undefined values at initial point. FSOLVE cannot continue.
+  (10,12) ERROR 0s: Objective function is returning undefined values at initial point. FSOLVE cannot continue.
+  (11, 2) ERROR 0s: Objective function is returning undefined values at initial point. FSOLVE cannot continue.
+  (11, 3) ERROR 0s: Objective function is returning undefined values at initial point. FSOLVE cannot continue.
+  (11, 4) ERROR 0s: Objective function is returning undefined values at initial point. FSOLVE cannot continue.
+  (11, 5) ERROR 0s: Objective function is returning undefined values at initial point. FSOLVE cannot continue.
+  (11, 6) ERROR 0s: Objective function is returning undefined values at initial point. FSOLVE cannot continue.
+  (11, 7) ERROR 0s: Objective function is returning undefined values at initial point. FSOLVE cannot continue.
+  (11, 8) ERROR 0s: Objective function is returning undefined values at initial point. FSOLVE cannot continue.
+  (11, 9) ERROR 0s: Objective function is returning undefined values at initial point. FSOLVE cannot continue.
+  (11,10) ERROR 0s: Objective function is returning undefined values at initial point. FSOLVE cannot continue.
+  (11,11) ERROR 0s: Objective function is returning undefined values at initial point. FSOLVE cannot continue.
+  (11,12) ERROR 0s: Objective function is returning undefined values at initial point. FSOLVE cannot continue.
+  (12, 2) ERROR 0s: Objective function is returning undefined values at initial point. FSOLVE cannot continue.
+  (12, 3) ERROR 0s: Objective function is returning undefined values at initial point. FSOLVE cannot continue.
+  (12, 4) ERROR 0s: Objective function is returning undefined values at initial point. FSOLVE cannot continue.
+  (12, 5) ERROR 0s: Objective function is returning undefined values at initial point. FSOLVE cannot continue.
+  (12, 6) ERROR 0s: Objective function is returning undefined values at initial point. FSOLVE cannot continue.
+  (12, 7) ERROR 0s: Objective function is returning undefined values at initial point. FSOLVE cannot continue.
+  (12, 8) ERROR 0s: Objective function is returning undefined values at initial point. FSOLVE cannot continue.
+  (12, 9) ERROR 0s: Objective function is returning undefined values at initial point. FSOLVE cannot continue.
+  (12,10) ERROR 0s: Objective function is returning undefined values at initial point. FSOLVE cannot continue.
+  (12,11) ERROR 0s: Objective function is returning undefined values at initial point. FSOLVE cannot continue.
+  (12,12) ERROR 0s: Objective function is returning undefined values at initial point. FSOLVE cannot continue.
+WAVE 2 DONE: 0/132 polished+verified. median |tfD-tfI| = NaN
+fastest INDIRECT-refined: tf = 

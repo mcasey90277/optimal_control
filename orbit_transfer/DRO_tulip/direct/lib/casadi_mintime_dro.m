@@ -463,7 +463,13 @@ out.mf        = out.X(7,end);
 try
     lamAll = full(sol.value(opti.lam_g));
     kd = find(strcmp({creg.label},'defect'), 1);   % NOT creg(1): Hermite-Simpson
-    out.lamDef = reshape(lamAll(creg(kd).rows), 7, N);   % registers interp first
+    % ns rows, NOT 7: under Sundman the defect system carries the time state,
+    % and reshaping 8N multipliers as 7xN throws -- which a silent catch turned
+    % into an EMPTY catalog (132 NaN entries) until the wave-2 acceptance test
+    % exposed it. Rows 1:7 are the physical costates; row 8 (Sundman only) is
+    % lambda_t, which PMP fixes at a constant (+/-1 by convention): a built-in
+    % consistency check on every solve.
+    out.lamDef = reshape(lamAll(creg(kd).rows), ns, N);
     kf = find(strcmp({creg.label},'bcf'), 1);
     if ~isempty(kf), out.lamBCf = lamAll(creg(kf).rows); else, out.lamBCf = []; end
     k0 = find(strcmp({creg.label},'bc0'), 1);

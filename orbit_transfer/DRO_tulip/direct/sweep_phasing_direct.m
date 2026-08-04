@@ -124,7 +124,7 @@ log_('DIRECT SWEEP %dx%d, N=%d, sundman HS  (anchor at sD=%.3f sA=%.3f)\n', ...
 % Plots refresh at every checkpoint so the torus picture is always current.
 TF = nan(nD,nA); MF = TF; DV = TF; PERIS = TF; ARRALT = TF;
 GLOBKM = TF; GLOBMS = TF; DEFECT = TF; WALL = TF; ARRSPD = TF; PASS = false(nD,nA);
-LAM0 = nan(8,nD,nA);
+LAM0 = nan(8,nD,nA);  LAMT = nan(nD,nA);  CELLS = cell(nD,nA);
 seeds = cell(nD,nA);
 TRIES = zeros(nD,nA);
 nbr = [1 0; -1 0; 0 1; 0 -1];
@@ -179,10 +179,15 @@ maxTriesW = d('maxTriesW',4);
                 DEFECT(iD,iA) = o.maxDefect;  WALL(iD,iA) = w;
                 PASS(iD,iA) = gOK;
                 if ~isempty(o.lamDef)
-                    lamD = o.lamDef;
+                    lamD = o.lamDef(1:7,:);              % physical costates only
                     aS = o.Um(1:3,1)/max(norm(o.Um(1:3,1)),eps);
                     sg = 1;  if (-lamD(4:6,1)/max(norm(lamD(4:6,1)),eps)).'*aS < 0, sg = -1; end
                     LAM0(:,iD,iA) = [sg*lamD(:,1); o.tf];
+                    if size(o.lamDef,1) >= 8             % Sundman: lambda_t consistency
+                        LAMT(iD,iA) = sg*median(o.lamDef(8,:));
+                    end
+                    CELLS{iD,iA} = struct('X',o.X,'U',o.U,'Um',o.Um, ...
+                        'tNodes',o.tNodes,'tf',o.tf,'lamDef',sg*o.lamDef);
                 end
                 if gOK
                     tu = linspace(0, o.tf, N+1);
@@ -207,7 +212,7 @@ maxTriesW = d('maxTriesW',4);
         nAttempt = nAttempt + 1;
         if mod(nAttempt,3) == 0
             save(ckptF,'TF','MF','DV','PERIS','ARRALT','ARRSPD','GLOBKM','GLOBMS', ...
-                 'DEFECT','PASS','WALL','LAM0','sD','sA','TRIES');
+                 'DEFECT','PASS','WALL','LAM0','LAMT','sD','sA','TRIES');
             try
                 plot_phase_torus(ckptF, fullfile(rd, sprintf('phase_torus_%dx%d', nD, nA)));
                 close all
@@ -277,10 +282,11 @@ end
 S = struct('sD',sD,'sA',sA,'TF',TF,'MF',MF,'DV',DV,'PERIS',PERIS,'ARRALT',ARRALT, ...
     'ARRSPD',ARRSPD, ...
     'GLOBKM',GLOBKM,'GLOBMS',GLOBMS,'DEFECT',DEFECT,'PASS',PASS,'WALL',WALL, ...
-    'LAM0',LAM0, 'anchor',struct('fA0',fA0,'tfRef',sol(8)), ...
+    'LAM0',LAM0, 'LAMT',LAMT, 'anchor',struct('fA0',fA0,'tfRef',sol(8)), ...
     'meta',struct('N',N,'thrustN',thrustN,'ispS',ispS,'m0kg',m0, ...
                   'wallMin',toc(tW)/60,'opts',opts));
 save(fullfile(rd, sprintf('dsweep_%dx%d.mat', nD, nA)), 'S', '-v7.3');
+save(fullfile(rd, sprintf('dsweep_%dx%d_cells.mat', nD, nA)), 'CELLS', '-v7.3');
 nOK = nnz(PASS);
 log_('DONE: %d/%d solved+gated, %d attempted, %.1f min total\n', ...
     nOK, nD*nA, nnz(~isnan(TF)), toc(tW)/60);

@@ -237,16 +237,15 @@ maxTriesW = d('maxTriesW',4);
         end
         TRIES(iD,iA) = TRIES(iD,iA) + 1;
         nAttempt = nAttempt + 1;
-        if mod(nAttempt,3) == 0
+        if true   % save after EVERY square (Mike's directive 2026-08-04):
+                  % worst-case loss on any crash = the square in flight
             save(ckptF,'TF','MF','DV','PERIS','ARRALT','ARRSPD','GLOBKM','GLOBMS', ...
                  'DEFECT','PASS','WALL','LAM0','LAMT','sD','sA','TRIES');
             % THE CELLS ARE THE IRREPLACEABLE PRODUCT -- checkpoint them too.
             % End-of-run-only saving is how 11 hours of trajectories and duals
             % were lost once already; never again. (Every 9 attempts: the file
             % rewrite grows to ~60 MB late in a run, a few seconds each.)
-            if mod(nAttempt,9) == 0
-                save(ckptCellsF, 'CELLS', '-v7.3');
-            end
+            save(ckptCellsF, 'CELLS', '-v7.3');
             try
                 plot_phase_torus(ckptF, fullfile(rd, sprintf('phase_torus_%dx%d', nD, nA)));
                 close all

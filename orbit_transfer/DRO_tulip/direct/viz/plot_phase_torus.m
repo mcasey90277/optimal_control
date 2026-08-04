@@ -92,8 +92,9 @@ for kA = 1:nA+1
 end
 axis equal off;  view(-35, 35);   % flat colors -- no lighting, it washes cells out
 title(sprintf(['DRO \\rightarrow tulip phasing torus  |  big circle = departure s_D, ' ...
-    'small = arrival s_A\ngreen pass / orange near-miss / red fail / grey untried  ' ...
-    '(%d tried, %d pass)'], nnz(tried), nnz(pass)));
+    'small = arrival s_A\ngreen = CONTINUOUSLY VERIFIED (flown control lands <100 km, map res) / ' ...
+    'orange near-miss / red = no valid trajectory / grey untried  (%d tried, %d verified)'], ...
+    nnz(tried), nnz(pass)));
 savefig(f1, [outStem '_torus.fig']);
 exportgraphics(f1, [outStem '_torus.png'], 'Resolution', 140);
 fprintf('  torus  -> %s_torus.fig (rotatable) + .png\n', outStem);
@@ -114,8 +115,8 @@ for kD = 1:nD
 end
 axis([-0.5/nD 1-0.5/nD+1/nD -0.5/nA 1-0.5/nA+1/nA]);  axis square
 xlabel('departure phase s_D (wraps)');  ylabel('arrival phase s_A (wraps)');
-title(sprintf(['flat torus: green pass (t_f shown) / orange near-miss / red fail / grey untried\n' ...
-    'both axes periodic']));
+title({'flat torus: green = continuously verified, flown control lands <100 km (t_f shown)', ...
+    'orange near-miss / red = solver certificate but NO valid trajectory / grey untried; axes periodic'});
 exportgraphics(f2, [outStem '_flat.png'], 'Resolution', 140);
 fprintf('  flat   -> %s_flat.png\n', outStem);
 
@@ -155,8 +156,8 @@ colormap(f3, cmap);
 cb = colorbar;  caxis([tfLo tfHi]);
 cb.Label.String = sprintf('t_f [ND]   (%.1f - %.1f days)', ...
     tfLo*4.4327, tfHi*4.4327);
-title({'minimum transfer time over the phasing torus (map resolution)', ...
-       'colored where solved;  red x = tried, unresolved;  grey = untried'});
+title({'minimum transfer time over the phasing torus (map resolution, pre-certification)', ...
+       'colored where the CONTINUOUS trajectory is verified (<100 km flown);  red x = discrete-only, rejected;  grey = untried'});
 exportgraphics(f3, [outStem '_tfmap.png'], 'Resolution', 140);
 fprintf('  tf map -> %s_tfmap.png\n', outStem);
 end

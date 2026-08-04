@@ -74,6 +74,10 @@ indep   = d('independent',false);
 % produce no reusable product, so re-running them buys nothing but audit
 % completeness. refPass = logical [nD x nA] from the prior map.
 refMat  = d('refMat', '');
+% w0Cells: [k x 2] (iD,iA) list restricting WAVE 0 to known cold-openers (the
+% prior run's [w0]-PASS cells). Cold attempts elsewhere are known to fail and
+% only green via the wave-1 flood, so re-paying them buys nothing.
+w0Cells = d('w0Cells', []);
 tauDRO  = d('tauDRO', 1.0);
 NpT     = d('NpTulip', 7);
 tauT    = d('tauTulip', 5*2*pi/6);
@@ -147,6 +151,12 @@ if ~isempty(refMat)
     RM = load(refMat);
     if isfield(RM,'S'), refPass = RM.S.PASS; else, refPass = RM.PASS; end
     log_('reference-guided: attempting only the %d cells the reference run proved green\n', nnz(refPass));
+end
+w0Mask = true(nD,nA);
+if ~isempty(w0Cells)
+    w0Mask = false(nD,nA);
+    for kw = 1:size(w0Cells,1), w0Mask(w0Cells(kw,1),w0Cells(kw,2)) = true; end
+    log_('wave 0 restricted to %d known cold-opener cells\n', size(w0Cells,1));
 end
 mode = lower(d('mode','waves'));
 wave0Iter = d('wave0Iter',500);
@@ -264,7 +274,7 @@ case 'waves'
         maxIter, stride, numel(1:stride:nD)*numel(1:stride:nA));
     for iD = 1:stride:nD
         for iA = 1:stride:nA
-            if refPass(iD,iA)
+            if refPass(iD,iA) && w0Mask(iD,iA)
                 try_node(iD, iA, [], maxIter, 'w0');
             end
         end

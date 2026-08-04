@@ -66,6 +66,13 @@ sD0off  = d('sD0',0);
 % the warm-start confound from difficulty measurements, which is exactly what
 % the arrival-difficulty hypothesis needs.
 indep   = d('independent',false);
+% ORBIT PARAMETERS AS OPTIONS -- future sweeps vary these (the period axis is
+% Darin's third dimension), and every data product must record which orbits it
+% belongs to. Defaults reproduce the original DRO(tau0=1) -> tulip(7,-1) pair.
+tauDRO  = d('tauDRO', 1.0);
+NpT     = d('NpTulip', 7);
+tauT    = d('tauTulip', 5*2*pi/6);
+pmT     = d('pmTulip', -1);
 
 here = fileparts(mfilename('fullpath'));
 addpath(fullfile(here,'lib'));  addpath(fullfile(here,'certify'));
@@ -83,12 +90,12 @@ c    = (ispS/tStar)*g0;
 tW = tic;
 
 %% orbits and anchor (same construction as the marching harness)
-[~, rvD0] = pumpkynPie.cr3bp.getDRO(1.0);
-rvD0 = pumpkyn.cr3bp.cont_np(rvD0, 1.0, muStar, 1e-12);
-[tD, rvD] = pumpkyn.cr3bp.prop(1.0, rvD0, muStar);
-[~, rvT0] = pumpkyn.cr3bp.getTulip(5*2*pi/6, 7, -1);
-rvT0 = pumpkyn.cr3bp.cont_np(rvT0, 5*2*pi/6, muStar, 1e-12);
-[tT, rvT] = pumpkyn.cr3bp.prop(5*2*pi/6, rvT0, muStar);
+[~, rvD0] = pumpkynPie.cr3bp.getDRO(tauDRO);
+rvD0 = pumpkyn.cr3bp.cont_np(rvD0, tauDRO, muStar, 1e-12);
+[tD, rvD] = pumpkyn.cr3bp.prop(tauDRO, rvD0, muStar);
+[~, rvT0] = pumpkyn.cr3bp.getTulip(tauT, NpT, pmT);
+rvT0 = pumpkyn.cr3bp.cont_np(rvT0, tauT, muStar, 1e-12);
+[tT, rvT] = pumpkyn.cr3bp.prop(tauT, rvT0, muStar);
 dep = @(f) interp1(tD, rvD, mod(f,1)*tD(end), 'spline');
 arr = @(f) interp1(tT, rvT, mod(f,1)*tT(end), 'spline');
 dvTheta = pumpkyn.util.bsxAng(rvT(:,4:6), rvD(1,4:6), 2);
@@ -186,8 +193,16 @@ maxTriesW = d('maxTriesW',4);
                     if size(o.lamDef,1) >= 8             % Sundman: lambda_t consistency
                         LAMT(iD,iA) = sg*median(o.lamDef(8,:));
                     end
+                    % SELF-CONTAINED cell record: someone holding only this
+                    % struct can reconstruct and re-verify the solution --
+                    % states, controls, costates, the phases it connects, the
+                    % actual endpoint states used, and the physics constants.
                     CELLS{iD,iA} = struct('X',o.X,'U',o.U,'Um',o.Um, ...
-                        'tNodes',o.tNodes,'tf',o.tf,'lamDef',sg*o.lamDef);
+                        'tNodes',o.tNodes,'tf',o.tf,'lamDef',sg*o.lamDef, ...
+                        'sD',sD(iD),'sA',sA(iA), ...
+                        'rv0',rv0(1:6),'rvf',rvf(1:6), ...
+                        'Tmax',Tmax,'c',c,'muStar',muStar, ...
+                        'floorKm',floorKm,'N',N);
                 end
                 if gOK
                     tu = linspace(0, o.tf, N+1);
@@ -284,9 +299,16 @@ S = struct('sD',sD,'sA',sA,'TF',TF,'MF',MF,'DV',DV,'PERIS',PERIS,'ARRALT',ARRALT
     'GLOBKM',GLOBKM,'GLOBMS',GLOBMS,'DEFECT',DEFECT,'PASS',PASS,'WALL',WALL, ...
     'LAM0',LAM0, 'LAMT',LAMT, 'anchor',struct('fA0',fA0,'tfRef',sol(8)), ...
     'meta',struct('N',N,'thrustN',thrustN,'ispS',ispS,'m0kg',m0, ...
+                  'orbit',struct('tauDRO',tauDRO,'NpTulip',NpT, ...
+                       'tauTulip',tauT,'pmTulip',pmT,'muStar',muStar, ...
+                       'lStar',lStar,'tStar',tStar,'rMoonKm',rMoonKm, ...
+                       'periodDRO',tD(end),'periodTulip',tT(end)), ...
+                  'floorKm',floorKm,'globTolKm',globTolKm,'globTolMs',globTolMs, ...
                   'wallMin',toc(tW)/60,'opts',opts));
 save(fullfile(rd, sprintf('dsweep_%dx%d.mat', nD, nA)), 'S', '-v7.3');
-save(fullfile(rd, sprintf('dsweep_%dx%d_cells.mat', nD, nA)), 'CELLS', '-v7.3');
+cellsMeta = S.meta;  cellsGrids = struct('sD',sD,'sA',sA); %#ok<NASGU>
+save(fullfile(rd, sprintf('dsweep_%dx%d_cells.mat', nD, nA)), ...
+     'CELLS','cellsMeta','cellsGrids','-v7.3');
 nOK = nnz(PASS);
 log_('DONE: %d/%d solved+gated, %d attempted, %.1f min total\n', ...
     nOK, nD*nA, nnz(~isnan(TF)), toc(tW)/60);

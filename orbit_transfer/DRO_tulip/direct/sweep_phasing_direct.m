@@ -150,6 +150,9 @@ refPass = true(nD,nA);
 if ~isempty(refMat)
     RM = load(refMat);
     if isfield(RM,'S'), refPass = RM.S.PASS; else, refPass = RM.PASS; end
+    assert(isequal(size(refPass), [nD nA]), ...
+        'refMat PASS is %dx%d, grid is %dx%d -- incompatible reference', ...
+        size(refPass,1), size(refPass,2), nD, nA);
     log_('reference-guided: attempting only the %d cells the reference run proved green\n', nnz(refPass));
 end
 w0Mask = true(nD,nA);
@@ -159,6 +162,7 @@ if ~isempty(w0Cells)
     log_('wave 0 restricted to %d known cold-opener cells\n', size(w0Cells,1));
 end
 mode = lower(d('mode','waves'));
+if indep, mode = 'independent'; end
 wave0Iter = d('wave0Iter',500);
 maxTriesW = d('maxTriesW',4);
 
@@ -209,8 +213,16 @@ maxTriesW = d('maxTriesW',4);
                 PASS(iD,iA) = gOK;
                 if ~isempty(o.lamDef)
                     lamD = o.lamDef(1:7,:);              % physical costates only
-                    aS = o.Um(1:3,1)/max(norm(o.Um(1:3,1)),eps);
-                    sg = 1;  if (-lamD(4:6,1)/max(norm(lamD(4:6,1)),eps)).'*aS < 0, sg = -1; end
+                    % sign resolution: majority vote of primer-vs-control
+                    % alignment over the first nodes (single-node comparison
+                    % is vulnerable to one noisy station -- review finding)
+                    nv = min(10, size(lamD,2));  vote = 0;
+                    for kv = 1:nv
+                        aS = o.Um(1:3,kv)/max(norm(o.Um(1:3,kv)),eps);
+                        pv = -lamD(4:6,kv)/max(norm(lamD(4:6,kv)),eps);
+                        vote = vote + sign(pv.'*aS);
+                    end
+                    sg = 1;  if vote < 0, sg = -1; end
                     LAM0(:,iD,iA) = [sg*lamD(:,1); o.tf];
                     if size(o.lamDef,1) >= 8             % Sundman: lambda_t consistency
                         LAMT(iD,iA) = sg*median(o.lamDef(8,:));

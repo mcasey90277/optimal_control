@@ -31,7 +31,8 @@ function [z, info] = ms_tfmin(rv0, rvf, seed, Tmax, c, muStar, opts)
 % OUTPUTS:
 %   z    - [lambda0(7); tf] in tfMin's convention [8x1] (best iterate)
 %   info - struct: .converged, .normR (final inf-norm), .iters, .wall (s),
-%          .Y (14 x K+1 converged junction states), .tGrid
+%          .Y (14 x K junction START states; the final propagated endpoint
+%          is not included), .tGrid
 %
 % REFERENCES:
 %   [1] pumpkyn.cr3bp.tfMin / tfMinProp / tfMinEoM (D. Koblick, Coorbital) -
@@ -68,10 +69,10 @@ fopts = optimoptions('fsolve', 'Display', dispmode(verbose), ...
     'FunctionTolerance', tolR^2, 'StepTolerance', 1e-13, ...
     'MaxIterations', maxIter, 'MaxFunctionEvaluations', 10*maxIter, ...
     'OutputFcn', @(x,ov,st) toc(tStart) > wallSec);   % wall budget
-[p, ~, ~, ~] = fsolve(@residual, p, fopts);
+[p, ~, ~, fout] = fsolve(@residual, p, fopts);
 [R, ~] = residual(p);
 normR = norm(R, inf);
-it = maxIter;   % fsolve owns the count; kept for the info struct
+it = fout.iterations;
 
 z = [p(1:7); p(end)];
 info = struct('converged', normR < tolR, 'normR', normR, 'iters', it, ...
@@ -89,10 +90,13 @@ info = struct('converged', normR < tolR, 'normR', normR, 'iters', it, ...
     % propagation into integrator collapse (step size -> eps, unbounded
     % memory -- observed killing the process). Reject it with a large
     % residual instead of propagating it.
+    % The rejection residual must exceed ANY real accepted residual, else a
+    % solver whose current ||R|| is larger would read it as an improvement
+    % and ACCEPT the garbage iterate (review finding, Gemini 2026-08-04).
     if ~all(isfinite(p)) || tf < 0.3*seed.tf || tf > 3*seed.tf ...
             || max(abs(p)) > 1e5
-        R = 1e3*ones(n,1);
-        if needJ, J = eye(n); end
+        R = 1e8*ones(n,1);
+        if needJ, J = eye(n); end   % placeholder; step is rejected on ratio
         return
     end
     Yj   = [ [rv0; 1; lam0], reshape(p(8:end-1), 14, K-1) ];   % junctions
@@ -105,7 +109,7 @@ info = struct('converged', normR < tolR, 'normR', normR, 'iters', it, ...
         try
             [~, Yout] = pumpkyn.cr3bp.tfMinProp(dsg(k)*tf, y0k, Tmax, c, muStar);
         catch
-            R = 1e3*ones(n,1);
+            R = 1e8*ones(n,1);
             if needJ, J = eye(n); end
             return
         end

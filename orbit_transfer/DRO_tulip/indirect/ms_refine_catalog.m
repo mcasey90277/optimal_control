@@ -61,6 +61,7 @@ if isempty(todo)
 end
 
 TFI = nan(nD,nA); RES = TFI; MISSKM = TFI; ITERS = TFI; WALL = TFI; KUSED = TFI;
+ACCDZ = TFI;
 OKI = false(nD,nA);  LAMI = nan(8,nD,nA);
 sD = S.sD; sA = S.sA; meta = S.meta; %#ok<NASGU>
 fprintf('MS REFINE: %d cells, K-ladder [%s], %ds/cell budget\n', ...
@@ -86,14 +87,24 @@ for kc = 1:size(todo,1)
             [z, info] = ms_tfmin(rv0(1:6), rvf(1:6), seed, Tmax, c, muStar, ...
                 struct('wallSec', wallSec, 'verbose', verbose));
             [~, rvFly] = pumpkyn.cr3bp.tfMinProp(z(8), ...
-                [rv0(1:6), 1, z(1:7)'], Tmax, c, muStar);
+                [rv0(1:6)'; 1; z(1:7)], Tmax, c, muStar);
             missKm = norm(rvFly(end,1:3) - rvf(1:3))*ob.lStar;
             ok = info.converged && missKm < 100;
+            if ok
+                % step-3 gate IN the driver: the production single-shooting
+                % solver must accept the entry essentially unchanged
+                evalc('zAcc = pumpkyn.cr3bp.tfMin(rv0(1:6), rvf(1:6), z, Tmax, c, muStar);');
+                accDz = norm(zAcc - z);
+                ok = accDz < 1e-6;
+            else
+                accDz = NaN;
+            end
             if ok || toc(t0) > wallSec, break, end
         end
         TFI(iD,iA) = z(8);  RES(iD,iA) = info.normR;
         MISSKM(iD,iA) = missKm;  ITERS(iD,iA) = info.iters;
         WALL(iD,iA) = toc(t0);  OKI(iD,iA) = ok;  KUSED(iD,iA) = K;
+        ACCDZ(iD,iA) = accDz;
         if ok, LAMI(:,iD,iA) = z; end
         fprintf('  (%2d,%2d) tfD=%.5f tfI=%.5f  R=%.1e  fly=%.2fkm  %s (%.0fs) [%d/%d]\n', ...
             iD, iA, S.TF(iD,iA), z(8), info.normR, missKm, okstr(ok), ...
@@ -102,11 +113,12 @@ for kc = 1:size(todo,1)
         WALL(iD,iA) = toc(t0);
         fprintf('  (%2d,%2d) ERROR (%.0fs): %s\n', iD, iA, toc(t0), ME.message);
     end
-    save(outMat, 'TFI','RES','MISSKM','ITERS','WALL','OKI','LAMI','KUSED', ...
+    save(outMat, 'TFI','RES','MISSKM','ITERS','WALL','OKI','LAMI','KUSED','ACCDZ', ...
          'sD','sA','meta');                                    % EVERY cell
 end
 P = struct('TFI',TFI,'RES',RES,'MISSKM',MISSKM,'ITERS',ITERS,'WALL',WALL, ...
-           'OKI',OKI,'LAMI',LAMI,'KUSED',KUSED,'sD',S.sD,'sA',S.sA,'meta',S.meta);
+           'OKI',OKI,'LAMI',LAMI,'KUSED',KUSED,'ACCDZ',ACCDZ, ...
+           'sD',S.sD,'sA',S.sA,'meta',S.meta);
 nOK = nnz(OKI);
 fprintf('MS REFINE DONE: %d/%d verified.', nOK, size(todo,1));
 if nOK > 0

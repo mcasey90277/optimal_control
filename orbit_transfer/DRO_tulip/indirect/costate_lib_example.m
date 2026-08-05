@@ -18,14 +18,16 @@
 %
 %  M. Casey                                                    08/04/2026
 
-%% 1. Load the library:
-       L = load('costate_lib_dro_tulip.mat');
+%% 1. Load the library (EDIT libFile for your machine):
+ libFile = ['/Users/msc/Desktop/optimal_control/orbit_transfer/', ...
+            'DRO_tulip/direct/results/costate_lib_dro_tulip.mat'];
+       L = load(libFile);
      lib = L.costate_lib_dro_tulip;
       mu = lib.constants.muStar;
 
 %% 2. Pick the entry nearest the phasing you want (phases in DAYS):
- depDays = 1.0;      %departure: days past the DRO reference point
- arrDays = 10.0;     %arrival:   days past the tulip reference point
+ depDays = 2.3;      %departure: days past the DRO reference point
+ arrDays = 1.0;     %arrival:   days past the tulip reference point
        e = costate_lib_nearest(lib, depDays, arrDays);
 
 fprintf('using entry at dep %.2f d, arr %.2f d;  transfer time %.2f days\n', ...
@@ -48,7 +50,7 @@ fprintf('using entry at dep %.2f d, arr %.2f d;  transfer time %.2f days\n', ...
      rvf = interp1(tT, rvT, e.arrival_phase_frac*tT(end),  'spline');
 
 %% 5a. Fly the transfer directly from the library costates (no solver):
- [tau,y] = pumpkyn.cr3bp.tfMinProp(e.tf_nd, [rv0(1:6), 1, e.lambda0'], ...
+ [tau,y] = pumpkyn.cr3bp.tfMinProp(e.tf_nd, [rv0(1:6)'; 1; e.lambda0], ...
                 lib.thruster.Tmax_nd, lib.thruster.c_nd, mu);
   missKm = norm(y(end,1:3) - rvf(1:3)) * lib.constants.lStar_km;
 fprintf('flown arrival miss: %.3f km\n', missKm);

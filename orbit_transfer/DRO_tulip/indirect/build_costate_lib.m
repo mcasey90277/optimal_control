@@ -1,0 +1,120 @@
+function lib = build_costate_lib(refinedMat, sweepMat, outMat)
+% BUILD_COSTATE_LIB  Package the refined catalog as a shareable costate library.
+%
+% Produces the structure costate_lib_dro_tulip: a self-describing, pumpkyn-
+% ready library of converged min-time costates over the DRO->tulip phasing
+% torus. A recipient needs only pumpkyn and this file: reconstruct both
+% orbits from the recorded parameters, pick an entry by departure/arrival
+% phase, and fly it with tfMinProp or hand it to tfMin. Every entry passed
+% the tfMin acceptance test (tfMin returns it unchanged in seconds).
+%
+% INPUTS:
+%   refinedMat - ms_refined_12x12.mat (LAMI, OKI, MISSKM, RES, meta)
+%   sweepMat   - dsweep_12x12.mat (map + orbit metadata; provenance)
+%   outMat     - output .mat path holding costate_lib_dro_tulip
+%
+% OUTPUTS:
+%   lib - the costate_lib_dro_tulip structure (also saved to outMat):
+%         .name, .created, .provenance
+%         .constants          (muStar, lStar km, tStar s)
+%         .thruster           (Tmax N, Isp s, m0 kg + ND equivalents)
+%         .departure_orbit    'DRO'   + .departure_params (tau, period,
+%                             reconstruction recipe, seed state)
+%         .arrival_orbit      'Tulip' + .arrival_params (tau, Np, pm, ...)
+%         .entries            [n x 1] struct array: departure/arrival phase
+%                             (fraction, ND time, days), lambda0 [7x1],
+%                             tf (ND, days), z8 = [lambda0; tf] for tfMin,
+%                             verification (ms residual, flight miss km)
+%         .usage              worked example, exact pumpkyn calls
+%
+% REFERENCES:
+%   [1] ms_refine_catalog.m / ms_tfmin.m -- how the entries were converged.
+%   [2] pumpkyn.cr3bp.tfMin / tfMinProp -- the consumers.
+
+R = load(refinedMat);
+M = load(sweepMat);  S = M.S;
+ob = S.meta.orbit;
+
+lib = struct();
+lib.name = 'costate_lib_dro_tulip';
+lib.description = ['Min-time low-thrust DRO->Tulip transfer costate library ', ...
+    'over the (departure phase x arrival phase) torus, CR3BP Earth-Moon. ', ...
+    'Each entry is a converged PMP solution: z8 = [lambda_r(3); lambda_v(3); ', ...
+    'lambda_m; tf] in pumpkyn.cr3bp.tfMin convention. All entries verified: ', ...
+    'multiple-shooting residual ~1e-11 and end-to-end PMP flight lands at ', ...
+    'the arrival state; pumpkyn tfMin accepts every entry unchanged.'];
+lib.created = datestr(now, 'yyyy-mm-dd');
+lib.provenance = ['Direct Hermite-Simpson collocation sweep (N=800, Sundman ', ...
+    'mesh, 500 km lunar-altitude floor) -> Hager covector mapping of NLP ', ...
+    'duals -> multiple-shooting PMP refinement (analytic STM Jacobian, ', ...
+    'K-ladder 12/24/48) -> tfMin acceptance test. Casey/Koblick 2026-08.'];
+
+lib.constants = struct('muStar', ob.muStar, 'lStar_km', ob.lStar, ...
+    'tStar_s', ob.tStar, 'nd_time_to_days', ob.tStar/86400);
+
+g0 = 9.80665*ob.tStar^2/(1000*ob.lStar);
+lib.thruster = struct('Tmax_N', S.meta.thrustN, 'Isp_s', S.meta.ispS, ...
+    'm0_kg', S.meta.m0kg, ...
+    'Tmax_nd', (S.meta.thrustN/S.meta.m0kg)*ob.tStar^2/(ob.lStar*1000), ...
+    'c_nd', (S.meta.ispS/ob.tStar)*g0, ...
+    'note', 'tfMin args: Tmax_nd, c_nd. Mass is normalized to m0 (m(0)=1).');
+
+lib.departure_orbit = 'DRO';
+lib.departure_params = struct( ...
+    'tau', ob.tauDRO, ...
+    'period_nd', ob.periodDRO, 'period_days', ob.periodDRO*ob.tStar/86400, ...
+    'reconstruction', ['[~,rv0] = pumpkynPie.cr3bp.getDRO(tau); ', ...
+        'rv0 = pumpkyn.cr3bp.cont_np(rv0,tau,muStar,1e-12); ', ...
+        '[t,rv] = pumpkyn.cr3bp.prop(tau,rv0,muStar); ', ...
+        'state at phase f: interp1(t,rv,mod(f,1)*t(end),''spline'')']);
+
+lib.arrival_orbit = 'Tulip';
+lib.arrival_params = struct( ...
+    'tau', ob.tauTulip, 'Np', ob.NpTulip, 'pm', ob.pmTulip, ...
+    'period_nd', ob.periodTulip, 'period_days', ob.periodTulip*ob.tStar/86400, ...
+    'reconstruction', ['[~,rvf] = pumpkyn.cr3bp.getTulip(tau,Np,pm); ', ...
+        'rvf = pumpkyn.cr3bp.cont_np(rvf,tau,muStar,1e-12); ', ...
+        '[t,rv] = pumpkyn.cr3bp.prop(tau,rvf,muStar); ', ...
+        'state at phase f: interp1(t,rv,mod(f,1)*t(end),''spline'')']);
+
+n = 0;
+entries = struct([]);
+for iD = 1:numel(R.sD)
+    for iA = 1:numel(R.sA)
+        if ~R.OKI(iD,iA), continue, end
+        n = n + 1;
+        z = R.LAMI(:,iD,iA);
+        entries(n,1).departure_phase_frac = R.sD(iD);
+        entries(n,1).departure_phase_nd   = R.sD(iD)*ob.periodDRO;
+        entries(n,1).departure_phase_days = R.sD(iD)*ob.periodDRO*ob.tStar/86400;
+        entries(n,1).arrival_phase_frac   = R.sA(iA);
+        entries(n,1).arrival_phase_nd     = R.sA(iA)*ob.periodTulip;
+        entries(n,1).arrival_phase_days   = R.sA(iA)*ob.periodTulip*ob.tStar/86400;
+        entries(n,1).lambda0              = z(1:7);
+        entries(n,1).tf_nd                = z(8);
+        entries(n,1).tf_days              = z(8)*ob.tStar/86400;
+        entries(n,1).z8                   = z;
+        entries(n,1).ms_residual          = R.RES(iD,iA);
+        entries(n,1).flight_miss_km       = R.MISSKM(iD,iA);
+    end
+end
+lib.entries = entries;
+lib.n_entries = n;
+
+lib.usage = sprintf(['%% Fly entry k of the library:\n', ...
+    'L  = load(''costate_lib_dro_tulip.mat'');  lib = L.costate_lib_dro_tulip;\n', ...
+    'mu = lib.constants.muStar;  e = lib.entries(k);\n', ...
+    '%% rebuild orbits (recipes in departure_params/arrival_params), then:\n', ...
+    'rv0 = interp1(tD, rvD, e.departure_phase_frac*tD(end), ''spline'');\n', ...
+    'rvf = interp1(tT, rvT, e.arrival_phase_frac*tT(end), ''spline'');\n', ...
+    '%% option 1 -- verify/repropagate directly:\n', ...
+    '[t,y] = pumpkyn.cr3bp.tfMinProp(e.tf_nd, [rv0(1:6),1,e.lambda0''], ...\n', ...
+    '        lib.thruster.Tmax_nd, lib.thruster.c_nd, mu);\n', ...
+    '%% option 2 -- hand to the single-shooting solver (accepts unchanged):\n', ...
+    'z = pumpkyn.cr3bp.tfMin(rv0(1:6), rvf(1:6), e.z8, ...\n', ...
+    '    lib.thruster.Tmax_nd, lib.thruster.c_nd, mu);\n']);
+
+costate_lib_dro_tulip = lib; %#ok<NASGU>
+save(outMat, 'costate_lib_dro_tulip');
+fprintf('costate_lib_dro_tulip: %d entries -> %s\n', n, outMat);
+end

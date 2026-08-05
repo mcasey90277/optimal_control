@@ -27,6 +27,8 @@ function P = thrust_ladder_library(outMat, opts)
 %              .gateKm    flown-arrival gate, km           [100]
 %              .cells     [k x 2] (iD,iA) subset           [all 12x12]
 %              .nD,.nA    torus resolution                 [12 12]
+%              .sD0,.sA0  phase-grid origins; defaults MATCH the
+%                         low-thrust library grid            [0, 0.075378]
 %              .maxIter   NLP iteration cap                [3000]
 %              .logFile   append-mode log path             [stdout]
 %
@@ -50,6 +52,11 @@ floorKm = d('floorKm', 500);
 gateKm  = d('gateKm', 100);
 nD      = d('nD', 12);
 nA      = d('nA', 12);
+% Phase-grid ORIGINS. These must match the low-thrust library exactly or the
+% two libraries sample different phase pairs and cannot be merged: that grid
+% is offset in arrival phase by the demo's max-velocity-angle anchor.
+sD0     = d('sD0', 0);
+sA0     = d('sA0', 0.075378);
 maxIter = d('maxIter', 3000);
 logFile = d('logFile', '');
 lg = @(varargin) logmsg(logFile, sprintf(varargin{:}));
@@ -70,7 +77,7 @@ rvD0 = pumpkyn.cr3bp.cont_np(rvD0, tauDRO, muStar, 1e-12);
 rvT0 = pumpkyn.cr3bp.cont_np(rvT0, tauT, muStar, 1e-12);
 [tT, rvT] = pumpkyn.cr3bp.prop(tauT, rvT0, muStar);
 
-sD = (0:nD-1)/nD;  sA = (0:nA-1)/nA;
+sD = mod(sD0 + (0:nD-1)/nD, 1);  sA = mod(sA0 + (0:nA-1)/nA, 1);
 todo = d('cells', []);
 if isempty(todo)
     [gA, gD] = meshgrid(1:nA, 1:nD);
@@ -83,7 +90,8 @@ OK = false(nD,nA,nR);  Z8 = nan(8,nD,nA,nR);
 meta = struct('muStar',muStar,'lStar',lStar,'tStar',tStar, ...
     'tauDRO',tauDRO,'NpTulip',NpT,'tauTulip',tauT,'pmTulip',pmT, ...
     'periodDRO',tD(end),'periodTulip',tT(end), ...
-    'ispS',ispS,'m0kg',m0kg,'N',N,'floorKm',floorKm,'gateKm',gateKm);
+    'ispS',ispS,'m0kg',m0kg,'N',N,'floorKm',floorKm,'gateKm',gateKm, ...
+    'sD0',sD0,'sA0',sA0);
 
 lg('THRUST LADDER: %d cells x %d rungs [%s] N, Isp=%d s, m0=%d kg, N=%d', ...
    size(todo,1), nR, num2str(rungs), ispS, m0kg, N);

@@ -91,6 +91,12 @@ end
 nR = numel(rungs);
 TF = nan(nD,nA,nR); FLYKM = TF; ACCDZ = TF; RES = TF; WALL = TF;
 OK = false(nD,nA,nR);  Z8 = nan(8,nD,nA,nR);
+% ATT counts attempts per cell, written BEFORE the cell is solved so that a
+% cell which HANGS (and is killed externally) still leaves a record. Without
+% it a hung cell has no verified rung, resume would not skip it, and a
+% batched driver would retry it forever.
+ATT = zeros(nD,nA);
+maxAtt = d('maxAtt', 2);
 % RESUME: a prior run's products are data -- reload them and skip cells that
 % already produced verified rungs (opts.resume, default true).
 if d('resume', true) && isfile(outMat)
@@ -98,9 +104,11 @@ if d('resume', true) && isfile(outMat)
     if isequal(size(Q.OK), [nD nA nR])
         TF=Q.TF; FLYKM=Q.FLYKM; ACCDZ=Q.ACCDZ; RES=Q.RES; WALL=Q.WALL;
         OK=Q.OK; Z8=Q.Z8;
+        if isfield(Q,'ATT'), ATT = Q.ATT; end
         keep = false(size(todo,1),1);
         for kq = 1:size(todo,1)
-            keep(kq) = ~any(OK(todo(kq,1), todo(kq,2), :));
+            iq = todo(kq,1);  jq = todo(kq,2);
+            keep(kq) = ~any(OK(iq,jq,:)) && ATT(iq,jq) < maxAtt;
         end
         nSkip = nnz(~keep);  todo = todo(keep,:);
     else
@@ -123,6 +131,9 @@ for kc = 1:min(size(todo,1), maxCells)
     rv0 = interp1(tD, rvD, mod(sD(iD),1)*tD(end), 'spline');
     rvf = interp1(tT, rvT, mod(sA(iA),1)*tT(end), 'spline');
     seedX = [];  seedU = [];  seedTf = [];  Tprev = [];
+    ATT(iD,iA) = ATT(iD,iA) + 1;      % record BEFORE solving (hang-proof)
+    save(outMat, 'TF','FLYKM','ACCDZ','RES','WALL','OK','Z8','ATT', ...
+         'rungs','sD','sA','meta');
     for kr = 1:nR
         TN = rungs(kr);  Tnd = ndT(TN);
         t0 = tic;
@@ -224,7 +235,7 @@ for kc = 1:min(size(todo,1), maxCells)
         seedU(4,:)   = min(max(seedU(4,:),0),1);
         seedTf = o.tf;  Tprev = TN;
         rungs_ = rungs; %#ok<NASGU>
-        save(outMat, 'TF','FLYKM','ACCDZ','RES','WALL','OK','Z8', ...
+        save(outMat, 'TF','FLYKM','ACCDZ','RES','WALL','OK','Z8','ATT', ...
              'rungs','sD','sA','meta');                        % EVERY rung
     end
     if mod(kc,10) == 0

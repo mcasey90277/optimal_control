@@ -17,7 +17,8 @@ function P = ms_refine_catalog(sweepMat, cellsMat, outMat, opts)
 %   sweepMat - sweep result .mat holding S (map, meta with orbit definition)
 %   cellsMat - per-cell products .mat holding CELLS (X, lamDef, tNodes, tf)
 %   outMat   - output .mat path (written after every cell)
-%   opts     - (optional) struct: .K segments [12], .wallSec per cell [240],
+%   opts     - (optional) struct: .Kladder segment escalation [12 24 48],
+%              .wallSec per cell [240],
 %              .cells [k x 2] subset of (iD,iA) to run [all green],
 %              .verbose [false]
 %
@@ -32,7 +33,7 @@ function P = ms_refine_catalog(sweepMat, cellsMat, outMat, opts)
 
 if nargin < 4, opts = struct(); end
 d = @(f,v) fielddef(opts, f, v);
-K       = d('K', 12);
+Kladder = d('Kladder', [12 24 48]);   % escalate segmentation until verified
 wallSec = d('wallSec', 240);
 verbose = d('verbose', false);
 
@@ -59,11 +60,11 @@ if isempty(todo)
     todo = [iiD, iiA];
 end
 
-TFI = nan(nD,nA); RES = TFI; MISSKM = TFI; ITERS = TFI; WALL = TFI;
+TFI = nan(nD,nA); RES = TFI; MISSKM = TFI; ITERS = TFI; WALL = TFI; KUSED = TFI;
 OKI = false(nD,nA);  LAMI = nan(8,nD,nA);
 sD = S.sD; sA = S.sA; meta = S.meta; %#ok<NASGU>
-fprintf('MS REFINE: %d cells, K=%d segments, %ds/cell budget\n', ...
-    size(todo,1), K, wallSec);
+fprintf('MS REFINE: %d cells, K-ladder [%s], %ds/cell budget\n', ...
+    size(todo,1), num2str(Kladder), wallSec);
 for kc = 1:size(todo,1)
     iD = todo(kc,1);  iA = todo(kc,2);
     cell_ = CELLS{iD,iA};
@@ -71,24 +72,28 @@ for kc = 1:size(todo,1)
     rv0 = interp1(tD, rvD, mod(S.sD(iD),1)*tD(end), 'spline');
     rvf = interp1(tT, rvT, mod(S.sA(iA),1)*tT(end), 'spline');
 
-    % seed trajectory: states at nodes, costates at defect rows (node-k)
-    tN   = cell_.tNodes(:)';
-    tGrid = linspace(0, cell_.tf, K+1);
-    Xg = interp1(tN, cell_.X', tGrid, 'pchip')';               % [7 x K+1]
-    Lg = interp1(tN(1:end-1), cell_.lamDef(1:7,:)', tGrid, 'pchip', 'extrap')';
-    seed = struct('tf', cell_.tf, 'tGrid', tGrid, 'Y', [Xg; Lg]);
+    % seed trajectory per ladder rung: states at nodes, costates at defect
+    % rows (node-k convention, validated at the anchor)
+    tN = cell_.tNodes(:)';
 
     t0 = tic;
     try
-        [z, info] = ms_tfmin(rv0(1:6), rvf(1:6), seed, Tmax, c, muStar, ...
-            struct('wallSec', wallSec, 'verbose', verbose));
-        [~, rvFly] = pumpkyn.cr3bp.tfMinProp(z(8), ...
-            [rv0(1:6), 1, z(1:7)'], Tmax, c, muStar);
-        missKm = norm(rvFly(end,1:3) - rvf(1:3))*ob.lStar;
-        ok = info.converged && missKm < 100;
+        for K = Kladder
+            tGrid = linspace(0, cell_.tf, K+1);
+            Xg = interp1(tN, cell_.X', tGrid, 'pchip')';
+            Lg = interp1(tN(1:end-1), cell_.lamDef(1:7,:)', tGrid, 'pchip', 'extrap')';
+            seed = struct('tf', cell_.tf, 'tGrid', tGrid, 'Y', [Xg; Lg]);
+            [z, info] = ms_tfmin(rv0(1:6), rvf(1:6), seed, Tmax, c, muStar, ...
+                struct('wallSec', wallSec, 'verbose', verbose));
+            [~, rvFly] = pumpkyn.cr3bp.tfMinProp(z(8), ...
+                [rv0(1:6), 1, z(1:7)'], Tmax, c, muStar);
+            missKm = norm(rvFly(end,1:3) - rvf(1:3))*ob.lStar;
+            ok = info.converged && missKm < 100;
+            if ok || toc(t0) > wallSec, break, end
+        end
         TFI(iD,iA) = z(8);  RES(iD,iA) = info.normR;
         MISSKM(iD,iA) = missKm;  ITERS(iD,iA) = info.iters;
-        WALL(iD,iA) = toc(t0);  OKI(iD,iA) = ok;
+        WALL(iD,iA) = toc(t0);  OKI(iD,iA) = ok;  KUSED(iD,iA) = K;
         if ok, LAMI(:,iD,iA) = z; end
         fprintf('  (%2d,%2d) tfD=%.5f tfI=%.5f  R=%.1e  fly=%.2fkm  %s (%.0fs) [%d/%d]\n', ...
             iD, iA, S.TF(iD,iA), z(8), info.normR, missKm, okstr(ok), ...
@@ -97,11 +102,11 @@ for kc = 1:size(todo,1)
         WALL(iD,iA) = toc(t0);
         fprintf('  (%2d,%2d) ERROR (%.0fs): %s\n', iD, iA, toc(t0), ME.message);
     end
-    save(outMat, 'TFI','RES','MISSKM','ITERS','WALL','OKI','LAMI', ...
+    save(outMat, 'TFI','RES','MISSKM','ITERS','WALL','OKI','LAMI','KUSED', ...
          'sD','sA','meta');                                    % EVERY cell
 end
 P = struct('TFI',TFI,'RES',RES,'MISSKM',MISSKM,'ITERS',ITERS,'WALL',WALL, ...
-           'OKI',OKI,'LAMI',LAMI,'sD',S.sD,'sA',S.sA,'meta',S.meta);
+           'OKI',OKI,'LAMI',LAMI,'KUSED',KUSED,'sD',S.sD,'sA',S.sA,'meta',S.meta);
 nOK = nnz(OKI);
 fprintf('MS REFINE DONE: %d/%d verified.', nOK, size(todo,1));
 if nOK > 0

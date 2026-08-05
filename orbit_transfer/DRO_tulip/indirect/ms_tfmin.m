@@ -41,7 +41,7 @@ function [z, info] = ms_tfmin(rv0, rvf, seed, Tmax, c, muStar, opts)
 
 if nargin < 7, opts = struct(); end
 d = @(f,v) getfieldwithdefault(opts, f, v);
-maxIter = d('maxIter', 30);
+maxIter = d('maxIter', 100);
 tolR    = d('tolR', 1e-10);
 wallSec = d('wallSec', 300);
 verbose = d('verbose', false);
@@ -57,31 +57,21 @@ Y0(1:7,1) = [rv0; 1];
 p = [Y0(8:14,1); reshape(Y0(:,2:K), 14*(K-1), 1); seed.tf];
 n = numel(p);                                  % = 14K - 6
 
+% Trust-region-dogleg (same globalization tfMin uses) on the multiple-
+% shooting system, with the analytic block Jacobian. A plain Newton +
+% backtracking loop stalls on rough seeds (measured: first step rejected on
+% 2 of 3 pilot cells); the trust region handles those steps properly.
 tStart = tic;
-bestR = inf;  bestP = p;
-normR = inf;  it = 0;
-for it = 1:maxIter
-    [R, J] = residual(p);
-    normR = norm(R, inf);
-    if normR < bestR, bestR = normR; bestP = p; end
-    if verbose
-        fprintf('   ms iter %2d  ||R||_inf = %.3e  (%.0fs)\n', it-1, normR, toc(tStart));
-    end
-    if normR < tolR || toc(tStart) > wallSec, break, end
-    dp = -J\R;
-    % backtracking line search on ||R||
-    a = 1;  ok = false;
-    for kls = 1:7
-        Rt = residual(p + a*dp);
-        if norm(Rt, inf) < normR, ok = true; break, end
-        a = a/2;
-    end
-    if ~ok, break, end                         % stalled: return best iterate
-    p = p + a*dp;
-end
-p = bestP;
-[R, ~] = residual(p);                          % refresh at best iterate
+fopts = optimoptions('fsolve', 'Display', dispmode(verbose), ...
+    'Algorithm','trust-region-dogleg', ...
+    'SpecifyObjectiveGradient', true, ...
+    'FunctionTolerance', tolR^2, 'StepTolerance', 1e-13, ...
+    'MaxIterations', maxIter, 'MaxFunctionEvaluations', 10*maxIter, ...
+    'OutputFcn', @(x,ov,st) toc(tStart) > wallSec);   % wall budget
+[p, ~, ~, ~] = fsolve(@residual, p, fopts);
+[R, ~] = residual(p);
 normR = norm(R, inf);
+it = maxIter;   % fsolve owns the count; kept for the info struct
 
 z = [p(1:7); p(end)];
 info = struct('converged', normR < tolR, 'normR', normR, 'iters', it, ...
@@ -152,6 +142,13 @@ info = struct('converged', normR < tolR, 'normR', normR, 'iters', it, ...
     else,      B = T;
     end
     end
+end
+
+% ------------------------------------------------------------------------
+function m = dispmode(verbose)
+% DISPMODE  fsolve display mode from the verbose flag.
+% INPUTS: verbose logical. OUTPUTS: m [char].
+if verbose, m = 'iter'; else, m = 'off'; end
 end
 
 % ------------------------------------------------------------------------

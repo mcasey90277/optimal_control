@@ -133,11 +133,20 @@ for kc = 1:size(todo,1)
                 vote = vote + sign(pv.'*aS);
             end
             sg = 1;  if vote < 0, sg = -1; end
-            tN = o.tNodes(:)';
+            % With Sundman off the mesh is uniform in time and the solver
+            % leaves tNodes empty -- reconstruct it.
+            if isempty(o.tNodes)
+                tN = linspace(0, o.tf, size(o.X,2));
+            else
+                tN = o.tNodes(:)';
+            end
+            % Hermite-Simpson defect multipliers belong at interval
+            % MIDPOINTS (review finding, Gemini 2026-08-04), not left nodes.
+            tMid = tN(1:end-1) + diff(tN)/2;
             for K = [12 24]
                 tG = linspace(0, o.tf, K+1);
                 Xg = interp1(tN, o.X', tG, 'pchip')';
-                Lg = interp1(tN(1:end-1), (sg*lamD)', tG, 'pchip', 'extrap')';
+                Lg = interp1(tMid, (sg*lamD)', tG, 'pchip', 'extrap')';
                 seed = struct('tf', o.tf, 'tGrid', tG, 'Y', [Xg; Lg]);
                 [z, info] = ms_tfmin(rv0(1:6), rvf(1:6), seed, Tnd, cnd, muStar, ...
                         struct('wallSec', 120));
@@ -161,10 +170,10 @@ for kc = 1:size(todo,1)
         lg('  (%2d,%2d) T=%5.1f  tf=%.5f (%.3f d)  fly=%.2fkm  acc=%.1e  %s (%.0fs)', ...
            iD, iA, TN, TF(iD,iA,kr), TF(iD,iA,kr)*tStar/86400, ...
            FLYKM(iD,iA,kr), accDz, okstr(okCell), toc(t0));
-        % next rung warm-starts from THIS rung's direct solution
-        tu = linspace(0, o.tf, N+1);
-        seedX = interp1(o.tNodes, o.X', tu, 'spline')';
-        seedU = interp1(o.tNodes, o.U', tu, 'spline')';
+        % next rung warm-starts from THIS rung's direct solution. With the
+        % uniform mesh the node grid already matches, so no resampling.
+        seedX = o.X;
+        seedU = o.U;
         seedU(1:3,:) = seedU(1:3,:) ./ max(vecnorm(seedU(1:3,:),2,1), eps);
         seedU(4,:)   = min(max(seedU(4,:),0),1);
         seedTf = o.tf;  Tprev = TN;

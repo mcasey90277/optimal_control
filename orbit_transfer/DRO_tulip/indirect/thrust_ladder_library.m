@@ -17,7 +17,9 @@ function P = thrust_ladder_library(outMat, opts)
 %   outMat - output .mat path (rewritten after every rung)
 %   opts   - (optional) struct:
 %              .rungs     thrust rung set, N, high to low
-%                         [15 12 10 7 5 3 2 1]
+%                         [15 12 10 7 5 3 2 1.5 1] -- 1.5 added
+%                         because t_f(T) steepens below 2 N, so linear
+%                         interpolation needs a tighter rung there
 %              .ispS      specific impulse, s              [1710]
 %              .m0kg      initial mass, kg                 [150]
 %              .N         collocation intervals            [400]
@@ -40,7 +42,7 @@ function P = thrust_ladder_library(outMat, opts)
 
 if nargin < 2, opts = struct(); end
 d = @(f,v) fdef(opts, f, v);
-rungs   = d('rungs', [15 12 10 7 5 3 2 1]);
+rungs   = d('rungs', [15 12 10 7 5 3 2 1.5 1]);
 ispS    = d('ispS', 1710);
 m0kg    = d('m0kg', 150);
 N       = d('N', 400);

@@ -70,11 +70,19 @@ batchSec = d('batchSec', inf);
 logFile = d('logFile', '');
 lg = @(varargin) logmsg(logFile, sprintf(varargin{:}));
 
-% --- constants and orbits (same definitions as the low-thrust library) ----
-muStar = 0.012150585609624;
-lStar  = 389703.264829278;
-tStar  = 382981.289129055;
-tauDRO = 1.0;  NpT = 7;  tauT = 5*2*pi/6;  pmT = -1;
+% --- constants and orbits -----------------------------------------------
+% Orbit and solver settings are OPTIONS, not literals, so the front door
+% (run_costate_library.m) genuinely controls them.
+muStar = d('muStar', 0.012150585609624);
+lStar  = d('lStar',  389703.264829278);
+tStar  = d('tStar',  382981.289129055);
+tauDRO = d('tauDRO', 1.0);
+NpT    = d('NpTulip', 7);
+tauT   = d('tauTulip', 5*2*pi/6);
+pmT    = d('pmTulip', -1);
+msSeg  = d('msSeg', [12 24]);      % multiple-shooting segment ladder
+msWallS= d('msWallS', 120);        % ms_tfmin budget per attempt (s)
+accTol = d('accTol', 1e-6);        % tfMin acceptance tolerance
 g0  = 9.80665*tStar^2/(1000*lStar);
 cnd = (ispS/tStar)*g0;
 ndT = @(TN) (TN/m0kg)*tStar^2/(lStar*1000);
@@ -209,20 +217,20 @@ for kc = 1:min(size(todo,1), maxCells)
             % Hermite-Simpson defect multipliers belong at interval
             % MIDPOINTS (review finding, Gemini 2026-08-04), not left nodes.
             tMid = tN(1:end-1) + diff(tN)/2;
-            for K = [12 24]
+            for K = msSeg
                 tG = linspace(0, o.tf, K+1);
                 Xg = interp1(tN, o.X', tG, 'pchip')';
                 Lg = interp1(tMid, (sg*lamD)', tG, 'pchip', 'extrap')';
                 seed = struct('tf', o.tf, 'tGrid', tG, 'Y', [Xg; Lg]);
                 [z, info] = ms_tfmin(rv0(1:6), rvf(1:6), seed, Tnd, cnd, muStar, ...
-                        struct('wallSec', 120));
+                        struct('wallSec', msWallS));
                 [~, rvFly] = pumpkyn.cr3bp.tfMinProp(z(8), ...
                         [rv0(1:6)'; 1; z(1:7)], Tnd, cnd, muStar);
                 msKm = norm(rvFly(end,1:3) - rvf(1:3))*lStar;
                 if info.converged && msKm < 100
                     evalc('zA = pumpkyn.cr3bp.tfMin(rv0(1:6), rvf(1:6), z, Tnd, cnd, muStar);');
                     accDz = norm(zA - z);
-                    if accDz < 1e-6
+                    if accDz < accTol
                         okCell = true;  Z8(:,iD,iA,kr) = z;
                         RES(iD,iA,kr) = info.normR;  TF(iD,iA,kr) = z(8);
                         FLYKM(iD,iA,kr) = msKm;

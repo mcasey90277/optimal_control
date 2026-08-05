@@ -4,6 +4,8 @@
 \usepackage{booktabs}
 \usepackage{hyperref}
 \usepackage{xcolor}
+\usepackage{tikz}
+\usetikzlibrary{shapes.geometric, arrows.meta, positioning, calc}
 \hypersetup{colorlinks=true, linkcolor=blue!60!black, urlcolor=blue!60!black}
 
 \title{The Costate-Library Pipeline:\\
@@ -45,6 +47,86 @@ hopelessly otherwise: the guess is the whole game. A \emph{costate library} ---
 converged $z$ indexed by problem parameters (here the two orbital phases;
 next, thrust and DRO period) --- turns every future solve into a lookup plus a
 seconds-long polish.
+
+
+\section{The pipeline at a glance}
+
+\begin{center}
+\begin{tikzpicture}[
+  node distance = 7mm and 9mm,
+  every node/.style = {font=\small},
+  box/.style   = {rectangle, rounded corners=2pt, draw, thick,
+                  text width=52mm, align=center, minimum height=9mm,
+                  fill=blue!4},
+  gate/.style  = {diamond, aspect=2.4, draw, thick, text width=30mm,
+                  align=center, inner sep=1pt, fill=orange!12},
+  data/.style  = {rectangle, draw, dashed, text width=42mm, align=center,
+                  minimum height=8mm, fill=gray!6, font=\footnotesize},
+  arr/.style   = {-{Stealth[length=2mm]}, thick},
+  lbl/.style   = {font=\scriptsize\itshape}
+]
+
+\node[box] (solve) {\textbf{1. DIRECT SOLVE}\\ Hermite--Simpson collocation};
+\node[data, right=of solve] (d1) {trajectory + costate trajectory\\(Hager covector mapping)};
+
+\node[gate, below=of solve] (g1) {flown control\\arrives?};
+\node[box, below=of g1] (refine) {\textbf{2. REFINE}\\ \texttt{ms\_tfmin}: multiple shooting,\\ analytic STM Jacobian};
+\node[data, right=of refine] (d2) {$\lambda_0$, $t_f$ to $\sim10^{-12}$};
+
+\node[gate, below=of refine] (g2) {\texttt{tfMin} returns\\it unchanged?};
+\node[box, below=of g2] (lib) {\textbf{3. LIBRARY ENTRY}\\ $z_8 = [\lambda_0; t_f]$ stored with\\ phases, thrust, verification};
+
+\node[box, left=14mm of refine, fill=green!6] (ladder)
+     {\textbf{THRUST LADDER}\\ anchor high, walk down;\\ each rung warm-starts the next};
+
+\node[right=6mm of g1, lbl, text width=26mm] (r1) {no $\Rightarrow$ reject\\(defect $\neq$ accuracy)};
+\node[right=6mm of g2, lbl, text width=26mm] (r2) {no $\Rightarrow$ deepen\\segmentation, retry};
+
+\draw[arr] (solve) -- (g1);
+\draw[arr] (g1) -- node[right, lbl] {yes} (refine);
+\draw[arr] (refine) -- (g2);
+\draw[arr] (g2) -- node[right, lbl] {yes} (lib);
+\draw[arr, dashed] (solve) -- (d1);
+\draw[arr, dashed] (refine) -- (d2);
+\draw[arr] (g1) -- (r1);
+\draw[arr] (g2) -- (r2);
+\draw[arr, green!50!black] (ladder.south) |- ($(lib.west)+(0,6mm)$);
+\draw[arr, green!50!black] ($(lib.west)+(0,-2mm)$) -| (ladder.north);
+
+\end{tikzpicture}
+\end{center}
+
+\noindent
+Read it as a funnel: step~1 produces candidates cheaply, and each subsequent
+gate is stricter and more expensive, so nothing costly is spent on a case that
+was never going to survive. The green loop is the thrust ladder --- a
+converged entry at one thrust becomes the seed for the next rung down, which
+is why the library is one coherent solution family rather than a patchwork of
+independent solves.
+
+\section{Running it}
+
+One front door, \texttt{run\_costate\_library.m}, carries every adjustable
+setting in a single labelled block: the two orbit definitions, the phasing
+grid and its origins, the thrust rungs, $I_{sp}$ and mass, the collocation
+mesh and altitude floor, the multiple-shooting segment ladder, and the three
+acceptance tolerances. Editing that block and running the file regenerates the
+library; nothing else needs to be touched.
+
+\begin{verbatim}
+run_costate_library('ladder')    % build the library over the thrust rungs
+run_costate_library('extend')    % continue each phase pair to lower thrust
+run_costate_library('package')   % write the shareable .mat + helper files
+run_costate_library             % all three
+\end{verbatim}
+
+For long unattended runs use \texttt{./run\_ladder\_batched.sh}, which runs
+the same front door in small batches under an operating-system timeout. This
+is not a convenience: some solver calls cannot be interrupted from inside
+MATLAB --- an integration can crawl near the lunar singularity without bound
+--- so batching converts a hang from an open-ended stall into the loss of one
+batch, after which the pipeline's own resume logic skips whatever already
+finished.
 
 \section{Step 1: Direct solve (the map-maker)}
 

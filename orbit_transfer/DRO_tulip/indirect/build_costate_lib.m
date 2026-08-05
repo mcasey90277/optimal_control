@@ -22,7 +22,8 @@ function lib = build_costate_lib(refinedMat, sweepMat, outMat)
 %                             reconstruction recipe, seed state)
 %         .arrival_orbit      'Tulip' + .arrival_params (tau, Np, pm, ...)
 %         .entries            [n x 1] struct array: departure/arrival phase
-%                             (fraction, ND time, days), lambda0 [7x1],
+%                             (fraction, ND time, days), thrust_N / isp_s /
+%                             m0_kg for THAT entry, lambda0 [7x1],
 %                             tf (ND, days), z8 = [lambda0; tf] for tfMin,
 %                             verification (ms residual, flight miss km)
 %         .usage              worked example, exact pumpkyn calls
@@ -94,6 +95,11 @@ for iD = 1:numel(R.sD)
         entries(n,1).arrival_phase_frac   = R.sA(iA);
         entries(n,1).arrival_phase_nd     = R.sA(iA)*ob.periodTulip;
         entries(n,1).arrival_phase_days   = R.sA(iA)*ob.periodTulip*ob.tStar/86400;
+        % thruster spec ON EVERY ENTRY: once a library carries a thrust
+        % axis, the top-level struct can no longer describe an entry.
+        entries(n,1).thrust_N             = S.meta.thrustN;
+        entries(n,1).isp_s                = S.meta.ispS;
+        entries(n,1).m0_kg                = S.meta.m0kg;
         entries(n,1).lambda0              = z(1:7);
         entries(n,1).tf_nd                = z(8);
         entries(n,1).tf_days              = z(8)*ob.tStar/86400;

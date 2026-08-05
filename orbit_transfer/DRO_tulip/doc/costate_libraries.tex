@@ -1,0 +1,266 @@
+\documentclass[11pt]{article}
+\usepackage[margin=1.05in]{geometry}
+\usepackage{amsmath,amssymb}
+\usepackage{booktabs}
+\usepackage{longtable}
+\usepackage{hyperref}
+\hypersetup{colorlinks=true, linkcolor=blue!60!black, urlcolor=blue!60!black}
+
+\title{The DRO\,$\rightarrow$\,Tulip Costate Libraries\\
+\large Reference for \texttt{costate\_lib\_dro\_tulip.mat} (v1) and
+\texttt{costate\_lib\_dro\_tulip\_v2.mat} (v2)}
+\author{M.~Casey \and D.~Koblick}
+\date{August 5, 2026}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+Two MATLAB libraries of converged minimum-time low-thrust transfer solutions
+between a distant retrograde orbit (DRO) and a tulip orbit in the Earth--Moon
+circular restricted three-body problem. Each entry is a \emph{root} of the
+indirect (Pontryagin) boundary-value problem --- initial costates and flight
+time --- indexed by orbital phasing and, in v2, by thrust level. Every entry
+is verified three ways, including acceptance by the production single-shooting
+solver \texttt{pumpkyn.cr3bp.tfMin}, which returns library entries unchanged.
+Version~1 holds 126 entries at a single operating point (0.07~N, $I_{sp}$
+900~s); version~2 holds 990 entries spanning nine thrust levels from 1 to
+15~N at $I_{sp}$ 1710~s.
+\end{abstract}
+
+\section{Purpose}
+
+The indirect formulation of the minimum-time transfer reduces to finding eight
+unknowns
+\begin{equation}
+z_8 \;=\; [\,\lambda_r(3);\;\lambda_v(3);\;\lambda_m;\;t_f\,]
+\end{equation}
+such that the trajectory propagated under the PMP control law satisfies
+\begin{equation}
+r(t_f) = r_f,\qquad v(t_f) = v_f,\qquad \lambda_m(t_f) = 0,\qquad H(t_f) = 0,
+\label{eq:bcs}
+\end{equation}
+the last condition being free-final-time transversality. These are precisely
+the equations \texttt{pumpkyn.cr3bp.tfMin} solves; the libraries store their
+roots.
+
+Single shooting on \eqref{eq:bcs} converges in seconds from a good guess and
+fails outright otherwise --- the guess is the whole difficulty. A costate
+library converts every future solve into a lookup plus a seconds-long polish,
+and supplies continuation anchors for neighboring cases.
+
+\section{Summary of the two libraries}
+
+\begin{center}
+\begin{tabular}{lll}
+\toprule
+ & \textbf{v1} & \textbf{v2} \\
+\midrule
+Structure name      & \texttt{costate\_lib\_dro\_tulip} & \texttt{costate\_lib\_dro\_tulip\_v2} \\
+Axes                & departure $\times$ arrival phase & departure $\times$ arrival $\times$ \textbf{thrust} \\
+Entries             & 126 & 990 \\
+Phase-pair coverage & 126 of 144 & 130 of 144 (49 with all 9 rungs) \\
+Thrust              & 0.07 N & 1, 1.5, 2, 3, 5, 7, 10, 12, 15 N \\
+$I_{sp}$ / mass     & 900 s / 150 kg & 1710 s / 150 kg \\
+Flight times        & 16.21--33.31 d & 0.269--2.560 d \\
+Lookup helper       & \texttt{costate\_lib\_nearest.m} & \texttt{costate\_lib\_pick.m} \\
+Worked example      & \texttt{costate\_lib\_example.m} & \texttt{costate\_lib\_v2\_example.m} \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\section{The two orbits}
+
+Identical in both libraries and recorded inside each file, so a recipient
+needs nothing but pumpkyn and the \texttt{.mat}.
+
+\paragraph{Departure: DRO, selected by period.} \texttt{getDRO(tau)} returns
+the distant retrograde orbit whose \emph{period} equals \texttt{tau} in
+nondimensional time. Both libraries use $\tau = 1.0$, a period of
+4.4327~days.
+
+\paragraph{Arrival: tulip.} \texttt{getTulip(tau, Np, pm)} with
+$\tau = 5\cdot 2\pi/6$, $N_p = 7$, $pm = -1$; period 23.2093~days. The tulip
+period is exactly $5/6$ of the Moon's revolution, so the seven-lobed pattern
+closes after six tulip periods.
+
+\paragraph{Phase convention.} A phase is the fraction of an orbit period past
+the reference state returned by \texttt{getDRO}/\texttt{getTulip}; entries
+store it as a fraction, in nondimensional time, and in days. Both axes wrap,
+so the domain is a torus. The arrival axis is offset by the anchor phase
+$0.075378$ in both libraries, so their cells correspond one-to-one. The grid
+is $12 \times 12 = 144$ phase pairs, spaced 8.9~hours along the DRO and
+1.93~days along the tulip.
+
+\section{Constants and thruster conversions}
+
+\begin{align}
+\mu^\ast &= 0.012150585609624, &
+l^\ast &= 389703.264829278~\text{km}, \\
+t^\ast &= 382981.289129055~\text{s}, &
+1~\text{ND time} &= 4.432654~\text{days}.
+\end{align}
+
+\texttt{tfMin} consumes nondimensional thrust and exhaust velocity:
+\begin{equation}
+T_{\max}^{\text{nd}} = \frac{T[\mathrm{N}]}{m_0[\mathrm{kg}]}\,
+\frac{(t^\ast)^2}{l^\ast \cdot 1000},
+\qquad
+c^{\text{nd}} = \frac{I_{sp}}{t^\ast}\,g_0,
+\qquad
+g_0 = \frac{9.80665\,(t^\ast)^2}{1000\,l^\ast}.
+\end{equation}
+Mass is normalized so $m(0)=1$; multiply by \texttt{m0\_kg} for kilograms.
+
+Version~1 is a single operating point (0.467~mm/s$^2$ initial acceleration,
+transfers spanning several DRO revolutions). Version~2 spans
+6.7--100~mm/s$^2$, where every transfer is \emph{sub-revolution}. The two are
+neighboring sheets rather than points on one continuum: the interval between
+0.07~N and 1~N contains several revolution-count transitions, which is why v2
+was anchored at high thrust instead of continued upward from v1.
+
+\section{Structure layout}
+
+Both files contain a single struct with fields \texttt{name},
+\texttt{description}, \texttt{created}, \texttt{provenance},
+\texttt{constants}, \texttt{thruster}, \texttt{departure\_orbit},
+\texttt{departure\_params}, \texttt{arrival\_orbit}, \texttt{arrival\_params},
+\texttt{entries}, \texttt{n\_entries}, \texttt{grid}, \texttt{usage}.
+
+\begin{center}
+\begin{tabular}{ll}
+\toprule
+\textbf{\texttt{entries(k)} field} & \textbf{Meaning} \\
+\midrule
+\texttt{departure\_phase\_frac/\_nd/\_days} & where on the DRO the transfer starts \\
+\texttt{arrival\_phase\_frac/\_nd/\_days}   & where on the tulip it ends \\
+\texttt{thrust\_N}, \texttt{isp\_s}, \texttt{m0\_kg} & the propulsion case for this entry \\
+\texttt{lambda0} $[7\times1]$ & initial costates $[\lambda_r;\lambda_v;\lambda_m]$ \\
+\texttt{tf\_nd}, \texttt{tf\_days} & minimum flight time \\
+\texttt{z8} $[8\times1]$ & $[\lambda_0; t_f]$, the \texttt{tfMin}-ready vector \\
+\texttt{ms\_residual} & multiple-shooting residual at convergence \\
+\texttt{flight\_miss\_km} & arrival error when the PMP law is flown end to end \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+The \texttt{grid} substructure repeats the same information as lookup arrays:
+phase axes, \texttt{thrust\_N} (v2), a \texttt{has\_solution} mask,
+\texttt{tf\_days}, and \texttt{entry\_index} into \texttt{entries}
+($0 =$ no solution). Arrays are $12\times12$ in v1 and $12\times12\times9$ in
+v2.
+
+\section{Production pipeline}
+
+Both libraries follow the same three steps (recorded in
+\texttt{process/COSTATE\_LIBRARY\_PIPELINE.md}):
+
+\begin{enumerate}
+\item \textbf{Direct solve.} Hermite--Simpson collocation yields a trajectory
+and a costate trajectory (Hager covector mapping of the NLP defect
+multipliers), verified by flying the solved control end to end.
+\item \textbf{Refinement.} \texttt{ms\_tfmin} --- multiple shooting with an
+analytic block Jacobian assembled from pumpkyn's own segment state-transition
+matrices --- drives the residual of \eqref{eq:bcs} to $\sim10^{-12}$.
+Collocation duals are only $\sim10^{-3}$ accurate and single shooting
+amplifies that by $\sim10^3$ over a multi-revolution arc, so this step is
+mandatory.
+\item \textbf{Acceptance.} \texttt{pumpkyn.cr3bp.tfMin} must return the entry
+essentially unchanged.
+\end{enumerate}
+
+The two differ in grid strategy. Version~1 swept the torus in two waves ---
+cold straight-line seeds opened isolated cells, then solutions flooded to
+neighbors --- because a cold solve at 0.07~N is expensive and often fails.
+Version~2 anchored each phase pair at 15~N, where the transfer is nearly
+impulsive and converges cold in seconds, then walked thrust \emph{down} with
+each rung warm-started from the one above. Continuation keeps a cell on a
+single solution family; independent cold solves do not (two meshes at 15~N
+were measured landing 50\,\% apart in $t_f$, both feasible).
+
+\section{Verification}
+
+\begin{center}
+\begin{tabular}{lll}
+\toprule
+\textbf{Check} & \textbf{v1 (126 entries)} & \textbf{v2 (990 entries)} \\
+\midrule
+Multiple-shooting residual & max $9.5\times10^{-11}$ & max $9.3\times10^{-11}$ \\
+Flown arrival miss & max $0.064$ km & max $1.5\times10^{-5}$ km \\
+\texttt{tfMin} acceptance $\lVert\Delta z\rVert$ & max $2.8\times10^{-8}$, 126/126 & max $1.2\times10^{-10}$, 990/990 \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+For v1 there is an additional cross-method check: direct and indirect flight
+times agree to a median of $2\times10^{-8}$ ND over all 126 phase pairs.
+
+\section{Coverage and known gaps}
+
+Version~1 solves 126 of 144 phase pairs; the missing 18 are dominated by the
+arrival row at phase $0.0754$, the tulip's fastest-moving point, which is hard
+to reach after four to seven revolutions.
+
+Version~2 covers 130 of 144 pairs, 49 of them with the complete ladder:
+
+\begin{center}
+\begin{tabular}{rrl}
+\toprule
+\textbf{Thrust (N)} & \textbf{Pairs} & \textbf{$t_f$ range (days)} \\
+\midrule
+15   & 109 & 0.269--0.661 \\
+12   & 128 & 0.301--0.583 \\
+10   & 128 & 0.330--0.642 \\
+7    & 121 & 0.398--0.773 \\
+5    & 125 & 0.483--0.919 \\
+3    & 119 & 0.704--1.375 \\
+2    & 106 & 0.923--1.553 \\
+1.5  &  91 & 1.122--2.054 \\
+1    &  63 & 1.546--2.560 \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+Two patterns stand out. The 15~N anchor is cold-started and therefore fails
+more often (109 pairs) than the rungs beneath it (128); a failed anchor does
+not stop the ladder, since the next rung recovers. The bottom rung is thin ---
+at 1~N only 63 pairs converge --- and filling it is the main outstanding item,
+planned as an intermediate 1.25~N rung to soften the continuation step.
+Version~2 does, however, cover phase pairs version~1 could not: the hard
+arrival row is reachable at sub-revolution thrust, confirming that its
+difficulty was many-revolution geometry rather than the endpoints themselves.
+
+\section{Usage}
+
+\begin{verbatim}
+L = load('costate_lib_dro_tulip_v2.mat');  lib = L.costate_lib_dro_tulip_v2;
+[tf_days, e, bracket] = costate_lib_pick(lib, depDays, arrDays, thrustN);
+
+% e.z8 is a converged seed at the nearest rung; tf_days is interpolated
+% linearly between the bracketing rungs. Rebuild both orbits from
+% lib.departure_params / lib.arrival_params, then either fly it:
+[t, y] = pumpkyn.cr3bp.tfMinProp(e.tf_nd, [rv0(1:6)'; 1; e.lambda0], ...
+                                 Tnd, lib.thruster.c_nd, mu);
+% ...or hand the seed to the single-shooting solver, which returns it
+% unchanged:
+z = pumpkyn.cr3bp.tfMin(rv0(1:6), rvf(1:6), e.z8, Tnd, lib.thruster.c_nd, mu);
+\end{verbatim}
+
+Version~1 is identical with \texttt{costate\_lib\_nearest(lib, depDays,
+arrDays)}, which takes no thrust argument. For a thrust or phase between grid
+values, the returned \texttt{z8} is a warm start a fraction of a step away and
+\texttt{tfMin} closes the difference in about a second. To browse rather than
+query, \texttt{lib.grid.has\_solution} gives availability,
+\texttt{lib.grid.tf\_days} the flight times, and
+\texttt{lib.grid.entry\_index} maps a grid cell to its row in
+\texttt{lib.entries}.
+
+\section{Growth axes}
+
+The pipeline is parameterized, so further libraries are reruns rather than
+rebuilds: \emph{DRO period} (the selector $\tau$ \emph{is} the period, so each
+$\tau$ yields one sheet, and together they form the $\Delta V$--period--phasing
+map), \emph{thrust} (further rungs or ranges, as v2 demonstrates), and
+\emph{orbit pair} (endpoints from any of pumpkyn's catalogued families).
+
+\end{document}

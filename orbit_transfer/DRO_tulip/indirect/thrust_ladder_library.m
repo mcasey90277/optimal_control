@@ -87,14 +87,32 @@ end
 nR = numel(rungs);
 TF = nan(nD,nA,nR); FLYKM = TF; ACCDZ = TF; RES = TF; WALL = TF;
 OK = false(nD,nA,nR);  Z8 = nan(8,nD,nA,nR);
+% RESUME: a prior run's products are data -- reload them and skip cells that
+% already produced verified rungs (opts.resume, default true).
+if d('resume', true) && isfile(outMat)
+    Q = load(outMat);
+    if isequal(size(Q.OK), [nD nA nR])
+        TF=Q.TF; FLYKM=Q.FLYKM; ACCDZ=Q.ACCDZ; RES=Q.RES; WALL=Q.WALL;
+        OK=Q.OK; Z8=Q.Z8;
+        keep = false(size(todo,1),1);
+        for kq = 1:size(todo,1)
+            keep(kq) = ~any(OK(todo(kq,1), todo(kq,2), :));
+        end
+        nSkip = nnz(~keep);  todo = todo(keep,:);
+    else
+        nSkip = 0;
+    end
+else
+    nSkip = 0;
+end
 meta = struct('muStar',muStar,'lStar',lStar,'tStar',tStar, ...
     'tauDRO',tauDRO,'NpTulip',NpT,'tauTulip',tauT,'pmTulip',pmT, ...
     'periodDRO',tD(end),'periodTulip',tT(end), ...
     'ispS',ispS,'m0kg',m0kg,'N',N,'floorKm',floorKm,'gateKm',gateKm, ...
     'sD0',sD0,'sA0',sA0);
 
-lg('THRUST LADDER: %d cells x %d rungs [%s] N, Isp=%d s, m0=%d kg, N=%d', ...
-   size(todo,1), nR, num2str(rungs), ispS, m0kg, N);
+lg('THRUST LADDER: %d cells x %d rungs [%s] N, Isp=%d s, m0=%d kg, N=%d (%d cells resumed/skipped)', ...
+   size(todo,1), nR, num2str(rungs), ispS, m0kg, N, nSkip);
 tAll = tic;
 for kc = 1:size(todo,1)
     iD = todo(kc,1);  iA = todo(kc,2);
@@ -121,6 +139,20 @@ for kc = 1:size(todo,1)
         if ~(o.success && o.maxDefect < 1e-9)
             lg('  (%2d,%2d) T=%5.1f  direct fail (defect %.1e) -- ladder stops', ...
                iD, iA, TN, o.maxDefect);
+            break
+        end
+        % CHEAP SANITY PRE-CHECK. A solve can meet the discrete defect test
+        % to 1e-9 and still be physically wild; integrating such a trajectory
+        % crawls near the lunar singularity WITHOUT BOUND (measured: one cell
+        % pinned the run 16 min at 100% CPU). Screen on the discrete nodes --
+        % altitude floor and a plausible time of flight -- before ever
+        % handing the solution to an integrator.
+        rMoonKm = 1737.4;
+        dMoon = vecnorm(o.X(1:3,:) - [1-muStar;0;0], 2, 1)*lStar - rMoonKm;
+        tfBad = ~isempty(seedTf) && (o.tf > 3*seedTf || o.tf < 0.3*seedTf);
+        if min(dMoon) < 0.5*floorKm || tfBad
+            lg('  (%2d,%2d) T=%5.1f  rejected pre-flight (minAlt %.0f km, tf %.4f) -- ladder stops', ...
+               iD, iA, TN, min(dMoon), o.tf);
             break
         end
         C = certify_dro_mintime(o, struct('muStar',muStar,'lStar',lStar,'tStar',tStar), ...

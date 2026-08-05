@@ -1,0 +1,125 @@
+\documentclass[11pt]{article}
+\usepackage[margin=1.1in]{geometry}
+\usepackage{amsmath,amssymb}
+\usepackage{booktabs}
+\usepackage{hyperref}
+\usepackage{xcolor}
+\hypersetup{colorlinks=true, linkcolor=blue!60!black, urlcolor=blue!60!black}
+
+\title{The Costate-Library Pipeline:\\
+Direct Solve $\rightarrow$ Multiple-Shooting Refinement $\rightarrow$
+Single-Shooting Acceptance}
+\author{M.~Casey \and D.~Koblick}
+\date{August 4, 2026}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+We record the production process behind our first costate library: a catalog
+of converged minimum-time low-thrust transfer solutions
+$(\lambda_0, t_f)$ over the (departure phase $\times$ arrival phase) torus of
+a DRO$\to$tulip transfer in the Earth--Moon CR3BP. The pipeline has three
+steps: (1) a \emph{direct} collocation sweep maps the torus and manufactures
+full state and costate trajectories; (2) a \emph{multiple-shooting} solver
+refines each cell's costates to machine accuracy, seeded by those saved
+trajectories; (3) every refined entry is fed to the production single-shooting
+solver (\texttt{pumpkyn.cr3bp.tfMin}) and must be accepted unchanged. The
+first library holds 126 verified entries; every one passes the acceptance
+gate in seconds, and direct and indirect transfer times agree to a median of
+$2\times10^{-8}$ time units across the torus.
+\end{abstract}
+
+\section{The problem and why a library}
+
+The indirect (PMP) formulation of the minimum-time low-thrust transfer reduces
+to a root-finding problem in the eight unknowns $z = [\lambda_0;\, t_f]$:
+seven initial costates and the flight time, driven to satisfy
+\begin{equation}
+r(t_f) = r_f, \qquad v(t_f) = v_f, \qquad \lambda_m(t_f) = 0, \qquad
+H(t_f) = 0 .
+\label{eq:bcs}
+\end{equation}
+Single shooting solves \eqref{eq:bcs} quickly \emph{from a good guess} and
+hopelessly otherwise: the guess is the whole game. A \emph{costate library} ---
+converged $z$ indexed by problem parameters (here the two orbital phases;
+next, thrust and DRO period) --- turns every future solve into a lookup plus a
+seconds-long polish.
+
+\section{Step 1: Direct solve (the map-maker)}
+
+A Hermite--Simpson collocation transcription ($N=800$ intervals, Sundman-type
+mesh, lifted $t_f$, 500-km lunar altitude floor) is swept over the
+$12\times12$ phasing torus by a two-wave strategy: wave~0 attempts a sparse
+sublattice from cold seeds; wave~1 floods warm starts from each solved cell to
+its torus neighbors. A cell is counted \emph{green} only under continuous
+verification: the solved control history is re-integrated end-to-end at high
+accuracy and must arrive within map tolerance (100~km, 10~m/s). Solver
+success certificates alone never color a cell.
+
+Every completed cell immediately saves its full data product: states,
+controls, time grid, $t_f$, the \emph{sign-resolved costate trajectory} at all
+nodes (from the Hager covector mapping of the NLP defect multipliers), the
+phase pair, endpoint states, and the orbit and thruster definitions. Saving
+costate \emph{trajectories}, not just initial values, is what makes Step~2
+possible.
+
+\section{Step 2: Refinement with \texttt{ms\_tfmin} (the precision-maker)}
+
+Collocation duals are locally faithful but only ${\sim}10^{-3}$ accurate.
+Measured over all 132 green cells, flying the PMP control law from the
+collocation-derived $\lambda_0$ misses the target by 12{,}700--558{,}000~km
+(median 47{,}500~km): single shooting amplifies seed error by roughly
+$10^{3}$ over a 4-ND spiral, so \texttt{tfMin} from such seeds effectively
+cold-starts and can grind for hours. The cheap diagnostic --- one PMP flight
+per cell --- should always be run \emph{before} spending solver time.
+
+\texttt{ms\_tfmin} therefore solves \eqref{eq:bcs} by \emph{multiple
+shooting}: the arc is split into $K$ segments whose junction states are
+additional unknowns, which caps the error amplification per segment. All
+dynamics, Hamiltonian evaluations, and segment state-transition matrices come
+from \texttt{pumpkyn} calls (\texttt{tfMinProp} in its 210-state STM mode;
+\texttt{tfMinEoM} for $H$ and $\partial H/\partial y$), so conventions match
+\texttt{tfMin} exactly and the converged $z$ is interchangeable with a
+\texttt{tfMin} solution. The nonlinear system is solved by trust-region
+dogleg with the analytic block Jacobian; a \emph{$K$-ladder} ($12 \to 24 \to
+48$) escalates segmentation for rough seeds. Junction seeds come from the
+cell's saved state and costate trajectories. Guard rails: per-cell wall
+budgets, iterate sanity bounds, and try/catch around segment propagation
+(an unguarded wild iterate can collapse the integrator).
+
+First-library outcome: 126 of 132 cells converged to residuals
+${\sim}10^{-11}$ with end-to-end PMP flight misses of meters, at 1--25
+seconds per cell.
+
+\section{Step 3: Acceptance against \texttt{pumpkyn.cr3bp.tfMin}}
+
+Each refined entry is handed to the production single-shooting solver as its
+initial guess. The acceptance criterion is strict: \texttt{tfMin} must return
+the seed essentially unchanged ($\lVert \Delta z\rVert < 10^{-6}$) within
+seconds --- proof that the entry is a root of the production solver's own
+residual, usable downstream with zero adaptation.
+
+First-library outcome: \textbf{126/126 passed}, maximum $\lVert \Delta
+z\rVert = 2.8\times10^{-8}$, maximum wall time 2.4~s. As an independent
+cross-check of both methods, the direct and indirect transfer times agree to
+a median of $2\times10^{-8}$ ND time units over the torus.
+
+\section{Packaging and growth axes}
+
+The shipped artifact is a self-describing MATLAB structure
+(\texttt{costate\_lib\_dro\_tulip.mat}): both orbit definitions with
+reconstruction recipes (the DRO is selected \emph{by period} --- the $\tau$
+of \texttt{getDRO} is the orbit period in ND time), CR3BP constants, thruster
+parameters, per-entry phases in fraction/ND/days, $\lambda_0$, $t_f$, the
+\texttt{tfMin}-ready \texttt{z8}, verification metrics, and an availability
+grid over the torus. Companion files: a nearest-entry picker and a worked
+example script.
+
+The pipeline generalizes along three axes: \emph{thrust} (continuation ladder
+per cell toward the 1--15~N regime, with multiple-shooting fallback across
+revolution-count transitions), \emph{DRO period} (one library sheet per
+$\tau$; together the $\Delta V$--period--phasing map), and \emph{orbit pair}
+(endpoints from any of pumpkyn's catalogued families).
+
+\end{document}

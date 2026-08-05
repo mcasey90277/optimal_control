@@ -62,6 +62,11 @@ maxIter = d('maxIter', 3000);
 % driver run the ladder in small batches under an OS-level timeout, so a
 % hang inside an uninterruptible solver call costs minutes, not the run.
 maxCells = d('maxCells', inf);
+% batchSec: stop cleanly BETWEEN cells once this much wall time has passed.
+% The driver's OS timeout is then only a backstop for genuine hangs, so a
+% cell is never killed merely for being last in a batch (which would count an
+% unfair failed attempt against it).
+batchSec = d('batchSec', inf);
 logFile = d('logFile', '');
 lg = @(varargin) logmsg(logFile, sprintf(varargin{:}));
 
@@ -127,6 +132,10 @@ lg('THRUST LADDER: %d cells x %d rungs [%s] N, Isp=%d s, m0=%d kg, N=%d (%d cell
    size(todo,1), nR, num2str(rungs), ispS, m0kg, N, nSkip);
 tAll = tic;
 for kc = 1:min(size(todo,1), maxCells)
+    if toc(tAll) > batchSec
+        lg('  [batch wall budget reached -- exiting cleanly after %d cells]', kc-1);
+        break
+    end
     iD = todo(kc,1);  iA = todo(kc,2);
     rv0 = interp1(tD, rvD, mod(sD(iD),1)*tD(end), 'spline');
     rvf = interp1(tT, rvT, mod(sA(iA),1)*tT(end), 'spline');

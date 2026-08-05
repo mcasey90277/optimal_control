@@ -58,6 +58,10 @@ nA      = d('nA', 12);
 sD0     = d('sD0', 0);
 sA0     = d('sA0', 0.075378);
 maxIter = d('maxIter', 3000);
+% maxCells: process at most this many fresh cells then return. Lets a shell
+% driver run the ladder in small batches under an OS-level timeout, so a
+% hang inside an uninterruptible solver call costs minutes, not the run.
+maxCells = d('maxCells', inf);
 logFile = d('logFile', '');
 lg = @(varargin) logmsg(logFile, sprintf(varargin{:}));
 
@@ -114,7 +118,7 @@ meta = struct('muStar',muStar,'lStar',lStar,'tStar',tStar, ...
 lg('THRUST LADDER: %d cells x %d rungs [%s] N, Isp=%d s, m0=%d kg, N=%d (%d cells resumed/skipped)', ...
    size(todo,1), nR, num2str(rungs), ispS, m0kg, N, nSkip);
 tAll = tic;
-for kc = 1:size(todo,1)
+for kc = 1:min(size(todo,1), maxCells)
     iD = todo(kc,1);  iA = todo(kc,2);
     rv0 = interp1(tD, rvD, mod(sD(iD),1)*tD(end), 'spline');
     rvf = interp1(tT, rvT, mod(sA(iA),1)*tT(end), 'spline');

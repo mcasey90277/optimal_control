@@ -84,15 +84,31 @@ info = struct('converged', normR < tolR, 'normR', normR, 'iters', it, ...
     % INPUTS:  p [n x 1] unknown vector.  OUTPUTS: R [n x 1]; J [n x n].
     lam0 = p(1:7);
     tf   = p(end);
-    Yj   = [ [rv0; 1; lam0], reshape(p(8:end-1), 14, K-1) ];   % junctions
     needJ = nargout > 1;
+    % Iterate sanity guard: a wild trust-region iterate can drive a segment
+    % propagation into integrator collapse (step size -> eps, unbounded
+    % memory -- observed killing the process). Reject it with a large
+    % residual instead of propagating it.
+    if ~all(isfinite(p)) || tf < 0.3*seed.tf || tf > 3*seed.tf ...
+            || max(abs(p)) > 1e5
+        R = 1e3*ones(n,1);
+        if needJ, J = eye(n); end
+        return
+    end
+    Yj   = [ [rv0; 1; lam0], reshape(p(8:end-1), 14, K-1) ];   % junctions
     R = zeros(n,1);
     if needJ, J = zeros(n,n); end
     PHI0 = eye(14);
     for k = 1:K
         y0k = Yj(:,k);
         if needJ, y0k = [y0k; PHI0(:)]; end
-        [~, Yout] = pumpkyn.cr3bp.tfMinProp(dsg(k)*tf, y0k, Tmax, c, muStar);
+        try
+            [~, Yout] = pumpkyn.cr3bp.tfMinProp(dsg(k)*tf, y0k, Tmax, c, muStar);
+        catch
+            R = 1e3*ones(n,1);
+            if needJ, J = eye(n); end
+            return
+        end
         yh = Yout(end,1:14)';
         if needJ, PHIk = reshape(Yout(end,15:210), 14, 14); end
         [Fh, Hh, dHdy] = pumpkyn.cr3bp.tfMinEoM(0, [yh; PHI0(:)], Tmax, c, muStar);

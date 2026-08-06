@@ -57,6 +57,10 @@ for pass in $(seq 1 200); do
   wait $MPID 2>/dev/null
   kill $WPID 2>/dev/null
 
+  if tail -30 "$HERE/direct/results/${STAGE}_matlab.log" 2>/dev/null | grep -qa "^Error in\|^{Error\|Unrecognized"; then
+    echo "=== MATLAB ERROR in pass $pass -- ABORTING (see ${STAGE}_matlab.log)" >> "$LOG"
+    break
+  fi
   after=$(count_ok); after=${after:-0}
   echo "  [pass $pass: $after log lines total]" >> "$LOG"
   # explicit completion marker beats inference

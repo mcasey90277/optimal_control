@@ -261,7 +261,7 @@ for kc = 1:min(size(todo,1), maxCells)
     end
 end
 P = struct('TF',TF,'FLYKM',FLYKM,'ACCDZ',ACCDZ,'RES',RES,'WALL',WALL, ...
-           'OK',OK,'Z8',Z8,'rungs',rungs,'sD',sD,'sA',sA,'meta',meta);
+           'OK',OK,'Z8',Z8,'ATT',ATT,'rungs',rungs,'sD',sD,'sA',sA,'meta',meta);
 lg('THRUST LADDER DONE: %d verified entries over %d cells, %.1f min', ...
    nnz(OK), size(todo,1), toc(tAll)/60);
 end

@@ -1,4 +1,4 @@
-function [tf_days, e, bracket] = costate_lib_pick(lib, depPhaseDays, arrPhaseDays, thrustN)
+function [tf_days, e, bracket] = costate_lib_pick(lib, depPhaseDays, arrPhaseDays, thrustN, warnFlag)
 %% Purpose:
 %
 %   Selects a costate-library entry by orbit phasing AND thrust level, and
@@ -41,6 +41,20 @@ function [tf_days, e, bracket] = costate_lib_pick(lib, depPhaseDays, arrPhaseDay
 %                                                   nominally within the
 %                                                   library's rung range
 %
+%  warnFlag                 logical                 true (default): print a
+%                                                   WARNING whenever what is
+%                                                   RETURNED differs from
+%                                                   what was REQUESTED --
+%                                                   off-grid phases snapped
+%                                                   to the nearest cell, an
+%                                                   unsolved (red/grey) cell
+%                                                   answered by the nearest
+%                                                   SOLVED pair, or a thrust
+%                                                   served from a different
+%                                                   rung. The message states
+%                                                   the phase pair actually
+%                                                   delivered.
+%
 %% Outputs:
 %
 %  tf_days                  double                  Minimum flight time at
@@ -80,6 +94,8 @@ if nargin == 0
    return;
 end
 
+if ~exist('warnFlag','var'), warnFlag = true; end
+
 %% Locate the phase pair on the torus:
       Pd = lib.departure_params.period_days;
       Pa = lib.arrival_params.period_days;
@@ -92,13 +108,37 @@ end
    [~,iD] = min(dd);
    [~,iA] = min(da);
 
+%% Off-grid snap? Report how far the returned cell is from the request:
+      Pd = lib.departure_params.period_days;     %#ok<NASGU> (already set)
+   dSnap = min(abs(sDg(iD)-fd), 1-abs(sDg(iD)-fd)) * lib.departure_params.period_days;
+   aSnap = min(abs(sAg(iA)-fa), 1-abs(sAg(iA)-fa)) * lib.arrival_params.period_days;
+if warnFlag && (dSnap > 1e-6 || aSnap > 1e-6)
+    fprintf(['WARNING (costate_lib_pick): requested phases (dep %.4f d, arr %.4f d) are OFF-GRID;\n', ...
+             '  returning the nearest grid pair (dep %.4f d, arr %.4f d) -- %.2f h and %.2f h away.\n'], ...
+        depPhaseDays, arrPhaseDays, ...
+        sDg(iD)*lib.departure_params.period_days, sAg(iA)*lib.arrival_params.period_days, ...
+        24*dSnap, 24*aSnap);
+end
+
 %% Which rungs have a solution at this phase pair:
     rung = lib.grid.thrust_N;
      hav = squeeze(lib.grid.has_solution(iD,iA,:))';
 if ~any(hav)
-    error('costate_lib_pick:noSolution', ...
-          'No library entry at departure %.3f d / arrival %.3f d.', ...
-          depPhaseDays, arrPhaseDays);
+    % this grid pair is red/grey everywhere: answer from the nearest pair
+    % that IS solved somewhere, and say so loudly
+    [okD, okA] = find(any(lib.grid.has_solution,3));
+    dd2 = min(abs(sDg(okD)'-fd),1-abs(sDg(okD)'-fd)).^2 ...
+        + min(abs(sAg(okA)'-fa),1-abs(sAg(okA)'-fa)).^2;
+    [~, kb] = min(dd2);
+    iD = okD(kb);  iA = okA(kb);
+    hav = squeeze(lib.grid.has_solution(iD,iA,:))';
+    if warnFlag
+        fprintf(['WARNING (costate_lib_pick): the requested phase pair has NO SOLUTION in this\n', ...
+                 '  library (unsolved cell). You are getting the nearest SOLVED pair instead:\n', ...
+                 '  dep %.4f d, arr %.4f d.\n'], ...
+            sDg(iD)*lib.departure_params.period_days, ...
+            sAg(iA)*lib.arrival_params.period_days);
+    end
 end
    rAvail = rung(hav);
   tfAvail = squeeze(lib.grid.tf_days(iD,iA,:))';
@@ -130,5 +170,11 @@ end
       kNear = find(rung == rAvail(kn), 1);
          ei = lib.grid.entry_index(iD,iA,kNear);
           e = lib.entries(ei);
+if warnFlag && abs(e.thrust_N - thrustN) > 1e-9
+    fprintf(['WARNING (costate_lib_pick): no stored rung at %.3f N for this pair;\n', ...
+             '  the returned SEED is the %.2f N entry (t_f there %.4f d). The interpolated\n', ...
+             '  flight time above still refers to your requested thrust.\n'], ...
+        thrustN, e.thrust_N, e.tf_days);
+end
 
 end

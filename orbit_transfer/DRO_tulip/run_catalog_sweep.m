@@ -126,11 +126,13 @@ case 'all'
             if toc(tAll) > batchSec, allDone = false; break, end
             P = thrust_ladder_library([sheetName(tau,Np) '.mat'], ...
                 mkOpts(tau, Np, maxCells, max(0, batchSec - toc(tAll))));
-            % a sheet is open while any cell is neither finished nor retired
+            % a sheet is open only while the ENGINE would still revisit a
+            % cell: no verified rung yet AND attempts remaining. (A partial
+            % ladder counts as finished -- the engine never revisits it.)
             open_ = false;
             for iD = 1:nD
                 for iA = 1:nA
-                    if ~P.OK(iD,iA,end) && P.ATT(iD,iA) < 2, open_ = true; end
+                    if ~any(P.OK(iD,iA,:)) && P.ATT(iD,iA) < 2, open_ = true; end
                 end
             end
             if open_, allDone = false; end

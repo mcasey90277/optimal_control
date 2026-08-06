@@ -21,17 +21,27 @@ KILL_AFTER=$(( BSEC + 140 ))          # clean exit + MATLAB startup + grace
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
 MATLAB=/Applications/MATLAB_R2025b.app/bin/matlab
-LOG="$HERE/direct/results/${STAGE}_progress.txt"
+if [ "$STAGE" = "catalog" ]; then
+  LOG="$HERE/direct/results/catalog/combined_progress.txt"
+  mkdir -p "$HERE/direct/results/catalog"
+  ln -sf /dev/null "$LOG" 2>/dev/null; rm -f "$LOG"
+  count_ok() { cat "$HERE"/direct/results/catalog/ladder_*_progress.txt 2>/dev/null | grep -ac "OK ("; }
+else
+  LOG="$HERE/direct/results/${STAGE}_progress.txt"
+  count_ok() { grep -ac "OK (" "$LOG" 2>/dev/null; }
+fi
 PUMPKYN=/Users/msc/Desktop/proj7/external/pumpkynPie
 
 mkdir -p "$HERE/direct/results"
 echo "=== $STAGE run started $(date) ($CELLS cells/batch, ${BSEC}s clean, ${KILL_AFTER}s kill)" >> "$LOG"
 
 for pass in $(seq 1 200); do
-  before=$(grep -ac "OK (" "$LOG" 2>/dev/null); before=${before:-0}
+  before=$(count_ok); before=${before:-0}
 
   if [ "$STAGE" = "lowthrust" ]; then
     CMD="run_lowthrust_ladder('all', $CELLS, $BSEC);"
+  elif [ "$STAGE" = "catalog" ]; then
+    CMD="run_catalog_sweep('all', $CELLS, $BSEC);"
   else
     CMD="run_costate_library('$STAGE', $CELLS, $BSEC);"
   fi
@@ -46,7 +56,7 @@ for pass in $(seq 1 200); do
   wait $MPID 2>/dev/null
   kill $WPID 2>/dev/null
 
-  after=$(grep -ac "OK (" "$LOG" 2>/dev/null); after=${after:-0}
+  after=$(count_ok); after=${after:-0}
   echo "  [pass $pass: $after verified entries total]" >> "$LOG"
   if [ "$after" -eq "$before" ] && [ $pass -gt 2 ]; then
     echo "=== no progress in a full pass -- stopping ($after entries)" >> "$LOG"

@@ -4,12 +4,19 @@
 %   expensive transfers a costate library holds, in Delta-V, and see what
 %   distinguishes them.
 %
-%   Three questions are asked in turn:
+%   Four questions are asked in turn:
 %     1. At ONE thrust level, which phasing is cheapest and which is dearest?
 %        (This is the useful comparison: phasing alone, thrust held fixed.)
 %     2. Across the WHOLE library, what is the cheapest transfer available
 %        at any thrust?
 %     3. How does the spread between best and worst phasing vary with thrust?
+%     4. The same search ranked by FLIGHT TIME instead of Delta-V.
+%
+%   A caution worth internalizing: at a FIXED thrust the two rankings are
+%   identical. These transfers burn continuously, so dV = c*ln(1/(1-T*t_f/c))
+%   rises monotonically with t_f -- the cheapest phasing at a rung is also
+%   the fastest. The metrics separate only across thrust levels, where the
+%   quickest transfer of all is nearly the most expensive.
 %
 %   Files needed on the path:
 %     costate_lib_dro_tulip_v2.mat   the library
@@ -39,7 +46,19 @@
 fprintf('cheapest anywhere: %.4f km/s at %.2f N;  dearest: %.4f km/s at %.2f N\n\n', ...
         gMin.deltaV_kms, gMin.thrust_N, gMax.deltaV_kms, gMax.thrust_N);
 
-%% 4. How much does phasing alone matter, rung by rung?
+%% 4. Ranked by FLIGHT TIME instead -- at one rung (identical answer, as
+%   explained above) and then across the whole library (a different answer):
+[tMinRung, tMaxRung] = costate_lib_extremes(lib, thrustN, false, 'time');
+fprintf('at %.1f N, fastest phasing matches the cheapest: %d\n\n', ...
+        thrustN, isequal(tMinRung.z8, eMin.z8));
+
+[tMin, tMax] = costate_lib_extremes(lib, [], true, 'time');
+fprintf(['fastest transfer anywhere: %.3f d at %.2f N (costs %.4f km/s)\n', ...
+         'slowest transfer anywhere: %.3f d at %.2f N (costs %.4f km/s)\n\n'], ...
+        tMin.tf_days, tMin.thrust_N, tMin.deltaV_kms, ...
+        tMax.tf_days, tMax.thrust_N, tMax.deltaV_kms);
+
+%% 5. How much does phasing alone matter, rung by rung?
     rungs = lib.thruster.thrust_rungs_N;
    spread = nan(size(rungs));
     dvLo  = nan(size(rungs));

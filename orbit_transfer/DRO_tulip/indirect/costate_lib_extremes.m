@@ -1,11 +1,19 @@
-function [eMin, eMax] = costate_lib_extremes(lib, thrustN, doPlot)
+function [eMin, eMax] = costate_lib_extremes(lib, thrustN, doPlot, metric)
 %% Purpose:
 %
-%   Finds the CHEAPEST and MOST EXPENSIVE transfers in a costate library, by
-%   Delta-V, and reports the phasing of each in both nondimensional time and
-%   days. Optionally flies both and plots them side by side, so the geometric
-%   difference between a well-phased departure and a badly-phased one is
-%   visible rather than merely numerical.
+%   Finds the EXTREME transfers in a costate library -- either by Delta-V or
+%   by flight time -- and reports the phasing of each in both nondimensional
+%   time and days. Optionally flies both and plots them side by side, so the
+%   geometric difference between a well-phased departure and a badly-phased
+%   one is visible rather than merely numerical.
+%
+%   AT A FIXED THRUST THE TWO METRICS AGREE EXACTLY. These transfers burn
+%   continuously, so the final mass is m_f = 1 - T*t_f/c and
+%   dV = c*ln(1/m_f): a strictly increasing function of t_f when thrust is
+%   held fixed. The cheapest phasing at a rung is therefore also the fastest,
+%   and both metric options return the same entries. They diverge only in a
+%   whole-library search across thrust levels, where the fastest transfer
+%   (highest thrust) is nearly the most expensive one.
 %
 %   Restrict the search to one thrust rung by passing thrustN; omit it (or
 %   pass []) to search every entry in the library. Restricting is usually
@@ -32,13 +40,20 @@ function [eMin, eMax] = costate_lib_extremes(lib, thrustN, doPlot)
 %                                                   them side by side
 %                                                   (default false)
 %
+%  metric                   char                    'deltaV' (default) ranks
+%                                                   by Delta-V; 'time' ranks
+%                                                   by flight time. Same
+%                                                   answer at fixed thrust
+%                                                   (see above)
+%
 %% Outputs:
 %
 %  eMin                     struct                  Library entry with the
-%                                                   LOWEST Delta-V
+%                                                   LOWEST value of the
+%                                                   chosen metric
 %
 %  eMax                     struct                  Library entry with the
-%                                                   HIGHEST Delta-V
+%                                                   HIGHEST value
 %
 %                                                   Each carries phases
 %                                                   (frac/nd/days), thrust,
@@ -54,15 +69,21 @@ if nargin == 0
    %Demo: extremes at the 5 N rung, with the side-by-side plot:
        L = load('costate_lib_dro_tulip_v2.mat');
      lib = L.costate_lib_dro_tulip_v2;
-[eMin,eMax] = costate_lib_extremes(lib, 5, true);
+[eMin,eMax] = costate_lib_extremes(lib, 5, true, 'deltaV');
      return;
 end
 if ~exist('thrustN','var'), thrustN = []; end
 if ~exist('doPlot','var'),  doPlot  = false; end
+if ~exist('metric','var'),  metric  = 'deltaV'; end
 
-%% Select the population to search:
+%% Select the population and the quantity being ranked:
       dv = [lib.entries.deltaV_kms];
       tN = [lib.entries.thrust_N];
+if strncmpi(metric, 't', 1)
+     rank = [lib.entries.tf_days];   mName = 'flight time';  mUnit = 'days';
+else
+     rank = dv;                      mName = 'Delta-V';      mUnit = 'km/s';
+end
      sel = true(size(dv));
 if ~isempty(thrustN)
      sel = abs(tN - thrustN) < 1e-9;
@@ -73,20 +94,22 @@ if ~isempty(thrustN)
     end
 end
      idx = find(sel);
-[~, kLo] = min(dv(idx));
-[~, kHi] = max(dv(idx));
+[~, kLo] = min(rank(idx));
+[~, kHi] = max(rank(idx));
     eMin = lib.entries(idx(kLo));
     eMax = lib.entries(idx(kHi));
 
 %% Report:
 if isempty(thrustN)
-    fprintf('\nDelta-V extremes over the whole library (%d entries):\n', numel(idx));
+    fprintf('\n%s extremes over the whole library (%d entries):\n', ...
+            mName, numel(idx));
 else
-    fprintf('\nDelta-V extremes at %.2f N (%d entries):\n', thrustN, numel(idx));
+    fprintf('\n%s extremes at %.2f N (%d entries):\n', mName, thrustN, numel(idx));
 end
 report('MINIMUM', eMin, lib);
 report('MAXIMUM', eMax, lib);
-fprintf('  ratio max/min = %.2f\n\n', eMax.deltaV_kms/eMin.deltaV_kms);
+fprintf('  ratio max/min = %.2f (%s, %s)\n\n', ...
+        rank(idx(kHi))/rank(idx(kLo)), mName, mUnit);
 
 if ~doPlot, return, end
 
@@ -102,7 +125,11 @@ if ~doPlot, return, end
 [tT,rvT] = pumpkyn.cr3bp.prop(tauT, rvT0, mu);
 
 figure('Color','w','Position',[60 60 1200 560]);
-ttl = {'MINIMUM \DeltaV', 'MAXIMUM \DeltaV'};
+if strncmpi(metric,'t',1)
+    ttl = {'MINIMUM flight time', 'MAXIMUM flight time'};
+else
+    ttl = {'MINIMUM \DeltaV', 'MAXIMUM \DeltaV'};
+end
 for kp = 1:2
     if kp == 1, e = eMin; else, e = eMax; end
     rv0 = interp1(tD, rvD, e.departure_phase_frac*tD(end), 'spline');
@@ -119,9 +146,9 @@ for kp = 1:2
     plot3(rvf(1), rvf(2), rvf(3), '.r', 'MarkerSize', 18);
     axis equal; grid on; view(-35, 25);
     xlabel('x [ND]'); ylabel('y [ND]'); zlabel('z [ND]');
-    title({sprintf('%s:  %.4f km/s', ttl{kp}, e.deltaV_kms), ...
-           sprintf('%.2f N,  t_f = %.3f d,  %.2f kg propellant', ...
-                   e.thrust_N, e.tf_days, e.propellant_kg), ...
+    title({sprintf('%s', ttl{kp}), ...
+           sprintf('\\DeltaV = %.4f km/s,  t_f = %.3f d,  %.2f N,  %.2f kg prop', ...
+                   e.deltaV_kms, e.tf_days, e.thrust_N, e.propellant_kg), ...
            sprintf('depart %.3f d,  arrive %.3f d', ...
                    e.departure_phase_days, e.arrival_phase_days)});
     if kp == 1

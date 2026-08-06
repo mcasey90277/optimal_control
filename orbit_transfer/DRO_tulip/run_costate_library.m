@@ -49,6 +49,9 @@ function run_costate_library(stage, maxCellsIn, batchSecIn)
 %                                                             library
 %                                                   'extend'  continue to
 %                                                             lower thrust
+%                                                   'densify' fill per-rung
+%                                                             gaps among
+%                                                             solving pairs
 %                                                   'package' write the
 %                                                             shareable .mat
 %                                                   'all'     all three
@@ -144,6 +147,15 @@ if any(strcmpi(stage, {'ladder','all'}))
             nD*nA, numel(thrustRungs));
     ladderOpts.logFile = fullfile(resDir,'ladder_progress.txt');
     thrust_ladder_library(ladderFile, ladderOpts);
+end
+
+%% Densify: fill per-rung gaps among pairs that solve somewhere:
+if any(strcmpi(stage, {'densify'}))
+    fprintf('\n=== DENSIFY: per-rung gaps in the %g-%g N band ===\n', ...
+            min(thrustRungs), max(thrustRungs));
+    densify_ladder(ladderFile, struct('gateKm',gateKm, 'accTol',accTol, ...
+        'msWallS',msWallS, 'maxCells',maxCells, 'batchSec',batchSec, ...
+        'logFile',fullfile(resDir,'densify_progress.txt')));
 end
 
 %% Optional: continue the ladder to lower thrust:

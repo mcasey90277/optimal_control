@@ -120,12 +120,27 @@ case 'pilot'
 
 case 'all'
     tAll = tic;
+    allDone = true;
     for tau = tauDROList
         for Np = NpList
-            if toc(tAll) > batchSec, return, end
-            thrust_ladder_library([sheetName(tau,Np) '.mat'], ...
+            if toc(tAll) > batchSec, allDone = false; break, end
+            P = thrust_ladder_library([sheetName(tau,Np) '.mat'], ...
                 mkOpts(tau, Np, maxCells, max(0, batchSec - toc(tAll))));
+            % a sheet is open while any cell is neither finished nor retired
+            open_ = false;
+            for iD = 1:nD
+                for iA = 1:nA
+                    if ~P.OK(iD,iA,end) && P.ATT(iD,iA) < 2, open_ = true; end
+                end
+            end
+            if open_, allDone = false; end
         end
+        if toc(tAll) > batchSec, allDone = false; break, end
+    end
+    if allDone
+        fid = fopen(fullfile(catDir,'combined_progress.txt'),'a');
+        fprintf(fid, 'CATALOG ALL SHEETS COMPLETE
+');  fclose(fid);
     end
 
 case 'report'

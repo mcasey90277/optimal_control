@@ -124,7 +124,8 @@ else
     bracket = struct('thrust_N',[lo hi], 'tf_days',[tfLo tfHi]);
 end
 
-%% Nearest available rung supplies the seed:
+%% Nearest available rung supplies the seed (its entry carries deltaV_kms,
+%  m_final_kg and propellant_kg for that rung):
     [~,kn] = min(abs(rAvail - thrustN));
       kNear = find(rung == rAvail(kn), 1);
          ei = lib.grid.entry_index(iD,iA,kNear);

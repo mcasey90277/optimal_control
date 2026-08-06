@@ -20,8 +20,9 @@ function lib = build_costate_lib_v2(ladderMat, outMat)
 %         .arrival_orbit    'Tulip' + .arrival_params
 %         .entries          [n x 1]: departure/arrival phase (frac, ND, days),
 %                           thrust_N, isp_s, m0_kg, lambda0 [7x1], tf_nd,
-%                           tf_days, z8 [8x1] (tfMin-ready), ms_residual,
-%                           flight_miss_km
+%                           tf_days, deltaV_kms, m_final_kg,
+%                           propellant_kg, z8 [8x1] (tfMin-ready),
+%                           ms_residual, flight_miss_km
 %         .grid             has_solution / tf_days / entry_index
 %                           [nD x nA x nRung], phase axes, rung axis
 %         .usage            worked example
@@ -55,6 +56,7 @@ lib.constants = struct('muStar', ob.muStar, 'lStar_km', ob.lStar, ...
     'tStar_s', ob.tStar, 'nd_time_to_days', ob.tStar/86400);
 
 g0 = 9.80665*ob.tStar^2/(1000*ob.lStar);
+cnd = (ob.ispS/ob.tStar)*g0;
 lib.thruster = struct('isp_s', ob.ispS, 'm0_kg', ob.m0kg, ...
     'thrust_rungs_N', Q.rungs, ...
     'c_nd', (ob.ispS/ob.tStar)*g0, ...
@@ -83,6 +85,7 @@ lib.arrival_params = struct('tau', ob.tauTulip, 'Np', ob.NpTulip, ...
 
 entries = struct([]);
 idx = zeros(nD,nA,nR);
+dvGrid = nan(nD,nA,nR);
 n = 0;
 for iD = 1:nD
     for iA = 1:nA
@@ -102,10 +105,21 @@ for iD = 1:nD
             entries(n,1).lambda0              = z(1:7);
             entries(n,1).tf_nd                = z(8);
             entries(n,1).tf_days              = z(8)*ob.tStar/86400;
+            % Minimum-time transfers are ALL-BURN (throttle == 1 throughout,
+            % verified against propagation to every printed digit), so the
+            % final mass and Delta-V follow exactly from thrust, c and t_f:
+            %   m_f  = 1 - Tmax_nd * t_f / c_nd        (mass normalized)
+            %   dV   = c_nd * ln(1/m_f)                (ND velocity)
+            Tnd = (Q.rungs(kr)/ob.m0kg)*ob.tStar^2/(ob.lStar*1000);
+            mf  = 1 - Tnd*z(8)/cnd;
+            entries(n,1).deltaV_kms           = cnd*log(1/mf)*ob.lStar/ob.tStar;
+            entries(n,1).m_final_kg           = mf*ob.m0kg;
+            entries(n,1).propellant_kg        = (1-mf)*ob.m0kg;
             entries(n,1).z8                   = z;
             entries(n,1).ms_residual          = Q.RES(iD,iA,kr);
             entries(n,1).flight_miss_km       = Q.FLYKM(iD,iA,kr);
             idx(iD,iA,kr) = n;
+            dvGrid(iD,iA,kr) = entries(n,1).deltaV_kms;
         end
     end
 end
@@ -120,6 +134,7 @@ lib.grid = struct( ...
     'thrust_N',             Q.rungs(:)', ...
     'has_solution',         Q.OK, ...
     'tf_days',              Q.TF*ob.tStar/86400, ...
+    'deltaV_kms',           dvGrid, ...
     'entry_index',          idx, ...
     'note', ['has_solution(i,j,k): departure phase i, arrival phase j, ', ...
              'thrust rung k. entry_index(i,j,k) is the row of lib.entries ', ...

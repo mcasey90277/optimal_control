@@ -103,6 +103,14 @@ for iD = 1:numel(R.sD)
         entries(n,1).lambda0              = z(1:7);
         entries(n,1).tf_nd                = z(8);
         entries(n,1).tf_days              = z(8)*ob.tStar/86400;
+        % all-burn minimum time: m_f and Delta-V follow exactly from
+        % thrust, exhaust velocity and t_f (see build_costate_lib_v2)
+        TndE = (S.meta.thrustN/S.meta.m0kg)*ob.tStar^2/(ob.lStar*1000);
+        cndE = (S.meta.ispS/ob.tStar)*(9.80665*ob.tStar^2/(1000*ob.lStar));
+        mfE  = 1 - TndE*z(8)/cndE;
+        entries(n,1).deltaV_kms           = cndE*log(1/mfE)*ob.lStar/ob.tStar;
+        entries(n,1).m_final_kg           = mfE*S.meta.m0kg;
+        entries(n,1).propellant_kg        = (1-mfE)*S.meta.m0kg;
         entries(n,1).z8                   = z;
         entries(n,1).ms_residual          = R.RES(iD,iA);
         entries(n,1).flight_miss_km       = R.MISSKM(iD,iA);

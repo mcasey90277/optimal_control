@@ -37,9 +37,9 @@ fprintf('library: %d entries, thrust rungs [%s] N, Isp %d s, m0 %d kg\n', ...
         lib.thruster.isp_s, lib.thruster.m0_kg);
 
 %% 2. Choose phasing (DAYS) and thrust (N):
- depDays = 1.0;      %departure: days past the DRO reference point
- arrDays = 10.0;     %arrival:   days past the tulip reference point
- thrustN = 4.0;      %anywhere within the library's rung range
+ depDays = 20.0;      %departure: days past the DRO reference point
+ arrDays = 4.0;     %arrival:   days past the tulip reference point
+ thrustN = 1.0;      %anywhere within the library's rung range
 
 [tf_days, e, bracket] = costate_lib_pick(lib, depDays, arrDays, thrustN);
 
@@ -93,17 +93,30 @@ title(sprintf('DRO \\rightarrow tulip minimum time, %.1f N, t_f = %.3f days', ..
       e.thrust_N, e.tf_days));
 legend('transfer', 'DRO', 'tulip', 'depart', 'arrive');
 
-%% 7. The availability map: which phase pairs solve at this thrust:
+%% 7. The phasing torus at this thrust, with the selected point starred:
+%
+%   Both phases wrap, so the space of (departure, arrival) choices is a
+%   torus. Two views of the same map are drawn -- the flat unwrap and the
+%   genuine 3-D torus, which is rotatable (drag it with the mouse):
+%
+%     GREEN  the library holds a verified entry at this thrust
+%     RED    the pair solves at some other thrust, but not this one
+%     GREY   the pair has no entry at any thrust
+%     YELLOW STAR  the phase pair selected above
+%
       kr = find(lib.grid.thrust_N == e.thrust_N, 1);
-fprintf('at %.1f N, %d of %d phase pairs have solutions\n', ...
+fprintf('at %.2f N, %d of %d phase pairs have solutions\n', ...
         e.thrust_N, nnz(lib.grid.has_solution(:,:,kr)), ...
         numel(lib.grid.departure_phase_frac)*numel(lib.grid.arrival_phase_frac));
 
+plot_costate_torus(lib, e.thrust_N, depDays, arrDays);
+
+%% 8. ...and the flight-time surface at this thrust, for contrast:
 figure('Color','w');
 imagesc(lib.grid.arrival_phase_days, lib.grid.departure_phase_days, ...
         lib.grid.tf_days(:,:,kr));
 set(gca,'YDir','normal');  colorbar;  axis square
 xlabel('arrival phase along the tulip [days]');
 ylabel('departure phase along the DRO [days]');
-title(sprintf('minimum flight time [days] at %.1f N (white = no solution)', ...
+title(sprintf('minimum flight time [days] at %.2f N (white = no solution)', ...
       e.thrust_N));

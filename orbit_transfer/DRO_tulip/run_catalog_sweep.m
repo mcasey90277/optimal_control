@@ -139,8 +139,7 @@ case 'all'
     end
     if allDone
         fid = fopen(fullfile(catDir,'combined_progress.txt'),'a');
-        fprintf(fid, 'CATALOG ALL SHEETS COMPLETE
-');  fclose(fid);
+        fprintf(fid, 'CATALOG ALL SHEETS COMPLETE\n');  fclose(fid);
     end
 
 case 'report'

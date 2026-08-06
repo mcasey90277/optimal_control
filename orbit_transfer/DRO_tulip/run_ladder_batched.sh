@@ -30,9 +30,14 @@ echo "=== $STAGE run started $(date) ($CELLS cells/batch, ${BSEC}s clean, ${KILL
 for pass in $(seq 1 200); do
   before=$(grep -ac "OK (" "$LOG" 2>/dev/null); before=${before:-0}
 
+  if [ "$STAGE" = "lowthrust" ]; then
+    CMD="run_lowthrust_ladder('all', $CELLS, $BSEC);"
+  else
+    CMD="run_costate_library('$STAGE', $CELLS, $BSEC);"
+  fi
   $MATLAB -batch "here=pwd; cd('$PUMPKYN'); startup(); cd(here); \
                   addpath('$HERE'); \
-                  run_costate_library('$STAGE', $CELLS, $BSEC);" \
+                  $CMD" \
           >> "$HERE/direct/results/${STAGE}_matlab.log" 2>&1 &
   MPID=$!
   ( sleep $KILL_AFTER; kill -9 $MPID 2>/dev/null && \

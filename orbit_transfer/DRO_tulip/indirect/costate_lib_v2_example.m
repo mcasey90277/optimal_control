@@ -37,9 +37,9 @@ fprintf('library: %d entries, thrust rungs [%s] N, Isp %d s, m0 %d kg\n', ...
         lib.thruster.isp_s, lib.thruster.m0_kg);
 
 %% 2. Choose phasing (DAYS) and thrust (N):
- depDays = 20.0;      %departure: days past the DRO reference point
- arrDays = 4.0;     %arrival:   days past the tulip reference point
- thrustN = 1.0;      %anywhere within the library's rung range
+ depDays = 24.0;      %departure: days past the DRO reference point
+ arrDays = 5;     %arrival:   days past the tulip reference point
+ thrustN = 7;      %anywhere within the library's rung range
 
 [tf_days, e, bracket] = costate_lib_pick(lib, depDays, arrDays, thrustN);
 

@@ -501,9 +501,13 @@ function test_viz()
         ['the intermediate frame holds %d track points against the final ' ...
          'frame''s %d; the track is not growing.'],nPtsM,nPtsF);
 
-%% The MARKERS ride a shell 0.2 per cent above the sphere, because a marker
-%% drawn exactly on the surface is bisected by the depth buffer and renders as
-%% a half-disc. The shell is recomputed here rather than read back, in the same
+%% The MARKERS ride a shell 2 per cent above the sphere, because a marker drawn
+%% exactly on the surface is bisected by the depth buffer and renders as a
+%% half-disc. Two per cent, not the 0.2 that looks sufficient: the marker is a
+%% screen-aligned quad spanning of order 115 km of ground, and 0.2 per cent is
+%% only 12.8 km of lift, which was measured to change the rendered ring not at
+%% all (41 lit pixels at shell 1.000 and 41 at 1.002; 58 and a closed annulus
+%% at 1.02). Do not tighten it back. The shell is recomputed here rather than read back, in the same
 %% form the function documents -- max(plotted radius, 1.02 rE), radial only --
 %% so a shell applied to the wrong quantity, or applied to the TRACK, fails:
               rMkW = max(rPlt,1.02.*c.rE);

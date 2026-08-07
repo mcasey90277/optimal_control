@@ -208,8 +208,11 @@ function mv = globeMovie(traj,veh,env,opts)
 %  limb, and the marker floors mean a very small frame carries relatively
 %  larger markers than the sweep assumed, so a marker near the limb of a very
 %  small frame can still come out clipped. Measured residual: at 480 x 320 the
-%  launch ring 55 deg off centre is still cut. That is the known edge of this
-%  fix, not an unnoticed one.
+%  launch ring 55 deg off centre is still cut, and it is cut at the DEFAULT
+%  1280 x 720 as well once the spin has carried it far enough towards the limb
+%  -- it is visible in the final frame of the default render. The residual is
+%  not confined to the largest or the smallest frame size. That is the known
+%  edge of this fix, not an unnoticed one.
 %
 %  The launch marker is additionally drawn hollow and larger than the vehicle,
 %  so at t = 0, when the two are the same point, the picture is a white dot

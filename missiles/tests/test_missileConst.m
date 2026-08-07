@@ -4,6 +4,14 @@ function test_missileConst()
 %  Verify the constants struct exposes every field the library depends on,
 %  with values in SI and of the right order of magnitude.
 %
+%% Inputs:
+%
+%  none
+%
+%% Outputs:
+%
+%  none                                         Throws on any failed assertion
+%
 %% Revision History:
 %  Michael Casey                                                08/06/2026
 %  Copyright 2026 Coorbital, Inc.
@@ -25,6 +33,8 @@ function test_missileConst()
     assert(abs(c.rho0 - 1.225)          < 1e-3,  'rho0 out of range');
     assert(c.Hscale > 6000 && c.Hscale < 9000,   'Hscale out of range');
     assert(abs(c.gamAir - 1.4)          < 1e-6,  'gamAir out of range');
+    assert(abs(c.T0   - 250)            < 1e-9,  'T0 out of range');
+    assert(abs(c.Rair - 287.053)        < 1e-3,  'Rair out of range');
 
 %% Surface gravity from muE and rE agrees with g0 to better than 0.5 percent:
               gSurf = c.muE/c.rE^2;

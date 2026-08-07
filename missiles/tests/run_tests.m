@@ -24,7 +24,16 @@ function run_tests()
               here = fileparts(mfilename('fullpath'));
               root = fullfile(here,'..');
     addpath(root);
-    addpath(fullfile(root,'HGV'));
+
+%% Vehicle folders are added only once they exist, so the suite stays quiet
+%% while the library is still being built out:
+           vehDirs = {'HGV','BM','ICBM'};
+    for k = 1:numel(vehDirs)
+              vDir = fullfile(root,vehDirs{k});
+        if isfolder(vDir)
+            addpath(vDir);
+        end
+    end
 
 %% Discover the test files:
              files = dir(fullfile(here,'test_*.m'));

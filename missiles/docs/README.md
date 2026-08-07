@@ -32,6 +32,20 @@ fenced `%% USER PARAMETERS:` block at the top; nothing below that block should
 need editing. Called with an output — `traj = run_glide;` — it returns the
 trajectory struct; called bare it prints the summary and returns nothing.
 
+It also takes one optional argument, a struct of overrides for named
+USER PARAMETERS entries, in the block's own human units:
+
+```matlab
+traj = run_glide(struct('psiEntry',135,'latEntry',25,'showPlots',false));
+```
+
+Every entry in the block is overridable and nothing else is — a misspelt name
+raises rather than silently leaving the shipped value in place. This exists so
+an automated test or a batch sweep can drive the script at more than one
+operating point without editing it; `tests/test_runGlide.m` is the reason it
+was added, and the throughput requirement in `DESIGN.md` §1 is where it goes
+next. For a routine interactive run, ignore it and edit the block.
+
 Headless, which is how it was verified:
 
 ```bash
@@ -65,14 +79,26 @@ file, and raises `missiles:testsFailed` at the end if any failed, so `-batch`
 returns a non-zero exit code. Current state:
 
 ```
-  PASS  test_allenEggers      PASS  test_greatCircle
-  PASS  test_constLD          PASS  test_missileConst
-  PASS  test_equilibriumGlide PASS  test_phaseRun
+  PASS  test_allenEggers      PASS  test_missileConst
+  PASS  test_constLD          PASS  test_phaseRun
+  PASS  test_equilibriumGlide PASS  test_runGlide
   PASS  test_expAtmos         PASS  test_sphereGrav
   PASS  test_glide3DOF
+  PASS  test_greatCircle
 
-9 passed, 0 failed
+10 passed, 0 failed
 ```
+
+Nine of the ten test one library function apiece. `test_runGlide` is the odd
+one out and the important one: it tests the **composition** — `HGV/run_glide.m`
+end to end, including the unit conversion, the great-circle call site, the peak
+search, the termination diagnosis, and the printed summary, which it parses
+rather than recomputes. It also guards the deliberate duplication between
+`vehicle_hgv` and `vehicleDefaults`. It runs two propagations: the shipped
+due-east configuration, and a south-east one, because the shipped geometry is
+provably blind to a lat/lon transposition at the `greatCircle` call site (with
+the entry point at the origin the central angle is symmetric in the terminal
+latitude and longitude, so the swap changes the summary by nothing at all).
 
 ### Self-demos
 
@@ -139,7 +165,7 @@ Everything reusable lives in one `+coorbital` package. Vehicle folders hold
 | `+coorbital/+guide/` | `prescribed.m` |
 | `+coorbital/+prop/` | `phaseRun.m`, `eventAltitude.m` |
 | `HGV/` | `run_glide.m`, `vehicle_hgv.m` |
-| `tests/` | `run_tests.m` plus nine `test_*.m` |
+| `tests/` | `run_tests.m` plus ten `test_*.m` |
 | `docs/` | this file, `DESIGN.md`, `LESSONS_LEARNED.md`, the plan, reviews |
 
 ### What each piece is for
@@ -152,6 +178,9 @@ fields known to be wrong.
 
 **`util/vehicleDefaults`** returns mass, `Sref`, `CL`, `LD`, `noseRadius`. All
 five are **PLACEHOLDER** open-literature values for a generic lifting body.
+`noseRadius` is not read by anything: it is carried for the deferred
+Sutton–Graves heating rate, and the file says so at the point of definition so
+it is not mistaken for dead code.
 `HGV/vehicle_hgv.m` starts from these and overrides — currently to the same
 numbers, deliberately, so that real values have exactly one home when they
 arrive. There is no `CD` field anywhere: `constLD` derives `CD = CL/LD`, so drag
@@ -252,6 +281,13 @@ rad/s, exactly `-gLat*sin(psi)/(V*cos(gamma))`. The plumbing is live.
 3. Write `tests/test_j2Grav.m`. It must assert at least one **absolute** number
    that a wrong J2 would change — the equatorial-minus-polar surface gravity
    difference, say — not merely that `gLat` is nonzero.
+3a. **Fly it on a NON-EASTWARD heading.** A due-east arc sets `cos(psi) = 0`,
+   which zeroes the `gLat*cos(psi)` projections in `Vdot` and `gammadot` and
+   leaves two of the three `gLat` terms in `glide3DOF` completely unexercised —
+   the trajectory test would pass with either of them wrong, or missing. The
+   shipped `run_glide` configuration is due east, so this cannot be inherited
+   from it; override the heading. `tests/test_runGlide.m` flies a south-east
+   case for exactly this reason and shows the pattern.
 4. Change one line in the entry script:
 
    ```matlab

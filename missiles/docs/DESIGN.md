@@ -2,6 +2,21 @@
 
 *Coorbital, Inc. — 2026-08-06*
 
+> ## ⚠ READ THIS FIRST — this document is a pre-implementation spec
+>
+> Everything below §0 was written **before** the code existed and has **not**
+> been revised to match it. Fifteen specific statements in it are now false:
+> files that were never written, tolerances that were relaxed or replaced,
+> validation checks that were delivered as something else. Taking any of it as
+> a description of the shipped library will mislead you.
+>
+> **`README.md` is the authority on delivered behaviour.** This file is kept
+> unedited as the record of what was *intended*, which is worth having — the
+> gap between the two is the most interesting thing in the repo.
+>
+> Every known discrepancy is listed in **[§10 As built — 2026-08-06](#10-as-built--2026-08-06)**
+> at the end. Read that section alongside any part of the spec you rely on.
+
 Design for a MATLAB library that generates boost / glide / descent trajectories for
 hypersonic glide vehicles, with ballistic and ICBM variants sharing the same core.
 Written to be read before the implementation plan; the math derivations live in
@@ -261,3 +276,83 @@ survived contact with working code. `LESSONS_LEARNED.md` starts on day one.
 - **Vehicle parameters.** No representative HGV mass, reference area, or L/D has been
   chosen. Phase 1 uses plausible open-literature values, flagged as placeholders in
   `vehicle_hgv.m` until real numbers are supplied.
+
+---
+
+## 10. As built — 2026-08-06
+
+**Everything above this line is the pre-implementation spec, unedited.** This
+section is the correction list, written after the first milestone shipped. It
+does not revise the spec; it says where the spec and the code disagree and
+which one won. `README.md` is the authority on delivered behaviour — where this
+section and `README.md` differ, `README.md` is right and this section is stale.
+
+Each entry was checked against the code on 2026-08-06, not carried over from a
+review note.
+
+### 10.1 Files the spec names that do not exist
+
+| Spec says | As built |
+|---|---|
+| §0 preamble: "the math derivations live in `hgv_dynamics_note.tex` and the interface detail in `software_design.tex`" | **Neither file exists.** Both were deferred on purpose — see §8, which correctly says they are written *after* the interfaces survive contact with working code. The preamble states them as though they already do. The EOM sources are cited inline in `+coorbital/+eom/glide3DOF.m` instead. |
+| §2 tree: `boost3DOF.m`, `ballistic3DOF.m` | Not delivered. Boost and ballistic are out of scope for this milestone. |
+| §2 tree: `eventApogee.m`, `eventBurnout.m` | Not delivered. `eventAltitude.m` is the only event function. |
+| §2 tree: `+viz/` with `trajPlot.m`, `groundTrack.m`, `profilePlot.m` | **No `+viz` package at all.** `run_glide` carries three inline `figure` blocks. |
+| §2 tree: `+util/stateConvert.m` | Not delivered — see §10.3. |
+| §2 tree: `BM/` (`run_ballistic.m`, `vehicle_bm.m`) and `ICBM/` (`run_icbm.m`, `vehicle_icbm.m`) | Neither folder exists. `HGV/` is the only vehicle folder. `tests/run_tests.m` already looks for `BM` and `ICBM` on the path and skips them silently, so the suite is ready for them. |
+
+### 10.2 Files that exist and the spec's tree omits
+
+The `+util/` line of the §2 tree reads `stateConvert.m vehicleDefaults.m`. As
+built, `+util/` contains **`missileConst.m`**, **`vehicleDefaults.m`** and
+**`greatCircle.m`** — and no `stateConvert.m`. The two additions are not
+incidental:
+
+- `missileConst.m` is the single source of truth for every physical constant,
+  and `test_missileConst` is the load-bearing test of the whole suite. See the
+  "structural blind spot" section of `README.md` for why: an analytic reference
+  computed from the same constants as the model cannot detect a wrong constant.
+- `greatCircle.m` is the haversine central angle, used for ground range.
+
+### 10.3 Statements about behaviour that are false
+
+| Spec says | As built |
+|---|---|
+| §2: "Boost lives in the common library from the first commit because all three vehicle classes use it." | **Boost is out of scope for this milestone**, so it lives nowhere. The reasoning still holds for when it arrives. |
+| §2.2: "Phases may use different EOM and different state definitions; `stateConvert` handles the mapping at each junction" | `stateConvert` **does not exist**. `phaseRun` passes the 6-state vector straight through from one phase to the next, because every Phase 1 phase shares the same glide state. The junction states *are* recorded, as specified, so the Phase 2 linkage-constraint plan is unaffected. A boost phase carrying mass in a Cartesian state is what will force `stateConvert` to be written. |
+| §4: "Derived quantities reported but not integrated: Mach, dynamic pressure, load factor, and stagnation-point heating rate (Sutton–Graves)." | Mach, dynamic pressure and load factor are computed and reported by `run_glide`. **Heating is not computed anywhere** — there is no Sutton–Graves code in the library. `vehicleDefaults` carries a `noseRadius` field for it, and now says at the point of definition that it is a placeholder for deferred work rather than dead code. |
+| §7: "`if nargin == 0` self-demo in every library function" | Eight of the ten library functions have one. **`missileConst` and `vehicleDefaults` do not**, and deliberately: both are pure constant returns whose entire content is visible in the header, so a demo would print back what the reader is already looking at. This is a ruled exception, not an oversight. |
+| §7: "Every function carries a `%% References:` block when its math has a source — Vinh for the glide EOM, Allen–Eggers for the entry solution, **Sutton–Graves for heating**." | The first two are delivered. There is no Sutton–Graves block because there is no heating code. |
+| §6 build order, item 1: "`getConst` wrapper" | **`missileConst` is deliberately not a wrapper around pumpkyn's `getConst`.** `getConst` has no `muE`, no Earth radius, and two fields known to be wrong (`deg2ArcSec`, `c`). Wrapping it would have made the library's single source of truth depend on a struct that cannot supply its two most important members. `missileConst` is standalone and cites WGS-84 and US-76 directly. |
+
+### 10.4 The validation table (§5) as delivered
+
+Every row moved. The delivered budgets and the reasoning behind each are in the
+"Validated results" table of `README.md`, which carries the measured numbers;
+this is only the spec-to-code mapping.
+
+| §5 row | Spec tolerance | As built |
+|---|---|---|
+| Equilibrium glide `V(h)` | 1 % over the glide | **3 %**, measured 1.51 %. The 1 % figure did not survive contact with a real arc: an open-loop constant-alpha glide phugoids about the equilibrium curve, and the quasi-steady assumption gives way at the low, slow end. 3 % is roughly twice the measured departure and still well below the 11.52 % a 20 % lift error produces. |
+| Allen–Eggers ballistic entry: "peak deceleration **and its altitude**" | 2 % | Split into three delivered checks, none of them at 2 %. **(a)** Peak deceleration, budget **one-sided `0 < rel < 12 %`**, measured +10.50 % and +9.20 %. Not two-sided: the closed form drops gravity and freezes the flight path angle, and both neglected effects can only *raise* the peak, so a simulated peak *below* the analytic value means too much drag rather than a better approximation. **(b)** Peak *location*, budget **6 %** — and compared **in density**, not in altitude as the spec row implies, because the same discrepancy reads as 4.85 % and 4.36 % in density but 6.55 % and 1.52 % in altitude, so an altitude budget would mean different things at different ballistic coefficients. The spec gave the location no budget of its own. **(c)** A check the spec does not contain at all: **β-independence**, budget 3 %, an eightfold change in ballistic coefficient must move the peak by less than 3 % while moving its altitude by kilometres. That independence is Allen–Eggers' most distinctive claim and is now exercised directly. |
+| "Zero-lift vacuum: **range and apogee** of a ballistic arc, Keplerian, 1e-6 relative" | 1e-6 | Delivered in `test_glide3DOF` as **conservation of specific energy `V²/2 − μ/r` over a 300 s lofted arc, at 1e-8** (measured 1.28e-13). **Range and apogee are never checked against a Keplerian reference.** Energy conservation is the sharper instrument for the sign and frame errors this row was meant to catch, and it needs no separate propagator to produce the reference; but it is a different claim, and anyone who wants the Keplerian range check should know it was not written. A rotating-frame Jacobi-integral analogue at the same 1e-8 was added alongside it, which the spec does not mention. |
+| "Energy bookkeeping: work done by drag vs. mechanical energy lost, 1e-8 relative" | 1e-8, integrated over an arc | Delivered as an **instantaneous identity at 1e-12**: `dV/dt` from `glide3DOF` against `−D/m − g sin(gamma)` formed independently at a single state. Tighter, and it localises a fault to the equation rather than to somewhere along a trajectory, but it is a point check and not the integrated bookkeeping the row describes. |
+| "Great-circle range, zero bank, 1e-6 relative" | 1e-6 | **Was** delivered only as a unit test of `greatCircle` itself; the *propagated* zero-bank arc was checked nowhere automated, and its range had been verified exactly once, by hand, by a reviewer. **As of 2026-08-06 this is closed**: `tests/test_runGlide.m` propagates the shipped zero-bank glide and asserts the reported range and central angle against pinned literals at 1e-4 relative, asserts the range against its own reported angle on the stated sphere, and asserts the invariance of both under moving the entry point and heading. Note the budget is 1e-4 against a *pinned measurement*, not 1e-6 against an independent closed form — spherical trigonometry gives the angle between two points, not the arc a vehicle flies, so there is no closed form to compare against here. |
+
+### 10.5 Open items (§9), as resolved
+
+| §9 item | Status |
+|---|---|
+| **Package name** — `+coorbital` or `+hyperfly` | **Resolved: `+coorbital`**, matching `proj7/pumpkyn_style/+coorbital`. |
+| **Repository** — "`missiles/` sits inside the `optimal_control` git repo, **which has no remote configured**. It is deliberately outside the `myLatex` tree, so **none of this syncs to GitHub**." | **Resolved as to location** — `missiles/` is in-repo, in `optimal_control`, outside `myLatex`. **But the stated rationale is now false, and this one matters.** `optimal_control` *does* have a remote: `origin git@github.com:mcasey90277/optimal_control.git`. Being outside `myLatex` does not keep this off GitHub. Anyone pushing this branch is publishing the library. Nothing here is sensitive today — every vehicle number is a marked open-literature placeholder — but the assumption written into the spec is wrong and should not be relied on when real parameters arrive. |
+| **Vehicle parameters** | **Still open, and the spec's text is still accurate.** Every field of `vehicleDefaults` and every override in `vehicle_hgv` is a marked PLACEHOLDER. The two files duplicate the same four values on purpose, so that real numbers have exactly one home when they arrive; `test_runGlide` now asserts they have not drifted apart. |
+
+### 10.6 One thing built that the spec did not ask for
+
+`HGV/run_glide.m` takes an optional struct of overrides for its
+`%% USER PARAMETERS:` entries. It was added so `tests/test_runGlide.m` could
+drive the entry script at a second operating point — necessary because the
+shipped due-east equatorial geometry is provably blind to a lat/lon
+transposition at the `greatCircle` call site. It also serves the batch
+throughput requirement in §1. The fenced user block remains the interface for
+a routine interactive run; see `README.md`.

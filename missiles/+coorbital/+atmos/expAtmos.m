@@ -33,7 +33,7 @@ function [rho,P,T,a] = expAtmos(h)
 
 %% Self-demo:
 if nargin == 0
-              hVec = linspace(0,120e3,400)';
+    hVec         = linspace(0,120e3,400)';
     [rhoV,~,~,~] = coorbital.atmos.expAtmos(hVec);
     figure('color',[1 1 1]);
     semilogx(rhoV,hVec./1000,'linewidth',1.5); grid on;

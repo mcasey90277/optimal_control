@@ -137,8 +137,20 @@ function test_phaseRun()
     assert(iFirst2 == iLast1 + 1, ...
         'the phase labels must change exactly once, at the boundary');
 
-            odeOne = @(t,x) coorbital.eom.glide3DOF(t,x, ...
-                            coorbital.guide.prescribed(t,x,sched),veh,env);
+%% CLOCK TRAP, closed deliberately. The reference is ONE phase spanning both
+%  of the driver's, so its solver time is the cumulative clock -- whereas the
+%  driver evaluates the schedule on each phase's own clock. Feeding
+%  coorbital.guide.prescribed the reference's time would therefore apply the
+%  WRONG control in the second half, and the resulting mismatch would read as
+%  a continuity failure. Rather than rely on the schedule happening to be
+%  constant, that is asserted and the control is then held fixed, which makes
+%  the reference independent of any time convention. Anyone extending this to
+%  a time-varying schedule must split the reference at the junction instead:
+    assert(all(sched.alpha == sched.alpha(1)) && all(sched.sigma == sched.sigma(1)), ...
+        'the one-shot reference is only valid for a constant schedule');
+            uConst = coorbital.guide.prescribed(0,[],sched);
+
+            odeOne = @(t,x) coorbital.eom.glide3DOF(t,x,uConst,veh,env);
            optsOne = odeset('RelTol',1e-12,'AbsTol',1e-12, ...
                             'Events',@(t,x) coorbital.prop.eventAltitude(t,x,5e3));
             solOne = ode89(odeOne,[0 8000],x0,optsOne);
@@ -243,6 +255,75 @@ function test_phaseRun()
           rowsShf = find(abs(trShf.t - trShf.junction(1).t) < 1e-9);
     assert(numel(rowsShf) == 1, ...
         'the shifted junction instant appears in %d rows; expected 1',numel(rowsShf));
+
+%% ---------------------------------------------------------------------
+%% THREE phases, with the shifted phase in the MIDDLE. The two-phase check
+%  above cannot defend the tspan(1) fix on its own: when the shifted phase is
+%  LAST, a corrupted time accumulator is computed but never read, because
+%  only a SUBSEQUENT phase consumes it. A middle phase is the position that
+%  bites. Descend 60 -> 40 -> 25 -> 10 km, with the middle leg given
+%  tspan = [10 4010]:
+%% ---------------------------------------------------------------------
+              ph3a = phase1;
+    ph3a.terminate = @(t,x) coorbital.prop.eventAltitude(t,x,40e3);
+        ph3a.tspan = [0 4000];
+              ph3b = ph3a;
+    ph3b.terminate = @(t,x) coorbital.prop.eventAltitude(t,x,25e3);
+        ph3b.tspan = [10 4010];
+              ph3c = ph3a;
+    ph3c.terminate = @(t,x) coorbital.prop.eventAltitude(t,x,10e3);
+        ph3c.tspan = [0 4000];
+               tr3 = coorbital.prop.phaseRun([ph3a ph3b ph3c],x0,veh,env);
+
+    assert(numel(tr3.junction) == 2,'three phases must give two junctions');
+    assert(isequal(unique(tr3.phaseIdx)',[1 2 3]),'samples must be labelled 1, 2, 3');
+    assert(all(diff(tr3.t) > 0),'time must strictly increase across both junctions');
+
+%% All three legs really ran, each stopping on its own trigger:
+    assert(abs(tr3.junction(1).x(1) - c.rE - 40e3) < 1,'leg 1 must hand over at 40 km');
+    assert(abs(tr3.junction(2).x(1) - c.rE - 25e3) < 1,'leg 2 must hand over at 25 km');
+    assert(abs(tr3.x(end,1) - c.rE - 10e3) < 1,'leg 3 must terminate at 10 km');
+
+%% Independent reference: integrate each leg standalone and measure its
+%  duration off its OWN solver clock. Nothing below touches the driver's
+%  accumulator, so the elapsed-time identity is a genuine external check:
+            optsAt = @(hs) odeset('RelTol',1e-10,'AbsTol',1e-10, ...
+                            'Events',@(t,x) coorbital.prop.eventAltitude(t,x,hs));
+              fRef = @(t,x) coorbital.eom.glide3DOF(t,x,uConst,veh,env);
+         [tR1,xR1] = ode45(fRef,[0 4000],  x0,          optsAt(40e3));
+         [tR2,xR2] = ode45(fRef,[10 4010], xR1(end,:)', optsAt(25e3));
+         [tR3,  ~] = ode45(fRef,[0 4000],  xR2(end,:)', optsAt(10e3));
+               dur = [tR1(end)-tR1(1); tR2(end)-tR2(1); tR3(end)-tR3(1)];
+            cumDur = cumsum(dur);
+
+%% Total elapsed time is the sum of the three legs' actual durations. A
+%  middle phase starting at tspan(1) = 10 must contribute its duration, not
+%  its duration plus 10:
+    assert(abs(tr3.t(end) - cumDur(3)) < 1e-6, ...
+        ['elapsed time %.6f s against %.6f s from the three measured leg ' ...
+         'durations; tspan(1) leaked into the accumulator'],tr3.t(end),cumDur(3));
+
+%% Each junction sits at the running sum of the preceding legs, and appears
+%  on exactly one row:
+           medStep = median(diff(tr3.t));
+for kj = 1:2
+    assert(abs(tr3.junction(kj).t - cumDur(kj)) < 1e-6, ...
+        'junction %d recorded at %.6f s against %.6f s measured', ...
+        kj,tr3.junction(kj).t,cumDur(kj));
+             rows3 = find(abs(tr3.t - tr3.junction(kj).t) < 1e-9);
+    assert(numel(rows3) == 1, ...
+        'junction %d appears in %d rows; expected exactly 1',kj,numel(rows3));
+
+%% ...and no anomalous jump in diff(t) at either boundary. Each gap must be
+%  an ordinary integration step, not the ~10 s a leaked tspan(1) would open:
+            iLast3 = find(tr3.phaseIdx == kj,1,'last');
+           iFirst3 = find(tr3.phaseIdx == kj+1,1,'first');
+    assert(iFirst3 == iLast3 + 1,'phase labels %d/%d must be contiguous',kj,kj+1);
+              gap3 = tr3.t(iFirst3) - tr3.t(iLast3);
+    assert(gap3 < 5*medStep, ...
+        ['boundary %d opened a %.6f s gap against a %.6f s median step; ' ...
+         'that is not an ordinary integration step'],kj,gap3,medStep);
+end
 
 %% ---------------------------------------------------------------------
 %% Solver tolerances are overridable through env, defaulting to 1e-10. A

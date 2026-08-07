@@ -16,6 +16,7 @@ that pair; this catalog is the coarse map across the orbit families.
 | `costate_catalog_pick.m` | five-coordinate lookup (DRO period, petals, dep/arr phase, thrust) with honest warnings |
 | `costate_catalog_example.m` | worked example: pick → derive → fly → tfMin → plot → period-axis view |
 | `costate_lib_describe.m` | prints the catalog's facts: phase grids (ND + days), thrusts, periods, petals, coverage per sheet, best/worst sheet |
+| `costate_catalog_extremes.m` | cheapest/dearest (or fastest/slowest) transfer under any filter (sheet, petals, thrust); side-by-side plot |
 
 Requires **pumpkyn / pumpkynPie** on the MATLAB path. The data itself is
 dependency-free.

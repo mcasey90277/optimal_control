@@ -307,7 +307,7 @@ review note.
 | §0 preamble: "the math derivations live in `hgv_dynamics_note.tex` and the interface detail in `software_design.tex`" | **Neither file exists.** Both were deferred on purpose — see §8, which correctly says they are written *after* the interfaces survive contact with working code. The preamble states them as though they already do. The EOM sources are cited inline in `+coorbital/+eom/glide3DOF.m` instead. |
 | §2 tree: `boost3DOF.m`, `ballistic3DOF.m` | Not delivered. Boost and ballistic are out of scope for this milestone. |
 | §2 tree: `eventApogee.m`, `eventBurnout.m` | Not delivered. `eventAltitude.m` is the only event function. |
-| §2 tree: `+viz/` with `trajPlot.m`, `groundTrack.m`, `profilePlot.m` | **No `+viz` package at all.** `run_glide` carries three inline `figure` blocks. |
+| §2 tree: `+viz/` with `trajPlot.m`, `groundTrack.m`, `profilePlot.m` | **Delivered 2026-08-07**, after being skipped in two milestones. `groundTrack.m` and `profilePlot.m` are as specified; `trajPlot.m` was not written and `globe3D.m` was written instead, a static 3-D Earth with the arc over it being the picture a flat lat/lon grid cannot give at intercontinental range. Two package-private helpers came with it: `private/vizParent.m`, the only place in the package allowed to call `figure()`, and `private/earthSurface.m`, shared with the globe movie so the still and the animation cannot end up rendering two different Earths. The three inline `figure` blocks in each entry script are gone. |
 | §2 tree: `+util/stateConvert.m` | Not delivered — see §10.3. |
 | §2 tree: `BM/` (`run_ballistic.m`, `vehicle_bm.m`) and `ICBM/` (`run_icbm.m`, `vehicle_icbm.m`) | Neither folder exists. `HGV/` is the only vehicle folder. `tests/run_tests.m` already looks for `BM` and `ICBM` on the path and skips them silently, so the suite is ready for them. |
 
@@ -392,10 +392,11 @@ Every entry was checked against the code on 2026-08-07.
 | §10.2: "`+util/` contains `missileConst.m`, `vehicleDefaults.m` and `greatCircle.m`" | Add **`boosterDefaults.m`**. Still no `stateConvert.m`. |
 | §10.3: "§7: '`if nargin == 0` self-demo in every library function' — **Eight of the ten** library functions have one. **`missileConst` and `vehicleDefaults` do not**… This is a ruled exception, not an oversight." | **Both counts have moved and there is now a THIRD exception.** Counted against the code on 2026-08-07: **17 library functions under `+coorbital/`, 14 of them with a self-demo, and three ruled exceptions — `missileConst`, `vehicleDefaults` and now `boosterDefaults`.** The reasoning is unchanged and now covers all three: each is a pure constant return whose entire content is visible in its header, so a demo would print back what the reader is already looking at. `README.md` ("Conventions") states this correctly; §10's "eight of ten, two exceptions" was the true count on 2026-08-06 and is left standing as that dated record, not corrected in place. |
 
-Unchanged from §10 and still true: there is no `+viz/` package, no
+Unchanged from §10 and still true: there is no
 `hgv_dynamics_note.tex` or `software_design.tex`, no `ICBM/` folder, no
 Sutton–Graves heating anywhere, and `missileConst` is still deliberately not a
-wrapper around pumpkyn's `getConst`.
+wrapper around pumpkyn's `getConst`. **No longer true as of 2026-08-07: the
+`+viz/` package now exists** — see the corrected row in §10.1.
 
 ### 11.2 The design change: `stateConvert` was replaced, not deferred
 
@@ -460,7 +461,7 @@ Nothing here forecloses it; it simply was not needed for mass.
 | §2.1 lists three model families — atmosphere, gravity, aerodynamics | There are now **four**. Propulsion is `[T,mdot] = f(t,P,veh)`, taking ambient **pressure**, not altitude, because the back-pressure debit is a pressure term and passing `P` keeps propulsion independent of which atmosphere is installed. Read only by `boost3DOF`; `env.prop` is absent from unpowered runs and `glide3DOF` ignores it if present. |
 | §2.2's phase struct has four fields: `eom`, `guide`, `terminate`, `tspan` | A fifth, optional, was added: **`link`**, a handle `xNext = link(xEnd)` applied to a phase's terminal state to form the next phase's initial state. Absent or `[]` is the identity (`[]` being how a MATLAB struct array mixes linked and unlinked phases). Applied **before** the junction is recorded, so `traj.junction(k).x` is the far side of a staging jump. |
 | §4: control is `u = [alpha, sigma]`, and §7 implies guidance is schedule evaluation | Still `[alpha, sigma]`, but `guide/pitchProgram` is the first law that **reads the state**: it interpolates a commanded pitch *attitude* and returns `alpha = theta(t) - gamma`, taking `gamma` from `x(5)`. The `u = f(t,x,sched)` signature that §2.2's `prescribed` already had is what made this a drop-in. |
-| §6 build order, item 7: "`boost3DOF` with a prescribed pitch program; `BM/run_ballistic.m`" and item 8: "Terminal/descent phase; full boost → glide → descent chain in one entry script" | **Both delivered**, in that order, and the chain script is `HGV/run_boost_glide.m`. Item 6 (`+viz`) was skipped; it sat between them in the build order and was not a prerequisite for either. |
+| §6 build order, item 7: "`boost3DOF` with a prescribed pitch program; `BM/run_ballistic.m`" and item 8: "Terminal/descent phase; full boost → glide → descent chain in one entry script" | **Both delivered**, in that order, and the chain script is `HGV/run_boost_glide.m`. Item 6 (`+viz`) was skipped at the time; it sat between them in the build order and was not a prerequisite for either. It was picked up on 2026-08-07 and the entry scripts were retrofitted onto it, their headline numbers unmoved. |
 | §1 capability table, "Terminal: prescribed CL and bank" | Delivered as **prescribed bank only**. `constLD` ignores `alpha`, so the descent phase is flown by rolling to a large bank angle — 75° in the shipped block, leaving `cos(75°) = 0.2588` of the lift supporting the vehicle. Commanding `CL` directly awaits an alpha-dependent aero model, at which point the existing `descAlpha` entry becomes live with no code change. |
 
 ### 11.4 One thing built that the spec did not ask for

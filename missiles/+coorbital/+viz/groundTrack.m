@@ -44,6 +44,12 @@ function hFig = groundTrack(traj,veh,env,opts)
 %                                                         marked when given
 %                                               PhaseName cellstr, one name per
 %                                                         phase, for the legend
+%                                               StartName char, legend text for
+%                                                         the first sample;
+%                                                         default 'launch'
+%                                               EndName   char, legend text for
+%                                                         the last sample;
+%                                                         default 'impact'
 %                                               Title     char, axes title
 %                                               Visible   'on' (default) or
 %                                                         'off'; applies only
@@ -65,6 +71,14 @@ function hFig = groundTrack(traj,veh,env,opts)
 %  of the wrap and not something the vehicle did. The axis limits follow the
 %  data, so the grid is still a latitude/longitude grid; it is just not always
 %  centred on the prime meridian.
+%
+%  THE END POINTS ARE NAMED BY THE CALLER. They default to 'launch' and
+%  'impact' because two of the three shipped entry scripts fly from a pad to
+%  the ground, but HGV/run_glide begins at an entry interface and ends at a
+%  terminal altitude, and calling either of those a launch or an impact would
+%  be wrong. The MARKER TAGS stay launchMarker and impactMarker whatever the
+%  legend says, because a tag is a programmatic handle and renaming it with
+%  the label would break every caller that looks one up.
 %
 %  PHASE SEGMENTS AND THE JUNCTION SAMPLE. coorbital.prop.phaseRun records the
 %  sample at a phase boundary ONCE and labels it with the OUTGOING phase, so
@@ -110,11 +124,13 @@ end
               opts = struct();
     end
     assert(isstruct(opts),'opts must be a struct of options.');
-            parent = optionOf(opts,'Parent',[]);
-            target = optionOf(opts,'Target',[]);
-            phName = optionOf(opts,'PhaseName',{});
-            titTxt = optionOf(opts,'Title','Ground track');
-            visTxt = optionOf(opts,'Visible','on');
+            parent = vizOption(opts,'Parent',[]);
+            target = vizOption(opts,'Target',[]);
+            phName = vizOption(opts,'PhaseName',{});
+            titTxt = vizOption(opts,'Title','Ground track');
+            visTxt = vizOption(opts,'Visible','on');
+            begTxt = vizOption(opts,'StartName','launch');
+            endTxt = vizOption(opts,'EndName','impact');
 
 %% The plotted quantities. ONE conversion from radians to degrees, and the
 %% axis labels below state the unit it produced:
@@ -164,7 +180,7 @@ end
                           'LineWidth',1.5,'Color',[0.75 0 0], ...
                           'Tag','impactMarker');
              hLeg  = [hTrack hLnch hImp];
-            legTxt = [trkTxt {'launch','impact'}];
+            legTxt = [trkTxt {begTxt,endTxt}];
 
 %% The aim point, when the caller has one. Distinct from the impact marker on
 %% purpose: the gap between the two IS the miss distance, and a plot that drew
@@ -193,35 +209,5 @@ end
 %% axes has no side effect beyond the children added:
     if ~wasHeld
         hold(hAx,'off');
-    end
-end
-
-function val = optionOf(opts,name,val)
-%% Purpose:
-%
-%  Return one option's value when the caller supplied it and the default
-%  otherwise. Factored out so the option block above reads as one unbranched
-%  line per option, matching the override blocks in the entry scripts.
-%
-%% Inputs:
-%
-%  opts             Struct                      Caller options
-%
-%  name             Char [1 x n]                Option name
-%
-%  val              Any                         Default value
-%
-%% Outputs:
-%
-%  val              Any                         opts.(name) when present,
-%                                               otherwise the default
-%
-%% Revision History:
-%  Michael Casey                                                08/07/2026
-%  Copyright 2026 Coorbital, Inc.
-%% ------------------------ Begin Code Sequence ---------------------------
-
-    if isfield(opts,name) && ~isempty(opts.(name))
-               val = opts.(name);
     end
 end

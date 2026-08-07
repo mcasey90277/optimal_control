@@ -114,11 +114,11 @@ end
               opts = struct();
     end
     assert(isstruct(opts),'opts must be a struct of options.');
-            parent = optionOf(opts,'Parent',[]);
-            target = optionOf(opts,'Target',[]);
-          altScale = optionOf(opts,'AltScale',1);
-            titTxt = optionOf(opts,'Title','Trajectory over the Earth');
-            visTxt = optionOf(opts,'Visible','on');
+            parent = vizOption(opts,'Parent',[]);
+            target = vizOption(opts,'Target',[]);
+          altScale = vizOption(opts,'AltScale',1);
+            titTxt = vizOption(opts,'Title','Trajectory over the Earth');
+            visTxt = vizOption(opts,'Visible','on');
     assert(isscalar(altScale) && altScale > 0, ...
         'AltScale must be a positive scalar; %s given.',mat2str(altScale));
 
@@ -232,34 +232,4 @@ function hMk = surfaceMarker(hAx,rE,latRad,lonRad,mkr,col,tagTxt)
                hMk = line(hAx,xMk,yMk,zMk, ...
                           'LineStyle','none','Marker',mkr,'MarkerSize',10, ...
                           'LineWidth',1.5,'Color',col,'Tag',tagTxt);
-end
-
-function val = optionOf(opts,name,val)
-%% Purpose:
-%
-%  Return one option's value when the caller supplied it and the default
-%  otherwise. Factored out so the option block above reads as one unbranched
-%  line per option, matching the override blocks in the entry scripts.
-%
-%% Inputs:
-%
-%  opts             Struct                      Caller options
-%
-%  name             Char [1 x n]                Option name
-%
-%  val              Any                         Default value
-%
-%% Outputs:
-%
-%  val              Any                         opts.(name) when present,
-%                                               otherwise the default
-%
-%% Revision History:
-%  Michael Casey                                                08/07/2026
-%  Copyright 2026 Coorbital, Inc.
-%% ------------------------ Begin Code Sequence ---------------------------
-
-    if isfield(opts,name) && ~isempty(opts.(name))
-               val = opts.(name);
-    end
 end

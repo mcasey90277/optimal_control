@@ -5,9 +5,10 @@ function test_viz()
 %  checks that nothing threw is worth almost nothing: every mistake worth
 %  catching -- plotting the wrong column, converting metres to kilometres
 %  twice, labelling an axis without its unit, marking a launch point that is
-%  not where the flight began -- produces a figure that draws perfectly and is
-%  wrong. So this file reads the drawn objects back out and compares them
-%  against the trajectory the figure claims to be showing.
+%  not where the flight began, drawing a phase boundary in the wrong place --
+%  produces a figure that draws perfectly and is wrong. So this file reads the
+%  drawn objects back out and compares them against the trajectory the figure
+%  claims to be showing.
 %
 %  Four things are asserted for every figure in the package:
 %
@@ -23,12 +24,19 @@ function test_viz()
 %  units, so that a wrong column, a stale array or a doubled conversion moves
 %  one side and not the other.
 %
+%  THE PHASE BOUNDARY LINES ARE CHECKED FOR POSITION, not just counted.
+%  HGV/run_boost_glide's hand-drawn handoff marker was DELETED in favour of
+%  them, so where they sit is now load-bearing information rather than
+%  decoration, and a boundary drawn at the wrong instant is a figure that lies
+%  about which phase a feature belongs to. Counting them alone did not catch
+%  a mutation that moved every one of them to t(1); section 9 does.
+%
 %  THE TRAJECTORIES ARE SYNTHETIC, and deliberately so. The figures do not
 %  integrate anything, so a real propagation would add seconds to the suite
 %  and buy nothing; what a synthetic state buys instead is control over
-%  phaseIdx, which is how the phase-segment contract below gets exercised at
-%  all. The composition of viz with the real propagator is covered where it
-%  belongs, in the entry-script tests.
+%  phaseIdx, which is how the phase-segment and phase-boundary contracts below
+%  get exercised at all. The composition of viz with the real propagator is
+%  covered where it belongs, in the entry-script tests.
 %
 %  Every figure is created with 'Visible','off' and closed again, and the
 %  figure count is asserted back to its starting value at the end, so the
@@ -44,21 +52,18 @@ function test_viz()
 %
 %% Revision History:
 %  Michael Casey                                                08/07/2026
+%  Michael Casey  Channel pool, Extra panel, boundary positions 08/07/2026
 %  Copyright 2026 Coorbital, Inc.
 %% ------------------------ Begin Code Sequence ---------------------------
 
                  c = coorbital.util.missileConst();
              nFig0 = numel(findall(groot,'Type','figure'));
 
-%% The environment the derived panels are computed from, and three vehicles
-%% that are genuinely different from one another. The differences are the
-%% point: a load-factor panel that ignored the per-phase vehicle list and used
-%% the single veh argument throughout would agree with the expectation below
-%% only if the vehicles happened to match, so they are made not to:
-         env.atmos = @coorbital.atmos.expAtmos;
-          env.aero = @coorbital.aero.constLD;
-          env.grav = @coorbital.grav.sphereGrav;
-        env.omegaE = 0;
+%% The environment the derived panels are computed from, and two vehicles that
+%% are genuinely different from one another. The difference is the point: a
+%% load-factor panel that ignored the per-phase vehicle list and used the
+%% single veh argument throughout would agree with the expectation below only
+%% if the vehicles happened to match, so they are made not to.
 %%
 %% The boost vehicle is the real coorbital.util.boosterDefaults struct rather
 %% than a doctored copy of the glide vehicle, and that is deliberate: a
@@ -66,6 +71,10 @@ function test_viz()
 %% and only the chain that assembles them knows the total. A load-factor panel
 %% that reached for veh.mass unconditionally would throw on it, which is
 %% exactly the defect this argument caught during construction:
+         env.atmos = @coorbital.atmos.expAtmos;
+          env.aero = @coorbital.aero.constLD;
+          env.grav = @coorbital.grav.sphereGrav;
+        env.omegaE = 0;
             vehOne = coorbital.util.vehicleDefaults();
             vehBst = coorbital.util.boosterDefaults();
     assert(~isfield(vehBst,'mass'), ...
@@ -75,9 +84,10 @@ function test_viz()
 
 %% A three-phase, seven-state trajectory, and a one-phase six-state one. Both
 %% shapes ship in this library and they exercise different branches: the mass
-%% column, and the per-phase vehicle list:
+%% column, the mass CHANNEL, and the per-phase vehicle list:
             trjCha = chainTraj(c.rE);
             trjOne = singleTraj(c.rE);
+            phList = unique(trjCha.phaseIdx(:)).';
 
 %% ---------------------------------------------------------------------
 %% 1. groundTrack -- structure, labels and units
@@ -87,7 +97,7 @@ function test_viz()
                          struct('Visible','off','Target',target, ...
                                 'PhaseName',{{'boost','glide','descent'}}, ...
                                 'Title','Ground track, 7663 km great-circle range'));
-             axGT  = axesInOrder(hFigGT);
+              axGT = axesInOrder(hFigGT);
     assert(numel(axGT) == 1, ...
         'groundTrack drew %d axes; it promises exactly 1.',numel(axGT));
     assertLabelled(axGT,'groundTrack');
@@ -105,7 +115,6 @@ function test_viz()
 %% Reconstructed here from phaseIdx alone, so a segment drawn over the wrong
 %% index range fails even though the union of the segments still looks right:
             hTrack = lineByTag(axGT(1),'groundTrack');
-            phList = unique(trjCha.phaseIdx(:)).';
     assert(numel(hTrack) == numel(phList), ...
         'groundTrack drew %d track segments for %d phases.', ...
         numel(hTrack),numel(phList));
@@ -113,10 +122,7 @@ function test_viz()
               hSeg = hTrack([hTrack.UserData] == phList(kp));
         assert(isscalar(hSeg), ...
             'expected exactly one track segment tagged for phase %d.',phList(kp));
-              sel  = find(trjCha.phaseIdx == phList(kp));
-        if kp > 1
-              sel  = [find(trjCha.phaseIdx == phList(kp-1),1,'last'); sel];
-        end
+               sel = phaseSpan(trjCha.phaseIdx,phList,kp);
         assertSeries(hSeg.XData(:),rad2deg(trjCha.x(sel,2)), ...
             sprintf('groundTrack phase %d longitude (deg)',phList(kp)));
         assertSeries(hSeg.YData(:),rad2deg(trjCha.x(sel,3)), ...
@@ -135,79 +141,68 @@ function test_viz()
 %% assertions above would both pass on a figure that marked one thing twice:
              dMark = abs(rad2deg(trjCha.x(1,2)) - rad2deg(trjCha.x(end,2)));
     assert(dMark > 1, ...
-        'the synthetic track starts and ends within %.3f deg of longitude; the marker checks cannot discriminate.',dMark);
+        ['the synthetic track starts and ends within %.3f deg of longitude; ' ...
+         'the marker checks cannot discriminate.'],dMark);
 
+%% The default legend names the ends launch and impact:
+    assertLegend(hFigGT,{'boost','glide','descent','launch','impact','target'});
     close(hFigGT);
 
 %% ---------------------------------------------------------------------
-%% 3. groundTrack -- no target means NO target marker
+%% 3. groundTrack -- optional target, and caller-named end points
 %% ---------------------------------------------------------------------
 %% The aim point is optional, and an optional marker that is drawn anyway --
 %% at the origin, or at the impact point -- is worse than no marker at all,
-%% because a reader would read the miss distance off it:
+%% because a reader would read the miss distance off it.
+%%
+%% The end-point NAMES are the caller's, because HGV/run_glide begins at an
+%% entry interface and ends at a terminal altitude, and neither is a launch or
+%% an impact. The marker TAGS must not follow the names, or every caller that
+%% looks a marker up by tag would break the moment a script renamed one:
             hFigNT = coorbital.viz.groundTrack(trjCha,vehOne,env, ...
-                         struct('Visible','off'));
-             axNT  = axesInOrder(hFigNT);
+                         struct('Visible','off', ...
+                                'StartName','entry','EndName','terminus'));
+              axNT = axesInOrder(hFigNT);
     assert(isempty(findobj(axNT(1),'Tag','targetMarker')), ...
         'groundTrack drew a target marker when no Target was supplied.');
     assert(~isempty(findobj(axNT(1),'Tag','launchMarker')) && ...
            ~isempty(findobj(axNT(1),'Tag','impactMarker')), ...
-        'launch and impact must be marked whether or not a target is given.');
+        ['launch and impact must be marked, under their fixed tags, whether ' ...
+         'or not a target is given and whatever the legend calls them.']);
+    assertLegend(hFigNT,{'phase 1','phase 2','phase 3','entry','terminus'});
     close(hFigNT);
 
 %% ---------------------------------------------------------------------
-%% 4. profilePlot -- structure, labels and units
+%% 4. profilePlot -- the DEFAULT five channels, structure, labels and units
 %% ---------------------------------------------------------------------
             hFigPP = coorbital.viz.profilePlot(trjCha,vehOne,env, ...
                          struct('Visible','off','VehPhase',{vehPhase}));
-             axPP  = axesInOrder(hFigPP);
+              axPP = axesInOrder(hFigPP);
     assert(numel(axPP) == 5, ...
-        'profilePlot drew %d axes; it promises exactly 5.',numel(axPP));
+        'profilePlot drew %d axes; its default is exactly 5 channels.',numel(axPP));
     assertLabelled(axPP,'profilePlot');
 
 %% Every panel shares one time axis, and every panel's own unit must appear in
 %% its own label. The list is written out rather than looped over a pattern so
 %% that a panel silently relabelled into another panel's unit still fails:
-            unitsY = {'km','m/s','(-)','kPa','(g)'};
+           dfltChn = {'altitude','speed','mach','q','nAero'};
     for ka = 1:5
         assertUnit(axPP(ka).XLabel.String,'(s)', ...
             sprintf('profilePlot panel %d x axis',ka));
-        assertUnit(axPP(ka).YLabel.String,unitsY{ka}, ...
+        assertUnit(axPP(ka).YLabel.String,unitOf(dfltChn{ka}), ...
             sprintf('profilePlot panel %d y axis',ka));
     end
 
 %% ---------------------------------------------------------------------
 %% 5. profilePlot -- every panel's data, recomputed from traj
 %% ---------------------------------------------------------------------
-    [hExp,vExp,machExp,qExp,nExp] = profileChannels(trjCha,vehPhase,c);
-             wantY = {hExp,vExp,machExp,qExp,nExp};
-             wantN = {'altitude (km)','speed (m/s)','Mach number', ...
-                      'dynamic pressure (kPa)','aerodynamic load factor (g)'};
-    for ka = 1:5
-               hLn = lineByTag(axPP(ka),'profile');
-        assert(isscalar(hLn), ...
-            'profilePlot panel %d holds %d primary lines; expected 1.',ka,numel(hLn));
-        assertSeries(hLn.XData(:),trjCha.t,sprintf('profilePlot panel %d time (s)',ka));
-        assertSeries(hLn.YData(:),wantY{ka},sprintf('profilePlot %s',wantN{ka}));
-    end
+             wantC = profileChannels(trjCha,vehPhase,c);
+    assertPanels(axPP,dfltChn,wantC,trjCha.t,'default');
 
 %% The five channels must be five DIFFERENT things. Without this, a function
 %% that plotted altitude into all five panels could still pass every check
 %% above if the expectations were ever built from the drawn data:
-    for ka = 1:5
-        for kb = ka+1:5
-            assert(max(abs(wantY{ka} - wantY{kb})) > 1e-6, ...
-                'panels %d and %d carry the same series; the checks cannot discriminate.',ka,kb);
-        end
-    end
-
-%% Phase boundaries are drawn on every panel, one fewer than the phases:
-    for ka = 1:5
-              hBnd = findobj(axPP(ka),'Tag','phaseBoundary');
-        assert(numel(hBnd) == numel(phList) - 1, ...
-            'profilePlot panel %d drew %d phase boundaries for %d phases.', ...
-            ka,numel(hBnd),numel(phList));
-    end
+    assertDistinct(dfltChn,wantC);
     close(hFigPP);
 
 %% ---------------------------------------------------------------------
@@ -219,9 +214,9 @@ function test_viz()
 %% nothing about it:
             hFigSV = coorbital.viz.profilePlot(trjCha,vehOne,env, ...
                          struct('Visible','off'));
-             axSV  = axesInOrder(hFigSV);
+              axSV = axesInOrder(hFigSV);
              nSing = lineByTag(axSV(5),'profile');
-    assert(max(abs(nSing.YData(:) - nExp)) > 1e-3, ...
+    assert(max(abs(nSing.YData(:) - wantC.nAero)) > 1e-3, ...
         ['the load factor is unchanged when the per-phase vehicle list is ' ...
          'withheld; profilePlot is ignoring VehPhase.']);
     close(hFigSV);
@@ -231,29 +226,129 @@ function test_viz()
 %% ---------------------------------------------------------------------
 %% No mass column and no staging: the mass must then come from the vehicle,
 %% and there must be no phase boundary to draw:
-            hFig6  = coorbital.viz.profilePlot(trjOne,vehOne,env, ...
+             hFig6 = coorbital.viz.profilePlot(trjOne,vehOne,env, ...
                          struct('Visible','off'));
-             ax6   = axesInOrder(hFig6);
+               ax6 = axesInOrder(hFig6);
     assert(numel(ax6) == 5,'profilePlot drew %d axes on a six-state run.',numel(ax6));
-    [h6,v6,m6,q6,n6] = profileChannels(trjOne,{vehOne},c);
-            want6  = {h6,v6,m6,q6,n6};
-    for ka = 1:5
-               hLn = lineByTag(ax6(ka),'profile');
-        assertSeries(hLn.YData(:),want6{ka}, ...
-            sprintf('six-state profilePlot panel %d',ka));
-    end
+             want6 = profileChannels(trjOne,{vehOne},c);
+    assertPanels(ax6,dfltChn,want6,trjOne.t,'six-state');
     assert(isempty(findobj(ax6(1),'Tag','phaseBoundary')), ...
         'a single-phase run has no phase boundary to draw.');
     close(hFig6);
 
 %% ---------------------------------------------------------------------
-%% 8. globe3D -- structure, labels, units and the arc
+%% 8. profilePlot -- the WHOLE channel pool, plus a caller-supplied panel
+%% ---------------------------------------------------------------------
+%% 'mass' and 'gamma' are the two channels the first cut of this package
+%% dropped, and both were restored because the printed summary cannot show
+%% what they show: mass carries the STAGING DISCONTINUITY, which is this
+%% library's headline feature and is a jump rather than a number, and gamma
+%% through a skip phugoid is a shape whose per-phase mean says nothing about
+%% it.
+%%
+%% The Extra panel is the sensed load factor -- the thing profilePlot must not
+%% compute, because thrust needs a propulsion model, an ambient pressure and a
+%% list of which phases burn, and a trajectory carries none of them. It is
+%% built here the way BM/run_ballistic builds it, from arbitrary but distinct
+%% numbers, because what is under test is that the SERIES HANDED OVER is the
+%% series drawn, not what it means:
+            allChn = {'altitude','speed','mach','q','nAero','mass','gamma'};
+            xtraSr = 3 + sin(linspace(0,9,numel(trjCha.t))');
+           hFigAll = coorbital.viz.profilePlot(trjCha,vehOne,env, ...
+                         struct('Visible','off','VehPhase',{vehPhase}, ...
+                                'Channels',{allChn}, ...
+                                'Extra',{{xtraSr,'sensed load factor (g)', ...
+                                          'Sensed load factor'}}));
+             axAll = axesInOrder(hFigAll);
+    assert(numel(axAll) == numel(allChn) + 1, ...
+        ['profilePlot drew %d axes for %d channels plus an Extra panel; the ' ...
+         'count must be numel(Channels) + ~isempty(Extra).'], ...
+        numel(axAll),numel(allChn));
+    assertLabelled(axAll,'profilePlot full pool');
+    for ka = 1:numel(allChn)
+        assertUnit(axAll(ka).YLabel.String,unitOf(allChn{ka}), ...
+            sprintf('profilePlot ''%s'' panel',allChn{ka}));
+    end
+    assertPanels(axAll(1:numel(allChn)),allChn,wantC,trjCha.t,'full pool');
+    assertDistinct(allChn,wantC);
+
+%% The Extra panel is LAST, carries the caller's series unchanged, and wears
+%% the caller's label and title:
+              hXtr = lineByTag(axAll(end),'profile');
+    assert(isscalar(hXtr),'the Extra panel holds %d primary lines.',numel(hXtr));
+    assertSeries(hXtr.XData(:),trjCha.t,'Extra panel time (s)');
+    assertSeries(hXtr.YData(:),xtraSr,'Extra panel series');
+    assertUnit(axAll(end).YLabel.String,'(g)','Extra panel y axis');
+    assert(contains(labelText(axAll(end).Title.String),'Sensed'), ...
+        'the Extra panel does not wear the title it was given.');
+
+%% ...and the Extra series must be nothing the pool already draws, or the
+%% check above would pass on a panel that quietly plotted a channel:
+    for kc = 1:numel(allChn)
+        assert(max(abs(xtraSr - wantC.(allChn{kc}))) > 1e-6, ...
+            'the Extra series coincides with the ''%s'' channel.',allChn{kc});
+    end
+
+%% ---------------------------------------------------------------------
+%% 9. profilePlot -- WHERE the phase boundaries are, not just how many
+%% ---------------------------------------------------------------------
+%% This is the check that makes the dashed lines trustworthy. They replaced
+%% HGV/run_boost_glide's deleted handoff marker, so their POSITION is the
+%% information. The junction instants are recomputed here from phaseIdx alone:
+              tBnd = zeros(1,0);
+    for kp = 2:numel(phList)
+              tBnd = [tBnd trjCha.t(find(trjCha.phaseIdx == phList(kp-1),1,'last'))];
+    end
+    assert(min(abs(tBnd - trjCha.t(1))) > 1, ...
+        ['every junction sits within 1 s of the start of the trajectory; ' ...
+         'this check cannot tell a correct boundary from one collapsed to ' ...
+         't(1).']);
+    for ka = 1:numel(axAll)
+              hBnd = findobj(axAll(ka),'Tag','phaseBoundary');
+        assert(numel(hBnd) == numel(tBnd), ...
+            'panel %d drew %d phase boundaries for %d junctions.', ...
+            ka,numel(hBnd),numel(tBnd));
+               got = zeros(1,numel(hBnd));
+        for kb = 1:numel(hBnd)
+            assert(numel(hBnd(kb).XData) == 2 && ...
+                   hBnd(kb).XData(1) == hBnd(kb).XData(2), ...
+                'panel %d boundary %d is not a vertical line.',ka,kb);
+           got(kb) = hBnd(kb).XData(1);
+        end
+        assertSeries(sort(got(:)),sort(tBnd(:)), ...
+            sprintf('panel %d phase boundary times (s)',ka));
+    end
+    close(hFigAll);
+
+%% ---------------------------------------------------------------------
+%% 10. profilePlot -- what it must REFUSE
+%% ---------------------------------------------------------------------
+%% Each of these is a caller error that would otherwise produce a plausible
+%% figure. A misspelt channel silently dropped, or an Extra panel whose unit
+%% a reader has to guess, is the failure mode the whole package exists to
+%% prevent:
+    assertThrows(@() coorbital.viz.profilePlot(trjCha,vehOne,env, ...
+        struct('Visible','off','Channels',{{'altitude','altitud'}})), ...
+        'a misspelt channel name');
+    assertThrows(@() coorbital.viz.profilePlot(trjOne,vehOne,env, ...
+        struct('Visible','off','Channels',{{'altitude','mass'}})), ...
+        'the mass channel on a six-state trajectory');
+    assertThrows(@() coorbital.viz.profilePlot(trjCha,vehOne,env, ...
+        struct('Visible','off','Extra',{{[1 2 3],'load (g)','Load'}})), ...
+        'an Extra series of the wrong length');
+    assertThrows(@() coorbital.viz.profilePlot(trjCha,vehOne,env, ...
+        struct('Visible','off', ...
+               'Extra',{{xtraSr,'sensed load','Load'}})), ...
+        'an Extra label that states no unit');
+
+%% ---------------------------------------------------------------------
+%% 11. globe3D -- structure, labels, units and the arc
 %% ---------------------------------------------------------------------
              altSc = 30;
             hFigG3 = coorbital.viz.globe3D(trjCha,vehOne,env, ...
                          struct('Visible','off','AltScale',altSc, ...
                                 'Target',target));
-             axG3  = axesInOrder(hFigG3);
+              axG3 = axesInOrder(hFigG3);
     assert(numel(axG3) == 1,'globe3D drew %d axes; it promises exactly 1.',numel(axG3));
     assertLabelled(axG3,'globe3D');
     assertUnit(axG3(1).XLabel.String,'km','globe3D x axis');
@@ -262,7 +357,7 @@ function test_viz()
 
 %% A non-unity exaggeration MUST be stated in the title. A vertical scale
 %% thirty times the horizontal one, unannounced, is a lie told with a plot:
-            titG3  = labelText(axG3(1).Title.String);
+             titG3 = labelText(axG3(1).Title.String);
     assert(contains(titG3,'exaggerat') && contains(titG3,sprintf('%g',altSc)), ...
         ['globe3D was given AltScale = %g and its title does not say so. ' ...
          'Title was "%s".'],altSc,titG3);
@@ -278,7 +373,7 @@ function test_viz()
 %% here independently. This is where an exaggeration applied to the sphere
 %% instead of to the altitude, or a latitude/longitude transposition in the
 %% conversion, is caught:
-            hArc   = lineByTag(axG3(1),'globeTrack');
+              hArc = lineByTag(axG3(1),'globeTrack');
     assert(numel(hArc) == numel(phList), ...
         'globe3D drew %d arc segments for %d phases.',numel(hArc),numel(phList));
               rPlt = c.rE + altSc.*(trjCha.x(:,1) - c.rE);
@@ -290,10 +385,7 @@ function test_viz()
     for kp = 1:numel(phList)
               hSeg = hArc([hArc.UserData] == phList(kp));
         assert(isscalar(hSeg),'expected one globe arc segment for phase %d.',phList(kp));
-              sel  = find(trjCha.phaseIdx == phList(kp));
-        if kp > 1
-              sel  = [find(trjCha.phaseIdx == phList(kp-1),1,'last'); sel];
-        end
+               sel = phaseSpan(trjCha.phaseIdx,phList,kp);
         assertSeries(hSeg.XData(:),xWant(sel),sprintf('globe3D phase %d x (km)',phList(kp)));
         assertSeries(hSeg.YData(:),yWant(sel),sprintf('globe3D phase %d y (km)',phList(kp)));
         assertSeries(hSeg.ZData(:),zWant(sel),sprintf('globe3D phase %d z (km)',phList(kp)));
@@ -315,20 +407,20 @@ function test_viz()
 %% A unity exaggeration is the default and must NOT be announced, or every
 %% honest figure would carry a caveat that does not apply to it:
             hFigG1 = coorbital.viz.globe3D(trjCha,vehOne,env,struct('Visible','off'));
-             axG1  = axesInOrder(hFigG1);
+              axG1 = axesInOrder(hFigG1);
     assert(~contains(labelText(axG1(1).Title.String),'exaggerat'), ...
         'globe3D announced an exaggeration it did not apply.');
     close(hFigG1);
 
 %% ---------------------------------------------------------------------
-%% 9. 'Parent' composes instead of creating
+%% 12. 'Parent' composes instead of creating
 %% ---------------------------------------------------------------------
 %% The whole point of the option: handed somewhere to draw, none of these may
 %% open a figure of their own. Counted, not assumed:
              hHost = figure('Visible','off');
-              axG  = axes('Parent',hHost);
+               axG = axes('Parent',hHost);
            nBefore = numel(findall(groot,'Type','figure'));
-              fGT  = coorbital.viz.groundTrack(trjCha,vehOne,env, ...
+               fGT = coorbital.viz.groundTrack(trjCha,vehOne,env, ...
                          struct('Parent',axG));
     assert(numel(findall(groot,'Type','figure')) == nBefore, ...
         'groundTrack opened a figure although it was handed an axes.');
@@ -341,24 +433,25 @@ function test_viz()
 %% sphere sharing one set of limits would be unreadable, and the point being
 %% made is only that no new figure appears:
               axG2 = axes('Parent',hHost);
-              fG3  = coorbital.viz.globe3D(trjCha,vehOne,env, ...
+               fG3 = coorbital.viz.globe3D(trjCha,vehOne,env, ...
                          struct('Parent',axG2));
-    assert(~isempty(lineByTag(axG2,'globeTrack')), ...
-        'globe3D drew nothing into the axes it was given.');
     assert(numel(findall(groot,'Type','figure')) == nBefore, ...
         'globe3D opened a figure although it was handed an axes.');
     assert(isequal(fG3,hHost), ...
         'globe3D returned a figure other than the one its Parent lives in.');
+    assert(~isempty(lineByTag(axG2,'globeTrack')), ...
+        'globe3D drew nothing into the axes it was given.');
 
-%% profilePlot needs five axes, so it is handed five:
+%% profilePlot needs one axes per panel, and the panel count is the caller's
+%% own choice, so it is handed exactly as many as it asked for:
             hHost5 = figure('Visible','off');
-             ax5   = gobjects(1,5);
+               ax5 = gobjects(1,5);
     for ka = 1:5
            ax5(ka) = axes('Parent',hHost5, ...
                           'OuterPosition',[0 (5-ka)./5 1 1./5]);
     end
           nBefore5 = numel(findall(groot,'Type','figure'));
-            fPP    = coorbital.viz.profilePlot(trjCha,vehOne,env, ...
+               fPP = coorbital.viz.profilePlot(trjCha,vehOne,env, ...
                          struct('Parent',ax5,'VehPhase',{vehPhase}));
     assert(numel(findall(groot,'Type','figure')) == nBefore5, ...
         'profilePlot opened a figure although it was handed five axes.');
@@ -369,25 +462,26 @@ function test_viz()
             'profilePlot did not draw into supplied axes %d.',ka);
     end
 
-%% ...and the wrong number of axes must be refused rather than half-filled:
-             threw = false;
-    try
-        coorbital.viz.profilePlot(trjCha,vehOne,env,struct('Parent',ax5(1:3)));
-    catch
-             threw = true;
-    end
-    assert(threw,'profilePlot accepted three axes for a five-panel figure.');
+%% ...and the wrong number of axes must be refused rather than half-filled.
+%% Five axes are the right number for the DEFAULT channels and the wrong
+%% number the moment a sixth channel or an Extra panel is asked for, which is
+%% the mistake this refusal exists to catch:
+    assertThrows(@() coorbital.viz.profilePlot(trjCha,vehOne,env, ...
+        struct('Parent',ax5(1:3))),'three axes for a five-panel figure');
+    assertThrows(@() coorbital.viz.profilePlot(trjCha,vehOne,env, ...
+        struct('Parent',ax5,'VehPhase',{vehPhase},'Channels',{allChn})), ...
+        'five axes for a seven-channel figure');
 
     close(hHost);
     close(hHost5);
 
 %% ---------------------------------------------------------------------
-%% 10. No leaked figures
+%% 13. No leaked figures
 %% ---------------------------------------------------------------------
              nFig1 = numel(findall(groot,'Type','figure'));
     assert(nFig1 == nFig0, ...
-        'test_viz leaked %d figure(s); the suite must end with the %d it started with.', ...
-        nFig1 - nFig0,nFig0);
+        ['test_viz leaked %d figure(s); the suite must end with the %d it ' ...
+         'started with.'],nFig1 - nFig0,nFig0);
 end
 
 function traj = chainTraj(rE)
@@ -398,6 +492,10 @@ function traj = chainTraj(rE)
 %  afterwards. It is not a solution of anything, and it does not need to be --
 %  what a plotting test needs is a state history whose every column is
 %  distinct and whose phase structure is known exactly.
+%
+%  The mass column carries a real staging DROP at the phase 1/2 boundary, so
+%  the 'mass' channel is exercised on the discontinuity it exists to show and
+%  not on a smooth curve.
 %
 %% Inputs:
 %
@@ -451,9 +549,9 @@ function traj = singleTraj(rE)
 %% Purpose:
 %
 %  A synthetic one-phase, six-state trajectory -- the shape HGV/run_glide
-%  returns. Exists so the mass-column and per-phase-vehicle branches of
-%  coorbital.viz.profilePlot are exercised on the side where neither is
-%  present.
+%  returns. Exists so the mass-column, mass-channel and per-phase-vehicle
+%  branches of coorbital.viz.profilePlot are exercised on the side where none
+%  of them is present.
 %
 %% Inputs:
 %
@@ -485,11 +583,11 @@ function traj = singleTraj(rE)
      traj.junction = repmat(struct('t',[],'x',[]),0,1);
 end
 
-function [hKm,V,mach,qKPa,nAero] = profileChannels(traj,vehPhase,c)
+function chn = profileChannels(traj,vehPhase,c)
 %% Purpose:
 %
-%  Recompute the five channels coorbital.viz.profilePlot draws, in the units
-%  it draws them in, from the trajectory and the per-phase vehicles. The
+%  Recompute every channel coorbital.viz.profilePlot can draw, in the units it
+%  draws them in, from the trajectory and the per-phase vehicles. The
 %  duplication of the plotting routine's arithmetic is the whole mechanism:
 %  the two are compared, so a wrong column or a doubled conversion moves one
 %  and not the other.
@@ -505,15 +603,11 @@ function [hKm,V,mach,qKPa,nAero] = profileChannels(traj,vehPhase,c)
 %
 %% Outputs:
 %
-%  hKm              [N x 1]                     Altitude (km)
-%
-%  V                [N x 1]                     Speed (m/s)
-%
-%  mach             [N x 1]                     Mach number (-)
-%
-%  qKPa             [N x 1]                     Dynamic pressure (kPa)
-%
-%  nAero            [N x 1]                     Aerodynamic load factor (g)
+%  chn              Struct                      One [N x 1] field per channel:
+%                                               altitude (km), speed (m/s),
+%                                               mach (-), q (kPa), nAero (g),
+%                                               gamma (deg), and mass (kg)
+%                                               when the state carries one
 %
 %% Revision History:
 %  Michael Casey                                                08/07/2026
@@ -526,11 +620,15 @@ function [hKm,V,mach,qKPa,nAero] = profileChannels(traj,vehPhase,c)
     [rho,~,~,aSnd] = coorbital.atmos.expAtmos(hM);
               qbar = 0.5.*rho.*V.^2;
               mach = V./aSnd;
-               hKm = hM./1000;
-              qKPa = qbar./1000;
+      chn.altitude = hM./1000;
+         chn.speed = V;
+          chn.mach = mach;
+             chn.q = qbar./1000;
+         chn.gamma = rad2deg(traj.x(:,5));
             phList = unique(traj.phaseIdx(:)).';
 
     if size(traj.x,2) >= 7
+          chn.mass = traj.x(:,7);
              massV = traj.x(:,7);
     else
              massV = zeros(nS,1);
@@ -543,13 +641,148 @@ function [hKm,V,mach,qKPa,nAero] = profileChannels(traj,vehPhase,c)
              aLift = zeros(nS,1);
              aDrag = zeros(nS,1);
     for ks = 1:nS
-              kPh  = find(phList == traj.phaseIdx(ks),1);
+               kPh = find(phList == traj.phaseIdx(ks),1);
               vehK = vehPhase{kPh};
          [CLk,CDk] = coorbital.aero.constLD(traj.u(ks,1),mach(ks),vehK);
          aLift(ks) = qbar(ks).*vehK.Sref.*CLk./massV(ks);
          aDrag(ks) = qbar(ks).*vehK.Sref.*CDk./massV(ks);
     end
-             nAero = sqrt(aLift.^2 + aDrag.^2)./c.g0;
+         chn.nAero = sqrt(aLift.^2 + aDrag.^2)./c.g0;
+end
+
+function txt = unitOf(name)
+%% Purpose:
+%
+%  The unit token that must appear in a given channel's axis label. Kept as a
+%  lookup rather than derived from the drawn label, because a token read back
+%  out of the figure would agree with itself no matter what it said.
+%
+%% Inputs:
+%
+%  name             Char [1 x n]                Channel name
+%
+%% Outputs:
+%
+%  txt              Char [1 x m]                Required substring of the label
+%
+%% Revision History:
+%  Michael Casey                                                08/07/2026
+%  Copyright 2026 Coorbital, Inc.
+%% ------------------------ Begin Code Sequence ---------------------------
+
+             known = {'altitude','speed','mach','q','nAero','mass','gamma'};
+             units = {'km'      ,'m/s'  ,'(-)' ,'kPa','(g)' ,'(kg)','(deg)'};
+               idx = find(strcmp(name,known),1);
+    assert(~isempty(idx),'no unit recorded for channel "%s".',name);
+               txt = units{idx};
+end
+
+function assertPanels(hAx,names,chn,tWant,what)
+%% Purpose:
+%
+%  Assert that a run of profile panels carries, in order, the channels named,
+%  each on the trajectory's own time base. This is the assertion that makes
+%  the file a test rather than a smoke check.
+%
+%% Inputs:
+%
+%  hAx              [1 x M] axes                Panels, in drawing order
+%
+%  names            Cellstr [1 x M]             Channel expected in each panel
+%
+%  chn              Struct                      Recomputed channels
+%
+%  tWant            [N x 1]                     Expected time base (s)
+%
+%  what             Char [1 x n]                Case name, for the message
+%
+%% Outputs:
+%
+%  none                                         Throws on failure
+%
+%% Revision History:
+%  Michael Casey                                                08/07/2026
+%  Copyright 2026 Coorbital, Inc.
+%% ------------------------ Begin Code Sequence ---------------------------
+
+    assert(numel(hAx) == numel(names), ...
+        '%s: %d panels against %d expected channels.',what,numel(hAx),numel(names));
+    for ka = 1:numel(names)
+               hLn = lineByTag(hAx(ka),'profile');
+        assert(isscalar(hLn), ...
+            '%s: panel %d holds %d primary lines; expected 1.',what,ka,numel(hLn));
+        assertSeries(hLn.XData(:),tWant, ...
+            sprintf('%s panel %d time (s)',what,ka));
+        assertSeries(hLn.YData(:),chn.(names{ka}), ...
+            sprintf('%s panel %d, channel ''%s''',what,ka,names{ka}));
+    end
+end
+
+function assertDistinct(names,chn)
+%% Purpose:
+%
+%  Assert that the named channels are pairwise different series. Without this,
+%  a function that drew one channel into every panel could satisfy every other
+%  check in the file the moment an expectation was ever built from drawn data
+%  rather than from the trajectory.
+%
+%% Inputs:
+%
+%  names            Cellstr [1 x M]             Channel names to compare
+%
+%  chn              Struct                      Recomputed channels
+%
+%% Outputs:
+%
+%  none                                         Throws on failure
+%
+%% Revision History:
+%  Michael Casey                                                08/07/2026
+%  Copyright 2026 Coorbital, Inc.
+%% ------------------------ Begin Code Sequence ---------------------------
+
+    for ka = 1:numel(names)
+        for kb = ka+1:numel(names)
+               dif = max(abs(chn.(names{ka}) - chn.(names{kb})));
+            assert(dif > 1e-6, ...
+                'channels ''%s'' and ''%s'' carry the same series; the checks cannot discriminate.', ...
+                names{ka},names{kb});
+        end
+    end
+end
+
+function sel = phaseSpan(phIdx,phList,kp)
+%% Purpose:
+%
+%  The sample indices one phase segment is drawn over: that phase's own
+%  samples, with the preceding phase's LAST sample prepended. That is the
+%  contract coorbital.viz.groundTrack and coorbital.viz.globe3D both document
+%  -- phaseRun labels a junction sample with the outgoing phase, so drawing a
+%  phase over its own samples alone leaves a one-segment hole at every
+%  boundary. Reconstructed here from phaseIdx alone, so a segment drawn over
+%  the wrong index range fails even though the union still looks right.
+%
+%% Inputs:
+%
+%  phIdx            [N x 1]                     Phase index per sample
+%
+%  phList           [1 x P]                     Phase indices present, sorted
+%
+%  kp               [1 x 1]                     Which entry of phList
+%
+%% Outputs:
+%
+%  sel              [M x 1]                     Sample indices, ascending
+%
+%% Revision History:
+%  Michael Casey                                                08/07/2026
+%  Copyright 2026 Coorbital, Inc.
+%% ------------------------ Begin Code Sequence ---------------------------
+
+               sel = find(phIdx == phList(kp));
+    if kp > 1
+               sel = [find(phIdx == phList(kp-1),1,'last'); sel];
+    end
 end
 
 function hAx = axesInOrder(hFig)
@@ -581,7 +814,7 @@ function hAx = axesInOrder(hFig)
               oPos = hAx(ka).OuterPosition;
           yTop(ka) = oPos(2);
     end
-            [~,ord] = sort(yTop,'descend');
+           [~,ord] = sort(yTop,'descend');
                hAx = reshape(hAx(ord),1,[]);
 end
 
@@ -700,6 +933,37 @@ function assertUnit(str,tok,what)
         '%s is labelled "%s", which does not state "%s".',what,txt,tok);
 end
 
+function assertLegend(hFig,want)
+%% Purpose:
+%
+%  Assert that a figure's legend carries exactly the entries expected, in
+%  order. The end-point entries are caller-settable, so a legend that ignored
+%  StartName and EndName would draw a correct picture under wrong names --
+%  and "launch" on a glide that begins at an entry interface is wrong.
+%
+%% Inputs:
+%
+%  hFig             [1 x 1] figure              Figure to search
+%
+%  want             Cellstr [1 x M]             Expected legend entries
+%
+%% Outputs:
+%
+%  none                                         Throws on failure
+%
+%% Revision History:
+%  Michael Casey                                                08/07/2026
+%  Copyright 2026 Coorbital, Inc.
+%% ------------------------ Begin Code Sequence ---------------------------
+
+               hLg = findobj(hFig,'Type','legend');
+    assert(isscalar(hLg),'expected one legend, found %d.',numel(hLg));
+               got = cellstr(string(hLg.String));
+    assert(isequal(reshape(got,1,[]),reshape(want,1,[])), ...
+        'legend reads {%s} against the expected {%s}.', ...
+        strjoin(got,', '),strjoin(want,', '));
+end
+
 function assertMarker(hAx,tagTxt,xWant,yWant,what)
 %% Purpose:
 %
@@ -786,6 +1050,39 @@ function assertSurfaceMarker(hAx,tagTxt,rE,latRad,lonRad,what)
         ['the %s marker is at [%.4f %.4f %.4f] km against [%.4f %.4f %.4f] km ' ...
          'from its latitude and longitude; %.3e km apart.'], ...
         what,got(1),got(2),got(3),want(1),want(2),want(3),err);
+end
+
+function assertThrows(fn,what)
+%% Purpose:
+%
+%  Assert that a call raises. Used for the caller errors that would otherwise
+%  produce a plausible but wrong figure -- a misspelt channel name silently
+%  dropped, a mass channel on a state that has no mass, an axes array of the
+%  wrong length half-filled, an unlabelled extra panel.
+%
+%% Inputs:
+%
+%  fn               Function handle             Zero-argument call to make
+%
+%  what             Char [1 x n]                Description of the bad input,
+%                                               for the message
+%
+%% Outputs:
+%
+%  none                                         Throws when fn does NOT
+%
+%% Revision History:
+%  Michael Casey                                                08/07/2026
+%  Copyright 2026 Coorbital, Inc.
+%% ------------------------ Begin Code Sequence ---------------------------
+
+             threw = false;
+    try
+        fn();
+    catch
+             threw = true;
+    end
+    assert(threw,'%s must be refused, not accepted.',what);
 end
 
 function assertSeries(got,want,what)

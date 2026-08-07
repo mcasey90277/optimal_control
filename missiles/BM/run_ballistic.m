@@ -814,12 +814,22 @@ function [traj,info] = run_ballistic(opts)
 %% nothing it would draw the whole flight on the booster's reference area.
 %% See the "two vehicles, one chain" note in the header of this file.
 %%
-%% The load panel is the AERODYNAMIC load, thrust excluded, where the third
-%% inline figure this replaced plotted nSens with the thrust included. The
-%% sensed figure is still reported, at its boost peak, in the summary above:
+%% SIX CHANNELS AND A SEVENTH PANEL. The 'nAero' channel is the aerodynamic
+%% load with thrust EXCLUDED, and on a boosted flight that is near nothing
+%% exactly where the interesting load is -- the sensed load peaks near 40 g at
+%% end of burn on this booster while the air is still thin. So the sensed
+%% load, which this script already computes for its own summary, is handed to
+%% the plot as an extra panel rather than left to a single printed peak: a
+%% peak is a number, and what a reader needs to see is the build-up and when
+%% it happened. coorbital.viz.profilePlot does not compute it, and should not
+%% -- the thrust term needs a propulsion model, an ambient pressure and a list
+%% of which phases are burning, none of which a trajectory carries:
     if showPlots
         coorbital.viz.profilePlot(traj,bst,env, ...
             struct('Name','Ballistic profile', ...
+                   'Channels',{{'altitude','speed','mach','q','nAero','mass'}}, ...
+                   'Extra',{{nSens,'sensed load factor (g)', ...
+                             'Sensed load factor, thrust included'}}, ...
                    'VehPhase',{{bst,coastVeh,coastVeh}}));
         coorbital.viz.groundTrack(traj,bst,env, ...
             struct('PhaseName',{{'boost','coast','descent'}}, ...

@@ -149,7 +149,7 @@ Must run headless under `-batch` without displaying. Use `'Visible','off'`.
 
 **Files:** Create `+coorbital/+viz/globeMovie.m`, extend `tests/test_viz.m`.
 
-**Interface produced:** `mv = coorbital.viz.globeMovie(traj,opts)` writing an MP4 and returning the file path plus frame count.
+**Interface produced:** ~~`mv = coorbital.viz.globeMovie(traj,opts)`~~ **CORRECTED 2026-08-07 after review:** `mv = coorbital.viz.globeMovie(traj,veh,env,opts)` writing an MP4 and returning the file path plus frame count. The two-argument form above was an error in this plan. Every other function in `coorbital.viz` takes `(traj,veh,env,opts)`, and `globe3D.m` — `globeMovie`'s direct companion, which reads neither `veh` nor `env` either — documents those two unread arguments as the package contract. Task 4 must call the four-argument form.
 
 - [ ] **Step 1: Read pumpkyn's renderers before writing anything**
 

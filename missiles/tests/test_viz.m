@@ -53,6 +53,8 @@ function test_viz()
 %% Revision History:
 %  Michael Casey                                                08/07/2026
 %  Michael Casey  Channel pool, Extra panel, boundary positions 08/07/2026
+%  Michael Casey  globeMovie: (traj,veh,env,opts), marker shell,
+%                 phase width grading, handoff markers, legend  08/07/2026
 %  Copyright 2026 Coorbital, Inc.
 %% ------------------------ Begin Code Sequence ---------------------------
 
@@ -430,7 +432,7 @@ function test_viz()
             mvFile = [tempname '.mp4'];
             frmSeen = cell(nFrmT,1);
              nFigMv = numel(findall(groot,'Type','figure'));
-                mv = coorbital.viz.globeMovie(trjCha, ...
+                mv = coorbital.viz.globeMovie(trjCha,vehOne,env, ...
                          struct('File',mvFile,'NFrame',nFrmT, ...
                                 'Size',[480 320],'AltScale',altSc, ...
                                 'SpinDeg',0,'Texture','plain','Sky','black', ...
@@ -499,11 +501,117 @@ function test_viz()
         ['the intermediate frame holds %d track points against the final ' ...
          'frame''s %d; the track is not growing.'],nPtsM,nPtsF);
 
+%% The MARKERS ride a shell 0.2 per cent above the sphere, because a marker
+%% drawn exactly on the surface is bisected by the depth buffer and renders as
+%% a half-disc. The shell is recomputed here rather than read back, in the same
+%% form the function documents -- max(plotted radius, 1.02 rE), radial only --
+%% so a shell applied to the wrong quantity, or applied to the TRACK, fails:
+              rMkW = max(rPlt,1.02.*c.rE);
+             xMkW  = rMkW.*cos(latC).*cos(lonC)./1000;
+             yMkW  = rMkW.*cos(latC).*sin(lonC)./1000;
+             zMkW  = rMkW.*sin(latC)./1000;
+
 %% The vehicle is marked at the sample the frame shows, and it MOVES:
-    assertSeries(frmSeen{kMidF}.veh(:),[xWant(kEndM);yWant(kEndM);zWant(kEndM)], ...
+    assertSeries(frmSeen{kMidF}.veh(:),[xMkW(kEndM);yMkW(kEndM);zMkW(kEndM)], ...
         'globeMovie vehicle marker, intermediate frame (km)');
-    assertSeries(frmSeen{nFrmT}.veh(:),[xWant(end);yWant(end);zWant(end)], ...
+    assertSeries(frmSeen{nFrmT}.veh(:),[xMkW(end);yMkW(end);zMkW(end)], ...
         'globeMovie vehicle marker, final frame (km)');
+
+%% ...and the shell really is doing something at the end of this trajectory, or
+%% the two assertions above would be indistinguishable from no shell at all.
+%% The synthetic chain ends at 0.1 km, so the final sample is a case where the
+%% marker must be LIFTED off the track it is riding:
+             liftM = sqrt((xMkW(end) - xWant(end)).^2 + ...
+                          (yMkW(end) - yWant(end)).^2 + ...
+                          (zMkW(end) - zWant(end)).^2);
+    assert(liftM > 1, ...
+        ['the marker shell lifts the final vehicle marker by only %.4f km; ' ...
+         'this check cannot tell a shell from no shell.'],liftM);
+
+%% The launch marker sits on the shell too, over the ground the flight began
+%% on. It is NOT exaggerated: it marks a ground position:
+    assertSeries(frmSeen{1}.lau(:), ...
+        1.02.*(c.rE./1000).*[cos(latC(1)).*cos(lonC(1)); ...
+                              cos(latC(1)).*sin(lonC(1)); ...
+                              sin(latC(1))], ...
+        'globeMovie launch marker (km)');
+
+%% ---------------------------------------------------------------------
+%% 12b. globeMovie -- the picture reads as THREE phases, not two
+%% ---------------------------------------------------------------------
+%% A boost-glide chain puts two orders of magnitude more length into the glide
+%% than into the terminal descent, and drawn at one width on a whole globe the
+%% descent measured FIVE coloured pixels in a 1280 x 720 frame -- three phases
+%% in the data and two in the picture. None of that is visible to a test that
+%% reads properties, so what is pinned here is the MECHANISM: the width grading,
+%% the junction markers and the legend. The frame itself still has to be looked
+%% at, and was.
+%%
+%% Width first. The phase drawn over the least distance must be drawn WIDER
+%% than the phase drawn over the most, and the two must not be equal:
+              lenP = zeros(1,numel(phList));
+    for kp = 1:numel(phList)
+               sel = phaseSpan(trjCha.phaseIdx,phList,kp);
+          lenP(kp) = sum(sqrt(diff(xWant(sel)).^2 + ...
+                              diff(yWant(sel)).^2 + ...
+                              diff(zWant(sel)).^2));
+    end
+        [~,kShort] = min(lenP);
+         [~,kLong] = max(lenP);
+    assert(lenP(kShort) < 0.5.*lenP(kLong), ...
+        ['the shortest synthetic phase is %.1f km against the longest %.1f km; ' ...
+         'the width grading cannot be told from a constant width.'], ...
+        lenP(kShort),lenP(kLong));
+              lwF  = frmSeen{nFrmT}.lw;
+              phF  = frmSeen{nFrmT}.ph;
+    assert(lwF(phF == phList(kShort)) > lwF(phF == phList(kLong)) + 0.5, ...
+        ['the shortest phase is drawn %.2f pt wide against the longest phase''s ' ...
+         '%.2f pt; a short leg drawn no bolder than a long one is a leg a ' ...
+         'reader cannot see.'], ...
+        lwF(phF == phList(kShort)),lwF(phF == phList(kLong)));
+
+%% A junction marker per handoff, in the right place, and -- the part that
+%% matters -- NOT drawn before the flight reaches it. Frame 8 of this
+%% trajectory has passed the first junction and not the second, so one marker
+%% must be placed and one must be off-screen:
+              jWnt = zeros(1,numel(phList) - 1);
+    for kp = 2:numel(phList)
+        jWnt(kp-1) = find(trjCha.phaseIdx == phList(kp-1),1,'last');
+    end
+    assert(numel(frmSeen{nFrmT}.jctP) == numel(jWnt), ...
+        'globeMovie drew %d handoff markers for %d junctions.', ...
+        numel(frmSeen{nFrmT}.jctP),numel(jWnt));
+    assert(jWnt(1) <= kEndM && jWnt(end) > kEndM, ...
+        ['frame %d must sit BETWEEN two junctions for the growth check below ' ...
+         'to mean anything; junctions are at samples %s and it shows %d.'], ...
+        kMidF,mat2str(jWnt),kEndM);
+    for kj = 1:numel(jWnt)
+              kRow = find(frmSeen{nFrmT}.jctP == phList(kj+1),1);
+        assert(~isempty(kRow), ...
+            'no handoff marker carries the index of phase %d.',phList(kj+1));
+        assertSeries(frmSeen{nFrmT}.jctXyz(kRow,:)', ...
+            [xMkW(jWnt(kj));yMkW(jWnt(kj));zMkW(jWnt(kj))], ...
+            sprintf('globeMovie handoff marker %d (km)',kj));
+              kRwM = find(frmSeen{kMidF}.jctP == phList(kj+1),1);
+               gotM = frmSeen{kMidF}.jctXyz(kRwM,:);
+        if jWnt(kj) <= kEndM
+            assertSeries(gotM(:), ...
+                [xMkW(jWnt(kj));yMkW(jWnt(kj));zMkW(jWnt(kj))], ...
+                sprintf('globeMovie handoff marker %d, intermediate frame (km)',kj));
+        else
+            assert(all(isnan(gotM)), ...
+                ['handoff marker %d is drawn at %s in frame %d, which has only ' ...
+                 'reached sample %d of the junction''s %d. A handoff drawn ' ...
+                 'before the vehicle gets there announces the ending.'], ...
+                kj,mat2str(gotM,4),kMidF,kEndM,jWnt(kj));
+        end
+    end
+
+%% The legend names the phases, in the caller's own words. Without it the
+%% colours are a code the frame never explains:
+    assert(isequal(reshape(frmSeen{nFrmT}.leg,1,[]),{'boost','glide','descent'}), ...
+        'globeMovie''s legend reads {%s}; it must name the phases it was given.', ...
+        strjoin(frmSeen{nFrmT}.leg,', '));
 
 %% The readout updates per frame, states its units, and names the phase the
 %% vehicle is actually in. A frozen annotation on a moving vehicle is worse
@@ -570,24 +678,24 @@ function test_viz()
 %% All four are caught BEFORE a frame is rendered, which is the point: a movie
 %% that renders for ten minutes and then cannot be written has wasted ten
 %% minutes, and a one-frame movie is a still with a codec:
-    assertThrows(@() coorbital.viz.globeMovie(trjCha, ...
+    assertThrows(@() coorbital.viz.globeMovie(trjCha,vehOne,env, ...
         struct('File',[tempname '.avi'],'NFrame',4)),'an output that is not .mp4');
-    assertThrows(@() coorbital.viz.globeMovie(trjCha, ...
+    assertThrows(@() coorbital.viz.globeMovie(trjCha,vehOne,env, ...
         struct('File',fullfile(tempdir,'no_such_folder_here','m.mp4'),'NFrame',4)), ...
         'an output folder that does not exist');
-    assertThrows(@() coorbital.viz.globeMovie(trjCha, ...
+    assertThrows(@() coorbital.viz.globeMovie(trjCha,vehOne,env, ...
         struct('File',[tempname '.mp4'],'NFrame',1)),'a one-frame movie');
-    assertThrows(@() coorbital.viz.globeMovie(trjCha, ...
+    assertThrows(@() coorbital.viz.globeMovie(trjCha,vehOne,env, ...
         struct('File',[tempname '.mp4'],'NFrame',4,'AltScale',-3)), ...
         'a negative altitude exaggeration');
 
 %% ...and a misspelt Texture or Sky, because silently downgrading one would be
 %% indistinguishable from pumpkyn not being installed, which is the one thing
 %% the function's degradation note promises a reader can tell apart:
-    assertThrows(@() coorbital.viz.globeMovie(trjCha, ...
+    assertThrows(@() coorbital.viz.globeMovie(trjCha,vehOne,env, ...
         struct('File',[tempname '.mp4'],'NFrame',4,'Texture','atuo')), ...
         'a misspelt Texture');
-    assertThrows(@() coorbital.viz.globeMovie(trjCha, ...
+    assertThrows(@() coorbital.viz.globeMovie(trjCha,vehOne,env, ...
         struct('File',[tempname '.mp4'],'NFrame',4,'Sky','starz')), ...
         'a misspelt Sky');
 
@@ -694,13 +802,27 @@ function test_viz()
            got.ph  = zeros(1,numel(hTr));
            got.xyz = cell(1,numel(hTr));
            got.col = cell(1,numel(hTr));
+           got.lw  = zeros(1,numel(hTr));
         for kr = 1:numel(hTr)
         got.ph(kr) = hTr(kr).UserData;
        got.xyz{kr} = [hTr(kr).XData(:),hTr(kr).YData(:),hTr(kr).ZData(:)];
        got.col{kr} = hTr(kr).Color;
+        got.lw(kr) = hTr(kr).LineWidth;
         end
                hVe = findobj(hAxF,'Type','line','Tag','vehicleMarker');
            got.veh = [hVe.XData,hVe.YData,hVe.ZData];
+               hLa = findobj(hAxF,'Type','line','Tag','launchMarker');
+           got.lau = [hLa.XData,hLa.YData,hLa.ZData];
+
+%% The junction markers, phase index and position together, so a marker drawn
+%% at the wrong junction is a different thing from one drawn at the right one:
+               hHd = findobj(hAxF,'Type','line','Tag','handoffMarker');
+          got.jctP = zeros(1,numel(hHd));
+        got.jctXyz = zeros(numel(hHd),3);
+        for kr = 1:numel(hHd)
+      got.jctP(kr) = hHd(kr).UserData;
+   got.jctXyz(kr,:) = [hHd(kr).XData,hHd(kr).YData,hHd(kr).ZData];
+        end
 
 %% The caption and the readout are FIGURE annotations, not axes children, so
 %% they are looked up in the figure. findall rather than findobj, because an
@@ -711,6 +833,11 @@ function test_viz()
            got.hud = labelText(hHu.String);
                hTi = findall(hFg,'Tag','titleText');
            got.tit = labelText(hTi.String);
+               hLg = findobj(hFg,'Type','legend');
+           got.leg = {};
+        if isscalar(hLg)
+           got.leg = cellstr(string(hLg.String));
+        end
                hEa = findobj(hAxF,'Tag','earthSurface');
         got.nEarth = numel(hEa);
         got.rEarth = NaN;

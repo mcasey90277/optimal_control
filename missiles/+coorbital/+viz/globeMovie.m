@@ -1,4 +1,4 @@
-function mv = globeMovie(traj,opts)
+function mv = globeMovie(traj,veh,env,opts)
 %% Purpose:
 %
 %  Write an MP4 of the trajectory DEVELOPING over the Earth: the planet, the
@@ -23,6 +23,17 @@ function mv = globeMovie(traj,opts)
 %                                               x(:,3) latitude (rad), and
 %                                               phaseIdx [N x 1]
 %
+%  veh              Struct                      Vehicle parameters. NOT READ.
+%                                               Present so that every function
+%                                               in coorbital.viz takes the same
+%                                               (traj,veh,env,opts) arguments,
+%                                               exactly as in
+%                                               coorbital.viz.globe3D
+%
+%  env              Struct                      Environment model handles. NOT
+%                                               READ. The arc is the state's
+%                                               own geometry; no model enters
+%
 %  opts             Struct, optional            All fields optional:
 %                                               File      char, output path.
 %                                                         MUST end .mp4.
@@ -31,8 +42,8 @@ function mv = globeMovie(traj,opts)
 %                                                         tempdir -- see Notes
 %                                               NFrame    [1 x 1] frames to
 %                                                         render (-), default
-%                                                         90. See Notes for the
-%                                                         cost
+%                                                         240. See Notes for
+%                                                         what that costs
 %                                               FrameRate [1 x 1] playback rate
 %                                                         (frames/s), default
 %                                                         20
@@ -140,15 +151,69 @@ function mv = globeMovie(traj,opts)
 %  movie draws is always trajectory the propagator actually produced. Frame 1
 %  is sample 1 and the last frame is sample N whatever NFrame is.
 %
-%  COST, AND HOW TO MAKE IT LONGER. MEASURED, not budgeted: 0.13 s per frame at
-%  1920 x 1080 with the texture and the starfield, 90 frames of the full
-%  boost-glide-descent chain in 11.6 s wall clock, on this machine on
-%  2026-08-07. The scene is one textured sphere and a handful of lines, which
-%  is an order of magnitude cheaper than the multi-body scenes that gave the
-%  2 to 3 s per frame figure this library's plan quoted. So make it as long as
-%  you like: NFrame 300 at 1080p is under a minute. For a smoother-looking
-%  flight raise NFrame, not FrameRate -- more frames is a finer walk along the
-%  trajectory, a higher frame rate just plays the same walk faster.
+%  COST, AND WHY THE DEFAULT IS 240 FRAMES. MEASURED, not budgeted, on this
+%  machine on 2026-08-07 over the full boost-glide-descent chain with the
+%  texture and the starfield: 0.08 to 0.10 s per frame at the default
+%  1280 x 720, and 0.17 s per frame at 1920 x 1080. The scene is one textured
+%  sphere and a handful of lines, which is an order of magnitude cheaper than
+%  the multi-body scenes that gave the 2 to 3 s per frame figure this library's
+%  plan quoted. SO THE DEFAULT NFrame OF 240 COSTS 19 TO 24 s AT 1280 x 720, OR
+%  ABOUT 40 s AT 1920 x 1080, and plays for 12 s at the default 20 frames/s --
+%  both measured, not extrapolated. The first cut of this function defaulted to
+%  90, which bought a 4.5 s movie for 8 s of work; that is the wrong trade when
+%  the whole point of an animation is that a reader can follow the flight. For
+%  a smoother-looking flight raise NFrame, not FrameRate: more frames is a
+%  finer walk along the trajectory, a higher frame rate just plays the same
+%  walk faster.
+%
+%  READING THREE PHASES OUT OF A PICTURE OF ONE. The three legs of a
+%  boost-glide chain are nothing like the same length -- HGV/run_boost_glide
+%  flies 114 km of boost, 7528 km of glide and 30 km of descent -- so drawn at
+%  one width on a whole globe the descent is a few pixels and the movie reads
+%  as two phases and a rounding error. It was measured at FIVE yellow pixels in
+%  a 1280 x 720 frame. Three things are done about it, all of them visible in
+%  the frame rather than in the data: the LINE WIDTH is graded by phase LENGTH,
+%  so the shortest phase is drawn boldest and the longest at the base width; a
+%  HANDOFF MARKER, Tag 'handoffMarker', is dropped at each junction in the
+%  colour of the phase that starts there, and appears only once the flight
+%  reaches it; and a LEGEND names the phases in their own colours. A reader who
+%  wants the descent bigger than that wants a second movie zoomed on it, which
+%  this function does not do.
+%
+%  MARKERS RIDE A SHELL 2 PER CENT ABOVE THE SPHERE, AND WHY IT IS THAT BIG. A
+%  marker drawn AT the surface comes out as a HALF-DISC: MATLAB draws a marker
+%  as a screen-aligned quad at one depth, the planet under it recedes across
+%  that quad, and the far half loses the depth test. So every marker is drawn
+%  at radius max(plotted radius, 1.02 rE).
+%
+%  The 2 per cent was MEASURED, not chosen. The lift a marker needs is its own
+%  screen radius converted to kilometres times the tangent of its angle from
+%  the centre of the disc -- at the default 1280 x 720 this scene runs about
+%  23 km per pixel, so the 10 pt vehicle marker 9 deg off centre needs ~19 km
+%  and the 14 pt launch ring 55 deg off centre needs ~230 km. A shell was swept
+%  at 1.002, 1.01, 1.02 and 1.04 rE with the frames inspected each time:
+%  1.002 (12.8 km) left BOTH markers halved, 1.01 cured the vehicle and not the
+%  launch ring, 1.02 (128 km) cures both, 1.04 costs visible displacement and
+%  buys nothing further. One shell serves the LARGER frames because the markers
+%  grow with the frame: marker pixels rise and kilometres-per-pixel falls in
+%  the same proportion, so the kilometres a marker spans stop changing with
+%  Size once past the floors.
+%
+%  What it costs, stated plainly: the shell is radial, so a marker's apparent
+%  GROUND position shifts by up to 128*sin(angle from disc centre) km, about
+%  105 km and four pixels at the worst point of the shipped run. Nothing moves
+%  along the ground in the DATA -- coorbital.viz.globe3D draws the same markers
+%  exactly on the surface and is the figure to read a position off. And the
+%  rule cannot be perfect: the required lift grows without bound towards the
+%  limb, and the marker floors mean a very small frame carries relatively
+%  larger markers than the sweep assumed, so a marker near the limb of a very
+%  small frame can still come out clipped. Measured residual: at 480 x 320 the
+%  launch ring 55 deg off centre is still cut. That is the known edge of this
+%  fix, not an unnoticed one.
+%
+%  The launch marker is additionally drawn hollow and larger than the vehicle,
+%  so at t = 0, when the two are the same point, the picture is a white dot
+%  inside a green ring rather than one white dot with the ring hidden under it.
 %
 %  THE DEFAULT OUTPUT GOES TO tempdir, not to the current folder. A movie is a
 %  multi-megabyte binary and a self-demo that dropped one into whatever
@@ -163,8 +228,9 @@ function mv = globeMovie(traj,opts)
 %
 %  Tags on the drawn objects, for anyone reading them back. In the AXES:
 %  'earthSurface' the planet, 'globeTrack' one line per phase with the phase
-%  index in its UserData, 'vehicleMarker' the current position, 'launchMarker'
-%  the start point on the surface. In the FIGURE: 'titleText' the caption and
+%  index in its UserData, 'handoffMarker' one per junction with the index of
+%  the phase it starts in its UserData, 'vehicleMarker' the current position,
+%  'launchMarker' the start point. In the FIGURE: 'titleText' the caption and
 %  'hudText' the readout, both annotations rather than axes children -- see the
 %  note beside them for the measured reason.
 %
@@ -172,6 +238,17 @@ function mv = globeMovie(traj,opts)
 %  grid around a cinematic globe reads as clutter. The units are therefore
 %  stated where the numbers are: the readout labels its own seconds and
 %  kilometres, and the caption carries any altitude exaggeration.
+%
+%  THE TEXT IS SIZED FROM THE FRAME, not fixed in points. Absolute point sizes
+%  against fractional boxes work at one frame size and break at every other:
+%  the first cut of this function used 14 pt for the caption and 12 pt for the
+%  readout, which are right at 1280 x 720 and wrong at the 480 x 320 the
+%  shipped test renders, where the caption wrapped onto the globe and the
+%  readout put its 's' and its 'km' on lines of their own. Both are now
+%  round(Size(2)/50) and round(Size(2)/60), floored at 8 pt, so the layout
+%  holds from 480 x 320 to 1920 x 1080. The test cannot see this -- it reads
+%  the String property, which was correct throughout -- so it was found, and
+%  must be re-checked, by rendering a frame and LOOKING at it.
 %
 %% Revision History:
 %  Michael Casey                                                08/07/2026
@@ -197,18 +274,19 @@ if nargin == 0
           demoOpt  = struct('NFrame',24,'Size',[640 360],'AltScale',30, ...
                             'PhaseName',{{'glide','descent'}}, ...
                             'Title','coorbital.viz.globeMovie self-demo');
-                mv = coorbital.viz.globeMovie(demo,demoOpt);
+                mv = coorbital.viz.globeMovie(demo, ...
+                         coorbital.util.vehicleDefaults(),struct(),demoOpt);
     fprintf('globeMovie self-demo wrote %d frames to %s\n',mv.nFrame,mv.file);
     return;
 end
 
 %% Options, every one of them defaulted before anything is drawn:
-    if nargin < 2 || isempty(opts)
+    if nargin < 4 || isempty(opts)
               opts = struct();
     end
     assert(isstruct(opts),'opts must be a struct of options.');
            outFile = vizOption(opts,'File',fullfile(tempdir,'globeMovie.mp4'));
-            nFrame = vizOption(opts,'NFrame',90);
+            nFrame = vizOption(opts,'NFrame',240);
             fpsOut = vizOption(opts,'FrameRate',20);
             sizPix = vizOption(opts,'Size',[1280 720]);
             spinDg = vizOption(opts,'SpinDeg',30);
@@ -231,6 +309,27 @@ end
         'AltScale must be a positive scalar; %s given.',mat2str(altScale));
     assert(isempty(frmFcn) || isa(frmFcn,'function_handle'), ...
         'FrameFcn must be a function handle taking (hAx,kFrame), or [].');
+
+%% Text sized FROM THE FRAME. A point size is absolute and a text box is
+%% fractional, so any fixed size is right at one Size and wrong at every other:
+%% at the 480 x 320 the shipped test renders, the 14 pt caption and 12 pt
+%% readout this function first carried wrapped onto the globe and onto extra
+%% lines. Height over 50 and over 60, floored at 8 pt so that a very small
+%% frame stays legible rather than becoming correct and unreadable:
+            fntCap = max(8,round(sizPix(2)./50));
+            fntHud = max(8,round(sizPix(2)./60));
+
+%% The markers GROW with the frame and never shrink below the sizes that were
+%% checked by eye at 480 x 320 and 1280 x 720. Both halves of that were
+%% measured. Letting them scale down as well was tried first, and at 480 x 320
+%% it turned the descent handoff into a speck -- the count of descent-coloured
+%% pixels outside the legend fell from 50 to 8, which is most of the way back
+%% to the defect this is here to fix. Letting them stay fixed instead leaves a
+%% 10 pt dot on a 1080p frame, which is a speck of a different kind. So:
+%% floors at the values that read at the smallest frame, growth above them:
+            mkVeh  = max(10,round(sizPix(2)./72));
+            mkLau  = max(14,round(1.4.*mkVeh));
+            mkHand = max( 9,round(0.9.*mkVeh));
 
 %% Texture and Sky are refused rather than quietly downgraded when they are not
 %% one of the two things they can be. A misspelt 'atuo' that silently produced
@@ -275,6 +374,19 @@ end
              yTrk  = rPlt.*cos(lat).*sin(lon)./1000;
              zTrk  = rPlt.*sin(lat)./1000;
              altKm = (traj.x(:,1) - c.rE)./1000;
+
+%% ...and the same points again on a shell 2 per cent above the sphere, for the
+%% MARKERS only. A marker sitting on the surface is cut in half by the depth
+%% buffer and renders as a half-disc; 1.02 rE, 128 km here, is the smallest
+%% lift measured to clear BOTH the vehicle marker and the larger launch ring in
+%% the shipped scene -- see the shell note in the header for the sweep and for
+%% what the lift costs. A marker already above the shell is left where the
+%% trajectory put it. The TRACK is never lifted -- it is the data:
+            shellF = 1.02;
+              rMk  = max(rPlt,shellF.*c.rE);
+             xMk   = rMk.*cos(lat).*cos(lon)./1000;
+             yMk   = rMk.*cos(lat).*sin(lon)./1000;
+             zMk   = rMk.*sin(lat)./1000;
 
 %% Which SAMPLE each frame shows. Uniform in time rather than in index, so the
 %% movie plays at a constant rate whatever the integrator's step history did:
@@ -350,11 +462,10 @@ end
             skyTxt = 'black';
     end
 
-%% One line per phase, each empty until the frame loop fills it, and each
+%% Which samples each phase is drawn over, and what it is called. Each phase is
 %% extended backward to the junction so the growing track has no holes in it --
 %% the same contract coorbital.viz.globe3D documents:
                col = lines(max(nPh,7));
-            hTrack = gobjects(1,nPh);
             selAll = cell(1,nPh);
            nmPhase = cell(1,nPh);
     for kp = 1:nPh
@@ -366,29 +477,89 @@ end
         if numel(phName) >= kp
        nmPhase{kp} = phName{kp};
         end
+    end
+
+%% HOW WIDE each phase is drawn, graded by how LONG it is. The three legs of a
+%% boost-glide chain differ by two orders of magnitude in length -- 114 km,
+%% 7528 km and 30 km on this library's shipped run -- and at one width on a
+%% whole globe the short ones vanish: the terminal descent measured FIVE
+%% coloured pixels in a 1280 x 720 frame. So the longest phase is drawn at the
+%% base width and a phase of vanishing length at the base plus the whole of the
+%% extra, which puts the boldest stroke on exactly the leg a globe-wide view
+%% would otherwise swallow. The lengths are the DRAWN lengths, chord by chord
+%% through the plotted points, so the grading follows the exaggerated picture
+%% the reader is actually looking at:
+            lwBase = 2.0;
+            lwXtra = 3.5;
+             lenPh = zeros(1,nPh);
+    for kp = 1:nPh
+               sel = selAll{kp};
+        if numel(sel) >= 2
+         lenPh(kp) = sum(sqrt(diff(xTrk(sel)).^2 + ...
+                              diff(yTrk(sel)).^2 + ...
+                              diff(zTrk(sel)).^2));
+        end
+    end
+            lenMax = max([lenPh,eps]);
+              lwPh = lwBase + lwXtra.*(1 - lenPh./lenMax);
+
+%% One line per phase, each empty until the frame loop fills it:
+            hTrack = gobjects(1,nPh);
+    for kp = 1:nPh
         hTrack(kp) = line(hAx,NaN,NaN,NaN, ...
-                          'Color',col(kp,:),'LineWidth',2.5, ...
+                          'Color',col(kp,:),'LineWidth',lwPh(kp), ...
                           'Tag','globeTrack','UserData',phList(kp));
     end
 
-%% The launch point, on the surface and never exaggerated -- it marks ground,
-%% and lifting it would put it somewhere the vehicle was not. There is no
-%% impact marker: the vehicle has not got there yet, and drawing where it will
-%% end up would give the ending away in frame one:
-    line(hAx,rEkm.*cos(lat(1)).*cos(lon(1)), ...
-             rEkm.*cos(lat(1)).*sin(lon(1)), ...
-             rEkm.*sin(lat(1)), ...
-         'LineStyle','none','Marker','o','MarkerSize',9,'LineWidth',1.5, ...
+%% A marker at each junction, in the colour of the phase that STARTS there, and
+%% carrying that phase's index. Colour and width tell a reader that the stroke
+%% changed; a marker tells them WHERE, which is the thing a 30 km terminal leg
+%% cannot say for itself. Each is held off-screen until the flight reaches it,
+%% in the frame loop, for the same reason there is no impact marker:
+              nJct = max(nPh - 1,0);
+            hHand  = gobjects(1,nJct);
+            idxJct = zeros(1,nJct);
+    for kp = 2:nPh
+       idxJct(kp-1) = selAll{kp}(1);
+       hHand(kp-1)  = line(hAx,NaN,NaN,NaN, ...
+                           'LineStyle','none','Marker','d', ...
+                           'MarkerSize',mkHand, ...
+                           'MarkerFaceColor',col(kp,:), ...
+                           'MarkerEdgeColor',[0 0 0],'LineWidth',1.2, ...
+                           'Tag','handoffMarker','UserData',phList(kp));
+    end
+
+%% The launch point, on the marker shell over the ground the flight began on
+%% and never exaggerated -- it marks ground, and lifting it by the exaggeration
+%% would put it somewhere the vehicle was not. HOLLOW and larger than the
+%% vehicle marker, so that at t = 0, when the two are the same point, the
+%% picture is a white dot inside a green ring rather than one white dot. There
+%% is no impact marker: the vehicle has not got there yet, and drawing where it
+%% will end up would give the ending away in frame one:
+    line(hAx,shellF.*rEkm.*cos(lat(1)).*cos(lon(1)), ...
+             shellF.*rEkm.*cos(lat(1)).*sin(lon(1)), ...
+             shellF.*rEkm.*sin(lat(1)), ...
+         'LineStyle','none','Marker','o','MarkerSize',mkLau,'LineWidth',2.0, ...
          'Color',[0.2 1 0.4],'Tag','launchMarker');
 
 %% The vehicle. WHITE, and deliberately not one of the phase colours: lines()
 %% reaches yellow at phase 3, and a yellow vehicle riding the end of a yellow
 %% descent is a marker a reader cannot find:
               hVeh = line(hAx,NaN,NaN,NaN, ...
-                          'LineStyle','none','Marker','o','MarkerSize',10, ...
+                          'LineStyle','none','Marker','o','MarkerSize',mkVeh, ...
                           'MarkerFaceColor',[1 1 1], ...
                           'MarkerEdgeColor',[0 0 0],'LineWidth',1.2, ...
                           'Tag','vehicleMarker');
+
+%% The legend, naming the phases in their own colours and at their own widths.
+%% AutoUpdate off and an explicit handle list, so the markers created above and
+%% anything a FrameFcn adds later stay out of it. It is the one part of the
+%% frame that says what the colours MEAN; the readout names only the phase the
+%% vehicle is in at that instant:
+              hLeg = legend(hAx,hTrack,nmPhase,'AutoUpdate','off', ...
+                            'Location','southwest','Interpreter','none');
+    set(hLeg,'TextColor',[1 1 1],'Color',[0.06 0.06 0.06], ...
+             'EdgeColor',[0.45 0.45 0.45],'FontSize',fntHud,'Box','on');
 
 %% The caption and the readout, both FIGURE-level annotations rather than an
 %% axes title and an axes text. Measured on R2025b, 2026-08-07: in an axes
@@ -402,14 +573,15 @@ end
     if altScale ~= 1
             titFul = sprintf('%s (altitude exaggerated %gx)',titTxt,altScale);
     end
-    annotation(hFig,'textbox',[0.05 0.90 0.90 0.08], ...
+    annotation(hFig,'textbox',[0.03 0.90 0.94 0.09], ...
                'String',titFul,'Tag','titleText', ...
-               'Color',[1 1 1],'FontSize',14,'FontWeight','bold', ...
+               'Color',[1 1 1],'FontSize',fntCap,'FontWeight','bold', ...
                'HorizontalAlignment','center','VerticalAlignment','top', ...
                'EdgeColor','none','FitBoxToText','off','Interpreter','none');
-              hHud = annotation(hFig,'textbox',[0.015 0.76 0.30 0.14], ...
+              hHud = annotation(hFig,'textbox',[0.015 0.68 0.42 0.22], ...
                           'String',{''},'Tag','hudText', ...
-                          'Color',[1 1 1],'FontName','FixedWidth','FontSize',12, ...
+                          'Color',[1 1 1],'FontName','FixedWidth', ...
+                          'FontSize',fntHud, ...
                           'HorizontalAlignment','left','VerticalAlignment','top', ...
                           'EdgeColor','none','FitBoxToText','off','Interpreter','none');
 
@@ -437,8 +609,22 @@ end
                                'ZData',zTrk(sel));
             end
 
-%% The vehicle and the readout, at the sample this frame shows:
-            set(hVeh,'XData',xTrk(kEnd),'YData',yTrk(kEnd),'ZData',zTrk(kEnd));
+%% The junction markers, each appearing only in the frame that reaches it. A
+%% handoff drawn before the vehicle gets there would announce the ending, which
+%% is the same reason there is no impact marker:
+            for kj = 1:nJct
+                if idxJct(kj) <= kEnd
+                    set(hHand(kj),'XData',xMk(idxJct(kj)), ...
+                                  'YData',yMk(idxJct(kj)), ...
+                                  'ZData',zMk(idxJct(kj)));
+                else
+                    set(hHand(kj),'XData',NaN,'YData',NaN,'ZData',NaN);
+                end
+            end
+
+%% The vehicle and the readout, at the sample this frame shows. The marker sits
+%% on the shell, so it stays a whole disc when the vehicle is on the deck:
+            set(hVeh,'XData',xMk(kEnd),'YData',yMk(kEnd),'ZData',zMk(kEnd));
                kNow = find(phList == phIdx(kEnd),1);
             set(hHud,'String',{sprintf('t   = %7.1f s',tS(kEnd)), ...
                                sprintf('alt = %7.2f km',altKm(kEnd)), ...

@@ -3,31 +3,60 @@
 Running log. Newest entries at the top. Record what broke, what fixed it, and
 what a future reader would otherwise rediscover the hard way.
 
-## 2026-08-06 — An analytic reference cannot see a parameter it shares with the code
+## 2026-08-06 — An analytic test can never validate a constant it shares with the model
 
-The single biggest lesson from the analytic validation suite. A closed-form
-solution is only a check on the parameters it does NOT share with the
-simulation. Allen-Eggers gives peak deceleration as `Ve^2 |sin(gammaE)| / (2 e H)`.
-Inflate `Hscale` by 15 percent and the prediction drops 13 percent — and so does
-the simulation, by almost exactly the same amount, because Allen-Eggers *is* the
-exact solution for that atmosphere. Measured: agreement moves from +10.50 to
-+10.44 percent. The comparison is structurally blind to `H`, and nothing else in
-the suite pinned it either (`test_missileConst` only brackets it to 6–9 km).
+State it in the general form, because it is the most transferable thing this
+milestone produced:
 
-The fix is to anchor the shared parameter against something outside both sides.
-Allen-Eggers assumes an isothermal atmosphere in *hydrostatic equilibrium*, and
-for one of those the scale height is not free: `H = R T / g`. The library's
-7200 m sits 1.64 percent from `Rair*T0/g0 = 7317.8 m`, so `test_allenEggers`
-asserts that gap stays under 3 percent. That single line is what makes the
-`Hscale` mutation fail; the deceleration comparison alone would have passed it.
+> **An analytic reference computed from the same constants as the model cannot
+> detect a wrong constant.** The constant appears on both sides and cancels. No
+> tolerance, however tight, recovers the sensitivity. The ONLY defence is to pin
+> the constant at its source.
 
-The same trap, caught earlier in the same task: the equilibrium-glide reference
-must read `CL` from `veh.CL`, not from `coorbital.aero.constLD`. Scaling `CL` by
-1.2 *inside* `constLD` with the reference reading it back out moves the mismatch
-from 14.2 percent DOWN to 9.9 percent — the mutant looks better than the
-original. Reading `CL` from the vehicle instead, the same mutation drives the
-error from 1.5 to 11.5 percent. Ask of every symbol in an analytic reference:
-where does the simulation get this, and would a wrong value cancel?
+`test_missileConst` is therefore not a formality — it is the load-bearing test
+for every physical constant in the library, and the analytic suite is built on
+the assumption that it holds. Demonstrated three ways, all measured:
+
+| Mutation | Analytic suite | Caught by |
+|---|---|---|
+| `Hscale` × 1.15 | both pass (Allen-Eggers agreement moves only +10.50 → +10.44 %) | nothing, originally — `test_missileConst` merely bracketed it to 6–9 km |
+| `rho0` × 1.3 | both pass | `test_missileConst` pin; also `test_expAtmos` (sea-level pressure 87909.92 Pa) |
+| `muE` × 1.02 | both pass | `test_missileConst` pin; also `test_sphereGrav` (surface gravity) |
+
+Note *what* catches `rho0` and `muE` besides the constants pin: unit tests that
+assert a hand-computed ABSOLUTE value which happens to depend on them.
+`Hscale` had no such anchor anywhere in the suite — `test_expAtmos` checks that
+density falls by one e-fold per scale height, which is true for *any* `Hscale`
+and so is self-referential in exactly the way described above. That is the
+precise reason `Hscale` was the one constant left exposed. It is now pinned to
+7200 m within 1 m, with a comment saying why.
+
+Generalising the diagnostic: for every constant, ask whether ANY test asserts a
+number that would change if the constant were wrong. "Relative" checks — one
+e-fold per scale height, energy conservation, a closed-form solution built from
+the same constants — do not count.
+
+**A wrong turn worth recording.** The first fix attempted was an anchor inside
+`test_allenEggers` asserting the scale height against its hydrostatic value,
+`H = R T / g`. That was wrong on two counts. First, Allen-Eggers needs only an
+exponential *density* profile — temperature and pressure never enter the
+solution, so hydrostatic consistency is not a precondition of the reference at
+all, and the anchor would have false-alarmed on a perfectly legitimate change to
+`T0`. Second, it did not assert much: `Rair*T0/g0` = 7317.81 m against
+`Hscale` = 7200 m, a pre-existing 1.64 percent inconsistency, so a 3 percent
+budget left only 1.8× headroom over a gap that was already there. The lesson
+generalises: when a shared parameter turns out to be invisible, pin it where it
+is *defined*; do not invent a physical-sounding cross-check in the test that
+noticed the blindness.
+
+**The same trap in its non-constant form**, caught earlier in the same task: the
+equilibrium-glide reference must read `CL` from `veh.CL`, not from
+`coorbital.aero.constLD`. Scaling `CL` by 1.2 *inside* `constLD` with the
+reference reading it back out moves the mismatch from 14.2 percent DOWN to
+9.9 percent — the mutant looks better than the original. Reading `CL` from the
+vehicle instead, the same mutation drives the error from 1.51 to 11.52 percent.
+Ask of every symbol in an analytic reference: where does the simulation get
+this, and would a wrong value cancel?
 
 ## 2026-08-06 — Put the initial condition on the manifold, don't wait out the phugoid
 

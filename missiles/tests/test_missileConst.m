@@ -31,7 +31,12 @@ function test_missileConst()
     assert(abs(c.rE   - 6378137)        < 1,     'rE out of range');
     assert(abs(c.g0   - 9.80665)        < 1e-3,  'g0 out of range');
     assert(abs(c.rho0 - 1.225)          < 1e-3,  'rho0 out of range');
-    assert(c.Hscale > 6000 && c.Hscale < 9000,   'Hscale out of range');
+%% Hscale is PINNED, not range-checked. The Allen-Eggers reference
+%% aMax = Ve^2|sin(gammaE)|/(2 e Hscale) divides by the same scale height the
+%% atmosphere multiplies by, so that comparison is structurally blind to a wrong
+%% Hscale -- both sides move together. This assertion is the only thing standing
+%% between a mistyped scale height and a validation suite that still reports green:
+    assert(abs(c.Hscale - 7200)         < 1,     'Hscale out of range');
     assert(abs(c.gamAir - 1.4)          < 1e-6,  'gamAir out of range');
     assert(abs(c.T0   - 250)            < 1e-9,  'T0 out of range');
     assert(abs(c.Rair - 287.053)        < 1e-3,  'Rair out of range');

@@ -33,8 +33,9 @@ function test_equilibriumGlide()
 %      blind to precisely that error, because the mistake would then enter
 %      both sides of the comparison equally and cancel. Measured: scaling CL
 %      by 1.2 inside constLD LOWERS the mismatch when the reference reads CL
-%      from the model, and raises it from 1.5 to 13.5 percent when the
-%      reference reads it from the vehicle.
+%      from the model (14.2 down to 9.9 percent on the arc that formulation
+%      flew), and raises it from 1.51 to 11.52 percent when the reference
+%      reads it from the vehicle.
 %
 %  (2) An open-loop constant-alpha arc is not obliged to sit on the
 %      equilibrium curve. It phugoids about it, and at these altitudes the
@@ -64,7 +65,7 @@ function test_equilibriumGlide()
 %  1.5 percent, reached at the low, slow end where the quasi-steady assumption
 %  starts to give way (drag is no longer small against the terms retained).
 %  The assertion is set at 3 percent: roughly a factor of two of headroom over
-%  the measured quasi-steady departure, and far below the 13.5 percent a
+%  the measured quasi-steady departure, and well below the 11.52 percent a
 %  20 percent lift error produces.
 %
 %% Inputs:
@@ -158,12 +159,18 @@ function test_equilibriumGlide()
         vSpan);
 
 %% The shallow-glide premise, checked rather than assumed. The measured worst
-%% case is -3.13 deg at the slow end, where cos(gamma) is 1.5e-3 below unity;
-%% the bounds below allow half again as much before calling the premise broken:
-    assert(max(abs(gArc)) < deg2rad(5), ...
+%% case is -3.13 deg at the slow end, where cos(gamma) is 1.5e-3 below unity.
+%% These are GUARDS, not the physics assertion, and they are deliberately loose:
+%% every field of vehicleDefaults is marked PLACEHOLDER, and a routine change to
+%% one of them moves this angle. Doubling Sref, for instance, steepens the glide
+%% enough to trip a 5 deg bound -- and a run that failed HERE rather than on the
+%% relative-speed assertion below would report a broken premise when what had
+%% actually happened is that the physics check was never reached. 8 deg is still
+%% unambiguously a glide and leaves that room:
+    assert(max(abs(gArc)) < deg2rad(8), ...
         'flight path angle reached %.4f deg; the glide is no longer shallow', ...
         rad2deg(max(abs(gArc))));
-    assert(max(abs(1 - cos(gArc))) < 5e-3, ...
+    assert(max(abs(1 - cos(gArc))) < 1e-2, ...
         'cos(gamma) departed unity by %.3e; the small-angle premise has gone', ...
         max(abs(1 - cos(gArc))));
 

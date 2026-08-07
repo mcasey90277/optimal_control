@@ -127,8 +127,11 @@ returns a non-zero exit code. Current state:
 ```
 
 6.3 s wall clock including MATLAB startup, measured 2026-08-07 on an Apple
-silicon Mac, and zero warnings. Twelve of the sixteen test one library function
-apiece. The other four test **compositions**, and they are the important ones:
+silicon Mac, and zero warnings. Twelve of the sixteen are unit or
+analytic-validation tests — ten exercise one library function apiece, and
+`test_allenEggers` and `test_equilibriumGlide` check the propagator against a
+closed-form solution. The other four test **compositions**, and they are the
+important ones:
 
 | Test | What it composes |
 |---|---|
@@ -592,8 +595,13 @@ expression evaluated in the same order, so with `T = 0` the residual is an IEEE
 identity. It *proves* the six shared equations **are** `glide3DOF` — no
 transcription drift, no dropped term, no altered sign — and it is simultaneously
 **zero-bit evidence of correctness**, because any error in `glide3DOF` is
-inherited and cancels invisibly. Eight mutations of the thrust terms survived the
-entire suite before the force-increment check existed. The force increment is
+inherited and cancels invisibly. Mutations of the thrust terms survived the
+entire suite before the force-increment check existed — **four of them measured
+and tabulated** in the 2026-08-07 reduction-test entry of `LESSONS_LEARNED.md`,
+eight in total according to the development log, which is not in this repository.
+Take the four as the reproducible figure; the eight is provenance, not a
+measurement, and unlike everything else in this section it cannot be re-run now
+that the check exists. The force increment is
 what covers them: evaluate the same state twice with **only** `env.prop` changed,
 so every shared model is bit-identical across the two calls and the difference
 isolates the new terms exactly. It is the sharpest instrument in the suite.
@@ -730,11 +738,27 @@ open-literature value.** They demonstrate that the machinery works and are of th
 right order of magnitude. **No trajectory number in this document is a
 performance prediction for any real vehicle.**
 
+This table is the complete set — every field of all three parameter files.
+
 | Struct | Values |
 |---|---|
-| `vehicleDefaults` / `vehicle_hgv` | `mass = 900 kg`, `Sref = 0.75 m²`, `CL = 0.35`, `L/D = 2.5` |
-| `vehicle_bm` | `mass = 900 kg`, `Sref = 0.385 m²`, `CL = 0.005`, `L/D = 0.02` |
-| `boosterDefaults` | `massDry = 1500 kg`, `massProp = 30000 kg`, `thrustVac = 950 kN`, `Isp = 260 s` (vacuum), `Aexit = 1.25 m²` |
+| `vehicleDefaults` / `vehicle_hgv` | `mass = 900 kg`, `Sref = 0.75 m²`, `CL = 0.35`, `L/D = 2.5`, `noseRadius = 0.05 m` |
+| `vehicle_bm` | `mass = 900 kg`, `Sref = 0.385 m²`, `CL = 0.005`, `L/D = 0.02`, `noseRadius = 0.10 m` |
+| `boosterDefaults`, mass and propulsion | `massDry = 1500 kg`, `massProp = 30000 kg`, `thrustVac = 950 kN`, `Isp = 260 s` (vacuum), `Aexit = 1.25 m²` |
+| `boosterDefaults`, **stack aerodynamics** | `Sref = 1.77 m²`, `CL = 0.05`, `L/D = 0.25` |
+
+**Do not read the booster aerodynamic triple as inert bookkeeping.** It sets the
+boosted stack's drag through the whole powered ascent, so it moves the burnout
+state every later phase inherits. And with `separation = false` it describes the
+airframe for the *entire* unpowered flight as well: a slender body of revolution
+at `L/D = 0.25` barely glides. Measured on `run_boost_glide` 2026-08-07 —
+7663.05 km with separation against **2853.71 km without, a 62.8 % loss of
+range**, driven by these three numbers.
+
+`noseRadius` is the one field in the table no physics routine reads. It is
+carried for the deferred Sutton–Graves heating rate and says so at its point of
+definition; three tests assert only that it exists and passes through
+`vehicle_hgv` unchanged.
 
 Both chain scripts print `(PLACEHOLDER values)` on the vehicle and booster lines
 of their own summaries, so the caveat travels with the output. `test_constThrust`
@@ -798,8 +822,8 @@ from `veh.CL`, never back out of the aero model).
 - **A reduction test validates only the terms that survive the reduction.** The
   shared object that cancels is a whole *expression* rather than a constant. The
   `boost3DOF` → `glide3DOF` reduction is bit-exact and covers none of the thrust
-  physics; eight thrust mutations survived the whole suite before the
-  force-increment check existed.
+  physics; four measured thrust mutations survived the whole suite before the
+  force-increment check existed, tabulated in that entry.
 - **Tsiolkovsky is blind to every booster constant.** `Isp`, `g0`, `thrustVac`
   and the mass ratio all cancel between propagation and closed form. Six exact
   pins in `test_constThrust.m` are the entire defence — the `Hscale` lesson,

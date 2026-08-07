@@ -60,7 +60,11 @@ function traj = phaseRun(phases,x0,veh,env)
 %  glide therefore cannot be chained directly onto a seven-state powered
 %  phase: wrap the six-state EOM with coorbital.eom.massConstant, which
 %  appends dm/dt = 0, and run the whole chain seven-state. The control width
-%  nu is likewise measured, from the first guide evaluation, not assumed.
+%  nu is likewise measured, not assumed: phase 1's guide is called ONCE
+%  before the phase loop, at (tspan(1), x0), purely to size traj.u. A
+%  STATEFUL guide -- one that latches, counts calls, or otherwise remembers
+%  what it has been asked -- will therefore see one evaluation more than the
+%  integrator makes, and must tolerate it.
 %
 %  A phase may carry an optional link handle, xNext = link(xEnd), applied to
 %  that phase's terminal state to form the initial state of the NEXT phase --
@@ -73,8 +77,12 @@ function traj = phaseRun(phases,x0,veh,env)
 %  the state AS HANDED TO THE NEXT PHASE: the value on the FAR side of a
 %  staging jump, not the terminal state of the phase that just ended. The
 %  near side is the last traj.x row labelled phase k, which sits at the same
-%  instant on the cumulative clock. A link on the FINAL phase has no
-%  observable effect, there being no next phase to seed.
+%  instant on the cumulative clock. A link on the FINAL phase is still
+%  evaluated and validated -- it can raise linkWidth, and any side effect it
+%  has still happens -- but it does not affect the output, there being no
+%  next phase to seed and no junction to record.
+%
+%  A call with no phases returns an empty traj and does not integrate.
 %
 %% Revision History:
 %  Michael Casey                                                08/06/2026
@@ -116,9 +124,13 @@ end
 
 %% State and control widths are MEASURED, never assumed, so a seven-state
 %% powered chain, or a control carrying a throttle channel, needs no edit
-%% here. nu comes from the first guide evaluation the chain will make:
+%% here. nu costs one guide evaluation, which a zero-phase call must not
+%% make -- there is no phase 1 to ask, and such a call returns empty:
                 nx = numel(xCurr);
+                nu = 0;
+if nPh > 0
                 nu = numel(phases(1).guide(phases(1).tspan(1),xCurr));
+end
 
 %% Solver tolerances, overridable through env so a later task can trade
 %% accuracy for speed without editing this file:

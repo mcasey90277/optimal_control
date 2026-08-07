@@ -440,21 +440,51 @@ function test_phaseRun()
 %  six flight states must be untouched by the lift. The six-state run of the
 %  identical phase is the independent reference -- x(7) is inert in
 %  glide3DOF, which reads vehicle mass from veh, so widening the state must
-%  not perturb the trajectory at all:
+%  not perturb the trajectory:
                nS7 = numel(traj7.t);
     assert(isequal(size(traj7.x),[nS7 7]),'state must be [N x 7]');
     assert(isequal(size(traj7.u),[nS7 2]),'control must still be [N x 2]');
     assert(isequal(size(traj7.phaseIdx),[nS7 1]),'phaseIdx must be [N x 1]');
-    assert(numel(traj.t) == nS7, ...
-        ['the seven-state run took %d samples against %d for the identical ' ...
-         'six-state run; the inert mass state perturbed the integration'], ...
-        nS7,numel(traj.t));
-             d67 = max(max(abs(traj7.x(:,1:6) - traj.x(:,1:6))));
-    assert(d67 < 1e-9, ...
-        'widening the state changed the six flight states by %.3e',d67);
-    assert(abs(traj7.t(end) - traj.t(end)) < 1e-9, ...
+
+%% Compared at the TERMINUS, which both runs reach through the same 20 km
+%  event, so the comparison needs no shared time grid. Component-scaled so
+%  metres and radians are weighed alike. The two runs do in fact land on
+%  identical grids today, because ode45 gives a zero-derivative component
+%  zero weight in its error norm -- but that is a property of the step
+%  controller, not of this driver, so it is not asserted. What IS asserted is
+%  that the step COUNT stays the same order, which still catches a mass state
+%  that has started driving the integration:
+           xScale7 = max(abs(traj.x(end,1:6)'),1);
+             dEnd7 = max(abs(traj7.x(end,1:6)' - traj.x(end,1:6)')./xScale7);
+    assert(dEnd7 < 1e-9, ...
+        'widening the state changed the terminal flight state by %.3e',dEnd7);
+    assert(abs(traj7.t(end) - traj.t(end)) < 1e-6, ...
         'widening the state changed the flight time by %.3e s', ...
         abs(traj7.t(end) - traj.t(end)));
+    assert(abs(nS7 - numel(traj.t)) < 0.05*numel(traj.t), ...
+        ['the seven-state run took %d samples against %d for the identical ' ...
+         'six-state run; the inert mass state is driving the integration'], ...
+        nS7,numel(traj.t));
+
+%% massConstant must hand the base EOM SIX states, not the whole widened
+%  vector. glide3DOF is structurally blind to this -- it unpacks components 1
+%  through 6 and ignores anything after -- so the slice is pinned with a
+%  probe EOM that REPORTS what it was given instead: its first derivative is
+%  the length of the state it saw, and the rest echo that state back:
+             probe = @(~,x,~,~,~) [numel(x); x(2:end)];
+          eomProbe = coorbital.eom.massConstant(probe);
+             xdotP = eomProbe(0,(1:7)',[0;0],veh,env);
+
+    assert(numel(xdotP) == 7, ...
+        ['massConstant returned %d derivatives for a 7-state input; it must ' ...
+         'pass 6 states down and append exactly one zero'],numel(xdotP));
+    assert(xdotP(1) == 6, ...
+        ['the base EOM was handed %d states; massConstant must slice x(1:6) ' ...
+         'and pass the base exactly 6'],xdotP(1));
+    assert(isequal(xdotP(2:6),(2:6)'), ...
+        'the base EOM must receive components 1 through 6 in order, unaltered');
+    assert(xdotP(7) == 0, ...
+        'the appended mass derivative must be exactly zero, got %.3e',xdotP(7));
 
 %% ---------------------------------------------------------------------
 %% The CONTROL width is measured too, not assumed to be 2. A powered phase
@@ -583,4 +613,19 @@ function test_phaseRun()
               hitL = strcmp(errL.identifier,'coorbital:phaseRun:linkWidth');
     end
     assert(hitL,'a link that drops a state must raise coorbital:phaseRun:linkWidth');
+
+%% ---------------------------------------------------------------------
+%% A call with NO phases returns an empty traj rather than throwing. This is
+%  degenerate, but it is what the driver did before the widths were measured,
+%  and measuring nu must not cost it: there is no phase 1 to ask for a guide
+%  evaluation, and asking anyway raised a bare subscript error:
+%% ---------------------------------------------------------------------
+            trNone = coorbital.prop.phaseRun(struct([]),x07,veh,env);
+    assert(isempty(trNone.t),'a zero-phase call must return an empty time vector');
+    assert(isempty(trNone.x),'a zero-phase call must return an empty state history');
+    assert(isempty(trNone.u),'a zero-phase call must return an empty control history');
+    assert(isempty(trNone.phaseIdx),'a zero-phase call must return no phase labels');
+    assert(isequal(size(trNone.junction),[0 1]), ...
+        'a zero-phase call must give a 0 x 1 junction array, got %s', ...
+        mat2str(size(trNone.junction)));
 end

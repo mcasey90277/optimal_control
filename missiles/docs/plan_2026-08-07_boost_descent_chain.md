@@ -152,6 +152,14 @@ Setting `T = 0` and `mdot = 0` must reduce the first six components to `glide3DO
 Run: `grep -n "6" missiles/+coorbital/+prop/phaseRun.m`
 Read each hit and classify it as a genuine state-dimension assumption or a coincidence. Record the list in your report before changing anything.
 
+**Correction, established during execution:** the driver was ALREADY state-agnostic.
+`xSeg` is a cell array with no width, and the state flows `x0` -> `ode45` -> `xk(k0:end,:)`
+-> `vertcat` untouched; the only sixes in the file were header annotations and self-demo
+numbers. The single genuine executable width assumption was on the CONTROL axis,
+`uk = zeros(numel(tk),2)`. `nx` is still worth introducing, but as a validated quantity
+(it checks that a `link` preserves the state dimension), not as a fix to a bug that was
+never there. Do not go looking for an `xSeg` preallocation to widen.
+
 - [ ] **Step 2: Write the failing test**
 
 Add to `missiles/tests/test_phaseRun.m`:
@@ -232,6 +240,11 @@ staging event needs to know which side of the jump is recorded.
 Test it: a two-phase run whose first phase carries `link = @(x) [x(1:6); x(7) - 500]`
 must show `traj.x` component 7 dropping by exactly 500 across the junction, with
 components 1 through 6 continuous to 1e-9.
+
+**That assertion alone does NOT pin the ordering** — established during execution.
+Phase 2 receives the post-link state whether the link is applied before or after the
+junction is recorded, so `traj.x` steps by 500 either way. Pinning the documented
+ordering requires asserting on `junction(1).x(7)` directly. Include that assertion.
 
 - [ ] **Step 6: Generalise phaseRun**
 

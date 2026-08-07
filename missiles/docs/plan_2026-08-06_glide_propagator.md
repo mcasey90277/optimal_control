@@ -165,7 +165,7 @@ end
 
 Run:
 ```bash
-/Applications/MATLAB_R2025b.app/bin/matlab -batch "cd('/Users/msc/Desktop/optimal_control/missiles'); tests/run_tests" 2>&1 | grep -vE "Home License|personal use|academic, research|organizational use"
+/Applications/MATLAB_R2025b.app/bin/matlab -batch "cd('/Users/msc/Desktop/optimal_control/missiles'); run('tests/run_tests')" 2>&1 | grep -vE "Home License|personal use|academic, research|organizational use"
 ```
 Expected: `FAIL test_missileConst` with an "Unrecognized function" message for `coorbital.util.missileConst`.
 
@@ -1674,12 +1674,12 @@ of `run_glide.m`. Nothing below that block should need editing.
 Tests:
 
     cd ~/Desktop/optimal_control/missiles
-    tests/run_tests
+    run('tests/run_tests')
 
 Headless:
 
     /Applications/MATLAB_R2025b.app/bin/matlab -batch \
-      "cd('/Users/msc/Desktop/optimal_control/missiles'); tests/run_tests"
+      "cd('/Users/msc/Desktop/optimal_control/missiles'); run('tests/run_tests')"
 
 ## Layout
 
@@ -1721,7 +1721,7 @@ degrees and kilometres in the user block and convert immediately.
 
 - [ ] **Step 2: Verify every documented command runs**
 
-Run each of the three commands in the Running section. Expected: `run_glide` prints its summary, `tests/run_tests` reports `9 passed, 0 failed`.
+Run each of the three commands in the Running section. Expected: `run_glide` prints its summary, `run_tests` reports `9 passed, 0 failed`.
 
 - [ ] **Step 3: Commit**
 

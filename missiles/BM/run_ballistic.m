@@ -797,29 +797,37 @@ function [traj,info] = run_ballistic(opts)
       info.stopOK    = allOK;
       info.stopWhy   = {why1;why2;why3};
 
-%% Plots:
+%% Vertical exaggeration for the globe. A DISPLAY choice, not a physical
+%% constant, so it does not belong in missileConst. This flight apogees near
+%% 1619 km on a 6378 km sphere, which is already visible at true scale, so the
+%% factor is small and only lifts the arc clear of the surface at its ends;
+%% coorbital.viz.globe3D writes it into the title either way:
+           altExag = 3;
+
+%% Plots. Every figure comes from coorbital.viz, which reads the trajectory
+%% and never writes it -- see the header of each. Nothing below this line can
+%% move a number in the summary above.
+%%
+%% ONE VEHICLE PER PHASE is handed over, because this chain does not fly one:
+%% phase 1 is the stack on the pad and phases 2 and 3 are whatever survived
+%% staging. The load-factor panel is the only one that reads it, and given
+%% nothing it would draw the whole flight on the booster's reference area.
+%% See the "two vehicles, one chain" note in the header of this file.
+%%
+%% The load panel is the AERODYNAMIC load, thrust excluded, where the third
+%% inline figure this replaced plotted nSens with the thrust included. The
+%% sensed figure is still reported, at its boost peak, in the summary above:
     if showPlots
-        figure('color',[1 1 1],'name','Ballistic time histories');
-        subplot(3,1,1); plot(traj.t,hKm,'linewidth',1.5); grid on;
-        ylabel('altitude (km)'); title('Boost, coast and descent to impact');
-        subplot(3,1,2); plot(traj.t,V,'linewidth',1.5); grid on;
-        ylabel('speed (m/s)');
-        subplot(3,1,3); plot(traj.t,massS,'linewidth',1.5); grid on;
-        ylabel('mass (kg)'); xlabel('time (s)');
-
-        figure('color',[1 1 1],'name','Ground track');
-        plot(rad2deg(traj.x(:,2)),rad2deg(traj.x(:,3)),'linewidth',1.5); grid on; hold on;
-        plot(lonLaunch,latLaunch,'o','markersize',8,'linewidth',1.5);
-        plot(rad2deg(traj.x(end,2)),rad2deg(traj.x(end,3)),'s','markersize',8,'linewidth',1.5);
-        xlabel('longitude (deg)'); ylabel('latitude (deg)');
-        legend('ground track','launch','impact','location','best');
-        title(sprintf('Ground track, %.0f km great-circle range',rangeKm));
-
-        figure('color',[1 1 1],'name','Loads');
-        subplot(2,1,1); plot(traj.t,qbar./1000,'linewidth',1.5); grid on;
-        ylabel('q (kPa)'); title('Dynamic pressure and sensed load');
-        subplot(2,1,2); plot(traj.t,nSens,'linewidth',1.5); grid on;
-        ylabel('sensed load (g)'); xlabel('time (s)');
+        coorbital.viz.profilePlot(traj,bst,env, ...
+            struct('Name','Ballistic profile', ...
+                   'VehPhase',{{bst,coastVeh,coastVeh}}));
+        coorbital.viz.groundTrack(traj,bst,env, ...
+            struct('PhaseName',{{'boost','coast','descent'}}, ...
+                   'Title',sprintf('Ground track, %.0f km great-circle range', ...
+                                   rangeKm)));
+        coorbital.viz.globe3D(traj,bst,env, ...
+            struct('AltScale',altExag, ...
+                   'Title','Boost, coast and descent to impact'));
     end
 
 %% Hand the trajectory back only when the caller asked for it. Typing

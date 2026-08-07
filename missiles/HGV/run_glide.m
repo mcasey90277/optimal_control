@@ -291,29 +291,25 @@ function traj = run_glide(opts)
     end
     fprintf('=========================================================\n\n');
 
-%% Plots:
+%% Vertical exaggeration for the globe. A 60 km glide over a 6378 km sphere is
+%% one part in 106, so a true-scale arc lies on the surface and shows nothing
+%% of the vertical profile. This is a DISPLAY choice, not a physical constant,
+%% so it does not belong in missileConst; coorbital.viz.globe3D writes the
+%% factor into the figure title so the picture states its own distortion:
+           altExag = 30;
+
+%% Plots. Every figure comes from coorbital.viz, which reads the trajectory
+%% and never writes it -- see the header of each. Nothing below this line can
+%% move a number in the summary above:
     if showPlots
-        figure('color',[1 1 1],'name','Glide time histories');
-        subplot(3,1,1); plot(traj.t,hKm,'linewidth',1.5); grid on;
-        ylabel('altitude (km)'); title('Prescribed-control glide');
-        subplot(3,1,2); plot(traj.t,V,'linewidth',1.5); grid on;
-        ylabel('speed (m/s)');
-        subplot(3,1,3); plot(traj.t,qbar./1000,'linewidth',1.5); grid on;
-        ylabel('q (kPa)'); xlabel('time (s)');
-
-        figure('color',[1 1 1],'name','Ground track');
-        plot(rad2deg(traj.x(:,2)),rad2deg(traj.x(:,3)),'linewidth',1.5); grid on; hold on;
-        plot(lonEntry,latEntry,'o','markersize',8,'linewidth',1.5);
-        plot(rad2deg(traj.x(end,2)),rad2deg(traj.x(end,3)),'s','markersize',8,'linewidth',1.5);
-        xlabel('longitude (deg)'); ylabel('latitude (deg)');
-        legend('ground track','entry','terminus','location','best');
-        title(sprintf('Ground track, %.0f km great-circle range',rangeKm));
-
-        figure('color',[1 1 1],'name','Mach and load factor');
-        subplot(2,1,1); plot(traj.t,mach,'linewidth',1.5); grid on;
-        ylabel('Mach (-)'); title('Speed regime and sensed aerodynamic load');
-        subplot(2,1,2); plot(traj.t,nLoad,'linewidth',1.5); grid on;
-        ylabel('load factor (g)'); xlabel('time (s)');
+        coorbital.viz.profilePlot(traj,veh,env, ...
+            struct('Name','Glide profile'));
+        coorbital.viz.groundTrack(traj,veh,env, ...
+            struct('PhaseName',{{'glide'}}, ...
+                   'Title',sprintf('Ground track, %.0f km great-circle range', ...
+                                   rangeKm)));
+        coorbital.viz.globe3D(traj,veh,env, ...
+            struct('AltScale',altExag,'Title','Prescribed-control glide'));
     end
 
 %% Hand the trajectory back only when the caller asked for it. Typing

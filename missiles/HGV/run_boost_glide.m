@@ -912,32 +912,39 @@ function [traj,info] = run_boost_glide(opts)
       info.boostVeh  = bst;
       info.glideVeh  = glideVeh;
 
-%% Plots:
+%% Vertical exaggeration for the globe. A DISPLAY choice, not a physical
+%% constant, so it does not belong in missileConst. The whole flight stays
+%% under 50 km on a 6378 km sphere -- one part in 128 -- so a true-scale arc
+%% would lie on the surface and show nothing of the skip phugoid, which is the
+%% most distinctive thing this trajectory does. coorbital.viz.globe3D writes
+%% the factor into the figure title so the picture states its own distortion:
+           altExag = 30;
+
+%% Plots. Every figure comes from coorbital.viz, which reads the trajectory
+%% and never writes it -- see the header of each. Nothing below this line can
+%% move a number in the summary above.
+%%
+%% ONE VEHICLE PER PHASE is handed over, because this chain does not fly one:
+%% phase 1 is the stack under power and phases 2 and 3 are the separated glide
+%% vehicle. The load-factor panel is the only one that reads it, and given
+%% nothing it would draw the whole flight on the booster's reference area. See
+%% the "three vehicles, one chain" note in the header of this file.
+%%
+%% The handoff no longer gets a marker of its own on the ground track. It does
+%% not need one: the track is drawn one coloured segment per phase, so the
+%% glide-to-descent boundary IS the colour change, and the phase names are in
+%% the legend. The profile panels carry the same boundary as a dashed line:
     if showPlots
-        figure('color',[1 1 1],'name','Boost-glide time histories');
-        subplot(3,1,1); plot(traj.t,hKm,'linewidth',1.5); grid on;
-        ylabel('altitude (km)'); title('Boost, glide and terminal descent');
-        subplot(3,1,2); plot(traj.t,V,'linewidth',1.5); grid on;
-        ylabel('speed (m/s)');
-        subplot(3,1,3); plot(traj.t,massS,'linewidth',1.5); grid on;
-        ylabel('mass (kg)'); xlabel('time (s)');
-
-        figure('color',[1 1 1],'name','Ground track');
-        plot(rad2deg(traj.x(:,2)),rad2deg(traj.x(:,3)),'linewidth',1.5); grid on; hold on;
-        plot(lonLaunch,latLaunch,'o','markersize',8,'linewidth',1.5);
-        plot(rad2deg(traj.x(kHO,2)),rad2deg(traj.x(kHO,3)),'d','markersize',8,'linewidth',1.5);
-        plot(rad2deg(traj.x(end,2)),rad2deg(traj.x(end,3)),'s','markersize',8,'linewidth',1.5);
-        xlabel('longitude (deg)'); ylabel('latitude (deg)');
-        legend('ground track','launch','handoff','impact','location','best');
-        title(sprintf('Ground track, %.0f km great-circle range',rangeKm));
-
-        figure('color',[1 1 1],'name','Loads and flight path');
-        subplot(3,1,1); plot(traj.t,qbar./1000,'linewidth',1.5); grid on;
-        ylabel('q (kPa)'); title('Dynamic pressure, load and flight path angle');
-        subplot(3,1,2); plot(traj.t,nAero,'linewidth',1.5); grid on;
-        ylabel('aero load (g)');
-        subplot(3,1,3); plot(traj.t,rad2deg(traj.x(:,5)),'linewidth',1.5); grid on;
-        ylabel('gamma (deg)'); xlabel('time (s)');
+        coorbital.viz.profilePlot(traj,bst,env, ...
+            struct('Name','Boost-glide profile', ...
+                   'VehPhase',{{bst,glideVeh,glideVeh}}));
+        coorbital.viz.groundTrack(traj,bst,env, ...
+            struct('PhaseName',{{'boost','glide','descent'}}, ...
+                   'Title',sprintf('Ground track, %.0f km great-circle range', ...
+                                   rangeKm)));
+        coorbital.viz.globe3D(traj,bst,env, ...
+            struct('AltScale',altExag, ...
+                   'Title','Boost, glide and terminal descent'));
     end
 
 %% Hand the trajectory back only when the caller asked for it. Typing

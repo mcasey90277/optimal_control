@@ -17,6 +17,8 @@ that pair; this catalog is the coarse map across the orbit families.
 | `costate_catalog_example.m` | worked example: pick → derive → fly → tfMin → plot → period-axis view |
 | `costate_lib_describe.m` | prints the catalog's facts: phase grids (ND + days), thrusts, periods, petals, coverage per sheet, best/worst sheet |
 | `costate_catalog_extremes.m` | cheapest/dearest (or fastest/slowest) transfer under any filter (sheet, petals, thrust); side-by-side plot |
+| `costate_catalog_extremes_movies.m` | renders the two extremes as side-by-side movies (.mp4 + .gif), same clock: the shorter finishes and freezes while the longer plays out |
+| `sample_extremes_movie.mp4` | example output: min vs max ΔV phasing on the τ=2, Np=7 sheet at 5 N |
 
 Requires **pumpkyn / pumpkynPie** on the MATLAB path. The data itself is
 dependency-free.

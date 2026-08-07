@@ -85,12 +85,12 @@ if V < 1
 end
 
 %% Environment: density, gravity, aerodynamic coefficients:
-    [rho,~,~,aSnd] = env.atmos(h);
+   [rho,~,~,aSnd] = env.atmos(h);
         [gr,gLat] = env.grav(r,lat);
           [CL,CD] = env.aero(alpha,V./aSnd,veh);
 
 %% Aerodynamic accelerations:
-              qbar = 0.5.*rho.*V.^2;
+               qbar = 0.5.*rho.*V.^2;
               aLift = qbar.*veh.Sref.*CL./veh.mass;
               aDrag = qbar.*veh.Sref.*CD./veh.mass;
 

@@ -261,6 +261,13 @@ backups mitigate); driver progress counters parse logs rather than
 \texttt{.mat} state; the ladder stops a cell's descent at the first failed
 rung rather than attempting recovery below it; sheets record but do not
 yet enforce a schema version. Each is recorded as deferred-with-eyes-open
-in the review commit of 2026-08-06.
+in the review commit of 2026-08-06. Additional accepted debts from the
+document review: the sheet schema here is descriptive rather than
+normative (a versioned schema with field-level units and NaN conventions
+is future work, to precede any second data consumer);
+\texttt{cat.derive}'s executable strings trade auditability for
+compactness and should become a named formula registry when the catalog
+format is versioned; environment pinning (MATLAB/CasADi/IPOPT/pumpkyn
+revisions) is recorded in campaign metadata but not yet enforced.
 
 \end{document}

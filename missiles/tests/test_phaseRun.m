@@ -121,12 +121,52 @@ function test_phaseRun()
     assert(numel(rows) == 1, ...
         'the junction instant appears in %d rows; expected exactly 1',numel(rows));
 
-%% ...and the state recorded there must be the state on that row:
               iJun = rows(1);
-              jump = abs(traj2.x(iJun,:) - traj2.junction(1).x(:)');
-    assert(max(jump) < 1e-6,'state jumped by %.3e across the junction',max(jump));
     assert(isequal(size(traj2.junction(1).x),[6 1]), ...
         'the junction state must be stored as [6 x 1]');
+
+%% Continuity, checked against a genuinely INDEPENDENT reference. Comparing
+%  the junction record against traj2.x would be circular -- both descend from
+%  the same ode45 output -- so the same trajectory is integrated ONCE over the
+%  whole span with a DIFFERENT solver at a tighter tolerance, and the junction
+%  record is measured against that. Note the reference time is taken from the
+%  phase LABELS in the output, never from the junction record itself, so a
+%  junction recorded at the wrong instant cannot hide:
+            iLast1 = find(traj2.phaseIdx == 1,1,'last');
+           iFirst2 = find(traj2.phaseIdx == 2,1,'first');
+    assert(iFirst2 == iLast1 + 1, ...
+        'the phase labels must change exactly once, at the boundary');
+
+            odeOne = @(t,x) coorbital.eom.glide3DOF(t,x, ...
+                            coorbital.guide.prescribed(t,x,sched),veh,env);
+           optsOne = odeset('RelTol',1e-12,'AbsTol',1e-12, ...
+                            'Events',@(t,x) coorbital.prop.eventAltitude(t,x,5e3));
+            solOne = ode89(odeOne,[0 8000],x0,optsOne);
+
+%% Scale each component by its own magnitude so metres and radians are
+%  compared on equal terms:
+            xScale = max(abs(traj2.junction(1).x),1);
+             dLast = max(abs(deval(solOne,traj2.t(iLast1)) ...
+                             - traj2.junction(1).x)./xScale);
+            dFirst = max(abs(deval(solOne,traj2.t(iFirst2)) ...
+                             - traj2.junction(1).x)./xScale);
+    assert(min(dLast,dFirst) < 1e-8, ...
+        ['the junction state is not the one-shot trajectory state at the ' ...
+         'phase boundary: %.3e before, %.3e after'],dLast,dFirst);
+
+%% The recorded junction TIME must also be consistent with that same
+%  independent solution:
+             dAtJn = max(abs(deval(solOne,tJun) ...
+                             - traj2.junction(1).x)./xScale);
+    assert(dAtJn < 1e-8, ...
+        'the junction state disagrees with the one-shot solution by %.3e',dAtJn);
+
+%% The one-shot run must also reach the same terminal state as the split run,
+%  or the split has changed the physics rather than merely partitioned it:
+            dFinal = max(abs(deval(solOne,solOne.x(end)) - traj2.x(end,:)') ...
+                         ./max(abs(traj2.x(end,:)'),1));
+    assert(dFinal < 1e-8, ...
+        'splitting the run into two phases changed the terminal state by %.3e',dFinal);
 
 %% Shapes stay consistent for the multi-phase case:
                nS2 = numel(traj2.t);
@@ -166,6 +206,67 @@ function test_phaseRun()
 %% The cumulative clock must also start where phase 1 started:
     assert(traj2.t(1) == 0,'the cumulative clock must start at 0');
     assert(traj2.t(end) > tJun,'the second phase must advance the clock');
+
+%% ---------------------------------------------------------------------
+%% A phase whose tspan does not start at zero must contribute only its own
+%  DURATION to the cumulative clock. Shifting phase 2 from [0 4000] to
+%  [10 4010] leaves the span length and the dynamics untouched, so the whole
+%  cumulative trajectory must be unchanged -- no 10 s gap opened at the
+%  junction, no 10 s added to the elapsed time:
+%% ---------------------------------------------------------------------
+          phase2Sh = phase2;
+    phase2Sh.tspan = [10 4010];
+             trShf = coorbital.prop.phaseRun([phase1 phase2Sh],x0,veh,env);
+
+    assert(abs(trShf.t(end) - traj2.t(end)) < 1e-6, ...
+        ['shifting phase 2 tspan to [10 4010] changed the elapsed time by ' ...
+         '%.6f s; the clock must follow the phase duration, not tspan(1)'], ...
+        abs(trShf.t(end) - traj2.t(end)));
+    assert(abs(trShf.junction(1).t - traj2.junction(1).t) < 1e-9, ...
+        'the junction time must not depend on the next phase tspan(1)');
+    assert(all(diff(trShf.t) > 0),'time must strictly increase');
+
+%% No gap at the junction: the step across the boundary must be an ordinary
+%  integration step, identical to the unshifted run's step, not ~10 s:
+           iLastSh = find(trShf.phaseIdx == 1,1,'last');
+          iFirstSh = find(trShf.phaseIdx == 2,1,'first');
+            gapShf = trShf.t(iFirstSh) - trShf.t(iLastSh);
+            gapRef = traj2.t(iFirst2)  - traj2.t(iLast1);
+    assert(abs(gapShf - gapRef) < 1e-6, ...
+        ['a %.6f s step opened at the junction against %.6f s in the ' ...
+         'unshifted run; tspan(1) leaked into the cumulative clock'], ...
+        gapShf,gapRef);
+    assert(gapShf < 0.5*max(diff(traj2.t)) + 1, ...
+        'the junction step %.6f s is not an ordinary integration step',gapShf);
+
+%% The shifted run must still record its junction on exactly one row:
+          rowsShf = find(abs(trShf.t - trShf.junction(1).t) < 1e-9);
+    assert(numel(rowsShf) == 1, ...
+        'the shifted junction instant appears in %d rows; expected 1',numel(rowsShf));
+
+%% ---------------------------------------------------------------------
+%% Solver tolerances are overridable through env, defaulting to 1e-10. A
+%  loose override must visibly change the step selection while still landing
+%  on the event:
+%% ---------------------------------------------------------------------
+           envLoose = env;
+ envLoose.odeRelTol = 1e-6;
+ envLoose.odeAbsTol = 1e-6;
+            trLoose = coorbital.prop.phaseRun(phase1,x0,veh,envLoose);
+
+    assert(numel(trLoose.t) < 0.5*numel(traj.t), ...
+        ['a 1e-6 tolerance produced %d samples against %d at 1e-10; the ' ...
+         'override did not reach ode45'],numel(trLoose.t),numel(traj.t));
+    assert(abs(trLoose.x(end,1) - c.rE - 20e3) < 1, ...
+        'the loose run must still terminate on the 20 km event');
+    assert(abs(trLoose.t(end) - traj.t(end)) < 0.1, ...
+        'the loose run diverged from the tight run by %.4f s', ...
+        abs(trLoose.t(end) - traj.t(end)));
+
+%% Absent those fields the default must still be 1e-10, i.e. the untouched
+%  env must reproduce the tight run exactly:
+    assert(numel(traj.t) > 2*numel(trLoose.t), ...
+        'the default tolerance must remain the tight 1e-10');
 
 %% ---------------------------------------------------------------------
 %% The event is one-sided. A lofted arc launched BELOW the trigger altitude

@@ -26,6 +26,24 @@ function u = prescribed(t,x,sched)
 %  Copyright 2026 Coorbital, Inc.
 %% ------------------------ Begin Code Sequence ---------------------------
 
+%% Self-demo:
+if nargin == 0
+             schedD = struct('tGrid',[0 30 60],'alpha',deg2rad([5 12 8]), ...
+                             'sigma',deg2rad([0 -45 45]));
+                 tD = linspace(-10,70,321)';
+                 uD = zeros(numel(tD),2);
+    for kd = 1:numel(tD)
+             uD(kd,:) = coorbital.guide.prescribed(tD(kd),[],schedD).';
+    end
+    figure('color',[1 1 1]);
+    plot(tD,rad2deg(uD),'linewidth',1.5); grid on;
+    xlabel('time (s)'); ylabel('control (deg)');
+    legend('angle of attack','bank angle','location','best');
+    title('Prescribed schedule: linear inside the grid, clamped outside');
+                  u = [];
+    return;
+end
+
 %% Single-point schedules are constant; interp1 needs two points:
 if numel(sched.tGrid) == 1
                  u = [sched.alpha(1); sched.sigma(1)];

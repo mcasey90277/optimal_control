@@ -26,6 +26,16 @@ function [value,isterminal,direction] = eventAltitude(t,x,hStop)
 %  Copyright 2026 Coorbital, Inc.
 %% ------------------------ Begin Code Sequence ---------------------------
 
+%% Self-demo:
+if nargin == 0
+                cD = coorbital.util.missileConst();
+                xD = [cD.rE + 32e3; 0; 0; 4000; 0; deg2rad(90)];
+    [vD,itD,dirD] = coorbital.prop.eventAltitude(0,xD,20e3);
+    fprintf('value = %.1f m, isterminal = %d, direction = %+d\n',vD,itD,dirD);
+    [value,isterminal,direction] = deal([]);
+    return;
+end
+
                  c = coorbital.util.missileConst();
              value = (x(1) - c.rE) - hStop;
         isterminal = 1;

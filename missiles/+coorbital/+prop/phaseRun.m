@@ -17,7 +17,11 @@ function traj = phaseRun(phases,x0,veh,env)
 %
 %  veh              Struct                      Vehicle parameters
 %
-%  env              Struct                      Environment model handles
+%  env              Struct                      Environment model handles:
+%                                               atmos, grav, aero, omegaE.
+%                                               Optional odeRelTol and
+%                                               odeAbsTol override the ode45
+%                                               tolerances, default 1e-10 each
 %
 %% Outputs:
 %
@@ -28,6 +32,20 @@ function traj = phaseRun(phases,x0,veh,env)
 %                                               phaseIdx [N x 1] 1-based phase
 %                                               junction [(P-1) x 1] struct
 %                                                        with fields t and x
+%
+%% Notes:
+%
+%  Each phase is integrated on its own tspan and then referenced to that
+%  tspan's start, so a phase given tspan = [10 50] contributes 40 s to the
+%  cumulative clock and opens no gap at the junction. The guide, by contrast,
+%  still sees the phase's own tspan-relative time, so a schedule written
+%  against tspan = [10 50] is evaluated at 10 through 50.
+%
+%  The sample at a phase boundary is recorded ONCE and carries the OUTGOING
+%  phase's control. A control discontinuity across a boundary therefore does
+%  not appear in traj.u -- only the value just before the handoff is stored.
+%  A consumer needing both sides must evaluate the incoming phase's guide at
+%  the junction time itself.
 %
 %% Revision History:
 %  Michael Casey                                                08/06/2026
@@ -66,11 +84,22 @@ end
               tOff = 0;
              xCurr = x0(:);
 
+%% Solver tolerances, overridable through env so a later task can trade
+%% accuracy for speed without editing this file:
+            relTol = 1e-10;
+            absTol = 1e-10;
+if isfield(env,'odeRelTol')
+            relTol = env.odeRelTol;
+end
+if isfield(env,'odeAbsTol')
+            absTol = env.odeAbsTol;
+end
+
 %% Integrate each phase in turn:
 for kp = 1:nPh
                 ph = phases(kp);
               odeF = @(t,x) ph.eom(t,x,ph.guide(t,x),veh,env);
-              opts = odeset('RelTol',1e-10,'AbsTol',1e-10, ...
+              opts = odeset('RelTol',relTol,'AbsTol',absTol, ...
                             'Events',ph.terminate);
           [tk,xk] = ode45(odeF,ph.tspan,xCurr,opts);
 
@@ -86,14 +115,16 @@ for kp = 1:nPh
                 k0 = 2;
     end
 
-         tSeg{kp} = tOff + tk(k0:end);
+%% Referencing every phase to its own tspan(1) keeps the cumulative clock right
+%% for a phase that does not start at zero:
+         tSeg{kp} = tOff + (tk(k0:end) - tk(1));
          xSeg{kp} = xk(k0:end,:);
          uSeg{kp} = uk(k0:end,:);
        idxSeg{kp} = kp*ones(numel(tk)-k0+1,1);
 
 %% Record the junction and carry the state forward:
              xCurr = xk(end,:)';
-              tOff = tOff + tk(end);
+              tOff = tOff + (tk(end) - tk(1));
     if kp < nPh
         junction(kp).t = tOff;
         junction(kp).x = xCurr;

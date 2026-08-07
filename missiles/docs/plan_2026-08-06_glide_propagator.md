@@ -92,12 +92,13 @@ function run_tests()
 
 %% Discover the test files:
              files = dir(fullfile(here,'test_*.m'));
+                nT = numel(files);
             passed = 0;
             failed = 0;
-          failures = {};
+          failures = cell(nT,1);
 
-%% Run each test in turn:
-    for k = 1:numel(files)
+%% Run each test in turn, recording the message of any that throws:
+    for k = 1:nT
              name = erase(files(k).name,'.m');
         try
             feval(name);
@@ -105,10 +106,11 @@ function run_tests()
             fprintf('  PASS  %s\n',name);
         catch err
             failed = failed + 1;
-            failures{end+1} = sprintf('%s: %s',name,err.message); %#ok<AGROW>
+            failures{k} = sprintf('%s: %s',name,err.message);
             fprintf('  FAIL  %s\n',name);
         end
     end
+          failures = failures(~cellfun(@isempty,failures));
 
 %% Report:
     fprintf('\n%d passed, %d failed\n',passed,failed);
@@ -926,7 +928,7 @@ git commit -m "missiles: 3-DOF glide equations of motion"
 - Produces:
   - `[value,isterminal,direction] = coorbital.prop.eventAltitude(t,x,hStop)` — standard ODE event signature, terminal, decreasing
   - `u = coorbital.guide.prescribed(t,x,sched)` returning `[2 x 1]`, where `sched` has fields `tGrid` `[1 x K]`, `alpha` `[1 x K]`, `sigma` `[1 x K]`; values are linearly interpolated and held at the endpoints
-  - `traj = coorbital.prop.phaseRun(phases,x0,veh,env)` returning a struct with fields `t` `[N x 1]`, `x` `[N x 6]`, `u` `[N x 2]`, `phaseIdx` `[N x 1]`, and `junction` `[1 x (P-1)]` struct array with fields `t` and `x`
+  - `traj = coorbital.prop.phaseRun(phases,x0,veh,env)` returning a struct with fields `t` `[N x 1]`, `x` `[N x 6]`, `u` `[N x 2]`, `phaseIdx` `[N x 1]`, and `junction` `[(P-1) x 1]` struct array with fields `t` and `x`
 
 - [ ] **Step 1: Write the failing test**
 
@@ -1111,7 +1113,7 @@ function traj = phaseRun(phases,x0,veh,env)
 %                                               x        [N x 6] state
 %                                               u        [N x 2] control (rad)
 %                                               phaseIdx [N x 1] 1-based phase
-%                                               junction [1 x (P-1)] struct
+%                                               junction [(P-1) x 1] struct
 %                                                        with fields t and x
 %
 %% Revision History:
@@ -1140,17 +1142,19 @@ if nargin == 0
     return;
 end
 
-%% Accumulators:
-              tAll = [];
-              xAll = [];
-              uAll = [];
-           idxAll = [];
-          junction = struct('t',{},'x',{});
+%% One cell per phase, concatenated once at the end. Segment lengths are not
+%% known until ode45 returns, so the cells are the preallocation:
+               nPh = numel(phases);
+              tSeg = cell(nPh,1);
+              xSeg = cell(nPh,1);
+              uSeg = cell(nPh,1);
+            idxSeg = cell(nPh,1);
+          junction = repmat(struct('t',[],'x',[]),max(nPh-1,0),1);
               tOff = 0;
              xCurr = x0(:);
 
 %% Integrate each phase in turn:
-for kp = 1:numel(phases)
+for kp = 1:nPh
                 ph = phases(kp);
               odeF = @(t,x) ph.eom(t,x,ph.guide(t,x),veh,env);
               opts = odeset('RelTol',1e-10,'AbsTol',1e-10, ...
@@ -1169,25 +1173,25 @@ for kp = 1:numel(phases)
                 k0 = 2;
     end
 
-              tAll = [tAll; tOff + tk(k0:end)];       %#ok<AGROW>
-              xAll = [xAll; xk(k0:end,:)];            %#ok<AGROW>
-              uAll = [uAll; uk(k0:end,:)];            %#ok<AGROW>
-            idxAll = [idxAll; kp*ones(numel(tk)-k0+1,1)]; %#ok<AGROW>
+         tSeg{kp} = tOff + tk(k0:end);
+         xSeg{kp} = xk(k0:end,:);
+         uSeg{kp} = uk(k0:end,:);
+       idxSeg{kp} = kp*ones(numel(tk)-k0+1,1);
 
 %% Record the junction and carry the state forward:
              xCurr = xk(end,:)';
               tOff = tOff + tk(end);
-    if kp < numel(phases)
-        junction(end+1).t = tOff;                     %#ok<AGROW>
-        junction(end).x   = xCurr;
+    if kp < nPh
+        junction(kp).t = tOff;
+        junction(kp).x = xCurr;
     end
 end
 
 %% Assemble:
-            traj.t = tAll;
-            traj.x = xAll;
-            traj.u = uAll;
-     traj.phaseIdx = idxAll;
+            traj.t = vertcat(tSeg{:});
+            traj.x = vertcat(xSeg{:});
+            traj.u = vertcat(uSeg{:});
+     traj.phaseIdx = vertcat(idxSeg{:});
      traj.junction = junction;
 end
 ```

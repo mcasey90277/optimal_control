@@ -325,7 +325,7 @@ git commit -m "missiles: constant-mass-flow propulsion model and booster paramet
 
 **Files:**
 - Create: `missiles/+coorbital/+eom/boost3DOF.m`
-- Test: `missiles/tests/test_boost3DOF.m` (created in Task 6; write only a smoke assertion here)
+- Test: none in this task. `missiles/tests/test_boost3DOF.m` is created in Task 6, which owns all validation of this file.
 
 **Interfaces:**
 - Consumes: `env.atmos`, `env.grav`, `env.aero`, `env.omegaE`, and the new `env.prop`.

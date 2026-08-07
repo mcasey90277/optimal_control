@@ -1,4 +1,4 @@
-function traj = run_glide()
+function traj = run_glide(opts)
 %% Purpose:
 %
 %  Propagate a prescribed-control hypersonic glide from entry interface to a
@@ -13,7 +13,19 @@ function traj = run_glide()
 %
 %% Inputs:
 %
-%  none
+%  opts             Struct, optional            Overrides for named USER
+%                                               PARAMETERS entries, given in
+%                                               the SAME human units as the
+%                                               block itself (deg, km). Omit
+%                                               it -- or pass [] -- for the
+%                                               shipped configuration. An
+%                                               unrecognised field name is an
+%                                               error, not a silent no-op.
+%                                               Exists so an automated test or
+%                                               a batch sweep can drive this
+%                                               script at more than one
+%                                               operating point without
+%                                               editing it.
 %
 %% Outputs:
 %
@@ -68,6 +80,42 @@ function traj = run_glide()
          showPlots = true;             %false to skip the figures, e.g. under matlab -batch
 %% ======================= END USER PARAMETERS ============================
 
+%% Apply the caller's overrides, if any. This is the ONE supported way to
+%% change a run without editing the block above. Overrides are applied BEFORE
+%% the unit conversion below, so a caller writes degrees and kilometres exactly
+%% as the block does. Every entry in the block is overridable and nothing else
+%% is, so a misspelt name raises rather than quietly doing nothing:
+    if nargin < 1 || isempty(opts)
+              opts = struct();
+    end
+    assert(isstruct(opts),'opts must be a struct of USER PARAMETERS overrides.');
+       overridable = {'hEntry','vEntry','gammaEntry','psiEntry','latEntry', ...
+                      'lonEntry','hStop','tMaxSim','alphaAngle','bankAngle', ...
+                      'vehicleFn','atmosFn','gravFn','aeroFn','earthSpin', ...
+                      'showPlots'};
+             given = fieldnames(opts);
+    for ko = 1:numel(given)
+        assert(any(strcmp(given{ko},overridable)), ...
+            '"%s" is not a USER PARAMETERS entry; there is nothing to override.', ...
+            given{ko});
+    end
+            hEntry = overrideOf(opts,'hEntry',hEntry);
+            vEntry = overrideOf(opts,'vEntry',vEntry);
+        gammaEntry = overrideOf(opts,'gammaEntry',gammaEntry);
+          psiEntry = overrideOf(opts,'psiEntry',psiEntry);
+          latEntry = overrideOf(opts,'latEntry',latEntry);
+          lonEntry = overrideOf(opts,'lonEntry',lonEntry);
+             hStop = overrideOf(opts,'hStop',hStop);
+           tMaxSim = overrideOf(opts,'tMaxSim',tMaxSim);
+        alphaAngle = overrideOf(opts,'alphaAngle',alphaAngle);
+         bankAngle = overrideOf(opts,'bankAngle',bankAngle);
+         vehicleFn = overrideOf(opts,'vehicleFn',vehicleFn);
+           atmosFn = overrideOf(opts,'atmosFn',atmosFn);
+            gravFn = overrideOf(opts,'gravFn',gravFn);
+            aeroFn = overrideOf(opts,'aeroFn',aeroFn);
+         earthSpin = overrideOf(opts,'earthSpin',earthSpin);
+         showPlots = overrideOf(opts,'showPlots',showPlots);
+
 %% Convert the user block to library SI units. This is the ONLY unit
 %% conversion in the file; everything past this point is m, m/s, rad and s:
            hEntryM = hEntry.*1000;
@@ -102,10 +150,10 @@ function traj = run_glide()
              sched = struct('tGrid',[0 tMaxSim], ...
                             'alpha',[alphaRad alphaRad], ...
                             'sigma',[bankRad  bankRad]);
-           ph.eom = @coorbital.eom.glide3DOF;
-         ph.guide = @(t,x) coorbital.guide.prescribed(t,x,sched);
-     ph.terminate = @(t,x) coorbital.prop.eventAltitude(t,x,hStopM);
-         ph.tspan = [0 tMaxSim];
+            ph.eom = @coorbital.eom.glide3DOF;
+          ph.guide = @(t,x) coorbital.guide.prescribed(t,x,sched);
+      ph.terminate = @(t,x) coorbital.prop.eventAltitude(t,x,hStopM);
+          ph.tspan = [0 tMaxSim];
 
                 x0 = [c.rE + hEntryM; ...
                       lonEntryRd; ...
@@ -273,5 +321,39 @@ function traj = run_glide()
 %% under a dump of the whole struct as ans:
     if nargout == 0
         clear traj;
+    end
+end
+
+function v = overrideOf(opts,name,v)
+%% Purpose:
+%
+%  Return the caller's override for one USER PARAMETERS entry when it was
+%  supplied, and the script's own value otherwise. Factored out so the
+%  override block above reads as one unbranched line per parameter.
+%
+%% Inputs:
+%
+%  opts             Struct                      Caller overrides, already
+%                                               checked for unknown fields
+%
+%  name             Char [1 x n]                Name of the USER PARAMETERS
+%                                               entry being resolved
+%
+%  v                Scalar / handle             The script's own value, in the
+%                                               user block's own units
+%
+%% Outputs:
+%
+%  v                Scalar / handle             opts.(name) when that field is
+%                                               present, otherwise the input v
+%                                               unchanged
+%
+%% Revision History:
+%  Michael Casey                                                08/06/2026
+%  Copyright 2026 Coorbital, Inc.
+%% ------------------------ Begin Code Sequence ---------------------------
+
+    if isfield(opts,name)
+                 v = opts.(name);
     end
 end

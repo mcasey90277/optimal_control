@@ -173,7 +173,7 @@ function test_runBallistic()
     assertRel(inDef.tBurnout,80.517757894737741,1e-4,'burnout time (s)');
     assertRel(inDef.hBurnout,102000.27979884855,1e-4,'burnout altitude (m)');
     assertRel(inDef.vBurnout,5768.1977161798968,1e-4,'burnout speed (m/s)');
-    assertRel(rad2deg(inDef.gamBurnout),47.599864886168566,1e-4, ...
+    assertRel(rad2deg(inDef.gamBurnout),47.599708657243582,1e-4, ...
         'burnout flight path angle (deg)');
     assertRel(inDef.downBOKm,68.640084819172984,1e-4,'burnout downrange (km)');
 
@@ -183,10 +183,10 @@ function test_runBallistic()
 
     assertRel(inDef.tFlight,1620.6138710598609,1e-4,'flight time (s)');
     assertRel(inDef.rangeKm,4536.361953009874,1e-4,'ground range (km)');
-    assertRel(rad2deg(inDef.angTot),40.750775300437299,1e-4,'central angle (deg)');
+    assertRel(rad2deg(inDef.angTot),40.750832766870516,1e-4,'central angle (deg)');
 
     assertRel(inDef.vImpact,3156.4873607478771,1e-4,'impact speed (m/s)');
-    assertRel(rad2deg(inDef.gamImpact),-47.725169800118862,1e-4, ...
+    assertRel(rad2deg(inDef.gamImpact),-47.724959925777831,1e-4, ...
         'impact flight path angle (deg)');
 
 %% Peak loads. The re-entry peak is the "peak deceleration" of a ballistic

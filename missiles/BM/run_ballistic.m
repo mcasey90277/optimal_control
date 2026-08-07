@@ -575,7 +575,7 @@ function [traj,info] = run_ballistic(opts)
     fprintf('  Apogee, end of phase 2\n');
     fprintf('    time             %10.3f s\n',traj.t(kApo));
     fprintf('    altitude         %10.3f %-5s  (exact event, not a grid maximum)\n',hKm(kApo),'km');
-    fprintf('    speed            %10.2f %-5s\n',V(kApo),'m/s');
+    fprintf('    speed            %10.2f m/s\n',V(kApo));
     fprintf('    flight path      %10.3e %-5s  (zero by construction at apogee)\n', ...
             rad2deg(traj.x(kApo,5)),'deg');
     fprintf('\n');
@@ -584,8 +584,13 @@ function [traj,info] = run_ballistic(opts)
     fprintf('    ground range     %10.2f %-5s  (great circle on the r = %.1f km impact sphere)\n', ...
             rangeKm,'km',rI./1000);
     fprintf('    central angle    %10.4f deg\n',rad2deg(angTot));
-    fprintf('    apogee           %10.2f %-5s  (%.4f of the range)\n', ...
+    fprintf('    range check      %10.3f %-5s  = %.3f (pad to burnout) + %.3f (burnout to\n', ...
+            downBOKm + sAeroB./1000,'km',downBOKm,sAeroB./1000);
+    fprintf('                                         impact). The legs add exactly because\n');
+    fprintf('                                         the unbanked non-rotating arc is a great circle.\n');
+    fprintf('    apogee           %10.2f %-5s  (%.4f of the range; a minimum-energy arc sits\n', ...
             hKm(kApo),'km',hKm(kApo)./rangeKm);
+    fprintf('                                        near 0.25, so this trajectory is LOFTED)\n');
     fprintf('    samples          %10d %-5s  (ode45 adaptive steps over 3 phases)\n',nS,'');
     fprintf('\n');
     fprintf('  Impact\n');
@@ -609,6 +614,11 @@ function [traj,info] = run_ballistic(opts)
             nReMax,'g',nReMax.*c.g0,traj.t(kNR),hKm(kNR));
     fprintf('\n');
     fprintf('  Keplerian cross-check, from the burnout state, on the r = %.1f km sphere\n',rI./1000);
+    fprintf('    EVERY range in this block is BURNOUT to impact, not pad to impact. Add the\n');
+    fprintf('    %.3f km flown under power to compare against the %.2f km ground range\n', ...
+            downBOKm,rangeKm);
+    fprintf('    above: %.3f + %.3f = %.3f km. Do not difference the two directly.\n', ...
+            downBOKm,sAeroB./1000,downBOKm + sAeroB./1000);
     fprintf('    closed-form vacuum range %10.4f km\n',sVac./1000);
     fprintf('    propagated vacuum range  %10.4f %-5s  (lift and drag OFF, rotation OFF)\n', ...
             sVacProp./1000,'km');
@@ -636,15 +646,29 @@ function [traj,info] = run_ballistic(opts)
         fprintf('    the comparison.\n');
     end
     if liftDiff > 0
-        fprintf('    Lift sign: POSITIVE, as expected -- CL = %.4f at %.1f deg of bank puts the\n', ...
-                coastVeh.CL,bankAngle);
-        fprintf('    lift vector up, which flattens the descent and extends the arc.\n');
+        fprintf('    Lift sign: POSITIVE, as expected FOR THIS CONFIGURATION -- CL = %.4f at\n', ...
+                coastVeh.CL);
+        fprintf('    %.1f deg of bank puts the lift vector up, and at a %.1f km burnout altitude\n', ...
+                bankAngle,(r0 - c.rE)./1000);
+        fprintf('    the air is thin enough that the arc meets it only on the terminal dive,\n');
+        fprintf('    where raising gamma flattens the descent and extends the range. That\n');
+        fprintf('    premise is what fixes the sign; upward lift does NOT lengthen every\n');
+        fprintf('    ballistic arc -- see the note in the other branch.\n');
+    else
+        fprintf('    Lift sign: NEGATIVE. That is not automatically a defect. Two ways it is\n');
+        fprintf('    legitimate: (1) if the ascending leg is lofted enough for lift to raise\n');
+        fprintf('    the burnout-equivalent gamma ABOVE the max-range value, extra loft costs\n');
+        fprintf('    range rather than buying it -- at this burnout state the max-range gamma\n');
+        fprintf('    is near 33 deg against the %.1f deg flown; (2) a nonzero bank, or a\n', ...
+                rad2deg(gam0));
+        fprintf('    negative CL, points the lift vector sideways or down. Check both before\n');
+        fprintf('    treating it as a bug.\n');
     end
     fprintf('    Magnitude: small in RANGE because the atmosphere is met only on a steep\n');
     fprintf('    terminal dive, where the aerodynamic force acts nearly along the descent\n');
     fprintf('    direction and so moves the impact point very little. It is not small in\n');
     fprintf('    SPEED, which is where the same drag shows up:\n');
-    fprintf('    impact speed, vacuum     %10.2f %-5s\n',trajV.x(end,4),'m/s');
+    fprintf('    impact speed, vacuum     %10.2f m/s\n',trajV.x(end,4));
     fprintf('    impact speed, flown      %10.2f %-5s  (%+.2f m/s)\n', ...
             V(end),'m/s',V(end) - trajV.x(end,4));
     if earthSpin

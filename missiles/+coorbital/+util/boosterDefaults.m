@@ -78,10 +78,36 @@ function bst = boosterDefaults()
 %     liftoff T/W     = 950000/(32400*9.80665)    =     2.990
 %     ideal delta-V   = 2549.729*log(13.5)        =  6636.2  m/s
 %
-%  The ideal delta-V is the loss-free Tsiolkovsky figure. A lofted ascent of
-%  this duration spends of order 500-700 m/s on gravity and drag losses, so a
-%  burnout speed near 6 km/s is the expectation -- which is what the 60 km,
-%  6 km/s entry interface in HGV/run_glide assumes.
+%  The ideal delta-V is the loss-free Tsiolkovsky figure. What a real ascent
+%  keeps of it depends on the PITCH PROGRAM flown, so the losses below are a
+%  measurement of one trajectory and not a property of this booster.
+%
+%  Measured along the shipped BM/run_ballistic ascent -- 89 deg at the pad
+%  pitching to 34 deg at burnout -- by integrating each term of the dV
+%  equation over the flown boost phase:
+%
+%     gravity        int gr sin(gamma) dt              =  697.23 m/s
+%     drag           int D/m dt                        =   48.37 m/s
+%     back pressure  int (Tvac - T)/m dt               =   98.85 m/s
+%     steering       int T(1 - cos(alpha))/m dt        =   33.51 m/s
+%                                                        --------
+%     total losses                                     =  877.96 m/s
+%
+%     burnout speed  = 10 + 6636.15 - 877.96           = 5768.20 m/s
+%
+%  which closes against the propagated burnout speed to 0.01 m/s. (The leading
+%  10 m/s is the nonzero speed run_ballistic must start from, the equations
+%  being singular at V = 0.)
+%
+%  An earlier version of this note quoted 500-700 m/s. That is too low for a
+%  lofted ascent of this duration: gravity loss ALONE is 697 m/s here, because
+%  a trajectory steep enough to reach a 1600 km apogee spends most of the burn
+%  fighting gravity nearly head-on. A flatter program trades gravity loss for
+%  drag loss and lands lower. Expect 700-900 m/s for anything lofted, and
+%  measure it rather than assuming it.
+%
+%  Either way, a burnout speed near 6 km/s is the expectation -- which is what
+%  the 60 km, 6 km/s entry interface in HGV/run_glide assumes.
 %
 %  Burn time and liftoff T/W are not independent: for a given propellant mass
 %  fraction f, burn time = Isp*f/(T/W). Holding T/W in the 2-3 band with a

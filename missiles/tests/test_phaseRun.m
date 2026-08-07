@@ -470,10 +470,19 @@ function test_phaseRun()
 %  vector. glide3DOF is structurally blind to this -- it unpacks components 1
 %  through 6 and ignores anything after -- so the slice is pinned with a
 %  probe EOM that REPORTS what it was given instead: its first derivative is
-%  the length of the state it saw, and the rest echo that state back:
+%  the length of the state it saw, and the rest echo that state back.
+%
+%  Component 7 of the probe input is veh.mass rather than the 7 that the
+%  running index would give. massConstant now REFUSES to run when the carried
+%  mass x(7) disagrees with the veh.mass its wrapped equations actually divide
+%  by, which is the guard that catches a staging jump applied to the state and
+%  not to the vehicle. A 7 kg mass against a 900 kg vehicle is exactly the
+%  disagreement that guard exists to reject. Nothing below reads component 7 --
+%  the slice assertions cover 1 through 6 -- so pinning it to the consistent
+%  value changes what this probe proves not at all:
              probe = @(~,x,~,~,~) [numel(x); x(2:end)];
           eomProbe = coorbital.eom.massConstant(probe);
-             xdotP = eomProbe(0,(1:7)',[0;0],veh,env);
+             xdotP = eomProbe(0,[(1:6)'; veh.mass],[0;0],veh,env);
 
     assert(numel(xdotP) == 7, ...
         ['massConstant returned %d derivatives for a 7-state input; it must ' ...
@@ -516,8 +525,22 @@ function test_phaseRun()
 %  and the fact that massConstant holds mass fixed inside a phase -- never
 %  from the driver's own bookkeeping:
 %% ---------------------------------------------------------------------
+%  The jettisoning phases below use a LOCAL seven-state wrapper rather than
+%  coorbital.eom.massConstant, and that is deliberate. massConstant refuses to
+%  run when the carried mass x(7) disagrees with the veh.mass its wrapped
+%  equations divide by -- and this chain creates exactly that disagreement on
+%  purpose, because phaseRun carries ONE vehicle struct for the whole chain
+%  and there is no way to rebuild it at the junction. That is a real
+%  architectural gap, not a defect in this test: what is under test HERE is
+%  phaseRun's link plumbing, which must be pinned independently of any
+%  particular EOM wrapper's mass contract. The guarded wrapper is exercised in
+%  the seven-state block above, and the guard itself is pinned in the block
+%  immediately after this one:
+          eomStage = @(t,x,u,vArg,eArg) ...
+                     [coorbital.eom.glide3DOF(t,x(1:6),u,vArg,eArg); 0];
              mDrop = 500;
             phLnkA = ph7;
+        phLnkA.eom = eomStage;
   phLnkA.terminate = @(t,x) coorbital.prop.eventAltitude(t,x,40e3);
        phLnkA.link = @(x) [x(1:6); x(7) - mDrop];
             phLnkB = phLnkA;
@@ -602,6 +625,61 @@ function test_phaseRun()
         'the staged leg 1 must hand over at 40 km');
     assert(abs(trLink.x(end,1) - c.rE - 20e3) < 1, ...
         'the staged leg 2 must terminate at 20 km');
+
+%% ---------------------------------------------------------------------
+%% THE massConstant MASS GUARD BITES. The block above had to reach for an
+%  unguarded wrapper precisely because the chain it builds is unsafe: it
+%  jettisons 500 kg from the state while phaseRun keeps handing phase 2 the
+%  same 900 kg vehicle, and glide3DOF divides by veh.mass and never reads
+%  x(7). Run through massConstant, that same chain must now REFUSE rather
+%  than fly silently at the pre-separation weight:
+%% ---------------------------------------------------------------------
+         phGuardA = phLnkA;
+     phGuardA.eom = eom7;
+         phGuardB = phLnkB;
+     phGuardB.eom = eom7;
+            errG  = [];
+    try
+        coorbital.prop.phaseRun([phGuardA phGuardB],x07,veh,env);
+    catch errG
+    end
+    assert(~isempty(errG), ...
+        ['a chain that jettisons 500 kg without rebuilding the vehicle struct ' ...
+         'must raise; massConstant let it fly at the wrong weight instead']);
+    assert(strcmp(errG.identifier,'coorbital:massConstant:massMismatch'), ...
+        ['expected coorbital:massConstant:massMismatch, got "%s". The guard ' ...
+         'must be the thing that fires, not an incidental downstream failure.'], ...
+        errG.identifier);
+    assert(contains(errG.message,'400.000000000') && ...
+           contains(errG.message,'900.000000000'), ...
+        ['the mismatch message must name BOTH masses so the reader can see ' ...
+         'which side is stale. Message was:\n%s'],errG.message);
+
+%% ...and it must NOT fire on a consistent chain. The same two phases with no
+%  jettison run clean, so the guard is discriminating rather than simply
+%  hostile to seven-state chains -- trBare above already flew that path:
+    assert(max(abs(trBare.x(:,7) - veh.mass)) < 1e-12, ...
+        'the consistent guarded chain must have run to completion at %.1f kg',veh.mass);
+
+%% The tolerance must clear an ODE event solve's residual on the mass state,
+%  which is a fraction of a nanogram, while rejecting a real staging jump. A
+%  perturbation just inside the documented 1e-9 relative budget must pass and
+%  one just outside must fail, so the threshold is pinned rather than assumed:
+              tolG = 1e-9.*max(1,veh.mass);
+             xNear = x07;
+          xNear(7) = veh.mass + 0.4.*tolG;
+             xFar  = x07;
+          xFar(7)  = veh.mass + 2.0.*tolG;
+    eom7(0,xNear,[0;0],veh,env);
+             threwFar = false;
+    try
+        eom7(0,xFar,[0;0],veh,env);
+    catch
+             threwFar = true;
+    end
+    assert(threwFar, ...
+        'a %.3e kg disagreement must exceed the %.3e kg budget and raise', ...
+        2.0.*tolG,tolG);
 
 %% A link that changes the state dimension breaks the chain and must say so:
             phBadL = phLnkA;

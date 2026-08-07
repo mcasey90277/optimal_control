@@ -828,6 +828,20 @@ end
                  c = coorbital.util.missileConst();
                  h = r - c.rE;
 
+%% Guard the coordinate singularities so they fail loudly, not as silent NaN:
+if abs(cos(lat)) < 1e-8
+    error('coorbital:glide3DOF:polarSingularity', ...
+        'Longitude rate is singular at the pole (lat = %.6f rad).',lat);
+end
+if abs(cos(gamma)) < 1e-8
+    error('coorbital:glide3DOF:verticalFlight', ...
+        'Heading rate is singular in vertical flight (gamma = %.6f rad).',gamma);
+end
+if V < 1
+    error('coorbital:glide3DOF:zeroSpeed', ...
+        'Equations are singular as V approaches zero (V = %.3f m/s).',V);
+end
+
 %% Environment: density, gravity, aerodynamic coefficients:
     [rho,~,~,aSnd] = env.atmos(h);
         [gr,gLat] = env.grav(r,lat);
@@ -845,9 +859,9 @@ end
 
 %% Dynamics over a non-rotating sphere:
               Vdot = -aDrag - gr.*sin(gamma) ...
-                     - gLat.*cos(gamma).*cos(psi);
+                     + gLat.*cos(gamma).*cos(psi);
           gammadot = aLift.*cos(sigma)./V - (gr./V - V./r).*cos(gamma) ...
-                     + gLat.*sin(gamma).*cos(psi)./V;
+                     - gLat.*sin(gamma).*cos(psi)./V;
             psidot = aLift.*sin(sigma)./(V.*cos(gamma)) ...
                      + V.*cos(gamma).*sin(psi).*tan(lat)./r ...
                      - gLat.*sin(psi)./(V.*cos(gamma));
@@ -1468,10 +1482,13 @@ function test_equilibriumGlide()
 %  the bank angle at zero and the flight path angle shallow, lift very nearly
 %  balances weight less centrifugal relief:
 %
-%      0.5 rho V^2 S CL = m g - m V^2 / r
+%      0.5 rho V^2 S CL = (m g - m V^2 / r) cos(gamma)
 %
 %  which rearranges to a closed-form V at each altitude. The propagated speed
 %  must track it once the trajectory has settled out of its entry transient.
+%  The cos(gamma) factor falls out of setting dgamma/dt = 0; it is within 1e-4
+%  of unity at the shallow angles used here, but is carried so the reference is
+%  the equilibrium condition exactly rather than an approximation to it.
 %
 %% References:
 %   [1] Vinh, N.X., et al., "Hypersonic and Planetary Entry Flight Mechanics,"
@@ -1504,8 +1521,9 @@ function test_equilibriumGlide()
       [rhoArc,~,~,~] = coorbital.atmos.expAtmos(rArc - c.rE);
         [grArc,~] = coorbital.grav.sphereGrav(rArc,traj.x(:,3));
           [CL,~] = coorbital.aero.constLD(0,0,veh);
-             vEq2 = (veh.mass.*grArc)./ ...
-                    (0.5.*rhoArc.*veh.Sref.*CL + veh.mass./rArc);
+             cgam = cos(traj.x(:,5));
+             vEq2 = (veh.mass.*grArc.*cgam)./ ...
+                    (0.5.*rhoArc.*veh.Sref.*CL + veh.mass.*cgam./rArc);
               vEq = sqrt(vEq2);
 
 %% Skip the first 20 percent, which is the entry transient:
@@ -1570,10 +1588,14 @@ function test_allenEggers()
                 x0 = [c.rE + 120e3; 0; 0; vE; gammaE; deg2rad(90)];
               traj = coorbital.prop.phaseRun(ph,x0,veh,env);
 
-%% Peak deceleration from the propagated speed history:
+%% Peak AERODYNAMIC deceleration. Differencing the speed history gives the NET
+%% rate, which carries gravity's along-track contribution; Allen-Eggers
+%% predicts the drag term alone.
               vArc = traj.x(:,4);
-              tArc = traj.t;
-             accel = abs(diff(vArc)./diff(tArc));
+              rArc = traj.x(:,1);
+    [rhoArc,~,~,~] = coorbital.atmos.expAtmos(rArc - c.rE);
+          [~,CDb] = env.aero(0,0,veh);
+             accel = 0.5.*rhoArc.*vArc.^2.*veh.Sref.*CDb./veh.mass;
            aMaxNum = max(accel);
 
 %% Allen-Eggers closed form:

@@ -117,17 +117,17 @@ for kp = 1:nPh
 
 %% Referencing every phase to its own tspan(1) keeps the cumulative clock right
 %% for a phase that does not start at zero:
-         tSeg{kp} = tOff + (tk(k0:end) - tk(1));
-         xSeg{kp} = xk(k0:end,:);
-         uSeg{kp} = uk(k0:end,:);
-       idxSeg{kp} = kp*ones(numel(tk)-k0+1,1);
+          tSeg{kp} = tOff + (tk(k0:end) - tk(1));
+          xSeg{kp} = xk(k0:end,:);
+          uSeg{kp} = uk(k0:end,:);
+        idxSeg{kp} = kp*ones(numel(tk)-k0+1,1);
 
 %% Record the junction and carry the state forward:
              xCurr = xk(end,:)';
               tOff = tOff + (tk(end) - tk(1));
     if kp < nPh
-        junction(kp).t = tOff;
-        junction(kp).x = xCurr;
+    junction(kp).t = tOff;
+    junction(kp).x = xCurr;
     end
 end
 

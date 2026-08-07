@@ -4,6 +4,14 @@ function test_sphereGrav()
 %  Verify point-mass gravity: correct surface value, inverse-square falloff,
 %  no latitude dependence, and a zero latitudinal component.
 %
+%% Inputs:
+%
+%  none
+%
+%% Outputs:
+%
+%  none                                         Throws on any failed assertion
+%
 %% Revision History:
 %  Michael Casey                                                08/06/2026
 %  Copyright 2026 Coorbital, Inc.

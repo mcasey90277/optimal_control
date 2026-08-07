@@ -6,6 +6,14 @@ function test_glide3DOF()
 %  drag present the mechanical energy must decrease at exactly the rate the
 %  drag force does work.
 %
+%% Inputs:
+%
+%  none
+%
+%% Outputs:
+%
+%  none                                         Throws on any failed assertion
+%
 %% Revision History:
 %  Michael Casey                                                08/06/2026
 %  Copyright 2026 Coorbital, Inc.

@@ -8,6 +8,14 @@ function test_phaseRun()
 %  event, which must ignore an ascending crossing, and the prescribed control
 %  schedule, which must interpolate inside its grid and clamp outside it.
 %
+%% Inputs:
+%
+%  none
+%
+%% Outputs:
+%
+%  none                                         Throws on any failed assertion
+%
 %% Revision History:
 %  Michael Casey                                                08/06/2026
 %  Copyright 2026 Coorbital, Inc.
@@ -306,24 +314,24 @@ function test_phaseRun()
 %% Each junction sits at the running sum of the preceding legs, and appears
 %  on exactly one row:
            medStep = median(diff(tr3.t));
-for kj = 1:2
-    assert(abs(tr3.junction(kj).t - cumDur(kj)) < 1e-6, ...
-        'junction %d recorded at %.6f s against %.6f s measured', ...
-        kj,tr3.junction(kj).t,cumDur(kj));
+    for kj = 1:2
+        assert(abs(tr3.junction(kj).t - cumDur(kj)) < 1e-6, ...
+            'junction %d recorded at %.6f s against %.6f s measured', ...
+            kj,tr3.junction(kj).t,cumDur(kj));
              rows3 = find(abs(tr3.t - tr3.junction(kj).t) < 1e-9);
-    assert(numel(rows3) == 1, ...
-        'junction %d appears in %d rows; expected exactly 1',kj,numel(rows3));
+        assert(numel(rows3) == 1, ...
+            'junction %d appears in %d rows; expected exactly 1',kj,numel(rows3));
 
 %% ...and no anomalous jump in diff(t) at either boundary. Each gap must be
 %  an ordinary integration step, not the ~10 s a leaked tspan(1) would open:
             iLast3 = find(tr3.phaseIdx == kj,1,'last');
            iFirst3 = find(tr3.phaseIdx == kj+1,1,'first');
-    assert(iFirst3 == iLast3 + 1,'phase labels %d/%d must be contiguous',kj,kj+1);
+        assert(iFirst3 == iLast3 + 1,'phase labels %d/%d must be contiguous',kj,kj+1);
               gap3 = tr3.t(iFirst3) - tr3.t(iLast3);
-    assert(gap3 < 5*medStep, ...
-        ['boundary %d opened a %.6f s gap against a %.6f s median step; ' ...
-         'that is not an ordinary integration step'],kj,gap3,medStep);
-end
+        assert(gap3 < 5*medStep, ...
+            ['boundary %d opened a %.6f s gap against a %.6f s median step; ' ...
+             'that is not an ordinary integration step'],kj,gap3,medStep);
+    end
 
 %% ---------------------------------------------------------------------
 %% Solver tolerances are overridable through env, defaulting to 1e-10. A

@@ -53,7 +53,7 @@ if nargin == 0
           env.aero = @coorbital.aero.constLD;
         env.omegaE = 0;
                 x0 = [c.rE + 60e3; 0; 0; 6000; deg2rad(-1); deg2rad(90)];
-             xdot = coorbital.eom.glide3DOF(0,x0,[0;0],veh,env);
+              xdot = coorbital.eom.glide3DOF(0,x0,[0;0],veh,env);
     fprintf('xdot = [%.4g %.4g %.4g %.4g %.4g %.4g]''\n',xdot);
     return;
 end
@@ -90,9 +90,9 @@ end
           [CL,CD] = env.aero(alpha,V./aSnd,veh);
 
 %% Aerodynamic accelerations:
-               qbar = 0.5.*rho.*V.^2;
-              aLift = qbar.*veh.Sref.*CL./veh.mass;
-              aDrag = qbar.*veh.Sref.*CD./veh.mass;
+              qbar = 0.5.*rho.*V.^2;
+             aLift = qbar.*veh.Sref.*CL./veh.mass;
+             aDrag = qbar.*veh.Sref.*CD./veh.mass;
 
 %% Kinematics:
               rdot = V.*sin(gamma);

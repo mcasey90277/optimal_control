@@ -5,6 +5,14 @@ function test_constLD()
 %  consistent with the requested lift-to-drag ratio, and ignores alpha and
 %  Mach as documented.
 %
+%% Inputs:
+%
+%  none
+%
+%% Outputs:
+%
+%  none                                         Throws on any failed assertion
+%
 %% Revision History:
 %  Michael Casey                                                08/06/2026
 %  Copyright 2026 Coorbital, Inc.

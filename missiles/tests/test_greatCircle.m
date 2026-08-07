@@ -16,6 +16,14 @@ function test_greatCircle()
 %  It is deliberately NOT used as the reference for the small-separation
 %  cases, since that is precisely the regime in which it is the wrong one.
 %
+%% Inputs:
+%
+%  none
+%
+%% Outputs:
+%
+%  none                                         Throws on any failed assertion
+%
 %% Revision History:
 %  Michael Casey                                                08/06/2026
 %  Copyright 2026 Coorbital, Inc.
@@ -126,8 +134,20 @@ end
 function r = arcsecToRad(a)
 %% Purpose:
 %
-%  Convert arcseconds to radians.
+%  Convert arcseconds to radians. Written out rather than folded into the
+%  caller so that the small-separation cases read as the angles they are.
 %
+%% Inputs:
+%
+%  a                [N x 1]                     Angle (arcsec)
+%
+%% Outputs:
+%
+%  r                [N x 1]                     The same angle (rad)
+%
+%% Revision History:
+%  Michael Casey                                                08/06/2026
+%  Copyright 2026 Coorbital, Inc.
 %% ------------------------ Begin Code Sequence ---------------------------
                  r = a.*pi./(180*3600);
 end

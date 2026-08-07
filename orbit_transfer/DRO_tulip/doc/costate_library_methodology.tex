@@ -489,6 +489,102 @@ at fixed 5~N the \emph{orbit-pair} choice spans $\Delta V$
 ($\lesssim2\times$ within a sheet, and shrinking with decreasing thrust as
 slow spirals average the geometry).
 
+\section{What the pipeline verifies --- and what it does not}
+\label{sec:checks}
+
+The pipeline's checks deserve honest classification, because they prove
+different things. Three tiers, in ascending strength:
+
+\paragraph{Tier 1: gross-error tripwires.} Feasibility screens that prove
+nothing about optimality but keep junk out of the machinery: NLP
+convergence with defect $<10^{-9}$; pre-flight node screens (altitude
+floor, plausible $t_f$) before any unbounded integration; the magnitude of
+$\lambda_t$ (junk solutions violate the $+1$ identity by orders of
+magnitude); periodicity and NaN guards on family members; mass-fraction
+validity on catalog entries.
+
+\paragraph{Tier 2: consistency checks.} The solution agreeing with itself
+or with \emph{our} statement of the equations. Defect satisfaction is
+internal consistency of the discretization --- with the canonical
+counterexample on record (defect $10^{-14}$ coexisting with $O(1)$ true
+error). The \textbf{flown-control gate} is the strongest member of this
+tier and merits its precise label: \emph{true independent verification of
+dynamical feasibility} --- a separate high-accuracy integrator confirms
+the trajectory is physically flyable; a feasible but wildly suboptimal
+trajectory passes identically. The multiple-shooting residual
+($\sim10^{-11}$) verifies our statement of the PMP conditions; the
+open-loop PMP flight to meter-level arrival confirms our junctions agree
+with a single-arc integration. Structural identities --- continuous burn,
+$\Delta V = c\ln(1/m_f)$ against propagation, $H(t_f)=0$ via
+$\lambda_t = +1$ --- are consistencies with the theory, not independent
+facts.
+
+\paragraph{Tier 3: extremality verification with real independence.} The
+\texttt{tfMin} acceptance gate hands each entry to an \emph{independently
+implemented} residual --- different author, different code for dynamics,
+Hamiltonian and STMs --- and requires the entry back unchanged
+($\lVert\Delta z\rVert\leq10^{-9}$ observed). This catches convention and
+implementation errors that no amount of internal checking can. The
+direct--indirect cross-agreement (median
+$|t_f^{\rm dir}-t_f^{\rm ind}| = 2\times10^{-8}$ over 126 phase pairs) is
+two methodologically alien solvers converging to the same object.
+
+\paragraph{What none of it verifies.} Every library entry is a
+\emph{verified extremal}: a solution of Pontryagin's \emph{necessary}
+conditions, independently confirmed. Three things remain unproven:
+(i)~\textbf{local optimality} --- no second-order (Jacobi) condition is
+tested, and over 4--7-revolution arcs an extremal can pass a conjugate
+point and cease to be even a local minimum without any tier-1--3 check
+noticing; (ii)~\textbf{global optimality} --- our own measurements refute
+any such claim (multiple extremal families at one phase pair, 50\% apart
+in $t_f$); ``minimum time'' in a library means \emph{best extremal on the
+family the continuation stayed on}; (iii)~normal extremals are assumed
+(the $+1$ normalization); abnormal extremals are invisible to the
+formulation.
+
+\paragraph{A sobering meta-observation.} The two subtlest real defects
+found in this program --- the midpoint-vs-node station association
+(\S\ref{sec:covector}) and a missing thrust-ratio factor in continuation
+mass scaling --- passed \emph{every} runtime gate, because the pipeline is
+self-healing: refinement re-converges from degraded seeds. Both were found
+by external code review. Gates verify solutions; review verifies code;
+neither substitutes for the other.
+
+\subsection{Closing the local-optimality gap: the conjugate-point test}
+\label{sec:conjugate}
+
+The one missing verification with a practical route is second order. Along
+an extremal, consider neighboring extremals launched from the same initial
+state with perturbed initial costates: with the augmented STM
+$\bm\Phi(t,0)\in\mathbb{R}^{14\times14}$ partitioned into state/costate
+blocks, a perturbation $\delta\bm\lambda(0)$ (with
+$\delta\bm x(0)=\bm 0$) produces
+\begin{equation}
+\delta\bm x(t) \;=\; \bm\Phi_{x\lambda}(t,0)\,\delta\bm\lambda(0).
+\end{equation}
+A time $t_c\in(0,t_f)$ where $\bm\Phi_{x\lambda}$ (restricted to the
+position--velocity rows and $\lr,\lv$ columns, the $6\times6$ block
+relevant to our fixed-endpoint conditions) becomes \emph{singular} is a
+\textbf{conjugate point}: a nontrivial neighboring extremal returns to the
+same state, and the second variation ceases to be positive definite ---
+the extremal is no longer locally minimizing beyond $t_c$. The practical
+test is therefore to monitor
+\begin{equation}
+J(t) \;=\; \det\!\big[\bm\Phi_{x\lambda}(t,0)\big]_{6\times6}
+\end{equation}
+for zero crossings on $(0, t_f)$. The implementation is nearly free in our
+architecture: the multiple-shooting Jacobian (\S\ref{sec:mstfmin}) already
+propagates every segment's $14\times14$ STM, so $\bm\Phi(t,0)$ accumulates
+as the running product of segment matrices, and $J$ is evaluated at
+segment boundaries as bookkeeping on quantities already computed. We
+implement this as a \emph{necessary-condition indicator} attached to every
+refined solution (crossing detected $\Rightarrow$ flagged not locally
+optimal; no crossing $\Rightarrow$ strong evidence of local optimality),
+with the standard refinements for the free final time and the free-mass
+channel documented as a follow-on. This upgrades the library's claim from
+``verified extremal'' toward ``verified locally minimizing extremal'' at
+the cost of a determinant per segment.
+
 \section{Conclusion}
 
 The library concept converts the indirect method's greatest liability ---

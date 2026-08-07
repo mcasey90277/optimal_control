@@ -1,0 +1,265 @@
+\documentclass[11pt]{article}
+\usepackage[margin=1.05in]{geometry}
+\usepackage{amsmath}
+\usepackage{booktabs}
+\usepackage{longtable}
+\usepackage{hyperref}
+\hypersetup{colorlinks=true, linkcolor=blue!55!black, urlcolor=blue!55!black}
+
+\title{Costate-Library Generation Software:\\ \large Software Design Document}
+\author{M.~Casey \and D.~Koblick}
+\date{August 6, 2026}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+Design of the MATLAB software that produces, verifies, packages and serves
+costate libraries for minimum-time low-thrust transfers in the Earth--Moon
+CR3BP. The system is organized in five layers over the pumpkyn/pumpkynPie
+astrodynamics libraries; every campaign runs through one human-editable
+front door; long computations run under an externally-timed batch driver
+with resume semantics; and every library entry is certified by three
+independent gates. Reliability patterns are documented together with the
+production incident that motivated each. Companion document:
+\emph{Costate Libraries \dots\ Model, Theory, and the Direct--Indirect
+Production Pipeline} (the mathematics).
+\end{abstract}
+
+\tableofcontents
+
+\section{Scope and design goals}
+
+The software builds catalogs of converged solutions
+$z=[\bm\lambda_0;t_f]$ of the minimum-time PMP boundary-value problem,
+indexed by orbit-family parameters, orbital phasing, and thrust. Standing
+requirements (M.~Casey, 2026-08-05):
+
+\begin{enumerate}
+\item \textbf{Leverage pumpkyn/pumpkynPie} whenever possible; never write
+      into them.
+\item \textbf{Physics consistent with pumpkyn's} --- enforced structurally
+      by the final acceptance gate (\S\ref{sec:gates}).
+\item \textbf{Modular, pumpkyn-house-style code}: front door $+$ engine $+$
+      policy modules $+$ helpers; \texttt{Purpose/Inputs/Outputs/Revision
+      History} headers; \texttt{nargin==0} self-demos.
+\item \textbf{Reproducible results}: drivers in the repository, per-item
+      saves with metadata, deterministic reruns.
+\item \textbf{Clear adjustable parameters}, runnable by a human from
+      MATLAB; a parameter that does not reach the solver is a defect.
+\item \textbf{The pipeline}: direct solve $\to$ \texttt{ms\_tfmin} $\to$
+      pumpkyn \texttt{tfMin} final verification.
+\end{enumerate}
+
+\section{Architecture}
+
+\begin{center}
+\begin{tabular}{ll}
+\toprule
+\textbf{Layer} & \textbf{Contents}\\
+\midrule
+L5 Serving      & pickers, describer, extremes, movies, deliverable zips\\
+L4 Packaging    & \texttt{build\_costate\_lib*}, \texttt{build\_costate\_catalog}\\
+L3 Orchestration& front doors (\texttt{run\_*.m}), batch driver, chains\\
+L2 Engines      & \texttt{thrust\_ladder\_library}, \texttt{extend/densify},\\
+                & \texttt{ms\_tfmin}, \texttt{mesh\_policy}, sweep engine\\
+L1 Shared OC    & \texttt{costate\_common/}: \texttt{get\_family\_orbit},\\
+                & \texttt{survey\_family\_bounds}\\
+L0 Foundation   & pumpkyn / pumpkynPie (orbits, dynamics, STMs, tfMin),\\
+                & CasADi $+$ IPOPT (direct NLP)\\
+\bottomrule
+\end{tabular}
+\end{center}
+
+Dependencies point strictly downward. L0 is read-only third-party code.
+L1 is the seed of the general optimal-control library: anything reused by
+more than one campaign migrates here.
+
+\subsection{Component responsibilities}
+
+\begin{longtable}{p{0.34\textwidth}p{0.60\textwidth}}
+\toprule
+\textbf{Component} & \textbf{Responsibility}\\
+\midrule
+\texttt{get\_family\_orbit(family,p)} &
+THE endpoint provider: family name $+$ parameters $\to$ propagated periodic
+orbit (dro/tulip/halo/dpo/lyapunov), always via pumpkyn getters
+$+$ \texttt{cont\_np} $+$ \texttt{prop}. Adding a family here makes it
+available to every engine.\\
+\texttt{survey\_family\_bounds} &
+Admissibility survey for any family (periselene $\geq$ 500~km, $\leq$
+100~Mm from the Moon) with a NaN-safe periodicity guard; failures print
+their true error identity.\\
+\texttt{casadi\_mintime\_dro} &
+Direct Hermite--Simpson transcription (lifted $t_f$, altitude floor,
+optional Sundman mesh); returns states, controls, node times, and the
+defect multipliers.\\
+\texttt{certify\_dro\_mintime} &
+Continuous verification: re-integrates the solved control end-to-end;
+reports flown arrival error.\\
+\texttt{ms\_tfmin} &
+Multiple-shooting solve of the PMP BVP; analytic block Jacobian from
+pumpkyn segment STMs; iterate guards, wall budget.\\
+\texttt{mesh\_policy} &
+The one place discretization is chosen: $N \sim 250/$rev,
+$K \sim 10/$rev, Sundman from 1.5 rev.\\
+\texttt{thrust\_ladder\_library} &
+Per (phase pair): cold 15~N anchor, walk rungs downward with warm starts;
+all three gates per rung; resume $+$ attempt caps; per-rung saves.\\
+\texttt{extend\_/densify\_ladder} &
+In-place sheet growth to lower rungs / gap filling by indirect
+continuation (multi-exponent time stretch; thrust-ratio mass rescale;
+neighbor seeding).\\
+Front doors (\texttt{run\_*.m}) &
+One per campaign; ALL adjustable parameters in a single labelled block;
+stages (\texttt{pilot} / \texttt{all} / \texttt{report} / \dots);
+pre-registered success criteria where a pilot decides a route.\\
+\texttt{run\_ladder\_batched.sh} &
+Externally-timed batches around uninterruptible solver calls; single-
+instance lock; abort on MATLAB error or nonzero exit; stop on completion
+marker or true wedge.\\
+Packaging (\texttt{build\_*}) &
+Sheets $\to$ shareable \texttt{.mat}; compact ND-only catalog format with
+derive-formulas embedded; invariants asserted across sheets.\\
+Serving &
+\texttt{costate\_catalog\_pick} (five-coordinate lookup with the honesty
+contract), \texttt{costate\_lib\_describe}, extremes $+$ movies.\\
+\bottomrule
+\end{longtable}
+
+\section{Data design}
+
+\subsection{Sheet file (engine output)}
+
+One \texttt{.mat} per (orbit pair) sheet; arrays over
+$(i_D, i_A, k_{\rm rung})$:
+\texttt{TF, FLYKM, ACCDZ, RES, WALL, OK, SUNDUSED},
+$\texttt{Z8}\in\mathbb{R}^{8\times n_D\times n_A\times n_R}$, attempt
+counters \texttt{ATT/ATTD/EXT}, phase grids, and \texttt{meta} carrying the
+\emph{complete} problem definition (constants, thruster, family names and
+parameters, measured periods). The file is the unit of resume: it is
+rewritten after \emph{every} rung, and attempt counters are written
+\emph{before} solving so an externally-killed item still leaves evidence.
+
+\subsection{Compact catalog (shipped)}
+
+Data minimization (D.~Koblick): canonical ND quantities only ---
+constants once at top level; per sheet the phase fractions, availability
+mask, $t_f$ lookup grid, \texttt{entry\_index}, and the \texttt{z8}
+columns. Days, $\Delta V$, masses are \emph{derived}; every formula rides
+in \texttt{cat.derive} as an executable string. Approximately 72~bytes per
+certified solution.
+
+\subsection{The honesty contract (serving)}
+
+Whenever a lookup returns something other than what was requested (nearest
+sheet, snapped phases, nearest \emph{solved} pair, different thrust rung),
+the picker warns with the exact delivered coordinates, and
+\texttt{info.delivered} carries them programmatically ---
+including the distinction between the thrust at which the interpolated
+$t_f$ is valid (\texttt{tfThrustN}, clamped to the available rung range)
+and the rung the \texttt{z8} seed came from (\texttt{seedThrustN}).
+
+\section{Verification: the three gates}
+\label{sec:gates}
+
+An entry exists only if all three pass, in order:
+\begin{enumerate}
+\item \textbf{Flown arrival}: the solved control, re-integrated end-to-end,
+      lands within \texttt{gateKm}/\texttt{gateMs}. (Defect satisfaction is
+      not accuracy.)
+\item \textbf{Refinement residual}: \texttt{ms\_tfmin} converges the PMP
+      residual below tolerance ($\sim10^{-11}$ observed).
+\item \textbf{Production acceptance}: \texttt{pumpkyn.cr3bp.tfMin} returns
+      the entry unchanged ($\lVert\Delta z\rVert<10^{-6}$; observed
+      $\leq10^{-9}$).
+\end{enumerate}
+Gate~3 is what makes ``physics consistent with pumpkyn'' a theorem about
+the data rather than a claim about the code.
+
+\section{Reliability patterns (and their incidents)}
+
+Each pattern below is paired with the production incident that created it;
+the pairing is deliberate --- future maintainers should know these are
+scars, not style.
+
+\begin{longtable}{p{0.42\textwidth}p{0.52\textwidth}}
+\toprule
+\textbf{Pattern} & \textbf{Incident}\\
+\midrule
+File logging, never stdout &
+\texttt{matlab -batch} buffers stdout; a healthy run looked dead for
+hours.\\
+nohup'd script files, never inline \texttt{\&} chains &
+children of an exited background shell died silently (empty review
+outputs, killed campaigns).\\
+Externally-timed batches (\texttt{batchSec} clean exit inside MATLAB;
+OS kill as backstop) &
+solver/ODE calls are uninterruptible in-process; runs pinned at 100\% CPU
+for 16--33 minutes.\\
+Attempt counters written \emph{before} solving &
+a hung cell left no record; resume retried it forever (livelock).\\
+Per-item saves with full metadata &
+run-1 of the phase sweep kept only summaries; 11 hours re-paid.\\
+Resume from the output file; reference-guided reruns &
+prior computation is data; greens-only rerun saved $\sim$4~h.\\
+Progress $=$ work-list advance; completion $=$ explicit marker written by
+the worker; abort on any MATLAB error &
+a driver spun 200 empty passes (2~h) against a finished catalog; another
+burned passes on a parse error that logs two header lines per pass.\\
+Completion tests use the \emph{worker's own} revisit rule &
+a meta-level ``done'' definition disagreed with the engine's, so the
+marker never wrote.\\
+Single-instance lock (mkdir) per driver &
+two live drivers raced one sheet file.\\
+Iterate sanity guards with rejection residual above any reachable true
+residual; try/catch around propagation &
+a wild trust-region iterate collapsed ode45's stepsize and the OS killed
+MATLAB; later, a rejection value of $10^3$ was \emph{accepted} as an
+improvement when the true residual exceeded it.\\
+NaN-safe predicates ($\lnot(x<\text{tol})$) &
+NaN closures passed a \texttt{err > tol} periodicity test and admitted
+$10^{10}$-km ``orbits''.\\
+Catches print the error identity &
+a struct-append bug was mislabeled ``family generator failed'' and cost a
+debugging round.\\
+Frames index-resampled to exactly $1280\times720$ &
+H.264 shears off-size frames (diagonal artifacts), twice.\\
+Code-vs-docs external review per layer &
+caught advertised-but-ignored parameters, a physics error in continuation
+mass scaling ($\dot m \propto T$), and the honesty-contract gap.\\
+\bottomrule
+\end{longtable}
+
+\section{Extension guide}
+
+\paragraph{New orbit family.} Add a case to \texttt{get\_family\_orbit};
+run \texttt{survey\_family\_bounds} over the family's native members to fix
+the admissible box; clone a front door, changing only the
+\texttt{depFamily/depParams} (or arrival) block; pilot two sheets (move one
+axis at a time, few cells) before committing to the full sweep. The Halo
+campaign (\texttt{HALO\_tulip/run\_halo\_catalog.m}) is the worked
+example: it differs from the DRO catalog's front door only in the
+departure-family parameters.
+
+\paragraph{New axis (e.g.\ $I_{sp}$, mass).} Prefer a new rung/list in the
+front door over a new engine; keep continuation steps small where the
+$t_f$ response steepens; record the axis value in \texttt{meta} and in
+every packaged entry.
+
+\paragraph{Toward a pumpkyn-style optimal-control library.} Migration
+rule: code reused by a second campaign moves to \texttt{costate\_common/}
+in its next touch. Current residents: the endpoint provider and the bounds
+survey; next candidates: \texttt{ms\_tfmin}, \texttt{mesh\_policy}, the
+generic pickers/describer, the batched-driver template.
+
+\section{Known limitations}
+
+Saves are not atomic (a kill during \texttt{save} can corrupt a sheet;
+backups mitigate); driver progress counters parse logs rather than
+\texttt{.mat} state; the ladder stops a cell's descent at the first failed
+rung rather than attempting recovery below it; sheets record but do not
+yet enforce a schema version. Each is recorded as deferred-with-eyes-open
+in the review commit of 2026-08-06.
+
+\end{document}

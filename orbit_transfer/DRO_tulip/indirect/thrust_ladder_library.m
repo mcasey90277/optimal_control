@@ -80,6 +80,13 @@ tauDRO = d('tauDRO', 1.0);
 NpT    = d('NpTulip', 7);
 tauT   = d('tauTulip', 5*2*pi/6);
 pmT    = d('pmTulip', -1);
+% FAMILY-AGNOSTIC ENDPOINTS: any pumpkyn family via the shared provider
+% (costate_common/get_family_orbit). Defaults reproduce the DRO->tulip
+% campaign exactly; a Halo campaign passes depFamily='halo' etc.
+depFamily = d('depFamily', 'dro');
+depParams = d('depParams', struct('tau', tauDRO));
+arrFamily = d('arrFamily', 'tulip');
+arrParams = d('arrParams', struct('Np', NpT, 'pm', pmT));
 msSeg  = d('msSeg', [12 24]);      % multiple-shooting segment ladder
 msWallS= d('msWallS', 120);        % ms_tfmin budget per attempt (s)
 accTol = d('accTol', 1e-6);        % tfMin acceptance tolerance
@@ -87,12 +94,8 @@ g0  = 9.80665*tStar^2/(1000*lStar);
 cnd = (ispS/tStar)*g0;
 ndT = @(TN) (TN/m0kg)*tStar^2/(lStar*1000);
 
-[~, rvD0] = pumpkynPie.cr3bp.getDRO(tauDRO);
-rvD0 = pumpkyn.cr3bp.cont_np(rvD0, tauDRO, muStar, 1e-12);
-[tD, rvD] = pumpkyn.cr3bp.prop(tauDRO, rvD0, muStar);
-[~, rvT0] = pumpkyn.cr3bp.getTulip(tauT, NpT, pmT);
-rvT0 = pumpkyn.cr3bp.cont_np(rvT0, tauT, muStar, 1e-12);
-[tT, rvT] = pumpkyn.cr3bp.prop(tauT, rvT0, muStar);
+[tD, rvD] = get_family_orbit(depFamily, depParams);
+[tT, rvT] = get_family_orbit(arrFamily, arrParams);
 
 sD = mod(sD0 + (0:nD-1)/nD, 1);  sA = mod(sA0 + (0:nA-1)/nA, 1);
 todo = d('cells', []);
@@ -132,6 +135,8 @@ else
 end
 meta = struct('muStar',muStar,'lStar',lStar,'tStar',tStar, ...
     'tauDRO',tauDRO,'NpTulip',NpT,'tauTulip',tauT,'pmTulip',pmT, ...
+    'depFamily',depFamily,'depParams',depParams, ...
+    'arrFamily',arrFamily,'arrParams',arrParams, ...
     'periodDRO',tD(end),'periodTulip',tT(end), ...
     'ispS',ispS,'m0kg',m0kg,'N',N,'floorKm',floorKm,'gateKm',gateKm, ...
     'sD0',sD0,'sA0',sA0);

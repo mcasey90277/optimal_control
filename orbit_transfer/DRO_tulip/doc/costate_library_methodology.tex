@@ -1,0 +1,376 @@
+\documentclass[11pt]{article}
+\usepackage[margin=1.05in]{geometry}
+\usepackage{amsmath,amssymb,bm}
+\usepackage{booktabs}
+\usepackage{hyperref}
+\hypersetup{colorlinks=true, linkcolor=blue!55!black, urlcolor=blue!55!black}
+\newcommand{\Rv}{\bm{r}}
+\newcommand{\Vv}{\bm{v}}
+\newcommand{\lr}{\bm{\lambda}_r}
+\newcommand{\lv}{\bm{\lambda}_v}
+\newcommand{\uh}{\hat{\bm{u}}}
+
+\title{Costate Libraries for Minimum-Time Low-Thrust Transfers\\
+in the Earth--Moon Three-Body Problem:\\
+\large Model, Theory, and the Direct--Indirect Production Pipeline}
+\author{M.~Casey \and D.~Koblick}
+\date{August 6, 2026}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+This document records, with mathematical rigor and physical intuition, how
+the DRO$\to$tulip costate libraries were built. We define the dynamical
+model (the circular restricted three-body problem in the rotating synodic
+frame), the two orbit families and their phasing torus, and the minimum-time
+optimal control problem with mass dynamics. We derive the necessary
+conditions of Pontryagin's Minimum Principle, whose two-point boundary-value
+problem in eight unknowns $z = [\bm\lambda_0; t_f]$ is what a costate
+library stores solutions of. We then explain \emph{why} a library is the
+right artifact --- the exponential sensitivity of single shooting and the
+multi-family structure of the solution landscape --- and describe the
+three-stage production pipeline: direct collocation with continuous
+verification, covector-mapped multiple-shooting refinement, and acceptance
+by the production single-shooting solver. Every design choice cited here is
+tied to a measurement made during the campaign.
+\end{abstract}
+
+\tableofcontents
+
+\section{The dynamical model}
+
+\subsection{The circular restricted three-body problem}
+
+Two primaries --- Earth (mass $m_1$) and Moon (mass $m_2$) --- move on
+circular orbits about their barycenter; a spacecraft of negligible mass
+moves in their combined gravity field. The \emph{circular restricted
+three-body problem} (CR3BP) studies the spacecraft's motion. Its single
+dimensionless parameter is the mass ratio
+\begin{equation}
+\mu \;=\; \frac{m_2}{m_1+m_2} \;=\; 0.012150585609624 .
+\end{equation}
+
+\paragraph{Nondimensionalization.} Lengths are scaled by the Earth--Moon
+distance $l^\ast = 389{,}703.264829278$~km, time by
+$t^\ast = 382{,}981.289129055$~s (chosen so the primaries' angular rate is
+unity), so one nondimensional (ND) time unit is $4.4327$~days and one
+revolution of the Moon is $2\pi$ ND $= 27.85$~days. Velocities scale by
+$l^\ast/t^\ast \approx 1.0175$~km/s.
+
+\subsection{The rotating (synodic) frame}
+
+All work is done in the frame that rotates with the primaries: the $x$-axis
+points from the barycenter through the Moon, $z$ along the orbital angular
+momentum, $y$ completing the right-handed triad. Earth sits at $(-\mu,0,0)$
+and the Moon at $(1-\mu,0,0)$, both \emph{fixed}. The price of a fixed
+geometry is fictitious accelerations; the equations of motion are
+\begin{equation}
+\ddot{\Rv} \;=\; \bm g(\Rv)
+\;-\; 2\,\bm\omega\times\dot{\Rv}
+\;-\; \bm\omega\times(\bm\omega\times\Rv),
+\qquad \bm\omega = \hat{\bm z},
+\label{eq:eom}
+\end{equation}
+with the two-body gravities
+\begin{equation}
+\bm g(\Rv) = -\frac{(1-\mu)(\Rv - \Rv_E)}{\lVert \Rv-\Rv_E\rVert^{3}}
+             -\frac{\mu\,(\Rv - \Rv_M)}{\lVert \Rv-\Rv_M\rVert^{3}} .
+\end{equation}
+Equivalently, with the effective potential
+$U(\Rv)=\tfrac12(x^2+y^2)+\frac{1-\mu}{r_1}+\frac{\mu}{r_2}$,
+equation~\eqref{eq:eom} reads $\ddot x - 2\dot y = U_x$,
+$\ddot y + 2\dot x = U_y$, $\ddot z = U_z$.
+
+\paragraph{Intuition.} The centrifugal term tilts the landscape outward;
+gravity wells sit at the two primaries; their competition creates the five
+Lagrange equilibria. The Coriolis term does no work but curls every
+trajectory --- it is why low-energy motion in this frame looks like
+spirals and loops rather than conic arcs, and why families of
+\emph{periodic} orbits (DROs, halos, tulips) exist at all: in the rotating
+frame the time-dependence of the gravity field disappears, so closed orbits
+become possible and the Jacobi integral
+$C = 2U - \lVert\dot{\Rv}\rVert^2$ is conserved (ballistically; thrust
+changes it).
+
+\subsection{The two orbit families}
+
+Both terminal orbits come from the pumpkyn/pumpkynPie catalogs: a seed
+state from a lookup table, sharpened to machine periodicity by differential
+correction (\texttt{cont\_np}), then propagated one period.
+
+\paragraph{DRO (departure).} Distant retrograde orbits are stable, planar,
+retrograde loops around the Moon. The family is \emph{parameterized by its
+period}: $\texttt{getDRO}(\tau)$ returns the member whose period is $\tau$
+ND. The libraries use $\tau = 1.0$ (period $4.43$~d, lunar distances
+$27$--$30$~Mm); the catalog sweeps $\tau \in \{0.5, 1, 2, 3\}$ within the
+measured admissible range $[0.05, 3.25]$.
+
+\paragraph{Tulip (arrival).} Tulip orbits are $z$-excursing resonant orbits
+whose ground track over the lunar south pole draws $N_p$ petals. The
+resonance locks the period to $(N_p-2)/(N_p-1)$ lunar revolutions,
+\begin{equation}
+\tau_{\rm tulip} = \frac{N_p-2}{N_p-1}\,2\pi ,
+\end{equation}
+e.g.\ $N_p=7 \Rightarrow \tau = 5\pi/3 = 23.21$~d. The two branches
+$pm=\pm1$ are exact mirror images under $z\to-z$ --- a symmetry of
+\eqref{eq:eom} --- so every solution for one branch maps to the other by
+flipping $z$-components of states \emph{and costates}; only one branch is
+ever computed.
+
+\subsection{Phasing and the torus}
+
+A transfer's endpoints are points \emph{on} these orbits, labeled by phase:
+the fraction $f\in[0,1)$ of the period elapsed past the catalog reference
+state. The state at phase $f$ is obtained by propagating one period and
+interpolating. Because both phases wrap, the space of (departure, arrival)
+choices is a \emph{torus}; the library grids it (12$\times$12 for the
+single-pair libraries, 6$\times$6 per catalog sheet). Every point of the
+torus is a complete optimal control problem.
+
+\section{The optimal control problem}
+
+\subsection{Model with mass dynamics}
+
+The state is $\bm x = [\Rv; \Vv; m] \in \mathbb{R}^7$ with $m$ normalized
+by the initial mass. Control is a thrust direction $\uh$
+($\lVert\uh\rVert=1$) and throttle $\delta\in[0,1]$:
+\begin{equation}
+\dot{\Rv} = \Vv, \qquad
+\dot{\Vv} = \bm a_{\rm 3B}(\Rv,\Vv) + \delta\,\frac{T_{\max}}{m}\,\uh, \qquad
+\dot m = -\,\delta\,\frac{T_{\max}}{c},
+\label{eq:dyn}
+\end{equation}
+where $\bm a_{\rm 3B}$ collects gravity, centrifugal and Coriolis terms of
+\eqref{eq:eom}, $T_{\max}$ is the ND thrust acceleration scale
+($T_{\max} = \frac{T[\mathrm N]}{m_0}\frac{(t^\ast)^2}{1000\,l^\ast}$) and
+$c = I_{sp}\,g_0$ the ND exhaust velocity. Given endpoints
+$\Rv(0),\Vv(0)$ and $\Rv(t_f),\Vv(t_f)$ fixed by the chosen phases, and
+$m(0)=1$ with $m(t_f)$ free, the \textbf{minimum-time problem} is
+\begin{equation}
+\min_{\;\uh(\cdot),\,\delta(\cdot),\,t_f}\; J = \int_0^{t_f}\! 1\, dt .
+\end{equation}
+
+\subsection{Pontryagin's Minimum Principle}
+
+Adjoin costates $\bm\lambda = [\lr;\lv;\lambda_m]$ and form the
+Hamiltonian (with the normal multiplier absorbed as $+1$):
+\begin{equation}
+H \;=\; 1 + \lr^{\!\top}\Vv
+      + \lv^{\!\top}\!\Big(\bm a_{\rm 3B} + \delta\frac{T_{\max}}{m}\uh\Big)
+      - \lambda_m\,\delta\,\frac{T_{\max}}{c}.
+\label{eq:H}
+\end{equation}
+Minimizing $H$ pointwise gives the control law. The direction enters only
+through $\lv^{\!\top}\uh$, so
+\begin{equation}
+\uh^\star = -\,\frac{\lv}{\lVert\lv\rVert}
+\qquad\text{(the \emph{primer vector} law)},
+\end{equation}
+and the throttle through the \emph{switching function}
+\begin{equation}
+S = -\,\frac{\lVert\lv\rVert\,c}{m} - \lambda_m,
+\qquad
+\delta^\star = \begin{cases} 1, & S<0\\ 0, & S>0 . \end{cases}
+\end{equation}
+For minimum time the engine runs continuously in practice
+($\delta\equiv1$; confirmed numerically on every library entry, which is
+also why $\Delta V = c\,\ln\!\frac{1}{m(t_f)}$ with
+$m(t_f) = 1 - T_{\max}t_f/c$ is \emph{exact} for these solutions, and why
+at fixed thrust minimum time and minimum $\Delta V$ are the same transfer).
+
+The costates obey $\dot{\bm\lambda} = -\partial H/\partial \bm x$:
+\begin{equation}
+\dot{\lr} = -\Big(\frac{\partial \bm a_{\rm 3B}}{\partial \Rv}\Big)^{\!\top}\!\lv,
+\qquad
+\dot{\lv} = -\lr
+            -\Big(\frac{\partial \bm a_{\rm 3B}}{\partial \Vv}\Big)^{\!\top}\!\lv,
+\qquad
+\dot\lambda_m = \delta\,\frac{T_{\max}}{m^2}\,\lVert\lv\rVert .
+\end{equation}
+
+\paragraph{Intuition.} $\lv$ (the primer) points opposite the optimal
+thrust; its magnitude measures how much a unit of velocity change is worth
+right now. $\lr$ is the shadow price of position; the Coriolis coupling
+rotates the pair continuously, which is why costates in the rotating frame
+oscillate on roughly the orbital timescale.
+
+\subsection{The boundary-value problem}
+
+Free final mass gives $\lambda_m(t_f)=0$; free final time gives the
+transversality condition $H(t_f) = 0$ (with the $+1$ convention of
+\eqref{eq:H}). Collecting, a candidate optimal transfer is a root of the
+\emph{shooting residual}
+\begin{equation}
+\bm R(z) =
+\begin{bmatrix}
+\Rv(t_f;z) - \Rv_f\\[2pt]
+\Vv(t_f;z) - \Vv_f\\[2pt]
+\lambda_m(t_f;z)\\[2pt]
+H(t_f;z)
+\end{bmatrix} = \bm 0,
+\qquad
+z = \begin{bmatrix}\bm\lambda(0)\\ t_f\end{bmatrix}\in\mathbb{R}^8,
+\label{eq:bvp}
+\end{equation}
+where the trajectory is generated by integrating states and costates from
+$t=0$ under the PMP control law. Equation~\eqref{eq:bvp} is exactly the
+system \texttt{pumpkyn.cr3bp.tfMin} solves; \textbf{a costate library is a
+catalog of its roots}, indexed by the problem parameters (phases, thrust,
+orbit-family parameters).
+
+\section{Why a library: sensitivity and solution families}
+
+\subsection{Exponential sensitivity of single shooting}
+
+The state--costate flow of \eqref{eq:bvp} is Hamiltonian and, near these
+orbits, strongly unstable: linearized errors grow with the state-transition
+matrix, whose norm grows roughly exponentially along multi-revolution
+arcs. Measured on the $\tau=1$, $N_p=7$ torus: costate initial conditions
+accurate to $\sim10^{-3}$ (the best a direct transcription's multipliers
+deliver, see \S\ref{sec:covector}) produce terminal misses of
+12{,}700--558{,}000~km over 4--7 revolution transfers --- an amplification
+of order $10^3$. Single shooting from such a seed is effectively a cold
+start; from a library root it converges in one step. \emph{The guess is the
+entire difficulty; the library is the guess.}
+
+\subsection{Multiple families}
+
+The solution landscape is not single-valued. At one phase pair and thrust
+we measured two converged, feasible minimum-time transfers with
+$t_f = 0.40$ vs $0.60$~days; across the phasing torus, neighboring cells'
+$t_f$ jumps by up to 75\% across \emph{family walls} (median smooth
+variation is 5--8\% per grid step). Which family a solver lands on depends
+on its seed. Two practical consequences: maps must be built by
+\emph{continuation} (each solution seeding its neighbor) to stay on one
+family per region, and independent cold solves produce patchwork
+(``blocky'') maps even when every individual solve converged.
+
+\section{The production pipeline}
+
+Three stages; an entry joins a library only after passing \emph{all
+three gates}.
+
+\subsection{Stage 1: direct collocation, continuously verified}
+
+The OCP is transcribed by Hermite--Simpson collocation: states and controls
+at $N$+1 nodes, dynamics enforced by separated Simpson defect constraints
+on each interval, $t_f$ a decision variable, throttle and unit-direction
+bounds, and a lunar-altitude path constraint ($\geq 500$~km) --- without
+which the optimizer happily flies through the Moon. The NLP is solved by
+IPOPT via CasADi.
+
+A converged NLP is \emph{not} accepted on the solver's word. The
+\textbf{continuous verification gate} re-integrates the solved control
+history end-to-end with a high-accuracy integrator: the flown trajectory
+must arrive within tolerance (100~km, 10~m/s). This matters because defect
+satisfaction is not accuracy: a coarse mesh can satisfy its own discrete
+equations along a ``trajectory'' no spacecraft could fly (measured: NLP
+defect $10^{-14}$ coexisting with $O(1)$ true error on an early
+mesh).
+
+\subsection{Stage 1.5: the covector mapping}
+\label{sec:covector}
+
+The KKT multipliers of the defect constraints are a discrete approximation
+of the continuous costates (the Hager covector mapping): $\lambda$ at node
+$k$ is read from the multiplier of interval $k$'s defect (interval
+\emph{midpoints} for Hermite--Simpson). Two details proved essential in
+practice: the multipliers' \emph{sign} is fixed by requiring the implied
+primer direction to match the solved control (decided by a majority vote
+over the first ten nodes), and the full costate \emph{trajectory} is saved,
+not just $\bm\lambda(0)$ --- stage~2 is only possible because of it.
+
+\subsection{Stage 2: multiple-shooting refinement}
+
+Because $10^{-3}$-accurate costates cannot survive single shooting
+(\S3.1), refinement uses \emph{multiple shooting}: the arc is split into
+$K$ segments with junction states
+$\bm y_k = [\Rv;\Vv;m;\bm\lambda]\in\mathbb{R}^{14}$ as additional
+unknowns,
+\begin{equation}
+\bm p = \big[\bm\lambda(0);\; \bm y_2;\dots;\bm y_K;\; t_f\big],
+\end{equation}
+with $14(K{-}1)$ continuity conditions and the 8 terminal conditions of
+\eqref{eq:bvp}. Per-segment error amplification is bounded by the segment
+length, which is the entire point. The Jacobian is \emph{analytic}: each
+segment's $14\times14$ state-transition matrix comes from pumpkyn's own
+augmented propagation, terminal rows use pumpkyn's $\partial H/\partial\bm
+y$, and $t_f$-columns follow from the chain rule with fixed normalized
+breakpoints ($d(\text{segment endpoint})/dt_f = \bm f(\bm y)\,\Delta\sigma_k$).
+Junction seeds are interpolated from the saved direct trajectory (states)
+and covector-mapped multipliers (costates); the system is solved by
+trust-region dogleg with a segment ladder $K = 12 \to 24 \to 48$ for rough
+seeds. Guard rails --- iterate sanity bounds with a rejection residual
+\emph{larger than any reachable true residual}, try/catch around segment
+propagation, wall budgets --- exist because each was once violated at
+measurable cost.
+
+Refined entries reach residuals $\sim10^{-11}$ and their $\bm\lambda(0)$,
+flown open-loop under the PMP law, arrives within meters.
+
+\subsection{Stage 3: acceptance by the production solver}
+
+Finally each refined $z$ is handed to \texttt{pumpkyn.cr3bp.tfMin} as a
+seed. \textbf{Pass = the solver returns it unchanged}
+($\lVert\Delta z\rVert < 10^{-6}$; observed $\leq 10^{-9}$) in seconds.
+This gate makes physics consistency structural rather than asserted: every
+library entry is a root of the production solver's own residual, usable
+downstream with zero adaptation. As an independent cross-check, direct and
+indirect flight times agree to a median of $2\times10^{-8}$ ND across the
+torus --- a certification of \emph{both} methods at every phase pair.
+
+\section{The thrust axis: ladders and continuation}
+
+Thrust enters as a family parameter. At high thrust (15~N on 150~kg,
+$0.1$~m/s$^2$) transfers are sub-revolution and nearly impulsive: cold
+direct solves converge in seconds. At low thrust, transfers wind many
+revolutions and cold solves are expensive and unreliable. The catalog is
+therefore built by a \textbf{downward thrust ladder}: anchor each phase
+pair at 15~N, then walk down the rung set
+$\{15,12,10,7,5,3,2,1.5,1\}$~N with each rung warm-started from the one
+above (states from the propagated solution, control from the PMP law,
+$t_f$ scaled by an empirical $t_f \sim T^{-p}$ with $p$ steepening from
+$\sim0.56$ to $\gtrsim1.7$ down the band; the seed's mass history rescales
+by both the time stretch and the thrust ratio, since $\dot m \propto T$).
+Continuation keeps a phase pair on \emph{one} solution family; independent
+solves do not (\S3.2).
+
+The ladder's floor is physical: coverage collapses where transfers cross
+one departure-orbit revolution (measured: 63/144 pairs at 1~N, 20/144 at
+0.5~N for the $\tau=1$ DRO). Below the boundary lives the genuinely
+low-thrust regime, which the $0.07$~N library reaches with different
+machinery (Sundman-regularized meshes, cold flood seeding over the torus)
+--- the two sheets are neighbors, not points on one continuum.
+
+\section{The catalog and its admissible box}
+
+Orbit-family parameters (DRO period $\tau$; tulip $N_p$) become catalog
+axes. ``Reasonable'' members are decided by measurement, not intuition:
+propagate each candidate one period and require periselene altitude
+$\geq 500$~km and maximum lunar distance $\leq 100$~Mm (lunar vicinity,
+including L1/L2). For the DRO family this admits $\tau\in[0.05,3.25]$; all
+tulip petal counts 3--14 pass. A periodicity guard excludes family members
+whose differential correction did not truly converge (their metrics are
+garbage), with the check written NaN-safely as $\lnot(\text{err}<\text{tol})$.
+
+The resulting coarse catalog: 16 sheets ($\tau\in\{0.5,1,2,3\}\times
+N_p\in\{5,7,9,12\}$), $6\times6$ phasing, 9 rungs --- 3{,}936 three-gate
+entries at 89--97\% phase-pair coverage per sheet, built in $\sim$26
+unattended hours ($\sim$25~s per verified solution). Headline physics:
+at fixed 5~N the \emph{orbit-pair} choice spans $\Delta V$
+1.18--4.09~km/s ($3.5\times$), dominating the phasing effect
+($\lesssim2\times$ within a sheet, and shrinking with decreasing thrust as
+slow spirals average the geometry).
+
+\section{Conclusion}
+
+The library concept converts the indirect method's greatest liability ---
+seed sensitivity --- into a data product: solve each region of parameter
+space once, with a direct method that needs no costate guess; distill each
+solution to machine-accurate costates by multiple shooting; certify against
+the production solver; and index by the parameters missions care about.
+The pipeline is family-agnostic (endpoints enter only through a shared
+orbit provider) and is now being applied to the L2-southern halo family.
+
+\end{document}

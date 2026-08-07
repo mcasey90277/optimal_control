@@ -1,0 +1,118 @@
+function bst = boosterDefaults()
+%% Purpose:
+%
+%  Default single-stage booster parameters for lofting the generic glide
+%  vehicle of coorbital.util.vehicleDefaults. PLACEHOLDER VALUES: they are
+%  open-literature, order-of-magnitude figures for a large solid-propellant
+%  first stage and are not any specific motor. Replace before any result
+%  leaves this machine.
+%
+%  Mass bookkeeping (docs/plan_2026-08-07_boost_descent_chain.md, "Mass
+%  bookkeeping") -- the propagated state mass is ALWAYS the total mass
+%  currently carried:
+%
+%     m at liftoff       = veh.mass + bst.massDry + bst.massProp
+%     m at burnout       = veh.mass + bst.massDry
+%     m after separation = veh.mass
+%     burn time          = bst.massProp / mdot
+%
+%  There is deliberately NO massWet field. A wet mass would have to mean
+%  either booster-only or stack-including-payload, and either reading is
+%  defensible, so the field would silently invite the one ambiguity the
+%  bookkeeping rule above exists to remove. Add the two masses that are here.
+%
+%  The aerodynamic fields describe the BOOSTED STACK, not the glide vehicle:
+%  a slender body of revolution flying near zero incidence, which is a much
+%  poorer lifting shape than the waverider it carries. They exist so the boost
+%  phase can fly with coorbital.aero.constLD, the same aerodynamic model the
+%  glide uses. As in vehicleDefaults there is no CD field -- constLD derives
+%  CD = CL/LD, so drag cannot fall out of sync with the pair below.
+%
+%% Inputs:
+%
+%  none
+%
+%% Outputs:
+%
+%  bst              Struct                      Booster parameters:
+%                                               massDry   (kg) spent booster
+%                                                  structure, jettisoned at
+%                                                  separation; EXCLUDES the
+%                                                  payload
+%                                               massProp  (kg) usable
+%                                                  propellant
+%                                               thrustVac (N) vacuum thrust,
+%                                                  constant through the burn
+%                                               Isp       (s) VACUUM specific
+%                                                  impulse; mdot is derived
+%                                                  from it, see the note below
+%                                               Aexit     (m^2) nozzle exit
+%                                                  area, sets the ambient
+%                                                  back-pressure thrust debit
+%                                               Sref      (m^2) stack
+%                                                  reference area
+%                                               CL        (-) stack lift
+%                                                  coefficient
+%                                               LD        (-) stack
+%                                                  lift-to-drag ratio
+%
+%% Note -- Isp is the VACUUM value, and that matters:
+%
+%  coorbital.prop.constThrust derives the propellant mass flow as
+%  mdot = thrustVac/(Isp*g0). That identity holds only when the thrust and the
+%  specific impulse are quoted at the SAME ambient condition. Both are quoted
+%  in vacuum here. Substituting a sea-level Isp against thrustVac would
+%  overstate the flow by the sea-level thrust debit and burn the motor out
+%  early, which reads as a trajectory error rather than a units error.
+%
+%% Note -- the resulting performance, computed from the values below:
+%
+%  With the 900 kg vehicleDefaults payload, and g0 = 9.80665 m/s^2:
+%
+%     liftoff mass    = 900 + 1500 + 30000        = 32400    kg
+%     burnout mass    = 900 + 1500                =  2400    kg
+%     mass ratio                                  =    13.5
+%     exhaust speed   = Isp*g0 = 260*9.80665      =  2549.729 m/s
+%     mass flow       = 950000/2549.729           =   372.589 kg/s
+%     burn time       = 30000/372.5886            =    80.518 s
+%     liftoff T/W     = 950000/(32400*9.80665)    =     2.990
+%     ideal delta-V   = 2549.729*log(13.5)        =  6636.2  m/s
+%
+%  The ideal delta-V is the loss-free Tsiolkovsky figure. A lofted ascent of
+%  this duration spends of order 500-700 m/s on gravity and drag losses, so a
+%  burnout speed near 6 km/s is the expectation -- which is what the 60 km,
+%  6 km/s entry interface in HGV/run_glide assumes.
+%
+%  Burn time and liftoff T/W are not independent: for a given propellant mass
+%  fraction f, burn time = Isp*f/(T/W). Holding T/W in the 2-3 band with a
+%  solid-class Isp therefore pins the burn near 80 s, and no choice of masses
+%  shortens it without either raising T/W above the band or giving up the
+%  delta-V needed to reach entry speed.
+%
+%% References:
+%   [1] Sutton, G.P., Biblarz, O., "Rocket Propulsion Elements," 9th ed.,
+%       Wiley, 2017, Ch. 2-3 and Ch. 12. (Isp, thrust coefficient, and
+%       representative HTPB solid-motor performance.)
+%
+%% Revision History:
+%  Michael Casey                                                08/07/2026
+%  Copyright 2026 Coorbital, Inc.
+%% ------------------------ Begin Code Sequence ---------------------------
+
+%% Masses -- see the bookkeeping block above; there is no massWet:
+       bst.massDry = 1500;            %kg, PLACEHOLDER, spent structure only
+      bst.massProp = 30000;           %kg, PLACEHOLDER, usable propellant
+
+%% Propulsion -- thrustVac and Isp are BOTH vacuum values:
+     bst.thrustVac = 950000;          %N, PLACEHOLDER, constant through the burn
+           bst.Isp = 260;             %s, PLACEHOLDER, VACUUM specific impulse;
+                                      %   typical HTPB solid range 250-270
+         bst.Aexit = 1.25;            %m^2, PLACEHOLDER, nozzle exit area;
+                                      %   1.26 m exit diameter
+
+%% Boosted-stack aerodynamics for coorbital.aero.constLD (PLACEHOLDER):
+          bst.Sref = 1.77;            %m^2, PLACEHOLDER, pi/4*(1.5 m)^2 body
+                                      %   cross-section
+            bst.CL = 0.05;            %PLACEHOLDER, near-zero-incidence body lift
+            bst.LD = 0.25;            %PLACEHOLDER, gives CD = CL/LD = 0.20
+end

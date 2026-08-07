@@ -5,6 +5,21 @@ function veh = vehicle_hgv()
 %  Starts from the library defaults so there is one place to change a value
 %  that should apply everywhere, and overrides only what is vehicle-specific.
 %
+%% Note -- this file currently changes nothing:
+%
+%  Every value set below deliberately COINCIDES with the generic placeholders
+%  in coorbital.util.vehicleDefaults, because no airframe-specific numbers
+%  have been supplied for this vehicle yet. The file is not redundant: it
+%  exists so that real numbers have exactly one home when they arrive, and so
+%  that run_glide reaches for a named vehicle rather than for the library
+%  defaults directly. Read the assignments below as a schedule of what must be
+%  replaced, not as a statement that anything has been.
+%
+%  There is no CD field to set. coorbital.aero.constLD derives CD = CL/LD, so
+%  drag is fixed by the two values below and cannot fall out of sync with
+%  them. A real airframe with a Mach-dependent drag polar needs a different
+%  aero model, not an extra field here.
+%
 %% Inputs:
 %
 %  none

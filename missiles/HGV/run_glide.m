@@ -49,7 +49,9 @@ function traj = run_glide()
            tMaxSim = 4000;             %s,  integration horizon; raise it if the glide is cut short
 
 %% Prescribed control schedule -- held constant for the whole flight here:
-        alphaAngle = 0;                %deg, angle of attack [0 .. 30]; ignored by the constLD aero model
+        alphaAngle = 0;                %deg, angle of attack. NO EFFECT with the default constLD aero
+                                       %     model, which ignores it; becomes live only when aeroFn
+                                       %     below is swapped for an alpha- or Mach-dependent model
          bankAngle = 0;                %deg, bank [-90 .. 90]; 0 = all lift up, +/-90 = all lift into the turn
 
 %% Vehicle -- point this at any file in this folder returning a veh struct:
@@ -148,6 +150,23 @@ function traj = run_glide()
       [nMax,kN]    = max(nLoad);
       [hMax,kH]    = max(hKm);
 
+%% Peak Mach is degenerate whenever the atmosphere model returns a constant
+%% sound speed, as the isothermal expAtmos does: it can then only ever occur
+%% at the speed peak, which for a glide is the entry point. Say so rather than
+%% letting the line read as an independent result -- but test the model rather
+%% than assume it, so the note stays correct if atmosFn is swapped:
+          machNote = sprintf('at t = %.1f s',traj.t(kM));
+    if max(aSnd) - min(aSnd) < 1e-9
+          machNote = sprintf(['at t = %.1f s; constant sound speed in this ' ...
+                              'model, so peak Mach = peak speed'],traj.t(kM));
+    end
+
+%% Conventional lower edge of the hypersonic regime. This is a modelling
+%% convention, not a physical constant of the Earth or the air, so it does not
+%% belong in missileConst; it is the threshold below which holding CL and L/D
+%% constant stops being defensible:
+         machHyper = 5;
+
 %% Label for the rotation switch in the model line below:
            spinTxt = 'OFF';
     if earthSpin
@@ -192,7 +211,7 @@ function traj = run_glide()
             rangeKm,'km',c.rE./1000);
     fprintf('    central angle    %10.4f deg\n',rad2deg(angRad));
     fprintf('    peak altitude    %10.2f %-5s  (at t = %.1f s)\n',hMax,'km',traj.t(kH));
-    fprintf('    samples          %10d       (ode45 adaptive steps)\n',nS);
+    fprintf('    samples          %10d %-5s  (ode45 adaptive steps)\n',nS,'');
     fprintf('\n');
     fprintf('  Terminal conditions\n');
     fprintf('    altitude         %10.3f km\n',hEndM./1000);
@@ -205,7 +224,7 @@ function traj = run_glide()
     fprintf('  Peak loads\n');
     fprintf('    dynamic pressure %10.2f %-5s  (at t = %.1f s, h = %.2f km)\n', ...
             qMax./1000,'kPa',traj.t(kQ),hKm(kQ));
-    fprintf('    Mach number      %10.2f       (at t = %.1f s)\n',machMax,traj.t(kM));
+    fprintf('    Mach number      %10.2f %-5s  (%s)\n',machMax,'',machNote);
     fprintf('    deceleration     %10.2f %-5s  (%.2f m/s^2 sensed aero load, at t = %.1f s)\n', ...
             nMax,'g',nMax.*c.g0,traj.t(kN));
     fprintf('\n');
@@ -213,37 +232,46 @@ function traj = run_glide()
             func2str(atmosFn),func2str(gravFn),func2str(aeroFn),spinTxt);
     fprintf('  Vehicle: %s, mass %.1f kg, Sref %.3f m^2, CL %.3f, L/D %.2f (PLACEHOLDER values)\n', ...
             func2str(vehicleFn),veh.mass,veh.Sref,veh.CL,veh.LD);
+    fprintf('  Validity: %s holds CL and L/D constant, a hypersonic approximation.\n', ...
+            func2str(aeroFn));
+    if mach(end) < machHyper
+        fprintf('            The terminal state at Mach %.2f is below Mach %.0f and so lies\n', ...
+                mach(end),machHyper);
+        fprintf('            OUTSIDE that regime. Real coefficients vary strongly through\n');
+        fprintf('            transonic; treat the low-speed end of this glide as indicative\n');
+        fprintf('            only, not as a performance prediction.\n');
+    end
     fprintf('=========================================================\n\n');
 
 %% Plots:
-if showPlots
-    figure('color',[1 1 1],'name','Glide time histories');
-    subplot(3,1,1); plot(traj.t,hKm,'linewidth',1.5); grid on;
-    ylabel('altitude (km)'); title('Prescribed-control glide');
-    subplot(3,1,2); plot(traj.t,V,'linewidth',1.5); grid on;
-    ylabel('speed (m/s)');
-    subplot(3,1,3); plot(traj.t,qbar./1000,'linewidth',1.5); grid on;
-    ylabel('q (kPa)'); xlabel('time (s)');
+    if showPlots
+        figure('color',[1 1 1],'name','Glide time histories');
+        subplot(3,1,1); plot(traj.t,hKm,'linewidth',1.5); grid on;
+        ylabel('altitude (km)'); title('Prescribed-control glide');
+        subplot(3,1,2); plot(traj.t,V,'linewidth',1.5); grid on;
+        ylabel('speed (m/s)');
+        subplot(3,1,3); plot(traj.t,qbar./1000,'linewidth',1.5); grid on;
+        ylabel('q (kPa)'); xlabel('time (s)');
 
-    figure('color',[1 1 1],'name','Ground track');
-    plot(rad2deg(traj.x(:,2)),rad2deg(traj.x(:,3)),'linewidth',1.5); grid on; hold on;
-    plot(lonEntry,latEntry,'o','markersize',8,'linewidth',1.5);
-    plot(rad2deg(traj.x(end,2)),rad2deg(traj.x(end,3)),'s','markersize',8,'linewidth',1.5);
-    xlabel('longitude (deg)'); ylabel('latitude (deg)');
-    legend('ground track','entry','terminus','location','best');
-    title(sprintf('Ground track, %.0f km great-circle range',rangeKm));
+        figure('color',[1 1 1],'name','Ground track');
+        plot(rad2deg(traj.x(:,2)),rad2deg(traj.x(:,3)),'linewidth',1.5); grid on; hold on;
+        plot(lonEntry,latEntry,'o','markersize',8,'linewidth',1.5);
+        plot(rad2deg(traj.x(end,2)),rad2deg(traj.x(end,3)),'s','markersize',8,'linewidth',1.5);
+        xlabel('longitude (deg)'); ylabel('latitude (deg)');
+        legend('ground track','entry','terminus','location','best');
+        title(sprintf('Ground track, %.0f km great-circle range',rangeKm));
 
-    figure('color',[1 1 1],'name','Mach and load factor');
-    subplot(2,1,1); plot(traj.t,mach,'linewidth',1.5); grid on;
-    ylabel('Mach (-)'); title('Speed regime and sensed aerodynamic load');
-    subplot(2,1,2); plot(traj.t,nLoad,'linewidth',1.5); grid on;
-    ylabel('load factor (g)'); xlabel('time (s)');
-end
+        figure('color',[1 1 1],'name','Mach and load factor');
+        subplot(2,1,1); plot(traj.t,mach,'linewidth',1.5); grid on;
+        ylabel('Mach (-)'); title('Speed regime and sensed aerodynamic load');
+        subplot(2,1,2); plot(traj.t,nLoad,'linewidth',1.5); grid on;
+        ylabel('load factor (g)'); xlabel('time (s)');
+    end
 
 %% Hand the trajectory back only when the caller asked for it. Typing
 %% "run_glide" at the prompt should leave the summary on screen, not bury it
 %% under a dump of the whole struct as ans:
-if nargout == 0
-    clear traj;
-end
+    if nargout == 0
+        clear traj;
+    end
 end

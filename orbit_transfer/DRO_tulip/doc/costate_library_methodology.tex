@@ -331,30 +331,106 @@ In practice two details carry the stage: the sign vote above, and saving
 the full costate \emph{trajectory}, not just $\bm\lambda(0)$ --- stage~2's
 junction seeds exist only because of it.
 
-\subsection{Stage 2: multiple-shooting refinement}
+\subsection{Stage 2: multiple-shooting refinement (\texttt{ms\_tfmin})}
+\label{sec:mstfmin}
 
 Because $10^{-3}$-accurate costates cannot survive single shooting
-(\S3.1), refinement uses \emph{multiple shooting}: the arc is split into
-$K$ segments with junction states
-$\bm y_k = [\Rv;\Vv;m;\bm\lambda]\in\mathbb{R}^{14}$ as additional
-unknowns,
+(\S3.1), refinement solves the BVP \eqref{eq:bvp} by \emph{multiple
+shooting}. This subsection gives the complete formulation implemented in
+\texttt{ms\_tfmin}.
+
+\paragraph{Unknowns and segment maps.} Let
+$\bm y = [\Rv;\Vv;m;\lr;\lv;\lambda_m] \in \mathbb{R}^{14}$ be the
+augmented state, whose flow $\dot{\bm y} = \bm f(\bm y)$ combines the
+dynamics \eqref{eq:dyn} and the costate equations under the PMP feedback
+law ($\uh = -\lv/\lVert\lv\rVert$, $\delta$ from the switching function).
+Fix \emph{normalized breakpoints} $0=\sigma_1<\dots<\sigma_{K+1}=1$ with
+$\Delta\sigma_k = \sigma_{k+1}-\sigma_k$, so segment $k$ spans physical
+time $\Delta\sigma_k\,t_f$. Define the segment map
+$\bm\Phi_k(\bm y;t_f)$: the value at the segment's end of the flow started
+at $\bm y$ and integrated for $\Delta\sigma_k t_f$. The unknown vector is
 \begin{equation}
-\bm p = \big[\bm\lambda(0);\; \bm y_2;\dots;\bm y_K;\; t_f\big],
+\bm p \;=\; \big[\underbrace{\bm\lambda_1}_{7};\;
+\underbrace{\bm y_2;\dots;\bm y_K}_{14(K-1)};\;
+\underbrace{t_f}_{1}\big] \;\in\; \mathbb{R}^{14K-6},
 \end{equation}
-with $14(K{-}1)$ continuity conditions and the 8 terminal conditions of
-\eqref{eq:bvp}. Per-segment error amplification is bounded by the segment
-length, which is the entire point. The Jacobian is \emph{analytic}: each
-segment's $14\times14$ state-transition matrix comes from pumpkyn's own
-augmented propagation, terminal rows use pumpkyn's $\partial H/\partial\bm
-y$, and $t_f$-columns follow from the chain rule with fixed normalized
-breakpoints ($d(\text{segment endpoint})/dt_f = \bm f(\bm y)\,\Delta\sigma_k$).
-Junction seeds are interpolated from the saved direct trajectory (states)
-and covector-mapped multipliers (costates); the system is solved by
-trust-region dogleg with a segment ladder $K = 12 \to 24 \to 48$ for rough
-seeds. Guard rails --- iterate sanity bounds with a rejection residual
-\emph{larger than any reachable true residual}, try/catch around segment
-propagation, wall budgets --- exist because each was once violated at
-measurable cost.
+where segment 1's state part is pinned to the known departure
+$[\Rv_0;\Vv_0;1]$ so only its costates $\bm\lambda_1$ are free.
+
+\paragraph{Residual.} With
+$\hat{\bm y}_{k+1} := \bm\Phi_k(\bm y_k; t_f)$ (and
+$\bm y_1 = [\Rv_0;\Vv_0;1;\bm\lambda_1]$),
+\begin{equation}
+\bm R(\bm p) \;=\;
+\begin{bmatrix}
+\hat{\bm y}_2 - \bm y_2\\
+\vdots\\
+\hat{\bm y}_K - \bm y_K\\[3pt]
+\hat{\Rv}_{K+1} - \Rv_f\\
+\hat{\Vv}_{K+1} - \Vv_f\\
+\hat\lambda_{m,K+1}\\
+H(\hat{\bm y}_{K+1})
+\end{bmatrix}
+\in \mathbb{R}^{14(K-1)+8} = \mathbb{R}^{14K-6},
+\end{equation}
+a square system. At a root, the concatenated segments form one continuous
+extremal satisfying every condition of \eqref{eq:bvp}; setting $K=1$
+recovers single shooting exactly, which is why a converged $\bm p$ is
+interchangeable with a \texttt{tfMin} solution.
+
+\paragraph{Why it works.} Linearized error through one segment grows by at
+most $\lVert\Phi_k\rVert \sim e^{L\,\Delta\sigma_k t_f}$ rather than
+$e^{L t_f}$: the $\sim10^{3}$ amplification that destroys single shooting
+is replaced by $K$ factors of order $10^{3/K}$, each absorbed by its own
+junction unknown. Seed quality requirements drop correspondingly --- which
+is exactly what covector-mapped seeds can meet, since the saved direct
+trajectory supplies \emph{every} junction, not only the initial point.
+
+\paragraph{Analytic Jacobian.} Let
+$\bm A_k = \partial\bm\Phi_k/\partial\bm y\in\mathbb{R}^{14\times14}$ be
+the segment state-transition matrix (obtained from pumpkyn's augmented
+propagation of $\dot{\bm A} = (\partial\bm f/\partial\bm y)\bm A$), and
+$\bm f_{k+1} := \bm f(\hat{\bm y}_{k+1})$. Because the breakpoints are
+fixed in $\sigma$, the only $t_f$-dependence of segment $k$ is its
+duration, so by the chain rule
+$\partial\hat{\bm y}_{k+1}/\partial t_f = \bm f_{k+1}\,\Delta\sigma_k$ ---
+and crucially, junction states are \emph{independent} unknowns, so no
+dependence accumulates across segments. The Jacobian is block
+bidiagonal-bordered:
+\begin{equation}
+\frac{\partial \bm R}{\partial \bm p} =
+\begin{bmatrix}
+\bm A_1 \bm S & -\bm I & & & \bm f_2\Delta\sigma_1\\
+ & \bm A_2 & -\bm I & & \bm f_3\Delta\sigma_2\\
+ & & \ddots & \ddots & \vdots\\
+ & & & \bm T\,[\text{cols of } \bm y_K] & \bm G
+\end{bmatrix},
+\end{equation}
+where $\bm S \in \mathbb{R}^{14\times7}$ selects the costate columns of
+segment 1 (its states being pinned), and the terminal rows are
+\begin{equation}
+\bm T = \begin{bmatrix} [\bm A_K]_{1:6,\,:}\\ [\bm A_K]_{14,\,:}\\
+\big(\partial H/\partial\bm y\big)\bm A_K \end{bmatrix}
+\in\mathbb{R}^{8\times14},
+\qquad
+\bm G = \begin{bmatrix} [\bm f_{K+1}]_{1:6}\\ [\bm f_{K+1}]_{14}\\
+\big(\partial H/\partial\bm y\big)\bm f_{K+1}\end{bmatrix}\Delta\sigma_K .
+\end{equation}
+Every ingredient ($\bm A_k$, $\bm f$, $\partial H/\partial\bm y$) comes
+from pumpkyn's own routines, so conventions match \texttt{tfMin} exactly
+--- the same functions, called verbatim. (An external review verified this
+assembly independently.)
+
+\paragraph{Solve strategy and guards.} The square system is solved by
+trust-region dogleg (the same globalization \texttt{tfMin} uses; a plain
+damped-Newton loop stalled on 2 of 3 pilot cells). Rough seeds escalate a
+\emph{segment ladder} $K = 12 \to 24 \to 48$; each rung costs seconds
+because the analytic Jacobian makes an iteration $\approx$ one full-arc
+STM propagation. Guard rails, each purchased by an incident: iterate
+sanity bounds whose rejection residual exceeds \emph{any reachable true
+residual} (a smaller constant was once accepted as an ``improvement''),
+try/catch around segment propagation (a wild iterate once collapsed the
+integrator and took the process with it), and wall budgets.
 
 Refined entries reach residuals $\sim10^{-11}$ and their $\bm\lambda(0)$,
 flown open-loop under the PMP law, arrives within meters.

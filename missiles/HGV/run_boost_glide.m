@@ -42,10 +42,12 @@ function [traj,info] = run_boost_glide(opts)
 %  itself on this particular run.
 %
 %  The handoff is an altitude, and the operator sets it. It must sit BELOW
-%  every trough of the glide phugoid, or the glide is cut short at its first
-%  dip instead of at its end; the shipped 15 km clears the lowest earlier
-%  trough of the shipped case by about 6 km. Raise it and check the glide
-%  duration in the summary before believing the result.
+%  every trough of the glide phugoid, or the glide is cut short at a skip
+%  instead of at its end; the shipped 15 km clears the lowest earlier trough by
+%  about 6.5 km. This is the one user-block entry that can quietly change the
+%  answer by 25 percent while every phase reports nominal, so the run detects
+%  it and prints a WARNING -- see the counterfactual block below for how, and
+%  for the one-sided blind spot that check has.
 %
 %% Note -- three vehicles, one chain:
 %
@@ -169,9 +171,16 @@ function [traj,info] = run_boost_glide(opts)
                                        %     aero model, which ignores it; becomes live only when
                                        %     aeroFn below is swapped for an alpha-dependent model
          glideBank = [0 0];            %deg, bank [-90 .. 90]; 0 = all lift up, +/-90 = none up
-          hHandoff = 15;               %km, glide-to-descent handoff, DESCENDING crossing only
-                                       %    (0 .. hLaunch); must sit below every trough of the
-                                       %    glide phugoid, see the header note
+          hHandoff = 15;               %km, glide-to-descent handoff, DESCENDING crossing only.
+                                       %    Hard bound: hStop < hHandoff < the burnout altitude,
+                                       %    which for the shipped boost is 47.0 km. USABLE range
+                                       %    is far narrower -- [1 .. 21] for the shipped case --
+                                       %    because it must also sit BELOW EVERY TROUGH of the
+                                       %    glide phugoid or the glide is cut short at a skip
+                                       %    instead of at its end. 22 km loses one skip; 30 km
+                                       %    loses 1882 km of range and still reports nominal.
+                                       %    The run prints a WARNING when it detects this; see
+                                       %    the header note and the caveat on that warning
          tMaxGlide = 6000;             %s, glide horizon; raise it if the glide is cut short
 
 %% Phase 3, descent -- the terminal dive. Same airframe, same equations; the
@@ -182,7 +191,9 @@ function [traj,info] = run_boost_glide(opts)
           descBank = [75 75];          %deg, bank [-90 .. 90]; only cos(bank) of the lift is
                                        %     left supporting the vehicle, so 75 deg keeps 26 %
                                        %     of it and the rest of the weight is unopposed
-             hStop = 0;                %km, impact altitude, DESCENDING crossing only [0 .. 10]
+             hStop = 0;                %km, impact altitude, DESCENDING crossing only
+                                       %    [0 .. hHandoff); a target on high terrain is a
+                                       %    legitimate setting, not just sea level
           tMaxDesc = 1000;             %s, descent horizon
 
 %% Vehicle and booster -- point these at any file returning the right struct:
@@ -279,8 +290,16 @@ function [traj,info] = run_boost_glide(opts)
     checkSchedule(descTimS ,descBnkR ,'descTime' ,'descBank');
     assert(hHandoffM > hStopM, ...
         'hHandoff (%.1f km) must be above hStop (%.1f km).',hHandoff,hStop);
-    assert(hStopM < hLaunchM + 1000, ...
-        'hStop (%.1f km) is at or above the pad; the run would end at t = 0.',hStop);
+%% hStop is NOT bounded by the pad. run_ballistic guards it that way because
+%% its descent phase begins at apogee, so a stop altitude near the pad really
+%% could fire at t = 0; here the descent begins at hHandoff and the assertion
+%% above already forces hStop below it, so the t = 0 hazard cannot arise and a
+%% pad-referenced bound would only reject legitimate targets on high terrain.
+%% What is left is the datum itself:
+    assert(hStopM >= 0, ...
+        ['hStop (%.1f km) is below the spherical datum. The descent ends on a ' ...
+         'descending crossing of that altitude, and a negative one has no ' ...
+         'meaning against this Earth model.'],hStop);
     assert(vLaunch > 1, ...
         'vLaunch must exceed 1 m/s; the equations of motion are singular below that.');
     assert(all([tMaxBoost tMaxGlide tMaxDesc] > 0),'every phase horizon must be positive.');
@@ -426,8 +445,16 @@ function [traj,info] = run_boost_glide(opts)
     end
 
 %% Sensed specific force -- what an accelerometer on board would read. Gravity
-%% is not sensed and is excluded. nAero drops the thrust, which is the quantity
-%% meant by "deceleration" on an unpowered entry:
+%% is not sensed and is excluded. nSens carries the thrust; nAero drops it.
+%%
+%% nAero IS THE AERODYNAMIC LOAD FACTOR -- the magnitude of lift and drag
+%% together -- and it is NOT a deceleration. Labelling it one overstates the
+%% along-track braking by sqrt(1 + LD^2)/LD, which for the shipped LD = 2.5 is
+%% a factor of 2.69, and leaves the peak irreconcilable with the mean drag
+%% deceleration printed for the same phase. With constLD the split is fixed by
+%% the drag polar, CD/CL = 1/LD, so the load is 93 percent lift at EVERY
+%% unpowered sample. The summary prints the lift and drag parts at the peak so
+%% that the two quantities cannot be confused again:
              nSens = sqrt((aThrV - aDrag).^2 + (aThrN + aLift).^2)./c.g0;
              nAero = sqrt(aLift.^2 + aDrag.^2)./c.g0;
 
@@ -460,6 +487,11 @@ function [traj,info] = run_boost_glide(opts)
      [nDscMax,kND] = maxOver(nAero,isDsc);
      [nAerMax,kNA] = maxOver(nAero,isUnp);
        [hGlMax,kG] = maxOver(hKm  ,isGld);
+
+%% The lift and drag parts of the peak load, so the summary can show that the
+%% load factor is not the deceleration:
+          nAerLift = aLift(kNA)./c.g0;
+          nAerDrag = aDrag(kNA)./c.g0;
 
 %% Phase means, time-weighted rather than sample-weighted so that an adaptive
 %% step clustering samples in the interesting part of a phase cannot bias them:
@@ -518,6 +550,28 @@ function [traj,info] = run_boost_glide(opts)
               allG = true(nSG,1);
    [gamCfrAvg,sinkCfr,drgCfrAvg] = phaseMeans(trajG.t,trajG.x,aDrgG,allG,c.rE);
 
+%% ...and the same propagation answers a SECOND question for free, which is
+%% the one a user is far more likely to get wrong. hHandoff is advertised as
+%% freely settable, but the glide descends in a damped skip phugoid, so a
+%% handoff placed above a trough terminates the glide a whole skip early. That
+%% costs range -- 1882 km, a quarter of the total, at hHandoff = 30 km -- and
+%% every phase still reports NOMINAL, because each event fired exactly as
+%% asked. Nothing in the termination diagnosis can see it.
+%%
+%% The counterfactual can. It flies the handoff state ON THE GLIDE SCHEDULE,
+%% so if the handoff caught a trough the vehicle climbs back out of it, and the
+%% rebound above the handoff altitude is the evidence. Measured: +0.00 km at
+%% 15, 20, 21 and 25 km, +0.60 km at 22 km, +31.33 km at 30 km.
+%%
+%% The check is ONE-SIDED and its blind spot is stated where it is printed: it
+%% sees a trough the continued glide climbs out of, and cannot see a handoff
+%% that truncated a shallow skip without rebounding -- 25 km is exactly that
+%% case. It costs nothing, the propagation being needed anyway, so partial
+%% coverage is free coverage:
+          reboundM = max(trajG.x(:,1)) - c.rE - hHandoffM;
+         reboundTol = 100;
+        troughWarn = reboundM > reboundTol;
+
 %% ---------------------------------------------------------------------
 %% Termination diagnosis, one line per phase
 %% ---------------------------------------------------------------------
@@ -560,6 +614,21 @@ function [traj,info] = run_boost_glide(opts)
     if ~allOK
         fprintf('  *** CAUTION ***  at least one phase did NOT end as intended; the\n');
         fprintf('                   trajectory below is TRUNCATED, not a completed flight\n');
+    end
+    if troughWarn
+        fprintf('  *** WARNING ***  the handoff caught a PHUGOID TROUGH, not the end of the\n');
+        fprintf('                   glide. Every phase above ended nominally -- the events all\n');
+        fprintf('                   fired exactly as asked -- but flown on the glide schedule\n');
+        fprintf('                   the vehicle would have climbed %.2f km back above the\n', ...
+                reboundM./1000);
+        fprintf('                   %.1f km handoff before descending again, so the glide was\n', ...
+                hHandoff);
+        fprintf('                   cut short by at least one skip and the range below is NOT\n');
+        fprintf('                   this vehicle''s glide range. Lower hHandoff and compare.\n');
+        fprintf('                   The run is a valid trajectory; it is probably not the one\n');
+        fprintf('                   you meant. This check is ONE-SIDED: it sees a trough the\n');
+        fprintf('                   continued glide climbs out of, and CANNOT see a handoff\n');
+        fprintf('                   that truncated a shallow skip without rebounding.\n');
     end
     fprintf('\n');
     fprintf('  Launch\n');
@@ -689,16 +758,28 @@ function [traj,info] = run_boost_glide(opts)
             nBstMax,'g',nBstMax.*c.g0,traj.t(kNB));
     fprintf('    glide max q      %10.2f %-5s  (at t = %.1f s, h = %.2f km)\n', ...
             qGldMax./1000,'kPa',traj.t(kQG),hKm(kQG));
-    fprintf('    glide decel      %10.2f %-5s  (%.2f m/s^2 aero only, at t = %.1f s, h = %.2f km)\n', ...
-            nGldMax,'g',nGldMax.*c.g0,traj.t(kNG),hKm(kNG));
+    fprintf('    glide aero load  %10.2f %-5s  (%.2f m/s^2 lift and drag, thrust excluded, at\n', ...
+            nGldMax,'g',nGldMax.*c.g0);
+    fprintf('                                        t = %.1f s, h = %.2f km)\n', ...
+            traj.t(kNG),hKm(kNG));
     fprintf('    descent max q    %10.2f %-5s  (at t = %.1f s, h = %.2f km)\n', ...
             qDscMax./1000,'kPa',traj.t(kQD),hKm(kQD));
-    fprintf('    descent decel    %10.2f %-5s  (%.2f m/s^2 aero only, at t = %.1f s, h = %.2f km)\n', ...
-            nDscMax,'g',nDscMax.*c.g0,traj.t(kND),hKm(kND));
-    fprintf('    peak decel       %10.2f %-5s  (%.2f m/s^2, over the whole unpowered flight,\n', ...
+    fprintf('    descent aero load%10.2f %-5s  (%.2f m/s^2 lift and drag, thrust excluded, at\n', ...
+            nDscMax,'g',nDscMax.*c.g0);
+    fprintf('                                        t = %.1f s, h = %.2f km)\n', ...
+            traj.t(kND),hKm(kND));
+    fprintf('    peak aero load   %10.2f %-5s  (%.2f m/s^2, over the whole unpowered flight,\n', ...
             nAerMax,'g',nAerMax.*c.g0);
     fprintf('                                        at t = %.1f s, h = %.2f km, in phase %d)\n', ...
             traj.t(kNA),hKm(kNA),traj.phaseIdx(kNA));
+    fprintf('      of which lift  %10.2f %-5s  (%.1f %% of the load)\n', ...
+            nAerLift,'g',100.*nAerLift./nAerMax);
+    fprintf('      of which drag  %10.2f %-5s  (%.1f %% of the load). ONLY THE DRAG PART\n', ...
+            nAerDrag,'g',100.*nAerDrag./nAerMax);
+    fprintf('                                        brakes the vehicle. The load factor above\n');
+    fprintf('                                        is what the structure feels, NOT a\n');
+    fprintf('                                        deceleration -- see the mean drag\n');
+    fprintf('                                        deceleration reported per phase earlier.\n');
     fprintf('\n');
     fprintf('  Models: atmos %s | grav %s | aero %s\n', ...
             func2str(atmosFn),func2str(gravFn),func2str(aeroFn));
@@ -777,6 +858,10 @@ function [traj,info] = run_boost_glide(opts)
     info.gamCfrAvg   = gamCfrAvg;
        info.sinkCfr  = sinkCfr;
      info.drgCfrAvg  = drgCfrAvg;
+      info.nAerLift  = nAerLift;
+      info.nAerDrag  = nAerDrag;
+      info.reboundM  = reboundM;
+    info.troughWarn  = troughWarn;
         info.stopOK  = allOK;
        info.stopWhy  = {why1;why2;why3};
 

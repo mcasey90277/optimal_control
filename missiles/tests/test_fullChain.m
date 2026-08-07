@@ -18,13 +18,26 @@ function test_fullChain()
 %  Part 4 re-integrates ACROSS each junction with ode89 at 1e-12, a different
 %  solver at a tighter tolerance than the driver's ode45 at 1e-10, starting
 %  from a driver sample two seconds before the junction and finishing at a
-%  driver sample two seconds after it, applying the phase link in between. The
-%  choice of solver is not fastidiousness. Re-integrating deterministic
-%  autonomous dynamics with the SAME solver at the SAME tolerance from the SAME
-%  initial state reproduces the driver's output BITWISE, so the residual is
-%  identically zero whatever the driver did -- which restores exactly the
-%  circularity the check exists to remove. That was established the hard way on
-%  the glide milestone; see docs/LESSONS_LEARNED.md.
+%  driver sample two seconds after it, applying the phase link in between.
+%
+%  THE CLAIM THAT MATTERS IS THE TOLERANCE ORDERING, not the solver name: a
+%  reference no tighter than the driver measures its own error as much as the
+%  driver's, and the residual then bounds nothing. That ordering is asserted in
+%  crossJunction rather than left to a comment, so a later edit cannot
+%  downgrade the reference -- or tighten the driver through env.odeRelTol --
+%  and leave this check silently vacuous.
+%
+%  A stronger-sounding argument was tried and does NOT hold for this anchoring
+%  scheme, so it is recorded here rather than repeated: re-running the driver's
+%  own ode45 at its own 1e-10 does not reproduce the trajectory bitwise and
+%  does not give a zero residual. It gives 1.337e-06 m at junction 1 against
+%  the ode89 reference's 1.340e-06, agreeing to five digits. The bitwise trap
+%  of the glide milestone (docs/LESSONS_LEARNED.md) needs the reference to
+%  repeat the driver's STEP SEQUENCE, which happens when it restarts from the
+%  same state at the same phase boundary; anchoring on an interior sample two
+%  seconds inside the phase breaks that sequence, so the circularity is absent
+%  here by accident of the anchoring. Relying on the accident would be
+%  careless. The tolerance ordering is the load-bearing part.
 %
 %  The reference reaches the equations of motion through info.phases, which
 %  run_boost_glide returns for this purpose. What is independent is the
@@ -257,9 +270,25 @@ function test_fullChain()
     assertRel(inDef.qGldMax,260188.99657384725,1e-4,'glide peak dynamic pressure (Pa)');
     assertRel(inDef.nGldMax,8.334586218596451,1e-4,'glide peak deceleration (g)');
     assertRel(inDef.qDscMax,98954.597663692897,1e-4,'descent peak dynamic pressure (Pa)');
-    assertRel(inDef.nDscMax,3.1697944064305994,1e-4,'descent peak deceleration (g)');
-    assertRel(inDef.nAerMax,8.334586218596451,1e-4,'peak deceleration (g)');
-    assertRel(inDef.tNAerMax,569.7723246998296,1e-4,'time of peak deceleration (s)');
+    assertRel(inDef.nDscMax,3.1697944064305994,1e-4,'descent peak aero load (g)');
+    assertRel(inDef.nAerMax,8.334586218596451,1e-4,'peak aero load (g)');
+    assertRel(inDef.tNAerMax,569.7723246998296,1e-4,'time of the peak aero load (s)');
+
+%% The peak aero LOAD is not a deceleration, and the split is what proves it.
+%% With constLD the ratio is fixed by the drag polar, so the load can be
+%% reassembled from the vehicle's own CL and LD -- an identity the summary's
+%% two "of which" lines must satisfy, and one that a future edit relabelling
+%% the load as a deceleration again would break:
+    assertRel(inDef.nAerLift,7.73846903214032,1e-4,'lift part of the peak load (g)');
+    assertRel(inDef.nAerDrag,3.0953876128561273,1e-4,'drag part of the peak load (g)');
+    assertRel(inDef.nAerLift./inDef.nAerDrag,veh.LD,1e-12, ...
+        'lift-to-drag ratio at the peak load');
+    assertRel(sqrt(inDef.nAerLift.^2 + inDef.nAerDrag.^2),inDef.nAerMax,1e-12, ...
+        'peak load reassembled from its lift and drag parts');
+    assert(inDef.nAerDrag < inDef.nAerMax./2, ...
+        ['the drag part is %.3f g of a %.3f g load; if these ever come close ' ...
+         'the "not a deceleration" caveat has stopped being the point'], ...
+        inDef.nAerDrag,inDef.nAerMax);
 
 %% The boost peak sensed load is the end-of-burn thrust over the burnout mass,
 %% LESS the drag the stack is still feeling at 47 km -- unlike the ballistic
@@ -365,8 +394,22 @@ function test_fullChain()
         inDef.rangeKm,0.005 + 1e-9,'printed ground range (km)');
     assertAbs(summaryNumber(outDef,'flight time +([-\d.]+) +s'), ...
         inDef.tFlight,0.005 + 1e-9,'printed flight time (s)');
-    assertAbs(summaryNumber(outDef,'peak decel +([-\d.]+) +g'), ...
-        inDef.nAerMax,0.005 + 1e-9,'printed peak deceleration (g)');
+    assertAbs(summaryNumber(outDef,'peak aero load +([-\d.]+) +g'), ...
+        inDef.nAerMax,0.005 + 1e-9,'printed peak aero load (g)');
+    assertAbs(summaryNumber(outDef,'of which drag +([-\d.]+) +g'), ...
+        inDef.nAerDrag,0.005 + 1e-9,'printed drag part of the peak load (g)');
+
+%% The label itself is asserted. The quantity is a load factor and calling it a
+%% deceleration overstates the braking 2.69-fold, so the word must not come
+%% back -- and the honest wording must be present:
+    assert(~contains(outDef,'decel  ') && ~contains(outDef,'peak decel'), ...
+        ['the summary is labelling the aerodynamic load factor as a ' ...
+         'deceleration again. It is %.1f %% lift.'], ...
+        100.*inDef.nAerLift./inDef.nAerMax);
+    assert(contains(outDef,'lift and drag, thrust excluded'), ...
+        'the peak-load lines must say what the load factor is made of');
+    assert(contains(outDef,'ONLY THE DRAG PART'), ...
+        'the summary must say which part of the load actually brakes');
     assertAbs(summaryNumber(outDef,'handoff speed +([-\d.]+) +m/s'), ...
         inDef.vHandoff,0.005 + 1e-9,'printed handoff speed (m/s)');
     assertAbs(summaryNumber(outDef,'mass into glide +([-\d.]+) +kg'), ...
@@ -412,7 +455,84 @@ function test_fullChain()
          'notice a dropped separation link'],inDef.rangeKm - inNos.rangeKm);
 
 %% ---------------------------------------------------------------------
-%% 9. The override hook itself
+%% 9. The phugoid-trough warning on hHandoff
+%% ---------------------------------------------------------------------
+%% hHandoff is advertised as freely settable, and it is the one entry in the
+%% user block that can change the answer by a quarter while every phase still
+%% reports NOMINAL: the glide descends in a damped skip phugoid, so a handoff
+%% above a trough ends the glide a skip early. The script detects it from the
+%% counterfactual it already flies, and this part asserts that the detector is
+%% quiet on the shipped case and loud on a case that really is truncated:
+    assert(~inDef.troughWarn && ~contains(outDef,'PHUGOID TROUGH'), ...
+        ['the shipped 15 km handoff raised the trough warning; rebound was ' ...
+         '%.1f m'],inDef.reboundM);
+    assertAbs(inDef.reboundM,0,1e-6,'shipped continued-glide rebound (m)');
+
+            out30 = evalc(['[~,in30] = run_boost_glide(struct(' ...
+                           '''showPlots'',false,''hHandoff'',30));']);
+    assert(in30.stopOK && ~contains(out30,'CAUTION'), ...
+        ['the 30 km handoff case must still terminate nominally -- that it ' ...
+         'does is the whole hazard']);
+    assert(in30.troughWarn && contains(out30,'PHUGOID TROUGH'), ...
+        ['a 30 km handoff cuts the glide short by a whole skip and the ' ...
+         'warning did not fire; rebound was %.1f m'],in30.reboundM);
+    assertRel(in30.reboundM,31325.514742694795,1e-4,'30 km continued-glide rebound (m)');
+    assertRel(in30.rangeKm,5781.5704976898978,1e-4,'30 km handoff ground range (km)');
+    assert(inDef.rangeKm - in30.rangeKm > 1500, ...
+        ['the 30 km handoff cost only %.1f km; if that ever falls the warning ' ...
+         'is warning about nothing'],inDef.rangeKm - in30.rangeKm);
+
+%% The blind spot, asserted so it stays documented rather than discovered. The
+%% check is one-sided: a handoff that truncates a shallow skip WITHOUT the
+%% continued glide climbing back out of it is invisible to it. 25 km is exactly
+%% that case -- it costs 173 km of range and raises no warning:
+            out25 = evalc(['[~,in25] = run_boost_glide(struct(' ...
+                           '''showPlots'',false,''hHandoff'',25));']);
+    assert(~in25.troughWarn && ~contains(out25,'PHUGOID TROUGH'), ...
+        ['the 25 km case is the documented blind spot of the rebound check. ' ...
+         'If it now fires, the check got better and this assertion, the ' ...
+         'header note and the user-block comment all need rewriting.']);
+    assert(inDef.rangeKm - in25.rangeKm > 100, ...
+        ['the 25 km blind spot cost only %.1f km of range; the caveat may no ' ...
+         'longer be worth its words'],inDef.rangeKm - in25.rangeKm);
+
+%% ---------------------------------------------------------------------
+%% 10. The unpowered guidance runs on the PHASE-LOCAL clock
+%% ---------------------------------------------------------------------
+%% phaseRun evaluates each phase's guide at that phase's own tspan-relative
+%% time, so a glide schedule written against [0 .. tMaxGlide] starts at the
+%% handoff from the BOOST, not at liftoff. Both shipped unpowered schedules are
+%% constant, which makes the whole convention invisible: an 80 s offset in the
+%% clock handed to the guide would change nothing at all and pass every
+%% assertion above. A time-varying bank makes it visible:
+            gTime = [0 400 800 6000];
+            gBank = [0  70   0    0];
+            outTv = evalc(['[~,inTv] = run_boost_glide(struct(''showPlots'',false,' ...
+                           '''glideTime'',gTime,''glideBank'',gBank,' ...
+                           '''glideAlpha'',[0 0 0 0]));']);
+    assert(inTv.stopOK && ~contains(outTv,'CAUTION') && ~contains(outTv,'PHUGOID'), ...
+        'the time-varying-bank case did not fly cleanly. Summary was:\n%s',outTv);
+    assertRel(inTv.rangeKm,6101.6034301223772,1e-4, ...
+        'time-varying glide bank, ground range (km)');
+    assertRel(inTv.tFlight,1951.9689001876234,1e-4, ...
+        'time-varying glide bank, flight time (s)');
+
+%% ...and the discrimination is MEASURED, not assumed. The same schedule shifted
+%% by the boost duration is what the flight would see if the guide were being
+%% handed cumulative time instead of phase-local time. It must be a different
+%% flight, and it is a wildly different one -- 1839 km, 30 percent:
+            gShft = gTime + inDef.tBurnout;
+            outSh = evalc(['[~,inSh] = run_boost_glide(struct(''showPlots'',false,' ...
+                           '''glideTime'',gShft,''glideBank'',gBank,' ...
+                           '''glideAlpha'',[0 0 0 0]));']);
+    assert(abs(inTv.rangeKm - inSh.rangeKm) > 100, ...
+        ['shifting the glide schedule by the %.1f s boost duration moved the ' ...
+         'range only %.3f km. This case exists to pin the phase-local clock ' ...
+         'convention, and at that sensitivity it does not pin it.'], ...
+        inDef.tBurnout,abs(inTv.rangeKm - inSh.rangeKm));
+
+%% ---------------------------------------------------------------------
+%% 11. The override hook itself
 %% ---------------------------------------------------------------------
 %% A misspelt parameter must raise rather than silently leave the shipped value
 %% in place, or a future test could believe it flew a case it did not:
@@ -475,8 +595,10 @@ function crossJunction(traj,info,kJun,tolX)
 %  sample two seconds after it, and compares.
 %
 %  ode89 at 1e-12 against the driver's ode45 at 1e-10: a different method at a
-%  tighter tolerance. Re-running the driver's own solver at its own tolerance
-%  from the same state would reproduce its output bitwise and prove nothing.
+%  tighter tolerance. The tolerance ordering is what the check rests on and is
+%  asserted below; see the note in the file header for why the more familiar
+%  "a same-solver re-run goes bitwise-zero" argument does not apply to this
+%  anchoring scheme and must not be relied on.
 %
 %  Mass is checked too, but as a JUMP, not as a continuity: at the separation
 %  junction component 7 must drop by the booster dry mass, and demanding
@@ -526,7 +648,22 @@ function crossJunction(traj,info,kJun,tolX)
                 o2 = tOff(kJun+1);
               odeA = @(t,x) ph(kJun).eom(t-o1,x,ph(kJun).guide(t-o1,x),[],env);
               odeB = @(t,x) ph(kJun+1).eom(t-o2,x,ph(kJun+1).guide(t-o2,x),[],env);
-              opts = odeset('RelTol',1e-12,'AbsTol',1e-12);
+
+%% The reference must be TIGHTER than the driver, or the residual is measuring
+%% its own error as much as the driver's and bounds nothing. phaseRun defaults
+%% to 1e-10 and lets env override it, so the driver's figure is read rather
+%% than assumed, and the ordering is asserted rather than trusted to a comment:
+            refTol = 1e-12;
+            drvTol = 1e-10;
+    if isfield(env,'odeRelTol')
+            drvTol = env.odeRelTol;
+    end
+    assert(refTol <= drvTol./100, ...
+        ['the cross-junction reference runs at %.1e against the driver''s ' ...
+         '%.1e. A reference that is not at least a hundred times tighter ' ...
+         'cannot bound the driver''s error, and this check would be measuring ' ...
+         'nothing.'],refTol,drvTol);
+              opts = odeset('RelTol',refTol,'AbsTol',refTol);
 
 %% Leg one, up to the junction:
               solA = ode89(odeA,[traj.t(ka) tJ],traj.x(ka,:).',opts);

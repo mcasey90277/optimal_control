@@ -98,14 +98,16 @@ This satisfies the `massConstant` guard, which requires the carried mass to matc
 - LAX to JFK: `65.867 deg` to within `0.01 deg`. Cite the source of that number in a comment.
 - A point to itself must not return NaN.
 - Wrapping: the result is always in `[0,2*pi)`, checked over a sweep.
-- **Asymmetry:** bearing(A,B) is NOT generally bearing(B,A) reversed — unlike distance. Assert this explicitly on the LAX/JFK pair, because a reader who assumes symmetry will write a bug, and because it is the one property that distinguishes a correct implementation from one that swapped its arguments.
+- **Asymmetry:** bearing(A,B) is NOT generally bearing(B,A) reversed — unlike distance. Assert this on the LAX/JFK pair, because a reader who assumes symmetry will write a bug.
+- **A CORRECTION to the line above, established during execution.** This plan originally called the asymmetry test "the one property that distinguishes a correct implementation from one that swapped its arguments." That is FALSE, and it was measured: swapping `lat1` and `lat2` in the formula moves both the forward and reverse bearings but leaves the offset-from-reciprocal at 27.974 deg in both cases, identical, so the asymmetry assertion cannot see the swap. A NEAR-MERIDIONAL pair is the real discriminator — (10N,0) to (80N,1E) gives 0.185 deg true against 178.952 deg swapped. Include such a case; that is the actual transposition detector.
 
 `test_rangeSolve.m`, against a synthetic monotonic function with a known root so the solver is tested independently of any trajectory:
 - Converges to the analytic root within tolerance.
 - Reports `converged = false` rather than throwing when the requested value is outside the bracket, and the `info` struct carries the achievable band.
 - Handles the exact-endpoint case.
 - Respects the tolerance: a tighter `tolM` gives a tighter result.
-- Errors with a named identifier if `tLo >= tHi`, and if `fRange` is not monotonic over the bracket in the sense that both endpoints sit on the same side of the target — the message must state the bracket values.
+- Errors with a named identifier if `tLo >= tHi` — a malformed bracket.
+- **CORRECTION established during execution:** an earlier version of this line also demanded an error when both endpoints sit on the same side of the target. That is the SAME condition as the out-of-bracket case two lines above, which must NOT throw. Contradictory. The return-with-band behaviour governs; carry the named identifier and the achievable band inside `info` so the caller can print a useful refusal.
 
 - [ ] **Step 2: Run and confirm they fail**
 - [ ] **Step 3: Write both functions**
@@ -227,6 +229,28 @@ Mutations, restoring byte-identically after each: transpose the arguments to `gr
 - [ ] **Step 7: Run the full suite** — expect `20 passed, 0 failed`, zero warnings, and all four entry scripts producing their headline numbers.
 
 - [ ] **Step 8: Commit**
+
+---
+
+## Task 5: `BM/run_ballistic_target.m` — the ballistic point-to-point script
+
+**Files:** Create `BM/run_ballistic_target.m`, `tests/test_runBallisticTarget.m`. Modify `docs/README.md`.
+
+The framework already exists. `BM/run_ballistic.m` flies boost -> coast -> impact and is validated against the Keplerian closed form to 8.5e-13, and Task 1 supplies the two pieces that turn "launch plus azimuth" into "launch plus destination". This task is the targeting wrapper applied to the ballistic chain.
+
+**The one thing that genuinely differs from the HGV case.** A pure ballistic trajectory has TWO solutions for every range short of maximum — a lofted arc and a depressed arc, either side of the minimum-energy solution — and a ballistic-missile user expects to choose. So the ranging control here is the **loft angle**, the pitch program's terminal attitude, rather than thrust-termination, and the user block carries a branch selector:
+
+```matlab
+       branch = 'minimum-energy';   % 'minimum-energy' | 'lofted' | 'depressed'
+```
+
+- `minimum-energy` is the textbook default. Bracket the max-range loft angle first, then solve on whichever side of it the target falls.
+- `lofted` and `depressed` solve the high and low branches. Each must REPORT which branch it actually landed on, measured from the flown apogee and flight time, rather than trusting that the bracket kept it there.
+- Beyond maximum range, refuse with the maximum range stated, the loft angle achieving it, and the shortfall.
+
+Report BOTH branch solutions when they exist, even though only one is flown, so the user can see the trade: give flight time, apogee, impact speed and impact flight-path angle for each. The lofted arc buys steeper, slower impact at longer flight time; the depressed arc is faster and flatter.
+
+Everything else follows Task 4: same user-block discipline, same independent verification of the impact point with `greatCircle`, same off-axis test case, same mutation proofs.
 
 ---
 

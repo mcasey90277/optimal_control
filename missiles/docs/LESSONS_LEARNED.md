@@ -3,6 +3,105 @@
 Running log. Newest entries at the top. Record what broke, what fixed it, and
 what a future reader would otherwise rediscover the hard way.
 
+## 2026-08-07 — Two files can each be correct and their composition still be wrong
+
+State it in the general form:
+
+> **When a quantity is represented twice — once in a state vector and once in a
+> parameter struct — nothing in the arithmetic makes the two agree.** Each file
+> can be correct under its own contract, and the composition still silently
+> wrong. Correctness of parts is not correctness of the whole; the interface is
+> where the defect lives, and no unit test can be positioned to see it.
+
+The shape of it. Routine A integrates a quantity as a state. Routine B was
+written before A existed, takes the same quantity from a parameter struct, and
+never looks at the state. Compose them in one chain and the state component is
+**inert** in B's phases: it rides along, it is plotted, it is reported, and it
+drives nothing. Change it — at a staging event, a mass drop, a configuration
+switch — and B keeps using the old parameter. The output does not diverge, does
+not NaN, does not warn. It is a plausible trajectory of the wrong vehicle.
+
+Three properties make this class of bug much worse than an ordinary one:
+
+- **The evidence is present and misleading.** The state history shows the jump.
+  A reader checking "did the mass drop at separation?" sees that it did, and
+  concludes the dynamics used it.
+- **Deleting the buggy code changes nothing.** Measured here: removing the
+  staging link entirely left the flown trajectory **bit-identical** and changed
+  only the recorded mass. A change with no effect is not a change a test can
+  catch by comparing before and after.
+- **Neither file is wrong.** There is no line to fix in A or in B. Reviewing
+  either in isolation finds nothing, because in isolation there is nothing.
+
+**The structural answer is a per-phase parameter set** — one carried on each
+phase, so the question "which vehicle is this phase flying?" has exactly one
+answer. Until that exists, the interim answer is a **guard at the adapter**: the
+wrapper that lifts B into A's state space refuses to run unless the two
+representations agree. Here `coorbital.eom.massConstant` raises
+`coorbital:massConstant:massMismatch` when `x(7)` and `veh.mass` differ by more
+than 1e-9 relative — loose enough to clear the residual an event solve leaves on
+the state (measured 3.4e-10 kg on 900 kg), tight enough that a real staging jump
+of hundreds of kilograms cannot pass.
+
+**Two rules about that guard, both learned by getting them wrong first.**
+
+- **Do not let the guard repair the disagreement.** Injecting the state value
+  into a copy of the parameter struct is the obvious fix and it is worse than the
+  bug, because it looks repaired. Mass was never the only thing that changed at
+  separation: `Sref`, `CL` and `L/D` all still describe the jettisoned stack. A
+  guard that silences the one symptom it can see, while leaving the rest wrong,
+  has converted a detectable fault into an undetectable one. **Raise; do not
+  reconcile.**
+- **A tolerance that is only relative is not enough.** `abs(a-b) < tol*abs(b)`
+  degenerates as `b` approaches zero. Floor it: never tighter than the same
+  figure absolute.
+
+And the general diagnostic, which is the transferable part: **for every quantity
+in a composed system, ask how many places hold it and which one the arithmetic
+actually reads.** If the answer is "two, and one of them," that is the bug,
+whether or not it has bitten yet.
+
+## 2026-08-07 — A closed-form reference cancels its own constants: the Hscale lesson, in a second place
+
+The 2026-08-06 entry below records that an analytic reference computed from the
+same constants as the model cannot detect a wrong constant. That was learned on
+one constant, `Hscale`. It recurred immediately on a whole new parameter set, and
+the recurrence is the point worth recording:
+
+> **When you add a subsystem, its closed-form check is blind to that subsystem's
+> constants for exactly the same reason — and you get no warning, because the
+> check passes.** The lesson does not transfer itself. Re-run the diagnostic on
+> every new parameter as it arrives.
+
+The instance. The rocket equation, `deltaV = Isp*g0*ln(m0/mf)`, is the natural
+validation for a powered phase and looks like a strong one. It is blind to
+**every booster constant it contains**:
+
+| Constant | Why it cancels |
+|---|---|
+| `Isp`, `g0` | Appear on both sides — inside `mdot = thrustVac/(Isp*g0)` on the simulation side, and inside `Isp*g0*ln(...)` on the reference side |
+| `thrustVac` | In vacuum at zero incidence the whole speed equation is `dV/dt = T/m`, so the propagated result is `(thrustVac/mdot)*ln(m0/mf)`; substituting `mdot` removes it entirely. **Doubling the thrust halves the burn time and leaves the delta-V untouched.** |
+| The mass ratio | The propagation starts at `m0` and terminates on an event set to `mf`, and the reference is built from the same mass fields. A wrong propellant load moves both sides identically. |
+
+So the check validates the **shape** of the rocket equation — that the integral
+of `T/m` really is an exhaust speed times a log mass ratio — and nothing
+whatever about the numbers fed into it. It measures 2.4e-10 relative, which reads
+as a very strong result and is a very weak one.
+
+The defence is the same as for `Hscale` and there is no other: **pin each
+constant exactly, at its source.** Six exact-equality pins carry this check, and
+all six live together in `tests/test_constThrust.m:50-56` — `massDry`,
+`massProp`, `thrustVac`, `Isp`, the payload `mass`, and `g0`. A comment in
+`test_boost3DOF.m` names them and their line numbers, so the dependency is
+written down rather than left to be rediscovered.
+
+**One detail worth generalising: a range check is not a pin.**
+`test_missileConst` bounds `g0` with `abs(c.g0 - 9.80665) < 1e-3`, which would
+pass a `g0` wrong in the fourth decimal. Bracketing a constant to a plausible
+band proves it is plausible; it does not prove it is the value the hand
+arithmetic assumed. If a literal elsewhere in the suite was computed from a
+constant, that constant needs equality, not an interval.
+
 ## 2026-08-07 — A reduction test validates only the terms that survive the reduction
 
 State it in the general form:
@@ -22,6 +121,11 @@ This is the same disease as the shared-constant blindness recorded in the
 whole *expression*. In both cases the tolerance is irrelevant: no tightening
 recovers a sensitivity that is identically zero. Ask of any test that comes in
 suspiciously clean: what would have to be wrong for this number to move?
+
+Three entries in this log are now the same problem in different clothes — the
+constant that cancels (2026-08-06), the expression that cancels (here), and the
+whole *subsystem* whose constants cancel (the Tsiolkovsky entry above). Read them
+together; the diagnostic is one question, not three.
 
 Measured on `boost3DOF` reducing to `glide3DOF` with `env.prop` returning a dead
 engine. Residual 0.000e+00 on all four states, `isequal` true, rotating and

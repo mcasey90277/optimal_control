@@ -14,8 +14,17 @@
 > unedited as the record of what was *intended*, which is worth having — the
 > gap between the two is the most interesting thing in the repo.
 >
-> Every known discrepancy is listed in **[§10 As built — 2026-08-06](#10-as-built--2026-08-06)**
-> at the end. Read that section alongside any part of the spec you rely on.
+> Every known discrepancy is listed in the dated as-built sections at the end,
+> **one per milestone**, each written when that milestone shipped and never
+> edited afterwards — the record of what was true at each stage is the point.
+> Read them in order alongside any part of the spec you rely on:
+>
+> - **[§10 As built — 2026-08-06](#10-as-built--2026-08-06)** — the glide propagator
+> - **[§11 As built — 2026-08-07](#11-as-built--2026-08-07)** — boost, descent, and the full chain
+>
+> **Where §10 and §11 disagree, §11 is the later record.** Several §10 entries
+> ("boost is out of scope", "`stateConvert` will be written") were true when
+> written and are now superseded; §11 says so at each point.
 
 Design for a MATLAB library that generates boost / glide / descent trajectories for
 hypersonic glide vehicles, with ballistic and ICBM variants sharing the same core.
@@ -356,3 +365,127 @@ shipped due-east equatorial geometry is provably blind to a lat/lon
 transposition at the `greatCircle` call site. It also serves the batch
 throughput requirement in §1. The fenced user block remains the interface for
 a routine interactive run; see `README.md`.
+
+---
+
+## 11. As built — 2026-08-07
+
+**§10 above is the record of the glide milestone and is left unedited**, even
+where this milestone has since overtaken it. This section is the correction list
+for the second milestone: powered boost, a descent phase, and the full
+boost → glide → descent chain. Same rules as §10 — it does not revise the spec,
+it says where the spec and the code disagree and which one won, and `README.md`
+remains the authority on delivered behaviour.
+
+Every entry was checked against the code on 2026-08-07.
+
+### 11.1 §10 entries this milestone supersedes
+
+| §10 said, correctly at the time | As of 2026-08-07 |
+|---|---|
+| §10.1: "`boost3DOF.m`, `ballistic3DOF.m` — not delivered" | **`boost3DOF.m` is delivered.** `ballistic3DOF.m` was never written and will not be: a ballistic arc is `glide3DOF` at zero lift, so a third EOM file would have duplicated six equations to switch off two terms. `BM/vehicle_bm.m` carries `CL = 0.005`, `L/D = 0.02` instead, and `run_ballistic`'s cross-check forces `CL = 0` through a wrapper on the *aero handle* rather than through a separate EOM. |
+| §10.1: "`eventApogee.m`, `eventBurnout.m` — not delivered" | **Both delivered**, both terminal and one-sided. See §11.3 for the one interface change. |
+| §10.1: "`BM/` — neither folder exists. `run_tests.m` already looks for `BM` and `ICBM` on the path and skips them silently, so the suite is ready for them." | **`BM/` exists** with `run_ballistic.m` and `vehicle_bm.m`, and the suite picked it up exactly as predicted. `ICBM/` still does not exist. |
+| §10.3: "Boost is out of scope for this milestone, so it lives nowhere. The reasoning still holds for when it arrives." | Boost now lives in `+coorbital/+eom/boost3DOF.m` in the common library, as §2 intended. Both `BM/` and `HGV/` use it. |
+| §10.3: "`stateConvert` does not exist... A boost phase carrying mass in a Cartesian state is what will force `stateConvert` to be written." | **The prediction was wrong and `stateConvert` will not be written.** See §11.2 — this is the milestone's one genuine design change. |
+| §10.2: "`+util/` contains `missileConst.m`, `vehicleDefaults.m` and `greatCircle.m`" | Add **`boosterDefaults.m`**. Still no `stateConvert.m`. |
+
+Unchanged from §10 and still true: there is no `+viz/` package, no
+`hgv_dynamics_note.tex` or `software_design.tex`, no `ICBM/` folder, no
+Sutton–Graves heating anywhere, and `missileConst` is still deliberately not a
+wrapper around pumpkyn's `getConst`.
+
+### 11.2 The design change: `stateConvert` was replaced, not deferred
+
+**Record this as a change to the design, not as an unbuilt promise.**
+
+§2.2 specifies: *"Phases may use different EOM and different state definitions;
+`stateConvert` handles the mapping at each junction."* That is not what was
+built, and it is not what should have been built.
+
+`phaseRun` concatenates all phases into a single `traj.x`, so every phase in one
+call must share one state dimension. Rather than translating between a six-state
+glide vector and a seven-state boost vector at each seam, **the whole chain runs
+seven-state and the unpowered EOM is lifted to match**:
+
+```matlab
+eomFree = coorbital.eom.massConstant(@coorbital.eom.glide3DOF);   % appends dm/dt = 0
+```
+
+Why this is better than the spec's mapping layer:
+
+- **A mapping at a junction is a place for state to be silently lost or
+  reordered.** A uniform vector has no such place. There is nothing to get wrong
+  at a seam because nothing happens at a seam.
+- **`traj.x` stays a rectangular matrix** with one meaning per column across the
+  whole flight. Plotting mass against time, or searching a peak across phases,
+  needs no phase-aware indexing.
+- **The optimizer story is unchanged.** §2.2's real requirement was that junction
+  states be recorded for Phase 2 linkage constraints. They are, and they are now
+  recorded in a single consistent coordinate system.
+- **`stateConvert` would have had almost nothing to do.** The only genuine
+  discontinuity in these chains is staging, which changes *one component* of an
+  otherwise-continuous state. That is served by `phaseRun`'s optional per-phase
+  `link` handle, `xNext = link(xEnd)`, in one line:
+  `@(x) [x(1:6); x(7) - bst.massDry]`.
+
+**The cost of the change, which is real and must be understood.** `glide3DOF`
+divides by `veh.mass`, not by `x(7)`. So in an unpowered phase the carried mass
+is **inert**: it rides along and drives nothing. Two sources of truth for one
+physical quantity, with nothing in the arithmetic making them agree. A chain that
+jettisons a stage while continuing to hand the same `veh` struct to the next
+phase flies silently at the old weight, with a mass jump visible in `traj.x` that
+the dynamics ignore. Measured: deleting the separation link in `run_ballistic`
+leaves the flown trajectory bit-identical.
+
+`massConstant` therefore raises `coorbital:massConstant:massMismatch` when `x(7)`
+and `veh.mass` disagree. **The guard is not the fix; the per-phase vehicle is.**
+Any chain with a mass-changing link must bind its own vehicle inside each EOM
+closure, rebuilding mass **and** `Sref`, `CL`, `LD` — separation changes the whole
+airframe, not just the weight. Both entry scripts do this. Full treatment in
+`README.md`, "The seven-state convention and the inert-mass trap", and the
+general lesson in `LESSONS_LEARNED.md`.
+
+The spec's mapping layer remains the right answer if a future phase genuinely
+needs a *different coordinate system* — a Cartesian ECI terminal phase, say.
+Nothing here forecloses it; it simply was not needed for mass.
+
+### 11.3 Other statements about behaviour that are now false
+
+| Spec says | As built |
+|---|---|
+| §2 tree places `eventApogee.m` and `eventBurnout.m` alongside `eventAltitude.m` with no further detail | Delivered, but note `eventBurnout(t,x,mBurnout)` takes the burnout mass as an **explicit scalar argument**, not reached for inside the event from a booster struct. It must be `veh.mass + bst.massDry`; comparing `x(7)` against `bst.massDry` alone would treat the payload as part of the propellant budget and burn straight through it. |
+| §2.1 lists three model families — atmosphere, gravity, aerodynamics | There are now **four**. Propulsion is `[T,mdot] = f(t,P,veh)`, taking ambient **pressure**, not altitude, because the back-pressure debit is a pressure term and passing `P` keeps propulsion independent of which atmosphere is installed. Read only by `boost3DOF`; `env.prop` is absent from unpowered runs and `glide3DOF` ignores it if present. |
+| §2.2's phase struct has four fields: `eom`, `guide`, `terminate`, `tspan` | A fifth, optional, was added: **`link`**, a handle `xNext = link(xEnd)` applied to a phase's terminal state to form the next phase's initial state. Absent or `[]` is the identity (`[]` being how a MATLAB struct array mixes linked and unlinked phases). Applied **before** the junction is recorded, so `traj.junction(k).x` is the far side of a staging jump. |
+| §4: control is `u = [alpha, sigma]`, and §7 implies guidance is schedule evaluation | Still `[alpha, sigma]`, but `guide/pitchProgram` is the first law that **reads the state**: it interpolates a commanded pitch *attitude* and returns `alpha = theta(t) - gamma`, taking `gamma` from `x(5)`. The `u = f(t,x,sched)` signature that §2.2's `prescribed` already had is what made this a drop-in. |
+| §6 build order, item 7: "`boost3DOF` with a prescribed pitch program; `BM/run_ballistic.m`" and item 8: "Terminal/descent phase; full boost → glide → descent chain in one entry script" | **Both delivered**, in that order, and the chain script is `HGV/run_boost_glide.m`. Item 6 (`+viz`) was skipped; it sat between them in the build order and was not a prerequisite for either. |
+| §1 capability table, "Terminal: prescribed CL and bank" | Delivered as **prescribed bank only**. `constLD` ignores `alpha`, so the descent phase is flown by rolling to a large bank angle — 75° in the shipped block, leaving `cos(75°) = 0.2588` of the lift supporting the vehicle. Commanding `CL` directly awaits an alpha-dependent aero model, at which point the existing `descAlpha` entry becomes live with no code change. |
+
+### 11.4 One thing built that the spec did not ask for
+
+**`run_boost_glide` detects a bifurcation in its own user block.** The
+glide descends in a damped skip phugoid, so the `hHandoff` altitude — advertised
+as freely settable — terminates the glide a whole skip early if placed above a
+phugoid trough. Measured: 7663.05 km of range at the shipped 15 km against
+5781.57 km at 30 km, a loss of 1881 km, **with every phase reporting nominal**,
+because every event fired exactly as asked. No termination diagnosis can see it.
+
+The script now flies the handoff state on the *continued glide schedule* — a
+propagation it needs anyway, to measure what the descent phase buys — and warns
+when the vehicle would have climbed back above the handoff altitude. The check is
+**one-sided and its blind spot is printed with it**: it cannot see a handoff that
+truncated a shallow skip without rebounding, and 25 km is exactly that case.
+
+This has no counterpart in the spec, which treats phase boundaries as given. It
+is recorded here because it is the second time this library has found a
+*silently wrong but internally consistent* result — the first being the
+shared-constant blindness of §10 — and both were found by asking what the
+existing checks could not see.
+
+### 11.5 Open items (§9), as they now stand
+
+| §9 item | Status |
+|---|---|
+| **Package name** | Resolved 2026-08-06: `+coorbital`. Unchanged. |
+| **Repository** | §10.5 corrected the spec's claim that nothing syncs to GitHub: `optimal_control` **does** have a remote, `git@github.com:mcasey90277/optimal_control.git`. Still true, and now more consequential — this milestone adds booster performance parameters. They are all marked open-literature placeholders today, but the assumption written into the spec is wrong and must not be relied on when real numbers arrive. |
+| **Vehicle parameters** | **Still open, and now larger.** `boosterDefaults` adds five more PLACEHOLDER values (`massDry`, `massProp`, `thrustVac`, `Isp`, `Aexit`) and `vehicle_bm` adds a fourth vehicle parameter set. All are pinned exactly in `test_constThrust.m:50-56`, so retuning them fails loudly and says why rather than quietly changing every trajectory in the documentation. Both chain scripts print `(PLACEHOLDER values)` in their own summaries so the caveat travels with the output. |

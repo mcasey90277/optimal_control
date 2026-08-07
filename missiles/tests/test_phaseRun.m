@@ -520,33 +520,43 @@ function test_phaseRun()
 %% STAGE SEPARATION. A phase may carry an optional link, xNext = link(xEnd),
 %  applied to its terminal state to form the next phase's initial state.
 %  Dropping 500 kg of spent booster must move component 7 by exactly 500 and
-%  leave the six flight states untouched. Every expected number below comes
-%  from the test's OWN inputs -- the 900 kg initial mass, the 500 kg drop,
-%  and the fact that massConstant holds mass fixed inside a phase -- never
-%  from the driver's own bookkeeping:
+%  leave the six flight states untouched ACROSS THE JUNCTION ITSELF. Every
+%  expected number below comes from the test's OWN inputs -- the 900 kg
+%  initial mass and the 500 kg drop -- never from the driver's bookkeeping:
 %% ---------------------------------------------------------------------
-%  The jettisoning phases below use a LOCAL seven-state wrapper rather than
-%  coorbital.eom.massConstant, and that is deliberate. massConstant refuses to
-%  run when the carried mass x(7) disagrees with the veh.mass its wrapped
-%  equations divide by -- and this chain creates exactly that disagreement on
-%  purpose, because phaseRun carries ONE vehicle struct for the whole chain
-%  and there is no way to rebuild it at the junction. That is a real
-%  architectural gap, not a defect in this test: what is under test HERE is
-%  phaseRun's link plumbing, which must be pinned independently of any
-%  particular EOM wrapper's mass contract. The guarded wrapper is exercised in
-%  the seven-state block above, and the guard itself is pinned in the block
-%  immediately after this one:
-          eomStage = @(t,x,u,vArg,eArg) ...
-                     [coorbital.eom.glide3DOF(t,x(1:6),u,vArg,eArg); 0];
+%  PER-PHASE VEHICLE, AND WHY THE CHAIN IS BUILT THIS WAY. phaseRun carries
+%  ONE vehicle struct for a whole chain, but separation changes the vehicle.
+%  The post-separation phase therefore binds its own REBUILT struct inside its
+%  equation-of-motion closure -- the same construction BM/run_ballistic uses --
+%  so both phases run the REAL coorbital.eom.massConstant, guard and all, and
+%  the carried mass agrees with the flown mass on both sides of the jettison.
+%
+%  DO NOT "SIMPLIFY" THIS BY DROPPING THE REBUILD. glide3DOF divides by
+%  veh.mass and never reads x(7), so handing phase 2 the pre-separation 900 kg
+%  struct makes it fly at the wrong weight while its own mass history says
+%  otherwise. That configuration used to pass this test, on the stated ground
+%  that "mass is inert in glide3DOF". Mass is inert in those EQUATIONS and
+%  emphatically not inert in the PHYSICS: rebuilding phase 2 at 400 kg moves
+%  the terminus by 329 km and the terminal speed by 329 m/s. Confusing the two
+%  is exactly what massConstant's guard now refuses to let through -- see the
+%  block after this one, which pins that refusal.
              mDrop = 500;
+            vehPre = veh;
+           vehPost = veh;
+      vehPost.mass = veh.mass - mDrop;
             phLnkA = ph7;
-        phLnkA.eom = eomStage;
+        phLnkA.eom = @(t,x,u,vArg,eArg) eom7(t,x,u,vehPre,eArg);
   phLnkA.terminate = @(t,x) coorbital.prop.eventAltitude(t,x,40e3);
        phLnkA.link = @(x) [x(1:6); x(7) - mDrop];
             phLnkB = phLnkA;
+        phLnkB.eom = @(t,x,u,vArg,eArg) eom7(t,x,u,vehPost,eArg);
   phLnkB.terminate = @(t,x) coorbital.prop.eventAltitude(t,x,20e3);
        phLnkB.link = [];
             trLink = coorbital.prop.phaseRun([phLnkA phLnkB],x07,veh,env);
+
+%% The cumulative clock never runs backwards across the junction:
+    assert(all(diff(trLink.t) >= 0), ...
+        'the cumulative time vector is not monotonically non-decreasing');
 
     assert(numel(trLink.junction) == 1,'expected one junction between two phases');
     assert(isequal(size(trLink.junction(1).x),[7 1]), ...
@@ -590,11 +600,10 @@ function test_phaseRun()
         'the link perturbed the six flight states by %.3e; it must be the identity there', ...
         d16J);
 
-%% Independent reference for that continuity claim: the SAME chain with no
-%  link at all. Mass is inert in glide3DOF, so removing 500 kg of state must
-%  change nothing about the flight path -- if the six states drift, the link
-%  is leaking into the dynamics. This run also pins the two documented ways
-%  of asking for the identity: an ABSENT link field, and link = []:
+%% The UNSTAGED reference: the same two legs with no link at all, flying the
+%  whole way at 900 kg. It pins the two documented ways of asking for the
+%  identity -- an ABSENT link field, and link = [] -- and it is the control
+%  against which the staged run's divergence is measured below:
               ph7a = ph7;
     ph7a.terminate = phLnkA.terminate;
               ph7b = ph7;
@@ -607,12 +616,57 @@ function test_phaseRun()
     assert(max(abs(trBare.x(:,7) - veh.mass)) < 1e-12, ...
         'an unlinked chain must fly the whole way at the initial mass');
 
+%% UP TO SEPARATION the two runs are the same flight -- phase 1 is 900 kg in
+%  both -- so the junction states must coincide exactly. This localises every
+%  difference below to the staging event itself, and it catches a rebuilt
+%  vehicle leaking backwards into phase 1:
              dJn16 = max(abs(trLink.junction(1).x(1:6) - trBare.junction(1).x(1:6)));
     assert(dJn16 < 1e-9, ...
-        'the staged and unstaged runs disagree at the junction by %.3e',dJn16);
+        ['the staged and unstaged runs disagree at the junction by %.3e; ' ...
+         'phase 1 is 900 kg in both and must be the identical flight'],dJn16);
+
+%% AFTER SEPARATION they must DIVERGE, and that is the whole point. An earlier
+%  version of this test asserted the opposite -- that the terminus agreed to
+%  1e-9 -- which was only ever true because phase 2 was being handed the
+%  pre-separation vehicle and so flew at 900 kg regardless of what its mass
+%  state said. With phase 2 genuinely rebuilt at 400 kg the aerodynamic
+%  accelerations go as 1/m, and the lighter body decelerates harder:
             dEnd16 = max(abs(trLink.x(end,1:6) - trBare.x(end,1:6)));
-    assert(dEnd16 < 1e-9, ...
-        'the staged and unstaged runs disagree at the terminus by %.3e',dEnd16);
+    assert(dEnd16 > 1, ...
+        ['the staged and unstaged runs agree at the terminus to %.3e. Phase 2 ' ...
+         'is not actually flying at the rebuilt %.1f kg -- the per-phase ' ...
+         'vehicle binding is not reaching the equations of motion.'], ...
+        dEnd16,vehPost.mass);
+    assert(trLink.x(end,4) < trBare.x(end,4) - 100, ...
+        ['the %.1f kg staged body arrived at %.2f m/s against %.2f m/s for the ' ...
+         '%.1f kg unstaged one. Drag acceleration goes as 1/m, so the lighter ' ...
+         'body must arrive SLOWER, not faster.'], ...
+        vehPost.mass,trLink.x(end,4),trBare.x(end,4),veh.mass);
+
+%% ...and the post-separation leg must be flying at 400 kg specifically, not
+%  merely at something other than 900. The independent reference is that same
+%  leg flown ALONE from the junction state with the rebuilt vehicle: if phase 2
+%  of the chain really used vehPost, the two must land on the same terminus.
+%  The 900 kg version of the identical leg is run too, so the check is shown to
+%  discriminate rather than assumed to:
+              solo = ph7b;
+          solo.eom = phLnkB.eom;
+            trSolo = coorbital.prop.phaseRun(solo,trLink.junction(1).x,vehPost,env);
+             xSc16 = max(abs(trLink.x(end,1:6)),1);
+              dSolo = max(abs(trSolo.x(end,1:6) - trLink.x(end,1:6))./xSc16);
+    assert(dSolo < 1e-9, ...
+        ['the chain''s phase 2 and the same leg flown alone at %.1f kg differ ' ...
+         'by %.3e; phase 2 did not fly the rebuilt vehicle'],vehPost.mass,dSolo);
+
+             xSolo9 = trLink.junction(1).x;
+          xSolo9(7) = veh.mass;
+             solo9  = solo;
+         solo9.eom  = phLnkA.eom;
+            trSolo9 = coorbital.prop.phaseRun(solo9,xSolo9,vehPre,env);
+             dSolo9 = max(abs(trSolo9.x(end,1:6) - trLink.x(end,1:6))./xSc16);
+    assert(dSolo9 > 1e-3, ...
+        ['the 400 kg and 900 kg versions of the post-separation leg agree to ' ...
+         '%.3e, so the reference above cannot tell them apart'],dSolo9);
 
 %% link = [] on the LAST phase is the identity and must not disturb the run,
 %  which is what lets a struct array mix linked and unlinked phases:
@@ -627,12 +681,11 @@ function test_phaseRun()
         'the staged leg 2 must terminate at 20 km');
 
 %% ---------------------------------------------------------------------
-%% THE massConstant MASS GUARD BITES. The block above had to reach for an
-%  unguarded wrapper precisely because the chain it builds is unsafe: it
-%  jettisons 500 kg from the state while phaseRun keeps handing phase 2 the
-%  same 900 kg vehicle, and glide3DOF divides by veh.mass and never reads
-%  x(7). Run through massConstant, that same chain must now REFUSE rather
-%  than fly silently at the pre-separation weight:
+%% THE massConstant MASS GUARD BITES. Take the staged chain above and REMOVE
+%  THE PER-PHASE REBUILD -- both phases fall back to the single chain-wide
+%  900 kg vehicle phaseRun supplies, while the link still drops the state to
+%  400 kg. That is the configuration this whole block exists to outlaw, and
+%  it must now REFUSE rather than fly silently at the pre-separation weight:
 %% ---------------------------------------------------------------------
          phGuardA = phLnkA;
      phGuardA.eom = eom7;
@@ -680,6 +733,48 @@ function test_phaseRun()
     assert(threwFar, ...
         'a %.3e kg disagreement must exceed the %.3e kg budget and raise', ...
         2.0.*tolG,tolG);
+
+%% THE ABSOLUTE FLOOR in the budget is documented behaviour, so it gets a test
+%  that can actually see it. The rule is 1e-9 RELATIVE but never tighter than
+%  1e-9 ABSOLUTE, and the floor is the half that nothing above exercises,
+%  because every vehicle in this suite masses hundreds of kilograms. It is
+%  kept rather than dropped for a concrete reason: a purely relative budget
+%  collapses with the mass, and at 0.25 kg it would be 2.5e-10 kg -- TIGHTER
+%  than the 3.4e-10 kg residual an ODE burnout-event solve already leaves on a
+%  900 kg stack. The guard would then start rejecting ordinary roundoff
+%  instead of real mass errors, which is the failure mode the floor exists to
+%  prevent. Pinned with a disagreement that sits ABOVE the unfloored budget
+%  and BELOW the floored one, so this call succeeds only because of the floor:
+            vehSml = veh;
+       vehSml.mass = 0.25;
+             xSml  = x07;
+          xSml(7)  = vehSml.mass + 6e-10;
+         threwNear = false;
+    try
+        eom7(0,xSml,[0;0],vehSml,env);
+    catch
+         threwNear = true;
+    end
+    assert(~threwNear, ...
+        ['a %.1e kg disagreement on a %.2f kg vehicle was REJECTED. The ' ...
+         'budget must never fall below 1e-9 kg absolute; a purely relative ' ...
+         'rule would give %.1e kg here, tighter than the %.2e kg residual a ' ...
+         'burnout event solve leaves on a 900 kg stack.'], ...
+        6e-10,vehSml.mass,1e-9.*vehSml.mass,3.4e-10);
+
+%% ...and the floor is not a blanket amnesty: past it, a light vehicle is
+%  still policed:
+             xSmlF  = x07;
+          xSmlF(7)  = vehSml.mass + 3e-9;
+          threwSml  = false;
+    try
+        eom7(0,xSmlF,[0;0],vehSml,env);
+    catch
+          threwSml  = true;
+    end
+    assert(threwSml, ...
+        ['a %.1e kg disagreement on a %.2f kg vehicle must still exceed the ' ...
+         '1e-9 kg floor and raise'],3e-9,vehSml.mass);
 
 %% A link that changes the state dimension breaks the chain and must say so:
             phBadL = phLnkA;

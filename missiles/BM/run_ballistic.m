@@ -127,7 +127,14 @@ function [traj,info] = run_ballistic(opts)
           boosterFn = @coorbital.util.boosterDefaults;    %handle, returns the booster struct
 
 %% Model selection -- swap a handle here to raise fidelity; each replacement
-%% must keep the same signature as the one it replaces:
+%% must keep the same signature as the one it replaces.
+%%
+%% ONE EXCEPTION, and it applies to gravFn only: the Keplerian cross-check
+%% reported below always re-propagates on coorbital.grav.sphereGrav, whatever
+%% is selected here, because the closed form it is compared against is
+%% two-body by construction. Select an oblate model and the FLOWN trajectory
+%% is oblate while that single cross-check stays Keplerian -- so it keeps
+%% validating the propagator instead of aborting on the J2 signal:
             atmosFn = @coorbital.atmos.expAtmos;   %[rho,P,T,a] = atmosFn(h)
              gravFn = @coorbital.grav.sphereGrav;  %[gr,gLat]   = gravFn(r,lat)
              aeroFn = @coorbital.aero.constLD;     %[CL,CD]     = aeroFn(alpha,mach,veh)
@@ -434,9 +441,23 @@ function [traj,info] = run_ballistic(opts)
               gam0 = xBO(5);
 
 %% Free propagation from that state: same equations, zero aerodynamics, no
-%% rotation, one phase all the way down to the impact altitude:
+%% rotation, POINT-MASS gravity, one phase all the way down to the impact
+%% altitude.
+%%
+%% All three of those pins are deliberate, and env.grav is the one a reader
+%% will not expect. The closed form below is Keplerian BY CONSTRUCTION -- it
+%% is built from c.muE and nothing else, so it describes the arc of a point
+%% mass. Inheriting a user-selected oblate gravity here would propagate a J2
+%% arc and compare it against a two-body reference, firing the 1e-6 assertion
+%% on a MODELLING DIFFERENCE, which is precisely what that assertion's message
+%% says a failure is not. Measured with a scratch J2 model before this pin was
+%% added: the script aborted at 3.2e-03 relative. The MAIN run still flies
+%% whatever gravity the user selected in the block above; only this
+%% cross-check is forced back to sphereGrav, because only this cross-check has
+%% a two-body closed form to answer to:
         envVac      = env;
         envVac.aero = @(alphaArg,machArg,vehArg) deal(0,0);
+        envVac.grav = @coorbital.grav.sphereGrav;
       envVac.omegaE = 0;
           phV.eom   = eomCst;
         phV.guide   = @(t,x) coorbital.guide.prescribed(t,x,schedCoast);
@@ -535,6 +556,17 @@ function [traj,info] = run_ballistic(opts)
 %% missileConst; it is the threshold below which holding CL and L/D constant
 %% stops being defensible:
          machHyper = 5;
+
+%% Which of the swappable models are still the library defaults. The validity
+%% paragraph below describes the DEFAULT models' limitations by name -- an
+%% isothermal windless atmosphere, a spherical no-J2 gravity field, a motor
+%% that cannot throttle -- and every one of those statements becomes a
+%% FALSEHOOD the moment the corresponding handle is replaced. A summary that
+%% prints "the spherical j2Grav carries no J2" is worse than one that prints
+%% nothing, so each caveat is gated on its own handle:
+       defaultAtmos = isequal(atmosFn,@coorbital.atmos.expAtmos);
+        defaultGrav = isequal(gravFn,@coorbital.grav.sphereGrav);
+        defaultProp = isequal(propFn,@coorbital.prop.constThrust);
 
 %% Report:
     fprintf('\n');
@@ -687,18 +719,40 @@ function [traj,info] = run_ballistic(opts)
             func2str(aeroFn));
     fprintf('            this flight runs from a subsonic liftoff through Mach %.0f and back\n',machMaxOf(mach));
     fprintf('            down again, so the transonic ends of the boost and of the re-entry\n');
-    fprintf('            lie outside it. The isothermal %s and the spherical\n',func2str(atmosFn));
-    fprintf('            %s carry no J2 and no winds. Treat this as an indicative\n',func2str(gravFn));
-    fprintf('            trajectory, not a performance prediction.\n');
+    fprintf('            lie outside it.\n');
+    if defaultAtmos
+        fprintf('            The atmosphere %s is isothermal and carries no winds.\n', ...
+                func2str(atmosFn));
+    else
+        fprintf('            The atmosphere is %s, NOT the library default, so the\n', ...
+                func2str(atmosFn));
+        fprintf('            isothermal-and-windless caveat this script prints by default does\n');
+        fprintf('            not describe it. Its validity range is its own to state.\n');
+    end
+    if defaultGrav
+        fprintf('            The gravity model %s is spherical and carries no J2.\n', ...
+                func2str(gravFn));
+    else
+        fprintf('            Gravity is %s, NOT the default sphereGrav, so the no-J2\n', ...
+                func2str(gravFn));
+        fprintf('            caveat this script prints by default does not apply. NOTE that the\n');
+        fprintf('            Keplerian cross-check above is still flown two-body on purpose.\n');
+    end
+    fprintf('            Treat this as an indicative trajectory, not a performance\n');
+    fprintf('            prediction.\n');
     if mach(end) < machHyper
         fprintf('            Impact is at Mach %.2f, below Mach %.0f, so the terminal state in\n', ...
                 mach(end),machHyper);
         fprintf('            particular is outside the constant-coefficient regime.\n');
     end
-    if nBstMax > 15
+    if nBstMax > 15 && defaultProp
         fprintf('            The %.1f g sensed load at end of burn is an artefact of the\n',nBstMax);
         fprintf('            constant-thrust placeholder motor, which does not throttle as the\n');
         fprintf('            stack empties. A real stage would tail off or stage before that.\n');
+    elseif nBstMax > 15
+        fprintf('            The %.1f g sensed load at end of burn is high. This run uses\n',nBstMax);
+        fprintf('            %s, NOT the default constant-thrust motor, so\n',func2str(propFn));
+        fprintf('            whether that load is a throttling artefact depends on that model.\n');
     end
     fprintf('=========================================================\n\n');
 

@@ -179,8 +179,15 @@ function [traj,info] = run_boost_glide(opts)
                                        %    glide phugoid or the glide is cut short at a skip
                                        %    instead of at its end. 22 km loses one skip; 30 km
                                        %    loses 1882 km of range and still reports nominal.
-                                       %    The run prints a WARNING when it detects this; see
-                                       %    the header note and the caveat on that warning
+                                       %    The run prints a WARNING when it detects this, but
+                                       %    that check is ONE-SIDED and SILENCE IS NOT SAFETY:
+                                       %    it sees a trough the continued glide climbs back out
+                                       %    of, and CANNOT see a handoff that truncated a shallow
+                                       %    skip without rebounding. 25 km is the known blind
+                                       %    spot -- 173 km short of the shipped run, no warning.
+                                       %    Sweep hHandoff downward and compare rather than
+                                       %    reading a silent run as a validated one. See the
+                                       %    header note and the caveat printed with the warning
          tMaxGlide = 6000;             %s, glide horizon; raise it if the glide is cut short
 
 %% Phase 3, descent -- the terminal dive. Same airframe, same equations; the
@@ -604,6 +611,17 @@ function [traj,info] = run_boost_glide(opts)
 %% stops being defensible:
          machHyper = 5;
 
+%% Which of the swappable models are still the library defaults. The validity
+%% paragraph below describes the DEFAULT models' limitations by name -- an
+%% isothermal windless atmosphere, a spherical no-J2 gravity field, a motor
+%% that cannot throttle -- and every one of those statements becomes a
+%% FALSEHOOD the moment the corresponding handle is replaced. A summary that
+%% prints "the spherical j2Grav carries no J2" is worse than one that prints
+%% nothing, so each caveat is gated on its own handle:
+      defaultAtmos = isequal(atmosFn,@coorbital.atmos.expAtmos);
+       defaultGrav = isequal(gravFn,@coorbital.grav.sphereGrav);
+       defaultProp = isequal(propFn,@coorbital.prop.constThrust);
+
 %% Report:
     fprintf('\n');
     fprintf('===== Boost-glide trajectory summary ====================\n');
@@ -793,8 +811,25 @@ function [traj,info] = run_boost_glide(opts)
     fprintf('            and this flight runs from a subsonic liftoff through Mach %.0f and\n', ...
             max(mach));
     fprintf('            back down again, so the transonic ends of the boost and of the\n');
-    fprintf('            terminal descent lie outside it. The isothermal %s and\n',func2str(atmosFn));
-    fprintf('            the spherical %s carry no J2 and no winds.\n',func2str(gravFn));
+    fprintf('            terminal descent lie outside it.\n');
+    if defaultAtmos
+        fprintf('            The atmosphere %s is isothermal and carries no winds.\n', ...
+                func2str(atmosFn));
+    else
+        fprintf('            The atmosphere is %s, NOT the library default, so the\n', ...
+                func2str(atmosFn));
+        fprintf('            isothermal-and-windless caveat this script prints by default does\n');
+        fprintf('            not describe it. Its validity range is its own to state.\n');
+    end
+    if defaultGrav
+        fprintf('            The gravity model %s is spherical and carries no J2.\n', ...
+                func2str(gravFn));
+    else
+        fprintf('            Gravity is %s, NOT the default sphereGrav, so the\n', ...
+                func2str(gravFn));
+        fprintf('            no-J2 caveat this script prints by default does not apply. Its\n');
+        fprintf('            validity range is its own to state.\n');
+    end
     fprintf('            Treat this as an indicative trajectory, not a performance prediction.\n');
     if mach(kHO) < machHyper
         fprintf('            The handoff is at Mach %.2f, below Mach %.0f, so the ENTIRE\n', ...
@@ -803,10 +838,14 @@ function [traj,info] = run_boost_glide(opts)
         fprintf('            reported to show what the phase split does, not as a terminal\n');
         fprintf('            performance figure.\n');
     end
-    if nBstMax > 15
+    if nBstMax > 15 && defaultProp
         fprintf('            The %.1f g sensed load at end of burn is an artefact of the\n',nBstMax);
         fprintf('            constant-thrust placeholder motor, which does not throttle as the\n');
         fprintf('            stack empties. A real stage would tail off or stage before that.\n');
+    elseif nBstMax > 15
+        fprintf('            The %.1f g sensed load at end of burn is high. This run uses\n',nBstMax);
+        fprintf('            %s, NOT the default constant-thrust motor, so\n',func2str(propFn));
+        fprintf('            whether that load is a throttling artefact depends on that model.\n');
     end
     fprintf('=========================================================\n\n');
 

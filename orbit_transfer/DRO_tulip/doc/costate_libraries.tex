@@ -255,6 +255,26 @@ query, \texttt{lib.grid.has\_solution} gives availability,
 \texttt{lib.grid.entry\_index} maps a grid cell to its row in
 \texttt{lib.entries}.
 
+\section{The multi-orbit catalog (August 6)}
+
+The pipeline swept the admissible box: 16 sheets --- DRO periods
+$\tau \in \{0.5, 1, 2, 3\}$ ND $\times$ petal counts $N_p \in \{5,7,9,12\}$
+($pm=-1$; the $+1$ branch is the exact $z$-mirror) --- at $6\times6$ phasing
+and nine thrust rungs, yielding \textbf{3{,}936 three-gate entries} with
+89--97\,\% phase-pair coverage on every sheet (\texttt{costate\_catalog\_%
+dro\_tulip.mat}, compact ND-only format). Cross-sheet findings: at fixed
+5~N, the orbit-pair choice spans $\Delta V$ 1.18--4.09~km/s ($3.5\times$,
+larger than phasing's $\sim2\times$); the fastest transfer anywhere is
+0.218~d ($\tau=0.5$, $N_p=9$, 15~N) and the slowest 3.44~d ($\tau=3$,
+$N_p=12$, 1~N) at nearly equal $\Delta V$.
+
+\paragraph{Halo bounds (the next family).} Applying the same admissibility
+survey to pumpkynPie's Halo family: \emph{L2 southern} is continuously
+admissible for periods 7.1--15.1 days (periselene 2{,}800--49{,}900~km);
+L1 is largely sub-surface (two clean members); L3 lies 0.39--1.05~Gm from
+the Moon, outside the 100~Mm box. The Halo$\to$tulip campaign proceeds on
+L2 southern via the shared \texttt{get\_family\_orbit} provider.
+
 \section{Growth axes}
 
 The pipeline is parameterized, so further libraries are reruns rather than

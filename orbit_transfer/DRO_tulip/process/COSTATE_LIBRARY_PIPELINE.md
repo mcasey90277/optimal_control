@@ -98,3 +98,36 @@ pumpkyn house style) and `costate_lib_example.m` (worked example).
    collapse).
 6. **Chain the stages automatically**; humans should read results, not
    babysit handoffs.
+
+
+## Multi-family catalogs (added 2026-08-06)
+
+The pipeline is now family-agnostic. Shared code lives in
+`orbit_transfer/costate_common/` — the seed of an optimal-control library
+alongside pumpkyn's astrodynamics:
+
+- `get_family_orbit.m` — THE one place a family name + parameters becomes a
+  propagated periodic orbit (dro / tulip / halo / dpo / lyapunov, all via
+  pumpkyn getters + cont_np + prop). Engines build endpoints only through it.
+- `survey_family_bounds.m` — the admissibility survey (>= 500 km periselene,
+  <= 100 Mm from the Moon) for ANY family, with a periodicity guard: members
+  whose seed did not truly converge are labeled NON-PERIODIC and excluded,
+  never trusted (an interpolated L1 halo "member" showed 1e10-km excursions;
+  and note the guard is written `~(err < tol)` so NaN closures fail it too).
+
+**Measured Halo admissible box (2026-08-06,
+`HALO_tulip/direct/results/halo_bounds.mat`):**
+
+- **L2 southern is the workhorse**: continuously admissible for periods
+  7.1–15.1 days (tau 1.61–3.42), periselene 2,800→49,900 km. Northern is the
+  exact z-mirror.
+- L1: mostly inadmissible (the family plunges below the lunar surface over
+  most of its range); two clean members at tau = 1.80 and 2.74.
+- L3: excluded wholesale — 0.39–1.05 Gm from the Moon, far outside the box.
+- Short-period L2 (NRHO territory, < 7 d) falls below the 500 km floor at
+  this grid; the true boundary deserves a finer survey before writing NRHOs
+  off.
+
+The Halo campaign (HALO_tulip/) proceeds on L2 southern, coarse periods
+{1.75, 2.2, 2.8, 3.4} ND, reusing the ladder pipeline through
+get_family_orbit.

@@ -780,21 +780,45 @@ of their own summaries, so the caveat travels with the output.
 
 **What is actually pinned — corrected 2026-08-07.** An earlier version of this
 section said `test_constThrust` "pins all of them exactly (lines 50–56)". It did
-not: that span holds **seven** assertions covering the five `boosterDefaults`
-mass and propulsion fields plus the 900 kg payload mass and `g0` — seven of the
-eighteen values in the table above. Two gaps have since been closed and the rest
-are stated honestly here:
+not: that span holds **seven assertions**, and they cover **six** of the eighteen
+values in the table above — the five `boosterDefaults` mass and propulsion fields
+plus the 900 kg payload mass. The seventh assertion pins `g0`, which is not a
+parameter-file value at all; it comes from `missileConst`. Three gaps have since
+been closed and the rest are stated honestly here:
 
 | Values | Pinned where |
 |---|---|
 | `boosterDefaults` `massDry`, `massProp`, `thrustVac`, `Isp`, `Aexit`; payload `mass`; `g0` | `test_constThrust.m:50-56`, exact equality — seven pins |
 | `boosterDefaults` `Sref`, `CL`, `LD`, plus the derived `CD = 0.20` | `test_constThrust.m`, own block immediately below — **added 2026-08-07.** Nothing in that file's hand arithmetic touches the triple, so every other check there stayed green at any positive values, while these three drive the 62.8 % range swing measured above |
 | `vehicleDefaults` `Sref`, `CL`, `LD` | `test_runGlide.m`, exact equality — **added 2026-08-07.** `test_equilibriumGlide` builds its closed-form `Veq(r)` from these very fields, so they cancel between model and reference and it cannot see them. Same disease as the `Hscale` blindness below; same cure |
-| `vehicle_bm` `mass`, `Sref`, `CL`, `LD` | `test_runBallistic.m` — **jointly, not one by one**, and deliberately so. `mass` is tied to the pinned 900 kg payload, the derived `CD = CL/LD = 0.25` is pinned at 1e-12, and the ballistic coefficient `mass/(CD·Sref) = 9350.649350649351 kg/m²` at 1e-9. Every combination the equations of motion read is anchored; the split of a fixed `CD` between `CL` and `LD` is not, and no trajectory can see it |
+| `vehicle_bm` `mass`, `Sref`, `CL`, `LD` | `test_runBallistic.m`. `mass` is tied to the pinned 900 kg payload; the derived `CD = CL/LD = 0.25` is pinned at 1e-12; the ballistic coefficient `mass/(CD·Sref) = 9350.649350649351 kg/m²` at 1e-9; and **`CL` is pinned absolutely at 0.005**, which the other three do not cover — see below |
 | `noseRadius`, both files | **Not pinned, deliberately** — no physics routine reads it. The tests assert only that it exists, is positive, and passes through `vehicle_hgv` unchanged |
 
 Those pins are what stands between a mistyped constant and a suite that still
 reports green.
+
+**Why `vehicle_bm`'s `CL` needs a pin of its own, when `CD` and β are already
+pinned.** Those two constrain only the *ratio*. Doubling `CL` to 0.010 and `LD`
+to 0.040 together holds `CD = 0.25` and β = 9350.649350649351 kg/m² **exactly**,
+so both joint pins stay green — and the trajectory still moves, because
+`glide3DOF` reads `CL` **directly** for lift:
+
+```matlab
+             aLift = qbar.*veh.Sref.*CL./veh.mass;
+             aDrag = qbar.*veh.Sref.*CD./veh.mass;
+```
+
+The split of a fixed `CD` between `CL` and `LD` is therefore **observable —
+through lift, not through drag**. Measured on that mutation: impact speed moves
+3156.49 → 3144.86 m/s and the pinned trajectory literal breaks at 3.683e-03
+relative, with nothing in the failure saying why. An unexplained
+trajectory-literal break is exactly what this section exists to prevent, so `CL`
+is pinned at its own value and the cause fires first. `LD = CL/CD` is then fixed
+by the two pins together.
+
+An earlier version of this table asserted the opposite — that no trajectory
+could see the split. That was wrong, and wrong in the instructive direction: the
+reasoning stopped at the drag term.
 
 Two artefacts of the placeholder motor are worth naming so they are not read as
 physics. It is constant-thrust and does not throttle, so the sensed load climbs

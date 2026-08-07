@@ -76,6 +76,19 @@ function test_runBallistic()
     assertRel(veh.mass./(CDref.*veh.Sref),9350.649350649351,1e-9, ...
         'vehicle_bm ballistic coefficient (kg/m^2)');
 
+%% ...and CL is pinned ABSOLUTELY as well, which the two joint pins above do
+%% NOT cover. They constrain only the RATIO: doubling CL to 0.010 and LD to
+%% 0.040 together holds CD at 0.25 and the ballistic coefficient at
+%% 9350.649350649351 exactly, so both assertions above stay green. The
+%% trajectory does not. coorbital.eom.glide3DOF reads CL directly for lift --
+%% aLift = qbar*Sref*CL/mass, alongside the aDrag term that reads CD -- so the
+%% split of a fixed CD between CL and LD is OBSERVABLE, through lift and not
+%% through drag. Measured on that mutation: impact speed moves 3156.49 to
+%% 3144.86 m/s and the pinned literal further down this file breaks at
+%% 3.683e-03 with nothing saying why. This pin makes the cause fire first.
+%% With CL and the derived CD both pinned, LD = CL/CD is fixed too:
+    assertRel(veh.CL,0.005,1e-12,'vehicle_bm CL');
+
 %% ---------------------------------------------------------------------
 %% 2. The shipped configuration
 %% ---------------------------------------------------------------------

@@ -3,6 +3,15 @@
 Running log. Newest entries at the top. Record what broke, what fixed it, and
 what a future reader would otherwise rediscover the hard way.
 
+## 2026-08-06 — Vacuum energy conservation is the test that matters
+
+The glide EOM has six equations and many chances for a sign error. Propagating
+a vacuum ballistic arc and checking that V^2/2 - mu/r holds constant to 1e-8
+catches nearly all of them in one assertion, because any sign flip in gravity
+or the centrifugal term breaks conservation immediately. Approximate checks
+against analytic glide solutions do not — they tolerate a percent of error by
+construction, which is enough to hide a wrong term.
+
 ## 2026-08-06 — `-batch` needs `run(...)`, not a bare relative path
 
 Invoking the test harness as `matlab -batch "cd(...); tests/run_tests"` does

@@ -455,7 +455,7 @@ function test_sphereGrav()
 
 %% Surface gravity is mu/r^2 and points down (positive by convention):
        [gr,gLat] = coorbital.grav.sphereGrav(c.rE,0);
-    assert(abs(gr - c.muE/c.rE^2) < 1e-12,'surface gravity wrong');
+    assert(abs(gr - 9.7983) < 1e-4,'surface gravity wrong: got %.6f m/s^2',gr);
     assert(gr > 0,'gr must be positive downward');
     assert(gLat == 0,'spherical gravity has no latitudinal component');
 

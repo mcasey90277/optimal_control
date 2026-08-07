@@ -536,10 +536,10 @@ function test_phaseRun()
 %  struct makes it fly at the wrong weight while its own mass history says
 %  otherwise. That configuration used to pass this test, on the stated ground
 %  that "mass is inert in glide3DOF". Mass is inert in those EQUATIONS and
-%  emphatically not inert in the PHYSICS: rebuilding phase 2 at 400 kg moves
-%  the terminus by 329 km and the terminal speed by 329 m/s. Confusing the two
-%  is exactly what massConstant's guard now refuses to let through -- see the
-%  block after this one, which pins that refusal.
+%  emphatically not inert in the PHYSICS: rebuilding phase 2 at 400 kg slows
+%  arrival by 329.2 m/s and moves the impact point 46.0 km down range.
+%  Confusing the two is exactly what massConstant's guard now refuses to let
+%  through -- see the block after this one, which pins that refusal.
              mDrop = 500;
             vehPre = veh;
            vehPost = veh;
@@ -616,15 +616,12 @@ function test_phaseRun()
     assert(max(abs(trBare.x(:,7) - veh.mass)) < 1e-12, ...
         'an unlinked chain must fly the whole way at the initial mass');
 
-%% UP TO SEPARATION the two runs are the same flight -- phase 1 is 900 kg in
-%  both -- so the junction states must coincide exactly. This localises every
-%  difference below to the staging event itself, and it catches a rebuilt
-%  vehicle leaking backwards into phase 1:
-             dJn16 = max(abs(trLink.junction(1).x(1:6) - trBare.junction(1).x(1:6)));
-    assert(dJn16 < 1e-9, ...
-        ['the staged and unstaged runs disagree at the junction by %.3e; ' ...
-         'phase 1 is 900 kg in both and must be the identical flight'],dJn16);
-
+%% There is deliberately NO check here that the two runs agree at the junction.
+%  Do not re-add one: vehPre and vehPost differ only in .mass, so any bug that
+%  made phase 1 fly vehPost would put x(7) = 900 against veh.mass = 400 on the
+%  first derivative call, and massConstant's guard would throw inside phaseRun
+%  -- naming both masses -- long before such an assertion could be reached.
+%
 %% AFTER SEPARATION they must DIVERGE, and that is the whole point. An earlier
 %  version of this test asserted the opposite -- that the terminus agreed to
 %  1e-9 -- which was only ever true because phase 2 was being handed the

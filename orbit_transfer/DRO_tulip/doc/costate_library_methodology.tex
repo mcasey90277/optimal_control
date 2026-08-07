@@ -272,14 +272,64 @@ mesh).
 \subsection{Stage 1.5: the covector mapping}
 \label{sec:covector}
 
-The KKT multipliers of the defect constraints are a discrete approximation
-of the continuous costates (the Hager covector mapping): $\lambda$ at node
-$k$ is read from the multiplier of interval $k$'s defect (interval
-\emph{midpoints} for Hermite--Simpson). Two details proved essential in
-practice: the multipliers' \emph{sign} is fixed by requiring the implied
-primer direction to match the solved control (decided by a majority vote
-over the first ten nodes), and the full costate \emph{trajectory} is saved,
-not just $\bm\lambda(0)$ --- stage~2 is only possible because of it.
+\paragraph{Principle.} Write the transcribed NLP with dynamics enforced by
+defect constraints $\bm c_k(\bm X, \bm U, t_f) = \bm 0$, one vector per
+interval, and let $\bm\mu_k$ be their KKT multipliers. Stationarity of the
+NLP Lagrangian with respect to the state variables,
+\begin{equation}
+\nabla_{\bm x_k} J \;+\; \sum_j \bm\mu_j^{\top} \nabla_{\bm x_k}\bm c_j
+\;=\; \bm 0,
+\end{equation}
+is, term by term, a \emph{discretization of the continuous adjoint
+equation} $\dot{\bm\lambda} = -\partial H/\partial \bm x$. This is the
+covector mapping principle (Hager's analysis for Runge--Kutta classes; the
+weight-scaled version for pseudospectral methods): \textbf{the multipliers
+are samples of the costate}. The library pipeline exploits it to obtain
+costate trajectories from a solver that was never told costates exist.
+
+\paragraph{The map is transcription-specific.} \emph{Which} samples, with
+what scaling, depends on the scheme. For trapezoidal collocation the
+multipliers associate naturally with the \emph{nodes}. For
+Hermite--Simpson --- our transcription --- the discrete adjoint places
+$\bm\mu_k$ at the interval \emph{midpoint} $t_k + h_k/2$ (adopting the node
+association instead injects a half-step phase error into every seed; found
+in external review, since fixed), and the mapped values show mild order
+reduction near the arc endpoints. For Legendre--Gauss--Lobatto
+pseudospectral methods the multipliers must additionally be scaled by the
+inverse quadrature weights. A reusable implementation therefore takes the
+scheme as part of its contract.
+
+\paragraph{Conventions decide sign and scale.} The multiplier of
+$\bm c = \bm 0$ is defined only up to the conventions of the NLP: how the
+defect is normalized (an $h$-scaled defect scales $\bm\mu$ by $1/h$), the
+constraint's sign, minimization sense, and the solver interface's own
+choices --- notably, CasADi's \texttt{opti.dual} returns duals in a
+\emph{canonicalized orientation} and must be bypassed in favor of
+\texttt{opti.lam\_g} indexed by constraint rows (a lesson that once cost a
+10--60$^\circ$ primer misalignment). Residual global sign is fixed
+empirically: the mapped primer $-\lv/\lVert\lv\rVert$ must align with the
+solved thrust direction, decided by majority vote over the first ten
+stations. With a lifted final time the multiplier paired with the $t_f$
+degree of freedom supplies a free consistency check: for our conventions it
+must equal $+1$ exactly (it is $-H$, and $H(t_f)=0$ with the $+1$
+normalization); junk solutions announce themselves by violating it by
+orders of magnitude. Under a Sundman time transformation the mapping
+acquires a clock-rate factor which vanishes here because $H \equiv 0$ along
+optimal arcs of the transformed problem.
+
+\paragraph{Limits, stated plainly.} (i)~On arcs where a path constraint is
+\emph{active} (the altitude floor), the inequality multipliers inject
+additional terms: the mapped $\bm\lambda$ is the costate of the
+\emph{constrained} problem and is not a valid seed for the unconstrained
+BVP \eqref{eq:bvp} --- refinement re-converges the unconstrained problem
+and absorbs this where the floor is inactive at the solution. (ii)~The
+accuracy ceiling is $\sim10^{-3}$ regardless of care: mapped costates are
+\textbf{seeds for multiple shooting, never shooting-quality solutions}
+(\S3.1's 12{,}700--558{,}000~km measurement is the proof).
+
+In practice two details carry the stage: the sign vote above, and saving
+the full costate \emph{trajectory}, not just $\bm\lambda(0)$ --- stage~2's
+junction seeds exist only because of it.
 
 \subsection{Stage 2: multiple-shooting refinement}
 

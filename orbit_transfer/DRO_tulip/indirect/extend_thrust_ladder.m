@@ -52,6 +52,7 @@ gateKm   = d('gateKm', 100);
 % poor guess. Try several and keep the fastest solution that converges --
 % this is a minimum-time problem, so smaller t_f is the better answer.
 tfExpList = d('tfExpList', [0.56 1.0 1.7 2.4]);
+maxAtt   = d('maxAtt', 2);
 maxCells = d('maxCells', inf);
 batchSec = d('batchSec', inf);
 logFile  = d('logFile', '');
@@ -86,6 +87,7 @@ if ~alreadyExtended                         % first extension: grow arrays
 end
 nR = numel(Q.rungs);
 if ~isfield(Q,'EXT'), Q.EXT = zeros(nD,nA); end   % extension attempts
+save(ladderMat, '-struct', 'Q');   % persist growth BEFORE any early return
 
 ob = Q.meta;  muStar = ob.muStar;  lStar = ob.lStar;  tStar = ob.tStar;
 g0  = 9.80665*tStar^2/(1000*lStar);
@@ -105,7 +107,7 @@ for iD = 1:nD
     for iA = 1:nA
         hasOld = any(Q.OK(iD,iA,1:nR0));
         hasNew = any(Q.OK(iD,iA,nR0+1:nR));
-        if hasOld && ~hasNew && Q.EXT(iD,iA) < 1
+        if hasOld && ~hasNew && Q.EXT(iD,iA) < maxAtt
             todo(end+1,:) = [iD iA]; %#ok<AGROW>
         end
     end
@@ -144,7 +146,9 @@ for kc = 1:min(size(todo,1), maxCells)
             for tfExp = tfExpList
                 tfGuess = zPrev(8) * (Tprev/TN)^tfExp;
                 Yg = interp1(tu/tu(end), yj(iu,1:14), sGrid, 'pchip')';
-                Yg(7,:) = 1 + (Yg(7,:)-1)*(tfGuess/zPrev(8));   % mass rescale
+                % mass rescale: consumed propellant scales with BOTH the time
+                % stretch AND the thrust ratio (mdot ~ T) -- review finding
+                Yg(7,:) = 1 + (Yg(7,:)-1)*(tfGuess/zPrev(8))*(TN/Tprev);
                 seed = struct('tf', tfGuess, 'tGrid', sGrid*tfGuess, 'Y', Yg);
                 [zt, it] = ms_tfmin(rv0(1:6), rvf(1:6), seed, ndT(TN), cnd, ...
                                     muStar, struct('wallSec', wallSec));

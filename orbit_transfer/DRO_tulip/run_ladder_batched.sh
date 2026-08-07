@@ -33,6 +33,13 @@ fi
 PUMPKYN=/Users/msc/Desktop/proj7/external/pumpkynPie
 
 mkdir -p "$HERE/direct/results"
+# single-instance lock (review finding: two drivers can corrupt one sheet)
+LOCK="$HERE/direct/results/.${STAGE}_driver.lock"
+if ! mkdir "$LOCK" 2>/dev/null; then
+  echo "another $STAGE driver appears to be running (lock: $LOCK) -- exiting"
+  exit 1
+fi
+trap 'rmdir "$LOCK" 2>/dev/null' EXIT
 echo "=== $STAGE run started $(date) ($CELLS cells/batch, ${BSEC}s clean, ${KILL_AFTER}s kill)" >> "$LOG"
 
 dry=0
@@ -54,8 +61,12 @@ for pass in $(seq 1 200); do
   ( sleep $KILL_AFTER; kill -9 $MPID 2>/dev/null && \
     echo "  [pass $pass timed out -- a solver call hung; skipping ahead]" >> "$LOG" ) &
   WPID=$!
-  wait $MPID 2>/dev/null
+  wait $MPID 2>/dev/null; MSTATUS=$?
   kill $WPID 2>/dev/null
+  if [ $MSTATUS -ne 0 ] && [ $MSTATUS -ne 137 ]; then
+    echo "=== MATLAB exited with status $MSTATUS in pass $pass -- ABORTING" >> "$LOG"
+    break
+  fi
 
   if tail -30 "$HERE/direct/results/${STAGE}_matlab.log" 2>/dev/null | grep -qa "^Error in\|^{Error\|Unrecognized"; then
     echo "=== MATLAB ERROR in pass $pass -- ABORTING (see ${STAGE}_matlab.log)" >> "$LOG"

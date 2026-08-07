@@ -227,7 +227,7 @@ for kc = 1:min(size(todo,1), maxCells)
                 [~, rvFly] = pumpkyn.cr3bp.tfMinProp(z(8), ...
                         [rv0(1:6)'; 1; z(1:7)], Tnd, cnd, muStar);
                 msKm = norm(rvFly(end,1:3) - rvf(1:3))*lStar;
-                if info.converged && msKm < 100
+                if info.converged && msKm < gateKm
                     evalc('zA = pumpkyn.cr3bp.tfMin(rv0(1:6), rvf(1:6), z, Tnd, cnd, muStar);');
                     accDz = norm(zA - z);
                     if accDz < accTol

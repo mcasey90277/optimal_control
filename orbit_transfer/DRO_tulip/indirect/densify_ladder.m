@@ -189,7 +189,7 @@ try
     for p = tfExpList
         tfG = zSrc(8) * (Tsrc/TN)^p;
         Yg = interp1(tu/tu(end), yj(iu,1:14), sG, 'pchip')';
-        Yg(7,:) = 1 + (Yg(7,:)-1)*(tfG/zSrc(8));
+        Yg(7,:) = 1 + (Yg(7,:)-1)*(tfG/zSrc(8))*(TN/Tsrc);   % mdot ~ T (review)
         seed = struct('tf', tfG, 'tGrid', sG*tfG, 'Y', Yg);
         [zt, it] = ms_tfmin(rv0(1:6), rvf(1:6), seed, ndT(TN), cnd, ...
                             muStar, struct('wallSec', msWallS));

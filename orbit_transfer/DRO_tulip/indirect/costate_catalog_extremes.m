@@ -63,6 +63,8 @@ end
 if ~exist('filt','var') || isempty(filt), filt = struct(); end
 if ~exist('doPlot','var'), doPlot = false; end
 if ~exist('metric','var'), metric = 'deltaV'; end
+assert(any(strncmpi(metric, {'deltaV','time'}, 1)), ...
+       'metric must be ''deltaV'' or ''time'', got ''%s''', metric);
 
    tStar = cat_.constants.tStar_s;
    lStar = cat_.constants.lStar_km;
@@ -86,6 +88,7 @@ for ks = 1:numel(cat_.sheets)
                 if ~sh.has_solution(iD,iA,kr), continue, end
                 tf = sh.tf_nd(iD,iA,kr);
                 mf = 1 - ndT(TN)*tf/cnd;
+                if ~(mf > 0 && mf <= 1), continue, end   % corrupt entry
                 dV = cnd*log(1/mf)*lStar/tStar;
                 if strncmpi(metric,'t',1), v = tf; else, v = dV; end
                 if v < vBest

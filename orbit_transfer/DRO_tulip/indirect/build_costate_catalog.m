@@ -61,10 +61,13 @@ cat_.provenance = ['Coarse catalog sweep (run_catalog_sweep): per sheet, ', ...
 
 nTot = 0;
 sheets = struct([]);
+nS = 0;
 for kf = 1:numel(files)
     Q = load(fullfile(files(kf).folder, files(kf).name));
+    if nnz(Q.OK) == 0, continue, end     % an empty sheet would crash lookups
+    nS = nS + 1;
     ob = Q.meta;
-    if kf == 1
+    if nS == 1
         cat_.constants = struct('muStar', ob.muStar, 'lStar_km', ob.lStar, ...
                                 'tStar_s', ob.tStar);
         g0 = 9.80665*ob.tStar^2/(1000*ob.lStar);
@@ -74,6 +77,9 @@ for kf = 1:numel(files)
         cat_.rungs_N = Q.rungs(:)';
     end
     assert(isequal(Q.rungs(:)', cat_.rungs_N), 'sheet %s: rung mismatch', files(kf).name);
+    assert(ob.ispS == cat_.thruster.isp_s && ob.m0kg == cat_.thruster.m0_kg ...
+        && abs(ob.muStar - cat_.constants.muStar) < 1e-15, ...
+        'sheet %s: thruster/constants differ from the catalog''s', files(kf).name);
     [nD, nA, nR] = size(Q.OK);
     z8 = zeros(8, nnz(Q.OK));
     idx = zeros(nD, nA, nR);
@@ -89,16 +95,16 @@ for kf = 1:numel(files)
         end
     end
     tf = Q.TF;  tf(~Q.OK) = NaN;
-    sheets(kf,1).tauDRO          = ob.tauDRO;     % = DRO period (ND)
-    sheets(kf,1).Np              = ob.NpTulip;
-    sheets(kf,1).pm              = ob.pmTulip;
-    sheets(kf,1).period_tulip_nd = ob.periodTulip;
-    sheets(kf,1).sD_frac         = Q.sD(:)';
-    sheets(kf,1).sA_frac         = Q.sA(:)';
-    sheets(kf,1).has_solution    = Q.OK;
-    sheets(kf,1).tf_nd           = tf;
-    sheets(kf,1).entry_index     = idx;
-    sheets(kf,1).z8              = z8;
+    sheets(nS,1).tauDRO          = ob.tauDRO;     % = DRO period (ND)
+    sheets(nS,1).Np              = ob.NpTulip;
+    sheets(nS,1).pm              = ob.pmTulip;
+    sheets(nS,1).period_tulip_nd = ob.periodTulip;
+    sheets(nS,1).sD_frac         = Q.sD(:)';
+    sheets(nS,1).sA_frac         = Q.sA(:)';
+    sheets(nS,1).has_solution    = Q.OK;
+    sheets(nS,1).tf_nd           = tf;
+    sheets(nS,1).entry_index     = idx;
+    sheets(nS,1).z8              = z8;
     nTot = nTot + n;
 end
 % order sheets by (tauDRO, Np) for human readability

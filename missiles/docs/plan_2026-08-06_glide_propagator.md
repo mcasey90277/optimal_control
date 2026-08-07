@@ -1484,7 +1484,7 @@ Run:
 ```bash
 /Applications/MATLAB_R2025b.app/bin/matlab -batch "cd('/Users/msc/Desktop/optimal_control/missiles/HGV'); run_glide" 2>&1 | grep -vE "Home License|personal use|academic, research|organizational use"
 ```
-Expected: a summary block printing a flight time of order hundreds of seconds, a ground range of order 1000 km, and a peak Mach above 15. If the vehicle skips back out of the atmosphere and hits the 4000 s horizon instead of the 5 km floor, that is physical for `L/D = 2.5` at a shallow entry angle — steepen `gammaEntry` to -3 degrees and re-run.
+Expected: a summary block printing a flight time of roughly 2000 s, a ground range near 7000 km, and a peak Mach above 15. The Saenger equilibrium-glide closed form, `R = (L/D) * rE * ln(1/(1 - (V0/Vcirc)^2))`, independently predicts 6944 km for this vehicle and entry state, so a range within about 1 percent of that is the correct answer, not an anomaly. If the vehicle instead skips back out of the atmosphere and hits the 4000 s horizon rather than the 5 km floor, that is physical for `L/D = 2.5` at a shallow entry angle — steepen `gammaEntry` to -3 degrees and re-run.
 
 - [ ] **Step 6: Run the full test suite to confirm nothing regressed**
 

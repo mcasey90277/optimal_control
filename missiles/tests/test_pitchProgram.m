@@ -121,6 +121,33 @@ function test_pitchProgram()
         u7(1),deg2rad(-20));
 
 %% =========================================================================
+%% alphaMax clamp with NONZERO gamma, POSITIVE bound. This separates
+%  clamping alpha (correct) from clamping theta and then subtracting gamma
+%  (a plausible bug): theta = 90 deg, gamma = 10 deg, alphaMax = 20 deg.
+%  Clamping alpha: unclamped alpha = 90 - 10 = 80 deg, clamped to 20 deg.
+%  Clamping theta instead: clamp(90,20) = 20, then 20 - 10 = 10 deg. The two
+%  forms disagree (20 vs 10 deg), so gamma = 0 alone cannot catch this bug:
+%% =========================================================================
+                 xcp = zeros(7,1);
+              xcp(5) = deg2rad(10);
+                u6b = coorbital.guide.pitchProgram(0,xcp,schedClampP);
+    assert(abs(u6b(1) - deg2rad(20)) < 1e-9, ...
+        ['nonzero-gamma positive clamp gave alpha = %.9f rad, expected ' ...
+         '20 deg = %.9f rad (clamping theta instead of alpha would give ' ...
+         '10 deg)'],u6b(1),deg2rad(20));
+
+%% alphaMax clamp with NONZERO gamma, NEGATIVE bound. theta = -90 deg,
+%  gamma = 10 deg, alphaMax = 20 deg. Clamping alpha: unclamped
+%  alpha = -90 - 10 = -100 deg, clamped to -20 deg. Clamping theta instead:
+%  clamp(-90,20) = -20, then -20 - 10 = -30 deg. Again the two forms
+%  disagree (-20 vs -30 deg):
+                u7b = coorbital.guide.pitchProgram(0,xcp,schedClampN);
+    assert(abs(u7b(1) - deg2rad(-20)) < 1e-9, ...
+        ['nonzero-gamma negative clamp gave alpha = %.9f rad, expected ' ...
+         '-20 deg = %.9f rad (clamping theta instead of alpha would give ' ...
+         '-30 deg)'],u7b(1),deg2rad(-20));
+
+%% =========================================================================
 %% alphaMax ABSENT: no clamping, even for a physically absurd 100 deg
 %  commanded angle of attack. This must equal 100 deg exactly, unclamped:
 %% =========================================================================

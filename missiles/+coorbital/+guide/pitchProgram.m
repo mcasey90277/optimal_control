@@ -70,17 +70,17 @@ end
 %  grid, exactly as coorbital.guide.prescribed does. Single-point schedules
 %  are constant; interp1 needs two points:
 if numel(sched.tGrid) == 1
-                 theta = sched.theta(1);
-                 sigma = sched.sigma(1);
+             theta = sched.theta(1);
+             sigma = sched.sigma(1);
 else
-                 theta = interp1(sched.tGrid,sched.theta,t,'linear','extrap');
-                 sigma = interp1(sched.tGrid,sched.sigma,t,'linear','extrap');
+             theta = interp1(sched.tGrid,sched.theta,t,'linear','extrap');
+             sigma = interp1(sched.tGrid,sched.sigma,t,'linear','extrap');
     if t <= sched.tGrid(1)
-                 theta = sched.theta(1);
-                 sigma = sched.sigma(1);
+             theta = sched.theta(1);
+             sigma = sched.sigma(1);
     elseif t >= sched.tGrid(end)
-                 theta = sched.theta(end);
-                 sigma = sched.sigma(end);
+             theta = sched.theta(end);
+             sigma = sched.sigma(end);
     end
 end
 

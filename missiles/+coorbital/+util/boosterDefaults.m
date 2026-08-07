@@ -72,6 +72,7 @@ function bst = boosterDefaults()
 %     liftoff mass    = 900 + 1500 + 30000        = 32400    kg
 %     burnout mass    = 900 + 1500                =  2400    kg
 %     mass ratio                                  =    13.5
+%     structural coeff = 1500/(1500 + 30000)      =     0.0476  (4.76 %)
 %     exhaust speed   = Isp*g0 = 260*9.80665      =  2549.729 m/s
 %     mass flow       = 950000/2549.729           =   372.589 kg/s
 %     burn time       = 30000/372.5886            =    80.518 s
@@ -106,8 +107,38 @@ function bst = boosterDefaults()
 %  drag loss and lands lower. Expect 700-900 m/s for anything lofted, and
 %  measure it rather than assuming it.
 %
-%  Either way, a burnout speed near 6 km/s is the expectation -- which is what
-%  the 60 km, 6 km/s entry interface in HGV/run_glide assumes.
+%% Note -- the structural coefficient is OPTIMISTIC, and it is load-bearing:
+%
+%  massDry/(massDry + massProp) = 1500/31500 = 4.76 %. Real large solid
+%  boosters run 10-15 % -- cases, nozzles, insulation, TVC actuators and
+%  skirts do not scale away -- so this stage is light by roughly a factor of
+%  two to three. The value is DELIBERATELY LEFT ALONE: it is a marked
+%  placeholder, and changing it would move every headline number in
+%  docs/README.md and every pinned literal in tests/test_constThrust.m for no
+%  gain in what this library is demonstrating, which is the machinery and not
+%  the motor. But it must be read as optimistic, because the ideal delta-V
+%  above is what pays for the entry interface, and a light structure buys most
+%  of it.
+%
+%  What a realistic structure would cost, at an 11.2 % coefficient with the
+%  same 30000 kg propellant load and the same 900 kg payload:
+%
+%     massDry         = 30000*0.112/0.888          =  3783.78 kg
+%     liftoff mass    = 900 + 3783.78 + 30000      = 34683.78 kg
+%     burnout mass    = 900 + 3783.78              =  4683.78 kg
+%     ideal delta-V   = 2549.729*log(7.4051)       =  5104.98 m/s
+%
+%  a fall of 1531 m/s from 6636 m/s. Re-splitting the SAME 31500 kg stack at
+%  11.2 % instead of enlarging it gives 5074.50 m/s, so it is about 5.1 km/s
+%  either way -- the counterfactual is insensitive to which mass is held.
+%
+%  So: with the losses measured above, this booster delivers a burnout speed
+%  near 6 km/s, and the 60 km, 6 km/s entry interface in HGV/run_glide is
+%  consistent with it. That alignment is an ARTEFACT OF THE OPTIMISTIC MASS
+%  FRACTION, not an expectation to design against. A stage with a realistic
+%  structure and this propellant load lands roughly 1.5 km/s short of the
+%  ideal figure quoted here, and a burnout near 6 km/s would then need either
+%  more propellant, a higher Isp, or a second stage.
 %
 %  Burn time and liftoff T/W are not independent: for a given propellant mass
 %  fraction f, burn time = Isp*f/(T/W). Holding T/W in the 2-3 band with a
@@ -132,7 +163,8 @@ function bst = boosterDefaults()
 %% Propulsion -- thrustVac and Isp are BOTH vacuum values:
      bst.thrustVac = 950000;          %N, PLACEHOLDER, constant through the burn
            bst.Isp = 260;             %s, PLACEHOLDER, VACUUM specific impulse;
-                                      %   typical HTPB solid range 250-270
+                                      %   typical HTPB solid VACUUM range
+                                      %   250-270 s
          bst.Aexit = 1.25;            %m^2, PLACEHOLDER, nozzle exit area;
                                       %   1.26 m exit diameter
 

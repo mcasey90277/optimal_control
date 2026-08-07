@@ -531,7 +531,22 @@ rad/s, exactly `-gLat*sin(psi)/(V*cos(gamma))`. The plumbing is live.
    ```
 
 Nothing else moves. The EOM, the integrator, the guidance, the event functions,
-and the plotting are untouched. The same recipe with `[rho,P,T,a] = us76Atmos(h)`
+and the plotting are untouched.
+
+**One deliberate exception, which is not a counter-example.**
+`BM/run_ballistic`'s Keplerian cross-check always re-propagates on
+`coorbital.grav.sphereGrav` whatever `gravFn` is set to, because the closed form
+it is compared against is built from `muE` alone and is two-body *by
+construction*. The flown trajectory is oblate; only that one validation stays
+Keplerian. Until 2026-08-07 the check inherited `env.grav`, so following the
+recipe above aborted the script — measured at `2.9e-03` to `3.2e-03` relative,
+on a 1e-6 assertion whose message insisted "a disagreement is a defect, not a
+modelling difference". It was a modelling difference. Both entry scripts also
+gate their printed validity paragraphs on the handles actually being the
+defaults, so a swapped model no longer produces the line "the spherical
+`j2Grav` carries no J2".
+
+The same recipe with `[rho,P,T,a] = us76Atmos(h)`
 adds a US76 atmosphere; the same recipe with `[CL,CD] = tableAero(alpha,mach,veh)`
 adds a tabulated drag polar. Note that `alpha` currently has **no effect** on the
 trajectory, because `constLD` ignores it by construction; it becomes live the
@@ -609,9 +624,9 @@ isolates the new terms exactly. It is the sharpest instrument in the suite.
 **Tsiolkovsky is blind to every booster constant.** `Isp`, `g0`, `thrustVac` and
 the mass ratio all cancel between the propagation and the closed form — doubling
 the thrust halves the burn time and leaves the delta-V untouched. It validates
-the *shape* of the rocket equation and nothing about the numbers fed into it. Six
-exact-equality pins at `tests/test_constThrust.m:50-56` are the only defence.
-Same disease as the `Hscale` blindness below; same cure.
+the *shape* of the rocket equation and nothing about the numbers fed into it.
+**Seven** exact-equality pins at `tests/test_constThrust.m:50-56` are the only
+defence. Same disease as the `Hscale` blindness below; same cure.
 
 **The junction reference is tolerance-ordered, not solver-named.** What makes
 `ode89` @1e-12 a valid reference is that it is a hundred times tighter than the
@@ -761,9 +776,25 @@ definition; three tests assert only that it exists and passes through
 `vehicle_hgv` unchanged.
 
 Both chain scripts print `(PLACEHOLDER values)` on the vehicle and booster lines
-of their own summaries, so the caveat travels with the output. `test_constThrust`
-pins all of them exactly (lines 50–56) — those pins are what stands between a
-mistyped constant and a suite that still reports green.
+of their own summaries, so the caveat travels with the output.
+
+**What is actually pinned — corrected 2026-08-07.** An earlier version of this
+section said `test_constThrust` "pins all of them exactly (lines 50–56)". It did
+not: that span holds **seven** assertions covering the five `boosterDefaults`
+mass and propulsion fields plus the 900 kg payload mass and `g0` — seven of the
+eighteen values in the table above. Two gaps have since been closed and the rest
+are stated honestly here:
+
+| Values | Pinned where |
+|---|---|
+| `boosterDefaults` `massDry`, `massProp`, `thrustVac`, `Isp`, `Aexit`; payload `mass`; `g0` | `test_constThrust.m:50-56`, exact equality — seven pins |
+| `boosterDefaults` `Sref`, `CL`, `LD`, plus the derived `CD = 0.20` | `test_constThrust.m`, own block immediately below — **added 2026-08-07.** Nothing in that file's hand arithmetic touches the triple, so every other check there stayed green at any positive values, while these three drive the 62.8 % range swing measured above |
+| `vehicleDefaults` `Sref`, `CL`, `LD` | `test_runGlide.m`, exact equality — **added 2026-08-07.** `test_equilibriumGlide` builds its closed-form `Veq(r)` from these very fields, so they cancel between model and reference and it cannot see them. Same disease as the `Hscale` blindness below; same cure |
+| `vehicle_bm` `mass`, `Sref`, `CL`, `LD` | `test_runBallistic.m` — **jointly, not one by one**, and deliberately so. `mass` is tied to the pinned 900 kg payload, the derived `CD = CL/LD = 0.25` is pinned at 1e-12, and the ballistic coefficient `mass/(CD·Sref) = 9350.649350649351 kg/m²` at 1e-9. Every combination the equations of motion read is anchored; the split of a fixed `CD` between `CL` and `LD` is not, and no trajectory can see it |
+| `noseRadius`, both files | **Not pinned, deliberately** — no physics routine reads it. The tests assert only that it exists, is positive, and passes through `vehicle_hgv` unchanged |
+
+Those pins are what stands between a mistyped constant and a suite that still
+reports green.
 
 Two artefacts of the placeholder motor are worth naming so they are not read as
 physics. It is constant-thrust and does not throttle, so the sensed load climbs
@@ -825,9 +856,12 @@ from `veh.CL`, never back out of the aero model).
   physics; four measured thrust mutations survived the whole suite before the
   force-increment check existed, tabulated in that entry.
 - **Tsiolkovsky is blind to every booster constant.** `Isp`, `g0`, `thrustVac`
-  and the mass ratio all cancel between propagation and closed form. Six exact
-  pins in `test_constThrust.m` are the entire defence — the `Hscale` lesson,
-  applied to a second set of constants before it could bite.
+  and the mass ratio all cancel between propagation and closed form. **Seven**
+  exact pins in `test_constThrust.m` are the entire defence — the `Hscale`
+  lesson, applied to a second set of constants before it could bite. It was
+  applied incompletely: the booster's *aerodynamic* triple went unpinned until
+  2026-08-07, and it is not blind to Tsiolkovsky so much as absent from it. See
+  [Placeholder parameters](#placeholder-parameters) for the corrected coverage.
 
 The diagnostic is the same one in all four cases: **what would have to be wrong
 for this number to move?**

@@ -5,7 +5,8 @@
 > ## ⚠ READ THIS FIRST — this document is a pre-implementation spec
 >
 > Everything below §0 was written **before** the code existed and has **not**
-> been revised to match it. Fifteen specific statements in it are now false:
+> been revised to match it. Twenty-one specific statements in it are now false
+> — fifteen catalogued when §10 shipped, plus the six §11.3 adds:
 > files that were never written, tolerances that were relaxed or replaced,
 > validation checks that were delivered as something else. Taking any of it as
 > a description of the shipped library will mislead you.
@@ -389,6 +390,7 @@ Every entry was checked against the code on 2026-08-07.
 | §10.3: "Boost is out of scope for this milestone, so it lives nowhere. The reasoning still holds for when it arrives." | Boost now lives in `+coorbital/+eom/boost3DOF.m` in the common library, as §2 intended. Both `BM/` and `HGV/` use it. |
 | §10.3: "`stateConvert` does not exist... A boost phase carrying mass in a Cartesian state is what will force `stateConvert` to be written." | **The prediction was wrong and `stateConvert` will not be written.** See §11.2 — this is the milestone's one genuine design change. |
 | §10.2: "`+util/` contains `missileConst.m`, `vehicleDefaults.m` and `greatCircle.m`" | Add **`boosterDefaults.m`**. Still no `stateConvert.m`. |
+| §10.3: "§7: '`if nargin == 0` self-demo in every library function' — **Eight of the ten** library functions have one. **`missileConst` and `vehicleDefaults` do not**… This is a ruled exception, not an oversight." | **Both counts have moved and there is now a THIRD exception.** Counted against the code on 2026-08-07: **17 library functions under `+coorbital/`, 14 of them with a self-demo, and three ruled exceptions — `missileConst`, `vehicleDefaults` and now `boosterDefaults`.** The reasoning is unchanged and now covers all three: each is a pure constant return whose entire content is visible in its header, so a demo would print back what the reader is already looking at. `README.md` ("Conventions") states this correctly; §10's "eight of ten, two exceptions" was the true count on 2026-08-06 and is left standing as that dated record, not corrected in place. |
 
 Unchanged from §10 and still true: there is no `+viz/` package, no
 `hgv_dynamics_note.tex` or `software_design.tex`, no `ICBM/` folder, no
@@ -488,4 +490,4 @@ existing checks could not see.
 |---|---|
 | **Package name** | Resolved 2026-08-06: `+coorbital`. Unchanged. |
 | **Repository** | §10.5 corrected the spec's claim that nothing syncs to GitHub: `optimal_control` **does** have a remote, `git@github.com:mcasey90277/optimal_control.git`. Still true, and now more consequential — this milestone adds booster performance parameters. They are all marked open-literature placeholders today, but the assumption written into the spec is wrong and must not be relied on when real numbers arrive. |
-| **Vehicle parameters** | **Still open, and now larger.** `boosterDefaults` adds five more PLACEHOLDER values (`massDry`, `massProp`, `thrustVac`, `Isp`, `Aexit`) and `vehicle_bm` adds a fourth vehicle parameter set. All are pinned exactly in `test_constThrust.m:50-56`, so retuning them fails loudly and says why rather than quietly changing every trajectory in the documentation. Both chain scripts print `(PLACEHOLDER values)` in their own summaries so the caveat travels with the output. |
+| **Vehicle parameters** | **Still open, and now larger.** `boosterDefaults` adds **eight** more PLACEHOLDER values — the five mass and propulsion fields (`massDry`, `massProp`, `thrustVac`, `Isp`, `Aexit`) **and the boosted-stack aerodynamic triple `Sref`, `CL`, `LD`**, which is not bookkeeping: it sets the stack's drag through the whole ascent and, with `separation = false`, the airframe for the entire unpowered flight. `vehicle_bm` adds a fourth vehicle parameter set. **Pinning, corrected 2026-08-07:** the five propulsion and mass fields are pinned exactly at `test_constThrust.m:50-56` (seven assertions, counting the 900 kg payload and `g0`); the aerodynamic triple was **not** pinned anywhere when this section was first written and now is, in its own block immediately below them, together with the derived `CD = 0.20`. `vehicleDefaults`' `Sref`, `CL` and `LD` are pinned in `test_runGlide`. Retuning any of these now fails loudly and says why rather than quietly changing every trajectory in the documentation. Both chain scripts print `(PLACEHOLDER values)` in their own summaries so the caveat travels with the output. |

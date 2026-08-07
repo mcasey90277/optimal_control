@@ -3,13 +3,15 @@ function [value,isterminal,direction] = eventAltitude(t,x,hStop)
 %
 %  ODE event that fires when the vehicle descends through a given altitude.
 %  Terminal and one-sided, so a climbing trajectory passing the same altitude
-%  does not stop the integration.
+%  does not stop the integration. Works on any state whose first component is
+%  the geocentric radius, six-state glide or seven-state boost alike, since
+%  only x(1) is read.
 %
 %% Inputs:
 %
 %  t                scalar                      Time (s). Unused.
 %
-%  x                [6 x 1]                     Glide state; uses x(1) = r
+%  x                [>=1 x 1]                   State; uses x(1) = r
 %
 %  hStop            scalar                      Altitude to stop at (m)
 %

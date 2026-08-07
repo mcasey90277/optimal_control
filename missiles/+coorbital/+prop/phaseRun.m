@@ -22,7 +22,12 @@ function traj = phaseRun(phases,x0,veh,env)
 %  veh              Struct                      Vehicle parameters
 %
 %  env              Struct                      Environment model handles:
-%                                               atmos, grav, aero, omegaE.
+%                                               atmos, grav, aero, omegaE, and
+%                                               prop for any POWERED phase.
+%                                               prop is read only by
+%                                               coorbital.eom.boost3DOF; an
+%                                               unpowered chain may omit it and
+%                                               glide3DOF ignores it if present.
 %                                               Optional odeRelTol and
 %                                               odeAbsTol override the ode45
 %                                               tolerances, default 1e-10 each

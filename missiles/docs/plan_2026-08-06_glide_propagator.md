@@ -33,7 +33,7 @@
 | `+coorbital/+atmos/expAtmos.m` | Isothermal exponential atmosphere: density, pressure, temperature, sound speed |
 | `+coorbital/+grav/sphereGrav.m` | Point-mass gravity, returns radial and latitudinal components |
 | `+coorbital/+aero/constLD.m` | Constant-CL, constant-L/D aerodynamics |
-| `+coorbital/+util/vehicleDefaults.m` | Vehicle parameter struct with validation |
+| `+coorbital/+util/vehicleDefaults.m` | Vehicle parameter struct; placeholder open-literature values |
 | `+coorbital/+eom/glide3DOF.m` | The 6-state glide equations of motion |
 | `+coorbital/+prop/eventAltitude.m` | ODE event: altitude crossing |
 | `+coorbital/+prop/phaseRun.m` | Multi-phase integration driver |

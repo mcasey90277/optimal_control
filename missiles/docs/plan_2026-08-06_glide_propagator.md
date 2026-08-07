@@ -20,6 +20,7 @@
 - Every library function lives in `missiles/+coorbital/+<subpkg>/`, one function per file, file name equal to function name, called by full namespace.
 - Author line in every header: `Michael Casey` with the current date, then `Copyright 2026 Coorbital, Inc.`
 - **On pumpkyn reuse:** the spec's §3 lists frame conversions (`LLA2ECEF`, `ECItoECEF`, …) as reusable. Phase 1 does not call them: the glide state carries geocentric latitude/longitude directly and never leaves that frame, so there is nothing to convert. They become load-bearing at geodetic altitude and ECI trajectory export, both out of scope here. `pumpkyn.util.vmag` is likewise unused because no 3-vector norms appear in the 6-state EOM. Do not add pumpkyn calls that serve no purpose just to satisfy §3.
+- **No lint-suppression pragmas.** Never write `%#ok<NASGU>`, `%#ok<AGROW>`, `%#ok<*ANY>`, or any other `%#ok` directive — humans do not write them and they hide real problems. If a variable is unused, delete it or capture it with `~`. If a loop grows an array, preallocate it.
 - Run MATLAB headlessly as: `/Applications/MATLAB_R2025b.app/bin/matlab -batch "cd('/Users/msc/Desktop/optimal_control/missiles'); <command>" 2>&1 | grep -vE "Home License|personal use|academic, research|organizational use"`
 
 ---

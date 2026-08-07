@@ -51,14 +51,32 @@ function test_boost3DOF()
 %
 %% Note -- the trap check 3 does not escape:
 %
-%  Isp and g0 appear on both sides of the Tsiolkovsky comparison -- inside
-%  constThrust's mdot = thrustVac/(Isp*g0) on the simulation side, and inside
-%  the closed form Isp*g0*log(mass ratio) on the reference side -- so they
-%  CANCEL. A wrong Isp is invisible to this test at any tolerance. This is
-%  exactly the shared-constant blindness recorded in docs/LESSONS_LEARNED.md
-%  for Hscale, and the only defence is the same one: pin the constant where
-%  it is defined. Isp is pinned to 260 s in test_constThrust, and g0 is
-%  pinned in test_missileConst. Those pins are load-bearing for this file.
+%  Check 3 is blind to EVERY BOOSTER CONSTANT, not merely to Isp. Take them
+%  in turn:
+%
+%    Isp and g0 appear on both sides -- inside constThrust's
+%    mdot = thrustVac/(Isp*g0) on the simulation side, and inside the closed
+%    form Isp*g0*log(mass ratio) on the reference side -- so they cancel.
+%
+%    thrustVac cancels for the same reason. In vacuum with alpha = 0 the
+%    whole speed equation is dV/dt = T/m with T = thrustVac, so the
+%    propagated result is (thrustVac/mdot)*log(mass ratio); substituting
+%    mdot = thrustVac/(Isp*g0) removes thrustVac entirely. Doubling the
+%    thrust halves the burn time and leaves the delta-V untouched.
+%
+%    The mass ratio cancels too. The propagation STARTS at mLiftoff and
+%    TERMINATES on an event set to mBurnout, and the reference is built from
+%    the same veh.mass, bst.massDry and bst.massProp. A wrong propellant load
+%    moves both sides identically.
+%
+%  So this check validates the SHAPE of the rocket equation -- that the
+%  integral of T/m really is an exhaust speed times a log mass ratio -- and
+%  nothing about the numbers fed into it. This is exactly the shared-constant
+%  blindness recorded in docs/LESSONS_LEARNED.md for Hscale, and the only
+%  defence is the same one: pin each constant where it is defined.
+%  test_constThrust pins Isp to 260 s, thrustVac to 950000 N, massDry to
+%  1500 kg and massProp to 30000 kg; test_missileConst pins g0. ALL of those
+%  pins are load-bearing for this file.
 %
 %% Note -- provenance of the reference values:
 %
@@ -323,4 +341,97 @@ end
     assert(abs((mLine(1) - mLine(end)) - bst.massProp) < 1e-3, ...
         ['the analytic line spans %.6f kg over the recorded burn against a ' ...
          'propellant budget of %.1f kg'],mLine(1) - mLine(end),bst.massProp);
+
+%% =========================================================================
+%% GUARDS -- each singular state must fail loudly with the documented error
+%% identifier, not silently return NaN or fall through with no error. Same
+%% pattern as test_glide3DOF, extended to massDepleted, which is unique to
+%% the powered equations: it is the guard that stops a negative mass state
+%% from inverting every acceleration instead of merely scaling it, and it
+%% fires in practice, not just in principle.
+%%
+%% The environment carries a live engine so a guard cannot be reached by way
+%% of a dead one, and the base state is nonsingular in every channel except
+%% the one each case perturbs:
+%% =========================================================================
+      envGrd.atmos = @coorbital.atmos.expAtmos;
+       envGrd.grav = @coorbital.grav.sphereGrav;
+       envGrd.aero = @coorbital.aero.constLD;
+       envGrd.prop = @coorbital.prop.constThrust;
+     envGrd.omegaE = c.omegaE;
+              uGrd = deg2rad([8; 35]);
+              xGrd = [c.rE + 20e3; 0; 0; 1500; deg2rad(48); deg2rad(115); 21000];
+
+%% The base state must itself be clean, or a guard case could throw for the
+%% wrong reason and still look like a pass:
+              dGrd = coorbital.eom.boost3DOF(0,xGrd,uGrd,bst,envGrd);
+    assert(all(isfinite(dGrd)), ...
+        'the guard base state must evaluate cleanly before it is perturbed');
+
+%% Longitude rate is singular at the pole:
+             xPole = xGrd;
+          xPole(3) = pi/2;
+         threwPole = false;
+    try
+        coorbital.eom.boost3DOF(0,xPole,uGrd,bst,envGrd);
+    catch errPole
+         threwPole = true;
+        assert(strcmp(errPole.identifier,'coorbital:boost3DOF:polarSingularity'), ...
+            'wrong error identifier at the pole: %s',errPole.identifier);
+    end
+    assert(threwPole,'boost3DOF must throw at the pole (lat = pi/2)');
+
+%% Heading rate is singular in vertical flight:
+             xVert = xGrd;
+          xVert(5) = pi/2;
+         threwVert = false;
+    try
+        coorbital.eom.boost3DOF(0,xVert,uGrd,bst,envGrd);
+    catch errVert
+         threwVert = true;
+        assert(strcmp(errVert.identifier,'coorbital:boost3DOF:verticalFlight'), ...
+            'wrong error identifier in vertical flight: %s',errVert.identifier);
+    end
+    assert(threwVert,'boost3DOF must throw at gamma = pi/2');
+
+%% The equations are singular as the speed approaches zero:
+             xSlow = xGrd;
+          xSlow(4) = 0.5;
+         threwSlow = false;
+    try
+        coorbital.eom.boost3DOF(0,xSlow,uGrd,bst,envGrd);
+    catch errSlow
+         threwSlow = true;
+        assert(strcmp(errSlow.identifier,'coorbital:boost3DOF:zeroSpeed'), ...
+            'wrong error identifier at low speed: %s',errSlow.identifier);
+    end
+    assert(threwSlow,'boost3DOF must throw below V = 1 m/s');
+
+%% A non-positive mass state would invert every acceleration denominator,
+%% turning thrust into a retarding force rather than merely a large one:
+             xDead = xGrd;
+          xDead(7) = -1;
+         threwDead = false;
+    try
+        coorbital.eom.boost3DOF(0,xDead,uGrd,bst,envGrd);
+    catch errDead
+         threwDead = true;
+        assert(strcmp(errDead.identifier,'coorbital:boost3DOF:massDepleted'), ...
+            'wrong error identifier at negative mass: %s',errDead.identifier);
+    end
+    assert(threwDead,'boost3DOF must throw at a negative mass state');
+
+%% Zero mass is the boundary case and the guard is written <=, so it must
+%% throw there too, not divide by zero and return Inf:
+             xZero = xGrd;
+          xZero(7) = 0;
+         threwZero = false;
+    try
+        coorbital.eom.boost3DOF(0,xZero,uGrd,bst,envGrd);
+    catch errZero
+         threwZero = true;
+        assert(strcmp(errZero.identifier,'coorbital:boost3DOF:massDepleted'), ...
+            'wrong error identifier at zero mass: %s',errZero.identifier);
+    end
+    assert(threwZero,'boost3DOF must throw at a zero mass state');
 end

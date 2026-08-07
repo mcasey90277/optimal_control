@@ -160,17 +160,24 @@ function test_rangeSolve()
         xSol,fAch);
 
 %% A named identifier the caller can rethrow, and a message that states BOTH
-%% bracket values and BOTH achieved values so a user sees the band at once:
+%% bracket values and BOTH achieved values so a user sees the band at once.
+%%
+%% The numbers are matched IN CONTEXT, as the phrases they sit in. Searching
+%% the message for a bare '2' or '3' would be very nearly vacuous: those
+%% digits occur incidentally inside the target value 1000, inside a %g
+%% exponent, and inside almost any other number the message happens to
+%% carry, so such an assertion would pass against a message that named none
+%% of the four quantities it is supposed to name:
     assert(strcmp(info.identifier,'coorbital:rangeSolve:targetOutsideBracket'), ...
         'wrong refusal identifier: %s',info.identifier);
-    assert(contains(info.message,sprintf('%.6g',0)), ...
-        'the refusal message does not state the lower bracket value: %s',info.message);
-    assert(contains(info.message,sprintf('%.6g',3)), ...
-        'the refusal message does not state the upper bracket value: %s',info.message);
-    assert(contains(info.message,sprintf('%.6g',2)), ...
-        'the refusal message does not state the lower achieved value: %s',info.message);
-    assert(contains(info.message,sprintf('%.6g',29)), ...
-        'the refusal message does not state the upper achieved value: %s',info.message);
+    assert(contains(info.message,'x = 0 and x = 3'), ...
+        'the refusal message does not state both bracket values: %s',info.message);
+    assert(contains(info.message,'achieves 2 and 29'), ...
+        'the refusal message does not state both achieved values: %s',info.message);
+    assert(contains(info.message,'2 to 29 is reachable'), ...
+        'the refusal message does not state the achievable band: %s',info.message);
+    assert(contains(info.message,'1000'), ...
+        'the refusal message does not state the target that was refused: %s',info.message);
 
 %% Only the two endpoints were worth evaluating; there is nothing to bisect:
     assert(info.nEval == 2, ...
@@ -228,6 +235,65 @@ function test_rangeSolve()
     [xSol,~,info] = coorbital.util.rangeSolve(20,fLin,0,8,1e-9);
     assert(info.converged && xSol == 8, ...
         'exact endpoint on the decreasing function wrong: x=%.17g',xSol);
+
+%% -------------------------------------------------------------------
+%% Bracketed, but the tolerance is unreachable
+%% -------------------------------------------------------------------
+%% The third way a solve can end, and the one the other cases do not reach:
+%% the endpoints DO straddle the target, so this is not an out-of-band
+%% refusal, but no x exists at which the achieved value comes within tolF.
+%%
+%%      fStep(x) = 2 + 27*(x >= 2)
+%%
+%% jumps straight from 2 to 29 at x = 2 and takes the value 10 nowhere.
+%% fStep(0) = 2 is below the target and fStep(3) = 29 is above it, so the
+%% bracket looks perfectly healthy and the solver bisects. It drives the
+%% bracket down onto the discontinuity at x = 2 and stops when the interval
+%% reaches the floating-point spacing there, having achieved 2 and not 10.
+%%
+%% This is not a contrived case. It is what a real fRange looks like when
+%% tolF is finer than the propagation's own repeatability: the achieved
+%% value stops responding to the parameter before the tolerance is met.
+%%
+%% The converged FLAG is the thing under test here. It is the entire guard
+%% behind "never a silent nearest miss" -- an entry script reads it to decide
+%% whether to fly the answer or refuse -- and every other case in this file
+%% exercises only the paths where it is true or where the endpoints never
+%% straddled at all:
+             fStep = @(x) 2 + 27*(x >= 2);
+    [xSol,fAch,info] = coorbital.util.rangeSolve(10,fStep,0,3,1e-9);
+    assert(~info.converged, ...
+        ['a solve that never came within tolF reported converged = true. ', ...
+         'It returned x = %.17g achieving %.17g against a target of 10.'], ...
+        xSol,fAch);
+    assert(abs(fAch - 10) > 1e-9, ...
+        ['reference check: this case is only meaningful if the tolerance ', ...
+         'really was missed, and the residual came out %.17g'],abs(fAch - 10));
+    assert(strcmp(info.identifier,'coorbital:rangeSolve:toleranceNotMet'), ...
+        'wrong identifier on the unreachable-tolerance path: ''%s''',info.identifier);
+    assert(contains(info.message,'Failed to reach'), ...
+        'the unreachable-tolerance message must say so plainly: %s',info.message);
+
+%% It really did bisect rather than bail out at the endpoints, which is what
+%% separates this path from the out-of-band refusal above:
+    assert(info.iterations > 10, ...
+        'the unreachable-tolerance case should have bisected, took %d iterations', ...
+        info.iterations);
+    assert(info.nEval == info.iterations + 2, ...
+        'evaluation accounting broke on the unreachable-tolerance path: %d vs %d + 2', ...
+        info.nEval,info.iterations);
+
+%% And it stopped on the collapsed bracket rather than grinding to the
+%% iteration cap, which is the difference between a solver that gives up
+%% cheaply and one that burns 200 trajectory propagations to say nothing:
+    assert(info.iterations < 100, ...
+        ['the solver should stop once the bracket collapses, not run to the ', ...
+         'iteration cap; it took %d iterations'],info.iterations);
+
+%% The band is still reported, because the caller still wants it:
+    assert(info.fMin == 2 && info.fMax == 29, ...
+        'the band must be reported on the unreachable-tolerance path too: [%.17g,%.17g]', ...
+        info.fMin,info.fMax);
 
 %% -------------------------------------------------------------------
 %% An inverted or degenerate bracket is an error, not a refusal

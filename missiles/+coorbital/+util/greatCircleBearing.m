@@ -42,15 +42,36 @@ function psi0 = greatCircleBearing(lat1,lon1,lat2,lon2)
 %  118.41 W to New York at 40.64 N 73.78 W: the outbound course is 65.867 deg
 %  and the return course is 273.841 deg, whereas reversing the outbound
 %  course would give 245.867 deg. The 27.974 deg discrepancy is the whole
-%  point. An implementation with lat1 and lat2 transposed reproduces all four
-%  cardinal directions correctly and only shows itself on a case like this.
+%  point.
+%
+%  That discrepancy is NOT, however, a way to detect a lat1/lat2
+%  transposition, and it is worth being precise about why, because the
+%  natural assumption is the opposite. Exchanging lat1 with lat2 inside the
+%  formula moves BOTH courses -- LAX-JFK becomes 86.159 deg and JFK-LAX
+%  becomes 294.133 deg -- and leaves their difference at exactly the same
+%  27.974 deg. What a transposition does break is the meridional cardinals
+%  and the absolute courses: due north comes back as pi and due south as
+%  zero, the two east-west cardinals survive, and every general-position
+%  course is wrong. So the things to assert against are absolute bearings on
+%  a near-meridional leg, not the reverse-course offset.
 %
 %  Coincident points have no arc and no course. atan2(0,0) is defined as
 %  zero, so a point to itself returns zero rather than NaN. That keeps a
 %  degenerate user input from poisoning a state vector, but zero is a
 %  convention here, not an answer.
 %
-%  The poles are the other degenerate case. At exactly the north pole every
+%  Antipodal points are degenerate in the opposite way: EVERY great circle
+%  joins them, so there is no unique initial course and the returned value is
+%  an artifact of how the two vanishing terms round. From (0,0) to (0,pi)
+%  this returns exactly 90 deg -- the numerator is sin(pi), which is 1.22e-16
+%  rather than zero, and the denominator is a true zero. Nudge either
+%  latitude by 1e-9 rad and the answer swings the whole way across: +1e-9
+%  gives 7.02e-6 deg and -1e-9 gives 179.99999 deg. The value is not wrong,
+%  because there is no right answer, but a caller must not treat a bearing
+%  near the antipode as meaningful. The companion coorbital.util.greatCircle
+%  degrades gracefully there; this function does not, and cannot.
+%
+%  The poles are the third degenerate case. At exactly the north pole every
 %  direction is south and the returned value is whatever the limit of the
 %  atan2 expression happens to be along the approach; it is not meaningful.
 %

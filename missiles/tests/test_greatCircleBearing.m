@@ -103,9 +103,12 @@ function test_greatCircleBearing()
 %% Turning the outbound course through 180 deg gives 245.867 deg, which is
 %% 27.974 deg away from the true return course of 273.841 deg. The two are
 %% not reverses of one another and must not be treated as such. A reader who
-%% assumes bearing(B,A) = bearing(A,B) + pi, or an implementation that has
-%% swapped lat1 with lat2, lands on 245.867 deg and is wrong by that same 28
-%% deg -- which over a 3979 km leg is roughly a 1900 km cross-range miss.
+%% assumes bearing(B,A) = bearing(A,B) + pi lands on 245.867 deg and is wrong
+%% by that same 28 deg -- which over a 3979 km leg is roughly a 1900 km
+%% cross-range miss. An implementation with lat1 and lat2 swapped is a
+%% DIFFERENT failure and lands somewhere else again, on 294.133 deg; that one
+%% is caught by the absolute-course assertions, not by the offset, for the
+%% reason set out below.
 %%
 %% The physical reason is that the LAX-JFK arc is neither a meridian nor the
 %% equator, so it meets the local meridian at a different angle at each end.

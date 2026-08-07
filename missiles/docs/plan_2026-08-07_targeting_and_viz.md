@@ -129,6 +129,8 @@ This package was in the design spec from the first milestone and was deferred tw
 **Interfaces produced:** each takes `(traj,veh,env)` plus an options struct and returns a figure handle. They must not call `figure` implicitly when handed a target axes — accept an optional `'Parent'` so a caller can compose.
 
 - [ ] **Step 1: Read the inline plotting in all three entry scripts** — `run_glide.m`, `run_ballistic.m`, `run_boost_glide.m`. Record in your report what is genuinely common and what is script-specific. Extract only the common part; do not force a shared abstraction over things that legitimately differ.
+
+**CORRECTION established during execution:** this plan originally illustrated that warning by claiming `run_ballistic` plots a coast arc and `run_boost_glide` plots a counterfactual glide. Neither is true — both trajectories are computed and feed printed numbers only; they were never plotted. The warning stands on its own, but that example was wrong.
 - [ ] **Step 2: Write the tests**
 
 Plotting tests are mostly smoke tests, so make them earn their place: assert the figure has the expected number of axes, that every axis has non-empty `XLabel`, `YLabel` and `Title` strings, that units appear in the label text, that the data plotted matches `traj` (compare `XData`/`YData` of the primary line against the trajectory arrays), and that the ground track marks launch, target and impact. A plot test that only checks "no error was thrown" is worth little; these must check the figure says what it claims.

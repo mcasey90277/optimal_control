@@ -3,6 +3,68 @@
 Running log. Newest entries at the top. Record what broke, what fixed it, and
 what a future reader would otherwise rediscover the hard way.
 
+## 2026-08-07 — A reduction test validates only the terms that survive the reduction
+
+State it in the general form:
+
+> **A reduction test validates only the terms that SURVIVE the reduction.** Every
+> term the reduction switches off is, by construction, invisible to it. And in
+> its sharper form: **a BIT-EXACT reduction proves identity while providing zero
+> evidence of correctness.** If the residual is exactly zero because the two
+> routines evaluate character-identical expressions in the same order, then the
+> check has confirmed that one file is a faithful copy of the other — and
+> nothing whatever about whether either is right. Any error in the reference
+> implementation is inherited and cancels invisibly.
+
+This is the same disease as the shared-constant blindness recorded in the
+2026-08-06 entry below, seen from the other side. There the shared object is a
+*constant* that appears on both sides of a comparison and cancels; here it is a
+whole *expression*. In both cases the tolerance is irrelevant: no tightening
+recovers a sensitivity that is identically zero. Ask of any test that comes in
+suspiciously clean: what would have to be wrong for this number to move?
+
+Measured on `boost3DOF` reducing to `glide3DOF` with `env.prop` returning a dead
+engine. Residual 0.000e+00 on all four states, `isequal` true, rotating and
+non-rotating branches alike. That is a genuinely strong *structural* result —
+transcription drift into the six shared equations is impossible — but the
+mutation table shows exactly how much of the new physics it leaves uncovered:
+
+| Mutation in `boost3DOF` | Reduction to glide | `test_boostEvents` | Force increment | Tsiolkovsky |
+|---|---|---|---|---|
+| thrust denominator frozen at liftoff mass | passes | passes | **fails, 35.2 % / 78.4 %** | **fails, 64.4 %** |
+| `T*cos(alpha)` → `T` in `dV/dt` | passes | passes | **fails, 9.83e-3 rel** | passes (`alpha = 0` there) |
+| `cos(sigma)` ↔ `sin(sigma)` on the thrust normal terms | passes | passes | **fails, 30.0 %** | passes |
+| `dm/dt` sign flip | passes | **fails** | **fails, 2.00 rel** | — |
+
+Three of the four mutations live entirely inside terms the reduction annihilates,
+so the reduction cannot see any of them, and neither can an event test that only
+watches the mass channel. The check that covers them is the **force increment**:
+evaluate the same state twice with only the propulsion model changed, and require
+the difference to equal the closed-form thrust projection. Because every shared
+model is bit-identical across the two calls, the difference isolates the new
+terms exactly, and it measures at 3.6e-16 relative in the clean case — the
+sharpest instrument in the suite.
+
+Two design rules follow, both learned by measurement:
+
+- **Excite every coefficient you mean to test.** A zero angle of attack cannot
+  distinguish `T cos(alpha)` from `T`; a zero bank angle cannot distinguish the
+  flight-path channel from the heading channel. Choose states where no
+  trigonometric factor is 1, 0, or equal to its partner, and *assert* that
+  choice in the test so a later edit cannot quietly make the check vacuous.
+- **Make the state disagree with the parameters.** Set the state mass to a value
+  equal to no field, and no sum of fields, in either parameter struct. That is
+  what turns "used the wrong mass" from a silent bug into a failing assertion.
+
+A footnote on mutation design. The literal substitution of `veh.mass` for `x(7)`
+is not runnable here: the boost phase is flown with `boosterDefaults`, which has
+no `mass` field at all, so the mutant dies with `Unrecognized field name "mass"`
+rather than producing a wrong number. That is a *loud* failure, and loud failures
+are not what a mutation study is for. Freezing the denominator at a numeric
+constant is the faithful mutant — it is what the bug would actually look like —
+and it is the one that reveals the coverage gap. When a proposed mutation cannot
+compile or cannot run, it has not proved the test bites; find the silent form.
+
 ## 2026-08-06 — An analytic test can never validate a constant it shares with the model
 
 State it in the general form, because it is the most transferable thing this

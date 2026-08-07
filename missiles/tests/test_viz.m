@@ -413,7 +413,186 @@ function test_viz()
     close(hFigG1);
 
 %% ---------------------------------------------------------------------
-%% 12. 'Parent' composes instead of creating
+%% 12. globeMovie -- a movie of the trajectory DEVELOPING
+%% ---------------------------------------------------------------------
+%% The one assertion that distinguishes a movie of a growing trajectory from a
+%% static arc spun on a turntable: the track drawn in an INTERMEDIATE frame
+%% must be the trajectory TRUNCATED at that frame's time, and the track drawn
+%% in the FINAL frame must be the whole of it. Both are compared against the
+%% same xWant/yWant/zWant arrays section 11 built by hand from traj, at the
+%% same exaggeration, so the movie and the still are held to one standard.
+%%
+%% The frames are reached through the FrameFcn hook, because everything a movie
+%% draws is deleted by the time it returns. grabFrame is nested inside this
+%% function so it can write into frmSeen:
+             nFrmT = 16;
+             kMidF = 8;
+            mvFile = [tempname '.mp4'];
+            frmSeen = cell(nFrmT,1);
+             nFigMv = numel(findall(groot,'Type','figure'));
+                mv = coorbital.viz.globeMovie(trjCha, ...
+                         struct('File',mvFile,'NFrame',nFrmT, ...
+                                'Size',[480 320],'AltScale',altSc, ...
+                                'SpinDeg',0,'Texture','plain','Sky','black', ...
+                                'PhaseName',{{'boost','glide','descent'}}, ...
+                                'FrameFcn',@grabFrame));
+
+%% The file exists, is not empty, and says what it is:
+    assert(isfile(mv.file),'globeMovie reported "%s", which is not a file.',mv.file);
+             mvInf = dir(mv.file);
+    assert(mvInf.bytes > 0,'globeMovie wrote a zero-byte file.');
+    assert(strcmp(mv.file,mvFile), ...
+        'globeMovie wrote "%s" against the requested "%s".',mv.file,mvFile);
+
+%% The frame count is the count that was asked for, and the frames were really
+%% rendered rather than merely counted:
+    assert(mv.nFrame == nFrmT, ...
+        'globeMovie reports %d frames against the %d requested.',mv.nFrame,nFrmT);
+    assert(numel(mv.frameIdx) == nFrmT, ...
+        'mv.frameIdx holds %d entries for %d frames.',numel(mv.frameIdx),nFrmT);
+    assert(sum(~cellfun(@isempty,frmSeen)) == nFrmT, ...
+        'the per-frame hook fired %d times for %d frames.', ...
+        sum(~cellfun(@isempty,frmSeen)),nFrmT);
+
+%% MPEG-4 needs both dimensions even, and a frame size that is not is a file
+%% that will not open. Pinned, because the cropping that guarantees it is easy
+%% to lose in a refactor:
+    assert(all(mod(mv.frameSize,2) == 0), ...
+        'globeMovie wrote %d x %d frames; MPEG-4 needs both dimensions even.', ...
+        mv.frameSize(1),mv.frameSize(2));
+
+%% Which SAMPLE each frame shows, recomputed here from the documented rule --
+%% the last sample at or before a uniform walk in TIME -- rather than read back
+%% from the function:
+              tFrm = linspace(trjCha.t(1),trjCha.t(end),nFrmT)';
+            idxWnt = zeros(nFrmT,1);
+    for kf = 1:nFrmT
+         idxWnt(kf) = find(trjCha.t <= tFrm(kf),1,'last');
+    end
+    assertSeries(mv.frameIdx,idxWnt,'globeMovie frame sample indices');
+    assert(idxWnt(1) == 1 && idxWnt(end) == numel(trjCha.t), ...
+        ['the movie must open on the first sample and close on the last; it ' ...
+         'opens on %d and closes on %d of %d.'], ...
+        idxWnt(1),idxWnt(end),numel(trjCha.t));
+
+%% The intermediate frame must be a PROPER truncation, or the comparison below
+%% cannot tell a growing track from a static one:
+              kEndM = idxWnt(kMidF);
+    assert(kEndM > 1 && kEndM < numel(trjCha.t), ...
+        ['frame %d shows sample %d of %d; an intermediate frame that is the ' ...
+         'first or the last sample proves nothing about growth.'], ...
+        kMidF,kEndM,numel(trjCha.t));
+
+%% THE ASSERTION. Final frame against the whole trajectory, intermediate frame
+%% against the trajectory truncated at its own time:
+    assertGrownTrack(frmSeen{nFrmT},trjCha.phaseIdx,phList, ...
+        numel(trjCha.t),xWant,yWant,zWant,'final');
+    assertGrownTrack(frmSeen{kMidF},trjCha.phaseIdx,phList, ...
+        kEndM,xWant,yWant,zWant,'intermediate');
+
+%% ...and the two frames really are different pictures. Without this a function
+%% that drew the full arc every frame would have to fail the truncation check
+%% above, but a function that drew NOTHING would sail through both:
+             nPtsM = sum(cellfun(@(m) size(m,1),frmSeen{kMidF}.xyz));
+             nPtsF = sum(cellfun(@(m) size(m,1),frmSeen{nFrmT}.xyz));
+    assert(nPtsM > 0 && nPtsM < nPtsF, ...
+        ['the intermediate frame holds %d track points against the final ' ...
+         'frame''s %d; the track is not growing.'],nPtsM,nPtsF);
+
+%% The vehicle is marked at the sample the frame shows, and it MOVES:
+    assertSeries(frmSeen{kMidF}.veh(:),[xWant(kEndM);yWant(kEndM);zWant(kEndM)], ...
+        'globeMovie vehicle marker, intermediate frame (km)');
+    assertSeries(frmSeen{nFrmT}.veh(:),[xWant(end);yWant(end);zWant(end)], ...
+        'globeMovie vehicle marker, final frame (km)');
+
+%% The readout updates per frame, states its units, and names the phase the
+%% vehicle is actually in. A frozen annotation on a moving vehicle is worse
+%% than none, because a reader would believe it:
+            phNames = {'boost','glide','descent'};
+            altKmT  = (trjCha.x(:,1) - c.rE)./1000;
+    for kf = [kMidF nFrmT]
+              kEndK = idxWnt(kf);
+              hudTx = frmSeen{kf}.hud;
+        assert(contains(hudTx,sprintf('%.1f s',trjCha.t(kEndK))), ...
+            'frame %d readout "%s" does not state its time %.1f s, with the unit.', ...
+            kf,hudTx,trjCha.t(kEndK));
+        assert(contains(hudTx,sprintf('%.2f km',altKmT(kEndK))), ...
+            'frame %d readout "%s" does not state its altitude %.2f km, with the unit.', ...
+            kf,hudTx,altKmT(kEndK));
+        assertUnit(hudTx,phNames{trjCha.phaseIdx(kEndK)}, ...
+            sprintf('frame %d readout',kf));
+    end
+    assert(~strcmp(frmSeen{kMidF}.hud,frmSeen{nFrmT}.hud), ...
+        'the readout is identical in frames %d and %d; it is not updating.', ...
+        kMidF,nFrmT);
+
+%% The caption states the exaggeration. A movie whose vertical scale is thirty
+%% times its horizontal one and does not say so is the same lie a still figure
+%% would be telling, and section 11 holds globe3D to exactly this:
+             titMv = frmSeen{nFrmT}.tit;
+    assert(contains(titMv,'exaggerat') && contains(titMv,sprintf('%g',altSc)), ...
+        ['globeMovie was given AltScale = %g and its caption does not say so. ' ...
+         'Caption was "%s".'],altSc,titMv);
+
+%% The phases are drawn in DISTINGUISHABLE colours -- the whole reason the
+%% track is split into one line per phase rather than drawn as one polyline:
+              colF = frmSeen{nFrmT}.col;
+    for ka = 1:numel(colF)
+        for kb = ka+1:numel(colF)
+            assert(max(abs(colF{ka} - colF{kb})) > 0.1, ...
+                'globeMovie drew two phases in the same colour %s.', ...
+                mat2str(colF{ka},3));
+        end
+    end
+
+%% The planet is the SHARED renderer's, at the right radius. A movie that grew
+%% its own Earth would drift out of step with coorbital.viz.globe3D:
+    assert(frmSeen{nFrmT}.nEarth == 1, ...
+        'globeMovie drew %d Earth surfaces; expected exactly 1.', ...
+        frmSeen{nFrmT}.nEarth);
+    assert(abs(frmSeen{nFrmT}.rEarth - c.rE./1000) < 1e-6, ...
+        'the movie''s Earth has radius %.3f km against rE = %.3f km.', ...
+        frmSeen{nFrmT}.rEarth,c.rE./1000);
+
+%% No figure survives the call. A movie renders into a figure and must take it
+%% away with it, or a batch that writes twenty movies ends with twenty windows:
+    assert(numel(findall(groot,'Type','figure')) == nFigMv, ...
+        'globeMovie left %d figure(s) open.', ...
+        numel(findall(groot,'Type','figure')) - nFigMv);
+
+%% The test cleans up after itself: the repository must stay free of binaries:
+    delete(mvFile);
+    assert(~isfile(mvFile),'the test movie "%s" could not be deleted.',mvFile);
+
+%% ---------------------------------------------------------------------
+%% 13. globeMovie -- what it must REFUSE
+%% ---------------------------------------------------------------------
+%% All four are caught BEFORE a frame is rendered, which is the point: a movie
+%% that renders for ten minutes and then cannot be written has wasted ten
+%% minutes, and a one-frame movie is a still with a codec:
+    assertThrows(@() coorbital.viz.globeMovie(trjCha, ...
+        struct('File',[tempname '.avi'],'NFrame',4)),'an output that is not .mp4');
+    assertThrows(@() coorbital.viz.globeMovie(trjCha, ...
+        struct('File',fullfile(tempdir,'no_such_folder_here','m.mp4'),'NFrame',4)), ...
+        'an output folder that does not exist');
+    assertThrows(@() coorbital.viz.globeMovie(trjCha, ...
+        struct('File',[tempname '.mp4'],'NFrame',1)),'a one-frame movie');
+    assertThrows(@() coorbital.viz.globeMovie(trjCha, ...
+        struct('File',[tempname '.mp4'],'NFrame',4,'AltScale',-3)), ...
+        'a negative altitude exaggeration');
+
+%% ...and a misspelt Texture or Sky, because silently downgrading one would be
+%% indistinguishable from pumpkyn not being installed, which is the one thing
+%% the function's degradation note promises a reader can tell apart:
+    assertThrows(@() coorbital.viz.globeMovie(trjCha, ...
+        struct('File',[tempname '.mp4'],'NFrame',4,'Texture','atuo')), ...
+        'a misspelt Texture');
+    assertThrows(@() coorbital.viz.globeMovie(trjCha, ...
+        struct('File',[tempname '.mp4'],'NFrame',4,'Sky','starz')), ...
+        'a misspelt Sky');
+
+%% ---------------------------------------------------------------------
+%% 14. 'Parent' composes instead of creating
 %% ---------------------------------------------------------------------
 %% The whole point of the option: handed somewhere to draw, none of these may
 %% open a figure of their own. Counted, not assumed:
@@ -476,12 +655,70 @@ function test_viz()
     close(hHost5);
 
 %% ---------------------------------------------------------------------
-%% 13. No leaked figures
+%% 15. No leaked figures
 %% ---------------------------------------------------------------------
              nFig1 = numel(findall(groot,'Type','figure'));
     assert(nFig1 == nFig0, ...
         ['test_viz leaked %d figure(s); the suite must end with the %d it ' ...
          'started with.'],nFig1 - nFig0,nFig0);
+
+    function grabFrame(hAxF,kF)
+%% Purpose:
+%
+%  The FrameFcn hook handed to coorbital.viz.globeMovie: read one rendered
+%  frame's drawn objects out of the axes and keep them. NESTED inside test_viz
+%  rather than written as a subfunction, because it has to write into frmSeen,
+%  and an anonymous function cannot assign.
+%
+%  This is the only way an intermediate frame can be inspected at all: a movie
+%  deletes its figure before it returns, so by the time the call is over there
+%  is nothing left to read.
+%
+%% Inputs:
+%
+%  hAxF             [1 x 1] axes                The movie's axes, mid-render
+%
+%  kF               [1 x 1]                     Frame number (-)
+%
+%% Outputs:
+%
+%  none                                         Writes frmSeen{kF}
+%
+%% Revision History:
+%  Michael Casey                                                08/07/2026
+%  Copyright 2026 Coorbital, Inc.
+%% ------------------------ Begin Code Sequence ---------------------------
+
+               hTr = findobj(hAxF,'Type','line','Tag','globeTrack');
+               got = struct();
+           got.ph  = zeros(1,numel(hTr));
+           got.xyz = cell(1,numel(hTr));
+           got.col = cell(1,numel(hTr));
+        for kr = 1:numel(hTr)
+        got.ph(kr) = hTr(kr).UserData;
+       got.xyz{kr} = [hTr(kr).XData(:),hTr(kr).YData(:),hTr(kr).ZData(:)];
+       got.col{kr} = hTr(kr).Color;
+        end
+               hVe = findobj(hAxF,'Type','line','Tag','vehicleMarker');
+           got.veh = [hVe.XData,hVe.YData,hVe.ZData];
+
+%% The caption and the readout are FIGURE annotations, not axes children, so
+%% they are looked up in the figure. findall rather than findobj, because an
+%% annotation lives in a hidden overlay axes that findobj will not descend
+%% into:
+               hFg = ancestor(hAxF,'figure');
+               hHu = findall(hFg,'Tag','hudText');
+           got.hud = labelText(hHu.String);
+               hTi = findall(hFg,'Tag','titleText');
+           got.tit = labelText(hTi.String);
+               hEa = findobj(hAxF,'Tag','earthSurface');
+        got.nEarth = numel(hEa);
+        got.rEarth = NaN;
+        if isscalar(hEa)
+        got.rEarth = max(hEa.XData(:));
+        end
+      frmSeen{kF}  = got;
+    end
 end
 
 function traj = chainTraj(rE)
@@ -782,6 +1019,79 @@ function sel = phaseSpan(phIdx,phList,kp)
                sel = find(phIdx == phList(kp));
     if kp > 1
                sel = [find(phIdx == phList(kp-1),1,'last'); sel];
+    end
+end
+
+function assertGrownTrack(frm,phIdx,phList,kEnd,xWant,yWant,zWant,what)
+%% Purpose:
+%
+%  Assert that ONE captured frame of coorbital.viz.globeMovie holds the
+%  trajectory truncated at sample kEnd -- every phase's own samples up to that
+%  point and not one beyond it, in the same phase-by-phase segmentation
+%  coorbital.viz.globe3D uses.
+%
+%  This is what separates a movie of a trajectory developing from a static arc
+%  spun on a turntable. Called with kEnd = N it asserts the whole trajectory;
+%  called with an intermediate kEnd it asserts a proper prefix, and a function
+%  that drew the full arc in every frame fails the second call.
+%
+%  The expected coordinates are the arrays section 11 built by hand from traj,
+%  passed in whole and indexed here, so the movie is compared against the same
+%  independent arithmetic the still figure is.
+%
+%% Inputs:
+%
+%  frm              Struct                      One captured frame: fields ph
+%                                               [1 x P] phase index per drawn
+%                                               segment and xyz [1 x P] cell of
+%                                               [M x 3] drawn points (km)
+%
+%  phIdx            [N x 1]                     Phase index per sample
+%
+%  phList           [1 x P]                     Phase indices present, sorted
+%
+%  kEnd             [1 x 1]                     Last sample this frame may show
+%
+%  xWant            [N x 1]                     Expected x of every sample (km)
+%
+%  yWant            [N x 1]                     Expected y of every sample (km)
+%
+%  zWant            [N x 1]                     Expected z of every sample (km)
+%
+%  what             Char [1 x n]                Frame name, for the message
+%
+%% Outputs:
+%
+%  none                                         Throws on failure
+%
+%% Revision History:
+%  Michael Casey                                                08/07/2026
+%  Copyright 2026 Coorbital, Inc.
+%% ------------------------ Begin Code Sequence ---------------------------
+
+    assert(numel(frm.xyz) == numel(phList), ...
+        '%s frame holds %d track segments for %d phases.', ...
+        what,numel(frm.xyz),numel(phList));
+    for kp = 1:numel(phList)
+               kSg = find(frm.ph == phList(kp),1);
+        assert(~isempty(kSg), ...
+            '%s frame has no track segment tagged for phase %d.',what,phList(kp));
+               sel = phaseSpan(phIdx,phList,kp);
+               sel = sel(sel <= kEnd);
+               got = frm.xyz{kSg};
+        assert(size(got,1) == numel(sel), ...
+            ['%s frame, phase %d: %d points drawn against the %d samples the ' ...
+             'trajectory has up to sample %d. The track is not growing with ' ...
+             'the flight.'],what,phList(kp),size(got,1),numel(sel),kEnd);
+        if isempty(sel)
+            continue;
+        end
+        assertSeries(got(:,1),xWant(sel), ...
+            sprintf('%s frame, phase %d x (km)',what,phList(kp)));
+        assertSeries(got(:,2),yWant(sel), ...
+            sprintf('%s frame, phase %d y (km)',what,phList(kp)));
+        assertSeries(got(:,3),zWant(sel), ...
+            sprintf('%s frame, phase %d z (km)',what,phList(kp)));
     end
 end
 

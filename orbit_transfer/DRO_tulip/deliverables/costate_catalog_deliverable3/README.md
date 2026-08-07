@@ -15,6 +15,7 @@ that pair; this catalog is the coarse map across the orbit families.
 | `costate_catalog_dro_tulip.mat` | the catalog — 16 sheets, 3,936 entries, COMPACT format |
 | `costate_catalog_pick.m` | five-coordinate lookup (DRO period, petals, dep/arr phase, thrust) with honest warnings |
 | `costate_catalog_example.m` | worked example: pick → derive → fly → tfMin → plot → period-axis view |
+| `costate_lib_describe.m` | prints the catalog's facts: phase grids (ND + days), thrusts, periods, petals, coverage per sheet, best/worst sheet |
 
 Requires **pumpkyn / pumpkynPie** on the MATLAB path. The data itself is
 dependency-free.
@@ -29,7 +30,11 @@ cat = L.costate_catalog_dro_tulip;
 % z8 -> pumpkyn.cr3bp.tfMin as-is;  info.delivered = what you actually got
 ```
 
-Or run `costate_catalog_example` from this folder.
+Or run `costate_catalog_example` from this folder. For a fact sheet first:
+
+```matlab
+costate_lib_describe('costate_catalog_dro_tulip.mat')
+```
 
 ## What it covers
 

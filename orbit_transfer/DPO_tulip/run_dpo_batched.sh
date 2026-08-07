@@ -33,7 +33,7 @@ count_lines() { echo $(( $(cat "$CATDIR"/dpo_*_progress.txt 2>/dev/null | wc -l)
 
 echo "=== dpocat run started $(date) ($CELLS cells/batch, ${BSEC}s clean, ${KILL_AFTER}s kill)" >> "$LOG"
 dry=0
-for pass in $(seq 1 200); do
+for pass in $(seq 1 600); do
   before=$(count_lines); before=${before:-0}
 
   "$MATLAB" -batch "here=pwd; cd('$PUMPKYN'); startup(); cd(here); \

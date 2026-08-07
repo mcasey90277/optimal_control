@@ -28,14 +28,14 @@ if ! mkdir "$LOCK" 2>/dev/null; then
 fi
 trap 'rmdir "$LOCK" 2>/dev/null' EXIT
 
-count_lines() { cat "$CATDIR"/halo_*_progress.txt 2>/dev/null | wc -l; }
+count_lines() { echo $(( $(cat "$CATDIR"/halo_*_progress.txt 2>/dev/null | wc -l) )); }
 
 echo "=== halocat run started $(date) ($CELLS cells/batch, ${BSEC}s clean, ${KILL_AFTER}s kill)" >> "$LOG"
 dry=0
-for pass in $(seq 1 200); do
+for pass in $(seq 1 600); do
   before=$(count_lines); before=${before:-0}
 
-  $MATLAB -batch "here=pwd; cd('$PUMPKYN'); startup(); cd(here); \
+  "$MATLAB" -batch "here=pwd; cd('$PUMPKYN'); startup(); cd(here); \
                   addpath('$HERE'); \
                   run_halo_catalog('all', $CELLS, $BSEC);" \
           >> "$MLOG" 2>&1 &
@@ -44,14 +44,14 @@ for pass in $(seq 1 200); do
     echo "  [pass $pass timed out -- a solver call hung; skipping ahead]" >> "$LOG" ) &
   WPID=$!
   wait $MPID 2>/dev/null; MSTATUS=$?
-  kill $WPID 2>/dev/null
+  pkill -P $WPID 2>/dev/null; kill $WPID 2>/dev/null
   if [ $MSTATUS -ne 0 ] && [ $MSTATUS -ne 137 ]; then
     echo "=== MATLAB exited with status $MSTATUS in pass $pass -- ABORTING" >> "$LOG"
-    break
+    exit 1
   fi
   if tail -30 "$MLOG" 2>/dev/null | grep -qa "^Error in\|^{Error\|Unrecognized"; then
     echo "=== MATLAB ERROR in pass $pass -- ABORTING (see halocat_matlab.log)" >> "$LOG"
-    break
+    exit 1
   fi
 
   after=$(count_lines); after=${after:-0}

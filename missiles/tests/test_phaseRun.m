@@ -416,4 +416,171 @@ function test_phaseRun()
 %  is decorative: the banked run must have turned out of the equatorial plane:
     assert(max(abs(trRamp.x(:,3))) > deg2rad(0.5), ...
         'the banked run never left the equator; sigma did not reach the EOM');
+
+%% ---------------------------------------------------------------------
+%% A seven-state phase runs and returns a seven-column trajectory. The
+%  driver must take its state width from x0, not from the six the glide
+%  EOM happens to have; coorbital.eom.massConstant lifts that six-state
+%  EOM into the seven-state chain a powered phase needs:
+%% ---------------------------------------------------------------------
+         schedZero = struct('tGrid',[0 5000],'alpha',[0 0],'sigma',[0 0]);
+              eom7 = coorbital.eom.massConstant(@coorbital.eom.glide3DOF);
+           ph7.eom = eom7;
+         ph7.guide = @(t,x) coorbital.guide.prescribed(t,x,schedZero);
+     ph7.terminate = @(t,x) coorbital.prop.eventAltitude(t,x,20e3);
+         ph7.tspan = [0 4000];
+               x07 = [c.rE + 60e3; 0; 0; 6000; deg2rad(-1); deg2rad(90); veh.mass];
+             traj7 = coorbital.prop.phaseRun(ph7,x07,veh,env);
+
+    assert(size(traj7.x,2) == 7,'expected a 7-column trajectory, got %d',size(traj7.x,2));
+    assert(all(abs(traj7.x(:,7) - veh.mass) < 1e-12), ...
+        'mass must be exactly constant under massConstant');
+
+%% The other outputs must stay consistent with the widened state, and the
+%  six flight states must be untouched by the lift. The six-state run of the
+%  identical phase is the independent reference -- x(7) is inert in
+%  glide3DOF, which reads vehicle mass from veh, so widening the state must
+%  not perturb the trajectory at all:
+               nS7 = numel(traj7.t);
+    assert(isequal(size(traj7.x),[nS7 7]),'state must be [N x 7]');
+    assert(isequal(size(traj7.u),[nS7 2]),'control must still be [N x 2]');
+    assert(isequal(size(traj7.phaseIdx),[nS7 1]),'phaseIdx must be [N x 1]');
+    assert(numel(traj.t) == nS7, ...
+        ['the seven-state run took %d samples against %d for the identical ' ...
+         'six-state run; the inert mass state perturbed the integration'], ...
+        nS7,numel(traj.t));
+             d67 = max(max(abs(traj7.x(:,1:6) - traj.x(:,1:6))));
+    assert(d67 < 1e-9, ...
+        'widening the state changed the six flight states by %.3e',d67);
+    assert(abs(traj7.t(end) - traj.t(end)) < 1e-9, ...
+        'widening the state changed the flight time by %.3e s', ...
+        abs(traj7.t(end) - traj.t(end)));
+
+%% ---------------------------------------------------------------------
+%% The CONTROL width is measured too, not assumed to be 2. A powered phase
+%  carries a throttle channel alongside the two aerodynamic angles; the
+%  driver must return all three columns, and the extra channel -- which
+%  glide3DOF ignores -- must arrive unaltered:
+%% ---------------------------------------------------------------------
+            thrCmd = 0.73;
+            guide3 = @(t,x) [coorbital.guide.prescribed(t,x,schedZero); thrCmd];
+              ph3u = ph7;
+        ph3u.guide = guide3;
+             traj3 = coorbital.prop.phaseRun(ph3u,x07,veh,env);
+
+    assert(size(traj3.u,2) == 3, ...
+        ['expected a 3-column control history from a 3-channel guide, got ' ...
+         '%d; the control width is still hard-coded'],size(traj3.u,2));
+    assert(isequal(size(traj3.u),[numel(traj3.t) 3]),'control must be [N x 3]');
+    assert(max(abs(traj3.u(:,3) - thrCmd)) < 1e-12, ...
+        'the third control channel must be carried through unaltered');
+    assert(max(max(abs(traj3.u(:,1:2)))) < 1e-12, ...
+        'the two angle channels must still come from the zero schedule');
+
+%% ---------------------------------------------------------------------
+%% STAGE SEPARATION. A phase may carry an optional link, xNext = link(xEnd),
+%  applied to its terminal state to form the next phase's initial state.
+%  Dropping 500 kg of spent booster must move component 7 by exactly 500 and
+%  leave the six flight states untouched. Every expected number below comes
+%  from the test's OWN inputs -- the 900 kg initial mass, the 500 kg drop,
+%  and the fact that massConstant holds mass fixed inside a phase -- never
+%  from the driver's own bookkeeping:
+%% ---------------------------------------------------------------------
+             mDrop = 500;
+            phLnkA = ph7;
+  phLnkA.terminate = @(t,x) coorbital.prop.eventAltitude(t,x,40e3);
+       phLnkA.link = @(x) [x(1:6); x(7) - mDrop];
+            phLnkB = phLnkA;
+  phLnkB.terminate = @(t,x) coorbital.prop.eventAltitude(t,x,20e3);
+       phLnkB.link = [];
+            trLink = coorbital.prop.phaseRun([phLnkA phLnkB],x07,veh,env);
+
+    assert(numel(trLink.junction) == 1,'expected one junction between two phases');
+    assert(isequal(size(trLink.junction(1).x),[7 1]), ...
+        'the junction state must be [7 x 1] in a seven-state chain, got %s', ...
+        mat2str(size(trLink.junction(1).x)));
+
+%% Mass is piecewise constant at the two values the test itself prescribes:
+             isP1L = trLink.phaseIdx == 1;
+             isP2L = trLink.phaseIdx == 2;
+    assert(max(abs(trLink.x(isP1L,7) - veh.mass)) < 1e-9, ...
+        'phase 1 must fly at the %.1f kg initial mass throughout',veh.mass);
+    assert(max(abs(trLink.x(isP2L,7) - (veh.mass - mDrop))) < 1e-9, ...
+        'phase 2 must fly at %.1f kg after separation',veh.mass - mDrop);
+
+%% ...and the step between them, located by the phase LABELS rather than by
+%  any index convention, is exactly the 500 kg the link removes:
+            iLastA = find(isP1L,1,'last');
+           iFirstB = find(isP2L,1,'first');
+    assert(iFirstB == iLastA + 1,'the phase labels must change exactly once');
+             dMass = trLink.x(iLastA,7) - trLink.x(iFirstB,7);
+    assert(abs(dMass - mDrop) < 1e-9, ...
+        'component 7 dropped %.9f kg across the junction, expected exactly %.1f', ...
+        dMass,mDrop);
+
+%% THE ORDERING THE HEADER PROMISES. junction(k).x is the state AS HANDED TO
+%  THE NEXT PHASE, i.e. AFTER the link -- the far side of the staging jump.
+%  Recording it before the link instead would leave the pre-separation mass
+%  here, and a reader debugging a staging event would read the wrong side:
+      mJunRecorded = trLink.junction(1).x(7);
+    assert(abs(mJunRecorded - (veh.mass - mDrop)) < 1e-9, ...
+        ['junction(1).x(7) = %.6f kg, but the junction must record the state ' ...
+         'HANDED TO THE NEXT PHASE, i.e. AFTER the %.1f kg separation: ' ...
+         '%.1f kg, not the %.1f kg the ending phase carried'], ...
+        mJunRecorded,mDrop,veh.mass - mDrop,veh.mass);
+
+%% The link touched component 7 and nothing else. The junction record and the
+%  last phase-1 sample sit at the same instant on the cumulative clock, so the
+%  six flight states must agree there to 1e-9:
+              d16J = max(abs(trLink.junction(1).x(1:6) - trLink.x(iLastA,1:6)'));
+    assert(d16J < 1e-9, ...
+        'the link perturbed the six flight states by %.3e; it must be the identity there', ...
+        d16J);
+
+%% Independent reference for that continuity claim: the SAME chain with no
+%  link at all. Mass is inert in glide3DOF, so removing 500 kg of state must
+%  change nothing about the flight path -- if the six states drift, the link
+%  is leaking into the dynamics. This run also pins the two documented ways
+%  of asking for the identity: an ABSENT link field, and link = []:
+              ph7a = ph7;
+    ph7a.terminate = phLnkA.terminate;
+              ph7b = ph7;
+    ph7b.terminate = phLnkB.terminate;
+            trBare = coorbital.prop.phaseRun([ph7a ph7b],x07,veh,env);
+
+    assert(~isfield(ph7a,'link'),'the bare reference must carry no link field at all');
+    assert(abs(trBare.junction(1).x(7) - veh.mass) < 1e-12, ...
+        'a phase with no link field must hand its mass on unchanged');
+    assert(max(abs(trBare.x(:,7) - veh.mass)) < 1e-12, ...
+        'an unlinked chain must fly the whole way at the initial mass');
+
+             dJn16 = max(abs(trLink.junction(1).x(1:6) - trBare.junction(1).x(1:6)));
+    assert(dJn16 < 1e-9, ...
+        'the staged and unstaged runs disagree at the junction by %.3e',dJn16);
+            dEnd16 = max(abs(trLink.x(end,1:6) - trBare.x(end,1:6)));
+    assert(dEnd16 < 1e-9, ...
+        'the staged and unstaged runs disagree at the terminus by %.3e',dEnd16);
+
+%% link = [] on the LAST phase is the identity and must not disturb the run,
+%  which is what lets a struct array mix linked and unlinked phases:
+    assert(abs(trLink.x(end,7) - (veh.mass - mDrop)) < 1e-9, ...
+        'an empty link must be the identity, leaving %.1f kg at the terminus', ...
+        veh.mass - mDrop);
+
+%% Both legs really ran, each stopping on its own trigger:
+    assert(abs(trLink.junction(1).x(1) - c.rE - 40e3) < 1, ...
+        'the staged leg 1 must hand over at 40 km');
+    assert(abs(trLink.x(end,1) - c.rE - 20e3) < 1, ...
+        'the staged leg 2 must terminate at 20 km');
+
+%% A link that changes the state dimension breaks the chain and must say so:
+            phBadL = phLnkA;
+       phBadL.link = @(x) x(1:6);
+              hitL = false;
+    try
+        coorbital.prop.phaseRun([phBadL phLnkB],x07,veh,env);
+    catch errL
+              hitL = strcmp(errL.identifier,'coorbital:phaseRun:linkWidth');
+    end
+    assert(hitL,'a link that drops a state must raise coorbital:phaseRun:linkWidth');
 end

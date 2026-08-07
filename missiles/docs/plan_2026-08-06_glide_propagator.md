@@ -288,8 +288,16 @@ function test_expAtmos()
 %% Purpose:
 %
 %  Verify the exponential atmosphere reproduces sea-level density, decays by
-%  exactly one e-fold per scale height, vectorizes, and returns a sound speed
-%  consistent with its own temperature.
+%  exactly one e-fold per scale height, vectorizes, and returns pressure and
+%  sound speed matching values computed independently of the implementation.
+%
+%% Inputs:
+%
+%  none
+%
+%% Outputs:
+%
+%  none                                         Throws on any failed assertion
 %
 %% Revision History:
 %  Michael Casey                                                08/06/2026
@@ -306,11 +314,15 @@ function test_expAtmos()
        [rhoH,~,~,~] = coorbital.atmos.expAtmos(c.Hscale);
     assert(abs(rhoH - c.rho0/exp(1)) < 1e-12,'scale-height decay wrong');
 
-%% Ideal gas law is self-consistent:
-    assert(abs(P - rho*c.Rair*T) < 1e-6,'P does not satisfy the ideal gas law');
+%% Sea-level pressure and sound speed against values worked out by hand, so a
+%% formula error cannot hide behind the implementation's own arithmetic:
+    assert(abs(T - 250)      < 1e-9,  'isothermal temperature wrong');
+    assert(abs(P - 87909.92) < 1e-2,  'sea-level pressure wrong: got %.2f Pa',P);
+    assert(abs(a - 316.9677) < 1e-3,  'sea-level sound speed wrong: got %.4f m/s',a);
 
-%% Sound speed matches its own temperature:
-    assert(abs(a - sqrt(c.gamAir*c.Rair*T)) < 1e-9,'sound speed inconsistent');
+%% The ideal gas law then holds at an altitude the hand values do not cover:
+    [rho2,P2,T2,~] = coorbital.atmos.expAtmos(40000);
+    assert(abs(P2 - rho2*c.Rair*T2) < 1e-6,'P does not satisfy the ideal gas law');
 
 %% Vectorizes over a column of altitudes:
               hVec = (0:10000:100000)';

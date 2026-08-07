@@ -496,6 +496,58 @@ function test_phaseRun()
         'the appended mass derivative must be exactly zero, got %.3e',xdotP(7));
 
 %% ---------------------------------------------------------------------
+%% massConstant's THREE CONTRACT GUARDS, each by identifier. The mass-mismatch
+%  guard is exercised further down through a whole staged chain; these three
+%  are the cheaper ones ahead of it, and until now nothing in the suite
+%  reached any of them. An unreached error path is an unverified error path:
+%  it can be misspelt, it can raise the wrong identifier, or a later edit can
+%  delete it outright, and every test still passes. Each block below asserts
+%  that a throw ACTUALLY HAPPENED, so a guard that quietly stops guarding
+%  fails here rather than falling through in silence:
+%% ---------------------------------------------------------------------
+%% (a) A state too narrow to carry a mass in component 7:
+              xNarw = (1:6)';
+         threwWidth = false;
+    try
+        eom7(0,xNarw,[0;0],veh,env);
+    catch errWidth
+        threwWidth = true;
+        assert(strcmp(errWidth.identifier,'coorbital:massConstant:stateWidth'), ...
+            'wrong error identifier for a 6-state input: %s',errWidth.identifier);
+    end
+    assert(threwWidth, ...
+        'massConstant must throw on a 6-state input; the mass must be component 7');
+
+%% (b) A vehicle struct with no mass field at all. The wrapped equations
+%  divide by veh.mass, so an absent field is not a defaultable omission:
+            vehNoMs = rmfield(veh,'mass');
+               xOk7 = [(1:6)'; veh.mass];
+        threwNoMass = false;
+    try
+        eom7(0,xOk7,[0;0],vehNoMs,env);
+    catch errNoMass
+        threwNoMass = true;
+        assert(strcmp(errNoMass.identifier,'coorbital:massConstant:noMass'), ...
+            'wrong error identifier for a massless vehicle: %s',errNoMass.identifier);
+    end
+    assert(threwNoMass,'massConstant must throw when veh has no mass field');
+
+%% (c) A non-scalar veh.mass. A point mass carries one mass, and an array
+%  would turn the mismatch comparison into a partial-match test that passes
+%  on the strength of one lucky element:
+            vehVecM = veh;
+       vehVecM.mass = [veh.mass veh.mass];
+        threwNotScl = false;
+    try
+        eom7(0,xOk7,[0;0],vehVecM,env);
+    catch errNotScl
+        threwNotScl = true;
+        assert(strcmp(errNotScl.identifier,'coorbital:massConstant:massNotScalar'), ...
+            'wrong error identifier for a non-scalar mass: %s',errNotScl.identifier);
+    end
+    assert(threwNotScl,'massConstant must throw on a non-scalar veh.mass');
+
+%% ---------------------------------------------------------------------
 %% The CONTROL width is measured too, not assumed to be 2. A powered phase
 %  carries a throttle channel alongside the two aerodynamic angles; the
 %  driver must return all three columns, and the extra channel -- which
@@ -515,6 +567,31 @@ function test_phaseRun()
         'the third control channel must be carried through unaltered');
     assert(max(max(abs(traj3.u(:,1:2)))) < 1e-12, ...
         'the two angle channels must still come from the zero schedule');
+
+%% ...and a phase that DISAGREES with phase 1 about that width is REFUSED, by
+%  identifier. A ragged control history cannot be concatenated into one
+%  traj.u, so the driver raises where the disagreement is discovered rather
+%  than failing deep inside the assignment with a size message that names no
+%  phase. Nothing in the suite reached this path before, and an unreached
+%  error path is an unverified one -- it can be misspelt, raise the wrong
+%  identifier, or be deleted outright with every test still green. The throw
+%  itself is therefore asserted, not merely its identifier:
+              phW1 = ph7;
+    phW1.terminate = @(t,x) coorbital.prop.eventAltitude(t,x,40e3);
+              phW2 = ph7;
+        phW2.guide = guide3;
+         threwCtrl = false;
+    try
+        coorbital.prop.phaseRun([phW1 phW2],x07,veh,env);
+    catch errCtrl
+        threwCtrl = true;
+        assert(strcmp(errCtrl.identifier,'coorbital:phaseRun:controlWidth'), ...
+            'wrong error identifier for a ragged control width: %s', ...
+            errCtrl.identifier);
+    end
+    assert(threwCtrl, ...
+        ['phaseRun must refuse a phase whose guide returns 3 controls where ' ...
+         'phase 1 returned 2; it concatenated them into one traj.u instead']);
 
 %% ---------------------------------------------------------------------
 %% STAGE SEPARATION. A phase may carry an optional link, xNext = link(xEnd),

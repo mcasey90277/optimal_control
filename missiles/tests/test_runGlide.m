@@ -68,6 +68,24 @@ function test_runGlide()
     assert(veh.noseRadius == vdf.noseRadius, ...
         'noseRadius must pass through vehicle_hgv unchanged');
 
+%% ...but agreeing with each other is not the same as being RIGHT. The check
+%% above pins the two files together and pins neither to a number, so a
+%% retune applied consistently to both passes it in silence. The three
+%% aerodynamic placeholders below are the library's only physics-bearing
+%% constants with no absolute anchor anywhere, and the analytic suite cannot
+%% supply one: test_equilibriumGlide builds its closed-form Veq(r) from
+%% veh.mass, veh.Sref and veh.CL, so all three cancel between the model and
+%% its own reference and the check passes at any values. That is exactly the
+%% Hscale blindness of docs/LESSONS_LEARNED.md, and the cure is the same one
+%% -- pin the constant where it is DEFINED, so a retune fails here and says
+%% why, rather than surfacing as an unexplained shift in a pinned trajectory
+%% literal further down this file. veh.mass needs no pin here; it is already
+%% pinned to 900 kg in test_constThrust, where the booster mass bookkeeping
+%% is quoted against it:
+    assert(vdf.Sref == 0.75,'expected vehicleDefaults Sref = 0.75 m^2');
+    assert(vdf.CL   == 0.35,'expected vehicleDefaults CL   = 0.35');
+    assert(vdf.LD   == 2.5, 'expected vehicleDefaults LD   = 2.5');
+
 %% ---------------------------------------------------------------------
 %% 2. The shipped configuration
 %% ---------------------------------------------------------------------

@@ -155,7 +155,7 @@ function test_boostEvents()
 
            optsApo = odeset('RelTol',1e-10,'AbsTol',1e-10, ...
                             'Events',@(t,x) coorbital.prop.eventApogee(t,x));
-    [tApo,xApo,teApo,~,ieApo] = ode45(odeA,[0 4000],xLoft,optsApo);
+    [tApo,xApo,teApo] = ode45(odeA,[0 4000],xLoft,optsApo);
 
 %% Exactly one termination, before the horizon:
     assert(numel(teApo) == 1,'expected exactly one apogee event, got %d',numel(teApo));

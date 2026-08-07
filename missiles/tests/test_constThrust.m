@@ -55,6 +55,29 @@ function test_constThrust()
     assert(veh.mass      == 900,    'expected payload mass = 900 kg');
     assert(c.g0          == 9.80665,'expected g0 = 9.80665 m/s^2');
 
+%% Anchor the BOOSTED-STACK AERODYNAMIC TRIPLE as well, in its own block
+%% because it defends against a different blindness from the seven pins
+%% above. Not one of these three appears in any hand computation in this
+%% file: Tsiolkovsky, the liftoff T/W, the burn time and the back-pressure
+%% debit are all untouched by them, so every other check here would stay
+%% green with the triple retuned to any positive numbers at all. What they
+%% actually set is the drag of the stack through the whole powered ascent,
+%% and therefore the burnout state that every later phase inherits -- and
+%% with separation = false they describe the airframe for the entire
+%% unpowered flight too. Measured on HGV/run_boost_glide 2026-08-07:
+%% 7663.05 km with separation against 2853.71 km without, a 62.8 % swing in
+%% range driven by these three numbers. Load-bearing placeholders get pins:
+    assert(bst.Sref      == 1.77,   'expected stack Sref = 1.77 m^2');
+    assert(bst.CL        == 0.05,   'expected stack CL   = 0.05');
+    assert(bst.LD        == 0.25,   'expected stack LD   = 0.25');
+
+%% CD is derived and never stored, so the pair above is what actually fixes
+%% the drag. Pinning the derived value too puts the physically effective
+%% quantity in this file rather than leaving it implied.
+%% Hand arithmetic: CL/LD = 0.05/0.25 = 0.20
+    assert(abs(bst.CL./bst.LD - 0.20) < 1e-12, ...
+        'derived stack CD = CL/LD should be 0.20');
+
 %% ---- Vacuum thrust ------------------------------------------------------
 %% At P = 0 the back-pressure debit vanishes identically, so the delivered
 %% thrust must be the vacuum thrust to the last bit, not merely to tolerance:

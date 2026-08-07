@@ -146,9 +146,11 @@ for kc = 1:min(size(todo,1), maxCells)
             for tfExp = tfExpList
                 tfGuess = zPrev(8) * (Tprev/TN)^tfExp;
                 Yg = interp1(tu/tu(end), yj(iu,1:14), sGrid, 'pchip')';
-                % mass rescale: consumed propellant scales with BOTH the time
-                % stretch AND the thrust ratio (mdot ~ T) -- review finding
-                Yg(7,:) = 1 + (Yg(7,:)-1)*(tfGuess/zPrev(8))*(TN/Tprev);
+                % mass: DERIVED from the all-burn identity m(t) = 1 - T t/c
+                % rather than rescaled from the old trajectory. A derivation
+                % from the invariant cannot carry a scaling mistake; the
+                % previous rescale-based construction did (review finding).
+                Yg(7,:) = 1 - ndT(TN)*(sGrid*tfGuess)/cnd;
                 seed = struct('tf', tfGuess, 'tGrid', sGrid*tfGuess, 'Y', Yg);
                 [zt, it] = ms_tfmin(rv0(1:6), rvf(1:6), seed, ndT(TN), cnd, ...
                                     muStar, struct('wallSec', wallSec));

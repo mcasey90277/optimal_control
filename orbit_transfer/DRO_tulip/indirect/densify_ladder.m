@@ -189,7 +189,9 @@ try
     for p = tfExpList
         tfG = zSrc(8) * (Tsrc/TN)^p;
         Yg = interp1(tu/tu(end), yj(iu,1:14), sG, 'pchip')';
-        Yg(7,:) = 1 + (Yg(7,:)-1)*(tfG/zSrc(8))*(TN/Tsrc);   % mdot ~ T (review)
+        % mass DERIVED from the all-burn identity m(t) = 1 - T t/c: a
+        % construction from the invariant cannot carry a scaling mistake
+        Yg(7,:) = 1 - ndT(TN)*(sG*tfG)/cnd;
         seed = struct('tf', tfG, 'tGrid', sG*tfG, 'Y', Yg);
         [zt, it] = ms_tfmin(rv0(1:6), rvf(1:6), seed, ndT(TN), cnd, ...
                             muStar, struct('wallSec', msWallS));

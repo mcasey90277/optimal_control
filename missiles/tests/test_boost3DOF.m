@@ -73,10 +73,24 @@ function test_boost3DOF()
 %  integral of T/m really is an exhaust speed times a log mass ratio -- and
 %  nothing about the numbers fed into it. This is exactly the shared-constant
 %  blindness recorded in docs/LESSONS_LEARNED.md for Hscale, and the only
-%  defence is the same one: pin each constant where it is defined.
-%  test_constThrust pins Isp to 260 s, thrustVac to 950000 N, massDry to
-%  1500 kg and massProp to 30000 kg; test_missileConst pins g0. ALL of those
-%  pins are load-bearing for this file.
+%  defence is the same one: pin each constant exactly, at its source.
+%
+%  SIX exact-equality pins carry this test, and all six live together in
+%  test_constThrust.m lines 50-56:
+%
+%     bst.massDry   == 1500      (line 50)
+%     bst.massProp  == 30000     (line 51)
+%     bst.thrustVac == 950000    (line 52)
+%     bst.Isp       == 260       (line 53)
+%     veh.mass      == 900       (line 55)
+%     c.g0          == 9.80665   (line 56)
+%
+%  Note where g0 is NOT pinned: test_missileConst.m line 32 only range-checks
+%  it, abs(c.g0 - 9.80665) < 1e-3, which would pass a g0 wrong in the fourth
+%  decimal. The exact pin is the one in test_constThrust, same as the other
+%  five. Every one of these six constants cancels out of the Tsiolkovsky
+%  comparison, so those pins are the only thing standing between a mistyped
+%  booster constant and a validation suite that still reports green.
 %
 %% Note -- provenance of the reference values:
 %

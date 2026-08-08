@@ -82,6 +82,9 @@ function [traj,info] = run_ballistic(opts)
 %
 %% Revision History:
 %  Michael Casey                                                08/07/2026
+%  Michael Casey  alphaMax read from the vehicle; drag and     08/08/2026
+%                 lift attributed on arcs that share one
+%                 gravity model and one rotation rate
 %  Copyright 2026 Coorbital, Inc.
 %% ------------------------ Begin Code Sequence ---------------------------
 
@@ -107,7 +110,18 @@ function [traj,info] = run_ballistic(opts)
 %% taken from the FIRST node, so the vehicle leaves the pad at zero incidence:
           pitchTime = [0  6  15  30  50  70  82];   %s,   nodes, strictly increasing [0 .. burn time]
          pitchAngle = [89 86  76  60  46  38  34];  %deg, commanded attitude [5 .. 90], descending
-           alphaMax = 6;               %deg, clamp on |angle of attack| [1 .. 15]
+           alphaMax = [];              %deg, clamp on |angle of attack|. EMPTY -- the
+                                       %     shipped value -- reads the VEHICLE'S OWN
+                                       %     control-authority limit, veh.alphaMaxDeg,
+                                       %     which is 6 deg in BM/vehicle_bm.m. That is
+                                       %     where a structural, actuator and
+                                       %     aerothermal limit belongs, and it is why
+                                       %     this script and BM/run_ballistic_target
+                                       %     can no longer disagree about it. Put a
+                                       %     number here [1 .. 15] to OVERRIDE the
+                                       %     vehicle for a deliberate sensitivity
+                                       %     study; the 6 deg is a PLACEHOLDER awaiting
+                                       %     a qualification basis, not a cleared value
           bankAngle = 0;               %deg, bank [-90 .. 90]; 0 keeps the flight in the launch plane
 
 %% Staging -- whether the spent booster is thrown away at burnout:
@@ -188,6 +202,33 @@ function [traj,info] = run_ballistic(opts)
          earthSpin = overrideOf(opts,'earthSpin',earthSpin);
          showPlots = overrideOf(opts,'showPlots',showPlots);
 
+%% The constants, the vehicle and the booster, read HERE rather than after the
+%% sanity checks, because the ANGLE-OF-ATTACK CLAMP is a property of the
+%% vehicle and the unit conversion below has to convert it:
+                 c = coorbital.util.missileConst();
+               veh = vehicleFn();
+               bst = boosterFn();
+
+%% Resolve the angle-of-attack clamp. It is a CONTROL-AUTHORITY LIMIT of the
+%% airframe, not a targeting knob, so its home is BM/vehicle_bm.m and an empty
+%% user-block entry reads it from there. This script and
+%% BM/run_ballistic_target used to carry two different literals -- 6 deg and
+%% 12 deg -- for nominally the same vehicle, which made their performance
+%% non-comparable; a number in the block still overrides it, deliberately and
+%% visibly, for a sensitivity study:
+    assert(isfield(veh,'alphaMaxDeg'), ...
+        ['%s returned a vehicle with no alphaMaxDeg field. The clamp on the ' ...
+         'angle of attack is a vehicle limit and this script reads it from ' ...
+         'the vehicle; set alphaMax in the USER PARAMETERS block to fly a ' ...
+         'vehicle file that does not carry one.'],func2str(vehicleFn));
+    if isempty(alphaMax)
+          alphaMax = veh.alphaMaxDeg;
+    end
+    assert(isscalar(alphaMax) && isnumeric(alphaMax) && isfinite(alphaMax) && ...
+           alphaMax > 0, ...
+        'alphaMax must be a positive finite scalar in degrees; got %s.', ...
+        mat2str(alphaMax));
+
 %% Convert the user block to library SI units. This is the ONLY unit
 %% conversion in the file; everything past this point is m, m/s, rad and s:
           hLaunchM = hLaunch.*1000;
@@ -213,10 +254,6 @@ function [traj,info] = run_ballistic(opts)
     assert(all([tMaxBoost tMaxCoast tMaxDesc] > 0),'every phase horizon must be positive.');
     assert(islogical(separation) || isnumeric(separation), ...
         'separation must be true or false.');
-
-                 c = coorbital.util.missileConst();
-               veh = vehicleFn();
-               bst = boosterFn();
 
 %% Mass bookkeeping -- the state mass is ALWAYS the total mass carried; see
 %% coorbital.util.boosterDefaults:
@@ -423,16 +460,28 @@ function [traj,info] = run_ballistic(opts)
 %% drag-included range measures a model discrepancy whose size nothing in this
 %% file predicts, so it is printed and judged, never asserted.
 %%
-%% Step two is run TWICE, and it has to be. Switching env.aero off removes
-%% LIFT as well as drag, so a single vacuum-against-full difference is the
-%% total aerodynamic effect, not the drag effect -- and the two have opposite
-%% signs. Drag can only shorten a ballistic arc; upward lift, which is what a
-%% positive CL at zero bank produces, lengthens it. Reporting their sum as
-%% "the drag effect" would invite exactly the wrong verdict on the sign
+%% Step two is run THREE TIMES, and it has to be. Switching env.aero off
+%% removes LIFT as well as drag, so a single vacuum-against-full difference is
+%% the total aerodynamic effect, not the drag effect -- and the two have
+%% opposite signs. Drag can only shorten a ballistic arc; upward lift, which is
+%% what a positive CL at zero bank produces, lengthens it. Reporting their sum
+%% as "the drag effect" would invite exactly the wrong verdict on the sign
 %% whenever lift wins, which for a high-ballistic-coefficient re-entry body on
-%% a steep arc it can. A third propagation with lift alone suppressed
-%% therefore separates them, and the sign judgement below is passed on the
-%% drag-only figure, which theory does predict.
+%% a steep arc it can. A propagation with lift alone suppressed therefore
+%% separates them, and the sign judgement below is passed on the drag-only
+%% figure, which theory does predict.
+%%
+%% AND ALL THREE COMPARISON ARCS FLY THE SAME GRAVITY AND THE SAME ROTATION.
+%% This is the third of them, and it exists because the FLOWN trajectory does
+%% not. The flown arc carries whatever gravFn and earthSpin the user selected;
+%% the vacuum arc is pinned to sphereGrav with rotation off, because only a
+%% two-body arc can be compared against a two-body closed form. Differencing
+%% one against the other therefore folded the GRAVITY-MODEL difference into a
+%% number the summary called drag, and the same contamination reached lift
+%% through the flown arc. Every difference below is now taken between arcs that
+%% differ in ONE model and nothing else; the gap between the pinned
+%% full-aerodynamics arc and the flown one is reported separately, as what it
+%% is.
 
 %% Burnout state as HANDED TO THE COAST -- the far side of the staging jump:
                xBO = traj.junction(1).x;
@@ -508,10 +557,17 @@ function [traj,info] = run_ballistic(opts)
 
 %% ...and the same arc again with LIFT alone suppressed, so drag's own
 %% contribution can be separated from lift's. Same burnout state, same
-%% equations, same drag coefficient, CL forced to zero:
-        envDrg      = env;
+%% equations, same drag coefficient, CL forced to zero.
+%%
+%% IT IS BUILT FROM envVac AND NOT FROM env, and that is the whole point of
+%% this line. envVac pins the gravity model to sphereGrav and the rotation
+%% rate to zero; inheriting env instead would leave a user-selected oblate
+%% gravity, or Earth rotation, INSIDE the difference that the summary then
+%% calls the drag effect. Measured before the pin was added: with a scratch J2
+%% model the "drag effect" moved by kilometres that had nothing to do with
+%% drag, and the sign judgement below is passed on that number:
+        envDrg      = envVac;
         envDrg.aero = @(alphaArg,machArg,vehArg) dragOnly(aeroFn,alphaArg,machArg,vehArg);
-      envDrg.omegaE = 0;
           phD       = phV;
              trajD  = coorbital.prop.phaseRun(phD,xBO,coastVeh,envDrg);
     assert(abs((trajD.x(end,1) - c.rE) - hStopM) < 1e-3, ...
@@ -522,13 +578,39 @@ function [traj,info] = run_ballistic(opts)
                                                  trajD.x(end,3),trajD.x(end,2));
               sDrgB = rI.*angDrgB;
 
-%% The three differences, all against the vacuum arc:
-            aeroDiff = sAeroB - sVac;
-             aeroPct = 100.*aeroDiff./sVac;
-            dragDiff = sDrgB - sVac;
-             dragPct = 100.*dragDiff./sVac;
-            liftDiff = sAeroB - sDrgB;
-             liftPct = 100.*liftDiff./sVac;
+%% ...and a THIRD re-propagation, with the full aerodynamic model but the SAME
+%% pinned gravity and rotation. The flown trajectory cannot serve here: it
+%% carries whatever gravity and rotation the user selected, so differencing it
+%% against the drag-only arc would attribute a gravity-model change to LIFT.
+%% With the shipped handles this arc and the flown one are the same physics and
+%% agree to integration tolerance, which the summary reports as a check rather
+%% than assumes:
+        envFul      = envVac;
+        envFul.aero = aeroFn;
+          phF       = phV;
+             trajF  = coorbital.prop.phaseRun(phF,xBO,coastVeh,envFul);
+    assert(abs((trajF.x(end,1) - c.rE) - hStopM) < 1e-3, ...
+        ['the full-aerodynamics re-propagation did not reach the %.1f km ' ...
+         'impact altitude; it stopped at %.3f km after %.1f s'], ...
+        hStop,(trajF.x(end,1) - c.rE)./1000,trajF.t(end));
+            angFulB = coorbital.util.greatCircle(xBO(3),xBO(2), ...
+                                                 trajF.x(end,3),trajF.x(end,2));
+              sFulB = rI.*angFulB;
+
+%% The three differences. ALL FOUR ARCS -- vacuum, drag-only, full-aero and the
+%% closed form -- now share one gravity model and one rotation rate, so each
+%% difference isolates exactly the one model that was switched:
+            aeroDiff = sFulB - sVacProp;
+             aeroPct = 100.*aeroDiff./sVacProp;
+            dragDiff = sDrgB - sVacProp;
+             dragPct = 100.*dragDiff./sVacProp;
+            liftDiff = sFulB - sDrgB;
+             liftPct = 100.*liftDiff./sVacProp;
+
+%% How far the pinned full-aerodynamics arc sits from the FLOWN one. Zero when
+%% the shipped handles are in place, and a measure of how much of the flown
+%% range comes from a non-default gravity or from rotation when they are not:
+            flownGap = sAeroB - sFulB;
 
 %% ---------------------------------------------------------------------
 %% Termination diagnosis, one line per phase
@@ -657,16 +739,31 @@ function [traj,info] = run_ballistic(opts)
     fprintf('    agreement                %10.3e %-5s  (relative; budget %.1e, asserted)\n', ...
             relVac,'',tolVac);
     fprintf('    ---\n');
+    fprintf('    ALL THREE ARCS BELOW share the propagated vacuum arc''s gravity model and\n');
+    fprintf('    its zero rotation rate, and differ from it in ONE model each, so every\n');
+    fprintf('    difference isolates the model that was switched and nothing else.\n');
     fprintf('    drag-only range          %10.4f %-5s  (CL forced to zero, CD kept)\n', ...
             sDrgB./1000,'km');
-    fprintf('    full-aerodynamics range  %10.4f %-5s  (the flown trajectory)\n', ...
-            sAeroB./1000,'km');
+    fprintf('    full-aerodynamics range  %10.4f %-5s  (re-propagated, NOT the flown arc)\n', ...
+            sFulB./1000,'km');
     fprintf('    drag effect              %10.4f %-5s  (%+.4f %% of the vacuum range)\n', ...
             dragDiff./1000,'km',dragPct);
     fprintf('    lift effect              %10.4f %-5s  (%+.4f %%)\n', ...
             liftDiff./1000,'km',liftPct);
     fprintf('    net aerodynamic effect   %10.4f %-5s  (%+.4f %%)\n', ...
             aeroDiff./1000,'km',aeroPct);
+    fprintf('    flown minus re-propagated %9.4f %-5s  (what the SELECTED gravity model and\n', ...
+            flownGap./1000,'km');
+    fprintf('                                         rotation add to the flown arc; it is\n');
+    fprintf('                                         NOT part of any figure above)\n');
+    if ~defaultGrav || earthSpin
+        fprintf('    THE FLOWN ARC IS NOT THE ARC ABOVE. Gravity is %s and Earth rotation\n', ...
+                func2str(gravFn));
+        fprintf('    is %s, so the flown burnout-to-impact range of %.4f km is %.4f km from\n', ...
+                spinTxt,sAeroB./1000,flownGap./1000);
+        fprintf('    the re-propagated one. That gap is a GRAVITY and ROTATION effect and is\n');
+        fprintf('    deliberately kept out of the drag and lift figures.\n');
+    end
     fprintf('    These differences are MODEL DISCREPANCIES, reported and NOT asserted:\n');
     fprintf('    nothing in this file predicts their size, so no tolerance is attached.\n');
     if dragDiff < 0
@@ -787,6 +884,8 @@ function [traj,info] = run_ballistic(opts)
         info.relVac  = relVac;
         info.tolVac  = tolVac;
          info.sAeroB = sAeroB;
+          info.sFulB = sFulB;
+      info.flownGap  = flownGap;
           info.sDrgB = sDrgB;
       info.dragDiff  = dragDiff;
        info.dragPct  = dragPct;

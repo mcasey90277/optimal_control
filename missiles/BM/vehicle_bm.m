@@ -43,6 +43,40 @@ function veh = vehicle_bm()
 %  that payload, and changing it here would silently invalidate every number
 %  in that header.
 %
+%% Note -- alphaMaxDeg lives HERE because it is a property of the VEHICLE:
+%
+%  The clamp on the magnitude of the angle of attack is a CONTROL-AUTHORITY
+%  limit: how far off the relative wind this airframe may be flown before its
+%  structure, its actuators or its aerothermal margins say no. It is not a
+%  targeting degree of freedom, and it must not be raised because a desired
+%  trajectory would otherwise be out of reach.
+%
+%  BM/run_ballistic and BM/run_ballistic_target both fly this vehicle, and
+%  until 08/08/2026 they carried the limit as a USER PARAMETERS entry of their
+%  own -- 6 deg in one and 12 deg in the other. Two different control
+%  authorities for one airframe made the two scripts' performance
+%  non-comparable, and the 12 deg had been chosen to bring a demonstration
+%  target inside the depressed branch, which is exactly the reasoning a
+%  vehicle limit may not be set by. Both scripts now read the value below, and
+%  both still accept an explicit alphaMax override for a deliberate
+%  sensitivity study.
+%
+%  6 deg IS A PLACEHOLDER AWAITING A QUALIFICATION BASIS, like every other
+%  number in this file. It is the value BM/run_ballistic has always flown, and
+%  it was not chosen to make anything reachable. What the choice costs is
+%  written down rather than left to be rediscovered:
+%
+%    at 6 deg  maximum range 5211.525 km; the depressed branch spans roughly
+%              4708 to 5212 km, and its max-range loft angle sits near
+%              -42.9 deg, so a loft bracket must reach below that to find it;
+%    at 12 deg maximum range falls by about 156 km, and the depressed branch
+%              reaches down to about 1684 km.
+%
+%  Raising the limit therefore BUYS depressed-branch reach and PAYS about
+%  156 km of maximum range. Neither number is a reason to move it: the
+%  qualified value is whatever the airframe is cleared for, and that number
+%  does not exist yet.
+%
 %% Inputs:
 %
 %  none
@@ -56,9 +90,13 @@ function veh = vehicle_bm()
 %                                               CL         (-)
 %                                               LD         (-)
 %                                               noseRadius (m)
+%                                               alphaMaxDeg(deg) clamp on the
+%                                                          MAGNITUDE of the
+%                                                          angle of attack
 %
 %% Revision History:
 %  Michael Casey                                                08/07/2026
+%  Michael Casey  alphaMaxDeg moved here from the two scripts   08/08/2026
 %  Copyright 2026 Coorbital, Inc.
 %% ------------------------ Begin Code Sequence ---------------------------
 
@@ -74,4 +112,11 @@ function veh = vehicle_bm()
                                        %   gives CD = CL/LD = 0.25
     veh.noseRadius = 0.10;             %m, PLACEHOLDER, blunted nose; unused until
                                        %   Sutton-Graves heating arrives
+   veh.alphaMaxDeg = 6;                %deg, PLACEHOLDER control-authority limit on
+                                       %   |angle of attack| [1 .. 15], AWAITING A
+                                       %   QUALIFICATION BASIS. Read by BM/run_ballistic
+                                       %   and BM/run_ballistic_target alike -- one
+                                       %   vehicle, one limit. See the header note for
+                                       %   what the value costs and why it is not a
+                                       %   targeting degree of freedom
 end

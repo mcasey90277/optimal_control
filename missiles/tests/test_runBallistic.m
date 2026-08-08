@@ -271,7 +271,87 @@ function test_runBallistic()
          'the lift vector is up and must extend the arc.'],-inDef.liftDiff);
     assertRel(inDef.sDrgB,4467557.9029780682,1e-4,'drag-only range (m)');
     assertRel(inDef.sAeroB,4467721.8681907002,1e-4,'full-aerodynamics range (m)');
+    assertRel(inDef.sFulB ,4467721.8681676891,1e-4, ...
+        're-propagated full-aerodynamics range (m)');
     assertRel(inDef.vImpVac,5936.2865265314022,1e-4,'vacuum impact speed (m/s)');
+
+%% THE FOUR COMPARISON ARCS DIFFER IN ONE MODEL EACH, and with the shipped
+%% handles the re-propagated full-aerodynamics arc IS the flown one, to
+%% integration tolerance. That agreement is what makes the attribution readable
+%% here; the next block is what makes it TRUE in general:
+    assert(abs(inDef.flownGap) < 1e-3, ...
+        ['the flown burnout-to-impact arc and the re-propagated one differ by ' ...
+         '%.3e m under the SHIPPED handles, where they are the same physics ' ...
+         'flown as two phases and as one'],inDef.flownGap);
+    assertAbs(inDef.aeroDiff,inDef.dragDiff + inDef.liftDiff,1e-6, ...
+        'the net aerodynamic effect against the sum of its two parts (m)');
+
+%% ---------------------------------------------------------------------
+%% 5b. THE ATTRIBUTION IS DRAG, NOT DRAG PLUS A GRAVITY MODEL
+%% ---------------------------------------------------------------------
+%% THIS IS THE ASSERTION THE SHIPPED CONFIGURATION CANNOT MAKE. The vacuum arc
+%% is pinned to sphereGrav with rotation off, because only a two-body arc has a
+%% two-body closed form to answer to. The drag-only arc used to inherit
+%% env.grav, and the full-aerodynamics figure used to be read off the FLOWN
+%% trajectory, which carries whatever gravity and rotation the user selected --
+%% so under a swapped gravity model the number the summary called "the drag
+%% effect" silently included the gravity-model difference, and the sign
+%% judgement printed beneath it was passed on that contaminated number. With the
+%% shipped sphereGrav the contamination is exactly zero, which is why nothing
+%% above can see it.
+%%
+%% So the run is repeated on a SCRATCH OBLATE gravity model. Three things must
+%% then be true, and only the fix makes all three true:
+%%
+%%   THE DRAG AND LIFT FIGURES MUST BARELY MOVE. Every arc they are measured
+%%   between is pinned to sphereGrav, so the only thing the swapped model can
+%%   legitimately change about them is the BURNOUT STATE they all start from --
+%%   the boost does fly under the selected gravity. MEASURED: -39.605 m of drag
+%%   becomes -40.040 m and 163.965 m of lift becomes 164.819 m, so the budget is
+%%   5 m. Under the old code the drag-only arc inherited env.grav while the
+%%   vacuum arc did not, so the difference between them picked up the whole J2
+%%   effect over a 4500 km coast -- kilometres, and of the wrong SIGN, which the
+%%   summary would have reported as a red-flag error in a model behaving
+%%   perfectly.
+%%
+%%   THE FLOWN ARC MUST MOVE, or the swapped model did nothing and the
+%%   assertions above are vacuous.
+%%
+%%   AND THE SUMMARY MUST SAY that the flown arc is not the attributed one.
+             outJ2 = evalc(['[~,inJ2] = run_ballistic(struct(''gravFn'',@j2Grav,' ...
+                            '''showPlots'',false));']);
+    assert(~isempty(outJ2),'the oblate-gravity run printed nothing');
+    assertAbs(inJ2.dragDiff,inDef.dragDiff,5, ...
+        ['the drag effect under a swapped gravity model (m). Every arc it is ' ...
+         'measured between is pinned to sphereGrav, so only the burnout state ' ...
+         'may move it; a large change means the gravity model has leaked into ' ...
+         'a number the summary calls drag']);
+    assertAbs(inJ2.liftDiff,inDef.liftDiff,5, ...
+        ['the lift effect under a swapped gravity model (m); the same ' ...
+         'contamination reaches lift through the flown arc if the ' ...
+         'full-aerodynamics figure is read off it']);
+    assert(inJ2.dragDiff < 0, ...
+        ['under a swapped gravity model the drag effect came out at %+.3f m. ' ...
+         'Drag removes energy and cannot lengthen a ballistic arc; a positive ' ...
+         'figure here is the gravity model in the wrong column'],inJ2.dragDiff);
+
+%% ...and the swapped model really did change the flight, so the assertions
+%% above are not vacuous. Measured: the flown arc moves kilometres:
+    assert(abs(inJ2.flownGap) > 1000, ...
+        ['the oblate model moved the flown burnout-to-impact arc by only ' ...
+         '%.3f m. This test cannot see a contaminated attribution unless the ' ...
+         'model it swaps in actually changes the flight'],abs(inJ2.flownGap));
+    assert(abs(inJ2.sAeroB - inDef.sAeroB) > 1000, ...
+        'the flown arc moved by only %.3f m under the oblate model', ...
+        abs(inJ2.sAeroB - inDef.sAeroB));
+    assert(abs(inJ2.sDrgB - inDef.sDrgB) > 1000, ...
+        ['the drag-only arc moved by only %.3f m; it starts from the flown ' ...
+         'burnout state, which an oblate boost does move'], ...
+        abs(inJ2.sDrgB - inDef.sDrgB));
+    assert(contains(outJ2,'THE FLOWN ARC IS NOT THE ARC ABOVE'), ...
+        ['a run whose flown gravity is not the pinned one must SAY that the ' ...
+         'flown arc and the attributed arc are different, and by how much. ' ...
+         'Summary was:\n%s'],outJ2);
 
 %% ---------------------------------------------------------------------
 %% 6. The greatCircle argument order, which the shipped geometry does pin
@@ -391,6 +471,49 @@ function test_runBallistic()
              threw = true;
     end
     assert(threw,'an unrecognised override field must raise, not be ignored');
+end
+
+function [gr,gLat] = j2Grav(r,lat)
+%% Purpose:
+%
+%  A SCRATCH oblate gravity model, for one job only: to be a gravity model that
+%  is not coorbital.grav.sphereGrav, so that run_ballistic's drag and lift
+%  attribution can be shown to be independent of which one the user selected.
+%
+%  IT IS NOT A VALIDATED J2 MODEL and nothing in this library should ever call
+%  it for anything else. The J2 coefficient is the standard WGS-84 value and the
+%  two components are the usual first-order zonal terms, but no test here checks
+%  them against anything -- their only requirement is to move the flown
+%  trajectory by kilometres, which is asserted where it is used.
+%
+%% Inputs:
+%
+%  r                [N x 1]                     Geocentric radius (m)
+%
+%  lat              [N x 1]                     Geocentric latitude (rad)
+%
+%% Outputs:
+%
+%  gr               [N x 1]                     Acceleration toward the centre
+%                                               (m/s^2), positive inward
+%
+%  gLat             [N x 1]                     Northward acceleration (m/s^2)
+%
+%% References:
+%   [1] Vallado, D.A., "Fundamentals of Astrodynamics and Applications,"
+%       4th ed., Microcosm, 2013, Section 8.6.1. First-order J2 acceleration in
+%       spherical components.
+%
+%% Revision History:
+%  Michael Casey                                                08/08/2026
+%  Copyright 2026 Coorbital, Inc.
+%% ------------------------ Begin Code Sequence ---------------------------
+
+                 c = coorbital.util.missileConst();
+               j2C = 1.08262668e-3;
+              rat2 = (c.rE./r).^2;
+                gr = (c.muE./r.^2).*(1 + 1.5.*j2C.*rat2.*(3.*sin(lat).^2 - 1));
+              gLat = (c.muE./r.^2).*(3.*j2C.*rat2.*sin(lat).*cos(lat));
 end
 
 function val = summaryNumber(txt,pat)

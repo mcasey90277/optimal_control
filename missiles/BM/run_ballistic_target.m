@@ -127,28 +127,41 @@ function [traj,info] = run_ballistic_target(opts)
 %  is, not as a prediction of the burnout state.
 %
 %  THE CLAMP IS ALSO WHY alphaMax IS 12 deg HERE AND 6 deg IN BM/run_ballistic,
-%  and that is a targeting decision rather than an aerodynamic one. At 6 deg the
-%  clamp binds over the WHOLE loft bracket: a commanded -30 deg still burns out
-%  at 33.4 deg of flight-path angle, above the max-range value, so the max-range
-%  angle is never reached, range is monotone decreasing in loft across the
-%  entire bracket, and THE DEPRESSED BRANCH DOES NOT EXIST. Measured, by
-%  scanning the shipped bracket at 6, 8, 10 and 12 deg: the same commanded
-%  -30 deg gives 23.6, 15.0 and 7.6 deg at the other three. The two-branch structure this script is built around
-%  needs enough pitch-over authority to fly past the max-range angle, and the
-%  bracketing step below refuses with that message if it is not there.
+%  and that is a targeting decision rather than an aerodynamic one. IT IS NOT
+%  THAT 6 deg ABOLISHES THE DEPRESSED BRANCH. Measured, by scanning loft from
+%  -140 to 85 deg at a 6 deg clamp: the max-range angle sits at a commanded
+%  -42.902 deg with 5211.525 km of range, so the hump is there and so are both
+%  branches. What is wrong at 6 deg is that the hump sits 2.902 deg BELOW the
+%  shipped loftMin of -40 deg, so the shipped bracket finds its largest range ON
+%  an endpoint and the bracketing step below refuses. THE CAUSE OF THAT REFUSAL
+%  IS BRACKET WIDTH, NOT THE CLAMP.
 %
-%% Note -- TWO LIMITATIONS, both printed in the summary rather than buried:
+%  What the clamp decides is WHERE the branches lie and what they can reach. At
+%  6 deg the depressed branch spans only 4708.463 to 5211.525 km -- its floor is
+%  the range still flown at a commanded -140 deg, by which point the clamp has
+%  long since saturated -- so it cannot reach the 3175 km shipped target at any
+%  loft angle, and widening loftMin instead of raising alphaMax would clear the
+%  bracketing refusal only to meet the unreachable-branch one. At 12 deg the
+%  depressed branch reaches down to 1684.117 km and the shipped target is inside
+%  it. THE CLAMP IS PAID FOR IN RANGE: the maximum falls from 5211.525 km at
+%  6 deg to 5055.302 km at 12 deg, 156.224 km given up to buy a depressed branch
+%  that reaches targets a user would actually ask for.
 %
-%  THE AZIMUTH IS EXACT ONLY BECAUSE THE EARTH DOES NOT ROTATE HERE. With
-%  env.omegaE = 0 the ground track of an unbanked trajectory is a great circle,
-%  so the initial bearing of the launch-to-target arc is the whole answer.
-%  Switch earthSpin on and the target is carried east under the vehicle for the
-%  whole flight, so the azimuth needs an OUTER ITERATION around the range solve
-%  and this script does not have one. It refuses to pretend: with earthSpin
-%  true it prints a caution and the reported miss is against a target that
-%  stood still. The two branches make that error VISIBLE rather than abstract,
-%  because they fly for very different times -- 659 s and 1816 s on the shipped
-%  case -- so the same geometry drifts by very different amounts.
+%% Note -- TWO LIMITATIONS, one REFUSED outright and one printed in the summary:
+%
+%  THE AZIMUTH IS EXACT ONLY BECAUSE THE EARTH DOES NOT ROTATE HERE, and
+%  earthSpin true is therefore REFUSED rather than flown. With env.omegaE = 0
+%  the ground track of an unbanked trajectory is a great circle, so the initial
+%  bearing of the launch-to-target arc is the whole answer. Switch earthSpin on
+%  and the target is carried east under the vehicle for the whole flight, the
+%  vehicle has to be aimed where the target is GOING TO BE, and closing that
+%  needs an OUTER AZIMUTH ITERATION around the two branch solves -- PER BRANCH,
+%  the two arcs flying for 659 s and 1816 s on the shipped case. This script
+%  does not have one. It used to run anyway and print a caution; measured, that
+%  produced a 315.690 km miss printed as a converged solution, beside a
+%  cross-track WARNING blaming a banked segment when the bank was already zero.
+%  It now refuses on the same terms as the envelope refusals -- empty traj,
+%  info.refused true, nothing thrown -- and names the iteration it lacks.
 %
 %  THE SOLVE CONTROLS DOWNRANGE ONLY. Bisection matches the great-circle
 %  distance from launch to impact; nothing in it steers the track sideways.
@@ -209,12 +222,18 @@ function [traj,info] = run_ballistic_target(opts)
 %                                               printed text; all SI except the
 %                                               *Km distances and the *Deg
 %                                               angles. Always carries refused
-%                                               (logical), rngReqM, psiLaunch,
+%                                               (logical), refusedWhy
+%                                               ('envelope' or 'earthSpin'),
+%                                               rngReqM and psiLaunch. An
+%                                               ENVELOPE refusal adds
 %                                               loftStarDeg, rngMaxM, rngMinM
 %                                               and the per-branch records in
-%                                               depressed and lofted, so a
-%                                               refused run still hands back the
-%                                               envelope it refused against. A
+%                                               depressed and lofted, so it
+%                                               hands back the envelope it
+%                                               refused against; an earthSpin
+%                                               refusal happens before any
+%                                               propagation and adds omegaE and
+%                                               tgSpeedM instead. A
 %                                               run that was not refused
 %                                               additionally carries the flown
 %                                               branch's own numbers and the
@@ -330,9 +349,14 @@ function [traj,info] = run_ballistic_target(opts)
                                        %     flown as written; pitchRef(end) sets the shape only
           alphaMax = 12;               %deg, clamp on |angle of attack| [1 .. 15]. THIS CLAMP,
                                        %     NOT THE SCHEDULE, is what limits how fast the
-                                       %     flight path can be pushed over, and at
-                                       %     BM/run_ballistic's 6 deg the depressed branch does
-                                       %     not exist at all -- see the header note
+                                       %     flight path can be pushed over. It decides WHERE
+                                       %     the two branches lie: at BM/run_ballistic's 6 deg
+                                       %     the depressed branch still exists but bottoms out
+                                       %     at 4708.463 km and cannot reach the shipped target,
+                                       %     and its hump sits below loftMin so the bracket
+                                       %     below refuses on WIDTH. 12 deg buys a depressed
+                                       %     branch reaching 1684.117 km and pays 156.224 km of
+                                       %     maximum range for it -- see the header note
          bankAngle = 0;                %deg, bank [-90 .. 90], all phases. MUST BE 0 for the
                                        %     closed-form azimuth to be the answer; anything else
                                        %     turns the heading and walks the impact point off
@@ -362,14 +386,29 @@ function [traj,info] = run_ballistic_target(opts)
             gravFn = @coorbital.grav.sphereGrav;  %[gr,gLat]   = gravFn(r,lat)
             aeroFn = @coorbital.aero.constLD;     %[CL,CD]     = aeroFn(alpha,mach,veh)
             propFn = @coorbital.prop.constThrust; %[T,mdot]    = propFn(t,P,veh)
-         earthSpin = false;            %MUST BE false for the closed-form azimuth to hold.
-                                       %true enables the Coriolis and centrifugal terms and
-                                       %INVALIDATES the targeting solve; the run then prints a
-                                       %caution and reports the miss against a target that the
-                                       %rotating Earth has moved out from under it
+         earthSpin = false;            %MUST BE false. true enables the Coriolis and centrifugal
+                                       %terms, which INVALIDATE the closed-form azimuth, and the
+                                       %run is then REFUSED rather than flown: aiming at where
+                                       %the target is going to be needs an outer azimuth
+                                       %iteration this script does not have. Measured before the
+                                       %refusal existed, on the shipped geometry: a 315.690 km
+                                       %miss printed as though it were a converged solution
 
 %% Output:
          showPlots = true;             %false to skip the figures, e.g. under matlab -batch
+           altExag = 1;                %-, VERTICAL EXAGGERATION of the globe still and of the
+                                       %   movie. 1 is TRUE SCALE and is the shipped default:
+                                       %   the movie's altitude inset is true-scale already and
+                                       %   carries the profile, so the globe need not lie about
+                                       %   it, and coorbital.viz drops the "(altitude
+                                       %   exaggerated Nx)" caption clause at unity. Any
+                                       %   positive number is used as given. The char 'auto'
+                                       %   selects the ADAPTIVE rule instead -- exagFor below,
+                                       %   which holds the apparent apogee at or under 0.3 rE,
+                                       %   capped at 30 and floored at 2. 'auto' is worth asking
+                                       %   for when the two branches are being compared: they
+                                       %   differ by ten times in apogee and it draws them at 2x
+                                       %   and 9x, where one fixed factor suits neither
           movieOn  = false;            %true renders the globe movie; it is the expensive part
                                        %of a run, roughly 0.3 s a frame, so it is off by default
        movieFrames = 120;              %-, frames to render [30 .. 600]; ignored unless movieOn
@@ -430,6 +469,7 @@ function [traj,info] = run_ballistic_target(opts)
             propFn = overrideOf(opts,'propFn',propFn);
          earthSpin = overrideOf(opts,'earthSpin',earthSpin);
          showPlots = overrideOf(opts,'showPlots',showPlots);
+           altExag = overrideOf(opts,'altExag',altExag);
           movieOn  = overrideOf(opts,'movieOn',movieOn);
        movieFrames = overrideOf(opts,'movieFrames',movieFrames);
          movieFile = overrideOf(opts,'movieFile',movieFile);
@@ -491,10 +531,28 @@ function [traj,info] = run_ballistic_target(opts)
          'longitude; this script solves a single trajectory, and a vector ' ...
          'here would silently broadcast through every great-circle call.']);
     assert(abs(latLaunch - latTarget) + abs(lonLaunch - lonTarget) > 0, ...
+        'coorbital:runBallisticTarget:coincidentPoints', ...
         ['the launch point and the target are the same point; there is nothing ' ...
          'to solve. coorbital.util.greatCircleBearing would refuse this a few ' ...
          'lines further down, but it can only speak of coincident points, not ' ...
          'of latTarget and lonTarget.']);
+
+%% The display exaggeration, checked here rather than at the figures: a
+%% mistyped one would otherwise cost a full two-branch solve before it was
+%% noticed. Either a positive number, used as given, or the char 'auto', which
+%% defers to the adaptive rule once the flown apogee is known:
+    if ischar(altExag) || isstring(altExag)
+        assert(strcmpi(char(altExag),'auto'), ...
+            ['altExag = "%s" is not understood; it must be a positive number ' ...
+             'or the word ''auto'', which selects the adaptive rule.'], ...
+            char(altExag));
+    else
+        assert(isnumeric(altExag) && isscalar(altExag) && ...
+               isfinite(altExag) && altExag > 0, ...
+            ['altExag must be a positive finite scalar or the word ''auto''; ' ...
+             'got %s. coorbital.viz refuses a zero or negative AltScale.'], ...
+            mat2str(altExag));
+    end
 
 %% The branch selector, checked against the three legal words rather than left
 %% to fall through a switch's otherwise clause: a misspelling here would
@@ -651,6 +709,68 @@ function [traj,info] = run_ballistic_target(opts)
                                                 latTargetR,lonTargetR);
             rngReq = rI.*angReqR;
             fRange = @(loftR) flyLoft(loftR,cfg,rI);
+
+%% -----------------------------------------------------------------
+%% Refuse a ROTATING Earth, before a single trajectory is propagated
+%% -----------------------------------------------------------------
+%% The closed-form azimuth above is the whole answer only while the ground does
+%% not move under the vehicle. With env.omegaE non-zero it is not an answer at
+%% all, and everything downstream of it -- the branch solves, the miss, the
+%% cross-track, the limitations paragraph -- would be describing a target that
+%% stood still. This used to run anyway behind a caution, and what it produced
+%% was three mutually contradictory statements around a 315.690 km miss. It
+%% refuses instead, on the same terms as the envelope refusals below: nothing is
+%% thrown, traj comes back empty and info.refused is true. It refuses HERE,
+%% before the bracketing, because 57 propagations spent on an answer that will
+%% be discarded are 57 propagations wasted:
+    if env.omegaE ~= 0
+            tgSpdM = c.omegaE.*rI.*cos(latTargetR);
+        fprintf('\n');
+        fprintf('===== Ballistic point-to-point targeting: REFUSED =======\n');
+        fprintf('  earthSpin is TRUE. This script cannot target a ROTATING Earth.\n');
+        fprintf('\n');
+        fprintf('    launch           %10.4f %-5s %10.4f deg  (lat, lon)\n', ...
+                latLaunch,'deg',lonLaunch);
+        fprintf('    target           %10.4f %-5s %10.4f deg  (lat, lon)\n', ...
+                latTarget,'deg',lonTarget);
+        fprintf('    required range   %10.3f %-5s (great circle on the r = %.3f km sphere,\n', ...
+                rngReq./1000,'km',rI./1000);
+        fprintf('                                      measured to where the target is NOW)\n');
+        fprintf('    launch azimuth   %10.6f %-5s (the closed form, computed and then NOT\n', ...
+                rad2deg(psiLaunch),'deg');
+        fprintf('                                      used: it is not the answer here)\n');
+        fprintf('    env.omegaE     %.6e rad/s (Coriolis and centrifugal terms ON)\n', ...
+                env.omegaE);
+        fprintf('    target moves     %10.2f %-5s (eastward ground speed under the target at\n', ...
+                tgSpdM,'m/s');
+        fprintf('                                      %.4f deg latitude; every second of\n',latTarget);
+        fprintf('                                      flight carries the aim point this far)\n');
+        fprintf('\n');
+        fprintf('  WHAT IS MISSING IS AN OUTER AZIMUTH ITERATION, and this script does not\n');
+        fprintf('  have one. On a turning Earth the vehicle must be aimed where the target is\n');
+        fprintf('  GOING TO BE, which makes the azimuth depend on the flight time, the flight\n');
+        fprintf('  time depend on the loft angle, and the loft angle depend on the azimuth.\n');
+        fprintf('  Worse here than in HGV/run_target: the loop would have to run PER BRANCH,\n');
+        fprintf('  the lofted and depressed arcs flying for very different times over the\n');
+        fprintf('  same geometry, so the two branches do not even share an aim point.\n');
+        fprintf('  Running anyway is what this refusal replaces. It converged, reported a\n');
+        fprintf('  315.690 km miss on the shipped geometry as though it were a solution, and\n');
+        fprintf('  blamed the cross-range on a banked segment while the bank was zero. Set\n');
+        fprintf('  earthSpin false, or bring an azimuth iteration.\n');
+        fprintf('=========================================================\n\n');
+              traj = [];
+       info.refused = true;
+    info.refusedWhy = 'earthSpin';
+      info.branchAsked = branch;
+       info.rngReqM = rngReq;
+     info.psiLaunch = psiLaunch;
+       info.omegaE  = env.omegaE;
+      info.tgSpeedM = tgSpdM;
+        if nargout == 0
+            clear traj info;
+        end
+        return;
+    end
 
 %% -----------------------------------------------------------------
 %% Bracket the MAXIMUM-RANGE loft angle, before either branch is solved
@@ -817,6 +937,7 @@ function [traj,info] = run_ballistic_target(opts)
         fprintf('=========================================================\n\n');
               traj = [];
        info.refused = true;
+    info.refusedWhy = 'envelope';
       info.branchAsked = branch;
        info.rngReqM = rngReq;
      info.psiLaunch = psiLaunch;
@@ -903,6 +1024,19 @@ function [traj,info] = run_ballistic_target(opts)
         [flownName,flownAgree] = measureBranch(pick.hApoM,pick.tFlyS, ...
                                                hApoStar,tFlyStar);
          branchOK = strcmp(flownName,pickName) && flownAgree;
+
+%% THE ONE CASE IN WHICH THE MEASUREMENT LEGITIMATELY DISAGREES, and it is worth
+%% naming because otherwise the caution below misdiagnoses it. Apogee rises
+%% monotonically with loft angle and each branch is solved on a bracket with the
+%% max-range angle at one end, so a solution strictly inside its bracket always
+%% measures as the branch it was solved on. The exception is the shared endpoint:
+%% when the required range comes within the range tolerance of the MAXIMUM,
+%% coorbital.util.rangeSolve short-circuits at that endpoint and BOTH branches
+%% return the max-range arc itself. The lofted request then measures as
+%% depressed, because the apogee test is strict and the apogee is equal rather
+%% than greater. That is a degeneracy of the request, not a mislocated maximum,
+%% and the summary says so instead of blaming the bracketing:
+        atMaxRange = pick.loftR == loftStarR;
 
 %% -----------------------------------------------------------------
 %% Derived quantities for the trajectory summary
@@ -991,15 +1125,17 @@ function [traj,info] = run_ballistic_target(opts)
 %% How far the ground under the target would have moved during this flight had
 %% the Earth been turning. Quantifies the non-rotating caveat instead of merely
 %% stating it, and it is quantified for BOTH branches because their flight times
-%% differ by a factor of nearly three:
+%% differ by a factor of nearly three. A branch that does not reach the target
+%% has no flight time, so the pair is only reported when both exist -- a NaN
+%% printed in that sentence would read as a measurement:
           driftDep = c.omegaE.*rI.*cos(latTargetR).*dep.tFlyS;
           driftLof = c.omegaE.*rI.*cos(latTargetR).*lof.tFlyS;
 
-%% Labels for the switches in the model line:
+%% Earth rotation is necessarily OFF from here down: earthSpin true is refused
+%% above, before the bracketing, and the assert at the head of the report
+%% re-checks it so that no paragraph below can describe a run it did not
+%% describe:
            spinTxt = 'OFF';
-    if earthSpin
-           spinTxt = 'ON';
-    end
             sepTxt = 'booster JETTISONED at burnout';
     if ~separation
             sepTxt = 'booster RETAINED through impact (no separation)';
@@ -1017,6 +1153,16 @@ function [traj,info] = run_ballistic_target(opts)
       defaultAtmos = isequal(atmosFn,@coorbital.atmos.expAtmos);
        defaultGrav = isequal(gravFn,@coorbital.grav.sphereGrav);
        defaultProp = isequal(propFn,@coorbital.prop.constThrust);
+
+%% EVERY STATEMENT THE SUMMARY MAKES ABOUT THE AZIMUTH, the cross-range and the
+%% great-circle ground track is conditional on a non-rotating Earth. earthSpin
+%% true is refused above precisely so that the prose below cannot contradict the
+%% run it is describing; this re-checks the condition at the point of use rather
+%% than trusting a refusal two hundred lines away:
+    assert(env.omegaE == 0, ...
+        ['the summary is about to describe a closed-form azimuth on a ' ...
+         'non-rotating Earth while env.omegaE = %.6e rad/s; the earthSpin ' ...
+         'refusal above should have made this unreachable'],env.omegaE);
 
 %% Report:
     fprintf('\n');
@@ -1070,11 +1216,22 @@ function [traj,info] = run_ballistic_target(opts)
                 abs(xTrackM)./1000);
         fprintf('                   circle, more than the %.2f km range tolerance. The range\n', ...
                 tolRngM./1000);
-        fprintf('                   solve CONVERGED and the vehicle still missed, because a\n');
-        fprintf('                   banked segment turns the heading and walks the track off\n');
-        fprintf('                   the arc it left on. Set bankAngle to zero, or accept the\n');
-        fprintf('                   cross-range: closing it needs an outer azimuth iteration,\n');
-        fprintf('                   which this script does not have.\n');
+        fprintf('                   solve CONVERGED and the vehicle still missed.\n');
+        if bankRad ~= 0
+        fprintf('                   THE CAUSE IS THE %.1f deg BANK: a banked segment turns the\n', ...
+                bankAngle);
+        fprintf('                   heading and walks the track off the arc it left on. Set\n');
+        fprintf('                   bankAngle to zero, or accept the cross-range -- closing it\n');
+        fprintf('                   needs an outer azimuth iteration this script does not have.\n');
+        else
+        fprintf('                   THE BANK ANGLE IS ALREADY ZERO, so a banked segment is NOT\n');
+        fprintf('                   the cause and setting bankAngle to zero would change\n');
+        fprintf('                   nothing. An unbanked track over a NON-ROTATING sphere\n');
+        fprintf('                   cannot leave the great circle it departed on, and a\n');
+        fprintf('                   rotating one is refused above, so the sideways motion came\n');
+        fprintf('                   from neither. Look at the guidance schedules: something is\n');
+        fprintf('                   commanding a sigma other than bankAngle.\n');
+        end
     end
     fprintf('\n');
     fprintf('  The range-versus-loft hump, bracketed before either branch was solved\n');
@@ -1117,7 +1274,7 @@ function [traj,info] = run_ballistic_target(opts)
     printPair('IMPACT SPEED (m/s)'    ,dep.vImpM            ,lof.vImpM            ,dep,lof,'%16.4f');
     printPair('IMPACT ANGLE (deg)'    ,rad2deg(dep.gamImR)  ,rad2deg(lof.gamImR)  ,dep,lof,'%16.4f');
     printPair('burnout energy (MJ/kg)',dep.epsBo./1e6       ,lof.epsBo./1e6       ,dep,lof,'%16.4f');
-    printPair('loft from max-range'   ,rad2deg(dLoftDep)    ,rad2deg(dLoftLof)    ,dep,lof,'%16.4f');
+    printPair('loft from max (deg)'   ,rad2deg(dLoftDep)    ,rad2deg(dLoftLof)    ,dep,lof,'%16.4f');
     printPair('bisection steps'       ,dep.iterations       ,lof.iterations       ,dep,lof,'%16d');
     printPair('propagations'          ,dep.nProp            ,lof.nProp            ,dep,lof,'%16d');
     if bothHere
@@ -1168,7 +1325,22 @@ function [traj,info] = run_ballistic_target(opts)
         fprintf('                   arc and the other below it, which a genuine lofted or\n');
         fprintf('                   depressed arc cannot do. Suspect the max-range angle.\n');
     end
-    if ~branchOK
+    if ~branchOK && atMaxRange
+        fprintf('  *** CAUTION ***  the flown trajectory MEASURES as the %s branch while the\n', ...
+                flownName);
+        fprintf('                   solve was run on the %s bracket, because BOTH brackets\n', ...
+                pickName);
+        fprintf('                   converged at their SHARED endpoint, the %.4f deg\n', ...
+                rad2deg(loftStarR));
+        fprintf('                   max-range angle: the required %.3f km is inside the\n', ...
+                rngReq./1000);
+        fprintf('                   %.3f km tolerance of the %.3f km maximum. The two arcs\n', ...
+                tolRngM./1000,rngMax./1000);
+        fprintf('                   ARE the same arc at this range and the lofted/depressed\n');
+        fprintf('                   distinction has no meaning here. The max-range angle is\n');
+        fprintf('                   NOT suspect. Tighten tolRangeKm, or take the max-range arc\n');
+        fprintf('                   and stop asking which side of itself it is on.\n');
+    elseif ~branchOK
         fprintf('  *** CAUTION ***  the flown trajectory MEASURES as the %s branch while the\n', ...
                 flownName);
         fprintf('                   solve was run on the %s bracket. The bracket did not hold\n', ...
@@ -1177,7 +1349,20 @@ function [traj,info] = run_ballistic_target(opts)
         fprintf('                   max-range angle above is suspect. Do not read the branch\n');
         fprintf('                   label; read the apogee and the flight time.\n');
     end
-    if strcmp(branch,'minimum-energy')
+%% The minimum-energy paragraph compares TWO burnout energies and TWO loft
+%% distances, and a branch that does not reach the target supplies NaN for both.
+%% Printed unguarded that reads as a measurement -- "essentially the same energy
+%% -- NaN and -44.9073 MJ/kg, NaN %% apart" -- so the one-branch case gets its
+%% own paragraph saying the rule never ran:
+    if strcmp(branch,'minimum-energy') && ~bothHere
+    fprintf('    MINIMUM-ENERGY HAD NO CHOICE TO MAKE HERE. Only one of the two arcs\n');
+    fprintf('    reaches this target, so the rule -- take the branch whose loft angle lies\n');
+    fprintf('    nearer the max-range angle -- never ran, and the energies and loft\n');
+    fprintf('    distances it compares do not exist for the branch that is missing. The\n');
+    fprintf('    label above records which arc survived, not a choice between two. Read the\n');
+    fprintf('    "what minimum-energy can and cannot mean" note in the header before\n');
+    fprintf('    reading anything more into it.\n');
+    elseif strcmp(branch,'minimum-energy')
     fprintf('    WHAT MINIMUM-ENERGY MEANS HERE, precisely, because it does not mean what\n');
     fprintf('    the textbook means. The textbook trajectory reaches the required range on\n');
     fprintf('    the LEAST burnout energy, at a burnout flight-path angle of\n');
@@ -1295,23 +1480,21 @@ function [traj,info] = run_ballistic_target(opts)
             nReMax,'g',nReMax.*c.g0,traj.t(kNR),hKm(kNR));
     fprintf('\n');
     fprintf('  LIMITATIONS OF THIS TARGETING SOLUTION\n');
-    fprintf('    1. THE AZIMUTH IS EXACT ONLY FOR A NON-ROTATING EARTH. This run has Earth\n');
-    fprintf('       rotation %s, env.omegaE = %.6e rad/s, so the ground track of an\n', ...
-            spinTxt,env.omegaE);
-    fprintf('       unbanked trajectory is a great circle and the initial bearing of the\n');
+    fprintf('    1. THE AZIMUTH IS EXACT ONLY FOR A NON-ROTATING EARTH, which is why earthSpin\n');
+    fprintf('       true is declined at the top of this script. This run has Earth rotation %s,\n',spinTxt);
+    fprintf('       env.omegaE = %.6e rad/s, so the ground track of an unbanked\n',env.omegaE);
+    fprintf('       trajectory is a great circle and the initial bearing of the\n');
     fprintf('       launch-to-target arc is the WHOLE answer -- one closed-form call, no\n');
-    fprintf('       iteration. Turn the Earth on and it stops being the answer, and the two\n');
-    fprintf('       branches show how much it matters: the ground under the target sweeps\n');
-    fprintf('       %.0f km east during the depressed arc''s %.0f s and %.0f km during the\n', ...
+    fprintf('       iteration. Turn the Earth on and it stops being the answer, which is what\n');
+    fprintf('       the refusal is for.\n');
+    if bothHere
+    fprintf('       The two branches show how much it would matter: the ground under the\n');
+    fprintf('       target sweeps %.0f km east during the depressed arc''s %.0f s and %.0f km\n', ...
             driftDep./1000,dep.tFlyS,driftLof./1000);
-    fprintf('       lofted arc''s %.0f s. The azimuth would then depend on WHICH BRANCH IS\n', ...
+    fprintf('       during the lofted arc''s %.0f s, so the aim point is not even the same for\n', ...
             lof.tFlyS);
-    fprintf('       FLOWN, so the outer iteration this script does not have would have to\n');
-    fprintf('       run per branch. Rotating-Earth targeting is out of scope for it.\n');
-    if earthSpin
-    fprintf('       *** earthSpin IS ON. The azimuth above was computed as though it were\n');
-    fprintf('       not, so the miss reported above is against a target that stood still and\n');
-    fprintf('       is NOT this vehicle''s miss. Do not read it as one. ***\n');
+    fprintf('       the two arcs and the outer azimuth iteration this script lacks would have\n');
+    fprintf('       to run PER BRANCH. Rotating-Earth targeting is out of scope for it.\n');
     end
     fprintf('    2. THE MISS IS THE RESIDUAL OF THE RANGE SOLVE, ALONG THE GREAT CIRCLE.\n');
     fprintf('       Bisection matches a DISTANCE; nothing in it steers sideways.\n');
@@ -1322,6 +1505,13 @@ function [traj,info] = run_ballistic_target(opts)
     fprintf('       difference. Measured on this run: %.2f m of cross-track offset against a\n', ...
             abs(xTrackM));
     fprintf('       %.2f m range residual, for a %.2f m total miss.\n',abs(resM),missM);
+    elseif crossWarn
+    fprintf('       Cross-range came out at %.2e m WITH THE BANK ANGLE AT ZERO, which the\n', ...
+            abs(xTrackM));
+    fprintf('       WARNING above already declines to blame on a bank. The sentence normally\n');
+    fprintf('       printed here -- that an unbanked track over a non-rotating sphere never\n');
+    fprintf('       leaves the great circle it departed on -- is CONTRADICTED by that\n');
+    fprintf('       measurement, so it is not printed. Read the warning instead.\n');
     else
     fprintf('       Cross-range came out at %.2e m here because the bank angle is zero\n', ...
             abs(xTrackM));
@@ -1334,9 +1524,14 @@ function [traj,info] = run_ballistic_target(opts)
     fprintf('       clamp on angle of attack limits how fast the flight path can be pushed\n');
     fprintf('       over, so the %.4f deg commanded here produced a %.4f deg burnout flight\n', ...
             rad2deg(pick.loftR),rad2deg(pick.gamBoR));
-    fprintf('       path. At BM/run_ballistic''s 6 deg clamp the depressed branch does not\n');
-    fprintf('       exist at all: the clamp holds burnout gamma above the max-range value\n');
-    fprintf('       over the whole bracket and range becomes monotone in loft.\n');
+    fprintf('       path. The clamp also decides WHERE the two branches lie. At\n');
+    fprintf('       BM/run_ballistic''s 6 deg the hump still exists, but at a commanded\n');
+    fprintf('       -42.902 deg, 2.902 deg BELOW the shipped loftMin of -40 deg, so the\n');
+    fprintf('       shipped bracket finds its maximum on an endpoint and is refused for\n');
+    fprintf('       BRACKET WIDTH rather than for the clamp. Widening it recovers the hump\n');
+    fprintf('       but not a useful second branch: at 6 deg the depressed arc bottoms out at\n');
+    fprintf('       4708.463 km and cannot reach this %.3f km target at any loft angle.\n', ...
+            rngReq./1000);
     fprintf('\n');
     fprintf('  Models: atmos %s | grav %s | aero %s\n', ...
             func2str(atmosFn),func2str(gravFn),func2str(aeroFn));
@@ -1398,6 +1593,7 @@ info.branchMeasured = flownName;
   info.branchAgrees = branchOK;
    info.branchWhy   = pickWhy;
 info.branchTimeAgrees = flownAgree;
+    info.atMaxRange = atMaxRange;
        info.rngReqM = rngReq;
        info.rngAchM = pick.rngM;
          info.missM = missM;
@@ -1450,14 +1646,26 @@ info.branchTimeAgrees = flownAgree;
        info.driftLofM = driftLof;
         info.stopOK = allOK;
        info.stopWhy = {why1;why2;why3};
-        info.nProp  = mr.nEval + 1 + dep.nEval + lof.nEval;
+%% The SAME sum the summary prints above, from the SAME fields. nProp counts
+%% whole trajectories flown, and a branch costs its solver evaluations plus the
+%% one propagation that re-creates the state history at the converged loft
+%% angle, which is br.nProp and not br.nEval:
+        info.nProp  = mr.nEval + 1 + dep.nProp + lof.nProp;
 
-%% Vertical exaggeration for the globe, scaled to the apogee the run actually
-%% flew rather than fixed, because the two branches differ by a factor of ten in
-%% apogee and no single factor suits both. Same rule and same cap and floor as
-%% HGV/run_target, whose exagFor header carries the full rationale:
+%% Vertical exaggeration for the globe. TRUE SCALE IS THE SHIPPED DEFAULT: the
+%% movie carries a true-scale altitude inset, which is what the globe used to
+%% have to lie for, and coorbital.viz drops the "(altitude exaggerated Nx)"
+%% caption clause at unity so a true-scale picture makes no claim it is not
+%% keeping. The ADAPTIVE rule is still one word away -- altExag = 'auto' --
+%% because it is the right answer when the two branches are being compared:
+%% they differ by a factor of ten in apogee, 208 km depressed against 2118 km
+%% lofted, and 'auto' draws them at 9x and 2x where one fixed factor suits
+%% neither. Same rule, cap and floor as HGV/run_target, whose exagFor header
+%% carries the full rationale:
             hPeakM = max(traj.x(:,1)) - c.rE;
-           altExag = overrideOf(opts,'altExag',exagFor(hPeakM,c.rE));
+    if ischar(altExag) || isstring(altExag)
+           altExag = exagFor(hPeakM,c.rE);
+    end
        info.altExag = altExag;
    info.altExagRule = @(hM) exagFor(hM,c.rE);
 
@@ -1757,16 +1965,20 @@ function [loftStarR,rngStar,mr] = maxRangeLoft(fRange,loftLoR,loftHiR,nScan,tolL
         error('coorbital:runBallisticTarget:maximumNotBracketed', ...
             ['The largest range over the loft bracket %.4f to %.4f deg was ' ...
              'found AT the %.4f deg endpoint, so the max-range loft angle is ' ...
-             'outside the bracket and range is monotonic across all of it. ' ...
-             'There is then only ONE branch, and the lofted/depressed structure ' ...
-             'this script is built around does not exist. Two usual causes, in ' ...
-             'order of likelihood: (1) the alphaMax clamp is too tight for the ' ...
-             'vehicle to be pushed past the max-range attitude -- at 6 deg on ' ...
-             'the shipped booster a commanded -30 deg still burns out at ' ...
-             '33.4 deg of flight-path angle, above the max-range value, and ' ...
-             'the depressed branch is unreachable at every commanded loft; ' ...
-             '(2) the bracket itself is too narrow. Widen loftMin and ' ...
-             'loftMax, or raise alphaMax.'], ...
+             'outside THIS BRACKET and range is monotonic across all of it. ' ...
+             'There is then only ONE branch here, and the lofted/depressed ' ...
+             'structure this script is built around does not exist. Two usual ' ...
+             'causes, in order of likelihood: (1) THE BRACKET IS TOO NARROW ' ...
+             'and the hump lies outside it -- widen loftMin and loftMax. This ' ...
+             'is what happens at BM/run_ballistic''s 6 deg clamp on the ' ...
+             'shipped booster: the maximum is at a commanded -42.902 deg, ' ...
+             '2.902 deg below the shipped loftMin of -40 deg, and a loftMin of ' ...
+             '-140 finds it. (2) The alphaMax clamp is too tight for the ' ...
+             'vehicle to be pushed past the max-range attitude at any loft ' ...
+             'angle the bracket allows -- raise alphaMax. Note that widening ' ...
+             'the bracket recovers the hump but not necessarily a USEFUL ' ...
+             'second branch: at 6 deg the depressed arc spans only 4708.463 ' ...
+             'to 5211.525 km.'], ...
             rad2deg(loftLoR),rad2deg(loftHiR),rad2deg(scanLoftR(kB)));
     end
 
@@ -2403,13 +2615,14 @@ function e = exagFor(hPeakM,rE)
 %  number in the summary and enters no equation of motion.
 %
 %  The factor holds the APPARENT apogee at or under 0.3 rE, capped at 30 and
-%  floored at 2. THIS SCRIPT NEEDS THE RULE RATHER THAN A FIXED FACTOR because
-%  its two branches differ by a factor of ten in apogee -- 208 km depressed
-%  against 2118 km lofted on the shipped case -- and no single number suits
-%  both: at the 3x BM/run_ballistic hard-codes, the depressed arc is invisible.
-%  The full rationale for the cap, the floor and the 0.3 rE target, and for
-%  where the invariant stops holding, is in the exagFor header of
-%  HGV/run_target.m; this is the same rule.
+%  floored at 2. IT IS NOT THE SHIPPED DEFAULT ANY MORE -- altExag ships at 1,
+%  true scale -- but it is reached by altExag = 'auto', and that is worth asking
+%  for when the two branches are compared: they differ by a factor of ten in
+%  apogee, 208 km depressed against 2118 km lofted on the shipped case, so no
+%  single fixed factor suits both. At the 3x BM/run_ballistic hard-codes, the
+%  depressed arc is invisible. The full rationale for the cap, the floor and the
+%  0.3 rE target, and for where the invariant stops holding, is in the exagFor
+%  header of HGV/run_target.m; this is the same rule.
 %
 %% Inputs:
 %

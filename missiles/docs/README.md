@@ -162,7 +162,7 @@ important ones:
 | `test_runGlide` | `HGV/run_glide` end to end — unit conversion, the `greatCircle` call site, the peak search, the termination diagnosis, and the printed summary, which it parses rather than recomputes. Also guards the deliberate duplication between `vehicle_hgv` and `vehicleDefaults`. |
 | `test_runBallistic` | `BM/run_ballistic` end to end — the boost → coast → descent chain, the staging link, and the Keplerian cross-check. |
 | `test_runTarget` | `HGV/run_target` end to end — the closed-form azimuth, the bisection on cutoff time, the separation link, the reachable-envelope refusal at BOTH ends of the band, and the printed summary. The miss it asserts is measured impact-to-target with `greatCircle` from the flown state, not read back out of the solver's own residual — and it flies a **banked** case as well as the shipped zero-bank one, because at zero bank those two numbers agree to 9.3e-10 m and nothing can tell a measurement from a substitution. |
-| `test_runBallisticTarget` | `BM/run_ballistic_target` end to end — the closed-form azimuth, the **bracketing of the max-range loft angle**, the two branch solves either side of it, the branch selector, and three separate refusals (beyond maximum range, too close, and an unreachable *branch*). What it checks that no other test in this suite can: the branch is **re-derived from the flown apogee and flight time** rather than read off the script's own label, the lofted and depressed arcs are asserted to differ by more than five times in apogee and two in flight time, and `minimum-energy` is flown at **two** targets because it takes the lofted arc at 3175 km and the depressed one at 4218 km — one case alone cannot tell a working rule from a hard-wired answer. It also pins the `alphaMax` guard: at `BM/run_ballistic`'s 6° clamp the depressed branch does not exist and the script must refuse with `coorbital:runBallisticTarget:maximumNotBracketed`. |
+| `test_runBallisticTarget` | `BM/run_ballistic_target` end to end — the closed-form azimuth, the **bracketing of the max-range loft angle**, the two branch solves either side of it, the branch selector, and three separate refusals (beyond maximum range, too close, and an unreachable *branch*). What it checks that no other test in this suite can: the branch is **re-derived from the flown apogee and flight time** rather than read off the script's own label, the lofted and depressed arcs are asserted to differ by more than five times in apogee and two in flight time, and `minimum-energy` is flown at **two** targets because it takes the lofted arc at 3175 km and the depressed one at 4218 km — one case alone cannot tell a working rule from a hard-wired answer. Part 11 exercises the branch **measurement** on the one geometry where it can legitimately disagree with the label — a target inside the range tolerance of the *maximum*, where both brackets converge on their shared endpoint — because every other case in the file passes with the measurement bypassed. Part 12 pins the `earthSpin` refusal. It also pins the `alphaMax` story: the shipped 6° clamp must refuse with `coorbital:runBallisticTarget:maximumNotBracketed`, the *cause* must be bracket width (widen `loftMin` to −140° at the same clamp and the hump appears at −42.907°), and the 12° the script ships must cost 156.224 km of maximum range. |
 | `test_fullChain` | The chain milestone's headline deliverable: boost, glide and descent on one seven-state vector. Re-integrates **across** each junction with `ode89` at 1e-12 — a different method at a hundred times the driver's tolerance — and asserts continuity in states 1–6 and the expected staging jump in state 7. |
 | `test_boostEvents` | `eventBurnout` and `eventApogee` inside a live propagation, not just as scalar function calls. |
 
@@ -544,8 +544,12 @@ US76 and every propulsion model follows automatically.
 
 Earth rotation is not a handle — it is the scalar `env.omegaE`. Set it to
 `c.omegaE` to turn on the Coriolis and centrifugal terms already present in
-`glide3DOF` and `boost3DOF`, or leave it at 0. In all three entry scripts the
-switch is the boolean `earthSpin` in the user block, shipped `false`.
+`glide3DOF` and `boost3DOF`, or leave it at 0. In every entry script the switch
+is the boolean `earthSpin` in the user block, shipped `false`. In the two
+**targeting** scripts, `HGV/run_target` and `BM/run_ballistic_target`, `true` is
+now **refused** rather than flown: their launch azimuth is a closed form that is
+only the answer while the ground stands still. See "A rotating Earth is refused,
+not flown" below.
 
 ### Why `sphereGrav` returns a `gLat` that is always zero
 
@@ -668,7 +672,9 @@ to change, at both ends:
 A refusal returns an empty trajectory and `info.refused = true`; it does **not**
 throw, so a caller can read the band out of `info` without a `try`/`catch`.
 
-### Two limitations, printed in every summary
+### Two limitations: one refused outright, one printed in every summary
+
+#### A rotating Earth is refused, not flown
 
 **The azimuth is exact only for a non-rotating Earth.** With `env.omegaE = 0`
 the ground track of a zero-bank trajectory is a great circle, so the initial
@@ -677,9 +683,27 @@ bearing is the whole answer. Turn rotation on and it is not: over the shipped
 vehicle would have to be aimed where the target is going to be. That makes the
 azimuth depend on the flight time, the flight time on the cutoff, and the
 cutoff on the azimuth — an **outer iteration** around the range solve, which
-`run_target` does not have and which is out of scope for it. Setting
-`earthSpin` true prints a caution saying the reported miss is against a target
-that stood still.
+neither targeting script has.
+
+`earthSpin` true used to run anyway behind a caution, and what came out was
+three statements that contradicted each other around a number that was not a
+miss:
+
+| Script | Measured miss with `earthSpin` true | What the summary said beside it |
+|---|---|---|
+| `HGV/run_target` | **231.55 km** | rotation ON *and* "the initial bearing is the WHOLE answer"; a cross-track `*** WARNING ***` telling the user to zero banks that were already zero |
+| `BM/run_ballistic_target` | **315.69 km** | the same, plus a limitations paragraph attributing 3.15e5 m of cross-range to a bank angle of zero |
+
+Both now **refuse** — the same contract as the envelope refusals: nothing is
+thrown, `traj` comes back empty, `info.refused` is true and
+`info.refusedWhy = 'earthSpin'`. The refusal happens **before any propagation**,
+names the outer azimuth iteration that is missing, and prints the eastward
+ground speed under the target so the size of the effect is a number rather than
+an adjective. Everything the summary says about the azimuth in a normal run is
+gated on `env.omegaE == 0` by an assertion at the head of the report, so the
+prose can no longer describe a run it is not describing. `BM`'s cross-track
+`WARNING` also forks on the bank now: with a bank it blames the bank, and with
+the bank at zero it says so and points at the guidance schedules instead.
 
 **The miss is the residual of the range solve, along the great circle.**
 Bisection matches a *distance*; nothing in it steers sideways. Cross-range comes
@@ -718,6 +742,31 @@ degradation and needs no network. Both are a working movie: the launch point,
 the skipping glide and the terminal descent onto the target are visible in each,
 and the three phases are coloured separately. Output goes to `tempdir` by
 default — a movie is a build artefact and does not belong in the source tree.
+
+#### Vertical exaggeration: true scale is the default
+
+Both targeting scripts expose `altExag` in their USER PARAMETERS block, and both
+ship it at **1 — true scale**. The globe used to exaggerate altitude because
+otherwise the arc lay on the surface and showed nothing; the movie's **altitude
+inset is true-scale already** and was added precisely so the globe need not lie
+about it, and `globeMovie` drops the `(altitude exaggerated Nx)` caption clause
+when the scale is 1, so a true-scale picture makes no claim it is not keeping.
+
+The adaptive rule is still one word away: `altExag = 'auto'` selects `exagFor`,
+which holds the apparent apogee at or under 0.3 rE, capped at 30 and floored at
+2. Any positive number is used as given, and anything else raises — before the
+solve, not after it.
+
+Rendered and looked at, 36 frames each at the new default:
+
+| Run | apogee | fraction of rE | true-scale verdict |
+|---|---|---|---|
+| `BM/run_ballistic_target`, lofted arc | 2118.45 km | 33.2 % | **reads well.** The arc stands clearly off the limb; the coast and descent legs are separately visible and the ballistic hump is obvious without any exaggeration. `'auto'` gives 2x, a barely perceptible difference |
+| `HGV/run_target` | 118.09 km | 1.9 % | the ground track is crisp against the globe with both markers legible, but the **skip phugoid is invisible** on the sphere — it reads as a surface track. The inset carries it completely: six clear skips decaying from 121 km, in true scale, with axes. Ask for `'auto'` (16x) when the phugoid is the point of the picture |
+
+Neither is unreadable, so neither default was reverted. What changed is where a
+reader looks for altitude: the inset, which is honest, rather than the globe,
+which was not.
 
 ---
 
@@ -796,27 +845,42 @@ summary prints both distances and **cautions** inside a 5 % band, advising the
 only sound course there — ask for `'lofted'` or `'depressed'` explicitly.
 `tests/test_runBallisticTarget.m` flies all three of those targets.
 
-### The clamp that decides whether the second branch exists at all
+### The clamp, and what it actually costs — a corrected claim
 
 `run_ballistic_target` ships `alphaMax = 12°` where `BM/run_ballistic` ships 6°,
 and that is a targeting decision, not an aerodynamic one. The loft angle is a
 *commanded attitude*; what the vehicle achieves at burnout is limited by how fast
-the angle-of-attack clamp lets the flight path be pushed over. Measured by
-scanning the shipped bracket at 6, 8, 10 and 12°:
+the angle-of-attack clamp lets the flight path be pushed over.
 
-| `alphaMax` | burnout γ at the most depressed command | max-range angle inside the bracket? |
-|---|---|---|
-| 6° | 33.4° at a commanded −30° | **no** — range is monotone decreasing across the whole bracket |
-| 8° | 23.6° at a commanded −30° | yes, near 5° |
-| 10° | 15.0° at a commanded −30° | yes, near 25° |
-| 12° | 7.6° at a commanded −30° | yes, at 25.07° |
+**An earlier version of this section, of the script's header and of its refusal
+message all said that at 6° "the depressed branch does not exist" and that range
+is monotone in loft. That is measurably false and is corrected here.** Sweep the
+loft angle from −140° to +85° at a 6° clamp and the hump is plainly there:
 
-At 6° the clamp holds burnout γ above the max-range value at *every* commanded
-loft angle, **the depressed branch does not exist**, and the two-branch structure
-this script is built around collapses. The bracketing step refuses with
-`coorbital:runBallisticTarget:maximumNotBracketed` and names that cause first,
-rather than reporting a one-branch problem as a two-branch one with one branch
-quietly missing.
+| `alphaMax` | max-range loft angle | maximum range | depressed branch |
+|---|---|---|---|
+| 6° | **−42.902°** | **5211.525 km** | exists, spans 4708.463–5211.525 km |
+| 12° (shipped) | +25.068° | 5055.302 km | exists, spans 1684.117–5055.302 km |
+
+Two things follow, and neither is the old claim.
+
+**The shipped refusal at 6° is about BRACKET WIDTH, not the clamp.** The
+max-range angle at 6° sits 2.902° *below* the shipped `loftMin = −40°`, so the
+coarse scan finds its largest range on an endpoint and `maxRangeLoft` refuses
+with `coorbital:runBallisticTarget:maximumNotBracketed`. Widen `loftMin` to
+−140° at the same 6° clamp and the run solves, with the maximum interior and
+both branches present. The refusal message now names bracket width **first** and
+the clamp second, in that order.
+
+**What the clamp actually buys is REACH, and it is paid for in range.** At 6° the
+depressed branch bottoms out at 4708.463 km and so cannot serve the 3175 km demo
+target at any loft angle — widening the bracket clears the bracketing refusal
+only to meet the unreachable-branch one. Raising the clamp to 12° drops that
+floor to 1684.117 km and puts the demo target inside it, at a cost of
+**156.224 km of maximum range** (5055.302 against 5211.525). That is the trade,
+and `tests/test_runBallisticTarget.m` part 9 pins every number in it — the
+refusal identifier at the shipped bracket, the hump at the widened one, the
+6° depressed floor, and the 156.224 km.
 
 ### Three refusals, none of which throws
 
@@ -1098,7 +1162,7 @@ reachable            556.603 to 5055.302 km
   IMPACT SPEED (m/s)       924.2005        3502.7891
   IMPACT ANGLE (deg)       -18.2269         -62.7418
   burnout energy (MJ/kg)   -45.1546         -44.9073
-  loft from max-range       39.4287          34.0773
+  loft from max (deg)       39.4287          34.0773
 
 asked for   minimum-energy   flew lofted   MEASURED as lofted
 launch azimuth    39.197731 deg  (closed form, no iteration)
@@ -1106,9 +1170,15 @@ flown azimuth     39.197731 deg  (-2.200e-10 deg from the commanded one)
 cross-track           -1.17e-05 m
 MISS DISTANCE        115.86 m    (impact to target, from the FLOWN state)
 impact            61.999681 N, 60.002110 W  (target 62.000000, -60.000000)
-propagations              57     (29 bracketing the maximum, 1 re-flying it,
+propagations              59     (29 bracketing the maximum, 1 re-flying it,
                                   14 depressed, 15 lofted)
 ```
+
+`info.nProp` used to return **57** where the summary printed 59, the difference
+being the two propagations that re-create each branch's state history at its
+converged loft angle. Both now read `mr.nEval + 1 + dep.nProp + lof.nProp`, and
+`tests/test_runBallisticTarget.m` parses the printed count and compares it with
+the returned one.
 
 Four independent checks, all recomputed outside the script:
 
@@ -1119,10 +1189,40 @@ Four independent checks, all recomputed outside the script:
 | Which branch was flown, re-derived from `max(traj.x(:,1))` and `traj.t(end)` against the max-range arc's 1021.486 km and 1327.812 s | `lofted` requested | apogee 2118.449 km and 1816.010 s, both **above** — `lofted` |
 | `traj.x(1,6)` against `greatCircleBearing(launch,target)` | equal | **bit-identical**, `0` ulp |
 
-The whole run — 57 propagations, both branches, the bracketing and the summary —
+The whole run — 59 propagations, both branches, the bracketing and the summary —
 takes about 3 s. A ballistic propagation is roughly 0.05 s, three times cheaper
 than the boost-glide chain, which is what makes a two-branch solve affordable at
 all.
+
+### The branch is measured, and the measurement is now pinned
+
+The script reports the branch it *measured* from the flown apogee and flight
+time beside the branch it was *asked* for, and that measurement had **no test
+behind it**: every case in the suite was one where the two agree, so replacing
+the whole `measureBranch` call with `flownName = pickName; flownAgree = true`
+left the suite green while `info.branchMeasured`, `info.branchAgrees`,
+`info.branchTimeAgrees` and the summary's `MEASURED as` line all quietly became
+restatements of the command.
+
+Finding a case where the two can *legitimately* differ takes some care, and the
+reason is structural. Apogee rises monotonically with the loft angle, and each
+branch is solved on a bracket with the max-range angle at one end, so a solution
+strictly inside its bracket always measures as the branch it was solved on — a
+mislocated maximum moves the reference apogee and the bracket end together and
+cannot separate them. The exception is the **shared endpoint**: when the required
+range falls within the range tolerance of the *maximum*,
+`coorbital.util.rangeSolve` short-circuits there and both branches come back
+holding the max-range arc itself. A `'lofted'` request is then served by an arc
+whose apogee *equals* rather than exceeds the reference, and the strict test
+names it depressed.
+
+Part 11 of `tests/test_runBallisticTarget.m` flies exactly that — 5030 km on a
+50 km tolerance against a 5055.302 km maximum — and asserts
+`branchMeasured == 'depressed'` against a `'lofted'` command, `branchAgrees`
+false, and the printed caution. The caution itself was improved to diagnose the
+degeneracy ("both brackets converged at their SHARED endpoint … the max-range
+angle is NOT suspect") instead of blaming a bracketing step that did nothing
+wrong. With the bypass in place, part 11 fails.
 
 ---
 

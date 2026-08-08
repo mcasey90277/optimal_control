@@ -53,15 +53,18 @@ function [traj,info] = run_target(opts)
 %
 %% Note -- TWO LIMITATIONS, both printed in the summary rather than buried:
 %
-%  THE AZIMUTH IS EXACT ONLY BECAUSE THE EARTH DOES NOT ROTATE HERE. With
-%  env.omegaE = 0 the ground track of a zero-bank trajectory is a great
-%  circle, so the initial bearing of the launch-to-target arc is the whole
-%  answer. Switch earthSpin on and the target is carried east under the
-%  vehicle for the whole flight -- of order 600 km at mid latitude over a
-%  27-minute flight -- so the initial bearing is no longer the answer, the
-%  azimuth needs an OUTER ITERATION around the range solve, and this script
-%  does not have one. It refuses to pretend: with earthSpin true it prints a
-%  caution and the reported miss is against a target that stood still.
+%  THE AZIMUTH IS EXACT ONLY BECAUSE THE EARTH DOES NOT ROTATE HERE, and
+%  earthSpin true is therefore REFUSED rather than flown. With env.omegaE = 0
+%  the ground track of a zero-bank trajectory is a great circle, so the
+%  initial bearing of the launch-to-target arc is the whole answer. Switch
+%  earthSpin on and the target is carried east under the vehicle for the whole
+%  flight -- of order 600 km at mid latitude over a 27-minute flight -- so the
+%  initial bearing is no longer the answer, the azimuth needs an OUTER
+%  ITERATION around the range solve, and this script does not have one. It
+%  used to run anyway behind a caution; measured, that produced a 231.552 km
+%  miss printed as a converged solution, beside a cross-track WARNING blaming
+%  a banked segment when every bank was zero. It now refuses on the same terms
+%  as the envelope refusal -- empty traj, info.refused true, nothing thrown.
 %
 %  THE SOLVE CONTROLS DOWNRANGE ONLY. Bisection matches the great-circle
 %  distance from launch to impact; nothing in it steers the track sideways.
@@ -124,12 +127,17 @@ function [traj,info] = run_target(opts)
 %                                               have to read them back out of
 %                                               printed text; all SI except the
 %                                               *Km distances. Always carries
-%                                               refused (logical), rngReqM,
-%                                               psiLaunch, rngMinM, rngMaxM and
-%                                               the rangeSolve record in
-%                                               solveInfo, so a refused run
-%                                               still hands back the envelope
-%                                               it refused against. A run that
+%                                               refused (logical), refusedWhy
+%                                               ('envelope' or 'earthSpin'),
+%                                               rngReqM and psiLaunch. An
+%                                               ENVELOPE refusal adds rngMinM,
+%                                               rngMaxM and the rangeSolve
+%                                               record in solveInfo, so it hands
+%                                               back the envelope it refused
+%                                               against; an earthSpin refusal
+%                                               happens before any propagation
+%                                               and adds omegaE and tgSpeedM
+%                                               instead. A run that
 %                                               was not refused additionally
 %                                               carries the DISPLAY choices the
 %                                               figures were drawn with:
@@ -273,13 +281,29 @@ function [traj,info] = run_target(opts)
             aeroFn = @coorbital.aero.constLD;     %[CL,CD]     = aeroFn(alpha,mach,veh)
             propFn = @coorbital.prop.constThrust; %[T,mdot]    = propFn(t,P,veh)
          earthSpin = false;            %MUST BE false for the closed-form azimuth to hold.
-                                       %true enables the Coriolis and centrifugal terms and
-                                       %INVALIDATES the targeting solve; the run then prints a
-                                       %caution and reports the miss against a target that the
-                                       %rotating Earth has moved out from under it
+                                       %true enables the Coriolis and centrifugal terms, which
+                                       %INVALIDATE the closed-form azimuth, and the run is then
+                                       %REFUSED rather than flown: aiming at where the target is
+                                       %going to be needs an outer azimuth iteration this script
+                                       %does not have. Measured before the refusal existed, on
+                                       %the shipped geometry: a 231.552 km miss printed as
+                                       %though it were a converged solution
 
 %% Output:
          showPlots = true;             %false to skip the figures, e.g. under matlab -batch
+           altExag = 1;                %-, VERTICAL EXAGGERATION of the globe still and of the
+                                       %   movie. 1 is TRUE SCALE and is the shipped default:
+                                       %   the movie's altitude inset is true-scale already and
+                                       %   carries the profile, so the globe need not lie about
+                                       %   it, and coorbital.viz drops the "(altitude
+                                       %   exaggerated Nx)" caption clause at unity. Any
+                                       %   positive number is used as given. The char 'auto'
+                                       %   selects the ADAPTIVE rule instead -- exagFor below,
+                                       %   which holds the apparent apogee at or under 0.3 rE,
+                                       %   capped at 30 and floored at 2, and returns 16 on the
+                                       %   shipped case. Ask for it when the skip phugoid is
+                                       %   the point of the picture: at true scale a 118 km
+                                       %   glide is one part in 54 of an Earth radius
           movieOn  = false;            %true renders the globe movie; it is the expensive part
                                        %of a run, roughly 0.3 s a frame, so it is off by default
        movieFrames = 120;              %-, frames to render [30 .. 600]; ignored unless movieOn
@@ -344,6 +368,7 @@ function [traj,info] = run_target(opts)
             propFn = overrideOf(opts,'propFn',propFn);
          earthSpin = overrideOf(opts,'earthSpin',earthSpin);
          showPlots = overrideOf(opts,'showPlots',showPlots);
+           altExag = overrideOf(opts,'altExag',altExag);
           movieOn  = overrideOf(opts,'movieOn',movieOn);
        movieFrames = overrideOf(opts,'movieFrames',movieFrames);
          movieFile = overrideOf(opts,'movieFile',movieFile);
@@ -397,6 +422,23 @@ function [traj,info] = run_target(opts)
          'here would silently broadcast through every great-circle call.']);
     assert(abs(latLaunch - latTarget) + abs(lonLaunch - lonTarget) > 0, ...
         'the launch point and the target are the same point; there is nothing to solve.');
+
+%% The display exaggeration, checked here rather than at the figures: a
+%% mistyped one would otherwise cost a whole range solve before it was noticed.
+%% Either a positive number, used as given, or the char 'auto', which defers to
+%% the adaptive rule once the flown apogee is known:
+    if ischar(altExag) || isstring(altExag)
+        assert(strcmpi(char(altExag),'auto'), ...
+            ['altExag = "%s" is not understood; it must be a positive number ' ...
+             'or the word ''auto'', which selects the adaptive rule.'], ...
+            char(altExag));
+    else
+        assert(isnumeric(altExag) && isscalar(altExag) && ...
+               isfinite(altExag) && altExag > 0, ...
+            ['altExag must be a positive finite scalar or the word ''auto''; ' ...
+             'got %s. coorbital.viz refuses a zero or negative AltScale.'], ...
+            mat2str(altExag));
+    end
 
                  c = coorbital.util.missileConst();
                veh = vehicleFn();
@@ -507,6 +549,62 @@ function [traj,info] = run_target(opts)
             rngReq = rI.*angReqR;
 
 %% -----------------------------------------------------------------
+%% Refuse a ROTATING Earth, before a single trajectory is propagated
+%% -----------------------------------------------------------------
+%% The closed-form azimuth above is the whole answer only while the ground does
+%% not move under the vehicle. With env.omegaE non-zero it is not an answer at
+%% all, and every number downstream of it -- the cutoff, the miss, the
+%% cross-track, the limitations paragraph -- would be describing a target that
+%% stood still. This used to run anyway behind a caution, and what it produced
+%% was a 231.552 km miss reported as a converged solution. It refuses instead,
+%% on the same terms as the envelope refusal below: nothing is thrown, traj
+%% comes back empty and info.refused is true:
+    if env.omegaE ~= 0
+            tgSpdM = c.omegaE.*rI.*cos(latTargetR);
+        fprintf('\n');
+        fprintf('===== Point-to-point targeting: REFUSED =================\n');
+        fprintf('  earthSpin is TRUE. This script cannot target a ROTATING Earth.\n');
+        fprintf('\n');
+        fprintf('    launch           %10.4f %-5s %10.4f deg  (lat, lon)\n', ...
+                latLaunch,'deg',lonLaunch);
+        fprintf('    target           %10.4f %-5s %10.4f deg  (lat, lon)\n', ...
+                latTarget,'deg',lonTarget);
+        fprintf('    required range   %10.2f %-5s (great circle on the r = %.3f km sphere,\n', ...
+                rngReq./1000,'km',rI./1000);
+        fprintf('                                      measured to where the target is NOW)\n');
+        fprintf('    launch azimuth   %10.6f %-5s (the closed form, computed and then NOT\n', ...
+                rad2deg(psiLaunch),'deg');
+        fprintf('                                      used: it is not the answer here)\n');
+        fprintf('    env.omegaE     %.6e rad/s (Coriolis and centrifugal terms ON)\n', ...
+                env.omegaE);
+        fprintf('    target moves     %10.2f %-5s (eastward ground speed under the target at\n', ...
+                tgSpdM,'m/s');
+        fprintf('                                      %.4f deg latitude; every second of\n',latTarget);
+        fprintf('                                      flight carries the aim point this far)\n');
+        fprintf('\n');
+        fprintf('  WHAT IS MISSING IS AN OUTER AZIMUTH ITERATION, and this script does not\n');
+        fprintf('  have one. On a turning Earth the vehicle must be aimed where the target is\n');
+        fprintf('  GOING TO BE, which makes the azimuth depend on the flight time, the flight\n');
+        fprintf('  time depend on the cutoff, and the cutoff depend on the azimuth. Running\n');
+        fprintf('  anyway is what this refusal replaces: it converged, reported a 231.552 km\n');
+        fprintf('  miss on the shipped geometry as though it were a solution, and blamed the\n');
+        fprintf('  cross-range on a banked segment while every bank was zero. Set earthSpin\n');
+        fprintf('  false, or bring an azimuth iteration.\n');
+        fprintf('=========================================================\n\n');
+              traj = [];
+       info.refused = true;
+    info.refusedWhy = 'earthSpin';
+       info.rngReqM = rngReq;
+     info.psiLaunch = psiLaunch;
+       info.omegaE  = env.omegaE;
+      info.tgSpeedM = tgSpdM;
+        if nargout == 0
+            clear traj info;
+        end
+        return;
+    end
+
+%% -----------------------------------------------------------------
 %% The range solve: bracket the envelope, then bisect
 %% -----------------------------------------------------------------
 %% The bracket endpoints in seconds. rangeSolve evaluates both before it
@@ -582,6 +680,7 @@ function [traj,info] = run_target(opts)
         fprintf('=========================================================\n\n');
               traj = [];
        info.refused  = true;
+    info.refusedWhy  = 'envelope';
        info.rngReqM  = rngReq;
      info.psiLaunch  = psiLaunch;
        info.rngMinM  = sv.fMin;
@@ -768,11 +867,11 @@ function [traj,info] = run_target(opts)
 %% units that convert to zero is still recognised as zero:
            anyBank = any([bankBoostR glideBnkR descBnkR] ~= 0);
 
-%% Labels for the switches in the model line:
+%% Earth rotation is necessarily OFF from here down: earthSpin true is refused
+%% above, before the range solve, and the assert at the head of the report
+%% re-checks it so that no paragraph below can describe a run it did not
+%% describe:
            spinTxt = 'OFF';
-    if earthSpin
-           spinTxt = 'ON';
-    end
 
 %% Conventional lower edge of the hypersonic regime. A modelling convention,
 %% not a physical constant of the Earth or the air, so it does not belong in
@@ -786,6 +885,16 @@ function [traj,info] = run_target(opts)
       defaultAtmos = isequal(atmosFn,@coorbital.atmos.expAtmos);
        defaultGrav = isequal(gravFn,@coorbital.grav.sphereGrav);
        defaultProp = isequal(propFn,@coorbital.prop.constThrust);
+
+%% EVERY STATEMENT THE SUMMARY MAKES ABOUT THE AZIMUTH, the cross-range and the
+%% great-circle ground track is conditional on a non-rotating Earth. earthSpin
+%% true is refused above precisely so that the prose below cannot contradict the
+%% run it is describing; this re-checks the condition at the point of use rather
+%% than trusting a refusal several hundred lines away:
+    assert(env.omegaE == 0, ...
+        ['the summary is about to describe a closed-form azimuth on a ' ...
+         'non-rotating Earth while env.omegaE = %.6e rad/s; the earthSpin ' ...
+         'refusal above should have made this unreachable'],env.omegaE);
 
 %% Report:
     fprintf('\n');
@@ -839,11 +948,21 @@ function [traj,info] = run_target(opts)
                 abs(xTrackM)./1000);
         fprintf('                   circle, more than the %.2f km range tolerance. The range\n', ...
                 tolRngM./1000);
-        fprintf('                   solve CONVERGED and the vehicle still missed, because a\n');
-        fprintf('                   banked segment turns the heading and walks the track off\n');
-        fprintf('                   the arc it left on. Set glideBank and descBank to zero, or\n');
-        fprintf('                   accept the cross-range: closing it needs an outer azimuth\n');
-        fprintf('                   iteration, which this script does not have.\n');
+        fprintf('                   solve CONVERGED and the vehicle still missed.\n');
+        if anyBank
+        fprintf('                   THE CAUSE IS THE BANK: a banked segment turns the heading\n');
+        fprintf('                   and walks the track off the arc it left on. Set glideBank\n');
+        fprintf('                   and descBank to zero, or accept the cross-range -- closing\n');
+        fprintf('                   it needs an outer azimuth iteration this script lacks.\n');
+        else
+        fprintf('                   EVERY BANK IS ALREADY ZERO, so a banked segment is NOT the\n');
+        fprintf('                   cause and zeroing the banks would change nothing. A\n');
+        fprintf('                   zero-bank track over a NON-ROTATING sphere cannot leave the\n');
+        fprintf('                   great circle it departed on, and a rotating one is refused\n');
+        fprintf('                   above, so the sideways motion came from neither. Look at\n');
+        fprintf('                   the guidance schedules: something is commanding a sigma\n');
+        fprintf('                   other than the bank entries in the user block.\n');
+        end
     end
     fprintf('\n');
     fprintf('    solved cutoff    %10.4f %-5s  (%.6f of the %.4f s full burn)\n', ...
@@ -958,9 +1077,9 @@ function [traj,info] = run_target(opts)
     fprintf('                                        that fraction of it brakes the vehicle.\n');
     fprintf('\n');
     fprintf('  LIMITATIONS OF THIS TARGETING SOLUTION\n');
-    fprintf('    1. THE AZIMUTH IS EXACT ONLY FOR A NON-ROTATING EARTH. This run has Earth\n');
-    fprintf('       rotation %s, env.omegaE = %.6e rad/s, so the ground track of a zero-bank\n', ...
-            spinTxt,env.omegaE);
+    fprintf('    1. THE AZIMUTH IS EXACT ONLY FOR A NON-ROTATING EARTH, which is why earthSpin\n');
+    fprintf('       true is declined at the top of this script. This run has Earth rotation %s,\n',spinTxt);
+    fprintf('       env.omegaE = %.6e rad/s, so the ground track of a zero-bank\n',env.omegaE);
     fprintf('       trajectory is a great circle and the initial bearing of the\n');
     fprintf('       launch-to-target arc is the WHOLE answer -- one closed-form call, no\n');
     fprintf('       iteration. Turn the Earth on and it stops being the answer: over this\n');
@@ -970,13 +1089,9 @@ function [traj,info] = run_target(opts)
             latTarget);
     fprintf('       is GOING TO BE. That makes the azimuth depend on the flight time, the\n');
     fprintf('       flight time depend on the cutoff, and the cutoff depend on the azimuth:\n');
-    fprintf('       an OUTER ITERATION around the range solve. This script has none, and\n');
-    fprintf('       rotating-Earth targeting is out of scope for it.\n');
-    if earthSpin
-    fprintf('       *** earthSpin IS ON. The azimuth above was computed as though it were\n');
-    fprintf('       not, so the miss reported above is against a target that stood still and\n');
-    fprintf('       is NOT this vehicle''s miss. Do not read it as one. ***\n');
-    end
+    fprintf('       an OUTER ITERATION around the range solve. This script has none, so it\n');
+    fprintf('       refuses the case rather than reporting a miss against a target that\n');
+    fprintf('       stood still.\n');
     fprintf('    2. THE MISS IS THE RESIDUAL OF THE RANGE SOLVE, ALONG THE GREAT CIRCLE.\n');
     fprintf('       Bisection matches a DISTANCE; nothing in it steers sideways.\n');
     if anyBank
@@ -1129,24 +1244,25 @@ function [traj,info] = run_target(opts)
 %% on the surface and show nothing of the skip phugoid -- a 50 km glide on a
 %% 6378 km sphere is one part in 128.
 %%
-%% But a FIXED exaggeration does not travel. The shipped 30x suits a glide that
-%% stays under about 60 km; on a lofted intercontinental shot that peaks near
-%% 260 km it paints the arc 7800 km off the surface, further out than the Earth
-%% is wide, and the track leaves the frame entirely. So it is scaled to the
-%% flown apogee by exagFor below, and remains overridable.
+%% TRUE SCALE IS NOW THE SHIPPED DEFAULT, altExag = 1. The movie carries a
+%% true-scale altitude inset, which is precisely what the globe used to have to
+%% exaggerate for, and coorbital.viz.globeMovie drops the "(altitude exaggerated
+%% Nx)" caption clause at unity, so a true-scale picture makes no claim it is
+%% not keeping.
 %%
-%% THE SHIPPED CASE DID CHANGE, and the comment this replaces claimed it did
-%% not. This script's own default peaks at 118.09 km, so the rule returns 16x,
-%% not the 30x it used to hard-code -- the cap never comes near binding here.
-%% Sixteen is the better picture and not a regression: at 30x a 118 km apogee
-%% is painted 3543 km off the surface, more than half an Earth radius, and the
-%% arc reads as an orbit rather than as a glide; at 16x it stands 1889 km off,
-%% which is the 0.3 rE the rule is aiming at. What IS unchanged is the other
-%% three entry scripts, and only because each hard-codes its own factor and
-%% never reaches this rule at all -- HGV/run_glide and HGV/run_boost_glide at
-%% 30x, BM/run_ballistic at 3x:
+%% The ADAPTIVE rule is one word away -- altExag = 'auto' -- and it is what to
+%% ask for when the skip phugoid is the point of the picture. A FIXED
+%% exaggeration does not travel: 30x suits a glide that stays under about 60 km,
+%% but on a lofted intercontinental shot peaking near 260 km it paints the arc
+%% 7800 km off the surface, further out than the Earth is wide, and the track
+%% leaves the frame. exagFor scales to the flown apogee instead. On this
+%% script's own default, which peaks at 118.09 km, it returns 16x -- 1889 km of
+%% apparent altitude, the 0.3 rE the rule aims at -- where 30x would paint the
+%% same arc 3543 km off the surface and make a glide read as an orbit:
            hPeakM = max(traj.x(:,1)) - c.rE;
-          altExag = overrideOf(opts,'altExag',exagFor(hPeakM,c.rE));
+    if ischar(altExag) || isstring(altExag)
+          altExag = exagFor(hPeakM,c.rE);
+    end
 
 %% The display choices go into info beside the flight's own numbers. The RULE
 %% goes with them, as a handle: its cap and its floor sit at apogees no

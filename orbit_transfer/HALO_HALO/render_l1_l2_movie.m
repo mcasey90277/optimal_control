@@ -1,4 +1,4 @@
-function outStem = render_l1_l2_movie(rungN)
+function outStem = render_l1_l2_movie(rungN, probeMat)
 %% Purpose:
 %
 %   Renders the L1 -> L2 halo-to-halo probe transfer (probe_l1_l2_halo) as
@@ -13,6 +13,11 @@ function outStem = render_l1_l2_movie(rungN)
 %                                                   (N) [default 1, the
 %                                                   longest arc]
 %
+%  probeMat                 char                    Probe sheet file under
+%                                                   direct/results/l1l2/
+%                                                   [default
+%                                                   'probe_L1_L2.mat']
+%
 %% Outputs:
 %
 %  outStem                  char                    Stem of the .mp4/.gif
@@ -25,11 +30,12 @@ function outStem = render_l1_l2_movie(rungN)
 %% ------------------------ Begin Code Sequence ---------------------------
 
 if ~exist('rungN','var'), rungN = 1; end
+if ~exist('probeMat','var'), probeMat = 'probe_L1_L2.mat'; end
 
 here = fileparts(mfilename('fullpath'));
 addpath(fullfile(fileparts(here), 'costate_common'));
 outDir = fullfile(here, 'direct', 'results', 'l1l2');
-P = load(fullfile(outDir, 'probe_L1_L2.mat'));
+P = load(fullfile(outDir, probeMat));
 
 kr = find(P.rungs == rungN, 1);
 assert(~isempty(kr) && P.OK(1,1,kr), 'rung %.3g N not solved in the probe', rungN);
@@ -89,7 +95,9 @@ clockBox = annotation(fig, 'textbox', [0.02 0.02 0.96 0.05], 'String','', ...
 
 %% Frames (exact 1280 x 720 by index resampling):
 nFrames = 240;  fps = 30;
-outStem = fullfile(outDir, sprintf('l1_l2_halo_%gN', rungN));
+[~, probeStem] = fileparts(probeMat);
+tag = strrep(probeStem, 'probe_L1_L2', 'l1_l2_halo');
+outStem = fullfile(outDir, sprintf('%s_%gN', tag, rungN));
 vw = VideoWriter([outStem '.mp4'], 'MPEG-4');
 vw.FrameRate = fps;  vw.Quality = 95;  open(vw);
 cleanupVW = onCleanup(@() close(vw));

@@ -27,6 +27,11 @@ function sol = solve_pdg_convex(P, opts)
 %          .Nconv [def P.Nconv], .tolTf golden tolerance [def 0.05 s]
 % OUTPUTS:
 %   sol  - .t .tf .mf .X .U .u .sigma .lossless_gap .tf_curve .stats .P
+%          .tf_curve is Kx3: [tf, mf_or_-Inf, validity_code] where
+%          validity_code 3=valid (Solve_Succeeded + tight gap), 2=solved
+%          but relaxation not tight, 1=only Solved_To_Acceptable_Level,
+%          0=solver failed (see mf_or_neginf below) -- so a downstream
+%          reader can see what the golden search rejected and why.
 %
 % REFERENCES:
 %   [1] Acikmese & Ploen, JGCD 2007.  [2] Blackmore et al., JGCD 2010.
@@ -36,7 +41,8 @@ if ~isfield(opts,'tolTf'), opts.tolTf = 0.05;    end
 
 if isfield(opts,'tf') && ~isempty(opts.tf)
     sol = solve_fixed_tf(P, opts.tf, opts.Nconv);
-    sol.tf_curve = [opts.tf, sol.mf];
+    [~, code0] = mf_or_neginf(sol);
+    sol.tf_curve = [opts.tf, sol.mf, code0];
     return
 end
 
@@ -45,30 +51,53 @@ phi = (sqrt(5)-1)/2;
 a = P.tf_lo;  b = P.tf_hi;  curve = [];
 c = b - phi*(b-a);  d = a + phi*(b-a);
 sc = solve_fixed_tf(P, c, opts.Nconv);  sd = solve_fixed_tf(P, d, opts.Nconv);
-curve = [curve; c, mf_or_neginf(sc); d, mf_or_neginf(sd)];
-if ~isfinite(mf_or_neginf(sc)) && ~isfinite(mf_or_neginf(sd))
+[vc, codec] = mf_or_neginf(sc);  [vd, coded] = mf_or_neginf(sd);
+curve = [curve; c, vc, codec; d, vd, coded];
+if ~isfinite(vc) && ~isfinite(vd)
     error('solve_pdg_convex:infeasibleBracket', ...
         ['Both golden-section probes (tf=%.3f, tf=%.3f) failed to solve. ' ...
          'Widen the [P.tf_lo, P.tf_hi] bracket.'], c, d);
 end
 while (b - a) > opts.tolTf
-    if mf_or_neginf(sc) > mf_or_neginf(sd)
-        b = d;  d = c;  sd = sc;
+    if vc > vd
+        b = d;  d = c;  sd = sc;  vd = vc;
         c = b - phi*(b-a);  sc = solve_fixed_tf(P, c, opts.Nconv);
-        curve = [curve; c, mf_or_neginf(sc)];               %#ok<AGROW>
+        [vc, codec] = mf_or_neginf(sc);
+        curve = [curve; c, vc, codec];                      %#ok<AGROW>
     else
-        a = c;  c = d;  sc = sd;
+        a = c;  c = d;  sc = sd;  vc = vd;
         d = a + phi*(b-a);  sd = solve_fixed_tf(P, d, opts.Nconv);
-        curve = [curve; d, mf_or_neginf(sd)];               %#ok<AGROW>
+        [vd, coded] = mf_or_neginf(sd);
+        curve = [curve; d, vd, coded];                      %#ok<AGROW>
     end
 end
-if mf_or_neginf(sc) > mf_or_neginf(sd), sol = sc; else, sol = sd; end
+if vc > vd, sol = sc; else, sol = sd; end
 sol.tf_curve = sortrows(curve, 1);
 end
 
-function v = mf_or_neginf(s)
-% Infeasible tf (too short to stop) shows as solver failure -> -Inf.
-if s.stats.success, v = s.mf; else, v = -Inf; end
+function [v, code] = mf_or_neginf(s)
+% A probe counts toward the golden search ONLY if IPOPT fully converged
+% (Solve_Succeeded, not merely Solved_To_Acceptable_Level) AND the
+% relaxation is actually tight there (lossless_gap under the same
+% threshold test_convex_lossless checks). Without the second condition, a
+% "successful" but untight iterate (observed at tf=17: status
+% Solved_To_Acceptable_Level, gap ~1e-2, ~100x the optimum's ~1e-4) biases
+% mf UPWARD -- exactly the direction that wins a maximization search --
+% and the golden section has no other defense against picking it.
+%   code: 3 = valid; 2 = converged but relaxation not tight;
+%         1 = only Solved_To_Acceptable_Level (not Solve_Succeeded);
+%         0 = solver failed/threw (opti.debug iterate, not a solution).
+tightTol = 1e-4 * s.P.Tmax / s.P.m0;
+if ~s.stats.success
+    code = 0;
+elseif ~strcmp(s.stats.status, 'Solve_Succeeded')
+    code = 1;
+elseif s.lossless_gap >= tightTol
+    code = 2;
+else
+    code = 3;
+end
+if code == 3, v = s.mf; else, v = -Inf; end
 end
 
 function sol = solve_fixed_tf(P, tf, Nc)

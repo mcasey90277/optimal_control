@@ -1,0 +1,4 @@
+SEVERITY: MINOR
+LOCATION: Section 8.6, paragraph "But the discrepancy is not how you detect a transposition"
+WHY IT IS WRONG: Transposing $\phi_1$ and $\phi_2$ inside the initial bearing formula \eqref{eq:bearing} for a due-north leg ($\phi_1=0$, $\phi_2>0$, $\Delta\lambda=0$) yields an eastward component $y = \sin(0)\cos\phi_1 = 0$ and a northward component $x = \cos\phi_2\sin\phi_1 - \sin\phi_2\cos\phi_1\cos(0) = -\sin\phi_2 < 0$. The function $\operatorname{atan2}(0, \text{negative})$ returns $180^\circ$ ($\pi$ rad), not $90^\circ$. A return of $90^\circ$ would imply a due-east vector, which is mathematically impossible with a zero eastward component.
+CORRECTION: What a transposition does break is the meridional cardinals: a due-north leg, (0,0) to (0.1,0), correctly returns 0.0000 and returns 180.0000 transposed.

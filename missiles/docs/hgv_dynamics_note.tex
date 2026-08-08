@@ -1,0 +1,1838 @@
+\documentclass[11pt]{article}
+
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage{booktabs}
+\usepackage[margin=1in]{geometry}
+\usepackage{hyperref}
+\hypersetup{colorlinks=true,linkcolor=blue,citecolor=blue,urlcolor=blue}
+
+\newcommand{\vhat}{\hat{\mathbf{v}}}
+\newcommand{\ig}{\hat{\boldsymbol{\imath}}_{\gamma}}
+\newcommand{\ip}{\hat{\boldsymbol{\imath}}_{\psi}}
+\newcommand{\nhat}{\hat{\mathbf{n}}}
+\newcommand{\ehat}{\hat{\mathbf{e}}}
+\newcommand{\uhat}{\hat{\mathbf{u}}}
+\newcommand{\zhat}{\hat{\mathbf{z}}}
+\newcommand{\bomega}{\boldsymbol{\omega}}
+\newcommand{\bOmega}{\boldsymbol{\Omega}}
+\newcommand{\code}[1]{\texttt{#1}}
+\newcommand{\dd}{\mathrm{d}}
+
+\title{Boost, Glide and Descent Dynamics\\
+       \large The mathematics of the \code{missiles/} trajectory library}
+\author{Coorbital, Inc.}
+\date{7 August 2026}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+This note derives the three-degree-of-freedom point-mass equations of motion
+used by the \code{missiles/} MATLAB library for powered boost, unpowered
+atmospheric glide and terminal descent over a spherical, optionally rotating
+Earth; the four injected environment models; the phase machinery that chains
+them; and the seven closed-form references the library is validated against.
+It is written to be implementable from: every equation here is the equation the
+code evaluates, checked term by term against the source, and every closed form
+is derived rather than quoted. Where a result has a numerical consequence, the
+measured value is given. Symbolic checks were run in \code{sympy}~1.14 and
+numerical checks in MATLAB R2025b against the committed library;
+Section~\ref{sec:verify} records what was verified and how.
+\end{abstract}
+
+\tableofcontents
+
+%=====================================================================
+\section{Scope, and how to read this note}
+
+\subsection{What is here}
+
+The library flies a point mass over a sphere. Its state is six numbers ---
+position and velocity in geocentric spherical coordinates --- with a seventh,
+mass, appended whenever a chain contains a powered phase. Everything in
+Sections~\ref{sec:frames}--\ref{sec:phases} is a derivation of what
+\code{+coorbital/+eom/glide3DOF.m} and \code{+coorbital/+eom/boost3DOF.m}
+actually compute, in the order they compute it.
+Section~\ref{sec:analytic} derives the analytic solutions the library is
+measured against and reports the measured agreement.
+Section~\ref{sec:targeting} covers the two-solve targeting problem.
+
+\subsection{What is verified, and how}
+\label{sec:verify}
+
+Three kinds of check stand behind the statements below.
+
+\begin{description}
+\item[Symbolic.] The velocity triad's orthonormality and handedness, the three
+gravity projections, the three thrust projections, the two transport
+(curvature) terms, and the Coriolis and centrifugal projections were all
+re-derived in \code{sympy}~1.14 from explicit vector cross products and
+compared against the expressions in the source. All matched identically.
+\item[Numerical, against the code.] Each projection was independently
+reconstructed in MATLAB from explicit north--east--up basis vectors and
+compared against the derivative the library returns. Worst relative residual
+over all channels: $9.5\times10^{-16}$ for the gravity and aerodynamic terms,
+$1.6\times10^{-16}$ for thrust, $1.1\times10^{-13}$ for the rotating-Earth
+terms. Critically, this was done with a \emph{synthetic} gravity model
+returning $g_{\phi}=0.0123~\mathrm{m/s^2}$, because the shipped
+\code{sphereGrav} returns $g_{\phi}\equiv0$ and therefore cannot exercise the
+latitudinal terms at all.
+\item[Numerical, against closed forms.] Each analytic reference in
+Section~\ref{sec:analytic} was re-measured on the committed code. The numbers
+quoted are from that run, not carried over from a report.
+\end{description}
+
+\subsection{What this note is not}
+
+It is not a validation report --- \code{README.md} is the authority on
+delivered behaviour, and \code{DESIGN.md} records where the
+pre-implementation spec and the code disagree. It does not cover
+aerothermodynamics: no heating model exists in the library. It does not cover
+6-DOF attitude dynamics; angle of attack and bank angle are \emph{commanded}
+here, not the output of a rotational state. And every vehicle and booster
+number that appears below is a marked open-literature \textsc{placeholder};
+they are of the right order and are not any specific system.
+
+%=====================================================================
+\section{Frames, coordinates and conventions}
+\label{sec:frames}
+
+\subsection{The state}
+
+Position is geocentric spherical: radius from the planet centre, longitude,
+geocentric latitude. Velocity is planet-relative and given by its magnitude and
+two angles. The integrated state is
+\begin{equation}
+  \mathbf{x} \;=\; \begin{bmatrix} r & \lambda & \phi & V & \gamma & \psi
+  \end{bmatrix}^{\!\top},
+  \label{eq:state}
+\end{equation}
+with the total mass currently carried appended as a seventh component,
+$\mathbf{x}_7 = m$, on any chain that contains a powered phase
+(Section~\ref{sec:phases}). Four conventions are fixed once and never varied:
+
+\begin{itemize}
+\item $\gamma$ is \textbf{positive up}. A climbing vehicle has
+$\gamma>0$; a descending one has $\gamma<0$. Impact flight-path angles are
+therefore negative throughout the library.
+\item $\psi$ is measured \textbf{clockwise from north}: $0$ is due north,
+$\pi/2$ due east. This is deliberately the same convention as a navigational
+bearing, so \code{coorbital.util.greatCircleBearing} drops straight into
+$\mathbf{x}_6$ with no sign flip and no offset
+(Section~\ref{sec:targeting}).
+\item $V$ is \textbf{planet-relative}, not inertial. With the Earth rate
+switched on, $V$ is the speed seen by an observer rotating with the planet, and
+the Coriolis and centrifugal terms of Section~\ref{sec:rotating} are what make
+that consistent.
+\item $\phi$ is \textbf{geocentric} latitude, and $h = r - r_E$ is altitude
+above a sphere of radius $r_E$. There is no ellipsoid anywhere in the library,
+so geocentric and geodetic latitude are the same thing here; they will not be
+when an oblate model arrives.
+\end{itemize}
+
+\subsection{The local horizon basis}
+
+At the sub-vehicle point define the usual north--east--up triple
+$(\nhat,\ehat,\uhat)$: $\uhat$ along the outward radius, $\nhat$ tangent to the
+meridian toward the north pole, $\ehat$ completing the set to the east. Written
+in that \emph{listed} order the triple is left-handed; the right-handed
+ordering is $(\ehat,\nhat,\uhat)$, and the cross products used throughout are
+\begin{equation}
+  \ehat\times\nhat = \uhat, \qquad
+  \nhat\times\uhat = \ehat, \qquad
+  \uhat\times\ehat = \nhat .
+  \label{eq:handed}
+\end{equation}
+This is worth stating explicitly because getting it backwards flips the sign of
+every Coriolis term at once, and the resulting trajectory still looks
+plausible. The planet's spin axis resolves in this basis as
+\begin{equation}
+  \zhat \;=\; \cos\phi\,\nhat + \sin\phi\,\uhat ,
+  \label{eq:zhat}
+\end{equation}
+which is the only place the latitude enters the rotation terms.
+
+\subsection{The velocity triad}
+
+The three angles $(V,\gamma,\psi)$ are the spherical components of the
+planet-relative velocity in that basis. Writing $\mathbf{V} = V\vhat$,
+\begin{align}
+  \vhat &= \cos\gamma\cos\psi\;\nhat + \cos\gamma\sin\psi\;\ehat
+           + \sin\gamma\;\uhat ,   \label{eq:vhat}\\
+  \ig   &= -\sin\gamma\cos\psi\;\nhat - \sin\gamma\sin\psi\;\ehat
+           + \cos\gamma\;\uhat ,   \label{eq:igam}\\
+  \ip   &= -\sin\psi\;\nhat + \cos\psi\;\ehat .  \label{eq:ipsi}
+\end{align}
+$\vhat$ points along the velocity; $\ig$ is the direction in which a positive
+increment of $\gamma$ moves the velocity, i.e.\ ``up and normal to the flight
+path''; $\ip$ is the direction in which a positive increment of $\psi$ moves
+it, i.e.\ ``horizontally to the right of the track''.
+
+\paragraph{The triad is orthonormal and right-handed.}
+Direct computation from \eqref{eq:vhat}--\eqref{eq:ipsi}:
+\begin{align}
+  \vhat\cdot\vhat &= \cos^2\!\gamma(\cos^2\!\psi+\sin^2\!\psi) + \sin^2\!\gamma
+                   = \cos^2\!\gamma + \sin^2\!\gamma = 1, \nonumber\\
+  \ig\cdot\ig   &= \sin^2\!\gamma + \cos^2\!\gamma = 1, \qquad
+  \ip\cdot\ip    = \sin^2\!\psi + \cos^2\!\psi = 1, \nonumber\\
+  \vhat\cdot\ig &= -\sin\gamma\cos\gamma(\cos^2\!\psi+\sin^2\!\psi)
+                   + \sin\gamma\cos\gamma = 0, \nonumber\\
+  \vhat\cdot\ip &= -\cos\gamma\cos\psi\sin\psi + \cos\gamma\sin\psi\cos\psi = 0,
+                   \nonumber\\
+  \ig\cdot\ip   &= \phantom{-}\sin\gamma\cos\psi\sin\psi
+                   - \sin\gamma\sin\psi\cos\psi = 0 .
+  \label{eq:orthonormal}
+\end{align}
+Every cross term collapses on the same Pythagorean identity, which is the
+structural reason the triad is orthonormal for \emph{all} $(\gamma,\psi)$ and
+not merely for small angles. The handedness follows from \eqref{eq:handed}:
+$\vhat\times\ig = \ip$, verified symbolically. Numerically the Gram matrix of
+the triad differs from the identity by $1.1\times10^{-16}$ at a general state.
+
+Two derivatives that will be needed immediately, and which are the whole reason
+this particular triad is chosen:
+\begin{equation}
+  \frac{\partial\vhat}{\partial\gamma} = \ig ,
+  \qquad
+  \frac{\partial\vhat}{\partial\psi} = \cos\gamma\;\ip .
+  \label{eq:dvhat}
+\end{equation}
+The $\cos\gamma$ in the second is the first appearance of the factor that will
+haunt the heading equation: near vertical flight a large change of heading
+barely moves the velocity vector, so a given side force produces a very large
+$\dot\psi$.
+
+\subsection{Table of symbols}
+
+\begin{center}
+\begin{tabular}{llll}
+\toprule
+Symbol & Meaning & Units & Code \\
+\midrule
+$r$        & geocentric radius                        & m         & \code{x(1)} \\
+$\lambda$  & longitude                                & rad       & \code{x(2)} \\
+$\phi$     & geocentric latitude                      & rad       & \code{x(3)} \\
+$V$        & planet-relative speed                    & m/s       & \code{x(4)} \\
+$\gamma$   & flight-path angle, positive up           & rad       & \code{x(5)} \\
+$\psi$     & heading, clockwise from north            & rad       & \code{x(6)} \\
+$m$        & total mass currently carried             & kg        & \code{x(7)} \\
+$\alpha$   & angle of attack                          & rad       & \code{u(1)} \\
+$\sigma$   & bank angle about the velocity vector     & rad       & \code{u(2)} \\
+$h$        & altitude above the reference sphere      & m         & \code{h} \\
+$g_r$      & inward gravitational attraction, \emph{positive magnitude} & m/s$^2$ & \code{gr} \\
+$g_\phi$   & northward gravitational acceleration     & m/s$^2$   & \code{gLat} \\
+$\rho$     & atmospheric density                      & kg/m$^3$  & \code{rho} \\
+$P$        & ambient static pressure                  & Pa        & \code{P} \\
+$a_s$      & speed of sound                           & m/s       & \code{aSnd} \\
+$\bar q$   & dynamic pressure $\tfrac12\rho V^2$      & Pa        & \code{qbar} \\
+$S$        & aerodynamic reference area               & m$^2$     & \code{veh.Sref} \\
+$C_L,C_D$  & lift and drag coefficients               & --        & \code{CL,CD} \\
+$L,D$      & lift and drag forces                     & N         & --- \\
+$T$        & delivered thrust                         & N         & \code{T} \\
+$\dot m_p$ & propellant mass flow, \emph{positive}    & kg/s      & \code{mdot} \\
+$\mu$      & gravitational parameter                  & m$^3$/s$^2$ & \code{c.muE} \\
+$r_E$      & reference sphere radius                  & m         & \code{c.rE} \\
+$\omega$   & planet rotation rate                     & rad/s     & \code{env.omegaE} \\
+$H$        & density scale height                     & m         & \code{c.Hscale} \\
+$I_{sp}$   & vacuum specific impulse                  & s         & \code{bst.Isp} \\
+$g_0$      & standard gravity, $9.80665$              & m/s$^2$   & \code{c.g0} \\
+$\beta$    & ballistic coefficient $m/(SC_D)$         & kg/m$^2$  & --- \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+%=====================================================================
+\section{Kinematics}
+\label{sec:kinematics}
+
+The position vector is $\mathbf{r} = r\,\uhat(\lambda,\phi)$ and the velocity
+is $\mathbf{V}=V\vhat$. Resolving the velocity on the horizon basis and
+matching it to the time derivative of the position gives the three kinematic
+equations directly.
+
+The radial component is immediate:
+\begin{equation}
+  \dot r \;=\; \mathbf{V}\cdot\uhat \;=\; V\sin\gamma .
+  \label{eq:rdot}
+\end{equation}
+
+The two horizontal components must be matched against the surface velocity that
+a change in $(\lambda,\phi)$ produces. Moving north at fixed longitude sweeps
+arc length $r\,\dd\phi$; moving east at fixed latitude sweeps arc length
+$r\cos\phi\,\dd\lambda$, because the parallel of latitude $\phi$ is a circle of
+radius $r\cos\phi$, not $r$. Hence
+\begin{equation}
+  r\dot\phi = \mathbf{V}\cdot\nhat = V\cos\gamma\cos\psi ,
+  \qquad
+  r\cos\phi\;\dot\lambda = \mathbf{V}\cdot\ehat = V\cos\gamma\sin\psi ,
+\end{equation}
+that is
+\begin{equation}
+  \dot\phi \;=\; \frac{V\cos\gamma\cos\psi}{r},
+  \qquad
+  \dot\lambda \;=\; \frac{V\cos\gamma\sin\psi}{r\cos\phi} .
+  \label{eq:latlondot}
+\end{equation}
+These are exactly the three lines under \code{\%\% Kinematics:} in both EOM
+files.
+
+\paragraph{Why $\cos\phi$ sits in the denominator, and what breaks at the pole.}
+The $\cos\phi$ is a metric factor, not a physical one. Longitude is an angle
+measured about the polar axis, and near the pole a small eastward
+\emph{distance} corresponds to a large change of longitude, because the
+parallel it is measured on has shrunk to nothing. At the pole itself
+$\cos\phi=0$ and $\dot\lambda$ is unbounded: the coordinate is degenerate, not
+the physics. A vehicle flying over the pole has a perfectly well-behaved
+velocity vector; it is only its \emph{longitude} that becomes meaningless and
+then jumps by $\pi$.
+
+An adaptive integrator meeting this does not fail cleanly. It sees a stiff
+right-hand side, cuts its step, and either grinds to a halt or produces a
+longitude history that is numerically arbitrary while every other state looks
+fine. Both EOM files therefore guard it explicitly, raising
+\code{coorbital:glide3DOF:polarSingularity} when $|\cos\phi|<10^{-8}$, rather
+than letting a silent \code{NaN} propagate into the trajectory. The
+corresponding structural fix --- a non-singular parameterisation, or a
+Cartesian terminal phase --- is not in the library and is not needed for the
+mid-latitude trajectories it flies.
+
+\paragraph{A consistency reading.} Set $\gamma=0$ in \eqref{eq:rdot}: the
+radius is stationary, as it must be for horizontal flight. Set $\psi=\pi/2$
+(due east) at the equator in \eqref{eq:latlondot}: $\dot\phi=0$ and
+$\dot\lambda>0$. The library asserts both of these directly
+(\code{test\_glide3DOF.m}), and asserts the $\cos\phi$ placement by checking
+$\dot\lambda\,r\cos\phi = V\cos\gamma\sin\psi$ to $10^{-10}$ relative at an
+off-equator state --- which is the assertion that a $\cos\phi$ moved to the
+numerator could not survive.
+
+%=====================================================================
+\section{Dynamics}
+\label{sec:dynamics}
+
+\subsection{The general form}
+
+Differentiate $\mathbf{V}=V\vhat$ once:
+\begin{equation}
+  \mathbf{a} \;=\; \dot V\,\vhat + V\,\frac{\dd\vhat}{\dd t} .
+  \label{eq:adecomp}
+\end{equation}
+The unit vector $\vhat$ changes for two distinct reasons: the angles
+$(\gamma,\psi)$ change, and the basis $(\nhat,\ehat,\uhat)$ itself rotates as
+the vehicle moves over the sphere. Writing $\bomega_f$ for the angular velocity
+of the horizon basis relative to inertial space and using \eqref{eq:dvhat},
+\begin{equation}
+  \frac{\dd\vhat}{\dd t}
+  \;=\; \dot\gamma\,\ig + \dot\psi\cos\gamma\,\ip + \bomega_f\times\vhat .
+  \label{eq:dvhatdt}
+\end{equation}
+Projecting \eqref{eq:adecomp} on the triad and using orthonormality
+\eqref{eq:orthonormal} --- $\vhat\cdot\dd\vhat/\dd t = 0$ for a unit vector ---
+gives three scalar equations:
+\begin{align}
+  \dot V      &= \mathbf{a}\cdot\vhat ,                                        \label{eq:Vgen}\\
+  \dot\gamma  &= \frac{\mathbf{a}\cdot\ig}{V} - (\bomega_f\times\vhat)\cdot\ig ,\label{eq:gamgen}\\
+  \dot\psi    &= \frac{\mathbf{a}\cdot\ip}{V\cos\gamma}
+                 - \frac{(\bomega_f\times\vhat)\cdot\ip}{\cos\gamma} .          \label{eq:psigen}
+\end{align}
+
+\paragraph{The transport terms.}
+For a non-rotating planet the horizon basis turns only because the vehicle
+moves over it. Increasing longitude rotates the basis about the polar axis at
+$\dot\lambda$; increasing latitude tilts it about the \emph{westward}
+horizontal, since $\dd\uhat/\dd t = \dot\phi\,\nhat$ and, by
+\eqref{eq:handed}, $\ehat\times\uhat = -\nhat$. Hence
+\begin{equation}
+  \bomega_f \;=\; \dot\lambda\,\zhat - \dot\phi\,\ehat .
+  \label{eq:omegaf}
+\end{equation}
+Substituting \eqref{eq:zhat}, \eqref{eq:latlondot} and \eqref{eq:vhat} and
+reducing (verified symbolically) gives
+\begin{equation}
+  (\bomega_f\times\vhat)\cdot\vhat = 0,
+  \qquad
+  (\bomega_f\times\vhat)\cdot\ig = -\frac{V\cos\gamma}{r},
+  \qquad
+  (\bomega_f\times\vhat)\cdot\ip = -\frac{V\cos^2\!\gamma\sin\psi\tan\phi}{r} .
+  \label{eq:transport}
+\end{equation}
+Putting \eqref{eq:transport} into \eqref{eq:gamgen}--\eqref{eq:psigen}:
+\begin{align}
+  \dot V     &= \mathbf{a}\cdot\vhat ,                                             \label{eq:Vgen2}\\
+  \dot\gamma &= \frac{\mathbf{a}\cdot\ig}{V} + \frac{V}{r}\cos\gamma ,              \label{eq:gamgen2}\\
+  \dot\psi   &= \frac{\mathbf{a}\cdot\ip}{V\cos\gamma}
+                + \frac{V}{r}\cos\gamma\sin\psi\tan\phi .                           \label{eq:psigen2}
+\end{align}
+These three, with \eqref{eq:rdot} and \eqref{eq:latlondot}, are the whole
+model. Everything that follows is a statement about what goes into
+$\mathbf{a}$.
+
+\subsection{Gravity}
+\label{sec:gravity}
+
+The gravity model interface returns two numbers, $(g_r,g_\phi)$, and the
+convention on the first is the single most likely source of a sign error in the
+whole library:
+
+\begin{quote}
+\textbf{$g_r$ is a positive magnitude of \emph{inward} attraction, not a signed
+radial component.} For point-mass gravity $g_r = \mu/r^2 > 0$ always. The minus
+sign that turns it into a downward acceleration lives in the equations of
+motion, not in the model.
+\end{quote}
+
+The reason for the convention is interface stability rather than elegance: a
+scalar ``local up'' value cannot represent $J_2$, whose acceleration has a
+latitudinal component, so the interface commits to two components from the
+start and \code{sphereGrav} returns $g_\phi\equiv 0$. Written as a vector on the
+horizon basis,
+\begin{equation}
+  \mathbf{g} \;=\; g_\phi\,\nhat + 0\,\ehat - g_r\,\uhat .
+  \label{eq:gvec}
+\end{equation}
+Its three projections follow from \eqref{eq:vhat}--\eqref{eq:ipsi} by
+inspection, each being a single dot product:
+\begin{align}
+  \mathbf{g}\cdot\vhat &= -g_r\sin\gamma + g_\phi\cos\gamma\cos\psi ,
+    \label{eq:gv}\\
+  \mathbf{g}\cdot\ig   &= -g_r\cos\gamma - g_\phi\sin\gamma\cos\psi ,
+    \label{eq:gg}\\
+  \mathbf{g}\cdot\ip   &= -g_\phi\sin\psi .
+    \label{eq:gp}
+\end{align}
+All three were re-derived symbolically and match the source term for term.
+
+\paragraph{Physical reading, and the cost of each sign.}
+Equation~\eqref{eq:gv} says gravity removes speed when climbing
+($\gamma>0 \Rightarrow -g_r\sin\gamma<0$) and adds it when descending. Flip that
+sign and a descending vehicle decelerates under gravity: on a ballistic entry
+the impact speed collapses, and, worse, the vacuum energy check of
+Section~\ref{sec:energy} fails immediately, which is precisely why that check
+is the library's first line of defence.
+
+Equation~\eqref{eq:gg} says gravity always bends the flight path \emph{down},
+by $-g_r\cos\gamma/V$, and does so most strongly in level flight and not at all
+in vertical flight --- a vertically-moving vehicle is already pointed along
+gravity, so gravity can change its speed but not its direction. Flip this sign
+and the vehicle lofts under its own weight; the trajectory is obviously wrong
+within seconds.
+
+Equation~\eqref{eq:gp} is the only term in which a purely northward gravity
+component can steer the heading, and it is identically zero for a point mass.
+It is carried anyway so that dropping in \code{j2Grav} requires no edit to the
+equations of motion. Because $g_\phi\equiv 0$ under the shipped model, the
+$g_\phi$ terms in \eqref{eq:gv}--\eqref{eq:gp} are \emph{never exercised} by
+the shipped test suite. The verification for this note therefore injected a
+synthetic gravity model with $g_\phi=0.0123~\mathrm{m/s^2}$ and confirmed all
+three projections against an independent vector reconstruction to
+$9.5\times10^{-16}$ relative. A reviewer should treat those three terms as
+verified by this note and by nothing else in the repository.
+
+\subsection{Aerodynamics}
+
+Lift and drag are the usual
+\begin{equation}
+  L = \bar q\,S\,C_L , \qquad D = \bar q\,S\,C_D , \qquad
+  \bar q = \tfrac12\rho V^2 .
+  \label{eq:LD}
+\end{equation}
+Drag opposes the velocity, so it is purely along $-\vhat$. Lift is by
+definition perpendicular to the velocity, which leaves it one degree of
+freedom: the angle by which it is rolled about the velocity vector. That angle
+is the bank angle $\sigma$, and it distributes the lift between the two normal
+channels:
+\begin{equation}
+  \mathbf{a}_{\text{aero}} \;=\;
+  -\frac{D}{m}\,\vhat \;+\; \frac{L}{m}\bigl(\cos\sigma\,\ig
+  + \sin\sigma\,\ip\bigr) .
+  \label{eq:aaero}
+\end{equation}
+Hence, with \eqref{eq:Vgen2}--\eqref{eq:psigen2},
+\begin{equation}
+  \mathbf{a}_{\text{aero}}\cdot\vhat = -\frac{D}{m}, \qquad
+  \mathbf{a}_{\text{aero}}\cdot\ig   = \frac{L\cos\sigma}{m}, \qquad
+  \mathbf{a}_{\text{aero}}\cdot\ip   = \frac{L\sin\sigma}{m} .
+\end{equation}
+
+\paragraph{Physical reading.}
+$\sigma=0$ is wings-level: all the lift holds the vehicle up and none of it
+turns. $\sigma=\pi/2$ is a knife-edge roll: all the lift turns and none of it
+holds the vehicle up, so the vehicle falls as fast as a ballistic body while
+turning as hard as it can. The descent phase of \code{run\_boost\_glide} uses
+$\sigma=75^{\circ}$ for exactly this reason: $\cos 75^{\circ}=0.2588$, so it
+keeps only a quarter of its lift supporting the vehicle and dives. The sign of
+$\sigma$ chooses left or right; a sign error there mirrors the ground track
+about the launch great circle and, on a zero-bank configuration, is completely
+invisible.
+
+The $\cos\gamma$ in the denominator of \eqref{eq:psigen2} means the same bank
+angle turns the heading much faster in steep flight, and diverges at
+$\gamma=\pm\pi/2$. This is again a coordinate singularity --- in vertical flight
+``heading'' is undefined --- and it is guarded at $|\cos\gamma|<10^{-8}$,
+raising \code{verticalFlight}.
+
+\subsection{Thrust}
+\label{sec:thrust}
+
+Thrust acts at angle of attack $\alpha$ from the velocity vector, in the plane
+set by the same bank angle $\sigma$ that orients the lift. That is a modelling
+choice --- it says the vehicle's body axis, its lift vector and its thrust
+vector all share one roll orientation --- and its payoff is that thrust and
+lift add channel by channel with no extra bookkeeping:
+\begin{equation}
+  \mathbf{a}_{\text{thr}} \;=\; \frac{T}{m}\Bigl[
+    \cos\alpha\,\vhat + \sin\alpha\bigl(\cos\sigma\,\ig
+    + \sin\sigma\,\ip\bigr)\Bigr].
+  \label{eq:athr}
+\end{equation}
+The three projections follow at once from orthonormality:
+\begin{align}
+  \mathbf{a}_{\text{thr}}\cdot\vhat &= \frac{T\cos\alpha}{m},
+    \label{eq:tv}\\
+  \mathbf{a}_{\text{thr}}\cdot\ig   &= \frac{T\sin\alpha\cos\sigma}{m},
+    \label{eq:tg}\\
+  \mathbf{a}_{\text{thr}}\cdot\ip   &= \frac{T\sin\alpha\sin\sigma}{m},
+    \label{eq:tp}
+\end{align}
+and $\|\mathbf{a}_{\text{thr}}\| = T/m$ identically, since
+$\cos^2\!\alpha + \sin^2\!\alpha(\cos^2\!\sigma+\sin^2\!\sigma) = 1$. All three
+were verified symbolically, and numerically against the library at
+$\alpha=0.13$, $\sigma=-0.62$ to a worst relative residual of
+$1.6\times10^{-16}$; the norm identity holds to $1.2\times10^{-10}~\mathrm{N}$
+on a $9.5\times10^{5}~\mathrm{N}$ motor, which is floating-point noise.
+
+\paragraph{Physical reading.} At $\alpha=0$ the motor pushes purely along the
+velocity: maximum speed gain, no turning. As $\alpha$ opens, $\cos\alpha$ costs
+speed as $1-\alpha^2/2$ --- second order, hence cheap for small incidence ---
+while $\sin\alpha$ buys turning as $\alpha$ --- first order, hence effective.
+That asymmetry is the whole basis of gravity-turn ascent: a few degrees of
+incidence steers the vehicle for almost no velocity penalty. The library's
+measured steering loss on the shipped ballistic ascent,
+$\int T(1-\cos\alpha)/m\,\dd t$, is $33.5~\mathrm{m/s}$ out of a
+$6636~\mathrm{m/s}$ ideal --- half a percent.
+
+Dropping $\cos\alpha$ from \eqref{eq:tv} is a small error that no reduction
+test can see (Section~\ref{sec:phases}); swapping $\cos\sigma$ and $\sin\sigma$
+between \eqref{eq:tg} and \eqref{eq:tp} rotates the whole thrust vector by
+$90^{\circ}$ about the velocity and is a large one. The library's thrust
+increment check exists to catch exactly these two, and when they are injected
+as mutations it measures them at $9.8\times10^{-3}$ relative and
+$30.0\,\%$ respectively.
+
+\subsection{Mass}
+
+Propellant leaves the vehicle at a positive rate $\dot m_p$, so
+\begin{equation}
+  \dot m \;=\; -\dot m_p .
+  \label{eq:mdot}
+\end{equation}
+The sign convention is fixed at the interface: the propulsion model returns
+$\dot m_p$ \emph{positive}, and the equations of motion apply the minus. Both
+halves of that convention have to be written down, because each is defensible
+alone and only the pair is consistent.
+
+\paragraph{Why the mass in every acceleration denominator must be the state.}
+Equations \eqref{eq:aaero} and \eqref{eq:athr} divide by $m$. In
+\code{boost3DOF} that $m$ is $\mathbf{x}_7$ --- the integrated state --- and not
+a field of the parameter struct. This is not a stylistic preference. A booster
+burning $30{,}000~\mathrm{kg}$ of propellant from a $32{,}400~\mathrm{kg}$
+liftoff mass ends at $2{,}400~\mathrm{kg}$: a factor of $13.5$. Freezing the
+denominator at the liftoff value understates the end-of-burn acceleration by
+that factor and costs $64\,\%$ of the delta-V. Freezing it at the burnout value
+overstates the early acceleration by as much.
+
+The trap is that the six \emph{unpowered} equations read the mass from
+\code{veh.mass} instead, because they were written before a mass state existed.
+A chain that carries $\mathbf{x}_7$ through an unpowered phase therefore holds
+one physical quantity in two places, with nothing in the arithmetic forcing
+them to agree --- a staging jump applied to the state alone leaves the flight
+running silently at the old weight. Section~\ref{sec:phases} describes the
+guard that closes this, and \code{docs/LESSONS\_LEARNED.md} records the general
+form of the lesson.
+
+\subsection{The assembled equations}
+\label{sec:assembled}
+
+Collecting \eqref{eq:rdot}, \eqref{eq:latlondot}, \eqref{eq:Vgen2}--%
+\eqref{eq:psigen2}, \eqref{eq:gv}--\eqref{eq:gp}, \eqref{eq:aaero},
+\eqref{eq:athr} and \eqref{eq:mdot}, and writing $a_L = L/m$, $a_D = D/m$,
+$a_{T\parallel} = T\cos\alpha/m$, $a_{T\perp} = T\sin\alpha/m$, the
+seven-state powered equations of motion over a non-rotating sphere are
+\begin{align}
+  \dot r        &= V\sin\gamma ,                                        \label{eq:f1}\\
+  \dot \lambda  &= \frac{V\cos\gamma\sin\psi}{r\cos\phi} ,              \label{eq:f2}\\
+  \dot \phi     &= \frac{V\cos\gamma\cos\psi}{r} ,                      \label{eq:f3}\\
+  \dot V        &= a_{T\parallel} - a_D - g_r\sin\gamma
+                   + g_\phi\cos\gamma\cos\psi ,                         \label{eq:f4}\\
+  \dot \gamma   &= \frac{(a_{T\perp}+a_L)\cos\sigma}{V}
+                   - \Bigl(\frac{g_r}{V} - \frac{V}{r}\Bigr)\cos\gamma
+                   - \frac{g_\phi\sin\gamma\cos\psi}{V} ,               \label{eq:f5}\\
+  \dot \psi     &= \frac{(a_{T\perp}+a_L)\sin\sigma}{V\cos\gamma}
+                   + \frac{V\cos\gamma\sin\psi\tan\phi}{r}
+                   - \frac{g_\phi\sin\psi}{V\cos\gamma} ,               \label{eq:f6}\\
+  \dot m        &= -\dot m_p .                                          \label{eq:f7}
+\end{align}
+Setting $T=0$ (equivalently $a_{T\parallel}=a_{T\perp}=0$) and dropping
+\eqref{eq:f7} gives \code{glide3DOF} exactly. These are
+\cite{Vinh1980}~Eqs.~(2.28)--(2.33) in this library's notation.
+
+Two of the groupings in \eqref{eq:f5} are worth naming, because they are the
+places where the code's algebra departs cosmetically from the derivation
+above. The derivation produced $\mathbf{a}\cdot\ig/V + (V/r)\cos\gamma$; the
+code writes the gravity part and the transport part as one bracket,
+$-(g_r/V - V/r)\cos\gamma$. They are the same expression. Likewise
+\eqref{eq:f6}'s middle term is the transport term of \eqref{eq:transport}
+divided by $\cos\gamma$, which cancels one power of the cosine.
+
+\subsection{Centrifugal relief and the turning term}
+\label{sec:relief}
+
+\paragraph{$\bigl(g_r/V - V/r\bigr)\cos\gamma$: centrifugal relief.}
+In level flight ($\gamma=0$, no lift) this term is the whole of
+$\dot\gamma$. It vanishes when
+\begin{equation}
+  \frac{g_r}{V} = \frac{V}{r}
+  \quad\Longleftrightarrow\quad
+  V^2 = g_r r \;=\; \frac{\mu}{r}
+  \quad\Longleftrightarrow\quad
+  V = V_c \equiv \sqrt{\mu/r} ,
+  \label{eq:circular}
+\end{equation}
+the local circular speed, $V_c = 7905.4~\mathrm{m/s}$ at the reference sphere.
+The reading is exact and physical: at circular speed the required centripetal
+acceleration $V^2/r$ is supplied entirely by gravity and the path curves at
+precisely the rate needed to follow the sphere, so no lift is required. Below
+$V_c$ gravity wins and the path bends down; above $V_c$ the vehicle is in
+effect on a rising orbit and the path bends up even with no lift at all.
+
+For a hypersonic glider the practical consequence is that only the
+\emph{deficit} $1 - V^2/V_c^2$ has to be carried by lift. At $V=6000$~m/s that
+deficit is $0.424$: the vehicle weighs, aerodynamically, less than half of what
+it does at rest, which is why an $L/D$ of $2.5$ is enough to fly halfway around
+the planet (Section~\ref{sec:saenger}). Get the sign of this term wrong and the
+vehicle behaves as though gravity were \emph{stronger} at high speed --- the
+glide collapses, and the equilibrium-glide check of
+Section~\ref{sec:saenger} fails by tens of percent rather than the measured
+$1.5\,\%$.
+
+\paragraph{$V\cos\gamma\sin\psi\tan\phi/r$: the turning term.}
+This term appears in $\dot\psi$ with no force behind it. It is pure geometry:
+holding a great-circle course over a sphere requires the heading to change
+continuously, because the meridians the heading is measured against are
+themselves converging. Its structure says so. It is proportional to
+$\sin\psi$, so it vanishes for a due-north or due-south leg --- a meridian
+\emph{is} a great circle of constant bearing. It is proportional to $\tan\phi$,
+so it vanishes on the equator --- also a great circle of constant bearing ---
+and grows without bound at the pole, where all meridians meet. And it is
+proportional to the horizontal ground speed $V\cos\gamma$ divided by $r$, which
+is the angular rate at which the vehicle is crossing those meridians.
+
+An eastbound flight in the northern hemisphere ($\sin\psi>0$, $\tan\phi>0$) has
+$\dot\psi>0$: its bearing rotates clockwise, from east toward south. That is
+the familiar great-circle behaviour --- the route from Los Angeles to New York
+departs on a bearing of $65.87^{\circ}$ and arrives on one of $93.84^{\circ}$
+($=273.84^{\circ}-180^{\circ}$), swinging nearly $28^{\circ}$ to the south
+along the way. Delete the term and a zero-bank flight no longer follows a great
+circle at all; the great-circle range checks of Section~\ref{sec:gc} are what
+notice.
+
+\subsection{Rotating Earth}
+\label{sec:rotating}
+
+Everything above is written in the rotating frame, where $V$ is the
+planet-relative speed. Two apparent accelerations are then required, and they
+are gated on \code{env.omegaE} so that setting it to zero recovers the
+non-rotating case \emph{exactly} --- not approximately, since the whole block
+is skipped:
+\begin{equation}
+  \mathbf{a}_{\text{rot}} \;=\;
+  \underbrace{-2\,\bOmega\times\mathbf{V}}_{\text{Coriolis}}
+  \;\underbrace{-\,\bOmega\times(\bOmega\times\mathbf{r})}_{\text{centrifugal}},
+  \qquad \bOmega = \omega\,\zhat .
+  \label{eq:arot}
+\end{equation}
+
+\paragraph{Centrifugal.}
+$-\bOmega\times(\bOmega\times\mathbf{r})$ points directly away from the spin
+axis with magnitude $\omega^2 r\cos\phi$. Resolving the outward-from-axis
+direction on the horizon basis as $\cos\phi\,\uhat - \sin\phi\,\nhat$ and
+projecting:
+\begin{align}
+  \mathbf{a}_{\text{cen}}\cdot\vhat
+    &= \omega^2 r\cos\phi\,\bigl(\sin\gamma\cos\phi
+       - \cos\gamma\sin\phi\cos\psi\bigr) ,                      \label{eq:cenv}\\
+  \mathbf{a}_{\text{cen}}\cdot\ig
+    &= \omega^2 r\cos\phi\,\bigl(\cos\gamma\cos\phi
+       + \sin\gamma\cos\psi\sin\phi\bigr) ,                      \label{eq:ceng}\\
+  \mathbf{a}_{\text{cen}}\cdot\ip
+    &= \omega^2 r\sin\phi\cos\phi\sin\psi ,                      \label{eq:cenp}
+\end{align}
+which enter $\dot V$, $\dot\gamma$ and $\dot\psi$ divided by $1$, $V$ and
+$V\cos\gamma$ respectively, exactly as \eqref{eq:Vgen2}--\eqref{eq:psigen2}
+require. All three match the source.
+
+\paragraph{Coriolis.}
+$-2\bOmega\times\mathbf{V}$ is perpendicular to $\mathbf{V}$ by construction,
+so it appears in \emph{neither} $\dot V$ nor the kinematics. Its two surviving
+projections reduce to
+\begin{align}
+  \frac{\mathbf{a}_{\text{cor}}\cdot\ig}{V}
+    &= 2\omega\cos\phi\sin\psi ,                                  \label{eq:corg}\\
+  \frac{\mathbf{a}_{\text{cor}}\cdot\ip}{V\cos\gamma}
+    &= 2\omega\bigl(\sin\phi - \cos\phi\cos\psi\tan\gamma\bigr) .  \label{eq:corp}
+\end{align}
+Both are independent of $V$ --- the speed cancels between the force and the
+$1/V$ of \eqref{eq:gamgen2} --- so Coriolis is a pure \emph{rate} of turn,
+$O(2\omega) = 1.5\times10^{-4}~\mathrm{rad/s}$, or about half a degree per
+minute. Over a 27-minute intercontinental flight that is up to $14^{\circ}$ of
+accumulated heading, reduced by the geometric factors in
+\eqref{eq:corg}--\eqref{eq:corp}. It is why an azimuth solved on a
+non-rotating Earth misses (Section~\ref{sec:targeting}).
+
+Reading \eqref{eq:corg}: an eastbound vehicle ($\sin\psi>0$) is pushed
+\emph{up}, a westbound one down --- the E\"otv\"os effect, and it is largest at
+the equator. Reading the first part of \eqref{eq:corp}: $2\omega\sin\phi$ is
+the classical Coriolis parameter, deflecting to the right in the northern
+hemisphere and to the left in the southern, vanishing on the equator. The
+second part carries a $\tan\gamma$ and so blows up in vertical flight; it is
+covered by the same $|\cos\gamma|$ guard.
+
+Note that \eqref{eq:cenv}--\eqref{eq:corp} are all multiplied out and added to
+the non-rotating right-hand side inside an \code{if om \textasciitilde= 0}
+block. With the shipped \code{env.omegaE = 0} they are \textbf{zero by
+default}: every trajectory in the library's documentation, and every entry
+script except by explicit override, is flown on a non-rotating sphere.
+
+\subsection{Singularities and guards}
+
+Three states make the equations singular and all three are guarded explicitly,
+raising a named error rather than returning \code{NaN}:
+
+\begin{center}
+\begin{tabular}{lll}
+\toprule
+Condition & Singular quantity & Identifier suffix \\
+\midrule
+$|\cos\phi| < 10^{-8}$   & $\dot\lambda$, Eq.~\eqref{eq:f2}            & \code{polarSingularity} \\
+$|\cos\gamma| < 10^{-8}$ & $\dot\psi$, Eq.~\eqref{eq:f6}               & \code{verticalFlight} \\
+$V < 1~\mathrm{m/s}$     & $\dot\gamma$, $\dot\psi$, Eqs.~\eqref{eq:f5}--\eqref{eq:f6} & \code{zeroSpeed} \\
+$m \le 0$ (powered only) & every $1/m$, Eqs.~\eqref{eq:aaero}, \eqref{eq:athr} & \code{massDepleted} \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+The last is not a formality. A negative mass state does not merely scale the
+accelerations, it \emph{inverts} them --- thrust becomes a retarding force and
+drag becomes a propulsive one --- so the guard is written $m\le 0$ and catches
+the boundary case too. The $V<1$ guard is why the entry scripts start their
+ascent at a nonzero speed (10~m/s in \code{run\_ballistic}); a launch from
+literal rest is outside the model, not merely awkward for it.
+
+%=====================================================================
+\section{The injected models}
+\label{sec:models}
+
+The equations of motion never name a model. They call four handles carried on
+an environment struct, each with a fixed signature so that a higher-fidelity
+replacement is a one-line change in an entry script:
+
+\begin{center}
+\begin{tabular}{lll}
+\toprule
+Family & Signature & Shipped model \\
+\midrule
+atmosphere   & \code{[rho,P,T,a] = f(h)}          & \code{expAtmos} \\
+gravity      & \code{[gr,gLat]   = f(r,lat)}      & \code{sphereGrav} \\
+aerodynamics & \code{[CL,CD]     = f(alpha,mach,veh)} & \code{constLD} \\
+propulsion   & \code{[T,mdot]    = f(t,P,veh)}    & \code{constThrust} \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\subsection{Exponential isothermal atmosphere}
+
+\begin{equation}
+  \rho(h) = \rho_0\,e^{-h/H}, \qquad
+  T(h) = T_0, \qquad
+  P = \rho R T_0, \qquad
+  a_s = \sqrt{\kappa R T_0},
+  \label{eq:atmos}
+\end{equation}
+with $\rho_0 = 1.225~\mathrm{kg/m^3}$, $H = 7200~\mathrm{m}$,
+$T_0 = 250~\mathrm{K}$, $R = 287.0528~\mathrm{J/kg/K}$, $\kappa = 1.4$. Those
+give $P(0) = 87{,}909.92~\mathrm{Pa}$ and $a_s = 316.97~\mathrm{m/s}$
+everywhere --- the sound speed is altitude-independent because the temperature
+is.
+
+\paragraph{This is not exactly hydrostatic, and that is an accepted Phase~1
+choice.} Hydrostatic equilibrium in an isothermal gas requires
+$\dd P/\dd r = -\rho\,g(r)$, i.e.\ $\dd\ln\rho/\dd r = -g(r)/(RT_0)$. Two
+separate approximations stand between that and \eqref{eq:atmos}:
+
+\begin{enumerate}
+\item \emph{The scale height is not the hydrostatic one.} With constant gravity
+the solution of the hydrostatic equation is exponential with
+$H_{\text{hyd}} = RT_0/g_0 = 7317.81~\mathrm{m}$. The library uses
+$7200~\mathrm{m}$, which is $117.81~\mathrm{m}$ ($1.61\,\%$) smaller. The
+$7200~\mathrm{m}$ figure is an empirical fit to the real low-altitude density
+profile, not a derived quantity, and it is the density profile --- not the
+pressure --- that the trajectory actually feels.
+\item \emph{Gravity is not constant.} Under $g(r)=\mu/r^2$ the exact isothermal
+hydrostatic profile is not an exponential at all but
+$\rho/\rho_0 = \exp\bigl[(\mu/RT_0)(1/r - 1/r_E)\bigr]$, whose local scale
+height grows with altitude ($7555~\mathrm{m}$ at 100~km against
+$7318~\mathrm{m}$ at the surface). Against that exact profile the shipped
+exponential is low by $8.6\,\%$ at 30~km, $20\,\%$ at 60~km and $36\,\%$ at
+100~km.
+\end{enumerate}
+
+Neither discrepancy is hidden and neither is a bug: the model's stated purpose
+is to be the atmosphere for which the entry problem has closed-form solutions
+(Sections~\ref{sec:saenger} and \ref{sec:allen}), and Allen--Eggers needs an
+exponential \emph{density} profile and nothing else --- temperature and
+pressure never enter it. What the mismatch does mean is that $P$ from
+\eqref{eq:atmos} is a weaker quantity than $\rho$, and the one place $P$ is
+consumed is the thrust back-pressure debit below, where an error of a few
+percent in $P$ moves the delivered thrust by a few tenths of a percent.
+
+\paragraph{The trap.} $H$ appears both in the model and in every closed-form
+entry solution derived from the model, so it \emph{cancels} out of those
+comparisons: inflating $H$ by $15\,\%$ moves the Allen--Eggers agreement from
+$+10.50\,\%$ to $+10.44\,\%$. No tolerance recovers a sensitivity that is
+identically zero. $H$ is therefore pinned by exact equality at its source, in
+\code{test\_missileConst}, and that pin is the only thing protecting it.
+
+\subsection{Point-mass gravity}
+
+\begin{equation}
+  g_r = \frac{\mu}{r^2} \;>\; 0 , \qquad g_\phi \equiv 0 ,
+  \label{eq:grav}
+\end{equation}
+with $\mu = 3.986004418\times10^{14}~\mathrm{m^3/s^2}$ (WGS-84), giving
+$9.798285~\mathrm{m/s^2}$ at the reference sphere --- note this is
+\emph{not} $g_0 = 9.80665$, which is a defined standard used only for
+converting $I_{sp}$ and for reporting load factors in $g$.
+
+The interface carries $g_\phi$ even though it is identically zero because a
+scalar cannot represent $J_2$. Committing to a scalar now would force an edit
+to \eqref{eq:f4}--\eqref{eq:f6} the day an oblate model arrives; carrying the
+zero costs three multiplications by zero per derivative call and buys a drop-in
+replacement. The cost, stated plainly, is that the $g_\phi$ terms are
+\emph{dead code under the shipped configuration} and are unexercised by the
+test suite --- see the caveat in Section~\ref{sec:gravity}.
+
+\subsection{Constant lift coefficient, constant lift-to-drag ratio}
+
+\begin{equation}
+  C_L = \text{const}, \qquad C_D = \frac{C_L}{(L/D)} .
+  \label{eq:aero}
+\end{equation}
+$\alpha$ and Mach are accepted and ignored. Two consequences follow and both
+matter downstream.
+
+First, there is deliberately \emph{no} $C_D$ field on any vehicle struct: drag
+is derived from the pair, so it cannot fall out of sync with lift. Expressing
+``almost no lift, plenty of drag'' for a re-entry body therefore requires a
+small $C_L$ over a small $L/D$ --- \code{vehicle\_bm} uses
+$C_L=0.005$, $L/D=0.02$, giving $C_D = 0.25$ --- and $C_L$ cannot be set to
+zero without taking $C_D$ to zero with it.
+
+Second, because $\alpha$ does not reach the aerodynamics, the \emph{only} live
+aerodynamic control in the library is the bank angle $\sigma$. The angle of
+attack still reaches the \emph{thrust} projections \eqref{eq:tv}--\eqref{eq:tp},
+so it is a genuine control during boost and an inert one during glide. Anyone
+reading a glide phase's $\alpha$ history and expecting it to matter will be
+disappointed; that changes the day a table-driven $C_L(\alpha,M)$ is installed,
+at which point nothing else has to change.
+
+\subsection{Choked-nozzle thrust with back-pressure correction}
+
+\begin{align}
+  T &= \max\bigl(T_{\text{vac}} - A_e P,\; 0\bigr) ,          \label{eq:thrust}\\
+  \dot m_p &= \frac{T_{\text{vac}}}{I_{sp}\,g_0}\;\mathbf{1}\{T>0\} .
+              \label{eq:mflow}
+\end{align}
+
+\paragraph{Why $\dot m_p$ is held fixed while $T$ varies.}
+This looks inconsistent on first reading and is in fact the physically correct
+pairing. The nozzle throat is choked and the chamber pressure is fixed, so the
+mass flow through the throat is set entirely by conditions \emph{upstream} of
+the throat. Information cannot travel upstream through a sonic throat, so
+ambient back pressure --- which acts downstream, on the exit plane --- cannot
+change the flow. What it changes is the delivered thrust, through the pressure
+term $A_e(P_e - P)$ acting on the exit area. Hence: flow constant, thrust
+altitude-dependent.
+
+The same argument fixes which $I_{sp}$ may be used. The identity
+$\dot m_p = T/(I_{sp}g_0)$ holds only when thrust and specific impulse are
+quoted at the \emph{same} ambient condition; \eqref{eq:mflow} uses the vacuum
+pair, so it is consistent, and the flow it computes is the flow at every
+altitude. Substituting a sea-level $I_{sp}$ against a vacuum thrust would
+overstate the flow by the sea-level debit and burn the motor out early --- a
+units error that presents as a trajectory error.
+
+\paragraph{The clamp zeroes the flow too.}
+The linear debit $A_e P$ is only valid while it is small. Driven far enough it
+would return a negative thrust, which the $\max$ clamps to zero; at that point
+the model has left its domain, so the motor is reported as \emph{not running},
+and $\dot m_p$ goes to zero with it. A clamped engine that kept consuming
+propellant would corrupt the mass history silently and fire the burnout event
+early. The two outputs are always zero together.
+
+\paragraph{Numbers for the shipped placeholder booster.}
+$T_{\text{vac}}=950{,}000~\mathrm{N}$, $I_{sp}=260~\mathrm{s}$,
+$A_e=1.25~\mathrm{m^2}$, $m_{\text{prop}}=30{,}000~\mathrm{kg}$,
+$m_{\text{dry}}=1{,}500~\mathrm{kg}$ over a $900~\mathrm{kg}$ payload. Then
+\begin{align*}
+  \dot m_p &= \frac{950000}{260\times 9.80665} = 372.5886162804~\mathrm{kg/s},
+  & t_{\text{burn}} &= \frac{30000}{372.5886} = 80.517758~\mathrm{s}, \\
+  T(\text{sea level}) &= 840{,}112.6~\mathrm{N},
+  & \text{debit} &= 109{,}887~\mathrm{N} = 11.57\,\% ,\\
+  \text{liftoff } T/W &= \frac{950000}{32400\times 9.80665} = 2.9899 .
+\end{align*}
+All were re-computed for this note and agree with the values pinned in the
+test suite.
+
+%=====================================================================
+\section{Phase machinery}
+\label{sec:phases}
+
+\subsection{The seven-state convention}
+
+A trajectory is a sequence of phases, each an ODE integration with its own
+right-hand side, its own guidance law, its own terminal event and its own time
+span. \code{coorbital.prop.phaseRun} runs them in order, handing the terminal
+state of one to the next and concatenating the results into a single
+\code{traj.x}. Because that concatenation produces one rectangular matrix,
+\emph{every phase in one call must share one state dimension}.
+
+The consequence is that a chain containing a powered phase runs seven-state
+throughout, and the six-state unpowered equations are lifted to match by
+\code{coorbital.eom.massConstant}, which appends $\dot m = 0$. Unpowered phases
+therefore carry an inert mass. This was chosen over the alternative --- a
+mapping layer translating between a six-state and a seven-state vector at each
+junction --- for a specific reason: a mapping at a seam is a place for state to
+be silently lost or reordered, and a uniform vector has no such place. There is
+nothing to get wrong at a seam because nothing happens at a seam.
+
+\paragraph{The cost, which is real.} The lifted equations divide by
+\code{veh.mass} and never read $\mathbf{x}_7$. One physical quantity is now
+held in two places and nothing in the arithmetic makes them agree. A chain that
+jettisons a booster by dropping $\mathbf{x}_7$, while continuing to hand the
+same vehicle struct to the next phase, flies the rest of the flight at the old
+weight --- with a mass history that says otherwise, no divergence, no warning,
+and an entirely plausible trajectory. Measured on this library: deleting the
+separation link left the flown trajectory \emph{bit-identical} and changed only
+the recorded mass.
+
+\code{massConstant} therefore refuses to run when the carried mass and the
+flown mass disagree by more than $10^{-9}$ relative, floored at $10^{-9}$
+absolute. Two design rules are attached to that guard and both were learned by
+getting them wrong first:
+\begin{itemize}
+\item \textbf{Raise; do not reconcile.} Injecting $\mathbf{x}_7$ into a copy of
+the vehicle struct is the obvious repair and is worse than the bug, because it
+\emph{looks} repaired: separation changes $S$, $C_L$ and $L/D$ as well as the
+mass, and silencing the one symptom that is visible converts a detectable fault
+into an undetectable one. The structural answer is a per-phase vehicle bound
+inside each phase's EOM closure, which is what all four entry scripts do.
+\item \textbf{Floor the tolerance.} A purely relative budget collapses as the
+mass approaches zero. At $0.25~\mathrm{kg}$ it would be
+$2.5\times10^{-10}~\mathrm{kg}$, tighter than the
+$3.4\times10^{-10}~\mathrm{kg}$ residual an ODE burnout-event solve already
+leaves on a 900~kg stack --- the guard would then reject ordinary roundoff.
+\end{itemize}
+
+\subsection{Stage separation is a genuine state discontinuity}
+
+A phase may carry an optional link, $\mathbf{x}^+ = \ell(\mathbf{x}^-)$, applied
+to its terminal state to form the next phase's initial state. Stage separation
+is one line:
+\begin{equation}
+  \ell(\mathbf{x}) = \begin{bmatrix} \mathbf{x}_{1:6} \\
+                     \mathbf{x}_7 - m_{\text{dry}} \end{bmatrix} .
+  \label{eq:link}
+\end{equation}
+This is not a numerical convenience standing in for a fast transient. The
+booster physically leaves, and the state is genuinely discontinuous in
+$\mathbf{x}_7$ at that instant, while being continuous in the six flight
+states. A test asserting continuity in all seven components would be asserting
+a falsehood; the library asserts a jump of exactly $m_{\text{dry}}$ in
+component~7 and continuity in components 1--6 against an independent
+higher-order re-integration across the seam.
+
+The link is applied \emph{before} the junction is recorded, so
+\code{traj.junction(k).x} is the state as handed to the next phase --- the far
+side of the jump. The near side is the last trajectory row labelled phase $k$,
+at the same instant on the cumulative clock.
+
+\subsection{ODE events and the one-sided \code{direction}}
+
+Each phase terminates on a MATLAB ODE event function returning
+$(\text{value},\text{isterminal},\text{direction})$. The three shipped events
+are
+\begin{center}
+\begin{tabular}{lll}
+\toprule
+Event & Value & \code{direction} \\
+\midrule
+\code{eventAltitude(t,x,hStop)}   & $(r - r_E) - h_{\text{stop}}$ & $-1$ \\
+\code{eventBurnout(t,x,mBurnout)} & $\mathbf{x}_7 - m_{\text{burnout}}$ & $-1$ \\
+\code{eventApogee(t,x)}           & $\gamma$ & $-1$ \\
+\bottomrule
+\end{tabular}
+\end{center}
+All are terminal and all are \emph{one-sided}. The \code{direction} field is
+the load-bearing part and \code{-1} means ``locate only crossings at which the
+value is decreasing''.
+
+Consider what happens without it. A lofted trajectory launched below a trigger
+altitude climbs \emph{through} that altitude on the way up, coasts to apogee
+far above it, and descends back through it. A two-sided event stops the run on
+the ascending crossing: the flight ends near the launch point with a peak
+altitude barely above the trigger and a \emph{positive} terminal flight-path
+angle. Nothing about the result is obviously wrong --- an altitude event fired
+at the requested altitude --- and the whole coast and descent are simply
+missing. The one-sided form makes that impossible. The library tests it
+behaviourally, by flying an arc that must cross the trigger twice and asserting
+that the peak altitude exceeds it by tens of kilometres.
+
+Apogee deserves a note of its own. Terminating on $\gamma$ crossing zero
+downward makes apogee an \emph{exactly solved} event rather than the largest
+sample on an adaptive grid, so apogee time and altitude are good to the event
+solver's tolerance rather than to a step size. That is why
+\code{run\_ballistic} splits its coast in two at apogee even though the physics
+does not require a split; it also leaves the final phase monotonically
+descending, so the one-sided impact event cannot be reached from the wrong
+side.
+
+\subsection{Guidance}
+
+Two laws are shipped. \code{prescribed} interpolates $(\alpha,\sigma)$ linearly
+on a time grid and clamps outside it; it ignores the state.
+\code{pitchProgram} is the first law that reads the state: it interpolates a
+commanded pitch \emph{attitude} $\theta(t)$ and returns
+\begin{equation}
+  \alpha = \theta(t) - \gamma, \qquad \gamma = \mathbf{x}_5 ,
+  \label{eq:pitchprog}
+\end{equation}
+optionally clamped to $|\alpha|\le\alpha_{\max}$. This is the classical
+prescribed-pitch ascent law: the vehicle is flown to an attitude schedule and
+the angle of attack is whatever gap opens between that attitude and the
+velocity vector. The clamp is not optional in practice --- a $90^{\circ}$
+commanded attitude at liftoff, when $\gamma$ is still near zero, would hand the
+equations of motion a physically absurd incidence.
+
+One convention must be internalised: each phase's guidance is evaluated at that
+phase's \emph{own} tspan-relative time, not at cumulative flight time. A glide
+schedule written against $[0,t_{\max}]$ therefore starts at the handoff from
+boost, not at liftoff. With constant schedules the distinction is invisible;
+with a time-varying bank it moves the range by 30\,\%.
+
+%=====================================================================
+\section{Analytic references}
+\label{sec:analytic}
+
+Seven closed forms stand behind the library. Each is derived here and each is
+reported with the agreement measured on the committed code. Two properties of
+this list are worth stating before the list itself. First, several of these
+references are computed from the same constants as the model, so they are
+structurally blind to those constants: the constant appears on both sides and
+cancels, and no tolerance recovers the sensitivity. Where that happens it is
+said so explicitly. Second, no single check covers the model --- the
+equilibrium-glide reference contains no drag term and is blind to $C_D$; the
+Allen--Eggers reference is zero-lift and is blind to $C_L$. They are
+complementary by construction.
+
+\subsection{Vacuum specific energy}
+\label{sec:energy}
+
+With no atmosphere, no lift and no rotation, the only force is point-mass
+gravity, which is conservative. The specific orbital energy
+\begin{equation}
+  \varepsilon \;=\; \frac{V^2}{2} - \frac{\mu}{r}
+  \label{eq:energy}
+\end{equation}
+must therefore be constant. Directly, using \eqref{eq:f1} and \eqref{eq:f4}
+with $g_r=\mu/r^2$, $g_\phi=0$, $a_D = a_T = 0$:
+\begin{equation}
+  \dot\varepsilon = V\dot V + \frac{\mu}{r^2}\dot r
+  = V\Bigl(-\frac{\mu}{r^2}\sin\gamma\Bigr) + \frac{\mu}{r^2}\,V\sin\gamma
+  = 0 .
+\end{equation}
+The cancellation is exact and involves only two terms, which is precisely what
+makes this the sharpest single instrument in the suite: \emph{any} sign error
+in the radial gravity term, or in $\dot r$, or in the relative sign of the two,
+destroys it immediately. It is also cheap --- no second propagator is needed to
+produce the reference.
+
+\textbf{Measured:} $1.281\times10^{-13}$ relative drift over a 300~s lofted
+arc, against a $10^{-8}$ budget.
+
+\subsection{The rotating-frame Jacobi integral, and what it cannot see}
+\label{sec:jacobi}
+
+With the Earth rate on, energy is no longer conserved --- the frame is not
+inertial --- but the Jacobi integral is:
+\begin{equation}
+  J \;=\; \frac{V^2}{2} - \frac{\mu}{r}
+        - \frac{1}{2}\,\omega^2 r^2\cos^2\!\phi .
+  \label{eq:jacobi}
+\end{equation}
+The third term is the centrifugal potential, $-\tfrac12\omega^2 d^2$ with
+$d = r\cos\phi$ the distance from the spin axis. Differentiating,
+\begin{equation}
+  \frac{\dd J}{\dd t} \;=\; V\dot V + \frac{\mu}{r^2}\dot r
+   - \omega^2 r\cos^2\!\phi\;\dot r
+   + \omega^2 r^2\cos\phi\sin\phi\;\dot\phi .
+  \label{eq:djdt}
+\end{equation}
+Substituting $\dot V$ from \eqref{eq:f4} with the centrifugal term
+\eqref{eq:cenv}, $\dot r$ from \eqref{eq:f1} and $\dot\phi$ from
+\eqref{eq:f3}, the four terms cancel in pairs:
+\begin{align}
+  V\dot V &= -\frac{\mu V\sin\gamma}{r^2}
+             + \omega^2 r V\cos\phi\bigl(\sin\gamma\cos\phi
+             - \cos\gamma\sin\phi\cos\psi\bigr), \nonumber\\
+  \frac{\mu}{r^2}\dot r &= +\frac{\mu V\sin\gamma}{r^2}, \nonumber\\
+  -\omega^2 r\cos^2\!\phi\,\dot r &= -\omega^2 r V\cos^2\!\phi\sin\gamma, \nonumber\\
+  \omega^2 r^2\cos\phi\sin\phi\,\dot\phi
+    &= +\omega^2 r V\cos\phi\sin\phi\cos\gamma\cos\psi ,
+\end{align}
+and $\dd J/\dd t = 0$ identically. This was confirmed symbolically.
+
+\paragraph{The integral is structurally blind to a Coriolis sign error.}
+Look at \eqref{eq:djdt} again. It contains $\dot V$, $\dot r$ and $\dot\phi$
+and \emph{nothing else}: there is no $\dot\gamma$ and no $\dot\psi$ anywhere in
+it, because $J$ does not depend on $\gamma$ or $\psi$. But the Coriolis
+acceleration is workless --- $\mathbf{a}_{\text{cor}}\cdot\vhat = 0$ by
+construction, verified numerically at $-1.4\times10^{-17}~\mathrm{m/s^2}$ ---
+so it appears in \emph{neither} $\dot V$ nor the kinematic equations. It lives
+only in $\dot\gamma$ and $\dot\psi$. The two facts compose: the Jacobi integral
+cannot see the Coriolis terms at all.
+
+This is not a hypothetical. Flipping the sign of both $2\omega$ terms by hand
+and re-propagating the same arc:
+
+\begin{center}
+\begin{tabular}{lrr}
+\toprule
+& Correct Coriolis & Sign flipped \\
+\midrule
+Jacobi drift over 300~s   & $1.107\times10^{-13}$ & $1.468\times10^{-13}$ \\
+Terminal radius change    & --- & $47{,}273~\mathrm{m}$ \\
+Terminal latitude change  & --- & $2.940\times10^{-3}~\mathrm{rad}$ \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+The conservation law is satisfied to the same $10^{-13}$ in both cases while
+the trajectory has moved 47~km. A test built only on the Jacobi integral would
+report green on a model with the Coriolis force pointing the wrong way. The
+library closes the gap with an instantaneous spot check that recomputes
+\eqref{eq:corg}--\eqref{eq:corp} directly at an off-equator, non-cardinal
+state; for this note the same terms were rebuilt from explicit vector cross
+products and agree to $1.1\times10^{-13}$ or better.
+
+The general form of the lesson --- ask of any clean-looking test what would
+have to be wrong for the number to move --- is recorded in
+\code{docs/LESSONS\_LEARNED.md}.
+
+\subsection{S\"anger equilibrium glide}
+\label{sec:saenger}
+
+\paragraph{The equilibrium condition.}
+Set $\dot\gamma = 0$ in \eqref{eq:f5} with $\sigma=0$, no thrust and
+$g_\phi=0$:
+\begin{equation}
+  \frac{L}{mV} = \Bigl(\frac{g_r}{V} - \frac{V}{r}\Bigr)\cos\gamma
+  \quad\Longleftrightarrow\quad
+  \tfrac12\rho V^2 S C_L = m\Bigl(g_r - \frac{V^2}{r}\Bigr)\cos\gamma .
+  \label{eq:eqglide}
+\end{equation}
+Lift balances weight \emph{less centrifugal relief}, both projected by
+$\cos\gamma$. Solving for the speed gives the closed form the library tests
+against pointwise,
+\begin{equation}
+  V_{\text{eq}}^2(r) \;=\;
+  \frac{m\,g_r(r)\cos\gamma}
+       {\tfrac12\rho(r) S C_L + m\cos\gamma/r} .
+  \label{eq:veq}
+\end{equation}
+
+\paragraph{The range.}
+For the range integral take $\gamma$ small, so $\cos\gamma\to 1$, and write
+\eqref{eq:eqglide} as
+\begin{equation}
+  L = mg\Bigl(1 - \frac{V^2}{V_c^2}\Bigr), \qquad V_c^2 = gr ,
+  \label{eq:liftdeficit}
+\end{equation}
+which is the centrifugal-relief statement of Section~\ref{sec:relief}: lift
+carries only the deficit. Energy along the ground track $s$, with the gravity
+component negligible for shallow $\gamma$, is
+\begin{equation}
+  m V \frac{\dd V}{\dd s} = -D = -\frac{L}{(L/D)}
+  = -\frac{mg}{(L/D)}\Bigl(1 - \frac{V^2}{V_c^2}\Bigr) .
+\end{equation}
+Separating,
+\begin{equation}
+  \dd s = -\frac{(L/D)}{g}\,\frac{V\,\dd V}{1 - V^2/V_c^2} .
+\end{equation}
+Substitute $u = V^2/V_c^2$, so $V\,\dd V = \tfrac12 V_c^2\,\dd u$ and, crucially,
+$V_c^2/g = r$:
+\begin{equation}
+  \dd s = -\frac{(L/D)}{g}\cdot\frac{V_c^2}{2}\cdot\frac{\dd u}{1-u}
+        = -\frac{(L/D)\,r}{2}\cdot\frac{\dd u}{1-u} .
+  \label{eq:dsdu}
+\end{equation}
+Integrating from $u_0 = (V/V_c)^2$ down to $u=0$:
+\begin{equation}
+  R \;=\; \frac{L}{D}\,\frac{r_E}{2}\,
+          \ln\!\left[\frac{1}{1 - (V/V_c)^2}\right].
+  \label{eq:sanger}
+\end{equation}
+
+\paragraph{The factor of one half is essential.} It comes from
+$V\,\dd V = \tfrac12 V_c^2\,\dd u$ and from nowhere else. Omitting it doubles
+the predicted range exactly --- an error that is easy to make and impossible to
+detect by inspecting the formula's limits, since both versions diverge at
+$V\to V_c$ and both vanish at $V\to 0$. It was checked two ways for this note:
+symbolically in \code{sympy}, and by direct numerical quadrature of
+\eqref{eq:dsdu} at $(V/V_c)^2 = 0.25$, $0.5$ and $0.9$, agreeing with
+\eqref{eq:sanger} to $5.3\times10^{-14}$, $1.4\times10^{-14}$ and
+$1.9\times10^{-13}$ relative respectively.
+
+\paragraph{Physical reading.} The logarithm is the interesting part. Range is
+not proportional to kinetic energy; it diverges as $V\to V_c$, because at
+circular speed the vehicle needs no lift, generates no induced drag through the
+$L/D$ relation, and does not come down. Conversely the last increment of speed
+buys very little range. With $L/D = 2.5$ and $V = 6000~\mathrm{m/s}$
+($V_c = 7905.4~\mathrm{m/s}$), \eqref{eq:sanger} predicts $6842~\mathrm{km}$;
+the shipped boost-glide chain flies $7663~\mathrm{km}$ from a
+$5841~\mathrm{m/s}$ burnout, the excess coming from the initial altitude, the
+skip phugoid and the boost's own downrange leg, none of which
+\eqref{eq:sanger} contains.
+
+\textbf{Measured:} the library does not test \eqref{eq:sanger} directly ---
+it tests the pointwise condition \eqref{eq:veq}, which is the statement
+\eqref{eq:sanger} is integrated from. A glide launched \emph{on} the
+equilibrium manifold (entry speed $V_{\text{eq}}$, entry flight-path angle from
+the tangency condition
+$\sin\gamma_0 = -2(D/m)/(2g + \dd V_{\text{eq}}^2/\dd r)$, so no phugoid is
+excited) tracks it from 45~km to 20~km with a worst-case relative speed
+departure of $\mathbf{1.51\,\%}$ over the \emph{whole} arc, against a $3\,\%$
+budget, while the density spans a factor of $32.2$ and the speed a factor of
+$4.80$. The departure is largest at the low, slow end where the quasi-steady
+assumption gives way. For calibration: a $20\,\%$ error in $C_L$ drives the
+same measurement to $11.52\,\%$.
+
+\subsection{Allen--Eggers ballistic entry}
+\label{sec:allen}
+
+\paragraph{Setup.} A zero-lift body enters steeply. Two approximations: the
+flight-path angle is frozen at its entry value $\gamma_e$, and gravity is
+dropped from the speed equation, leaving drag alone. Then from \eqref{eq:f4}
+and \eqref{eq:f1},
+\begin{equation}
+  \frac{\dd V}{\dd t} = -\frac{\rho V^2}{2\beta}, \qquad
+  \frac{\dd h}{\dd t} = V\sin\gamma_e, \qquad
+  \beta \equiv \frac{m}{S C_D},
+\end{equation}
+so, dividing,
+\begin{equation}
+  \frac{\dd V}{V} = -\frac{\rho(h)\,\dd h}{2\beta\sin\gamma_e} .
+\end{equation}
+With $\rho = \rho_0 e^{-h/H}$ and integrating from $h=\infty$ (where
+$V = V_e$) down to $h$:
+\begin{equation}
+  \ln\frac{V}{V_e}
+  = -\frac{1}{2\beta\sin\gamma_e}\int_{\infty}^{h}\rho_0 e^{-h'/H}\dd h'
+  = \frac{H\rho(h)}{2\beta\sin\gamma_e} ,
+\end{equation}
+and since $\sin\gamma_e<0$ on entry this is negative, as it must be:
+\begin{equation}
+  V(\rho) = V_e\,\exp\!\left[-\frac{\rho H}{2\beta|\sin\gamma_e|}\right].
+  \label{eq:aeV}
+\end{equation}
+
+\paragraph{Peak deceleration.} The aerodynamic deceleration is
+$a = \rho V^2/(2\beta)$. Substituting \eqref{eq:aeV} and writing
+$x \equiv \rho H/(\beta|\sin\gamma_e|)$,
+\begin{equation}
+  a(x) \;=\; \frac{V_e^2|\sin\gamma_e|}{2H}\;x\,e^{-x} .
+  \label{eq:aeax}
+\end{equation}
+The function $xe^{-x}$ has its maximum at $x=1$, where it equals $1/e$. Hence
+\begin{equation}
+  a_{\max} = \frac{V_e^2\,|\sin\gamma_e|}{2\,e\,H},
+  \qquad\text{at}\qquad
+  \rho_{\text{pk}} = \frac{\beta|\sin\gamma_e|}{H},
+  \qquad
+  V_{\text{pk}} = \frac{V_e}{\sqrt{e}} .
+  \label{eq:allen}
+\end{equation}
+
+\paragraph{Independence of ballistic coefficient --- the derivation.}
+This is the sharpest statement in \eqref{eq:allen} and it falls straight out of
+\eqref{eq:aeax}. The ballistic coefficient $\beta$ enters $a$ \emph{only}
+through the dimensionless group $x$; the prefactor $V_e^2|\sin\gamma_e|/(2H)$
+contains no $\beta$ at all. And $x$ is a monotone function of density, which
+sweeps from $0$ to arbitrarily large values on any entry regardless of $\beta$.
+So $x=1$ is always reached, the maximum of $xe^{-x}$ is always attained, and
+its value is always $1/e$ times a $\beta$-free prefactor.
+
+What $\beta$ does control is \emph{where} that happens: $x=1$ at
+$\rho = \beta|\sin\gamma_e|/H$, so a heavy, slender body (large $\beta$)
+penetrates to high density before peaking, and a light, blunt one (small
+$\beta$) peaks high in the atmosphere. Physically: every entry body of a given
+entry speed and angle experiences the same peak deceleration; what it chooses
+by its ballistic coefficient is the altitude at which it takes it, and
+therefore how much time it has left afterwards.
+
+\textbf{Measured} at $V_e = 6000~\mathrm{m/s}$, $\gamma_e = -30^{\circ}$,
+$H=7200~\mathrm{m}$: closed form $a_{\max} = 459.85~\mathrm{m/s^2}$
+($46.89\,g$), $V_{\text{pk}} = 3639.2~\mathrm{m/s}$. The same entry flown at
+two ballistic coefficients eight times apart:
+
+\begin{center}
+\begin{tabular}{lrr}
+\toprule
+& $\beta = 8571.4~\mathrm{kg/m^2}$ & $\beta = 1071.4~\mathrm{kg/m^2}$ \\
+\midrule
+Peak deceleration           & $508.12~\mathrm{m/s^2}$ & $502.16~\mathrm{m/s^2}$ \\
+\quad vs.\ closed form      & $+10.50\,\%$            & $+9.20\,\%$ \\
+Altitude of the peak        & $4856~\mathrm{m}$       & $19{,}861~\mathrm{m}$ \\
+Density at the peak         & $0.624076$              & $0.077647$ \\
+\quad vs.\ $\beta|\sin\gamma_e|/H$ & $+4.84\,\%$      & $+4.36\,\%$ \\
+Speed at the peak           & $3736~\mathrm{m/s}$     & $3723~\mathrm{m/s}$ \\
+$\gamma$ at the peak        & $-31.39^{\circ}$        & $-31.25^{\circ}$ \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+An eightfold change in $\beta$ moves the peak value by $1.2\,\%$ and its
+altitude by $15.0~\mathrm{km}$. That is the independence, measured rather than
+asserted.
+
+\paragraph{Why the agreement is $10\,\%$ and not $2\,\%$.} Both neglected
+effects are quantifiable at the measured peak. Gravity has added speed on the
+way down: $3736$ against the predicted $V_e/\sqrt{e} = 3639~\mathrm{m/s}$, i.e.
+$+2.7\,\%$, which is $+5.4\,\%$ on $V^2$. And the path has steepened:
+$-31.39^{\circ}$ against the assumed $-30^{\circ}$, i.e. $+4.2\,\%$ on
+$|\sin\gamma_e|$. Together those predict $+9.8\,\%$; the measured excess is
+$+10.50\,\%$. The library's budget is $12\,\%$, and it is \emph{one-sided below
+as well}: both neglected effects can only add speed and steepen the path for a
+descending ballistic entry, so a simulated peak coming in \emph{under} the
+analytic value means too much drag, not a better approximation.
+
+\paragraph{Why the location is compared in density, not altitude.} Altitude is
+the logarithm of the predicted quantity. The two cases above disagree by
+$4.84\,\%$ and $4.36\,\%$ in density, but the \emph{same} disagreements read as
+$6.55\,\%$ and $1.52\,\%$ in altitude --- the constant log offset is being
+divided by two different absolute altitudes. A tolerance set in altitude means
+different things at different $\beta$; in density it means one thing.
+
+\subsection{Tsiolkovsky}
+\label{sec:tsiolkovsky}
+
+In vacuum with gravity off and thrust along the velocity ($\alpha=0$),
+\eqref{eq:f4} reduces to $\dot V = T/m$ with $T = T_{\text{vac}}$ constant, and
+\eqref{eq:f7} to $\dot m = -\dot m_p$ constant. Then
+\begin{equation}
+  \frac{\dd V}{\dd m} = \frac{\dot V}{\dot m}
+  = -\frac{T}{\dot m_p\,m}
+  \;\Longrightarrow\;
+  \Delta V = -\frac{T}{\dot m_p}\int_{m_0}^{m_f}\frac{\dd m}{m}
+  = \frac{T}{\dot m_p}\ln\frac{m_0}{m_f} ,
+\end{equation}
+and substituting $\dot m_p = T/(I_{sp}g_0)$ from \eqref{eq:mflow},
+\begin{equation}
+  \Delta V \;=\; I_{sp}\,g_0\,\ln\frac{m_0}{m_f} .
+  \label{eq:tsiolkovsky}
+\end{equation}
+For the shipped placeholder booster, $m_0 = 32{,}400$~kg,
+$m_f = 2{,}400$~kg, mass ratio $13.5$, exhaust speed
+$I_{sp}g_0 = 2549.729~\mathrm{m/s}$, giving
+$\Delta V = 6636.153368978~\mathrm{m/s}$.
+
+\textbf{Measured:} the propagated vacuum burn gives $6636.153370556$~m/s,
+$2.377\times10^{-10}$ relative. The mass history departs from the exact line
+$m(t) = m_0 - \dot m_p t$ by $6.8\times10^{-15}$ relative.
+
+\paragraph{This check is blind to every booster constant.} That
+$2.4\times10^{-10}$ reads as a very strong result and is a very weak one. Take
+the constants in turn:
+\begin{center}\small
+\begin{tabular}{@{}lp{11.2cm}@{}}
+\toprule
+Constant & Why it cancels \\
+\midrule
+$I_{sp}$, $g_0$ & Appear on both sides --- inside
+  $\dot m_p = T_{\text{vac}}/(I_{sp}g_0)$ on the simulation side and inside
+  $I_{sp}g_0\ln(\cdot)$ on the reference side \\
+$T_{\text{vac}}$ & The propagated result is
+  $(T_{\text{vac}}/\dot m_p)\ln(m_0/m_f)$; substituting $\dot m_p$ removes it.
+  Doubling the thrust halves the burn time and leaves $\Delta V$ untouched \\
+Mass ratio & The propagation starts at $m_0$ and terminates on an event set to
+  $m_f$; the reference is built from the same fields. A wrong propellant load
+  moves both sides identically \\
+\bottomrule
+\end{tabular}
+\end{center}
+So the check validates the \emph{shape} of the rocket equation --- that the
+integral of $T/m$ really is an exhaust speed times a log mass ratio --- and
+nothing whatever about the numbers fed into it. The only defence is to pin each
+constant by exact equality at its source, which the library does in
+\code{tests/test\_constThrust.m}. A range check is not a pin: bracketing $g_0$
+to $|g_0 - 9.80665| < 10^{-3}$ would pass a value wrong in the fourth decimal.
+
+\paragraph{What the ideal figure is worth in practice.} \eqref{eq:tsiolkovsky}
+is loss-free. Measured term by term along the shipped ballistic ascent
+(89$^\circ$ at the pad pitching to 34$^\circ$ at burnout): gravity loss
+$697.23$, drag $48.37$, back pressure $98.85$, steering $33.51$, total
+$877.96~\mathrm{m/s}$, leaving a burnout speed of $5768.20~\mathrm{m/s}$ ---
+which closes against the propagated value to $0.01~\mathrm{m/s}$. Note that
+gravity loss alone is $697~\mathrm{m/s}$; a trajectory steep enough to reach a
+1600~km apogee spends most of its burn fighting gravity nearly head-on.
+
+\subsection{Keplerian free-flight range from a burnout state}
+\label{sec:kepler}
+
+\paragraph{The development.} Above the sensible atmosphere the flight is
+two-body. Take a burnout state $(r_0, V_0, \gamma_0)$ and ask where the
+resulting conic meets the impact sphere $r = r_I$.
+
+The specific angular momentum is the radius times the \emph{transverse}
+velocity component, which is $V_0\cos\gamma_0$ since $\gamma$ is measured from
+the local horizontal:
+\begin{equation}
+  h = r_0 V_0 \cos\gamma_0 .
+  \label{eq:kh}
+\end{equation}
+The semi-latus rectum and the specific energy follow from $h$ and the vis-viva
+form of \eqref{eq:energy}:
+\begin{equation}
+  p = \frac{h^2}{\mu}, \qquad
+  \varepsilon = \frac{V_0^2}{2} - \frac{\mu}{r_0} .
+  \label{eq:kpe}
+\end{equation}
+Eccentricity follows from the energy relation $\varepsilon = -\mu/(2a)$ and
+$p = a(1-e^2)$, which give $\varepsilon = -\mu(1-e^2)/(2p)$ and hence
+$e^2 = 1 + 2\varepsilon p/\mu = 1 + 2\varepsilon h^2/\mu^2$:
+\begin{equation}
+  e = \sqrt{1 + \frac{2\varepsilon h^2}{\mu^2}} .
+  \label{eq:ke}
+\end{equation}
+The orbit equation $r = p/(1+e\cos f)$ gives the true anomaly at burnout
+through its cosine, and the radial velocity relation
+$\dot r = (\mu/h)\,e\sin f$ gives it through its sine:
+\begin{equation}
+  e\cos f_0 = \frac{p}{r_0} - 1 , \qquad
+  e\sin f_0 = \frac{h\,V_0\sin\gamma_0}{\mu} .
+\end{equation}
+Both are divided by the same positive $e$, and $\operatorname{atan2}$ is
+invariant under a common positive scaling, so the eccentricity need not be
+divided out:
+\begin{equation}
+  f_0 = \operatorname{atan2}\!\left(\frac{h V_0\sin\gamma_0}{\mu},\;
+        \frac{p}{r_0} - 1\right).
+  \label{eq:kf0}
+\end{equation}
+At the impact radius the orbit equation gives the cosine directly, and the
+\emph{descending} branch --- past apogee, on the way down --- is the one with
+$f \in (\pi, 2\pi)$:
+\begin{equation}
+  \cos f_I = \frac{p/r_I - 1}{e} , \qquad
+  f_I = 2\pi - \arccos\!\left(\frac{p/r_I - 1}{e}\right).
+  \label{eq:kfI}
+\end{equation}
+The free-flight range angle is the swept true anomaly, and the surface range is
+that angle on the impact sphere:
+\begin{equation}
+  \Delta f = (f_I - f_0)\bmod 2\pi , \qquad
+  s_{\text{vac}} = r_I\,\Delta f .
+  \label{eq:krange}
+\end{equation}
+
+\paragraph{Two guards the implementation needs.} If $|\cos f_I| > 1$ the conic
+never reaches the impact radius --- the burnout state is on an orbit whose
+perigee is above $r_I$ --- and the formula is meaningless rather than merely
+inaccurate; the code raises with the state that produced it. And if $e$ is
+numerically zero the true anomaly is undefined; the code refuses below
+$10^{-12}$.
+
+\paragraph{Physical reading.} Everything in \eqref{eq:kh}--\eqref{eq:kfI} is
+built from $\mu$ and the three burnout numbers, and from nothing about the
+vehicle. Free flight does not care what is flying: mass, area and drag
+coefficient are all absent. That is exactly why this check is a good one for
+the \emph{propagator} and a poor one for the \emph{vehicle}.
+
+\paragraph{Measured, three ways.} The library's own check, inside
+\code{run\_ballistic}, re-propagates the burnout state through the full
+spherical equations of motion with lift and drag switched off, rotation off and
+point-mass gravity \emph{forced} (whatever the user selected), and compares the
+propagated great-circle range against \eqref{eq:krange}:
+\begin{center}
+\textbf{$8.484\times10^{-13}$ relative}, on a $4467.5975~\mathrm{km}$ arc,
+against a $10^{-6}$ budget.
+\end{center}
+Independently, for this note, \eqref{eq:krange} was checked against
+\emph{direct two-body integration in Cartesian coordinates} --- a formulation
+sharing no line of code and no coordinate system with the spherical
+propagator --- at three burnout states, integrating $\ddot{\mathbf{r}} =
+-\mu\mathbf{r}/r^3$ with \code{ode89} at $3\times10^{-14}$ relative tolerance
+and terminating on a descending crossing of $r = r_I$:
+
+\begin{center}\small
+\begin{tabular}{@{}rrrrrr@{}}
+\toprule
+$r_0$ (km) & $V_0$ (m/s) & $\gamma_0$ (deg) & $e$ & Closed form (km) & Cartesian (km) \\
+\midrule
+$6480.137$ & $5768.198$ & $47.60$ & $0.800714$ & $4467.597508$ & $4467.597508$ \\
+$6458.137$ & $6500.000$ & $25.00$ & $0.510244$ & $7052.123547$ & $7052.123547$ \\
+$6498.137$ & $5200.000$ & $40.00$ & $0.772443$ & $3771.430312$ & $3771.430312$ \\
+\midrule
+\multicolumn{6}{@{}l}{Relative agreement, top to bottom:
+  $1.46\times10^{-15}$, \; $1.27\times10^{-14}$, \; $1.91\times10^{-14}$} \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+The first row is the shipped \code{run\_ballistic} burnout state. Note the two
+figures are not measuring the same thing: $8.484\times10^{-13}$ is the
+\emph{spherical propagator} against the closed form, and includes the
+propagator's own integration error; $\le 1.9\times10^{-14}$ is the closed form
+against an exact two-body reference, and isolates the algebra of
+\eqref{eq:kh}--\eqref{eq:krange}.
+
+\subsection{Great-circle distance and initial bearing}
+\label{sec:gc}
+
+\paragraph{Distance.} The haversine form of the central angle between two
+points on a sphere:
+\begin{equation}
+  a = \sin^2\!\frac{\phi_2-\phi_1}{2}
+      + \cos\phi_1\cos\phi_2\,\sin^2\!\frac{\lambda_2-\lambda_1}{2},
+  \qquad
+  d = 2\arcsin\bigl(\min(1,\sqrt{a})\bigr) .
+  \label{eq:haversine}
+\end{equation}
+Multiply by a radius for arc length. The clamp at one is not decoration:
+roundoff can push $a$ a hair above unity for near-antipodal points, and
+$\arcsin$ would then return a complex number.
+
+Haversine is used in preference to the spherical law of cosines,
+\begin{equation*}
+  \cos d = \sin\phi_1\sin\phi_2 + \cos\phi_1\cos\phi_2\cos\Delta\lambda ,
+\end{equation*}
+because for small $d$ that expression evaluates to $1 - d^2/2 + O(d^4)$;
+forming it in double precision and then taking $\arccos$ discards about half
+the significant digits, leaving an absolute error of order
+$\sqrt{\epsilon}\approx 10^{-8}$~rad and returning \emph{exactly zero} below
+$d\sim 10^{-8}$~rad. Measured: at a separation of $10^{-10}$~rad, haversine
+returns $1.000000\times10^{-10}$ and the cosine form returns exactly $0$.
+Terminal-phase ranges are short, so this matters. Haversine's own weak point is the
+near-antipodal case, where it degrades to about $\sqrt{\epsilon}$ --- harmless
+here.
+
+\paragraph{Initial bearing.} From the spherical triangle formed by the pole and
+the two points, the four-parts formula with the cotangents cleared gives
+\begin{equation}
+  \psi_0 = \operatorname{atan2}\bigl(
+    \sin\Delta\lambda\cos\phi_2,\;
+    \cos\phi_1\sin\phi_2 - \sin\phi_1\cos\phi_2\cos\Delta\lambda\bigr),
+  \qquad \Delta\lambda = \lambda_2-\lambda_1,
+  \label{eq:bearing}
+\end{equation}
+wrapped into $[0,2\pi)$. The first argument is the eastward component of the
+initial track direction and the second the northward one, both scaled by the
+same positive factor, so their ratio is the tangent of the course. The
+\code{atan2} form resolves the full circle without a quadrant test --- which is
+where hand-rolled bearing code usually breaks --- and stays well conditioned on
+short legs, where numerator and denominator vanish together.
+
+\paragraph{Bearing is not symmetric the way distance is.} Distance satisfies
+$d(A,B) = d(B,A)$. Bearing does not satisfy
+$\psi_0(B,A) = \psi_0(A,B) \pm \pi$, because the great-circle arc meets the
+local meridian at a different angle at each end. Measured, Los Angeles
+($33.94^{\circ}$N, $118.41^{\circ}$W) to New York ($40.64^{\circ}$N,
+$73.78^{\circ}$W):
+\begin{center}
+\begin{tabular}{lr}
+\toprule
+Outbound course, LAX $\to$ JFK      & $65.8669^{\circ}$ \\
+Return course, JFK $\to$ LAX        & $273.8410^{\circ}$ \\
+Reversing the outbound course would give & $245.8669^{\circ}$ \\
+Discrepancy                          & $27.974^{\circ}$ \\
+\bottomrule
+\end{tabular}
+\end{center}
+That $28^{\circ}$ is the convergence of the meridians and is the whole point.
+
+\paragraph{But the discrepancy is \emph{not} how you detect a transposition.}
+This is worth being precise about, because the natural assumption is the
+opposite. Exchanging $\phi_1$ with $\phi_2$ inside \eqref{eq:bearing} moves
+\emph{both} courses --- measured, LAX--JFK becomes $86.1590^{\circ}$ and
+JFK--LAX becomes $294.1331^{\circ}$ --- and leaves their difference at exactly
+the same $27.974^{\circ}$. What a transposition does break is the
+\emph{meridional cardinals}: a due-north leg, $(0,0)\to(0.1,0)$, correctly
+returns $0.0000^{\circ}$ and returns $90.0000^{\circ}$ transposed. The
+east--west cardinals survive the swap. So the assertion to write is an absolute
+bearing on a \textbf{near-meridional} leg, not a reverse-course offset.
+
+\paragraph{Three degenerate cases, all with conventions rather than answers.}
+Coincident points return zero, because $\operatorname{atan2}(0,0)$ is defined
+as zero --- a convention that keeps a degenerate input from poisoning a state
+vector, not an answer. Antipodal points admit \emph{every} great circle, so the
+returned value is an artifact of how two vanishing terms round: from $(0,0)$ to
+$(0,\pi)$ the function returns exactly $90^{\circ}$, and nudging either
+latitude by $10^{-9}$~rad swings the answer across the entire circle. And at
+the poles every direction is south. None of the three is wrong; all three are
+places where a caller must not treat the output as meaningful.
+
+\subsection{Summary of measured agreements}
+
+\begin{center}\small
+\begin{tabular}{@{}llr@{}}
+\toprule
+Check & Budget & Measured \\
+\midrule
+Vacuum specific energy, 300~s lofted arc          & $<10^{-8}$ rel & $1.281\times10^{-13}$ \\
+Rotating-frame Jacobi integral, same arc          & $<10^{-8}$ rel & $1.107\times10^{-13}$ \\
+\quad \emph{same, with the Coriolis sign flipped} & --- & $1.468\times10^{-13}$ \\
+Equilibrium glide $V(r)$, 45 $\to$ 20~km          & $<3\,\%$ & $1.51\,\%$ \\
+Allen--Eggers peak, $\beta$ 8$\times$ apart       & $0<\text{rel}<12\,\%$ & $+10.50\,\%$, $+9.20\,\%$ \\
+Allen--Eggers peak location, in density           & $<6\,\%$ & $+4.84\,\%$, $+4.36\,\%$ \\
+Peak value spread over 8$\times$ in $\beta$       & $<3\,\%$ & $1.2\,\%$ \\
+\code{boost3DOF} $\to$ \code{glide3DOF}, engine dead & $<10^{-12}$ & $0.000\times10^{0}$ \\
+Thrust force increment, $\alpha,\sigma\ne 0$      & $<10^{-12}$ & $3.642\times10^{-16}$ \\
+Tsiolkovsky, full vacuum burn                     & $<10^{-8}$ rel & $2.377\times10^{-10}$ \\
+Mass linearity over the burn                      & $<10^{-9}$ rel & $6.821\times10^{-15}$ \\
+Keplerian range, propagated vs closed form        & $<10^{-6}$ rel & $8.484\times10^{-13}$ \\
+Keplerian range, closed form vs Cartesian two-body & --- & $\le1.91\times10^{-14}$ \\
+Gravity/aero projections vs vector reconstruction & --- & $\le9.5\times10^{-16}$ \\
+Thrust projections vs vector reconstruction       & --- & $\le1.6\times10^{-16}$ \\
+Rotating-Earth terms vs vector reconstruction     & --- & $\le1.1\times10^{-13}$ \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\paragraph{A caution on the bit-exact row.} The
+\code{boost3DOF}$\,\to\,$\code{glide3DOF} reduction measures $0.000\times10^0$
+because every shared term in the powered file is a character-identical copy of
+the unpowered expression evaluated in the same order, and with $T=0$ the
+perturbations $(0 - a_D)$ and $(0 + a_L)$ are IEEE-exact identities. The check
+therefore \emph{proves} that the six shared equations are the glide equations
+--- no transcription drift, no dropped term, no altered sign is possible --- and
+is simultaneously \emph{zero-bit evidence of correctness}, because any error in
+the glide equations is inherited and cancels invisibly. It validates identity,
+not physics. A reduction test validates only the terms that survive the
+reduction.
+
+%=====================================================================
+\section{Targeting}
+\label{sec:targeting}
+
+Given a launch point and a destination rather than a launch point and an
+azimuth, two unknowns must be found. Over a non-rotating sphere they decouple
+completely, and the library solves them as two independent problems.
+
+\subsection{The azimuth is closed-form}
+
+The initial bearing of the launch-to-target great circle, \eqref{eq:bearing},
+\emph{is} the heading state $\psi$ --- both are measured clockwise from north
+--- so it goes straight into $\mathbf{x}_6$ with no conversion, no iteration and
+no tolerance. For the shipped geometry (Hawaii to the California coast) it is
+$\psi_0 = 0.988331159~\mathrm{rad} = 56.627204^{\circ}$, and the flown initial
+heading is asserted equal to it to $10^{-13}$.
+
+\paragraph{Exact only because the Earth does not rotate here.} With
+$\omega = 0$ the ground track of a zero-bank trajectory is a great circle, so
+the initial bearing of the launch-to-target arc is the whole answer. Switch the
+Earth rate on and the target is carried east under the vehicle for the entire
+flight --- of order 600~km at mid latitude over a 27-minute flight --- so the
+vehicle must be aimed not at where the target is but at where it \emph{will
+be}. The azimuth then depends on the flight time, the flight time on the
+cutoff, and the cutoff on the azimuth: what was a closed form becomes an outer
+iteration wrapped around the range solve. The library does not have that outer
+loop, and refuses to pretend it does: with rotation enabled it prints a caution
+and reports the miss against a target that stood still.
+
+\subsection{The range solve is a bisection on thrust-termination time}
+
+The boost phase already ends at $t_{\text{span}}(2)$ when the burnout event has
+not fired first, so a shortened span \emph{is} a thrust cutoff and no new
+machinery is needed. Less burn gives less energy gives less range: the map
+$t_{\text{cut}} \mapsto R$ is monotonic and single-valued, which is exactly
+what makes bisection safe.
+
+Bisection, rather than a secant or Newton method, because each evaluation is a
+full trajectory propagation of several seconds, the derivative is unavailable,
+and the function is only piecewise smooth. Bisection never leaves its bracket,
+needs no derivative, and cannot be thrown off by a local kink; it costs a fixed
+number of evaluations per decade of tolerance, which is the right trade when
+the alternative occasionally has to be restarted. Convergence is tested on the
+\emph{achieved value} --- a kilometre of range --- not on the parameter, because
+that is the quantity the user cares about.
+
+\paragraph{Why cutoff time and not something else.} The two obvious
+alternatives both bifurcate.
+\begin{itemize}
+\item \textbf{Loft angle} has a lofted and a depressed branch either side of a
+maximum-range hump --- two cutoffs per achievable range --- so a root finder
+lands on whichever branch it started nearest. Monotonicity is what bisection
+assumes and does not check; with several crossings it finds one and does not
+say which.
+\item \textbf{Glide handoff altitude} bifurcates on the skip phugoid's troughs.
+Measured in this library: moving the handoff from 15~km to 30~km costs
+$1881~\mathrm{km}$ of range --- a quarter of the flight --- \emph{with every
+phase still reporting nominal}, because every event fired exactly as asked.
+\end{itemize}
+Thrust termination is also what real systems do for energy management. Its
+price is that an early cutoff throws away unburned propellant with the
+jettisoned booster, so the summary reports how much went overboard; at a deep
+cutoff that is most of the load.
+
+\textbf{Measured} on the shipped configuration: required $3811.2399$~km,
+achieved $3811.7512$~km, residual $511.24$~m, in 10 bisection iterations, at a
+cutoff of $75.681975~\mathrm{s}$ ($93.99\,\%$ of the full burn). The reachable
+band, which is the two bracket evaluations the solve makes anyway, is
+$202.861$ to $7737.630$~km. A target outside that band is not an error: the
+solver returns \code{converged = false} with the band, and the caller phrases
+the refusal in its own vocabulary. What must never happen is a silent nearest
+miss, because a nearest miss \emph{looks} like a solution.
+
+\subsection{Cross-range is a property of the configuration, not a guarantee}
+
+The bisection matches the great-circle \emph{distance} from launch to impact.
+Nothing in it steers the track sideways. Cross-range comes out at zero in the
+shipped configuration because the bank angle is zero throughout, and a
+zero-bank trajectory over a non-rotating sphere stays on the great circle it
+left on --- which is a statement about $\sigma=0$ and $\omega=0$ together, not
+a general property of the solver.
+
+The library therefore \emph{measures} it rather than asserting it. The
+cross-track offset of the impact point from the launch-to-target great circle
+is computed from the flown state by the standard spherical relation
+\begin{equation}
+  x_{\text{track}} = r_I \arcsin\bigl(\sin\Delta\theta\;\sin\delta\psi\bigr),
+  \label{eq:xtrack}
+\end{equation}
+where $\Delta\theta$ is the flown central angle and
+$\delta\psi = \psi_{\text{flown}} - \psi_0$ the bearing error at the launch
+point, and it is printed every run with a warning when it exceeds the range
+tolerance. Measured:
+
+\begin{center}
+\begin{tabular}{lrr}
+\toprule
+& Shipped, $\sigma = 0$ & $\sigma = 75^{\circ}$ descent \\
+\midrule
+Cross-track offset & $-4.06\times10^{-7}$~m & $21{,}515.22$~m \\
+Total miss         & $511.24$~m & $21{,}524.70$~m \\
+Range residual     & $511.24$~m & $-585.20$~m \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+At $75^{\circ}$ of bank the range residual is still under a kilometre --- the
+bisection did its job --- and the vehicle lands 21.5~km to the side.
+Closing that requires an outer iteration on azimuth, which the library does not
+have. The honest reading is that the shipped script solves \emph{downrange
+only}, and the cross-track line in its summary is the evidence for the
+zero-cross-range claim rather than a restatement of it.
+
+%=====================================================================
+\section{Limitations}
+
+Stated plainly, because the model's boundaries are part of its specification.
+
+\begin{itemize}
+\item \textbf{Spherical Earth only.} No $J_2$, no ellipsoid, no geodetic
+altitude. The interfaces are shaped so that an oblate gravity model drops in
+without editing the equations of motion, and the $g_\phi$ terms exist for
+exactly that day, but they are unexercised today.
+\item \textbf{The rotating-Earth terms are off by default} and are exercised by
+the test suite but by no shipped trajectory. The targeting azimuth is
+closed-form only with them off.
+\item \textbf{The $g_\phi$ terms are verified only by this note}, using an
+injected synthetic gravity model. Nothing in the committed test suite can see
+them.
+\item \textbf{Aerodynamics are constant.} $\alpha$ does not reach $C_L$, so
+during unpowered flight the only live control is bank angle. Mach number is
+computed and ignored.
+\item \textbf{The atmosphere is isothermal-exponential} and, as
+Section~\ref{sec:models} quantifies, not exactly hydrostatic under
+inverse-square gravity. Its purpose is closed-form validation, not fidelity.
+\item \textbf{No aerothermodynamics.} \code{noseRadius} is carried on the
+vehicle struct as a placeholder for a deferred Sutton--Graves model; nothing
+reads it.
+\item \textbf{No 6-DOF, no actuator dynamics, no autopilot.} Commanded angles
+are achieved instantaneously.
+\item \textbf{Every vehicle and booster number is a placeholder.} The booster's
+structural coefficient in particular, $1500/31500 = 4.76\,\%$, is optimistic by
+roughly a factor of two against real large solids; a realistic $11.2\,\%$ stage
+with the same propellant load would deliver about $5.1$ rather than
+$6.6~\mathrm{km/s}$ of ideal $\Delta V$. The alignment between this booster's
+burnout speed and the 60~km, 6~km/s entry interface used elsewhere in the
+library is an artefact of that optimism, not a design expectation.
+\end{itemize}
+
+%=====================================================================
+\begin{thebibliography}{9}
+
+\bibitem{Vinh1980}
+Vinh, N.X., Busemann, A., Culp, R.D.,
+\emph{Hypersonic and Planetary Entry Flight Mechanics},
+University of Michigan Press, 1980. Eqs.~(2.28)--(2.33) are the flight-mechanics
+equations of Section~\ref{sec:dynamics}; Sec.~5.3 the equilibrium glide;
+Ch.~6 the Allen--Eggers entry.
+
+\bibitem{Allen1958}
+Allen, H.J., Eggers, A.J.,
+``A Study of the Motion and Aerodynamic Heating of Ballistic Missiles Entering
+the Earth's Atmosphere at High Supersonic Speeds,''
+NACA TR-1381, 1958.
+
+\bibitem{Eggers1958}
+Eggers, A.J., Allen, H.J., Neice, S.E.,
+``A Comparative Analysis of the Performance of Long-Range Hypervelocity
+Vehicles,'' NACA TR-1382, 1958.
+
+\bibitem{Sanger1944}
+S\"anger, E., Bredt, I.,
+``A Rocket Drive for Long Range Bombers,''
+Deutsche Luftfahrtforschung UM-3538, 1944.
+
+\bibitem{Bate1971}
+Bate, R.R., Mueller, D.D., White, J.E.,
+\emph{Fundamentals of Astrodynamics}, Dover, 1971. Ch.~6, the free-flight range
+angle of a ballistic missile.
+
+\bibitem{Sutton2017}
+Sutton, G.P., Biblarz, O.,
+\emph{Rocket Propulsion Elements}, 9th ed., Wiley, 2017.
+Sec.~3.2--3.3 (choked flow and the thrust pressure term), Sec.~4.1 (the ideal
+rocket equation), Ch.~12 (representative solid-motor performance).
+
+\bibitem{Sinnott1984}
+Sinnott, R.W., ``Virtues of the Haversine,''
+\emph{Sky and Telescope}, Vol.~68, No.~2, 1984, p.~159.
+
+\bibitem{Bowditch}
+Bowditch, N., \emph{The American Practical Navigator},
+Pub.~No.~9, National Geospatial-Intelligence Agency, chapter on Great-Circle
+Sailing.
+
+\bibitem{NumericalRecipes}
+Press, W.H., Teukolsky, S.A., Vetterling, W.T., Flannery, B.P.,
+\emph{Numerical Recipes}, 3rd ed., Cambridge University Press, 2007, Sec.~9.1
+(bisection).
+
+\bibitem{WGS84}
+\emph{Department of Defense World Geodetic System 1984},
+NIMA TR8350.2, 3rd ed., 1997. Source of $\mu$, $r_E$ and $\omega$.
+
+\end{thebibliography}
+
+\end{document}

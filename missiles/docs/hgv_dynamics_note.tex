@@ -320,12 +320,30 @@ Differentiate $\mathbf{V}=V\vhat$ once:
 The unit vector $\vhat$ changes for two distinct reasons: the angles
 $(\gamma,\psi)$ change, and the basis $(\nhat,\ehat,\uhat)$ itself rotates as
 the vehicle moves over the sphere. Writing $\bomega_f$ for the angular velocity
-of the horizon basis relative to inertial space and using \eqref{eq:dvhat},
+of the horizon basis \textbf{relative to the planet-fixed rotating frame} and
+using \eqref{eq:dvhat},
 \begin{equation}
   \frac{\dd\vhat}{\dd t}
   \;=\; \dot\gamma\,\ig + \dot\psi\cos\gamma\,\ip + \bomega_f\times\vhat .
   \label{eq:dvhatdt}
 \end{equation}
+
+\paragraph{Which frame $\bomega_f$ is measured in, and why it is not inertial.}
+This is load-bearing and is fixed here once. $\mathbf{V} = V\vhat$ is the
+\emph{planet-relative} velocity by the convention of
+Section~\ref{sec:frames}, so \eqref{eq:adecomp} is a derivative taken in the
+planet-fixed rotating frame, and $\bomega_f$ has to be the basis rate seen from
+that same frame. It therefore contains the vehicle's motion over the sphere and
+nothing else --- which is exactly what \eqref{eq:omegaf} below turns out to be,
+built from $\dot\lambda$ and $\dot\phi$ with no $\omega$ in it. The planet's own
+spin is deliberately absent: the inertial rate of the horizon basis is
+$\bOmega + \bomega_f$, and the $\bOmega$ part enters the equations of motion
+instead as the Coriolis and centrifugal accelerations of
+Section~\ref{sec:rotating}. Taking $\bomega_f$ inertial \emph{and} adding those
+pseudo-forces would count the planet's rotation twice; taking it inertial and
+omitting them would be the other consistent choice, and is not the one the code
+makes.
+
 Projecting \eqref{eq:adecomp} on the triad and using orthonormality
 \eqref{eq:orthonormal} --- $\vhat\cdot\dd\vhat/\dd t = 0$ for a unit vector ---
 gives three scalar equations:
@@ -337,8 +355,9 @@ gives three scalar equations:
 \end{align}
 
 \paragraph{The transport terms.}
-For a non-rotating planet the horizon basis turns only because the vehicle
-moves over it. Increasing longitude rotates the basis about the polar axis at
+Seen from the rotating frame the horizon basis turns only because the vehicle
+moves over it --- and that is true whether or not the planet spins, which is
+what makes the block below independent of $\omega$. Increasing longitude rotates the basis about the polar axis at
 $\dot\lambda$; increasing latitude tilts it about the \emph{westward}
 horizontal, since $\dd\uhat/\dd t = \dot\phi\,\nhat$ and, by
 \eqref{eq:handed}, $\ehat\times\uhat = -\nhat$. Hence
@@ -888,10 +907,22 @@ $m_{\text{dry}}=1{,}500~\mathrm{kg}$ over a $900~\mathrm{kg}$ payload. Then
   & t_{\text{burn}} &= \frac{30000}{372.5886} = 80.517758~\mathrm{s}, \\
   T(\text{sea level}) &= 840{,}112.6~\mathrm{N},
   & \text{debit} &= 109{,}887~\mathrm{N} = 11.57\,\% ,\\
-  \text{liftoff } T/W &= \frac{950000}{32400\times 9.80665} = 2.9899 .
+  \text{vacuum } T/W &= \frac{950{,}000}{32400\,g_0} = 2.9899 ,
+  & \text{liftoff } T/W &= \frac{840{,}112.6}{32400\,g_0} = 2.6441 .
 \end{align*}
 All were re-computed for this note and agree with the values pinned in the
 test suite.
+
+\paragraph{Both thrust-to-weight figures, and which one the vehicle feels.}
+Quoting one without the other is the standard way to be off by a tenth at the
+pad. $T_{\text{vac}}$ is never delivered at sea level --- the same
+$A_eP$ debit computed two lines above takes it to $840{,}112.6~\mathrm{N}$ ---
+so $2.9899$ is the data-sheet number and $2.6441$ is what actually lifts the
+stack. The difference is not cosmetic: net of weight, the initial vertical
+acceleration is $1.6441\,g$ rather than $1.9899\,g$, a $17\,\%$ shortfall on
+the quantity that has to clear the tower. The vacuum figure is the right one
+to compare against a motor specification; the delivered figure is the right one
+to put in a trajectory.
 
 %=====================================================================
 \section{Phase machinery}
@@ -1160,11 +1191,42 @@ against pointwise,
   \label{eq:veq}
 \end{equation}
 
-\paragraph{The range.}
-For the range integral take $\gamma$ small, so $\cos\gamma\to 1$, and write
-\eqref{eq:eqglide} as
+\paragraph{The range: the approximations, stated before the integral.}
+Equation~\eqref{eq:veq} is a pointwise condition and holds at whatever radius
+it is evaluated at. The closed-form range that follows from it does not: three
+approximations stand between the two, and they are written down here rather
+than introduced silently as the integration proceeds.
+
+\begin{enumerate}
+\item \emph{Shallow flight.} $\gamma$ is small, so $\cos\gamma\to 1$ and the
+component of gravity along the track is negligible beside drag.
+\item \emph{Near-constant altitude.} The glide descends through a small
+fraction of a planetary radius, so $r\simeq r_E$ over the whole arc. This is
+the assumption that does the work, because it converts three varying
+quantities into constants:
 \begin{equation}
-  L = mg\Bigl(1 - \frac{V^2}{V_c^2}\Bigr), \qquad V_c^2 = gr ,
+  r \simeq r_E , \qquad
+  g \;\equiv\; g_r(r_E) = \frac{\mu}{r_E^2} = 9.798285~\mathrm{m/s^2},
+  \qquad
+  V_c^2 \;\equiv\; g\,r_E = \frac{\mu}{r_E},
+  \quad V_c = 7905.4~\mathrm{m/s} .
+  \label{eq:sangerconst}
+\end{equation}
+Note that $g$ is defined here, and defined \emph{as a constant}: it is the
+inward attraction evaluated once at the reference sphere, not the $g_r(r)$ of
+\eqref{eq:eqglide}. Without \eqref{eq:sangerconst} the ratio $V_c^2/g = r$
+varies along the path and the substitution three lines below is not a
+substitution at all. The approximation is usable because the variation is
+small: over the library's 45~km to 20~km test glide, $r$ changes by
+$0.39\,\%$ and $g$ by $0.78\,\%$.
+\item \emph{Fixed $L/D$}, which the shipped aerodynamic model \eqref{eq:aero}
+supplies exactly, so this one costs nothing here.
+\end{enumerate}
+
+With \eqref{eq:sangerconst} in force, write \eqref{eq:eqglide} at
+$\cos\gamma = 1$ as
+\begin{equation}
+  L = mg\Bigl(1 - \frac{V^2}{V_c^2}\Bigr), \qquad V_c^2 = g\,r_E ,
   \label{eq:liftdeficit}
 \end{equation}
 which is the centrifugal-relief statement of Section~\ref{sec:relief}: lift
@@ -1178,11 +1240,12 @@ Separating,
 \begin{equation}
   \dd s = -\frac{(L/D)}{g}\,\frac{V\,\dd V}{1 - V^2/V_c^2} .
 \end{equation}
-Substitute $u = V^2/V_c^2$, so $V\,\dd V = \tfrac12 V_c^2\,\dd u$ and, crucially,
-$V_c^2/g = r$:
+Substitute $u = V^2/V_c^2$, so $V\,\dd V = \tfrac12 V_c^2\,\dd u$ and,
+crucially, $V_c^2/g = r_E$ --- a constant, by \eqref{eq:sangerconst}, which is
+the only reason it can come outside the integral:
 \begin{equation}
   \dd s = -\frac{(L/D)}{g}\cdot\frac{V_c^2}{2}\cdot\frac{\dd u}{1-u}
-        = -\frac{(L/D)\,r}{2}\cdot\frac{\dd u}{1-u} .
+        = -\frac{(L/D)\,r_E}{2}\cdot\frac{\dd u}{1-u} .
   \label{eq:dsdu}
 \end{equation}
 Integrating from $u_0 = (V/V_c)^2$ down to $u=0$:
@@ -1202,12 +1265,36 @@ symbolically in \code{sympy}, and by direct numerical quadrature of
 \eqref{eq:sanger} to $5.3\times10^{-14}$, $1.4\times10^{-14}$ and
 $1.9\times10^{-13}$ relative respectively.
 
-\paragraph{Physical reading.} The logarithm is the interesting part. Range is
-not proportional to kinetic energy; it diverges as $V\to V_c$, because at
-circular speed the vehicle needs no lift, generates no induced drag through the
-$L/D$ relation, and does not come down. Conversely the last increment of speed
-buys very little range. With $L/D = 2.5$ and $V = 6000~\mathrm{m/s}$
-($V_c = 7905.4~\mathrm{m/s}$), \eqref{eq:sanger} predicts $6842~\mathrm{km}$;
+\paragraph{Physical reading, and what the divergence is telling you.}
+The logarithm is the interesting part. Range is not proportional to kinetic
+energy; it diverges as $V\to V_c$, because at circular speed the vehicle needs
+no lift, generates no drag through the $L/D$ relation, and does not come down.
+The \emph{marginal} return runs the same way, not the opposite way:
+\begin{equation}
+  \frac{\dd R}{\dd V} \;=\; \frac{L}{D}\,\frac{r_E\,V}{V_c^2 - V^2}
+  \;\longrightarrow\; \infty \qquad\text{as}\quad V\to V_c^{-} ,
+  \label{eq:dRdV}
+\end{equation}
+so every increment of speed taken nearer circular speed buys \emph{more} range
+than the one before it, not less. At $L/D=2.5$ the same $100~\mathrm{m/s}$ is
+worth $27~\mathrm{km}$ of range at $1000~\mathrm{m/s}$, $373~\mathrm{km}$ at
+$6000~\mathrm{m/s}$, and $23{,}687~\mathrm{km}$ at $7800~\mathrm{m/s}$ --- more
+than half the planet's circumference for the last of those, which is the tell.
+
+That last figure is not a performance claim; it is the model announcing that it
+has left its domain. Every assumption behind \eqref{eq:sanger} fails together
+as $V\to V_c$. The required lift $mg(1-V^2/V_c^2)$ goes to zero, so the
+equilibrium altitude \eqref{eq:veq} climbs out of the sensible atmosphere and
+the near-constant-altitude assumption \eqref{eq:sangerconst} goes with it. With
+no lift there is no $L/D$ drag either, so the fixed-$L/D$ atmospheric-glide
+picture describes a vehicle that is no longer flying aerodynamically. And at
+$V = V_c$ exactly the vehicle is in a circular orbit, which is not a glide at
+all and has no finite range to predict. The formula is quantitative while lift
+genuinely carries the weight deficit --- roughly $V/V_c \lesssim 0.9$ --- and
+above that it is a statement about its own boundary.
+
+With $L/D = 2.5$ and $V = 6000~\mathrm{m/s}$
+($V/V_c = 0.759$), \eqref{eq:sanger} predicts $6842~\mathrm{km}$;
 the shipped boost-glide chain flies $7663~\mathrm{km}$ from a
 $5841~\mathrm{m/s}$ burnout, the excess coming from the initial altitude, the
 skip phugoid and the boost's own downrange leg, none of which
@@ -1575,20 +1662,63 @@ opposite. Exchanging $\phi_1$ with $\phi_2$ inside \eqref{eq:bearing} moves
 \emph{both} courses --- measured, LAX--JFK becomes $86.1590^{\circ}$ and
 JFK--LAX becomes $294.1331^{\circ}$ --- and leaves their difference at exactly
 the same $27.974^{\circ}$. What a transposition does break is the
-\emph{meridional cardinals}: a due-north leg, $(0,0)\to(0.1,0)$, correctly
-returns $0.0000^{\circ}$ and returns $90.0000^{\circ}$ transposed. The
-east--west cardinals survive the swap. So the assertion to write is an absolute
-bearing on a \textbf{near-meridional} leg, not a reverse-course offset.
+\emph{meridional cardinals}, and the reason is structural. On a meridian
+$\Delta\lambda = 0$, so the eastward component $\sin\Delta\lambda\cos\phi_2$
+of \eqref{eq:bearing} is \emph{exactly} zero --- before and after the swap
+alike --- and the transposed answer can therefore only be $0$ or $\pi$,
+whichever way the northward component points. Both meridional cardinals invert:
 
-\paragraph{Three degenerate cases, all with conventions rather than answers.}
-Coincident points return zero, because $\operatorname{atan2}(0,0)$ is defined
-as zero --- a convention that keeps a degenerate input from poisoning a state
-vector, not an answer. Antipodal points admit \emph{every} great circle, so the
-returned value is an artifact of how two vanishing terms round: from $(0,0)$ to
-$(0,\pi)$ the function returns exactly $90^{\circ}$, and nudging either
-latitude by $10^{-9}$~rad swings the answer across the entire circle. And at
-the poles every direction is south. None of the three is wrong; all three are
-places where a caller must not treat the output as meaningful.
+\begin{center}
+\begin{tabular}{llrr}
+\toprule
+Leg & $(\phi_1,\lambda_1)\to(\phi_2,\lambda_2)$ & Correct & $\phi_1\!\leftrightarrow\!\phi_2$ \\
+\midrule
+Due north & $(0,0)\to(0.1,0)$   & $0.0000^{\circ}$   & $180.0000^{\circ}$ \\
+Due south & $(0,0)\to(-0.1,0)$  & $180.0000^{\circ}$ & $0.0000^{\circ}$ \\
+Due east  & $(0,0)\to(0,0.1)$   & $90.0000^{\circ}$  & $90.0000^{\circ}$ \\
+Due west  & $(0,0)\to(0,-0.1)$  & $270.0000^{\circ}$ & $270.0000^{\circ}$ \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+The north entry is $\operatorname{atan2}(0,\,-\sin 0.1) = \pi$ exactly. The
+east--west pair survives untouched because with $\phi_1 = \phi_2 = 0$ there is
+nothing to exchange. So the assertion to write is an absolute bearing on a
+\textbf{near-meridional} leg, not a reverse-course offset.
+
+The four values are tabulated rather than described because this single claim
+has been written down wrongly three times in this project, by three different
+authors, the last of them after a review had already established the right
+answer. A transposed due-north leg cannot return $90^{\circ}$: that would
+require a nonzero eastward component, and on a meridian there is none. The
+numbers above are the defence against a fourth attempt.
+
+\paragraph{Three degenerate cases, all conventions rather than answers.}
+Equation~\eqref{eq:bearing} hands back a number at three geometries where no
+bearing exists. \emph{Coincident} points have no arc: both components vanish,
+$\operatorname{atan2}(0,0)$ is defined as zero, and the formula reports due
+north for a point to itself. \emph{Antipodal} points admit \emph{every} great
+circle, so whatever comes back is an artifact of how two vanishing terms round
+--- from $(0,0)$ to $(0,\pi)$ the formula gives exactly $90^{\circ}$, because
+$\sin\pi$ evaluates to $1.22\times10^{-16}$ against a true-zero denominator,
+and nudging either latitude by $10^{-9}$~rad swings the answer across the whole
+circle. And \emph{at a pole} the local north that a bearing is measured from
+does not exist: at the north pole every departure direction is south, at the
+south pole every departure direction is north, and in both cases longitude ---
+and with it any navigational bearing --- is a labelling choice, not a
+direction.
+
+Because this quantity is a targeting azimuth, a plausible-looking number at any
+of the three is worse than no number, since it flies.
+\code{coorbital.util.greatCircleBearing} therefore \emph{raises} rather than
+returns at all three: \code{degenerateArc} when
+$\operatorname{hypot}$ of the two components --- which is the sine of the
+angular separation, so one test catches both the coincident and the antipodal
+end --- falls to $10^{-12}$ or below, and \code{polarOrigin} when
+$|\cos\phi_1|\le 10^{-12}$, which needs its own test because the components do
+not vanish at a pole. Near-antipodal geometry stays ill-conditioned well
+outside the refusal band; the guard removes only the cases that have no answer
+at all.
 
 \subsection{Summary of measured agreements}
 
@@ -1713,14 +1843,52 @@ a general property of the solver.
 
 The library therefore \emph{measures} it rather than asserting it. The
 cross-track offset of the impact point from the launch-to-target great circle
-is computed from the flown state by the standard spherical relation
+is computed by the standard spherical relation
 \begin{equation}
-  x_{\text{track}} = r_I \arcsin\bigl(\sin\Delta\theta\;\sin\delta\psi\bigr),
+  x_{\text{track}} \;=\; r_I \arcsin\!\bigl(
+     \sin\Delta\theta_{\text{fly}}\;
+     \sin(\psi_{\text{fly}} - \psi_{\text{launch}})\bigr),
   \label{eq:xtrack}
 \end{equation}
-where $\Delta\theta$ is the flown central angle and
-$\delta\psi = \psi_{\text{flown}} - \psi_0$ the bearing error at the launch
-point, and it is printed every run with a warning when it exceeds the range
+in which \emph{all three inputs are quantities at the launch point}:
+
+\begin{itemize}
+\item $\Delta\theta_{\text{fly}}$ is the great-circle central angle from the
+launch point to the \emph{achieved impact} point, \eqref{eq:haversine} on the
+flown terminal position;
+\item $\psi_{\text{fly}} = \operatorname{bearing}(\text{launch},
+\text{impact})$ is the \emph{initial} bearing of the launch-to-impact arc,
+\eqref{eq:bearing} evaluated with the flown impact point as its second
+argument;
+\item $\psi_{\text{launch}} = \operatorname{bearing}(\text{launch},
+\text{target}) = \psi_0$ is the initial bearing of the intended launch-to-target
+arc --- the same closed form that seeded $\mathbf{x}_6$ in
+Section~\ref{sec:targeting}.
+\end{itemize}
+
+\noindent
+The difference of the two bearings is wrapped into $(-\pi,\pi]$ before the
+sine, which fixes the sign convention as positive to the right of the intended
+course. In the code these are \code{angFly}, \code{psiFly} and
+\code{psiLaunch}, and \code{psiFly} is a second call to
+\code{greatCircleBearing} from the launch point --- not a state read out of the
+trajectory.
+
+\paragraph{Why it is not the terminal heading, which is the plausible mistake.}
+$\psi_{\text{fly}}$ is emphatically \emph{not} $\mathbf{x}_6$ at impact. The
+terminal heading is tangent to the flown track at its \emph{far} end, and it
+differs from the initial launch-to-impact bearing by exactly the meridian
+convergence of Section~\ref{sec:gc} --- the same effect that puts
+$27.974^{\circ}$ between the LAX--JFK outbound and return courses. Substituting
+it into \eqref{eq:xtrack} leaves a formula that still looks right, still
+returns a number of plausible magnitude, and is wrong by tens of kilometres on
+an intercontinental arc. Both angles in \eqref{eq:xtrack} have to be anchored
+at the launch point, because the relation is a statement about the spherical
+right triangle standing on the intended great circle \emph{there}: one leg
+along the intended course, the hypotenuse along the launch-to-impact arc, and
+the included angle between them.
+
+The offset is printed every run, with a warning when it exceeds the range
 tolerance. Measured:
 
 \begin{center}

@@ -32,8 +32,10 @@ function eomFn = massConstant(baseEom)
 %  injecting x(7) into a copy of veh: that would silently leave Sref, CL and
 %  LD describing the jettisoned stack, which is worse than the bug it fixes
 %  because it looks repaired. Separation changes the whole airframe. The
-%  structural answer is a per-phase vehicle carried on the phase struct; until
-%  that exists, this guard is what stands in for it.
+%  structural answer is a per-phase vehicle carried on the phase struct, and
+%  it now exists -- coorbital.prop.phaseRun accepts an optional ph.veh -- but
+%  it is opt-in, so this guard remains the thing that catches a chain which
+%  did not use it.
 %
 %% Inputs:
 %
@@ -46,6 +48,9 @@ function eomFn = massConstant(baseEom)
 %                                               signature; component 7 is mass
 %                                               (kg) and its derivative is
 %                                               zero. Raises
+%                                               coorbital:massConstant:invalidMass
+%                                               if either mass is not a finite
+%                                               positive real scalar, and
 %                                               coorbital:massConstant:massMismatch
 %                                               if x(7) disagrees with
 %                                               veh.mass, see the WARNING above
@@ -53,6 +58,7 @@ function eomFn = massConstant(baseEom)
 %% Revision History:
 %  Michael Casey                                                08/07/2026
 %  Michael Casey  Guard x(7) against veh.mass                    08/07/2026
+%  Michael Casey  Reject non-finite masses before comparing      08/07/2026
 %  Copyright 2026 Coorbital, Inc.
 %% ------------------------ Begin Code Sequence ---------------------------
 
@@ -88,12 +94,23 @@ function xdot = massChecked(baseEom,t,x,u,veh,env)
 %  divergence is created mid-chain by a phase link and there is nothing to
 %  compare when the handle is built.
 %
+%  Both masses are validated as finite positive real scalars BEFORE they are
+%  compared. A comparison is not a validation: abs(NaN - m) > tol is false, so
+%  without that step the mismatch guard passes a NaN mass through and the
+%  wrapped equations return a plausible finite derivative.
+%
 %% Inputs:
 %
 %  baseEom          Function handle             Six-state EOM,
 %                                               xdot = f(t,x,u,veh,env)
 %
-%  t                scalar                      Time since phase start (s)
+%  t                scalar                      Phase clock (s): the phase's
+%                                               OWN tspan value, not rebased
+%                                               to zero. A phase given
+%                                               tspan = [10 50] is evaluated
+%                                               at 10 through 50. See TWO
+%                                               CLOCKS in
+%                                               coorbital.prop.phaseRun
 %
 %  x                [7 x 1]                     State; x(7) is mass (kg)
 %
@@ -112,6 +129,7 @@ function xdot = massChecked(baseEom,t,x,u,veh,env)
 %
 %% Revision History:
 %  Michael Casey                                                08/07/2026
+%  Michael Casey  Reject non-finite masses before comparing      08/07/2026
 %  Copyright 2026 Coorbital, Inc.
 %% ------------------------ Begin Code Sequence ---------------------------
 
@@ -134,22 +152,44 @@ if ~isscalar(veh.mass)
          'array test that quietly passes on a partial match.'],numel(veh.mass));
 end
 
+%% Both masses must be believable BEFORE they are compared, and this is not
+%% pedantry: abs(NaN - anything) > tol is FALSE, so a NaN carried mass sails
+%% straight through the mismatch test below -- the one guard whose entire
+%% purpose is to fail loudly -- and the wrapped equations hand back a finite,
+%% plausible derivative computed from veh.mass alone. Measured: a NaN in x(7)
+%% returned xdot(4) = -4.22652 rather than raising. Equal infinities pass the
+%% same way, Inf - Inf being NaN; a zero or negative agreeing pair passes too
+%% and divides by zero or inverts every aerodynamic acceleration. The
+%% identifier is deliberately NOT massMismatch: nothing has been shown to
+%% disagree here, the inputs are simply not masses:
+             mState = x(7);
+               mVeh = veh.mass(1);
+if ~isscalar(mState) || ~isreal(mState) || ~isfinite(mState) || mState <= 0 || ...
+   ~isscalar(mVeh)   || ~isreal(mVeh)   || ~isfinite(mVeh)   || mVeh   <= 0
+    error('coorbital:massConstant:invalidMass', ...
+        ['The carried mass x(7) = %s and veh.mass = %s must both be finite ' ...
+         'positive real scalars. A non-finite mass cannot be compared: ' ...
+         'abs(NaN - m) > tol is false, so the mismatch guard below would ' ...
+         'pass it through and the equations of motion would return a ' ...
+         'plausible derivative from veh.mass alone.'], ...
+        mat2str(mState),mat2str(mVeh));
+end
+
 %% Relative tolerance, floored so a near-zero veh.mass cannot make it
 %% vanishingly tight. Sized to clear the residual an ODE event solve leaves on
 %% the mass state, not to police the integrator:
-              mVeh = veh.mass(1);
                tol = 1e-9;
 if mVeh > 1
                tol = tol.*mVeh;
 end
-if abs(x(7) - mVeh) > tol
+if abs(mState - mVeh) > tol
     error('coorbital:massConstant:massMismatch', ...
         ['The carried mass x(7) = %.9f kg disagrees with veh.mass = ' ...
          '%.9f kg by %.6g kg, over a %.6g kg budget. The wrapped equations ' ...
          'of motion divide by veh.mass and NEVER read x(7), so this flight ' ...
          'would run silently at the wrong weight. Rebuild the vehicle struct ' ...
          '-- mass AND aerodynamics -- after every staging event.'], ...
-        x(7),mVeh,abs(x(7) - mVeh),tol);
+        mState,mVeh,abs(mState - mVeh),tol);
 end
 
               xdot = [baseEom(t,x(1:6),u,veh,env); 0];

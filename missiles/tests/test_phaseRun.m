@@ -17,6 +17,7 @@ function test_phaseRun()
 %  none                                         Throws on any failed assertion
 %
 %% Revision History:
+%  Michael Casey  Optional ph.veh; phase-end record; bad masses  08/07/2026
 %  Michael Casey                                                08/06/2026
 %  Copyright 2026 Coorbital, Inc.
 %% ------------------------ Begin Code Sequence ---------------------------
@@ -875,4 +876,194 @@ function test_phaseRun()
     assert(isequal(size(trNone.junction),[0 1]), ...
         'a zero-phase call must give a 0 x 1 junction array, got %s', ...
         mat2str(size(trNone.junction)));
+    assert(isequal(size(trNone.phaseEnd),[0 1]) && isstring(trNone.phaseEnd), ...
+        'a zero-phase call must give a 0 x 1 string phaseEnd, got %s %s', ...
+        mat2str(size(trNone.phaseEnd)),class(trNone.phaseEnd));
+    assert(isequal(size(trNone.endedOnEvent),[0 1]) && ...
+           islogical(trNone.endedOnEvent), ...
+        'a zero-phase call must give a 0 x 1 logical endedOnEvent, got %s %s', ...
+        mat2str(size(trNone.endedOnEvent)),class(trNone.endedOnEvent));
+
+%% ---------------------------------------------------------------------
+%% THE OPTIONAL PER-PHASE VEHICLE, ph.veh. Every chain entry script used to
+%  work around phaseRun's single chain-wide vehicle by binding a per-phase
+%  struct inside its EOM closure and ignoring the forwarded argument -- which
+%  is exactly what phLnkA and phLnkB above do. The field makes that explicit.
+%
+%  The test is EQUIVALENCE, and it has to be, because the field is only worth
+%  having if it does precisely what the closure did: the same staged chain
+%  expressed with ph.veh instead of a closure must produce a BIT-IDENTICAL
+%  trajectory. An implementation that read the field but passed it in the
+%  wrong place, or that fell back to the chain-wide 900 kg struct, would put
+%  x(7) = 400 against veh.mass = 900 and raise massConstant's mismatch guard
+%  rather than merely disagree:
+%% ---------------------------------------------------------------------
+            phVehA = ph7;
+        phVehA.eom = eom7;
+        phVehA.veh = vehPre;
+  phVehA.terminate = phLnkA.terminate;
+       phVehA.link = phLnkA.link;
+            phVehB = phVehA;
+        phVehB.veh = vehPost;
+  phVehB.terminate = phLnkB.terminate;
+       phVehB.link = [];
+             trVeh = coorbital.prop.phaseRun([phVehA phVehB],x07,veh,env);
+    assert(isequal(trVeh.t,trLink.t) && isequal(trVeh.x,trLink.x), ...
+        ['the ph.veh chain and the closure chain must be bit-identical; ' ...
+         'they differ by %.3e in t and %.3e in x'], ...
+        max(abs(trVeh.t - trLink.t)),max(max(abs(trVeh.x - trLink.x))));
+    assert(abs(trVeh.x(end,7) - vehPost.mass) < 1e-9, ...
+        'the ph.veh chain finished carrying %.6f kg, expected %.1f', ...
+        trVeh.x(end,7),vehPost.mass);
+
+%% BACKWARD COMPATIBILITY, both documented spellings of "not supplied". A
+%  phase with no veh field at all and a phase with veh = [] must each fall
+%  back to the chain-wide argument and reproduce the unstaged reference
+%  exactly. [] is the spelling a struct array needs when it mixes phases that
+%  carry a vehicle with phases that do not, MATLAB requiring every element to
+%  have the same fields:
+              phNoV = ph7;
+    phNoV.terminate = phLnkA.terminate;
+    assert(~isfield(phNoV,'veh'), ...
+        'the fallback reference must carry no veh field at all');
+              phEmV = phNoV;
+          phEmV.veh = [];
+             trNoV  = coorbital.prop.phaseRun(phNoV,x07,veh,env);
+             trEmV  = coorbital.prop.phaseRun(phEmV,x07,veh,env);
+    assert(isequal(trNoV.x,trEmV.x), ...
+        'veh = [] must behave exactly as an absent veh field');
+    assert(max(abs(trNoV.x(:,7) - veh.mass)) < 1e-12, ...
+        'the fallback chain must fly the chain-wide %.1f kg vehicle',veh.mass);
+
+%% ...and the field must actually be READ, not accepted and ignored. Fly the
+%  same single phase twice, once falling back to the 900 kg chain-wide struct
+%  and once carrying the 400 kg one, with the carried mass matched to each so
+%  massConstant's guard is satisfied both times. Drag acceleration goes as
+%  1/m, so the two must arrive materially apart:
+             x07Lt = x07;
+          x07Lt(7) = vehPost.mass;
+             phLt  = phNoV;
+         phLt.veh  = vehPost;
+             trLt  = coorbital.prop.phaseRun(phLt,x07Lt,veh,env);
+             dVeh  = max(abs(trLt.x(end,1:6) - trNoV.x(end,1:6)));
+    assert(dVeh > 1, ...
+        ['the %.1f kg and %.1f kg runs of the same phase agree to %.3e; ' ...
+         'ph.veh was accepted and then ignored'],vehPost.mass,veh.mass,dVeh);
+
+%% ---------------------------------------------------------------------
+%% HOW EACH PHASE ENDED. ode45 reaching tspan(end) and ode45 stopping on a
+%  terminal event are different outcomes, and the state history alone does
+%  not distinguish them: a burnout event that never fired and a burn that ran
+%  its allotted time look identical in traj.x. Recorded per phase so an entry
+%  script need not re-derive it, and deliberately NOT an error, because a
+%  time-limited phase is a legitimate design.
+%% ---------------------------------------------------------------------
+%  Both legs of the staged chain terminate on their altitude events:
+    assert(isequal(trLink.phaseEnd,["event"; "event"]), ...
+        'the staged chain ended on [%s], expected two events', ...
+        strjoin(trLink.phaseEnd',', '));
+    assert(all(trLink.endedOnEvent), ...
+        'endedOnEvent must agree with phaseEnd on the staged chain');
+
+%% A phase whose event is unreachable must report "tspan". The trigger is set
+%  at 100 km, ABOVE the 60 km entry altitude on a descending-only crossing,
+%  so it can never fire, and the tspan is cut to 200 s so the phase simply
+%  runs out. This is the case the old interface could not report at all:
+            phOut  = ph7;
+  phOut.terminate  = @(t,x) coorbital.prop.eventAltitude(t,x,100e3);
+      phOut.tspan  = [0 200];
+            trOut  = coorbital.prop.phaseRun(phOut,x07,veh,env);
+    assert(trOut.phaseEnd(1) == "tspan", ...
+        'a phase that ran out of tspan reported "%s"',trOut.phaseEnd(1));
+    assert(~trOut.endedOnEvent(1), ...
+        'endedOnEvent must be false when the phase reached tspan(end)');
+    assert(abs(trOut.t(end) - 200) < 1e-9, ...
+        'the exhausted phase should end at t = 200 s, ended at %.9f',trOut.t(end));
+
+%% A MIXED chain, so the record is shown to be per phase rather than one flag
+%  for the whole run. Phase 1 runs out of tspan, phase 2 stops on its event:
+            phMixA = phOut;
+            phMixB = ph7;
+             trMix = coorbital.prop.phaseRun([phMixA phMixB],x07,veh,env);
+    assert(isequal(trMix.phaseEnd,["tspan"; "event"]), ...
+        'the mixed chain reported [%s], expected tspan then event', ...
+        strjoin(trMix.phaseEnd',', '));
+    assert(isequal(trMix.endedOnEvent,[false; true]), ...
+        'endedOnEvent must be per phase, not one flag for the chain');
+
+%% ---------------------------------------------------------------------
+%% massConstant REFUSES A MASS THAT IS NOT A MASS, and this is the guard that
+%  matters most in the file, because it is the one whose absence is silent.
+%  abs(NaN - m) > tol is FALSE, so before this check a NaN carried mass sailed
+%  straight through the mismatch guard -- the guard whose entire purpose is to
+%  fail loudly -- and the wrapped equations returned a perfectly plausible
+%  finite derivative computed from veh.mass alone. Measured on this very
+%  configuration before the fix: xdot(4) came back as -4.22652 m/s^2.
+%
+%  Zero and negative masses agree with a zero or negative veh.mass and pass
+%  the comparison too, then divide by zero or invert every aerodynamic
+%  acceleration. The identifier is deliberately distinct from massMismatch:
+%  nothing has been shown to DISAGREE in these cases, the inputs are simply
+%  not masses.
+%% ---------------------------------------------------------------------
+    for badM = {NaN,Inf,-Inf,0,-1,1i}
+              xBadM = x07;
+           xBadM(7) = badM{1};
+             vehBad = veh;
+        vehBad.mass = badM{1};
+
+%%  (i) a bad mass in the STATE, against a healthy veh.mass:
+         threwState = false;
+        try
+            eom7(0,xBadM,[0;0],veh,env);
+        catch errBadS
+         threwState = true;
+            assert(strcmp(errBadS.identifier, ...
+                          'coorbital:massConstant:invalidMass'), ...
+                'a carried mass of %s threw %s, expected invalidMass', ...
+                mat2str(badM{1}),errBadS.identifier);
+        end
+        assert(threwState, ...
+            ['a carried mass of %s was accepted. Every comparison against ' ...
+             'NaN is false, so the mismatch guard cannot catch this and the ' ...
+             'equations return a plausible finite derivative instead.'], ...
+            mat2str(badM{1}));
+
+%%  (ii) a bad veh.mass, against a healthy carried mass:
+           threwVeh = false;
+        try
+            eom7(0,x07,[0;0],vehBad,env);
+        catch errBadV
+           threwVeh = true;
+            assert(strcmp(errBadV.identifier, ...
+                          'coorbital:massConstant:invalidMass'), ...
+                'a veh.mass of %s threw %s, expected invalidMass', ...
+                mat2str(badM{1}),errBadV.identifier);
+        end
+        assert(threwVeh,'a veh.mass of %s was accepted',mat2str(badM{1}));
+
+%%  (iii) BOTH bad and AGREEING, which is the case the mismatch guard is
+%%  structurally incapable of seeing -- NaN never equals NaN, and 0 - 0 is
+%%  comfortably inside any tolerance:
+          threwBoth = false;
+        try
+            eom7(0,xBadM,[0;0],vehBad,env);
+        catch errBadB
+          threwBoth = true;
+            assert(strcmp(errBadB.identifier, ...
+                          'coorbital:massConstant:invalidMass'), ...
+                'agreeing bad masses of %s threw %s, expected invalidMass', ...
+                mat2str(badM{1}),errBadB.identifier);
+        end
+        assert(threwBoth, ...
+            ['two AGREEING masses of %s were accepted. Agreement is not ' ...
+             'validity: the mismatch guard passes them by construction.'], ...
+            mat2str(badM{1}));
+    end
+
+%% ...and the guard is discriminating, not merely hostile: an ordinary
+%  healthy pair still runs and still returns a finite derivative:
+             xdotOk = eom7(0,x07,[0;0],veh,env);
+    assert(all(isfinite(xdotOk)) && xdotOk(7) == 0, ...
+        'a valid mass pair must still produce a finite derivative with dm/dt = 0');
 end

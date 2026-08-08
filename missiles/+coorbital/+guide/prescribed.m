@@ -6,7 +6,13 @@ function u = prescribed(t,x,sched)
 %
 %% Inputs:
 %
-%  t                scalar                      Time since phase start (s)
+%  t                scalar                      Phase clock (s): the phase's
+%                                               OWN tspan value, not rebased
+%                                               to zero. A phase given
+%                                               tspan = [10 50] is evaluated
+%                                               at 10 through 50. See TWO
+%                                               CLOCKS in
+%                                               coorbital.prop.phaseRun
 %
 %  x                [6 x 1]                     State. Unused; present so the
 %                                               signature matches closed-loop

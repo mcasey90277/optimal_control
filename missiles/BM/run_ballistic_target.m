@@ -68,53 +68,91 @@ function [traj,info] = run_ballistic_target(opts)
 %  and the summary reports the measured branch beside the requested one. They
 %  disagreeing is a CAUTION, printed, not an assertion swallowed.
 %
-%% Note -- what "minimum-energy" can and cannot mean for a FIXED booster:
+%% Note -- THE THREE MODES ARE NOT THREE POINTS ON ONE CURVE:
 %
-%  READ THIS BEFORE TRUSTING THE branch = 'minimum-energy' DEFAULT. The
-%  textbook minimum-energy ballistic trajectory is the one that reaches a
-%  required range with the LEAST burnout energy, and its burnout flight-path
-%  angle is gammaStar = 45 deg - Lambda/4 for a free-flight range angle Lambda.
-%  That statement presumes the burnout energy is FREE TO CHOOSE -- you size the
-%  booster to the range.
+%  TWO of the three fly the FULL BURN and range on the loft angle alone. They
+%  are the two arcs described above, one either side of the maximum-range loft
+%  angle, and they are what a fixed booster with no thrust termination can do:
 %
-%  This script cannot choose it. The booster carries a fixed propellant load
-%  and burns to exhaustion on every branch, so BOTH arcs leave burnout with
-%  essentially the same energy: measured on the shipped case, the two differ by
-%  0.55 %%, and that difference is boost-phase drag and gravity loss, not a
-%  design variable. No member of this family is the minimum-energy trajectory
-%  unless the target happens to sit at the maximum range.
+%      'lofted'      the high, slow, long-flight arc above the max-range angle;
+%      'depressed'   the low, fast, short-flight arc below it.
 %
-%  WHAT IS IMPLEMENTED, precisely: minimum-energy selects THE BRANCH WHOSE
-%  SOLVED LOFT ANGLE LIES NEARER THE MAX-RANGE LOFT ANGLE. The reasoning is
-%  that the max-range arc IS the minimum-energy arc for its own range -- that
-%  is the same theorem read the other way round -- so the arc nearest it in the
-%  control variable is the arc that comes nearest the minimum-energy geometry,
-%  and the selection becomes exact as the target approaches maximum range.
+%  THE THIRD IS THE TEXTBOOK TRAJECTORY, and it is a different problem. The
+%  minimum-energy ballistic trajectory between two points at the same radius is
+%  the one that reaches the required free-flight range angle Lambda on the LEAST
+%  burnout energy. It is a closed-form Keplerian result, reference [1]:
 %
-%  THREE THINGS THIS RULE IS NOT, all of them PRINTED every run so the reader
-%  can judge rather than take it on trust:
+%      V*^2      = (mu/rE) * 2 sin(Lambda/2) / (1 + sin(Lambda/2))
+%      gammaStar = 45 deg - Lambda/4
 %
-%    It is not "least burnout energy" read literally. That reading selects the
-%    arc that WASTED more energy climbing out, because with the propellant load
-%    fixed a lower burnout energy means a costlier ascent, not a cheaper
-%    trajectory. On the shipped case it would select the DEPRESSED arc while
-%    the rule above selects the lofted one. Both energies are reported.
+%  and it is the trajectory published ballistic-missile range tables are quoted
+%  on. NEITHER FULL-BURN ARC IS IT. At full burn the booster delivers a fixed
+%  delta-V, so the lofted and depressed arcs leave burnout with essentially the
+%  same energy -- measured on the shipped case, 0.55 %% apart, and that
+%  difference is boost drag and gravity loss rather than a design variable.
+%  V* is a speed the booster OVERSHOOTS, so neither arc can carry it.
 %
-%    It is not the gammaStar test. The burnout flight-path angle nearest
-%    45 deg - Lambda/4 is the textbook criterion and it is reported too, but it
-%    is measured on a burnout state this script does not control -- the alphaMax
-%    clamp does, see the next note -- so it is a diagnostic here, not the rule.
+%  WHICH IS WHY 'minimum-energy' HAS A SECOND CONTROL. The burnout speed has to
+%  be free, and the only way this vehicle can lower it is to CUT THE BURN SHORT
+%  -- the same thrust-termination control HGV/run_target ranges on. So this mode
+%  solves TWO unknowns against TWO residuals:
 %
-%    It is not always well conditioned. The range-versus-loft hump is roughly
-%    symmetric, so the two branch solutions can fall very nearly equidistant
-%    from the max-range angle and the selection then turns on a rounding.
-%    Measured on this vehicle, along the shipped azimuth: at 3175 km the two
-%    distances are 39.43 deg and 34.08 deg, 14 %% apart, and the lofted arc
-%    wins; by 3789 km they agree to 4 %% and the caution below fires; and by
-%    4218 km the ranking has FLIPPED and the depressed arc wins by 10 %%. The
-%    summary prints both distances and CAUTIONS when they fall within 5 %% of
-%    each other, and the advice it gives then is the right one: ask for
-%    'lofted' or 'depressed' explicitly.
+%      unknowns    the LOFT ANGLE and the CUTOFF FRACTION of the full burn;
+%      residual 1  achieved range      minus the required range, to tolRangeKm;
+%      residual 2  burnout gamma       minus gammaStar, to tolGamDeg.
+%
+%  THE SOLVE IS NESTED, NOT A 2x2 NEWTON, and the reason is that each level is
+%  then MONOTONIC and can reuse coorbital.util.rangeSolve exactly as designed:
+%
+%      INNER, on the CUTOFF FRACTION at a held loft angle. Range rises
+%             monotonically with cutoff -- more burn, more energy, more range --
+%             which is the property rangeSolve's bisection needs and the same
+%             one HGV/run_target rests on. Solved to tolRangeKm.
+%
+%      OUTER, on the LOFT ANGLE, driving the burnout gamma of that inner
+%             solution to gammaStar. Along the constant-range locus the burnout
+%             gamma rises monotonically with loft angle: measured on the shipped
+%             case, 11.815 deg at the depressed end through 62.840 deg at the
+%             lofted end, over nine equally spaced samples with no reversal.
+%             Solved to tolGamDeg, again by rangeSolve.
+%
+%  A 2x2 damped Newton on the same residuals would also work -- the Jacobian is
+%  dominated by its anti-diagonal, range answering mostly to cutoff and gamma
+%  mostly to loft, so it is not ill-conditioned -- but it needs a finite
+%  difference Jacobian, four propagations a step, and a damping rule, and it can
+%  leave the region where the chain propagates at all. The nested form cannot:
+%  bisection never leaves its bracket.
+%
+%  THE OUTER BRACKET IS THE TWO FULL-BURN BRANCH SOLUTIONS, which are solved
+%  before it and cost nothing extra. Between them, and only between them, the
+%  full burn reaches AT LEAST the required range, so the inner solve is
+%  guaranteed a cutoff fraction at or below 1 that lands on it. Where a branch
+%  does not exist the corresponding end of the loft bracket is used instead,
+%  which is admissible for the same reason: that branch is missing precisely
+%  because the full burn OVERSHOOTS the target there.
+%
+%  WHAT IT COSTS AND WHAT IT DELIVERS. Measured on the shipped 3174.981 km case:
+%  11 outer bisection steps and 190 propagations, about 8 s of an 11 s run --
+%  the two full-burn arcs are still solved and still reported. Against the classical
+%  reference for that range angle -- 687.304 km of apogee, 15.4635 min of flight
+%  and gammaStar = 37.8697 deg -- the solved trajectory flies 735.074 km,
+%  16.8893 min and 37.8654 deg: +6.95 %%, +9.22 %% and -0.0043 deg.
+%
+%  THE TWO PERCENTAGES ARE PHYSICS, NOT SOLVER ERROR, and the summary says so.
+%  The classical result assumes an IMPULSIVE burn at the impact radius in a
+%  VACUUM. This flight burns for 77.6 s and reaches gammaStar 80.56 km up at
+%  4833.3 m/s rather than 4970.3 m/s at zero altitude, and a Keplerian arc from
+%  THAT burnout state apogees at 735.093 km -- the flown figure to 0.019 km, so
+%  the whole 47.8 km gap to the classical arc is where the boost ENDED and not
+%  how the solve converged. Coast drag supplies what is left. Expect a few per
+%  cent from any finite boost; expect machine precision from neither.
+%
+%  MINIMUM-ENERGY REQUIRES SEPARATION. A cut-short burn leaves propellant in the
+%  booster, and the coast vehicle's mass is fixed before the cutoff is known, so
+%  the whole booster -- dry structure and the unburned propellant with it -- is
+%  jettisoned at cutoff, exactly as HGV/run_target does. separation = false
+%  cannot express that and is refused for this mode rather than flown with a
+%  mass the equations of motion would disagree with.
 %
 %% Note -- the loft angle is a COMMANDED ATTITUDE, not the burnout gamma:
 %
@@ -223,24 +261,36 @@ function [traj,info] = run_ballistic_target(opts)
 %                                               *Km distances and the *Deg
 %                                               angles. Always carries refused
 %                                               (logical), refusedWhy
-%                                               ('envelope' or 'earthSpin'),
-%                                               rngReqM and psiLaunch. An
-%                                               ENVELOPE refusal adds
-%                                               loftStarDeg, rngMaxM, rngMinM
+%                                               ('envelope', 'earthSpin' or
+%                                               'minimumEnergy'), rngReqM and
+%                                               psiLaunch. An ENVELOPE refusal
+%                                               adds loftStarDeg, rngMaxM,
+%                                               rngMinM, classical, gamStarR
 %                                               and the per-branch records in
 %                                               depressed and lofted, so it
 %                                               hands back the envelope it
-%                                               refused against; an earthSpin
-%                                               refusal happens before any
-%                                               propagation and adds omegaE and
-%                                               tgSpeedM instead. A
+%                                               refused against; a
+%                                               MINIMUMENERGY refusal adds all
+%                                               of those plus minEnergy, whose
+%                                               why and gamma band say what
+%                                               could not be reached; an
+%                                               earthSpin refusal happens
+%                                               before any propagation and adds
+%                                               omegaE and tgSpeedM instead. A
 %                                               run that was not refused
 %                                               additionally carries the flown
-%                                               branch's own numbers and the
-%                                               DISPLAY choices the figures were
-%                                               drawn with -- altExag, its rule
-%                                               as a handle, and the two
-%                                               hemisphere captions
+%                                               trajectory's own numbers, the
+%                                               classical minimum-energy
+%                                               reference in classical, the
+%                                               minimum-energy record in
+%                                               minEnergy (solved false on the
+%                                               two full-burn modes), the three
+%                                               residuals meGamResR, meApoRelE
+%                                               and meTofRelE, and the DISPLAY
+%                                               choices the figures were drawn
+%                                               with -- altExag, its rule as a
+%                                               handle, and the two hemisphere
+%                                               captions
 %
 %% References:
 %   [1] Bate, R.R., Mueller, D.D., White, J.E., "Fundamentals of
@@ -289,20 +339,28 @@ function [traj,info] = run_ballistic_target(opts)
                                        %     interchangeable in the range formula and hides a
                                        %     transposition at every call site that uses them
 
-%% WHICH OF THE TWO ARCS TO FLY. Both are solved and both are reported whatever
-%% is asked for here; this chooses only which one is flown, plotted and returned:
+%% WHICH TRAJECTORY TO FLY. The two FULL-BURN arcs are solved and reported
+%% whatever is asked for here, because the trade between them is the point; this
+%% chooses what is flown, plotted and returned. Read the THREE MODES note in the
+%% header: two of these are full-burn arcs either side of maximum range and the
+%% third is the textbook trajectory, which is a different solve on a second
+%% control and is NOT a member of the full-burn family:
             branch = 'minimum-energy'; %'minimum-energy' | 'lofted' | 'depressed'
-                                       %  minimum-energy: the branch whose loft angle lies
-                                       %                  NEARER the max-range loft angle. Read
-                                       %                  the "what minimum-energy can and
-                                       %                  cannot mean" note in the header before
-                                       %                  relying on it -- with a fixed
-                                       %                  propellant load burned to exhaustion
-                                       %                  neither branch is minimum-energy in
-                                       %                  the textbook sense, and the summary
-                                       %                  prints every number needed to see that
-                                       %  lofted:         the high, slow, long-flight arc
-                                       %  depressed:      the low, fast, short-flight arc
+                                       %  minimum-energy: the TEXTBOOK minimum-energy ballistic
+                                       %                  trajectory -- the one published range
+                                       %                  tables are quoted on. Solves the LOFT
+                                       %                  ANGLE and the CUTOFF FRACTION together
+                                       %                  so that the range is met AND the
+                                       %                  burnout flight-path angle equals
+                                       %                  gammaStar = 45 deg - Lambda/4. The
+                                       %                  burn is CUT SHORT: it is the only way
+                                       %                  to reach the burnout speed the
+                                       %                  textbook result asks for. Requires
+                                       %                  separation = true
+                                       %  lofted:         the FULL-BURN high, slow, long-flight
+                                       %                  arc, above the max-range loft angle
+                                       %  depressed:      the FULL-BURN low, fast, short-flight
+                                       %                  arc, below it
 
 %% Loft-angle bracket -- the search interval for BOTH the max-range angle and
 %% the two branch solves. The loft angle is the LAST node of the commanded pitch
@@ -335,6 +393,29 @@ function [traj,info] = run_ballistic_target(opts)
                                        %    branch [0.05 .. 50]. Each halving of this costs one
                                        %    more trajectory propagation per branch, and a
                                        %    propagation is about 0.05 s, so tightening it is cheap
+
+%% MINIMUM-ENERGY MODE ONLY. Ignored by 'lofted' and 'depressed', which fly the
+%% full burn and have no cutoff to solve for. See the THREE MODES note:
+        cutFracMin = 0.5;              %-, floor of the thrust-termination bracket the INNER
+                                       %   solve bisects, as a fraction of the full burn
+                                       %   [0.2 .. 0.95]. Both ends of that bracket are
+                                       %   propagated before the first bisection step, so the
+                                       %   floor must be a cutoff the chain can still FLY: too
+                                       %   early and the vehicle never reaches apogee, the event
+                                       %   never fires, and flyLoft refuses the propagation
+                                       %   rather than returning a range from a flight that did
+                                       %   not happen. Measured on this vehicle, 0.5 of the
+                                       %   80.518 s burn flies between 13 and 127 km depending
+                                       %   on loft angle, which is well clear of that failure
+         tolGamDeg = 0.01;             %deg, convergence tolerance of the OUTER solve on the
+                                       %     BURNOUT FLIGHT-PATH ANGLE against gammaStar
+                                       %     [0.001 .. 1]. This is the tolerance on the residual
+                                       %     that makes the trajectory minimum-energy at all, so
+                                       %     it is the one to tighten if the classical
+                                       %     comparison printed in the summary matters. Each
+                                       %     halving costs one more OUTER step, and an outer
+                                       %     step is a whole inner range solve -- about 16
+                                       %     propagations -- so it is NOT as cheap as tolRangeKm
 
 %% Pitch program -- commanded pitch ATTITUDE against time since liftoff. ONLY
 %% ITS SHAPE IS FLOWN. The profile is rescaled every propagation so that its
@@ -428,7 +509,8 @@ function [traj,info] = run_ballistic_target(opts)
     assert(isstruct(opts),'opts must be a struct of USER PARAMETERS overrides.');
        overridable = {'latLaunch','lonLaunch','hLaunch','vLaunch', ...
                       'latTarget','lonTarget','branch','loftMin','loftMax', ...
-                      'tolLoftDeg','nScanLoft','tolRangeKm','pitchTime', ...
+                      'tolLoftDeg','nScanLoft','tolRangeKm','cutFracMin', ...
+                      'tolGamDeg','pitchTime', ...
                       'pitchRef','alphaMax','bankAngle','separation','hStop', ...
                       'tMaxBoost','tMaxCoast','tMaxDesc','vehicleFn', ...
                       'boosterFn','atmosFn','gravFn','aeroFn','propFn', ...
@@ -452,6 +534,8 @@ function [traj,info] = run_ballistic_target(opts)
         tolLoftDeg = overrideOf(opts,'tolLoftDeg',tolLoftDeg);
          nScanLoft = overrideOf(opts,'nScanLoft',nScanLoft);
         tolRangeKm = overrideOf(opts,'tolRangeKm',tolRangeKm);
+        cutFracMin = overrideOf(opts,'cutFracMin',cutFracMin);
+         tolGamDeg = overrideOf(opts,'tolGamDeg',tolGamDeg);
          pitchTime = overrideOf(opts,'pitchTime',pitchTime);
           pitchRef = overrideOf(opts,'pitchRef',pitchRef);
           alphaMax = overrideOf(opts,'alphaMax',alphaMax);
@@ -490,6 +574,7 @@ function [traj,info] = run_ballistic_target(opts)
            loftLoR = deg2rad(loftMin);
            loftHiR = deg2rad(loftMax);
           tolLoftR = deg2rad(tolLoftDeg);
+           tolGamR = deg2rad(tolGamDeg);
 
 %% Sanity-check the user block before spending time in the integrator:
     assert(numel(pitchTimS) == numel(pitchRefR), ...
@@ -514,6 +599,13 @@ function [traj,info] = run_ballistic_target(opts)
     assert(nScanLoft >= 5 && nScanLoft == fix(nScanLoft), ...
         'nScanLoft must be a whole number of at least 5; got %s.',mat2str(nScanLoft));
     assert(tolRngM > 0,'tolRangeKm must be positive.');
+    assert(isscalar(cutFracMin) && isfinite(cutFracMin) && ...
+           cutFracMin > 0 && cutFracMin < 1, ...
+        ['cutFracMin must lie strictly between 0 and 1; got %s. It is the ' ...
+         'FLOOR of a bracket whose ceiling is the full burn, and a floor at ' ...
+         'or above 1 leaves the minimum-energy solve nothing to bisect.'], ...
+        mat2str(cutFracMin));
+    assert(tolGamR > 0,'tolGamDeg must be positive.');
     assert(hStopM >= 0, ...
         ['hStop (%.1f km) is below the spherical datum; the descent ends on a ' ...
          'descending crossing of that altitude and a negative one has no ' ...
@@ -566,6 +658,21 @@ function [traj,info] = run_ballistic_target(opts)
          '''depressed''. There is no default: every range short of the maximum ' ...
          'is reached by two different trajectories and guessing which one was ' ...
          'wanted is exactly what this parameter exists to prevent.'],branch);
+             isMinE = strcmp(branch,'minimum-energy');
+
+%% MINIMUM-ENERGY CUTS THE BURN SHORT, so the booster it throws away still has
+%% propellant in it. The coast vehicle's mass is built once, before the cutoff
+%% is known, and the six-state glide equations divide by THAT mass rather than
+%% by the mass state -- so a retained booster of unknown mass is not something
+%% this chain can express. Refused here rather than flown against a mass the
+%% equations disagree with:
+    assert(~isMinE || logical(separation), ...
+        ['branch = ''minimum-energy'' needs separation = true. It solves a ' ...
+         'THRUST-TERMINATION FRACTION as well as a loft angle, so the booster ' ...
+         'it drops carries unburned propellant, and the mass flying the coast ' ...
+         'is therefore only well defined if the whole booster goes overboard. ' ...
+         'Ask for ''lofted'' or ''depressed'' to keep a dead booster attached; ' ...
+         'both burn to exhaustion and leave nothing unburned to account for.']);
 
                  c = coorbital.util.missileConst();
                veh = vehicleFn();
@@ -686,6 +793,7 @@ function [traj,info] = run_ballistic_target(opts)
       cfg.bankRad  = bankRad;
       cfg.mBurnout = mBurnoutT;
         cfg.mCoast = mCoast;
+         cfg.tBurn = tBurn;
     cfg.separation = logical(separation);
       cfg.massDry  = bst.massDry;
          cfg.hStop = hStopM;
@@ -708,7 +816,13 @@ function [traj,info] = run_ballistic_target(opts)
            angReqR = coorbital.util.greatCircle(latLaunchR,lonLaunchR, ...
                                                 latTargetR,lonTargetR);
             rngReq = rI.*angReqR;
-            fRange = @(loftR) flyLoft(loftR,cfg,rI);
+
+%% The FULL-BURN range function, the one the max-range bracketing and both
+%% branch solves ride on. The second argument of flyLoft is the cutoff fraction
+%% and 1 means "no commanded cutoff": phase 1 keeps its horizon tspan and ends
+%% on propellant exhaustion, exactly as it always has. Only the minimum-energy
+%% solve ever passes anything else:
+            fRange = @(loftR) flyLoft(loftR,1,cfg,rI);
 
 %% -----------------------------------------------------------------
 %% Refuse a ROTATING Earth, before a single trajectory is propagated
@@ -810,10 +924,13 @@ function [traj,info] = run_ballistic_target(opts)
 %% -----------------------------------------------------------------
 %% Choose the branch, and say on what grounds
 %% -----------------------------------------------------------------
-%% dLoftDep and dLoftLof are the two distances the minimum-energy rule compares.
-%% They are computed here, once, whatever the selector says, because the summary
-%% prints them on every run: a reader deciding whether to trust the default
-%% needs to see how close the call was:
+%% dLoftDep and dLoftLof are how far each full-burn branch sits from the
+%% max-range loft angle. They are computed here, once, whatever the selector
+%% says, because the two-arc table prints them on every run: they are the
+%% clearest single measure of how far apart the two arcs are as CONTROLS rather
+%% than as outcomes. Nothing selects on them any more -- see the THREE MODES
+%% note for why "nearest the max-range angle" was the wrong reading of
+%% minimum-energy and what replaced it:
           dLoftDep = NaN;
           dLoftLof = NaN;
     if dep.exists
@@ -823,41 +940,24 @@ function [traj,info] = run_ballistic_target(opts)
           dLoftLof = abs(lof.loftR - loftStarR);
     end
           bothHere = dep.exists && lof.exists;
-          meRatio  = NaN;
-          meClose  = false;
-    if bothHere && max(dLoftDep,dLoftLof) > 0
-          meRatio  = min(dLoftDep,dLoftLof)./max(dLoftDep,dLoftLof);
-          meClose  = meRatio > 0.95;
-    end
 
-%% The selection itself. minimum-energy takes the nearer branch when both
-%% exist and the surviving one when only one does; a named branch takes that
-%% branch or nothing:
+%% The CLASSICAL reference for this range angle, computed from the geometry
+%% alone and from nothing this script flew. It is what the minimum-energy mode
+%% is solved against and what its residuals are reported against; the two
+%% full-burn modes print it as a yardstick and are not expected to match it:
+             refME = minEnergyRef(angReqR,c);
+          gamStarR = refME.gamR;
+
+%% The selection itself. A named branch takes that branch or nothing;
+%% minimum-energy is not a branch at all and is solved below, after the envelope
+%% refusal has established that the loft bracket it needs exists:
           pickName = branch;
           pickWhy  = '';
          pickShort = 'the branch selector';
     switch branch
         case 'minimum-energy'
-         pickShort = 'nearest the max-range angle';
-            if bothHere && dLoftLof <= dLoftDep
-          pickName = 'lofted';
-          pickWhy  = sprintf(['nearer the %.4f deg max-range loft angle: %.4f ' ...
-                              'deg against the depressed arc''s %.4f deg'], ...
-                             rad2deg(loftStarR),rad2deg(dLoftLof),rad2deg(dLoftDep));
-            elseif bothHere
-          pickName = 'depressed';
-          pickWhy  = sprintf(['nearer the %.4f deg max-range loft angle: %.4f ' ...
-                              'deg against the lofted arc''s %.4f deg'], ...
-                             rad2deg(loftStarR),rad2deg(dLoftDep),rad2deg(dLoftLof));
-            elseif lof.exists
-          pickName = 'lofted';
-          pickWhy  = 'the only branch that reaches this target';
-            elseif dep.exists
-          pickName = 'depressed';
-          pickWhy  = 'the only branch that reaches this target';
-            else
-          pickWhy  = 'neither branch reaches this target';
-            end
+         pickShort = 'solved on loft AND cutoff, not chosen between the two arcs';
+          pickWhy  = 'the textbook minimum-energy trajectory for this range angle';
         case 'lofted'
          pickShort = 'named in the user block';
           pickWhy  = 'the arc the user asked for by name, not a solver choice';
@@ -867,8 +967,6 @@ function [traj,info] = run_ballistic_target(opts)
     end
     if strcmp(pickName,'lofted')
               pick = lof;
-    elseif strcmp(pickName,'depressed')
-              pick = dep;
     else
               pick = dep;
     end
@@ -882,8 +980,13 @@ function [traj,info] = run_ballistic_target(opts)
 %% because the nearest miss LOOKS like a solution, and a script that threw
 %% would force every caller into a try/catch to read numbers the returned
 %% struct already carries:
+%% minimum-energy is exempt from the badPick test: it does not fly either
+%% branch, so a branch that does not exist costs it only ONE END of the loft
+%% bracket it searches, and the other end of the user's bracket serves instead.
+%% It is NOT exempt from noBranch -- if the full burn cannot reach this target
+%% at any loft angle then a burn CUT SHORTER certainly cannot:
           noBranch = ~dep.exists && ~lof.exists;
-          badPick  = ~noBranch && ~pick.exists;
+          badPick  = ~noBranch && ~isMinE && ~pick.exists;
     if noBranch || badPick
             shortM = bandShortfall(rngReq,rngMin,rngMax);
         fprintf('\n');
@@ -931,8 +1034,21 @@ function [traj,info] = run_ballistic_target(opts)
         fprintf('  event never fires and the propagation is rejected rather than believed.\n');
         else
         fprintf('  The required range is inside the reachable band, but not on the arc that\n');
-        fprintf('  was asked for. Ask for the other one, or for ''minimum-energy'', which\n');
-        fprintf('  takes whichever branch exists.\n');
+        fprintf('  was asked for. Ask for the other one.\n');
+        end
+        if isMinE
+        fprintf('\n');
+        fprintf('  AND MINIMUM-ENERGY IS THE HARDER ASK, NOT THE EASIER ONE. The textbook\n');
+        fprintf('  trajectory for this %.4f deg range angle wants a burnout speed of\n', ...
+                rad2deg(angReqR));
+        fprintf('  V* = %.1f m/s at gamma* = %.4f deg, which is BELOW what a full burn\n', ...
+                refME.V,rad2deg(refME.gamR));
+        fprintf('  delivers -- it is reached by CUTTING THE BURN SHORT. A trajectory that\n');
+        fprintf('  carries less energy than the full burn cannot fly further than the full\n');
+        fprintf('  burn does, so a target the full burn cannot reach is beyond this mode by\n');
+        fprintf('  a wider margin than it is beyond ''lofted'' or ''depressed''. The\n');
+        fprintf('  classical arc it would have flown: %.3f km of apogee in %.3f min.\n', ...
+                refME.hApoM./1000,refME.tofS./60);
         end
         fprintf('=========================================================\n\n');
               traj = [];
@@ -950,6 +1066,8 @@ function [traj,info] = run_ballistic_target(opts)
      info.depressed = dep;
         info.lofted = lof;
       info.maxRange = mr;
+     info.classical = refME;
+      info.gamStarR = gamStarR;
         if nargout == 0
             clear traj info;
         end
@@ -957,11 +1075,90 @@ function [traj,info] = run_ballistic_target(opts)
     end
 
 %% -----------------------------------------------------------------
-%% Fly the chosen branch
+%% The MINIMUM-ENERGY solve: two unknowns, two residuals, nested
 %% -----------------------------------------------------------------
-%% solveBranch already flew this loft angle and kept the trajectory, so nothing
-%% is re-integrated here. The check is that the kept trajectory is the one the
-%% solver reported, which a struct copied from the wrong branch would fail:
+%% Only now, with the envelope refusal past, is the loft bracket the outer solve
+%% needs known to exist. See the THREE MODES note for the method and for why the
+%% two levels are nested rather than Newton-solved together:
+                me = struct('solved',false);
+    if isMinE
+                me = minEnergySolve(rngReq,gamStarR,cfg,rI,c, ...
+                                    latTargetR,lonTargetR,dep,lof, ...
+                                    loftLoR,loftHiR,tolRngM,tolGamR,cutFracMin);
+        if ~me.solved
+        fprintf('\n');
+        fprintf('===== Ballistic point-to-point targeting: REFUSED =======\n');
+        fprintf('  The MINIMUM-ENERGY trajectory for this geometry is not in reach.\n');
+        fprintf('\n');
+        fprintf('    launch           %10.4f %-5s %10.4f deg  (lat, lon)\n', ...
+                latLaunch,'deg',lonLaunch);
+        fprintf('    target           %10.4f %-5s %10.4f deg  (lat, lon)\n', ...
+                latTarget,'deg',lonTarget);
+        fprintf('    required range   %10.3f %-5s (great circle on the r = %.3f km sphere,\n', ...
+                rngReq./1000,'km',rI./1000);
+        fprintf('                                       a %.4f deg range angle)\n',rad2deg(angReqR));
+        fprintf('    gamma* wanted    %10.4f %-5s (45 - Lambda/4, the burnout flight-path\n', ...
+                rad2deg(gamStarR),'deg');
+        fprintf('                                       angle that makes the arc minimum-energy)\n');
+        fprintf('    V* wanted        %10.1f %-5s (the burnout speed that goes with it)\n', ...
+                refME.V,'m/s');
+        if isfinite(me.gamLoR) && isfinite(me.gamHiR)
+        fprintf('    gamma reachable  %10.4f to %.4f deg  (over the loft bracket %.4f to\n', ...
+                rad2deg(me.gamLoR),rad2deg(me.gamHiR),rad2deg(me.loftAR));
+        fprintf('                                       %.4f deg, each end already RANGE-SOLVED\n', ...
+                rad2deg(me.loftBR));
+        fprintf('                                       on its cutoff fraction)\n');
+        else
+        fprintf('    gamma reachable      NOT MEASURED  (the outer bisection never ran; there\n');
+        fprintf('                                       was no loft interval to run it on)\n');
+        end
+        fprintf('\n');
+        fprintf('  %s\n',me.why);
+        fprintf('  The two FULL-BURN arcs below DO reach this target and are unaffected; ask\n');
+        fprintf('  for ''lofted'' or ''depressed'' to fly one of them. What is refused is the\n');
+        fprintf('  claim that either of them is the minimum-energy trajectory, which is the\n');
+        fprintf('  claim this mode exists to stop being made silently.\n');
+        fprintf('\n');
+        fprintf('    depressed arc    %10.4f deg loft, burnout gamma %.4f deg  [%s]\n', ...
+                rad2deg(dep.loftR),rad2deg(dep.gamBoR),dep.why);
+        fprintf('    lofted arc       %10.4f deg loft, burnout gamma %.4f deg  [%s]\n', ...
+                rad2deg(lof.loftR),rad2deg(lof.gamBoR),lof.why);
+        fprintf('=========================================================\n\n');
+              traj = [];
+       info.refused = true;
+    info.refusedWhy = 'minimumEnergy';
+  info.branchAsked  = branch;
+       info.rngReqM = rngReq;
+     info.psiLaunch = psiLaunch;
+   info.loftStarDeg = rad2deg(loftStarR);
+       info.rngMaxM = rngMax;
+       info.rngMinM = rngMin;
+     info.hApoStarM = hApoStar;
+     info.tFlyStarS = tFlyStar;
+     info.depressed = dep;
+        info.lofted = lof;
+      info.maxRange = mr;
+     info.classical = refME;
+      info.gamStarR = gamStarR;
+    info.minEnergy  = me;
+            if nargout == 0
+                clear traj info;
+            end
+            return;
+        end
+              pick = me;
+          pickName = 'minimum-energy';
+          pickWhy  = sprintf(['SOLVED, not selected: loft %.4f deg, burn cut at %.6f ' ...
+                              'of full'],rad2deg(me.loftR),me.cutFrac);
+    end
+
+%% -----------------------------------------------------------------
+%% Fly the chosen trajectory
+%% -----------------------------------------------------------------
+%% Whichever solve produced it already flew this trajectory and kept it, so
+%% nothing is re-integrated here. The check is that the kept trajectory is the
+%% one the solver reported, which a struct copied from the wrong record would
+%% fail:
               traj = pick.traj;
     assert(abs(pick.rngM - rI.*coorbital.util.greatCircle(latLaunchR,lonLaunchR, ...
                                                           traj.x(end,3),traj.x(end,2))) < 1e-6, ...
@@ -1021,9 +1218,21 @@ function [traj,info] = run_ballistic_target(opts)
 %% the maximum should have held the answer there, but a max-range angle located
 %% slightly wrong would break that silently, and the branch is the whole
 %% product of this script:
+%% MINIMUM-ENERGY IS NOT MEASURED THIS WAY, and pretending otherwise would print
+%% a falsehood. The test above compares against the FULL-BURN max-range arc, and
+%% the minimum-energy trajectory does not burn to exhaustion: it is lower and
+%% quicker than that arc for the same reason a smaller booster would be, so it
+%% would always "measure as depressed" while being nothing of the sort. Its own
+%% verification is the residual pair against gamma* and the required range, which
+%% the minimum-energy paragraph below prints:
+         flownName = 'minimum-energy';
+        flownAgree = true;
+          branchOK = true;
+    if ~isMinE
         [flownName,flownAgree] = measureBranch(pick.hApoM,pick.tFlyS, ...
                                                hApoStar,tFlyStar);
-         branchOK = strcmp(flownName,pickName) && flownAgree;
+          branchOK = strcmp(flownName,pickName) && flownAgree;
+    end
 
 %% THE ONE CASE IN WHICH THE MEASUREMENT LEGITIMATELY DISAGREES, and it is worth
 %% naming because otherwise the caution below misdiagnoses it. Apogee rises
@@ -1108,19 +1317,23 @@ function [traj,info] = run_ballistic_target(opts)
 %% so: a boost that ran out of horizon before it ran out of propellant, or a
 %% coast that never turned over, both produce a short trajectory that otherwise
 %% reads as a completed flight:
-        [why1,ok1] = whyBurnout(traj.t(kBO),massS(kBO),mBurnoutT,tMaxBoost);
+%% The commanded cutoff time, or NaN when the burn was not cut short. It is what
+%% tells whyBurnout apart a boost that ended on a COMMANDED thrust termination
+%% -- nominal for minimum-energy -- from one that hit a horizon, which is a
+%% fault. Passing the full-burn case a NaN is deliberate: every comparison
+%% against NaN is false, so the cutoff clause simply cannot fire there:
+              tCut = NaN;
+            meProp = 0;
+    if isMinE
+              tCut = me.tCutS;
+            meProp = me.nProp;
+    end
+        [why1,ok1] = whyBurnout(traj.t(kBO),massS(kBO),mBurnoutT,tMaxBoost,tCut);
         [why2,ok2] = whyApogee(traj.t(kApo) - traj.t(kBO),traj.t(kApo), ...
                                traj.x(kApo,5),tMaxCoast);
         [why3,ok3] = whyImpact(traj.t(nS) - traj.t(kApo),traj.t(nS), ...
                                traj.x(nS,1) - c.rE,hStopM,hStop,tMaxDesc);
              allOK = ok1 && ok2 && ok3;
-
-%% The textbook minimum-energy burnout flight-path angle for the REQUIRED range
-%% angle, gammaStar = 45 deg - Lambda/4. Reported as a diagnostic and used by
-%% nothing: see the "what minimum-energy can and cannot mean" note. The 45 and
-%% the 4 are constants of the closed-form result in reference [1], not physical
-%% constants of the Earth, so they do not belong in missileConst:
-          gamStarR = pi./4 - angReqR./4;
 
 %% How far the ground under the target would have moved during this flight had
 %% the Earth been turning. Quantifies the non-rotating caveat instead of merely
@@ -1137,7 +1350,9 @@ function [traj,info] = run_ballistic_target(opts)
 %% describe:
            spinTxt = 'OFF';
             sepTxt = 'booster JETTISONED at burnout';
-    if ~separation
+    if isMinE
+            sepTxt = 'WHOLE booster JETTISONED at cutoff, unburned propellant with it';
+    elseif ~separation
             sepTxt = 'booster RETAINED through impact (no separation)';
     end
 
@@ -1309,16 +1524,23 @@ function [traj,info] = run_ballistic_target(opts)
     fprintf('    %.3f km.\n',rngReq./1000);
     end
     fprintf('\n');
-    fprintf('  BRANCH SELECTION\n');
+    fprintf('  WHAT WAS FLOWN\n');
     fprintf('    asked for        %-16s (%s)\n',branch,pickShort);
     fprintf('    on the grounds that it is %s\n',pickWhy);
-    fprintf('    flew             %-16s (the branch this run actually solved for)\n',pickName);
+    fprintf('    flew             %-16s (the trajectory this run actually solved for)\n',pickName);
+    if isMinE
+    fprintf('    NOT MEASURED against the max-range arc, unlike the two full-burn modes:\n');
+    fprintf('    that arc burns to exhaustion and this one does not, so it would always\n');
+    fprintf('    read as "depressed" while being nothing of the sort. The minimum-energy\n');
+    fprintf('    paragraph below carries the residuals that DO verify it.\n');
+    else
     fprintf('    MEASURED as      %-16s (from the FLOWN apogee %.3f km against the\n', ...
             flownName,pick.hApoM./1000);
     fprintf('                                      max-range arc''s %.3f km, and the flown\n', ...
             hApoStar./1000);
     fprintf('                                      %.3f s flight time against its %.3f s)\n', ...
             pick.tFlyS,tFlyStar);
+    end
     if ~flownAgree
         fprintf('  *** CAUTION ***  the apogee and the flight time DISAGREE about which branch\n');
         fprintf('                   this is. One of them puts the flight above the max-range\n');
@@ -1349,59 +1571,78 @@ function [traj,info] = run_ballistic_target(opts)
         fprintf('                   max-range angle above is suspect. Do not read the branch\n');
         fprintf('                   label; read the apogee and the flight time.\n');
     end
-%% The minimum-energy paragraph compares TWO burnout energies and TWO loft
-%% distances, and a branch that does not reach the target supplies NaN for both.
-%% Printed unguarded that reads as a measurement -- "essentially the same energy
-%% -- NaN and -44.9073 MJ/kg, NaN %% apart" -- so the one-branch case gets its
-%% own paragraph saying the rule never ran:
-    if strcmp(branch,'minimum-energy') && ~bothHere
-    fprintf('    MINIMUM-ENERGY HAD NO CHOICE TO MAKE HERE. Only one of the two arcs\n');
-    fprintf('    reaches this target, so the rule -- take the branch whose loft angle lies\n');
-    fprintf('    nearer the max-range angle -- never ran, and the energies and loft\n');
-    fprintf('    distances it compares do not exist for the branch that is missing. The\n');
-    fprintf('    label above records which arc survived, not a choice between two. Read the\n');
-    fprintf('    "what minimum-energy can and cannot mean" note in the header before\n');
-    fprintf('    reading anything more into it.\n');
-    elseif strcmp(branch,'minimum-energy')
-    fprintf('    WHAT MINIMUM-ENERGY MEANS HERE, precisely, because it does not mean what\n');
-    fprintf('    the textbook means. The textbook trajectory reaches the required range on\n');
-    fprintf('    the LEAST burnout energy, at a burnout flight-path angle of\n');
-    fprintf('    gamma* = 45 - Lambda/4 = %.4f deg for this %.4f deg range angle. That\n', ...
-            rad2deg(gamStarR),rad2deg(angReqR));
-    fprintf('    presumes the energy is free to choose. It is not: this booster carries a\n');
-    fprintf('    fixed propellant load and burns to exhaustion on BOTH branches, so both\n');
-    fprintf('    leave burnout with essentially the same energy -- %.4f and %.4f MJ/kg,\n', ...
-            dep.epsBo./1e6,lof.epsBo./1e6);
-    fprintf('    %.2f %% apart, and that difference is boost drag and gravity loss rather\n', ...
+%% THE MINIMUM-ENERGY PARAGRAPH, and it is the only place in this summary that
+%% compares a flown trajectory against a result computed from the geometry
+%% alone. It prints the two solved residuals -- what makes the arc
+%% minimum-energy -- and then the two MODELLING residuals against the classical
+%% arc, which are physics rather than solver error and are attributed as such:
+    if isMinE
+    fprintf('  THE MINIMUM-ENERGY SOLVE\n');
+    fprintf('    TWO UNKNOWNS, TWO RESIDUALS. The textbook minimum-energy trajectory for a\n');
+    fprintf('    %.4f deg range angle wants a burnout flight-path angle of\n',rad2deg(angReqR));
+    fprintf('    gamma* = 45 - Lambda/4 = %.4f deg carrying V* = %.1f m/s, and a fixed\n', ...
+            rad2deg(gamStarR),refME.V);
+    fprintf('    booster burnt to exhaustion cannot deliver that speed -- it OVERSHOOTS it.\n');
+    fprintf('    So the burn is CUT SHORT and the loft angle and the cutoff are solved\n');
+    fprintf('    together, nested, each level monotonic and each bisected by\n');
+    fprintf('    coorbital.util.rangeSolve.\n');
+    fprintf('    %-22s %16s %16s\n','','solved','residual');
+    fprintf('    %-22s %16.4f %16s\n','loft angle (deg)',rad2deg(me.loftR),'-');
+    fprintf('    %-22s %16.6f %16s\n','cutoff fraction (-)',me.cutFrac,'-');
+    fprintf('    %-22s %16.4f %16s\n','cutoff time (s)',me.tCutS,'-');
+    fprintf('    %-22s %16.4f %16.2e\n','burnout gamma (deg)', ...
+            rad2deg(me.gamBoR),rad2deg(me.gamBoR - gamStarR));
+    fprintf('    %-22s %16.4f %16.2f\n','achieved range (km)', ...
+            me.rngM./1000,me.rngM - rngReq);
+    fprintf('      the gamma residual is in DEGREES against a %.4f deg tolerance; the range\n', ...
+            tolGamDeg);
+    fprintf('      residual is in METRES against a %.1f m one. %d outer steps, %d\n', ...
+            tolRngM,me.outerIters,me.nProp);
+    fprintf('      propagations.\n');
+    fprintf('    AGAINST THE CLASSICAL ARC for this range angle, which is computed from the\n');
+    fprintf('    geometry alone and from nothing this script flew:\n');
+    fprintf('    %-22s %16s %16s %14s\n','','flown','classical','difference');
+    fprintf('    %-22s %16.3f %16.3f %13.2f %%\n','APOGEE (km)', ...
+            me.hApoM./1000,refME.hApoM./1000, ...
+            100.*(me.hApoM - refME.hApoM)./refME.hApoM);
+    fprintf('    %-22s %16.4f %16.4f %13.2f %%\n','FLIGHT TIME (min)', ...
+            me.tFlyS./60,refME.tofS./60, ...
+            100.*(me.tFlyS - refME.tofS)./refME.tofS);
+    fprintf('    %-22s %16.4f %16.4f %13.2e\n','burnout gamma (deg)', ...
+            rad2deg(me.gamBoR),rad2deg(refME.gamR),rad2deg(me.gamBoR - refME.gamR));
+    fprintf('    %-22s %16.1f %16.1f %13.2f %%\n','burnout speed (m/s)', ...
+            me.vBoM,refME.V,100.*(me.vBoM - refME.V)./refME.V);
+    fprintf('    THE APOGEE AND TIME DIFFERENCES ARE PHYSICS, NOT SOLVER ERROR. The\n');
+    fprintf('    classical result assumes an IMPULSIVE burn at the impact radius in a\n');
+    fprintf('    VACUUM. This flight burns for %.3f s and arrives at gamma* %.2f km up at\n', ...
+            me.tCutS,me.hBoM./1000);
+    fprintf('    %.1f m/s, not at zero altitude at %.1f m/s, and a Keplerian arc from THAT\n', ...
+            me.vBoM,refME.V);
+    fprintf('    burnout state apogees at %.3f km -- which is the flown figure to %.3f km.\n', ...
+            me.hApoKepM./1000,abs(me.hApoM - me.hApoKepM)./1000);
+    fprintf('    Coast drag supplies the rest. Expect a few per cent from any finite boost.\n');
+%% The contrast against the two full-burn arcs needs BOTH of them, and a branch
+%% that does not reach the target supplies NaN for its energy. Printed unguarded
+%% that reads as a measurement -- "NaN and -44.9073 MJ/kg, NaN %% apart" -- so
+%% the one-branch case gets a paragraph that only claims what it has:
+    if bothHere
+    fprintf('    WHAT THE TWO FULL-BURN ARCS WOULD HAVE DONE INSTEAD, for contrast: they\n');
+    fprintf('    leave burnout at %.4f and %.4f MJ/kg, %.2f %% apart, because the\n', ...
+            dep.epsBo./1e6,lof.epsBo./1e6, ...
             100.*abs(lof.epsBo - dep.epsBo)./abs(dep.epsBo));
-    fprintf('    than a design variable.\n');
-    fprintf('    SO WHAT IS IMPLEMENTED IS: the branch whose loft angle lies NEARER the\n');
-    fprintf('    %.4f deg max-range angle, on the grounds that the max-range arc IS the\n', ...
-            rad2deg(loftStarR));
-    fprintf('    minimum-energy arc for its own range. Here that is %.4f deg against\n', ...
-            rad2deg(min(dLoftDep,dLoftLof)));
-    fprintf('    %.4f deg, so the %s arc wins.\n', ...
-            rad2deg(max(dLoftDep,dLoftLof)),pickName);
-    fprintf('    TWO CHECKS ON THAT CHOICE, both reported and neither used:\n');
-    fprintf('      least burnout energy read literally would pick the %s arc, the\n', ...
-            lowerOf('depressed','lofted',dep.epsBo,lof.epsBo));
-    fprintf('      opposite reading -- lower burnout energy with the propellant fixed means\n');
-    fprintf('      a COSTLIER ascent, not a cheaper trajectory, so it is not used;\n');
-    fprintf('      nearest gamma* would pick the %s arc (%.3f deg from %.3f deg against\n', ...
-            nearerOf('depressed','lofted',abs(dep.gamBoR - gamStarR), ...
-                     abs(lof.gamBoR - gamStarR)), ...
-            rad2deg(min(abs(dep.gamBoR - gamStarR),abs(lof.gamBoR - gamStarR))), ...
-            rad2deg(gamStarR));
-    fprintf('      %.3f deg), but it is measured on a burnout state the alphaMax clamp and\n', ...
-            rad2deg(max(abs(dep.gamBoR - gamStarR),abs(lof.gamBoR - gamStarR))));
-    fprintf('      not this script controls, so it is a diagnostic.\n');
-    if meClose
-    fprintf('  *** CAUTION ***  the two loft distances agree to %.2f %%, inside the 5 %% band\n', ...
-            100.*(1 - meRatio));
-    fprintf('                   where this selection turns on a rounding rather than on the\n');
-    fprintf('                   physics. The range-versus-loft hump is roughly symmetric and\n');
-    fprintf('                   this happens over a wide band of targets. ASK FOR ''lofted''\n');
-    fprintf('                   OR ''depressed'' EXPLICITLY at this range.\n');
+    fprintf('    propellant load is fixed and both burn all of it; this one leaves at\n');
+    fprintf('    %.4f MJ/kg, having thrown %.1f kg of propellant away unburned. That gap\n', ...
+            me.epsBo./1e6,me.propLeftKg);
+    fprintf('    is the whole reason neither full-burn arc is the trajectory above.\n');
+    else
+    fprintf('    ONLY ONE FULL-BURN ARC REACHES THIS TARGET, so there is no pair of burnout\n');
+    fprintf('    energies to contrast this one against; the %s arc alone leaves at\n', ...
+            onlyBranch(dep.exists));
+    fprintf('    %.4f MJ/kg against this trajectory''s %.4f MJ/kg, which threw %.1f kg of\n', ...
+            onlyEps(dep,lof),me.epsBo./1e6,me.propLeftKg);
+    fprintf('    propellant away unburned. THE MINIMUM-ENERGY SOLVE IS UNAFFECTED by the\n');
+    fprintf('    missing branch: it uses the loft bracket''s own end there, and the arc it\n');
+    fprintf('    found is the same one the geometry asks for either way.\n');
     end
     end
     fprintf('\n');
@@ -1415,10 +1656,18 @@ function [traj,info] = run_ballistic_target(opts)
             bst.thrustVac./(mLiftoff.*c.g0),'');
     fprintf('\n');
     fprintf('  Burnout, end of phase 1\n');
+    if isMinE
+    fprintf('    time             %10.3f %-5s  (COMMANDED THRUST TERMINATION at %.6f of the\n', ...
+            traj.t(kBO),'s',me.cutFrac);
+    fprintf('                                        %.4f s full burn. It is the SECOND control\n',tBurn);
+    fprintf('                                        of this mode: the loft angle sets gamma*\n');
+    fprintf('                                        and the cutoff sets the range)\n');
+    else
     fprintf('    time             %10.3f %-5s  (propellant exhaustion; the boost is never cut\n', ...
             traj.t(kBO),'s');
-    fprintf('                                        short here, the LOFT ANGLE being the\n');
-    fprintf('                                        ranging control instead of the cutoff)\n');
+    fprintf('                                        short on this branch, the LOFT ANGLE being\n');
+    fprintf('                                        the ranging control instead of the cutoff)\n');
+    end
     fprintf('    altitude         %10.3f km\n',hKm(kBO));
     fprintf('    speed            %10.2f %-5s  (Mach %.2f, planet-relative)\n', ...
             V(kBO),'m/s',mach(kBO));
@@ -1429,7 +1678,15 @@ function [traj,info] = run_ballistic_target(opts)
     fprintf('                                        on angle of attack is the difference)\n');
     fprintf('    heading          %10.3f deg\n',rad2deg(traj.x(kBO,6)));
     fprintf('    downrange        %10.2f %-5s  (great circle from the pad)\n',downBOKm,'km');
+    if isMinE
+    fprintf('    mass at cutoff   %10.1f %-5s  (payload + booster + %.1f kg of UNBURNED\n', ...
+            massS(kBO),'kg',me.propLeftKg);
+    fprintf('                                        propellant, %.2f %% of the load, thrown\n', ...
+            100.*me.propLeftKg./bst.massProp);
+    fprintf('                                        away with the booster)\n');
+    else
     fprintf('    mass at burnout  %10.1f %-5s  (payload + spent booster)\n',massS(kBO),'kg');
+    end
     fprintf('    mass into coast  %10.1f %-5s  (%s)\n',mCoast,'kg',sepTxt);
     fprintf('\n');
     fprintf('  Apogee, end of phase 2\n');
@@ -1451,11 +1708,17 @@ function [traj,info] = run_ballistic_target(opts)
             loftedOrNot((traj.x(kApo,1) - c.rE)./pick.rngM));
     fprintf('    samples          %10d %-5s  (ode45 adaptive steps over 3 phases)\n',nS,'');
     fprintf('    propagations     %10d %-5s  (whole trajectories flown to produce this run:\n', ...
-            mr.nEval + 1 + dep.nProp + lof.nProp,'');
+            mr.nEval + 1 + dep.nProp + lof.nProp + meProp,'');
     fprintf('                                        %d bracketing the maximum, 1 re-flying it,\n', ...
             mr.nEval);
+    if isMinE
+    fprintf('                                        %d on the depressed branch, %d on the lofted,\n', ...
+            dep.nProp,lof.nProp);
+    fprintf('                                        %d on the minimum-energy solve)\n',meProp);
+    else
     fprintf('                                        %d on the depressed branch, %d on the lofted)\n', ...
             dep.nProp,lof.nProp);
+    end
     fprintf('\n');
     fprintf('  Impact\n');
     fprintf('    altitude         %10.6f %-5s  (%+.2e m from the %.3f km stop, event residual)\n', ...
@@ -1614,9 +1877,6 @@ info.branchTimeAgrees = flownAgree;
         info.lofted = lof;
     info.dLoftDepDeg = rad2deg(dLoftDep);
     info.dLoftLofDeg = rad2deg(dLoftLof);
-       info.meRatio = meRatio;
-       info.meClose = meClose;
-     info.gamStarR  = gamStarR;
       info.loftDeg  = rad2deg(pick.loftR);
         info.tBurn  = tBurn;
      info.tBurnout  = traj.t(kBO);
@@ -1646,11 +1906,28 @@ info.branchTimeAgrees = flownAgree;
        info.driftLofM = driftLof;
         info.stopOK = allOK;
        info.stopWhy = {why1;why2;why3};
+
+%% The minimum-energy record and the classical arc it was solved against, always
+%% present so a caller does not have to test the mode before reading them. On a
+%% 'lofted' or 'depressed' run minEnergy.solved is false and every other field
+%% of it is absent -- there was no solve -- while classical is populated
+%% regardless, because it depends on the GEOMETRY and not on what was flown:
+    info.minEnergy  = me;
+    info.classical  = refME;
+     info.gamStarR  = gamStarR;
+    info.meGamResR  = NaN;
+    info.meApoRelE  = NaN;
+    info.meTofRelE  = NaN;
+    if isMinE
+    info.meGamResR  = me.gamBoR - gamStarR;
+    info.meApoRelE  = (me.hApoM - refME.hApoM)./refME.hApoM;
+    info.meTofRelE  = (me.tFlyS - refME.tofS)./refME.tofS;
+    end
 %% The SAME sum the summary prints above, from the SAME fields. nProp counts
 %% whole trajectories flown, and a branch costs its solver evaluations plus the
 %% one propagation that re-creates the state history at the converged loft
 %% angle, which is br.nProp and not br.nEval:
-        info.nProp  = mr.nEval + 1 + dep.nProp + lof.nProp;
+        info.nProp  = mr.nEval + 1 + dep.nProp + lof.nProp + meProp;
 
 %% Vertical exaggeration for the globe. TRUE SCALE IS THE SHIPPED DEFAULT: the
 %% movie carries a true-scale altitude inset, which is what the globe used to
@@ -1722,20 +1999,33 @@ info.branchTimeAgrees = flownAgree;
     end
 end
 
-function ph = buildPhases(loftR,cfg)
+function ph = buildPhases(loftR,cutFrac,cfg)
 %% Purpose:
 %
-%  Assemble the three-phase boost-coast-descent chain for ONE loft angle.
-%  Factored out because the max-range search, both branch solves and the final
-%  re-fly all need the same chain, and two copies of it would be two chains
-%  that could drift apart.
+%  Assemble the three-phase boost-coast-descent chain for ONE loft angle and ONE
+%  cutoff fraction. Factored out because the max-range search, both branch
+%  solves, the minimum-energy solve and the final re-fly all need the same
+%  chain, and two copies of it would be two chains that could drift apart.
 %
 %  THE LOFT ANGLE ENTERS THROUGH THE PITCH SCHEDULE AND NOWHERE ELSE. The
 %  schedule is the reference profile's SHAPE rescaled so that its first node
 %  stays at cfg.thetaTop and its last node becomes loftR; nothing else about the
-%  chain depends on it. The boost still ends at propellant exhaustion, so a
-%  change of loft angle changes WHERE the vehicle is going when the motor quits,
-%  never how much propellant it burned.
+%  chain depends on it. A change of loft angle changes WHERE the vehicle is
+%  going when the motor quits, never how much propellant it burned.
+%
+%  THE CUTOFF FRACTION IS THE tspan, NOT AN EVENT, which is HGV/run_target's
+%  rule and needs no new machinery: phase 1 keeps its burnout event, so a burn
+%  that is not cut short still ends on propellant exhaustion. cutFrac = 1 is the
+%  SENTINEL for "not cut short" and reproduces the full-burn chain exactly --
+%  the horizon tspan and the jettison-the-dry-structure link -- which is what
+%  keeps the 'lofted' and 'depressed' modes bit-for-bit what they were.
+%
+%  BELOW 1 THE WHOLE BOOSTER GOES OVERBOARD, unburned propellant included, and
+%  the link WRITES cfg.mCoast rather than subtracting the dry mass. It has to:
+%  the coast vehicle was built around cfg.mCoast before the cutoff was known,
+%  and coorbital.eom.massConstant checks the state mass against it on every
+%  derivative evaluation. That is also why the caller refuses
+%  minimum-energy with separation = false.
 %
 %  EACH PHASE CARRIES ITS OWN VEHICLE on ph.veh, which
 %  coorbital.prop.phaseRun forwards to the equations of motion. That is why the
@@ -1746,6 +2036,11 @@ function ph = buildPhases(loftR,cfg)
 %
 %  loftR            [1 x 1]                     Commanded terminal pitch
 %                                               attitude (rad)
+%
+%  cutFrac          [1 x 1]                     Thrust-termination time as a
+%                                               fraction of the full burn (-),
+%                                               in (0 .. 1]. 1 commands no
+%                                               cutoff at all
 %
 %  cfg              Struct                      Immutable configuration built
 %                                               by the caller: eomCoast
@@ -1775,16 +2070,21 @@ function ph = buildPhases(loftR,cfg)
                             'sigma',cfg.bankRad.*ones(1,numel(cfg.pitchT)), ...
                             'alphaMax',cfg.alphaMax);
 
-%% Phase 1, boost: burns to propellant exhaustion, then jettisons the spent
-%% booster. With separation switched off the link is [], which phaseRun reads
-%% as identity:
+%% Phase 1, boost. Not cut short: burns to propellant exhaustion, then jettisons
+%% the spent structure. With separation switched off the link is [], which
+%% phaseRun reads as identity. CUT SHORT: the tspan ends it at the commanded
+%% fraction of the burn and the link writes the coast mass outright, so the
+%% propellant still aboard leaves with the booster:
          ph(1).eom = @coorbital.eom.boost3DOF;
        ph(1).guide = @(t,x) coorbital.guide.pitchProgram(t,x,schedB);
    ph(1).terminate = @(t,x) coorbital.prop.eventBurnout(t,x,cfg.mBurnout);
        ph(1).tspan = [0 cfg.tMaxBoost];
         ph(1).link = [];
          ph(1).veh = cfg.bst;
-    if cfg.separation
+    if cutFrac < 1
+       ph(1).tspan = [0 cutFrac.*cfg.tBurn];
+        ph(1).link = @(x) [x(1:6); cfg.mCoast];
+    elseif cfg.separation
         ph(1).link = @(x) [x(1:6); x(7) - cfg.massDry];
     end
 
@@ -1808,14 +2108,14 @@ function ph = buildPhases(loftR,cfg)
          ph(3).veh = cfg.coastVeh;
 end
 
-function [rngM,traj] = flyLoft(loftR,cfg,rI)
+function [rngM,traj] = flyLoft(loftR,cutFrac,cfg,rI)
 %% Purpose:
 %
-%  Fly the whole boost-coast-descent chain at one loft angle and return the
-%  great-circle surface range from the launch point to the impact point. This
-%  is the function the max-range search maximises and the function
-%  coorbital.util.rangeSolve bisects on, and it is the only place either of them
-%  touches the physics.
+%  Fly the whole boost-coast-descent chain at one loft angle and one cutoff
+%  fraction and return the great-circle surface range from the launch point to
+%  the impact point. This is the function the max-range search maximises, the
+%  function coorbital.util.rangeSolve bisects on at BOTH levels of the
+%  minimum-energy solve, and the only place any of them touches the physics.
 %
 %  A PROPAGATION THAT DID NOT COMPLETE IS AN ERROR, NOT A SHORT RANGE. If a
 %  phase runs out of horizon -- the usual cause being a loft angle so depressed
@@ -1830,6 +2130,10 @@ function [rngM,traj] = flyLoft(loftR,cfg,rI)
 %
 %  loftR            [1 x 1]                     Commanded terminal pitch
 %                                               attitude (rad)
+%
+%  cutFrac          [1 x 1]                     Thrust-termination time as a
+%                                               fraction of the full burn (-);
+%                                               1 commands no cutoff
 %
 %  cfg              Struct                      Immutable configuration; see
 %                                               buildPhases, plus x0 [7 x 1],
@@ -1853,7 +2157,7 @@ function [rngM,traj] = flyLoft(loftR,cfg,rI)
 %  Copyright 2026 Coorbital, Inc.
 %% ------------------------ Begin Code Sequence ---------------------------
 
-                ph = buildPhases(loftR,cfg);
+                ph = buildPhases(loftR,cutFrac,cfg);
               traj = coorbital.prop.phaseRun(ph,cfg.x0,cfg.bst,cfg.env);
 
 %% All three phases must have run, and the last must have stopped ON the impact
@@ -1862,12 +2166,14 @@ function [rngM,traj] = flyLoft(loftR,cfg,rI)
              nPhRn = numel(unique(traj.phaseIdx));
     if nPhRn < 3 || abs(hEndM - cfg.hStop) > 1e-3
         error('coorbital:runBallisticTarget:propagationIncomplete', ...
-            ['A loft angle of %.6f deg produced %d of 3 phases and ended at ' ...
-             'h = %.3f km against a %.3f km stop altitude. The flight did not ' ...
-             'complete, so its range is meaningless to the search. The usual ' ...
-             'cause is a loft angle so depressed that the vehicle burns out ' ...
-             'already descending and the apogee event never fires: raise ' ...
-             'loftMin.'],rad2deg(loftR),nPhRn,hEndM./1000,cfg.hStop./1000);
+            ['A loft angle of %.6f deg at a cutoff fraction of %.6f produced ' ...
+             '%d of 3 phases and ended at h = %.3f km against a %.3f km stop ' ...
+             'altitude. The flight did not complete, so its range is ' ...
+             'meaningless to the search. Two usual causes: a loft angle so ' ...
+             'depressed that the vehicle burns out already descending and the ' ...
+             'apogee event never fires -- raise loftMin; or a cutoff so early ' ...
+             'that it never leaves the atmosphere -- raise cutFracMin.'], ...
+            rad2deg(loftR),cutFrac,nPhRn,hEndM./1000,cfg.hStop./1000);
     end
 
               rngM = rI.*coorbital.util.greatCircle(cfg.lat0,cfg.lon0, ...
@@ -2174,6 +2480,430 @@ function br = solveBranch(name,rngReq,fRange,loftAR,loftBR,tolRngM,cfg,rI,c, ...
         br.measured   = measureBranch(br.hApoM,br.tFlyS,hApoStar,tFlyStar);
 end
 
+function me = minEnergySolve(rngReq,gamStarR,cfg,rI,c,latTgR,lonTgR,dep,lof, ...
+                             loftLoR,loftHiR,tolRngM,tolGamR,cutFracMin)
+%% Purpose:
+%
+%  Solve the TEXTBOOK minimum-energy ballistic trajectory: the loft angle AND
+%  the thrust-termination fraction that together put the vehicle on the required
+%  range with a burnout flight-path angle of gammaStar = 45 deg - Lambda/4.
+%
+%  TWO UNKNOWNS AGAINST TWO RESIDUALS, and they are solved NESTED rather than as
+%  a 2x2 system, because nesting makes each level monotonic and lets both reuse
+%  coorbital.util.rangeSolve exactly as it was designed to be used:
+%
+%    INNER, on the CUTOFF FRACTION at a held loft angle. Range rises
+%           monotonically with the cutoff -- more burn, more energy, more range
+%           -- which is the property bisection needs. Bracket [cutFracMin, 1].
+%
+%    OUTER, on the LOFT ANGLE, driving the burnout gamma of the inner solution
+%           to gammaStar. Along the constant-range locus the burnout gamma rises
+%           monotonically with the loft angle.
+%
+%  THE OUTER BRACKET IS THE TWO FULL-BURN BRANCH SOLUTIONS, already solved by
+%  the caller and therefore free. Between them and only between them the FULL
+%  BURN reaches at least the required range, so the inner solve is guaranteed a
+%  cutoff fraction at or below 1 that lands on it. Where a branch does not exist
+%  the caller's own loft limit is used at that end instead, which is admissible
+%  for precisely the reason the branch is missing: the full burn OVERSHOOTS the
+%  target there, so a cut-short burn can still be made to land on it.
+%
+%  A GAMMA STAR OUTSIDE THE REACHABLE BAND IS NOT AN ERROR. rangeSolve reports
+%  it as converged = false with the band, and this returns solved = false with
+%  the two end values so the caller can refuse in the problem's own vocabulary.
+%  Every OTHER failure -- an inner solve that cannot make its range on a bracket
+%  that guarantees it can -- is a broken invariant and throws.
+%
+%% Inputs:
+%
+%  rngReq           [1 x 1]                     Required surface range (m)
+%
+%  gamStarR         [1 x 1]                     Minimum-energy burnout
+%                                               flight-path angle (rad)
+%
+%  cfg              Struct                      Chain configuration; see
+%                                               buildPhases and flyLoft
+%
+%  rI               [1 x 1]                     Impact sphere radius (m)
+%
+%  c                Struct                      coorbital.util.missileConst
+%
+%  latTgR, lonTgR   [1 x 1]                     Target coordinates (rad)
+%
+%  dep, lof         Struct                      The two full-burn branch
+%                                               records from solveBranch; only
+%                                               exists and loftR are read
+%
+%  loftLoR, loftHiR [1 x 1]                     The user's loft bracket (rad),
+%                                               used at whichever end has no
+%                                               branch solution
+%
+%  tolRngM          [1 x 1]                     Inner tolerance, on the achieved
+%                                               range (m)
+%
+%  tolGamR          [1 x 1]                     Outer tolerance, on the burnout
+%                                               flight-path angle (rad)
+%
+%  cutFracMin       [1 x 1]                     Floor of the inner bracket, as a
+%                                               fraction of the full burn (-)
+%
+%% Outputs:
+%
+%  me               Struct                      Solve record:
+%                                               solved      logical
+%                                               why         char, populated on
+%                                                           a refusal
+%                                               loftAR,loftBR (rad) the outer
+%                                                           bracket actually
+%                                                           searched
+%                                               gamLoR,gamHiR (rad) burnout
+%                                                           gamma at its ends
+%                                               ALL BELOW ONLY WHEN solved:
+%                                               exists      logical, always true
+%                                               loftR       (rad)
+%                                               cutFrac     (-)
+%                                               tCutS       (s)
+%                                               rngM, missM (m)
+%                                               gamBoR      (rad)
+%                                               vBoM        (m/s)
+%                                               hBoM        (m)
+%                                               hApoM       (m)
+%                                               hApoKepM    (m) the KEPLERIAN
+%                                                           apogee of the
+%                                                           burnout state, for
+%                                                           attributing the gap
+%                                                           to the classical arc
+%                                               tFlyS       (s)
+%                                               vImpM       (m/s)
+%                                               gamImR      (rad)
+%                                               epsBo       (J/kg)
+%                                               mCutKg,propLeftKg (kg)
+%                                               outerIters, innerIters
+%                                               nProp       propagations spent
+%                                               solveInfo   the outer rangeSolve
+%                                                           record
+%                                               traj        struct
+%
+%% References:
+%   [1] Bate, R.R., Mueller, D.D., White, J.E., "Fundamentals of
+%       Astrodynamics," Dover, 1971, Ch. 6.
+%   [2] Press, W.H., et al., "Numerical Recipes," 3rd ed., Cambridge, 2007,
+%       Section 9.1. Bisection, used at both levels.
+%
+%% Revision History:
+%  Michael Casey                                                08/08/2026
+%  Copyright 2026 Coorbital, Inc.
+%% ------------------------ Begin Code Sequence ---------------------------
+
+%% The outer bracket, from the full-burn branch solutions where they exist and
+%% from the user's own loft limits where they do not:
+            loftAR = loftLoR;
+    if dep.exists
+            loftAR = dep.loftR;
+    end
+            loftBR = loftHiR;
+    if lof.exists
+            loftBR = lof.loftR;
+    end
+         me.solved = false;
+            me.why = '';
+         me.loftAR = loftAR;
+         me.loftBR = loftBR;
+         me.gamLoR = NaN;
+         me.gamHiR = NaN;
+      me.innerIters = 0;
+      me.outerIters = 0;
+          me.nProp = 0;
+
+%% A collapsed bracket means the required range IS the maximum range to within
+%% the range tolerance: the two branches have met, there is one loft angle left
+%% and no freedom to trade gamma against it. Refused rather than bisected on an
+%% interval of zero width, which rangeSolve would throw on:
+    if ~(loftAR < loftBR)
+            me.why = sprintf(['The two full-burn arcs have MERGED at a loft angle of ' ...
+                              '%.4f deg, so there is no loft interval left to search. ' ...
+                              'The required range is within the range tolerance of the ' ...
+                              'MAXIMUM range, where the lofted and depressed arcs are the ' ...
+                              'same arc; tighten tolRangeKm or move the target inside the ' ...
+                              'envelope.'],rad2deg(loftAR));
+        return;
+    end
+
+             nProp = 0;
+           innerIt = 0;
+
+%% The OUTER objective: hold a loft angle, solve the cutoff fraction that makes
+%% the range, and report the burnout gamma that came out. Nested so the
+%% propagation tally cannot drift from the number of flights actually made:
+    function gamR = gammaAtRange(loftR)
+        [cutF,rngA,svIn] = coorbital.util.rangeSolve(rngReq, ...
+                               @(cf) flyCount(loftR,cf),cutFracMin,1,tolRngM);
+        if ~svIn.converged
+            error('coorbital:runBallisticTarget:minEnergyInnerFailed', ...
+                ['The minimum-energy INNER solve could not make %.3f km of range ' ...
+                 'at a loft angle of %.6f deg over a cutoff bracket of %.4f to ' ...
+                 '1.0 of the full burn, achieving %.3f km. The outer bracket is ' ...
+                 'supposed to guarantee this cannot happen -- between the two ' ...
+                 'full-burn branch solutions the FULL burn already reaches this ' ...
+                 'target -- so either the range-versus-loft curve is not the ' ...
+                 'single hump the bracketing assumed, or cutFracMin is above the ' ...
+                 'cutoff this loft angle needs. The library said: %s'], ...
+                rngReq./1000,rad2deg(loftR),cutFracMin,rngA./1000,svIn.message);
+        end
+           innerIt = innerIt + svIn.iterations;
+              oInn = flyMeasure(loftR,cutF);
+              gamR = oInn.gamBoR;
+    end
+
+%% The INNER objective, and the only place either level touches the physics:
+    function rngM = flyCount(loftR,cutF)
+             nProp = nProp + 1;
+              rngM = flyLoft(loftR,cutF,cfg,rI);
+    end
+
+%% One propagation, kept, and reduced to the quantities the record needs:
+    function o = flyMeasure(loftR,cutF)
+             nProp = nProp + 1;
+        [rngM,trj] = flyLoft(loftR,cutF,cfg,rI);
+               kBO = find(trj.phaseIdx == 1,1,'last');
+              kApo = find(trj.phaseIdx == 2,1,'last');
+            o.traj = trj;
+           o.loftR = loftR;
+         o.cutFrac = cutF;
+           o.tCutS = trj.t(kBO);
+            o.rngM = rngM;
+          o.gamBoR = trj.x(kBO,5);
+            o.vBoM = trj.x(kBO,4);
+            o.hBoM = trj.x(kBO,1) - c.rE;
+           o.mCutKg = trj.x(kBO,7);
+           o.hApoM = trj.x(kApo,1) - c.rE;
+           o.tFlyS = trj.t(end);
+           o.vImpM = trj.x(end,4);
+          o.gamImR = trj.x(end,5);
+           o.epsBo = trj.x(kBO,4).^2./2 - c.muE./trj.x(kBO,1);
+           o.missM = rI.*coorbital.util.greatCircle(trj.x(end,3),trj.x(end,2), ...
+                                                    latTgR,lonTgR);
+    end
+
+%% The OUTER solve. rangeSolve is generic in its abscissa and its ordinate --
+%% nothing in it knows that the parameter is an angle and the value another
+%% angle -- so the same bisection that solves range against loft solves gamma
+%% against loft here, with no second implementation to keep in step:
+    [loftS,gamAch,svOut] = coorbital.util.rangeSolve(gamStarR,@gammaAtRange, ...
+                                                     loftAR,loftBR,tolGamR);
+          me.gamLoR = svOut.fLo;
+          me.gamHiR = svOut.fHi;
+    me.outerIters   = svOut.iterations;
+      me.innerIters = innerIt;
+       me.solveInfo = svOut;
+          me.nProp  = nProp;
+
+%% gammaStar outside the reachable band is a refusal, not an error. It means the
+%% minimum-energy geometry for this range angle is not something this vehicle
+%% can be flown into at this range, whatever the cutoff:
+    if ~svOut.converged
+            me.why = sprintf(['gamma* = %.4f deg is not reachable. Over the loft ' ...
+                              'bracket %.4f to %.4f deg -- each end already solved ' ...
+                              'for the cutoff fraction that makes the range -- the ' ...
+                              'burnout flight-path angle spans only %.4f to %.4f ' ...
+                              'deg, and the minimum-energy condition lies outside ' ...
+                              'it. The library said: %s'], ...
+                             rad2deg(gamStarR),rad2deg(loftAR),rad2deg(loftBR), ...
+                             rad2deg(min(svOut.fMin,svOut.fMax)), ...
+                             rad2deg(max(svOut.fMin,svOut.fMax)),svOut.message);
+        return;
+    end
+
+%% Converged. Re-solve the cutoff at the settled loft angle and keep that
+%% trajectory, which is one propagation rather than carrying a cache through the
+%% bisection; the assert is that the kept flight is the one the outer solve was
+%% told about, which a stale cache would fail:
+    [cutS,~,svFin] = coorbital.util.rangeSolve(rngReq,@(cf) flyCount(loftS,cf), ...
+                                               cutFracMin,1,tolRngM);
+    assert(svFin.converged, ...
+        ['the minimum-energy inner solve converged during the outer bisection ' ...
+         'and then failed when repeated at the settled %.6f deg loft angle; ' ...
+         'the propagation is not repeatable'],rad2deg(loftS));
+                me = mergeInto(me,flyMeasure(loftS,cutS));
+    assert(abs(me.gamBoR - gamAch) < 1e-9, ...
+        ['the re-flown minimum-energy trajectory has a burnout gamma of %.12f ' ...
+         'rad against the %.12f rad the outer solve reported; the two levels ' ...
+         'have come out of step'],me.gamBoR,gamAch);
+      me.innerIters = innerIt + svFin.iterations;
+          me.nProp  = nProp;
+         me.solved  = true;
+         me.exists  = true;
+      me.propLeftKg = me.mCutKg - cfg.mBurnout;
+       me.hApoKepM  = keplerApogee(c.rE + me.hBoM,me.vBoM,me.gamBoR,c) - c.rE;
+end
+
+function s = mergeInto(s,add)
+%% Purpose:
+%
+%  Copy every field of one struct onto another, overwriting collisions. Exists
+%  so the minimum-energy record can be filled from the measured-flight struct in
+%  one line instead of twenty, and so a field added to the measurement cannot be
+%  forgotten in the copy.
+%
+%% Inputs:
+%
+%  s                Struct                      Destination
+%
+%  add              Struct                      Source; its fields win
+%
+%% Outputs:
+%
+%  s                Struct                      Destination with the source's
+%                                               fields written onto it
+%
+%% Revision History:
+%  Michael Casey                                                08/08/2026
+%  Copyright 2026 Coorbital, Inc.
+%% ------------------------ Begin Code Sequence ---------------------------
+
+                fn = fieldnames(add);
+    for kf = 1:numel(fn)
+          s.(fn{kf}) = add.(fn{kf});
+    end
+end
+
+function rApoM = keplerApogee(rM,vM,gamR,c)
+%% Purpose:
+%
+%  Apogee radius of the Keplerian arc through one state. Used to attribute the
+%  gap between the flown minimum-energy apogee and the classical one: the
+%  classical result assumes an impulsive burn at the impact radius, and most of
+%  the difference is simply that the real burnout happens tens of kilometres up.
+%  What this leaves unexplained is drag over the coast, and that is the point of
+%  computing it.
+%
+%% Inputs:
+%
+%  rM               [1 x 1]                     Radius at the state (m)
+%
+%  vM               [1 x 1]                     Speed there (m/s)
+%
+%  gamR             [1 x 1]                     Flight-path angle there (rad)
+%
+%  c                Struct                      coorbital.util.missileConst
+%
+%% Outputs:
+%
+%  rApoM            [1 x 1]                     Apogee radius (m), NaN if the
+%                                               state is not bound
+%
+%% References:
+%   [1] Bate, R.R., Mueller, D.D., White, J.E., "Fundamentals of
+%       Astrodynamics," Dover, 1971, Ch. 1.
+%
+%% Revision History:
+%  Michael Casey                                                08/08/2026
+%  Copyright 2026 Coorbital, Inc.
+%% ------------------------ Begin Code Sequence ---------------------------
+
+               eps = vM.^2./2 - c.muE./rM;
+             rApoM = NaN;
+    if eps < 0
+                aM = -c.muE./(2.*eps);
+                hM = rM.*vM.*cos(gamR);
+                pM = hM.^2./c.muE;
+               ecc = sqrt(max(0,1 - pM./aM));
+             rApoM = aM.*(1 + ecc);
+    end
+end
+
+function ref = minEnergyRef(psiR,c)
+%% Purpose:
+%
+%  The CLASSICAL minimum-energy ballistic trajectory between two points at the
+%  same radius, in closed form, for a free-flight range angle psi. It is
+%  computed from the geometry alone -- no propagation, no vehicle, no
+%  atmosphere -- and it is what the minimum-energy mode is solved against and
+%  reported against.
+%
+%  THE ASSUMPTIONS ARE STRONG AND THEY MATTER when the numbers are compared:
+%  an IMPULSIVE burn AT the impact radius, a VACUUM, a SPHERICAL non-rotating
+%  Earth. A real boost takes tens of seconds and finishes tens of kilometres up,
+%  which is worth a few per cent of apogee and of flight time. The caller
+%  attributes that gap rather than absorbing it.
+%
+%      V*^2      = (mu/rE) * 2 sin(psi/2) / (1 + sin(psi/2))
+%      gammaStar = 45 deg - psi/4
+%
+%  and the rest is the two-body orbit those two determine. The 45 and the 4 are
+%  constants of the closed-form result in reference [1], not physical constants
+%  of the Earth, so they do not belong in coorbital.util.missileConst.
+%
+%% Inputs:
+%
+%  psiR             [1 x 1]                     Free-flight range angle (rad),
+%                                               strictly between 0 and pi
+%
+%  c                Struct                      coorbital.util.missileConst;
+%                                               muE (m^3/s^2) and rE (m) are
+%                                               read
+%
+%% Outputs:
+%
+%  ref              Struct                      Closed-form reference:
+%                                               psiR   [1 x 1] (rad) as passed
+%                                               V      [1 x 1] (m/s) burnout
+%                                                      speed
+%                                               gamR   [1 x 1] (rad) burnout
+%                                                      flight-path angle
+%                                               aM     [1 x 1] (m) semi-major
+%                                                      axis
+%                                               ecc    [1 x 1] (-)
+%                                               hApoM  [1 x 1] (m) apogee
+%                                                      ALTITUDE above rE
+%                                               tofS   [1 x 1] (s) burnout to
+%                                                      impact
+%
+%% References:
+%   [1] Bate, R.R., Mueller, D.D., White, J.E., "Fundamentals of
+%       Astrodynamics," Dover, 1971, Ch. 6. The minimum-energy free-flight
+%       trajectory and gammaStar = 45 deg - psi/4.
+%
+%% Revision History:
+%  Michael Casey                                                08/08/2026
+%  Copyright 2026 Coorbital, Inc.
+%% ------------------------ Begin Code Sequence ---------------------------
+
+    assert(isscalar(psiR) && isfinite(psiR) && psiR > 0 && psiR < pi, ...
+        ['the free-flight range angle must lie strictly between 0 and pi rad; ' ...
+         'got %s. A zero angle has no trajectory and pi is the antipodal ' ...
+         'degeneracy every great circle satisfies.'],mat2str(psiR));
+
+%% Burnout speed and flight-path angle, the two closed-form results:
+              sHalf = sin(psiR./2);
+                 V2 = (c.muE./c.rE).*2.*sHalf./(1 + sHalf);
+             ref.V  = sqrt(V2);
+           ref.gamR = pi./4 - psiR./4;
+           ref.psiR = psiR;
+
+%% The orbit those two determine, taken at r = rE because that is the radius the
+%% closed form is stated at:
+                eps = V2./2 - c.muE./c.rE;
+    assert(eps < 0, ...
+        ['the minimum-energy burnout speed for a %.6f rad range angle is not ' ...
+         'bound to the Earth; the closed form has been applied outside its ' ...
+         'range.'],psiR);
+             ref.aM = -c.muE./(2.*eps);
+                 hM = c.rE.*ref.V.*cos(ref.gamR);
+                 pM = hM.^2./c.muE;
+            ref.ecc = sqrt(max(0,1 - pM./ref.aM));
+          ref.hApoM = ref.aM.*(1 + ref.ecc) - c.rE;
+
+%% Time of flight, burnout to impact, by Kepler's equation. The arc is symmetric
+%% about apogee, so it is twice the time from burnout up to apogee, and the
+%% burnout point is on the ASCENDING side -- true anomaly in (0,pi):
+                 nu = acos((pM./c.rE - 1)./ref.ecc);
+                 EA = 2.*atan(sqrt((1 - ref.ecc)./(1 + ref.ecc)).*tan(nu./2));
+                 MA = EA - ref.ecc.*sin(EA);
+              nMean = sqrt(c.muE./ref.aM.^3);
+           ref.tofS = 2.*(pi - MA)./nMean;
+end
+
 function [name,agree] = measureBranch(hApoM,tFlyS,hApoStar,tFlyStar)
 %% Purpose:
 %
@@ -2295,59 +3025,58 @@ function s = yesNo(tf)
     end
 end
 
-function s = lowerOf(nameA,nameB,vA,vB)
+function s = onlyBranch(depExists)
 %% Purpose:
 %
-%  Name whichever of two branches carries the smaller value. Used by the
-%  minimum-energy paragraph to report what the literal least-burnout-energy
-%  reading WOULD have selected, which is not what the script selects.
+%  Name whichever of the two full-burn arcs is the one that exists, for the
+%  one-branch paragraph of the minimum-energy summary. Exactly one of them does
+%  when that paragraph is reached: neither existing is refused above.
 %
 %% Inputs:
 %
-%  nameA, nameB     Char                        Branch names
-%
-%  vA, vB           [1 x 1]                     Their values
+%  depExists        [1 x 1] logical             Whether the depressed arc
+%                                               reaches the target
 %
 %% Outputs:
 %
-%  s                Char [1 x n]                nameA if vA <= vB, else nameB
+%  s                Char [1 x n]                'depressed' or 'lofted'
 %
 %% Revision History:
-%  Michael Casey                                                08/07/2026
+%  Michael Casey                                                08/08/2026
 %  Copyright 2026 Coorbital, Inc.
 %% ------------------------ Begin Code Sequence ---------------------------
 
-                 s = nameB;
-    if vA <= vB
-                 s = nameA;
+                 s = 'lofted';
+    if depExists
+                 s = 'depressed';
     end
 end
 
-function s = nearerOf(nameA,nameB,dA,dB)
+function e = onlyEps(dep,lof)
 %% Purpose:
 %
-%  Name whichever of two branches lies nearer a reference, given the two
-%  distances. Used by the gammaStar diagnostic.
+%  Burnout specific energy of whichever full-burn arc exists, in MJ/kg, for the
+%  same paragraph. Reading the missing branch's field would print the NaN this
+%  exists to keep out of a results sentence.
 %
 %% Inputs:
 %
-%  nameA, nameB     Char                        Branch names
-%
-%  dA, dB           [1 x 1]                     Their distances from the
-%                                               reference, non-negative
+%  dep, lof         Struct                      The two branch records; exists
+%                                               and epsBo are read
 %
 %% Outputs:
 %
-%  s                Char [1 x n]                nameA if dA <= dB, else nameB
+%  e                [1 x 1]                     Burnout specific energy of the
+%                                               surviving arc (MJ/kg)
 %
 %% Revision History:
-%  Michael Casey                                                08/07/2026
+%  Michael Casey                                                08/08/2026
 %  Copyright 2026 Coorbital, Inc.
 %% ------------------------ Begin Code Sequence ---------------------------
 
-                 s = nameB;
-    if dA <= dB
-                 s = nameA;
+                 e = lof.epsBo./1e6;
+    if dep.exists
+                 e = dep.epsBo./1e6;
     end
 end
 
@@ -2468,15 +3197,24 @@ function [pk,kAt] = maxOver(v,mask)
                kAt = idx(kLoc);
 end
 
-function [why,ok] = whyBurnout(tEnd,mEnd,mBurnoutT,tMaxBoost)
+function [why,ok] = whyBurnout(tEnd,mEnd,mBurnoutT,tMaxBoost,tCut)
 %% Purpose:
 %
-%  Diagnose why the boost phase stopped. Nominal termination is propellant
-%  exhaustion, which coorbital.prop.eventBurnout detects as the mass state
-%  descending through the total burnout mass. THE BOOST IS NEVER CUT SHORT IN
-%  THIS SCRIPT -- the loft angle is the ranging control, not the cutoff time --
-%  so a horizon timeout or anything else is a fault and must be named rather
-%  than left to look like a completed burn.
+%  Diagnose why the boost phase stopped. There are TWO nominal terminations and
+%  which of them applies depends on the mode:
+%
+%    PROPELLANT EXHAUSTION, which coorbital.prop.eventBurnout detects as the
+%    mass state descending through the total burnout mass. This is the only
+%    nominal end for 'lofted' and 'depressed', which range on the loft angle and
+%    never cut the burn short.
+%
+%    A COMMANDED THRUST TERMINATION at tCut, which is how 'minimum-energy'
+%    reaches a burnout speed below what the full burn delivers. Recognised only
+%    when a cutoff was actually commanded; tCut is NaN otherwise and the clause
+%    cannot fire, every comparison against NaN being false.
+%
+%  Anything else -- a horizon timeout above all -- is a fault, and must be named
+%  rather than left to look like a completed burn.
 %
 %% Inputs:
 %
@@ -2488,14 +3226,19 @@ function [why,ok] = whyBurnout(tEnd,mEnd,mBurnoutT,tMaxBoost)
 %
 %  tMaxBoost        [1 x 1]                     Boost horizon (s)
 %
+%  tCut             [1 x 1]                     Commanded thrust-termination
+%                                               time (s), or NaN when the burn
+%                                               was not cut short
+%
 %% Outputs:
 %
 %  why              Char [1 x n]                Human-readable reason
 %
-%  ok               [1 x 1] logical             True only for a nominal burnout
+%  ok               [1 x 1] logical             True for either nominal end
 %
 %% Revision History:
 %  Michael Casey                                                08/07/2026
+%  Michael Casey  Recognise a commanded cutoff                   08/08/2026
 %  Copyright 2026 Coorbital, Inc.
 %% ------------------------ Begin Code Sequence ---------------------------
 
@@ -2503,6 +3246,11 @@ function [why,ok] = whyBurnout(tEnd,mEnd,mBurnoutT,tMaxBoost)
     if abs(mEnd - mBurnoutT) < 1e-6
                why = sprintf('propellant exhausted at t = %.3f s, m = %.1f kg (nominal)', ...
                              tEnd,mEnd);
+                ok = true;
+    elseif abs(tEnd - tCut) < 1e-6
+               why = sprintf(['thrust terminated on command at t = %.4f s with %.1f kg ' ...
+                              'of propellant still aboard (nominal for ' ...
+                              'minimum-energy)'],tEnd,mEnd - mBurnoutT);
                 ok = true;
     elseif tEnd >= tMaxBoost - 1e-6
                why = sprintf(['hit the %.0f s boost horizon with %.1f kg of ' ...

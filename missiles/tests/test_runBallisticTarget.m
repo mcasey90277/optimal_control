@@ -3,9 +3,11 @@ function test_runBallisticTarget()
 %
 %  Pin BM/run_ballistic_target, the ballistic point-to-point targeting script:
 %  the closed-form launch azimuth, the bracketing of the max-range loft angle,
-%  the TWO branch solves either side of it, the branch selector, the
+%  the TWO full-burn branch solves either side of it, the TEXTBOOK
+%  MINIMUM-ENERGY solve on loft angle and cutoff fraction together, the
 %  after-the-fact measurement of which branch was actually flown, and the
-%  refusals at both ends of the envelope and for an unreachable branch.
+%  refusals at both ends of the envelope, for an unreachable branch and for a
+%  minimum-energy request the vehicle cannot meet.
 %
 %  WHAT MAKES THIS DIFFERENT FROM test_runTarget, and it is the whole reason
 %  this file is separate. HGV/run_target ranges on thrust-termination time,
@@ -26,11 +28,19 @@ function test_runBallisticTarget()
 %    A script that solved the same branch twice and labelled them differently
 %    would satisfy every miss assertion in this file and fail that one.
 %
-%    THE SELECTOR IS SHOWN NOT TO BE A CONSTANT. minimum-energy picks the
-%    LOFTED arc at the shipped 3175 km target and the DEPRESSED arc at 4218 km,
-%    because the ranking of the two loft-angle distances flips between them.
-%    Both are flown here. One case alone cannot tell a working rule from a
-%    hard-wired answer.
+%    THE MINIMUM-ENERGY MODE IS GRADED AGAINST A CLOSED FORM THIS FILE COMPUTES
+%    ITSELF, in parts 6, 7 and 13. It is the one mode whose answer is known
+%    independently of the code: the classical minimum-energy trajectory between
+%    two points at the same radius has V*^2 = (mu/rE) 2 sin(psi/2)/(1 +
+%    sin(psi/2)) and gammaStar = 45 deg - psi/4, and classicalArc below writes
+%    that out rather than calling the script's own. Mutate gammaStar in the
+%    script to a flat 45 deg and this file still knows the right answer.
+%
+%    ...AND IT IS SHOWN NOT TO BE EITHER FULL-BURN ARC. Every range and miss
+%    assertion here is satisfied by the lofted arc and by the depressed one, so
+%    a minimum-energy mode that quietly fell back to SELECTING a branch -- which
+%    is exactly what it used to do -- would pass all of them.
+%    assertBetweenArcs is what sees the difference, on two separate targets.
 %
 %  WHY THE FLOWN CASE IS NEITHER EQUATORIAL NOR DUE EAST. From (0,0) the
 %  central angle reduces to acos(cos(lat2) cos(lon2)), which is symmetric in
@@ -61,10 +71,11 @@ function test_runBallisticTarget()
 %  branch bottoms out at 4708.463 km -- and what 12 deg costs is 156.224 km of
 %  maximum range.
 %
-%  COST. A trajectory propagation is about 0.05 s and a full solve takes 59 of
-%  them, so a run is about 3 s and the whole file about 50 s. The SHIPPED
-%  configuration is therefore flown at its shipped settings, which is the
-%  stronger test: what is pinned is exactly what a user gets.
+%  COST. A trajectory propagation is about 0.05 s. A 'lofted' or 'depressed' run
+%  takes 59 of them, about 3 s; a 'minimum-energy' run takes 249, about 11 s,
+%  because the nested solve is 190 of those on its own. The whole file is about
+%  80 s. The SHIPPED configuration is flown at its shipped settings throughout,
+%  which is the stronger test: what is pinned is exactly what a user gets.
 %
 %  All reference numbers below were read out of a run of the committed code at
 %  full printed precision, not rounded from a report.
@@ -164,29 +175,29 @@ function test_runBallisticTarget()
 %% THE HEADLINE NUMBERS of the flown arc, to 1e-4 relative, read at full
 %% printed precision from a run of the committed code:
     assertRel(inDef.rngReqM  ,3174980.9089995562 ,1e-4,'required range (m)');
-    assertRel(inDef.rngAchM  ,3174865.0504538282 ,1e-4,'achieved range (m)');
-    assertRel(inDef.missM    ,115.85854572764042 ,1e-4,'miss distance (m)');
-    assertRel(inDef.residM   ,-115.85854572802782,1e-4,'range residual (m)');
-    assertRel(inDef.loftDeg  ,59.145739482374033 ,1e-4,'flown loft angle (deg)');
+    assertRel(inDef.rngAchM  ,3175569.3035038970 ,1e-4,'achieved range (m)');
+    assertRel(inDef.missM    ,588.39450434150390 ,1e-4,'miss distance (m)');
+    assertRel(inDef.residM   ,588.39450434083120 ,1e-4,'range residual (m)');
+    assertRel(inDef.loftDeg  ,28.601997036545610 ,1e-4,'flown loft angle (deg)');
     assertRel(inDef.psiLaunch,0.68412945715650275,1e-4,'launch azimuth (rad)');
-    assertRel(inDef.tFlight  ,1816.0099756049399 ,1e-4,'flight time (s)');
-    assertRel(inDef.hApogee  ,2118448.9231126327 ,1e-4,'apogee (m)');
-    assertRel(inDef.tApogee  ,936.83532260709865 ,1e-4,'time of apogee (s)');
-    assertRel(inDef.vImpact  ,3502.7890627171873 ,1e-4,'impact speed (m/s)');
-    assertRel(rad2deg(inDef.gamImpact),-62.741757597464222,1e-4,'impact angle (deg)');
-    assertRel(inDef.tBurnout ,80.517757894736846 ,1e-4,'burnout time (s)');
-    assertRel(inDef.hBurnout ,114579.20371766761 ,1e-4,'burnout altitude (m)');
-    assertRel(inDef.vBurnout ,5741.8872569467831 ,1e-4,'burnout speed (m/s)');
-    assertRel(rad2deg(inDef.gamBurnout),62.840462372477255,1e-4,'burnout gamma (deg)');
-    assertRel(inDef.qBstMax  ,81489.445833564532 ,1e-4,'boost peak dynamic pressure (Pa)');
-    assertRel(inDef.nBstMax  ,40.363728442775539 ,1e-4,'peak boost sensed load (g)');
-    assertRel(inDef.qReMax   ,7523889.6014499972 ,1e-4,'re-entry peak dynamic pressure (Pa)');
-    assertRel(inDef.nReMax   ,82.066669559692102 ,1e-4,'peak re-entry deceleration (g)');
+    assertRel(inDef.tFlight  ,1013.3601833344570 ,1e-4,'flight time (s)');
+    assertRel(inDef.hApogee  ,735074.48724318016 ,1e-4,'apogee (m)');
+    assertRel(inDef.tApogee  ,531.25092599567850 ,1e-4,'time of apogee (s)');
+    assertRel(inDef.vImpact  ,2372.2975669065300 ,1e-4,'impact speed (m/s)');
+    assertRel(rad2deg(inDef.gamImpact),-38.888486066477910,1e-4,'impact angle (deg)');
+    assertRel(inDef.tBurnout ,77.559280706465860 ,1e-4,'cutoff time (s)');
+    assertRel(inDef.hBurnout ,80560.646773226560 ,1e-4,'burnout altitude (m)');
+    assertRel(inDef.vBurnout ,4833.3136917076080 ,1e-4,'burnout speed (m/s)');
+    assertRel(rad2deg(inDef.gamBurnout),37.865407738253940,1e-4,'burnout gamma (deg)');
+    assertRel(inDef.qBstMax  ,84875.700372397520 ,1e-4,'boost peak dynamic pressure (Pa)');
+    assertRel(inDef.nBstMax  ,27.657742256519640 ,1e-4,'peak boost sensed load (g)');
+    assertRel(inDef.qReMax   ,3761799.6834535259 ,1e-4,'re-entry peak dynamic pressure (Pa)');
+    assertRel(inDef.nReMax   ,41.031751916221470 ,1e-4,'peak re-entry deceleration (g)');
 
 %% The impact point itself, pinned separately from the range. A single scalar
 %% range is built from both coordinates and cannot tell them apart:
-    assertRel(rad2deg(inDef.latImpact), 61.999681084883072,1e-4,'impact latitude (deg)');
-    assertRel(rad2deg(inDef.lonImpact),-60.002110254674157,1e-4,'impact longitude (deg)');
+    assertRel(rad2deg(inDef.latImpact), 62.001619132623560,1e-4,'impact latitude (deg)');
+    assertRel(rad2deg(inDef.lonImpact),-59.989282264861000,1e-4,'impact longitude (deg)');
 
 %% Cross-range is zero in this configuration, so the whole miss IS the range
 %% residual. Not a general guarantee: it holds because the bank angle is zero:
@@ -202,10 +213,13 @@ function test_runBallisticTarget()
     assertAbs(summaryNumber(outDef,'propagations +(\d+) +\(whole'), ...
         inDef.nProp,0.5,'printed propagation count against info.nProp');
     assert(inDef.nProp == inDef.maxRange.nEval + 1 + ...
-                          inDef.depressed.nProp + inDef.lofted.nProp, ...
+                          inDef.depressed.nProp + inDef.lofted.nProp + ...
+                          inDef.minEnergy.nProp, ...
         ['info.nProp is %d against %d bracketing propagations, one re-flying ' ...
-         'the maximum, and %d and %d on the two branches'], ...
-        inDef.nProp,inDef.maxRange.nEval,inDef.depressed.nProp,inDef.lofted.nProp);
+         'the maximum, %d and %d on the two full-burn branches and %d on the ' ...
+         'minimum-energy solve'], ...
+        inDef.nProp,inDef.maxRange.nEval,inDef.depressed.nProp, ...
+        inDef.lofted.nProp,inDef.minEnergy.nProp);
 
 %% ---------------------------------------------------------------------
 %% 2. The impact point, checked INDEPENDENTLY from the flown trajectory
@@ -316,13 +330,17 @@ function test_runBallisticTarget()
 %% misled, and the script says so at length precisely so it cannot be:
     assert(contains(outDef,'THE TWO ARCS THAT REACH THIS TARGET'), ...
         'the summary must report BOTH branch solutions, not only the flown one');
-    assert(contains(outDef,'BRANCH SELECTION'), ...
-        'the summary must say which branch was chosen and on what grounds');
-    assert(contains(outDef,'MEASURED as'), ...
-        'the summary must report the branch MEASURED from the flown arc');
-    assert(contains(outDef,'WHAT MINIMUM-ENERGY MEANS HERE'), ...
-        ['the minimum-energy default must state precisely what it implements; ' ...
-         'the textbook meaning is not available to a fixed booster']);
+    assert(contains(outDef,'WHAT WAS FLOWN'), ...
+        'the summary must say which trajectory was flown and on what grounds');
+    assert(contains(outDef,'THE MINIMUM-ENERGY SOLVE'), ...
+        ['the minimum-energy default must show its solve: two unknowns, two ' ...
+         'residuals, and the classical arc it was solved against']);
+    assert(contains(outDef,'AGAINST THE CLASSICAL ARC'), ...
+        ['the minimum-energy default must be reported against the closed-form ' ...
+         'reference for its range angle, not only against itself']);
+    assert(contains(outDef,'PHYSICS, NOT SOLVER ERROR'), ...
+        ['the summary must attribute the gap to the classical arc rather than ' ...
+         'leaving a reader to read it as convergence error']);
     assert(contains(outDef,'NON-ROTATING EARTH'), ...
         'the summary must state that the azimuth is exact only for a non-rotating Earth');
     assert(contains(outDef,'COMMANDED ATTITUDE, NOT THE BURNOUT GAMMA'), ...
@@ -434,68 +452,200 @@ function test_runBallisticTarget()
         rad2deg(inLof.gamImpact),rad2deg(inDep.gamImpact));
 
 %% ---------------------------------------------------------------------
-%% 6. THE SELECTOR IS NOT A CONSTANT
+%% 6. THE MINIMUM-ENERGY SOLVE, against the CLASSICAL closed form
 %% ---------------------------------------------------------------------
-%% minimum-energy took the LOFTED arc above. At a longer target the ranking of
-%% the two loft-angle distances flips and it must take the DEPRESSED one. A
-%% selector hard-wired either way passes exactly one of these two:
-    assert(strcmp(inDef.branchFlown,'lofted') && ...
-           inDef.dLoftLofDeg < inDef.dLoftDepDeg, ...
-        ['at the shipped target minimum-energy must take the lofted arc: it ' ...
-         'lies %.4f deg from the max-range angle against the depressed arc''s ' ...
-         '%.4f deg, and it flew "%s"'], ...
-        inDef.dLoftLofDeg,inDef.dLoftDepDeg,inDef.branchFlown);
-             outFlp = evalc(['[trFlp,inFlp] = run_ballistic_target(struct(' ...
-                             '''lonTarget'',-40,''showPlots'',false));']);
-    assert(contains(outFlp,'(nominal)') && ~contains(outFlp,'REFUSED'), ...
-        'the 4218 km minimum-energy case did not solve. Summary was:\n%s',outFlp);
-    assert(inFlp.rngReqM > inDef.rngReqM + 1e6, ...
-        'the second minimum-energy target is not materially further; it cannot discriminate');
-    assert(strcmp(inFlp.branchFlown,'depressed') && ...
-           strcmp(inFlp.branchMeasured,'depressed'), ...
-        ['at 4218 km the depressed arc lies %.4f deg from the max-range angle ' ...
-         'against the lofted arc''s %.4f deg, so minimum-energy must take it; ' ...
-         'it flew "%s" and measured as "%s". A selector wired to a constant ' ...
-         'passes the shipped case and fails here'], ...
-        inFlp.dLoftDepDeg,inFlp.dLoftLofDeg,inFlp.branchFlown,inFlp.branchMeasured);
-    assert(inFlp.dLoftDepDeg < inFlp.dLoftLofDeg, ...
-        'the flip case does not actually flip: %.4f against %.4f deg', ...
-        inFlp.dLoftDepDeg,inFlp.dLoftLofDeg);
-    assert(inFlp.missM <= tolM, ...
-        'the flip case missed by %.2f m',inFlp.missM);
-             missIF = c.rE.*coorbital.util.greatCircle(trFlp.x(end,3),trFlp.x(end,2), ...
-                                                       deg2rad(62),deg2rad(-40));
-    assert(missIF <= tolM, ...
-        'the flip case''s flown impact point is %.2f m from its target',missIF);
-    assert(maxAlt(trFlp,c.rE) < inFlp.hApoStarM, ...
-        'the flip case measured as depressed but apogees above the max-range arc');
-    assertBranchMiss(inFlp,tolM,'the 4218 km minimum-energy case');
+%% THIS IS THE PART THE MODE EXISTS FOR. The shipped default no longer selects
+%% between the two full-burn arcs -- neither of them is a minimum-energy
+%% trajectory, because at full burn the booster delivers a fixed delta-V and
+%% both arcs leave burnout with essentially the same energy, 0.55 %% apart. It
+%% solves the LOFT ANGLE and the CUTOFF FRACTION together against two residuals:
+%% the range, and the burnout flight-path angle against gammaStar.
+%%
+%% THE REFERENCE IS COMPUTED HERE, IN THIS FILE'S OWN HAND, from the range angle
+%% and coorbital.util.missileConst. It is NOT read out of info.classical: a test
+%% that took its reference from the code under test could not see the code
+%% change the formula, which is exactly the mutation this part has to catch:
+%%
+%%     V*^2      = (mu/rE) * 2 sin(psi/2) / (1 + sin(psi/2))
+%%     gammaStar = 45 deg - psi/4
+%%
+            psiReq = coorbital.util.greatCircle(latLn,lonLn,latTg,lonTg);
+            gamStr = pi./4 - psiReq./4;
+             refKm = classicalArc(psiReq,c);
 
-%% ...and the SOLVE MOVED with the target. A longer target on a different
-%% azimuth must give a different loft angle and a different bearing:
-    assert(abs(inFlp.loftDeg - inDef.loftDeg) > 1, ...
-        'the two minimum-energy targets solved to the same loft angle');
-    assert(abs(rad2deg(wrapPi(inFlp.psiLaunch - inDef.psiLaunch))) > 1, ...
+%% The closed form first, to machine precision, because everything below is
+%% measured against it and a wrong reference makes every tolerance meaningless.
+%% 1e-9 relative, not 1e-4: there is no integration anywhere in it:
+    assertRel(rad2deg(gamStr),37.869665306645022,1e-9,'gammaStar (deg)');
+    assertRel(refKm.V        ,4970.2903871732401,1e-9,'classical burnout speed (m/s)');
+    assertRel(refKm.hApoM    ,687304.31264742557,1e-9,'classical apogee (m)');
+    assertRel(refKm.tofS     ,927.80711586516302,1e-9,'classical flight time (s)');
+    assertRel(inDef.classical.hApoM,refKm.hApoM,1e-9, ...
+        'the script own classical apogee against this file (m)');
+    assertRel(inDef.classical.tofS ,refKm.tofS ,1e-9, ...
+        'the script own classical flight time against this file (s)');
+    assertAbs(inDef.gamStarR,gamStr,1e-12,'the script own gammaStar (rad)');
+
+%% THE BURN IS ACTUALLY CUT SHORT. This is the whole mechanism: gammaStar needs
+%% a burnout speed the booster OVERSHOOTS at full burn, so the second control
+%% has to be exercised. A solve that quietly ran to propellant exhaustion would
+%% satisfy the range assertion and nothing else here:
+    assert(inDef.minEnergy.solved, ...
+        'the shipped minimum-energy run did not report a solved trajectory');
+    assert(inDef.minEnergy.cutFrac < 0.999, ...
+        ['the minimum-energy solve cut the burn at %.6f of full, which is no ' ...
+         'cut at all. gammaStar is reachable only below full burn on this ' ...
+         'vehicle'],inDef.minEnergy.cutFrac);
+    assert(inDef.minEnergy.propLeftKg > 100, ...
+        'a cut-short burn must leave propellant unburned; this one left %.3f kg', ...
+        inDef.minEnergy.propLeftKg);
+    assertRel(inDef.minEnergy.cutFrac   ,0.96325683593750000,1e-4,'cutoff fraction');
+    assertRel(inDef.minEnergy.tCutS     ,77.559280706465860 ,1e-4,'cutoff time (s)');
+    assertRel(inDef.minEnergy.propLeftKg,1102.2949218749980 ,1e-4, ...
+        'propellant left unburned (kg)');
+    assertAbs(inDef.minEnergy.tCutS,inDef.minEnergy.cutFrac.*inDef.tBurn,1e-6, ...
+        'the cutoff time against the fraction times the full burn (s)');
+    assert(inDef.minEnergy.tCutS < inDef.tBurn, ...
+        'the cutoff at %.4f s must precede the %.4f s full burn', ...
+        inDef.minEnergy.tCutS,inDef.tBurn);
+
+%% RESIDUAL ONE: THE BURNOUT GAMMA IS gammaStar, to the outer tolerance. This is
+%% the residual that makes the trajectory minimum-energy rather than merely
+%% on-target, and it is asserted against the tolerance the script was ASKED for
+%% and not against whatever it happened to achieve:
+            tolGamR = deg2rad(0.01);
+    assertAbs(inDef.gamBurnout,gamStr,tolGamR, ...
+        'flown burnout gamma against gammaStar (rad)');
+    assertAbs(inDef.meGamResR,inDef.gamBurnout - gamStr,1e-15, ...
+        'the reported gamma residual against the flown one (rad)');
+
+%% RESIDUAL TWO: THE RANGE, to the range tolerance. Part 1 asserts it through
+%% the miss; it is restated here as the residual the solve drives, because the
+%% PAIR is what makes the trajectory minimum-energy and half a pair proves
+%% nothing -- either full-burn arc satisfies the range residual alone:
+    assert(abs(inDef.residM) <= tolM, ...
+        'the minimum-energy range residual is %.2f m against a %.1f m tolerance', ...
+        inDef.residM,tolM);
+    assert(abs(inDef.depressed.gamBoR - gamStr) > 10.*tolGamR && ...
+           abs(inDef.lofted.gamBoR    - gamStr) > 10.*tolGamR, ...
+        ['the two full-burn arcs sit %.4f and %.4f deg from gammaStar; if ' ...
+         'either were within the outer tolerance this part could not tell a ' ...
+         'genuine minimum-energy solve from a branch selection'], ...
+        rad2deg(abs(inDef.depressed.gamBoR - gamStr)), ...
+        rad2deg(abs(inDef.lofted.gamBoR - gamStr)));
+
+%% THE FLOWN ARC IS THE CLASSICAL ARC, to a tolerance taken FROM THE PHYSICS
+%% rather than chosen for comfort. The closed form assumes an IMPULSIVE burn AT
+%% the impact radius in a VACUUM; this flight burns for 77.6 s and reaches
+%% gammaStar 80.6 km up at 4833.3 m/s rather than 4970.3 m/s at zero altitude.
+%% MEASURED on the committed code: the apogee comes out 6.95 %% high and the
+%% flight time 9.22 %% long. The budgets below are set a little above those --
+%% 10 %% and 12 %% -- loose enough that a re-tuned integrator does not trip
+%% them, and tight enough that the arc cannot wander to the 2118 km, 30.3 min
+%% LOFTED arc (+208 %% and +96 %%) or to the 208 km, 11.0 min DEPRESSED one
+%% (-70 %% and -29 %%), which are the two answers the old selector gave:
+    assert(abs(inDef.meApoRelE) < 0.10, ...
+        ['the flown apogee is %.3f km against the classical %.3f km, %.2f %% ' ...
+         'out. A finite boost is worth a few per cent; this is not a few per ' ...
+         'cent'],inDef.hApogee./1000,refKm.hApoM./1000,100.*inDef.meApoRelE);
+    assert(abs(inDef.meTofRelE) < 0.12, ...
+        ['the flown flight time is %.4f min against the classical %.4f min, ' ...
+         '%.2f %% out'],inDef.tFlight./60,refKm.tofS./60,100.*inDef.meTofRelE);
+    assertAbs(inDef.meApoRelE,(inDef.hApogee - refKm.hApoM)./refKm.hApoM,1e-12, ...
+        'the reported apogee residual against this file');
+    assertAbs(inDef.meTofRelE,(inDef.tFlight - refKm.tofS)./refKm.tofS,1e-12, ...
+        'the reported flight-time residual against this file');
+
+%% ...AND THE TOLERANCES ARE JUSTIFIED, not merely stated. Almost the whole gap
+%% is the FINITE BURNOUT ALTITUDE: a Keplerian arc from the flown burnout state
+%% apogees within 20 m of what the vehicle flew, so what the classical arc gets
+%% wrong is where the boost ENDED and not how the solve converged. If a future
+%% change ever makes the coast lossy enough for this to fail, the percentage
+%% budgets above stop being attributable and must be re-derived rather than
+%% quietly widened:
+    assertAbs(inDef.minEnergy.hApoKepM,inDef.hApogee,1000, ...
+        'Keplerian apogee of the burnout state against the flown apogee (m)');
+    assert(abs(inDef.minEnergy.hApoKepM - refKm.hApoM) > ...
+           0.9.*abs(inDef.hApogee - refKm.hApoM), ...
+        ['the finite burnout altitude accounts for only %.3f km of the %.3f ' ...
+         'km gap to the classical arc; the attribution the summary prints is ' ...
+         'wrong'],abs(inDef.minEnergy.hApoKepM - refKm.hApoM)./1000, ...
+        abs(inDef.hApogee - refKm.hApoM)./1000);
+
+%% ...and the arc really is the textbook one rather than either full-burn arc.
+%% The apogee-to-range ratio of a minimum-energy ballistic trajectory sits near
+%% a quarter; the lofted arc here is at 0.67 and the depressed at 0.066:
+             ratME = inDef.hApogee./inDef.rngAchM;
+    assert(ratME > 0.20 && ratME < 0.28, ...
+        ['the flown apogee-to-range ratio is %.4f; a minimum-energy arc sits ' ...
+         'near 0.25 and the two full-burn arcs here sit at %.4f and %.4f'], ...
+        ratME,inDef.depressed.hApoM./inDef.rngAchM, ...
+        inDef.lofted.hApoM./inDef.rngAchM);
+
+%% ---------------------------------------------------------------------
+%% 7. THE SOLVE IS NOT A CONSTANT, and it is neither full-burn arc
+%% ---------------------------------------------------------------------
+%% One case cannot tell a working two-parameter solve from a hard-wired answer.
+%% A second target, 1031 km further out, must move BOTH unknowns and must meet
+%% ITS OWN classical reference -- a different gammaStar, a different apogee and
+%% a different flight time:
+            outFar2 = evalc(['[trFar2,inFar2] = run_ballistic_target(struct(' ...
+                             '''lonTarget'',-40,''showPlots'',false));']);
+    assert(contains(outFar2,'(nominal)') && ~contains(outFar2,'REFUSED'), ...
+        'the 4206 km minimum-energy case did not solve. Summary was:\n%s',outFar2);
+    assert(inFar2.rngReqM > inDef.rngReqM + 1e6, ...
+        'the second minimum-energy target is not materially further out');
+
+%% BOTH unknowns moved. A solve wired to a constant loft angle, or one that
+%% never touched the cutoff, passes the shipped case and fails here:
+    assert(abs(inFar2.loftDeg - inDef.loftDeg) > 1, ...
+        ['the two minimum-energy targets solved to loft angles %.4f and %.4f ' ...
+         'deg, less than a degree apart'],inFar2.loftDeg,inDef.loftDeg);
+    assert(abs(inFar2.minEnergy.cutFrac - inDef.minEnergy.cutFrac) > 0.01, ...
+        ['the two targets solved to cutoff fractions %.6f and %.6f; the ' ...
+         'cutoff is the range control and it must move with the range'], ...
+        inFar2.minEnergy.cutFrac,inDef.minEnergy.cutFrac);
+    assert(abs(rad2deg(wrapPi(inFar2.psiLaunch - inDef.psiLaunch))) > 1, ...
         'the two targets returned the same azimuth to within a degree');
 
-%% ---------------------------------------------------------------------
-%% 7. THE ILL-CONDITIONED BAND, where the selection is not worth trusting
-%% ---------------------------------------------------------------------
-%% Between those two targets the two loft distances pass through equality, and
-%% the script CAUTIONS there rather than pretending the choice is meaningful.
-%% Unpinned, that caution would be a paragraph nothing can fire:
-             outCau = evalc(['[~,inCau] = run_ballistic_target(struct(' ...
-                             '''lonTarget'',-48,''showPlots'',false));']);
-    assert(inCau.meClose, ...
-        ['at 3789 km the two loft distances are %.4f and %.4f deg, a ratio of ' ...
-         '%.4f, and info.meClose must be true inside the 5 %% band'], ...
-        inCau.dLoftDepDeg,inCau.dLoftLofDeg,inCau.meRatio);
-    assertRel(inCau.meRatio,0.95856292689990052,1e-3,'ill-conditioning ratio');
-    assert(contains(outCau,'turns on a rounding'), ...
-        ['the near-degenerate case printed no caution. Summary was:\n%s'],outCau);
-    assert(~inDef.meClose && ~contains(outDef,'turns on a rounding'), ...
-        ['the shipped case is %.2f %% from degenerate and must NOT print the ' ...
-         'caution, or the caution says nothing'],100.*(1 - inDef.meRatio));
+%% ...and the SECOND case meets its OWN reference, recomputed here rather than
+%% reused. gammaStar FALLS as the range angle grows -- 37.870 deg at 3175 km
+%% against 35.554 deg at 4206 km -- so a gammaStar wired to a constant passes
+%% the shipped case and fails this one. That is precisely the mutation this
+%% assertion exists to catch:
+           psiFar2 = coorbital.util.greatCircle(latLn,lonLn,latTg,deg2rad(-40));
+           gamStr2 = pi./4 - psiFar2./4;
+           refFar2 = classicalArc(psiFar2,c);
+    assert(abs(rad2deg(gamStr2 - gamStr)) > 2, ...
+        ['the two gammaStar values are %.4f and %.4f deg, only %.4f deg ' ...
+         'apart; this case cannot see a gammaStar wired to a constant'], ...
+        rad2deg(gamStr2),rad2deg(gamStr),abs(rad2deg(gamStr2 - gamStr)));
+    assertAbs(inFar2.gamBurnout,gamStr2,tolGamR, ...
+        'the 4206 km burnout gamma against ITS OWN gammaStar (rad)');
+    assert(abs(inFar2.meApoRelE) < 0.10, ...
+        ['the 4206 km apogee is %.3f km against the classical %.3f km, ' ...
+         '%.2f %% out'],inFar2.hApogee./1000,refFar2.hApoM./1000, ...
+        100.*inFar2.meApoRelE);
+    assert(abs(inFar2.meTofRelE) < 0.12, ...
+        ['the 4206 km flight time is %.4f min against the classical %.4f ' ...
+         'min, %.2f %% out'],inFar2.tFlight./60,refFar2.tofS./60, ...
+        100.*inFar2.meTofRelE);
+    assert(inFar2.missM <= tolM, ...
+        'the 4206 km case missed by %.2f m',inFar2.missM);
+            missIF = c.rE.*coorbital.util.greatCircle(trFar2.x(end,3), ...
+                                                      trFar2.x(end,2), ...
+                                                      latTg,deg2rad(-40));
+    assert(missIF <= tolM, ...
+        'the 4206 km case flown impact point is %.2f m from its target',missIF);
+    assertBranchMiss(inFar2,tolM,'the 4206 km minimum-energy case');
+
+%% ...AND THE MINIMUM-ENERGY ARC IS NEITHER OF THE TWO FULL-BURN ARCS, on both
+%% cases. It lies BETWEEN them in apogee and in flight time, which is what a
+%% trajectory carrying less burnout energy than either of them must do, and it
+%% is far from both -- so a mode that quietly fell back to selecting a branch
+%% could not pass this:
+    assertBetweenArcs(inDef ,'the shipped 3175 km case');
+    assertBetweenArcs(inFar2,'the 4206 km case');
 
 %% ---------------------------------------------------------------------
 %% 8. THE REFUSALS: beyond maximum range, too close, and a missing branch
@@ -635,16 +785,44 @@ function test_runBallisticTarget()
     assertAbs((inWid.rngMaxM - inDef.rngMaxM)./1000,156.2236,0.01, ...
         'maximum range given up to raise the clamp from 6 to 12 deg (km)');
 
-%% ...and a one-branch minimum-energy run must not print arithmetic it does not
-%% have. The rule compares two burnout energies and two loft distances, and the
-%% missing branch supplies NaN for both; unguarded, the paragraph read
-%% "essentially the same energy -- NaN and -44.9073 MJ/kg, NaN %% apart":
+%% ...and a ONE-BRANCH minimum-energy run must still SOLVE, and must not print
+%% arithmetic it does not have. Two separate claims:
+%%
+%%   THE SOLVE SURVIVES A MISSING BRANCH. The outer loft bracket is normally the
+%%   two full-burn branch solutions; here the depressed one does not exist, so
+%%   the bracket takes the user's own loftMin at that end, which is admissible
+%%   because the full burn OVERSHOOTS the target there. The minimum-energy
+%%   trajectory is a property of the GEOMETRY, so the answer must be very nearly
+%%   the same one the shipped 12 deg clamp finds -- a different COMMANDED loft
+%%   angle, because the clamp changes what a command delivers, but the same
+%%   burnout gamma and very nearly the same arc:
+    assert(inWid.minEnergy.solved, ...
+        ['the one-branch case did not solve the minimum-energy trajectory. ' ...
+         'Summary was:\n%s'],outWid);
+    assert(~inWid.depressed.exists, ...
+        'this case is meant to have exactly one full-burn branch');
+    assertAbs(inWid.gamBurnout,inDef.gamStarR,deg2rad(0.01), ...
+        'one-branch burnout gamma against gammaStar (rad)');
+    assert(abs(inWid.hApogee - inDef.hApogee) < 0.05.*inDef.hApogee, ...
+        ['the 6 deg clamp found a %.3f km apogee against the 12 deg clamp''s ' ...
+         '%.3f km. The minimum-energy arc is set by the GEOMETRY and the two ' ...
+         'must very nearly agree'],inWid.hApogee./1000,inDef.hApogee./1000);
+    assert(abs(inWid.loftDeg - inDef.loftDeg) > 10, ...
+        ['the two clamps solved to loft angles %.4f and %.4f deg. They must ' ...
+         'DIFFER: the clamp decides what a commanded attitude delivers, and ' ...
+         'if they agreed the loft angle would not be doing any work'], ...
+        inWid.loftDeg,inDef.loftDeg);
+
+%%   AND IT PRINTS NO NaN. The contrast paragraph compares the two full-burn
+%%   burnout energies and the missing branch supplies NaN; unguarded it read
+%%   "leave burnout at NaN and -44.9073 MJ/kg, NaN %% apart", which in a results
+%%   paragraph reads as a measurement:
     assert(~contains(outWid,'NaN'), ...
         ['the one-branch run printed a NaN, which in a results paragraph ' ...
          'reads as a measurement. Summary was:\n%s'],outWid);
-    assert(contains(outWid,'NO CHOICE TO MAKE'), ...
-        ['a minimum-energy run with only one branch must say that the rule ' ...
-         'never ran. Summary was:\n%s'],outWid);
+    assert(contains(outWid,'ONLY ONE FULL-BURN ARC REACHES THIS TARGET'), ...
+        ['a minimum-energy run with only one full-burn arc must say so ' ...
+         'instead of printing half a comparison. Summary was:\n%s'],outWid);
 
 %% A misspelt branch word must raise rather than fall through to a default.
 %% There is no sensible default: every range short of the maximum is reached by
@@ -853,11 +1031,296 @@ function test_runBallisticTarget()
         ['the limitations paragraph must say WHY the non-rotating case is the ' ...
          'only one described:\n%s'],outDef);
 
+%% ---------------------------------------------------------------------
+%% 13. PLESETSK TO NEW YORK: the published case, and what it costs
+%% ---------------------------------------------------------------------
+%% 7132.320 km on a 64.0707 deg range angle, which is the geometry published
+%% ballistic-missile range figures are usually quoted on. The classical
+%% minimum-energy arc for it is 6581.8 m/s at gammaStar = 28.9823 deg, apogeeing
+%% at 1205.989 km after 26.012 min, and this file computes all four from the
+%% closed form rather than quoting them:
+            latPl = deg2rad(62.925);
+            lonPl = deg2rad(40.577);
+            latNy = deg2rad(40.7128);
+            lonNy = deg2rad(-74.006);
+            psiPny = coorbital.util.greatCircle(latPl,lonPl,latNy,lonNy);
+            refPny = classicalArc(psiPny,c);
+            gamPny = pi./4 - psiPny./4;
+    assertRel(c.rE.*psiPny  ,7132319.5118074585,1e-9,'Plesetsk to New York (m)');
+    assertRel(rad2deg(gamPny),28.982320928298690,1e-9,'its gammaStar (deg)');
+    assertRel(refPny.V      ,6581.8444425394830,1e-9,'its classical burnout speed (m/s)');
+    assertRel(refPny.hApoM  ,1205989.0518133850,1e-9,'its classical apogee (m)');
+    assertRel(refPny.tofS   ,1560.7229921211660,1e-9,'its classical flight time (s)');
+
+%% THE SHIPPED BOOSTER CANNOT FLY IT, and that is a measurement rather than an
+%% opinion: 7132.320 km against a 5055.302 km maximum, 2077.018 km short. It
+%% must REFUSE -- through the envelope path, because a burn CUT SHORTER than the
+%% full one carries LESS energy and cannot fly further than the full burn does.
+%% A minimum-energy request beyond maximum range is beyond it by a WIDER margin
+%% than a lofted or depressed one, and the refusal has to say so rather than
+%% silently flying something else:
+  [outPny,infPny,threwPny,trPny] = tryRun(struct('latLaunch',62.925, ...
+                                                 'lonLaunch',40.577, ...
+                                                 'latTarget',40.7128, ...
+                                                 'lonTarget',-74.006, ...
+                                                 'showPlots',false));
+    assert(~threwPny,'the Plesetsk case must refuse, not throw:\n%s',outPny);
+    assert(infPny.refused && strcmp(infPny.refusedWhy,'envelope'), ...
+        'expected an envelope refusal; got refused = %d, why = "%s"', ...
+        infPny.refused,infPny.refusedWhy);
+    assert(isempty(trPny),'a refused run must return an empty trajectory');
+    assertRel(infPny.rngReqM,c.rE.*psiPny,1e-9,'the refused required range (m)');
+    assert(infPny.rngReqM > infPny.rngMaxM + 2.0e6, ...
+        ['the Plesetsk case is only %.3f km beyond the maximum; it is meant to ' ...
+         'be far beyond it'],(infPny.rngReqM - infPny.rngMaxM)./1000);
+    assert(contains(outPny,'MINIMUM-ENERGY IS THE HARDER ASK'), ...
+        ['the refusal must explain that minimum-energy needs a burnout speed ' ...
+         'BELOW full burn and is therefore further out of reach, not nearer. ' ...
+         'Summary was:\n%s'],outPny);
+
+%% ...and the refusal must PRINT the classical arc it declined to fly, because
+%% that is the number a user came for:
+    assertAbs(summaryNumber(outPny,'V\* = ([-\d.]+) m/s'),refPny.V,0.1, ...
+        'printed classical burnout speed (m/s)');
+    assertAbs(summaryNumber(outPny,'gamma\* = ([-\d.]+) deg'),rad2deg(gamPny),1e-3, ...
+        'printed gammaStar (deg)');
+    assertAbs(summaryNumber(outPny,'flown: ([-\d.]+) km of apogee'), ...
+        refPny.hApoM./1000,1e-2,'printed classical apogee (km)');
+    assertAbs(summaryNumber(outPny,'apogee in ([-\d.]+) min'),refPny.tofS./60,1e-2, ...
+        'printed classical flight time (min)');
+
+%% GIVE IT A BOOSTER SIZED TO THE RANGE AND THE MODE REPRODUCES THE REFERENCE,
+%% which is the acceptance test for the whole mode. The classical result
+%% PRESUMES the burnout energy is free to choose -- you size the booster to the
+%% range -- and the shipped placeholder is sized to about 5000 km, so the case
+%% is flown here on a booster with the delta-V for 7132 km. Nothing else
+%% changes: same vehicle, same pitch programme, same clamp, same solver
+%% settings. MEASURED: 1257.452 km of apogee against 1205.989 km (+4.27 %%) and
+%% 27.5096 min against 26.0120 min (+5.76 %%), with the burnout gamma
+%% 0.0058 deg from gammaStar. The budgets are 8 %% and 8 %%, set from those
+%% measurements the same way part 6 sets its own:
+  [outBig,infBig,threwBig,trBig] = tryRun(struct('latLaunch',62.925, ...
+                                                 'lonLaunch',40.577, ...
+                                                 'latTarget',40.7128, ...
+                                                 'lonTarget',-74.006, ...
+                                                 'boosterFn',@bigBooster, ...
+                                                 'showPlots',false));
+    assert(~threwBig,'the sized-booster Plesetsk case threw:\n%s',outBig);
+    assert(~infBig.refused && ~isempty(trBig), ...
+        ['the sized-booster Plesetsk case must SOLVE; a booster with the ' ...
+         'delta-V for the range is what the classical result presumes. ' ...
+         'Summary was:\n%s'],outBig);
+    assert(infBig.minEnergy.solved && infBig.minEnergy.cutFrac < 0.999, ...
+        'the sized-booster case must still CUT THE BURN SHORT; it cut at %.6f', ...
+        infBig.minEnergy.cutFrac);
+    assertAbs(infBig.gamBurnout,gamPny,deg2rad(0.01), ...
+        'sized-booster burnout gamma against gammaStar (rad)');
+    assert(abs(infBig.meApoRelE) < 0.08, ...
+        ['the sized-booster apogee is %.3f km against the classical %.3f km, ' ...
+         '%.2f %% out; the reference is 1205.989 km'], ...
+        infBig.hApogee./1000,refPny.hApoM./1000,100.*infBig.meApoRelE);
+    assert(abs(infBig.meTofRelE) < 0.08, ...
+        ['the sized-booster flight time is %.4f min against the classical ' ...
+         '%.4f min, %.2f %% out; the reference is 26.012 min'], ...
+        infBig.tFlight./60,refPny.tofS./60,100.*infBig.meTofRelE);
+    assert(infBig.missM <= tolM, ...
+        'the sized-booster Plesetsk case missed by %.2f m',infBig.missM);
+            missIB = c.rE.*coorbital.util.greatCircle(trBig.x(end,3), ...
+                                                      trBig.x(end,2),latNy,lonNy);
+    assert(missIB <= tolM, ...
+        'the sized-booster flown impact point is %.2f m from New York',missIB);
+
+%% ---------------------------------------------------------------------
+%% 14. THE MINIMUM-ENERGY GUARDS
+%% ---------------------------------------------------------------------
+%% A CUT-SHORT BURN JETTISONS PROPELLANT, so the coast mass is only well defined
+%% if the WHOLE booster goes overboard. separation = false cannot express that
+%% and must RAISE rather than fly against a mass the equations of motion would
+%% disagree with. It is a user-block contradiction, not an unreachable target,
+%% so it throws where the envelope cases refuse:
+            idSep = errorIdOf(@() run_ballistic_target( ...
+                                   struct('separation',false,'showPlots',false)));
+    assert(~isempty(idSep), ...
+        'minimum-energy with separation = false must raise, not fly');
+
+%% ...and the two FULL-BURN modes are unaffected by that restriction, because
+%% they burn to exhaustion and leave nothing unburned to account for. Flown
+%% rather than asserted about, or the exemption is only a claim:
+           outNoSep = evalc(['[~,inNoSep] = run_ballistic_target(struct(' ...
+                             '''separation'',false,''branch'',''lofted'',' ...
+                             '''showPlots'',false));']);
+    assert(~inNoSep.refused && ~contains(outNoSep,'REFUSED'), ...
+        ['a LOFTED run with separation = false must still fly. Summary ' ...
+         'was:\n%s'],outNoSep);
+
+%% A cutFracMin at or above the full burn leaves the inner solve nothing to
+%% bisect, and must be caught in the user-block checks rather than inside the
+%% solver:
+            idCut = errorIdOf(@() run_ballistic_target( ...
+                                   struct('cutFracMin',1,'showPlots',false)));
+    assert(~isempty(idCut),'cutFracMin = 1 must raise');
+            idTol = errorIdOf(@() run_ballistic_target( ...
+                                   struct('tolGamDeg',0,'showPlots',false)));
+    assert(~isempty(idTol),'tolGamDeg = 0 must raise');
+
+%% THE OUTER TOLERANCE IS ACTUALLY HONOURED, which nothing above can see: every
+%% assertion so far is written against the SHIPPED 0.01 deg. Tighten it by a
+%% factor of ten and the residual must fall below the tighter figure, which a
+%% solve that ignored the tolerance -- or one that stopped after a fixed number
+%% of steps -- could not do:
+          outTight = evalc(['[~,inTight] = run_ballistic_target(struct(' ...
+                            '''tolGamDeg'',0.001,''showPlots'',false));']);
+    assert(~inTight.refused,'the tightened run did not solve:\n%s',outTight);
+    assert(abs(rad2deg(inTight.meGamResR)) < 0.001, ...
+        ['asked for 0.001 deg on the burnout gamma the solve delivered ' ...
+         '%.6f deg'],abs(rad2deg(inTight.meGamResR)));
+    assert(inTight.minEnergy.outerIters > inDef.minEnergy.outerIters, ...
+        ['a ten times tighter outer tolerance took %d outer steps against ' ...
+         'the shipped %d; it cannot cost the same'], ...
+        inTight.minEnergy.outerIters,inDef.minEnergy.outerIters);
+    assert(abs(rad2deg(inTight.meGamResR)) < abs(rad2deg(inDef.meGamResR)), ...
+        'the tightened run is no closer to gammaStar than the shipped one');
+
 %% Nothing above asked for a figure, so nothing above may have made one:
             nFig1  = numel(findall(groot,'Type','figure'));
     assert(nFig1 == nFig0, ...
         ['run_ballistic_target left %d new figure(s) open with showPlots ' ...
          'false; the suite must run headless'],nFig1 - nFig0);
+end
+
+function ref = classicalArc(psiR,c)
+%% Purpose:
+%
+%  The CLASSICAL minimum-energy ballistic trajectory for a free-flight range
+%  angle, in closed form, WRITTEN OUT HERE rather than called from
+%  BM/run_ballistic_target. That duplication is the point: this is the reference
+%  the minimum-energy mode is graded against, and a reference read out of the
+%  code under test cannot see that code change the formula. Mutate gammaStar in
+%  the script to a flat 45 deg and this function still returns the right answer,
+%  so the assertions that compare the two fire.
+%
+%      V*^2      = (mu/rE) * 2 sin(psi/2) / (1 + sin(psi/2))
+%      gammaStar = 45 deg - psi/4
+%
+%  and the flight time is twice the burnout-to-apogee time of the two-body arc
+%  those two determine, by Kepler's equation.
+%
+%% Inputs:
+%
+%  psiR             [1 x 1]                     Free-flight range angle (rad)
+%
+%  c                Struct                      coorbital.util.missileConst
+%
+%% Outputs:
+%
+%  ref              Struct                      V (m/s), gamR (rad), hApoM (m)
+%                                               apogee ALTITUDE, tofS (s)
+%
+%% References:
+%   [1] Bate, R.R., Mueller, D.D., White, J.E., "Fundamentals of
+%       Astrodynamics," Dover, 1971, Ch. 6.
+%
+%% Revision History:
+%  Michael Casey                                                08/08/2026
+%  Copyright 2026 Coorbital, Inc.
+%% ------------------------ Begin Code Sequence ---------------------------
+
+             sHalf = sin(psiR./2);
+                V2 = (c.muE./c.rE).*2.*sHalf./(1 + sHalf);
+             ref.V = sqrt(V2);
+          ref.gamR = pi./4 - psiR./4;
+               eps = V2./2 - c.muE./c.rE;
+                aM = -c.muE./(2.*eps);
+                hM = c.rE.*ref.V.*cos(ref.gamR);
+                pM = hM.^2./c.muE;
+               ecc = sqrt(max(0,1 - pM./aM));
+         ref.hApoM = aM.*(1 + ecc) - c.rE;
+                nu = acos((pM./c.rE - 1)./ecc);
+                EA = 2.*atan(sqrt((1 - ecc)./(1 + ecc)).*tan(nu./2));
+                MA = EA - ecc.*sin(EA);
+             nMean = sqrt(c.muE./aM.^3);
+          ref.tofS = 2.*(pi - MA)./nMean;
+end
+
+function assertBetweenArcs(info,what)
+%% Purpose:
+%
+%  Assert that the flown minimum-energy trajectory is NEITHER of the two
+%  full-burn arcs, and lies strictly between them in both apogee and flight
+%  time. Exists because every range and miss assertion in this file is satisfied
+%  by either full-burn arc: a minimum-energy mode that quietly fell back to
+%  selecting a branch -- which is exactly what it used to do -- would pass all
+%  of them. This is what sees the difference.
+%
+%  BOTH SEPARATIONS ARE CHECKED AS FACTORS rather than as differences, so the
+%  thresholds do not have to be re-derived for every geometry: the trajectory
+%  must be at least half again the depressed apogee and at most two thirds of
+%  the lofted one, and its flight time strictly inside the pair.
+%
+%% Inputs:
+%
+%  info             Struct                      A non-refused run's info, with
+%                                               depressed, lofted, hApogee and
+%                                               tFlight
+%
+%  what             Char [1 x n]                Name of the case, for messages
+%
+%% Outputs:
+%
+%  none                                         Throws on any failed assertion
+%
+%% Revision History:
+%  Michael Casey                                                08/08/2026
+%  Copyright 2026 Coorbital, Inc.
+%% ------------------------ Begin Code Sequence ---------------------------
+
+    assert(info.depressed.exists && info.lofted.exists, ...
+        '%s needs both full-burn arcs for this comparison',what);
+    assert(info.hApogee > 1.5.*info.depressed.hApoM, ...
+        ['%s apogees at %.3f km against the DEPRESSED arc''s %.3f km; the ' ...
+         'minimum-energy trajectory must be clearly above it'], ...
+        what,info.hApogee./1000,info.depressed.hApoM./1000);
+    assert(info.hApogee < 0.67.*info.lofted.hApoM, ...
+        ['%s apogees at %.3f km against the LOFTED arc''s %.3f km; the ' ...
+         'minimum-energy trajectory must be clearly below it'], ...
+        what,info.hApogee./1000,info.lofted.hApoM./1000);
+    assert(info.tFlight > info.depressed.tFlyS && ...
+           info.tFlight < info.lofted.tFlyS, ...
+        ['%s flies for %.2f s against %.2f s depressed and %.2f s lofted; it ' ...
+         'must lie strictly between them'],what,info.tFlight, ...
+        info.depressed.tFlyS,info.lofted.tFlyS);
+end
+
+function bst = bigBooster()
+%% Purpose:
+%
+%  A booster with the delta-V for the Plesetsk-to-New-York range, for part 13.
+%  The classical minimum-energy result PRESUMES the burnout energy is free to
+%  choose -- you size the booster to the range -- and the shipped placeholder is
+%  sized to about 5000 km, so the 7132 km case cannot be flown on it at all.
+%  This is the shipped booster with the propellant load, the dry structure and
+%  the thrust scaled together, which leaves the burn time and the liftoff
+%  thrust-to-weight essentially where they were and buys about 860 m/s of ideal
+%  delta-V. PLACEHOLDER values, like everything else in this library.
+%
+%% Inputs:
+%
+%  none
+%
+%% Outputs:
+%
+%  bst              Struct                      Booster parameters; see
+%                                               coorbital.util.boosterDefaults
+%
+%% Revision History:
+%  Michael Casey                                                08/08/2026
+%  Copyright 2026 Coorbital, Inc.
+%% ------------------------ Begin Code Sequence ---------------------------
+
+               bst = coorbital.util.boosterDefaults();
+       bst.massDry = 2000;              %kg,  PLACEHOLDER, scaled with the load
+      bst.massProp = 52000;             %kg,  PLACEHOLDER
+     bst.thrustVac = 1615000;           %N,   PLACEHOLDER, holds T/W near 3
 end
 
 function h = maxAlt(traj,rE)

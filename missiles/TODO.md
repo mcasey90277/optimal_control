@@ -131,6 +131,39 @@ could not fail" could be found. There are now two:
   short-circuits at the shared endpoint and both branches return the max-range
   arc itself).
 
+### ~~The GPT-5.6-sol BALLISTIC-PIPELINE review is unapplied~~ — DONE, 2026-08-08
+
+Source document at `docs/reviews/bm_pipeline_gpt56sol_review_2026-08-08.md`;
+twelve findings, one critical. What changed, and what it cost:
+
+- **The critical.** `'minimum-energy'` drove the burnout flight-path angle to
+  `gamma* = 45 deg - Lambda/4` with `Lambda` the PAD-TO-TARGET central angle.
+  That closed form is derived for a free-flight arc with both endpoints on the
+  SAME radius; burnout is 82 km up and downrange, so the residual did not apply
+  to the arc being flown and the reported agreement verified the wrong
+  condition. The mode is now the constrained minimisation it always claimed to
+  be — minimise `V_BO^2/2 - mu/r_BO` subject to `R(loft,cutFrac) = R_req` — and
+  `gamma*` is a printed DIAGNOSTIC. The objective is checked in the vacuum
+  equal-radius limit, where it reproduces `gamma*` to 1.6e-8 rad and `V*` to
+  4.7e-16 relative (`test_runBallisticTarget` part 6b).
+- **Certified branch machinery.** Golden section returns an interval, not a
+  maximiser, so the branch brackets are now `[loftMin,aL]` and `[bL,loftMax]`,
+  the branch is identified from the ROOT'S POSITION against `[aL,bL]`, a
+  required range inside the unresolved top band is reported as COALESCED, and
+  unimodality is certified by adaptive refinement rather than a turn count.
+  Apogee and flight time are kept as descriptive outputs only.
+- **`alphaMax` moved to `BM/vehicle_bm.m`** as `alphaMaxDeg = 6`, read by BOTH
+  BM entry scripts. It used to be 12 deg here and 6 deg there for one airframe,
+  and the 12 had been chosen to bring the demonstration target inside the
+  depressed branch. The shipped target moved to 62 N 28 W, 4828.045 km, which is
+  inside the 6 deg depressed band; `loftMin` moved to -140 deg, which is what it
+  takes to hold that branch once the clamp saturates.
+- Also: honest cutoff bracketing by sampled sign change with verified
+  monotonicity; a measured and printed noise figure for the inner tolerance;
+  per-phase completion checks in `flyLoft`; a non-convergence error in the
+  golden section; and `run_ballistic`'s drag and lift attribution taken between
+  arcs that share ONE gravity model and ONE rotation rate.
+
 ### ~~The GPT-5.6-sol pipeline review is unapplied~~ — DONE, `23c3470`, `61e78ad`, recorded in `02ccb11`
 
 Source document archived at `docs/reviews/pipeline_gpt56sol_review_2026-08-07.md`.
@@ -202,9 +235,9 @@ the interface rather than in a lambda.
 
 **Deliberately not done in the same pass as the interface change.** The headline
 results — `run_glide` 6986.82 km, `run_ballistic` 4536.36 km, `run_boost_glide`
-7663.05 km, `run_target` 3811.240 km required, `run_ballistic_target` 3174.981 km
-— are pinned to their last printed digit, and a migration touches the one
-construction those numbers are produced by. It should be its own change with its
+7663.05 km, `run_target` 3811.240 km required, `run_ballistic_target` 4828.045 km
+required (moved 2026-08-08, see below) — are pinned to their last printed digit,
+and a migration touches the one construction those numbers are produced by. It should be its own change with its
 own full-capture diff. A closure and `ph.veh` were *measured* bit-identical on
 the staged test chain, so the migration is expected to move nothing; expected is
 not verified.
@@ -350,17 +383,25 @@ non-existent banked segment (`HGV/run_target.m:946-965`).
 
 Below `cutFrac = 1` the burn is cut short and the **whole booster is jettisoned
 with its unburned propellant**, which is why `separation = false` is refused for
-this mode (`BM/run_ballistic_target.m:669-670`). That is the honest consequence
-of using thrust termination as the second control, not a bug — but it means the
-mode's `ΔV` bookkeeping is not comparable with the full-burn branches, and a
-staged booster would change the answer.
+this mode. That is the honest consequence of using thrust termination as the
+second control, not a bug — but it means the mode's `ΔV` bookkeeping is not
+comparable with the full-burn branches, and a staged booster would change the
+answer.
 
-Note also that the flown minimum-energy arc sits **+6.95 %** above the classical
-apogee on the shipped 3174.981 km case. That is **physics, not solver error**:
-the classical result assumes an impulsive burn at the impact radius in a vacuum,
-this one reaches γ\* 80.56 km up, and a Keplerian arc from *that* burnout state
-apogees at 735.093 km against the flown 735.074 km — agreement to 0.019 km. The
-script's summary attributes it.
+Note also that the flown minimum-energy arc sits **+1.36 %** above the classical
+apogee on the shipped 4828.045 km case. That is **physics, not solver error**,
+and since 2026-08-08 it is **not a residual either** — nothing is driven against
+it. The classical result assumes an impulsive burn at the impact radius in a
+vacuum; this one finishes 82.18 km up, and a Keplerian arc from *that* burnout
+state apogees at 965.641 km against the flown 965.613 km — agreement to
+0.027 km. The script's summary attributes it.
+
+**The cut is now small: 0.995 of the full burn, 150.7 kg left aboard.** At the
+vehicle's 6 deg clamp the shipped target sits at 93 % of maximum range, and the
+minimum-energy arc there is close to the max-range arc, so there is little
+energy to give back. That is a property of the demonstration geometry, not of
+the method — the 3175 km case in `test_runBallisticTarget` part 7 cuts at 0.961
+and leaves 1170.6 kg.
 
 ### The `hHandoff` phugoid-trough warning is one-sided
 
@@ -406,14 +447,21 @@ The old edition, and the shipped code it was quoting, said `run_ballistic_target
 refuses at a 6° `alphaMax` clamp because the clamp destroys the range hump so
 the two branches do not exist. **`fd72b3d` measured that and it is wrong.**
 Swept loft from −140° to 85° at a 6° clamp: the max-range angle is at
-**−42.902° with 5211.525 km**, so the hump and both branches *do* exist. They
-sit 2.902° below the shipped `loftMin = −40°`, so the cause is **bracket
-width**, not the clamp. What 6° actually costs is reach — its depressed branch
-spans only 4708.463–5211.525 km and cannot serve the 3175 km demo target — and
-what the shipped 12° costs is 156.224 km of maximum range. The header, the
-refusal message and `docs/README.md` were all corrected and test part 9 pins
-every number; recorded here because the wrong reason was stated confidently in
-three places for a day.
+**−42.907° with 5211.525 km**, so the hump and both branches *do* exist. They
+sit 2.907° below the then-shipped `loftMin = −40°`, so the cause is **bracket
+width**, not the clamp.
+
+**Superseded 2026-08-08 in the direction the measurement pointed.** The clamp is
+now a VEHICLE property, `BM/vehicle_bm`'s `alphaMaxDeg = 6`, read by both BM
+entry scripts; `loftMin` ships at −140° so the hump is inside the bracket; and
+the demonstration target moved to 4828.045 km, inside the 6° depressed band of
+roughly 4708–5212 km, so all three modes fly on the shipped configuration. What
+12° would buy is depressed-branch reach down to 1684.117 km, and what it costs
+is 156.224 km of maximum range — both pinned in `test_runBallisticTarget`
+part 9, as a sensitivity study rather than as the shipped value. **The 6° is a
+placeholder awaiting a qualification basis, not a cleared limit**, and that is
+now stated in the vehicle file, in both scripts' user blocks and in the printed
+limitations.
 
 ---
 

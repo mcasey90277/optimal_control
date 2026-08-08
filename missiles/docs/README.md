@@ -162,7 +162,7 @@ important ones:
 | `test_runGlide` | `HGV/run_glide` end to end — unit conversion, the `greatCircle` call site, the peak search, the termination diagnosis, and the printed summary, which it parses rather than recomputes. Also guards the deliberate duplication between `vehicle_hgv` and `vehicleDefaults`. |
 | `test_runBallistic` | `BM/run_ballistic` end to end — the boost → coast → descent chain, the staging link, and the Keplerian cross-check. |
 | `test_runTarget` | `HGV/run_target` end to end — the closed-form azimuth, the bisection on cutoff time, the separation link, the reachable-envelope refusal at BOTH ends of the band, and the printed summary. The miss it asserts is measured impact-to-target with `greatCircle` from the flown state, not read back out of the solver's own residual — and it flies a **banked** case as well as the shipped zero-bank one, because at zero bank those two numbers agree to 9.3e-10 m and nothing can tell a measurement from a substitution. |
-| `test_runBallisticTarget` | `BM/run_ballistic_target` end to end — the closed-form azimuth, the **bracketing of the max-range loft angle**, the two full-burn branch solves either side of it, the **two-parameter minimum-energy solve**, and four separate refusals (beyond maximum range, too close, an unreachable *branch*, and `earthSpin`). What it checks that no other test in this suite can: the branch is **re-derived from the flown apogee and flight time** rather than read off the script's own label; the lofted and depressed arcs are asserted to differ by more than five times in apogee and two in flight time; and the minimum-energy mode is graded against a **closed form the test file writes out itself** (`classicalArc`), so a mutated γ\* in the script is caught rather than mirrored. `assertBetweenArcs` is the assertion that a mode quietly falling back to *selecting* a branch cannot pass — every range and miss assertion in the file is satisfied by either arc. Part 11 exercises the branch **measurement** on the one geometry where it can legitimately disagree with the label. Part 13 flies **Plesetsk to New York**: refused on the shipped booster (7132.320 km against a 5055.302 km maximum) and, on a booster sized to the range, reproducing the classical 1205.989 km / 26.012 min reference to +4.27 % and +5.76 %. It also pins the `alphaMax` story: the shipped 6° clamp must refuse with `coorbital:runBallisticTarget:maximumNotBracketed`, the *cause* must be bracket width (widen `loftMin` to −140° at the same clamp and the hump appears at −42.907°), and the 12° the script ships must cost 156.224 km of maximum range. |
+| `test_runBallisticTarget` | `BM/run_ballistic_target` end to end — the closed-form azimuth, the **certified bracketing of the max-range loft angle**, the two full-burn branch solves on the certified one-sided intervals either side of it, the **minimum-energy constrained minimisation**, and four separate refusals (beyond maximum range, too close, an unreachable *branch*, and `earthSpin`). What it checks that no other test in this suite can: the branch is **re-derived from the flown loft angle against the certified maximiser interval** rather than read off the script's own label; the lofted and depressed arcs are asserted to differ by more than twice in apogee and 1.3 times in flight time (measured 2.55 and 1.48 at the vehicle's 6° clamp); the minimum-energy answer is asserted to be **below the burnout energy of both neighbouring feasible points and of both full-burn arcs**, by a margin far above the measured noise of the inner solve; and part 6b asserts the **vacuum equal-radius limit** — the same constrained minimisation applied to an impulsive burn at r = rE must return the classical γ\* and V\*, which it does to 1.6e−8 rad and 4.7e−16 relative. `assertBetweenArcs` is the assertion that a mode quietly falling back to *selecting* a branch cannot pass. Part 11 exercises the branch **measurement** on the one geometry where it can legitimately disagree with the label, and asserts `coalesced`. Part 13 flies **Plesetsk to New York**: refused on the shipped booster (7132.320 km against a 5211.525 km maximum) and, on a booster sized to the range, landing on the classical 1205.989 km / 26.012 min reference to +1.03 % and +4.42 %. It also pins the `alphaMax` story: the clamp is `BM/vehicle_bm`'s `alphaMaxDeg = 6`, a −40° `loftMin` must refuse with `coorbital:runBallisticTarget:maximumNotBracketed` for bracket width, and a 12° sensitivity study must cost 156.224 km of maximum range while buying reach down to 1684.117 km. |
 | `test_fullChain` | The chain milestone's headline deliverable: boost, glide and descent on one seven-state vector. Re-integrates **across** each junction with `ode89` at 1e-12 — a different method at a hundred times the driver's tolerance — and asserts continuity in states 1–6 and the expected staging jump in state 7. |
 | `test_boostEvents` | `eventBurnout` and `eventApogee` inside a live propagation, not just as scalar function calls. |
 
@@ -787,156 +787,198 @@ trajectories**:
 
 | | depressed arc | max-range arc | lofted arc |
 |---|---|---|---|
-| loft angle | −14.36° | **25.07°** | 59.15° |
-| range | 3174.31 km | 5055.30 km | 3174.87 km |
-| apogee | 208.36 km | 1021.49 km | 2118.45 km |
-| flight time | 659.01 s | 1327.81 s | 1816.01 s |
-| impact speed | 924.20 m/s | — | 3502.79 m/s |
-| impact angle | −18.23° | — | −62.74° |
+| loft angle | −126.73° | **−42.91°** | +19.43° |
+| range | 4828.50 km | 5211.53 km | 4828.82 km |
+| apogee | 569.18 km | 974.10 km | 1453.66 km |
+| flight time | 1047.95 s | 1314.78 s | 1550.50 s |
+| impact speed | 1781.32 m/s | — | 3012.98 m/s |
+| impact angle | −22.97° | — | −43.40° |
 
-Measured on the shipped geometry: 45°N 100°W to 62°N 60°W, 3174.98 km required
-on a 39.198° azimuth. **Both arcs are always solved and always reported**, and
-only one is flown, because the trade is the point.
+Measured on the shipped geometry: 45°N 100°W to 62°N 28°W, 4828.045 km required
+on a 40.555° azimuth, at the vehicle's 6° angle-of-attack clamp. **Both arcs are
+always solved and always reported**, and only one is flown, because the trade is
+the point. The depressed arc's commanded −126.73° is not a pitch programme
+anyone would fly: it is where that branch goes once the clamp saturates the
+achievable pitch-over, which is why `loftMin` ships at −140°.
 
-So the script **brackets the maximum first** — a 13-point coarse scan across the
-loft bracket, then golden-section refinement to 0.05° — which does two things:
-it splits the loft axis into two intervals on each of which range *is* monotonic
-(the precondition `coorbital.util.rangeSolve` documents and does not check), and
-it produces the max-range arc's own apogee and flight time. Those two numbers
-are the reference the flown branch is then **measured against**, because the
-max-range arc sits between the two branches in both. A bracket lying on one side
-of the maximum *should* keep the solution on that side; the script does not take
-`should` for evidence, and prints the measured branch beside the requested one.
+So the script **brackets the maximum first** — a 21-point coarse scan across the
+loft bracket, adaptively refined until it *certifies* a single interior hump,
+then golden-section refinement to 0.05°. What that returns is an **interval**,
+`[aL,bL]`, and not a maximiser: a golden section can prove only that the
+maximiser is inside its final bracket. So the loft axis is split on the
+interval's **ends** — `[loftMin, aL]` and `[bL, loftMax]` — on which range
+provably is monotonic (the precondition `coorbital.util.rangeSolve` documents and
+does not check). Splitting at the interval's midpoint instead, which this script
+did until 2026-08-08, leaves one bracket straddling the true maximum.
+
+**The branch is measured from the root's POSITION against that interval**: below
+`aL` is depressed, above `bL` is lofted, inside is **coalesced** — at that range
+the two arcs are the same arc and the distinction has no content. It used to be
+measured from the flown apogee and flight time against the max-range arc's, and
+neither of those is a branch invariant for a finite powered atmospheric arc:
+drag, lift, burnout altitude and boost duration can make either non-monotone in
+the loft angle, and near the maximum both differences vanish quadratically. They
+are still printed, as the descriptive quantities they are.
 
 **The steep arc arrives faster here, which is the opposite of the vacuum
 intuition.** With the propellant load fixed both arcs leave burnout with almost
-the same energy — −45.15 and −44.91 MJ/kg, 0.55 % apart — so in vacuum they
-would arrive at almost the same speed. With an atmosphere the shallow −18.2°
-depressed descent spends far longer in dense air than the steep −62.7° lofted
-plunge and is braked to 26 % of its arrival speed. The script measures this and
+the same energy — −44.54 and −44.82 MJ/kg, 0.63 % apart — so in vacuum they
+would arrive at almost the same speed. With an atmosphere the shallow −23.0°
+depressed descent spends far longer in dense air than the steep −43.4° lofted
+plunge and is braked to 59 % of its arrival speed. The script measures this and
 prints it; it does not assert the textbook expectation.
 
-### The three modes: two full-burn arcs, and the textbook trajectory
+### The three modes: two full-burn arcs, and a constrained minimisation
 
 Two of the three fly the **full burn** and range on the loft angle alone —
 `'lofted'` and `'depressed'`, one either side of the max-range loft angle. They
 are what a fixed booster with no thrust termination can do.
 
-The third is a **different problem**. The classical minimum-energy ballistic
-trajectory between two points at the same radius reaches the required
-free-flight range angle Λ on the **least burnout energy**, and it is a
-closed-form Keplerian result:
+The third states an optimisation problem and then solves it:
+
+```
+minimise    eps_BO = V_BO^2/2 - mu/r_BO
+over        the loft angle and the cutoff fraction
+subject to  R(loft,cutFrac) = the required range
+```
+
+Two parameters and one constraint leave a **one-dimensional feasible family**,
+so the problem is well posed: parameterise the family by the loft angle, let the
+cutoff be whatever makes the range, and minimise the burnout specific energy
+along it.
+
+**It used to be a gamma match, and that was the critical finding of the
+2026-08-08 review.** The classical closed form
 
 ```
 V*^2      = (mu/rE) * 2 sin(Lambda/2) / (1 + sin(Lambda/2))
 gammaStar = 45 deg - Lambda/4
 ```
 
-It is the trajectory published ballistic-missile range figures are quoted on.
-**Neither full-burn arc is it.** At full burn the booster delivers a fixed
-delta-V, so both arcs leave burnout with essentially the same energy — measured
-on the shipped case, 0.55 % apart, and that difference is boost drag and gravity
-loss rather than a design variable. V\* is a speed the booster *overshoots*.
+is derived for a free-flight arc whose two endpoints lie at the **same radius**,
+with Λ the free-flight central angle between them. The script drove the burnout
+flight-path angle to that γ\* with Λ taken as the **pad-to-target** angle, while
+burnout sits downrange and 82 km above the impact sphere. The residual therefore
+did not apply to the arc being flown, and the reported agreement with it verified
+the wrong condition. γ\* is still computed and still printed — it is the right
+yardstick for how far a finite boost is from the vacuum equal-radius idealisation
+— but it is a **diagnostic beside** the achieved burnout gamma, not a residual.
 
-So `'minimum-energy'` carries a **second control**: the burn is **cut short**,
-using the same thrust-termination mechanism `HGV/run_target` ranges on. Two
-unknowns — the loft angle and the cutoff fraction — against two residuals: the
-achieved range, and the burnout flight-path angle against γ\*.
+**Neither full-burn arc is the answer.** At full burn the booster delivers a
+fixed delta-V, so both arcs leave burnout with essentially the same energy —
+0.63 % apart on the shipped case — and there is no minimisation to do. So
+`'minimum-energy'` carries a **second control**: the burn is **cut short**, using
+the same thrust-termination mechanism `HGV/run_target` ranges on.
 
-**The solve is nested, not a 2×2 Newton**, because nesting makes each level
-monotonic and lets both reuse `coorbital.util.rangeSolve` exactly as designed:
-
-| level | parameter | residual driven to zero | why it is monotonic |
+| level | parameter | what it does | how it is bracketed |
 |---|---|---|---|
-| inner | cutoff fraction, bracket `[cutFracMin, 1]` | achieved range − required range | more burn, more energy, more range |
-| outer | loft angle | burnout γ − γ\* | along the constant-range locus γ rises with loft: measured 11.815° at the depressed end through 62.840° at the lofted end, nine samples, no reversal |
+| inner | cutoff fraction | enforces the **constraint** to `tolRangeMEKm` | the cutoff axis is *sampled* and a **sign change** of `R − R_req` is taken; monotonicity is then *verified* on the interval selected, not assumed across `[cutFracMin, 1]`. Where several roots exist the lowest-energy one wins |
+| outer | loft angle | minimises **eps_BO** along the feasible family to `tolLoftMEDeg` | a coarse scan of `nScanME` points certifies a single valley — both ends of the family are full-burn arcs, so the energy is highest there — then a golden-section minimisation |
 
 The **outer bracket is the two full-burn branch solutions**, already solved and
 therefore free: between them and only between them the full burn reaches at
-least the required range, so the inner solve is guaranteed a cutoff at or below
-1 that lands on it. Where a branch does not exist the user's own loft limit
+least the required range. Where a branch does not exist the user's own loft limit
 serves at that end, which is admissible for the same reason — the full burn
-*overshoots* there.
+*overshoots* there. An endpoint may itself be infeasible by a few hundred metres,
+because `rangeSolve` places a branch within `tolRangeKm` **either side** of the
+range; the scan tolerates that at the ends and refuses a hole in the middle.
 
-**What it costs and what it delivers.** On the shipped 3174.981 km case: 11
-outer bisection steps and 190 propagations, about 8 s of an 11 s run. Against
-the classical arc for that range angle:
+**It is shown to be a minimum, and the noise is measured.** The summary prints
+the burnout energy at the two neighbouring **feasible** points, and re-solves the
+constraint ten times tighter at the settled loft angle to report the propagated
+effect of the inner tolerance on the objective. On the shipped case:
+−45.555275 MJ/kg against −45.486364 and −44.818885 at the neighbours, a valley
+68 911 J/kg deep on its shallower side, against 101 J/kg of measured noise — a
+ratio of 1.5e−3. Cost: 5 scan points and 16 golden-section steps, 669
+propagations of a 731-propagation run, about 28 s.
+
+**And the objective reduces to the classical arc in the vacuum equal-radius
+limit**, which is the check that says it is the right objective. Take the boost
+to be impulsive at r = rE in a vacuum; the feasible family is then the
+one-parameter family of Keplerian arcs of central angle Λ from rE back to rE, and
+minimising the same eps returns γ\* to **1.6e−8 rad** and V\* to **4.7e−16
+relative**. `test_runBallisticTarget` part 6b writes that limit out in its own
+hand and asserts it, on two different range angles.
+
+**Against the classical arc on the shipped case**, as a diagnostic:
 
 | | flown | classical | difference |
 |---|---|---|---|
-| apogee | 735.074 km | 687.304 km | **+6.95 %** |
-| flight time | 16.8893 min | 15.4635 min | **+9.22 %** |
-| burnout γ | 37.8654° | 37.8697° | **−0.0043°** |
-| burnout speed | 4833.3 m/s | 4970.3 m/s | −2.76 % |
+| apogee | 965.613 km | 952.696 km | **+1.36 %** |
+| flight time | 21.2817 min | 20.1686 min | **+5.52 %** |
+| burnout γ | 33.3290° | 34.1572° | **−0.828°** |
+| burnout speed | 5682.3 m/s | 5807.2 m/s | −2.15 % |
 
-**The two percentages are physics, not solver error**, and the summary
-attributes them rather than absorbing them. The classical result assumes an
-*impulsive* burn *at* the impact radius in a *vacuum*. This flight burns for
-77.6 s and reaches γ\* 80.56 km up at 4833.3 m/s, and a Keplerian arc from
-*that* burnout state apogees at 735.093 km — the flown figure to 0.019 km. So
-the entire 47.8 km gap is where the boost ended, not how the solve converged.
-Coast drag supplies the remainder. Expect a few per cent from any finite boost.
+**Those differences are physics, not solver error, and they are not residuals.**
+The classical result assumes an *impulsive* burn *at* the impact radius in a
+*vacuum*. This flight burns for 80.1 s and finishes 82.18 km up, and a Keplerian
+arc from *that* burnout state apogees at 965.641 km — the flown figure to
+0.027 km. Coast drag supplies the remainder.
 
 **Minimum-energy requires `separation = true`.** A cut-short burn leaves
 propellant in the booster, and the coast vehicle's mass is fixed before the
-cutoff is known, so the *whole* booster goes overboard at cutoff — 1102.3 kg of
-unburned propellant with it on the shipped case. `separation = false` cannot
-express that and is refused for this mode.
+cutoff is known, so the *whole* booster goes overboard at cutoff — 150.7 kg of
+unburned propellant with it on the shipped case, which sits at 93 % of maximum
+range where there is little energy left to give back. The 3175 km case in part 7
+cuts at 0.961 and throws away 1170.6 kg. `separation = false` cannot express that
+and is refused for this mode.
 
 **And it refuses what it cannot reach.** Plesetsk to New York is 7132.320 km
-against this placeholder booster's 5055.302 km maximum, so it is declined
+against this placeholder booster's 5211.525 km maximum, so it is declined
 through the envelope path — and the refusal says *why* minimum-energy is the
-harder ask, not the easier one: a burn cut shorter carries less energy and
-cannot fly further than the full burn does. Give the same geometry a booster
-with the delta-V for the range (52 t of propellant against 30 t, everything else
-unchanged) and the mode reproduces the reference: **1257.452 km of apogee
-against the classical 1205.989 km (+4.27 %), 27.5096 min against 26.0120 min
-(+5.76 %), burnout γ 0.0058° from γ\***. That case is flown in
-`test_runBallisticTarget` part 13.
-`tests/test_runBallisticTarget.m` flies all three of those targets.
+harder ask, not the easier one: every trajectory it will consider carries less
+energy than the full burn, and a burn cut shorter cannot fly further than the
+full burn does. Give the same geometry a booster with the delta-V for the range
+(52 t of propellant against 30 t, everything else unchanged) and the mode lands
+on the reference: **1218.445 km of apogee against the classical 1205.989 km
+(+1.03 %), 27.161 min against 26.012 min (+4.42 %), burnout γ 0.557° from γ\***.
+That case is flown in `test_runBallisticTarget` part 13.
 
-### The clamp, and what it actually costs — a corrected claim
+### The clamp is a VEHICLE limit, and it is not a targeting knob
 
-`run_ballistic_target` ships `alphaMax = 12°` where `BM/run_ballistic` ships 6°,
-and that is a targeting decision, not an aerodynamic one. The loft angle is a
-*commanded attitude*; what the vehicle achieves at burnout is limited by how fast
-the angle-of-attack clamp lets the flight path be pushed over.
+`BM/vehicle_bm.m` carries `alphaMaxDeg = 6`, and **both** BM entry scripts read
+it. Until 2026-08-08 `run_ballistic_target` carried 12° in its own user block
+where `BM/run_ballistic` carried 6°, for nominally the same airframe — and the
+12° had been chosen because it brought the demonstration target inside the
+depressed branch. A control-authority limit chosen for reachability is not a
+limit, and two limits for one vehicle made the two scripts' performance
+non-comparable. Either script still accepts an explicit `alphaMax` override, for
+a deliberate sensitivity study.
 
-**An earlier version of this section, of the script's header and of its refusal
-message all said that at 6° "the depressed branch does not exist" and that range
-is monotone in loft. That is measurably false and is corrected here.** Sweep the
-loft angle from −140° to +85° at a 6° clamp and the hump is plainly there:
+**6° is a PLACEHOLDER awaiting a qualification basis**, like every other number
+in `vehicle_bm`. It is the value `run_ballistic` has always flown and the one
+that was *not* chosen to make a feature work. What each value costs, measured:
 
 | `alphaMax` | max-range loft angle | maximum range | depressed branch |
 |---|---|---|---|
-| 6° | **−42.902°** | **5211.525 km** | exists, spans 4708.463–5211.525 km |
-| 12° (shipped) | +25.068° | 5055.302 km | exists, spans 1684.117–5055.302 km |
+| 6° (the vehicle's) | **−42.907°** | **5211.525 km** | spans 4708.463–5211.525 km |
+| 12° (sensitivity study) | +25.068° | 5055.302 km | spans 1684.117–5055.302 km |
 
-Two things follow, and neither is the old claim.
+Raising the clamp therefore **buys depressed-branch reach and pays about 156 km
+of maximum range**. Neither figure is a reason to move it; the qualified number
+is whatever the airframe is cleared for, and it does not exist yet.
 
-**The shipped refusal at 6° is about BRACKET WIDTH, not the clamp.** The
-max-range angle at 6° sits 2.902° *below* the shipped `loftMin = −40°`, so the
-coarse scan finds its largest range on an endpoint and `maxRangeLoft` refuses
-with `coorbital:runBallisticTarget:maximumNotBracketed`. Widen `loftMin` to
-−140° at the same 6° clamp and the run solves, with the maximum interior and
-both branches present. The refusal message now names bracket width **first** and
-the clamp second, in that order.
+Two consequences follow for the shipped configuration.
 
-**What the clamp actually buys is REACH, and it is paid for in range.** At 6° the
-depressed branch bottoms out at 4708.463 km and so cannot serve the 3175 km demo
-target at any loft angle — widening the bracket clears the bracketing refusal
-only to meet the unreachable-branch one. Raising the clamp to 12° drops that
-floor to 1684.117 km and puts the demo target inside it, at a cost of
-**156.224 km of maximum range** (5055.302 against 5211.525). That is the trade,
-and `tests/test_runBallisticTarget.m` part 9 pins every number in it — the
-refusal identifier at the shipped bracket, the hump at the widened one, the
-6° depressed floor, and the 156.224 km.
+**`loftMin` ships at −140°, because that is what it takes to bracket the hump.**
+The max-range angle at 6° sits 2.907° *below* the −40° this script used to ship,
+so the coarse scan would find its largest range on an endpoint and `maxRangeLoft`
+would refuse with `coorbital:runBallisticTarget:maximumNotBracketed`. The
+refusal, and the bracket width that causes it, are both pinned in
+`tests/test_runBallisticTarget.m` part 9.
+
+**The demonstration target sits inside the 6° depressed band**, 4828.045 km
+against a band of roughly 4708–5212 km, which is what lets all three modes fly on
+the shipped configuration. It moved there from 3174.981 km when the clamp did:
+at 6° the depressed branch cannot reach 3175 km at any loft angle, and that
+geometry is now part 7's second minimum-energy case and part 8's
+unreachable-branch refusal.
 
 ### Three refusals, none of which throws
 
 | Case | What the summary says |
 |---|---|
-| Beyond maximum range | `BEYOND MAXIMUM RANGE by 7268.302 km`, with the 5055.302 km maximum, the 25.0684° loft angle achieving it, the 556.603–5055.302 km band, and each branch's own band and loft interval |
+| Beyond maximum range | `BEYOND MAXIMUM RANGE by 7112.078 km`, with the 5211.525 km maximum, the −42.9074° loft angle achieving it, the 556.603–5211.525 km band, and each branch's own band and loft interval |
 | Too close | `TOO CLOSE`, with the overflight in kilometres and what to change |
 | **Branch unreachable** | the target is inside the envelope but only the *other* arc reaches it — `The depressed arc does not reach this target, though the other one does.` |
 
@@ -1192,41 +1234,45 @@ be tightened almost for free: each halving costs one more.
 
 ### What `run_ballistic_target` produces
 
-Shipped block — launch 45°N 100°W, target 62°N 60°W, loft bracket −40° to 85°,
-`alphaMax` 12°, 1 km range tolerance, `branch = 'minimum-energy'`, zero bank
-throughout. Run 2026-08-07:
+Shipped block — launch 45°N 100°W, target 62°N 28°W, loft bracket −140° to 85°,
+`alphaMax` read from the vehicle (6°), 1 km range tolerance, 50 m constraint
+tolerance, `branch = 'minimum-energy'`, zero bank throughout. Run 2026-08-08:
 
 ```
-required range      3174.981 km   (great circle, launch to target)
-max-range loft       25.0684 deg  (bracketed: 13 scan points + 13 golden steps)
-MAXIMUM RANGE       5055.302 km   apogee 1021.486 km, flight time 1327.812 s
-reachable            556.603 to 5055.302 km
+required range      4828.045 km   (great circle, launch to target)
+max-range loft      -42.9074 deg  (bracketed: 21 scan points + 13 golden steps)
+CERTIFIED interval  -42.9290 to -42.8858 deg   ranges 5211.525 and 5211.525 km
+MAXIMUM RANGE       5211.525 km   apogee 974.102 km, flight time 1314.777 s
+reachable            556.603 to 5211.525 km
 
                           depressed           lofted
-  loft angle (deg)         -14.3602          59.1457
-  burnout gamma (deg)       11.8153          62.8405
-  achieved range (km)     3174.3149        3174.8651
-  miss (m)                 666.0454         115.8585
-  APOGEE (km)              208.3574        2118.4489
-  FLIGHT TIME (s)          659.0085        1816.0100
-  IMPACT SPEED (m/s)       924.2005        3502.7891
-  IMPACT ANGLE (deg)       -18.2269         -62.7418
-  burnout energy (MJ/kg)   -45.1546         -44.9073
-  loft from max (deg)       39.4287          34.0773
+  loft angle (deg)        -126.7286          19.4336
+  burnout gamma (deg)       21.8634          43.2151
+  achieved range (km)     4828.5025        4828.8247
+  miss (m)                 457.2699         779.4909
+  APOGEE (km)              569.1767        1453.6613
+  FLIGHT TIME (s)         1047.9491        1550.4998
+  IMPACT SPEED (m/s)      1781.3246        3012.9766
+  IMPACT ANGLE (deg)       -22.9679         -43.4028
+  burnout energy (MJ/kg)   -44.5365         -44.8168
+  loft from max (deg)       83.8212          62.3409
 
-asked for   minimum-energy   flew minimum-energy (NEITHER of the two above)
-  loft angle              28.6020 deg   cutoff 0.963257 of the 80.5178 s burn
-  burnout gamma           37.8654 deg   gamma* 37.8697 deg, residual -4.26e-03
-  APOGEE                 735.074 km     classical  687.304 km   +6.95 %
-  FLIGHT TIME            16.8893 min    classical 15.4635 min   +9.22 %
-  propellant unburned    1102.3 kg      thrown away with the booster
-launch azimuth    39.197731 deg  (closed form, no iteration)
-flown azimuth     39.197731 deg  (-1.586e-10 deg from the commanded one)
-cross-track            8.43e-06 m
-MISS DISTANCE        588.39 m    (impact to target, from the FLOWN state)
-impact            62.001619 N, 59.989282 W  (target 62.000000, -60.000000)
-propagations             249     (29 bracketing the maximum, 1 re-flying it,
-                                  14 depressed, 15 lofted, 190 minimum-energy)
+asked for   minimum-energy   flew minimum-energy (NOT ON A BRANCH)
+  loft angle             -31.7656 deg   cutoff 0.994976 of the 80.5178 s burn
+  BURNOUT ENERGY      -45.555275 MJ/kg  MINIMISED
+  neighbouring feasible -45.486364 and -44.818885 MJ/kg; valley 68911 J/kg deep
+  measured noise         1.010e+02 J/kg  = 1.47e-03 of that valley
+  APOGEE                 965.613 km     classical  952.696 km   +1.36 %
+  FLIGHT TIME            21.2817 min    classical 20.1686 min   +5.52 %
+  burnout gamma           33.3290 deg   gamma* 34.1572 deg  (DIAGNOSTIC)
+  propellant unburned     150.7 kg      thrown away with the booster
+launch azimuth    40.555398 deg  (closed form, no iteration)
+flown azimuth     40.555398 deg  (-1.134e-10 deg from the commanded one)
+cross-track            8.67e-06 m
+MISS DISTANCE         39.01 m    (impact to target, from the FLOWN state)
+impact            62.000071 N, 28.000731 W  (target 62.000000, -28.000000)
+propagations             731     (37 bracketing the maximum, 1 re-flying it,
+                                  11 depressed, 13 lofted, 669 minimum-energy)
 ```
 
 `info.nProp` used to return **57** where the summary printed 59, the difference
@@ -1239,45 +1285,45 @@ Four independent checks, all recomputed outside the script:
 
 | Check | Reference | Measured |
 |---|---|---|
-| Impact-to-target distance, `greatCircle` on the flown terminal state | the reported 115.85854573 m miss | `115.85854573 m`, difference **`0.000e+00`** |
-| Same for the depressed arc | the reported 666.04542234 m | `666.04542234 m`, difference **`0.000e+00`** |
-| Which branch was flown, re-derived from `max(traj.x(:,1))` and `traj.t(end)` against the max-range arc's 1021.486 km and 1327.812 s | `lofted` requested | apogee 2118.449 km and 1816.010 s, both **above** — `lofted` |
+| Impact-to-target distance, `greatCircle` on the flown terminal state | the reported 779.49087505 m lofted miss | `779.49087505 m`, difference **`0.000e+00`** |
+| Same for the depressed arc | the reported 457.26985976 m | `457.26985976 m`, difference **`0.000e+00`** |
+| Which branch was flown, re-derived from the flown loft angle against the certified maximiser interval −42.9290° to −42.8858° | `lofted` requested | +19.4336°, **above** `bL` — `lofted` |
 | `traj.x(1,6)` against `greatCircleBearing(launch,target)` | equal | **bit-identical**, `0` ulp |
 
-The whole run — 59 propagations, both branches, the bracketing and the summary —
-takes about 3 s. A ballistic propagation is roughly 0.05 s, three times cheaper
+A full-burn run — 62 propagations, both branches, the bracketing and the summary
+— takes about 3 s. A ballistic propagation is roughly 0.05 s, three times cheaper
 than the boost-glide chain, which is what makes a two-branch solve affordable at
-all.
+all. A `'minimum-energy'` run costs 731 and about 28 s: every outer evaluation of
+the objective is a whole inner feasibility solve.
 
 ### The branch is measured, and the measurement is now pinned
 
-The script reports the branch it *measured* from the flown apogee and flight
-time beside the branch it was *asked* for, and that measurement had **no test
-behind it**: every case in the suite was one where the two agree, so replacing
-the whole `measureBranch` call with `flownName = pickName; flownAgree = true`
-left the suite green while `info.branchMeasured`, `info.branchAgrees`,
-`info.branchTimeAgrees` and the summary's `MEASURED as` line all quietly became
-restatements of the command.
+The script reports the branch it *measured* beside the branch it was *asked*
+for, and that measurement had **no test behind it**: every case in the suite was
+one where the two agree, so replacing the whole call with
+`flownName = pickName; branchOK = true` left the suite green while
+`info.branchMeasured`, `info.branchAgrees` and the summary's `MEASURED as` line
+all quietly became restatements of the command.
 
-Finding a case where the two can *legitimately* differ takes some care, and the
-reason is structural. Apogee rises monotonically with the loft angle, and each
-branch is solved on a bracket with the max-range angle at one end, so a solution
-strictly inside its bracket always measures as the branch it was solved on — a
-mislocated maximum moves the reference apogee and the bracket end together and
-cannot separate them. The exception is the **shared endpoint**: when the required
-range falls within the range tolerance of the *maximum*,
-`coorbital.util.rangeSolve` short-circuits there and both branches come back
-holding the max-range arc itself. A `'lofted'` request is then served by an arc
-whose apogee *equals* rather than exceeds the reference, and the strict test
-names it depressed.
+Since 2026-08-08 the measurement is the flown loft angle's **position** against
+the certified maximiser interval, which is the only branch invariant available.
+Finding a case where that can *legitimately* differ from the label is
+structural: each branch is solved on an interval lying entirely on one certified
+side of the maximum, so a solution strictly inside its own bracket always
+measures as the branch it was solved on. The exception is the **endpoint**: when
+the required range falls within the range tolerance of the largest range the
+search can certify, `coorbital.util.rangeSolve` short-circuits there, both branch
+solves come back holding an arc INSIDE the unresolved interval, and the position
+test can only answer **coalesced** — because at that range the two arcs are the
+same arc.
 
-Part 11 of `tests/test_runBallisticTarget.m` flies exactly that — 5030 km on a
-50 km tolerance against a 5055.302 km maximum — and asserts
-`branchMeasured == 'depressed'` against a `'lofted'` command, `branchAgrees`
-false, and the printed caution. The caution itself was improved to diagnose the
-degeneracy ("both brackets converged at their SHARED endpoint … the max-range
-angle is NOT suspect") instead of blaming a bracketing step that did nothing
-wrong. With the bypass in place, part 11 fails.
+Part 11 of `tests/test_runBallisticTarget.m` flies exactly that — 5212.791 km on
+a 50 km tolerance against a 5211.525 km certified maximum — and asserts
+`branchMeasured == 'coalesced'` against a `'lofted'` command, `branchAgrees`
+false, `coalescedRq` true, and the printed caution. The caution diagnoses the
+degeneracy ("landed INSIDE the certified maximiser interval … the bracketing is
+NOT suspect") instead of blaming a bracketing step that did nothing wrong. With
+the bypass in place, part 11 fails.
 
 ---
 

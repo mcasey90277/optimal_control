@@ -43,3 +43,6 @@ matlab_crash_dump.*
 *.synctex.gz
 *.fls
 *.fdb_latexmk
+
+# missiles: rendered movies and frames are build artefacts, never committed
+missiles/results/

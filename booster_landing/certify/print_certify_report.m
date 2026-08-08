@@ -10,8 +10,8 @@ function print_certify_report(rep)
 %
 % Thresholds shown are EFFECTIVE (i.e. nominal*tolScale for the gates
 % tolScale actually scales -- currently only G3), read from rep.tolScale
-% so the printed table can never say something false like "value < 0.1
-% PASS" when the enforced threshold was actually 0.1*tolScale. The header
+% so the printed table can never say something false like "value < 1.0
+% PASS" when the enforced threshold was actually 1.0*tolScale. The header
 % echoes tolScale whenever it is not 1, and every row's own individual
 % verdict is computed here from (value, effective threshold), not just
 % copied from a single stored .*_pass flag -- so a table with several rows
@@ -38,11 +38,14 @@ prow('G2 vel residual [m/s]', rep.G2_vel, 0.1, '<', 1);
 prow('G2 mass residual [kg]', rep.G2_dm,  0.5, '<', 1);
 gsummary('G2', rep.G2_pass);
 
-% G3 (two data rows + one info row, dmf/dtf scaled by tolScale):
+% G3 (two data rows + one info row, dmf/dtf scaled by tolScale). |dmf|'s
+% nominal threshold is 1.0 kg (was 0.1 kg -- adjudicated 2026-08-08, a
+% measurement gate over the genuine Taylor mass-bound model error; see
+% certify_pdg.m's "G3 |dmf| gate" header note):
 if isequal(rep.G3_pass, 'skipped')
     fprintf('%-30s %14s   %20s   %s\n', 'G3 cross-method (dmf, dtf)', '--', '--', 'skipped');
 else
-    prow('G3 |dmf| [kg]', rep.G3_dmf, 0.1, '<', tolScale);
+    prow('G3 |dmf| [kg]', rep.G3_dmf, 1.0, '<', tolScale);
     prow('G3 |dtf| [s]',  rep.G3_dtf, 0.2, '<', tolScale);
     fprintf('%-30s %14.6g   %20s   %s\n', 'G3 traj Linf [m]', rep.G3_traj_Linf, '(info)', '');
     gsummary('G3', rep.G3_pass);

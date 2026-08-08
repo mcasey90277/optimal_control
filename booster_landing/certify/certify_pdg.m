@@ -16,7 +16,10 @@ function rep = certify_pdg(solC, solV, P, tolScale)
 % G3 (cross-method): final mass / final time / position-trajectory
 %                    agreement between the independently-formulated
 %                    collocation (nonconvex annulus) and convexified
-%                    (lossless relaxation) solvers.
+%                    (lossless relaxation) solvers. The |dmf| threshold is
+%                    a MEASUREMENT of Taylor-bound model error (adjudicated
+%                    2026-08-08, see the "G3 |dmf| gate" note below), not
+%                    an arbitrary agreement tolerance.
 % G4 (losslessness): the convex relaxation gap (||u||-sigma) is tight.
 % G5 (PMP structure): throttle bang-bang (>=95% of node+midpoint samples
 %                    on a bound, <=2 interior switches, max-thrust at
@@ -42,6 +45,25 @@ function rep = certify_pdg(solC, solV, P, tolScale)
 % HS actually assumes. G2 no longer needs any tolScale accommodation as a
 % result (see tolScale doc below).
 %
+% G3 |dmf| gate (ADJUDICATED 2026-08-08, threshold CHANGED from the
+% brief's literal 0.1 kg to 1.0 kg, documented in the task-5 fix report):
+% G3's |dmf| is reclassified from an "agreement tolerance" (something the
+% two solvers should be tuned/refined to close) to a MEASUREMENT of a
+% real, understood, bounded physical/modeling effect -- the convex-side
+% solver's Taylor-linearized mass bound (see solve_pdg_convex.m's
+% mu1/mu2/dz construction) is an approximation, not exact, and its cost is
+% the ~0.70 kg offset measured here (about 0.02% of the ~3473 kg of fuel
+% burned). This is NOT a discretization artifact: a dedicated refinement
+% sweep (fixed tf, Nconv=120/180/240/300, plus a tighter golden-search
+% tolTf=0.01) held the gap in a 0.70-0.94 kg band with no downward trend
+% -- see the task-5 fix report's "Important 7" section for the full sweep
+% and for why Nconv=360's apparent outlier there is IPOPT non-convergence,
+% not evidence of a competing optimum (a convex program has none). The
+% user adjudicated the number after reviewing that evidence: 1.0 kg is
+% the new nominal gate, chosen with headroom over the measured ~0.70-0.94
+% kg floor. rep.G3_dmf still reports the raw, unrounded number either way
+% -- this only changes what counts as PASS, not what is measured.
+%
 % INPUTS:
 %   solC     - sol struct from solve_pdg_colloc [see that function]
 %   solV     - sol struct from solve_pdg_convex, or [] to skip G3/G4
@@ -56,11 +78,13 @@ function rep = certify_pdg(solC, solV, P, tolScale)
 %              above: with the corrected control representation its
 %              residual is far under gate even at coarse grids, so
 %              scaling it is unnecessary and would only hide a real
-%              regression). G3's |dmf| gap IS genuine and bounded (a
-%              convex-side Nconv/tolTf refinement sweep in the task-5
-%              report shows it sits in a 0.70-0.94 kg band regardless of
-%              refinement) -- tolScale accommodates that documented,
-%              measured, non-formulation-error gap at coarse test grids.
+%              regression). G3's |dmf| gate is now 1.0 kg at tolScale=1
+%              (adjudicated 2026-08-08, see the "G3 |dmf| gate" note
+%              above) -- a measurement threshold with headroom over the
+%              genuine ~0.70-0.94 kg Taylor-bound floor, not merely an
+%              agreement tolerance -- so most callers no longer need
+%              tolScale>1 for G3 either; it remains available for
+%              COARSE-grid calls where |dmf| runs a bit higher still.
 %
 % OUTPUTS:
 %   rep - gate report struct:
@@ -142,7 +166,11 @@ else
     rC  = interp1(solC.t.', solC.X(1:3,:).', tq.', 'pchip');
     rV  = interp1(solV.t.', solV.X(1:3,:).', tq.', 'pchip');
     rep.G3_traj_Linf = max(sqrt(sum((rC - rV).^2, 2)));
-    rep.G3_pass = rep.G3_dmf < 0.1*tolScale && rep.G3_dtf < 0.2*tolScale;
+    % |dmf| threshold 1.0 kg (was 0.1 kg, adjudicated 2026-08-08 -- see
+    % the "G3 |dmf| gate" note in this function's header): a measurement
+    % gate over the genuine, non-shrinking ~0.70-0.94 kg Taylor mass-bound
+    % model error, not an agreement tolerance the solvers should close.
+    rep.G3_pass = rep.G3_dmf < 1.0*tolScale && rep.G3_dtf < 0.2*tolScale;
     rep.G4_gap  = solV.lossless_gap;
     rep.G4_pass = rep.G4_gap < 1e-4 * P.Tmax / P.m0;
 end

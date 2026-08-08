@@ -59,6 +59,10 @@ function test_runTarget()
 %
 %% Revision History:
 %  Michael Casey                                                08/07/2026
+%  Michael Casey  The display choices -- the adaptive altitude
+%                 exaggeration, its cap and floor, and the
+%                 hemisphere captions -- none of which was
+%                 pinned by anything                            08/07/2026
 %  Copyright 2026 Coorbital, Inc.
 %% ------------------------ Begin Code Sequence ---------------------------
 
@@ -466,7 +470,106 @@ function test_runTarget()
     assert(isempty(trFar),'a refused run must return an empty trajectory');
 
 %% ---------------------------------------------------------------------
-%% 8. The override hook itself
+%% 8. The DISPLAY choices: the adaptive exaggeration and the captions
+%% ---------------------------------------------------------------------
+%% Neither moves a number in the summary, and both were shipped with nothing
+%% asserting anything about them. That is not harmless. The exaggeration
+%% decides whether a reader sees a glide or an orbit, and the captions are
+%% where most readers meet these coordinates at all -- a caption that reports
+%% 155 deg west as "155.00E" is a figure that lies about which ocean the
+%% vehicle crossed.
+%%
+%% THE SHIPPED CASE GETS 16x, NOT THE 30x THE SCRIPT USED TO HARD-CODE. Pinned
+%% as the literal it is, with the apogee it comes from, because the change was
+%% at one point described as leaving the short-range case unchanged and it does
+%% not: 0.3 * 6378.137 / 118.0858 = 16.2, floored:
+    assert(inDef.altExag == 16, ...
+        ['the shipped run drew its globe at %gx against the 16x the adaptive ' ...
+         'rule gives for its %.4f km apogee'],inDef.altExag,inDef.hGlideMax);
+             hPkFlw = max(trDef.x(:,1)) - c.rE;
+    assert(inDef.altExag == inDef.altExagRule(hPkFlw), ...
+        ['the run drew at %gx while its own rule gives %gx for the %.4f km ' ...
+         'apogee it flew; the reported factor is not the one that was used'], ...
+        inDef.altExag,inDef.altExagRule(hPkFlw),hPkFlw./1000);
+
+%% THE CAP AND THE FLOOR, asked of the rule directly. Neither is reachable
+%% from any configuration this script can fly -- the cap binds only under
+%% 63.8 km of apogee and the floor only above 956.7 km, against a 118 km
+%% shipped peak -- so a check that only ever flies trajectories cannot see
+%% either of them, and both were unpinned. info.altExagRule exists for exactly
+%% this: it is the rule itself, so the two ends can be asked about:
+    assert(inDef.altExagRule(40e3) == 30, ...
+        ['the rule returns %g at a 40 km apogee; it must CAP at 30, the ' ...
+         'factor the rest of this library uses by hand. Uncapped it would ' ...
+         'return %g and paint a low flight halfway off the frame.'], ...
+        inDef.altExagRule(40e3),floor(0.3.*c.rE./40e3));
+    assert(inDef.altExagRule(0) == 30, ...
+        ['a zero apogee returns %g; the rule must survive a flight that never ' ...
+         'left the pad and hand it the cap.'],inDef.altExagRule(0));
+    assert(inDef.altExagRule(2e6) == 2, ...
+        ['the rule returns %g at a 2000 km apogee; it must FLOOR at 2. Below ' ...
+         '2x an exaggeration is indistinguishable from true scale, and a ' ...
+         'floor of 0 or 1 would hand coorbital.viz an AltScale it refuses.'], ...
+        inDef.altExagRule(2e6));
+
+%% ...and between the two it holds its stated invariant, that the APPARENT
+%% apogee stays at or under 0.3 rE. Checked across the whole band rather than
+%% at one point, because a rule that happened to be right at 118 km and wrong
+%% everywhere else would pass every assertion above:
+    for hKmT = [70 100 150 250 400 700 950]
+              eGot = inDef.altExagRule(hKmT.*1000);
+        assert(eGot >= 2 && eGot <= 30 && eGot == fix(eGot), ...
+            'the rule returns %g at a %g km apogee; it must be a whole number in [2 30].', ...
+            eGot,hKmT);
+        assert(eGot.*hKmT.*1000 <= 0.3.*c.rE, ...
+            ['at a %g km apogee the rule returns %gx, which paints the arc ' ...
+             '%.1f km off the surface against the 0.3 rE = %.1f km it holds ' ...
+             'itself to'],hKmT,eGot,eGot.*hKmT,0.3.*c.rE./1000);
+    end
+
+%% ...and it is MONOTONE: a higher flight never gets a bigger exaggeration.
+%% A rule that was not would paint two similar flights at wildly different
+%% scales and give a reader no way to compare them:
+            hSwp   = (20:20:1200).*1000;
+            eSwp   = arrayfun(inDef.altExagRule,hSwp);
+    assert(all(diff(eSwp) <= 0), ...
+        'the exaggeration rule is not monotone decreasing in apogee.');
+
+%% THE CAPTIONS CARRY HEMISPHERE LETTERS. The shipped launch and target are
+%% both WEST of the meridian, so a formatter that never reached its west branch
+%% would produce a caption that is wrong by 310 degrees of longitude and looks
+%% perfectly reasonable:
+    assert(strcmp(inDef.launchStr,'20.00N 155.00W'), ...
+        'the launch caption reads "%s" against the expected "20.00N 155.00W"', ...
+        inDef.launchStr);
+    assert(strcmp(inDef.targetStr,'35.00N 120.00W'), ...
+        'the target caption reads "%s" against the expected "35.00N 120.00W"', ...
+        inDef.targetStr);
+    assert(strcmp(in2.targetStr,'30.00N 140.00W'), ...
+        ['the second target''s caption reads "%s"; the captions must follow ' ...
+         'the overrides, not the shipped block'],in2.targetStr);
+
+%% THE OVERRIDE THE HEADER PROMISES MUST WORK. It did not: with altExag
+%% supplied, a guard skipped the assignment and the very next line read the
+%% variable that was never assigned, so every documented use of this override
+%% died with "Unrecognized function or variable 'altExag'". A bracket and a
+%% loose tolerance keep the extra solve cheap; what is checked is the display
+%% choice, not the trajectory:
+             exgWnt = 7;
+              outEx = evalc(sprintf( ...
+                      ['[trEx,inEx] = run_target(struct(''altExag'',%d,' ...
+                       '''tolRangeKm'',25,''showPlots'',false));'],exgWnt));
+    assert(contains(outEx,'(nominal)') && ~contains(outEx,'REFUSED'), ...
+        'the altExag override run did not solve. Summary was:\n%s',outEx);
+    assert(inEx.altExag == exgWnt, ...
+        'the run was given altExag = %d and drew at %g',exgWnt,inEx.altExag);
+    assert(exgWnt ~= inDef.altExag, ...
+        ['the override was set to the value the adaptive rule already gives; ' ...
+         'this check cannot tell an honoured override from an ignored one']);
+    assert(~isempty(trEx),'the altExag override run returned no trajectory');
+
+%% ---------------------------------------------------------------------
+%% 9. The override hook itself
 %% ---------------------------------------------------------------------
 %% A misspelt parameter must raise rather than silently leave the shipped
 %% value in place, or a future test could believe it flew a case it did not:

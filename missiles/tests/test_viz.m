@@ -55,6 +55,10 @@ function test_viz()
 %  Michael Casey  Channel pool, Extra panel, boundary positions 08/07/2026
 %  Michael Casey  globeMovie: (traj,veh,env,opts), marker shell,
 %                 phase width grading, handoff markers, legend  08/07/2026
+%  Michael Casey  globeMovie: the altitude inset, the arc-frame
+%                 camera, the spin centring and the two
+%                 degenerate arcs -- all of which shipped with
+%                 nothing at all asserted about them            08/07/2026
 %  Copyright 2026 Coorbital, Inc.
 %% ------------------------ Begin Code Sequence ---------------------------
 
@@ -677,6 +681,319 @@ function test_viz()
     assert(~isfile(mvFile),'the test movie "%s" could not be deleted.',mvFile);
 
 %% ---------------------------------------------------------------------
+%% 12c. globeMovie -- the altitude inset says what the globe cannot
+%% ---------------------------------------------------------------------
+%% The globe cannot show height: at the sub-camera point the altitude vector
+%% points at the lens. The inset is the answer, and it shipped with NOTHING
+%% asserted about it -- the render above drew it every frame and looked away.
+%% Four mutations lived in it: drawing the whole flight in every frame, putting
+%% downrange in metres under a label that says kilometres, exaggerating the
+%% profile that calls itself true scale, and a fixed marker size. Each of the
+%% checks below kills one.
+%%
+%% Downrange and altitude are recomputed HERE from traj, in the units the
+%% panel's own labels claim, so a unit slip moves one side and not the other:
+             dRngW = coorbital.util.greatCircle(latC(1),lonC(1),latC,lonC) ...
+                     .*(c.rE./1000);
+            altKmW = (trjCha.x(:,1) - c.rE)./1000;
+    assert(frmSeen{nFrmT}.nIns == 1, ...
+        ['globeMovie drew %d axes tagged insetAxes; Inset defaults to true ' ...
+         'and must produce exactly one.'],frmSeen{nFrmT}.nIns);
+
+%% The labels, each naming its quantity AND its unit. "downrange" without
+%% "(km)" is the same silent unit error every other panel in this file is
+%% checked for, and "true scale" is the claim that distinguishes this panel
+%% from the exaggerated arc above it:
+    assertUnit(frmSeen{nFrmT}.insLbl{1},'downrange','inset x axis');
+    assertUnit(frmSeen{nFrmT}.insLbl{1},'km'       ,'inset x axis');
+    assertUnit(frmSeen{nFrmT}.insLbl{2},'altitude' ,'inset y axis');
+    assertUnit(frmSeen{nFrmT}.insLbl{2},'km'       ,'inset y axis');
+    assertUnit(frmSeen{nFrmT}.insLbl{3},'true scale','inset title');
+
+%% THE PROFILE IS THE TRAJECTORY, phase by phase, and it GROWS. The final
+%% frame carries the whole flight and the intermediate frame carries it
+%% truncated at its own sample -- the same contract the globe track is held to
+%% in section 12, applied to the panel that was never checked:
+    for kp = 1:numel(phList)
+        for kf = [kMidF nFrmT]
+              kCut = idxWnt(kf);
+              kRow = find(frmSeen{kf}.insPh == phList(kp),1);
+            assert(~isempty(kRow), ...
+                'the inset has no line tagged for phase %d.',phList(kp));
+               sel = phaseSpan(trjCha.phaseIdx,phList,kp);
+               sel = sel(sel <= kCut);
+               got = frmSeen{kf}.insXy{kRow};
+            assert(size(got,1) == numel(sel), ...
+                ['inset frame %d, phase %d: %d points drawn against the %d ' ...
+                 'samples the flight has reached. The panel is not growing ' ...
+                 'with the flight.'],kf,phList(kp),size(got,1),numel(sel));
+            if isempty(sel)
+                continue;
+            end
+            assertSeries(got(:,1),dRngW(sel), ...
+                sprintf('inset frame %d, phase %d downrange (km)',kf,phList(kp)));
+            assertSeries(got(:,2),altKmW(sel), ...
+                sprintf('inset frame %d, phase %d altitude (km)',kf,phList(kp)));
+        end
+    end
+
+%% ...and the two frames are different pictures, so a panel that drew nothing
+%% cannot pass the truncation check by drawing nothing twice:
+             nInsM = sum(cellfun(@(m) size(m,1),frmSeen{kMidF}.insXy));
+             nInsF = sum(cellfun(@(m) size(m,1),frmSeen{nFrmT}.insXy));
+    assert(nInsM > 0 && nInsM < nInsF, ...
+        ['the inset holds %d points in the intermediate frame against %d in ' ...
+         'the final one; the profile is not growing.'],nInsM,nInsF);
+
+%% TRUE SCALE, AND THE CHECK IS DISCRIMINATING. The globe arc above is drawn
+%% at AltScale; the panel must not be. The assertion above compares against
+%% altKmW, so an exaggerated panel fails it -- but only because the two differ,
+%% which is stated here rather than assumed:
+    assert(altSc ~= 1 && max(altKmW) > 0, ...
+        ['the movie was rendered at AltScale = %g on a flight peaking at ' ...
+         '%.3f km; the true-scale check cannot tell the panel from the arc.'], ...
+        altSc,max(altKmW));
+
+%% The moving point rides the profile at the sample the frame shows:
+    assertSeries(frmSeen{kMidF}.insVeh(:),[dRngW(kEndM);altKmW(kEndM)], ...
+        'inset vehicle point, intermediate frame (km)');
+    assertSeries(frmSeen{nFrmT}.insVeh(:),[dRngW(end);altKmW(end)], ...
+        'inset vehicle point, final frame (km)');
+
+%% The panel's colours are the globe's colours. A profile in colours of its own
+%% would make a reader match legs by shape:
+    for kp = 1:numel(phList)
+              kGlb = find(frmSeen{nFrmT}.ph    == phList(kp),1);
+              kIns = find(frmSeen{nFrmT}.insPh == phList(kp),1);
+        assert(max(abs(frmSeen{nFrmT}.col{kGlb} - ...
+                       frmSeen{nFrmT}.insCl{kIns})) < 1e-9, ...
+            ['phase %d is drawn %s on the globe and %s in the inset; the two ' ...
+             'must be one colour or the panel cannot be read against the arc.'], ...
+            phList(kp),mat2str(frmSeen{nFrmT}.col{kGlb},3), ...
+            mat2str(frmSeen{nFrmT}.insCl{kIns},3));
+    end
+
+%% The limits are set from the WHOLE flight, so the curve grows into a frame
+%% that never rescales, and they are FLOORED so a flight with no vertical
+%% extent still produces a legal axis -- section 12f flies one:
+             insLm = frmSeen{nFrmT}.insLim;
+    assert(insLm(2) >= max(dRngW) && insLm(4) >= max(altKmW), ...
+        ['the inset is limited to %.3f km downrange by %.3f km altitude on a ' ...
+         'flight that reaches %.3f by %.3f; the curve would run off the panel.'], ...
+        insLm(2),insLm(4),max(dRngW),max(altKmW));
+    assert(insLm(2) > insLm(1) && insLm(4) > insLm(3), ...
+        'the inset limits [%g %g] x [%g %g] are not increasing.', ...
+        insLm(1),insLm(2),insLm(3),insLm(4));
+
+%% THE PANEL IS TRANSPARENT. An opaque panel over a globe hides whatever the
+%% flight put behind it, and on the shipped run_target case it hid part of the
+%% glide -- the track descended behind its left edge and re-emerged above its
+%% top. Pinned as a property because no property check can see the picture:
+    assert(strcmp(frmSeen{nFrmT}.insCol,'none'), ...
+        ['the inset axes Color is %s; an opaque panel over the planet hides ' ...
+         'the track behind it.'],mat2str(frmSeen{nFrmT}.insCol));
+
+%% ...and its x label is ON THE PAGE. The label under the panel is an absolute
+%% stack of tick text roughly 26 px tall, so a panel whose origin is a fixed
+%% FRACTION of the figure loses the label at every small frame size -- which
+%% is both the 480 x 320 rendered here and the 640 x 360 the self-demo uses.
+%% Measured in pixels, because pixels are what the label occupies:
+             yInPx = frmSeen{nFrmT}.insPos(2).*320;
+    assert(yInPx > 25.99, ...
+        ['the inset sits %.1f px off the bottom of a 320 px frame; its x ' ...
+         'label needs 26 and is clipped.'],yInPx);
+
+%% ---------------------------------------------------------------------
+%% 12d. globeMovie -- the camera aims where it says it aims
+%% ---------------------------------------------------------------------
+%% Everything the arc-frame construction does ends in view(az,el), and nothing
+%% read it. The camera aim, the plane normal, the along-arc offset and the
+%% out-of-plane tilt were therefore all unpinned at once: negating the tilt,
+%% or swapping the endpoints the midpoint is built from, changed every frame of
+%% every movie and failed no assertion.
+%%
+%% The render above used SpinDeg = 0, so its camera is the same in every frame
+%% and is exactly the arc-frame direction. Recomputed here from the two
+%% endpoints and the DOCUMENTED defaults, restated in the test's own hand:
+            offDef = 0;
+            tltDef = 32;
+               uvT = @(a,b) [cos(a).*cos(b); cos(a).*sin(b); sin(a)];
+               u1T = uvT(latC(1)  ,lonC(1));
+               u2T = uvT(latC(end),lonC(end));
+               nPT = unitOf3(cross(u1T,u2T));
+               mMT = unitOf3(u1T + u2T);
+               tTT = unitOf3(cross(nPT,mMT));
+               cDT = cosd(tltDef).*(cosd(offDef).*mMT + sind(offDef).*tTT) ...
+                     + sind(tltDef).*nPT;
+               cDT = unitOf3(cDT);
+    for kf = [1 kMidF nFrmT]
+        assertCamera(frmSeen{kf}.view,cDT, ...
+            sprintf('globeMovie camera, frame %d',kf));
+    end
+
+%% ...and the assertion is DISCRIMINATING, which is the half that was missing.
+%% Each of the three ways this construction has been got wrong must move the
+%% aim by far more than the tolerance above, or the check is passing on a
+%% coincidence rather than on correctness:
+               cNeg = unitOf3(cosd(tltDef).*mMT - sind(tltDef).*nPT);
+               cSwp = unitOf3(cosd(tltDef).*mMT ...
+                              + sind(tltDef).*unitOf3(cross(u2T,u1T)));
+               kMed = ceil(numel(trjCha.t)./2);
+               cMed = unitOf3(cosd(tltDef).*uvT(latC(kMed),lonC(kMed)) ...
+                              + sind(tltDef).*nPT);
+    assert(angBetween(cDT,cNeg) > 5, ...
+        ['a negated ViewTiltDeg moves the aim only %.3f deg; the camera check ' ...
+         'cannot see the sign of the tilt.'],angBetween(cDT,cNeg));
+    assert(angBetween(cDT,cSwp) > 5, ...
+        ['swapping the two endpoints moves the aim only %.3f deg; the camera ' ...
+         'check cannot see which way the arc frame was built.'], ...
+        angBetween(cDT,cSwp));
+%% The median-sample threshold is ONE degree and not five, and the reason is
+%% worth stating: this synthetic trajectory is uniform in index, so its median
+%% SAMPLE sits close to its arc midpoint and the two aims differ by a measured
+%% 4.85 deg. The defect this replaced was much worse than that in the field --
+%% ode45 clusters samples where the dynamics are fast, and on a 97 deg
+%% intercontinental arc the median sample hid the launch point entirely -- so
+%% a synthetic case cannot reproduce its full size. It does not need to:
+%% assertCamera's budget is 1e-6 deg, so even 4.85 is a margin of five million:
+    assert(angBetween(cDT,cMed) > 1, ...
+        ['aiming at the MEDIAN SAMPLE instead of the arc midpoint moves the ' ...
+         'aim only %.3f deg on this trajectory; the check cannot see the ' ...
+         'defect it exists for.'],angBetween(cDT,cMed));
+
+%% ---------------------------------------------------------------------
+%% 12e. globeMovie -- the midpoint is the great-circle midpoint, and the
+%%      spin is CENTRED on it
+%% ---------------------------------------------------------------------
+%% Section 12d recomputes the function's own arithmetic. This one does not: it
+%% flies the camera flat, at ViewTiltDeg = 0 and ViewOffsetDeg = 0, where the
+%% aim must be the great-circle midpoint of the endpoints and nothing else, and
+%% compares it against the standard midpoint formula -- a different expression
+%% of the same geometry, so an error common to both sides is not possible.
+%%
+%% The frame is rendered TALL on purpose. The inset marker is sized from the
+%% frame like everything else in the file, and at 320 or 720 px of height the
+%% rule and the 5 pt constant it replaced give the same answer; only above 720
+%% do they part company, so only a tall frame can tell them apart:
+            nFrmV = 4;
+            spinV = 40;
+            sizeV = [320 1080];
+          viewSeen = zeros(nFrmV,2);
+         insMkSeen = NaN;
+            mvFilV = [tempname '.mp4'];
+    coorbital.viz.globeMovie(trjCha,vehOne,env, ...
+        struct('File',mvFilV,'NFrame',nFrmV,'Size',sizeV, ...
+               'AltScale',altSc,'SpinDeg',spinV, ...
+               'ViewOffsetDeg',0,'ViewTiltDeg',0, ...
+               'Texture','plain','Sky','black','FrameFcn',@grabView));
+    delete(mvFilV);
+
+%% The great-circle midpoint, from the formula, in the test's own hand:
+      [latMd,lonMd] = gcMidpoint(latC(1),lonC(1),latC(end),lonC(end));
+               cMid = uvT(latMd,lonMd);
+
+%% The sweep is CENTRED on it: the first and the last frame sit half the sweep
+%% either side, so their mean is the aim and their difference is SpinDeg. A
+%% one-sided sweep -- the defect this replaced -- puts the aim at frame one and
+%% walks a long arc off the limb by the end:
+               azMd = rad2deg(atan2(cMid(2),cMid(1))) + 90;
+               elMd = rad2deg(asin(cMid(3)));
+    assertAngle(viewSeen(1    ,1),azMd - spinV./2,1e-6, ...
+        'first-frame azimuth against the midpoint less half the sweep (deg)');
+    assertAngle(viewSeen(nFrmV,1),azMd + spinV./2,1e-6, ...
+        'last-frame azimuth against the midpoint plus half the sweep (deg)');
+    for kf = 1:nFrmV
+        assertAngle(viewSeen(kf,2),elMd,1e-6, ...
+            sprintf('frame %d elevation at zero tilt against the midpoint (deg)',kf));
+    end
+
+%% ...and the midpoint is not the launch point, the impact point or the median
+%% sample, so the three assertions above are statements about the MIDPOINT and
+%% not about whichever sample happens to sit near it:
+    for kEnds = [1 kMed numel(trjCha.t)]
+        assert(angBetween(cMid,uvT(latC(kEnds),lonC(kEnds))) > 5, ...
+            ['the arc midpoint is only %.3f deg from sample %d; this ' ...
+             'trajectory cannot tell the midpoint from that sample.'], ...
+            angBetween(cMid,uvT(latC(kEnds),lonC(kEnds))),kEnds);
+    end
+
+%% The inset marker grew with the frame. mkIns is half the globe marker,
+%% floored at 5 pt, so a 1080 px frame must carry more than the 5 pt a 320 px
+%% frame does; a hard-coded 5 gives the same speck at every size:
+    assert(insMkSeen > frmSeen{nFrmT}.insMkS, ...
+        ['the inset marker is %.1f pt at %d px of frame height and %.1f pt at ' ...
+         '320; a marker that does not grow with the frame is a speck at ' ...
+         '1080.'],insMkSeen,sizeV(2),frmSeen{nFrmT}.insMkS);
+
+%% ---------------------------------------------------------------------
+%% 12f. globeMovie -- the two degenerate arcs, and a flight with no height
+%% ---------------------------------------------------------------------
+%% COINCIDENT and ANTIPODAL endpoints both collapse the trajectory plane, and
+%% both used to be handled by one guard that was wrong twice over. The fallback
+%% normal was the polar axis whatever the aim was, so the frame was NOT
+%% orthonormal -- m . n came out at 0.5 on a 30 deg case -- and ViewTiltDeg was
+%% then not the angle out of anything. And the MIDPOINT was left unguarded: for
+%% antipodal endpoints u1 + u2 is pure roundoff, measured at 2.0e-16, and
+%% normalising it aimed the camera in a direction decided by floating point.
+%%
+%% Both are checked by ONE property that needs no knowledge of the fallback:
+%% the camera must sit exactly ViewTiltDeg away from the point it is aimed at.
+%% That is what the option means, it holds in every branch of an orthonormal
+%% frame, and it fails for both defects -- the old polar fallback puts the
+%% camera 25.8 deg from a 20 N aim point when asked for 32, and the roundoff
+%% midpoint puts it 90 deg from anywhere in particular:
+            tltDeg = 32;
+    for kCase = 1:2
+        if kCase == 1
+              trDgn = degenTraj(c.rE,'coincident');
+              aimWt = uvT(trDgn.x(1,3),trDgn.x(1,2));
+              whatT = 'coincident endpoints';
+        else
+              trDgn = degenTraj(c.rE,'antipodal');
+              aimWt = uvT(trDgn.x(1,3),trDgn.x(1,2));
+              whatT = 'antipodal endpoints';
+        end
+          viewSeen = zeros(2,2);
+            mvFilD = [tempname '.mp4'];
+            nFigDg = numel(findall(groot,'Type','figure'));
+        coorbital.viz.globeMovie(trDgn,vehOne,env, ...
+            struct('File',mvFilD,'NFrame',2,'Size',[320 240], ...
+                   'SpinDeg',0,'ViewOffsetDeg',0,'ViewTiltDeg',tltDeg, ...
+                   'Texture','plain','Sky','black','FrameFcn',@grabView));
+        delete(mvFilD);
+        assert(numel(findall(groot,'Type','figure')) == nFigDg, ...
+            'globeMovie leaked a figure on %s.',whatT);
+               cGot = camDirOf(viewSeen(1,:));
+        assert(all(isfinite(cGot)), ...
+            'the camera came back %s on %s.',mat2str(viewSeen(1,:),4),whatT);
+               angT = angBetween(cGot,aimWt);
+        assert(abs(angT - tltDeg) < 1e-6, ...
+            ['the camera sits %.6f deg from the aim point on %s against the ' ...
+             '%g deg tilt it was given. Either the fallback frame is not ' ...
+             'orthonormal, so the tilt is not the angle it claims, or the aim ' ...
+             'itself came out of roundoff.'],angT,whatT,tltDeg);
+    end
+
+%% ...and a flight with NO VERTICAL EXTENT AT ALL must still render with the
+%% inset on. The panel takes its limits from the flight, and a zero span is an
+%% axis limit MATLAB refuses; that error used to be thrown with the video
+%% writer already open, so the run left a figure on screen and a part-written
+%% MP4 on disk. With Inset false the very same trajectory rendered perfectly,
+%% which is what made it an inset defect rather than a trajectory one:
+            trFlat = degenTraj(c.rE,'flat');
+            mvFilF = [tempname '.mp4'];
+            nFigFl = numel(findall(groot,'Type','figure'));
+              mvFl = coorbital.viz.globeMovie(trFlat,vehOne,env, ...
+                         struct('File',mvFilF,'NFrame',4,'Size',[320 240], ...
+                                'Texture','plain','Sky','black'));
+    assert(isfile(mvFl.file),'the flat-trajectory movie was not written.');
+             infFl = dir(mvFl.file);
+    assert(infFl.bytes > 0,'the flat-trajectory movie is empty.');
+    delete(mvFilF);
+    assert(numel(findall(groot,'Type','figure')) == nFigFl, ...
+        'globeMovie leaked a figure on a flat trajectory.');
+
+%% ---------------------------------------------------------------------
 %% 13. globeMovie -- what it must REFUSE
 %% ---------------------------------------------------------------------
 %% All four are caught BEFORE a frame is rendered, which is the point: a movie
@@ -702,6 +1019,28 @@ function test_viz()
     assertThrows(@() coorbital.viz.globeMovie(trjCha,vehOne,env, ...
         struct('File',[tempname '.mp4'],'NFrame',4,'Sky','starz')), ...
         'a misspelt Sky');
+
+%% ...and the three camera-and-inset options, which shipped with no check at
+%% all while every other option in the file had one. The NaN cases are the
+%% reason this matters: view() takes a NaN angle without complaint and leaves
+%% the camera on MATLAB's default, so a NaN tilt produced a movie shot from
+%% the wrong place with nothing anywhere saying the option had been thrown
+%% away. A refusal is the only way a caller finds out:
+    assertThrows(@() coorbital.viz.globeMovie(trjCha,vehOne,env, ...
+        struct('File',[tempname '.mp4'],'NFrame',4,'ViewTiltDeg',NaN)), ...
+        'a NaN ViewTiltDeg');
+    assertThrows(@() coorbital.viz.globeMovie(trjCha,vehOne,env, ...
+        struct('File',[tempname '.mp4'],'NFrame',4,'ViewOffsetDeg',NaN)), ...
+        'a NaN ViewOffsetDeg');
+    assertThrows(@() coorbital.viz.globeMovie(trjCha,vehOne,env, ...
+        struct('File',[tempname '.mp4'],'NFrame',4,'ViewTiltDeg',[10 20])), ...
+        'a non-scalar ViewTiltDeg');
+    assertThrows(@() coorbital.viz.globeMovie(trjCha,vehOne,env, ...
+        struct('File',[tempname '.mp4'],'NFrame',4,'Inset','yes')), ...
+        'a character Inset');
+    assertThrows(@() coorbital.viz.globeMovie(trjCha,vehOne,env, ...
+        struct('File',[tempname '.mp4'],'NFrame',4,'Inset',[true true])), ...
+        'a non-scalar Inset');
 
 %% ---------------------------------------------------------------------
 %% 14. 'Parent' composes instead of creating
@@ -848,7 +1187,82 @@ function test_viz()
         if isscalar(hEa)
         got.rEarth = max(hEa.XData(:));
         end
+
+%% THE CAMERA. view(az,el) is the entire visible output of the arc-frame
+%% construction -- the midpoint, the plane normal, the offset and the tilt all
+%% end in these two numbers and nowhere else -- so a frame that does not record
+%% them cannot see any of that code work:
+          got.view = hAxF.View;
+
+%% THE ALTITUDE INSET, everything about it that can be compared against the
+%% trajectory: the drawn series per phase, the moving point, the limits, the
+%% labels, the marker size, the panel geometry and whether the panel is
+%% transparent:
+          got.nIns = 0;
+         got.insXy = {};
+         got.insPh = [];
+         got.insCl = {};
+        got.insVeh = [];
+        got.insLim = [];
+        got.insPos = [];
+        got.insMkS = NaN;
+        got.insCol = '';
+        got.insLbl = {'','',''};
+               hIn = findobj(hFg,'Type','axes','Tag','insetAxes');
+          got.nIns = numel(hIn);
+        if isscalar(hIn)
+               hIl = findobj(hIn,'Type','line','Tag','insetTrack');
+         got.insPh = zeros(1,numel(hIl));
+         got.insXy = cell(1,numel(hIl));
+         got.insCl = cell(1,numel(hIl));
+            for kr = 1:numel(hIl)
+     got.insPh(kr) = hIl(kr).UserData;
+    got.insXy{kr}  = [hIl(kr).XData(:),hIl(kr).YData(:)];
+    got.insCl{kr}  = hIl(kr).Color;
+            end
+               hIv = findobj(hIn,'Type','line','Tag','insetVehicle');
+        got.insVeh = [hIv.XData,hIv.YData];
+        got.insMkS = hIv.MarkerSize;
+        got.insLim = [hIn.XLim,hIn.YLim];
+        got.insPos = hIn.Position;
+        got.insCol = hIn.Color;
+        got.insLbl = {labelText(hIn.XLabel.String), ...
+                      labelText(hIn.YLabel.String), ...
+                      labelText(hIn.Title.String)};
+        end
       frmSeen{kF}  = got;
+    end
+
+    function grabView(hAxF,kF)
+%% Purpose:
+%
+%  A lighter FrameFcn than grabFrame: record only the camera angles of every
+%  frame, and the inset marker size. Used by the renders below that exist to
+%  check the camera and the frame-size scaling rather than the drawn data, so
+%  they cost one property read per frame instead of a whole scene walk.
+%
+%% Inputs:
+%
+%  hAxF             [1 x 1] axes                The movie's axes, mid-render
+%
+%  kF               [1 x 1]                     Frame number (-)
+%
+%% Outputs:
+%
+%  none                                         Writes viewSeen and insMkSeen
+%
+%% Revision History:
+%  Michael Casey                                                08/07/2026
+%  Copyright 2026 Coorbital, Inc.
+%% ------------------------ Begin Code Sequence ---------------------------
+
+    viewSeen(kF,:) = hAxF.View;
+               hFv = ancestor(hAxF,'figure');
+               hIv = findobj(hFv,'Type','axes','Tag','insetAxes');
+        if isscalar(hIv)
+               hMv = findobj(hIv,'Type','line','Tag','insetVehicle');
+         insMkSeen = hMv.MarkerSize;
+        end
     end
 end
 
@@ -1224,6 +1638,248 @@ function assertGrownTrack(frm,phIdx,phList,kEnd,xWant,yWant,zWant,what)
         assertSeries(got(:,3),zWant(sel), ...
             sprintf('%s frame, phase %d z (km)',what,phList(kp)));
     end
+end
+
+function traj = degenTraj(rE,kind)
+%% Purpose:
+%
+%  One of the three trajectories that break the movie's geometry rather than
+%  its arithmetic. None is a solution of anything; each is the smallest input
+%  that reaches one degenerate branch:
+%
+%    'coincident'  Launch and impact at the SAME point, so the trajectory
+%                  plane is undefined and the inset's downrange span is zero.
+%    'antipodal'   Endpoints exactly opposite on the sphere, so the plane
+%                  normal AND the endpoint sum both vanish -- the sum into
+%                  roundoff rather than into zero, which is the harder case.
+%    'flat'        A flight that moves but never leaves the surface, so the
+%                  inset's altitude span is zero.
+%
+%% Inputs:
+%
+%  rE               [1 x 1]                     Reference sphere radius (m)
+%
+%  kind             Char [1 x n]                'coincident', 'antipodal' or
+%                                               'flat'
+%
+%% Outputs:
+%
+%  traj             Struct                      Fields t [N x 1] (s),
+%                                               x [N x 6], u [N x 2] (rad),
+%                                               phaseIdx [N x 1] all ones,
+%                                               junction [0 x 1] struct
+%
+%% Revision History:
+%  Michael Casey                                                08/07/2026
+%  Copyright 2026 Coorbital, Inc.
+%% ------------------------ Begin Code Sequence ---------------------------
+
+                nS = 12;
+            traj.t = linspace(0,600,nS)';
+    switch lower(kind)
+        case 'coincident'
+               lat = deg2rad(20).*ones(nS,1);
+               lon = deg2rad(-155).*ones(nS,1);
+               hKm = linspace(40,10,nS)';
+        case 'antipodal'
+               lat = deg2rad(linspace(10,-10,nS))';
+               lon = deg2rad(linspace(20,-160,nS))';
+               hKm = linspace(40,10,nS)';
+        case 'flat'
+               lat = zeros(nS,1);
+               lon = deg2rad(linspace(0,20,nS))';
+               hKm = zeros(nS,1);
+        otherwise
+            error('degenTraj: unknown kind "%s".',kind);
+    end
+            traj.x = [rE + 1000.*hKm, lon, lat, ...
+                      3000.*ones(nS,1), zeros(nS,1), zeros(nS,1)];
+            traj.u = zeros(nS,2);
+     traj.phaseIdx = ones(nS,1);
+     traj.junction = repmat(struct('t',[],'x',[]),0,1);
+end
+
+function u = unitOf3(v)
+%% Purpose:
+%
+%  Normalise a three-vector. Written out rather than taken from norm() because
+%  this library does not use norm anywhere.
+%
+%% Inputs:
+%
+%  v                [3 x 1]                     Any non-zero vector
+%
+%% Outputs:
+%
+%  u                [3 x 1]                     v scaled to unit length
+%
+%% Revision History:
+%  Michael Casey                                                08/07/2026
+%  Copyright 2026 Coorbital, Inc.
+%% ------------------------ Begin Code Sequence ---------------------------
+
+               mag = sqrt(sum(v(:).^2));
+    assert(mag > 0,'cannot normalise a zero vector.');
+                 u = v(:)./mag;
+end
+
+function ang = angBetween(a,b)
+%% Purpose:
+%
+%  The angle between two three-vectors, in degrees, by atan2 of the cross and
+%  the dot rather than by acos of the dot: acos loses all its precision
+%  exactly where these checks need it, on nearly parallel directions.
+%
+%% Inputs:
+%
+%  a                [3 x 1]                     First vector
+%
+%  b                [3 x 1]                     Second vector
+%
+%% Outputs:
+%
+%  ang              [1 x 1]                     Angle between them (deg)
+%
+%% Revision History:
+%  Michael Casey                                                08/07/2026
+%  Copyright 2026 Coorbital, Inc.
+%% ------------------------ Begin Code Sequence ---------------------------
+
+                cr = cross(a(:),b(:));
+               ang = atan2d(sqrt(sum(cr.^2)),dot(a(:),b(:)));
+end
+
+function d = camDirOf(azEl)
+%% Purpose:
+%
+%  The unit vector a MATLAB view(az,el) looks FROM, inverting the convention
+%  coorbital.viz.globeMovie uses to set it: a camera over longitude L and
+%  latitude B is view(L + 90, B). This is how a rendered frame's camera is
+%  turned back into geometry the trajectory can be compared against.
+%
+%% Inputs:
+%
+%  azEl             [1 x 2]                     Azimuth and elevation as read
+%                                               from an axes View (deg)
+%
+%% Outputs:
+%
+%  d                [3 x 1]                     Unit vector from the centre of
+%                                               the sphere towards the camera
+%
+%% Revision History:
+%  Michael Casey                                                08/07/2026
+%  Copyright 2026 Coorbital, Inc.
+%% ------------------------ Begin Code Sequence ---------------------------
+
+               azR = deg2rad(azEl(1) - 90);
+               elR = deg2rad(azEl(2));
+                 d = [cos(elR).*cos(azR); cos(elR).*sin(azR); sin(elR)];
+end
+
+function assertCamera(azEl,cWant,what)
+%% Purpose:
+%
+%  Assert that a rendered frame's camera points along an expected direction.
+%  Compared as an ANGLE between two unit vectors rather than as two numbers,
+%  because azimuth is periodic and degenerate at the poles, and a test that
+%  compared the raw pair would fail on wrapping and pass on nonsense.
+%
+%% Inputs:
+%
+%  azEl             [1 x 2]                     Axes View as rendered (deg)
+%
+%  cWant            [3 x 1]                     Expected camera direction
+%
+%  what             Char [1 x n]                Name of the case, for the
+%                                               message
+%
+%% Outputs:
+%
+%  none                                         Throws on failure
+%
+%% Revision History:
+%  Michael Casey                                                08/07/2026
+%  Copyright 2026 Coorbital, Inc.
+%% ------------------------ Begin Code Sequence ---------------------------
+
+               got = camDirOf(azEl);
+               ang = angBetween(got,cWant);
+    assert(ang < 1e-6, ...
+        ['%s aims %.6f deg away from the direction the arc frame requires. ' ...
+         'Rendered view was [%.4f %.4f] deg.'],what,ang,azEl(1),azEl(2));
+end
+
+function assertAngle(got,want,tol,what)
+%% Purpose:
+%
+%  Assert two angles are equal in degrees, comparing them wrapped into
+%  (-180,180]. MATLAB stores an axes azimuth wrapped, so a camera correctly
+%  placed at 370 deg reads back as 10 and a raw difference would call that a
+%  360 degree error.
+%
+%% Inputs:
+%
+%  got              [1 x 1]                     Angle read from the figure (deg)
+%
+%  want             [1 x 1]                     Expected angle (deg)
+%
+%  tol              [1 x 1]                     Absolute tolerance (deg)
+%
+%  what             Char [1 x n]                Name of the quantity, for the
+%                                               message
+%
+%% Outputs:
+%
+%  none                                         Throws on failure
+%
+%% Revision History:
+%  Michael Casey                                                08/07/2026
+%  Copyright 2026 Coorbital, Inc.
+%% ------------------------ Begin Code Sequence ---------------------------
+
+               dif = mod(got - want + 180,360) - 180;
+    assert(abs(dif) < tol, ...
+        '%s: got %.9g against %.9g, %.3e deg apart, budget %.1e', ...
+        what,got,want,abs(dif),tol);
+end
+
+function [latM,lonM] = gcMidpoint(lat1,lon1,lat2,lon2)
+%% Purpose:
+%
+%  The great-circle midpoint of two points on a sphere, by the standard
+%  navigation formula. Written this way ON PURPOSE: coorbital.viz.globeMovie
+%  reaches the same point by normalising the SUM of the two Cartesian unit
+%  vectors, so an error common to both sides is not available, and comparing
+%  the two is a genuine check rather than a restatement.
+%
+%% Inputs:
+%
+%  lat1, lon1       [1 x 1]                     First point (rad)
+%
+%  lat2, lon2       [1 x 1]                     Second point (rad)
+%
+%% Outputs:
+%
+%  latM             [1 x 1]                     Midpoint latitude (rad)
+%
+%  lonM             [1 x 1]                     Midpoint longitude (rad)
+%
+%% REFERENCES:
+%   [1] Veness, C., "Calculating distance, bearing and more between
+%       Latitude/Longitude points," Movable Type Scripts, midpoint formula.
+%
+%% Revision History:
+%  Michael Casey                                                08/07/2026
+%  Copyright 2026 Coorbital, Inc.
+%% ------------------------ Begin Code Sequence ---------------------------
+
+               dLn = lon2 - lon1;
+                bX = cos(lat2).*cos(dLn);
+                bY = cos(lat2).*sin(dLn);
+              latM = atan2(sin(lat1) + sin(lat2), ...
+                           sqrt((cos(lat1) + bX).^2 + bY.^2));
+              lonM = lon1 + atan2(bY,cos(lat1) + bX);
 end
 
 function hAx = axesInOrder(hFig)

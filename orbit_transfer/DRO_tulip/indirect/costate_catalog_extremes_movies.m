@@ -27,7 +27,9 @@ function outStem = costate_catalog_extremes_movies(cat_, filt, metric, outStem)
 %
 %% Inputs:
 %
-%  cat_                     struct                  costate_catalog_dro_tulip
+%  cat_                     struct                  A compact costate catalog
+%                                                   (any family: dro_tulip,
+%                                                   halo_tulip, ...)
 %
 %  filt                     struct                  Same filter as
 %                                                   costate_catalog_extremes
@@ -54,11 +56,18 @@ function outStem = costate_catalog_extremes_movies(cat_, filt, metric, outStem)
 %% ------------------------ Begin Code Sequence ---------------------------
 
 if nargin == 0
-   %Demo: phasing extremes on one sheet at 5 N:
-       L = load('costate_catalog_dro_tulip.mat');
-    cat_ = L.costate_catalog_dro_tulip;
+   %Demo: phasing extremes on the mid sheet at 5 N. Runs on whichever
+   %compact catalog sits in the current folder:
+     F = dir('costate_catalog_*.mat');
+     assert(~isempty(F), ...
+            'demo: no costate_catalog_*.mat in the current folder');
+       L = load(F(1).name);
+      fn = fieldnames(L);
+    cat_ = L.(fn{1});
+   fprintf('demo catalog: %s\n', F(1).name);
+      sh = cat_.sheets(ceil(numel(cat_.sheets)/2));
  outStem = costate_catalog_extremes_movies(cat_, ...
-               struct('tauDRO',2.0,'Np',7,'thrustN',5));
+               struct('tauDRO',sh.tauDRO,'Np',sh.Np,'thrustN',5));
      return;
 end
 if ~exist('filt','var'),    filt = struct(); end

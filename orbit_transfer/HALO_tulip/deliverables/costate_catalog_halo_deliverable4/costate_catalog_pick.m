@@ -19,7 +19,7 @@ function [tf_nd, z8, info] = costate_catalog_pick(cat_, tauDRO, Np, ...
 %
 %  ASSUMPTIONS / NOTES:
 %
-% • Phases are days past each orbit's reference point (getDRO / getTulip),
+% • Phases are days past each orbit's reference point (the family getters),
 %   modulo the period. The DRO period is the sheet's tauDRO (ND).
 % • For thrusts between rungs, fly the returned z8's own rung or hand it to
 %   tfMin at your thrust and let it converge the small correction.
@@ -27,7 +27,9 @@ function [tf_nd, z8, info] = costate_catalog_pick(cat_, tauDRO, Np, ...
 %
 %% Inputs:
 %
-%  cat_                     struct                  costate_catalog_dro_tulip
+%  cat_                     struct                  A compact costate catalog
+%                                                   (any family: dro_tulip,
+%                                                   halo_tulip, ...)
 %
 %  tauDRO                   double                  Requested DRO period (ND)
 %
@@ -65,10 +67,18 @@ function [tf_nd, z8, info] = costate_catalog_pick(cat_, tauDRO, Np, ...
 %% ------------------------ Begin Code Sequence ---------------------------
 
 if nargin == 0
-   %Demo: an off-grid request, warnings on:
-       L = load('costate_catalog_dro_tulip.mat');
-    cat_ = L.costate_catalog_dro_tulip;
-[tf,z,inf_] = costate_catalog_pick(cat_, 1.7, 8, 3.3, 11.0, 4.0);
+   %Demo: an off-grid request, warnings on. Runs on whichever compact
+   %catalog sits in the current folder:
+     F = dir('costate_catalog_*.mat');
+     assert(~isempty(F), ...
+            'demo: no costate_catalog_*.mat in the current folder');
+       L = load(F(1).name);
+      fn = fieldnames(L);
+    cat_ = L.(fn{1});
+   fprintf('demo catalog: %s\n', F(1).name);
+      sh = cat_.sheets(1);
+[tf,z,inf_] = costate_catalog_pick(cat_, sh.tauDRO*0.93, sh.Np+1, ...
+                                   3.3, 11.0, 4.0);
    fprintf('tf = %.4f ND;  delivered sheet tau=%.2f Np=%d\n', ...
            tf, inf_.delivered.tauDRO, inf_.delivered.Np);
    return;

@@ -19,7 +19,9 @@ function [eMin, eMax] = costate_catalog_extremes(cat_, filt, doPlot, metric)
 %
 %% Inputs:
 %
-%  cat_                     struct                  costate_catalog_dro_tulip
+%  cat_                     struct                  A compact costate catalog
+%                                                   (any family: dro_tulip,
+%                                                   halo_tulip, ...)
 %
 %  filt                     struct                  Optional restrictions,
 %                                                   any subset of:
@@ -53,11 +55,18 @@ function [eMin, eMax] = costate_catalog_extremes(cat_, filt, doPlot, metric)
 %% ------------------------ Begin Code Sequence ---------------------------
 
 if nargin == 0
-   %Demo: pure phasing effect -- one sheet, one thrust, with the plot:
-       L = load('costate_catalog_dro_tulip.mat');
-    cat_ = L.costate_catalog_dro_tulip;
+   %Demo: pure phasing effect -- the mid sheet, one thrust, with the plot.
+   %Runs on whichever compact catalog sits in the current folder:
+     F = dir('costate_catalog_*.mat');
+     assert(~isempty(F), ...
+            'demo: no costate_catalog_*.mat in the current folder');
+       L = load(F(1).name);
+      fn = fieldnames(L);
+    cat_ = L.(fn{1});
+   fprintf('demo catalog: %s\n', F(1).name);
+      sh = cat_.sheets(ceil(numel(cat_.sheets)/2));
 [eMin,eMax] = costate_catalog_extremes(cat_, ...
-                  struct('tauDRO',2.0,'Np',7,'thrustN',5), true);
+                  struct('tauDRO',sh.tauDRO,'Np',sh.Np,'thrustN',5), true);
      return;
 end
 if ~exist('filt','var') || isempty(filt), filt = struct(); end

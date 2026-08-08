@@ -286,7 +286,8 @@ function [traj,info] = run_target(opts)
                       'glideBank','hHandoff','tMaxGlide','descTime', ...
                       'descAlpha','descBank','hStop','tMaxDesc','vehicleFn', ...
                       'boosterFn','atmosFn','gravFn','aeroFn','propFn', ...
-                      'earthSpin','showPlots','movieOn','movieFrames','movieFile'};
+                      'earthSpin','showPlots','movieOn','movieFrames', ...
+                      'movieFile','altExag'};
              given = fieldnames(opts);
     for ko = 1:numel(given)
         assert(any(strcmp(given{ko},overridable)), ...
@@ -1106,10 +1107,21 @@ function [traj,info] = run_target(opts)
       info.glideVeh  = glideVeh;
 
 %% Vertical exaggeration for the globe. A DISPLAY choice, not a physical
-%% constant, so it does not belong in missileConst. The whole flight stays
-%% under 50 km on a 6378 km sphere -- one part in 128 -- so a true-scale arc
-%% would lie on the surface and show nothing of the skip phugoid:
-           altExag = 30;
+%% constant, so it does not belong in missileConst. A true-scale arc would lie
+%% on the surface and show nothing of the skip phugoid -- a 50 km glide on a
+%% 6378 km sphere is one part in 128.
+%%
+%% But a FIXED exaggeration does not travel. The shipped 30x suits a glide that
+%% stays under about 60 km; on a lofted intercontinental shot that peaks near
+%% 260 km it paints the arc 7800 km off the surface, further out than the Earth
+%% is wide, and the track leaves the frame entirely. So scale it to the flight:
+%% hold the apparent apogee at or under 0.3 rE, and cap it at the shipped 30 so
+%% the short-range case is unchanged.
+           hPeakM = max(traj.x(:,1)) - c.rE;
+    if isempty(opts) || ~isfield(opts,'altExag')
+           altExag = min(30,max(2,floor(0.3.*c.rE./max(hPeakM,1))));
+    end
+           altExag = overrideOf(opts,'altExag',altExag);
 
 %% Plots. Every figure comes from coorbital.viz, which reads the trajectory and
 %% never writes it. Nothing below this line can move a number in the summary
@@ -1132,8 +1144,9 @@ function [traj,info] = run_target(opts)
         coorbital.viz.globe3D(traj,bst,env, ...
             struct('Target',[latTargetR; lonTargetR], ...
                    'AltScale',altExag, ...
-                   'Title',sprintf('Solved transfer to %.2f deg, %.2f deg', ...
-                                   latTarget,lonTarget)));
+                   'Title',sprintf('Solved transfer, %s to %s', ...
+                                   llStr(latLaunch,lonLaunch), ...
+                                   llStr(latTarget,lonTarget))));
     end
 
 %% The movie, off by default because it is the expensive part of a run. The
@@ -1146,8 +1159,9 @@ function [traj,info] = run_target(opts)
                    'NFrame',movieFrames, ...
                    'AltScale',altExag, ...
                    'PhaseName',{{'boost','glide','descent'}}, ...
-                   'Title',sprintf('Launch %.1f, %.1f to target %.1f, %.1f', ...
-                                   latLaunch,lonLaunch,latTarget,lonTarget)));
+                   'Title',sprintf('Launch %s  to  target %s', ...
+                                   llStr(latLaunch,lonLaunch), ...
+                                   llStr(latTarget,lonTarget))));
         fprintf('  Movie: %d frames at %g fps written to\n    %s\n', ...
                 mv.nFrame,mv.frameRate,mv.file);
         fprintf('         Earth texture %s, background %s\n\n',mv.texture,mv.background);
@@ -1517,6 +1531,42 @@ function [why,ok] = whyAltitude(tPhase,tEnd,hEnd,hTargetM,hTargetKm,tMax,what)
                               '(integrator failure or an unmodelled event)'], ...
                              tEnd,hEnd./1000);
     end
+end
+
+function txt = llStr(latDeg,lonDeg)
+%% Purpose:
+%
+%  Format a latitude and longitude for a human-readable figure title, with
+%  hemisphere letters rather than signed decimals. A caption reading
+%  "40.96N 100.29E" is unambiguous where "40.96, 100.29" leaves the reader to
+%  remember which way the signs run.
+%
+%% Inputs:
+%
+%  latDeg           scalar                      Latitude (deg), positive north
+%
+%  lonDeg           scalar                      Longitude (deg), positive east
+%
+%% Outputs:
+%
+%  txt              char                        e.g. '40.96N 100.29E'
+%
+%% Revision History:
+%  Michael Casey                                                08/07/2026
+%  Copyright 2026 Coorbital, Inc.
+%% ------------------------ Begin Code Sequence ---------------------------
+
+%% Hemisphere letters, with the sign folded into the letter:
+              hLat = 'N';
+    if latDeg < 0
+              hLat = 'S';
+    end
+              hLon = 'E';
+    if lonDeg < 0
+              hLon = 'W';
+    end
+               txt = sprintf('%.2f%c %.2f%c', ...
+                             abs(latDeg),hLat,abs(lonDeg),hLon);
 end
 
 function v = overrideOf(opts,name,v)

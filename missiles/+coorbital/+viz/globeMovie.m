@@ -293,6 +293,9 @@ end
             fpsOut = vizOption(opts,'FrameRate',20);
             sizPix = vizOption(opts,'Size',[1280 720]);
             spinDg = vizOption(opts,'SpinDeg',30);
+           viewOff = vizOption(opts,'ViewOffsetDeg',0);
+           viewTlt = vizOption(opts,'ViewTiltDeg',32);
+           insetOn = vizOption(opts,'Inset',true);
           altScale = vizOption(opts,'AltScale',1);
             titTxt = vizOption(opts,'Title','Trajectory over the Earth');
             phName = vizOption(opts,'PhaseName',{});
@@ -441,14 +444,50 @@ end
 %% the cube's DIAGONAL and the planet is left occupying 1/sqrt(3) of the frame
 %% with the corners empty. Everything drawn here lies inside the SPHERE of
 %% radius lim, not just inside the cube, so that factor is pure waste and
-%% recovering it clips nothing, at any spin angle:
-    camzoom(hAx,sqrt(3));
+%% recovering it clips nothing, at any spin angle. Held just under the full
+%% sqrt(3) = 1.7321 so the limb stays clear of the caption band at the top of
+%% the frame; at the full factor a polar-route arc touches the text.
+    camzoom(hAx,1.62);
 
-%% A viewpoint looking down on the middle of the arc, as in globe3D: MATLAB's
-%% view(az,el) points at longitude L and latitude B for az = L + 90, el = B:
-              kMid = ceil(nS./2);
-               az0 = rad2deg(lon(kMid)) + 90;
-               el0 = rad2deg(lat(kMid));
+%% A viewpoint looking down on the middle of the arc: MATLAB's view(az,el)
+%% points at longitude L and latitude B for az = L + 90, el = B.
+%%
+%% The middle is the GREAT-CIRCLE MIDPOINT OF THE ENDPOINTS, not the median
+%% sample. ode45 clusters samples where the dynamics are fast -- the skips and
+%% the terminal dive -- so on a long flight the median sample sits well down
+%% the track, and aiming there swings the launch end round the limb and out of
+%% frame. On a 97 deg intercontinental arc that hid the launch point entirely:
+%% Build an ARC FRAME from the two endpoints: m points at the arc midpoint, n
+%% is the trajectory-plane normal, and t runs along-track at the midpoint.
+               uv = @(a,b) [cos(a).*cos(b); cos(a).*sin(b); sin(a)];
+               u1 = uv(lat(1),lon(1));
+               u2 = uv(lat(end),lon(end));
+               nP = cross(u1,u2);
+    if sqrt(sum(nP.^2)) < 1e-12
+%% Endpoints coincident or antipodal: the plane is undefined, so fall back to
+%% the polar axis and let the offset and tilt still do something sensible.
+               nP = [0;0;1];
+    end
+               nP = nP./sqrt(sum(nP.^2));
+               mM = (u1 + u2);
+               mM = mM./sqrt(sum(mM.^2));
+               tT = cross(nP,mM);
+               tT = tT./sqrt(sum(tT.^2));
+
+%% ALTITUDE IS ONLY VISIBLE AWAY FROM THE SUB-CAMERA POINT. A trajectory point
+%% sitting at angular distance theta from directly-under-the-camera shows its
+%% height as h*sin(theta): straight underneath, the altitude vector points at
+%% the lens and the whole vertical profile collapses to nothing. Aiming at the
+%% arc midpoint therefore produces a beautiful ground track and a flat-looking
+%% flight. So swing the camera ViewOffsetDeg along the arc, which throws the
+%% far half of the track out towards the limb where its height projects, and
+%% lift it ViewTiltDeg out of the trajectory plane so the ground track does not
+%% collapse onto a line at the same time.
+               cD = cosd(viewTlt).*(cosd(viewOff).*mM + sind(viewOff).*tT) ...
+                    + sind(viewTlt).*nP;
+               cD = cD./sqrt(sum(cD.^2));
+               az0 = rad2deg(atan2(cD(2),cD(1))) + 90;
+               el0 = rad2deg(asin(max(-1,min(1,cD(3)))));
     view(hAx,az0,el0);
 
 %% The sky, drawn AFTER the camera is set because stars3D sizes its celestial
@@ -597,6 +636,44 @@ end
 
 %% The frame loop. Everything that can throw is inside the try, because a
 %% half-rendered movie must still leave the writer closed and no figure open:
+%% THE ALTITUDE INSET. The globe shows where the vehicle went; it cannot show
+%% how high, because at the sub-camera point the altitude vector points at the
+%% lens and the vertical profile collapses. A small two-dimensional panel is a
+%% far better answer than tilting the camera until both are equally bad: this
+%% one plots TRUE altitude, unexaggerated, against downrange, and grows with
+%% the flight exactly as the track above it does.
+              hIns = [];
+              hInL = [];
+              hInV = [];
+    if insetOn
+%% Downrange along the great circle from the launch point, per sample:
+              dRng = coorbital.util.greatCircle(lat(1),lon(1),lat,lon) ...
+                     .*(rEkm);
+              hIns = axes(hFig,'Position',[0.615 0.055 0.345 0.235], ...
+                          'Color',[0 0 0],'XColor',[1 1 1],'YColor',[1 1 1], ...
+                          'GridColor',[0.6 0.6 0.6],'GridAlpha',0.35, ...
+                          'Box','on','Tag','insetAxes');
+        hold(hIns,'on'); grid(hIns,'on');
+%% One line per phase so the inset colours match the globe:
+              hInL = gobjects(nPh,1);
+        for kp = 1:nPh
+            hInL(kp) = plot(hIns,NaN,NaN,'-', ...
+                            'Color',col(kp,:),'LineWidth',lwPh(kp));
+        end
+              hInV = plot(hIns,NaN,NaN,'o','MarkerSize',5, ...
+                          'MarkerFaceColor',[1 1 1], ...
+                          'MarkerEdgeColor',[0 0 0],'LineWidth',0.5);
+%% Fixed limits, set from the WHOLE flight, so the curve grows into a frame
+%% that never rescales -- a rescaling axis makes a growing line look static:
+        set(hIns,'XLim',[0 max(dRng).*1.02], ...
+                 'YLim',[0 max(altKm).*1.12], ...
+                 'FontSize',max(7,round(sizPix(2)./85)));
+        xlabel(hIns,'downrange (km)','FontSize',max(7,round(sizPix(2)./85)));
+        ylabel(hIns,'altitude (km)','FontSize',max(7,round(sizPix(2)./85)));
+        title(hIns,'altitude profile (true scale)', ...
+              'Color',[1 1 1],'FontSize',max(7,round(sizPix(2)./80)));
+    end
+
            frmSize = [];
     try
         for kf = 1:nFrame
@@ -633,8 +710,21 @@ end
                                sprintf('alt = %7.2f km',altKm(kEnd)), ...
                                nmPhase{kNow}});
 
-%% The camera, sweeping SpinDeg of azimuth across the whole movie:
-            view(hAx,az0 + spinDg.*(kf - 1)./(nFrame - 1),el0);
+%% The inset grows on the same sample index as the globe track, so the two can
+%% never drift apart:
+            if insetOn
+                for kp = 1:nPh
+                   selI = selAll{kp};
+                   selI = selI(selI <= kEnd);
+                    set(hInL(kp),'XData',dRng(selI),'YData',altKm(selI));
+                end
+                set(hInV,'XData',dRng(kEnd),'YData',altKm(kEnd));
+            end
+
+%% The camera, sweeping SpinDeg of azimuth across the whole movie, CENTRED on
+%% the arc midpoint rather than starting there -- a one-sided sweep walks a
+%% long arc off the limb by the end of the movie:
+            view(hAx,az0 - spinDg./2 + spinDg.*(kf - 1)./(nFrame - 1),el0);
 
 %% The caller's per-frame hook, before the capture so that whatever it draws
 %% is in the frame:

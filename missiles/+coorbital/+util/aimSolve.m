@@ -143,16 +143,27 @@ function [xSol,fAch,info] = aimSolve(fResid,x0,dx0,tolF,opts)
 %                                                           made to fResid,
 %                                                           including the
 %                                                           ones that threw
-%                                               nShrink     [1 x 1] trial
+%                                               nShrink     [1 x 1] TRIAL
 %                                                           evaluations
 %                                                           rejected, each of
 %                                                           which halved the
 %                                                           step
-%                                               nInfeasible [1 x 1] of those,
-%                                                           how many failed
-%                                                           outright rather
-%                                                           than merely
-%                                                           failing to improve
+%                                               nInfeasible [1 x 1] every
+%                                                           evaluation that
+%                                                           threw or returned
+%                                                           a non-finite pair,
+%                                                           at a TRIAL or a
+%                                                           PROBE point. NOT a
+%                                                           subset of nShrink:
+%                                                           an infeasible
+%                                                           trial shrinks the
+%                                                           step and so counts
+%                                                           in both, but an
+%                                                           infeasible probe
+%                                                           ends the solve
+%                                                           without any
+%                                                           shrinkage and
+%                                                           counts only here
 %                                               condJ       [1 x nJ] 2-norm
 %                                                           condition number
 %                                                           of every Jacobian
@@ -164,11 +175,17 @@ function [xSol,fAch,info] = aimSolve(fResid,x0,dx0,tolF,opts)
 %                                                           residual per
 %                                                           control
 %                                               lambda      [1 x nL] damping
-%                                                           factor ending
-%                                                           each line search;
+%                                                           factor of the last
+%                                                           step ATTEMPTED in
+%                                                           each line search.
 %                                                           1 means the full
 %                                                           Newton step was
-%                                                           taken
+%                                                           accepted at once;
+%                                                           on a stall it is
+%                                                           the shortest step
+%                                                           tried, never the
+%                                                           untried halving
+%                                                           below it
 %                                               xHist       [2 x (nA+1)] x0
 %                                                           followed by every
 %                                                           ACCEPTED iterate
@@ -197,7 +214,7 @@ function [xSol,fAch,info] = aimSolve(fResid,x0,dx0,tolF,opts)
 %  already carries. What must never happen is a silent near miss, and
 %  converged = false is what prevents it.
 %
-%  The four refusals, all with converged = false:
+%  The six refusals, all with converged = false:
 %      coorbital:aimSolve:toleranceNotMet    opts.maxIter iterations went by
 %                                            without max(abs(f)) reaching tolF
 %      coorbital:aimSolve:singularJacobian   the Jacobian's condition number
@@ -206,7 +223,22 @@ function [xSol,fAch,info] = aimSolve(fResid,x0,dx0,tolF,opts)
 %                                            Newton step all failed to reduce
 %                                            max(abs(f))
 %      coorbital:aimSolve:jacobianFailed     fResid would not evaluate at a
-%                                            finite-difference probe point
+%                                            finite-difference probe point.
+%                                            Remedy: SHRINK dx0
+%      coorbital:aimSolve:stepUnderflow      a control has drifted to a
+%                                            magnitude at which adding its
+%                                            dx0 changes nothing, so no
+%                                            derivative exists there.
+%                                            Remedy: ENLARGE dx0, or bound
+%                                            the controls with opts.maxStep
+%      coorbital:aimSolve:jacobianNotFinite  both residuals were finite but
+%                                            their difference quotient
+%                                            overflowed. Remedy: rescale
+%                                            fResid
+%  The last three are kept apart rather than merged into one "the Jacobian
+%  could not be built" because their remedies are not the same, and two of
+%  them are exact opposites. A single message telling a caller to shrink dx0
+%  when the fix is to enlarge it is worse than no message.
 %
 %  CONVERGENCE IS ON THE RESIDUAL, NEVER ON THE STEP. max(abs(f)) <= tolF is
 %  the only success criterion. A small step is emphatically NOT evidence of a
@@ -221,11 +253,21 @@ function [xSol,fAch,info] = aimSolve(fResid,x0,dx0,tolF,opts)
 %  number is formed from the singular values, sigma_max/sigma_min, and
 %  compared against opts.condMax BEFORE any step is computed, so the caller
 %  is told the number rather than handed an infinity. The step itself is then
-%  read out of the SAME decomposition, V*inv(S)*U'*f, which costs no second
-%  factorisation and cannot emit the near-singularity warning a backslash
-%  would print to the console. This is the single most common way
-%  a two-axis targeting solve goes wrong, and it is a geometry statement
-%  about the trajectory, not a numerical accident.
+%  SOLVED THROUGH THE SAME THREE FACTORS -- rotate the residual into the
+%  singular basis, divide by the singular values, rotate back -- which costs
+%  no second factorisation and cannot emit the near-singularity warning a
+%  backslash would print to the console. No inverse is formed at any point.
+%  This is the single most common way a two-axis targeting solve goes wrong,
+%  and it is a geometry statement about the trajectory, not a numerical
+%  accident.
+%
+%  Because that test bounds the smallest singular value below by
+%  sigma_max/condMax, it also bounds the step, and there is deliberately no
+%  separate finiteness test on the step itself: such a test would be
+%  unreachable, and unreachable code is worse than absent code because it
+%  reads as protection that was never exercised. A Jacobian whose columns are
+%  parallel to the last bit gives sigma_min exactly zero, an infinite
+%  condition number, and the singularJacobian refusal.
 %
 %  THE STEP IS BOUNDED TWICE. opts.maxStep caps the change in each control
 %  per iteration, applied as ONE scale factor on the whole step so the Newton
@@ -240,10 +282,12 @@ function [xSol,fAch,info] = aimSolve(fResid,x0,dx0,tolF,opts)
 %  to return a non-finite pair, for a control pair whose flight does not
 %  complete -- a coordinate guard, a vehicle that never reaches the glide
 %  phase, an integrator that gives up. At a TRIAL point that is caught,
-%  counted in nInfeasible, and treated exactly like a step that failed to
-%  improve: halve and try again. At a finite-difference PROBE point there is
-%  nothing to halve, so the solve refuses with jacobianFailed and the
-%  message quotes the underlying error.
+%  counted in both nShrink and nInfeasible, and treated exactly like a step
+%  that failed to improve: halve and try again. At a finite-difference PROBE
+%  point there is nothing to halve, so the solve refuses with jacobianFailed,
+%  counting the failure in nInfeasible only, and the message quotes the
+%  underlying error text -- which is quoted on THAT path alone, so a caller
+%  can never be shown an unrelated earlier failure as the cause of this one.
 %
 %  THE INITIAL POINT IS THE ONE EXCEPTION, AND IT THROWS. A non-finite
 %  residual at x0 raises coorbital:aimSolve:nonFiniteEval, and an fResid that
@@ -512,25 +556,54 @@ while true
 %% reused, never recomputed -- that is the whole reason an iteration costs
 %% three propagations and not four -- and the quotient divides by the
 %% REALISED step so that the rounding in xCur + dx0 does not leak into the
-%% derivative:
+%% derivative.
+%%
+%% THREE DISTINCT THINGS CAN GO WRONG HERE, and they are kept apart because
+%% they call for opposite remedies. The realised step can vanish, which means
+%% dx0 is too SMALL against the magnitude the control has drifted to and must
+%% be enlarged. The probe point can fail to fly, which is fResid's business
+%% and usually means dx0 is too LARGE or the guess is badly placed. The
+%% quotient can overflow, which is a scaling problem in the residual itself.
+%% Reporting all three as one refusal would hand the caller a remedy that is
+%% sometimes exactly backwards:
               jMat = zeros(2,2);
-               okJ = true;
+             jFail = '';
+              kBad = 0;
     for kCol = 1:2
             xProbe = xCur;
       xProbe(kCol) = xCur(kCol) + dx0(kCol);
              hReal = xProbe(kCol) - xCur(kCol);
+              kBad = kCol;
+
+%% Tested BEFORE the probe is evaluated, because a probe at a point that is
+%% bit-for-bit the base point buys nothing but a propagation:
+        if hReal == 0
+             jFail = 'underflow';
+            break;
+        end
       [fProbe,okP] = evalSoft(xProbe);
-        if ~okP || hReal == 0
-               okJ = false;
+        if ~okP
+             jFail = 'probe';
             break;
         end
       jMat(:,kCol) = (fProbe - fCur)./hReal;
+        if ~all(isfinite(jMat(:,kCol)))
+             jFail = 'overflow';
+            break;
+        end
     end
 
-%% A probe point that will not fly leaves no Jacobian to guard and no step to
-%% halve, so this one refuses rather than shrinking:
-    if ~okJ
+%% None of the three leaves a Jacobian to guard or a step to halve, so each
+%% refuses rather than shrinking -- but each with its own identifier, so the
+%% caller is not told to shrink dx0 when the fix is to enlarge it:
+    if strcmp(jFail,'underflow')
+             ident = 'coorbital:aimSolve:stepUnderflow';
+        break;
+    elseif strcmp(jFail,'probe')
              ident = 'coorbital:aimSolve:jacobianFailed';
+        break;
+    elseif strcmp(jFail,'overflow')
+             ident = 'coorbital:aimSolve:jacobianNotFinite';
         break;
     end
 
@@ -558,15 +631,20 @@ while true
         break;
     end
 
-%% The Newton direction, as V*inv(S)*U' applied to the residual. Guarded
-%% again on the result, because a Jacobian can pass the condition test and
-%% still produce a non-finite step when the residual itself is near the edge
-%% of the representable range:
+%% The Newton direction, solved through the same three factors: rotate the
+%% residual into the singular basis, divide by the singular values, rotate
+%% back. No inverse is formed anywhere.
+%%
+%% There is deliberately no second finiteness test on the step. The two tests
+%% above already bound it: the Jacobian entries are finite, and the condition
+%% test bounds sVal(2) below by sVal(1)/condMax, so the division cannot
+%% overflow unless the residual itself is within a factor of condMax of the
+%% floating-point ceiling. A test for that would be unreachable code, and
+%% unreachable code is worse than absent code because it reads as protection.
+%% If it ever did happen the solve still refuses rather than misbehaves: an
+%% infinite trial point is simply an infeasible one, and the line search
+%% below shrinks and then reports stepStalled:
               sDir = -(vJac*((uJac'*fCur)./sVal));
-    if ~all(isfinite(sDir))
-             ident = 'coorbital:aimSolve:singularJacobian';
-        break;
-    end
 
 %% Cap the step with ONE scale factor rather than clipping the components
 %% independently: clipping would rotate the step off the Newton direction and
@@ -604,6 +682,13 @@ while true
         end
            nShrink = nShrink + 1;
                lam = lam./2;
+    end
+
+%% Undo the halving the rejected last attempt left behind, so that lambda
+%% always names a factor that was actually TRIED. Reporting 2^-(maxHalve+1)
+%% here would name a step the solve never took:
+    if ~accepted
+               lam = lam.*2;
     end
                nLS = nLS + 1;
       lamHist(nLS) = lam;
@@ -676,22 +761,49 @@ elseif strcmp(ident,'coorbital:aimSolve:singularJacobian')
                      fAch(1),fAch(2));
 elseif strcmp(ident,'coorbital:aimSolve:stepStalled')
       info.message = sprintf(['The damped Newton step stalled at ', ...
-                     'x = [%.10g, %.10g] after %d iteration(s): %d ', ...
-                     'halving(s) of the step, down to a factor of %.6g, ', ...
-                     'all failed to reduce the largest residual below ', ...
-                     '%.6g. Over the whole solve %d trial point(s) would ', ...
-                     'not fly at all. Achieved residuals there are [%.6g, %.6g] ', ...
-                     'against a tolerance of %.6g.'],xSol(1),xSol(2), ...
-                     kIter,opts.maxHalve + 1,lam,errCur,nInfeasible, ...
-                     fAch(1),fAch(2),tolF);
+                     'x = [%.10g, %.10g] after %d iteration(s): %d trial ', ...
+                     'step(s), the shortest a factor %.6g of the full ', ...
+                     'Newton step, all failed to reduce the largest ', ...
+                     'residual below %.6g. Over the whole solve %d trial ', ...
+                     'point(s) would not fly at all. Achieved residuals ', ...
+                     'there are [%.6g, %.6g] against a tolerance of %.6g. ', ...
+                     'This is a near miss being REFUSED rather than ', ...
+                     'returned: raise opts.maxHalve if the direction is ', ...
+                     'right and only the length is wrong, otherwise the ', ...
+                     'aim point is out of reach from this guess.'], ...
+                     xSol(1),xSol(2),kIter,opts.maxHalve + 1,lam,errCur, ...
+                     nInfeasible,fAch(1),fAch(2),tolF);
+elseif strcmp(ident,'coorbital:aimSolve:stepUnderflow')
+      info.message = sprintf(['The difference step underflowed at ', ...
+                     'x = [%.10g, %.10g] after %d iteration(s): control %d ', ...
+                     'has reached a magnitude at which adding its step of ', ...
+                     '%.6g leaves it bit-for-bit unchanged, so no ', ...
+                     'derivative can be measured there. ENLARGE dx0(%d) -- ', ...
+                     'shrinking it makes this worse -- or bound the ', ...
+                     'controls with opts.maxStep so they cannot run out to ', ...
+                     'this magnitude in the first place. The best point ', ...
+                     'visited was x = [%.10g, %.10g], achieving ', ...
+                     '[%.6g, %.6g].'],xCur(1),xCur(2),kIter,kBad, ...
+                     dx0(kBad),kBad,xSol(1),xSol(2),fAch(1),fAch(2));
+elseif strcmp(ident,'coorbital:aimSolve:jacobianNotFinite')
+      info.message = sprintf(['The difference quotient overflowed at ', ...
+                     'x = [%.10g, %.10g] after %d iteration(s). fResid ', ...
+                     'returned finite residuals at both the base point and ', ...
+                     'the probe beside control %d, but they differ by more ', ...
+                     'than the floating-point range spans once divided by ', ...
+                     'the step of %.6g, so the Jacobian column is not ', ...
+                     'finite. Rescale fResid, or shrink dx0(%d) so the ', ...
+                     'probe does not straddle whatever the residual is ', ...
+                     'doing there.'],xCur(1),xCur(2),kIter,kBad,dx0(kBad), ...
+                     kBad);
 else
-      info.message = sprintf(['fResid would not evaluate at a ', ...
-                     'finite-difference probe point beside ', ...
+      info.message = sprintf(['fResid would not evaluate at the ', ...
+                     'finite-difference probe point beside control %d at ', ...
                      'x = [%.10g, %.10g] after %d iteration(s), so the ', ...
                      'Jacobian cannot be built there. The difference ', ...
                      'steps were [%.6g, %.6g]. Shrink dx0, or start from ', ...
                      'a guess whose neighbourhood flies. The underlying ', ...
-                     'failure was: %s'],xCur(1),xCur(2),kIter,dx0(1), ...
+                     'failure was: %s'],kBad,xCur(1),xCur(2),kIter,dx0(1), ...
                      dx0(2),msgLast);
 end
 

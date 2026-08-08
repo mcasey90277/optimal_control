@@ -7,7 +7,7 @@ function test_aimSolve()
 %  Nothing here integrates an equation of motion; the whole point is that a
 %  solver bug and a dynamics bug must not be able to hide behind one another.
 %
-%  Seven reference residuals are used, each chosen to isolate one behaviour:
+%  Nine reference residuals are used, each chosen to isolate one behaviour:
 %
 %      fLin     an exactly linear 2x2 system with root [0.42;0.31]. Newton
 %               solves it in ONE iteration, so the evaluation accounting can
@@ -20,9 +20,18 @@ function test_aimSolve()
 %               method never comes back
 %      fNoRoot  1e4*(atan(x1) - 2). atan is bounded by pi/2 < 2, so there is
 %               no root anywhere and the solve must refuse
+%      fStall   1e4*(1 + (x1-1)^2), whose minimum of 10 km sits AT the guess.
+%               Every step makes the miss worse, so the line search runs out
+%               of halvings: the near miss that must be refused, not returned
 %      fSing    two components that are the same linear combination of the
 %               controls, so the Jacobian columns are parallel: the
-%               ill-conditioning of a range maximum, in closed form
+%               ill-conditioning of a range maximum, in closed form. With the
+%               ceiling loosened it also drives the controls out to 1e12,
+%               where the difference step underflows -- a distinct failure
+%               with the OPPOSITE remedy
+%      fSwing   finite at every point but jumping the full floating-point
+%               range across x1 = 0.5, so the difference quotient overflows
+%               while both evaluations succeed
 %      fGuard   fAtan behind a coordinate guard that THROWS for x1 < -3,
 %               which is exactly where the undamped first step lands
 %      fProbe   a residual that returns at ONE point and throws everywhere
@@ -298,17 +307,111 @@ function test_aimSolve()
         'the refusal message must name a remedy: %s',info.message);
 
 %% -------------------------------------------------------------------
+%% THE STEP STALLS: the near miss that must be REFUSED, not returned
+%% -------------------------------------------------------------------
+%% fStall's first component is 1e4*(1 + (x1-1)^2). It has a strict minimum of
+%% 10000 m at x1 = 1 and is never smaller anywhere, so no control pair on the
+%% plane gets within the 1 m tolerance -- but unlike fNoRoot, the guess is
+%% already sitting ON the best point there is. This is the targeting case the
+%% converged flag exists for: an aim point 10 km beyond the envelope,
+%% approached from the control that gets closest to it. Every Newton step
+%% from here makes the miss worse, and a solver that returned its last
+%% iterate with no flag would hand back a 10 km miss dressed as a solution.
+%%
+%% The arithmetic is exact enough to hand-trace. At x1 = 1 the true
+%% derivative of a pure quadratic is zero, so the forward difference measures
+%% the chord instead: 1e4*h^2/h = 1e4*1e-5 = 0.1. Against the second row's
+%% 1e4 that is a condition number of 1e5, comfortably inside the ceiling, so
+%% the Jacobian is NOT refused -- the step is computed, comes out at -1e5,
+%% and every halving of it still moves x1 off the minimum. With maxHalve = 4
+%% there are five trial steps, all rejected, and the solve refuses.
+%%
+%% Nothing else in this file reaches this exit, and it is the exit that
+%% guards the whole "never a silent near miss" contract:
+            fStall = @(x) [1.0e4.*(1 + (x(1) - 1).^2);1.0e4.*(x(2) - 0.5)];
+            oStall = struct('maxHalve',4);
+    [xSol,fAch,info] = coorbital.util.aimSolve(fStall,[1.0;0.5],hFD,1.0,oStall);
+    assert(~info.converged, ...
+        ['a stalled solve reported converged = true. It returned ', ...
+         'x = [%.17g, %.17g] achieving [%.17g, %.17g] against a 1 m ', ...
+         'tolerance -- a 10 km miss presented as a solution'], ...
+        xSol(1),xSol(2),fAch(1),fAch(2));
+    assert(strcmp(info.identifier,'coorbital:aimSolve:stepStalled'), ...
+        'wrong identifier on the stalled case: ''%s''',info.identifier);
+    assert(info.iterations == 1, ...
+        'the stall happens on the first line search, took %d iterations', ...
+        info.iterations);
+
+%% opts.maxHalve IS HONOURED, exactly. Five trial steps for maxHalve = 4, not
+%% four and not a hundred: this is the assertion a solver that ignored the
+%% option, or halved one time too few or too many, fails:
+    assert(info.nShrink == oStall.maxHalve + 1, ...
+        ['maxHalve = %d must give exactly %d rejected trial steps, gave %d'], ...
+        oStall.maxHalve,oStall.maxHalve + 1,info.nShrink);
+    assert(info.nEval == 1 + 2 + (oStall.maxHalve + 1), ...
+        ['a one-iteration stall costs 1 initial + 2 probes + %d trials = ', ...
+         '%d evaluations, it cost %d'],oStall.maxHalve + 1, ...
+        3 + oStall.maxHalve,info.nEval);
+    assert(info.nInfeasible == 0, ...
+        ['nothing failed to FLY in the stalled case; the steps merely did ', ...
+         'not help. nInfeasible is %d'],info.nInfeasible);
+
+%% The shortest step actually TRIED is 2^-4 of the Newton step. Not
+%% 2^-5: that halving is where the loop left the counter, but it was never
+%% evaluated, and reporting it would name a step the solve did not take:
+    assert(isscalar(info.lambda) && abs(info.lambda - 0.0625) < 1.0e-15, ...
+        ['lambda must be the shortest step TRIED, 2^-4 = 0.0625, not the ', ...
+         'untried halving below it; got %s'],mat2str(info.lambda));
+
+%% Best-so-far is the initial guess, because nothing beat it -- and that is
+%% the whole point: the solver did not wander off and hand back the last
+%% place it happened to look:
+    assert(isequal(xSol,[1.0;0.5]) && isequal(fAch,[1.0e4;0]), ...
+        ['a stall must return the best point seen, which here is the guess ', ...
+         'itself: got x = %s f = %s'],mat2str(xSol),mat2str(fAch));
+
+%% The message has to carry enough for a caller to write its own refusal, and
+%% is asserted phrase by phrase so that gutting it does not go unnoticed:
+    assert(contains(info.message,'stalled'), ...
+        'the stall message must say so plainly: %s',info.message);
+    assert(contains(info.message,'5 trial step(s)'), ...
+        'the stall message must state how many steps were tried: %s', ...
+        info.message);
+    assert(contains(info.message,'REFUSED'), ...
+        ['the stall message must be explicit that a near miss is being ', ...
+         'refused rather than returned: %s'],info.message);
+    assert(contains(info.message,'opts.maxHalve'), ...
+        'the stall message must name a remedy: %s',info.message);
+
+%% A different maxHalve gives a different count, which rules out a solver
+%% that happens to halve five times whatever it is told:
+    [~,~,infoS1] = coorbital.util.aimSolve(fStall,[1.0;0.5],hFD,1.0, ...
+                   struct('maxHalve',1));
+    assert(strcmp(infoS1.identifier,'coorbital:aimSolve:stepStalled') && ...
+            infoS1.nShrink == 2 && infoS1.nEval == 5, ...
+        ['maxHalve = 1 must give 2 trial steps and 5 evaluations, gave ', ...
+         '%d and %d'],infoS1.nShrink,infoS1.nEval);
+
+%% -------------------------------------------------------------------
 %% A SINGULAR JACOBIAN is detected and reported, not turned into infinity
 %% -------------------------------------------------------------------
 %% Both components of fSing depend on x1 and x2 only through the sum x1 + x2,
-%% so the Jacobian columns are identical up to scale: [1e4 1e4; 2e4 2e4],
-%% exactly rank one. This is the closed-form version of what happens near a
-%% maximum-range control, where the downrange sensitivity collapses and the
-%% two controls stop moving the two residuals independently. The two
-%% components also disagree -- one wants x1 + x2 = 1 and the other 1.5 -- so
-%% there is no root to find even if the step could be computed.
+%% so the true Jacobian's columns are identical up to scale, [1e4 1e4;
+%% 2e4 2e4], and it is rank one IN EXACT ARITHMETIC. The FINITE-DIFFERENCE
+%% Jacobian is only nearly so -- the cancellation in the difference quotient
+%% leaves the columns disagreeing in the last few bits, which is why the
+%% measured condition number comes out around 7e15 rather than infinite. That
+%% is the honest thing to assert against, and it is also what a real
+%% collapsing sensitivity looks like: never exactly singular, just far past
+%% any ceiling worth trusting.
 %%
-%% What must NOT happen is a backslash against a rank-one matrix producing an
+%% This is the closed-form version of what happens near a maximum-range
+%% control, where the downrange sensitivity collapses and the two controls
+%% stop moving the two residuals independently. The two components also
+%% disagree -- one wants x1 + x2 = 1 and the other 1.5 -- so there is no root
+%% to find even if the step could be computed.
+%%
+%% What must NOT happen is a rank-deficient linear solve producing an
 %% infinite step, or a near-singularity warning escaping to the console:
     [xSol,fAch,info] = coorbital.util.aimSolve(fSing,[0.10;0.20],hFD,1.0);
     assert(~info.converged, ...
@@ -343,15 +446,83 @@ function test_aimSolve()
         ['refusing on the first Jacobian costs 1 initial + 2 probes = 3 ', ...
          'evaluations, it cost %d'],info.nEval);
 
-%% A ceiling loose enough to let the rank-one system through must still not
-%% produce an infinity: the fallback guard on the step itself catches it:
+%% -------------------------------------------------------------------
+%% THE DIFFERENCE STEP UNDERFLOWS, and the remedy is the OPPOSITE one
+%% -------------------------------------------------------------------
+%% Loosen the ceiling until the nearly-rank-one system gets through, and the
+%% solve does what an unguarded Newton method does with a condition number of
+%% 7e15: it takes a step of order 1e12 and lands the controls out at
+%% x = [-1.3e12, 1.3e12]. There, adding a difference step of 1e-5 leaves the
+%% control bit-for-bit unchanged -- eps(1.3e12) is about 2e-4, twenty times
+%% the step -- so the difference quotient measures nothing at all.
+%%
+%% This is a DIFFERENT failure from a probe point that will not fly, and the
+%% distinction is the whole reason it has its own identifier. The fix here is
+%% to ENLARGE dx0, or to stop the controls running out this far with
+%% opts.maxStep. A refusal that told the caller to shrink dx0 -- which is
+%% what the probe-failure message says, and rightly -- would be advice in
+%% exactly the wrong direction:
             oLoose = struct('condMax',1.0e18,'maxIter',3);
     [xL,fL,infoL] = coorbital.util.aimSolve(fSing,[0.10;0.20],hFD,1.0,oLoose);
     assert(~infoL.converged, ...
         'the singular system converged with a loosened condMax');
+    assert(strcmp(infoL.identifier,'coorbital:aimSolve:stepUnderflow'), ...
+        ['a vanished difference step must have its own identifier, not be ', ...
+         'folded into the probe-failure exit; got ''%s'''],infoL.identifier);
     assert(all(isfinite(xL)) && all(isfinite(fL)), ...
         'a loosened condMax let a non-finite result out: x = %s f = %s', ...
         mat2str(xL),mat2str(fL));
+
+%% The control really did run out to where eps exceeds the step. Asserted
+%% against the floating-point spacing rather than against the measured 1.3e12,
+%% so the test states the CONDITION rather than memorising an outcome:
+    assert(eps(xL(1)) > hFD(1), ...
+        ['the underflow case is only meaningful if the step really did ', ...
+         'vanish: eps(%.6g) is %.6g against a step of %.6g'], ...
+        xL(1),eps(xL(1)),hFD(1));
+    assert(contains(infoL.message,'ENLARGE dx0'), ...
+        ['the underflow message must say to enlarge the step, not shrink ', ...
+         'it: %s'],infoL.message);
+    assert(~contains(infoL.message,'would not evaluate'), ...
+        ['the underflow message must not claim fResid failed, because it ', ...
+         'did not: %s'],infoL.message);
+    assert(contains(infoL.message,'opts.maxStep'), ...
+        'the underflow message must name the other remedy: %s',infoL.message);
+
+%% -------------------------------------------------------------------
+%% THE DIFFERENCE QUOTIENT OVERFLOWS
+%% -------------------------------------------------------------------
+%% The third way the Jacobian can fail to exist: fResid returns finite
+%% residuals at both the base point and the probe, but they sit at opposite
+%% ends of the floating-point range, so their difference is Inf before the
+%% division even happens.
+%%
+%% The reason to catch this explicitly is DIAGNOSIS, not safety. Left to
+%% itself the solve does not blow up -- svd on a non-finite matrix returns
+%% NaN singular values on R2025b rather than erroring, the condition number
+%% comes out NaN, and the isfinite test on it refuses with
+%% singularJacobian. Safe, and completely wrong: singularJacobian tells the
+%% caller its two controls have stopped moving the two residuals
+%% independently and sends it off to look at range-maximum geometry, when
+%% the actual fault is that fResid is scaled absurdly. The measured
+%% behaviour of svd on non-finite input is also not something MATLAB
+%% contracts, so relying on it either way would be unwise:
+    [xO,fO,infoO] = coorbital.util.aimSolve(@hugeSwing,[0.50;0.0],hFD,1.0);
+    assert(~infoO.converged, ...
+        'an overflowing difference quotient was reported as converged');
+    assert(strcmp(infoO.identifier,'coorbital:aimSolve:jacobianNotFinite'), ...
+        'wrong identifier on the overflowing quotient: ''%s''',infoO.identifier);
+    assert(all(isfinite(xO)) && all(isfinite(fO)), ...
+        'the overflow case must still return finite numbers: x = %s f = %s', ...
+        mat2str(xO),mat2str(fO));
+    assert(isempty(infoO.condJ) && size(infoO.jacobians,3) == 0, ...
+        ['no Jacobian was ever completed, so none should be reported: ', ...
+         'condJ %s'],mat2str(infoO.condJ));
+    assert(infoO.nEval == 2, ...
+        ['the overflow is caught on the FIRST probe, so it costs 1 initial ', ...
+         '+ 1 probe = 2 evaluations, it cost %d'],infoO.nEval);
+    assert(contains(infoO.message,'overflowed'), ...
+        'the overflow message must say what happened: %s',infoO.message);
 
 %% -------------------------------------------------------------------
 %% A RESIDUAL THAT THROWS is handled by shrinkage, not by aborting
@@ -372,11 +543,16 @@ function test_aimSolve()
     assert(max(abs(fAch)) <= 1.0e-3, ...
         'guarded case achieved [%.17g,%.17g], outside tolerance', ...
         fAch(1),fAch(2));
-    assert(info.nInfeasible >= 1, ...
-        ['the guard must have been hit at least once and counted; ', ...
-         'nInfeasible is %d'],info.nInfeasible);
+    assert(info.nInfeasible == 1, ...
+        ['the guard is hit exactly once, on the full first step, and must ', ...
+         'be counted; nInfeasible is %d'],info.nInfeasible);
+
+%% An infeasible TRIAL counts in both tallies, because it both failed to fly
+%% and shrank the step. A probe failure does not, and the assertion below
+%% pins that distinction down rather than leaving the two counters loosely
+%% related:
     assert(info.nShrink >= info.nInfeasible, ...
-        'every infeasible trial must also have shrunk the step: %d against %d', ...
+        'every infeasible TRIAL must also have shrunk the step: %d against %d', ...
         info.nShrink,info.nInfeasible);
 
 %% A guard that throws EVERYWHERE around the guess cannot be worked around by
@@ -390,6 +566,16 @@ function test_aimSolve()
         'wrong identifier when the probe point fails: ''%s''',infoG.identifier);
     assert(contains(infoG.message,'no flight here'), ...
         'the message must quote the underlying failure: %s',infoG.message);
+
+%% AND HERE nInfeasible IS NOT A SUBSET OF nShrink. The probe failed, so
+%% nothing was ever shrunk: nInfeasible = 1 with nShrink = 0. The header
+%% documents the counters this way round, and this asserts it, because the
+%% obvious reading -- that nInfeasible counts a subset of the rejected trials
+%% -- is wrong and would quietly mislead anyone reading info to work out what
+%% a solve cost:
+    assert(infoG.nInfeasible == 1 && infoG.nShrink == 0, ...
+        ['a probe failure counts in nInfeasible only, never in nShrink: ', ...
+         'got %d and %d'],infoG.nInfeasible,infoG.nShrink);
 
 %% -------------------------------------------------------------------
 %% THE EVALUATION COUNT IS TRUTHFUL, and no point is evaluated twice
@@ -594,6 +780,40 @@ function test_aimSolve()
             error('test:aimSolve:probe','no flight here at all');
         end
                  f = [1.0e4;0];
+    end
+
+    function f = hugeSwing(x)
+    %% Purpose:
+    %
+    %  A residual that is perfectly finite everywhere and yet has no
+    %  measurable derivative: it jumps from -1e308 to +1e308 across
+    %  x1 = 0.5. Both the base point and the probe beside it return legal
+    %  doubles, so nothing in the evaluation wrapper objects, but their
+    %  difference overflows before the division by the step even happens.
+    %  Contrived on purpose -- the point is that the Jacobian must be checked
+    %  for finiteness rather than handed to svd, which quietly returns NaN
+    %  singular values and turns a scaling fault into a refusal that blames
+    %  the trajectory geometry instead.
+    %
+    %% Inputs:
+    %
+    %  x                [2 x 1]                     Controls (dimensionless)
+    %
+    %% Outputs:
+    %
+    %  f                [2 x 1]                     Residuals (m), finite but
+    %                                               at opposite ends of the
+    %                                               floating-point range
+    %
+    %% Revision History:
+    %  Michael Casey                                                08/08/2026
+    %  Copyright 2026 Coorbital, Inc.
+    %% ------------------------ Begin Code Sequence ---------------------------
+        if x(1) > 0.5
+                 f = [1.0e308;0];
+        else
+                 f = [-1.0e308;0];
+        end
     end
 
     function f = countedMild(x)

@@ -8,12 +8,13 @@ trajectories: give it a vehicle, a launch or entry state, and a control
 schedule, and it integrates the flight and reports it. No optimization — see
 [Out of scope](#out-of-scope).
 
-Two milestones have shipped:
+Three milestones have shipped:
 
 | Milestone | Delivers |
 |---|---|
 | 2026-08-06 | Validated glide propagator — `glide3DOF`, `phaseRun`, `HGV/run_glide` |
-| 2026-08-07 | **Powered boost, a descent phase, and full three-phase chains** — `boost3DOF`, `constThrust`, `pitchProgram`, `massConstant`, `BM/run_ballistic` (boost → coast → impact), `HGV/run_boost_glide` (boost → glide → descent) |
+| 2026-08-07 | Powered boost, a descent phase, and full three-phase chains — `boost3DOF`, `constThrust`, `pitchProgram`, `massConstant`, `BM/run_ballistic` (boost → coast → impact), `HGV/run_boost_glide` (boost → glide → descent) |
+| 2026-08-07 | **Point-to-point targeting and visualization** — `greatCircleBearing`, `rangeSolve`, the `+viz` package (`groundTrack`, `profilePlot`, `globe3D`, `globeMovie`), and `HGV/run_target`: give it a launch point and a destination and it solves the trajectory that connects them. See [Point-to-point targeting](#point-to-point-targeting) |
 
 The design rationale is in `DESIGN.md`; the running log of what broke and why is
 in `LESSONS_LEARNED.md`. This file covers layout, use, and extension.
@@ -29,13 +30,18 @@ vehicle and booster parameter in this library is a marked PLACEHOLDER.** See
 Everything below was executed on 2026-08-07 against the code as committed.
 Every command shown was run; every number shown came out of that run.
 
-### The three entry scripts
+### The four entry scripts
 
 | Script | Flight | Phases |
 |---|---|---|
 | `HGV/run_glide` | unpowered glide from an entry state | 1 (glide) |
 | `BM/run_ballistic` | ballistic missile, pad to impact | 3 (boost, coast to apogee, descent) |
 | `HGV/run_boost_glide` | boost-glide vehicle, pad to impact | 3 (boost, glide, terminal descent) |
+| `HGV/run_target` | **launch point → destination point**, solved | 3 (boost to a solved cutoff, glide, descent) |
+
+The first three fly *launch site + azimuth + control schedule → wherever the
+physics puts it*. `run_target` inverts that: it takes two latitude/longitude
+pairs and solves for the trajectory that connects them.
 
 Each puts itself and the library root on the path, so it runs from anywhere
 once MATLAB can see the file. Each is driven from a fenced
@@ -48,15 +54,16 @@ rather than silently leaving the shipped value in place:
 traj          = run_glide(struct('psiEntry',135,'latEntry',25,'showPlots',false));
 [traj,info]   = run_ballistic(struct('separation',false,'showPlots',false));
 [traj,info]   = run_boost_glide(struct('hHandoff',25,'showPlots',false));
+[traj,info]   = run_target(struct('latTarget',30,'lonTarget',-140,'showPlots',false));
 ```
 
-The two chain scripts return a second output, `info`, carrying every number in
-the printed summary at full precision. `run_boost_glide`'s `info` additionally
-carries `phases`, `env`, `x0`, `boostVeh` and `glideVeh` — everything an
-independent checker needs to re-integrate the same chain with a different
-solver, which is exactly what `tests/test_fullChain.m` does.
+The three chain scripts return a second output, `info`, carrying every number in
+the printed summary at full precision. `run_boost_glide`'s and `run_target`'s
+`info` additionally carry `phases`, `env`, `x0`, `boostVeh` and `glideVeh` —
+everything an independent checker needs to re-integrate the same chain with a
+different solver, which is exactly what `tests/test_fullChain.m` does.
 
-Headless, which is how all three were verified:
+Headless, which is how all four were verified:
 
 ```bash
 /Applications/MATLAB_R2025b.app/bin/matlab -batch \
@@ -67,6 +74,9 @@ Headless, which is how all three were verified:
 
 /Applications/MATLAB_R2025b.app/bin/matlab -batch \
   "cd('/Users/msc/Desktop/optimal_control/missiles/HGV'); run_boost_glide(struct('showPlots',false))"
+
+/Applications/MATLAB_R2025b.app/bin/matlab -batch \
+  "cd('/Users/msc/Desktop/optimal_control/missiles/HGV'); run_target(struct('showPlots',false))"
 ```
 
 ### The glide entry script in detail
@@ -114,38 +124,45 @@ file, and raises `missiles:testsFailed` at the end if any failed, so `-batch`
 returns a non-zero exit code. Current state:
 
 ```
-  PASS  test_allenEggers      PASS  test_glide3DOF
-  PASS  test_boost3DOF        PASS  test_greatCircle
+  PASS  test_allenEggers      PASS  test_greatCircle
+  PASS  test_boost3DOF        PASS  test_greatCircleBearing
   PASS  test_boostEvents      PASS  test_missileConst
   PASS  test_constLD          PASS  test_phaseRun
   PASS  test_constThrust      PASS  test_pitchProgram
-  PASS  test_equilibriumGlide PASS  test_runBallistic
-  PASS  test_expAtmos         PASS  test_runGlide
-  PASS  test_fullChain        PASS  test_sphereGrav
+  PASS  test_equilibriumGlide PASS  test_rangeSolve
+  PASS  test_expAtmos         PASS  test_runBallistic
+  PASS  test_fullChain        PASS  test_runGlide
+  PASS  test_glide3DOF        PASS  test_runTarget
+                              PASS  test_sphereGrav
+                              PASS  test_viz
 
-16 passed, 0 failed
+20 passed, 0 failed
 ```
 
-6.3 s wall clock including MATLAB startup, measured 2026-08-07 on an Apple
-silicon Mac, and zero warnings. Twelve of the sixteen are unit or
-analytic-validation tests — ten exercise one library function apiece, and
+14.5 s wall clock including MATLAB startup, measured 2026-08-07 on an Apple
+silicon Mac, and zero warnings. Fifteen of the twenty are unit or
+analytic-validation tests — thirteen exercise one library function apiece, and
 `test_allenEggers` and `test_equilibriumGlide` check the propagator against a
-closed-form solution. The other four test **compositions**, and they are the
+closed-form solution. The other five test **compositions**, and they are the
 important ones:
 
 | Test | What it composes |
 |---|---|
 | `test_runGlide` | `HGV/run_glide` end to end — unit conversion, the `greatCircle` call site, the peak search, the termination diagnosis, and the printed summary, which it parses rather than recomputes. Also guards the deliberate duplication between `vehicle_hgv` and `vehicleDefaults`. |
 | `test_runBallistic` | `BM/run_ballistic` end to end — the boost → coast → descent chain, the staging link, and the Keplerian cross-check. |
-| `test_fullChain` | The milestone's headline deliverable: boost, glide and descent on one seven-state vector. Re-integrates **across** each junction with `ode89` at 1e-12 — a different method at a hundred times the driver's tolerance — and asserts continuity in states 1–6 and the expected staging jump in state 7. |
+| `test_runTarget` | `HGV/run_target` end to end — the closed-form azimuth, the bisection on cutoff time, the separation link, the reachable-envelope refusal at BOTH ends of the band, and the printed summary. The miss it asserts is measured impact-to-target with `greatCircle` from the flown state, not read back out of the solver's own residual. |
+| `test_fullChain` | The chain milestone's headline deliverable: boost, glide and descent on one seven-state vector. Re-integrates **across** each junction with `ode89` at 1e-12 — a different method at a hundred times the driver's tolerance — and asserts continuity in states 1–6 and the expected staging jump in state 7. |
 | `test_boostEvents` | `eventBurnout` and `eventApogee` inside a live propagation, not just as scalar function calls. |
 
 `test_runGlide` runs two propagations, the shipped due-east configuration and a
 south-east one, because the shipped geometry is provably blind to a lat/lon
 transposition at the `greatCircle` call site (with the entry point at the origin
 the central angle is symmetric in the terminal latitude and longitude, so the
-swap changes the summary by nothing at all). Both chain scripts ship an
-off-axis geometry for the same reason.
+swap changes the summary by nothing at all). All three chain scripts ship an
+off-axis geometry for the same reason, and `test_runTarget` proves its geometry
+is discriminating — it asserts that every transposition of the `greatCircle`
+arguments moves the range by more than fifty times the miss budget — rather
+than assuming it.
 
 ### Self-demos
 
@@ -208,17 +225,18 @@ Everything reusable lives in one `+coorbital` package. Vehicle folders hold
 
 | Path | Contents |
 |---|---|
-| `+coorbital/+util/` | `missileConst.m`, `vehicleDefaults.m`, `boosterDefaults.m`, `greatCircle.m` |
+| `+coorbital/+util/` | `missileConst.m`, `vehicleDefaults.m`, `boosterDefaults.m`, `greatCircle.m`, `greatCircleBearing.m`, `rangeSolve.m` |
 | `+coorbital/+atmos/` | `expAtmos.m` |
 | `+coorbital/+grav/` | `sphereGrav.m` |
 | `+coorbital/+aero/` | `constLD.m` |
 | `+coorbital/+eom/` | `glide3DOF.m`, `boost3DOF.m`, `massConstant.m` |
 | `+coorbital/+guide/` | `prescribed.m`, `pitchProgram.m` |
 | `+coorbital/+prop/` | `phaseRun.m`, `constThrust.m`, `eventAltitude.m`, `eventApogee.m`, `eventBurnout.m` |
-| `HGV/` | `run_glide.m`, `run_boost_glide.m`, `vehicle_hgv.m` |
+| `+coorbital/+viz/` | `groundTrack.m`, `profilePlot.m`, `globe3D.m`, `globeMovie.m`, plus `private/` helpers |
+| `HGV/` | `run_glide.m`, `run_boost_glide.m`, `run_target.m`, `vehicle_hgv.m` |
 | `BM/` | `run_ballistic.m`, `vehicle_bm.m` |
-| `tests/` | `run_tests.m` plus sixteen `test_*.m` |
-| `docs/` | this file, `DESIGN.md`, `LESSONS_LEARNED.md`, the two plans, reviews |
+| `tests/` | `run_tests.m` plus twenty `test_*.m` |
+| `docs/` | this file, `DESIGN.md`, `LESSONS_LEARNED.md`, the three plans, reviews |
 
 Note the split: `+prop` holds both the **propagator** (`phaseRun`, the events)
 and **propulsion** (`constThrust`). One package, two meanings of the word,
@@ -246,6 +264,35 @@ cannot fall out of sync with lift.
 **`util/greatCircle`** is the haversine central angle, chosen over the spherical
 law of cosines because that form loses half its significant digits below about
 1e-8 rad and terminal-phase ranges are short.
+
+**`util/greatCircleBearing`** is the companion *initial bearing* of the same
+arc, clockwise from north and wrapped into `[0,2π)` — which is exactly the
+library's heading convention `psi`, so it drops straight into a launch state
+with no sign flip. Bearing is **not** symmetric under exchange of the two
+points: LAX→JFK is 65.867° while JFK→LAX is 273.841°, not the 245.867° a naive
+reversal would give. Its header states the three degenerate cases (coincident,
+antipodal, polar) and what it returns at each.
+
+**`util/rangeSolve`** bisects a scalar parameter until `fRange(x)` matches a
+target value, treating `fRange` as an opaque, expensive black box — in the
+intended use one call is a whole trajectory propagation. Bisection rather than
+a secant or Newton method because there is no derivative, the function is only
+piecewise smooth, and bisection cannot be thrown off a cliff by a local kink.
+**An unreachable target is not an error**: it returns `converged = false` with
+the achievable band in `info`, so the caller can phrase the refusal in its own
+vocabulary. It never evaluates `fRange` twice at the same abscissa.
+
+**`+viz`** is the plotting package: `groundTrack` (lat/lon track, one coloured
+segment per phase, launch, target and impact marked), `profilePlot` (a chosen
+subset of altitude, speed, Mach, dynamic pressure, load factor, mass and flight
+path against time), `globe3D` (a still 3-D Earth with the trajectory arc) and
+`globeMovie` (the same scene as an MP4 with the trajectory developing over
+time). Every one takes the same `(traj,veh,env,opts)` argument list — several
+of them do not read `veh` or `env` and say so in their headers — and every one
+reads the trajectory and never writes it, so no figure can move a number in a
+summary. The Earth texture and starfield come from the pumpkyn toolbox when it
+is on the path and degrade to a plain shaded sphere on a black background when
+it is not; both paths are a fully working figure and need no network.
 
 **`atmos` / `grav` / `aero` / `prop`** are the four swappable model families. See
 [Adding a fidelity level](#adding-a-fidelity-level) — this split is the point of
@@ -555,6 +602,106 @@ the user block.
 
 ---
 
+## Point-to-point targeting
+
+`HGV/run_target` takes a launch point and a destination point and solves for the
+trajectory that connects them. That is **two separate solves**, and on a
+non-rotating Earth they do not interact.
+
+**Azimuth — closed form, no iteration.** `coorbital.util.greatCircleBearing`
+gives the initial bearing of the launch-to-target great circle, clockwise from
+north, which is exactly the heading state `psi`. It is written straight into the
+launch state; `test_runTarget` asserts `traj.x(1,6)` equals it to machine
+precision, and the shipped run reproduces it bit-identically.
+
+**Range — bisection on thrust-termination time.** Of the available control
+parameters, only this one is monotonic and single-valued:
+
+| Parameter | Behaviour | Verdict |
+|---|---|---|
+| Thrust-termination time | less burn, less energy, shorter range | **chosen** |
+| Pitch-program loft angle | two branches either side of a max-range hump | rejected — a root finder lands on whichever branch it started nearest |
+| Glide handoff altitude | bifurcates on the glide phugoid's troughs; 30 km costs `run_boost_glide` 1882 km while every phase still reports nominal | rejected outright |
+
+It also needs **no new machinery**: the boost phase already ends at `tspan(2)`
+when the burnout event has not fired first, so a shortened `tspan` *is* a
+commanded cutoff. `coorbital.util.rangeSolve` does the bisection; `run_target`
+supplies the propagation.
+
+**Early cutoff leaves unburned propellant, and it is thrown away.** At
+separation the whole booster goes — dry structure and the propellant still in it
+— so the post-separation vehicle is exactly the payload:
+
+```matlab
+        ph(1).link = @(x) [x(1:6); cfg.mGlide];
+```
+
+That is what lets one glide vehicle struct serve every cutoff, and it is what
+`coorbital.eom.massConstant` checks on every derivative evaluation. Drop the
+link and the carried mass is 17400 kg while the equations of motion divide by
+900 kg; the guard raises `coorbital:massConstant:massMismatch` immediately
+rather than flying the whole glide at nineteen times its weight.
+
+**The reachable envelope is reported, not assumed.** The two bracket endpoints
+are propagated before the solve begins, and their ranges *are* the envelope. A
+target outside it is **refused in words**, with the band in kilometres and what
+to change, at both ends:
+
+```
+    required range     18815.80 km    (great circle on the r = 6378.137 km sphere)
+    reachable            202.86 to 7737.63 km
+    shortfall          11078.17 km    (required minus the nearer edge of the band)
+```
+
+A refusal returns an empty trajectory and `info.refused = true`; it does **not**
+throw, so a caller can read the band out of `info` without a `try`/`catch`.
+
+### Two limitations, printed in every summary
+
+**The azimuth is exact only for a non-rotating Earth.** With `env.omegaE = 0`
+the ground track of a zero-bank trajectory is a great circle, so the initial
+bearing is the whole answer. Turn rotation on and it is not: over the shipped
+1626 s flight the ground beneath a 35°N target sweeps **620 km** east, so the
+vehicle would have to be aimed where the target is going to be. That makes the
+azimuth depend on the flight time, the flight time on the cutoff, and the
+cutoff on the azimuth — an **outer iteration** around the range solve, which
+`run_target` does not have and which is out of scope for it. Setting
+`earthSpin` true prints a caution saying the reported miss is against a target
+that stood still.
+
+**The miss is the residual of the range solve, along the great circle.**
+Bisection matches a *distance*; nothing in it steers sideways. Cross-range comes
+out at zero in the shipped configuration because every commanded bank angle is
+zero — and that is a property of *that configuration*, not a general guarantee.
+`run_target` **measures** the cross-track offset of the impact point from the
+launch-to-target great circle every run and warns when it exceeds the range
+tolerance. Give the descent `run_boost_glide`'s 75° terminal bank and it does:
+the heading turns 162°, the range solve still converges to a 0.6 km residual,
+and the vehicle misses by **21.5 km**. That is why `run_target` ships
+`descBank = 0` where `run_boost_glide` ships 75 — a targeting decision, not an
+aerodynamic one, and the user block says so at the point of definition.
+
+### The movie
+
+`coorbital.viz.globeMovie` renders the trajectory developing over the Earth. It
+is off by default because it is the expensive part of a run:
+
+```matlab
+run_target(struct('showPlots',false,'movieOn',true,'movieFrames',60, ...
+                  'movieFile','/tmp/run_target.mp4'));
+```
+
+Run 2026-08-07, 60 frames at 1280×720 and 20 fps, twice. With the pumpkyn
+toolbox on the path it took 13 s wall clock including MATLAB startup and wrote
+6.4 MB over the `earth-clouds-4k` texture and the `starmap_4k` background;
+without it, 2.1 MB over a plain shaded sphere on black, which is the documented
+degradation and needs no network. Both are a working movie: the launch point,
+the skipping glide and the terminal descent onto the target are visible in each,
+and the three phases are coloured separately. Output goes to `tempdir` by
+default — a movie is a build artefact and does not belong in the source tree.
+
+---
+
 ## Validated results
 
 All numbers below were produced by running the code, not copied from a report.
@@ -743,6 +890,41 @@ the continued glide climbs out of; it cannot see a handoff that truncated a
 shallow skip without rebounding. The 25 km case loses 173 km against the shipped
 run with no rebound and therefore no warning. Partial coverage was taken because
 it costs nothing, not because it is complete.
+
+### What `run_target` produces
+
+Shipped block — launch 20°N 155°W, target 35°N 120°W, cutoff bracket 0.50 to
+1.00 of full burn, 1 km range tolerance, zero bank throughout. Run 2026-08-07:
+
+```
+boost            thrust terminated on command at t = 75.6820 s with 1801.8 kg
+                 of propellant still aboard (nominal)
+required range      3811.240 km    (great circle, launch to target)
+achieved range      3811.751 km
+range residual        +511.24 m    (achieved minus required, signed)
+MISS DISTANCE          511.24 m    (impact to target, from the FLOWN state)
+launch azimuth       56.627204 deg (closed form, no iteration)
+flown azimuth        56.627204 deg (-6.488e-12 deg from the commanded one)
+cross-track              -0.00 m   (-4.064e-07 m)
+solved cutoff         75.6820 s    (0.939941 of the 80.5178 s full burn)
+propellant burned     28198.2 kg   of 30000.0 kg; 1801.8 kg thrown away unburned
+reachable            202.861 to 7737.630 km
+iterations                  10     (12 trajectory propagations, plus one to re-fly)
+flight time          1626.09 s     (27.10 min)
+impact               35.001317 N, 119.994629 W  (target 35.000000, -120.000000)
+```
+
+Three independent checks on that solve, all recomputed outside the script:
+
+| Check | Reference | Measured |
+|---|---|---|
+| Impact-to-target distance, `greatCircle` on the flown terminal state | the reported 511.243460471 m miss | `511.243460471 m`, difference **`0.000e+00`** |
+| Miss against the magnitude of the range residual — this is the zero-cross-range property, measured | equal | `9.286e-10 m` apart |
+| `traj.x(1,6)` against `greatCircleBearing(launch,target)` | equal | **bit-identical**, `0` ulp |
+
+The whole solve — twelve propagations, the re-fly, and the summary — takes about
+2 s. A propagation here is roughly 0.15 s, which is why the range tolerance can
+be tightened almost for free: each halving costs one more.
 
 ---
 
@@ -942,14 +1124,19 @@ Deliberately excluded. Each becomes its own plan.
 | **Multi-stage boosters** | One stage, one burn. `phaseRun`'s per-phase `link` is the mechanism a second stage would use; nothing else blocks it. |
 | **Terminal guidance laws** | The descent phase flies a prescribed schedule, not a homing law. |
 | **Aerothermal heating** | No Sutton–Graves anywhere. `noseRadius` remains a carried placeholder, flagged as such at its point of definition. |
-| **`+viz` package** — ground tracks, 3-D trajectory over `pumpkyn.util.earth3D` | The three entry scripts have inline plots for now. |
+| **Rotating-Earth targeting** | `run_target`'s closed-form azimuth is exact only at `omegaE = 0`. Rotation needs an outer azimuth iteration around the range solve — see [Point-to-point targeting](#point-to-point-targeting). |
+| **Cross-range steering with bank** | The range solve controls downrange only. `run_target` measures the cross-track offset and warns, but cannot close it. |
+| **Solving for loft angle rather than cutoff time** | Two branches either side of the max-range hump, and a user who wants a ballistic point-to-point script expects to choose between them. That is `BM/run_ballistic_target`, not yet built. |
 | **`hgv_dynamics_note.tex`, `software_design.tex`** | Written *after* the interfaces survive contact with working code. Two milestones in, they now have. |
 | **Phase 2 optimization** against `orbit_transfer/verify_common` | Prescribed-control simulation first, deliberately: the throughput requirement (multiple trajectories per second) is what shapes the architecture. |
 | Further fidelity increments — rotating Earth on by default, `j2Grav`, geodetic altitude, tabulated aero, US76 atmosphere | Each behind its own validation test. All are one-line swaps by design; see [Adding a fidelity level](#adding-a-fidelity-level). |
 
 **Delivered since the first milestone**, and no longer out of scope: `boost3DOF`
 with a prescribed pitch program, `constThrust`, the burnout and apogee events,
-`BM/run_ballistic`, the descent phase, and the full boost → glide → descent chain
-in `HGV/run_boost_glide`. `util/stateConvert.m` was **not** built and will not be
+`BM/run_ballistic`, the descent phase, the full boost → glide → descent chain
+in `HGV/run_boost_glide`, the **`+viz` package** — which was on this list for two
+milestones and has now absorbed the plotting that was triplicated inline across
+the entry scripts, and added `globeMovie` — and **point-to-point targeting** in
+`HGV/run_target`. `util/stateConvert.m` was **not** built and will not be
 — see [The seven-state convention](#the-seven-state-convention-and-the-inert-mass-trap)
 and `DESIGN.md` §11.

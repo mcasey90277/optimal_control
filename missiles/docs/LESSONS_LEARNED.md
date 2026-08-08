@@ -3,6 +3,42 @@
 Running log. Newest entries at the top. Record what broke, what fixed it, and
 what a future reader would otherwise rediscover the hard way.
 
+## 2026-08-07 — A comparison is not a validation: every guard in this library was blind to NaN
+
+State it in the general form:
+
+> **A guard written as an inequality cannot see a NaN, because every inequality
+> against NaN is false.** So the guard passes, and — this is the part that makes
+> it worse than no guard at all — the code downstream carries on and produces a
+> plausible finite answer from whatever OTHER source of the same quantity it
+> happens to read.
+
+Found by external review across five files at once, which is itself the lesson:
+this is not a bug, it is a *habit*. The instances:
+
+| Guard | Written as | What NaN does |
+|---|---|---|
+| `massConstant` mass agreement | `abs(x(7) - veh.mass) > tol` | passes; the EOM divides by `veh.mass` and returns a finite derivative. **Measured: `xdot(4) = -4.08233` on a NaN carried mass** |
+| `glide3DOF` / `boost3DOF` singularities | `V < 1`, `m <= 0`, `abs(cos(lat)) < 1e-8` | all false; NaN reaches `xdot` and the integrator marches a NaN trajectory to `tspan(end)` |
+| `rangeSolve` convergence and sign tests | `abs(fMid - fTarget) <= tolF`, `sign(a) == sign(b)` | a NaN *target* neither converges nor trips the out-of-band refusal; bisects to collapse and reports "tolerance not met" |
+
+The `massConstant` one is the sharpest, because that guard exists for no other
+purpose than to fail loudly, and it was the guard that failed silently. Note
+also that **agreement is not validity**: two NaN masses, or two zero masses,
+sail through a mismatch test by construction — `NaN` never equals `NaN`, and
+`0 - 0` is inside any tolerance. The test for it therefore has to check the
+state alone, the parameter alone, AND both together.
+
+The fix is the same everywhere and it is ordering, not cleverness: **validate
+finiteness, realness and sign FIRST, with its own identifier, and only then
+compare.** A distinct identifier matters — `invalidMass` says "this is not a
+mass", `massMismatch` says "these two masses disagree", and conflating them
+sends the reader looking for a staging bug that is not there.
+
+The general diagnostic, which is the transferable part: **for every guard in
+the codebase, ask what it does when handed a NaN.** If the answer is "nothing,
+and execution continues", it is not a guard.
+
 ## 2026-08-07 — Two files can each be correct and their composition still be wrong
 
 State it in the general form:

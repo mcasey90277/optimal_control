@@ -1,6 +1,8 @@
 # Missile Trajectory Library — Open Items
 
-*Coorbital, Inc. — compiled 2026-08-07 against commit `8ea960d`.*
+*Coorbital, Inc. — compiled 2026-08-07 against commit `8ea960d`, revised the
+same day after the GPT-5.6-sol pipeline review
+(`docs/reviews/pipeline_gpt56sol_review_2026-08-07.md`) was applied.*
 
 Every claim below was checked against the code or measured by running it on
 2026-08-07; the measurements and their sources are named inline. The suite was
@@ -70,28 +72,59 @@ the repository documents.)*
 
 ## Structural, deferred deliberately
 
-### A per-phase `veh` field on the phase struct
+### ~~A per-phase `veh` field on the phase struct~~ — DONE 2026-08-07
 
-`coorbital.prop.phaseRun(phases,x0,veh,env)` forwards **one chain-wide vehicle**
-into every phase's EOM (`+coorbital/+prop/phaseRun.m:154`). For a staged chain
-that is simply wrong — after separation the airframe is a different vehicle,
-mass *and* `Sref`, `CL`, `LD`.
+`coorbital.prop.phaseRun` now accepts an **optional `ph.veh`**, the vehicle that
+phase flies. Absent or `[]`, the chain-wide `veh` argument is used and the
+behaviour is byte-for-byte what it was, so the change is purely additive and no
+consumer needed editing. Pinned in `tests/test_phaseRun.m`: the staged chain
+expressed with `ph.veh` is **bit-identical** to the same chain expressed with a
+closure, `veh = []` behaves exactly as an absent field, and a phase carrying a
+400 kg vehicle diverges from the 900 kg fallback (so the field is read, not
+merely accepted).
 
-Every chain entry script already works around it by binding a per-phase vehicle
-inside its EOM closure and ignoring the forwarded argument:
+`coorbital.eom.massConstant` keeps its mass guard: `ph.veh` is opt-in, so the
+guard is still what catches a chain that did not use it.
+
+**What is left is the migration**, listed under *Deferred* below.
+
+### Migrate the entry scripts off their EOM closures onto `phase.veh`
+
+Now that `ph.veh` exists, the four chain entry scripts still bind a per-phase
+vehicle inside an EOM closure and ignore the forwarded argument:
 
 - `BM/run_ballistic.m:281-282`
 - `HGV/run_boost_glide.m:365-366`
 - `HGV/run_target.m:439-440`
 
-The interim guard is `coorbital.eom.massConstant`, which refuses to run when
-`x(7)` and `veh.mass` disagree. It catches the failure; it does not remove the
-cause.
+The closures are correct and remain supported. The question is whether the
+scripts should read `phase(k).veh = vehK` instead, which says the same thing in
+the interface rather than in a lambda.
 
-**Deferred because it is a library interface change with five consumers outside
-the tests** — the four entry scripts plus `+coorbital/+viz/profilePlot`'s
-self-demo — all of which have been reviewed in their current form. **Do it
-before closed-loop guidance adds more.**
+**Deliberately not done in the same pass as the interface change.** The four
+headline results — `run_glide` 6986.82 km, `run_ballistic` 4536.36 km,
+`run_boost_glide` 7663.05 km, `run_target` 3811.240 km required — are pinned to
+their last printed digit, and a migration touches the one construction those
+numbers are produced by. It should be its own change with its own full-capture
+diff. Note that a closure and `ph.veh` were *measured* bit-identical on the
+staged test chain, so the migration is expected to move nothing; expected is
+not verified.
+
+### A state-scaled default `AbsTol` in `phaseRun`
+
+`phaseRun` defaults to the **scalar** `AbsTol = 1e-10` for every state
+component, across a vector whose entries are a radius in metres (6.4e6), angles
+in radians (order 1), a speed in m/s (1e3–7e3) and a mass in kg (1e3–3e4). That
+is 0.1 nm on the radius and 0.1 mg on the mass: not a physical error budget, and
+only the tightest of the seven components does any real work.
+
+`env.odeAbsTol` **already accepts a vector** — `odeset` takes one directly, and
+`phaseRun` passes it through unexamined. That is now documented in `phaseRun`'s
+Notes with a worked per-component example. What is deferred is changing the
+**default**, because every pinned number in all 20 test files was measured under
+the scalar and a new default moves all of them at once. Do it as its own change:
+pick the vector, re-measure the headline set, and re-pin deliberately rather
+than as a side effect.
 
 ### Extract the duplicated `overrideOf` and `maxOver` helpers into `+util`
 

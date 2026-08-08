@@ -230,11 +230,13 @@ function [traj,info] = run_target(opts)
                                        %     targeting decision, not an aerodynamic one.
                                        %     run_boost_glide dives at 75 deg for a steep, fast
                                        %     arrival, but a banked segment turns the heading --
-                                       %     162 deg of it, measured -- and walks the impact
-                                       %     point off the launch-to-target great circle. On
-                                       %     this geometry that is 21.5 km of miss against a
-                                       %     0.6 km range residual: the range solve converges
-                                       %     and the vehicle still misses. Raise it only if you
+                                       %     166.4 deg of it between handoff and impact on the
+                                       %     SHIPPED 20N 155W to 35N 120W geometry, measured --
+                                       %     and walks the impact point off the
+                                       %     launch-to-target great circle. On that same
+                                       %     geometry it is 21.52 km of miss against a 0.59 km
+                                       %     range residual: the range solve converges and the
+                                       %     vehicle still misses. Raise it only if you
                                        %     want the terminal dive more than you want the
                                        %     target, and read the cross-range line when you do
              hStop = 0;                %km, impact altitude, DESCENDING crossing only
@@ -544,12 +546,19 @@ function [traj,info] = run_target(opts)
         fprintf('  only ever subtract range.\n');
         else
         fprintf('  The target is TOO CLOSE. Even the shortest burn in the bracket overflies\n');
-        fprintf('  it by %.2f km. Lower cutFracMin below the shipped %.3f, or accept that a\n', ...
+        fprintf('  it by %.2f km. Lower cutFracMin below the shipped %.3f -- but NOT BELOW THE\n', ...
                 (sv.fMin - rngReq)./1000,cutFracMin);
-        fprintf('  boost-glide vehicle has a minimum range: below roughly %.0f km the boost\n', ...
+        fprintf('  DOCUMENTED 0.3 FLOOR, which is not a style preference: at 0.20 the boost\n');
+        fprintf('  leaves the vehicle too low and too slow to reach the handoff at all, the\n');
+        fprintf('  glide runs its whole horizon descending, and the propagation dies inside\n');
+        fprintf('  the equations of motion with coorbital:glide3DOF:zeroSpeed at a negative\n');
+        fprintf('  speed rather than reaching the propagationIncomplete refusal this script\n');
+        fprintf('  would otherwise raise. 0.30, 0.35 and 0.45 are all sound.\n');
+        fprintf('  Or accept that a boost-glide vehicle has a minimum range: below roughly\n');
+        fprintf('  %.0f km the boost cannot lift it high enough for the glide phase to start,\n', ...
                 sv.fMin./1000);
-        fprintf('  cannot lift it high enough for the glide phase to start, the handoff\n');
-        fprintf('  event never fires, and the propagation is rejected rather than believed.\n');
+        fprintf('  the handoff event never fires, and the propagation is rejected rather\n');
+        fprintf('  than believed.\n');
         end
         fprintf('=========================================================\n\n');
               traj = [];
@@ -731,6 +740,15 @@ function [traj,info] = run_target(opts)
 %% iteration that does not exist here would have to remove:
             driftM = c.omegaE.*rI.*cos(latTargetR).*traj.t(end);
 
+%% Whether ANY phase commands a bank. The zero-bank case and the banked case
+%% need two different paragraphs in the limitations block below, not one
+%% paragraph with a number substituted into it: at 75 deg of descent bank the
+%% sentence "cross-range came out at 21515.22 m because the bank angle is zero
+%% throughout" is self-refuting, and it sat directly under a WARNING saying the
+%% opposite. Gated on the RADIAN schedules, so a user block written in any
+%% units that convert to zero is still recognised as zero:
+           anyBank = any([bankBoostR glideBnkR descBnkR] ~= 0);
+
 %% Labels for the switches in the model line:
            spinTxt = 'OFF';
     if earthSpin
@@ -867,10 +885,17 @@ function [traj,info] = run_target(opts)
     fprintf('    duration         %10.2f s\n',traj.t(nS) - traj.t(kHO));
     fprintf('    ground covered   %10.2f %-5s  (great circle, handoff point to impact)\n', ...
             descKm,'km');
-    fprintf('    commanded bank   %10.2f %-5s  (glide bank %.2f deg; equal banks make the\n', ...
+    fprintf('    commanded bank   %10.2f %-5s  (glide bank %.2f deg)\n', ...
             rad2deg(descBnkR(1)),'deg',rad2deg(glideBnkR(end)));
-    fprintf('                                        handoff pure bookkeeping and keep the\n');
-    fprintf('                                        track on its great circle)\n');
+    if descBnkR(1) == glideBnkR(end)
+    fprintf('                                        The two banks are EQUAL, so the handoff is\n');
+    fprintf('                                        pure bookkeeping: both phases fly one\n');
+    fprintf('                                        control and hHandoff cannot move the range.\n');
+    else
+    fprintf('                                        The two banks DIFFER, so the handoff is a\n');
+    fprintf('                                        real control discontinuity and hHandoff can\n');
+    fprintf('                                        move where the vehicle lands.\n');
+    end
     fprintf('\n');
     fprintf('  Overall\n');
     fprintf('    flight time      %10.2f %-5s  (%.2f min)\n',traj.t(end),'s',traj.t(end)./60);
@@ -934,17 +959,34 @@ function [traj,info] = run_target(opts)
     fprintf('       is NOT this vehicle''s miss. Do not read it as one. ***\n');
     end
     fprintf('    2. THE MISS IS THE RESIDUAL OF THE RANGE SOLVE, ALONG THE GREAT CIRCLE.\n');
-    fprintf('       Bisection matches a DISTANCE; nothing in it steers sideways. Cross-range\n');
-    fprintf('       came out at %.2f m here because the bank angle is zero throughout --\n', ...
+    fprintf('       Bisection matches a DISTANCE; nothing in it steers sideways.\n');
+    if anyBank
+    fprintf('       THIS RUN COMMANDS A NON-ZERO BANK -- boost %.1f deg, glide %.1f deg,\n', ...
+            rad2deg(bankBoostR),rad2deg(glideBnkR(end)));
+    fprintf('       descent %.1f deg -- so the ground track is NOT the launch-to-target great\n', ...
+            rad2deg(descBnkR(1)));
+    fprintf('       circle, and the range solve cannot see the difference. Measured on this\n');
+    fprintf('       run: %.2f m of cross-track offset, a %.2f m total miss, against a range\n', ...
+            abs(xTrackM),missM);
+    fprintf('       residual of only %.2f m. The solve converged on DOWNRANGE and the vehicle\n', ...
+            abs(resM));
+    fprintf('       still missed, by a factor of %.1f over the residual. Closing that needs an\n', ...
+            missM./max(abs(resM),eps));
+    fprintf('       OUTER AZIMUTH ITERATION, which this script does not have. Set every bank\n');
+    fprintf('       to zero, or read the range residual as a downrange-only figure and the\n');
+    fprintf('       MISS DISTANCE line above as the answer.\n');
+    else
+    fprintf('       Cross-range came out at %.2f m here because the bank angle is zero\n', ...
             abs(xTrackM));
-    fprintf('       boost %.1f deg, glide %.1f deg, descent %.1f deg -- and a zero-bank\n', ...
-            bankBoost,rad2deg(glideBnkR(end)),rad2deg(descBnkR(1)));
-    fprintf('       trajectory over a non-rotating sphere never leaves the great circle it\n');
-    fprintf('       departed on. THAT IS A PROPERTY OF THIS CONFIGURATION, NOT A GENERAL\n');
-    fprintf('       GUARANTEE. It is measured above, not assumed. Bank any phase and the\n');
-    fprintf('       track curves off the arc while the range solve still converges: at\n');
-    fprintf('       run_boost_glide''s 75 deg terminal bank this geometry misses by 21.5 km\n');
-    fprintf('       on a 0.6 km range residual.\n');
+    fprintf('       throughout -- boost %.1f deg, glide %.1f deg, descent %.1f deg -- and a\n', ...
+            rad2deg(bankBoostR),rad2deg(glideBnkR(end)),rad2deg(descBnkR(1)));
+    fprintf('       zero-bank trajectory over a non-rotating sphere never leaves the great\n');
+    fprintf('       circle it departed on. THAT IS A PROPERTY OF THIS CONFIGURATION, NOT A\n');
+    fprintf('       GENERAL GUARANTEE. It is measured above, not assumed. Bank any phase and\n');
+    fprintf('       the track curves off the arc while the range solve still converges: at\n');
+    fprintf('       run_boost_glide''s 75 deg terminal bank this geometry misses by 21.52 km\n');
+    fprintf('       on a 0.59 km range residual.\n');
+    end
     fprintf('\n');
     fprintf('  Models: atmos %s | grav %s | aero %s\n', ...
             func2str(atmosFn),func2str(gravFn),func2str(aeroFn));

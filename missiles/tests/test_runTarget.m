@@ -267,7 +267,12 @@ function test_runTarget()
         'the summary must state that the azimuth is exact only for a non-rotating Earth');
     assert(contains(outDef,'OUTER ITERATION'), ...
         'the summary must say what rotation would require: an outer azimuth iteration');
-    assert(contains(outDef,'NOT A GENERAL') && contains(outDef,'GUARANTEE'), ...
+%% Matched on two CONTIGUOUS fragments rather than on the whole sentence: the
+%% claim is wrapped across printed lines, and a pattern spanning the wrap would
+%% break on any rewording of the line breaks while saying nothing about the
+%% content:
+    assert(contains(outDef,'PROPERTY OF THIS CONFIGURATION') && ...
+           contains(outDef,'GUARANTEE'), ...
         'the summary must say that zero cross-range is a property of this configuration');
 
 %% ---------------------------------------------------------------------
@@ -315,7 +320,102 @@ function test_runTarget()
          'returned without iterating'],in2.tCut);
 
 %% ---------------------------------------------------------------------
-%% 6. The reachable-envelope refusal, both ends
+%% 6. A BANKED case, which is the only thing that pins the cross-range
+%%    measurement and the warning that justifies shipping descBank = 0
+%% ---------------------------------------------------------------------
+%% WHY THIS CASE EXISTS, and it is the most important section in the file.
+%% Everything above flies at zero bank, where the measured impact-to-target
+%% miss and the magnitude of the solver's own range residual agree to 9.3e-10 m.
+%% They are therefore INDISTINGUISHABLE there, and every "independent" check in
+%% part 2 passes just as happily if run_target were to substitute the residual
+%% for the measurement. Two mutations that did exactly that -- forcing
+%% crossWarn = false, and setting missM = abs(resM) -- SURVIVED an earlier
+%% version of this suite. The measure-and-warn behaviour is the entire
+%% justification for shipping descBank = 0 rather than run_boost_glide's 75 deg,
+%% and it was completely unpinned.
+%%
+%% A banked run separates the two by a factor of 36.8, so nothing can pass by
+%% reporting the residual, and the warning has a case in which it must fire.
+%% This is the same shape of blind spot as the due-east geometry in
+%% test_runGlide: a verification that is only independent in the one
+%% configuration that happens to be tested:
+            outBnk = evalc(['[trBnk,inBnk] = run_target(struct(' ...
+                            '''descBank'',[75 75],''showPlots'',false));']);
+    assert(contains(outBnk,'(nominal)') && ~contains(outBnk,'REFUSED'), ...
+        'the banked case did not solve. Summary was:\n%s',outBnk);
+
+%% THE RANGE SOLVE STILL CONVERGES. That is the trap: a converged solve and a
+%% small residual, and the vehicle twenty-one kilometres away:
+    assert(abs(inBnk.residM) < tolM, ...
+        ['the banked run must still converge on RANGE -- that is what makes ' ...
+         'the cross-range miss dangerous -- but the residual is %.2f m'], ...
+        inBnk.residM);
+
+%% ...and the vehicle misses anyway, by the pinned amount:
+    assertRel(inBnk.missM,21524.695285497215,1e-3,'banked-case miss distance (m)');
+    assertRel(inBnk.xTrackM,21515.222106821158,1e-3,'banked-case cross-track (m)');
+
+%% THE ASSERTION THAT KILLS THE RESIDUAL SUBSTITUTION. If missM were computed
+%% from the solver's residual instead of from the flown terminal state, it
+%% would be 585 m here rather than 21525 m. A factor of thirty is far inside
+%% the measured 36.8 and far outside anything roundoff can produce:
+    assert(inBnk.missM > 30.*abs(inBnk.residM), ...
+        ['the banked-case miss is %.2f m against a %.2f m range residual, a ' ...
+         'factor of only %.2f. The miss looks like it is being read back out ' ...
+         'of the range solve rather than measured from the flown impact ' ...
+         'point; at 75 deg of bank the two must differ by more than thirty'], ...
+        inBnk.missM,abs(inBnk.residM),inBnk.missM./abs(inBnk.residM));
+
+%% ...checked once more from the flown state alone, which at nonzero bank is a
+%% genuinely independent number rather than the same one by construction:
+            missBnk = c.rE.*coorbital.util.greatCircle(trBnk.x(end,3), ...
+                                                       trBnk.x(end,2), ...
+                                                       latTg,lonTg);
+    assertRel(missBnk,inBnk.missM,1e-9, ...
+        'independently measured banked-case miss against the reported one (m)');
+    assert(missBnk > 30.*abs(inBnk.residM), ...
+        ['the INDEPENDENTLY measured banked miss is %.2f m against a %.2f m ' ...
+         'residual'],missBnk,abs(inBnk.residM));
+
+%% THE WARNING MUST FIRE, in the struct and on the page:
+    assert(inBnk.crossWarn, ...
+        ['info.crossWarn must be true when the impact point is %.2f m off the ' ...
+         'launch-to-target great circle against a %.1f m tolerance'], ...
+        abs(inBnk.xTrackM),tolM);
+    assert(contains(outBnk,'WARNING'), ...
+        'the banked run printed no WARNING. Summary was:\n%s',outBnk);
+    assert(contains(outBnk,'solve CONVERGED and the vehicle still missed'), ...
+        ['the warning must say that the solve converged and the vehicle still ' ...
+         'missed, which is the whole hazard. Summary was:\n%s'],outBnk);
+
+%% ...and the limitations paragraph must NOT then contradict it. The zero-bank
+%% wording -- "cross-range came out at N m because the bank angle is zero
+%% throughout" -- printed verbatim under a 75 deg descent bank, directly below
+%% the warning saying the opposite. A correct warning followed by a paragraph
+%% denying it is worse than no warning:
+    assert(~contains(outBnk,'because the bank angle is zero'), ...
+        ['the banked run printed the zero-bank explanation, which contradicts ' ...
+         'the warning immediately above it. Summary was:\n%s'],outBnk);
+    assert(contains(outBnk,'NON-ZERO BANK'), ...
+        ['the banked run must say plainly that it commands a non-zero bank. ' ...
+         'Summary was:\n%s'],outBnk);
+
+%% The shipped run must still take the OTHER branch, so this is a real fork and
+%% not a paragraph that was simply deleted:
+    assert(contains(outDef,'because the bank angle is zero'), ...
+        'the zero-bank explanation vanished from the shipped run');
+    assert(~contains(outDef,'NON-ZERO BANK'), ...
+        'the shipped zero-bank run claimed a non-zero bank');
+
+%% The handoff wording forks on the same fact, and for the same reason: at
+%% unequal banks the handoff is a real control discontinuity, not bookkeeping:
+    assert(contains(outDef,'banks are EQUAL'), ...
+        'the shipped run must call the handoff pure bookkeeping');
+    assert(contains(outBnk,'banks DIFFER'), ...
+        'the banked run must not call the handoff pure bookkeeping');
+
+%% ---------------------------------------------------------------------
+%% 7. The reachable-envelope refusal, both ends
 %% ---------------------------------------------------------------------
 %% An unreachable target must be REFUSED, in words, with the band -- and must
 %% NOT throw. Throwing would force every caller into a try/catch to read
@@ -366,7 +466,7 @@ function test_runTarget()
     assert(isempty(trFar),'a refused run must return an empty trajectory');
 
 %% ---------------------------------------------------------------------
-%% 7. The override hook itself
+%% 8. The override hook itself
 %% ---------------------------------------------------------------------
 %% A misspelt parameter must raise rather than silently leave the shipped
 %% value in place, or a future test could believe it flew a case it did not:

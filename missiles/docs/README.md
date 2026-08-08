@@ -150,7 +150,7 @@ important ones:
 |---|---|
 | `test_runGlide` | `HGV/run_glide` end to end — unit conversion, the `greatCircle` call site, the peak search, the termination diagnosis, and the printed summary, which it parses rather than recomputes. Also guards the deliberate duplication between `vehicle_hgv` and `vehicleDefaults`. |
 | `test_runBallistic` | `BM/run_ballistic` end to end — the boost → coast → descent chain, the staging link, and the Keplerian cross-check. |
-| `test_runTarget` | `HGV/run_target` end to end — the closed-form azimuth, the bisection on cutoff time, the separation link, the reachable-envelope refusal at BOTH ends of the band, and the printed summary. The miss it asserts is measured impact-to-target with `greatCircle` from the flown state, not read back out of the solver's own residual. |
+| `test_runTarget` | `HGV/run_target` end to end — the closed-form azimuth, the bisection on cutoff time, the separation link, the reachable-envelope refusal at BOTH ends of the band, and the printed summary. The miss it asserts is measured impact-to-target with `greatCircle` from the flown state, not read back out of the solver's own residual — and it flies a **banked** case as well as the shipped zero-bank one, because at zero bank those two numbers agree to 9.3e-10 m and nothing can tell a measurement from a substitution. |
 | `test_fullChain` | The chain milestone's headline deliverable: boost, glide and descent on one seven-state vector. Re-integrates **across** each junction with `ode89` at 1e-12 — a different method at a hundred times the driver's tolerance — and asserts continuity in states 1–6 and the expected staging jump in state 7. |
 | `test_boostEvents` | `eventBurnout` and `eventApogee` inside a live propagation, not just as scalar function calls. |
 
@@ -676,8 +676,15 @@ zero — and that is a property of *that configuration*, not a general guarantee
 `run_target` **measures** the cross-track offset of the impact point from the
 launch-to-target great circle every run and warns when it exceeds the range
 tolerance. Give the descent `run_boost_glide`'s 75° terminal bank and it does:
-the heading turns 162°, the range solve still converges to a 0.6 km residual,
-and the vehicle misses by **21.5 km**. That is why `run_target` ships
+the heading turns 166.42° between handoff and impact, the range solve still
+converges to a 585.20 m residual, and the vehicle misses by **21524.70 m** — a
+factor of 36.8 over the residual. The summary then prints a `*** WARNING ***`
+and switches its limitations paragraph to the banked wording, because the
+zero-bank explanation printed under a bank angle contradicts the warning
+directly above it. `tests/test_runTarget.m` flies that exact case and pins all
+of it; without it the measure-and-warn behaviour is unpinned, since at zero bank
+the measured miss and the solver's own residual agree to 9.3e-10 m and no
+assertion can tell them apart. That is why `run_target` ships
 `descBank = 0` where `run_boost_glide` ships 75 — a targeting decision, not an
 aerodynamic one, and the user block says so at the point of definition.
 

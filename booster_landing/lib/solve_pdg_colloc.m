@@ -28,6 +28,16 @@ function sol = solve_pdg_colloc(P, opts)
 %          SI. sol.lam_defect are duals of the NONDIMENSIONAL defect block,
 %          extracted via opti.lam_g at rows gDefStart:gDefStart+nDefRows-1
 %          -- house sign-bug lesson: never opti.dual.)
+%          sol.lam_defect SI conversion (all scales recoverable from sol.P
+%          via Lc=norm(P.r0), Tc=0.5*(P.tf_lo+P.tf_hi), Mc=P.m0):
+%            rows 1-3 (position defects): lambda_SI = lambda_stored * Mc/Lc
+%            rows 4-6 (velocity defects): lambda_SI = lambda_stored * Mc*Tc/Lc  (= Mc/Vc)
+%            row  7   (mass defect):      lambda_SI = lambda_stored * 1
+%          Rows 4-6 share ONE isotropic scale, so primer-DIRECTION checks
+%          against SI thrust are valid on the stored duals unrescaled;
+%          cross-block identities (e.g. comparing lambda_r to lambda_v, or
+%          lambdadot_v = -lambda_r) are off by a factor of Tc without
+%          rescaling.
 %
 % REFERENCES:
 %   [1] Kelly, "An Introduction to Trajectory Optimization," SIAM Rev 2017.

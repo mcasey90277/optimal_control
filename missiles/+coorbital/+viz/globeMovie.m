@@ -56,7 +56,35 @@ function mv = globeMovie(traj,veh,env,opts)
 %                                                         the WHOLE movie
 %                                                         (deg), default 30.
 %                                                         0 holds the camera
-%                                                         still
+%                                                         still. The sweep is
+%                                                         CENTRED on the arc
+%                                                         midpoint, not started
+%                                                         there
+%                                               ViewOffsetDeg
+%                                                         [1 x 1] camera swing
+%                                                         ALONG the arc, away
+%                                                         from its midpoint
+%                                                         (deg), default 0.
+%                                                         See the arc-frame
+%                                                         note below
+%                                               ViewTiltDeg
+%                                                         [1 x 1] camera lift
+%                                                         OUT of the
+%                                                         trajectory plane
+%                                                         (deg), default 32.
+%                                                         0 puts the lens in
+%                                                         the plane of the
+%                                                         flight, which
+%                                                         flattens the ground
+%                                                         track onto a line
+%                                               Inset     [1 x 1] logical,
+%                                                         default true. Draws
+%                                                         the growing
+%                                                         altitude-vs-downrange
+%                                                         panel, Tag
+%                                                         'insetAxes'. false
+%                                                         leaves the globe on
+%                                                         its own
 %                                               AltScale  [1 x 1] altitude
 %                                                         exaggeration (-),
 %                                                         default 1. Same
@@ -233,9 +261,13 @@ function mv = globeMovie(traj,veh,env,opts)
 %  'earthSurface' the planet, 'globeTrack' one line per phase with the phase
 %  index in its UserData, 'handoffMarker' one per junction with the index of
 %  the phase it starts in its UserData, 'vehicleMarker' the current position,
-%  'launchMarker' the start point. In the FIGURE: 'titleText' the caption and
-%  'hudText' the readout, both annotations rather than axes children -- see the
-%  note beside them for the measured reason.
+%  'launchMarker' the start point. In the FIGURE: 'titleText' the caption,
+%  'hudText' the readout -- both annotations rather than axes children, see the
+%  note beside them for the measured reason -- and 'insetAxes' the altitude
+%  panel, which is a SECOND AXES rather than a line and is present only when
+%  Inset is true. INSIDE that panel: 'insetBackdrop' its semi-transparent
+%  card, 'insetTrack' one line per phase with the phase index in its UserData,
+%  and 'insetVehicle' the current point on the profile.
 %
 %  The axes are invisible, as pumpkyn.util.earth3D leaves them, because a tick
 %  grid around a cinematic globe reads as clutter. The units are therefore
@@ -252,6 +284,24 @@ function mv = globeMovie(traj,veh,env,opts)
 %  holds from 480 x 320 to 1920 x 1080. The test cannot see this -- it reads
 %  the String property, which was correct throughout -- so it was found, and
 %  must be re-checked, by rendering a frame and LOOKING at it.
+%
+%  THE SAME DEFECT RECURRED IN THE INSET, twice, and both cures are geometric
+%  rather than cosmetic. First, the inset's x label was CLIPPED off the bottom
+%  of every frame under about 500 px high -- which is both the 480 x 320 the
+%  shipped test renders and the 640 x 360 the self-demo does -- because the
+%  panel sat at a FRACTIONAL height of 0.055 while the label it has to clear is
+%  an absolute stack of tick text and axis label about 26 px tall. The origin
+%  is therefore max(0.055,26/Size(2)): fractional where there is room, pixels
+%  where there is not.
+%
+%  Second, the inset was drawn OPAQUE, and an opaque panel over a globe hides
+%  whatever the flight put behind it. On the shipped run_target case the glide
+%  descended behind its left edge and re-emerged above its top -- a movie of a
+%  trajectory concealing the trajectory. The panel's axes Color is now 'none'
+%  and its backdrop is a semi-transparent patch inside it, so the track shows
+%  through: the arc stays readable, the curve stays legible against the
+%  planet, and nothing that flew is hidden. Both were found by rendering and
+%  looking, and both have to be re-checked the same way.
 %
 %% Revision History:
 %  Michael Casey                                                08/07/2026
@@ -311,6 +361,21 @@ end
         'Size must be [width height] in whole pixels, both at least 64.');
     assert(isscalar(spinDg) && isfinite(spinDg), ...
         'SpinDeg must be a finite scalar; %s given.',mat2str(spinDg));
+
+%% The three camera-and-inset options are checked exactly as hard as the rest.
+%% They were shipped unchecked, and an unchecked angle is the worst of the
+%% three: ViewTiltDeg = NaN produces a NaN camera direction, view() silently
+%% ignores it, and the movie comes out on MATLAB's default viewpoint with
+%% nothing anywhere saying the option was thrown away:
+    assert(isscalar(viewOff) && isfinite(viewOff), ...
+        'ViewOffsetDeg must be a finite scalar; %s given.',mat2str(viewOff));
+    assert(isscalar(viewTlt) && isfinite(viewTlt), ...
+        'ViewTiltDeg must be a finite scalar; %s given.',mat2str(viewTlt));
+    assert(isscalar(insetOn) && (islogical(insetOn) || ...
+                                 (isnumeric(insetOn) && isfinite(insetOn))), ...
+        'Inset must be a logical scalar; %s given.',mat2str(insetOn));
+              insetOn = logical(insetOn);
+
     assert(isscalar(altScale) && altScale > 0, ...
         'AltScale must be a positive scalar; %s given.',mat2str(altScale));
     assert(isempty(frmFcn) || isa(frmFcn,'function_handle'), ...
@@ -336,6 +401,14 @@ end
             mkVeh  = max(10,round(sizPix(2)./72));
             mkLau  = max(14,round(1.4.*mkVeh));
             mkHand = max( 9,round(0.9.*mkVeh));
+
+%% ...and the vehicle dot inside the altitude inset by the same rule. It is
+%% HALF the globe marker, because the inset is a fifth of the frame and a
+%% marker sized for the planet covers a visible slice of the profile; and it is
+%% derived from mkVeh rather than fixed at 5 pt, because a 5 pt dot that reads
+%% at 720 is invisible at 1080 -- which is the whole reason nothing else in
+%% this file carries an absolute point size:
+            mkIns  = max( 5,round(0.5.*mkVeh));
 
 %% Texture and Sky are refused rather than quietly downgraded when they are not
 %% one of the two things they can be. A misspelt 'atuo' that silently produced
@@ -444,9 +517,19 @@ end
 %% the cube's DIAGONAL and the planet is left occupying 1/sqrt(3) of the frame
 %% with the corners empty. Everything drawn here lies inside the SPHERE of
 %% radius lim, not just inside the cube, so that factor is pure waste and
-%% recovering it clips nothing, at any spin angle. Held just under the full
-%% sqrt(3) = 1.7321 so the limb stays clear of the caption band at the top of
-%% the frame; at the full factor a polar-route arc touches the text.
+%% recovering it clips nothing, at any spin angle.
+%%
+%% WHAT 1.62 ACTUALLY BOUGHT, stated honestly because the first version of this
+%% comment overclaimed. It is held under the full sqrt(3) = 1.7321 to leave the
+%% top of the frame less crowded, and it is strictly safer than the full
+%% factor: everything sits 6.5 per cent further from the caption than it would.
+%% It does NOT keep the limb out of the caption band, and no zoom factor above
+%% one can. The caption occupies the top tenth of the figure and the data
+%% sphere of radius lim is drawn to fill the frame, so on a polar route -- the
+%% case this was changed for -- the arc still reaches into the text. Clearing
+%% it properly means shrinking the AXES RECTANGLE to leave a caption strip, not
+%% easing the zoom, and that would re-frame every movie this library has
+%% rendered. Left as a known, measured edge.
     camzoom(hAx,1.62);
 
 %% A viewpoint looking down on the middle of the arc: MATLAB's view(az,el)
@@ -459,18 +542,44 @@ end
 %% frame. On a 97 deg intercontinental arc that hid the launch point entirely:
 %% Build an ARC FRAME from the two endpoints: m points at the arc midpoint, n
 %% is the trajectory-plane normal, and t runs along-track at the midpoint.
+%% BOTH DEGENERACIES ARE GUARDED, and they are different degeneracies. The
+%% plane normal u1 x u2 vanishes when the endpoints are coincident AND when
+%% they are antipodal; the midpoint u1 + u2 vanishes only in the antipodal
+%% case, and it vanishes into ROUNDOFF rather than into zero -- measured at
+%% 2.0e-16 for 10N 20E against 10S 160W, which normalises to the arbitrary
+%% direction [0.5547 -0.8321 0]. A camera aimed by roundoff points somewhere
+%% reproducible and meaningless, with nothing in the picture saying so. So the
+%% midpoint is checked as well as the normal, and antipodal endpoints aim at
+%% the LAUNCH end, which is a defensible answer rather than an accidental one.
+%%
+%% The fallback frame is built to be ORTHONORMAL, which the first cut was not:
+%% it took nP = [0;0;1] whatever m was, so m . n came out at 0.5 for a 30 deg
+%% case and ViewTiltDeg was then not the angle out of any plane at all. The
+%% replacement takes whichever axis is least aligned with m and removes m from
+%% it, so m, n and t are a genuine right-handed triad in every branch and the
+%% tilt means what the header says it means:
                uv = @(a,b) [cos(a).*cos(b); cos(a).*sin(b); sin(a)];
                u1 = uv(lat(1),lon(1));
                u2 = uv(lat(end),lon(end));
                nP = cross(u1,u2);
+               mM = u1 + u2;
+    if sqrt(sum(mM.^2)) < 1e-8
+               mM = u1;
+    end
+               mM = mM./sqrt(sum(mM.^2));
     if sqrt(sum(nP.^2)) < 1e-12
-%% Endpoints coincident or antipodal: the plane is undefined, so fall back to
-%% the polar axis and let the offset and tilt still do something sensible.
-               nP = [0;0;1];
+               ax = [0;0;1];
+        if abs(mM(3)) > 0.9
+               ax = [1;0;0];
+        end
+               nP = cross(mM,ax);
     end
                nP = nP./sqrt(sum(nP.^2));
-               mM = (u1 + u2);
-               mM = mM./sqrt(sum(mM.^2));
+
+%% n is orthogonal to m by construction in both branches -- the cross product
+%% of the endpoints is perpendicular to their sum, and the fallback cross
+%% product is perpendicular to m outright -- so t closes a right-handed triad
+%% without any further orthogonalisation:
                tT = cross(nP,mM);
                tT = tT./sqrt(sum(tT.^2));
 
@@ -627,15 +736,6 @@ end
                           'HorizontalAlignment','left','VerticalAlignment','top', ...
                           'EdgeColor','none','FitBoxToText','off','Interpreter','none');
 
-%% The writer, opened last so that nothing can fail after a part-written file
-%% exists on disk:
-                vw = VideoWriter(outFile,'MPEG-4');
-      vw.FrameRate = fpsOut;
-        vw.Quality = 95;
-    open(vw);
-
-%% The frame loop. Everything that can throw is inside the try, because a
-%% half-rendered movie must still leave the writer closed and no figure open:
 %% THE ALTITUDE INSET. The globe shows where the vehicle went; it cannot show
 %% how high, because at the sub-camera point the altitude vector points at the
 %% lens and the vertical profile collapses. A small two-dimensional panel is a
@@ -646,34 +746,91 @@ end
               hInL = [];
               hInV = [];
     if insetOn
-%% Downrange along the great circle from the launch point, per sample:
+%% Downrange along the great circle from the launch point, per sample. In
+%% KILOMETRES, the same unit the label states and the same unit the altitude
+%% is drawn in, because this panel's whole claim is that it is at true scale:
               dRng = coorbital.util.greatCircle(lat(1),lon(1),lat,lon) ...
                      .*(rEkm);
-              hIns = axes(hFig,'Position',[0.615 0.055 0.345 0.235], ...
-                          'Color',[0 0 0],'XColor',[1 1 1],'YColor',[1 1 1], ...
+
+%% Fixed limits, set from the WHOLE flight, so the curve grows into a frame
+%% that never rescales -- a rescaling axis makes a growing line look static.
+%% Both are FLOORED at one kilometre: a trajectory that never leaves the
+%% surface, or never leaves the pad, gives a zero span, and MATLAB refuses a
+%% zero-width axis limit with an error. That error used to be thrown here with
+%% the video writer already open, so a flat run left a figure on screen and a
+%% part-written MP4 on disk; with Inset false the same run rendered perfectly:
+             xLimI = [0 max(max(dRng).*1.02,1)];
+             yLimI = [0 max(max(altKm).*1.12,1)];
+
+%% The panel itself. Its origin is max(0.055,26/height) rather than a flat
+%% 0.055 because the x label under it is an absolute 26 px of tick text and
+%% axis label: below about 500 px of figure height a fractional origin puts the
+%% label off the bottom of the frame. And its Color is 'none' rather than
+%% black, so the globe and the flown track stay visible THROUGH it -- see the
+%% inset note in the header for what an opaque panel hid:
+              yIns = max(0.055,26./sizPix(2));
+              fntIns = max(7,round(sizPix(2)./85));
+              hIns = axes(hFig,'Position',[0.615 yIns 0.345 0.235], ...
+                          'Color','none','XColor',[1 1 1],'YColor',[1 1 1], ...
                           'GridColor',[0.6 0.6 0.6],'GridAlpha',0.35, ...
+                          'XLim',xLimI,'YLim',yLimI,'FontSize',fntIns, ...
                           'Box','on','Tag','insetAxes');
         hold(hIns,'on'); grid(hIns,'on');
+
+%% A semi-transparent backdrop, drawn FIRST so everything else sits on top of
+%% it. Transparent enough that the track behind the panel is still followable,
+%% dark enough that the profile curve reads against a bright Earth texture.
+%%
+%% It is drawn with CLIPPING OFF and overhangs the axes box, because the panel
+%% is wider than its plot area: the tick labels, the two axis labels and the
+%% title all sit OUTSIDE the box, and white text on the pale limb of the planet
+%% is unreadable. The overhangs are set in PIXELS and converted to data units,
+%% for the same reason the origin above is -- text is absolute and the axes is
+%% fractional, so a margin quoted as a fraction of the data span is right at
+%% one frame size and wrong at every other:
+             axWpx = 0.345.*sizPix(1);
+             axHpx = 0.235.*sizPix(2);
+             padLx = (3.5.*fntIns + 6)./axWpx.*xLimI(2);
+             padRx = 6./axWpx.*xLimI(2);
+             padBy = max(26,2.2.*fntIns + 10)./axHpx.*yLimI(2);
+             padTy = (1.9.*max(7,round(sizPix(2)./80)) + 6)./axHpx.*yLimI(2);
+        patch(hIns,'XData',[-padLx, xLimI(2) + padRx, ...
+                            xLimI(2) + padRx, -padLx], ...
+                   'YData',[-padBy, -padBy, ...
+                            yLimI(2) + padTy, yLimI(2) + padTy], ...
+              'FaceColor',[0 0 0],'FaceAlpha',0.55,'EdgeColor','none', ...
+              'Clipping','off','Tag','insetBackdrop');
+
 %% One line per phase so the inset colours match the globe:
               hInL = gobjects(nPh,1);
         for kp = 1:nPh
             hInL(kp) = plot(hIns,NaN,NaN,'-', ...
-                            'Color',col(kp,:),'LineWidth',lwPh(kp));
+                            'Color',col(kp,:),'LineWidth',lwPh(kp), ...
+                            'Tag','insetTrack','UserData',phList(kp));
         end
-              hInV = plot(hIns,NaN,NaN,'o','MarkerSize',5, ...
+              hInV = plot(hIns,NaN,NaN,'o','MarkerSize',mkIns, ...
                           'MarkerFaceColor',[1 1 1], ...
-                          'MarkerEdgeColor',[0 0 0],'LineWidth',0.5);
-%% Fixed limits, set from the WHOLE flight, so the curve grows into a frame
-%% that never rescales -- a rescaling axis makes a growing line look static:
-        set(hIns,'XLim',[0 max(dRng).*1.02], ...
-                 'YLim',[0 max(altKm).*1.12], ...
-                 'FontSize',max(7,round(sizPix(2)./85)));
-        xlabel(hIns,'downrange (km)','FontSize',max(7,round(sizPix(2)./85)));
-        ylabel(hIns,'altitude (km)','FontSize',max(7,round(sizPix(2)./85)));
+                          'MarkerEdgeColor',[0 0 0],'LineWidth',0.5, ...
+                          'Tag','insetVehicle');
+        xlabel(hIns,'downrange (km)','FontSize',fntIns);
+        ylabel(hIns,'altitude (km)','FontSize',fntIns);
         title(hIns,'altitude profile (true scale)', ...
               'Color',[1 1 1],'FontSize',max(7,round(sizPix(2)./80)));
     end
 
+%% The writer, opened LAST so that nothing can fail after a part-written file
+%% exists on disk. "Last" is the invariant the comment always claimed and did
+%% not hold: the inset block above was inserted between the open() and the try,
+%% where a throw stranded both an open writer and a figure. It is above the
+%% open() again, and the limits it sets are floored so the case that threw
+%% cannot:
+                vw = VideoWriter(outFile,'MPEG-4');
+      vw.FrameRate = fpsOut;
+        vw.Quality = 95;
+    open(vw);
+
+%% The frame loop. Everything that can throw is inside the try, because a
+%% half-rendered movie must still leave the writer closed and no figure open:
            frmSize = [];
     try
         for kf = 1:nFrame

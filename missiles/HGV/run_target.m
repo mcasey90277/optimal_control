@@ -129,7 +129,25 @@ function [traj,info] = run_target(opts)
 %                                               the rangeSolve record in
 %                                               solveInfo, so a refused run
 %                                               still hands back the envelope
-%                                               it refused against
+%                                               it refused against. A run that
+%                                               was not refused additionally
+%                                               carries the DISPLAY choices the
+%                                               figures were drawn with:
+%                                               altExag     [1 x 1] the
+%                                                           exaggeration used
+%                                                           (-)
+%                                               altExagRule handle, the rule
+%                                                           itself, so a
+%                                                           checker can ask
+%                                                           what it would do at
+%                                                           an apogee this run
+%                                                           did not fly -- its
+%                                                           cap and floor are
+%                                                           otherwise
+%                                                           unreachable
+%                                               launchStr,  char, the caption
+%                                               targetStr   text, hemisphere
+%                                                           letters and all
 %
 %% References:
 %   [1] Bowditch, N., "The American Practical Navigator," Pub. No. 9, NGA,
@@ -1114,14 +1132,29 @@ function [traj,info] = run_target(opts)
 %% But a FIXED exaggeration does not travel. The shipped 30x suits a glide that
 %% stays under about 60 km; on a lofted intercontinental shot that peaks near
 %% 260 km it paints the arc 7800 km off the surface, further out than the Earth
-%% is wide, and the track leaves the frame entirely. So scale it to the flight:
-%% hold the apparent apogee at or under 0.3 rE, and cap it at the shipped 30 so
-%% the short-range case is unchanged.
+%% is wide, and the track leaves the frame entirely. So it is scaled to the
+%% flown apogee by exagFor below, and remains overridable.
+%%
+%% THE SHIPPED CASE DID CHANGE, and the comment this replaces claimed it did
+%% not. This script's own default peaks at 118.09 km, so the rule returns 16x,
+%% not the 30x it used to hard-code -- the cap never comes near binding here.
+%% Sixteen is the better picture and not a regression: at 30x a 118 km apogee
+%% is painted 3543 km off the surface, more than half an Earth radius, and the
+%% arc reads as an orbit rather than as a glide; at 16x it stands 1889 km off,
+%% which is the 0.3 rE the rule is aiming at. What IS unchanged is the other
+%% three entry scripts, and only because each hard-codes its own factor and
+%% never reaches this rule at all -- HGV/run_glide and HGV/run_boost_glide at
+%% 30x, BM/run_ballistic at 3x:
            hPeakM = max(traj.x(:,1)) - c.rE;
-    if isempty(opts) || ~isfield(opts,'altExag')
-           altExag = min(30,max(2,floor(0.3.*c.rE./max(hPeakM,1))));
-    end
-           altExag = overrideOf(opts,'altExag',altExag);
+          altExag = overrideOf(opts,'altExag',exagFor(hPeakM,c.rE));
+
+%% The display choices go into info beside the flight's own numbers. The RULE
+%% goes with them, as a handle: its cap and its floor sit at apogees no
+%% flyable configuration of this script reaches -- under 63.8 km and over
+%% 956.7 km against a 118 km shipped peak -- so a checker that can only observe
+%% flown cases cannot see either of them work, and both were unpinned:
+      info.altExag = altExag;
+  info.altExagRule = @(hM) exagFor(hM,c.rE);
 
 %% Plots. Every figure comes from coorbital.viz, which reads the trajectory and
 %% never writes it. Nothing below this line can move a number in the summary
@@ -1129,7 +1162,13 @@ function [traj,info] = run_target(opts)
 %% chain does not fly one: phase 1 is the stack under power and phases 2 and 3
 %% are the separated payload. The ground track and the globe are given the
 %% TARGET, so the aim point and the impact point are both on the picture and
-%% the miss is something a reader can see rather than only read:
+%% the miss is something a reader can see rather than only read.
+%%
+%% The two captions are formatted ONCE, with hemisphere letters, and reported
+%% in info: a caption is the only place most readers meet these coordinates,
+%% and a caption that no test can read is a caption nothing checks:
+     info.launchStr = llStr(latLaunch,lonLaunch);
+     info.targetStr = llStr(latTarget,lonTarget);
     if showPlots
         coorbital.viz.profilePlot(traj,bst,env, ...
             struct('Name','Point-to-point targeting profile', ...
@@ -1145,8 +1184,7 @@ function [traj,info] = run_target(opts)
             struct('Target',[latTargetR; lonTargetR], ...
                    'AltScale',altExag, ...
                    'Title',sprintf('Solved transfer, %s to %s', ...
-                                   llStr(latLaunch,lonLaunch), ...
-                                   llStr(latTarget,lonTarget))));
+                                   info.launchStr,info.targetStr)));
     end
 
 %% The movie, off by default because it is the expensive part of a run. The
@@ -1160,8 +1198,7 @@ function [traj,info] = run_target(opts)
                    'AltScale',altExag, ...
                    'PhaseName',{{'boost','glide','descent'}}, ...
                    'Title',sprintf('Launch %s  to  target %s', ...
-                                   llStr(latLaunch,lonLaunch), ...
-                                   llStr(latTarget,lonTarget))));
+                                   info.launchStr,info.targetStr)));
         fprintf('  Movie: %d frames at %g fps written to\n    %s\n', ...
                 mv.nFrame,mv.frameRate,mv.file);
         fprintf('         Earth texture %s, background %s\n\n',mv.texture,mv.background);
@@ -1533,6 +1570,67 @@ function [why,ok] = whyAltitude(tPhase,tEnd,hEnd,hTargetM,hTargetKm,tMax,what)
     end
 end
 
+function e = exagFor(hPeakM,rE)
+%% Purpose:
+%
+%  The vertical exaggeration the globe figures are drawn at, scaled to the
+%  apogee the run actually flew. A DISPLAY rule and nothing else: it moves no
+%  number in the summary and enters no equation of motion.
+%
+%  THE INVARIANT, and exactly where it stops holding. The factor is chosen to
+%  hold the APPARENT apogee at or under 0.3 rE -- 1913 km, a little under a
+%  third of the disc -- which is high enough that the skip phugoid is plainly
+%  visible and low enough that the arc still reads as a flight over a planet
+%  rather than as an orbit around one. Between them the two limits mean the
+%  invariant holds only over a band of apogees:
+%
+%    Under 63.8 km of apogee the CAP wins. The raw ratio would exceed 30, the
+%    factor the rest of this library uses by hand, and the apparent apogee
+%    comes out under 0.3 rE rather than at it. Nothing is lost: a low flight
+%    exaggerated 30x is already legible, and letting the factor run to 300x on
+%    a pad abort would paint a stationary vehicle halfway to the Moon. The
+%    max(hPeakM,1) guard is what keeps a zero-apogee case out of a division by
+%    zero and hands it the cap.
+%
+%    Over 956.7 km of apogee the FLOOR wins and the invariant is ABANDONED,
+%    not merely approached. At 2x the apparent apogee is 2 hPeak, which passes
+%    0.3 rE at 956.7 km and grows without bound after it: a 3000 km apogee is
+%    drawn 6000 km off the surface, well outside the invariant. That is
+%    deliberate. Below 2x an exaggeration is indistinguishable from true scale,
+%    so the alternative is not a better picture but an honest-looking one that
+%    does nothing; and a flight that apogees above 957 km needs no help being
+%    seen -- BM/run_ballistic apogees at 1620 km and ships 3x by hand. The rule
+%    exists for flights the sphere would otherwise swallow.
+%
+%  The factor is floored to an integer so the caption reads "exaggerated 16x"
+%  rather than "16.2038x", which is a precision the picture does not have.
+%
+%% Inputs:
+%
+%  hPeakM           [1 x 1]                     Peak altitude above the
+%                                               reference sphere, over the
+%                                               whole flight (m)
+%
+%  rE               [1 x 1]                     Reference sphere radius (m),
+%                                               from coorbital.util.missileConst
+%
+%% Outputs:
+%
+%  e                [1 x 1]                     Altitude exaggeration to hand
+%                                               coorbital.viz as AltScale (-),
+%                                               a whole number in [2 .. 30]
+%
+%% Revision History:
+%  Michael Casey                                                08/07/2026
+%  Copyright 2026 Coorbital, Inc.
+%% ------------------------ Begin Code Sequence ---------------------------
+
+    assert(isscalar(hPeakM) && isfinite(hPeakM), ...
+        'exagFor needs a finite scalar apogee in metres; %s given.', ...
+        mat2str(hPeakM));
+                 e = min(30,max(2,floor(0.3.*rE./max(hPeakM,1))));
+end
+
 function txt = llStr(latDeg,lonDeg)
 %% Purpose:
 %
@@ -1541,11 +1639,27 @@ function txt = llStr(latDeg,lonDeg)
 %  "40.96N 100.29E" is unambiguous where "40.96, 100.29" leaves the reader to
 %  remember which way the signs run.
 %
+%  TWO EDGE CASES, both handled here rather than left to surprise a reader.
+%
+%  A COORDINATE THAT ROUNDS TO ZERO takes its hemisphere from the ROUNDED
+%  value, not from the raw sign. Longitude -0.001 deg used to print "0.00W", a
+%  west longitude of zero, which is a contradiction manufactured entirely by
+%  the rounding. Exact zero is reported N and E: the equator and the prime
+%  meridian are the lines the letters are measured from and have to fall on one
+%  side in a two-letter scheme.
+%
+%  A NON-FINITE COORDINATE IS REFUSED. Formatted, NaN produced "NaNN NaNE" --
+%  a caption that reads like a hemisphere letter stuck to a number and is
+%  neither, printed over a figure of a flight that cannot have happened. A
+%  title is the last place a silent NaN should be allowed to reach.
+%
 %% Inputs:
 %
-%  latDeg           scalar                      Latitude (deg), positive north
+%  latDeg           scalar                      Latitude (deg), positive north,
+%                                               finite
 %
-%  lonDeg           scalar                      Longitude (deg), positive east
+%  lonDeg           scalar                      Longitude (deg), positive east,
+%                                               finite
 %
 %% Outputs:
 %
@@ -1556,17 +1670,26 @@ function txt = llStr(latDeg,lonDeg)
 %  Copyright 2026 Coorbital, Inc.
 %% ------------------------ Begin Code Sequence ---------------------------
 
-%% Hemisphere letters, with the sign folded into the letter:
+    assert(isscalar(latDeg) && isfinite(latDeg) && ...
+           isscalar(lonDeg) && isfinite(lonDeg), ...
+        'llStr needs finite scalar coordinates; got %s and %s.', ...
+        mat2str(latDeg),mat2str(lonDeg));
+
+%% Round FIRST, then take the hemisphere letters from the rounded values, so a
+%% coordinate a thousandth of a degree west of the meridian does not print as
+%% a west longitude of zero:
+              latR = round(latDeg,2);
+              lonR = round(lonDeg,2);
               hLat = 'N';
-    if latDeg < 0
+    if latR < 0
               hLat = 'S';
     end
               hLon = 'E';
-    if lonDeg < 0
+    if lonR < 0
               hLon = 'W';
     end
                txt = sprintf('%.2f%c %.2f%c', ...
-                             abs(latDeg),hLat,abs(lonDeg),hLon);
+                             abs(latR),hLat,abs(lonR),hLon);
 end
 
 function v = overrideOf(opts,name,v)

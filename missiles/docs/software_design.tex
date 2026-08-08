@@ -1310,7 +1310,7 @@ unreachable by the very syntax it demonstrates.
 
 \subsection{The movie, feature by feature}
 
-\code{globeMovie} is 812 lines, most of it header, and every visual feature in
+\code{globeMovie} is 969 lines, most of it header, and every visual feature in
 it exists because a plain rotating globe failed at something specific.
 
 \paragraph{The growing track.} Frame $k$ shows the last trajectory sample at or
@@ -1340,12 +1340,36 @@ paints the arc $7800~\mathrm{km}$ off the surface, further out than the Earth
 is wide, and the track leaves the frame entirely'' --- and scales instead:
 
 \begin{lstlisting}
-           altExag = min(30,max(2,floor(0.3.*c.rE./max(hPeakM,1))));
+                 e = min(30,max(2,floor(0.3.*rE./max(hPeakM,1))));
 \end{lstlisting}
 
-hold the apparent apogee at or under $0.3\,r_E$, floor at $2\times$, and cap at
-the shipped $30\times$ so the short-range case is unchanged. It remains
-overridable.
+--- hold the apparent apogee at or under $0.3\,r_E$, floor at $2\times$, cap at
+the $30\times$ the rest of the library uses by hand. It remains overridable,
+and the value used is reported in \code{info.altExag}.
+
+\emph{The shipped case did change.} An earlier version of this paragraph, and
+of the comment it quotes, said the cap left the short-range case unchanged.
+That is false. \code{run\_target}'s own default peaks at
+$118.09~\mathrm{km}$, so the rule returns $16\times$, not the $30\times$ the
+script previously hard-coded; the cap never comes near binding on it.
+Sixteen is the better picture: at $30\times$ a $118~\mathrm{km}$ apogee is
+painted $3543~\mathrm{km}$ off the surface, more than half an Earth radius, and
+the arc reads as an orbit rather than as a glide, where at $16\times$ it stands
+$1889~\mathrm{km}$ off, which is the $0.3\,r_E$ the rule aims at. What is
+genuinely unchanged is the \emph{other three} entry scripts, and only because
+each hard-codes its own factor and never reaches this rule.
+
+Both ends of the rule sit outside anything the script can fly --- the cap binds
+only under $63.8~\mathrm{km}$ of apogee and the floor only above
+$956.7~\mathrm{km}$ --- so no flown case can exercise either, and both went
+unpinned through a mutation run. The rule is therefore handed back as
+\code{info.altExagRule}, a function handle, so a checker can ask it what it
+would do at an apogee this run did not fly. Above $956.7~\mathrm{km}$ the floor
+wins and the $0.3\,r_E$ invariant is \emph{abandoned}, not merely approached:
+the arc is drawn at $2\times$ whatever the apogee, so a $3000~\mathrm{km}$
+apogee stands $6000~\mathrm{km}$ off the surface. That is deliberate --- below
+$2\times$ an exaggeration is indistinguishable from true scale, and a flight
+that apogees above $957~\mathrm{km}$ needs no help being seen.
 
 \paragraph{The arc-frame camera.} MATLAB's \code{view(az,el)} needs a point to
 look at, and the obvious choice --- the median sample --- is wrong here:
@@ -1357,8 +1381,7 @@ launch point entirely.
 So the camera is built from an orthonormal frame constructed from the two
 \emph{endpoints}: $\mathbf{m}$ the great-circle midpoint, $\mathbf{n}$ the
 trajectory-plane normal, $\mathbf{t} = \mathbf{n}\times\mathbf{m}$
-along-track, with a degenerate fallback to the polar axis when the endpoints
-are coincident or antipodal. The camera direction is then
+along-track. The camera direction is then
 
 \[
   \mathbf{c} = \cos\theta_{\text{tilt}}
@@ -1378,6 +1401,28 @@ track does not collapse onto a line at the same time. The azimuth sweep is
 \emph{centred} on the arc midpoint rather than starting there, because a
 one-sided sweep walks a long arc off the limb by the end of the movie.
 
+\paragraph{Two degenerate arcs, and why one guard was not enough.} The frame
+above has two failure modes, not one, and the first cut guarded only half of
+each. $\mathbf{u}_1\times\mathbf{u}_2$ vanishes when the endpoints are
+\emph{coincident} and when they are \emph{antipodal}; $\mathbf{u}_1+\mathbf{u}_2$
+vanishes only in the antipodal case, and it vanishes into \emph{roundoff}
+rather than into zero --- measured at $2.0\times10^{-16}$ for $10^\circ$N
+$20^\circ$E against $10^\circ$S $160^\circ$W, which normalises to the arbitrary
+direction $[0.5547,\,-0.8321,\,0]$. A camera aimed by floating-point noise
+points somewhere reproducible and meaningless with nothing in the picture
+saying so, so the midpoint is now checked as well as the normal, and antipodal
+endpoints aim at the \emph{launch} end.
+
+The fallback normal was also wrong in a quieter way: it was the polar axis
+whatever $\mathbf{m}$ was, so $\mathbf{m}\cdot\mathbf{n}$ came out at $0.5$ on
+a $30^\circ$ case and \code{ViewTiltDeg} was then not the angle out of any
+plane at all --- asked for $32^\circ$ it delivered $25.8^\circ$. The fallback
+now takes whichever axis is least aligned with $\mathbf{m}$ and removes
+$\mathbf{m}$ from it, so the triad is orthonormal in every branch. That is what
+\code{tests/test\_viz} checks, and it checks it without knowing the fallback at
+all: the camera must sit \emph{exactly} \code{ViewTiltDeg} away from the point
+it is aimed at, which is what the option means and which both defects break.
+
 \paragraph{The altitude inset.} The camera fix is a compromise; the inset
 replaces it for the one question it cannot answer. A small 2-D panel plots
 \emph{true, unexaggerated} altitude against downrange, with fixed limits taken
@@ -1386,6 +1431,25 @@ rescaling axis makes a growing line look static. It grows on the same sample
 index as the globe track, so the two cannot drift apart. Its title says
 ``altitude profile (true scale)'', which is what distinguishes it from the
 exaggerated arc above it.
+
+Three things about it are geometric rather than cosmetic, and all three were
+defects first. Its limits are \emph{floored} at one kilometre, because a flight
+that never leaves the surface gives a zero span and MATLAB refuses a zero-width
+axis limit --- an error that used to be thrown with the video writer already
+open, leaving a figure on screen and a part-written MP4 on disk while the same
+trajectory rendered perfectly with \code{Inset} false. The panel is now built
+\emph{above} the \code{open(vw)} call, restoring the invariant the comment
+beside the writer always claimed. Its origin is $\max(0.055,\,26/\mathrm{height})$
+rather than a flat fraction, because the label stack under it is an absolute
+$26~\mathrm{px}$ and a fractional origin loses the x label at every frame under
+about $500~\mathrm{px}$ high --- which is both the $480\times320$ the shipped
+test renders and the $640\times360$ of the self-demo. And its axes
+\code{Color} is \code{'none'} over a semi-transparent backdrop patch, because an
+opaque panel over a globe hides whatever the flight put behind it: on the
+shipped \code{run\_target} case the glide descended behind its left edge and
+re-emerged above its top. Measured after the change, at $1280\times720$: every
+one of the $21440$ pixels the frame draws bright inside the panel's rectangle
+with the inset off is still lit with it on.
 
 \paragraph{Two more, each measured.} Phase \emph{line width} is graded by phase
 \emph{length}, because the three legs of a boost-glide chain differ by two
@@ -1721,7 +1785,7 @@ the three $g_\phi$ projections.
 \textbf{Visual output cannot be validated by a passing test.}
 \end{quote}
 
-\code{tests/test\_viz.m} is 1569 lines and is a serious test: it reads the
+\code{tests/test\_viz.m} is 2225 lines and is a serious test: it reads the
 drawn objects back out by \code{Tag} and compares \code{XData}/\code{YData}
 against the trajectory arrays \emph{recomputed in the test file}, asserts that
 every axis label names its unit, and checks phase-boundary lines for
@@ -1755,7 +1819,27 @@ on lines of their own. Both are now \code{round(Size(2)/50)} and
 limit of the test: \emph{``The test cannot see this --- it reads the String
 property, which was correct throughout --- so it was found, and must be
 re-checked, by rendering a frame and LOOKING at it.''}
+
+\item \textbf{The same font-versus-fraction defect, recurred in the inset, plus
+an opaque panel over the planet.} The inset's x label was clipped off every
+frame under about $500~\mathrm{px}$ high, for exactly the reason above and at
+exactly the size the shipped test renders; and the panel was drawn opaque, so
+on the shipped \code{run\_target} case it hid part of the flown glide. Neither
+is visible to a property test that does not look for it. What the test now
+holds is the \emph{geometry} rather than the appearance --- the panel must
+leave $26~\mathrm{px}$ under its axis for the label, and its axes \code{Color}
+must be \code{'none'} --- which is as close as a property check can get to
+``nothing that flew is hidden''. The picture still had to be rendered and
+looked at, and was.
 \end{enumerate}
+
+A fourth lesson, from a mutation run over the commit that added the inset and
+the arc-frame camera: \emph{all seven mutations survived}. Nothing tested the
+midpoint, the arc frame, the tilt sign, the exaggeration rule, the caption
+formatter or any property of the inset --- the test rendered with the inset on
+and asserted nothing about it. The gap was not that the checks were weak but
+that whole features had none, which is what a mutation run finds and a passing
+suite does not.
 
 Two design consequences. The marker-shell sweep at $1.002$, $1.01$, $1.02$ and
 $1.04\,r_E$ was carried out \emph{by inspecting frames at each setting}, and

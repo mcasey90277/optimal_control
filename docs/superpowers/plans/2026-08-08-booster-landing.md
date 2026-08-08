@@ -728,7 +728,7 @@ Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>"
 - Produces: `rep = certify_pdg(solC, solV, P)` — gates report struct:
   - `rep.G1_defect` (max HS defect re-evaluated at solution), `rep.G1_pass`
   - `rep.G2_resid` (ode45 re-integration: terminal position/velocity/mass error), `rep.G2_pass` (pos < 1 m, vel < 0.1 m/s, mass < 0.5 kg)
-  - `rep.G3_dmf` (|mf colloc − convex|), `rep.G3_dtf`, `rep.G3_traj_Linf` (position, common time grid), `rep.G3_pass` (dmf < 0.1 kg, dtf < 0.2 s)
+  - `rep.G3_dmf` (|mf colloc − convex|), `rep.G3_dtf`, `rep.G3_traj_Linf` (position, common time grid), `rep.G3_pass` (dmf < 1.0 kg, dtf < 0.2 s) — ADJUDICATED 2026-08-08: G3 measures the convex Taylor-bound model error (~0.7 kg genuine offset); gate raised 0.1→1.0 kg per user decision
   - `rep.G4_gap` (= solV.lossless_gap), `rep.G4_pass` (< 1e-4·Tmax/m0)
   - `rep.G5_structure` (throttle max–min–max: fraction of nodes on a bound ≥ 0.95, interior switch count ≤ 2), `rep.G5_primer_deg` (max angle between thrust and −λv), `rep.G5_pass` (structure ok AND primer < 1°)
   - `rep.all_pass`; `print_certify_report(rep)` nested pretty-printer (gate table, PASS/FAIL per row — the front door prints this)
@@ -1502,8 +1502,8 @@ Same command. Expected: `test_run_front_door PASS`.
 
 Run (expect a few minutes): `/Applications/MATLAB_R2025b.app/bin/matlab -batch "cd('/Users/msc/Desktop/optimal_control/booster_landing'); run_booster_landing"`
 Expected, per spec success criteria — verify each, honestly, before claiming done:
-- both solvers converged; gate table ALL PASS; final masses agree < 0.1 kg
-- throttle plot shows max–min–max with terminal max-throttle arc (open `results/pdg_solution.png` and LOOK)
+- both solvers converged; gate table ALL PASS; final masses agree < 1.0 kg (measured ~0.7 kg Taylor model offset — adjudicated, documented)
+- throttle plot shows bang-bang min–max with terminal max-throttle arc (adjudicated: min–max IS the optimum here; open `results/pdg_solution.png` and LOOK)
 - MC success ≥ 95% at 200 runs
 - `results/landing.mp4` plays clean (open it — no diagonal streaks)
 Record tf / mf / fuel / success-rate in the commit message. If any criterion fails, stop and fix (systematic-debugging) — do not commit a red flagship.

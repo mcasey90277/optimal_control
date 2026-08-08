@@ -17,9 +17,15 @@ function xdot = boost3DOF(t,x,u,veh,env)
 %
 %% Inputs:
 %
-%  t                scalar                      Time since phase start (s).
+%  t                scalar                      Phase clock (s): the phase's
+%                                               OWN tspan value, not rebased
+%                                               to zero. A phase given
+%                                               tspan = [10 50] is evaluated
+%                                               at 10 through 50. See TWO
+%                                               CLOCKS in
+%                                               coorbital.prop.phaseRun.
 %                                               Passed to env.prop, whose
-%                                               thrust may be time-varying.
+%                                               thrust may be time-varying
 %
 %  x                [7 x 1]                     State:
 %                                               r     (m) geocentric radius
@@ -44,7 +50,15 @@ function xdot = boost3DOF(t,x,u,veh,env)
 %
 %% Outputs:
 %
-%  xdot             [7 x 1]                     State derivative
+%  xdot             [7 x 1]                     State derivative. Raises
+%                                               coorbital:boost3DOF:nonFiniteState,
+%                                               :nonFiniteControl, :badRadius,
+%                                               :badAtmosphere, :badGravity,
+%                                               :badAero, :badPropulsion or
+%                                               :nonFiniteDerivative rather
+%                                               than return a NaN, in addition
+%                                               to the coordinate singularity
+%                                               and massDepleted identifiers
 %
 %% References:
 %   [1] Vinh, N.X., Busemann, A., Culp, R.D., "Hypersonic and Planetary Entry
@@ -54,6 +68,7 @@ function xdot = boost3DOF(t,x,u,veh,env)
 %
 %% Revision History:
 %  Michael Casey                                                08/07/2026
+%  Michael Casey  Finiteness guards; NaN passes every threshold  08/07/2026
 %  Copyright 2026 Coorbital, Inc.
 %% ------------------------ Begin Code Sequence ---------------------------
 
@@ -87,6 +102,31 @@ end
                  c = coorbital.util.missileConst();
                  h = r - c.rE;
 
+%% Nothing below this line can be believed unless the inputs are numbers, and
+%% A COMPARISON IS NOT A VALIDATION. Every threshold guard in this file is
+%% blind to NaN -- NaN < 1 is false, NaN <= 0 is false, abs(cos(NaN)) < 1e-8
+%% is false -- so a NaN arriving in the state or the control walks straight
+%% past all of them, poisons xdot, and lets the integrator march a trajectory
+%% of NaNs to tspan(end) without a word. The finiteness tests therefore come
+%% FIRST, and each carries its own identifier so the failure names where the
+%% bad number came from:
+if numel(x) < 7 || ~isreal(x(1:7)) || ~all(isfinite(x(1:7)))
+    error('coorbital:boost3DOF:nonFiniteState', ...
+        ['The state must be seven finite real components; got %s. NaN ' ...
+         'passes every threshold guard in this file, so it is refused ' ...
+         'here.'],mat2str(x(:).'));
+end
+if numel(u) < 2 || ~isreal(u(1:2)) || ~all(isfinite(u(1:2)))
+    error('coorbital:boost3DOF:nonFiniteControl', ...
+        'The control must be two finite real components; got %s.', ...
+        mat2str(u(:).'));
+end
+if r <= 0
+    error('coorbital:boost3DOF:badRadius', ...
+        ['The geocentric radius must be positive, the kinematics dividing ' ...
+         'by it; got r = %.6g m.'],r);
+end
+
 %% Guard the coordinate singularities so they fail loudly, not as silent NaN:
 if abs(cos(lat)) < 1e-8
     error('coorbital:boost3DOF:polarSingularity', ...
@@ -108,10 +148,40 @@ end
 %% Environment: density, pressure, gravity, aerodynamic coefficients:
    [rho,P,~,aSnd] = env.atmos(h);
         [gr,gLat] = env.grav(r,lat);
+
+%% The models are handles the caller installed, so their outputs are inputs
+%% to this file and get the same treatment. aSnd is checked before it is used
+%% as the Mach divisor, and P before it is handed to the motor, which is why
+%% the aero and propulsion calls sit below rather than beside their siblings:
+if ~isreal(rho) || ~isfinite(rho) || rho < 0 || ...
+   ~isreal(aSnd) || ~isfinite(aSnd) || aSnd <= 0 || ...
+   ~isreal(P) || ~isfinite(P) || P < 0
+    error('coorbital:boost3DOF:badAtmosphere', ...
+        ['env.atmos returned rho = %s, P = %s and aSnd = %s at h = %.6g m. ' ...
+         'Density and pressure must be finite and non-negative; the speed ' ...
+         'of sound must be finite and positive, the Mach number dividing ' ...
+         'by it.'],mat2str(rho),mat2str(P),mat2str(aSnd),h);
+end
+if ~isreal(gr) || ~isfinite(gr) || ~isreal(gLat) || ~isfinite(gLat)
+    error('coorbital:boost3DOF:badGravity', ...
+        'env.grav returned gr = %s and gLat = %s at r = %.6g m.', ...
+        mat2str(gr),mat2str(gLat),r);
+end
+
           [CL,CD] = env.aero(alpha,V./aSnd,veh);
+if ~isreal(CL) || ~isfinite(CL) || ~isreal(CD) || ~isfinite(CD)
+    error('coorbital:boost3DOF:badAero', ...
+        'env.aero returned CL = %s and CD = %s at Mach %.6g.', ...
+        mat2str(CL),mat2str(CD),V./aSnd);
+end
 
 %% Propulsion: thrust and (positive) mass flow at ambient pressure P:
          [T,mdot] = env.prop(t,P,veh);
+if ~isreal(T) || ~isfinite(T) || ~isreal(mdot) || ~isfinite(mdot)
+    error('coorbital:boost3DOF:badPropulsion', ...
+        ['env.prop returned T = %s N and mdot = %s kg/s at t = %.6g s, ' ...
+         'P = %.6g Pa.'],mat2str(T),mat2str(mdot),t,P);
+end
 
 %% Aerodynamic and thrust accelerations, all over the STATE mass m = x(7):
               qbar = 0.5.*rho.*V.^2;
@@ -146,6 +216,14 @@ if om ~= 0
                      + om.^2.*r.*sin(lat).*cos(lat).*sin(psi)./(V.*cos(gamma));
 end
 
-%% Assemble; the equations of motion apply the minus sign to the positive mdot:
+%% Assemble; the equations of motion apply the minus sign to the positive
+%% mdot. The guards above cover every input and every model output; the check
+%% below covers the arithmetic between them, and it is the only place a
+%% cancellation such as Inf - Inf can be caught:
               xdot = [rdot; londot; latdot; Vdot; gammadot; psidot; -mdot];
+if ~isreal(xdot) || ~all(isfinite(xdot))
+    error('coorbital:boost3DOF:nonFiniteDerivative', ...
+        'The equations of motion produced a non-finite derivative, %s.', ...
+        mat2str(xdot.'));
+end
 end

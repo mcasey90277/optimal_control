@@ -21,7 +21,8 @@ function [xSol,fAch,info] = rangeSolve(fTarget,fRange,xLo,xHi,tolF)
 %  fTarget          [1 x 1]                     Value of fRange to solve for.
 %                                               Units are whatever fRange
 %                                               returns; metres of surface
-%                                               range in the intended use
+%                                               range in the intended use.
+%                                               Must be a finite real scalar
 %
 %  fRange           Function handle             y = fRange(x), scalar in,
 %                                               finite real scalar out. Called
@@ -44,10 +45,17 @@ function [xSol,fAch,info] = rangeSolve(fTarget,fRange,xLo,xHi,tolF)
 %% Outputs:
 %
 %  xSol             [1 x 1]                     Solved parameter. On a failure
-%                                               to converge, the bracket
-%                                               endpoint whose achieved value
-%                                               is nearest the target -- the
-%                                               best the bracket can do
+%                                               to converge, the BEST-SO-FAR
+%                                               point: whichever abscissa
+%                                               visited -- either bracket
+%                                               endpoint or any midpoint --
+%                                               achieved the value nearest the
+%                                               target, ties keeping the
+%                                               earlier. NOT the final
+%                                               midpoint, which for a
+%                                               nonlinear, discontinuous or
+%                                               noisy fRange need not be the
+%                                               closest point reached
 %
 %  fAch             [1 x 1]                     Value fRange actually takes at
 %                                               xSol
@@ -105,12 +113,16 @@ function [xSol,fAch,info] = rangeSolve(fTarget,fRange,xLo,xHi,tolF)
 %  target short-circuits the solve; if both are, the nearer wins.
 %
 %  Genuinely malformed input does throw:
+%      coorbital:rangeSolve:badTarget       fTarget non-finite, complex or
+%                                           non-scalar
 %      coorbital:rangeSolve:badBracket      xLo >= xHi, or either non-finite
 %      coorbital:rangeSolve:badTolerance    tolF non-finite or not positive
 %      coorbital:rangeSolve:nonFiniteEval   fRange returned NaN or Inf
-%  The last of these matters in the intended use: a propagation that fails
-%  and hands back NaN would otherwise make every subsequent comparison false
-%  and let the bracket wander to an arbitrary answer.
+%  The first and last of these matter for the same reason, at the two ends of
+%  the comparison: EVERY test in this solver is an inequality, and every
+%  inequality against NaN is false. A NaN target or a propagation that fails
+%  and hands back NaN would otherwise let the bracket wander to an arbitrary
+%  answer and report it as a tolerance that could not be met.
 %
 %  MONOTONICITY IS ASSUMED, NOT CHECKED. Bisection on a bracket whose
 %  endpoints straddle the target converges to SOME crossing; with several
@@ -128,9 +140,16 @@ function [xSol,fAch,info] = rangeSolve(fTarget,fRange,xLo,xHi,tolF)
 %
 %  The loop also stops if the bracket collapses to the floating-point spacing
 %  of x before tolF is met, which is what happens if tolF is finer than
-%  fRange's own noise floor. That exit reports converged = false with
+%  fRange's own noise floor, and independently if the midpoint STAGNATES --
+%  lands exactly on an endpoint, so that another evaluation would repeat an
+%  abscissa already paid for. Either exit reports converged = false with
 %  identifier coorbital:rangeSolve:toleranceNotMet rather than looping to the
-%  iteration cap.
+%  iteration cap, and the message names the COLLAPSED bracket the solve
+%  actually ended on as well as the original one.
+%
+%  The midpoint is formed as aLo/2 + aHi/2, not 0.5*(aLo + aHi): the sum of
+%  two large same-sign finite endpoints can overflow where the half-sum is
+%  perfectly representable.
 %
 %% References:
 %   [1] Press, W.H., et al., "Numerical Recipes," 3rd ed., Cambridge, 2007,
@@ -140,6 +159,7 @@ function [xSol,fAch,info] = rangeSolve(fTarget,fRange,xLo,xHi,tolF)
 %
 %% Revision History:
 %  Michael Casey                                                08/07/2026
+%  Michael Casey  Validate fTarget; best-so-far; no stagnation   08/07/2026
 %  Copyright 2026 Coorbital, Inc.
 %% ------------------------ Begin Code Sequence ---------------------------
 
@@ -158,6 +178,19 @@ if nargin == 0
               fAch = [];
               info = [];
     return;
+end
+
+%% Validate the target FIRST, because a NaN here is invisible everywhere
+%% else: every convergence and sign comparison below is an inequality, and
+%% every inequality against NaN is false, so the solve would neither converge
+%% nor detect an out-of-band request -- it would bisect to the collapse test
+%% and hand back an arbitrary abscissa with a NaN residual, reported as a
+%% failure to meet the tolerance rather than as the input error it is:
+if ~isscalar(fTarget) || ~isreal(fTarget) || ~isfinite(fTarget)
+    error('coorbital:rangeSolve:badTarget', ...
+        ['fTarget must be a finite real scalar; got %s. A non-finite ' ...
+         'target makes every comparison in this solver false.'], ...
+        mat2str(fTarget));
 end
 
 %% Validate the bracket. An inverted or degenerate interval is a caller
@@ -252,27 +285,58 @@ if sign(fLo - fTarget) == sign(fHi - fTarget)
     return;
 end
 
-%% Bisect. aLo and aHi are the live bracket; gLo is the achieved value at aLo,
-%% kept only so the half-selection reads as a sign test rather than a
-%% re-evaluation. maxIter is a safety net, not the normal exit: the tolerance
-%% test or the bracket-collapse test below always fires first in practice,
-%% and 200 halvings shrink any representable interval past its own spacing:
+%% Bisect. aLo and aHi are the live bracket; gLo and gHi are the achieved
+%% values there, kept so the half-selection reads as a sign test rather than a
+%% re-evaluation and so the failure message can report the bracket the solve
+%% actually ended on. maxIter is a safety net, not the normal exit: the
+%% tolerance test, the bracket-collapse test or the midpoint-stagnation test
+%% below always fires first in practice:
                aLo = xLo;
                aHi = xHi;
                gLo = fLo;
+               gHi = fHi;
            maxIter = 200;
              kIter = 0;
-              xSol = NaN;
-              fAch = NaN;
          converged = false;
               stop = false;
 
+%% BEST-SO-FAR, seeded from the two endpoints. The final midpoint is NOT
+%% necessarily the closest point visited -- for a nonlinear, discontinuous or
+%% noisy fRange the last halving can step away from the target -- and the
+%% output contract promises the closest, so it is tracked explicitly rather
+%% than inferred. A tie keeps the earlier point:
+    if abs(fLo - fTarget) <= abs(fHi - fTarget)
+              xSol = xLo;
+              fAch = fLo;
+    else
+              xSol = xHi;
+              fAch = fHi;
+    end
+           bestErr = abs(fAch - fTarget);
+
 while kIter < maxIter && ~stop
+              xMid = aLo/2 + aHi/2;
+
+%% aLo/2 + aHi/2, not 0.5*(aLo + aHi): the sum of two large same-sign finite
+%% endpoints can overflow to Inf where the half-sum is perfectly
+%% representable. And once the bracket reaches machine spacing the midpoint
+%% lands ON an endpoint, at which point another evaluation buys nothing --
+%% the same abscissa, the same answer, one more expensive propagation -- and
+%% would break the "never twice at the same abscissa" guarantee. Tested
+%% BEFORE kIter is advanced, so the nEval = iterations + 2 accounting holds:
+    if xMid == aLo || xMid == aHi
+              stop = true;
+        break;
+    end
              kIter = kIter + 1;
-              xMid = 0.5.*(aLo + aHi);
               fMid = evalOnce(fRange,xMid);
+
+%% Retain the midpoint only if it genuinely improves on everything seen so far:
+    if abs(fMid - fTarget) < bestErr
+           bestErr = abs(fMid - fTarget);
               xSol = xMid;
               fAch = fMid;
+    end
 
 %% Converged on the ACHIEVED value, which is the quantity the user actually
 %% cares about -- a kilometre of range, not a millisecond of cutoff time:
@@ -288,6 +352,7 @@ while kIter < maxIter && ~stop
                gLo = fMid;
     else
                aHi = xMid;
+               gHi = fMid;
     end
 
 %% The bracket has collapsed to the spacing of the numbers themselves. No
@@ -307,11 +372,15 @@ if converged
                               kIter,xSol,fAch,fTarget));
 else
                msg = sprintf(['Failed to reach a tolerance of %.6g after %d ', ...
-                              'iteration(s). The bracket x = %.6g and ', ...
-                              'x = %.6g achieves %.6g and %.6g respectively; ', ...
-                              'the closest reached was %.10g at x = %.10g. ', ...
+                              'iteration(s). The solve ended on the ', ...
+                              'collapsed bracket x = %.10g to x = %.10g, ', ...
+                              'achieving %.10g and %.10g there; the closest ', ...
+                              'point visited anywhere was %.10g at ', ...
+                              'x = %.10g. The original bracket was x = %.6g ', ...
+                              'to x = %.6g, achieving %.6g and %.6g. ', ...
                               'Loosen tolF or check fRange for noise.'], ...
-                              tolF,kIter,xLo,xHi,fLo,fHi,fAch,xSol);
+                              tolF,kIter,aLo,aHi,gLo,gHi,fAch,xSol, ...
+                              xLo,xHi,fLo,fHi);
               info = finishInfo(info,fAch,false, ...
                      'coorbital:rangeSolve:toleranceNotMet',msg);
 end

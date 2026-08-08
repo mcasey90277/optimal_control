@@ -335,6 +335,52 @@ function test_rangeSolve()
     end
     assert(threwE,'a zero tolerance did not throw');
 
+%% A NON-FINITE TARGET IS THE SAME DEFECT AT THE OTHER END OF THE COMPARISON,
+%% and it is the one that hides. Every test in the solver is an inequality and
+%% every inequality against NaN is false, so a NaN target neither converges
+%% nor trips the out-of-band refusal: it bisects to the collapse and reports
+%% a tolerance it could not meet, with a NaN residual, as though the caller's
+%% fRange were noisy. It must be an input error instead:
+    for badT = {NaN,Inf,-Inf,[1 2],1i}
+            threwE = false;
+        try
+            coorbital.util.rangeSolve(badT{1},fCube,0,3,1e-9);
+        catch err
+            threwE = true;
+            assert(strcmp(err.identifier,'coorbital:rangeSolve:badTarget'), ...
+                'target %s threw the wrong identifier: %s', ...
+                mat2str(badT{1}),err.identifier);
+        end
+        assert(threwE,'a target of %s did not throw',mat2str(badT{1}));
+    end
+
+%% BEST-SO-FAR, NOT THE LAST MIDPOINT. The contract says xSol is the closest
+%% point reached; the final midpoint need not be it. fSpike is monotone
+%% except for one narrow notch, so bisection walks toward the notch, and the
+%% point it ends on achieves a value further from the target than one it
+%% visited earlier. A solver returning its final midpoint fails here; one
+%% retaining the best does not. The residual reported must be the residual of
+%% the point returned, whichever it is:
+             fSpike = @(x) 2 + 9.*x + 40.*exp(-((x - 2.1)./0.02).^2);
+    [xBest,fBest,infoB] = coorbital.util.rangeSolve(21,fSpike,0,3,1e-12);
+    assert(abs(fBest - fSpike(xBest)) < 1e-12, ...
+        ['the returned fAch %.17g is not fSpike(xSol) = %.17g -- the pair ' ...
+         'must describe one point'],fBest,fSpike(xBest));
+    assert(abs(infoB.residual - (fBest - 21)) < 1e-12, ...
+        'info.residual %.17g does not match fAch - fTarget = %.17g', ...
+        infoB.residual,fBest - 21);
+    if ~infoB.converged
+        assert(abs(fBest - 21) <= abs(infoB.fLo - 21) && ...
+               abs(fBest - 21) <= abs(infoB.fHi - 21), ...
+            ['a failed solve returned %.17g, which is further from the ' ...
+             'target than a bracket endpoint already was'],fBest);
+        assert(contains(infoB.message,'collapsed bracket'), ...
+            ['the failure message must report the bracket the solve ended ' ...
+             'on, not only the original: %s'],infoB.message);
+        assert(contains(infoB.message,'closest point visited'), ...
+            'the failure message must name the best point: %s',infoB.message);
+    end
+
 %% A failed propagation handing back NaN must stop the solve rather than let
 %% the bracket wander on a meaningless comparison:
             threwE = false;

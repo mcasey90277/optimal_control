@@ -8,8 +8,8 @@ function [T,mdot] = constThrust(t,P,veh)
 %  (throttled, tabulated, pressure-fed blowdown) so the environment struct can
 %  swap them without touching the equations of motion.
 %
-%     T    = max(veh.thrustVac - veh.Aexit*P, 0)
-%     mdot = veh.thrustVac/(veh.Isp*g0)          while T > 0, and 0 otherwise
+%     T    = veh.thrustVac - veh.Aexit*P,   required to be POSITIVE
+%     mdot = veh.thrustVac/(veh.Isp*g0)
 %
 %% Note -- the choked-nozzle assumption, which is why this is self-consistent:
 %
@@ -24,23 +24,41 @@ function [T,mdot] = constThrust(t,P,veh)
 %  at every altitude. Pairing a vacuum thrust with a sea-level Isp, or letting
 %  mdot follow the corrected thrust, would both break that.
 %
-%% Note -- the clamp zeroes the flow too, deliberately:
+%% Note -- a nonpositive net thrust is an ERROR, not a shutdown:
 %
 %  The linear back-pressure debit is only valid while it is small. Driven far
-%  enough it would return a negative thrust, which the max() clamps to zero.
-%  When that clamp fires the model has left its domain of validity, so the
-%  motor is reported as not running at all: mdot goes to zero WITH the thrust.
-%  A clamped engine that keeps consuming propellant is not a physical model,
-%  and the inconsistency would silently corrupt the integrated mass history --
-%  propellant would disappear with nothing to show for it, and the burnout
-%  event would fire early. The two outputs are always zero together.
+%  enough the expression returns a nonpositive thrust, and this function then
+%  REFUSES with coorbital:constThrust:invalidBackPressure.
+%
+%  It used to clamp instead -- max(...,0) on the thrust, and mdot zeroed with
+%  it -- and that was wrong in the way that matters most, because it was
+%  quiet. A choked motor does not stop burning because ambient back pressure
+%  has made a SIMPLIFIED net-thrust expression go negative; the flow is set
+%  upstream of the throat and knows nothing about the exit plane. So the
+%  condition says the NOZZLE MODEL is out of its domain, not that combustion
+%  ceased, and either way of resolving it silently is a lie: zeroing both
+%  outputs freezes the mass state above burnout, after which the burnout event
+%  never fires and coorbital.prop.phaseRun runs the phase out to tspan(end)
+%  with the motor "running" and the propellant untouched; zeroing thrust alone
+%  would drain propellant for nothing. Raise, and let the caller install a
+%  separated-flow model if it wants to fly there.
+%
+%  THIS BRANCH IS UNREACHABLE IN EVERY SHIPPED CONFIGURATION and is expected
+%  to stay that way. coorbital.util.boosterDefaults gives Aexit = 1.25 m^2
+%  against thrustVac = 950 kN, so the largest possible debit is
+%  1.25 * 101325 = 126.7 kN at sea level -- 13.3 percent of the vacuum thrust,
+%  with a margin of better than 7x. Nothing in the library changes
+%  numerically because of this edit.
 %
 %% Inputs:
 %
-%  t                [N x 1]                     Time since the start of the
-%                                               phase (s). Accepted and
-%                                               ignored by this model, whose
-%                                               thrust is constant in time.
+%  t                [N x 1]                     Phase clock (s): the phase's
+%                                               OWN tspan value, not rebased
+%                                               to zero. See TWO CLOCKS in
+%                                               coorbital.prop.phaseRun.
+%                                               Accepted and ignored by this
+%                                               model, whose thrust is
+%                                               constant in time.
 %
 %  P                [N x 1]                     Ambient static pressure (Pa).
 %                                               Pressure rather than altitude
@@ -58,8 +76,11 @@ function [T,mdot] = constThrust(t,P,veh)
 %
 %% Outputs:
 %
-%  T                [N x 1]                     Delivered thrust (N),
-%                                               non-negative
+%  T                [N x 1]                     Delivered thrust (N), strictly
+%                                               positive. Raises
+%                                               coorbital:constThrust:invalidBackPressure
+%                                               rather than clamp, see the
+%                                               Note above
 %
 %  mdot             [N x 1]                     Propellant mass flow (kg/s),
 %                                               POSITIVE by convention. The
@@ -73,6 +94,7 @@ function [T,mdot] = constThrust(t,P,veh)
 %
 %% Revision History:
 %  Michael Casey                                                08/07/2026
+%  Michael Casey  Refuse a nonpositive net thrust, not clamp     08/07/2026
 %  Copyright 2026 Coorbital, Inc.
 %% ------------------------ Begin Code Sequence ---------------------------
 
@@ -92,11 +114,22 @@ end
                  c = coorbital.util.missileConst();
 
 %% Delivered thrust: vacuum thrust less the back-pressure debit on the exit
-%% plane, clamped at zero. t is deliberately unused -- the thrust is constant:
-                 T = max(veh.thrustVac - veh.Aexit.*P,0);
+%% plane. t is deliberately unused -- the thrust is constant:
+              Traw = veh.thrustVac - veh.Aexit.*P;
+if any(Traw(:) <= 0) || any(~isfinite(Traw(:))) || ~isreal(Traw)
+    error('coorbital:constThrust:invalidBackPressure', ...
+        ['The simplified net thrust veh.thrustVac - veh.Aexit*P came out ' ...
+         'nonpositive: thrustVac = %.6g N, Aexit = %.6g m^2, worst debit ' ...
+         '%.6g N at P = %.6g Pa. The nozzle model is outside its domain of ' ...
+         'validity -- a choked motor does not stop burning because the ' ...
+         'back-pressure term overran -- so this is refused rather than ' ...
+         'clamped. Install a separated-flow model, or reduce Aexit.'], ...
+        veh.thrustVac,veh.Aexit,max(veh.Aexit.*P(:)),max(P(:)));
+end
+                 T = Traw;
 
 %% Choked flow, so the mass flow is fixed by the vacuum thrust and vacuum Isp
-%% and does not respond to P at all -- except that a clamped motor is not
-%% running, and then the flow is zero along with the thrust:
-              mdot = (veh.thrustVac./(veh.Isp.*c.g0)).*(T > 0);
+%% and does not respond to P at all. Broadcast to the shape of T so a column
+%% of pressures still returns a matching column of flows:
+              mdot = (veh.thrustVac./(veh.Isp.*c.g0)).*ones(size(T));
 end

@@ -24,7 +24,12 @@ function psi0 = greatCircleBearing(lat1,lon1,lat2,lon2)
 %
 %  psi0             [N x 1]                     Initial bearing at point 1
 %                                               (rad), clockwise from north,
-%                                               in [0,2*pi)
+%                                               in [0,2*pi). Raises
+%                                               coorbital:greatCircleBearing:degenerateArc
+%                                               for coincident or antipodal
+%                                               points and
+%                                               coorbital:greatCircleBearing:polarOrigin
+%                                               at a pole, see Notes
 %
 %% Notes:
 %
@@ -55,25 +60,51 @@ function psi0 = greatCircleBearing(lat1,lon1,lat2,lon2)
 %  course is wrong. So the things to assert against are absolute bearings on
 %  a near-meridional leg, not the reverse-course offset.
 %
-%  Coincident points have no arc and no course. atan2(0,0) is defined as
-%  zero, so a point to itself returns zero rather than NaN. That keeps a
-%  degenerate user input from poisoning a state vector, but zero is a
-%  convention here, not an answer.
+%% THE DEGENERATE CASES ARE REFUSED, NOT ANSWERED:
 %
-%  Antipodal points are degenerate in the opposite way: EVERY great circle
-%  joins them, so there is no unique initial course and the returned value is
-%  an artifact of how the two vanishing terms round. From (0,0) to (0,pi)
-%  this returns exactly 90 deg -- the numerator is sin(pi), which is 1.22e-16
-%  rather than zero, and the denominator is a true zero. Nudge either
-%  latitude by 1e-9 rad and the answer swings the whole way across: +1e-9
-%  gives 7.02e-6 deg and -1e-9 gives 179.99999 deg. The value is not wrong,
-%  because there is no right answer, but a caller must not treat a bearing
-%  near the antipode as meaningful. The companion coorbital.util.greatCircle
-%  degrades gracefully there; this function does not, and cannot.
+%  This function is a targeting azimuth. Where the azimuth does not exist, a
+%  plausible-looking number is worse than no number at all: it flies. So the
+%  three degenerate geometries raise rather than return.
 %
-%  The poles are the third degenerate case. At exactly the north pole every
-%  direction is south and the returned value is whatever the limit of the
-%  atan2 expression happens to be along the approach; it is not meaningful.
+%  Write the two components as yB, the eastward part of the initial track
+%  direction at point 1, and xB, the northward part. Both are scaled by the
+%  same positive factor, and that factor is sin(Delta) for a central angle
+%  Delta, so hypot(xB,yB) IS the sine of the angular separation. One test on
+%  it therefore catches both ends at once:
+%
+%      COINCIDENT points have no arc and no course, and hypot is exactly
+%      zero. atan2(0,0) is defined as zero, so the old behaviour was to
+%      return due north for a point to itself -- a convention, not an answer,
+%      and one that puts a launch heading of 0 deg into a state vector.
+%
+%      ANTIPODAL points are degenerate the opposite way: EVERY great circle
+%      joins them, so there is no unique initial course, and hypot is again
+%      zero to rounding. From (0,0) to (0,pi) the old form returned exactly
+%      90 deg, because sin(pi) evaluates to 1.22e-16 rather than zero against
+%      a true-zero denominator. Nudge either latitude by 1e-9 rad and the
+%      answer swings the whole way across: +1e-9 gives 7.02e-6 deg and -1e-9
+%      gives 179.99999 deg. Near-antipodal geometry stays catastrophically
+%      ill-conditioned well outside the refusal band, and no tolerance fixes
+%      that -- the refusal only removes the cases with no answer at all.
+%
+%      AT A POLE the local north direction that the bearing is measured from
+%      does not exist. hypot does NOT vanish there, so this one is tested
+%      separately, on cos(lat1).
+%
+%  The tolerance is 1e-12 on both tests. On hypot that is sin(Delta) <= 1e-12,
+%  i.e. points within about 6.4 micrometres of coincidence or of the antipode
+%  at Earth radius; on cos(lat1) it is a latitude within 1e-12 rad -- 6.4
+%  micrometres -- of a pole. Anything a targeting problem can pose is far
+%  outside it, and anything inside it has no azimuth to report.
+%
+%  The identifiers are coorbital:greatCircleBearing:degenerateArc and
+%  coorbital:greatCircleBearing:polarOrigin. Elementwise inputs are refused as
+%  a batch: if ANY element is degenerate the whole call raises, because a
+%  column with one silently wrong azimuth in it is the failure this guard
+%  exists to prevent.
+%
+%  The companion coorbital.util.greatCircle degrades gracefully at all three
+%  and returns a meaningful distance; this function cannot, and does not try.
 %
 %  This is a SPHERICAL bearing. On the WGS-84 ellipsoid the geodesic azimuth
 %  differs by up to a few tenths of a degree at continental range. That is
@@ -100,6 +131,7 @@ function psi0 = greatCircleBearing(lat1,lon1,lat2,lon2)
 %
 %% Revision History:
 %  Michael Casey                                                08/07/2026
+%  Michael Casey  Refuse coincident, antipodal and polar inputs  08/07/2026
 %  Copyright 2026 Coorbital, Inc.
 %% ------------------------ Begin Code Sequence ---------------------------
 
@@ -133,6 +165,32 @@ end
 %% the same positive factor, so their ratio is the tangent of the course:
                 yB = sin(dLon).*cos(lat2);
                 xB = cos(lat1).*sin(lat2) - sin(lat1).*cos(lat2).*cos(dLon);
+
+%% Refuse the geometries that have no azimuth, rather than return the
+%% rounding artefact atan2 makes of them. See THE DEGENERATE CASES in the
+%% header: hypot(xB,yB) is the sine of the angular separation, so one test on
+%% it catches coincident AND antipodal points, and the pole -- where the
+%% north direction the bearing is measured FROM does not exist -- needs its
+%% own test because hypot does not vanish there:
+            tolDeg = 1e-12;
+              magB = hypot(xB,yB);
+if any(magB(:) <= tolDeg)
+    error('coorbital:greatCircleBearing:degenerateArc', ...
+        ['There is no initial bearing between these points: the track ' ...
+         'components vanish to %.3g, at or below the %.3g tolerance, which ' ...
+         'means the two points are coincident or antipodal to within about ' ...
+         '6.4 micrometres of arc. Every great circle joins an antipodal ' ...
+         'pair and none joins a point to itself, so any value returned ' ...
+         'here would be an artefact of rounding, and it would fly.'], ...
+        min(magB(:)),tolDeg);
+end
+if any(abs(cos(lat1(:))) <= tolDeg)
+    error('coorbital:greatCircleBearing:polarOrigin', ...
+        ['A bearing is measured clockwise from local north, and at a pole ' ...
+         'there is no local north: |cos(lat1)| came to %.3g, at or below ' ...
+         'the %.3g tolerance. Move the origin off the pole.'], ...
+        min(abs(cos(lat1(:)))),tolDeg);
+end
 
 %% atan2 returns (-pi,pi] measured from north, positive toward the east,
 %% which is already the clockwise-from-north sense. Only the negative half

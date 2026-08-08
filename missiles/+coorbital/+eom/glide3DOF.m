@@ -9,8 +9,14 @@ function xdot = glide3DOF(t,x,u,veh,env)
 %
 %% Inputs:
 %
-%  t                scalar                      Time since phase start (s).
-%                                               Unused; present for ode45.
+%  t                scalar                      Phase clock (s): the phase's
+%                                               OWN tspan value, not rebased
+%                                               to zero. A phase given
+%                                               tspan = [10 50] is evaluated
+%                                               at 10 through 50. See TWO
+%                                               CLOCKS in
+%                                               coorbital.prop.phaseRun.
+%                                               Unused; present for ode45
 %
 %  x                [6 x 1]                     State:
 %                                               r     (m) geocentric radius
@@ -33,7 +39,16 @@ function xdot = glide3DOF(t,x,u,veh,env)
 %
 %% Outputs:
 %
-%  xdot             [6 x 1]                     State derivative
+%  xdot             [6 x 1]                     State derivative. Raises
+%                                               coorbital:glide3DOF:nonFiniteState,
+%                                               :nonFiniteControl, :badRadius,
+%                                               :badVehicleMass,
+%                                               :badAtmosphere, :badGravity,
+%                                               :badAero or
+%                                               :nonFiniteDerivative rather
+%                                               than return a NaN, in addition
+%                                               to the three coordinate
+%                                               singularity identifiers
 %
 %% References:
 %   [1] Vinh, N.X., Busemann, A., Culp, R.D., "Hypersonic and Planetary Entry
@@ -41,6 +56,7 @@ function xdot = glide3DOF(t,x,u,veh,env)
 %
 %% Revision History:
 %  Michael Casey                                                08/06/2026
+%  Michael Casey  Finiteness guards; NaN passes every threshold  08/07/2026
 %  Copyright 2026 Coorbital, Inc.
 %% ------------------------ Begin Code Sequence ---------------------------
 
@@ -70,6 +86,37 @@ end
                  c = coorbital.util.missileConst();
                  h = r - c.rE;
 
+%% Nothing below this line can be believed unless the inputs are numbers, and
+%% A COMPARISON IS NOT A VALIDATION. Every threshold guard in this file is
+%% blind to NaN -- NaN < 1 is false, abs(cos(NaN)) < 1e-8 is false, and so is
+%% every other inequality -- so a NaN arriving in the state or the control
+%% walks straight past all of them, poisons xdot, and lets the integrator
+%% march a trajectory of NaNs to tspan(end) without a word. The finiteness
+%% tests therefore come FIRST, and each carries its own identifier so the
+%% failure names where the bad number came from:
+if numel(x) < 6 || ~isreal(x(1:6)) || ~all(isfinite(x(1:6)))
+    error('coorbital:glide3DOF:nonFiniteState', ...
+        ['The state must be six finite real components; got %s. NaN passes ' ...
+         'every threshold guard in this file, so it is refused here.'], ...
+        mat2str(x(:).'));
+end
+if numel(u) < 2 || ~isreal(u(1:2)) || ~all(isfinite(u(1:2)))
+    error('coorbital:glide3DOF:nonFiniteControl', ...
+        'The control must be two finite real components; got %s.', ...
+        mat2str(u(:).'));
+end
+if r <= 0
+    error('coorbital:glide3DOF:badRadius', ...
+        ['The geocentric radius must be positive, the kinematics dividing ' ...
+         'by it; got r = %.6g m.'],r);
+end
+if ~isscalar(veh.mass) || ~isreal(veh.mass) || ~isfinite(veh.mass) || ...
+        veh.mass <= 0
+    error('coorbital:glide3DOF:badVehicleMass', ...
+        ['veh.mass must be a finite positive real scalar, both aerodynamic ' ...
+         'accelerations dividing by it; got %s.'],mat2str(veh.mass));
+end
+
 %% Guard the coordinate singularities so they fail loudly, not as silent NaN:
 if abs(cos(lat)) < 1e-8
     error('coorbital:glide3DOF:polarSingularity', ...
@@ -87,7 +134,31 @@ end
 %% Environment: density, gravity, aerodynamic coefficients:
    [rho,~,~,aSnd] = env.atmos(h);
         [gr,gLat] = env.grav(r,lat);
+
+%% The models are handles the caller installed, so their outputs are inputs
+%% to this file and get the same treatment. aSnd is checked before it is used
+%% as the Mach divisor, which is why the aero call sits below rather than
+%% beside its two siblings:
+if ~isreal(rho) || ~isfinite(rho) || rho < 0 || ...
+   ~isreal(aSnd) || ~isfinite(aSnd) || aSnd <= 0
+    error('coorbital:glide3DOF:badAtmosphere', ...
+        ['env.atmos returned rho = %s and aSnd = %s at h = %.6g m. Density ' ...
+         'must be finite and non-negative; the speed of sound must be ' ...
+         'finite and positive, the Mach number dividing by it.'], ...
+        mat2str(rho),mat2str(aSnd),h);
+end
+if ~isreal(gr) || ~isfinite(gr) || ~isreal(gLat) || ~isfinite(gLat)
+    error('coorbital:glide3DOF:badGravity', ...
+        'env.grav returned gr = %s and gLat = %s at r = %.6g m.', ...
+        mat2str(gr),mat2str(gLat),r);
+end
+
           [CL,CD] = env.aero(alpha,V./aSnd,veh);
+if ~isreal(CL) || ~isfinite(CL) || ~isreal(CD) || ~isfinite(CD)
+    error('coorbital:glide3DOF:badAero', ...
+        'env.aero returned CL = %s and CD = %s at Mach %.6g.', ...
+        mat2str(CL),mat2str(CD),V./aSnd);
+end
 
 %% Aerodynamic accelerations:
               qbar = 0.5.*rho.*V.^2;
@@ -120,6 +191,13 @@ if om ~= 0
                      + om.^2.*r.*sin(lat).*cos(lat).*sin(psi)./(V.*cos(gamma));
 end
 
-%% Assemble:
+%% Assemble, and check the result. The guards above cover every input and
+%% every model output; this covers the arithmetic between them, and it is the
+%% only place a cancellation such as Inf - Inf can be caught:
               xdot = [rdot; londot; latdot; Vdot; gammadot; psidot];
+if ~isreal(xdot) || ~all(isfinite(xdot))
+    error('coorbital:glide3DOF:nonFiniteDerivative', ...
+        'The equations of motion produced a non-finite derivative, %s.', ...
+        mat2str(xdot.'));
+end
 end

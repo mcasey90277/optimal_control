@@ -4,8 +4,8 @@ function test_constThrust()
 %  Verify the constant-mass-flow propulsion model and the booster parameter
 %  set it is driven with: vacuum thrust, the ambient back-pressure debit, a
 %  propellant flow that is fixed by the choked-nozzle assumption and therefore
-%  independent of ambient pressure, and the clamped branch, in which thrust
-%  and flow must go to zero TOGETHER.
+%  independent of ambient pressure, and the out-of-domain branch, in which a
+%  nonpositive net thrust must be REFUSED rather than clamped.
 %
 %  Every expected value below is a literal worked out by hand from the
 %  documented placeholders in coorbital.util.boosterDefaults, with the
@@ -23,6 +23,7 @@ function test_constThrust()
 %
 %% Revision History:
 %  Michael Casey                                                08/07/2026
+%  Michael Casey  Out-of-domain back pressure refuses, not clamps 08/07/2026
 %  Copyright 2026 Coorbital, Inc.
 %% ------------------------ Begin Code Sequence ---------------------------
 
@@ -179,18 +180,40 @@ function test_constThrust()
     assert(Tlate == Texp && mdotLate == mdotExp, ...
         'constThrust must not depend on t');
 
-%% ---- Clamped branch -----------------------------------------------------
+%% ---- Out-of-domain back pressure ----------------------------------------
 %% Drive the back-pressure debit far past the vacuum thrust with an absurd
 %% exit area: 1e6 m^2 * 101325 Pa = 1.01325e11 N of debit against 9.5e5 N of
-%% vacuum thrust. The model has left its domain of validity, so the motor must
-%% report as not running -- BOTH outputs zero, together. A zero thrust with a
-%% live propellant flow would silently drain the mass state for nothing:
+%% vacuum thrust. The nozzle model has left its domain of validity, and that
+%% must be an ERROR rather than a quiet shutdown. It used to clamp T to zero
+%% and zero mdot with it, which reads as "the motor stopped"; a choked motor
+%% does not stop burning because a simplified exit-plane term overran, and the
+%% clamp freezes the mass state above burnout, so the burnout event never
+%% fires and the phase silently runs out to tspan(end):
          bstAbsurd = bst;
    bstAbsurd.Aexit = 1e6;
-[Tclamp,mdotClamp] = coorbital.prop.constThrust(0,101325,bstAbsurd);
-    assert(Tclamp == 0,'clamped thrust must be exactly zero, never negative');
-    assert(mdotClamp == 0, ...
-        'mdot must be exactly zero whenever the thrust clamp fires');
+        threwBackP = false;
+    try
+        coorbital.prop.constThrust(0,101325,bstAbsurd);
+    catch errBackP
+        threwBackP = true;
+        assert(strcmp(errBackP.identifier, ...
+                      'coorbital:constThrust:invalidBackPressure'), ...
+            'wrong identifier for an out-of-domain back pressure: %s', ...
+            errBackP.identifier);
+    end
+    assert(threwBackP, ...
+        ['a nonpositive net thrust must be refused, not clamped to zero ' ...
+         'with the propellant flow silently stopped with it']);
+
+%% And the margin that makes the refusal unreachable in every shipped
+%% configuration, asserted so a later change to Aexit or thrustVac cannot
+%% quietly walk the booster into that branch. Worst case is sea level:
+%% 1.25 m^2 * 101325 Pa = 126.7 kN of debit against 950 kN of vacuum thrust:
+           debitSL = bst.Aexit.*101325;
+    assert(debitSL < 0.25.*bst.thrustVac, ...
+        ['the sea-level back-pressure debit is %.1f kN against %.1f kN of ' ...
+         'vacuum thrust -- the shipped booster is approaching the ' ...
+         'out-of-domain branch'],debitSL./1000,bst.thrustVac./1000);
 
 %% ---- Vectorised evaluation ----------------------------------------------
 %% A column of pressures must return the same answers the scalar calls gave,

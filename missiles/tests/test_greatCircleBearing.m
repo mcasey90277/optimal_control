@@ -42,6 +42,7 @@ function test_greatCircleBearing()
 %
 %% Revision History:
 %  Michael Casey                                                08/07/2026
+%  Michael Casey  Degenerate geometries now refuse, not answer   08/07/2026
 %  Copyright 2026 Coorbital, Inc.
 %% ------------------------ Begin Code Sequence ---------------------------
 
@@ -178,26 +179,122 @@ function test_greatCircleBearing()
     assert(psiMN == 0 && psiMS == pi, ...
         'meridian leg must reverse exactly: got %.17f and %.17f',psiMN,psiMS);
 
-%% A point to itself is degenerate -- there is no arc and no course -- but it
-%% must not poison a caller with a NaN that then propagates into a state
-%% vector. atan2(0,0) is defined as zero, and that is the answer taken:
-              psiS = coorbital.util.greatCircleBearing(0.3,1.1,0.3,1.1);
-    assert(~isnan(psiS),'a point to itself returned NaN');
-    assert(isfinite(psiS),'a point to itself returned a non-finite bearing');
-    assert(psiS >= 0 && psiS < 2*pi, ...
-        'a point to itself returned %.17f, outside [0,2*pi)',psiS);
+%% =========================================================================
+%% THE DEGENERATE GEOMETRIES ARE REFUSED. This block used to assert the
+%% opposite -- that a point to itself came back finite, non-NaN and inside
+%% [0,2*pi) -- on the reasoning that a number, any number, keeps a NaN out of
+%% a caller's state vector. That reasoning is backwards for a targeting
+%% azimuth. atan2(0,0) is zero, so a point to itself returned due north; the
+%% antipode returned whatever the two vanishing terms happened to round to.
+%% Neither is an answer, and both fly: a NaN heading stops a propagation on
+%% the first step, while a plausible one produces a complete, wrong,
+%% confident trajectory. Refusing is the safer failure, and it is now the
+%% contract.
+%% =========================================================================
+%% Coincident. There is no arc and no course:
+            threwD = false;
+    try
+        coorbital.util.greatCircleBearing(0.3,1.1,0.3,1.1);
+    catch errD
+            threwD = true;
+        assert(strcmp(errD.identifier, ...
+                      'coorbital:greatCircleBearing:degenerateArc'), ...
+            'a point to itself threw the wrong identifier: %s',errD.identifier);
+    end
+    assert(threwD, ...
+        ['a point to itself must be refused, not answered with the zero ' ...
+         'that atan2(0,0) happens to return']);
+
+%% Antipodal. EVERY great circle joins the pair, so no initial course is
+%% singled out. The old form returned exactly 90 deg here, purely because
+%% sin(pi) evaluates to 1.22e-16 against a true-zero denominator:
+            threwD = false;
+    try
+        coorbital.util.greatCircleBearing(0,0,0,pi);
+    catch errD
+            threwD = true;
+        assert(strcmp(errD.identifier, ...
+                      'coorbital:greatCircleBearing:degenerateArc'), ...
+            'an antipodal pair threw the wrong identifier: %s',errD.identifier);
+    end
+    assert(threwD,'an antipodal pair must be refused, not rounded');
+
+%% At a pole there is no local north to measure the bearing FROM. This one is
+%% NOT caught by the vanishing-track test -- from the north pole to the
+%% equator the track components are perfectly healthy -- so it has its own
+%% guard and its own identifier:
+            threwD = false;
+    try
+        coorbital.util.greatCircleBearing(pi/2,0,0,0);
+    catch errD
+            threwD = true;
+        assert(strcmp(errD.identifier, ...
+                      'coorbital:greatCircleBearing:polarOrigin'), ...
+            'a polar origin threw the wrong identifier: %s',errD.identifier);
+    end
+    assert(threwD,'a bearing measured from the north pole must be refused');
+
+%% Elementwise inputs are refused as a BATCH: one degenerate element poisons
+%% the column, and a column with one silently wrong azimuth in it is exactly
+%% what this guard exists to prevent:
+            threwD = false;
+    try
+        coorbital.util.greatCircleBearing([0.3; 0.1],[1.1; 0.2], ...
+                                          [0.3; 0.9],[1.1; 2.0]);
+    catch errD
+            threwD = true;
+        assert(strcmp(errD.identifier, ...
+                      'coorbital:greatCircleBearing:degenerateArc'), ...
+            'a batch with one degenerate element threw %s',errD.identifier);
+    end
+    assert(threwD, ...
+        'one degenerate element in a column must refuse the whole call');
+
+%% The refusal band is TIGHT, and that matters as much as its existence: a
+%% legitimate short leg must still be answered. Ten metres of arc at Earth
+%% radius is 1.57e-6 rad of separation, six orders above the 1e-12 tolerance,
+%% and it is very nearly due north:
+             psiTen = coorbital.util.greatCircleBearing(0,0,10/6378137,0);
+    assert(psiTen == 0, ...
+        ['a ten-metre northward leg is far outside the degeneracy band and ' ...
+         'must still return due north: got %.17f'],psiTen);
 
 %% Wrapping over a sweep. Every combination below must land in [0,2*pi), the
 %% upper end EXCLUDED. Sub-degree westward legs are included deliberately:
 %% they produce a bearing a hair below zero before wrapping, and 2*pi minus a
 %% hair rounds to exactly 2*pi in double precision, so a bare mod(psi,2*pi)
-%% can hand back 2*pi itself and quietly break a half-open contract:
+%% can hand back 2*pi itself and quietly break a half-open contract.
+%%
+%% The 81 COINCIDENT combinations -- same latitude index and same longitude
+%% index -- are pulled out of the wrap sweep and asserted to REFUSE instead,
+%% which is the same coverage rewritten against the new contract rather than
+%% quietly dropped. The grid contains no antipodal pair: the longitudes step
+%% by 40 deg, so no separation of 180 deg can occur, and the latitudes stop
+%% at plus and minus 80 deg, so no origin is polar:
              latSw = deg2rad(-80:20:80);
              lonSw = deg2rad(-170:40:170);
+           nCoinc = 0;
     for ka = 1:numel(latSw)
         for kb = 1:numel(lonSw)
             for kc = 1:numel(latSw)
                 for kd = 1:numel(lonSw)
+                    if ka == kc && kb == kd
+                        nCoinc = nCoinc + 1;
+                        threwW = false;
+                        try
+                            coorbital.util.greatCircleBearing( ...
+                                latSw(ka),lonSw(kb),latSw(kc),lonSw(kd));
+                        catch errW
+                            threwW = true;
+                            assert(strcmp(errW.identifier, ...
+                                   'coorbital:greatCircleBearing:degenerateArc'), ...
+                                'coincident sweep point threw %s',errW.identifier);
+                        end
+                        assert(threwW, ...
+                            'the coincident point (%g,%g) was not refused', ...
+                            latSw(ka),lonSw(kb));
+                        continue;
+                    end
               psiW = coorbital.util.greatCircleBearing(latSw(ka),lonSw(kb), ...
                                                         latSw(kc),lonSw(kd));
                     assert(psiW >= 0 && psiW < 2*pi, ...
@@ -207,6 +304,9 @@ function test_greatCircleBearing()
             end
         end
     end
+    assert(nCoinc == numel(latSw).*numel(lonSw), ...
+        'the sweep should hold %d coincident pairs, found %d', ...
+        numel(latSw).*numel(lonSw),nCoinc);
 
 %% The specific rounding hazard, isolated. A westward leg of 1e-18 rad of
 %% longitude from the equator to 1 rad north gives a raw bearing of about
@@ -221,8 +321,12 @@ function test_greatCircleBearing()
 %% Elementwise, matching the broadcasting contract of coorbital.util.greatCircle:
 %% a column in, a column of the same shape out, and scalars broadcast against
 %% columns. Each element must equal the scalar call on that element:
-              latA = [0; 0.1; -0.4; 1.0];
-              lonA = [0; 0.2;  0.9; 3.0];
+%% The first element used to be (0,0), which the scalar-broadcast block
+%% further down sends to (0,0) -- a coincident pair, now refused. It is moved
+%% off the origin so the broadcast case still exercises what it was written
+%% to exercise:
+              latA = [0.05; 0.1; -0.4; 1.0];
+              lonA = [0.15; 0.2;  0.9; 3.0];
               latB = [0.5; -0.3; 0.8; -1.1];
               lonB = [1.0;  2.2; -2.0; 0.4];
               psiV = coorbital.util.greatCircleBearing(latA,lonA,latB,lonB);

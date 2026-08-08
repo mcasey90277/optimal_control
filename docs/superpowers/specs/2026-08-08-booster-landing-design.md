@@ -185,8 +185,24 @@ booster_landing/
 └── results/                     % .mat solutions, PNGs, MP4, progress txt
 ```
 
-All functions carry the standard MATLAB header block (purpose/inputs/outputs/
-references). No `i`/`j` loop variables.
+## Conventions (Mike's standing rules apply)
+
+- **Pumpkyn style throughout:** all MATLAB written per the house pumpkyn look
+  (`%%`-delimited header blocks, column-aligned `=`, colon-terminated `%%`
+  section comments, `if nargin==0` self-demos on library functions). Invoke
+  the `matlab-pumpkyn-style` skill when writing each file.
+- **Leverage pumpkyn where useful:** booster landing is not CR3BP, so the
+  orbit-family machinery doesn't apply, but reuse pumpkyn/pumpkynPie
+  utilities (plotting, integrators, param-struct patterns) wherever one fits
+  rather than re-implementing. Document each reuse (or considered-and-refused
+  reuse) in the note.
+- **Run scripts Mike can run as easily as Claude:** `run_booster_landing`
+  with no arguments does the complete nominal campaign from a fresh MATLAB —
+  sets its own paths, prints progress, writes results/. Adjustable via an
+  optional params/options argument, never by editing the file. Same contract
+  as `run_cr3bp_geo` / `run_gto_tulip`.
+- Standard MATLAB header block (purpose/inputs/outputs/references) on every
+  function. No `i`/`j` loop variables.
 
 ## Test plan (`tests/`, fast — seconds to ~2 min)
 

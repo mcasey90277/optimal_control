@@ -11,12 +11,18 @@ function R = run_booster_landing(cfg)
 % INPUTS:
 %   cfg - (optional) .P params overrides (field-merged onto
 %         booster_params()), .doMovie [true], .doMC [true], .Nrun [200],
-%         .outdir [results/]
+%         .outdir [results/]. A cfg.P override that shadows a DERIVED
+%         field's parent (P.Tmax -> P.Tmin=0.40*Tmax, P.g0 -> P.gvec)
+%         is automatically re-derived unless the dependent is ALSO
+%         overridden explicitly -- see the re-derive block below.
 % OUTPUTS:
 %   R   - everything: .P .solC .solV .rep .ctrl .out0 .mc .when
 %
 % REFERENCES:
-%   [1] docs/superpowers/specs/2026-08-08-booster-landing-design.md
+%   [1] docs/superpowers/specs/2026-08-08-booster-landing-design.md --
+%       source of truth for every adjudicated number/date quoted below
+%       (etaT, vf, G3 gate); this file only echoes them for a cold
+%       console reader, never re-adjudicates.
 %   [2] docs/superpowers/plans/2026-08-08-booster-landing.md
 setup_paths;
 
@@ -33,6 +39,22 @@ P = booster_params();
 if isfield(cfg, 'P')
     pf = fieldnames(cfg.P);
     for k = 1:numel(pf), P.(pf{k}) = cfg.P.(pf{k}); end
+    % Re-derive dependents a flat field-overwrite would otherwise leave
+    % STALE (fix report, 2026-08-09 review): booster_params.m derives
+    % P.Tmin = 0.40*P.Tmax and P.gvec = [0;0;-g0] from their parents. A
+    % caller who overrides only the parent (e.g. cfg.P.Tmax) would
+    % silently get an inconsistent (Tmax, Tmin) pair that certify_pdg
+    % would certify without complaint. Re-derive whenever the parent was
+    % overridden and the dependent was NOT also explicitly overridden
+    % (an explicit dependent override always wins).
+    if isfield(cfg.P, 'Tmax') && ~isfield(cfg.P, 'Tmin')
+        P.Tmin = 0.40 * P.Tmax;
+        fprintf('    [cfg.P] Tmax overridden -> re-derived Tmin = 0.40*Tmax = %.1f N\n', P.Tmin);
+    end
+    if isfield(cfg.P, 'g0') && ~isfield(cfg.P, 'gvec')
+        P.gvec = [0; 0; -P.g0];
+        fprintf('    [cfg.P] g0 overridden -> re-derived gvec = [0;0;-g0] = [%.4f; %.4f; %.4f]\n', P.gvec);
+    end
 end
 if ~exist(cfg.outdir, 'dir'), mkdir(cfg.outdir); end
 
@@ -57,15 +79,35 @@ if cfg.doMC
     R.mc = run_monte_carlo(R.solC, R.ctrl, P, struct('Nrun', cfg.Nrun));
 end
 
-fprintf('=== [5/5] Products -> %s ===\n', cfg.outdir);
-plot_pdg_solution(R.solC, R.solV, fullfile(cfg.outdir, 'pdg_solution.png'));
-if cfg.doMC
-    plot_footprint(R.mc, P, fullfile(cfg.outdir, 'footprint.png'));
-end
-if cfg.doMovie
-    movie_landing(R.out0, R.solC, P, fullfile(cfg.outdir, 'landing.mp4'));
-end
+% CHECKPOINT SAVE (fix report, 2026-08-09 review): solve + certify + MC
+% is the expensive ~5-min part of the campaign. Save it BEFORE the viz
+% stage, not only after -- a movie_landing throw (the H.264
+% divisible-by-16 frame-size path is this campaign's known bite point,
+% see that function's own header) used to discard the entire run with
+% nothing on disk. The final save below re-writes the same file with
+% R.when refreshed and any viz-stage products folded in.
 R.P = P;  R.when = datetime('now');
+fprintf('    [checkpoint] solve+certify+MC products -> %s\n', ...
+        fullfile(cfg.outdir, 'booster_run.mat'));
+save(fullfile(cfg.outdir, 'booster_run.mat'), '-struct', 'R');
+
+fprintf('=== [5/5] Products -> %s ===\n', cfg.outdir);
+try
+    plot_pdg_solution(R.solC, R.solV, fullfile(cfg.outdir, 'pdg_solution.png'));
+    if cfg.doMC
+        plot_footprint(R.mc, P, fullfile(cfg.outdir, 'footprint.png'));
+    end
+    if cfg.doMovie
+        movie_landing(R.out0, R.solC, P, fullfile(cfg.outdir, 'landing.mp4'));
+    end
+catch vizErr
+    warning('run_booster_landing:vizFailed', ...
+        ['viz stage failed (%s) -- solve/certify/MC products are already ' ...
+         'checkpointed at %s; continuing with whatever plots/movie ' ...
+         'completed before the failure.'], ...
+        vizErr.message, fullfile(cfg.outdir, 'booster_run.mat'));
+end
+R.when = datetime('now');
 save(fullfile(cfg.outdir, 'booster_run.mat'), '-struct', 'R');
 
 fprintf('\n==================== SUMMARY ====================\n');

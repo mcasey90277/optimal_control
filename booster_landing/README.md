@@ -38,21 +38,40 @@ by editing files:
 
 ```matlab
 R = run_booster_landing(struct( ...
-    'doMovie', true, ...        % write results/landing.mp4  [def true]
-    'doMC',    true, ...        % run the Monte Carlo         [def true]
-    'Nrun',    200, ...         % MC sample count              [def 200]
-    'outdir',  'results', ...   % product directory            [def 'results/']
+    'doMovie', true, ...        % write <outdir>/landing.mp4   [def true]
+    'doMC',    true, ...        % run the Monte Carlo          [def true]
+    'Nrun',    200, ...         % MC sample count               [def 200]
+    'outdir',  '/Users/you/Desktop/optimal_control/booster_landing/results', ...
+                                 % product dir; RELATIVE paths resolve
+                                 % against MATLAB's CURRENT working
+                                 % directory, not this campaign folder
+                                 % [def <campaign>/results, an absolute
+                                 % path built from mfilename('fullpath')]
     'P',       struct('N', 60, 'Nconv', 120)));  % booster_params() overrides
 ```
 
-`cfg.P` is field-merged onto `booster_params()`, so any single parameter
-(grid size, thrust de-rate, boundary conditions, dispersion seed, ...) can
-be overridden without touching a library file. `R` returns everything the
-campaign produced: `.P .solC .solV .rep .ctrl .out0 .mc .when`, and the
-same struct is saved to `outdir/booster_run.mat`.
+`cfg.P` is field-merged onto `booster_params()` **field by field**, so any
+single parameter (grid size, thrust de-rate, boundary conditions,
+dispersion seed, ...) can be overridden without touching a library file.
+This is a flat overwrite, not a re-derivation: `booster_params.m` computes
+a few fields FROM others (`P.Tmin = 0.40*P.Tmax`, `P.gvec = [0;0;-P.g0]`),
+so overriding a parent (`cfg.P.Tmax`, `cfg.P.g0`) without also overriding
+its dependent would otherwise desync the pair. `run_booster_landing`
+detects exactly that case and re-derives the dependent automatically
+(printing a `[cfg.P] ... re-derived ...` note when it fires) *unless* the
+caller also supplies the dependent explicitly, which always wins. This
+covers the two known parent/dependent pairs above; a `cfg.P` override of
+any *other* field not documented as derived in `booster_params.m` is a
+plain, unchecked overwrite — as always, know what you're overriding.
+`R` returns everything the campaign produced:
+`.P .solC .solV .rep .ctrl .out0 .mc .when`, and the same struct is saved
+to `outdir/booster_run.mat`.
 
-Fast end-to-end smoke test (coarse grid, ~1 s, exercises the whole
-pipeline including the cfg-override contract):
+Fast end-to-end smoke test (coarse N=40/Nconv=90 grid, measured ~24 s
+wall time including MATLAB startup — dominated by the TVLQR Riccati
+integration and a 6-run Monte Carlo, not the coarse NLP solves, which
+each take well under 1 s — exercises the whole pipeline including the
+cfg-override contract):
 
 ```
 /Applications/MATLAB_R2025b.app/bin/matlab -batch \
@@ -79,6 +98,26 @@ Full unit-test suite (all `tests/test_*.m`):
 | `tests/` | One `test_*.m` per unit (self-bootstrapping: `addpath('..'); setup_paths;`, throws on failure) plus this task's `test_run_front_door.m` (end-to-end contract on a fast grid) |
 | `results/` | Generated products (git-ignored except `.gitkeep`): `booster_run.mat`, `pdg_solution.png`, `footprint.png`, `landing.mp4` |
 
+## Expected flagship result (baseline for a cold reproduction)
+
+Nominal grid (`P.N=60`, `P.Nconv=120`), no-args run, MATLAB R2025b,
+measured 2026-08-09 (4:52 wall time in one `-batch` call):
+
+| Quantity | Value |
+|---|---|
+| `tf` (both solvers agree to ~3 ms) | 16.595 s |
+| `mf` (collocation) / fuel used | 26464.6 kg / 3535.4 kg |
+| Gates G1-G5 | ALL PASS |
+| G3 `|dmf|` (cross-method mass agreement) | 0.43 kg (gate: < 1.0 kg) |
+| Nominal closed loop | miss 0.01 m, `vtd` 0.98 m/s, landed=true |
+| Monte Carlo (200 runs) | 99.5% success (199 landed / 1 arrest / 0 horizon) |
+
+A re-run should land close to these numbers (IPOPT/BLAS threading can
+shift the last digit or two, see `booster_params.m`'s `P.tf_hi` note for a
+documented case of that sensitivity) — a large deviation (gates failing,
+success rate materially under 95%, `tf` off by more than ~0.1 s) means
+something changed and is worth investigating before trusting the run.
+
 ## Spec / plan pointers
 
 - Design spec: `../docs/superpowers/specs/2026-08-08-booster-landing-design.md`
@@ -86,6 +125,11 @@ Full unit-test suite (all `tests/test_*.m`):
 - Per-task briefs/reports: `../.superpowers/sdd/2026-08-08-booster-landing/task-{1..10}-{brief,report}.md`
 
 ## Adjudication summary (the two numbers a cold reader needs)
+
+Dates below are as recorded in the source comments at adjudication time;
+the design spec (`docs/superpowers/specs/2026-08-08-booster-landing-design.md`)
+is the single source of truth if any date or number here and in code ever
+disagree.
 
 - **`P.etaT = 0.87`** — guidance solves against `etaT*Tmax = 735.15 kN`,
   not the engine's full 845 kN. The un-de-rated min-fuel optimum rides its

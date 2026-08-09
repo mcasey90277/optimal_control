@@ -461,7 +461,10 @@ function [traj,info] = run_ballistic_target(opts)
 %                                               choices the figures were drawn
 %                                               with -- altExag, its rule as a
 %                                               handle, and the two hemisphere
-%                                               captions
+%                                               captions. plotFiles, a cellstr
+%                                               of the PNG paths written, is
+%                                               present only when the figures
+%                                               were drawn AND saved
 %
 %% References:
 %   [1] Bate, R.R., Mueller, D.D., White, J.E., "Fundamentals of
@@ -494,6 +497,10 @@ function [traj,info] = run_ballistic_target(opts)
 %                 coorbital.util.aimSolve, which retires the
 %                 rotating-Earth refusal and the downrange-only
 %                 cross-track warning
+%  Michael Casey  plotFile: the three figures are written to    08/09/2026
+%                 disk through coorbital.viz.saveFigure and
+%                 their paths printed, gated by showPlots and
+%                 an empty stem
 %  Copyright 2026 Coorbital, Inc.
 %% ------------------------ Begin Code Sequence ---------------------------
 
@@ -721,6 +728,16 @@ function [traj,info] = run_ballistic_target(opts)
 
 %% Output:
          showPlots = true;             %false to skip the figures, e.g. under matlab -batch
+          plotFile = fullfile(tempdir,'run_ballistic_target'); %char, figure output path STEM,
+                                       %WITHOUT an extension: each figure appends its own suffix
+                                       %and '.png' -- _profile, _ground_track and _globe. Saving
+                                       %happens whenever showPlots is true and this is non-empty,
+                                       %so there is no second on/off flag to keep in step; set it
+                                       %to '' to draw the figures without writing them. Defaults
+                                       %into tempdir for the same reason movieFile does: a
+                                       %picture is a build artefact and does not belong in the
+                                       %source tree. The names are FIXED, so a re-run overwrites
+                                       %its own pictures rather than piling up new ones
            altExag = 1;                %-, VERTICAL EXAGGERATION of the globe still and of the
                                        %   movie. 1 is TRUE SCALE and is the shipped default:
                                        %   the movie's altitude inset is true-scale already and
@@ -758,8 +775,8 @@ function [traj,info] = run_ballistic_target(opts)
                       'pitchRef','alphaMax','bankAngle','separation','hStop', ...
                       'tMaxBoost','tMaxCoast','tMaxDesc','vehicleFn', ...
                       'boosterFn','atmosFn','gravFn','aeroFn','propFn', ...
-                      'earthSpin','showPlots','movieOn','movieFrames', ...
-                      'movieFile','altExag'};
+                      'earthSpin','showPlots','plotFile','movieOn', ...
+                      'movieFrames','movieFile','altExag'};
              given = fieldnames(opts);
     for ko = 1:numel(given)
         assert(any(strcmp(given{ko},overridable)), ...
@@ -799,6 +816,7 @@ function [traj,info] = run_ballistic_target(opts)
             propFn = overrideOf(opts,'propFn',propFn);
          earthSpin = overrideOf(opts,'earthSpin',earthSpin);
          showPlots = overrideOf(opts,'showPlots',showPlots);
+          plotFile = overrideOf(opts,'plotFile',plotFile);
            altExag = overrideOf(opts,'altExag',altExag);
           movieOn  = overrideOf(opts,'movieOn',movieOn);
        movieFrames = overrideOf(opts,'movieFrames',movieFrames);
@@ -2719,23 +2737,41 @@ info.branchTimeAgrees = flownAgree;
      info.launchStr = llStr(latLaunch,lonLaunch);
      info.targetStr = llStr(latTarget,lonTarget);
     if showPlots
-        coorbital.viz.profilePlot(traj,bst,env, ...
+             hProf = coorbital.viz.profilePlot(traj,bst,env, ...
             struct('Name','Ballistic targeting profile', ...
                    'Channels',{{'altitude','speed','mach','q','nAero','gamma'}}, ...
                    'Extra',{{nSens,'sensed load factor (g)', ...
                              'Sensed load factor, thrust included'}}, ...
                    'VehPhase',{{bst,coastVeh,coastVeh}}));
-        coorbital.viz.groundTrack(traj,bst,env, ...
+             hTrak = coorbital.viz.groundTrack(traj,bst,env, ...
             struct('Target',[latTargetR; lonTargetR], ...
                    'PhaseName',{{'boost','coast','descent'}}, ...
                    'Title',sprintf(['Ground track, %s arc, %.0f km required, ' ...
                                     '%.0f m miss (loft %.2f deg)'], ...
                                    pickName,rngReq./1000,missM,rad2deg(pick.loftR))));
-        coorbital.viz.globe3D(traj,bst,env, ...
+             hGlob = coorbital.viz.globe3D(traj,bst,env, ...
             struct('Target',[latTargetR; lonTargetR], ...
                    'AltScale',altExag, ...
                    'Title',sprintf('Solved %s arc, %s to %s', ...
                                    pickName,info.launchStr,info.targetStr)));
+
+%% Saved to disk when a stem is set, which it is by default. The suffixes name
+%% what each figure IS rather than paraphrasing its title: a title carries a
+%% miss distance, a minus sign and a degree symbol, and sanitising that into a
+%% file name gives a different name on every run and a truncated one at that.
+%% Fixed suffixes mean a re-run overwrites. An empty stem is the off switch;
+%% there is deliberately no second flag beside showPlots:
+        if ~isempty(plotFile)
+           figFile = {coorbital.viz.saveFigure(hProf,[plotFile '_profile']), ...
+                      coorbital.viz.saveFigure(hTrak,[plotFile '_ground_track']), ...
+                      coorbital.viz.saveFigure(hGlob,[plotFile '_globe'])};
+            fprintf('  Figures: %d PNG files written to\n',numel(figFile));
+            for kf = 1:numel(figFile)
+                fprintf('    %s\n',figFile{kf});
+            end
+            fprintf('\n');
+     info.plotFiles = figFile;
+        end
     end
 
 %% The movie, off by default because it is the expensive part of a run. The

@@ -72,7 +72,8 @@ parameter set and the dynamics model): a free-final-time Hermite--Simpson
 collocation NLP that carries the nonconvex thrust annulus directly, and a
 lossless convexification solved as fixed-time convex subproblems under a
 golden-section search on $t_f$. A certification layer then scores the pair
-against five gates. Only after certification does the guidance solution feed
+against five substantive gates G1--G5, plus a time-base gate G0 that
+certifies the basis the other five are computed on. Only after certification does the guidance solution feed
 the tracking half of the pipeline: a phase-scheduled time-varying LQR, a
 dispersed closed-loop truth simulation, and a Monte-Carlo campaign.
 
@@ -94,8 +95,11 @@ Phase 1, never a replacement. It re-solves Route A with
 \texttt{P.drag.on = true}, warm-started from the Phase-1 vacuum solution,
 and runs the same tracking/MC stack against it. There is no convex twin for
 the drag problem, so \texttt{certify\_pdg} is called with an empty
-\texttt{solV} and G3/G4 report \texttt{'skipped'}; G5's primer sub-check is
-loosened (not removed) from $1^\circ$ to $10^\circ$. See
+\texttt{solV} and G3/G4 report \texttt{'skipped'}. Every other gate,
+including G5's primer sub-check, applies to Phase 2 on exactly the same
+terms as Phase 1 --- the $10^\circ$ drag primer loosening this campaign
+once carried was withdrawn on 2026-08-09 when its cause turned out to be a
+bug in the gate (\S\ref{sec:certify}). See
 \noteS{Phase 2} for the physics and \S\ref{sec:certify} here for the
 software semantics.
 
@@ -522,15 +526,29 @@ $a_D = -\tfrac12\rho(z)C_dA\lVert v\rVert v/m$ evaluated only when
 \paragraph{Invariants.}
 \begin{itemize}
 \item \textbf{Complex-step safe.} All magnitudes are computed as
-\texttt{sqrt(sum(.\^{}2))}. No \texttt{norm}, \texttt{abs} or \texttt{max}
-appears anywhere in this file, because \file{tests/test\_dynamics\_jac.m}
-perturbs it with $h = 10^{-30}i$ and compares $\mathrm{Im}(f)/h$ against
+\texttt{sqrt(sum(.\^{}2) + 1e-12)}. No \texttt{norm}, \texttt{abs} or
+\texttt{max} appears anywhere in this file, because
+\file{tests/test\_dynamics\_jac.m} perturbs it with $h = 10^{-30}i$ and
+compares $\mathrm{Im}(f)/h$ against
 \texttt{A} and \texttt{B} to $10^{-12}$ relative. Introducing
 \texttt{norm()} here breaks that test silently in the sense that it will
 fail for a reason unrelated to the mathematics.
-\item The drag branch is not differentiable at $v=0$; the test evaluates at
-a nonzero-velocity state deliberately, and no part of the campaign
-linearizes at rest.
+\item \textbf{Division guards (2026-08-09).} The $+10^{-12}$ under both
+square roots is a guard, added after an external review, and it is what
+makes the previous bullet's ``no \texttt{max()}'' constraint compatible
+with being defined at the singular points. The raw forms divide by
+$\lVert v\rVert$ (drag Jacobian block $vv^\top/\lVert v\rVert$) and by
+$\lVert T\rVert$ (mass row of $B$), both $0/0$ at zero. Neither is
+hypothetical: \texttt{sim\_closed\_loop}'s arrest mode passes through
+$v_z=0$ by construction, and \texttt{tvlqr\_design} asks this function for
+$A$ and $B$ along the whole trajectory. The smoothed forms have the correct
+limits (both tend to zero), the analytic Jacobians remain \emph{exact}
+derivatives of the smoothed $\dot x$ so complex-step still validates them
+to machine precision, and the same $10^{-12}$ has always been in the
+CasADi twin --- so the two implementations now smooth identically.
+$\lVert T\rVert \sim 10^5$\,N and $\lVert v\rVert \sim 10^2$\,m/s here,
+making the guard $\sim10^{-22}$ relative: invisible away from the singular
+point.
 \item There is no guard against $m \le 0$; the propellant-depletion
 terminal event in \texttt{sim\_closed\_loop} exists to prevent reaching that
 state.
@@ -633,6 +651,16 @@ primer \emph{direction} check is valid on the stored duals unrescaled.
 Cross-block identities (comparing $\lambda_r$ to $\lambda_v$, or checking
 $\dot\lambda_v = -\lambda_r$) are off by a factor $T_c$ without rescaling.
 \end{enumerate}
+
+\paragraph{Cold-start guess.} States follow a straight line to the pad with
+mass ramped to $m_{dry}+500$; the thrust guess is a constant near-hover
+vector $-0.9\,m_0 g$; and $t_f$ starts at the \emph{midpoint of its own
+bracket}, $\tfrac12(t_{f,lo}+t_{f,hi})$ --- which, since that is exactly
+$T_c$, is $1$ in scaled units. It was a hardcoded $30$\,s until 2026-08-09,
+left over from before the bracket narrowed to $[10,22]$\,s, so every cold
+solve began outside its own scalar bound on $t_f$ and IPOPT spent
+restoration iterations pushing it back in. Writing it as the ratio rather
+than a number means a future bracket change carries the guess with it.
 
 \paragraph{Other notes.} The de-rate is applied only to the ceiling:
 \texttt{Tmin\_h = P.Tmin/Fc} but \texttt{Tmax\_h = P.etaT*P.Tmax/Fc}. A
@@ -940,11 +968,26 @@ limitation}: on a max--min--max profile --- which drag could produce --- the
 first upward crossing is the \emph{second} switch, so phase A would wrongly
 cover the leading $\Tmax$ arc. Generalizing to ``last upward crossing'', or
 to a per-arc schedule, is required if G5 ever certifies more than one
-interior switch. The no-switch fallback is \texttt{ts = 0}, i.e.\ the
+interior switch. The no-switch fallback is $t_s = -10\,t_{Blend}$, i.e.\ the
 conservative phase-B weights over the whole flight; returning \texttt{sol.tf}
 instead (as an early version did) would apply the aggressive phase-A lateral
 weights across the braking arc, which is precisely the failure the schedule
 exists to prevent.
+
+That fallback was \texttt{ts = 0} until the 2026-08-09 external review,
+which is a different thing from what the docstring promised. The blend is
+$Q(t) = (1-w)Q_A + wQ_B$ with $w = \tfrac12(1+\tanh((t-t_s)/t_{Blend}))$, so
+$t_s=0$ gives $w(0)=\tfrac12$ --- a 50/50 blend at $t=0$, injecting half the
+aggressive phase-A lateral gains into exactly the opening transient the
+fallback exists to keep conservative. (The error decays over $\sim
+t_{Blend}$, so it corrupts the transient rather than the flight; the opening
+transient is nonetheless where a large lateral dispersion is corrected.)
+Placing the switch $10\,t_{Blend}$ in the past saturates the $\tanh$:
+$w(0) = 1 - 2.1\times10^{-9}$, pure $Q_B$ to nine digits. Measured on a
+forged all-$\Tmax$ profile, $\lVert Q(0)-Q_B\rVert/\lVert Q_B\rVert$ is
+$2.2\times10^{-11}$ with the fix and $5.4\times10^{-3}$ without. Because
+the fallback is now expressed in units of $t_{Blend}$, that parameter is
+resolved before the switch detector is called.
 
 \paragraph{Reading the header.} This file's comment block is stratified
 historically (ADAPTATION 1 through 5, plus a task-7b co-design note). Later
@@ -1026,9 +1069,17 @@ Three terminal \texttt{ode45} events are armed:
 \end{tabular}
 \end{center}
 
-\texttt{.stop} is \texttt{'touchdown'} if event 1 fired, \texttt{'arrest'}
-if event 2 or 3 fired, and \texttt{'horizon'} if none fired before the
-$1.5\,t_f$ integration horizon. \texttt{.landed} is defined as
+\texttt{.stop} is \texttt{'touchdown'} if event 1 fired,
+\texttt{'depleted'} if event 3 fired (and 1 did not), \texttt{'arrest'} if
+event 2 fired, and \texttt{'horizon'} if none fired before the
+$1.5\,t_f$ integration horizon. Events 2 and 3 were \emph{both} reported as
+\texttt{'arrest'} until the 2026-08-09 external review; splitting them
+matters because an arrest is a controllability failure with fuel still in
+the tanks while a depletion is a fuel-budget failure, and the campaign's
+one Phase-1 Monte Carlo failure turns out to be the latter. When both fire
+at the same step, depletion wins the label: the arrest is then a
+consequence of the dry tank, and reporting the cause beats reporting the
+symptom. \texttt{.landed} is defined as
 \texttt{strcmp(stop,'touchdown')} --- so \textbf{\texttt{.landed} is true if
 and only if \texttt{.stop} is \texttt{'touchdown'}}, and
 \texttt{run\_monte\_carlo} asserts that invariant rather than assuming it.
@@ -1158,8 +1209,9 @@ Field & Size & Meaning \\
   \texttt{miss<P.pad\_radius} \textsc{and} \texttt{vtd<P.vtd\_max}
   \textsc{and} \texttt{m>=P.mdry} \\
 \texttt{.success\_rate} & scalar & \texttt{mean(mc.ok)} \\
-\texttt{.n\_landed}, \texttt{.n\_arrest}, \texttt{.n\_horizon} & scalars &
-  counts derived from \texttt{mc.stop}; sum to $N_r$ \\
+\texttt{.n\_landed}, \texttt{.n\_arrest}, \texttt{.n\_depleted},
+  \texttt{.n\_horizon} & scalars &
+  counts derived from \texttt{mc.stop}; \emph{asserted} to sum to $N_r$ \\
 \texttt{.dr0}, \texttt{.dv0} & $N_r\times3$ & the drawn dispersions \\
 \texttt{.thrust\_scale}, \texttt{.isp\_scale} & $N_r\times1$ & idem \\
 \texttt{.wind} & $N_r\times3$ & idem; present only when \texttt{P.drag.on} \\
@@ -1179,12 +1231,23 @@ then \texttt{wind} if drag is on. Two calls with the same inputs produce
 \texttt{isequal} structs, which \file{test\_monte\_carlo\_small.m} asserts
 on the \emph{full struct}. Adding, removing or reordering a draw
 invalidates every previously recorded Monte-Carlo number.
-\item \textbf{Single source of truth for counts.} All three counts derive
+\item \textbf{Single source of truth for counts.} All four counts derive
 from \texttt{mc.stop}; the \texttt{landed}$\Leftrightarrow$\texttt{stop}
 contract is then \emph{checked}
 (\texttt{run\_monte\_carlo:landedStopMismatch}), not assumed.
-\item \texttt{mc.ok} requires \texttt{landed}. An arrest or horizon run is a
-failure however good its \texttt{miss}/\texttt{vtd} look.
+\item \textbf{Exhaustiveness.} The four counts are asserted to sum to
+$N_r$ (\texttt{run\_monte\_carlo:stopClassesIncomplete}), so a stop class
+added in \texttt{sim\_closed\_loop} but not here cannot silently vanish
+from the breakdown --- which is how \texttt{'depleted'} hid inside
+\texttt{'arrest'} for as long as it did.
+\item \texttt{mc.ok} requires \texttt{landed}. An arrest, depletion or
+horizon run is a failure however good its \texttt{miss}/\texttt{vtd} look.
+\item \textbf{Unbounded draws, adjudicated.} The multiplicative thrust and
+$I_{sp}$ factors are $1 + \sigma\,\mathcal{N}(0,1)$, unbounded in
+principle. A sign reversal needs $66\sigma$ (thrust) or $100\sigma$
+($I_{sp}$), so the nonphysical tail is unreachable at any feasible campaign
+size; truncating the draw would change every reported success rate to
+defend against an event that cannot occur.
 \end{itemize}
 
 Progress prints every 25 runs. Dependencies: \texttt{sim\_closed\_loop}.
@@ -1240,8 +1303,9 @@ from \texttt{rep.G4\_pass}, because its threshold is a formula of $P$
 guess. G5's structure row is a composite with no single numeric threshold.
 \item \textbf{Skip patterns.} \texttt{'skipped'} for G3/G4 when there is no
 convex twin; the primer row prints as an unscored info row when
-\texttt{rep.G5\_primer\_mode} is \texttt{'skipped-cone'}, as a scored row at
-10\,deg when \texttt{rep.drag\_on}, and at 1\,deg otherwise. \textbf{This
+\texttt{rep.G5\_primer\_mode} is \texttt{'skipped-cone'} and as a scored row
+at $0.01$\,deg otherwise --- one branch fewer than before 2026-08-09, when
+\texttt{rep.drag\_on} selected a third, looser threshold. \textbf{This
 branch must stay in lockstep with \texttt{certify\_pdg}'s own
 \texttt{G5\_pass} logic}, or the printed table stops describing what was
 actually enforced.
@@ -1282,7 +1346,8 @@ has no midpoints and is plotted off its own dense node grid. Local:
 \texttt{plot\_footprint} &
 MC landing scatter coloured by \texttt{mc.ok}, pad-radius circle,
 $3\sigma$ ellipse from \texttt{cov(mc.land)} centred on the sample mean,
-annotation box with success rate, \texttt{landed/arrest/horizon} breakdown
+annotation box with success rate,
+\texttt{landed/arrest/depleted/horizon} breakdown
 and $v_{td}$ statistics &
 Axis limits are computed once from the data and pad radius (no autoscale
 jitter). Consumes \texttt{mc.n\_landed} etc.\ directly \\
@@ -1450,7 +1515,15 @@ Field & Meaning \\
   struct self-describing; the printer reads it) \\
 \texttt{.drag\_on} & \texttt{isfield(P,'drag') \&\& P.drag.on} --- guarded,
   so a parameter set predating the drag field is treated as vacuum rather
-  than throwing \\
+  than throwing. Reported for self-description only; since 2026-08-09 it no
+  longer selects a G5 primer threshold \\
+\texttt{.G0\_tf\_err}, \texttt{.G0\_dt\_err}, \texttt{.G0\_tf\_tol},
+  \texttt{.G0\_dt\_tol}, \texttt{.G0\_pass}, \texttt{.G0\_msg} & time-base
+  consistency (\S\ref{sec:certify:g0}). The tolerances are \emph{relative}
+  ($10^{-9}\max(1,|\cdot|)$) and are stored rather than left for the printer
+  to guess. \texttt{.G0\_msg} is the empty string on a pass and otherwise
+  carries the diagnostic text these checks emitted as exception messages
+  before they became a gate \\
 \texttt{.TmaxG} & $\etaT\Tmax$, the guidance ceiling every gate keys off \\
 \texttt{.G1\_defect}, \texttt{.G1\_pass} & max HS defect, all rows/segments \\
 \texttt{.G2\_pos}, \texttt{.G2\_vel}, \texttt{.G2\_dm}, \texttt{.G2\_pass} &
@@ -1476,7 +1549,7 @@ Field & Meaning \\
 before reading \texttt{rep.G3\_dmf}. On a drag report those fields do not
 exist, and a bare read errors.
 
-\subsection{The five gates}
+\subsection{The gates}
 
 \begin{center}
 \begin{longtable}{@{}lL{5.0cm}L{5.1cm}@{}}
@@ -1488,6 +1561,10 @@ Gate & Threshold & What it measures \\
 Gate & Threshold & What it measures \\
 \midrule
 \endhead
+G0 & $|t(\text{end})-t_f| < 10^{-9}\max(1,|t_f|)$ and
+$\max|\Delta t - h| < 10^{-9}\max(1,|h|)$ &
+That G1's own $h = t_f/N$ grid and the \texttt{solC.t} G2/G5 read are the
+same time base \\
 G1 & $\max|\text{defect}| < 10^{-6}$, absolute SI, all 7 rows &
 Hermite--Simpson defects re-evaluated in plain MATLAB
 \texttt{pdg\_dynamics}, independent of the CasADi graph the NLP was solved
@@ -1499,14 +1576,15 @@ the NLP's own terminal state \\
 G2ff & below-$\Tmin$ and above-$\etaT\Tmax$ fractions $<10^{-6}$ &
 The same reconstruction, densely sampled at $20N+1$ points: is it
 \emph{admissible} between samples? \\
-G3 & $|\Delta m_f| < 1.0\,$kg$\,\times$\,\texttt{tolScale},
-$|\Delta t_f| < 0.2$\,s$\,\times$\,\texttt{tolScale};
-$L_\infty$ trajectory difference is info-only &
+G3 & $|\Delta m_f| < 1.0\,$kg, $|\Delta t_f| < 0.2$\,s,
+$L_\infty$ trajectory difference $< 5.0$\,m --- all
+$\times$\,\texttt{tolScale}, all scored &
 Cross-method agreement between two independently formulated solvers \\
 G4 & gap $< 10^{-4}\etaT\Tmax/m_0$ &
 $\max_t\lvert\lVert u\rVert-\sigma\rvert$: is the convex relaxation tight? \\
 G5 & bound fraction $\ge 0.95$, interior switches $\le 2$, max thrust at
-the last sample; primer angle $<1^\circ$ / $<10^\circ$ / unscored &
+the last sample; primer angle $<0.01^\circ$, or unscored under a pointing
+cone &
 PMP necessary conditions: bang--bang structure and primer-vector alignment \\
 \bottomrule
 \end{longtable}
@@ -1523,31 +1601,60 @@ midpoints.} The two are interleaved chronologically into a $3\times(2N{+}1)$
 array \texttt{TU}; \texttt{solC.Um} are independent decision variables that
 G2 also flies, so a mid-annulus midpoint is a real chatter signal that a
 node-only check would miss (bound fraction could read 1.0 while a midpoint
-sits strictly inside the annulus). The primer check, by contrast, runs at
-\emph{nodes only} --- \texttt{lam\_defect} has no midpoint dual.
+sits strictly inside the annulus). The primer check runs at midpoints
+\emph{only}, for a different and stronger reason --- see below.
 
-\paragraph{G5's three primer modes.} This is the one gate whose pass
-criterion depends on the problem configuration:
+\paragraph{G5's primer runs at segment midpoints, and why that is not a
+detail.} \texttt{solC.lam\_defect(:,k)} is the multiplier of segment $k$'s
+Hermite--Simpson defect. The only control whose discrete stationarity
+condition involves that multiplier \emph{alone} is the segment's midpoint
+control \texttt{solC.Um(:,k)}: it enters the NLP through that one defect
+block (Simpson weight $4h/6$) plus its own annulus row, whose gradient is
+parallel to itself, so the condition forces $T_{k+1/2} \parallel
+\lambda_{v,k}$ exactly. A \emph{node} control appears in two adjacent defect
+blocks and inside both neighbours' Hermite interpolants, so its condition
+mixes $\lambda_{k-1}$ and $\lambda_k$.
+
+Until 2026-08-09 the check compared $\lambda_k$ against the node control
+\texttt{solC.U(:,k)} --- an $O(h)$ time-shifted comparison, which is exactly
+what the historical numbers showed: $1.72^\circ, 1.14^\circ, 0.85^\circ,
+0.57^\circ$ at $N = 20,30,40,60$ in vacuum, halving as $N$ doubled, and
+$8.63^\circ \ldots 2.61^\circ$ under drag. Against the midpoint control the
+same duals and the same solutions give $1.21\times10^{-6}$ degrees at every
+grid, vacuum and drag alike --- the double-precision floor of $\arccos$ near
+unity, not a physical quantity. The theory note derives the stationarity
+condition; \texttt{certify\_pdg}'s header carries both measurement tables.
+
+\paragraph{G5's two primer modes.} The pass criterion still depends on the
+problem configuration, but only through the pointing cone:
 
 \begin{center}
 \begin{tabular}{@{}lll@{}}
 \toprule
-Condition (checked in this order) & \texttt{G5\_primer\_mode} &
-\texttt{G5\_pass} requires \\
+Condition & \texttt{G5\_primer\_mode} & \texttt{G5\_pass} requires \\
 \midrule
 \texttt{isfinite(P.theta\_max\_deg)} & \texttt{'skipped-cone'} &
   \texttt{G5\_structOk} alone \\
-\texttt{P.drag.on} (cone infinite) & \texttt{'scored'} &
-  \texttt{G5\_structOk \&\& primer\_deg < 10} \\
-otherwise (vacuum, no cone) & \texttt{'scored'} &
-  \texttt{G5\_structOk \&\& primer\_deg < 1} \\
+otherwise (no cone) & \texttt{'scored'} &
+  \texttt{G5\_structOk \&\& primer\_deg < 0.01} \\
 \bottomrule
 \end{tabular}
 \end{center}
 
-\texttt{G5\_primer\_deg} is computed and reported in all three cases; only
-its role changes. The ordering matters: a cone run can never also be scored
-against the drag-loosened bound.
+\texttt{G5\_primer\_deg} is computed and reported in both cases; only its
+role changes. There is no longer a drag branch: the $10^\circ$ drag
+loosening existed to accommodate the time-base artifact above and was
+deleted with it, so vacuum and drag are scored identically.
+
+\emph{Where $0.01^\circ$ comes from}: not from the measurement, which is
+machine epsilon. What the angle now measures is the solve's KKT
+stationarity residual, so the calibration is against convergence depth. At
+$N=60$, varying \texttt{opts.tol} alone gives $0.037^\circ$ (vacuum) and
+$92^\circ$ (drag) at $10^{-4}$, $5.1\times10^{-5}$ and $0.0076^\circ$ at
+$10^{-6}$, and the $\arccos$ floor at both shipped defaults ($10^{-9}$
+vacuum, $10^{-11}$ drag). The gate carries four orders of margin over every
+shipped configuration, tolerates three orders of convergence degradation,
+and still fails an unconverged solve.
 
 \emph{Cone}: with a finite pointing cone the primer condition is simply not
 a necessary condition of the constrained problem. The optimal thrust rides
@@ -1555,23 +1662,11 @@ the cone boundary (the KKT projection of the unconstrained direction), so
 $T$ is not parallel to $\lambda_v$ by design. Measured at
 $\theta_{\max}=15^\circ$: both solvers independently bind the cone at
 $\approx15.000^\circ$ (agreeing to $\sim4\times10^{-3}$ deg --- itself a
-strong structural cross-check), while the naive primer angle reads
-$\approx6$--$7^\circ$ on that perfectly converged optimum. Skipping is the
-guard against that false fail.
-
-\emph{Drag}: the threshold is \emph{loosened, not removed}. An earlier fix
-set \texttt{G5\_pass = G5\_structOk} under drag, which would let a future
-sign-flip bug pass silently --- exactly the class of bug the primer sign
-convention exists to catch. Analytically drag should not change the
-direction condition at all (drag enters $A$, never
-$B = \partial\dot x/\partial T$), yet the measured angle is $5.11^\circ$ at
-$N=30$ and still $2.61^\circ$ at $N=60$, i.e.\ mesh refinement does not cure
-it the way it cures the vacuum discretization artifact. The $10^\circ$
-bound is a margin choice ($>3\times$ the measured production value) that
-still catches a gross misalignment or sign flip, which would land in the
-$90$--$180^\circ$ range. Why the discrete duals approximate the continuous
-costate less well under drag is an open question, flagged in the file rather
-than force-closed.
+strong structural cross-check), while the primer angle reads $7.32^\circ$ on
+that perfectly converged optimum --- and reads $7.32^\circ$ at the midpoint
+too, i.e.\ unlike the vacuum/drag artifact this gap is real and survives the
+time-base fix. Skipping is the guard against that false fail, and it matters
+more now that the bound is $0.01^\circ$ rather than $1^\circ$.
 
 \paragraph{Primer sign convention.} \texttt{pdir = +lamv/|lamv|}. The
 literal $-\lambda_v$ convention measured $\approx179.7$--$179.9^\circ$; the
@@ -1581,9 +1676,9 @@ anywhere in the file. The flip is a property of what
 
 \subsection{\texttt{tolScale} semantics}
 
-\texttt{tolScale} scales \textbf{only} G3's $|\Delta m_f|$ and
-$|\Delta t_f|$ tolerances. It does not touch G1, G2, G2ff, G4 or G5, and
-this is deliberate:
+\texttt{tolScale} scales \textbf{only} G3's three tolerances ($|\Delta
+m_f|$, $|\Delta t_f|$ and the trajectory $L_\infty$). It does not touch G0,
+G1, G2, G2ff, G4 or G5, and this is deliberate:
 
 \begin{itemize}
 \item \textbf{G2 does not need it.} With the corrected per-segment control
@@ -1592,9 +1687,10 @@ coarse grids; scaling it could only hide a real regression.
 \item \textbf{G2ff must not have it.} The direction/magnitude split makes a
 violation impossible by construction at \emph{any} resolution, so a
 coarse-grid exemption would be an escape hatch, not an accommodation.
-\item \textbf{G5's primer has never been in its reach.} The coarse-grid
-primer effect is real physics of the discretization, handled by choosing
-$N\ge40$ in tests (\S\ref{sec:tests}), not by scaling.
+\item \textbf{G5's primer has never been in its reach} --- and no longer
+needs to be. The coarse-grid primer effect that once motivated $N\ge40$ in
+tests (\S\ref{sec:tests}) was the time-base bug above, not discretization
+physics; the corrected angle is grid-independent.
 \item \textbf{G3 rarely needs it any more} at the adjudicated 1.0\,kg gate;
 it remains available for coarse-grid calls where $|\Delta m_f|$ runs higher.
 \end{itemize}
@@ -1652,17 +1748,29 @@ layer looks at the closed loop at all --- gates certify the \emph{guidance};
 the truth simulation and Monte Carlo are what certify the \emph{tracker},
 and they have no gate table.
 
-\subsection{Internal assertions}
+\subsection{G0: time base, and the end of the internal assertions}
+\label{sec:certify:g0}
 
-\texttt{certify\_pdg} is report-only in intent --- it returns FAIL flags
-rather than throwing, and callers decide what a failure means --- with one
-exception: two \emph{time-base consistency} assertions
-(\texttt{certify\_pdg:timebase}) that G1's $h = t_f/N$ grid matches the
-\texttt{solC.t} that G2 and G5 are built from, checking both
-$t(\text{end}) = t_f$ and uniform spacing. If a future solver returned a
-non-uniform \texttt{solC.t}, G1 and G2/G5 would silently disagree by an
+\texttt{certify\_pdg} is report-only --- it returns FAIL flags rather than
+throwing, and callers decide what a failure means --- and as of 2026-08-09
+that is true without exception. It previously carried two \emph{time-base
+consistency} assertions (\texttt{certify\_pdg:timebase}) checking that G1's
+$h = t_f/N$ grid matches the \texttt{solC.t} that G2 and G5 are built from,
+both $t(\text{end}) = t_f$ and uniform spacing. If a future solver returned
+a non-uniform \texttt{solC.t}, G1 and G2/G5 would silently disagree by an
 $h$-independent offset invisible to G1, which never reads \texttt{solC.t}.
-That failure mode is worth a hard stop.
+
+The check is worth keeping; the \emph{throw} was not. An external review
+noted that it contradicted the documented contract, and in the worst
+direction: the input most in need of a report --- a malformed or
+failed-solver \texttt{solC} --- was the one that produced an exception
+instead of one, taking the other gates' diagnostics with it. The two
+assertions are now gate G0, scored like any other, with the assertion text
+preserved verbatim in \texttt{rep.G0\_msg} and printed under the G0 rows on
+a failure. Downstream gates still run when G0 fails; their numbers are then
+suspect, which is the point of reporting them rather than hiding them.
+\texttt{rep.all\_pass} includes G0, so no caller can certify a solution on
+an inconsistent time base.
 
 %==============================================================
 \section{Test architecture}
@@ -1754,14 +1862,22 @@ rate at $N=30$ is roughly 65\% and is explicitly \emph{not} a robustness
 claim --- the file says so in its own header, and the production-grid number
 is 100\% over a 50-run probe.
 
-\textbf{$N=40$ (the certification floor).} G5's primer-alignment angle is a
-real function of mesh resolution in vacuum: $\approx1.7^\circ$ at $N=20$,
-$1.19^\circ$ at $N=30$, $0.92^\circ$ at $N=40$, $0.57^\circ$ at $N=60$. The
-gate is $1^\circ$. So $N=40$ is the smallest grid on which all five gates
-pass \emph{honestly} rather than by a loosened threshold, and it is the grid
-both \file{test\_certify\_nominal.m}'s first block and
-\file{test\_run\_front\_door.m} use. This is not a \texttt{tolScale}
-question --- the primer check was never in \texttt{tolScale}'s reach.
+\textbf{$N=40$ (the certification floor), and why that floor no longer
+exists.} G5's primer-alignment angle used to be a function of mesh
+resolution in vacuum --- $\approx1.7^\circ$ at $N=20$, $1.19^\circ$ at
+$N=30$, $0.92^\circ$ at $N=40$, $0.57^\circ$ at $N=60$ against a $1^\circ$
+gate --- so $N=40$ was chosen as the smallest grid on which all gates passed
+\emph{honestly} rather than by a loosened threshold, and it is the grid both
+\file{test\_certify\_nominal.m}'s first block and
+\file{test\_run\_front\_door.m} use. That grid dependence was the $O(h)$
+time-base bug of \S\ref{sec:certify}, fixed 2026-08-09; the corrected angle
+is at the $\arccos$ machine floor on every grid, so no $N$ clears or fails
+it any more. $N=40$ is kept regardless, because it is the coarse pair
+(with $N_{conv}=90$) whose margins on the \emph{other} gates are
+characterized and asserted. Moving it now would mean re-characterizing all
+of them to retire a justification that has already been replaced. This was
+never a \texttt{tolScale} question --- the primer check has never been in
+\texttt{tolScale}'s reach.
 
 \textbf{$N=60$ (production).} \file{test\_closed\_loop\_nominal.m} was moved
 to the production grid deliberately, and the reason is the campaign's
@@ -1928,8 +2044,10 @@ crossing. On a max--min--max profile that is the second switch, and phase A
 would wrongly cover the leading $\Tmax$ arc. Drag could produce such a
 profile. The fix is to detect the \emph{last} upward crossing, or to build a
 per-arc schedule, and it becomes mandatory the moment G5 certifies more than
-one interior switch. The no-switch fallback (\texttt{ts=0}) is already
-conservative. This is a live TODO in \file{lib/tvlqr\_design.m}.
+one interior switch. The no-switch fallback ($t_s = -10\,t_{Blend}$) is
+conservative --- as of 2026-08-09; at its previous value of $0$ it was not,
+see \S\ref{sec:mod:tvlqr}. This is a live TODO in
+\file{lib/tvlqr\_design.m}.
 
 \subsection{G1's absolute-SI tolerance}
 \label{sec:extend:g1tol}
@@ -1990,10 +2108,16 @@ cone programs solved with a general nonlinear interior-point method. A
 dedicated conic solver is a documented drop-in and was deliberately not made
 a dependency.
 
-\item \textbf{The drag primer question} (\S\ref{sec:certify}) is open: why
-the discrete defect duals approximate the continuous costate less well under
-drag when the direction condition is analytically drag-independent. A grid
-refinement study run to convergence would settle it.
+\item \textbf{Costate recovery beyond alignment.} G5's primer check exploits
+the one place in the transcription where a defect dual and a control satisfy
+an exact discrete stationarity condition --- the segment midpoint
+(\S\ref{sec:certify}). That certifies \emph{alignment}, which is all G5
+needs, but it does not produce a continuous costate history of known order:
+node duals, where such a history would naturally live, mix multipliers from
+adjacent segments. Recovering $\lambda(t)$ to a stated order from the
+discrete adjoint system is the natural bridge to an indirect formulation.
+(This item replaces ``the drag primer question'', which was closed on
+2026-08-09: the effect was the time-base bug, not the duals.)
 
 \item \textbf{Small dead code, deliberately noted rather than removed.}
 \texttt{S.ve} in \file{solve\_pdg\_colloc.m} is computed and never used;
@@ -2022,42 +2146,56 @@ threshold on \texttt{success\_rate} that anything enforces.
 
 These were found while transcribing interfaces for this document. In each
 case the \emph{code} is what \S\ref{sec:modules} documents; the discrepancy
-is recorded here rather than silently resolved. None changes a certified
+is recorded here rather than silently resolved. None changed a certified
 number.
+
+Eight of the nine were \textbf{corrected in code on 2026-08-09}, in the same
+pass that applied an external code review (\file{process/external-review-\allowbreak
+fixes-report.md}); each is marked \textsc{fixed} below and its entry now
+describes what was wrong and what it says instead. They are kept rather than
+deleted because the list is also a record of how this document was used.
 
 \begin{enumerate}
 
-\item \textbf{\file{run\_booster\_landing.m} header lists \texttt{.mc}
-unconditionally.} The \texttt{OUTPUTS} line reads
+\item \textsc{fixed.} \textbf{\file{run\_booster\_landing.m} header listed
+\texttt{.mc} unconditionally.} The \texttt{OUTPUTS} line read
 ``\texttt{R - everything: .P .solC .solV .rep .ctrl .out0 .mc .when}'',
 while the code gates \texttt{R.mc} behind \texttt{cfg.doMC}. The README was
-corrected on this point; the function header was not. The same header
-correctly documents \texttt{.mcD} as conditional.
+corrected on this point; the function header was not. The header now states
+the \texttt{cfg.doMC} condition, matching how it already documented
+\texttt{.mcD}.
 
-\item \textbf{\file{certify\_pdg.m} says it ``never throws''.} The header
-states ``This function is report-only and never throws''; the file contains
-three \texttt{assert} calls --- two time-base consistency assertions and,
-transitively, none in the gate logic itself. The intent (gates report, they
-do not throw) is correct and the assertions guard a genuinely
-unrecoverable inconsistency, but the blanket claim is false as written.
+\item \textsc{fixed.} \textbf{\file{certify\_pdg.m} said it ``never
+throws''.} The header stated ``This function is report-only and never
+throws'' while the file contained two time-base consistency assertions. The
+external review made the same finding independently and pushed further:
+throwing on a malformed \texttt{solC} destroys the report for \emph{all}
+gates in exactly the case a report is most wanted. The assertions are now
+gate G0 (\S\ref{sec:certify:g0}), with their messages preserved in
+\texttt{rep.G0\_msg}, and the contract is true as written.
 
-\item \textbf{\file{plot\_pdg\_solution.m} calls panel (b) ``the
-max--min--max money plot''.} The certified structure for these boundary
-conditions is \emph{min--max} --- a single $\Tmin\!\to\!\Tmax$ switch --- a
-finding significant enough that the theory note devotes a section to it and
-G5's structure check was rewritten around it. The header comment predates
-that finding.
+\item \textsc{fixed.} \textbf{\file{plot\_pdg\_solution.m} called panel (b)
+``the max--min--max money plot''.} The certified structure for these
+boundary conditions is \emph{min--max} --- a single $\Tmin\!\to\!\Tmax$
+switch --- a finding significant enough that the theory note devotes a
+section to it and G5's structure check was rewritten around it. The header
+comment predated that finding and now reads min--max, with a note recording
+the correction.
 
-\item \textbf{\file{movie\_landing.m}'s \texttt{sol} argument is unused.}
-The header documents it as ``\texttt{.tf} used for the throttle panel's
-x-axis extent only''; the body sets that axis from \texttt{out.t(end)} and
-never dereferences \texttt{sol}. The argument is positional, so it cannot
-simply be dropped without touching all callers.
+\item \textsc{fixed.} \textbf{\file{movie\_landing.m}'s \texttt{sol}
+argument is unused.} The header documented it as ``\texttt{.tf} used for the
+throttle panel's x-axis extent only''; the body sets that axis from
+\texttt{out.t(end)} --- the closed-loop duration, which is the right choice
+for a movie of the closed-loop run --- and never dereferences \texttt{sol}.
+The argument is third of five and positional, so dropping it would silently
+re-bind \texttt{outfile}/\texttt{opts} in every caller. The header now says
+it is unused and says why it is kept.
 
-\item \textbf{\file{solve\_pdg\_colloc.m}'s \texttt{INPUTS} line says
-\texttt{.tol [def 1e-9]}.} The actual default is $10^{-11}$ when
-\texttt{P.drag.on}. The same line cross-references the adaptation note that
-explains this, so it is a stale summary rather than a missing explanation.
+\item \textsc{fixed.} \textbf{\file{solve\_pdg\_colloc.m}'s \texttt{INPUTS}
+line said \texttt{.tol [def 1e-9]}.} The actual default is $10^{-11}$ when
+\texttt{P.drag.on}. The same line cross-referenced the adaptation note that
+explains this, so it was a stale summary rather than a missing explanation;
+it now states both defaults.
 
 \item \textbf{The shipped \file{results/booster\_run.mat} predates
 \texttt{.ctrlD}/\texttt{.Pd}.} Its top-level variables are \texttt{P},
@@ -2067,23 +2205,28 @@ explains this, so it is a stale summary rather than a missing explanation.
 acknowledges this (``populates on the next full run''). The schema in
 \S\ref{sec:data} documents the code, which is what a fresh run will produce.
 
-\item \textbf{README describes the test bootstrap as
+\item \textsc{fixed.} \textbf{README described the test bootstrap as
 \texttt{addpath('..'); setup\_paths;}.} The tests actually use
 \texttt{addpath(fullfile(fileparts(mfilename('fullpath')), '..'))}, which is
 cwd-independent; the literal README form is not. A simplification in prose,
-not a defect, but the literal form should not be copied into a new test.
+not a defect, but the literal form should not be copied into a new test ---
+which the README now says explicitly, alongside the real form in its folder
+map.
 
-\item \textbf{\file{test\_monte\_carlo\_small.m} points at a probe that does
-not exist in code.} Its header says ``see \texttt{run\_monte\_carlo.m}'s own
-probe at \texttt{N=P.N} for that (task-8 report, 50-run production-grid
-result)''. The 50-run production-grid probe is in the task-8 report;
-\file{run\_monte\_carlo.m} contains no such probe.
+\item \textsc{fixed.} \textbf{\file{test\_monte\_carlo\_small.m} pointed at
+a probe that does not exist in code.} Its header said ``see
+\texttt{run\_monte\_carlo.m}'s own probe at \texttt{N=P.N} for that (task-8
+report, 50-run production-grid result)''. The 50-run production-grid probe
+is a one-off run recorded in the task-8 report; \file{run\_monte\_carlo.m}
+contains no such probe. The header now points at the report and the
+README's flagship table.
 
-\item \textbf{README's folder-map row for \file{results/} lists
-\texttt{phase2\_footprint.png} as a product of ``a \texttt{cfg.phase2}
+\item \textsc{fixed.} \textbf{README's folder-map row for \file{results/}
+listed \texttt{phase2\_footprint.png} as a product of ``a \texttt{cfg.phase2}
 run''} without repeating the \texttt{cfg.doMC} condition, which the same
 README states correctly in its \texttt{cfg} listing above. The code requires
-both.
+both, and the folder map now says so (as it now does for
+\texttt{footprint.png}, which is under the same gate).
 
 \end{enumerate}
 

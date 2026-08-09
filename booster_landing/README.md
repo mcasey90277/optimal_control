@@ -25,13 +25,20 @@ certified, flagship configuration; Phase 2 is a comparison campaign on top
 of it, not a replacement. Flagship measurement (`P.N=60`, 2026-08-09):
 drag **saves** 434.7 kg of fuel versus vacuum (3535.4 -> 3100.7 kg, braking
 against the atmosphere) at a cost of +0.94 s of flight time (16.595 ->
-17.531 s); gates G1/G2/G5 pass (G3/G4 skipped — no convex twin exists for
+17.531 s); gates G0/G1/G2/G5 pass (G3/G4 skipped — no convex twin exists for
 the drag-on problem, lossless convexification is only exact in vacuum);
-wind Monte Carlo (200 runs) succeeds 99.0% of the time. See
-`certify/certify_pdg.m`'s "G5 primer LOOSENING under drag" note for the
-one certification difference from Phase 1 (primer-alignment threshold
-loosened from 1 deg to 10 deg under drag, not removed — still a real,
-measured detector).
+wind Monte Carlo (200 runs) succeeds 99.0% of the time. Phase 2 is
+certified against exactly the same thresholds as Phase 1 apart from the two
+gates that need a convex twin: this campaign once loosened G5's
+primer-alignment threshold from 1 deg to 10 deg under drag, but that
+loosening was **withdrawn 2026-08-09** when an external code review found
+its cause was a time-base bug in the gate (the segment defect dual was
+compared against the *node* control instead of the segment *midpoint*
+control it is the multiplier for). Corrected, the drag primer angle is
+1.2e-6 deg — the `acos` machine-precision floor, identical to vacuum, at
+every grid — and the gate is now 0.01 deg for both. See
+`certify/certify_pdg.m`'s "G5 primer TIME BASE" note for the measurement
+tables.
 
 ## How to run
 
@@ -100,6 +107,12 @@ cfg-override contract):
   "cd('/Users/msc/Desktop/optimal_control/booster_landing'); setup_paths; test_run_front_door"
 ```
 
+(The tests self-bootstrap with
+`addpath(fullfile(fileparts(mfilename('fullpath')), '..')); setup_paths;`,
+which is cwd-independent. Elsewhere this README shortens that to
+`addpath('..')` for readability — that short form only works when MATLAB's
+cwd is already `tests/`, so do not copy it into a new test.)
+
 Full unit-test suite (all `tests/test_*.m`, one MATLAB invocation per
 test): note each test must run in its OWN `-batch` call, not looped with
 `run()` inside a single session -- `run()` executes a script in the
@@ -126,10 +139,10 @@ done
 | `run_booster_landing.m` | Front door: solve -> certify -> track -> MC -> plots/movie -> `results/booster_run.mat` |
 | `setup_paths.m` | Adds campaign dirs + CasADi 3.7 to the MATLAB path |
 | `lib/` | `booster_params` (single source of truth for all constants/BCs/grid/MC settings), `pdg_dynamics` (3-DOF EOM), `solve_pdg_colloc` (Hermite-Simpson NLP, CasADi+IPOPT), `solve_pdg_convex` (lossless convexification + golden-section tf search), `hs_quad_ctrl` (flyable per-segment control reconstruction, shared by certify/tvlqr/sim), `tvlqr_design` (phase-scheduled time-varying LQR), `sim_closed_loop` (truth-model dispersed sim, altitude-indexed tracking), `run_monte_carlo` (dispersed landing campaign) |
-| `certify/` | `certify_pdg` (gates G1 discrete defect, G2 continuous residual, G2ff feedforward feasibility, G3 cross-method agreement, G4 losslessness, G5 PMP bang-bang + primer structure), `print_certify_report` (gate table) |
+| `certify/` | `certify_pdg` (gates G0 time-base consistency, G1 discrete defect, G2 continuous residual, G2ff feedforward feasibility, G3 cross-method agreement, G4 losslessness, G5 PMP bang-bang + primer structure), `print_certify_report` (gate table) |
 | `viz/` | `plot_pdg_solution` (2x2 trajectory/throttle/mass/speed comparison), `plot_footprint` (MC landing scatter + dispersion ellipse), `movie_landing` (booster + throttle-trace MP4, 1280x720 locked), `plot_vacuum_vs_drag` (Phase-2 1x3 trajectory/throttle/mass overlay, vacuum vs drag) |
-| `tests/` | One `test_*.m` per unit (self-bootstrapping: `addpath('..'); setup_paths;`, throws on failure), `test_run_front_door.m` (end-to-end contract on a fast grid), `test_phase2_drag.m` (Phase-2 drag solve + gates + `plot_vacuum_vs_drag` smoke) |
-| `results/` | Generated products (git-ignored except `.gitkeep`): `booster_run.mat`, `pdg_solution.png`, `footprint.png`, `landing.mp4`, and, from a `cfg.phase2` run, `phase2_vac_vs_drag.png` + `phase2_footprint.png` |
+| `tests/` | One `test_*.m` per unit (self-bootstrapping: `addpath(fullfile(fileparts(mfilename('fullpath')), '..')); setup_paths;` — cwd-independent, throws on failure), `test_run_front_door.m` (end-to-end contract on a fast grid), `test_phase2_drag.m` (Phase-2 drag solve + gates + `plot_vacuum_vs_drag` smoke) |
+| `results/` | Generated products (git-ignored except `.gitkeep`): `booster_run.mat`, `pdg_solution.png`, `landing.mp4`, plus `footprint.png` when `cfg.doMC`; from a `cfg.phase2` run, `phase2_vac_vs_drag.png`, and `phase2_footprint.png` only when `cfg.phase2` **and** `cfg.doMC` are both true (it plots the wind Monte Carlo, which `doMC` gates) |
 
 ## Expected flagship result (baseline for a cold reproduction)
 
@@ -140,10 +153,12 @@ measured 2026-08-09 (4:52 wall time in one `-batch` call):
 |---|---|
 | `tf` (both solvers agree to ~3 ms) | 16.595 s |
 | `mf` (collocation) / fuel used | 26464.6 kg / 3535.4 kg |
-| Gates G1-G5 | ALL PASS |
+| Gates G0-G5 | ALL PASS |
 | G3 `|dmf|` (cross-method mass agreement) | 0.43 kg (gate: < 1.0 kg) |
+| G3 trajectory L-inf (cross-method position agreement) | 0.373 m (gate: < 5.0 m) |
+| G5 primer angle (PMP alignment, midpoint semantics) | 1.2e-6 deg (gate: < 0.01 deg) |
 | Nominal closed loop | miss 0.01 m, `vtd` 0.98 m/s, landed=true |
-| Monte Carlo (200 runs) | 99.5% success (199 landed / 1 arrest / 0 horizon) |
+| Monte Carlo (200 runs) | 99.5% success (199 landed / 0 arrest / 1 depleted / 0 horizon) |
 
 A re-run should land close to these numbers (IPOPT/BLAS threading can
 shift the last digit or two, see `booster_params.m`'s `P.tf_hi` note for a
@@ -159,7 +174,7 @@ drag-on re-solve on top):
 |---|---|---|
 | `tf` | 16.595 s | 17.531 s (`dtf` = +0.94 s) |
 | fuel used | 3535.4 kg | 3100.7 kg (`dfuel` = 434.7 kg SAVED by drag) |
-| Gates | G1-G5 ALL PASS | G1/G2/G5 PASS (G3/G4 skipped, no convex twin) |
+| Gates | G0-G5 ALL PASS | G0/G1/G2/G5 PASS (G3/G4 skipped, no convex twin) |
 | Wind Monte Carlo (200 runs) | 99.5% (vacuum, no wind) | 99.0% (`P.drag.on` also enables `sig.wind`) |
 
 ## Spec / plan pointers

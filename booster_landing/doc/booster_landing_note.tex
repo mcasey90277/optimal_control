@@ -465,7 +465,9 @@ We do not
 take Theorem~\ref{thm:lossless} on faith --- gate G4 of
 \S\ref{sec:certify} \emph{measures} $\max_t\, \big|\lVert\uvec\rVert -
 \sigma\big|$ on the computed solution, and gate G5 measures the alignment
-angle in \eqref{eq:primer} on the \emph{collocation} solver's duals.
+angle in \eqref{eq:primer} on the \emph{collocation} solver's duals --- at
+the segment midpoints, which \S\ref{sec:certify} shows is the one place the
+discrete stationarity condition makes that comparison exact.
 
 \paragraph{Free final time.}
 The convex machinery requires $t_f$ fixed. The outer loop is a
@@ -554,11 +556,13 @@ remain a measurement with headroom.
 
 The certification layer (\texttt{certify/certify\_pdg.m}) exists because a
 converged NLP proves less than it appears to. Its architecture is five
-gates, of which the second (continuous accuracy) has two halves: G2 asks
-whether the reconstructed control \emph{flies} to the right place, and G2ff
-asks whether that same reconstruction is \emph{admissible} while doing it.
-They share a reconstruction and a failure history, which is why they are one
-gate and not two.
+substantive gates G1--G5, of which the second (continuous accuracy) has two
+halves: G2 asks whether the reconstructed control \emph{flies} to the right
+place, and G2ff asks whether that same reconstruction is \emph{admissible}
+while doing it. They share a reconstruction and a failure history, which is
+why they are one gate and not two. A sixth, G0, checks the time base the
+other five are computed on; it is described last because it certifies the
+certifier rather than the solution.
 
 \paragraph{G1 --- discrete defect.}
 The Hermite--Simpson defects \eqref{eq:hs} are re-evaluated in plain MATLAB
@@ -632,8 +636,16 @@ violation impossible by construction at any resolution.
 
 \paragraph{G3 --- cross-method agreement.}
 $|\Delta m_f|$, $|\Delta t_f|$ and the $L_\infty$ position-trajectory
-difference between Routes A and B. Reclassified as a measurement, per
-\S\ref{sec:crossval}.
+difference between Routes A and B. The mass row is reclassified as a
+measurement, per \S\ref{sec:crossval}. All three rows are \emph{scored}:
+the trajectory row was computed and printed but excluded from the verdict
+until the 2026 external review pointed out that two solutions could then
+agree on final mass and final time while flying materially different paths
+to the pad. Its threshold is dimensioned from the mission rather than from
+the measurement --- $5$~m, one third of the $R_{pad} = 15$~m landing
+requirement, so the two independently formulated solvers must agree on
+\emph{where} the vehicle is to well inside the accuracy that decides
+success. The measured value is $0.373$~m.
 
 \paragraph{G4 --- losslessness.}
 $\max_t \big|\lVert\uvec\rVert - \sigma\big|$ on the convex solution,
@@ -648,35 +660,102 @@ interior switches, and maximum thrust must be held at touchdown.
 \emph{Primer alignment}: the angle between the applied thrust direction and
 $+\lamv/\lVert\lamv\rVert$, taken from the collocation duals
 \verb|lam_defect| (which \S\ref{sec:colloc} established are directionally
-valid unrescaled), must be under $1^\circ$.
+valid unrescaled), must be under $0.01^\circ$.
+
+\emph{At which instant} that angle is evaluated turned out to matter more
+than the threshold. An external code review of this campaign found that the
+comparison was being made between segment $k$'s defect dual and the
+\emph{node} control $\Tvec_k$, and that the correct partner is the
+\emph{midpoint} control $\Tvec_{k+1/2}$. The argument is short. In the
+transcription \eqref{eq:hs} the midpoint control enters exactly one
+constraint block --- segment $k$'s defect, through the Simpson weight
+$\tfrac{4h}{6}f(x_{k+1/2},\Tvec_{k+1/2})$ --- plus its own annulus row,
+whose gradient is parallel to $\Tvec_{k+1/2}$ itself. Its stationarity
+condition is therefore
+%
+\begin{equation}
+0 \;=\; \frac{\partial \mathcal{L}}{\partial \Tvec_{k+1/2}}
+\;=\; -\frac{4h}{6}\,B(x_{k+1/2})^\top \lambda_k
+\;+\; \mu_k\, \Tvec_{k+1/2},
+\label{eq:midstat}
+\end{equation}
+%
+and since the rows of $B$ that touch $\Tvec$ are $I/m$ (velocity) and
+$-\Tvec^\top/(\lVert\Tvec\rVert I_{sp}g_0)$ (mass, itself radial in
+$\Tvec$), \eqref{eq:midstat} forces $\Tvec_{k+1/2}$ exactly parallel to
+$\lamv$ at the \emph{discrete} level, with no discretization error at all.
+A node control has no such clean condition: $\Tvec_k$ appears in two
+adjacent defect blocks \emph{and} inside both neighbours' Hermite
+interpolants $x_{k\pm1/2} = \tfrac12(x_k + x_{k\pm1}) \pm \tfrac{h}{8}(f_k -
+f_{k\pm1})$, so its stationarity condition mixes $\lambda_{k-1}$ and
+$\lambda_k$. Scoring $\lambda_k$ against $\Tvec_k$ is thus an $O(h)$
+time-shifted comparison, and $O(h)$ is precisely what the old numbers were:
+the measured angle halved as $N$ doubled ($1.72^\circ$, $1.14^\circ$,
+$0.85^\circ$, $0.57^\circ$ at $N = 20, 30, 40, 60$ in vacuum, and
+$8.63^\circ, 5.11^\circ, 3.63^\circ, 2.61^\circ$ under drag). Compared at
+the midpoint, the same solutions and the same duals give $1.2\times
+10^{-6}$~degrees at \emph{every} grid, in vacuum and under drag alike ---
+which is not a physical number but the double-precision floor of
+$\arccos$ near unity, $\arccos(1-\epsilon) = 1.207\times10^{-6}$~degrees.
+The alignment is exact to floating point.
+
+This retired two open items at once. What the campaign had been calling a
+``vacuum discretization artifact'' and a ``drag primer degradation''
+(\S\ref{sec:phase2cert}) were the same bug, and neither was about physics.
+What the gate now measures is the KKT stationarity residual of the solve,
+so its threshold is calibrated against solver convergence depth rather than
+mesh size: at $N=60$, varying the NLP tolerance alone gives $0.037^\circ$
+(vacuum) and $92^\circ$ (drag) at $10^{-4}$, falling to the $\arccos$ floor
+at both shipped defaults ($10^{-9}$ vacuum, $10^{-11}$ drag). The gate is
+set at $0.01^\circ$ --- four orders of margin over every shipped
+configuration, tolerant of three orders of degradation in convergence
+depth, and still failing outright on a genuinely unconverged solve. One
+threshold now serves vacuum and drag; the $10^\circ$ drag loosening
+described in \S\ref{sec:phase2cert} is deleted, because what it
+accommodated no longer exists.
+
+\paragraph{G0 --- time-base consistency.}
+A bookkeeping gate, added when the same review pointed out that the two
+consistency checks it replaces were \texttt{assert} calls in a routine
+documented as ``report-only and never throws''. G1 builds its own grid as
+$h = t_f/N$ while G2 and G5 read \verb|sol.t| directly; if those ever
+disagreed, the discrepancy would be invisible to G1, which never reads
+\verb|sol.t| at all. G0 reports $|t(\mathrm{end}) - t_f|$ and the worst
+grid-spacing error against $h$. Making it a gate rather than an assertion
+matters in exactly the case that motivates certification: a malformed or
+failed-solver solution used to throw, destroying the report for the other
+gates rather than producing one.
 
 \subsection{Flagship gate table}
 
-The following is the verbatim gate report from
-\texttt{results/booster\_run.mat}, Phase 1, at $N = 60$ / $N_{conv} = 120$
-with no tolerance scaling.
+The following is the verbatim gate report for the Phase-1 problem at the
+production grid $N = 60$ / $N_{conv} = 120$ with no tolerance scaling
+(re-certified 2026-08-09 after the review fixes above).
 
 {\footnotesize
 \begin{verbatim}
 Gate                                    value              threshold   verdict
 ------------------------------------------------------------------------------------
+G0 t(end) vs tf err [s]                     0          < 1.65952e-08   PASS
+G0 grid spacing err [s]           2.77556e-15                < 1e-09   PASS
+  -> G0 gate                                                           PASS
 G1 max HS defect                  1.39238e-07                < 1e-06   PASS
-G2 pos residual [m]                0.00884687                    < 1   PASS
-G2 vel residual [m/s]             0.000298943                  < 0.1   PASS
-G2 mass residual [kg]             8.23742e-06                  < 0.5   PASS
+G2 pos residual [m]                 0.0088486                    < 1   PASS
+G2 vel residual [m/s]             0.000299075                  < 0.1   PASS
+G2 mass residual [kg]             1.02479e-05                  < 0.5   PASS
   -> G2 gate                                                           PASS
 G2ff below-Tmin frac              1.72212e-16                < 1e-06   PASS
 G2ff above-Tmax frac              1.58356e-16                < 1e-06   PASS
   -> G2ff gate                                                         PASS
 G3 |dmf| [kg]                         0.42792                    < 1   PASS
 G3 |dtf| [s]                       0.00340864                  < 0.2   PASS
-G3 traj Linf [m]                     0.372616                 (info)
+G3 traj Linf [m]                     0.372616                    < 5   PASS
   -> G3 gate                                                           PASS
 G4 lossless gap [m/s^2]           0.000135597        < 1e-4*TmaxG/m0   PASS
 G5 bound fraction                    0.991736                >= 0.95   PASS
 G5 interior switches                        1                   <= 2   PASS
 G5 structure (bound+switch+max-last)                                         PASS
-G5 primer angle [deg]                0.574131                    < 1   PASS
+G5 primer angle [deg]             1.20742e-06                 < 0.01   PASS
   -> G5 gate                                                           PASS
 ------------------------------------------------------------------------------------
 ALL GATES                                                              PASS
@@ -685,11 +764,13 @@ ALL GATES                                                              PASS
 
 Every gate passes with margin: G1 by a factor of seven, G2's mass residual
 by nearly five orders, G2ff at the level of floating-point noise, G3's
-$|\Delta m_f|$ with $57\%$ of its (adjudicated) ceiling unused, G4 by a
-factor of $18$, and G5's primer angle at $0.574^\circ$ against a $1^\circ$
-gate. The bound fraction $0.9917$ is exactly $1$ sample of $121$ off a
-bound --- one midpoint sitting inside the annulus at the switch, which is
-the correct answer for a discretized step, not a defect.
+$|\Delta m_f|$ with $57\%$ of its (adjudicated) ceiling unused and its
+trajectory row with a factor of $13$, G4 by a factor of $18$, and G5's
+primer angle at the $\arccos$ machine-precision floor, four orders under a
+gate that is itself $100\times$ tighter than the one it replaced. The bound
+fraction $0.9917$ is exactly $1$ sample of $121$ off a bound --- one
+midpoint sitting inside the annulus at the switch, which is the correct
+answer for a discretized step, not a defect.
 
 \begin{figure}[htbp]
 \centering
@@ -829,10 +910,17 @@ target velocity, so a tracker that falls behind the guidance's own descent
 schedule can still arrest. What finally removed the arrest failure mode was
 the altitude indexing of \S\ref{sec:altindex}, not the boundary condition
 alone. Second, the simulator's touchdown classifier was rewritten to
-distinguish \texttt{touchdown} / \texttt{arrest} / \texttt{horizon}, because
+distinguish \texttt{touchdown} / \texttt{arrest} / \texttt{depleted} /
+\texttt{horizon}, because
 an arrest reports $v_{td} \approx 0$ \emph{by construction} --- $v_z = 0$
 \emph{is} the arrest event --- so a naive success metric scores the failure
-mode as a perfect landing.
+mode as a perfect landing. The \texttt{depleted} class (propellant falling
+through $m_{dry}$) was folded into \texttt{arrest} until the 2026 external
+review; splitting it out matters because the two failures point at
+different fixes. An arrest is a controllability failure with fuel still in
+the tanks; a depletion is a fuel-budget failure. The campaign's single
+Phase-1 Monte Carlo failure, discussed in \S\ref{sec:mc}, is a depletion
+that had been reported as an arrest.
 
 \subsection{The lateral pole ceiling: an $R$ that does not exist}
 \label{sec:pole}
@@ -1166,7 +1254,8 @@ mode as a perfect landing.
 \begin{tabular}{lr}
 \toprule
 success rate & $99.5\%$ (199 / 200) \\
-failure modes & 1 arrest, 0 horizon expiries, 0 miss/speed failures \\
+failure modes & 1 propellant depletion, 0 arrests, 0 horizon expiries,
+0 miss/speed failures \\
 miss: mean / median / p95 / max & $3.72$ / $3.67$ / $6.72$ / $9.24$ m \\
 $v_{td}$: mean / median / p95 / max & $1.054$ / $1.000$ / $1.206$ / $8.290$ m/s \\
 propellant remaining: min / mean / max & $0.0$ / $537.3$ / $882.7$ kg \\
@@ -1181,11 +1270,12 @@ initial position error of $\Delta\rvec_0 = [-34.3;\ 425.3;\ 121.6]$~m ---
 a $4.25\sigma$ cross-range excursion, $443.7$~m in total --- together with
 $\Delta\vvec_0 = [2.1;\ 19.6;\ -7.4]$~m/s and a $-2\%$ engine. Correcting
 that much cross-range consumed the entire propellant margin: the run
-reached $m_{dry}$ (remaining propellant $0.00$~kg) and arrested rather
-than touching down. Every other run in the campaign landed, and $95\%$ of
+reached $m_{dry}$ with $0.00$~kg of usable propellant remaining, and the
+simulation terminated on the propellant-depletion event. Every other run in
+the campaign landed, and $95\%$ of
 them landed within $6.7$~m of the pad centre at under $1.21$~m/s. Note
 that the maximum $v_{td}$ of $8.29$~m/s in the table belongs to that same
-arrest run and is not a touchdown speed at all: among the $199$ genuine
+depletion run and is not a touchdown speed at all: among the $199$ genuine
 touchdowns the worst contact speed is $1.476$~m/s, comfortably inside the
 $2.0$~m/s gate, and the whole touchdown population spans
 $0.879$--$1.476$~m/s.
@@ -1265,8 +1355,9 @@ the maximum-throttle braking arc contracts.}
 \end{figure}
 
 \subsection{What certification can and cannot say under drag}
+\label{sec:phase2cert}
 
-Gates G1, G2, G2ff and G5 apply unchanged. G3 and G4 are \emph{skipped}, and
+Gates G0, G1, G2, G2ff and G5 apply unchanged. G3 and G4 are \emph{skipped}, and
 the reason is a point of principle rather than convenience: lossless
 convexification is exact for the vacuum problem because the change of
 variables \eqref{eq:cov} makes those dynamics linear. Drag is quadratic in
@@ -1288,34 +1379,44 @@ G2ff below/above        & $1.7\times10^{-16}$ / $1.6\times10^{-16}$ & $<10^{-6}$
 G3, G4                  & --- & --- & skipped (no convex twin) \\
 G5 bound fraction       & $1.000$ & $\ge 0.95$ & PASS \\
 G5 interior switches    & $1$ & $\le 2$ & PASS \\
-G5 primer angle [deg]   & $2.605$ & $<10$ (loosened) & PASS \\
+G5 primer angle [deg]   & $1.21\times10^{-6}$ & $<0.01$ & PASS \\
 \bottomrule
 \end{tabular}}
 \end{center}
 
-Two adaptations are worth recording honestly.
+One adaptation is worth recording honestly, and one former adaptation has
+been withdrawn.
 
-First, G5's primer threshold is \emph{loosened} from $1^\circ$ to $10^\circ$
-under drag, not removed. An earlier version of the change did remove it, by
-setting the gate to the structure check alone, and review correctly caught
-that as a regression risk: with the primer check gone, a sign-flip bug would
-silently pass. The loosened threshold sits more than $3\times$ above the
-measured $2.605^\circ$ while still catching the $90$--$180^\circ$
-misalignments that constitute the real failure mode. The measurement behind
-the number: the same coarse grid that gives a vacuum primer angle of
-$1.14^\circ$ gives $5.11^\circ$ under drag, and at the production grid
-(where vacuum clears $1^\circ$ comfortably) drag still measures
-$2.605^\circ$ --- so finer meshing does \emph{not} cure it the way it cures
-the vacuum discretization artifact. Analytically the direction condition
-should be unchanged by drag: drag enters the dynamics Jacobian $A$ but never
-$B = \partial\dot{x}/\partial\Tvec$, so the Hamiltonian's control-dependent
-term is untouched and the maximizing direction is still
-$+\lamv/\lVert\lamv\rVert$. The most likely explanation is degradation in
-how well the discrete defect dual approximates the continuous costate once
-the residual's curvature grows under the $\lVert\vvec\rVert\vvec$
-nonlinearity. That is an open question, flagged rather than force-closed.
+The withdrawn one is G5's primer threshold, which this campaign loosened
+from $1^\circ$ to $10^\circ$ under drag and reported as a genuine, if
+unexplained, drag-model effect: the same coarse grid that gave a vacuum
+primer angle of $1.14^\circ$ gave $5.11^\circ$ under drag, and at the
+production grid drag still measured $2.605^\circ$, so finer meshing did
+\emph{not} cure it the way it cured the vacuum artifact. The analysis
+accompanying that loosening correctly observed that drag \emph{cannot}
+change the direction condition --- drag enters the dynamics Jacobian $A$ but
+never $B = \partial\dot{x}/\partial\Tvec$, so the Hamiltonian's
+control-dependent term is untouched and the maximizing direction is still
+$+\lamv/\lVert\lamv\rVert$ --- and then, having found no mechanism,
+attributed the residual to degradation in how the discrete dual approximates
+the continuous costate and left it open.
 
-Second, the NLP convergence tolerance is tightened from $10^{-9}$ to
+It was not that. It was the primer check comparing a segment's defect dual
+against a \emph{node} control instead of that segment's \emph{midpoint}
+control, an $O(h)$ time-base error described in \S\ref{sec:certify}. Under
+the corrected comparison the drag primer angle is $1.21\times10^{-6}$
+degrees --- the $\arccos$ floor, identical to vacuum, at every grid. The
+$10^\circ$ threshold is deleted and drag is scored against the same
+$0.01^\circ$ gate as vacuum. Two lessons are worth keeping from the episode.
+First, the loosening was at least defensible in form: it kept the detector
+and only moved the threshold, rather than dropping the check, so the gate
+would still have caught the sign-flip class of bug it was there for. Second,
+and less comfortably, an analysis that establishes there is \emph{no
+mechanism} for an observed effect is evidence that the measurement is wrong,
+not that the effect is mysterious. The correct response to ``drag cannot do
+this, and yet the number moves'' was to distrust the number.
+
+The adaptation that stands: the NLP convergence tolerance is tightened from $10^{-9}$ to
 $10^{-11}$ under drag. G1 initially failed at $3.21\times10^{-6}$, entirely
 concentrated in the \emph{mass} row of the \emph{first} segment. The cause
 was traced, not guessed: IPOPT's own constraint violation at $10^{-9}$ was
@@ -1339,7 +1440,8 @@ consequence. The principled fix is a per-row-scaled G1 tolerance, noted in
 \begin{tabular}{lr}
 \toprule
 success rate & $99.0\%$ (198 / 200) \\
-failure modes & 0 arrests, 0 horizon expiries, 2 pad-radius misses \\
+failure modes & 0 arrests, 0 depletions, 0 horizon expiries,
+2 pad-radius misses \\
 miss: mean / median / p95 / max & $6.02$ / $5.62$ / $12.38$ / $15.52$ m \\
 $v_{td}$: mean / max & $0.919$ / $1.125$ m/s \\
 propellant remaining: min / mean & $477.3$ / $994.1$ kg \\
@@ -1428,10 +1530,17 @@ workaround --- deepen convergence --- is measured and harmless, but the
 principled fix is to scale the G1 tolerance per state row by that row's own
 characteristic magnitude.
 
-\item \textbf{The drag primer question.} \S\ref{sec:phase2} leaves open why
-the discrete defect duals approximate the continuous costate less well under
-drag when the direction condition is analytically drag-independent. A grid
-refinement study run to convergence would settle it.
+\item \textbf{Higher-order costate recovery.} The primer check now uses the
+one place in the Hermite--Simpson transcription where a defect dual and a
+control satisfy an exact discrete stationarity condition --- the segment
+midpoint (\S\ref{sec:certify}). That is enough to certify \emph{alignment},
+which is what G5 needs, but it does not give a continuous costate
+\emph{history} of known order: the node duals, which is where a costate
+trajectory would naturally live, mix multipliers from adjacent segments.
+Recovering $\lambda(t)$ to a stated order from the discrete adjoint system
+would let the campaign report a genuine costate profile alongside the
+primer angle, and would be the natural bridge to an indirect (shooting)
+formulation of the same problem.
 
 \end{itemize}
 

@@ -5,7 +5,36 @@ parked items (rulings in `process/CAMPAIGN_LEDGER.md`), and post-campaign
 discussion (2026-08-09). The campaign itself is COMPLETE and certified —
 everything here is extension or hardening, nothing blocks current use.
 
-## P1 — natural next builds (each is a real campaign)
+## P0 — COMMITTED ROADMAP (user-adjudicated 2026-08-09, in this order)
+
+Three campaigns Mike has committed to, each with the full spec → plan →
+certify discipline of the base campaign. Order chosen deliberately:
+controller upgrades first on the certified 3-DOF plant (algorithm bugs
+isolated from plant bugs, near-total machinery reuse), then the heavy
+plant campaign ports two proven controllers.
+
+- [ ] **R1 — On-the-fly relinearization for K.** Evaluate the (existing,
+      complex-step-verified) Jacobians about the CURRENT state each cycle
+      instead of the stored nominal, extending the tracker's basin of
+      validity beyond the small-deviation regime. Smallest campaign;
+      changes where A(t),B(t) are evaluated + a gain-update strategy
+      (recompute cadence, Riccati re-sweep vs SDRE-style algebraic solve).
+- [ ] **R2 — Full MPC (onboard replanning).** Re-solve the guidance from
+      the current state receding-horizon — `solve_pdg_convex` warm-started
+      at each replan is the natural engine (sub-second convex solves; the
+      G-FOLD onboard story). Directly addresses the measured
+      fixed-reference-tracker limit (a -5% engine needs the braking point
+      re-timed ~90 m higher). Decisions at spec time: replan cadence,
+      solve-latency modeling, fallback to TVLQR between/on failed solves.
+- [ ] **R3 — 6-DOF rigid body.** Attitude on SO(3)/quaternions (lieFiltering
+      home turf), inertia, engine gimbal + grid fins, aero moments,
+      terminal-verticality constraint (fixes the tilted landing
+      physically). Both controllers port here. Pointing-cone machinery
+      (`P.theta_max_deg`) and G5's cone-aware primer semantics are ready
+      but never exercised end-to-end — add a cone-active test when this
+      starts.
+
+## P1 — natural next builds (unordered, after or alongside the roadmap)
 
 - [ ] **State estimation in the loop.** The tracker currently receives the
       true state (perfect navigation). Feed it an estimated state from an
@@ -20,18 +49,6 @@ everything here is extension or hardening, nothing blocks current use.
       slides the ignition point along an incoming ballistic arc and picks
       the cheapest. Recovers most of the Tmin-arc propellant (~750 kg
       class) at near-zero formulation cost.
-- [ ] **6-DOF rigid body.** Engine gimbal + grid fins, attitude dynamics,
-      aerodynamic moments — and a terminal-verticality constraint, which is
-      what makes a legged rocket land straight (the 3-DOF optimum genuinely
-      lands ~20 deg tilted; the cinematic movie eases it cosmetically).
-      Pointing-cone machinery (`P.theta_max_deg`) is already in place and
-      G5's cone-aware primer semantics are ready, but never exercised
-      end-to-end — add a cone-active test when this starts.
-- [ ] **Onboard replanning (MPC / re-solved guidance).** The measured limit
-      of the fixed-reference tracker (a -5% engine needs the braking point
-      re-timed ~90 m higher; feedback around a stored plan cannot do that)
-      is the motivation. This is what the flight-proven G-FOLD lineage does
-      onboard.
 - [ ] **SCvx for the drag phase.** Restores the two-solver cross-validation
       (G3/G4, currently 'skipped' under drag because the convex route is
       vacuum-only). Successive convexification re-linearizing about the

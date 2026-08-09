@@ -73,15 +73,16 @@ end
 prow('G5 bound fraction',    rep.G5_bound_frac, 0.95, '>=', 1);
 prow('G5 interior switches', rep.G5_switches,   2,    '<=', 1);
 fprintf('%-30s %14s   %20s   %s\n', 'G5 structure (bound+switch+max-last)', '', '', bool2str(rep.G5_structOk));
-% Primer row (task-11, Phase 2): relaxed to INFO-only under P.drag.on --
-% certify_pdg's G5_pass then requires G5_structOk alone (see that file's
-% "G5 primer relaxation under drag" header note for the measured
-% evidence). Printing it as a scored PASS/FAIL row here would contradict
-% gsummary's verdict whenever primer_deg>=1 but structOk=true, so it is
-% shown as an unscored info row instead, same treatment as G3's traj_Linf.
+% Primer row (task-11, Phase 2; corrected in the task-11 close-out review
+% round): LOOSENED to a 10 deg threshold under P.drag.on, not dropped to
+% an unscored info row -- certify_pdg's G5_pass requires G5_structOk AND
+% primer_deg < 10 under drag (was < 1 in vacuum), so this row must stay a
+% real scored prow or the printed table would silently stop matching what
+% G5_pass actually checks (see certify_pdg.m's "G5 primer LOOSENING under
+% drag" header note for the measured evidence and the margin rationale for
+% 10 deg).
 if isfield(rep, 'drag_on') && rep.drag_on
-    fprintf('%-30s %14.6g   %20s   %s\n', 'G5 primer angle [deg]', ...
-        rep.G5_primer_deg, '(info, drag-relaxed)', '');
+    prow('G5 primer angle [deg] (drag-loosened)', rep.G5_primer_deg, 10, '<', 1);
 else
     prow('G5 primer angle [deg]', rep.G5_primer_deg, 1, '<', 1);
 end

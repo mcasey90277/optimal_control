@@ -18,9 +18,20 @@ because zero velocity at zero altitude is singular once minimum throttle
 already exceeds vehicle weight. Both adjudications, with the measurements
 behind them, are documented in `lib/booster_params.m`.
 
-Phase 2 (opt-in exponential-atmosphere drag, `P.drag.on`) is scaffolded in
-`booster_params.m` and `pdg_dynamics.m` but not yet exercised by a
-campaign run — vacuum is the certified, flagship configuration.
+Phase 2 (opt-in exponential-atmosphere drag, `P.drag.on`) re-solves the
+same problem with drag on, warm-started from the Phase-1 vacuum solution
+(`run_booster_landing(struct('phase2', true))`) — vacuum stays the
+certified, flagship configuration; Phase 2 is a comparison campaign on top
+of it, not a replacement. Flagship measurement (`P.N=60`, 2026-08-09):
+drag **saves** 434.7 kg of fuel versus vacuum (3535.4 -> 3100.7 kg, braking
+against the atmosphere) at a cost of +0.94 s of flight time (16.595 ->
+17.531 s); gates G1/G2/G5 pass (G3/G4 skipped — no convex twin exists for
+the drag-on problem, lossless convexification is only exact in vacuum);
+wind Monte Carlo (200 runs) succeeds 99.0% of the time. See
+`certify/certify_pdg.m`'s "G5 primer LOOSENING under drag" note for the
+one certification difference from Phase 1 (primer-alignment threshold
+loosened from 1 deg to 10 deg under drag, not removed — still a real,
+measured detector).
 
 ## How to run
 
@@ -39,8 +50,16 @@ by editing files:
 ```matlab
 R = run_booster_landing(struct( ...
     'doMovie', true, ...        % write <outdir>/landing.mp4   [def true]
-    'doMC',    true, ...        % run the Monte Carlo          [def true]
+    'doMC',    true, ...        % run the Monte Carlo(s)        [def true]
+                                 % (gates BOTH Phase 1's R.mc and, when
+                                 % phase2 is also true, Phase 2's R.mcD +
+                                 % phase2_footprint.png -- same knob, both
+                                 % phases)
     'Nrun',    200, ...         % MC sample count               [def 200]
+    'phase2',  false, ...       % also run the drag-on re-solve stage
+                                 % (R.solD/.repD/.ctrlD/.Pd, +.mcD if doMC)
+                                 % and write phase2_vac_vs_drag.png +
+                                 % phase2_footprint.png              [def false]
     'outdir',  '/Users/you/Desktop/optimal_control/booster_landing/results', ...
                                  % product dir; RELATIVE paths resolve
                                  % against MATLAB's CURRENT working
@@ -64,8 +83,9 @@ covers the two known parent/dependent pairs above; a `cfg.P` override of
 any *other* field not documented as derived in `booster_params.m` is a
 plain, unchecked overwrite — as always, know what you're overriding.
 `R` returns everything the campaign produced:
-`.P .solC .solV .rep .ctrl .out0 .mc .when`, and the same struct is saved
-to `outdir/booster_run.mat`.
+`.P .solC .solV .rep .ctrl .out0 .mc .when`, plus, when `cfg.phase2` is
+true, `.solD .repD .ctrlD .Pd` (and `.mcD` too, if `cfg.doMC` is also
+true) — the same struct is saved to `outdir/booster_run.mat` either way.
 
 Fast end-to-end smoke test (coarse N=40/Nconv=90 grid, measured ~24 s
 wall time including MATLAB startup — dominated by the TVLQR Riccati
@@ -78,12 +98,23 @@ cfg-override contract):
   "cd('/Users/msc/Desktop/optimal_control/booster_landing'); setup_paths; test_run_front_door"
 ```
 
-Full unit-test suite (all `tests/test_*.m`):
+Full unit-test suite (all `tests/test_*.m`, one MATLAB invocation per
+test): note each test must run in its OWN `-batch` call, not looped with
+`run()` inside a single session -- `run()` executes a script in the
+CALLER's workspace (these are scripts, not functions), so a driver script
+that itself uses variables like `k`/`fs` would have them clobbered by
+whatever a test happens to name its own script-level variables (found
+during the task-11 close-out review while writing a suite runner):
 
 ```
-/Applications/MATLAB_R2025b.app/bin/matlab -batch \
-  "cd('/Users/msc/Desktop/optimal_control/booster_landing'); setup_paths; \
-   fs=dir('tests/test_*.m'); for k=1:numel(fs), run(fullfile(fs(k).folder,fs(k).name)); end"
+for t in test_params test_dynamics_jac test_colloc_smoke \
+         test_convex_lossless test_certify_nominal test_tvlqr_riccati \
+         test_closed_loop_nominal test_monte_carlo_small test_viz_smoke \
+         test_phase2_drag test_run_front_door; do
+  /Applications/MATLAB_R2025b.app/bin/matlab -batch \
+    "cd('/Users/msc/Desktop/optimal_control/booster_landing'); setup_paths; $t" \
+    || echo "FAILED: $t"
+done
 ```
 
 ## Folder map
@@ -94,9 +125,9 @@ Full unit-test suite (all `tests/test_*.m`):
 | `setup_paths.m` | Adds campaign dirs + CasADi 3.7 to the MATLAB path |
 | `lib/` | `booster_params` (single source of truth for all constants/BCs/grid/MC settings), `pdg_dynamics` (3-DOF EOM), `solve_pdg_colloc` (Hermite-Simpson NLP, CasADi+IPOPT), `solve_pdg_convex` (lossless convexification + golden-section tf search), `hs_quad_ctrl` (flyable per-segment control reconstruction, shared by certify/tvlqr/sim), `tvlqr_design` (phase-scheduled time-varying LQR), `sim_closed_loop` (truth-model dispersed sim, altitude-indexed tracking), `run_monte_carlo` (dispersed landing campaign) |
 | `certify/` | `certify_pdg` (gates G1 discrete defect, G2 continuous residual, G2ff feedforward feasibility, G3 cross-method agreement, G4 losslessness, G5 PMP bang-bang + primer structure), `print_certify_report` (gate table) |
-| `viz/` | `plot_pdg_solution` (2x2 trajectory/throttle/mass/speed comparison), `plot_footprint` (MC landing scatter + dispersion ellipse), `movie_landing` (booster + throttle-trace MP4, 1280x720 locked) |
-| `tests/` | One `test_*.m` per unit (self-bootstrapping: `addpath('..'); setup_paths;`, throws on failure) plus this task's `test_run_front_door.m` (end-to-end contract on a fast grid) |
-| `results/` | Generated products (git-ignored except `.gitkeep`): `booster_run.mat`, `pdg_solution.png`, `footprint.png`, `landing.mp4` |
+| `viz/` | `plot_pdg_solution` (2x2 trajectory/throttle/mass/speed comparison), `plot_footprint` (MC landing scatter + dispersion ellipse), `movie_landing` (booster + throttle-trace MP4, 1280x720 locked), `plot_vacuum_vs_drag` (Phase-2 1x3 trajectory/throttle/mass overlay, vacuum vs drag) |
+| `tests/` | One `test_*.m` per unit (self-bootstrapping: `addpath('..'); setup_paths;`, throws on failure), `test_run_front_door.m` (end-to-end contract on a fast grid), `test_phase2_drag.m` (Phase-2 drag solve + gates + `plot_vacuum_vs_drag` smoke) |
+| `results/` | Generated products (git-ignored except `.gitkeep`): `booster_run.mat`, `pdg_solution.png`, `footprint.png`, `landing.mp4`, and, from a `cfg.phase2` run, `phase2_vac_vs_drag.png` + `phase2_footprint.png` |
 
 ## Expected flagship result (baseline for a cold reproduction)
 
@@ -117,6 +148,17 @@ shift the last digit or two, see `booster_params.m`'s `P.tf_hi` note for a
 documented case of that sensitivity) — a large deviation (gates failing,
 success rate materially under 95%, `tf` off by more than ~0.1 s) means
 something changed and is worth investigating before trusting the run.
+
+Phase 2 (`run_booster_landing(struct('phase2', true))`), same grid,
+measured 2026-08-09 (Phase 1 numbers above unchanged — Phase 2 only adds a
+drag-on re-solve on top):
+
+| Quantity | Vacuum (Phase 1) | Drag (Phase 2) |
+|---|---|---|
+| `tf` | 16.595 s | 17.531 s (`dtf` = +0.94 s) |
+| fuel used | 3535.4 kg | 3100.7 kg (`dfuel` = 434.7 kg SAVED by drag) |
+| Gates | G1-G5 ALL PASS | G1/G2/G5 PASS (G3/G4 skipped, no convex twin) |
+| Wind Monte Carlo (200 runs) | 99.5% (vacuum, no wind) | 99.0% (`P.drag.on` also enables `sig.wind`) |
 
 ## Spec / plan pointers
 

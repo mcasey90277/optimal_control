@@ -24,10 +24,11 @@ function R = run_booster_landing(cfg)
 %         overridden explicitly -- see the re-derive block below.
 % OUTPUTS:
 %   R   - everything: .P .solC .solV .rep .ctrl .out0 .mc .when, and, when
-%         cfg.phase2 is true: .solD .repD .mcD (drag-on collocation
-%         solution, its certify_pdg report, and its wind-Monte-Carlo
-%         report -- the same three product KINDS as .solC/.rep/.mc, for
-%         the drag-on problem instead of vacuum)
+%         cfg.phase2 is true: .solD .repD .ctrlD .Pd (drag-on collocation
+%         solution, its certify_pdg report, its TVLQR design, and the
+%         drag-on params -- the same product KINDS as .solC/.rep/.ctrl/.P,
+%         for the drag-on problem instead of vacuum), plus .mcD (wind
+%         Monte Carlo, same shape as .mc) ONLY when cfg.doMC is also true
 %
 % REFERENCES:
 %   [1] docs/superpowers/specs/2026-08-08-booster-landing-design.md --
@@ -128,8 +129,9 @@ save(fullfile(cfg.outdir, 'booster_run.mat'), '-struct', 'R');
 % vacuum, before this block ever executes). No convex twin exists for the
 % drag-on problem (lossless convexification is only exact in vacuum -- see
 % certify_pdg.m's solV doc), so certify_pdg(R.solD, [], Pd) skips G3/G4;
-% G5's primer-alignment sub-check is also relaxed under drag (structure-
-% only pass) -- see that file's "G5 primer relaxation under drag" note.
+% G5's primer-alignment sub-check is also LOOSENED (not removed -- kept as
+% a real, 10-deg-threshold detector) under drag -- see that file's "G5
+% primer LOOSENING under drag" note.
 if cfg.phase2
     fprintf('=== [P2] Drag-on re-solve (warm-started) ===\n');
     Pd = P;  Pd.drag.on = true;
@@ -137,8 +139,21 @@ if cfg.phase2
     fprintf('    tf=%.3f s  mf=%.2f kg\n', R.solD.tf, R.solD.mf);
     R.repD = certify_pdg(R.solD, [], Pd);
     print_certify_report(R.repD);
-    ctrlD  = tvlqr_design(R.solD, Pd);
-    R.mcD  = run_monte_carlo(R.solD, ctrlD, Pd, struct('Nrun', cfg.Nrun));
+    ctrlD   = tvlqr_design(R.solD, Pd);
+    % Saved for parity with Phase 1's R.ctrl/R.P (task-11 close-out review
+    % minor): no flagship re-run needed for this to take effect, it
+    % populates on the next full run.
+    R.ctrlD = ctrlD;  R.Pd = Pd;
+    % cfg.doMC GUARD (task-11 close-out review, Important-1): the drag
+    % Monte Carlo + its footprint plot are the expensive, dispersion-only
+    % products -- same thing cfg.doMC already gates in Phase 1 above. This
+    % branch used to run both unconditionally regardless of cfg.doMC, the
+    % canonical advertised-but-ignored-cfg-option bug (see
+    % test_run_front_door.m's own header for why that bug class gets a
+    % dedicated regression check).
+    if cfg.doMC
+        R.mcD = run_monte_carlo(R.solD, ctrlD, Pd, struct('Nrun', cfg.Nrun));
+    end
 
     % CHECKPOINT SAVE (same discipline as Phase 1, task-9/10 fix report):
     % solve+certify+MC is the expensive part; save it before viz can throw.
@@ -149,7 +164,9 @@ if cfg.phase2
 
     try
         plot_vacuum_vs_drag(R.solC, R.solD, fullfile(cfg.outdir, 'phase2_vac_vs_drag.png'));
-        plot_footprint(R.mcD, Pd, fullfile(cfg.outdir, 'phase2_footprint.png'));
+        if cfg.doMC
+            plot_footprint(R.mcD, Pd, fullfile(cfg.outdir, 'phase2_footprint.png'));
+        end
     catch vizErrD
         warning('run_booster_landing:phase2VizFailed', ...
             ['Phase-2 viz stage failed (%s) -- solve/certify/MC products are ' ...
@@ -159,8 +176,13 @@ if cfg.phase2
     R.when = datetime('now');
     save(fullfile(cfg.outdir, 'booster_run.mat'), '-struct', 'R');
 
-    fprintf('P2: fuel vac %.1f kg -> drag %.1f kg; MC(wind) %.1f%%\n', ...
-            P.m0 - R.solC.mf, Pd.m0 - R.solD.mf, 100*R.mcD.success_rate);
+    if cfg.doMC
+        fprintf('P2: fuel vac %.1f kg -> drag %.1f kg; MC(wind) %.1f%%\n', ...
+                P.m0 - R.solC.mf, Pd.m0 - R.solD.mf, 100*R.mcD.success_rate);
+    else
+        fprintf('P2: fuel vac %.1f kg -> drag %.1f kg (MC skipped, cfg.doMC=false)\n', ...
+                P.m0 - R.solC.mf, Pd.m0 - R.solD.mf);
+    end
 end
 
 fprintf('\n==================== SUMMARY ====================\n');
@@ -178,8 +200,12 @@ if cfg.phase2
             R.solD.tf, R.solD.tf - R.solC.tf, P.m0 - R.solD.mf, ...
             (P.m0 - R.solC.mf) - (P.m0 - R.solD.mf), ...
             ternary(R.repD.all_pass, 'ALL PASS', 'FAILURES -- see table'));
-    fprintf('          MC(wind) %d runs, success %.1f%%  (landed %d / arrest %d / horizon %d)\n', ...
-            cfg.Nrun, 100*R.mcD.success_rate, R.mcD.n_landed, R.mcD.n_arrest, R.mcD.n_horizon);
+    if cfg.doMC
+        fprintf('          MC(wind) %d runs, success %.1f%%  (landed %d / arrest %d / horizon %d)\n', ...
+                cfg.Nrun, 100*R.mcD.success_rate, R.mcD.n_landed, R.mcD.n_arrest, R.mcD.n_horizon);
+    else
+        fprintf('          MC(wind) skipped (cfg.doMC=false)\n');
+    end
 end
 fprintf('design    guidance thrust de-rate etaT=%.2f (ceiling %.2f kN of Tmax=%.2f kN) --\n', ...
         P.etaT, P.etaT*P.Tmax/1e3, P.Tmax/1e3);

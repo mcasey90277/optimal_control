@@ -45,13 +45,28 @@ function rep = certify_pdg(solC, solV, P, tolScale)
 % HS actually assumes. G2 no longer needs any tolScale accommodation as a
 % result (see tolScale doc below).
 %
-% G5 primer relaxation under drag (task-11 fix, Phase 2, 2026-08-09,
-% documented per the task-11 brief's own instruction: "if G5_primer_deg
-% comes out near 180 deg... flip pdir sign ONCE" -- this is the brief's
-% companion instruction for the OTHER failure mode, "if primer alignment
-% fails ONLY in the drag case, relax G5 for drag runs to the bang-bang
-% structure check alone"): with P.drag.on, rep.G5_pass drops the primer
-% threshold and requires rep.G5_structOk only. MEASURED, not assumed: the
+% G5 primer LOOSENING under drag (task-11 fix, Phase 2, 2026-08-09;
+% CORRECTED in the task-11 close-out review round, 2026-08-09): documented
+% per the task-11 brief step 2's own fallback instruction, "if primer
+% alignment fails ONLY in the drag case, relax G5 for drag runs to the
+% bang-bang structure check alone." NOTE this is a DIFFERENT brief
+% instruction from the primer SIGN-flip rule applied below at the pdir
+% computation ("if G5_primer_deg comes out near 180 deg ... flip pdir sign
+% ONCE") -- an earlier version of this note conflated the two quotes as
+% if one were the "companion" of the other; that framing was wrong and is
+% fixed here. What "relax" means was ALSO corrected: the first pass at
+% this fix set rep.G5_pass = rep.G5_structOk alone under drag, i.e.
+% REMOVED the primer check entirely rather than loosening it. Review
+% caught this as a real regression risk: with the primer check gone, a
+% future bug that flips pdir's sign (or otherwise sends primer_deg toward
+% ~90-180 deg) would silently PASS G5 under drag -- exactly the class of
+% bug the sign-flip fix earlier in this file exists to catch, and exactly
+% the kind of "loosen a gate until it's not a gate" failure this campaign
+% has otherwise been careful to avoid (see the G3 |dmf| gate note below for
+% the house standard: a relaxed threshold must still be a MEASUREMENT with
+% headroom, not an escape hatch). FIX: rep.G5_pass now requires
+% rep.G5_structOk AND rep.G5_primer_deg < 10 (not < 1) under drag -- the
+% detector stays, only the threshold loosens. MEASURED, not assumed: the
 % same coarse grid (N=30) that gives a vacuum primer_deg of 1.14 deg (a
 % known, PRE-EXISTING discretization artifact -- test_certify_nominal.m's
 % own note: N>=40 is needed to clear <1 deg in vacuum, N=20 measures ~1.7
@@ -72,8 +87,13 @@ function rep = certify_pdg(solC, solV, P, tolScale)
 % purely-linear-in-v dynamics do not) -- a genuine open question, not
 % resolved here; left as this file's flag for the min-fuel paper's future
 % work list rather than force-closed by a grid search that was not run to
-% convergence in this task. Structure (bang-bang, <=2 switches, max-last)
-% is unaffected and still gates every run, drag or vacuum.
+% convergence in this task. The 10 deg threshold was chosen for margin,
+% not tightness: it sits >3x above the measured 2.61 deg production-grid
+% value (comfortable headroom against normal run-to-run noise) while still
+% catching a gross misalignment or sign-flip regression, which would show
+% up in the 90-180 deg range, nowhere near the pass/fail boundary.
+% Structure (bang-bang, <=2 switches, max-last) is unaffected and still
+% gates every run, drag or vacuum.
 %
 % G3 |dmf| gate (ADJUDICATED 2026-08-08, threshold CHANGED from the
 % brief's literal 0.1 kg to 1.0 kg, documented in the task-5 fix report):
@@ -142,11 +162,16 @@ function rep = certify_pdg(solC, solV, P, tolScale)
 %       (primer vector theory / PMP bang-bang structure)
 if nargin < 4, tolScale = 1; end
 rep.tolScale = tolScale;
-rep.drag_on  = P.drag.on;   % task-11: print_certify_report reads this to
-                            % annotate the G5 primer row as relaxed/info-
-                            % only rather than a scored gate under drag
-                            % (see the "G5 primer relaxation under drag"
-                            % header note above).
+% isfield guard (task-11 close-out review, parity with solve_pdg_colloc.m's
+% own "if isfield(P,'drag') && P.drag.on" tol-default check): a bare
+% P.drag.on would throw for any caller whose P predates the drag field
+% instead of just treating it as vacuum.
+rep.drag_on  = isfield(P,'drag') && P.drag.on;
+                            % print_certify_report reads this to print the
+                            % G5 primer row against the LOOSENED (10 deg,
+                            % not 1 deg) threshold under drag -- see the
+                            % "G5 primer LOOSENING under drag" header note
+                            % above.
 
 %% GUIDANCE thrust ceiling (task-7b, P.etaT). Every gate below certifies a
 %% GUIDANCE solution, so its upper annulus bound is the de-rated etaT*Tmax,
@@ -300,13 +325,16 @@ Tdir = solC.U(:,1:end-1) ./ sqrt(sum(solC.U(:,1:end-1).^2,1));
 pdir = lamv ./ max(sqrt(sum(lamv.^2,1)), 1e-30);
 cosang = sum(Tdir .* pdir, 1);
 rep.G5_primer_deg = max(acosd(min(1, max(-1, cosang))));
-% Primer threshold relaxed under drag (task-11, Phase 2) -- see the "G5
-% primer relaxation under drag" header note above for the measured
-% evidence (fails ONLY in the drag case at the production grid, does not
-% shrink with mesh refinement the way the vacuum discretization artifact
-% does). Structure (bang-bang + max-last) still gates every run.
-if P.drag.on
-    rep.G5_pass = rep.G5_structOk;
+% Primer threshold LOOSENED (not removed) under drag (task-11, Phase 2;
+% corrected in the task-11 close-out review round) -- see the "G5 primer
+% LOOSENING under drag" header note above for the measured evidence (fails
+% ONLY in the drag case at the production grid, does not shrink with mesh
+% refinement the way the vacuum discretization artifact does) and for why
+% dropping the check entirely (an earlier version of this fix) was a real
+% regression risk. Structure (bang-bang + max-last) still gates every run
+% regardless.
+if isfield(P,'drag') && P.drag.on
+    rep.G5_pass = rep.G5_structOk && rep.G5_primer_deg < 10;
 else
     rep.G5_pass = rep.G5_structOk && rep.G5_primer_deg < 1;
 end

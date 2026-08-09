@@ -3,20 +3,31 @@ function R = run_booster_landing(cfg)
 %
 %   solve (colloc + convex) -> certify G1-G5 -> TVLQR -> closed loop ->
 %   Monte Carlo -> plots + movie -> results/booster_run.mat
+%   -> optional Phase 2 (cfg.phase2): drag-on re-solve (warm-started from
+%      the Phase-1 vacuum solution) -> certify (G1/G2/G5 only, no convex
+%      twin) -> drag-aware TVLQR + closed loop + wind Monte Carlo ->
+%      vacuum-vs-drag comparison + footprint plots
 %
-% Run me with no arguments for the nominal campaign:
+% Run me with no arguments for the nominal (Phase 1, vacuum) campaign:
 %   /Applications/MATLAB_R2025b.app/bin/matlab -batch ...
 %     "cd('~/Desktop/optimal_control/booster_landing'); run_booster_landing"
+% Add Phase 2 (atmosphere + drag) with:
+%   run_booster_landing(struct('phase2', true))
 %
 % INPUTS:
 %   cfg - (optional) .P params overrides (field-merged onto
 %         booster_params()), .doMovie [true], .doMC [true], .Nrun [200],
+%         .phase2 [false] (drag-on re-solve stage, see above),
 %         .outdir [results/]. A cfg.P override that shadows a DERIVED
 %         field's parent (P.Tmax -> P.Tmin=0.40*Tmax, P.g0 -> P.gvec)
 %         is automatically re-derived unless the dependent is ALSO
 %         overridden explicitly -- see the re-derive block below.
 % OUTPUTS:
-%   R   - everything: .P .solC .solV .rep .ctrl .out0 .mc .when
+%   R   - everything: .P .solC .solV .rep .ctrl .out0 .mc .when, and, when
+%         cfg.phase2 is true: .solD .repD .mcD (drag-on collocation
+%         solution, its certify_pdg report, and its wind-Monte-Carlo
+%         report -- the same three product KINDS as .solC/.rep/.mc, for
+%         the drag-on problem instead of vacuum)
 %
 % REFERENCES:
 %   [1] docs/superpowers/specs/2026-08-08-booster-landing-design.md --
@@ -27,7 +38,7 @@ function R = run_booster_landing(cfg)
 setup_paths;
 
 %% ---------------- ADJUSTABLE PARAMETERS (defaults) ----------------
-def = struct('doMovie', true, 'doMC', true, 'Nrun', 200, ...
+def = struct('doMovie', true, 'doMC', true, 'Nrun', 200, 'phase2', false, ...
              'outdir', fullfile(fileparts(mfilename('fullpath')), 'results'));
 %% ------------------------------------------------------------------
 if nargin < 1, cfg = struct(); end
@@ -110,6 +121,48 @@ end
 R.when = datetime('now');
 save(fullfile(cfg.outdir, 'booster_run.mat'), '-struct', 'R');
 
+%% ---------------- Phase 2: atmosphere + drag (opt-in) ----------------
+% Drag-on re-solve, warm-started from the just-computed Phase-1 vacuum
+% solution R.solC (P.drag.on is opt-in throughout the campaign -- see
+% lib/pdg_dynamics.m -- so Phase 1 above ran entirely unmodified, in
+% vacuum, before this block ever executes). No convex twin exists for the
+% drag-on problem (lossless convexification is only exact in vacuum -- see
+% certify_pdg.m's solV doc), so certify_pdg(R.solD, [], Pd) skips G3/G4;
+% G5's primer-alignment sub-check is also relaxed under drag (structure-
+% only pass) -- see that file's "G5 primer relaxation under drag" note.
+if cfg.phase2
+    fprintf('=== [P2] Drag-on re-solve (warm-started) ===\n');
+    Pd = P;  Pd.drag.on = true;
+    R.solD = solve_pdg_colloc(Pd, struct('init', R.solC));
+    fprintf('    tf=%.3f s  mf=%.2f kg\n', R.solD.tf, R.solD.mf);
+    R.repD = certify_pdg(R.solD, [], Pd);
+    print_certify_report(R.repD);
+    ctrlD  = tvlqr_design(R.solD, Pd);
+    R.mcD  = run_monte_carlo(R.solD, ctrlD, Pd, struct('Nrun', cfg.Nrun));
+
+    % CHECKPOINT SAVE (same discipline as Phase 1, task-9/10 fix report):
+    % solve+certify+MC is the expensive part; save it before viz can throw.
+    R.when = datetime('now');
+    fprintf('    [checkpoint] Phase-2 solve+certify+MC products -> %s\n', ...
+            fullfile(cfg.outdir, 'booster_run.mat'));
+    save(fullfile(cfg.outdir, 'booster_run.mat'), '-struct', 'R');
+
+    try
+        plot_vacuum_vs_drag(R.solC, R.solD, fullfile(cfg.outdir, 'phase2_vac_vs_drag.png'));
+        plot_footprint(R.mcD, Pd, fullfile(cfg.outdir, 'phase2_footprint.png'));
+    catch vizErrD
+        warning('run_booster_landing:phase2VizFailed', ...
+            ['Phase-2 viz stage failed (%s) -- solve/certify/MC products are ' ...
+             'already checkpointed at %s.'], ...
+            vizErrD.message, fullfile(cfg.outdir, 'booster_run.mat'));
+    end
+    R.when = datetime('now');
+    save(fullfile(cfg.outdir, 'booster_run.mat'), '-struct', 'R');
+
+    fprintf('P2: fuel vac %.1f kg -> drag %.1f kg; MC(wind) %.1f%%\n', ...
+            P.m0 - R.solC.mf, Pd.m0 - R.solD.mf, 100*R.mcD.success_rate);
+end
+
 fprintf('\n==================== SUMMARY ====================\n');
 fprintf('tf        %.3f s      fuel  %.1f kg (mf %.1f)\n', ...
         R.solC.tf, P.m0 - R.solC.mf, R.solC.mf);
@@ -119,6 +172,14 @@ fprintf('nom miss  %.2f m  vtd %.2f m/s  (landed=%d, stop=%s)\n', ...
 if cfg.doMC
     fprintf('MC        %d runs, success %.1f%%  (landed %d / arrest %d / horizon %d)\n', ...
             cfg.Nrun, 100*R.mc.success_rate, R.mc.n_landed, R.mc.n_arrest, R.mc.n_horizon);
+end
+if cfg.phase2
+    fprintf('phase2    tf %.3f s (d%+.3f)  fuel %.1f kg (dfuel %+.1f)  gates %s\n', ...
+            R.solD.tf, R.solD.tf - R.solC.tf, P.m0 - R.solD.mf, ...
+            (P.m0 - R.solC.mf) - (P.m0 - R.solD.mf), ...
+            ternary(R.repD.all_pass, 'ALL PASS', 'FAILURES -- see table'));
+    fprintf('          MC(wind) %d runs, success %.1f%%  (landed %d / arrest %d / horizon %d)\n', ...
+            cfg.Nrun, 100*R.mcD.success_rate, R.mcD.n_landed, R.mcD.n_arrest, R.mcD.n_horizon);
 end
 fprintf('design    guidance thrust de-rate etaT=%.2f (ceiling %.2f kN of Tmax=%.2f kN) --\n', ...
         P.etaT, P.etaT*P.Tmax/1e3, P.Tmax/1e3);

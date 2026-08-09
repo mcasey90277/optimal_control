@@ -45,6 +45,36 @@ function rep = certify_pdg(solC, solV, P, tolScale)
 % HS actually assumes. G2 no longer needs any tolScale accommodation as a
 % result (see tolScale doc below).
 %
+% G5 primer relaxation under drag (task-11 fix, Phase 2, 2026-08-09,
+% documented per the task-11 brief's own instruction: "if G5_primer_deg
+% comes out near 180 deg... flip pdir sign ONCE" -- this is the brief's
+% companion instruction for the OTHER failure mode, "if primer alignment
+% fails ONLY in the drag case, relax G5 for drag runs to the bang-bang
+% structure check alone"): with P.drag.on, rep.G5_pass drops the primer
+% threshold and requires rep.G5_structOk only. MEASURED, not assumed: the
+% same coarse grid (N=30) that gives a vacuum primer_deg of 1.14 deg (a
+% known, PRE-EXISTING discretization artifact -- test_certify_nominal.m's
+% own note: N>=40 is needed to clear <1 deg in vacuum, N=20 measures ~1.7
+% deg) gives 5.11 deg under drag; at the PRODUCTION grid (N=60, where
+% vacuum's own primer clears comfortably under 1 deg) drag still measures
+% 2.61 deg -- i.e. finer meshing does NOT cure it the way it cures the
+% vacuum artifact, so this is a genuine drag-model effect, not (only) a
+% discretization one. Analytically the direction condition should be
+% UNCHANGED by drag: the Hamiltonian's control-dependent term,
+% lambda_v.T/m - lambda_m|T|/(Isp g0), does not involve aD (drag enters
+% only through the velocity/altitude/mass BLOCK of the dynamics Jacobian
+% A, never through B = d(xdot)/dT), so the maximizing T direction is still
+% +lambda_v/|lambda_v| regardless of P.drag.on. The measured degradation
+% is therefore most likely in how well the discrete lam_defect dual
+% approximates the CONTINUOUS costate once the defect residual's own
+% curvature grows under the added |v|v/m nonlinearity (drag couples
+% velocity components through vmag = sqrt(sum(v.^2)) in a way vacuum's
+% purely-linear-in-v dynamics do not) -- a genuine open question, not
+% resolved here; left as this file's flag for the min-fuel paper's future
+% work list rather than force-closed by a grid search that was not run to
+% convergence in this task. Structure (bang-bang, <=2 switches, max-last)
+% is unaffected and still gates every run, drag or vacuum.
+%
 % G3 |dmf| gate (ADJUDICATED 2026-08-08, threshold CHANGED from the
 % brief's literal 0.1 kg to 1.0 kg, documented in the task-5 fix report):
 % G3's |dmf| is reclassified from an "agreement tolerance" (something the
@@ -112,6 +142,11 @@ function rep = certify_pdg(solC, solV, P, tolScale)
 %       (primer vector theory / PMP bang-bang structure)
 if nargin < 4, tolScale = 1; end
 rep.tolScale = tolScale;
+rep.drag_on  = P.drag.on;   % task-11: print_certify_report reads this to
+                            % annotate the G5 primer row as relaxed/info-
+                            % only rather than a scored gate under drag
+                            % (see the "G5 primer relaxation under drag"
+                            % header note above).
 
 %% GUIDANCE thrust ceiling (task-7b, P.etaT). Every gate below certifies a
 %% GUIDANCE solution, so its upper annulus bound is the de-rated etaT*Tmax,
@@ -265,7 +300,16 @@ Tdir = solC.U(:,1:end-1) ./ sqrt(sum(solC.U(:,1:end-1).^2,1));
 pdir = lamv ./ max(sqrt(sum(lamv.^2,1)), 1e-30);
 cosang = sum(Tdir .* pdir, 1);
 rep.G5_primer_deg = max(acosd(min(1, max(-1, cosang))));
-rep.G5_pass = rep.G5_structOk && rep.G5_primer_deg < 1;
+% Primer threshold relaxed under drag (task-11, Phase 2) -- see the "G5
+% primer relaxation under drag" header note above for the measured
+% evidence (fails ONLY in the drag case at the production grid, does not
+% shrink with mesh refinement the way the vacuum discretization artifact
+% does). Structure (bang-bang + max-last) still gates every run.
+if P.drag.on
+    rep.G5_pass = rep.G5_structOk;
+else
+    rep.G5_pass = rep.G5_structOk && rep.G5_primer_deg < 1;
+end
 
 %% Verdict:
 gates = [rep.G1_pass, rep.G2_pass, rep.G2ff_pass, isequal(rep.G3_pass,true) || ...

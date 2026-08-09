@@ -19,10 +19,42 @@ function sol = solve_pdg_colloc(P, opts)
 % the internal Opti variables are scaled; every field of `sol` is unscaled
 % back to SI before it is returned, so the interface below is unchanged.
 %
+% G1 tol under drag (task-11 fix, Phase 2, 2026-08-09): certify_pdg's G1
+% gate (independent re-evaluation of the HS defects, absolute SI 1e-6
+% threshold across ALL 7 state rows) FAILED on the production drag solve
+% (N=P.N=60, warm-started from the vacuum solution) at 3.21e-6 -- entirely
+% concentrated in the MASS row of the very FIRST segment (t=0), all other
+% rows comfortably under 1e-8. Root cause (measured, not guessed): IPOPT's
+% own printed "Constraint violation" at the default tol=1e-9 is ~1.07e-10
+% in the solver's NONDIMENSIONAL units, and 1.07e-10 * Mc (Mc=P.m0=30000)
+% = 3.21e-6 kg matches the observed G1 defect to 5 significant figures --
+% i.e. IPOPT genuinely converged to its requested tolerance, the mass
+% row's *nondimensional* residual just happens to be the single worst-
+% violated constraint for THIS (harder, more nonlinear -- drag couples all
+% three velocity components through vmag=|v|) problem, and the Mc=30000
+% unscaling factor turns an unremarkable nondimensional residual into an
+% SI defect above the 1e-6 kg gate. The vacuum solve's comparably-sized
+% global residual (~1.28e-10) happens to be dominated by an inequality
+% bound instead (see the task-11 fix report for the full per-row diag), so
+% the same tol=1e-9 default never produced a comparably large mass defect
+% there -- this is a genuine drag-model conditioning effect, not a bug in
+% either dynamics function (mdot=-|T|/(Isp g0) is IDENTICAL in both
+% branches, no drag dependence at all; verified byte-for-byte). FIX:
+% opts.tol defaults to 1e-11 (not 1e-9) whenever P.drag.on, invisible to
+% every existing (vacuum) caller. Measured sweep at the production grid
+% (same warm start, only tol varied): 1e-9 -> G1=3.21e-6 (FAIL), 1e-10 ->
+% 8.87e-7 (PASS, thin), 1e-11 -> 2.28e-8 (PASS, comfortable), 1e-12 ->
+% 6.85e-10; mf and tf are IDENTICAL to 3-4 significant figures across the
+% whole sweep (mf=26899.276 kg unchanged to 0.001 kg, tf drifts only in
+% its 4th decimal) -- confirming this is a convergence-depth choice with
+% no physical consequence, not a different optimum.
+%
 % INPUTS:
 %   P    - booster_params struct
 %   opts - (optional) .N segments [def P.N], .init prior sol (warm start),
-%          .maxIter [def 3000]
+%          .maxIter [def 3000], .tol [def 1e-9] (IPOPT overall NLP
+%          convergence tolerance, NONDIMENSIONAL -- see the "G1 tol"
+%          ADAPTATION note below for why a caller ever needs this)
 % OUTPUTS:
 %   sol  - .t .tf .mf .X(7xN+1) .U(3xN+1) .Um(3xN) .lam_defect(7xN)
 %          .stats .P   (see plan Task 3 Interfaces; sol.X/.U/.Um/.tf/.t are
@@ -45,6 +77,15 @@ function sol = solve_pdg_colloc(P, opts)
 if nargin < 2, opts = struct(); end
 if ~isfield(opts,'N'),       opts.N = P.N;        end
 if ~isfield(opts,'maxIter'), opts.maxIter = 3000; end
+if ~isfield(opts,'tol')
+    % DRAG-AWARE DEFAULT (task-11 fix, Phase 2, 2026-08-09): see the "G1
+    % tol under drag" ADAPTATION note above for the measured evidence.
+    % P.drag.on gets a tighter default so callers (the front door,
+    % test_phase2_drag.m) do not need to know about this to get a G1-
+    % clean production solve; a vacuum call is completely unaffected
+    % (identical 1e-9 default it always had).
+    if isfield(P,'drag') && P.drag.on, opts.tol = 1e-11; else, opts.tol = 1e-9; end
+end
 import casadi.*
 N    = opts.N;
 opti = casadi.Opti();
@@ -143,7 +184,7 @@ end
 
 %% Solve:
 sopts = struct('ipopt', struct('max_iter', opts.maxIter, ...
-               'print_level', 3, 'tol', 1e-9));
+               'print_level', 3, 'tol', opts.tol));
 opti.solver('ipopt', struct('print_time', false), sopts.ipopt);
 try
     osol = opti.solve();

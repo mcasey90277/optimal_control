@@ -133,7 +133,7 @@ save(fullfile(cfg.outdir, 'booster_run.mat'), '-struct', 'R');
 % a real, 10-deg-threshold detector) under drag -- see that file's "G5
 % primer LOOSENING under drag" note.
 if cfg.phase2
-    fprintf('=== [P2] Drag-on re-solve (warm-started) ===\n');
+    fprintf('=== [P2 +1] Drag-on re-solve (warm-started) ===\n');
     Pd = P;  Pd.drag.on = true;
     R.solD = solve_pdg_colloc(Pd, struct('init', R.solC));
     fprintf('    tf=%.3f s  mf=%.2f kg\n', R.solD.tf, R.solD.mf);

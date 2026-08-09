@@ -45,8 +45,15 @@ if ~isfield(opts,'tolTf'), opts.tolTf = 0.05;    end
 
 if isfield(opts,'tf') && ~isempty(opts.tf)
     sol = solve_fixed_tf(P, opts.tf, opts.Nconv);
-    [~, code0] = mf_or_neginf(sol);
-    sol.tf_curve = [opts.tf, sol.mf, code0];
+    % FIX (final-review, 2026-08-09): tf_curve col 2 must be mf_or_neginf's
+    % OWN value (v0, -Inf when the iterate isn't valid -- see that
+    % function's header for the code/tightness semantics), matching the
+    % golden-search path below and the docstring's own "v (column 2) is mf
+    % for BOTH code 2 and code 3, -Inf otherwise" -- was sol.mf
+    % unconditionally, which reported a raw mf even for an invalid
+    % (code<2) single-tf probe.
+    [v0, code0] = mf_or_neginf(sol);
+    sol.tf_curve = [opts.tf, v0, code0];
     return
 end
 

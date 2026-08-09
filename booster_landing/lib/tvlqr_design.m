@@ -281,6 +281,14 @@ if ~isfield(opts,'QB'), opts.QB = diag([1e-4 1e-4 1e-4 1e-2 1e-2 qVelZ 0]); end
 if ~isfield(opts,'QA')
     rLat = opts.R(1,1);                               % lateral control price
     wA   = opts.omegaA;  zA = opts.zetaA;
+    % qVel>=0 needs zetaA>=1/sqrt(2) (LQR's own Butterworth floor, see the
+    % ADAPTATION 5 part (a) derivation above) -- assert it here rather than
+    % let a below-floor zetaA silently produce a negative qV a few lines
+    % down (bonus, final-review, 2026-08-09).
+    assert(zA >= 1/sqrt(2) - eps, ...
+        'tvlqr_design:zetaAFloor', ...
+        'opts.zetaA=%.6g is below the LQR Butterworth floor 1/sqrt(2)=%.6g -- the derived qVel would go negative.', ...
+        zA, 1/sqrt(2));
     qP   = mA^2 * rLat * wA^4;
     qV   = mA^2 * rLat * wA^2 * (4*zA^2 - 2);         % >=0 needs zetaA>=1/sqrt(2)
     opts.QA = diag([qP qP 1e-4 qV qV qVelZ 0]);

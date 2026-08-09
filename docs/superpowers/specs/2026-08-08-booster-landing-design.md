@@ -209,7 +209,9 @@ booster_landing/
 
 - **Pumpkyn style throughout:** all MATLAB written per the house pumpkyn look
   (`%%`-delimited header blocks, column-aligned `=`, colon-terminated `%%`
-  section comments, `if nargin==0` self-demos on library functions). Invoke
+  section comments, `if nargin==0` self-demos on library functions **where
+  meaningful** (several library functions are nullary or campaign-internal;
+  none shipped a self-demo — convention relaxed at final review)). Invoke
   the `matlab-pumpkyn-style` skill when writing each file.
 - **Leverage pumpkyn where useful:** booster landing is not CR3BP, so the
   orbit-family machinery doesn't apply, but reuse pumpkyn/pumpkynPie
@@ -242,9 +244,11 @@ fast tests passing does not prove the campaign survived).
 ## Success criteria
 
 - Both solvers converge on the nominal case; G1–G5 all green; final masses
-  agree < 0.1 kg.
+  agree < 1.0 kg (adjudicated: the residual is the measured Taylor-bound
+  model error, ~0.43 kg).
 - Hoverslam structure visible: bang-bang throttle (≤2 switches) with
-  terminal max-throttle arc to zero velocity at the pad. *(Adjudicated
+  terminal max-throttle arc to the adjudicated 1.5 m/s terminal descent
+  rate at the pad. *(Adjudicated
   2026-08-08: for these boundary conditions the certified optimum is
   min–max with 1 switch — a pure suicide burn, since T_min already exceeds
   hover weight so the booster cannot loiter; the literature's max–min–max

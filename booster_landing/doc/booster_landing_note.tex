@@ -1380,7 +1380,17 @@ attitude dynamics and a finite gimbal rate would put a real bandwidth limit
 on the direction channel, which is exactly the channel
 \S\ref{sec:pole} showed the controller leaning on hardest during the margin
 arc. The pointing cone constraint is already implemented and disabled;
-enabling it is the natural first step.
+enabling it is the natural first step. One certification wrinkle is already
+handled: Gate~G5's primer-vector sub-check (thrust parallel to the velocity
+costate) is a necessary condition only for the \emph{unconstrained} problem,
+and is invalid once the cone is active --- with a finite cone the optimal
+thrust rides the cone boundary (the projection of the unconstrained
+direction onto it), so thrust need not be parallel to the costate by
+design, not by bug. \texttt{certify\_pdg.m} is cone-aware: when
+\texttt{P.theta\_max\_deg} is finite the primer angle is still computed and
+reported but only as information (\texttt{G5\_primer\_mode =
+'skipped-cone'}), and G5's pass/fail rests on the bang-bang structure check
+alone.
 
 \item \textbf{The full return profile.} This campaign begins at the
 post-entry-burn state. Entry burn, aerodynamic descent with grid fins, and

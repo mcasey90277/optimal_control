@@ -83,9 +83,11 @@ covers the two known parent/dependent pairs above; a `cfg.P` override of
 any *other* field not documented as derived in `booster_params.m` is a
 plain, unchecked overwrite — as always, know what you're overriding.
 `R` returns everything the campaign produced:
-`.P .solC .solV .rep .ctrl .out0 .mc .when`, plus, when `cfg.phase2` is
-true, `.solD .repD .ctrlD .Pd` (and `.mcD` too, if `cfg.doMC` is also
-true) — the same struct is saved to `outdir/booster_run.mat` either way.
+`.P .solC .solV .rep .ctrl .out0 .when`, plus `.mc` if `cfg.doMC` is true
+(Phase 1's Monte Carlo, same gate as Phase 2's `.mcD` below — `.mc` is not
+unconditional), plus, when `cfg.phase2` is true, `.solD .repD .ctrlD .Pd`
+(and `.mcD` too, if `cfg.doMC` is also true) — the same struct is saved to
+`outdir/booster_run.mat` either way.
 
 Fast end-to-end smoke test (coarse N=40/Nconv=90 grid, measured ~24 s
 wall time including MATLAB startup — dominated by the TVLQR Riccati
@@ -164,7 +166,7 @@ drag-on re-solve on top):
 
 - Design spec: `../docs/superpowers/specs/2026-08-08-booster-landing-design.md`
 - Implementation plan (task-by-task): `../docs/superpowers/plans/2026-08-08-booster-landing.md`
-- Per-task briefs/reports: `../.superpowers/sdd/2026-08-08-booster-landing/task-{1..10}-{brief,report}.md`
+- Per-task briefs/reports: `../.superpowers/sdd/2026-08-08-booster-landing/task-{1..12}-{brief,report}.md`
 
 ## Adjudication summary (the two numbers a cold reader needs)
 

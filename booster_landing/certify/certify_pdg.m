@@ -13,6 +13,12 @@ function rep = certify_pdg(solC, solV, P, tolScale)
 %                    quadratic Lagrange interpolant through (U_k, Um_k,
 %                    U_{k+1}) -- see the "G2 control reconstruction" note
 %                    below for why this replaces a global pchip spline.
+%                    G2ff (below) is the SECOND HALF of G2, not a separate
+%                    gate: same reconstructed control, but asked a
+%                    different question -- is it ever outside [Tmin,Tmax]
+%                    BETWEEN samples (feedforward feasibility) rather than
+%                    how far the flown trajectory ends up from the target
+%                    (continuous residual). See G2ff_pass in OUTPUTS below.
 % G3 (cross-method): final mass / final time / position-trajectory
 %                    agreement between the independently-formulated
 %                    collocation (nonconvex annulus) and convexified
@@ -95,6 +101,39 @@ function rep = certify_pdg(solC, solV, P, tolScale)
 % Structure (bang-bang, <=2 switches, max-last) is unaffected and still
 % gates every run, drag or vacuum.
 %
+% G5 primer INVALID under a finite pointing cone (final-review fix,
+% 2026-08-09): the primer-vector sub-check above (thrust parallel to the
+% velocity costate) is a PMP necessary condition for the UNCONSTRAINED
+% control problem. The moment P.theta_max_deg is finite, the maximizing T
+% is no longer +lambda_v/|lambda_v| whenever that direction falls outside
+% the pointing cone -- by KKT, the optimal control there is instead the
+% PROJECTION of the unconstrained direction onto the cone boundary, i.e.
+% the solution sits ON the cone (T at angle theta_max from vertical) with
+% a nonzero multiplier on the cone constraint itself. T is then generally
+% NOT parallel to lambda_v by design, not by bug: the naive primer angle
+% (this file's Tdir.pdir check) measures the GAP between the constrained
+% and unconstrained directions, which is a property of the active
+% constraint, not a defect. MEASURED (2026-08-09, P.theta_max_deg=15,
+% nominal grid): both solvers independently ride the cone boundary at
+% ~15.000 deg from vertical (collocation and convexification agree to
+% ~4e-3 deg -- itself a strong cross-method structural check, just not
+% the primer's), while the OLD naive primer angle reads ~6.27 deg at the
+% same solution -- comfortably over the vacuum <1 deg gate on a
+% perfectly-converged optimum, which is exactly the false-fail this guard
+% exists to prevent. FIX: when P.theta_max_deg is finite, the primer
+% sub-check is not evaluated as a pass/fail gate at all --
+% rep.G5_primer_deg is still computed and reported (info only, for
+% inspection), rep.G5_primer_mode is set to 'skipped-cone' (the same
+% pattern G3/G4 use when solV is []; see print_certify_report.m), and
+% rep.G5_pass rests on rep.G5_structOk alone. The drag-loosened 10-deg
+% primer bound above only ever applies in the P.theta_max_deg=Inf branch
+% -- a cone run cannot also be scored against it. Structure (bang-bang,
+% <=2 switches, max-last) is unaffected and still gates every run. This
+% experiment is otherwise out of scope for this fix wave (P.theta_max_deg
+% still defaults to Inf everywhere in this campaign's certified results);
+% this guard only prevents a future pointing-cone experiment from either
+% false-failing G5 or silently mis-scoring it.
+%
 % G3 |dmf| gate (ADJUDICATED 2026-08-08, threshold CHANGED from the
 % brief's literal 0.1 kg to 1.0 kg, documented in the task-5 fix report):
 % G3's |dmf| is reclassified from an "agreement tolerance" (something the
@@ -150,6 +189,10 @@ function rep = certify_pdg(solC, solV, P, tolScale)
 %     .G3_dmf, .G3_dtf, .G3_traj_Linf, .G3_pass ('skipped' if solV==[])
 %     .G4_gap, .G4_pass ('skipped' if solV==[])
 %     .G5_bound_frac, .G5_switches, .G5_structOk, .G5_primer_deg, .G5_pass
+%     .G5_primer_mode - 'scored' (default, P.theta_max_deg=Inf) or
+%       'skipped-cone' (P.theta_max_deg finite -- primer_deg is info-only,
+%       G5_pass rests on G5_structOk alone; see the "G5 primer INVALID
+%       under a finite pointing cone" header note above)
 %     .all_pass - logical AND of all gates (skipped gates excluded)
 %
 % This function is report-only and never throws; callers (tests, the
@@ -333,9 +376,21 @@ rep.G5_primer_deg = max(acosd(min(1, max(-1, cosang))));
 % dropping the check entirely (an earlier version of this fix) was a real
 % regression risk. Structure (bang-bang + max-last) still gates every run
 % regardless.
-if isfield(P,'drag') && P.drag.on
+% CONE GUARD (final-review fix, 2026-08-09): under a finite pointing cone
+% the primer sub-check is invalid (see the "G5 primer INVALID under a
+% finite pointing cone" header note above) -- report primer_deg as
+% info-only and gate on structure alone, the same 'skipped'-style pattern
+% G3/G4 use above when there is no convex twin. The drag-loosened bound
+% only ever applies in the uncapped (P.theta_max_deg=Inf) branch, since a
+% cone run cannot also be scored against it.
+if isfinite(P.theta_max_deg)
+    rep.G5_primer_mode = 'skipped-cone';
+    rep.G5_pass = rep.G5_structOk;
+elseif isfield(P,'drag') && P.drag.on
+    rep.G5_primer_mode = 'scored';
     rep.G5_pass = rep.G5_structOk && rep.G5_primer_deg < 10;
 else
+    rep.G5_primer_mode = 'scored';
     rep.G5_pass = rep.G5_structOk && rep.G5_primer_deg < 1;
 end
 

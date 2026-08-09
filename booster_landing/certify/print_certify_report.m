@@ -81,7 +81,16 @@ fprintf('%-30s %14s   %20s   %s\n', 'G5 structure (bound+switch+max-last)', '', 
 % G5_pass actually checks (see certify_pdg.m's "G5 primer LOOSENING under
 % drag" header note for the measured evidence and the margin rationale for
 % 10 deg).
-if isfield(rep, 'drag_on') && rep.drag_on
+%
+% CONE GUARD (final-review fix, 2026-08-09): under a finite pointing cone
+% the primer sub-check is not a valid PMP necessary condition (see
+% certify_pdg.m's "G5 primer INVALID under a finite pointing cone" header
+% note) -- print it as an info row, same 'skipped'-style pattern as
+% G3/G4 above, rather than a scored prow it no longer is one.
+if isfield(rep, 'G5_primer_mode') && isequal(rep.G5_primer_mode, 'skipped-cone')
+    fprintf('%-30s %14.6g   %20s   %s\n', 'G5 primer angle [deg] (info, cone active)', ...
+        rep.G5_primer_deg, '(skipped-cone)', '');
+elseif isfield(rep, 'drag_on') && rep.drag_on
     prow('G5 primer angle [deg] (drag-loosened)', rep.G5_primer_deg, 10, '<', 1);
 else
     prow('G5 primer angle [deg]', rep.G5_primer_deg, 1, '<', 1);

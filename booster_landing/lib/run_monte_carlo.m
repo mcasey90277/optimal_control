@@ -19,11 +19,15 @@ function mc = run_monte_carlo(sol, ctrl, P, opts)
 %   ctrl  - tvlqr_design gain/feedforward struct (Task 6)
 %   P     - booster_params struct
 %   opts  - .Nrun [scalar, def 200]
-%           .sig  [struct, 1-sigma dispersion magnitudes, any subset;
-%                  defaults: .r0=[100;100;50] m, .v0=[10;10;10] m/s,
-%                  .thrust=0.015 (1.5% of nominal), .isp=0.01 (1% of
-%                  nominal), .wind=[10;10;0] m/s (drawn only when
-%                  P.drag.on)]
+%           .sig  [struct, 1-sigma dispersion magnitudes, any subset of
+%                  {r0,v0,thrust,isp,wind} -- an unrecognized field name
+%                  or wrong-shaped value errors immediately (a silently
+%                  ignored typo would otherwise leave a default
+%                  dispersion magnitude live in a tool whose whole point
+%                  is trustworthy magnitudes); defaults: .r0=[100;100;50]
+%                  m, .v0=[10;10;10] m/s, .thrust=0.015 (1.5% of
+%                  nominal), .isp=0.01 (1% of nominal), .wind=[10;10;0]
+%                  m/s (drawn only when P.drag.on)]
 %
 % OUTPUTS:
 %   mc - .land(Nrun x 2)   touchdown/terminal xy [m]
@@ -53,8 +57,27 @@ if ~isfield(opts,'Nrun'), opts.Nrun = 200; end
 sig = struct('r0',[100;100;50], 'v0',[10;10;10], 'thrust',0.015, ...
              'isp',0.01, 'wind',[10;10;0]);
 if isfield(opts,'sig')
+    validFields = {'r0','v0','thrust','isp','wind'};
     fn = fieldnames(opts.sig);
-    for k = 1:numel(fn), sig.(fn{k}) = opts.sig.(fn{k}); end
+    unknown = setdiff(fn, validFields);
+    if ~isempty(unknown)
+        error('run_monte_carlo:unknownSigField', ...
+            ['opts.sig has unrecognized field(s) {%s} -- valid fields ' ...
+             'are {%s} (a typo here would otherwise silently leave the ' ...
+             'default dispersion live)'], ...
+            strjoin(unknown, ', '), strjoin(validFields, ', '));
+    end
+    for k = 1:numel(fn)
+        val = opts.sig.(fn{k});
+        if any(strcmp(fn{k}, {'r0','v0','wind'}))
+            assert(isequal(size(val), [3 1]), 'run_monte_carlo:badSigShape', ...
+                'opts.sig.%s must be a 3x1 vector (got %s)', fn{k}, mat2str(size(val)));
+        else % 'thrust' or 'isp'
+            assert(isscalar(val), 'run_monte_carlo:badSigShape', ...
+                'opts.sig.%s must be a scalar (got %s)', fn{k}, mat2str(size(val)));
+        end
+        sig.(fn{k}) = val;
+    end
 end
 
 rng(P.seed);
@@ -97,7 +120,13 @@ for krun = 1:Nr
 end
 
 mc.success_rate = mean(mc.ok);
-mc.n_landed     = nnz(mc.landed);
+% All three counts derive from mc.stop (single source of truth); the
+% landed/stop invariant sim_closed_loop is supposed to maintain
+% (.landed <=> stop=='touchdown') is then checked, not assumed.
+mc.n_landed     = nnz(strcmp(mc.stop, 'touchdown'));
 mc.n_arrest     = nnz(strcmp(mc.stop, 'arrest'));
 mc.n_horizon    = nnz(strcmp(mc.stop, 'horizon'));
+assert(mc.n_landed == nnz(mc.landed), 'run_monte_carlo:landedStopMismatch', ...
+    ['n_landed (from mc.stop==touchdown) disagrees with nnz(mc.landed) -- ' ...
+     'sim_closed_loop returned an inconsistent td.landed/td.stop pair']);
 end

@@ -204,29 +204,17 @@ for kc = 1:min(size(todo,1), maxCells)
         % --- indirect refinement + acceptance -----------------------------
         accDz = NaN;  okCell = false;
         if ~isempty(o.lamDef)
-            lamD = o.lamDef(1:7,:);
-            nv = min(10, size(lamD,2));  vote = 0;
-            for kv = 1:nv
-                aS = o.Um(1:3,kv)/max(norm(o.Um(1:3,kv)),eps);
-                pv = -lamD(4:6,kv)/max(norm(lamD(4:6,kv)),eps);
-                vote = vote + sign(pv.'*aS);
+            % Covector mapping + seed assembly live in ONE home now
+            % (costate_common: duals_to_costates via harvest_ms_seed);
+            % the sign vote and the Hermite-Simpson midpoint association
+            % are enforced there. Self-resolve the path for callers that
+            % add only indirect/.
+            if isempty(which('harvest_ms_seed'))
+                addpath(fullfile(fileparts(fileparts(fileparts( ...
+                    mfilename('fullpath')))), 'costate_common'));
             end
-            sg = 1;  if vote < 0, sg = -1; end
-            % With Sundman off the mesh is uniform in time and the solver
-            % leaves tNodes empty -- reconstruct it.
-            if isempty(o.tNodes)
-                tN = linspace(0, o.tf, size(o.X,2));
-            else
-                tN = o.tNodes(:)';
-            end
-            % Hermite-Simpson defect multipliers belong at interval
-            % MIDPOINTS (review finding, Gemini 2026-08-04), not left nodes.
-            tMid = tN(1:end-1) + diff(tN)/2;
             for K = msSeg
-                tG = linspace(0, o.tf, K+1);
-                Xg = interp1(tN, o.X', tG, 'pchip')';
-                Lg = interp1(tMid, (sg*lamD)', tG, 'pchip', 'extrap')';
-                seed = struct('tf', o.tf, 'tGrid', tG, 'Y', [Xg; Lg]);
+                seed = harvest_ms_seed(o, K);
                 [z, info] = ms_tfmin(rv0(1:6), rvf(1:6), seed, Tnd, cnd, muStar, ...
                         struct('wallSec', msWallS));
                 [~, rvFly] = pumpkyn.cr3bp.tfMinProp(z(8), ...

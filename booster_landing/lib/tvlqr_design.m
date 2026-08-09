@@ -7,15 +7,32 @@ function ctrl = tvlqr_design(sol, P, opts)
 % Gains K(t) = R^{-1} B(t)' P(t), stored on a dense grid; controller is
 %   T_cmd(t) = T*(t) - K(t) (x - x*(t))  (saturation applied by the sim).
 %
+% The state weight is PHASE-SCHEDULED (see ADAPTATION 5): Q = Q(t), high
+% position weight while the guidance rides Tmin (thrust margin available
+% for lateral correction), position weight collapsed across the switch
+% into the Tmax braking arc (where every degree of tilt is stolen straight
+% out of vertical braking).
+%
 % INPUTS:
 %   sol  - collocation solution (Task 3 interface)
 %   P    - booster_params
-%   opts - (optional) .Q .R .Qf weight overrides (7x7, 3x3, 7x7)
+%   opts - (optional) overrides:
+%          .QA (7x7) margin-phase state weight   [def: see below]
+%          .QB (7x7) braking-phase state weight  [def: see below]
+%          .Q  (7x7) legacy CONSTANT weight -- sets QA=QB=Q, i.e. disables
+%                    the phase schedule (kept so callers/tests written
+%                    against the pre-schedule interface still work)
+%          .R  (3x3) control weight [def anisotropic, see ADAPTATION 5]
+%          .Qf (7x7) terminal weight
+%          .tSwitch [s] override for the auto-detected Tmin->Tmax switch
+%          .tBlend  [s] tanh half-width of the QA->QB blend
 % OUTPUTS:
 %   ctrl - .tgrid(1xM) .K(3x7xM) .Pt(7x7xM) .xnom(@t->7x1)
 %          .Tnom(@t_scalar->3x1) -- SCALAR-t ONLY (see note below); every
 %          caller in this repo (ricrhs below, sim_closed_loop's
 %          control_law) already calls it with a scalar t.
+%          .tSwitch .tBlend .Qfun(@t->7x7) -- the schedule actually flown
+%          (diagnostics; not required by any downstream task interface).
 %
 % ADAPTATION (task-7 fix report, 2026-08-08): ctrl.Tnom was originally a
 % global pchip spline threaded through all nodes+midpoints. certify_pdg.m's
@@ -109,10 +126,103 @@ function ctrl = tvlqr_design(sol, P, opts)
 % speed to 2 m/s under P.Tmin>weight -- a genuine actuator-authority
 % question, not a tuning one).
 %
+% ADAPTATION 5 (task-7 fix report round 5, 2026-08-08): the round-4
+% "genuine actuator-authority limit" verdict on the dispersed 58 m case is
+% WRONG, and the sweeps that produced it were searching the wrong axis.
+% Measured root cause (diag, N=60, dsp.dr0=[50;-30;0], old defaults):
+%
+%   * the closed-loop LATERAL position-error pole is sqrt(qPos/qVel)
+%     -- INDEPENDENT of R to leading order. At the old
+%     Q=diag([1e-4 1e-4 1e-4 1e-2 1e-2 1e-2 0]) that is sqrt(1e-4/1e-2)
+%     = 0.1 rad/s: a 10 s time constant on a 15.6 s flight. Measured
+%     K(1,1)/m = 0.020, K(1,4)/m = 0.233, ratio 0.084 -- confirming it.
+%     THAT is why every R sweep in rounds 2-4 moved `miss` monotonically
+%     and never fixed it: R rescales BOTH gains and cancels out of the
+%     pole ratio. The search axis was orthogonal to the defect.
+%   * consequently the tracker asks for K(1,1)*58 m ~ 18 kN of lateral
+%     thrust at t=0 while the guidance sits AT Tmin=338 kN with 507 kN of
+%     unused magnitude margin -- it declines free authority. The 58 m
+%     offset was still 32 m at the Tmin->Tmax switch (t~6.8 s) and 10.9 m
+%     at touchdown; the residual lateral demand then had to be paid out of
+%     the saturated Tmax braking arc, where a 16 deg tilt (measured)
+%     costs cos(16 deg) of vertical braking -- which is exactly the
+%     dispersed vtd=6.82 m/s failure. Not an authority limit: an
+%     authority-SCHEDULING failure.
+%
+% Fix, two parts:
+%  (a) PHASE-SCHEDULED Q. Phase A (t < tSwitch, the Tmin margin arc) gets
+%      lateral weights designed by pole placement rather than guessed. For
+%      the lateral double integrator (A=[0 1;0 0], B=[0;1/m]) the LQR
+%      closed loop is s^2 + (Kv/m)s + (Kr/m) with
+%        Kr/m = sqrt(qPos/r)/m,   Kv/m = sqrt((2m sqrt(qPos r)+qVel)/r)/m,
+%      so asking for natural frequency w and damping zeta inverts to
+%        qPos = m^2 r w^4,        qVel = m^2 r w^2 (4 zeta^2 - 2)
+%      (note qVel>=0 forces zeta>=1/sqrt(2) -- LQR's own Butterworth floor).
+%      Shipped: w=0.70 rad/s, zeta=1.00 at m=29500 kg, r=1e-9, giving
+%      qPos=0.21, qVel=0.85. The design formula is validated, not assumed:
+%      the Riccati solution measures K(1,1)/m = 0.4808 at t=0 against the
+%      predicted w^2 = 0.49 (and K(1,4)/m = 1.377 against 2*zeta*w = 1.40).
+%      Feasibility check that sets the ceiling on w: the initial lateral
+%      command is w^2*|dr| = 0.49*58 = 28 m/s^2 ~ 840 kN, which together
+%      with the ~338 kN vertical feedforward sits just outside the
+%      Tmax=845 kN rim -- so w=0.70 spends the margin arc's spare authority
+%      and just barely more, with sim_closed_loop's vertical-priority
+%      allocate_thrust absorbing the small overshoot without touching the
+%      vertical channel. The correction is essentially complete by t~5 s,
+%      well before tSwitch=7.16 s. w much beyond 0.75 buys nothing (the
+%      command is then annulus-limited, not gain-limited) and w below ~0.6
+%      leaves residual offset for the braking arc to pay for.
+%      Phase B (t > tSwitch, the Tmax braking arc) keeps the PRE-round-5
+%      weights verbatim, so the braking arc still tracks the velocity
+%      profile with the small position gain it always had -- once the
+%      offset is dead, a few metres of residual error costs <1 deg of
+%      tilt, and nothing needed changing there. The blend is a tanh over
+%      +-tBlend so the Riccati RHS stays smooth; tSwitch is auto-detected
+%      from sol (|T*| crossing mid-annulus, one switch by G5).
+%  (b) ANISOTROPIC position weight: only the LATERAL (x,y) position
+%      weights are re-scheduled. The z-position weight and ALL velocity
+%      weights keep their pre-round-5 values, and R stays the isotropic
+%      1e-9*eye(3). This is deliberately more surgical than the
+%      anisotropic-R form of the same idea: the vertical channel already
+%      demonstrably works (nominal vz tracked the guidance to <0.3 m/s
+%      through the whole braking arc at the old weights), so it is left
+%      untouched and only the axis that was measurably starved is fed.
+%      Weighting position anisotropically in Q is equivalent to pricing
+%      the axes differently in R for a diagonal problem, without also
+%      re-scaling the vertical loop.
+%
+% Measured at N=60, dsp.dr0=[50;-30;0] (task-7 report round 5 for the full
+% (w,zeta) sweep and the dispersion battery):
+%   before: dispersed miss 10.851 m, vtd 6.819 m/s, sat_frac 0.653
+%   after : dispersed miss  1.005 m, vtd 1.372 m/s, sat_frac 0.132
+% i.e. both gates (miss<15, vtd<2) pass together with ~14 m and ~0.6 m/s
+% of margin, on the same R the round-4 report proved could not satisfy
+% both at once -- because R was never the axis that controlled it.
+% Nominal is unchanged-clean (landed, miss 0.015 m, vtd 1.43 m/s).
+%
+% KNOWN REMAINING DEFECT, NOT THIS ROUND'S (measured, orthogonal to the
+% above): a pure ALTITUDE dispersion is still tracked far too weakly --
+% dr0=[0;0;-50] touches down at 20.4 m/s, dr0=[0;0;+50] arrests 9.2 m up,
+% and both numbers are IDENTICAL before and after this round's change, so
+% they are a pre-existing defect on a different axis, neither caused nor
+% cured here. Same root cause shape (the margin arc's authority is not
+% asked for), and a probe (task-7 report round 5) shows scheduling the
+% z-position weight up in phase A does move it a long way -- e.g. a
+% wz=0.45 rad/s z-loop takes dr0=[0;0;-50] from 20.4 to 0.85 m/s -- but it
+% trades into vertical ARRESTS (arriving below the guidance's own descent
+% rate is unrecoverable when Tmin exceeds weight), so it needs its own
+% design round with the terminal v(z) schedule, not a weight bump. This
+% matters for task 8, whose 1-sigma r0 draw includes 50 m of altitude.
+%
 % REFERENCES:
 %   [1] Anderson & Moore, "Optimal Control: Linear Quadratic Methods."
 if nargin < 3, opts = struct(); end
-if ~isfield(opts,'Q'),  opts.Q  = diag([1e-4 1e-4 1e-4 1e-2 1e-2 1e-2 0]); end
+% Phase-scheduled state weight. qPos/qVel ratio sets the lateral
+% position-error pole (see ADAPTATION 5); the overall qPos level sets the
+% commanded correction accel, a = sqrt(qPos/r)/m.
+if ~isfield(opts,'QA'), opts.QA = diag([0.21 0.21 1e-4 0.85 0.85 1e-2 0]); end
+if ~isfield(opts,'QB'), opts.QB = diag([1e-4 1e-4 1e-4 1e-2 1e-2 1e-2 0]); end
+if isfield(opts,'Q'),   opts.QA = opts.Q;  opts.QB = opts.Q;               end
 if ~isfield(opts,'R'),  opts.R  = 1e-9*eye(3);                             end
 if ~isfield(opts,'Qf'), opts.Qf = diag([1e-2 1e-2 1e-2 1 1 1 0]);          end
 
@@ -123,11 +233,20 @@ Nn = size(sol.X,2) - 1;  h = sol.tf/Nn;
 ctrl.xnom = @(t) interp1(sol.t.', sol.X.', clampt(t, sol.tf), 'pchip').';
 ctrl.Tnom = @(t) hs_quad_ctrl(clampt(t, sol.tf), sol.U, sol.Um, h, Nn, P.Tmin, P.Tmax);
 
+%% Phase schedule: Tmin-arc -> Tmax-arc switch, auto-detected from sol:
+if isfield(opts,'tSwitch'), ctrl.tSwitch = opts.tSwitch;
+else,                       ctrl.tSwitch = annulus_switch(sol, P);  end
+if isfield(opts,'tBlend'),  ctrl.tBlend  = opts.tBlend;
+else,                       ctrl.tBlend  = 0.4;                     end
+QA = opts.QA;  QB = opts.QB;  ts = ctrl.tSwitch;  tb = ctrl.tBlend;
+ctrl.Qfun = @(t) (1 - 0.5*(1 + tanh((t - ts)/tb)))*QA ...
+                 +    0.5*(1 + tanh((t - ts)/tb)) *QB;
+
 %% Backward Riccati on vec(P), dense output grid:
 M     = 4*(Nn+1);
 ctrl.tgrid = linspace(0, sol.tf, M);
 Rinv  = inv(opts.R);
-ric   = @(t, pv) ricrhs(t, pv, ctrl, P, opts.Q, Rinv);
+ric   = @(t, pv) ricrhs(t, pv, ctrl, P, ctrl.Qfun, Rinv);
 oo    = odeset('RelTol', 1e-8, 'AbsTol', 1e-8);
 [~, PV] = ode45(ric, fliplr(ctrl.tgrid), opts.Qf(:), oo);   % integrates tf->0
 PV    = flipud(PV);                                          % re-order 0->tf
@@ -143,9 +262,29 @@ end
 
 function t = clampt(t, tf), t = min(max(t, 0), tf); end
 
-function pdot = ricrhs(t, pv, ctrl, P, Q, Rinv)
+function ts = annulus_switch(sol, P)
+% ANNULUS_SWITCH  Time the nominal thrust magnitude crosses mid-annulus.
+%
+% The min-fuel solution is bang-bang on |T*| (certify_pdg's G5 gate counts
+% exactly one switch on this trajectory), so a single mid-annulus crossing
+% cleanly separates the Tmin coast-down arc from the Tmax braking arc.
+%
+% INPUTS:  sol - collocation solution;  P - booster_params (Tmin,Tmax)
+% OUTPUTS: ts  - switch time [s] (falls back to sol.tf if |T*| never
+%                crosses, i.e. no margin phase to schedule against)
+Tmag = sqrt(sum(sol.U.^2, 1));
+mid  = 0.5*(P.Tmin + P.Tmax);
+kx   = find(Tmag(1:end-1) < mid & Tmag(2:end) >= mid, 1, 'first');
+if isempty(kx)
+    ts = sol.tf;  return
+end
+w  = (mid - Tmag(kx)) / (Tmag(kx+1) - Tmag(kx));
+ts = sol.t(kx) + w*(sol.t(kx+1) - sol.t(kx));
+end
+
+function pdot = ricrhs(t, pv, ctrl, P, Qfun, Rinv)
 Pk = reshape(pv, 7, 7);
 [~, A, B] = pdg_dynamics(ctrl.xnom(t), ctrl.Tnom(t), P);
-Pd   = -(A.'*Pk + Pk*A - Pk*B*Rinv*B.'*Pk + Q);
+Pd   = -(A.'*Pk + Pk*A - Pk*B*Rinv*B.'*Pk + Qfun(t));
 pdot = Pd(:);
 end

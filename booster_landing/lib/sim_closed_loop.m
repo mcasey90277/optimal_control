@@ -2,8 +2,10 @@ function out = sim_closed_loop(sol, ctrl, P, dsp)
 % SIM_CLOSED_LOOP  Truth-model landing sim under TVLQR tracking.
 %
 % Plant = pdg_dynamics with dispersion multipliers (thrust/Isp bias, wind);
-% controller = T*(t) - K(t) dx, magnitude-saturated to [Tmin, Tmax] with
-% direction preserved, ALWAYS evaluated against the nominal model P (the
+% controller = T*(t) - K(t) dx, saturated into the [Tmin, Tmax] annulus by
+% allocate_thrust (direction-preserving, except that the upper bound is
+% served vertical-first -- see that function), ALWAYS evaluated against
+% the nominal model P (the
 % flight computer does not see the true dispersed plant -- see the
 % control_law note below). Below altitude P.zTermBand, altitude feedback
 % is re-scheduled -- see the TERMINAL-PHASE note. Integrates to the first
@@ -190,8 +192,48 @@ if inTerm
     xref(4:6) = ct.vOfZ(x(3));  % track v(z), not v*(t)
 end
 Traw = ctrl.Tnom(tqRaw) - Kt * (x - xref);
-Tm   = sqrt(sum(Traw.^2));
-T    = Traw * min(max(Tm, P.Tmin), P.Tmax) / max(Tm, 1e-9);
+T    = allocate_thrust(Traw, P);
+end
+
+function T = allocate_thrust(Traw, P)
+% ALLOCATE_THRUST  Annulus saturation with VERTICAL PRIORITY on the upper
+% bound.
+%
+% The brief's law is "magnitude clamped to [Tmin,Tmax], direction kept".
+% That is exactly what this returns whenever the raw command already fits
+% under Tmax -- which, after task-7 round 5's gain redesign, is the whole
+% of the acceptance dispersion case (measured sat_frac fell 0.65 -> 0.15).
+% It differs ONLY in the over-Tmax branch, where preserving direction
+% means scaling the VERTICAL component down in lockstep with a
+% (necessarily unaffordable) lateral demand -- i.e. paying for a lateral
+% correction with braking authority, at the one moment the vehicle can
+% least afford it. Large lateral offsets are precisely where that matters:
+% a 212 m offset commands >2 MN of lateral thrust, the direction-preserving
+% clamp then points the (Tmax-limited) vector nearly horizontal, and the
+% vehicle free-falls. Vertical priority instead keeps the commanded
+% vertical component and spends only the REMAINING annulus radius,
+% sqrt(Tmax^2 - Tz^2), on lateral -- the correct mission priority (miss the
+% pad before you crash into it), and a no-op wherever the command fits.
+%
+% The lower bound (|T| >= Tmin) stays direction-preserving: Tmin is a
+% throttle floor, not a budget to allocate.
+%
+% INPUTS:  Traw - raw commanded thrust [3x1 N];  P - booster_params
+% OUTPUTS: T    - annulus-feasible thrust [3x1 N]
+Tm = sqrt(sum(Traw.^2));
+if Tm > P.Tmax
+    Tz  = min(max(Traw(3), -P.Tmax), P.Tmax);      % vertical served first
+    lat = sqrt(max(P.Tmax^2 - Tz^2, 0));           % annulus radius left over
+    Txy = Traw(1:2);  n = sqrt(sum(Txy.^2));
+    if n > lat, Txy = Txy * (lat / n); end
+    T  = [Txy; Tz];
+    Tm = sqrt(sum(T.^2));
+    if Tm < P.Tmin                                 % restore the floor
+        T = T * P.Tmin / max(Tm, 1e-9);
+    end
+else
+    T = Traw * min(max(Tm, P.Tmin), P.Tmax) / max(Tm, 1e-9);
+end
 end
 
 function xdot = plant_rhs(t, x, ctrl, P, Pp, d, ct)

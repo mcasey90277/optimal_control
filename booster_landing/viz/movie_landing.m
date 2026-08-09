@@ -14,6 +14,20 @@ function movie_landing(out, sol, P, outfile, opts)
 % shear artifact in the exported MP4/GIF, not a MATLAB render bug (house
 % lesson, see matlab-polished-graphics skill / MEMORY.md).
 %
+% COLOR SCHEME (fix report, 2026-08-09): the binding colorblind-safe
+% blue/orange pair applies here too, not only to the two static plots --
+% booster body/marker/throttle-trace use the blue triplet
+% [0 0.447 0.741], thrust-plume arrow and the moving time cursor use the
+% orange triplet [0.85 0.325 0.098]. Bound lines (Tmin/Tmax, etaT, Tmax)
+% and the ground-track path sketch stay neutral black/gray -- they are
+% reference geometry, not data series, and adding them to the two-color
+% scheme would dilute it. The pad marker is the one deliberate exception:
+% it stays a distinct green rather than folding into blue/orange, because
+% a landing pad/helipad has its own real-world conventional color
+% (aviation safety green, e.g. helipad "H" markings) that a viewer
+% already associates with "this is the target," independent of this
+% campaign's solver-comparison scheme.
+%
 % INPUTS:
 %   out     - sim_closed_loop trace (.t .X .Tcmd)
 %   sol     - guidance solution, either solver (.tf used for the throttle
@@ -29,6 +43,9 @@ function movie_landing(out, sol, P, outfile, opts)
 if nargin < 5, opts = struct(); end
 if ~isfield(opts,'duration'), opts.duration = 12; end
 if ~isfield(opts,'fps'),      opts.fps = 30;      end
+
+colBooster = [0 0.447 0.741];      % colorblind-safe blue   -- booster/throttle
+colAccent  = [0.85 0.325 0.098];   % colorblind-safe orange -- plume/cursor
 
 fig = figure('Visible','off','Position',[100 100 1280 720],'Color','w');
 tl  = tiledlayout(fig, 1, 2, 'TileSpacing', 'compact');
@@ -52,22 +69,23 @@ for k = 1:nf
          out.X(:,3), '-', 'Color', [0.7 0.7 0.7]);
     dk = sqrt(sum(xk(1:2).^2)) * sign(xk(1)+eps);
     arr = -0.15 * zmax * Tk / P.Tmax;    % plume points opposite thrust
-    quiver(axT, dk, xk(3), arr(1), arr(3), 0, 'r', 'LineWidth', 2, ...
-           'MaxHeadSize', 0.5);
-    plot(axT, dk, xk(3), 'ks', 'MarkerFaceColor', 'k', 'MarkerSize', 9);
-    plot(axT, [-P.pad_radius P.pad_radius], [0 0], 'g-', 'LineWidth', 4);
+    quiver(axT, dk, xk(3), arr(1), arr(3), 0, 'Color', colAccent, ...
+           'LineWidth', 2, 'MaxHeadSize', 0.5);
+    plot(axT, dk, xk(3), 's', 'Color', colBooster, ...
+         'MarkerFaceColor', colBooster, 'MarkerSize', 9);
+    plot(axT, [-P.pad_radius P.pad_radius], [0 0], 'g-', 'LineWidth', 4);  % pad: conventional green, see header note
     xlim(axT, [-xmax xmax]*1.1);  ylim(axT, [-0.02*zmax zmax]);
     title(axT, sprintf('t = %6.2f s   alt = %7.1f m', ts(k), xk(3)));
     xlabel(axT, 'downrange [m]');  ylabel(axT, 'altitude [m]');
     % right: throttle trace + cursor, with the three bound lines
     cla(axR);  hold(axR, 'on');
-    plot(axR, out.t, Tmag/P.Tmax, 'b-');
+    plot(axR, out.t, Tmag/P.Tmax, '-', 'Color', colBooster, 'LineWidth', 1.5);
     yline(axR, P.Tmin/P.Tmax, 'k:',  'LineWidth', 1.25, ...
           'Label', sprintf('Tmin/Tmax=%.2f', P.Tmin/P.Tmax));
     yline(axR, P.etaT, 'k--', 'LineWidth', 1.25, ...
           'Label', sprintf('etaT=%.2f (guidance)', P.etaT));
     yline(axR, 1, 'k-',  'LineWidth', 1.0, 'Label', 'Tmax (tracker)');
-    xline(axR, ts(k), 'r-', 'LineWidth', 1.5);
+    xline(axR, ts(k), '-', 'Color', colAccent, 'LineWidth', 1.5);
     ylim(axR, [0 1.1]);  xlim(axR, [0 out.t(end)]);
     xlabel(axR, 'time [s]');  ylabel(axR, 'throttle T/Tmax');
     title(axR, 'throttle');

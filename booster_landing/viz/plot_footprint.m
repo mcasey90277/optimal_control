@@ -14,7 +14,12 @@ function fig = plot_footprint(mc, P, outfile)
 %   P       - booster_params (.pad_radius)
 %   outfile - (optional) PNG path; exportgraphics at 200 dpi if given
 % OUTPUTS:
-%   fig - figure handle (Visible off)
+%   fig - figure handle (Visible off). OWNERSHIP CONTRACT (fix report,
+%         2026-08-09): same as plot_pdg_solution.m -- with an output
+%         requested (fig = ...), the CALLER owns and must close it; called
+%         as a bare statement (nargout==0), this function closes the
+%         figure itself so repeated calls across a long -batch process
+%         (sweeps, campaigns) do not leak invisible handles.
 %
 % REFERENCES:
 %   [1] docs/superpowers/specs/2026-08-08-booster-landing-design.md
@@ -74,5 +79,9 @@ annotation(fig, 'textbox', [0.14 0.70 0.32 0.16], 'String', txt, ...
 
 if ~isempty(outfile)
     exportgraphics(fig, outfile, 'Resolution', 200);
+end
+if nargout == 0
+    close(fig);        % no caller owns the handle -- close it here (see
+                        % OUTPUTS' ownership-contract note above)
 end
 end

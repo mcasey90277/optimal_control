@@ -20,7 +20,14 @@ function fig = plot_pdg_solution(solC, solV, outfile)
 %   solV    - solve_pdg_convex solution (.t .X .U .tf .mf .P), same tf
 %   outfile - (optional) PNG path; exportgraphics at 200 dpi if given
 % OUTPUTS:
-%   fig - figure handle (Visible off)
+%   fig - figure handle (Visible off). OWNERSHIP CONTRACT (fix report,
+%         2026-08-09): called with an output requested (fig = ...), the
+%         CALLER owns the handle and is responsible for closing it.
+%         Called as a bare statement (no output captured, nargout==0 --
+%         e.g. a sweep or a smoke test that only wants the exported PNG),
+%         this function closes the figure itself before returning, so
+%         repeated calls in one long -batch process (Task 10's flagship,
+%         Task 11's sweeps) do not accumulate invisible figure handles.
 %
 % REFERENCES:
 %   [1] docs/superpowers/specs/2026-08-08-booster-landing-design.md
@@ -128,6 +135,10 @@ title(tl, sprintf('PDG guidance: collocation vs convex   (tf=%6.2f s, mf_C=%7.1f
 
 if ~isempty(outfile)
     exportgraphics(fig, outfile, 'Resolution', 200);
+end
+if nargout == 0
+    close(fig);        % no caller owns the handle -- close it here (see
+                        % OUTPUTS' ownership-contract note above)
 end
 end
 

@@ -231,33 +231,13 @@ gates = [rep.G1_pass, rep.G2_pass, isequal(rep.G3_pass,true) || ...
 rep.all_pass = all(gates);
 end
 
-function Tv = hs_quad_ctrl(tt, U, Um, h, N)
-% HS_QUAD_CTRL  Exact per-segment quadratic Lagrange control
-% reconstruction through (U_k, Um_k, U_{k+1}) for segment k -- the
-% control representation Hermite-Simpson's own defect equations (Simpson's
-% rule) are actually built against within each segment. See the "G2
-% control reconstruction" note at the top of certify_pdg.m for why this
-% replaces a global pchip spline (task-5 fix-report decisive experiment:
-% collapses a previously-measured 0.6-0.8 kg mass "floor" to ~0.0001-
-% 0.0005 kg at both N=60 and N=240 -- the floor was a reconstruction
-% artifact, not real continuous-time error).
-%
-% INPUTS:
-%   tt - query time [scalar, s] (ode45 calls this with scalar t)
-%   U  - node control samples [3 x (N+1)]
-%   Um - midpoint control samples [3 x N]
-%   h  - segment duration [scalar, s] (= tf/N, uniform grid)
-%   N  - number of segments [scalar]
-% OUTPUTS:
-%   Tv - reconstructed control at tt [3x1]
-ttc = min(max(tt, 0), N*h);
-k   = min(max(floor(ttc/h) + 1, 1), N);        % segment index 1..N
-tau = (ttc - (k-1)*h) / h;                     % local var in [0,1]
-L0  = 2*tau^2 - 3*tau + 1;                     % Lagrange basis at tau=0
-L1  = -4*tau^2 + 4*tau;                        % at tau=0.5 (midpoint)
-L2  = 2*tau^2 - tau;                           % at tau=1
-Tv  = L0*U(:,k) + L1*Um(:,k) + L2*U(:,k+1);
-end
+% NOTE (task-7 fix report, 2026-08-08): hs_quad_ctrl was promoted from a
+% local function here to lib/hs_quad_ctrl.m (byte-identical logic) so
+% Task 6's tvlqr_design.m could build ctrl.Tnom from the same per-segment
+% quadratic reconstruction G2 above certifies, instead of a global pchip
+% spline. test_certify_nominal.m re-run clean after the move (both blocks
+% still all_pass) -- see that test's output in the task-7 fix report for
+% the regression check.
 
 % NOTE (deviation from the brief's "nested function" suggestion, documented
 % in the task-5 report): print_certify_report is called directly by

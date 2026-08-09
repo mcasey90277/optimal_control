@@ -473,11 +473,28 @@ rep.G5_structOk = rep.G5_bound_frac >= 0.95 && rep.G5_switches <= 2 && onHi(end)
 % threshold re-tightening are in the "G5 primer TIME BASE" header note.
 % Um is 3xN, exactly matching lam_defect's N columns -- no truncation
 % needed (the old node form had to drop the last node).
-lamv = solC.lam_defect(4:6, :);                % 3xN, segment defect duals
+% STATION ASSOCIATION + SIGN come from the shared library home
+% (oclib/+oc/duals_to_costates) since 2026-08-09: this gate independently
+% re-invented, and independently re-fixed, the Hermite-Simpson
+% midpoint-vs-node rule that orbit_transfer's covector mapping already
+% owned -- one home per subtle rule ends that failure mode. The library
+% resolves the global dual sign by its primer-vs-control vote (this
+% campaign's duals carry +lam_v parallel to thrust, the opposite of the
+% orbit convention; the vote absorbs the difference), and returns
+% costates whose PRIMER -lam_v/|lam_v| aligns with thrust. The angle
+% computed below is therefore convention-free.
+if isempty(which('oc.duals_to_costates'))
+    addpath(fullfile(fileparts(fileparts(fileparts( ...
+        mfilename('fullpath')))), 'oclib'));
+end
+[lamMap, ~, dgMap] = oc.duals_to_costates(struct( ...
+    'scheme', 'hermite-simpson', 'mu', solC.lam_defect, ...
+    'tNodes', solC.t, 'uDir', solC.Um));
 Tdir = solC.Um ./ sqrt(sum(solC.Um.^2,1));     % 3xN, MIDPOINT directions
-pdir = lamv ./ max(sqrt(sum(lamv.^2,1)), 1e-30);
+pdir = -lamMap(4:6,:) ./ max(sqrt(sum(lamMap(4:6,:).^2,1)), 1e-30);
 cosang = sum(Tdir .* pdir, 1);
 rep.G5_primer_deg = max(acosd(min(1, max(-1, cosang))));
+rep.G5_voteMargin = dgMap.voteMargin;          % info: 1.00 = unanimous
 % Primer threshold RE-TIGHTENED to 0.01 deg for vacuum AND drag alike
 % (external code review, 2026-08-09) -- the task-11 drag loosening to
 % 10 deg is deleted, because the drag/vacuum difference it accommodated

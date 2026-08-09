@@ -12,4 +12,5 @@ addpath(fullfile(here, 'certify'));
 addpath(fullfile(here, 'viz'));
 addpath(fullfile(here, 'tests'));
 addpath(fullfile(getenv('HOME'), 'casadi-3.7.0'));
+addpath(fullfile(fileparts(here), 'oclib'));   % oc.* shared OC library
 end

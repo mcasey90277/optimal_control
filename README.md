@@ -5,6 +5,12 @@ guided build-it-yourself tutorials, and full research-grade campaigns
 reproducing published low-thrust orbit-transfer results by both **direct**
 (collocation NLP, CasADi + IPOPT) and **indirect** (PMP shooting) methods.
 
+**Start here for the big picture:** [`OCP_UNIFYING_MATH.md`](OCP_UNIFYING_MATH.md)
+— the one Bolza problem every folder instantiates, the four solution routes,
+the physics that forces each folder's special machinery (Sundman, multiple
+shooting, homotopy, convexification), the shared verification discipline, and
+what it all implies for the common-library goal.
+
 ## Layout
 
 | folder | what |

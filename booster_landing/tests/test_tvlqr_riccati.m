@@ -19,6 +19,13 @@ for k = 1:M
            'P not PSD at k=%d', k);
 end
 assert(all(isfinite(ctrl.K(:))), 'non-finite gains');
-Qf = diag([1e-2 1e-2 1e-2 1 1 1 0]);
-assert(max(max(abs(ctrl.Pt(:,:,end) - Qf))) < 1e-9, 'terminal P ~= Qf');
+% Compare against the weight tvlqr_design actually used (ctrl.Qf) rather
+% than a hardcoded literal: task-7b made Qf(6,6) a DERIVED quantity (the
+% phase-B vertical velocity weight, so the Riccati boundary layer does not
+% collapse the terminal vertical gain -- see tvlqr_design). The property
+% under test is "the terminal condition P(tf)=Qf is honored", which is what
+% this now checks, independent of what the default weights happen to be.
+assert(isfield(ctrl,'Qf'), 'tvlqr_design no longer reports the Qf it used');
+assert(max(max(abs(ctrl.Pt(:,:,end) - ctrl.Qf))) < 1e-9*max(1,max(abs(ctrl.Qf(:)))), ...
+       'terminal P ~= Qf');
 fprintf('test_tvlqr_riccati PASS\n');

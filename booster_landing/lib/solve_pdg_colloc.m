@@ -82,7 +82,10 @@ end
 nDefRows = 7 * N;
 
 %% Path constraints (nodes and midpoints), bounds scaled to match X, U:
-Tmin_h = P.Tmin / Fc;  Tmax_h = P.Tmax / Fc;
+% GUIDANCE ceiling is DE-RATED (task-7b, P.etaT): the trajectory is solved
+% against etaT*Tmax so the tracker has thrust left to command. Tmin is the
+% physical engine floor and is NOT de-rated.
+Tmin_h = P.Tmin / Fc;  Tmax_h = P.etaT * P.Tmax / Fc;
 Uall = [U, Um];
 for k = 1:size(Uall,2)
     T2 = sum(Uall(:,k).^2);

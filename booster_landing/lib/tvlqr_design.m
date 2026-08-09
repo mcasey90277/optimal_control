@@ -235,16 +235,14 @@ if nargin < 3, opts = struct(); end
 % Phase-scheduled state weight. qPos/qVel ratio sets the lateral
 % position-error pole (see ADAPTATION 5); the overall qPos level sets the
 % commanded correction accel, a = sqrt(qPos/r)/m.
-if ~isfield(opts,'R'),  opts.R  = 1e-9*eye(3);                             end
-if ~isfield(opts,'Qf'), opts.Qf = diag([1e-2 1e-2 1e-2 1 1 1 0]);          end
-if ~isfield(opts,'QB'), opts.QB = diag([1e-4 1e-4 1e-4 1e-2 1e-2 1e-2 0]); end
+if ~isfield(opts,'R'), opts.R = 1e-9*eye(3); end
 
 %% Nominal interpolants (state: pchip over nodes; thrust: shared
 %% per-segment HS quadratic reconstruction, scalar t only -- see the
 %% ADAPTATION note above):
 Nn = size(sol.X,2) - 1;  h = sol.tf/Nn;
 ctrl.xnom = @(t) interp1(sol.t.', sol.X.', clampt(t, sol.tf), 'pchip').';
-ctrl.Tnom = @(t) hs_quad_ctrl(clampt(t, sol.tf), sol.U, sol.Um, h, Nn, P.Tmin, P.Tmax);
+ctrl.Tnom = @(t) hs_quad_ctrl(clampt(t, sol.tf), sol.U, sol.Um, h, Nn, P.Tmin, P.etaT*P.Tmax);
 
 %% Phase schedule: Tmin-arc -> Tmax-arc switch, auto-detected from sol:
 if isfield(opts,'tSwitch'), ctrl.tSwitch = opts.tSwitch;
@@ -259,17 +257,43 @@ else,                       ctrl.tBlend  = 0.4;                     end
 %% a 100x R change would otherwise move the pole by 3.2x).
 if ~isfield(opts,'omegaA'), opts.omegaA = 0.70; end   % lateral wn [rad/s]
 if ~isfield(opts,'zetaA'),  opts.zetaA  = 1.00; end   % lateral damping
+inA = sol.t <= ctrl.tSwitch;
+if ~any(inA), inA(1) = true; end                      % ts=0 fallback guard
+mA  = mean(sol.X(7, inA));                            % mass over the margin arc
+mB  = mean(sol.X(7, ~inA));                           % mass over the braking arc
+if isnan(mB), mB = sol.X(7,end); end
+
+%% VERTICAL VELOCITY LOOP (task-7b co-design). Under altitude indexing the
+%% altitude-error channel is identically zero (see sim_closed_loop), so the
+%% vertical axis is a PURE FIRST-ORDER velocity loop, vzdot = Tz/m - g. Its
+%% scalar ARE gives gain/m = sqrt(qVelZ/r)/m, so a target bandwidth inverts
+%% to qVelZ = (m*omegaVz)^2 * r. omegaVz=12 rad/s is ~100x the pre-7b value
+%% (measured 0.12 rad/s), which is what the terminal arc actually needs: the
+%% descent-rate reference sweeps at ~19.8 m/s^2, so a loop of bandwidth w
+%% carries a standing lag of 19.8/w m/s, and 0.12 rad/s means the vehicle is
+%% simply never tracking the last 150 m at all.
+if ~isfield(opts,'omegaVz'), opts.omegaVz = 12; end   % vertical vel loop [rad/s]
+qVelZ = (mB * opts.omegaVz)^2 * opts.R(3,3);
+
+if ~isfield(opts,'QB'), opts.QB = diag([1e-4 1e-4 1e-4 1e-2 1e-2 qVelZ 0]); end
 if ~isfield(opts,'QA')
-    inA = sol.t <= ctrl.tSwitch;
-    if ~any(inA), inA(1) = true; end                  % ts=0 fallback guard
-    mRef = mean(sol.X(7, inA));                       % mass over the margin arc
     rLat = opts.R(1,1);                               % lateral control price
     wA   = opts.omegaA;  zA = opts.zetaA;
-    qP   = mRef^2 * rLat * wA^4;
-    qV   = mRef^2 * rLat * wA^2 * (4*zA^2 - 2);       % >=0 needs zetaA>=1/sqrt(2)
-    opts.QA = diag([qP qP 1e-4 qV qV 1e-2 0]);
+    qP   = mA^2 * rLat * wA^4;
+    qV   = mA^2 * rLat * wA^2 * (4*zA^2 - 2);         % >=0 needs zetaA>=1/sqrt(2)
+    opts.QA = diag([qP qP 1e-4 qV qV qVelZ 0]);
 end
+%% Qf(6,6) must MATCH the phase-B vertical weight, or the Riccati boundary
+%% layer silently undoes the design exactly where it matters. With the old
+%% Qf(6,6)=1 the terminal vertical gain collapsed to sqrt(1/r)/m = 1.19 1/s
+%% -- and since altitude indexing evaluates K at t*(z) -> tf as z -> 0, the
+%% vehicle flew the LAST METRE on a 1.19 1/s loop no matter how the rest was
+%% tuned. Setting it to qVelZ makes P(tf) consistent with the phase-B
+%% steady state, so the gain is smooth through touchdown. Measured: this
+%% alone removed every remaining vertical arrest in the task-7b battery.
+if ~isfield(opts,'Qf'), opts.Qf = diag([1e-2 1e-2 1e-2 1 1 qVelZ 0]); end
 if isfield(opts,'Q'), opts.QA = opts.Q;  opts.QB = opts.Q; end   % legacy
+ctrl.Qf = opts.Qf;   % exposed so tests assert P(tf)=Qf without a magic number
 QA = opts.QA;  QB = opts.QB;  ts = ctrl.tSwitch;  tb = ctrl.tBlend;
 ctrl.Qfun = @(t) (1 - 0.5*(1 + tanh((t - ts)/tb)))*QA ...
                  +    0.5*(1 + tanh((t - ts)/tb)) *QB;

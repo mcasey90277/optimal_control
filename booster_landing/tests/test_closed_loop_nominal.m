@@ -64,5 +64,31 @@ assert(out1.td.landed, 'dispersed did not land (stop=%s, alt=%.3f m) -- an arres
        out1.td.stop, out1.td.alt);
 assert(out1.td.miss < P.pad_radius, 'dispersed miss %.1f m', out1.td.miss);
 assert(out1.td.vtd  < P.vtd_max,    'dispersed vtd %.2f m/s', out1.td.vtd);
+%% TASK-7b ACCEPTANCE BATTERY. Every case must genuinely land, inside the
+%% pad and under the touchdown-speed gate. The two altitude cases are the
+%% adjudicated 7b-2 defect (a time-indexed tracker put dr0z=-50 into the
+%% ground at 20.3 m/s); the two thrust cases are the raison d'etre of the
+%% P.etaT guidance de-rate (7b-1) -- before it, thrust_scale=0.95 touched
+%% down at 67.4 m/s and no controller could have helped.
+bat = { struct('dr0',[0;0;-50]),                        'dr0=[0;0;-50]'
+        struct('dr0',[0;0; 50]),                        'dr0=[0;0;+50]'
+        struct('thrust_scale',0.95),                    'thrust_scale=0.95'
+        struct('thrust_scale',1.05),                    'thrust_scale=1.05'
+        struct('dr0',[50;-30;-50],'thrust_scale',0.97), 'combined' };
+nfail = 0;
+for kb = 1:size(bat,1)
+    ob = sim_closed_loop(sol, ctrl, P, bat{kb,1});
+    ok = ob.td.landed && ob.td.miss < P.pad_radius && ob.td.vtd < P.vtd_max;
+    fprintf('  battery %-20s land=%d miss=%7.3f m vtd=%6.3f m/s  %s\n', ...
+            bat{kb,2}, ob.td.landed, ob.td.miss, ob.td.vtd, pf(ok));
+    nfail = nfail + ~ok;
+end
+assert(nfail == 0, ['%d of %d task-7b battery cases failed -- see the ' ...
+    'printed table above and the task-7 report 7b section'], nfail, size(bat,1));
+
 fprintf('test_closed_loop_nominal PASS  (nom miss %.3f m vtd %.3f m/s, disp miss %.2f m vtd %.3f m/s)\n', ...
         out0.td.miss, out0.td.vtd, out1.td.miss, out1.td.vtd);
+
+function s = pf(ok)
+if ok, s = 'PASS'; else, s = '**FAIL**'; end
+end

@@ -5,10 +5,10 @@ function out = sim_closed_loop(sol, ctrl, P, dsp)
 % controller = T*(t) - K(t) dx, saturated into the [Tmin, Tmax] annulus by
 % allocate_thrust (direction-preserving, except that the upper bound is
 % served vertical-first -- see that function), ALWAYS evaluated against
-% the nominal model P (the
-% flight computer does not see the true dispersed plant -- see the
-% control_law note below). Below altitude P.zTermBand, altitude feedback
-% is re-scheduled -- see the TERMINAL-PHASE note. Integrates to the first
+% the nominal model P (the flight computer does not see the true dispersed
+% plant -- see the control_law note below). The reference trajectory and
+% gains are indexed by the vehicle's ALTITUDE, not wall-clock time -- see
+% the ALTITUDE-INDEXED GUIDANCE note. Integrates to the first
 % of three terminal events: a real z=0 touchdown, a vertical arrest just
 % above the pad followed by climb-away, or (safety net) propellant
 % depletion to P.mdry -- see the ADAPTATION note.
@@ -44,38 +44,53 @@ function out = sim_closed_loop(sol, ctrl, P, dsp)
 %                     horizon; .td is then just the last integrated
 %                     state, not any kind of landing)
 %
-% TERMINAL-PHASE ALTITUDE SCHEDULE (task-7 fix report round 4,
-% 2026-08-08 -- STRUCTURAL remedy, reviewer-endorsed): below P.zTermBand
-% altitude (150 m default -- see booster_params.m), the feedback law
-% switches from "track (r*(t),v*(t)) at wall-clock time t" to "null
-% lateral position error and TRACK THE GUIDANCE'S OWN v(z) PROFILE at the
-% vehicle's ACTUAL altitude" -- z-position error is excluded from the
-% feedback entirely (Kt(:,3)=0) and the velocity reference becomes
-% vOfZ(x(3)) instead of ctrl.xnom(t)'s time-indexed velocity. Root cause
-% this fixes: a dedicated N=60 sweep after task-7 round-4's hs_quad_ctrl
-% fix (see that function) found the dispersed-50m case's miss<15 and
-% vtd<2 requirements pull R in OPPOSITE directions with NO overlap
-% (miss<15 needs R<~1.5e-9, vtd<2 needs R>~5e-8) -- an antagonism that
-% survives the annulus-feasibility fix, so it is not a feedforward
-% artifact. Mechanism: P(tf)=Qf is DIAGONAL (booster_params/tvlqr_design),
-% and B's position rows (1:3) are always zero (rdot=v doesn't depend on
-% T), so K(tf)=Rinv*B'*P(tf) has EXACTLY ZERO position-feedback columns
-% at the terminal boundary -- not approximately, structurally. Because
-% sim_closed_loop's ode45 span runs to 1.5*sol.tf and control_law clamps
-% its time index to ctrl.tgrid(end)=tf, ANY simulated time past nominal
-% touchdown flies under this same degenerate, ALL-position-blind gain
-% (the "past-tf freeze") -- for a dispersed case that (correctly) takes
-% longer than tf to correct a 50 m offset, this silently strips ALL
-% position feedback (not just altitude) for the tail of the flight,
-% which is the arrest-conversion mechanism this round's reviewer
-% identified. The fix here holds the GAIN's time-index at
-% ctrl_term.tTermEntry (a point well before the tf singularity, where P
-% still has meaningful position-velocity coupling) for the whole terminal
-% phase and beyond -- so x,y LATERAL feedback authority survives past tf
-% (fixing the freeze) -- while z-position feedback is deliberately zeroed
-% by design in that same phase (the altitude schedule itself), replaced
-% by direct v(z) tracking. tTermEntry and vOfZ are built ONCE from sol
-% (not on every RHS call) and threaded through control_law/plant_rhs.
+% ALTITUDE-INDEXED GUIDANCE (task-7b, 2026-08-08 -- supersedes the round-4
+% "terminal-phase altitude schedule", which was a partial version of this
+% same idea applied only below P.zTermBand):
+%
+% The tracker indexes the reference trajectory by the vehicle's own
+% ALTITUDE, not by wall-clock time. At altitude z it flies toward
+% (r*_xy(z), v*(z)) with feedforward T*(t*(z)) and gains K(t*(z)), where
+% t*(z) is the nominal time at that altitude.
+%
+% WHY (measured, task-7b): a min-fuel landing trajectory has NO time
+% margin -- it ends exactly at z=0 with the tanks near dry -- so a pure
+% altitude dispersion is unrecoverable under time-indexed tracking. With
+% dr0=[0;0;-50] and a well-tuned time-indexed vertical loop the vehicle
+% tracked vznom(t) essentially perfectly (vz=-169.38 vs -169.84 at t=6.76),
+% which is exactly the problem: tracking time perfectly means STAYING 50 m
+% low all the way down and hitting the ground 50 m early, at -31.8 m/s,
+% while the guidance still had 2 s of braking left to do. Tightening the
+% loop made it WORSE (9.0 -> 43.4 m/s touchdown), because the better it
+% tracked the wrong schedule the harder it drove into the ground. The
+% round-4/5 code only escaped this by having a vertical loop so weak
+% (bandwidth ~0.12 rad/s) that velocity SAGGED toward the altitude-
+% appropriate profile on its own -- accidentally doing altitude indexing,
+% badly, in the last 150 m.
+%
+% Under altitude indexing the same dispersion is nearly a non-event: at
+% z=1950 the reference is v*(1950) = -179.83 m/s against the vehicle's
+% -180.00, an error of 0.17 m/s. The vehicle simply flies the profile it
+% is actually on and brakes where the guidance says to brake IN ALTITUDE,
+% which is the invariant the fuel-optimal solution actually encodes.
+%
+% Three structural simplifications fall out, all of which delete
+% special-case code rather than add it:
+%  * the ALTITUDE-ERROR CHANNEL VANISHES identically (xref(3) := x(3)), so
+%    round 4's explicit Kt(:,3)=0 terminal zeroing is no longer needed --
+%    it is now true by construction, everywhere, not below a band.
+%  * the "PAST-tf FREEZE" cannot occur. K was previously indexed by
+%    wall-clock t and clamped at tgrid(end)=tf, where P(tf)=Qf is diagonal
+%    and B's position rows are zero, making K(tf)'s position columns
+%    structurally zero -- so any run lasting past nominal tf silently flew
+%    with NO position feedback at all. Indexing by t*(z) means the gain
+%    reaches its terminal value only as the vehicle reaches the ground.
+%  * P.zTermBand and its hand-picked 150 m are no longer used by this file.
+%
+% Limitation, asserted rather than assumed: altitude indexing needs a
+% strictly monotone descent. That holds for this campaign (vz<0 throughout
+% the guidance solution) and is checked below; a trajectory with a hover or
+% ascent segment would need a different schedule variable (e.g. arclength).
 %
 % ADAPTATION FROM BRIEF (documented, forced by a genuine runtime issue):
 % P.Tmin (338 kN) exceeds the vehicle's weight at every mass on this
@@ -121,14 +136,18 @@ end
 Pp = P;  Pp.Isp = P.Isp * d.isp_scale;      % plant params differ from model
 x0 = [P.r0 + d.dr0; P.v0 + d.dv0; P.m0];
 
-%% Terminal-phase schedule, built ONCE from sol (see TERMINAL-PHASE note):
-zTermBand = P.zTermBand;                       % altitude gate [m]
-[zSorted, sortIdx] = sort(sol.X(3,:));         % altitude ascending for interp1
-ct.zTerm      = zTermBand;
-ct.vOfZ       = @(zq) interp1(zSorted, sol.X(4:6,sortIdx).', ...
-                               min(max(zq, zSorted(1)), zSorted(end)), 'pchip').';
-ct.tTermEntry = interp1(zSorted, sol.t(sortIdx), ...
-                         min(max(zTermBand, zSorted(1)), zSorted(end)), 'pchip');
+%% ALTITUDE-INDEXED reference schedule, built ONCE from sol (see the
+%% ALTITUDE-INDEXED GUIDANCE note above). Columns of REF, per altitude:
+%% [rx*, ry*, vx*, vy*, vz*, m*, t*]. z* needs no column -- it IS the
+%% index, which is exactly why the altitude-error channel vanishes.
+[zSorted, sortIdx] = sort(sol.X(3,:));          % ascending for interp1
+REF = [sol.X(1:2,sortIdx); sol.X(4:7,sortIdx); sol.t(sortIdx)].';
+assert(all(diff(zSorted) > 0), 'sim_closed_loop:zNotMonotone', ...
+    ['guidance altitude is not strictly monotone -- altitude indexing ' ...
+     'needs a monotone descent (true for this campaign: vz<0 throughout)']);
+ct.zLo = zSorted(1);  ct.zHi = zSorted(end);
+ct.ref = @(zq) interp1(zSorted, REF, min(max(zq, zSorted(1)), zSorted(end)), 'pchip').';
+ct.tf  = sol.tf;
 
 % Tolerances loosened from 1e-8/1e-8 to 1e-6/1e-6 (ADAPTATION, task-7 fix
 % report): the direction-preserving magnitude clamp in control_law makes
@@ -172,26 +191,26 @@ function T = control_law(t, x, ctrl, P, ct)
 % pass the model, dispersions only ever enter through the plant/dynamics
 % side (plant_rhs below).
 %
-% ct - terminal-phase schedule (see sim_closed_loop's TERMINAL-PHASE
-%      note): .zTerm altitude gate, .tTermEntry frozen gain time-index,
-%      .vOfZ guidance velocity-vs-altitude lookup.
-tqRaw  = min(max(t, ctrl.tgrid(1)), ctrl.tgrid(end));
-inTerm = x(3) < ct.zTerm;
-if inTerm
-    tqK = ct.tTermEntry;   % HOLD the gain before the tf singularity --
-else                       % fixes the past-tf freeze (see note above)
-    tqK = tqRaw;
-end
-Kt = zeros(3,7);
+% ct - ALTITUDE-INDEXED reference schedule (see the note in
+%      sim_closed_loop's header): .ref(z) -> [rx*;ry*;vx*;vy*;vz*;m*;t*],
+%      .zLo/.zHi clamp range, .tf.
+%
+% NOTE the wall-clock t argument is deliberately UNUSED for the reference:
+% the schedule variable is the vehicle's own altitude x(3). It is kept in
+% the signature because ode45 passes it and because a future
+% time-referenced variant would need it.
+ref  = ct.ref(x(3));                 % reference at the ACTUAL altitude
+tqK  = min(max(ref(7), ctrl.tgrid(1)), ctrl.tgrid(end));   % nominal t at z
+Kt   = zeros(3,7);
 for r = 1:3
     Kt(r,:) = interp1(ctrl.tgrid.', squeeze(ctrl.K(r,:,:)).', tqK, 'linear');
 end
-xref = ctrl.xnom(tqRaw);
-if inTerm
-    Kt(:,3)   = 0;              % altitude error no longer drives thrust
-    xref(4:6) = ct.vOfZ(x(3));  % track v(z), not v*(t)
-end
-Traw = ctrl.Tnom(tqRaw) - Kt * (x - xref);
+xref = [ref(1:2); x(3); ref(3:6)];   % z-reference IS the actual altitude,
+                                     % so the altitude-error channel is
+                                     % identically zero by construction --
+                                     % no gain zeroing special case needed.
+
+Traw = ctrl.Tnom(tqK) - Kt * (x - xref);
 T    = allocate_thrust(Traw, P);
 end
 

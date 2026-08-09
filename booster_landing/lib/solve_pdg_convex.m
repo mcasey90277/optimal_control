@@ -163,7 +163,11 @@ function [v, code] = mf_or_neginf(s)
 %   code: 3 = valid, fully converged; 2 = valid, acceptable-level only;
 %         1 = converged but relaxation not tight (any status);
 %         0 = solver failed/threw (opti.debug iterate, not a solution).
-tightTol = 1e-4 * s.P.Tmax / s.P.m0;
+% Keyed to the GUIDANCE ceiling (task-7b) so the tightness classifier keeps
+% the same meaning relative to the problem actually being solved. Slightly
+% stricter than the old full-Tmax form; measured gaps (~5e-5) sit ~50x below
+% either value, so no probe changes classification.
+tightTol = 1e-4 * s.P.etaT * s.P.Tmax / s.P.m0;
 if ~s.stats.success
     code = 0;
 elseif s.lossless_gap >= tightTol
@@ -180,10 +184,16 @@ function sol = solve_fixed_tf(P, tf, Nc)
 % One convex subproblem at fixed tf, trapezoidal on the LINEAR dynamics.
 import casadi.*
 al = 1 / (P.Isp * P.g0);
-assert(P.m0 - al*P.Tmax*tf > 0, ...
+% GUIDANCE ceiling is DE-RATED (task-7b, P.etaT): every reference below that
+% represents "the most thrust the GUIDANCE may use" -- the max-thrust
+% depletion reference z0/zlb, its Taylor upper bound mu2, the matching
+% initial guess Sg, and this depletion feasibility assert -- uses TmaxG.
+% P.Tmin (engine floor) and the zub bound built from it are NOT de-rated.
+TmaxG = P.etaT * P.Tmax;
+assert(P.m0 - al*TmaxG*tf > 0, ...
     'solve_pdg_convex:massDepletion', ...
-    'max-thrust depletion reference goes non-positive at tf=%.3f (m0=%.1f, al*Tmax*tf=%.1f) -- shrink tf or widen mdry margin', ...
-    tf, P.m0, al*P.Tmax*tf);
+    'max-thrust depletion reference goes non-positive at tf=%.3f (m0=%.1f, al*TmaxG*tf=%.1f) -- shrink tf or widen mdry margin', ...
+    tf, P.m0, al*TmaxG*tf);
 opti = casadi.Opti();
 t   = linspace(0, tf, Nc);  h = t(2) - t(1);
 Lc  = norm(P.r0);  Vc = Lc / tf;      % position/velocity scales (see note above)
@@ -199,14 +209,14 @@ for k = 1:Nc-1
 end
 
 %% Relaxed annulus + Taylor mass bounds about z0(t) (max-thrust depletion):
-z0  = log(P.m0 - al*P.Tmax*t);            % reference depletion
-zlb = log(P.m0 - al*P.Tmax*t);            % lower bound on z
+z0  = log(P.m0 - al*TmaxG*t);             % reference depletion (de-rated)
+zlb = log(P.m0 - al*TmaxG*t);             % lower bound on z  (de-rated)
 zub = log(P.m0 - al*P.Tmin*t);            % upper bound on z
 cotg = 1/tand(P.gs_deg);
 for k = 1:Nc
     opti.subject_to(sum(Uu(:,k).^2) <= S(k)^2);
     opti.subject_to(S(k) >= 0);
-    mu1 = P.Tmin*exp(-z0(k));  mu2 = P.Tmax*exp(-z0(k));
+    mu1 = P.Tmin*exp(-z0(k));  mu2 = TmaxG*exp(-z0(k));
     dz  = Z(k) - z0(k);
     opti.subject_to(S(k) >= mu1*(1 - dz + dz^2/2));
     opti.subject_to(S(k) <= mu2*(1 - dz));
@@ -241,7 +251,7 @@ tauN = t/tf;
 opti.set_initial(Rh, (P.r0/Lc)*(1-tauN));
 opti.set_initial(Vh, (P.v0/Vc)*(1-tauN));
 opti.set_initial(Z, z0);
-Sg = P.Tmax*exp(-z0);
+Sg = TmaxG*exp(-z0);
 opti.set_initial(S, Sg);
 opti.set_initial(Uu, [zeros(2,Nc); Sg]);
 

@@ -13,7 +13,8 @@ sol  = solve_pdg_colloc(P, struct('N', 15));
 assert(sol.stats.success, 'IPOPT did not converge: %s', sol.stats.status);
 assert(sol.mf > P.mdry && sol.mf < P.m0, 'final mass out of range');
 Tmag = sqrt(sum(sol.U.^2, 1));
-assert(all(Tmag >= P.Tmin - 1) && all(Tmag <= P.Tmax + 1), 'annulus violated');
+assert(all(Tmag >= P.Tmin - 1) && all(Tmag <= P.etaT*P.Tmax + 1), ...
+       'guidance annulus violated (ceiling is the DE-RATED etaT*Tmax, task-7b)');
 rxy  = sqrt(sum(sol.X(1:2,:).^2, 1));
 assert(all(rxy <= sol.X(3,:)/tand(P.gs_deg) + 1e-3), 'glideslope violated');
 assert(max(abs(sol.X(1:6,end) - [0;0;0;P.vf])) < 1e-3, ...

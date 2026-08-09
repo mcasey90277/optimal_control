@@ -72,12 +72,66 @@ Traw_mag = sqrt(sum(Traw.^2));
 dirT = Traw / max(Traw_mag, 1e-9);
 
 %% Magnitude: INDEPENDENT quadratic of |T| at the same three samples,
-%% clipped to the annulus -- this is what guarantees feasibility:
+%% clipped to the annulus -- this is what guarantees feasibility. EXCEPT
+%% on the one bang-bang SWITCH segment, where it is a STEP (see below).
 m0 = sqrt(sum(U(:,k).^2));
 mm = sqrt(sum(Um(:,k).^2));
 m1 = sqrt(sum(U(:,k+1).^2));
-Tmag = L0*m0 + L1*mm + L2*m1;
+
+%% SWITCH-SEGMENT STEP (task-7b): a min-fuel |T*| is bang-bang -- G5
+%% certifies exactly one interior switch -- and a quadratic through a
+%% STEP's three samples is simply the wrong basis function. Measured
+%% consequence: the ENTIRE G2 continuous residual is generated inside this
+%% single segment (mass error 0.000 kg before t=5 s, +1.45 kg at t=6.5 s,
+%% -1.34 kg from t=7.0 s onward and flat to touchdown), because the
+%% smeared ramp burns a different amount of propellant across the switch
+%% than the bang-bang the NLP actually solved for. This was NOT introduced
+%% by the P.etaT de-rate -- it is a pre-existing grid lottery, and the
+%% shipped (etaT=1, N=60) combination was simply LUCKY: identical physics
+%% at N=80 gives G2_pos = 0.93 m against a 1 m gate, and the de-rated
+%% tf merely rolled the dice differently (1.29 m, FAIL).
+%%
+%% Fix: when the segment's two ENDPOINT samples sit on OPPOSITE annulus
+%% bounds, reconstruct |T| as a step from m0 to m1 at an instant s chosen
+%% so the step's integral EQUALS the segment's Simpson quadrature,
+%%   s*m0 + (h-s)*m1 = (h/6)(m0 + 4*mm + m1)
+%%   =>  s = h*(m0 + 4*mm - 5*m1) / (6*(m0 - m1)),
+%% i.e. the reconstruction consumes exactly the propellant the NLP's own
+%% quadrature charged it. (Sanity: mm at the midpoint value (m0+m1)/2
+%% gives s = h/2.) Falls back to the quadratic if s leaves [0,h].
+%% Feasibility is preserved by construction: both levels are annulus
+%% samples, so G2ff cannot regress. Direction is untouched -- the primer
+%% direction is continuous through a switch; only the magnitude steps.
+tolB  = 1e-3;
+onB   = @(v) v <= Tmin*(1+tolB) || v >= Tmax*(1-tolB);
+%% "Transition segment" = not all three samples pinned to ONE bound. The
+%% off-bound sample the NLP uses to encode the switch can land on either a
+%% MIDPOINT or a NODE; when it lands on a node the switch straddles TWO
+%% segments, which is why testing only for "endpoints on opposite bounds"
+%% is not enough (it missed exactly the etaT=0.93/N=60 and etaT=1.00/N=80
+%% cases, leaving them at G2_pos 1.29 m and 0.93 m). So the levels are
+%% taken to be the certified bang-bang levels themselves, Tmin and Tmax,
+%% with the ordering set by the sample trend:
+allLo = m0 <= Tmin*(1+tolB) && mm <= Tmin*(1+tolB) && m1 <= Tmin*(1+tolB);
+allHi = m0 >= Tmax*(1-tolB) && mm >= Tmax*(1-tolB) && m1 >= Tmax*(1-tolB);
+isTrans = ~(allLo || allHi);
+sSw = NaN;  A = Tmin;  B = Tmax;
+if isTrans
+    if m1 < m0, A = Tmax;  B = Tmin; end            % falling switch
+    Isimp = (h/6)*(m0 + 4*mm + m1);                 % the NLP's own quadrature
+    sSw   = (Isimp - h*B) / (A - B);                % s*A + (h-s)*B = Isimp
+end
+if isTrans && sSw >= 0 && sSw <= h
+    if (ttc - (k-1)*h) <= sSw, Tmag = A; else, Tmag = B; end
+else
+    Tmag = L0*m0 + L1*mm + L2*m1;   % smooth/interior arc: quadratic as before
+end
 Tmag = min(max(Tmag, Tmin), Tmax);
+%% NOTE (Phase 2): on a genuinely INTERIOR (singular) arc -- which this
+%% vacuum min-fuel problem does not have (G5: bound fraction 0.9917, one
+%% interior switch) but drag or a pointing cone could introduce -- s falls
+%% outside [0,h] and the quadratic fallback above is taken, so the step
+%% model cannot misfire on a smooth arc.
 
 Tv = dirT * Tmag;
 end

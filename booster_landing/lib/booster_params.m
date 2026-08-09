@@ -18,6 +18,29 @@ P.mdry   = 25600;              % dry mass [kg]
 P.m0     = 30000;              % mass at landing-burn start [kg]
 P.Tmax   = 845e3;              % one Merlin 1D, sea level [N]
 P.Tmin   = 0.40 * P.Tmax;      % ~40 percent min throttle [N]
+P.etaT   = 0.93;               % GUIDANCE thrust de-rate [-] (ADJUDICATED
+                                % 2026-08-08, task-7b). The guidance solves
+                                % against etaT*Tmax = 785.85 kN; the tracker
+                                % and the truth sim keep the FULL [Tmin,Tmax]
+                                % annulus, so the 7% is reserved headroom for
+                                % feedback rather than lost capability.
+                                % Rationale: the min-fuel solution rode Tmax
+                                % for 54% of its nodes (certify G5 bound
+                                % fraction 0.9917) with only ~2% of net
+                                % deceleration to spare, so there was NOTHING
+                                % left to add during braking -- a -5% thrust
+                                % dispersion was unrecoverable by ANY tracker
+                                % around that nominal (measured 67.4 m/s
+                                % touchdown, identical under two different
+                                % controllers, i.e. arithmetic not tracking).
+                                % De-rating the guidance buys back real
+                                % authority: the braking arc's net decel goes
+                                % from ~21.5 to ~19.3 m/s^2 nominal, leaving
+                                % the tracker ~2.2 m/s^2 to command against
+                                % dispersions. Costs propellant (see the
+                                % task-7 report's 7b section for the measured
+                                % fuel delta) -- that is the trade the
+                                % adjudication accepted.
 P.Isp    = 282;                % sea-level Isp [s]
 P.g0     = 9.80665;            % standard gravity [m/s^2]
 P.gvec   = [0; 0; -P.g0];      % flat-Earth gravity, z up [m/s^2]

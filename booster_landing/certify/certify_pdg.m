@@ -113,6 +113,15 @@ function rep = certify_pdg(solC, solV, P, tolScale)
 if nargin < 4, tolScale = 1; end
 rep.tolScale = tolScale;
 
+%% GUIDANCE thrust ceiling (task-7b, P.etaT). Every gate below certifies a
+%% GUIDANCE solution, so its upper annulus bound is the de-rated etaT*Tmax,
+%% not the engine's full Tmax: the control reconstruction clamp (G2/G2ff),
+%% the G2ff over-ceiling check, the G4 tightness scale and G5's "on the
+%% upper bound" detector all key off TmaxG. The tracker/sim keep the full
+%% annulus -- see sim_closed_loop.m's allocate_thrust.
+TmaxG = P.etaT * P.Tmax;
+rep.TmaxG = TmaxG;
+
 %% G1: HS defects re-evaluated in plain MATLAB (independent of CasADi):
 N = size(solC.X,2) - 1;  h = solC.tf / N;  dmax = 0;
 for k = 1:N
@@ -152,7 +161,7 @@ TU(:,1:2:end) = solC.U;  TU(:,2:2:end) = solC.Um;
 %% exact per-segment quadratic Lagrange through (U_k, Um_k, U_{k+1}), the
 %% control representation Simpson's rule (hence the HS defects above) is
 %% actually built against, not a global spline across segment boundaries.
-odef = @(tt, xx) pdg_dynamics(xx, hs_quad_ctrl(tt, solC.U, solC.Um, h, N, P.Tmin, P.Tmax), P);
+odef = @(tt, xx) pdg_dynamics(xx, hs_quad_ctrl(tt, solC.U, solC.Um, h, N, P.Tmin, TmaxG), P);
 oo   = odeset('RelTol',1e-10,'AbsTol',1e-10);
 [~, XX] = ode45(odef, [0 solC.tf], solC.X(:,1), oo);
 ef = XX(end,:).' - solC.X(:,end);
@@ -183,11 +192,11 @@ rep.G2_pass = rep.G2_pos < 1 && rep.G2_vel < 0.1 && rep.G2_dm < 0.5;
 tdense = linspace(0, solC.tf, 20*N + 1);
 TmagD  = zeros(size(tdense));
 for kk = 1:numel(tdense)
-    Tvk = hs_quad_ctrl(tdense(kk), solC.U, solC.Um, h, N, P.Tmin, P.Tmax);
+    Tvk = hs_quad_ctrl(tdense(kk), solC.U, solC.Um, h, N, P.Tmin, TmaxG);
     TmagD(kk) = sqrt(sum(Tvk.^2));
 end
 rep.G2ff_below_tmin = max(max(0, P.Tmin - TmagD) / P.Tmin);
-rep.G2ff_above_tmax = max(max(0, TmagD - P.Tmax) / P.Tmax);
+rep.G2ff_above_tmax = max(max(0, TmagD - TmaxG) / TmaxG);
 rep.G2ff_pass = rep.G2ff_below_tmin < 1e-6 && rep.G2ff_above_tmax < 1e-6;
 
 %% G3/G4: cross-method agreement + losslessness (skip if no convex twin):
@@ -206,7 +215,7 @@ else
     % model error, not an agreement tolerance the solvers should close.
     rep.G3_pass = rep.G3_dmf < 1.0*tolScale && rep.G3_dtf < 0.2*tolScale;
     rep.G4_gap  = solV.lossless_gap;
-    rep.G4_pass = rep.G4_gap < 1e-4 * P.Tmax / P.m0;
+    rep.G4_pass = rep.G4_gap < 1e-4 * TmaxG / P.m0;
 end
 
 %% G5: PMP structure. Throttle bang-bang + primer alignment.
@@ -216,7 +225,7 @@ end
 %% signal if only nodes are checked (a node-only check could show
 %% bound_frac=1 while a midpoint sits strictly inside the annulus).
 Tmag = sqrt(sum(TU.^2, 1));
-onLo = Tmag < P.Tmin * 1.001;   onHi = Tmag > P.Tmax * 0.999;
+onLo = Tmag < P.Tmin * 1.001;   onHi = Tmag > TmaxG * 0.999;
 rep.G5_bound_frac = mean(onLo | onHi);
 segs = diff([onHi(1), onHi]);                  % max<->min transitions
 rep.G5_switches = sum(segs ~= 0);

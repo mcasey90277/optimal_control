@@ -91,19 +91,20 @@ m1 = sqrt(sum(U(:,k+1).^2));
 %% at N=80 gives G2_pos = 0.93 m against a 1 m gate, and the de-rated
 %% tf merely rolled the dice differently (1.29 m, FAIL).
 %%
-%% Fix: when the segment's two ENDPOINT samples sit on OPPOSITE annulus
-%% bounds, reconstruct |T| as a step from m0 to m1 at an instant s chosen
-%% so the step's integral EQUALS the segment's Simpson quadrature,
-%%   s*m0 + (h-s)*m1 = (h/6)(m0 + 4*mm + m1)
-%%   =>  s = h*(m0 + 4*mm - 5*m1) / (6*(m0 - m1)),
+%% Fix: on a TRANSITION segment (see the test below), reconstruct |T| as a
+%% step between the certified bang-bang LEVELS A and B -- Tmin and Tmax,
+%% ordered by the sample trend -- at the instant s that makes the step's
+%% integral EQUAL the segment's own Simpson quadrature:
+%%   s*A + (h-s)*B = (h/6)(m0 + 4*mm + m1) =: Isimp
+%%   =>  s = (Isimp - h*B) / (A - B),
 %% i.e. the reconstruction consumes exactly the propellant the NLP's own
-%% quadrature charged it. (Sanity: mm at the midpoint value (m0+m1)/2
-%% gives s = h/2.) Falls back to the quadratic if s leaves [0,h].
-%% Feasibility is preserved by construction: both levels are annulus
-%% samples, so G2ff cannot regress. Direction is untouched -- the primer
+%% quadrature charged it. Falls back to the quadratic if s leaves [0,h].
+%% Feasibility is preserved by construction: both levels ARE the annulus
+%% bounds, so G2ff cannot regress. Direction is untouched -- the primer
 %% direction is continuous through a switch; only the magnitude steps.
 tolB  = 1e-3;
 onB   = @(v) v <= Tmin*(1+tolB) || v >= Tmax*(1-tolB);
+anyOn = onB(m0) || onB(mm) || onB(m1);
 %% "Transition segment" = not all three samples pinned to ONE bound. The
 %% off-bound sample the NLP uses to encode the switch can land on either a
 %% MIDPOINT or a NODE; when it lands on a node the switch straddles TWO
@@ -114,7 +115,15 @@ onB   = @(v) v <= Tmin*(1+tolB) || v >= Tmax*(1-tolB);
 %% with the ordering set by the sample trend:
 allLo = m0 <= Tmin*(1+tolB) && mm <= Tmin*(1+tolB) && m1 <= Tmin*(1+tolB);
 allHi = m0 >= Tmax*(1-tolB) && mm >= Tmax*(1-tolB) && m1 >= Tmax*(1-tolB);
-isTrans = ~(allLo || allHi);
+%% A transition segment must (i) not be pinned to a single bound and
+%% (ii) still TOUCH a bound. Condition (ii) is what keeps the step model
+%% off smooth INTERIOR arcs: without it a segment running from 0.60*Tmax to
+%% 0.64*Tmax -- entirely in the annulus interior, no switch anywhere near --
+%% satisfies (i), and s lands inside [0,h], so it would be reconstructed as
+%% a full Tmin->Tmax bang. Vacuous on this campaign's certified bang-bang
+%% solution (G5: bound fraction 0.9917, one interior switch), but live the
+%% moment drag or a pointing cone introduces a real interior arc.
+isTrans = ~(allLo || allHi) && anyOn;
 sSw = NaN;  A = Tmin;  B = Tmax;
 if isTrans
     if m1 < m0, A = Tmax;  B = Tmin; end            % falling switch
@@ -127,11 +136,13 @@ else
     Tmag = L0*m0 + L1*mm + L2*m1;   % smooth/interior arc: quadratic as before
 end
 Tmag = min(max(Tmag, Tmin), Tmax);
-%% NOTE (Phase 2): on a genuinely INTERIOR (singular) arc -- which this
-%% vacuum min-fuel problem does not have (G5: bound fraction 0.9917, one
-%% interior switch) but drag or a pointing cone could introduce -- s falls
-%% outside [0,h] and the quadratic fallback above is taken, so the step
-%% model cannot misfire on a smooth arc.
+%% NOTE (corrected, task-7b polish): an earlier version of this comment
+%% claimed s falling outside [0,h] was what protected smooth interior arcs.
+%% That was FALSE -- a reviewer demonstrated a 0.60->0.64*Tmax interior arc
+%% whose s lands inside [0,h] and which the step model therefore rewrote as
+%% a full Tmin->Tmax bang. The actual protection is the anyOn term in
+%% isTrans above (the segment must touch a bound); the [0,h] range check is
+%% a second, weaker guard, not the primary one.
 
 Tv = dirT * Tmag;
 end

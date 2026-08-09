@@ -104,12 +104,14 @@ function ctrl = tvlqr_design(sol, P, opts)
 % [1.4,2.1]) at EVERY R from 7e-10 to ~1e-7, confirmed by a fresh sweep.
 %
 % The DISPERSED-case R antagonism, however, is REAL and SURVIVES both the
-% hs_quad_ctrl fix and sim_closed_loop.m's altitude-scheduled
+% hs_quad_ctrl fix and sim_closed_loop.m's then-current altitude-scheduled
 % terminal-phase remedy (zeroed z-position feedback + v(z) tracking below
-% P.zTermBand, fixing the "past-tf freeze" where K(tf)'s structurally-zero
-% position columns silently strip ALL position feedback -- x,y included --
-% for any simulated time past nominal tf; see sim_closed_loop.m's
-% TERMINAL-PHASE note). At N=60, post-both-fixes: dispersed miss<15
+% P.zTermBand). HISTORICAL: that remedy no longer exists -- task-7b
+% replaced it with full altitude-indexed guidance, which makes the
+% zeroed-altitude-channel and the "past-tf freeze" both structurally
+% impossible rather than patched, and retires P.zTermBand entirely. See
+% sim_closed_loop.m's ALTITUDE-INDEXED GUIDANCE note for what actually
+% runs. At N=60, post-both-fixes: dispersed miss<15
 % needs R<~1.5e-9 (R=1.5e-9: miss=13.99, right at the edge; R=3e-9:
 % miss=20.4, over) while dispersed vtd<2 needs R>~5e-8 (R=3e-8: vtd=1.68;
 % R=1e-8: vtd=2.80, over) -- a ~20-30x gap with NO overlap in an
@@ -283,15 +285,27 @@ if ~isfield(opts,'QA')
     qV   = mA^2 * rLat * wA^2 * (4*zA^2 - 2);         % >=0 needs zetaA>=1/sqrt(2)
     opts.QA = diag([qP qP 1e-4 qV qV qVelZ 0]);
 end
-%% Qf(6,6) must MATCH the phase-B vertical weight, or the Riccati boundary
-%% layer silently undoes the design exactly where it matters. With the old
-%% Qf(6,6)=1 the terminal vertical gain collapsed to sqrt(1/r)/m = 1.19 1/s
-%% -- and since altitude indexing evaluates K at t*(z) -> tf as z -> 0, the
-%% vehicle flew the LAST METRE on a 1.19 1/s loop no matter how the rest was
-%% tuned. Setting it to qVelZ makes P(tf) consistent with the phase-B
-%% steady state, so the gain is smooth through touchdown. Measured: this
-%% alone removed every remaining vertical arrest in the task-7b battery.
-if ~isfield(opts,'Qf'), opts.Qf = diag([1e-2 1e-2 1e-2 1 1 qVelZ 0]); end
+%% Qf(6,6) must carry the STEADY-STATE RICCATI VALUE of the vertical
+%% velocity channel, or the boundary layer silently undoes the design
+%% exactly where it matters. With the original Qf(6,6)=1 the terminal
+%% vertical gain collapsed to sqrt(1/r)/m = 1.19 1/s -- and since altitude
+%% indexing evaluates K at t*(z) -> tf as z -> 0, the vehicle flew the LAST
+%% METRE on a 1.19 1/s loop no matter how the rest was tuned.
+%%
+%% The right value is P_ss, NOT qVelZ. Q is a running cost (cost per unit
+%% state^2 per unit TIME); Qf is a terminal cost (cost per unit state^2).
+%% Setting Qf(6,6)=qVelZ mixes the two units. The scalar ARE for this
+%% channel, -p^2/(r m^2) + q = 0, gives
+%%       P_ss = m*sqrt(qVelZ*r),
+%% which reproduces the design bandwidth at tf: K/m = P_ss/(r m^2) =
+%% sqrt(qVelZ/r)/m = omegaVz. Using qVelZ instead put P(tf) 12x high
+%% (111.29 vs 9.27) and spiked K(3,6)/m from 12.6 to 159 1/s over the last
+%% 0.14 s -- a saturation-dominated overshoot layer, not the documented
+%% first-order loop. Corrected here (task-7b polish, reviewer catch).
+if ~isfield(opts,'Qf')
+    PssZ = mB * sqrt(qVelZ * opts.R(3,3));        % ARE steady state, not qVelZ
+    opts.Qf = diag([1e-2 1e-2 1e-2 1 1 PssZ 0]);
+end
 if isfield(opts,'Q'), opts.QA = opts.Q;  opts.QB = opts.Q; end   % legacy
 ctrl.Qf = opts.Qf;   % exposed so tests assert P(tf)=Qf without a magic number
 QA = opts.QA;  QB = opts.QB;  ts = ctrl.tSwitch;  tb = ctrl.tBlend;
@@ -342,7 +356,7 @@ function ts = annulus_switch(sol, P)
 % INCLUDING the braking arc, which is precisely the failure mode the
 % schedule exists to prevent.
 Tmag = sqrt(sum(sol.U.^2, 1));
-mid  = 0.5*(P.Tmin + P.Tmax);
+mid  = 0.5*(P.Tmin + P.etaT*P.Tmax);   % GUIDANCE ceiling, not the engine's
 kx   = find(Tmag(1:end-1) < mid & Tmag(2:end) >= mid, 1, 'first');
 if isempty(kx)
     ts = 0;  return

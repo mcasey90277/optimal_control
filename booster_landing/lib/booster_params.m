@@ -97,9 +97,10 @@ P.vf     = [0; 0; -1.5];       % terminal velocity target [m/s] (ADJUDICATED
                                 % descent-rate schedule can still arrest
                                 % near the ground under some gain/grid
                                 % settings (see sim_closed_loop.m's
-                                % TERMINAL-PHASE note and P.zTermBand below
-                                % for the structural fix that round 4
-                                % applied on top of this BC change).
+                                % ALTITUDE-INDEXED GUIDANCE note for the
+                                % structural fix that finally removed the
+                                % arrest failure mode -- task-7b, superseding
+                                % round 4's P.zTermBand band remedy).
 
 %% Path constraints:
 P.gs_deg        = 30;          % glideslope min elevation angle [deg]
@@ -150,21 +151,13 @@ P.tf_hi  = 22;                 % ADAPTATION (task-7 fix report round 3,
                                 % sweep in this comment's block rather than
                                 % assume 22 still has headroom.
 
-P.zTermBand = 150;             % terminal-phase altitude gate [m] (task-7
-                                % fix report round 4, 2026-08-08): below
-                                % this altitude, sim_closed_loop.m's
-                                % control_law stops feeding z-position error
-                                % into the thrust command and instead tracks
-                                % the guidance's own v(z) profile -- the
-                                % structural fix for the closed-loop arrest
-                                % mechanism (see that file's TERMINAL-PHASE
-                                % note). 150 m is the reviewer-suggested
-                                % starting point (this trajectory's descent
-                                % rate near the end is ~15-20 m/s, so 150 m
-                                % is roughly the last ~8-10 s of NOMINAL
-                                % flight time before the final high-gain
-                                % braking arc -- not tightly tuned; a sweep
-                                % of this value was not run this round).
+% P.zTermBand (terminal-phase altitude gate, 150 m) was RETIRED in task-7b.
+% It gated round 4's partial remedy -- zeroing z-position feedback and
+% tracking v(z) only below that altitude. Task-7b replaced that with full
+% altitude-indexed guidance in sim_closed_loop.m, under which the
+% altitude-error channel is identically zero EVERYWHERE by construction, so
+% there is no band to gate and no hand-picked 150 m to justify. Nothing
+% references it; kept here only as this note.
 
 %% Atmosphere (Phase 2, OFF by default -- vacuum keeps convexification exact):
 P.drag.on   = false;

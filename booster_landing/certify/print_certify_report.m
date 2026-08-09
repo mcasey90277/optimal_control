@@ -66,7 +66,7 @@ if isequal(rep.G4_pass, 'skipped')
     fprintf('%-30s %14s   %20s   %s\n', 'G4 lossless gap', '--', '--', 'skipped');
 else
     fprintf('%-30s %14.6g   %20s   %s\n', 'G4 lossless gap [m/s^2]', rep.G4_gap, ...
-        '< 1e-4*Tmax/m0', bool2str(rep.G4_pass));
+        '< 1e-4*TmaxG/m0', bool2str(rep.G4_pass));
 end
 
 % G5 (three data rows + structure/primer verdicts, no tolScale):

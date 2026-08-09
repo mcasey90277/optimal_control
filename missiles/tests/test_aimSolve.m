@@ -351,7 +351,7 @@ function test_aimSolve()
     assert(info.nEval == 1 + 2 + (oStall.maxHalve + 1), ...
         ['a one-iteration stall costs 1 initial + 2 probes + %d trials = ', ...
          '%d evaluations, it cost %d'],oStall.maxHalve + 1, ...
-        3 + oStall.maxHalve,info.nEval);
+        1 + 2 + (oStall.maxHalve + 1),info.nEval);
     assert(info.nInfeasible == 0, ...
         ['nothing failed to FLY in the stalled case; the steps merely did ', ...
          'not help. nInfeasible is %d'],info.nInfeasible);
@@ -523,6 +523,56 @@ function test_aimSolve()
          '+ 1 probe = 2 evaluations, it cost %d'],infoO.nEval);
     assert(contains(infoO.message,'overflowed'), ...
         'the overflow message must say what happened: %s',infoO.message);
+
+%% -------------------------------------------------------------------
+%% THE NEWTON STEP OVERFLOWS BENEATH A PERFECT CONDITION NUMBER
+%% -------------------------------------------------------------------
+%% The fourth and least obvious way the step can fail to exist, and the one
+%% that survived being argued away once already. The tempting claim is that
+%% the condition test makes a finiteness test on the step unreachable,
+%% because it bounds sVal(2) below by sVal(1)/condMax. It does not: condJ is
+%% a RATIO, and a ratio constrains nothing about magnitude. Both singular
+%% values can underflow together while condJ sits at exactly 1.
+%%
+%% satResid probed with dx0 = 1e308 does precisely that. The residual varies
+%% by at most 1e4 across a step of 1e308, so both difference quotients come
+%% back finite but denormal, the Jacobian is diagonal and perfectly
+%% conditioned, and dividing the residual by those singular values
+%% overflows. Every guard upstream is satisfied and the step is still NaN.
+%%
+%% Without the finiteness test the NaN direction reaches the line search,
+%% which halves a NaN twelve times and refuses with stepStalled -- advising
+%% a larger opts.maxHalve, which cannot ever help, because the fault is that
+%% dx0 is scaled wrongly and not that the geometry is hard:
+            dxHuge = [1.0e308;1.0e308];
+    [xN,fN,infoN] = coorbital.util.aimSolve(@satResid,[10.0;10.0],dxHuge,1.0);
+    assert(~infoN.converged, ...
+        'an overflowing Newton step was reported as converged');
+    assert(strcmp(infoN.identifier,'coorbital:aimSolve:stepNotFinite'), ...
+        ['a non-finite Newton step must have its own identifier and must ', ...
+         'NOT be left to the line search to misdiagnose as stepStalled; ', ...
+         'got ''%s'''],infoN.identifier);
+    assert(all(isfinite(xN)) && all(isfinite(fN)), ...
+        'the overflowing-step case must still return finite numbers: x = %s f = %s', ...
+        mat2str(xN),mat2str(fN));
+
+%% The premise the identifier rests on, asserted rather than assumed. If a
+%% future change to satResid or to the difference scheme stopped producing a
+%% well-conditioned denormal Jacobian, this case would still refuse -- for
+%% some other reason -- and would silently stop testing what it claims to:
+    assert(numel(infoN.condJ) == 1 && infoN.condJ(1) <= 1.0e8, ...
+        ['this case is only meaningful if the Jacobian PASSED the ', ...
+         'conditioning gate: condJ = %s against condMax 1e8'], ...
+        mat2str(infoN.condJ));
+    assert(infoN.nShrink == 0, ...
+        ['the step must be refused BEFORE the line search, not after it ', ...
+         'has wasted %d halvings on a NaN'],infoN.nShrink);
+    assert(contains(infoN.message,'SCALING'), ...
+        ['the message must name the actual fault, which is scaling and ', ...
+         'not conditioning: %s'],infoN.message);
+    assert(~contains(infoN.message,'stalled'), ...
+        ['the message must not blame the line search for a step that ', ...
+         'never reached it: %s'],infoN.message);
 
 %% -------------------------------------------------------------------
 %% A RESIDUAL THAT THROWS is handled by shrinkage, not by aborting
@@ -814,6 +864,41 @@ function test_aimSolve()
         else
                  f = [-1.0e308;0];
         end
+    end
+
+    function f = satResid(x)
+    %% Purpose:
+    %
+    %  A SATURATING residual -- bounded above by 1e4 and flattening out as
+    %  either control grows. Nothing exotic: a bounded miss distance behaves
+    %  exactly like this once the aim point has been driven off the far side
+    %  of the planet, so this is the shape a real targeting residual takes at
+    %  a bad guess, not a contrivance.
+    %
+    %  Probed with an absurdly large dx0 it produces a Jacobian that is
+    %  finite, DIAGONAL, and perfectly conditioned -- condJ is exactly 1 --
+    %  whose singular values are nonetheless denormal, because the residual
+    %  changed by at most 1e4 over a step of 1e308. Dividing a normal-
+    %  magnitude residual by a denormal singular value overflows, so the
+    %  Newton step is not finite even though every guard upstream of it is
+    %  satisfied. This is the case that shows the condition-number test is a
+    %  RATIO test and cannot stand in for a magnitude test.
+    %
+    %% Inputs:
+    %
+    %  x                [2 x 1]                     Controls (dimensionless)
+    %
+    %% Outputs:
+    %
+    %  f                [2 x 1]                     Residuals (m), bounded on
+    %                                               [0, 1e4)
+    %
+    %% Revision History:
+    %  Michael Casey                                                08/08/2026
+    %  Copyright 2026 Coorbital, Inc.
+    %% ------------------------ Begin Code Sequence ---------------------------
+                 f = [1.0e4 - 1.0e4./(1 + abs(x(1))); ...
+                      1.0e4 - 1.0e4./(1 + abs(x(2)))];
     end
 
     function f = countedMild(x)

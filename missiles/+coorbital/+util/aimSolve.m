@@ -214,7 +214,7 @@ function [xSol,fAch,info] = aimSolve(fResid,x0,dx0,tolF,opts)
 %  already carries. What must never happen is a silent near miss, and
 %  converged = false is what prevents it.
 %
-%  The six refusals, all with converged = false:
+%  The seven refusals, all with converged = false:
 %      coorbital:aimSolve:toleranceNotMet    opts.maxIter iterations went by
 %                                            without max(abs(f)) reaching tolF
 %      coorbital:aimSolve:singularJacobian   the Jacobian's condition number
@@ -235,7 +235,12 @@ function [xSol,fAch,info] = aimSolve(fResid,x0,dx0,tolF,opts)
 %                                            their difference quotient
 %                                            overflowed. Remedy: rescale
 %                                            fResid
-%  The last three are kept apart rather than merged into one "the Jacobian
+%      coorbital:aimSolve:stepNotFinite      the Jacobian was finite and well
+%                                            conditioned, but its singular
+%                                            values were denormal and the
+%                                            Newton step overflowed. Remedy:
+%                                            SHRINK dx0, or rescale fResid
+%  The last four are kept apart rather than merged into one "the Jacobian
 %  could not be built" because their remedies are not the same, and two of
 %  them are exact opposites. A single message telling a caller to shrink dx0
 %  when the fix is to enlarge it is worse than no message.
@@ -635,16 +640,24 @@ while true
 %% residual into the singular basis, divide by the singular values, rotate
 %% back. No inverse is formed anywhere.
 %%
-%% There is deliberately no second finiteness test on the step. The two tests
-%% above already bound it: the Jacobian entries are finite, and the condition
-%% test bounds sVal(2) below by sVal(1)/condMax, so the division cannot
-%% overflow unless the residual itself is within a factor of condMax of the
-%% floating-point ceiling. A test for that would be unreachable code, and
-%% unreachable code is worse than absent code because it reads as protection.
-%% If it ever did happen the solve still refuses rather than misbehaves: an
-%% infinite trial point is simply an infeasible one, and the line search
-%% below shrinks and then reports stepStalled:
+%% The step needs a finiteness test of its own, and the reason is worth
+%% stating because the obvious argument against it is wrong. The condition
+%% test above is a RELATIVE bound: condJ = sVal(1)/sVal(2) constrains the
+%% RATIO of the singular values and says nothing whatever about their
+%% magnitude. Both can underflow together while condJ sits at 1, which is as
+%% far under any sane ceiling as a matrix can get. A difference step far
+%% larger than the residual's own dynamic range does exactly that -- the
+%% difference quotients come back finite but denormal, the ratio is perfect,
+%% and dividing a finite residual by a denormal singular value overflows.
+%% Left untested the resulting NaN direction reaches the line search, which
+%% shrinks a NaN twelve times and then blames the geometry: it reports
+%% stepStalled and advises raising maxHalve, a remedy that cannot ever work
+%% because the fault is scaling, not conditioning:
               sDir = -(vJac*((uJac'*fCur)./sVal));
+    if ~all(isfinite(sDir))
+             ident = 'coorbital:aimSolve:stepNotFinite';
+        break;
+    end
 
 %% Cap the step with ONE scale factor rather than clipping the components
 %% independently: clipping would rotate the step off the Newton direction and
@@ -796,6 +809,22 @@ elseif strcmp(ident,'coorbital:aimSolve:jacobianNotFinite')
                      'probe does not straddle whatever the residual is ', ...
                      'doing there.'],xCur(1),xCur(2),kIter,kBad,dx0(kBad), ...
                      kBad);
+elseif strcmp(ident,'coorbital:aimSolve:stepNotFinite')
+      info.message = sprintf(['The Newton step overflowed at ', ...
+                     'x = [%.10g, %.10g] after %d iteration(s). The ', ...
+                     'Jacobian was finite and its condition number was ', ...
+                     '%.6g, comfortably inside opts.condMax = %.6g -- but ', ...
+                     'the condition number is a RATIO, and both singular ', ...
+                     'values are denormal (the smaller is %.6g), so ', ...
+                     'dividing the residual by them overflows. This is a ', ...
+                     'SCALING fault, not a geometric one: the difference ', ...
+                     'steps [%.6g, %.6g] are far larger than the range ', ...
+                     'over which fResid actually varies, so every quotient ', ...
+                     'came back finite but vanishingly small. Shrink dx0, ', ...
+                     'or rescale fResid. The best point visited was ', ...
+                     'x = [%.10g, %.10g], achieving [%.6g, %.6g].'], ...
+                     xCur(1),xCur(2),kIter,condJ,opts.condMax,sVal(2), ...
+                     dx0(1),dx0(2),xSol(1),xSol(2),fAch(1),fAch(2));
 else
       info.message = sprintf(['fResid would not evaluate at the ', ...
                      'finite-difference probe point beside control %d at ', ...

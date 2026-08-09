@@ -451,7 +451,7 @@ if sc ~= 1
     noteStr = sprintf('booster drawn at %.3gx scale  |  %s', sc, noteStr);
 end
 text(axO, 0.022, 0.175, noteStr, 'Color', col.dim, 'FontSize',12, 'FontName','Helvetica');
-text(axO, 0.978, 0.175, 'Coorbital  |  M. Casey', 'Color', col.dim*0.85, ...
+text(axO, 0.978, 0.175, 'M. Casey', 'Color', col.dim*0.85, ...
      'FontSize',12, 'FontName','Helvetica', 'HorizontalAlignment','right');
 
 % Fade / card layer: a full-frame black patch whose alpha is animated.

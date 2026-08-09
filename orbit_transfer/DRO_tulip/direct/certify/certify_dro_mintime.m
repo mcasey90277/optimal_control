@@ -213,20 +213,12 @@ if verbose
 end
 end
 
-er = norm(z(1:3) - o.X(1:3,end));
-ev = norm(z(4:6) - o.X(4:6,end));
-end
-
 % ---------------------------------------------------------------------------
 function s = local_accum(globKm, sumKm)
 % LOCAL_ACCUM  Whether the local errors accumulated or cancelled.
 % INPUTS: globKm; sumKm   OUTPUTS: s [char]
 if globKm < sumKm, s = 'CANCEL'; else, s = 'ACCUMULATE'; end
 end
-
-end
-
-
 
 % ---------------------------------------------------------------------------
 function s = local_mark(tf)

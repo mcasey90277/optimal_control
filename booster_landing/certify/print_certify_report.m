@@ -29,6 +29,18 @@ if tolScale ~= 1
 end
 fprintf('%s\n', repmat('-', 1, 84));
 
+% G0 (time-base consistency, two rows; scored since the 2026-08-09
+% external review turned certify_pdg's two time-base assertions into a
+% gate -- see that file's G0 block. The preserved assertion text is
+% printed underneath whenever G0 fails, so the diagnosis a caller used to
+% get from the exception message is still on screen):
+if isfield(rep, 'G0_pass')
+    prow('G0 t(end) vs tf err [s]', rep.G0_tf_err, rep.G0_tf_tol, '<', 1);
+    prow('G0 grid spacing err [s]', rep.G0_dt_err, rep.G0_dt_tol, '<', 1);
+    gsummary('G0', rep.G0_pass);
+    if ~rep.G0_pass, fprintf('     %s\n', rep.G0_msg); end
+end
+
 % G1 (single row, no tolScale):
 prow('G1 max HS defect', rep.G1_defect, 1e-6, '<', 1);
 
@@ -45,16 +57,20 @@ prow('G2ff below-Tmin frac',  rep.G2ff_below_tmin, 1e-6, '<', 1);
 prow('G2ff above-Tmax frac',  rep.G2ff_above_tmax, 1e-6, '<', 1);
 gsummary('G2ff', rep.G2ff_pass);
 
-% G3 (two data rows + one info row, dmf/dtf scaled by tolScale). |dmf|'s
-% nominal threshold is 1.0 kg (was 0.1 kg -- adjudicated 2026-08-08, a
-% measurement gate over the genuine Taylor mass-bound model error; see
-% certify_pdg.m's "G3 |dmf| gate" header note):
+% G3 (THREE data rows, all scaled by tolScale). |dmf|'s nominal threshold
+% is 1.0 kg (was 0.1 kg -- adjudicated 2026-08-08, a measurement gate over
+% the genuine Taylor mass-bound model error; see certify_pdg.m's "G3
+% |dmf| gate" header note). traj_Linf became a SCORED row at 5.0 m in the
+% 2026-08-09 external-review fix wave -- it printed as '(info)' here while
+% contributing nothing to G3_pass, which is precisely the "bare data row
+% next to another row's verdict" this printer's own header says it exists
+% to prevent (see certify_pdg.m's "G3 trajectory row" note):
 if isequal(rep.G3_pass, 'skipped')
-    fprintf('%-30s %14s   %20s   %s\n', 'G3 cross-method (dmf, dtf)', '--', '--', 'skipped');
+    fprintf('%-30s %14s   %20s   %s\n', 'G3 cross-method (dmf,dtf,traj)', '--', '--', 'skipped');
 else
-    prow('G3 |dmf| [kg]', rep.G3_dmf, 1.0, '<', tolScale);
-    prow('G3 |dtf| [s]',  rep.G3_dtf, 0.2, '<', tolScale);
-    fprintf('%-30s %14.6g   %20s   %s\n', 'G3 traj Linf [m]', rep.G3_traj_Linf, '(info)', '');
+    prow('G3 |dmf| [kg]',      rep.G3_dmf,       1.0, '<', tolScale);
+    prow('G3 |dtf| [s]',       rep.G3_dtf,       0.2, '<', tolScale);
+    prow('G3 traj Linf [m]',   rep.G3_traj_Linf, 5.0, '<', tolScale);
     gsummary('G3', rep.G3_pass);
 end
 
@@ -73,14 +89,12 @@ end
 prow('G5 bound fraction',    rep.G5_bound_frac, 0.95, '>=', 1);
 prow('G5 interior switches', rep.G5_switches,   2,    '<=', 1);
 fprintf('%-30s %14s   %20s   %s\n', 'G5 structure (bound+switch+max-last)', '', '', bool2str(rep.G5_structOk));
-% Primer row (task-11, Phase 2; corrected in the task-11 close-out review
-% round): LOOSENED to a 10 deg threshold under P.drag.on, not dropped to
-% an unscored info row -- certify_pdg's G5_pass requires G5_structOk AND
-% primer_deg < 10 under drag (was < 1 in vacuum), so this row must stay a
-% real scored prow or the printed table would silently stop matching what
-% G5_pass actually checks (see certify_pdg.m's "G5 primer LOOSENING under
-% drag" header note for the measured evidence and the margin rationale for
-% 10 deg).
+% Primer row: ONE threshold, 0.01 deg, for vacuum and drag alike
+% (external code review, 2026-08-09). The task-11 drag loosening to 10 deg
+% is gone -- the drag/vacuum difference it accommodated was a comparison
+% made at the wrong instant (node control vs segment-midpoint dual), fixed
+% in certify_pdg; see that file's "G5 primer TIME BASE" header note for
+% the measurement tables behind both the fix and the new number.
 %
 % CONE GUARD (final-review fix, 2026-08-09): under a finite pointing cone
 % the primer sub-check is not a valid PMP necessary condition (see
@@ -90,10 +104,8 @@ fprintf('%-30s %14s   %20s   %s\n', 'G5 structure (bound+switch+max-last)', '', 
 if isfield(rep, 'G5_primer_mode') && isequal(rep.G5_primer_mode, 'skipped-cone')
     fprintf('%-30s %14.6g   %20s   %s\n', 'G5 primer angle [deg] (info, cone active)', ...
         rep.G5_primer_deg, '(skipped-cone)', '');
-elseif isfield(rep, 'drag_on') && rep.drag_on
-    prow('G5 primer angle [deg] (drag-loosened)', rep.G5_primer_deg, 10, '<', 1);
 else
-    prow('G5 primer angle [deg]', rep.G5_primer_deg, 1, '<', 1);
+    prow('G5 primer angle [deg]', rep.G5_primer_deg, 0.01, '<', 1);
 end
 gsummary('G5', rep.G5_pass);
 

@@ -6,9 +6,13 @@
 % GRID ADAPTATION from the brief's literal N=20/Nconv=60 (documented per
 % this task's own supersession note: "the brief predates tasks 5-9"):
 % task-5's report established that certify_pdg's G5 primer-alignment gate
-% needs N>=40 to clear the <1 deg threshold (it measures ~1.7 deg at
-% N=20, a real coarse-grid effect, not a bug -- see that report and
-% certify_pdg.m's G5 section). N=40/Nconv=90 is the exact coarse pair
+% needed N>=40 to clear the then-<1 deg threshold (it measured ~1.7 deg at
+% N=20). That grid dependence turned out to be an O(h) time-base bug in
+% the gate itself, fixed 2026-08-09 -- the primer angle is now at the acos
+% machine-precision floor on every grid (see certify_pdg.m's "G5 primer
+% TIME BASE" note), so this is no longer WHY N=40. It stays because it is
+% the coarse pair test_certify_nominal.m characterizes and asserts
+% all_pass on. N=40/Nconv=90 is the exact coarse pair
 % test_certify_nominal.m already uses and already knows clears ALL FIVE
 % gates outright, so this test reuses it rather than picking a new grid
 % to characterize: fast (measured ~23 s -- dominated by the TVLQR Riccati

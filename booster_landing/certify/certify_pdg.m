@@ -22,17 +22,22 @@ function rep = certify_pdg(solC, solV, P, tolScale)
 % G3 (cross-method): final mass / final time / position-trajectory
 %                    agreement between the independently-formulated
 %                    collocation (nonconvex annulus) and convexified
-%                    (lossless relaxation) solvers. The |dmf| threshold is
+%                    (lossless relaxation) solvers. ALL THREE are scored
+%                    (the trajectory L-inf row was info-only before the
+%                    2026-08-09 external-review fix wave -- see the "G3
+%                    trajectory row" note below). The |dmf| threshold is
 %                    a MEASUREMENT of Taylor-bound model error (adjudicated
 %                    2026-08-08, see the "G3 |dmf| gate" note below), not
 %                    an arbitrary agreement tolerance.
 % G4 (losslessness): the convex relaxation gap (||u||-sigma) is tight.
 % G5 (PMP structure): throttle bang-bang (>=95% of node+midpoint samples
 %                    on a bound, <=2 interior switches, max-thrust at
-%                    touchdown) and primer-vector alignment (thrust
-%                    parallel to the velocity-costate direction), the two
-%                    textbook necessary conditions for a mass-optimal
-%                    3-DOF landing burn (Lawden/PMP).
+%                    touchdown) and primer-vector alignment (MIDPOINT
+%                    thrust parallel to the segment's velocity-costate
+%                    direction -- see the "G5 primer TIME BASE" note
+%                    below for why midpoint, not node), the two textbook
+%                    necessary conditions for a mass-optimal 3-DOF
+%                    landing burn (Lawden/PMP).
 %
 % G2 control reconstruction (CHANGED from the brief's literal global-pchip
 % spec, documented in the task-5 fix report): the brief's original G2 flew
@@ -51,55 +56,93 @@ function rep = certify_pdg(solC, solV, P, tolScale)
 % HS actually assumes. G2 no longer needs any tolScale accommodation as a
 % result (see tolScale doc below).
 %
-% G5 primer LOOSENING under drag (task-11 fix, Phase 2, 2026-08-09;
-% CORRECTED in the task-11 close-out review round, 2026-08-09): documented
-% per the task-11 brief step 2's own fallback instruction, "if primer
-% alignment fails ONLY in the drag case, relax G5 for drag runs to the
-% bang-bang structure check alone." NOTE this is a DIFFERENT brief
-% instruction from the primer SIGN-flip rule applied below at the pdir
-% computation ("if G5_primer_deg comes out near 180 deg ... flip pdir sign
-% ONCE") -- an earlier version of this note conflated the two quotes as
-% if one were the "companion" of the other; that framing was wrong and is
-% fixed here. What "relax" means was ALSO corrected: the first pass at
-% this fix set rep.G5_pass = rep.G5_structOk alone under drag, i.e.
-% REMOVED the primer check entirely rather than loosening it. Review
-% caught this as a real regression risk: with the primer check gone, a
-% future bug that flips pdir's sign (or otherwise sends primer_deg toward
-% ~90-180 deg) would silently PASS G5 under drag -- exactly the class of
-% bug the sign-flip fix earlier in this file exists to catch, and exactly
-% the kind of "loosen a gate until it's not a gate" failure this campaign
-% has otherwise been careful to avoid (see the G3 |dmf| gate note below for
-% the house standard: a relaxed threshold must still be a MEASUREMENT with
-% headroom, not an escape hatch). FIX: rep.G5_pass now requires
-% rep.G5_structOk AND rep.G5_primer_deg < 10 (not < 1) under drag -- the
-% detector stays, only the threshold loosens. MEASURED, not assumed: the
-% same coarse grid (N=30) that gives a vacuum primer_deg of 1.14 deg (a
-% known, PRE-EXISTING discretization artifact -- test_certify_nominal.m's
-% own note: N>=40 is needed to clear <1 deg in vacuum, N=20 measures ~1.7
-% deg) gives 5.11 deg under drag; at the PRODUCTION grid (N=60, where
-% vacuum's own primer clears comfortably under 1 deg) drag still measures
-% 2.61 deg -- i.e. finer meshing does NOT cure it the way it cures the
-% vacuum artifact, so this is a genuine drag-model effect, not (only) a
-% discretization one. Analytically the direction condition should be
-% UNCHANGED by drag: the Hamiltonian's control-dependent term,
-% lambda_v.T/m - lambda_m|T|/(Isp g0), does not involve aD (drag enters
-% only through the velocity/altitude/mass BLOCK of the dynamics Jacobian
-% A, never through B = d(xdot)/dT), so the maximizing T direction is still
-% +lambda_v/|lambda_v| regardless of P.drag.on. The measured degradation
-% is therefore most likely in how well the discrete lam_defect dual
-% approximates the CONTINUOUS costate once the defect residual's own
-% curvature grows under the added |v|v/m nonlinearity (drag couples
-% velocity components through vmag = sqrt(sum(v.^2)) in a way vacuum's
-% purely-linear-in-v dynamics do not) -- a genuine open question, not
-% resolved here; left as this file's flag for the min-fuel paper's future
-% work list rather than force-closed by a grid search that was not run to
-% convergence in this task. The 10 deg threshold was chosen for margin,
-% not tightness: it sits >3x above the measured 2.61 deg production-grid
-% value (comfortable headroom against normal run-to-run noise) while still
-% catching a gross misalignment or sign-flip regression, which would show
-% up in the 90-180 deg range, nowhere near the pass/fail boundary.
+% G5 primer TIME BASE -- the midpoint fix, and the re-tightening it
+% earned (external code review, 2026-08-09; SUPERSEDES the "G5 primer
+% LOOSENING under drag" note this file carried from task-11, whose
+% explanation is now known to have been WRONG).
+%
+% What the earlier note claimed: the primer angle measured 0.57 deg in
+% vacuum and 2.61 deg under drag at the production grid (N=60), the drag
+% number did not shrink with mesh refinement the way the vacuum number
+% did, and the residual was therefore "most likely" a genuine drag-model
+% effect in how the discrete dual approximates the continuous costate --
+% left as an open question, with the drag primer gate loosened from 1 deg
+% to 10 deg to accommodate it.
+%
+% ROOT CAUSE (found by the external review, then MEASURED here): the
+% comparison was made at the wrong instant. solC.lam_defect(:,k) is the
+% multiplier of the Hermite-Simpson defect of SEGMENT k, and the discrete
+% stationarity condition it satisfies is the one for that segment's
+% MIDPOINT control Um(:,k), not for either end node. Um(:,k) enters the
+% NLP through exactly one constraint block -- segment k's defect, via the
+% Simpson weight (4h/6)*f(xm,Um) -- plus its own annulus/cone rows, whose
+% gradients are parallel to Um itself. So
+%     0 = dL/dUm_k = -(4h/6) * B(xm)' * lam_k + (annulus mult) * Um_k
+% forces lam_v,k EXACTLY parallel to Um_k (B's velocity rows are I/m and
+% its mass row is -T'/(|T| Isp g0), both radial in T). A NODE control
+% U(:,k), by contrast, appears in TWO adjacent defect blocks AND inside
+% both neighbours' xm = 0.5(x_k+x_k+1) + (h/8)(f_k - f_k+1) terms, so its
+% stationarity condition mixes lam_{k-1} and lam_k -- comparing lam_k to
+% U(:,k) is an O(h) time-shifted comparison, and O(h) is exactly what
+% the old numbers were.
+%
+% MEASURED (2026-08-09, this file's own solutions, node vs midpoint
+% comparison against the same duals):
+%     N     case   node_deg    mid_deg
+%    20     vac     1.7238     8.5e-07
+%    30     vac     1.1424     8.5e-07
+%    40     vac     0.8534     8.5e-07
+%    60     vac     0.5741     8.5e-07
+%    20    drag     8.6275     1.2e-06
+%    30    drag     5.1122     1.2e-06
+%    40    drag     3.6264     1.2e-06
+%    60    drag     2.6051     1.2e-06
+% The node column halves as N doubles (O(h), the signature of a time-base
+% error); the midpoint column is CONSTANT at 1.2e-06 deg, which is not a
+% physical number at all -- it is the double-precision floor of acos near
+% 1: acosd(1-eps) = 1.20742e-06 deg. Alignment is exact to floating point,
+% in vacuum AND under drag, at every grid. There is no drag effect, no
+% discretization artifact, and nothing left open: both were one bug.
+%
+% RE-TIGHTENED THRESHOLD: 0.01 deg, ONE gate for vacuum and drag alike
+% (the drag branch is deleted, not merely reduced -- there is no measured
+% drag/vacuum difference left to accommodate). Why 0.01 and not "3x the
+% measurement": the measurement IS machine epsilon, so 3x it would be 3x
+% numerical noise. What the angle now measures is the KKT stationarity
+% residual of the solve, so the honest calibration is against solver
+% CONVERGENCE DEPTH, measured here at N=60 by varying opts.tol alone:
+%     tol      vac_deg      drag_deg
+%    1e-04     0.03704      92.113
+%    1e-06     5.09e-05      0.00758
+%    1e-08     1.21e-06      4.62e-04
+%    1e-09     8.54e-07      2.40e-05
+%    1e-11     1.21e-06      1.21e-06
+% Both shipped defaults (1e-9 vacuum, 1e-11 drag -- see
+% solve_pdg_colloc.m) sit on the acos floor. 0.01 deg therefore carries
+% ~4 orders of margin over every shipped configuration and tolerates a
+% full 3 orders of degradation in convergence depth, while still FAILING
+% on a genuinely unconverged solve (the tol=1e-4 row, which the old 10 deg
+% drag gate would have passed at 0.037 deg and failed only in the drag
+% column) and on any sign-flip or gross-misalignment regression (90-180
+% deg, nowhere near the boundary). Net effect: the gate is 1000x tighter
+% than the vacuum semantics it replaces and 1000x tighter than the drag
+% loosening it deletes, and it is now a real first-order-optimality
+% check rather than a discretization-noise tolerance.
+%
 % Structure (bang-bang, <=2 switches, max-last) is unaffected and still
 % gates every run, drag or vacuum.
+%
+% G3 trajectory row (external code review, 2026-08-09): G3_traj_Linf --
+% the worst position disagreement between the two solvers' trajectories,
+% sampled at 200 common times -- was COMPUTED and printed but never
+% entered G3_pass, so two solutions could agree on final mass and final
+% time (the only scored rows) while taking materially different paths to
+% the pad. It is now scored at 5.0 m, alongside |dmf| and |dtf|. The
+% number is dimensioned from the mission, not from the measurement: 5.0 m
+% is a third of the P.pad_radius = 15 m landing gate, i.e. the two
+% independently-formulated solvers are required to agree on WHERE the
+% vehicle is to well within the accuracy that decides mission success.
+% Measured at the production grid: 0.373 m, a 13x margin.
 %
 % G5 primer INVALID under a finite pointing cone (final-review fix,
 % 2026-08-09): the primer-vector sub-check above (thrust parallel to the
@@ -117,17 +160,27 @@ function rep = certify_pdg(solC, solV, P, tolScale)
 % nominal grid): both solvers independently ride the cone boundary at
 % ~15.000 deg from vertical (collocation and convexification agree to
 % ~4e-3 deg -- itself a strong cross-method structural check, just not
-% the primer's), while the OLD naive primer angle reads ~6.27 deg at the
+% the primer's), while the naive primer angle reads ~6.27 deg at the
 % same solution -- comfortably over the vacuum <1 deg gate on a
 % perfectly-converged optimum, which is exactly the false-fail this guard
-% exists to prevent. FIX: when P.theta_max_deg is finite, the primer
+% exists to prevent. RE-MEASURED after the midpoint time-base fix
+% (2026-08-09, P.theta_max_deg=15, N=60): the corrected MIDPOINT primer
+% angle reads 7.322 deg -- essentially identical to the node value
+% (7.322 deg) at the same solution, i.e. the cone gap is a REAL
+% constrained-vs-unconstrained direction offset that does not go away
+% with the time-base fix, unlike the vacuum/drag artifact. The guard is
+% therefore still required, and now against a 0.01 deg gate it matters
+% far MORE than it did against 1/10 deg. (Midpoint tilt from vertical on
+% that solution: max 15.000 deg, min 2.262 deg -- the solution really
+% does ride the cone boundary over part of the arc.) FIX: when
+% P.theta_max_deg is finite, the primer
 % sub-check is not evaluated as a pass/fail gate at all --
 % rep.G5_primer_deg is still computed and reported (info only, for
 % inspection), rep.G5_primer_mode is set to 'skipped-cone' (the same
 % pattern G3/G4 use when solV is []; see print_certify_report.m), and
-% rep.G5_pass rests on rep.G5_structOk alone. The drag-loosened 10-deg
-% primer bound above only ever applies in the P.theta_max_deg=Inf branch
-% -- a cone run cannot also be scored against it. Structure (bang-bang,
+% rep.G5_pass rests on rep.G5_structOk alone. The 0.01-deg primer bound
+% above only ever applies in the P.theta_max_deg=Inf branch -- a cone run
+% cannot also be scored against it. Structure (bang-bang,
 % <=2 switches, max-last) is unaffected and still gates every run. This
 % experiment is otherwise out of scope for this fix wave (P.theta_max_deg
 % still defaults to Inf everywhere in this campaign's certified results);
@@ -187,16 +240,28 @@ function rep = certify_pdg(solC, solV, P, tolScale)
 %       reconstructed control ever outside [Tmin,Tmax] BETWEEN
 %       nodes+midpoints, dense-sampled; see the G2b note above G2ff_pass)
 %     .G3_dmf, .G3_dtf, .G3_traj_Linf, .G3_pass ('skipped' if solV==[])
+%       -- all three rows are SCORED (traj_Linf was info-only before the
+%       2026-08-09 review fix; see the "G3 trajectory row" note above)
 %     .G4_gap, .G4_pass ('skipped' if solV==[])
 %     .G5_bound_frac, .G5_switches, .G5_structOk, .G5_primer_deg, .G5_pass
 %     .G5_primer_mode - 'scored' (default, P.theta_max_deg=Inf) or
 %       'skipped-cone' (P.theta_max_deg finite -- primer_deg is info-only,
 %       G5_pass rests on G5_structOk alone; see the "G5 primer INVALID
 %       under a finite pointing cone" header note above)
+%     .G0_tf_err, .G0_dt_err, .G0_tf_tol, .G0_dt_tol, .G0_pass, .G0_msg
+%       - TIME-BASE consistency
+%       (G1 uses h=tf/N, G2/G5 read solC.t; see the G0 block below). These
+%       were two bare `assert` calls until the 2026-08-09 external review
+%       pointed out they contradicted this file's own never-throws
+%       contract; they are now scored like any other gate, with the
+%       assertion text preserved verbatim in .G0_msg.
 %     .all_pass - logical AND of all gates (skipped gates excluded)
 %
 % This function is report-only and never throws; callers (tests, the
-% front door) decide what a FAIL means.
+% front door) decide what a FAIL means. This is now literally true: the
+% two time-base assertions that used to violate it are gate G0 (see
+% above). A malformed or failed-solver solC produces a report with failed
+% gates, not an exception with no report at all.
 %
 % REFERENCES:
 %   [1] Acikmese & Ploen, "Convex Programming Approach to Powered Descent
@@ -210,11 +275,12 @@ rep.tolScale = tolScale;
 % P.drag.on would throw for any caller whose P predates the drag field
 % instead of just treating it as vacuum.
 rep.drag_on  = isfield(P,'drag') && P.drag.on;
-                            % print_certify_report reads this to print the
-                            % G5 primer row against the LOOSENED (10 deg,
-                            % not 1 deg) threshold under drag -- see the
-                            % "G5 primer LOOSENING under drag" header note
-                            % above.
+                            % Reported so the struct is self-describing.
+                            % It no longer selects a primer THRESHOLD: the
+                            % drag loosening was deleted once the primer
+                            % time-base bug was fixed (see the "G5 primer
+                            % TIME BASE" header note) -- vacuum and drag
+                            % are now scored against the same 0.01 deg.
 
 %% GUIDANCE thrust ceiling (task-7b, P.etaT). Every gate below certifies a
 %% GUIDANCE solution, so its upper annulus bound is the de-rated etaT*Tmax,
@@ -237,20 +303,45 @@ for k = 1:N
 end
 rep.G1_defect = dmax;   rep.G1_pass = dmax < 1e-6;
 
-%% Time-base consistency check: G1 uses h=tf/N; G2/G5 below use solC.t
+%% G0: time-base consistency. G1 above uses h=tf/N; G2/G5 below use solC.t
 %% directly. If a future solver's solC.t ever drifted from a uniform
 %% h=tf/N grid, G1 and G2/G5 would silently disagree by an h-INDEPENDENT
 %% offset invisible to G1 (which never reads solC.t at all) -- exactly
 %% the failure mode this campaign burned time on before ("defect is not
-%% accuracy"). Assert it explicitly rather than assume it.
-assert(abs(solC.t(end) - solC.tf) < 1e-9 * max(1, abs(solC.tf)), ...
-    'certify_pdg:timebase', ...
-    'solC.t(end)=%.10g does not match solC.tf=%.10g -- G1 (h=tf/N) and G2/G5 (built from solC.t) would silently disagree.', ...
-    solC.t(end), solC.tf);
-assert(max(abs(diff(solC.t) - h)) < 1e-9 * max(1, abs(h)), ...
-    'certify_pdg:timebase', ...
-    'solC.t is not uniformly spaced at h=tf/N=%.10g (max spacing error %.3g) -- G1/G2/G5 time bases would silently disagree.', ...
-    h, max(abs(diff(solC.t) - h)));
+%% accuracy"). Check it explicitly rather than assume it.
+%%
+%% SCORED, NOT ASSERTED (external code review, 2026-08-09): these were two
+%% bare `assert` calls, which contradicted this function's own documented
+%% "report-only and never throws" contract -- and did so in the worst
+%% direction: a malformed or failed-solver solC (exactly the input a
+%% caller most needs a report for) threw instead of producing one, so the
+%% other four gates' diagnostics were lost with it. They are now gate G0.
+%% The failure MESSAGES are preserved verbatim in rep.G0_msg, so nothing
+%% a caller could previously read in the exception text is lost; it is
+%% simply delivered as data instead of as a throw. Downstream gates still
+%% run on a G0 failure (their numbers are then suspect, which is the
+%% point of reporting rather than hiding them), and rep.all_pass includes
+%% G0 so no caller can pass certification on an inconsistent time base.
+% Thresholds are RELATIVE (1e-9 * max(1,|scale|)), so they are stored in
+% the report rather than left for print_certify_report to guess -- the
+% same discipline the tolScale/EFFECTIVE-threshold machinery exists for.
+rep.G0_tf_tol = 1e-9 * max(1, abs(solC.tf));
+rep.G0_dt_tol = 1e-9 * max(1, abs(h));
+rep.G0_tf_err = abs(solC.t(end) - solC.tf);
+rep.G0_dt_err = max(abs(diff(solC.t) - h));
+g0msg = {};
+if ~(rep.G0_tf_err < rep.G0_tf_tol)
+    g0msg{end+1} = sprintf(['solC.t(end)=%.10g does not match solC.tf=%.10g -- ' ...
+        'G1 (h=tf/N) and G2/G5 (built from solC.t) would silently disagree.'], ...
+        solC.t(end), solC.tf);
+end
+if ~(rep.G0_dt_err < rep.G0_dt_tol)
+    g0msg{end+1} = sprintf(['solC.t is not uniformly spaced at h=tf/N=%.10g ' ...
+        '(max spacing error %.3g) -- G1/G2/G5 time bases would silently disagree.'], ...
+        h, rep.G0_dt_err);
+end
+rep.G0_pass = isempty(g0msg);
+rep.G0_msg  = strjoin(g0msg, ' | ');
 
 %% Node+midpoint control samples in chronological order (node_1, mid_1,
 %% node_2, mid_2, ..., node_{N+1}), used by G5's bang-bang statistics
@@ -316,7 +407,14 @@ else
     % the "G3 |dmf| gate" note in this function's header): a measurement
     % gate over the genuine, non-shrinking ~0.70-0.94 kg Taylor mass-bound
     % model error, not an agreement tolerance the solvers should close.
-    rep.G3_pass = rep.G3_dmf < 1.0*tolScale && rep.G3_dtf < 0.2*tolScale;
+    % traj_Linf is SCORED at 5.0 m (external review, 2026-08-09 -- it was
+    % computed and printed but never gated, so two solvers could agree on
+    % mf and tf while flying materially different paths). 5.0 m is a third
+    % of P.pad_radius=15 m: cross-method agreement on WHERE the vehicle is
+    % must be well inside the accuracy that decides mission success. See
+    % the "G3 trajectory row" header note.
+    rep.G3_pass = rep.G3_dmf < 1.0*tolScale && rep.G3_dtf < 0.2*tolScale ...
+                  && rep.G3_traj_Linf < 5.0*tolScale;
     rep.G4_gap  = solV.lossless_gap;
     rep.G4_pass = rep.G4_gap < 1e-4 * TmaxG / P.m0;
 end
@@ -360,44 +458,56 @@ rep.G5_structOk = rep.G5_bound_frac >= 0.95 && rep.G5_switches <= 2 && onHi(end)
 % (house lesson: opti.lam_g, never opti.dual -- see MEMORY
 % casadi-optidual-sign-bug), the correctly-aligned primer direction is
 % +lam_v, not -lam_v. Applied ONCE here, no abs() anywhere in this file.
-% (Primer is evaluated at NODES only -- solC.lam_defect has no midpoint
-% dual, so there is nothing to add here the way G5's bound/switch check
-% added Um above.)
-lamv = solC.lam_defect(4:6, :);                % 3xN, node-adjacent duals
-Tdir = solC.U(:,1:end-1) ./ sqrt(sum(solC.U(:,1:end-1).^2,1));
+%
+% TIME BASE (external code review, 2026-08-09): the comparison is against
+% the segment MIDPOINT control solC.Um(:,k), NOT the node control
+% solC.U(:,k). solC.lam_defect(:,k) is segment k's defect multiplier, and
+% the only control whose discrete stationarity condition involves that
+% multiplier ALONE is Um(:,k) -- a node control appears in two adjacent
+% defect blocks and in both neighbours' xm terms, so scoring lam_k
+% against U(:,k) is an O(h) time-shifted comparison. That single line was
+% the entire source of this campaign's "vacuum discretization artifact"
+% (0.57 deg) and "drag primer degradation" (2.61 deg); both collapse to
+% the acos machine-precision floor (1.2e-6 deg) under the corrected
+% comparison, at every grid. Full measurement tables and the resulting
+% threshold re-tightening are in the "G5 primer TIME BASE" header note.
+% Um is 3xN, exactly matching lam_defect's N columns -- no truncation
+% needed (the old node form had to drop the last node).
+lamv = solC.lam_defect(4:6, :);                % 3xN, segment defect duals
+Tdir = solC.Um ./ sqrt(sum(solC.Um.^2,1));     % 3xN, MIDPOINT directions
 pdir = lamv ./ max(sqrt(sum(lamv.^2,1)), 1e-30);
 cosang = sum(Tdir .* pdir, 1);
 rep.G5_primer_deg = max(acosd(min(1, max(-1, cosang))));
-% Primer threshold LOOSENED (not removed) under drag (task-11, Phase 2;
-% corrected in the task-11 close-out review round) -- see the "G5 primer
-% LOOSENING under drag" header note above for the measured evidence (fails
-% ONLY in the drag case at the production grid, does not shrink with mesh
-% refinement the way the vacuum discretization artifact does) and for why
-% dropping the check entirely (an earlier version of this fix) was a real
-% regression risk. Structure (bang-bang + max-last) still gates every run
-% regardless.
+% Primer threshold RE-TIGHTENED to 0.01 deg for vacuum AND drag alike
+% (external code review, 2026-08-09) -- the task-11 drag loosening to
+% 10 deg is deleted, because the drag/vacuum difference it accommodated
+% was the time-base bug fixed just above, not a drag-model effect. See
+% the "G5 primer TIME BASE" header note for the two measurement tables
+% (grid sweep and solver-tolerance sweep) behind the number. Structure
+% (bang-bang + max-last) still gates every run regardless.
 % CONE GUARD (final-review fix, 2026-08-09): under a finite pointing cone
 % the primer sub-check is invalid (see the "G5 primer INVALID under a
 % finite pointing cone" header note above) -- report primer_deg as
 % info-only and gate on structure alone, the same 'skipped'-style pattern
-% G3/G4 use above when there is no convex twin. The drag-loosened bound
-% only ever applies in the uncapped (P.theta_max_deg=Inf) branch, since a
-% cone run cannot also be scored against it.
+% G3/G4 use above when there is no convex twin. The 0.01 deg bound only
+% ever applies in the uncapped (P.theta_max_deg=Inf) branch, since a cone
+% run cannot also be scored against it -- and it matters MORE now that the
+% bound is 0.01 rather than 1/10 deg, because the cone gap (7.32 deg
+% measured) is far above it.
 if isfinite(P.theta_max_deg)
     rep.G5_primer_mode = 'skipped-cone';
     rep.G5_pass = rep.G5_structOk;
-elseif isfield(P,'drag') && P.drag.on
-    rep.G5_primer_mode = 'scored';
-    rep.G5_pass = rep.G5_structOk && rep.G5_primer_deg < 10;
 else
     rep.G5_primer_mode = 'scored';
-    rep.G5_pass = rep.G5_structOk && rep.G5_primer_deg < 1;
+    rep.G5_pass = rep.G5_structOk && rep.G5_primer_deg < 0.01;
 end
 
-%% Verdict:
-gates = [rep.G1_pass, rep.G2_pass, rep.G2ff_pass, isequal(rep.G3_pass,true) || ...
-         isequal(rep.G3_pass,'skipped'), isequal(rep.G4_pass,true) || ...
-         isequal(rep.G4_pass,'skipped'), rep.G5_pass];
+%% Verdict (G0 included -- see the G0 block for why it is a gate and not
+%% an assertion):
+gates = [rep.G0_pass, rep.G1_pass, rep.G2_pass, rep.G2ff_pass, ...
+         isequal(rep.G3_pass,true) || isequal(rep.G3_pass,'skipped'), ...
+         isequal(rep.G4_pass,true) || isequal(rep.G4_pass,'skipped'), ...
+         rep.G5_pass];
 rep.all_pass = all(gates);
 end
 

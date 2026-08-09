@@ -6,12 +6,25 @@
 % `all_pass` there too (see "G3 adjudication" below for why that changed).
 %
 % Grid ADAPTATION from the brief's literal N=30 (documented in the task-5
-% report): at N=30 the G5 primer-alignment check comes out to 1.19 deg,
-% over the 1 deg gate; a short N-sweep (report) shows this shrinks
-% smoothly with N and clears 1 deg at N>=40 (0.92 deg). N=40 is the
-% smallest N that keeps G5 an honest, non-gamed pass while staying fast
-% (~0.25 s). This is unrelated to G3/tolScale below -- G5's primer check
-% has never been in tolScale's reach.
+% report): at N=30 the G5 primer-alignment check came out to 1.19 deg,
+% over the then-1 deg gate; an N-sweep showed it shrinking smoothly with N
+% and clearing at N>=40 (0.92 deg), so N=40 was picked as the smallest
+% grid that kept G5 an honest, non-gamed pass while staying fast.
+%
+% THAT REASON IS SUPERSEDED (external code review, 2026-08-09): the primer
+% angle's grid dependence was an O(h) time-base bug -- the segment defect
+% dual was being compared against the NODE control instead of the segment
+% MIDPOINT control it is actually the multiplier for. Corrected, the
+% primer angle is 8.5e-07 deg (the acos machine-precision floor) at N=20,
+% 30, 40 and 60 alike, so no grid clears or fails it any more; the gate
+% has been re-tightened to 0.01 deg accordingly. See certify_pdg.m's "G5
+% primer TIME BASE" note for the measurement tables.
+%
+% N=40 is KEPT anyway: it is the characterized coarse pair (with
+% Nconv=90) that this file and test_run_front_door.m both assert all_pass
+% on, and it is still fast (~0.25 s). Moving it now would mean
+% re-characterizing every other gate's coarse-grid margin to remove a
+% justification that has already been replaced -- churn, not rigor.
 %
 % G3 adjudication (2026-08-08, documented in the task-5 fix report): the
 % user reclassified G3's |dmf| gate from an "agreement tolerance" (0.1 kg,

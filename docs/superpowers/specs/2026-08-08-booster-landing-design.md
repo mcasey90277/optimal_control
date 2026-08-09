@@ -46,7 +46,14 @@ v̇ = g + T/m          g = [0; 0; -g0]
   angle above horizon (default 30°, adjustable).
 - Optional thrust-pointing cone: angle of T from vertical ≤ θ_max (default
   off; convex form `T_z ≥ cos(θ_max)·‖T‖`).
-- Terminal: r(t_f) = 0, v(t_f) = 0. Mass floor m ≥ m_dry.
+- Terminal: r(t_f) = 0, v(t_f) = [0; 0; −1.5] m/s. Mass floor m ≥ m_dry.
+  *(Adjudicated 2026-08-08: originally v(t_f) = 0, but with T_min > weight
+  that endpoint is singular — a microscopically early velocity-null strands
+  the booster hovering-impossible above the pad (closed loop arrests ~0.5 m
+  up, min throttle pushes it back skyward; no weight tuning fixes it, 30-
+  config sweep). Real hoverslams touch down with a small descent rate the
+  legs absorb; the guidance now targets 1.5 m/s down at z = 0, within the
+  2.0 m/s touchdown gate.)*
 - Free final time t_f.
 
 **Objective:** min fuel = max m(t_f) (equivalently min ∫‖T‖ dt).

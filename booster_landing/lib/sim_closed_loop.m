@@ -201,8 +201,15 @@ function T = allocate_thrust(Traw, P)
 %
 % The brief's law is "magnitude clamped to [Tmin,Tmax], direction kept".
 % That is exactly what this returns whenever the raw command already fits
-% under Tmax -- which, after task-7 round 5's gain redesign, is the whole
-% of the acceptance dispersion case (measured sat_frac fell 0.65 -> 0.15).
+% under Tmax. That is the COMMON case but NOT the whole acceptance case --
+% an earlier draft of this comment claimed the over-Tmax branch was a
+% no-op after round 5's gain redesign, and measurement says otherwise:
+% the raw command exceeds Tmax on 1.9% of the dispersed run's flight time,
+% peaking at 968 kN (+14.6% over the bound), and on 2.1% of the nominal
+% run's -- though the nominal excursions are a knife-edge artifact of the
+% guidance riding exactly on Tmax (peak 850 kN, only +0.6% over), not a
+% real demand. The dispersed 14.6% overshoot is real, and it is the whole
+% reason this branch's policy matters.
 % It differs ONLY in the over-Tmax branch, where preserving direction
 % means scaling the VERTICAL component down in lockstep with a
 % (necessarily unaffordable) lateral demand -- i.e. paying for a lateral
@@ -218,19 +225,35 @@ function T = allocate_thrust(Traw, P)
 % The lower bound (|T| >= Tmin) stays direction-preserving: Tmin is a
 % throttle floor, not a budget to allocate.
 %
+% NEGATIVE-Tz GUARD (round-5 re-review): vertical priority is only
+% meaningful when the vertical demand is a BRAKING demand. A commanded
+% Traw(3) < 0 means "accelerate the descent" -- reachable whenever the
+% vehicle sits ABOVE the guidance's v(z) schedule, a regime task 8's Monte
+% Carlo will draw routinely -- and there is no braking authority to
+% protect there. Serving it first would be actively perverse: the
+% unguarded form turned Traw=[1e6;1e6;-1e6] into T=[0;0;-845 kN], i.e.
+% spend the ENTIRE annulus thrusting downward and zero the lateral
+% correction outright. So the priority branch is taken only for
+% Traw(3) >= 0; a negative commanded Tz falls back to plain
+% direction-preserving scaling, which keeps the lateral share intact.
+%
+% |T| == Tmax identically on BOTH over-budget branches, so no Tmin restore
+% is needed there (an earlier draft carried one; it was dead code).
+% Priority branch: if Traw(3) <= Tmax then Tz=Traw(3) and |Traw|>Tmax
+% forces |Txy_raw| > lat, so Txy is always scaled and |T| = sqrt(lat^2 +
+% Tz^2) = Tmax; if Traw(3) > Tmax then Tz=Tmax, lat=0 and |T| = Tmax.
+% Fallback branch: direction-preserving scaling of a vector with
+% |Traw| > Tmax lands exactly on Tmax.
+%
 % INPUTS:  Traw - raw commanded thrust [3x1 N];  P - booster_params
 % OUTPUTS: T    - annulus-feasible thrust [3x1 N]
 Tm = sqrt(sum(Traw.^2));
-if Tm > P.Tmax
-    Tz  = min(max(Traw(3), -P.Tmax), P.Tmax);      % vertical served first
+if Tm > P.Tmax && Traw(3) >= 0
+    Tz  = min(Traw(3), P.Tmax);                    % vertical served first
     lat = sqrt(max(P.Tmax^2 - Tz^2, 0));           % annulus radius left over
     Txy = Traw(1:2);  n = sqrt(sum(Txy.^2));
     if n > lat, Txy = Txy * (lat / n); end
-    T  = [Txy; Tz];
-    Tm = sqrt(sum(T.^2));
-    if Tm < P.Tmin                                 % restore the floor
-        T = T * P.Tmin / max(Tm, 1e-9);
-    end
+    T   = [Txy; Tz];
 else
     T = Traw * min(max(Tm, P.Tmin), P.Tmax) / max(Tm, 1e-9);
 end

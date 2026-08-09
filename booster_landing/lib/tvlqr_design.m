@@ -17,7 +17,10 @@ function ctrl = tvlqr_design(sol, P, opts)
 %   sol  - collocation solution (Task 3 interface)
 %   P    - booster_params
 %   opts - (optional) overrides:
-%          .QA (7x7) margin-phase state weight   [def: see below]
+%          .omegaA .zetaA  phase-A lateral pole placement [def 0.70, 1.00]
+%                    -- QA is DERIVED from these plus R and the phase-A
+%                       mass (see below); zetaA >= 1/sqrt(2) required
+%          .QA (7x7) margin-phase state weight   [def: derived, see below]
 %          .QB (7x7) braking-phase state weight  [def: see below]
 %          .Q  (7x7) legacy CONSTANT weight -- sets QA=QB=Q, i.e. disables
 %                    the phase schedule (kept so callers/tests written
@@ -131,14 +134,23 @@ function ctrl = tvlqr_design(sol, P, opts)
 % WRONG, and the sweeps that produced it were searching the wrong axis.
 % Measured root cause (diag, N=60, dsp.dr0=[50;-30;0], old defaults):
 %
-%   * the closed-loop LATERAL position-error pole is sqrt(qPos/qVel)
-%     -- INDEPENDENT of R to leading order. At the old
-%     Q=diag([1e-4 1e-4 1e-4 1e-2 1e-2 1e-2 0]) that is sqrt(1e-4/1e-2)
-%     = 0.1 rad/s: a 10 s time constant on a 15.6 s flight. Measured
-%     K(1,1)/m = 0.020, K(1,4)/m = 0.233, ratio 0.084 -- confirming it.
-%     THAT is why every R sweep in rounds 2-4 moved `miss` monotonically
-%     and never fixed it: R rescales BOTH gains and cancels out of the
-%     pole ratio. The search axis was orthogonal to the defect.
+%   * the closed-loop LATERAL position-error pole is BOUNDED ABOVE by
+%     sqrt(qPos/qVel), for EVERY R. Exactly (see the ARE inversion in
+%     part (a) below),
+%         pole = a/b = sqrt( qPos / (2 m sqrt(qPos r) + qVel) ),
+%     which is strictly DECREASING in r and rises to its supremum
+%     sqrt(qPos/qVel) only as r -> 0. At the old
+%     Q=diag([1e-4 1e-4 1e-4 1e-2 1e-2 1e-2 0]) that supremum is
+%     sqrt(1e-4/1e-2) = 0.1 rad/s -- a 10 s time constant on a 15.6 s
+%     flight, and NO choice of R can beat it. (At the shipped r=1e-9 the
+%     2 m sqrt(qPos r) term is 0.0187, i.e. ~1.9x LARGER than qVel=0.01,
+%     so the pole is actually 0.059 rad/s, further below the bound;
+%     measured 0.084 at t=0, where the Riccati is still off its
+%     steady-state value.) THAT is why every R sweep in rounds 2-4 moved
+%     `miss` monotonically and never fixed it: lowering R buys gain
+%     MAGNITUDE on both channels but cannot push the pole past a ceiling
+%     fixed by the qPos:qVel ratio alone. The search axis was orthogonal
+%     to the defect.
 %   * consequently the tracker asks for K(1,1)*58 m ~ 18 kN of lateral
 %     thrust at t=0 while the guidance sits AT Tmin=338 kN with 507 kN of
 %     unused magnitude margin -- it declines free authority. The 58 m
@@ -158,8 +170,11 @@ function ctrl = tvlqr_design(sol, P, opts)
 %      so asking for natural frequency w and damping zeta inverts to
 %        qPos = m^2 r w^4,        qVel = m^2 r w^2 (4 zeta^2 - 2)
 %      (note qVel>=0 forces zeta>=1/sqrt(2) -- LQR's own Butterworth floor).
-%      Shipped: w=0.70 rad/s, zeta=1.00 at m=29500 kg, r=1e-9, giving
-%      qPos=0.21, qVel=0.85. The design formula is validated, not assumed:
+%      Shipped: w=0.70 rad/s, zeta=1.00, with m taken as the mean mass
+%      over the margin arc and r=R(1,1) read from the ACTUAL weight, both
+%      at call time (opts.omegaA/.zetaA expose the design point). At the
+%      default R that evaluates to qPos=0.2099, qVel=0.8569. The design
+%      formula is validated, not assumed:
 %      the Riccati solution measures K(1,1)/m = 0.4808 at t=0 against the
 %      predicted w^2 = 0.49 (and K(1,4)/m = 1.377 against 2*zeta*w = 1.40).
 %      Feasibility check that sets the ceiling on w: the initial lateral
@@ -194,11 +209,11 @@ function ctrl = tvlqr_design(sol, P, opts)
 % Measured at N=60, dsp.dr0=[50;-30;0] (task-7 report round 5 for the full
 % (w,zeta) sweep and the dispersion battery):
 %   before: dispersed miss 10.851 m, vtd 6.819 m/s, sat_frac 0.653
-%   after : dispersed miss  1.005 m, vtd 1.372 m/s, sat_frac 0.132
+%   after : dispersed miss  0.944 m, vtd 1.363 m/s, sat_frac ~0.13
 % i.e. both gates (miss<15, vtd<2) pass together with ~14 m and ~0.6 m/s
 % of margin, on the same R the round-4 report proved could not satisfy
 % both at once -- because R was never the axis that controlled it.
-% Nominal is unchanged-clean (landed, miss 0.015 m, vtd 1.43 m/s).
+% Nominal is unchanged-clean (landed, miss 0.052 m, vtd 1.480 m/s).
 %
 % KNOWN REMAINING DEFECT, NOT THIS ROUND'S (measured, orthogonal to the
 % above): a pure ALTITUDE dispersion is still tracked far too weakly --
@@ -220,11 +235,9 @@ if nargin < 3, opts = struct(); end
 % Phase-scheduled state weight. qPos/qVel ratio sets the lateral
 % position-error pole (see ADAPTATION 5); the overall qPos level sets the
 % commanded correction accel, a = sqrt(qPos/r)/m.
-if ~isfield(opts,'QA'), opts.QA = diag([0.21 0.21 1e-4 0.85 0.85 1e-2 0]); end
-if ~isfield(opts,'QB'), opts.QB = diag([1e-4 1e-4 1e-4 1e-2 1e-2 1e-2 0]); end
-if isfield(opts,'Q'),   opts.QA = opts.Q;  opts.QB = opts.Q;               end
 if ~isfield(opts,'R'),  opts.R  = 1e-9*eye(3);                             end
 if ~isfield(opts,'Qf'), opts.Qf = diag([1e-2 1e-2 1e-2 1 1 1 0]);          end
+if ~isfield(opts,'QB'), opts.QB = diag([1e-4 1e-4 1e-4 1e-2 1e-2 1e-2 0]); end
 
 %% Nominal interpolants (state: pchip over nodes; thrust: shared
 %% per-segment HS quadratic reconstruction, scalar t only -- see the
@@ -238,6 +251,25 @@ if isfield(opts,'tSwitch'), ctrl.tSwitch = opts.tSwitch;
 else,                       ctrl.tSwitch = annulus_switch(sol, P);  end
 if isfield(opts,'tBlend'),  ctrl.tBlend  = opts.tBlend;
 else,                       ctrl.tBlend  = 0.4;                     end
+
+%% Phase-A lateral weights BY POLE PLACEMENT (see ADAPTATION 5 part (a)).
+%% Derived from (omegaA, zetaA) and the ACTUAL R and phase-A mass rather
+%% than hardcoded, so that an opts.R override re-derives the same closed
+%% loop instead of silently detuning phase A (omega scales as r^-1/4, so
+%% a 100x R change would otherwise move the pole by 3.2x).
+if ~isfield(opts,'omegaA'), opts.omegaA = 0.70; end   % lateral wn [rad/s]
+if ~isfield(opts,'zetaA'),  opts.zetaA  = 1.00; end   % lateral damping
+if ~isfield(opts,'QA')
+    inA = sol.t <= ctrl.tSwitch;
+    if ~any(inA), inA(1) = true; end                  % ts=0 fallback guard
+    mRef = mean(sol.X(7, inA));                       % mass over the margin arc
+    rLat = opts.R(1,1);                               % lateral control price
+    wA   = opts.omegaA;  zA = opts.zetaA;
+    qP   = mRef^2 * rLat * wA^4;
+    qV   = mRef^2 * rLat * wA^2 * (4*zA^2 - 2);       % >=0 needs zetaA>=1/sqrt(2)
+    opts.QA = diag([qP qP 1e-4 qV qV 1e-2 0]);
+end
+if isfield(opts,'Q'), opts.QA = opts.Q;  opts.QB = opts.Q; end   % legacy
 QA = opts.QA;  QB = opts.QB;  ts = ctrl.tSwitch;  tb = ctrl.tBlend;
 ctrl.Qfun = @(t) (1 - 0.5*(1 + tanh((t - ts)/tb)))*QA ...
                  +    0.5*(1 + tanh((t - ts)/tb)) *QB;
@@ -269,14 +301,27 @@ function ts = annulus_switch(sol, P)
 % exactly one switch on this trajectory), so a single mid-annulus crossing
 % cleanly separates the Tmin coast-down arc from the Tmax braking arc.
 %
+% TODO (Phase 2): this detects the FIRST UPWARD crossing only. On a
+% max-min-max profile (which drag, P.drag.on, could produce) that is the
+% SECOND switch, so phase A would wrongly cover the leading Tmax arc.
+% Generalize to "last upward crossing" or to a per-arc schedule if G5 ever
+% certifies more than one interior switch.
+%
 % INPUTS:  sol - collocation solution;  P - booster_params (Tmin,Tmax)
-% OUTPUTS: ts  - switch time [s] (falls back to sol.tf if |T*| never
-%                crosses, i.e. no margin phase to schedule against)
+% OUTPUTS: ts  - switch time [s]
+%
+% NO-SWITCH FALLBACK is ts=0, i.e. phase B (the conservative braking-arc
+% weights) over the whole flight. An all-Tmax profile has NO margin arc to
+% schedule against, so there is nothing to be aggressive with; returning
+% sol.tf instead -- as this function did when first written -- would apply
+% the aggressive phase-A LATERAL weights across the entire flight
+% INCLUDING the braking arc, which is precisely the failure mode the
+% schedule exists to prevent.
 Tmag = sqrt(sum(sol.U.^2, 1));
 mid  = 0.5*(P.Tmin + P.Tmax);
 kx   = find(Tmag(1:end-1) < mid & Tmag(2:end) >= mid, 1, 'first');
 if isempty(kx)
-    ts = sol.tf;  return
+    ts = 0;  return
 end
 w  = (mid - Tmag(kx)) / (Tmag(kx+1) - Tmag(kx));
 ts = sol.t(kx) + w*(sol.t(kx+1) - sol.t(kx));

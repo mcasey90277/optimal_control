@@ -18,29 +18,52 @@ P.mdry   = 25600;              % dry mass [kg]
 P.m0     = 30000;              % mass at landing-burn start [kg]
 P.Tmax   = 845e3;              % one Merlin 1D, sea level [N]
 P.Tmin   = 0.40 * P.Tmax;      % ~40 percent min throttle [N]
-P.etaT   = 0.93;               % GUIDANCE thrust de-rate [-] (ADJUDICATED
-                                % 2026-08-08, task-7b). The guidance solves
-                                % against etaT*Tmax = 785.85 kN; the tracker
-                                % and the truth sim keep the FULL [Tmin,Tmax]
-                                % annulus, so the 7% is reserved headroom for
-                                % feedback rather than lost capability.
-                                % Rationale: the min-fuel solution rode Tmax
-                                % for 54% of its nodes (certify G5 bound
-                                % fraction 0.9917) with only ~2% of net
-                                % deceleration to spare, so there was NOTHING
-                                % left to add during braking -- a -5% thrust
-                                % dispersion was unrecoverable by ANY tracker
-                                % around that nominal (measured 67.4 m/s
-                                % touchdown, identical under two different
-                                % controllers, i.e. arithmetic not tracking).
-                                % De-rating the guidance buys back real
-                                % authority: the braking arc's net decel goes
-                                % from ~21.5 to ~19.3 m/s^2 nominal, leaving
-                                % the tracker ~2.2 m/s^2 to command against
-                                % dispersions. Costs propellant (see the
-                                % task-7 report's 7b section for the measured
-                                % fuel delta) -- that is the trade the
-                                % adjudication accepted.
+P.etaT   = 0.87;               % GUIDANCE thrust de-rate [-] (ADJUDICATED
+                                % 2026-08-09, task-7b FINAL). The guidance
+                                % solves against etaT*Tmax = 735.15 kN; the
+                                % tracker and the truth sim keep the FULL
+                                % [Tmin,Tmax] annulus, so the 13% is reserved
+                                % headroom for feedback, not lost capability.
+                                %
+                                % WHY A DE-RATE AT ALL: the un-de-rated
+                                % min-fuel solution rode Tmax for 54% of its
+                                % nodes (certify G5 bound fraction 0.9917)
+                                % with only ~2% of net deceleration to spare,
+                                % so there was NOTHING left to add during
+                                % braking. A -5% thrust dispersion was then
+                                % unrecoverable by ANY tracker around that
+                                % nominal -- measured 67.4 m/s touchdown,
+                                % identical under two different controllers,
+                                % i.e. arithmetic, not tracking.
+                                %
+                                % WHY 0.87 AND NOT 0.93: 0.93 was adjudicated
+                                % first and SHIPPED BRIEFLY, then measured to
+                                % be insufficient -- it leaves the tracker
+                                % only 0.95/0.93 = 2.1% of thrust margin
+                                % against a -5% dispersion, and the terminal
+                                % arc consumes more than that. At 0.93 the
+                                % task-7b battery scored 5/7: thrust_scale
+                                % 0.95 touched down at 2.84 m/s and the
+                                % combined case at 2.07 m/s, both over the
+                                % 2.0 m/s gate. This was proven to be an
+                                % authority limit rather than a tuning one by
+                                % a reachability bound (a -5% vehicle CAN
+                                % land at 0.635 m/s, but only by braking at
+                                % 806.6 m instead of the nominal 718 m, which
+                                % a fixed-reference tracker cannot re-time)
+                                % and by a bandwidth sweep (5->20 rad/s moved
+                                % touchdown speed only 3.91->2.66 m/s).
+                                % A held-controller etaT sweep then measured
+                                % 0.87 as the point where the full battery
+                                % passes 7/7 with margin (worst case 1.67 m/s
+                                % against the 2.0 m/s gate).
+                                %
+                                % COST: 3535.4 kg of propellant vs 3453.1 kg
+                                % with no de-rate = +82.3 kg, ~1.9% of the
+                                % propellant budget, for 3-sigma-class thrust
+                                % robustness. That is the trade the
+                                % adjudication accepted. See the task-7
+                                % report's 7b section for the full sweep.
 P.Isp    = 282;                % sea-level Isp [s]
 P.g0     = 9.80665;            % standard gravity [m/s^2]
 P.gvec   = [0; 0; -P.g0];      % flat-Earth gravity, z up [m/s^2]

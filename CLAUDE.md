@@ -48,6 +48,15 @@ optimal_control/
 │   ├── min_fuel_paper/          # paper outline (co-author Koblick)
 │   ├── min_fuel_papers/         # reference PDFs
 │   └── abstracts/               # conference abstract drafts
+├── booster_landing/             # Falcon-9-class 3-DOF powered-descent campaign
+│   │                            #   (2026-08-09): min-fuel PDG solved 2 ways
+│   │                            #   (HS NLP + lossless convexification), 5-gate
+│   │                            #   certification, phase-scheduled TVLQR +
+│   │                            #   altitude-indexed tracking, 200-run MC
+│   │                            #   (99.5%), Phase-2 drag (saves 434.7 kg),
+│   │                            #   theory note in doc/. Front door:
+│   │                            #   run_booster_landing (no args, ~5 min).
+│   │                            #   Campaign history: process/CAMPAIGN_LEDGER.md
 ├── mpc/mpc_cart_pole/           # Model Predictive Control for cart-pole
 │   ├── mpc_cart_pole_demo.m     # MPC controller (N=50 horizon, 20Hz control)
 │   └── mpc_cart_pole_explained.tex  # Step-by-step code walkthrough

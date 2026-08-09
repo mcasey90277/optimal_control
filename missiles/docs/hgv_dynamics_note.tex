@@ -32,10 +32,17 @@ This note derives the three-degree-of-freedom point-mass equations of motion
 used by the \code{missiles/} MATLAB library for powered boost, unpowered
 atmospheric glide and terminal descent over a spherical, optionally rotating
 Earth; the four injected environment models; the phase machinery that chains
-them; and the seven closed-form references the library is validated against.
+them; the seven closed-form references the library is validated against; and
+the two-axis targeting solve that aims the vehicle and times its cutoff
+together, which is what lets it hit a ground point over a rotating Earth or
+from a banked track. It closes by separating targeting from guidance and
+stating, for the two closed-loop boost laws that are specified but not yet
+implemented, what the library would have to grow first.
 It is written to be implementable from: every equation here is the equation the
 code evaluates, checked term by term against the source, and every closed form
-is derived rather than quoted. Where a result has a numerical consequence, the
+is derived rather than quoted --- the single exception being
+Section~\ref{sec:pegvoa}, whose equations are a specification and are marked as
+such. Where a result has a numerical consequence, the
 measured value is given. Symbolic checks were run in \code{sympy}~1.14 and
 numerical checks in MATLAB R2025b against the committed library;
 Section~\ref{sec:verify} records what was verified and how.
@@ -56,7 +63,11 @@ Sections~\ref{sec:frames}--\ref{sec:phases} is a derivation of what
 actually compute, in the order they compute it.
 Section~\ref{sec:analytic} derives the analytic solutions the library is
 measured against and reports the measured agreement.
-Section~\ref{sec:targeting} covers the two-solve targeting problem.
+Section~\ref{sec:targeting} covers targeting, which is now a two-axis root
+solve on the launch azimuth and the thrust cutoff together, and
+Section~\ref{sec:guidance} separates that from guidance --- stating what the
+library's open-loop schedules do, and what the two specified closed-loop boost
+laws would need before either could be written.
 
 \subsection{What is verified, and how}
 \label{sec:verify}
@@ -705,8 +716,10 @@ $1/V$ of \eqref{eq:gamgen2} --- so Coriolis is a pure \emph{rate} of turn,
 $O(2\omega) = 1.5\times10^{-4}~\mathrm{rad/s}$, or about half a degree per
 minute. Over a 27-minute intercontinental flight that is up to $14^{\circ}$ of
 accumulated heading, reduced by the geometric factors in
-\eqref{eq:corg}--\eqref{eq:corp}. It is why an azimuth solved on a
-non-rotating Earth misses (Section~\ref{sec:targeting}).
+\eqref{eq:corg}--\eqref{eq:corp}. It is why an azimuth taken from the
+non-rotating closed form misses by $231.552~\mathrm{km}$ on the shipped
+geometry, almost all of it across the course, and why the library now solves
+the azimuth instead of computing it (Section~\ref{sec:targeting}).
 
 Reading \eqref{eq:corg}: an eastbound vehicle ($\sin\psi>0$) is pushed
 \emph{up}, a westbound one down --- the E\"otv\"os effect, and it is largest at
@@ -1059,6 +1072,11 @@ phase's \emph{own} tspan-relative time, not at cumulative flight time. A glide
 schedule written against $[0,t_{\max}]$ therefore starts at the handoff from
 boost, not at liftoff. With constant schedules the distinction is invisible;
 with a time-varying bank it moves the range by 30\,\%.
+
+Both shipped laws are \emph{open-loop}: a schedule fixed before liftoff, read
+back at each call. Section~\ref{sec:guidance} takes that up properly ---
+what separates it from closed-loop guidance, and what the two specified boost
+laws would need from the phase machinery described here.
 
 %=====================================================================
 \section{Analytic references}
@@ -1764,31 +1782,96 @@ reduction.
 \label{sec:targeting}
 
 Given a launch point and a destination rather than a launch point and an
-azimuth, two unknowns must be found. Over a non-rotating sphere they decouple
-completely, and the library solves them as two independent problems.
+azimuth, two unknowns have to be found: where to aim, and when to stop
+thrusting. There is exactly one geometry in which they decouple, and the
+library used to assume it. It now solves them together.
 
-\subsection{The azimuth is closed-form}
+The script that does so is \code{HGV/run\_target}.
+\code{BM/run\_ballistic\_target} has not been converted: it still takes its
+azimuth from the closed form below, still solves down-range alone, and still
+refuses a rotating Earth outright rather than flying one. Everything from
+Section~\ref{sec:missvector} onward describes the first of those two.
+
+\subsection{The closed form, and the one geometry in which it is exact}
+\label{sec:aimseed}
 
 The initial bearing of the launch-to-target great circle, \eqref{eq:bearing},
 \emph{is} the heading state $\psi$ --- both are measured clockwise from north
---- so it goes straight into $\mathbf{x}_6$ with no conversion, no iteration and
-no tolerance. For the shipped geometry (Hawaii to the California coast) it is
-$\psi_0 = 0.988331159~\mathrm{rad} = 56.627204^{\circ}$, and the flown initial
-heading is asserted equal to it to $10^{-13}$.
+--- so it goes straight into $\mathbf{x}_6$ with no conversion and no
+tolerance. For the shipped geometry ($20^{\circ}$N, $155^{\circ}$W to
+$35^{\circ}$N, $120^{\circ}$W) it is
+$\psi_{\text{seed}} = 0.988331159~\mathrm{rad} = 56.627204^{\circ}$, and the
+heading the vehicle actually leaves the pad on is asserted equal to the azimuth
+the solve asked for to $10^{-12}$~rad.
 
-\paragraph{Exact only because the Earth does not rotate here.} With
-$\omega = 0$ the ground track of a zero-bank trajectory is a great circle, so
-the initial bearing of the launch-to-target arc is the whole answer. Switch the
-Earth rate on and the target is carried east under the vehicle for the entire
-flight --- of order 600~km at mid latitude over a 27-minute flight --- so the
-vehicle must be aimed not at where the target is but at where it \emph{will
-be}. The azimuth then depends on the flight time, the flight time on the
-cutoff, and the cutoff on the azimuth: what was a closed form becomes an outer
-iteration wrapped around the range solve. The library does not have that outer
-loop, and refuses to pretend it does: with rotation enabled it prints a caution
-and reports the miss against a target that stood still.
+That bearing is the whole answer under two conditions and no others:
+$\omega = 0$ and $\sigma\equiv 0$. With both, the only horizontal force is a
+lift vector held in the vertical plane, $\dot\psi$ collapses to the pure
+meridian-convergence term of Section~\ref{sec:relief}, and that term is
+precisely the rate at which a great-circle course rotates against the
+converging meridians. The ground track is then the great circle the vehicle
+left on and its far end is the target, so matching the \emph{distance} matches
+the \emph{point}. Drop either condition and the flown track is some other
+curve, whose initial bearing at the launch point is no longer the aim point.
+It is still a good guess, and that is exactly how the library now uses it: as
+the seed of a two-axis solve.
 
-\subsection{The range solve is a bisection on thrust-termination time}
+\paragraph{Rotation deflects the vehicle; it does not move the target.}
+An earlier edition of this note said the opposite --- that switching the Earth
+rate on carries the target east under the vehicle for the whole flight, of
+order $600~\mathrm{km}$ at mid latitude, so that the vehicle must be aimed at
+where the target \emph{will be}. That claim is withdrawn. The same error was
+found in the source and corrected there. The integrated state is
+\emph{planet-relative} (Section~\ref{sec:rotating}) and the target is a ground
+point: both live in the rotating frame, and neither moves in it. Nothing
+carries the target anywhere.
+
+What rotation does is bend the vehicle off course. The Coriolis and
+centrifugal projections derived in Section~\ref{sec:rotating} enter $\dot\gamma$
+and $\dot\psi$ directly, and \eqref{eq:corp} in particular contributes a
+heading rate $2\omega\sin\phi$ at zero flight-path angle --- the classical
+Coriolis parameter, about half a degree per minute at mid latitude, which over
+a flight of many minutes integrates into a track that is not the departure
+great circle. The vehicle is not aimed at a stale position. It is aimed
+correctly and then deflected.
+
+The distinction is not pedantic, because the two mechanisms predict different
+\emph{misses}. A target carried east under a fixed heading is largely a
+down-range effect on an easterly course, scaling with the target's
+latitude-circle speed. A deflected vehicle is overwhelmingly a
+\emph{cross-range} effect, scaling with the flight time and the Coriolis
+parameter. Measured on the shipped geometry with \code{earthSpin} true, the
+closed-form bearing flown and the cutoff bisected, the miss decomposes as
+\begin{center}
+\begin{tabular}{lr}
+\toprule
+Cross-range component & $+231{,}477.499$~m \\
+Down-range component  & $-5{,}858.645$~m \\
+\midrule
+Total miss            & $231{,}551.628$~m \\
+\bottomrule
+\end{tabular}
+\end{center}
+--- the cross-range component is $39.5$ times the down-range one. It is a
+deflection, and the
+$231.552~\mathrm{km}$ figure replaces the $600~\mathrm{km}$ one, which belonged
+to the mechanism being retracted and has no standing now that the mechanism
+does not.
+
+\paragraph{Bank breaks the same assumption by the same route.} A banked
+segment turns the heading through \eqref{eq:f6}, so the track leaves the arc
+it departed on for a reason that has nothing to do with the planet. On the
+shipped geometry a $75^{\circ}$ terminal bank swings the heading by
+$166.4^{\circ}$ between handoff and impact and misses by $21{,}524.695$~m, of
+which $21{,}515.222$~m is cross-range. Rotation and bank are therefore
+\emph{one} failure of the closed form and not two, and one extra degree of
+freedom closes both.
+
+\subsection{Stage one: a bisection on thrust-termination time}
+\label{sec:rangesolve}
+
+The two-axis solve needs a starting point in both controls, and the second of
+them comes from the same one-dimensional bisection the library has always run.
 
 The boost phase already ends at $t_{\text{span}}(2)$ when the burnout event has
 not fired first, so a shortened span \emph{is} a thrust cutoff and no new
@@ -1832,47 +1915,330 @@ solver returns \code{converged = false} with the band, and the caller phrases
 the refusal in its own vocabulary. What must never happen is a silent nearest
 miss, because a nearest miss \emph{looks} like a solution.
 
-\subsection{Cross-range is a property of the configuration, not a guarantee}
+Two things about that band are worth stating exactly. It is measured at the
+\emph{seed} azimuth, so it is indicative rather than exact for the azimuth the
+next stage settles on; and the refusal it drives is the reason the two-axis
+Newton is never handed a target it cannot reach, which is what keeps it away
+from the ill-conditioned geometry of Section~\ref{sec:twoaxis}.
 
-The bisection matches the great-circle \emph{distance} from launch to impact.
-Nothing in it steers the track sideways. Cross-range comes out at zero in the
-shipped configuration because the bank angle is zero throughout, and a
-zero-bank trajectory over a non-rotating sphere stays on the great circle it
-left on --- which is a statement about $\sigma=0$ and $\omega=0$ together, not
-a general property of the solver.
+\subsection{The residual: a miss vector resolved at the target}
+\label{sec:missvector}
 
-The library therefore \emph{measures} it rather than asserting it. The
-cross-track offset of the impact point from the launch-to-target great circle
-is computed by the standard spherical relation
+Two unknowns require two residuals, and the choice of which two is not
+cosmetic. The library uses the vector from the target to the impact point,
+resolved \emph{at the target} into components along and across the intended
+course. Both zero is exactly ``the impact point \emph{is} the target''.
+
+Fix an aim frame once, before the solve begins. Let $(\phi_T,\lambda_T)$ be the
+target and let
+\begin{equation}
+  \psi_C \;=\; \operatorname{bearing}(\text{target},\text{launch}) + \pi
+  \pmod{2\pi}
+  \label{eq:psic}
+\end{equation}
+be the course of the launch-to-target great circle \emph{as it arrives}, which
+is the reversed arc's departing bearing turned through half a turn. It has to
+be the arriving course and not the departing one: those differ by the meridian
+convergence of Section~\ref{sec:gc}, several degrees at this range, and a basis
+tilted by that much would mix the two components. It is also computed once and
+held fixed rather than recomputed per trial, because a basis that moved with
+the impact point would make the finite-difference Jacobian of
+Section~\ref{sec:twoaxis} partly a derivative of the basis.
+
+Now let $(\phi_I,\lambda_I)$ be the achieved impact point and
+$\Delta\lambda_I = \lambda_I - \lambda_T$. Form
+\begin{align}
+  w_E &= \sin\Delta\lambda_I\,\cos\phi_I ,                        \label{eq:wE}\\
+  w_N &= \cos\phi_T\sin\phi_I - \sin\phi_T\cos\phi_I\cos\Delta\lambda_I .
+                                                                  \label{eq:wN}
+\end{align}
+These are not new quantities. They are the two arguments of the bearing
+formula~\eqref{eq:bearing}, evaluated from the target to the impact point ---
+the eastward and northward parts of the direction joining them, each scaled by
+the same positive factor. That factor is exactly $\sin\Delta$, with $\Delta$
+the central angle between the two points, so
+$\operatorname{hypot}(w_N,w_E) = \sin\Delta$ and the pair is $\sin\Delta$ times
+a unit horizon direction.
+
+The library takes the \emph{direction} from that pair and the \emph{length}
+from the haversine \eqref{eq:haversine}, joining them with the ratio
+$\Delta/\sin\Delta$:
+\begin{equation}
+  \begin{bmatrix} \text{arc}_N \\ \text{arc}_E \end{bmatrix}
+  \;=\; r_I\,\frac{\Delta}{\sin\Delta}
+  \begin{bmatrix} w_N \\ w_E \end{bmatrix},
+  \qquad
+  \Delta = \operatorname{haversine}\bigl((\phi_T,\lambda_T),(\phi_I,\lambda_I)\bigr),
+  \label{eq:arcNE}
+\end{equation}
+and rotates north--east into along--across the course. A course $\psi_C$
+clockwise from north points along $\cos\psi_C\,\nhat + \sin\psi_C\,\ehat$, and
+right of it is the same direction turned a further quarter turn, so
+\begin{equation}
+  \mathbf{f} \;=\;
+  \begin{bmatrix} f_{\text{down}} \\ f_{\text{cross}} \end{bmatrix}
+  \;=\;
+  \begin{bmatrix}
+    \phantom{-}\cos\psi_C & \sin\psi_C \\
+    -\sin\psi_C & \cos\psi_C
+  \end{bmatrix}
+  \begin{bmatrix} \text{arc}_N \\ \text{arc}_E \end{bmatrix},
+  \label{eq:missvec}
+\end{equation}
+positive \emph{long} down-range and positive \emph{right} cross-range. The
+rotation is orthogonal, so $\|\mathbf{f}\| = r_I\Delta$ is the great-circle
+miss distance exactly: the decomposition loses nothing and adds a direction.
+
+\paragraph{Why not the obvious alternative.} The obvious pairing is achieved
+minus required great-circle range, alongside the cross-track offset
+\eqref{eq:xtrack} of the impact point from the launch-to-target arc. It
+carries the same information and it is worse, for one reason: it references a
+great circle that the flown track no longer follows. Once the Earth turns or a
+bank is commanded, ``distance along the intended arc'' is a statement about a
+curve the vehicle is not on, and both controls then move both components.
+Equation~\eqref{eq:missvec} references nothing but two points --- the target
+and where the vehicle landed --- and its two components separate cleanly onto
+the two controls, which is what makes the Jacobian of
+Section~\ref{sec:twoaxis} nearly decoupled.
+
+\paragraph{Why the components and not a bearing and a distance.} The same
+information is a bearing from the target to the impact point plus the distance
+between them, and that form cannot be used, because \emph{no bearing exists at
+coincidence}. Section~\ref{sec:gc} establishes this: at zero separation both
+arguments of \eqref{eq:bearing} vanish, and \code{greatCircleBearing} rightly
+\emph{raises} \code{degenerateArc} rather than returning a plausible number.
+A residual built on it would therefore throw exactly where the solve
+converges, and a damped Newton whose trial points fail as they succeed halves
+its way into an infeasible point every time it does well. Taken as
+\emph{components}, \eqref{eq:wE}--\eqref{eq:wN} are smooth straight through
+coincidence and vanish there, which is the behaviour a residual must have at
+its own root.
+
+Two guards ride with \eqref{eq:arcNE}. The magnitude comes from the haversine
+rather than from an $\arcsin$ of the pair's own magnitude, which would fold
+every central angle past $90^{\circ}$ back on itself --- reachable early in a solve, when a trial
+pair can land most of a hemisphere away. And the ratio $\Delta/\sin\Delta$ is
+replaced by unity when $\operatorname{hypot}(w_N,w_E)$ is zero, which is exact:
+at coincidence the ratio tends to one and the components are zero anyway.
+
+\subsection{Stage two: two unknowns, two residuals, one damped Newton}
+\label{sec:twoaxis}
+
+The controls are the launch azimuth $\psi$ and the cutoff time
+$t_{\text{cut}}$; the residual is \eqref{eq:missvec}; the seed is
+$(\psi_{\text{seed}},t_{\text{seed}})$ from Sections~\ref{sec:aimseed}
+and~\ref{sec:rangesolve}. The solver is \code{coorbital.util.aimSolve}: a
+damped Newton with a forward-difference Jacobian, the step taken through a
+singular value decomposition of that Jacobian.
+
+\paragraph{Why not bisection, given that Section~\ref{sec:rangesolve} argues
+for it.} The argument there is not that bisection is robust in general. It is
+that bisection never leaves a bracket, and a bracket is worth more than a
+convergence rate when each evaluation costs a propagation and the function has
+kinks. Every one of those virtues rests on the bracket, and a bracket is a
+one-dimensional object --- it is the intermediate value theorem, which has no
+cheap two-dimensional analogue. Two residuals do not change sign across an
+interval; enclosing a root of a planar map requires a winding argument around a
+closed contour, which is many propagations to establish and offers no
+halving step once established. So the property bisection depends on does not
+exist here. That is what removes it from the table, and the consequence is
+that the safeguards a bracket used to provide for free must now be written
+down explicitly:
+
+\begin{itemize}
+\item \textbf{A condition-number ceiling.} The $2$-norm condition number
+$\varsigma_1/\varsigma_2$ is formed from the singular values and tested
+\emph{before} any step is computed, so an ill-conditioned Jacobian reaches the
+caller as a number it can print rather than as an infinity in the step.
+\item \textbf{A cap on the step,} applied as one scale factor on the whole
+step rather than component by component --- clipping the components
+independently would rotate the step off the Newton direction and into a
+direction nobody computed. The shipped caps are $10^{\circ}$ of heading and
+$5\,\%$ of the burn per iteration.
+\item \textbf{A backtracking line search} that halves until
+$\max|f_k|$ strictly decreases, and that treats a trial pair whose flight does
+not complete as an \emph{infeasible point} rather than as an error: it shrinks
+the step exactly as a step that merely failed to improve would. Along a Newton
+direction the linearised residual is $(1-\varrho)\,\mathbf{f}$ for damping
+$\varrho$, so the same infinity norm that defines convergence is a proper
+merit function and no second measure is needed.
+\end{itemize}
+
+The step itself is read out of the same three factors that gave the condition
+number: rotate the residual into the singular basis, divide by the singular
+values, rotate back,
+\begin{equation}
+  \mathbf{s} \;=\; -\,V\bigl(\Sigma^{-1}\,U^{\!\top}\mathbf{f}\bigr),
+  \qquad J = U\Sigma V^{\!\top},
+  \label{eq:newtonstep}
+\end{equation}
+in which $\Sigma^{-1}$ is a division by two numbers and not a matrix inversion.
+It costs no second factorisation, forms no inverse anywhere, and --- the practical
+reason --- cannot emit the near-singularity warning a backslash would print to
+the console from inside a loop that runs thousands of times.
+
+An iteration costs exactly three propagations: two finite-difference probes and
+one trial step. The base point is never re-evaluated, the accepted trial value
+becoming the next base value.
+
+\paragraph{Convergence is on the residual, never on the step.} This is not
+fastidiousness. The method damps, and a damped step is small precisely when the
+line search is in trouble; a solver that also accepted a small step would
+report its worst failures as successes. The only success criterion is
+$\max_k|f_k| \le \text{tol}$.
+
+\paragraph{The conditioning is about as good as this problem gets.} Azimuth
+moves the impact point almost purely crosswise and cutoff almost purely along
+the course, so each control owns one residual and the Jacobian is a
+permutation of a diagonally dominant matrix. Measured, on the $75^{\circ}$
+banked case, in metres per radian and metres per second:
+\begin{equation}
+  J \;=\;
+  \begin{bmatrix}
+    \partial f_{\text{down}}/\partial\psi &
+    \partial f_{\text{down}}/\partial t_{\text{cut}} \\[2pt]
+    \partial f_{\text{cross}}/\partial\psi &
+    \partial f_{\text{cross}}/\partial t_{\text{cut}}
+  \end{bmatrix}
+  \;=\;
+  \begin{bmatrix}
+    -1.7936\times10^{4} & 4.4458\times10^{5} \\
+    \phantom{-}3.5879\times10^{6} & 3.1613\times10^{3}
+  \end{bmatrix},
+  \label{eq:jacmeas}
+\end{equation}
+in which each column's smaller entry is $0.50\,\%$ and $0.71\,\%$ of its
+larger.
+Both dominant entries are predictable. Rotating the departure heading by
+$\delta\psi$ rotates the whole track about the launch point, so an impact point
+at central angle $\Delta_{\text{fly}}$ moves crosswise by
+$r_I\sin\Delta_{\text{fly}}\,\delta\psi$; with $\Delta_{\text{fly}} = 0.597547$
+that predicts $3.5885\times10^{6}~\mathrm{m/rad}$ against the
+$3.5879\times10^{6}$ measured, an agreement of $0.015\,\%$. The other is the
+range-per-second-of-burn the bisection of Section~\ref{sec:rangesolve} already
+lives on, $444.6~\mathrm{km/s}$ here.
+
+Because the matrix is near-antidiagonal its singular values are essentially
+those two entries, so
+\begin{equation}
+  \operatorname{cond}_2 J \;\approx\;
+  \frac{|\partial f_{\text{cross}}/\partial\psi|}
+       {|\partial f_{\text{down}}/\partial t_{\text{cut}}|}
+  \;=\; 8.0704 ,
+  \label{eq:condapprox}
+\end{equation}
+against $8.0703$ measured --- four figures. The two rotating-Earth iterations
+give $8.5278$ and $8.5690$ on the same reasoning. A condition number of about
+$8$ is the best this problem offers, and it is worth naming what it is not: it
+is not dimensionless, because the two controls are measured in radians and
+seconds and rescaling either rescales it. The units-free statement is the one
+above --- each control moves one residual to within about a percent.
+
+What would degrade it is geometric and is the reason the ceiling exists.
+Approaching the range maximum, $\partial f_{\text{down}}/\partial
+t_{\text{cut}}\to 0$: the cutoff stops moving the impact point, the two columns
+of $J$ become parallel, and the Newton step is a wild extrapolation along a
+direction the residuals barely respond to. The solver refuses there with
+\code{singularJacobian} and reports the number, rather than stepping. At the
+other extreme a near-antipodal target sends $\sin\Delta_{\text{fly}}\to 0$ and
+collapses the azimuth sensitivity instead; the envelope refusal of
+Section~\ref{sec:rangesolve} keeps the solve away from that end.
+
+\paragraph{A tolerance subtlety worth a paragraph.} The convergence test is a
+max-norm on the two components, so the per-component tolerance is set to the
+user's range tolerance over $\sqrt2$: with a $1~\mathrm{km}$ request the solver
+is given $707.107~\mathrm{m}$, and both components inside that puts the
+hypotenuse inside $1~\mathrm{km}$ in the worst case, which is the two
+components equal. That makes the user's tolerance \emph{sufficient} but not
+\emph{necessary}. Components of $900$ and $100~\mathrm{m}$ are a
+$906~\mathrm{m}$ miss, comfortably inside a kilometre, and they fail the
+$707~\mathrm{m}$ per-component test. The solver will keep working on a
+trajectory the user would have accepted. That is the right way round --- the
+alternative is accepting one the user would not --- but it should be read as a
+conservative test and not as a measurement of the miss.
+
+\subsection{What it cost, and what it did not exercise}
+\label{sec:aimmeasured}
+
+Three configurations, all on the shipped Hawaii-to-California geometry, all
+with a $1~\mathrm{km}$ range tolerance. ``Miss at the seed'' is the closed-form
+bearing with the bisected cutoff --- what the library used to report as its
+answer --- and it is free, because the solver records it as the first column of
+its own history.
+
+\begin{center}\small
+\begin{tabular}{@{}lrrrr@{}}
+\toprule
+Case & Miss at the seed (m) & Miss achieved (m) & $\psi-\psi_{\text{seed}}$ & Evals \\
+\midrule
+Rotating Earth, \code{earthSpin} true & $231{,}551.628$ & $4.361$   & $-3.5793^{\circ}$ & $7$ \\
+$75^{\circ}$ terminal bank            & $21{,}524.695$  & $54.795$  & $-0.3436^{\circ}$ & $4$ \\
+Shipped: still Earth, zero bank       & $511.243$       & $511.243$ & $0$               & $1$ \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+The first two rows are the point of the exercise: a $231.6~\mathrm{km}$ miss
+becomes $4.4~\mathrm{m}$ for six extra propagations, and a $21.5~\mathrm{km}$
+miss becomes $54.8~\mathrm{m}$ for three. The azimuth offsets are the
+mechanism made visible --- the vehicle is aimed $3.58^{\circ}$ off the
+great-circle bearing to cancel a Coriolis deflection, and $0.34^{\circ}$ off it
+to cancel a banked turn.
+
+\paragraph{The third row is not a result, and should not be read as one.}
+``Unchanged, bit for bit'' is true --- the achieved miss is the same
+$511.243460~\mathrm{m}$ to every digit --- but it is true because the two-axis
+path was never taken. The solve tests its tolerance before doing any work, the
+seed miss is already inside it, and the run exits at iteration zero having spent
+one evaluation. No Jacobian is built and no step is attempted, which is why the
+condition-number column is empty for that case.
+
+Nor does tightening the tolerance rescue it. At a twentieth of the shipped
+tolerance the seed miss falls to $22.044~\mathrm{m}$ against a
+$35.355~\mathrm{m}$ per-component test, and the solve still exits at iteration
+zero. That is structural rather than lucky: on a non-rotating, zero-bank run
+the cross-range component is zero to rounding, so the miss \emph{is} the
+down-range residual, and the down-range residual is the very quantity the
+stage-one bisection has already driven under the same tolerance. The seed
+cannot be outside a tolerance the bisection was asked to meet.
+
+So the coverage of the two-axis path comes from the rotating and the banked
+cases, and from those alone. The shipped case demonstrates only that adding the
+second axis costs nothing and changes nothing when there is nothing for it to
+do --- which is worth having, and is not evidence that the solve works.
+
+\subsection{Zero bank over a still Earth, read as a limiting case}
+\label{sec:crossrange}
+
+The claim that survives from the older, downrange-only treatment is the
+limiting one: \emph{a zero-bank trajectory over a non-rotating sphere stays on
+the great circle it left on}. That is a statement about $\sigma=0$ and
+$\omega=0$ together, and Section~\ref{sec:aimseed} gives its proof --- with no
+horizontal force and no apparent acceleration, $\dot\psi$ is exactly the
+meridian-convergence rate that holds a great-circle course. The measured
+cross-range on the shipped run, $-4.06\times10^{-7}$~m over a
+$3811~\mathrm{km}$ arc, is that statement at floating-point resolution.
+
+What no longer holds is the conclusion that used to be drawn from it --- that
+cross-range is a property of the configuration which the library can only
+measure. It is now a residual, and it is driven to zero.
+
+\code{run\_target} accordingly reports the two components of
+\eqref{eq:missvec}, whose hypotenuse is the miss itself. The older spherical
+relation
 \begin{equation}
   x_{\text{track}} \;=\; r_I \arcsin\!\bigl(
      \sin\Delta\theta_{\text{fly}}\;
-     \sin(\psi_{\text{fly}} - \psi_{\text{launch}})\bigr),
+     \sin(\psi_{\text{fly}} - \psi_{\text{launch}})\bigr)
   \label{eq:xtrack}
 \end{equation}
-in which \emph{all three inputs are quantities at the launch point}:
-
-\begin{itemize}
-\item $\Delta\theta_{\text{fly}}$ is the great-circle central angle from the
-launch point to the \emph{achieved impact} point, \eqref{eq:haversine} on the
-flown terminal position;
-\item $\psi_{\text{fly}} = \operatorname{bearing}(\text{launch},
-\text{impact})$ is the \emph{initial} bearing of the launch-to-impact arc,
-\eqref{eq:bearing} evaluated with the flown impact point as its second
-argument;
-\item $\psi_{\text{launch}} = \operatorname{bearing}(\text{launch},
-\text{target}) = \psi_0$ is the initial bearing of the intended launch-to-target
-arc --- the same closed form that seeded $\mathbf{x}_6$ in
-Section~\ref{sec:targeting}.
-\end{itemize}
-
-\noindent
-The difference of the two bearings is wrapped into $(-\pi,\pi]$ before the
-sine, which fixes the sign convention as positive to the right of the intended
-course. In the code these are \code{angFly}, \code{psiFly} and
-\code{psiLaunch}, and \code{psiFly} is a second call to
-\code{greatCircleBearing} from the launch point --- not a state read out of the
-trajectory.
+is still what \code{BM/run\_ballistic\_target} computes, and it is worth
+keeping on the page because it carries a trap that \eqref{eq:missvec} does not
+have to worry about. All three of its inputs are quantities \emph{at the launch
+point}: $\Delta\theta_{\text{fly}}$ is the central angle from launch to
+achieved impact, $\psi_{\text{fly}}$ is the \emph{initial} bearing of the
+launch-to-impact arc, and $\psi_{\text{launch}}$ is the initial bearing of the
+intended launch-to-target arc.
 
 \paragraph{Why it is not the terminal heading, which is the plausible mistake.}
 $\psi_{\text{fly}}$ is emphatically \emph{not} $\mathbf{x}_6$ at impact. The
@@ -1882,33 +2248,447 @@ convergence of Section~\ref{sec:gc} --- the same effect that puts
 $27.974^{\circ}$ between the LAX--JFK outbound and return courses. Substituting
 it into \eqref{eq:xtrack} leaves a formula that still looks right, still
 returns a number of plausible magnitude, and is wrong by tens of kilometres on
-an intercontinental arc. Both angles in \eqref{eq:xtrack} have to be anchored
-at the launch point, because the relation is a statement about the spherical
-right triangle standing on the intended great circle \emph{there}: one leg
-along the intended course, the hypotenuse along the launch-to-impact arc, and
-the included angle between them.
+an intercontinental arc. Both angles have to be anchored at the launch point,
+because the relation is a statement about the spherical right triangle standing
+on the intended great circle \emph{there}: one leg along the intended course,
+the hypotenuse along the launch-to-impact arc, and the included angle between
+them.
 
-The offset is printed every run, with a warning when it exceeds the range
-tolerance. Measured:
+Equation~\eqref{eq:missvec} avoids the trap by construction rather than by
+care, because it never forms an angle at the launch point at all. Its only
+direction is $\psi_C$ at the target, and its two components come from the
+target-to-impact pair directly.
 
-\begin{center}
-\begin{tabular}{lrr}
-\toprule
-& Shipped, $\sigma = 0$ & $\sigma = 75^{\circ}$ descent \\
-\midrule
-Cross-track offset & $-4.06\times10^{-7}$~m & $21{,}515.22$~m \\
-Total miss         & $511.24$~m & $21{,}524.70$~m \\
-Range residual     & $511.24$~m & $-585.20$~m \\
-\bottomrule
-\end{tabular}
-\end{center}
+%=====================================================================
+\section{Guidance, and how it differs from targeting}
+\label{sec:guidance}
 
-At $75^{\circ}$ of bank the range residual is still under a kilometre --- the
-bisection did its job --- and the vehicle lands 21.5~km to the side.
-Closing that requires an outer iteration on azimuth, which the library does not
-have. The honest reading is that the shipped script solves \emph{downrange
-only}, and the cross-track line in its summary is the evidence for the
-zero-cross-range claim rather than a restatement of it.
+This section is the one place where the note steps outside its own rule that
+every equation here is an equation the code evaluates. The first part is the
+library as it stands. The second describes two closed-loop boost-guidance laws
+that are \emph{specified for} this library and not implemented in it; nothing
+of either is coded, and the mathematics is reproduced from the source
+specification, derived where it can be and marked where the specification is a
+summary.
+
+\subsection{What the library has: open-loop schedules, and a loop closed
+outside the flight}
+\label{sec:openloop}
+
+Guidance in the library today is open-loop. Each phase carries a schedule of
+commanded attitude against that phase's \emph{own} clock, and the handle
+interpolates it at each call (Section~\ref{sec:phases}). \code{prescribed}
+interpolates $(\alpha,\sigma)$ on a time grid and ignores the state entirely.
+\code{pitchProgram} does read the state --- \eqref{eq:pitchprog} takes $\gamma$
+from $\mathbf{x}_5$ to turn a commanded pitch attitude into an angle of attack
+--- so the signature \code{guide(t,x)} is not decorative and the live state does
+reach the law. But nothing is \emph{recomputed}: the schedule the vehicle flies
+at $t=80~\mathrm{s}$ was fixed before liftoff, and no measurement of where the
+vehicle actually is can change it.
+
+The loop is closed, but it is closed \emph{outside} the flight. That is what
+Section~\ref{sec:targeting} is: the targeting solve propagates whole
+trajectories repeatedly, reads the endpoint, and adjusts two scalars until the
+endpoint is the target. Between propagations nothing is learned; within a
+propagation nothing is adjusted.
+
+The distinction is worth stating sharply because it is the point of this
+section. \textbf{Targeting solves before the flight and then flies the answer.
+Guidance re-solves during the flight, from wherever the vehicle actually is.}
+The library does the first. It is shooting-based trajectory optimisation with
+two decision variables, and calling it guidance would be a category error: it
+cannot respond to anything, because by construction there is nothing left to
+respond to once the answer has been computed.
+
+\subsection{PEG and VOA: specified, not implemented}
+\label{sec:pegvoa}
+
+\textbf{Neither of the two laws below exists in the library.} There is no
+\code{+guide} file for either, no test, and no entry script that calls one.
+They are the specified next milestone, and what follows is their mathematics as
+the source deck states it, with the derivations the deck omits supplied here so
+that the specification can be implemented from this note rather than from a
+slide.
+
+The deck's symbols collide with this note's in five places, so they are
+renamed, once, here: its interpolation parameter $\sigma$ becomes $s$ (bank
+angle is $\sigma$); its direction angles $(\alpha,\beta)$ become $(\eta,\zeta)$
+(angle of attack is $\alpha$); its cone angle $\Omega$ becomes $\Theta$ (the
+Earth rate vector is $\bOmega$); its target plane normal $\hat n_d$ becomes
+$\hat{\mathbf{w}}_d$ (local north is $\nhat$); and its reference vector
+$a_{\text{ref}}$ becomes $\mathbf{b}_{\text{ref}}$ ($a$ is an acceleration
+throughout). Angular momentum is written $\mathbf{h}$ in bold, since $h$ is
+altitude, and the costates are written $\boldsymbol{\lambda}_r$,
+$\boldsymbol{\lambda}_v$ in bold, since the unsubscripted $\lambda$ is
+longitude.
+
+Both laws work in an inertial Cartesian frame on the two-body problem with a
+known thrust-acceleration magnitude,
+\begin{equation}
+  \dot{\mathbf{r}} = \mathbf{v},
+  \qquad
+  \dot{\mathbf{v}} = -\frac{\mu}{r^3}\mathbf{r} + a_T(t)\,\mathbf{u},
+  \qquad \|\mathbf{u}\| = 1 ,
+  \label{eq:guidetwobody}
+\end{equation}
+where $a_T$ comes from the thrust and mass model. Both enforce the same five
+terminal constraints, and both leave the thrust magnitude alone: the only
+control is the direction $\mathbf{u}$.
+
+\subsubsection{The five terminal constraints}
+\label{sec:termcon}
+
+Let $R_d$, $V_d$ and $\gamma_d$ be the desired burnout radius, speed and
+flight-path angle, let $\hat{\mathbf{w}}_d = \mathbf{h}_d/\|\mathbf{h}_d\|$ be
+the unit normal of the desired orbit plane, and build an orthonormal triad in
+that plane from any $\mathbf{b}_{\text{ref}}$ not parallel to it:
+\begin{equation}
+  \mathbf{q}_1 = \frac{\mathbf{b}_{\text{ref}}\times\hat{\mathbf{w}}_d}
+                      {\|\mathbf{b}_{\text{ref}}\times\hat{\mathbf{w}}_d\|},
+  \qquad
+  \mathbf{q}_2 = \hat{\mathbf{w}}_d\times\mathbf{q}_1 .
+  \label{eq:qbasis}
+\end{equation}
+With $\mathbf{h}_f = \mathbf{r}_f\times\mathbf{v}_f$ the achieved angular
+momentum, the constraint vector is
+\begin{equation}
+  \mathbf{c} \;=\;
+  \begin{bmatrix}
+    \dfrac{\|\mathbf{r}_f\|}{R_d} - 1 \\[8pt]
+    \dfrac{\|\mathbf{v}_f\|}{V_d} - 1 \\[8pt]
+    \dfrac{\mathbf{r}_f^{\!\top}\mathbf{v}_f}{R_dV_d} - \sin\gamma_d \\[8pt]
+    \dfrac{\mathbf{q}_1^{\!\top}\mathbf{h}_f}{R_dV_d|\cos\gamma_d|} \\[8pt]
+    \dfrac{\mathbf{q}_2^{\!\top}\mathbf{h}_f}{R_dV_d|\cos\gamma_d|}
+  \end{bmatrix}
+  \;=\; \mathbf{0} .
+  \label{eq:termcon}
+\end{equation}
+Three readings the deck does not spell out. The third component is the
+flight-path angle: $\mathbf{r}^{\!\top}\mathbf{v} = rV\sin\gamma$ with the same
+sign convention this note fixes in Section~\ref{sec:frames}, so with the first
+two components satisfied the third says $\sin\gamma_f = \sin\gamma_d$. The
+fourth and fifth are the orbit plane: $\{\mathbf{q}_1,\mathbf{q}_2,
+\hat{\mathbf{w}}_d\}$ is orthonormal by \eqref{eq:qbasis}, so requiring
+$\mathbf{h}_f$ to have no $\mathbf{q}_1$ and no $\mathbf{q}_2$ component is
+requiring $\mathbf{h}_f \parallel \hat{\mathbf{w}}_d$ --- the achieved plane is
+the desired one --- and the normalisation $R_dV_d|\cos\gamma_d|$ is the desired
+$\|\mathbf{h}\|$, which makes both entries dimensionless direction-cosine
+errors. And because the pair vanishes exactly when $\mathbf{h}_f$ is parallel
+to $\hat{\mathbf{w}}_d$, the arbitrary $\mathbf{b}_{\text{ref}}$ that fixed the
+roll of the triad drops out of the constraint \emph{set}: it changes the two
+residuals individually and not the surface they define.
+
+Five constraints, and five is the number both laws are built around.
+
+\subsubsection{VOA: the variational formulation}
+\label{sec:voa}
+
+The source deck does not expand the acronym, and this note will not invent an
+expansion for it. From the mathematics it is an indirect Pontryagin
+formulation of the minimum-time ascent problem \cite{Pontryagin1962,Bryson1975}.
+
+Minimise $J = t_f$ subject to \eqref{eq:guidetwobody}. With costates
+$\boldsymbol{\lambda}_r$, $\boldsymbol{\lambda}_v$ the deck writes the
+Hamiltonian
+\begin{equation}
+  H \;=\; \boldsymbol{\lambda}_r^{\!\top}\mathbf{v}
+        + \boldsymbol{\lambda}_v^{\!\top}\dot{\mathbf{v}} - 1 ,
+  \label{eq:voaham}
+\end{equation}
+from which the pointwise optimal steering is
+\begin{equation}
+  \mathbf{u}^{*} \;=\; \frac{\boldsymbol{\lambda}_v}
+                            {\|\boldsymbol{\lambda}_v\|} ,
+  \label{eq:primer}
+\end{equation}
+because $\boldsymbol{\lambda}_v^{\!\top}\mathbf{u}$ is the only term in $H$
+containing the control and $a_T > 0$. This is Lawden's primer vector
+\cite{Lawden1963}: thrust along the velocity costate. One convention has to be
+read off rather than assumed --- \eqref{eq:voaham} is written with $-1$ and
+\eqref{eq:primer} \emph{aligns} with $\boldsymbol{\lambda}_v$, which is the
+maximising form of the principle; the minimising convention writes $H = 1 +
+\boldsymbol{\lambda}^{\!\top}\mathbf{f}$ and gives $\mathbf{u}^{*} =
+-\boldsymbol{\lambda}_v/\|\boldsymbol{\lambda}_v\|$. The two differ by the sign
+of $H$ and of the costates together and describe the same trajectory. The deck
+is self-consistent; an implementer merely must not mix them.
+
+The costate equations follow from $\dot{\boldsymbol{\lambda}} = -\partial
+H/\partial\mathbf{x}$. Only the gravity term depends on $\mathbf{r}$, and
+\begin{equation}
+  \frac{\partial}{\partial\mathbf{r}}\Bigl(-\frac{\mu}{r^3}\mathbf{r}\Bigr)
+  = -\mu\Bigl(\frac{I}{r^3} - 3\frac{\mathbf{r}\mathbf{r}^{\!\top}}{r^5}\Bigr),
+  \label{eq:gravgrad}
+\end{equation}
+so, transposing and negating,
+\begin{equation}
+  \dot{\boldsymbol{\lambda}}_r
+    = \mu\Bigl(\frac{I}{r^3} - 3\frac{\mathbf{r}\mathbf{r}^{\!\top}}{r^5}\Bigr)
+      \boldsymbol{\lambda}_v ,
+  \qquad
+  \dot{\boldsymbol{\lambda}}_v = -\boldsymbol{\lambda}_r .
+  \label{eq:voacostate}
+\end{equation}
+The matrix in \eqref{eq:voacostate} is symmetric, so the transpose costs
+nothing here; it is written out because getting the factor of three or the
+power of $r$ wrong is the standard way this derivation fails, and neither error
+shows up as anything but slow convergence.
+
+Equations \eqref{eq:guidetwobody} and \eqref{eq:voacostate} are the
+twelve-variable augmented state--costate system: six states and six costates,
+integrated together with the control eliminated by \eqref{eq:primer}. The
+shooting vector is
+\begin{equation}
+  \mathbf{z} \;=\;
+  \begin{bmatrix}\boldsymbol{\lambda}_r(0) \\
+                 \boldsymbol{\lambda}_v(0) \\
+                 t_f\end{bmatrix} \in \mathbb{R}^{7} .
+  \label{eq:voaz}
+\end{equation}
+
+Seven unknowns need seven conditions, and the deck lists exactly seven: the
+five of \eqref{eq:termcon}, the free-final-time transversality condition
+\begin{equation}
+  H(t_f) = 0 ,
+  \label{eq:voatrans}
+\end{equation}
+and one orthogonality condition on the terminal costates,
+\begin{equation}
+  \boldsymbol{\lambda}_r^{\!\top}(t_f)\bigl(\hat{\mathbf{w}}_d\times\mathbf{r}_f\bigr)
+  + \boldsymbol{\lambda}_v^{\!\top}(t_f)\bigl(\hat{\mathbf{w}}_d\times\mathbf{v}_f\bigr)
+  = 0 .
+  \label{eq:voaorth}
+\end{equation}
+The deck states \eqref{eq:voaorth} without derivation, and it is worth
+supplying, because it looks arbitrary and is not. The five constraints
+\eqref{eq:termcon} do not fix a terminal state; they fix a one-parameter
+family of them. Rotate the terminal state rigidly about the target plane
+normal by an angle $\delta\vartheta$:
+\begin{equation}
+  \mathbf{r}_f \mapsto \mathbf{r}_f
+    + \delta\vartheta\,\hat{\mathbf{w}}_d\times\mathbf{r}_f ,
+  \qquad
+  \mathbf{v}_f \mapsto \mathbf{v}_f
+    + \delta\vartheta\,\hat{\mathbf{w}}_d\times\mathbf{v}_f .
+  \label{eq:rigidrot}
+\end{equation}
+A rotation preserves $\|\mathbf{r}_f\|$, $\|\mathbf{v}_f\|$ and
+$\mathbf{r}_f^{\!\top}\mathbf{v}_f$; it maps $\mathbf{h}_f$ to the rotation of
+$\mathbf{h}_f$, and when $\mathbf{h}_f$ is already parallel to the rotation
+axis $\hat{\mathbf{w}}_d$ that leaves it unchanged. All five constraints
+therefore survive \eqref{eq:rigidrot}, which makes it an admissible variation
+of the terminal manifold --- the burnout point is free to slide around the
+target orbit. Transversality requires the costates to annihilate every
+admissible variation, $\boldsymbol{\lambda}_r^{\!\top}\delta\mathbf{r}_f +
+\boldsymbol{\lambda}_v^{\!\top}\delta\mathbf{v}_f = 0$, and substituting
+\eqref{eq:rigidrot} and dividing by $\delta\vartheta$ gives exactly
+\eqref{eq:voaorth}. It is not an extra assumption; it is the price of not
+having specified where in the orbit the vehicle must arrive.
+
+The count closes: twelve differential equations, seven shooting unknowns, seven
+scalar conditions at $t_f$. It is a two-point boundary-value problem and it has
+to be solved afresh at every guidance cycle.
+
+\subsubsection{PEG: the closed-form approximation}
+\label{sec:peg}
+
+PEG replaces the costate arc with an assumed shape for the thrust direction
+carrying five parameters --- a vector linear-tangent steering law in the sense
+of \cite{Jaggers1977} --- and solves the same five terminal constraints for
+those parameters.
+
+Parameterise a unit direction by two angles,
+\begin{equation}
+  \mathbf{p}(\eta,\zeta) =
+  \begin{bmatrix}\cos\zeta\cos\eta\\ \cos\zeta\sin\eta\\ \sin\zeta\end{bmatrix},
+  \qquad
+  \mathbf{z} = \begin{bmatrix}\eta_0 & \zeta_0 & \eta_f & \zeta_f &
+                              t_{\text{go}}\end{bmatrix}^{\!\top},
+  \label{eq:pegp}
+\end{equation}
+with $\mathbf{p}_0 = \mathbf{p}(\eta_0,\zeta_0)$ the direction at the start of
+the arc and $\mathbf{p}_f = \mathbf{p}(\eta_f,\zeta_f)$ the direction at its
+end. The deck also lists two unit vectors perpendicular to $\mathbf{p}$, and
+they are not independent data: they are the normalised partial derivatives of
+\eqref{eq:pegp},
+\begin{equation}
+  \hat{\mathbf{e}}_\eta = \frac{1}{\cos\zeta}\frac{\partial\mathbf{p}}{\partial\eta}
+    = \begin{bmatrix}-\sin\eta\\ \cos\eta\\ 0\end{bmatrix},
+  \qquad
+  \hat{\mathbf{e}}_\zeta = \frac{\partial\mathbf{p}}{\partial\zeta}
+    = \begin{bmatrix}-\sin\zeta\cos\eta\\ -\sin\zeta\sin\eta\\
+                     \cos\zeta\end{bmatrix} .
+  \label{eq:pegtangent}
+\end{equation}
+Both are unit, both are orthogonal to $\mathbf{p}$ and to each other --- three
+inner products, each collapsing on $\cos^2+\sin^2 = 1$ --- so
+$\{\mathbf{p},\hat{\mathbf{e}}_\eta,\hat{\mathbf{e}}_\zeta\}$ is an orthonormal
+triad and \eqref{eq:pegtangent} is the tangent basis of the direction sphere at
+$\mathbf{p}$. That is what makes $(\eta,\zeta)$ a legitimate two-parameter
+chart for a direction: perturbations in the two angles move $\mathbf{p}$ along
+two independent tangent directions and never off the sphere.
+
+The commanded direction over the arc is a spherical interpolation between the
+two endpoint directions, with a quadratic time warp:
+\begin{equation}
+  \mathbf{p}(\tau) =
+    \frac{\sin[(1-s)\Theta]}{\sin\Theta}\,\mathbf{p}_0
+  + \frac{\sin(s\Theta)}{\sin\Theta}\,\mathbf{p}_f ,
+  \qquad
+  s = \Bigl(\frac{\tau}{t_{\text{go}}}\Bigr)^{\!2},
+  \qquad
+  \Theta = \arccos\bigl(\mathbf{p}_0^{\!\top}\mathbf{p}_f\bigr),
+  \label{eq:slerp}
+\end{equation}
+for elapsed time $0\le\tau\le t_{\text{go}}$. Three properties, all checkable.
+At $\tau=0$, $s=0$ and \eqref{eq:slerp} returns $\mathbf{p}_0$ exactly; at
+$\tau=t_{\text{go}}$, $s=1$ and it returns $\mathbf{p}_f$ exactly. In between
+it stays on the unit sphere: expanding
+$\sin\Theta = \sin\bigl((1-s)\Theta + s\Theta\bigr)$ by the addition formula
+and using $\mathbf{p}_0^{\!\top}\mathbf{p}_f = \cos\Theta$ gives
+$\|\mathbf{p}(\tau)\|^2 = \sin^2\Theta/\sin^2\Theta = 1$ identically. And the
+warp is quadratic rather than linear, so $\dd s/\dd\tau = 2\tau/t_{\text{go}}^2$
+vanishes at $\tau=0$: the commanded direction leaves $\mathbf{p}_0$ with zero
+rate and does most of its turning late in the arc. Note that
+\eqref{eq:slerp} degenerates as $\Theta\to 0$, where both coefficients become
+$0/0$; an implementation needs the small-angle branch $(1-s)\mathbf{p}_0 +
+s\mathbf{p}_f$ renormalised, which the deck does not mention.
+
+The five parameters are then solved against the five terminal constraints. The
+trajectory is propagated forward from the navigated state under
+\eqref{eq:guidetwobody} with $\mathbf{u} = \mathbf{p}(\tau)$, the terminal
+state is measured by \eqref{eq:termcon}, and
+\begin{equation}
+  \mathbf{z}^{*} = \arg\min_{t_{\text{go}}>0}
+                   \tfrac{1}{2}\,\|\mathbf{c}(\mathbf{z})\|^2 .
+  \label{eq:pegsolve}
+\end{equation}
+Five unknowns against five residuals: the least-squares form is a root-find
+written defensively, and the deck's ``nonlinear correction'' is precisely this
+--- the constraints are measured on the \emph{propagated} nonlinear trajectory
+rather than on a closed-form approximation to it.
+
+Only the first direction is ever commanded:
+\begin{equation}
+  \mathbf{p}_{\text{cmd}} = \mathbf{p}(0;\mathbf{z}^{*})
+                          = \mathbf{p}_0(\eta^{*},\zeta^{*}) ,
+  \label{eq:pegcmd}
+\end{equation}
+and the rest of $\mathbf{p}(\tau)$ is a prediction that will be discarded and
+re-solved. That is the whole content of closed-loop: the cycle is
+\emph{navigate}, \emph{solve} \eqref{eq:pegsolve}, \emph{command}
+\eqref{eq:pegcmd}, \emph{execute} for a guidance interval $\Delta t$, repeat
+--- with the terminating test that if $t_{\text{go}}^{*} \le \Delta t$ the
+vehicle executes only $t_{\text{go}}^{*}$ and cuts off.
+
+\subsubsection{The relationship between them}
+
+VOA is the exact answer and PEG is the affordable one, and the difference is
+entirely in what is assumed about the shape of the steering history.
+
+VOA assumes nothing: \eqref{eq:primer} \emph{derives} the direction at every
+instant from the costates, so the arc it flies is the optimal one to within the
+integration. Its price is \eqref{eq:voaz} --- a seven-dimensional two-point
+boundary-value problem, each residual evaluation costing an integration of
+twelve coupled equations, solved again at every cycle, with the sensitivity to
+the initial costates that indirect methods are known for.
+
+PEG assumes \eqref{eq:slerp}: five numbers and a fixed interpolation shape
+stand in for the whole costate arc. The boundary-value problem collapses to a
+five-unknown square system over a single forward integration, and the
+commanded direction \eqref{eq:pegcmd} is available in closed form once
+$\mathbf{z}^{*}$ is known. That is what a flight computer can run at cycle
+rate.
+
+The honest statement of the relationship is that PEG is an approximation whose
+quality is a question about how close \eqref{eq:slerp} is to the primer-vector
+history \eqref{eq:primer} for the ascent in hand, and VOA is the benchmark that
+question is answered against --- off-line, where the cost of a boundary-value
+problem does not matter.
+
+\subsection{What stands between these and this library}
+\label{sec:guidancegaps}
+
+Four gaps, in decreasing order of how much modelling they require.
+
+\paragraph{1. The equations of motion are 3-DOF point-mass, and the control is
+not a direction.} PEG commands a thrust \emph{direction}
+$\mathbf{p}_{\text{cmd}}$ in an inertial Cartesian frame. The library's
+controls are an angle of attack and a bank angle, entering through
+\eqref{eq:athr}. The conversion is well posed --- resolve the commanded
+direction on the velocity triad and read
+\begin{equation}
+  \alpha = \arccos\bigl(\mathbf{p}\cdot\vhat\bigr),
+  \qquad
+  \sigma = \operatorname{atan2}\bigl(\mathbf{p}\cdot\ip,\;
+                                     \mathbf{p}\cdot\ig\bigr),
+  \label{eq:dirtoalpha}
+\end{equation}
+which inverts \eqref{eq:athr} exactly, and is degenerate only at $\alpha=0$,
+where $\sigma$ is undefined because there is no incidence to roll --- but
+\eqref{eq:dirtoalpha} is written nowhere in the library. Worse, it is not
+purely a conversion. Equation~\eqref{eq:athr} ties thrust and lift to a single
+roll orientation, so a guidance law that owns $\sigma$ owns the lift direction
+too, and during a boost with appreciable dynamic pressure the aerodynamic
+consequence of a PEG steering command is not something PEG was asked about.
+Note also that \eqref{eq:pitchprog}'s $\alpha = \theta - \gamma$ is a
+\emph{planar} relation, valid at $\sigma = 0$: at nonzero bank the commanded
+body axis is out of the vertical plane and the incidence is not the difference
+of two in-plane angles. There is no attitude state to help --- commanded angles
+are achieved instantaneously --- so a rate-limited turn between successive PEG
+commands cannot be represented at all.
+
+\paragraph{2. The call cadence is wrong, and the purity contract makes it
+visible.} \code{phaseRun} calls the guidance handle once per integrator stage,
+which is many times per second of flight and a count not knowable in advance,
+and then once more per returned sample on the reconstruction pass that fills
+\code{traj.u} --- all of the latter \emph{after} every solver-stage call for
+that phase has been made. PEG's cycle is not a call: it is a fixed interval
+$\Delta t$ with $\mathbf{z}^{*}$ carried across it. The library documents
+guidance handles as \emph{pure} functions of $(t,\mathbf{x})$ for exactly this
+reason, and a handle that latched $\mathbf{z}^{*}$ in its closure would report
+a \code{traj.u} that is not the control the integrator flew, and would leave
+its hidden state advanced by the reconstruction pass before the next phase
+began. Two honest options exist and neither is built:
+\begin{itemize}
+\item \textbf{Carry the guidance state in the integrated state vector.} The
+seven-state convention of Section~\ref{sec:phases} already anticipates this ---
+$\mathbf{x}_7$ is a non-flight quantity riding in the state --- and the
+reconstruction pass then reads the same numbers the integrator used, because
+they are in $\mathbf{x}$. The cost is that $\mathbf{z}^{*}$ is a discrete
+quantity being carried by a continuous integrator, which wants either a
+piecewise-constant hold the ODE solver is told about or a state whose
+derivative is zero between updates applied at events.
+\item \textbf{Give \code{phaseRun} a guidance cadence distinct from the
+integration steps,} so the update happens at known times and the stages in
+between see a held command. This is closer to what a real flight computer does
+and further from what the library is; it means \code{phaseRun} owning a second
+clock.
+\end{itemize}
+The choice is open. It should be made before either algorithm is written, not
+during.
+
+\paragraph{3. Both laws close on a \emph{navigated} state, and the library has
+only truth.} There is no navigation model here, no state estimate, no sensor,
+no dispersion --- the state handed to \code{guide(t,x)} is the integrator's own
+state, exact by construction. A closed-loop law flown against truth will
+demonstrate that the algorithm converges and that it hits its terminal
+constraints, which is worth having. It cannot demonstrate the thing closed-loop
+guidance exists for, which is rejecting dispersions the open-loop schedule
+never knew about. Until there is something to be wrong about, PEG and VOA in
+this library are expensive ways of computing an open-loop answer.
+
+\paragraph{4. The five terminal constraints are orbital-insertion constraints,
+and a ground target is not one of them.} Equation~\eqref{eq:termcon} asks for a
+radius, a speed, a flight-path angle and an orbit plane. Nothing in it names a
+latitude and a longitude. A re-entry or boost-glide application therefore needs
+the aim point mapped into that set --- for instance by choosing the burnout
+state whose free-flight Keplerian arc (Section~\ref{sec:kepler}) carries it to
+the target, which fixes $R_d$, $V_d$, $\gamma_d$ and the plane through the
+launch point and the target. That is a modelling decision with real content:
+it presumes the mapping, and the presumption is exactly what the two-axis
+targeting solve of Section~\ref{sec:targeting} declines to make when it
+propagates the whole flight and measures where it lands instead. Neither
+choice is obviously right, and it is not a coding question.
 
 %=====================================================================
 \section{Limitations}
@@ -1921,8 +2701,24 @@ altitude. The interfaces are shaped so that an oblate gravity model drops in
 without editing the equations of motion, and the $g_\phi$ terms exist for
 exactly that day, but they are unexercised today.
 \item \textbf{The rotating-Earth terms are off by default} and are exercised by
-the test suite but by no shipped trajectory. The targeting azimuth is
-closed-form only with them off.
+the test suite, by the two-axis targeting cases of
+Section~\ref{sec:aimmeasured}, and by no shipped trajectory. In
+\code{HGV/run\_target} they are \emph{supported}, because that script solves
+the azimuth; the ballistic targeting script still refuses them.
+\item \textbf{The two-axis solve is exercised only where it is needed.} On the
+shipped non-rotating, zero-bank run the seed miss is already inside tolerance
+and the Newton exits at iteration zero, so that case demonstrates nothing about
+the solve (Section~\ref{sec:aimmeasured}). Coverage comes from the rotating and
+the banked cases.
+\item \textbf{Guidance is open-loop and the loop is closed outside the flight.}
+Schedules are interpolated against a phase clock and never recomputed; the only
+feedback in the library is the targeting solve re-propagating whole
+trajectories. PEG and VOA are specified and not implemented, and
+Section~\ref{sec:guidancegaps} lists the four things that stand between the
+specification and this library --- no attitude dynamics and no
+direction-to-$(\alpha,\sigma)$ mapping, no guidance cadence distinct from the
+integrator's stages, no navigation model to close on, and terminal constraints
+that describe an orbit rather than a ground target.
 \item \textbf{The $g_\phi$ terms are verified only by this note}, using an
 injected synthetic gravity model. Nothing in the committed test suite can see
 them.
@@ -1947,7 +2743,7 @@ library is an artefact of that optimism, not a design expectation.
 \end{itemize}
 
 %=====================================================================
-\begin{thebibliography}{9}
+\begin{thebibliography}{99}
 
 \bibitem{Vinh1980}
 Vinh, N.X., Busemann, A., Culp, R.D.,
@@ -2000,6 +2796,56 @@ Press, W.H., Teukolsky, S.A., Vetterling, W.T., Flannery, B.P.,
 \bibitem{WGS84}
 \emph{Department of Defense World Geodetic System 1984},
 NIMA TR8350.2, 3rd ed., 1997. Source of $\mu$, $r_E$ and $\omega$.
+
+\bibitem{Dennis1996}
+Dennis, J.E., Schnabel, R.B.,
+\emph{Numerical Methods for Unconstrained Optimization and Nonlinear
+Equations}, SIAM Classics in Applied Mathematics 16, 1996. Chapters 5 and 6:
+forward-difference Jacobians, and the line-search damped Newton method for
+systems of nonlinear equations.
+
+\bibitem{Golub2013}
+Golub, G.H., Van Loan, C.F.,
+\emph{Matrix Computations}, 4th ed., Johns Hopkins University Press, 2013.
+Sec.~2.6.2, the 2-norm condition number as the ratio of extreme singular
+values.
+
+\bibitem{Pontryagin1962}
+Pontryagin, L.S., Boltyanskii, V.G., Gamkrelidze, R.V., Mishchenko, E.F.,
+\emph{The Mathematical Theory of Optimal Processes},
+Interscience, 1962.
+
+\bibitem{Bryson1975}
+Bryson, A.E., Ho, Y.-C.,
+\emph{Applied Optimal Control: Optimization, Estimation and Control},
+Hemisphere, 1975. Ch.~2 and~3: costate equations, transversality conditions and
+free-final-time problems.
+
+\bibitem{Lawden1963}
+Lawden, D.F.,
+\emph{Optimal Trajectories for Space Navigation},
+Butterworths, 1963. The primer vector.
+
+\bibitem{Jaggers1977}
+Jaggers, R.F.,
+``An Explicit Solution to the Exoatmospheric Powered Flight Guidance and
+Trajectory Optimization Problem for Rocket Propelled Vehicles,''
+AIAA Guidance and Control Conference, AIAA Paper 77-1051, 1977. The
+linear-tangent explicit-guidance family PEG belongs to.
+
+\bibitem{Shoemake1985}
+Shoemake, K.,
+``Animating Rotation with Quaternion Curves,''
+\emph{Computer Graphics}, Vol.~19, No.~3 (SIGGRAPH '85), 1985, pp.~245--254.
+Origin of the spherical linear interpolation used in \eqref{eq:slerp}.
+
+\bibitem{CoorbitalDeck}
+\emph{Coorbital HGV Capabilities}, internal briefing,
+\code{docs/Coorbital HGV Capabilities.pptx}, slides 8 and 9. The source
+specification for VOA and PEG reproduced in Section~\ref{sec:pegvoa}. It is a
+summary: it states \eqref{eq:voaorth} and the constraint set
+\eqref{eq:termcon} without derivation, does not expand the VOA acronym, and
+does not treat the $\Theta\to0$ branch of \eqref{eq:slerp}.
 
 \end{thebibliography}
 

@@ -46,15 +46,16 @@ function lam = foc_dual_to_costate(LamDef, sigma)
 %       terminal covector, read off the Lagrangian gradient. An earlier
 %       extrapolation fix in this file was superseded by that and removed.)
 
+% Since migration #5 this is a DELEGATE: the map itself lives in
+% costate_common/duals_to_costates (scheme 'trapezoid-nodal'), the ONE home
+% for covector station-association rules. Signature and output unchanged.
 sigma = sigma(:).';
 N  = size(LamDef, 2);
 assert(numel(sigma) == N + 1, 'foc_dual_to_costate: need N+1 sigma nodes');
-h  = diff(sigma);
-assert(all(h > 0), 'foc_dual_to_costate: sigma must be strictly increasing');
-nx = size(LamDef, 1);
-lam = zeros(nx, N + 1);
-lam(:, 1) = LamDef(:, 1);   lam(:, N + 1) = LamDef(:, N);
-for k = 2:N
-    lam(:, k) = (h(k-1)*LamDef(:, k-1) + h(k)*LamDef(:, k)) / (h(k-1) + h(k));
+if isempty(which('duals_to_costates'))
+    addpath(fullfile(fileparts(fileparts(mfilename('fullpath'))), ...
+            'costate_common'));
 end
+lam = duals_to_costates(struct('scheme', 'trapezoid-nodal', ...
+                               'mu', LamDef, 'tNodes', sigma));
 end

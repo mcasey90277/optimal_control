@@ -307,6 +307,21 @@ okSdot  = isnan(rep.sdotMinRel)       || rep.sdotMinRel > sdotMin;
 okSing  = isnan(rep.singularArcNodes) || rep.singularArcNodes == 0;
 rep.pass = rep.kktStatInf <= tolStat && rep.dirTanMax <= tolStat && ...
            okSign && okTrans && okSing && okSdot;
+
+% --- (opt) conjugate-point test (second-order, ADVISORY) ---------------------
+% Available since migration #5: pass opts.msInfo (an ms_bvp info struct with
+% .PHI/.Y/.tGrid, e.g. from ms_tfmin with conjTest/keepSTMs) and opts.msFlow
+% (state-rows dynamics handle). Runs the free-time quotiented Jacobi test
+% from costate_common. ADVISORY: reported as rep.conj, NOT folded into
+% rep.pass -- existing campaign reports stay bit-identical when unused.
+if isfield(opts,'msInfo') && ~isempty(fcdef(opts,'msInfo',[]))
+    if isempty(which('ms_conjugate_test'))
+        addpath(fullfile(fileparts(fileparts(mfilename('fullpath'))), ...
+                'costate_common'));
+    end
+    rep.conj = ms_conjugate_test(opts.msInfo, ...
+                   struct('flow', opts.msFlow));
+end
 end
 
 function v = fcdef(o, f, dflt)

@@ -42,7 +42,21 @@ function [lam, tStations, diag_] = duals_to_costates(spec)
 %
 %  spec                     struct
 %   .scheme                 char                    'hermite-simpson' |
-%                                                   'trapezoid'
+%                                                   'trapezoid' |
+%                                                   'trapezoid-nodal'
+%                                                   (step-weighted
+%                                                   adjacent-interval
+%                                                   average at ALL N+1
+%                                                   nodes, one-sided
+%                                                   endpoints -- the
+%                                                   stationarity map
+%                                                   adjudicated for the
+%                                                   earth campaigns;
+%                                                   migration #5 made this
+%                                                   the ONE home, with
+%                                                   verify_common/
+%                                                   foc_dual_to_costate a
+%                                                   delegate)
 %   .mu                     [ns x M]                Defect multipliers, one
 %                                                   column per interval
 %                                                   (M = N intervals for
@@ -131,19 +145,9 @@ end
 tN = tN(:).';
 assert(numel(tN) == M+1, 'duals_to_costates:size', ...
        'tNodes (%d) must be one longer than mu columns (%d)', numel(tN), M);
-switch scheme
-    case 'hermite-simpson'
-        tStations = tN(1:end-1) + diff(tN)/2;      % interval MIDPOINTS
-    case 'trapezoid'
-        tStations = tN(1:end-1);                   % nodes
-        notes{end+1} = 'trapezoid: last-node costate not sampled';
-    otherwise
-        error('duals_to_costates:scheme', ...
-              'scheme ''%s'' not implemented (hermite-simpson | trapezoid)', ...
-              scheme);
-end
 
-%% Defect normalization:
+%% Defect normalization (BEFORE station association: 'h' scaling is a
+%% per-INTERVAL operation, and trapezoid-nodal replaces mu with nodal columns):
 switch lower(d('defectScale', 'unit'))
     case 'unit'
         % defects written so multipliers approximate lambda directly
@@ -152,6 +156,37 @@ switch lower(d('defectScale', 'unit'))
         notes{end+1} = 'h-scaled defects: multipliers divided by interval width';
     otherwise
         error('duals_to_costates:defectScale', 'unknown defectScale');
+end
+
+switch scheme
+    case 'hermite-simpson'
+        tStations = tN(1:end-1) + diff(tN)/2;      % interval MIDPOINTS
+    case 'trapezoid'
+        tStations = tN(1:end-1);                   % left nodes
+        notes{end+1} = 'trapezoid: last-node costate not sampled';
+    case 'trapezoid-nodal'
+        % Step-weighted adjacent-interval average at the nodes, one-sided
+        % at the endpoints (the alpha-stationarity discrete-adjoint map;
+        % see verify_common/foc_dual_to_costate for the derivation refs):
+        %   lam(:,1)   = mu(:,1)
+        %   lam(:,k)   = (h(k-1)*mu(:,k-1) + h(k)*mu(:,k))/(h(k-1)+h(k))
+        %   lam(:,N+1) = mu(:,N)
+        tStations = tN;                            % ALL N+1 nodes
+        h = diff(tN);
+        assert(all(h > 0), 'duals_to_costates:grid', ...
+               'trapezoid-nodal needs strictly increasing tNodes');
+        muN = zeros(ns, M+1);
+        muN(:,1) = mu(:,1);   muN(:,M+1) = mu(:,M);
+        for kn = 2:M
+            muN(:,kn) = (h(kn-1)*mu(:,kn-1) + h(kn)*mu(:,kn)) ...
+                        / (h(kn-1) + h(kn));
+        end
+        mu = muN;
+        notes{end+1} = 'trapezoid-nodal: endpoint columns are one-sided (O(h) offset)';
+    otherwise
+        error('duals_to_costates:scheme', ...
+              ['scheme ''%s'' not implemented (hermite-simpson | ', ...
+               'trapezoid | trapezoid-nodal)'], scheme);
 end
 
 %% Global sign, by primer-vs-control vote where a control is supplied:

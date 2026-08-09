@@ -43,7 +43,7 @@
 \title{Software Design\\
        \large Architecture and data flow of the \code{missiles/} trajectory library}
 \author{Coorbital, Inc.}
-\date{7 August 2026; second edition 8 August 2026}
+\date{7 August 2026; second edition 8 August 2026; third edition 9 August 2026}
 
 \begin{document}
 \maketitle
@@ -78,6 +78,16 @@ interface and \emph{no implemented algorithm}. A fourth structural blindness
 joins the three (Section~\ref{sec:blind}), an honest coverage gap is recorded
 (Section~\ref{sec:aimcoverage}), and six errors in the first edition are listed
 and corrected in Section~\ref{sec:verify}.
+
+\medskip
+\noindent\textbf{Third edition, 9 August 2026.} The second edition described
+\code{BM/run\_ballistic\_target} as still taking its azimuth from the closed
+form and still refusing a rotating Earth. It was converted later the same day
+and both statements are now false; they are corrected in
+Section~\ref{sec:entry}, which gains the measured cost of that conversion and
+the one thing it did not buy --- a reachable envelope certified at the azimuth
+the script actually flies. Section~\ref{sec:limits} is rewritten around the
+seven open items two-axis targeting opened in place of the two it closed.
 \end{abstract}
 
 \tableofcontents
@@ -170,8 +180,10 @@ package-private helpers in \code{+viz/private}), 23 under \code{tests/}
 first edition counted 53, 26, 21 and six, before
 \code{+coorbital/+util/aimSolve.m} and its test landed and before
 \code{BM/run\_ballistic\_target.m} --- which \code{TODO.md} then listed as
-``specified in full and never implemented'' --- was written. Note that
-\code{README.md}'s conventions section still says ``39 \code{.m} files'';
+``specified in full and never implemented'' --- was written. Recounted on
+9 August 2026 it is 59, 28 and 25: the closed-loop guidance spike added
+\code{+coorbital/+guide/terminalConstraint.m} and its test. Note that
+\code{docs/README.md}'s conventions section still says ``39 \code{.m} files'';
 \code{TODO.md} already records that as a stale count rather than a violation.
 
 \subsection{What each package owns}
@@ -1183,7 +1195,7 @@ Script & Flight & Phases & Solves for \\
 \code{BM/run\_ballistic}    & ballistic missile, pad to impact    & 3 & --- \\
 \code{HGV/run\_boost\_glide}& boost-glide vehicle, pad to impact  & 3 & --- \\
 \code{HGV/run\_target}      & launch point $\to$ destination      & 3 & azimuth \emph{and} cutoff time, together \\
-\code{BM/run\_ballistic\_target} & launch point $\to$ destination & 3 & loft angle; azimuth still closed form \\
+\code{BM/run\_ballistic\_target} & launch point $\to$ destination & 3 & azimuth \emph{and} the mode's own range control, together \\
 \bottomrule
 \end{tabular}
 \end{center}
@@ -1197,13 +1209,74 @@ Two notes on the table, both dated. \code{BM/run\_ballistic\_target} landed on
 measurement below that says ``four entry scripts'' --- the \pkg{viz}
 read-only sweep, the injection experiment, the override-whitelist counts ---
 was taken over the four that existed then and has \emph{not} been re-run over
-the fifth. And the last two rows differ in exactly the way this milestone is
-about: \code{HGV/run\_target} solves both controls together against both
-components of the miss (Section~\ref{sec:aimflow}), while
-\code{BM/run\_ballistic\_target} still takes its azimuth from the closed-form
-bearing and therefore still refuses a rotating Earth. The two-axis solve is a
-\pkg{util} function and applies verbatim to it; that it has not yet been
-applied is scheduling, not architecture.
+the fifth.
+
+And the last two rows are now the \emph{same} architecture, which they were not
+when the second edition was written. \code{BM/run\_ballistic\_target} was
+converted later the same day (\code{183d0e6}, corrected in \code{3cf70bb}): it
+seeds on the closed-form bearing exactly as \code{run\_target} does, and
+\code{coorbital.util.aimSolve} then drives the azimuth beside the mode's own
+range control until both components of \code{missVector} are inside tolerance.
+The solve was always a \pkg{util} function that applied verbatim; applying it
+was scheduling, and the scheduling has happened.
+
+\paragraph{What the conversion cost the ballistic script, measured
+9~August~2026.} Same three columns as Section~\ref{sec:aimflow}'s table, on the
+shipped $45^{\circ}$N $100^{\circ}$W $\to$ $62^{\circ}$N $28^{\circ}$W geometry
+at $4828.045~\mathrm{km}$:
+
+\begin{center}
+\begin{tabular}{lrrr}
+\toprule
+Case & Miss, seed only & Miss, solved & Residual evaluations \\
+\midrule
+Rotating Earth (\code{earthSpin} true) & $463\,211.19~\mathrm{m}$ & $52.46~\mathrm{m}$ & 7 \\
+Shipped \code{'lofted'}                & $779.49~\mathrm{m}$      & $0.365~\mathrm{m}$  & 4 \\
+Shipped \code{'depressed'}             & $457.27~\mathrm{m}$      & unchanged bit-for-bit & 1 \\
+Shipped \code{'minimum-energy'}        & $39.01~\mathrm{m}$       & unchanged bit-for-bit & 1 \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+Two structural readings. First, \textbf{the seed miss decomposes the way the
+mechanism predicts}: the rotating case's $463~\mathrm{km}$ is
+$-17\,764.17~\mathrm{m}$ down-range against $+462\,870.44~\mathrm{m}$
+cross-range, a ratio of $26.1$ to $1$. A target being carried east would be a
+down-range effect; a vehicle being deflected is a cross-range one, and the
+decomposition is the evidence, not the total. Second, \textbf{the per-component
+tolerance is what decides whether a shipped mode moves at all}: three of the
+four rows have a seed inside $707.11~\mathrm{m}$ and converge at iteration
+zero, and the one that moved, \code{'lofted'} at $779.49~\mathrm{m}$, is
+outside it by $72~\mathrm{m}$. That last row deserves the same honesty
+Section~\ref{sec:aimcoverage} applies to \code{run\_target}: its seed miss is
+$779.490875~\mathrm{m}$ down-range against $-2.77\times10^{-5}~\mathrm{m}$
+cross-range, so the Newton corrected it almost entirely on the \emph{loft}
+axis and moved the azimuth by $6.3\times10^{-12}~\mathrm{rad}$. It exercises
+the two-axis machinery --- one iteration, four evaluations, a real Jacobian and
+a real step --- but it does not exercise the \emph{azimuth} axis. Only the
+rotating case does that, at $-5.6295^{\circ}$ of aim. The whole run costs $701$ propagations rotating
+and $733$ in the shipped minimum-energy mode, against $731$ before the
+conversion --- the two-axis stage is two propagations on a mode that was
+already spending seven hundred.
+
+\paragraph{And one thing the conversion did not buy, which the design has to
+own.} Stage 1 --- the max-range bracketing, the certified maximiser interval,
+the two branch brackets and the minimum-energy minimisation --- runs entirely
+at the \emph{seed} azimuth, deliberately, because range against loft is a curve
+at a fixed azimuth and a surface otherwise, and a golden section on a surface
+certifies nothing. So the reachable envelope, and therefore the too-far and
+too-close refusals drawn against it, are quantities of an azimuth the script
+may not end up flying. Measured size on this geometry: the maximum moves about
+$0.28^{\circ}$ of loft per degree of azimuth, against a certified maximiser
+interval $0.043^{\circ}$ wide, and turning the Earth on moves the envelope by
+$30$ to $42~\mathrm{km}$ --- maximum range $5211.5 \to 5439.9~\mathrm{km}$, the
+depressed floor $4708.5 \to 5085.8~\mathrm{km}$. The visible consequence is
+that \code{'depressed'} plus \code{earthSpin} is refused for the shipped
+target, which is correct physics on an easterly launch and not a solver fault.
+The alternative --- re-bracketing inside every Newton evaluation --- would
+multiply a seven-hundred-propagation mode by the cost of a whole bracketing and
+would still certify nothing. \code{TODO.md} carries it as an open
+approximation with those numbers attached.
 
 \subsection{The fenced user block}
 
@@ -2804,6 +2877,7 @@ elsewhere, and the first three are worth having without it.
 
 %=====================================================================
 \section{Known limitations and deferred work}
+\label{sec:limits}
 
 \code{TODO.md} is the authority and is compiled against a named commit with
 every claim measured. It is not duplicated here. Its structure, so a reader
@@ -2814,12 +2888,12 @@ knows what is in it:
 \toprule
 Section & Contains \\
 \midrule
-Recently closed        & \code{BM/run\_ballistic\_target.m}, now built; the per-phase \code{veh} field, now landed; the two targeting scripts' rotating-Earth refusal; three applied reviews \\
-Structural, deferred   & migrating the three older entry scripts off their EOM closures onto \code{phase.veh}; a state-scaled default \code{AbsTol}; the duplicated \code{overrideOf}/\code{maxOver} helpers; the two \code{BM} scripts' missing re-integration payload; a degenerate-input sweep \\
-Known limitations      & rotating-Earth targeting and cross-range \emph{for \code{BM/run\_ballistic\_target}}; \code{run\_ballistic\_target}'s jettisoned propellant; the one-sided phugoid warning; the optimistic booster structural coefficient; loose event tolerances \\
+Recently closed        & \code{BM/run\_ballistic\_target.m}, now built; the per-phase \code{veh} field, now landed; the two targeting scripts' rotating-Earth refusal, now retired by two-axis targeting in \emph{both} of them; four applied reviews \\
+Structural, deferred   & migrating the three older entry scripts off their EOM closures onto \code{phase.veh}; a state-scaled default \code{AbsTol}; the duplicated \code{overrideOf}/\code{maxOver} helpers and the deliberately duplicated \code{missVector}; the two \code{BM} scripts' missing re-integration payload; a degenerate-input sweep \\
+Known limitations      & the seed-azimuth envelope and its approximate refusal gate; the minimum-energy loft held at its seed-azimuth minimiser; the unboxed stage-2 Newton; the \code{loftBracket} refusal's narrower \code{info}; the sufficient-but-not-necessary tolerance; \code{run\_target}'s uncoverable shipped case; \code{run\_ballistic\_target}'s jettisoned propellant; the one-sided phugoid warning; the optimistic booster structural coefficient; loose event tolerances \\
 Upstream in pumpkyn    & two defects to \emph{report, not patch} \\
 Out of scope by design & PEG/VOA, multi-stage, terminal homing, aerothermal heating, fidelity increments, Phase~2 optimisation \\
-Documentation debt     & \code{DESIGN.md} needs a third dated as-built section; one stale file count \\
+Documentation debt     & \code{docs/README.md}'s stale counts and its superseded rotating-Earth row; two unarchived reviews; no bibliography \\
 \bottomrule
 \end{tabular}
 \end{center}
@@ -2832,37 +2906,60 @@ where they arise: the per-phase \code{veh} field and its unfinished migration
 \emph{algorithms} while the seam they attach to is very much in scope
 (Section~\ref{sec:seam}).
 
-\paragraph{Two rows of \code{TODO.md} are overtaken by this milestone, and one
-of them is overtaken in its reasoning as well as in its status.} Both sit under
-``Known limitations'' as of the version read for this edition, and both were
-written before the two-axis solve existed.
+\paragraph{Two rows of \code{TODO.md} were overtaken by this milestone, and one
+of them was overtaken in its reasoning as well as in its status.} Both sat
+under ``Known limitations'' in the version read for the second edition of this
+document, both were written before the two-axis solve existed, and
+\code{TODO.md} struck both on 9~August~2026. They are recorded here because the
+\emph{reason} one of them was wrong is a design lesson and not a bookkeeping
+one.
 
 ``Rotating-Earth targeting needs an outer azimuth iteration'' is now false for
-\code{HGV/run\_target}, which flies it (Section~\ref{sec:aimflow}), and remains
-true for \code{BM/run\_ballistic\_target}, which does not. But the entry's
-\emph{mechanism} is wrong independently of that. It says the vehicle ``must be
+\emph{both} targeting scripts, which fly it (Section~\ref{sec:aimflow} and the
+ballistic table above). But the entry's \emph{mechanism} was wrong
+independently of its status. It said the vehicle ``must be
 aimed where the target is \textbf{going to be}'', which would make the azimuth
 depend on the flight time and force an outer loop around the range solve. That
 is not what happens here. The state's latitude and longitude are Earth-fixed
 and the speed is planet-relative, so the target does not move at all --- it is
 the \emph{vehicle} that is deflected off the arc it left on, by the Coriolis
-and centrifugal terms. \code{run\_target}'s own header now says so, and the
-script deleted the eastward-drift figure it used to print
+and centrifugal terms. Both scripts' headers now say so, and both deleted the
+eastward-drift figure they used to print
 ($\omega_E r_I \cos\phi_T t_{\text{flight}}$, $628~\mathrm{km}$ on the rotating
-shipped case) precisely because that number measures a mechanism the file no
-longer claims. The deflection it \emph{does} claim is measured, not derived:
-$231.552~\mathrm{km}$, a factor of $2.7$ smaller. \emph{A retracted mechanism's
+shipped \code{run\_target} case) precisely because that number measures a
+mechanism the files no longer claim. The deflection they \emph{do} claim is
+measured, not derived: $231.552~\mathrm{km}$ for \code{run\_target}, a factor
+of $2.7$ smaller. \emph{A retracted mechanism's
 number left standing under a corrected sentence is the harder error to notice
 of the two, because the prose reads right.}
 
-``Cross-range is measured and warned about, not solved'' is likewise now
-\code{BM/run\_ballistic\_target}'s limitation alone. \code{run\_target} drives
-it to zero, \code{info.crossWarn} is gone, and the cross-range line in the
-summary is evidence rather than a caveat.
+The ballistic conversion then supplied the discriminating evidence the
+retraction had been argued for on general grounds: its rotating seed miss is
+$26.1$ to $1$ cross-range over down-range. A moving target is a down-range
+effect and a deflected vehicle is a cross-range one, so the decomposition
+settles it in a way the total never could.
 
-One addition this document generates: \code{TODO.md}'s documentation-debt
-section lists ``the two \LaTeX{} notes are forthcoming.'' Both now exist, and
-that entry can be closed.
+``Cross-range is measured and warned about, not solved'' is now false
+everywhere. Both scripts drive it to zero, \code{info.crossWarn} is gone from
+both, the $\arcsin$ cross-track relation is computed nowhere in the library,
+and the cross-range line in each summary is evidence rather than a caveat.
+
+What replaced those two rows is not nothing. Two-axis targeting opened seven
+open items of its own, all of them consequences of solving on a surface with
+machinery certified on a curve, and all of them are in \code{TODO.md} with
+measured sizes: the seed-azimuth envelope and the approximate refusal gate it
+drives; the minimum-energy loft held at its seed-azimuth minimiser while only
+the cutoff is re-trimmed; the unboxed stage-2 Newton and the three layers of
+diagnosis standing in place of a prohibition; the \code{loftBracket} refusal's
+\code{info} not being a superset of the other three; the max-norm tolerance
+being sufficient but not necessary; \code{missVector}'s deliberate duplication
+between the two scripts; and \code{run\_target}'s shipped case, which cannot be
+given two-axis coverage at any tolerance (Section~\ref{sec:aimcoverage}).
+
+One addition this document generated in its second edition: \code{TODO.md}'s
+documentation-debt section listed ``the two \LaTeX{} notes are forthcoming.''
+Both exist, and \code{README.md} and \code{TODO.md} both stopped saying
+otherwise on 9~August~2026.
 
 %=====================================================================
 \section{Verification record for this document}
@@ -2881,7 +2978,10 @@ this edition, additionally: \code{+coorbital/+util/aimSolve.m} and
 \code{+coorbital/+util/rangeSolve.m} in full, \code{HGV/run\_target.m},
 \code{+coorbital/+prop/phaseRun.m}, \code{+coorbital/+guide/pitchProgram.m}
 and \code{prescribed.m}, \code{tests/test\_runTarget.m}, and the fourth plan
-brief, \code{docs/plan\_2026-08-08\_aim\_solve\_and\_closed\_loop.md}. Every
+brief, \code{docs/plan\_2026-08-08\_aim\_solve\_and\_closed\_loop.md}. For the
+third edition, additionally: \code{BM/run\_ballistic\_target.m} in full ---
+its header, its two-stage solve, its four refusal paths and its own
+\code{missVector} --- and \code{tests/test\_runBallisticTarget.m}. Every
 code fragment quoted above is copied from the source, not retyped.
 
 \paragraph{Re-measured for this edition, 8 August 2026, MATLAB R2025b.}
@@ -2901,6 +3001,32 @@ Coverage, tolerance $1.0 \to 0.05$~km     & \code{aimIter} 0 at every step (Sect
 Convention sweep, 57 \code{.m} files      & 0 \code{\%\#ok}, 0 \code{for i/j =}, 1 \code{norm(} in a comment \\
 Self-demo count, \pkg{coorbital}          & 24 public functions, 21 demos, 3 ruled exceptions \\
 Line counts                               & $12\,316$ test against $15\,094$ library and script \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\paragraph{Measured for the third edition, 9 August 2026, MATLAB R2025b.} Each
+figure is read out of \code{info} at full precision on a run of the committed
+code, not carried across from a commit message.
+
+\begin{center}
+\begin{tabular}{ll}
+\toprule
+Measurement & Result \\
+\midrule
+Test suite                             & 23 passed, 0 failed, zero warnings, $314.6~\mathrm{s}$ wall \\
+Ballistic, \code{'minimum-energy'}     & $39.0092688~\mathrm{m}$; \code{aimIter} 0, \code{aimEval} 1, \code{nProp} 733 \\
+Ballistic, \code{'depressed'}          & $457.269860~\mathrm{m}$; \code{aimIter} 0, \code{aimEval} 1, \code{nProp} 64 \\
+Ballistic, \code{'lofted'}             & seed $779.490875 \to 0.365282~\mathrm{m}$; 1 iteration, \code{nProp} 67 \\
+Ballistic, \code{earthSpin} true       & seed $463\,211.19 \to 52.461~\mathrm{m}$; 2 iterations, \code{nProp} 701 \\
+\quad seed decomposition               & $-17\,764.17$ down-range, $+462\,870.44~\mathrm{m}$ across ($26.1{:}1$) \\
+\quad aim correction                   & $-0.0982538~\mathrm{rad} = -5.6295^\circ$ \\
+\quad envelope shift                   & maximum range $5211.525 \to 5439.857~\mathrm{km}$ \\
+Targeting, shipped case                & $511.2434605~\mathrm{m}$; \code{aimIter} 0, \code{aimEval} 1, \code{nProp} 14 \\
+Targeting, \code{earthSpin} true       & seed $231\,551.628 \to 4.361~\mathrm{m}$; \code{nProp} 23 \\
+File count under \code{missiles/}      & 59 \code{.m}: 25 public, 3 private, 5 entry, 2 vehicle, 24 test \\
+Self-demo count, \pkg{coorbital}       & 25 public functions, 22 demos, 3 ruled exceptions \\
+Wall clock, four entry-script runs     & $2.14$, $3.42$, $27.17$ and $27.04~\mathrm{s}$ \\
 \bottomrule
 \end{tabular}
 \end{center}
@@ -2936,12 +3062,13 @@ the source comment it came from.
 \paragraph{Discrepancies found and recorded rather than repeated.}
 
 \begin{enumerate}
-\item \code{README.md}'s conventions section says the style sweep covered
-``39 \code{.m} files''. There are 57. \code{TODO.md} already logs this as a
-count refresh; the sweep is still clean.
+\item \code{docs/README.md}'s conventions section says the style sweep covered
+``39 \code{.m} files''. There are 59 as of 9 August 2026. \code{TODO.md}
+already logs this as a count refresh; the sweep is still clean.
 \item \code{DESIGN.md} \S11.1's ``17 library functions, 14 with a self-demo''
-predates \pkg{viz}. The count today is 24 and 21. \S11.1 is a dated record and
-is correctly left unedited.
+predates \pkg{viz}. The count on 9 August 2026 is 25 and 22, with the same
+three ruled exceptions. \S11.1 is a dated record and is correctly left
+unedited.
 \item The plan brief's justification for \code{ode89} --- that a same-solver
 re-integration goes bitwise --- does not hold for the anchoring
 \code{test\_fullChain} actually uses, and the test's own header says so with

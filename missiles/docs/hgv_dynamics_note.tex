@@ -1786,11 +1786,18 @@ azimuth, two unknowns have to be found: where to aim, and when to stop
 thrusting. There is exactly one geometry in which they decouple, and the
 library used to assume it. It now solves them together.
 
-The script that does so is \code{HGV/run\_target}.
-\code{BM/run\_ballistic\_target} has not been converted: it still takes its
-azimuth from the closed form below, still solves down-range alone, and still
-refuses a rotating Earth outright rather than flying one. Everything from
-Section~\ref{sec:missvector} onward describes the first of those two.
+\emph{Both} targeting scripts do so, as of 8~August~2026.
+\code{HGV/run\_target} pairs the launch azimuth with the thrust-termination
+time; \code{BM/run\_ballistic\_target} pairs it with the mode's own range
+control --- the loft angle on the two full-burn branches, the cutoff fraction
+in minimum-energy mode. The residual of Section~\ref{sec:missvector}, the frame
+it is resolved in and the solver of Section~\ref{sec:twoaxis} are the same in
+the two, so everything from Section~\ref{sec:missvector} onward describes both
+scripts. Where they differ is upstream, in the one-dimensional stage that
+produces the seed: \code{run\_target} bisects a monotonic map, while the
+ballistic script must first bracket a maximum, and \emph{everything that stage
+certifies is certified at the seed azimuth alone}
+(Section~\ref{sec:rangesolve}). Both fly a rotating Earth; neither refuses one.
 
 \subsection{The closed form, and the one geometry in which it is exact}
 \label{sec:aimseed}
@@ -1920,6 +1927,35 @@ Two things about that band are worth stating exactly. It is measured at the
 next stage settles on; and the refusal it drives is the reason the two-axis
 Newton is never handed a target it cannot reach, which is what keeps it away
 from the ill-conditioned geometry of Section~\ref{sec:twoaxis}.
+
+\paragraph{The ballistic stage one, and the size of the same caveat.}
+\code{BM/run\_ballistic\_target} ranges on the \emph{loft angle}, which is not
+monotonic: range rises to a maximum and falls away on both sides, so every
+reachable range short of that maximum is flown by two arcs. Its stage one
+therefore does more work than a bisection --- a coarse scan, a golden-section
+bracketing of the maximum that returns a \emph{certified interval} rather than
+a point, two monotone one-sided branch brackets, and a bisection on each ---
+and in minimum-energy mode a further minimisation of the burnout specific
+energy over the loft angle with the achieved range held at the required one.
+All of it runs at the seed azimuth and \emph{has} to: range against loft is a
+curve at a fixed azimuth and a surface otherwise, and a golden section on a
+surface certifies nothing.
+
+The consequence is that the seed-azimuth caveat is quantitatively larger for
+the ballistic script than it is for \code{run\_target}, and it has two measured
+faces. The first is how
+far the certified structure moves with the aim: about $0.28^{\circ}$ of loft
+per degree of azimuth on the shipped geometry, against a certified maximiser
+interval $0.043^{\circ}$ wide, which is also why the stage-two Newton is
+\emph{not} boxed to the branch side --- the only interval available to draw the
+box on is the seed-azimuth one, and a box drawn there would exclude genuine
+roots. The second is how far the reachable envelope itself moves when the Earth
+is turned on: on the shipped easterly geometry the maximum range rises from
+$5211.5$ to $5439.9~\mathrm{km}$ and the depressed-branch floor from $4708.5$
+to $5085.8~\mathrm{km}$, so the shipped $4828~\mathrm{km}$ target leaves the
+depressed band altogether and \code{'depressed'} is legitimately refused with
+rotation on. That is physics --- an easterly launch is helped by the planet's
+rotation --- and not an artefact of the new solve.
 
 \subsection{The residual: a miss vector resolved at the target}
 \label{sec:missvector}
@@ -2160,7 +2196,8 @@ conservative test and not as a measurement of the miss.
 \subsection{What it cost, and what it did not exercise}
 \label{sec:aimmeasured}
 
-Three configurations, all on the shipped Hawaii-to-California geometry, all
+Take \code{HGV/run\_target} first: three configurations, all on the shipped
+Hawaii-to-California geometry, all
 with a $1~\mathrm{km}$ range tolerance. ``Miss at the seed'' is the closed-form
 bearing with the bisected cutoff --- what the library used to report as its
 answer --- and it is free, because the solver records it as the first column of
@@ -2207,6 +2244,50 @@ cases, and from those alone. The shipped case demonstrates only that adding the
 second axis costs nothing and changes nothing when there is nothing for it to
 do --- which is worth having, and is not evidence that the solve works.
 
+\paragraph{The ballistic script, measured the same way.}
+\code{BM/run\_ballistic\_target} was converted on the same day, and its numbers
+say the same thing in a louder register because a ballistic arc flies for
+twenty-one minutes rather than seven and accumulates that much more deflection.
+All four rows are on the shipped $45^{\circ}$N $100^{\circ}$W $\to$
+$62^{\circ}$N $28^{\circ}$W geometry, $4828.045~\mathrm{km}$ required, at a
+$1~\mathrm{km}$ range tolerance.
+
+\begin{center}\small
+\begin{tabular}{@{}lrrrr@{}}
+\toprule
+Case & Miss at the seed (m) & Miss achieved (m) & $\psi-\psi_{\text{seed}}$ & Evals \\
+\midrule
+Rotating Earth, \code{earthSpin} true & $463{,}211.19$ & $52.461$ & $-5.6295^{\circ}$ & $7$ \\
+Shipped \code{'lofted'}               & $779.491$      & $0.365$  & $+3.6\times10^{-10\,\circ}$ & $4$ \\
+Shipped \code{'depressed'}            & $457.270$      & $457.270$ & $0$ & $1$ \\
+Shipped \code{'minimum-energy'}       & $39.009$       & $39.009$  & $0$ & $1$ \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+The rotating row is the one that matters, and its \emph{decomposition} is what
+makes it evidence rather than a number: $-17{,}764.17~\mathrm{m}$ down-range
+against $+462{,}870.44~\mathrm{m}$ cross-range, a ratio of $26.1$ to $1$. That
+is the discriminator of Section~\ref{sec:aimseed} applied to a second,
+independent geometry --- a carried target would show up down-range, a deflected
+vehicle shows up across --- and it comes out the same way. The aim correction,
+$-5.63^{\circ}$, is three and a half times \code{run\_target}'s because the
+flight is that much longer.
+
+Two honest qualifications, in the same spirit as the third row above. The
+\code{'lofted'} row \emph{does} run the Newton --- one iteration, four
+evaluations, a real Jacobian and a real step --- but its seed miss is
+$779.491~\mathrm{m}$ down-range against $-2.8\times10^{-5}~\mathrm{m}$
+cross-range, so the correction is essentially all in the loft angle and the
+azimuth moves by $6\times10^{-12}~\mathrm{rad}$. It exercises the solver, not
+the azimuth axis. And the arithmetic of cost is worth reading off directly: the
+rotating run spends $693$ propagations in stage one and $701$ in total, the
+shipped minimum-energy run $731$ and $733$. The two-axis stage is eight
+propagations in the hard case and two in the easy one, on top of a stage one
+that was already spending seven hundred --- which is the real reason the
+conversion was cheap here, and is not a claim that two-axis targeting is cheap
+in general.
+
 \subsection{Zero bank over a still Earth, read as a limiting case}
 \label{sec:crossrange}
 
@@ -2223,7 +2304,7 @@ What no longer holds is the conclusion that used to be drawn from it --- that
 cross-range is a property of the configuration which the library can only
 measure. It is now a residual, and it is driven to zero.
 
-\code{run\_target} accordingly reports the two components of
+Both targeting scripts accordingly report the two components of
 \eqref{eq:missvec}, whose hypotenuse is the miss itself. The older spherical
 relation
 \begin{equation}
@@ -2232,9 +2313,11 @@ relation
      \sin(\psi_{\text{fly}} - \psi_{\text{launch}})\bigr)
   \label{eq:xtrack}
 \end{equation}
-is still what \code{BM/run\_ballistic\_target} computes, and it is worth
-keeping on the page because it carries a trap that \eqref{eq:missvec} does not
-have to worry about. All three of its inputs are quantities \emph{at the launch
+is no longer computed anywhere in the library --- \code{BM/run\_ballistic\_target}
+was the last caller and it was converted on 8~August~2026 --- but it is worth
+keeping on the page, both because it is the natural formula to reach for and
+because it carries a trap that \eqref{eq:missvec} does not have to worry about.
+All three of its inputs are quantities \emph{at the launch
 point}: $\Delta\theta_{\text{fly}}$ is the central angle from launch to
 achieved impact, $\psi_{\text{fly}}$ is the \emph{initial} bearing of the
 launch-to-impact arc, and $\psi_{\text{launch}}$ is the initial bearing of the
@@ -2617,7 +2700,10 @@ controls are an angle of attack and a bank angle, entering through
 \eqref{eq:athr}. The conversion is well posed --- resolve the commanded
 direction on the velocity triad and read
 \begin{equation}
-  \alpha = \arccos\bigl(\mathbf{p}\cdot\vhat\bigr),
+  \alpha = \operatorname{atan2}\Bigl(
+             \operatorname{hypot}\bigl(\mathbf{p}\cdot\ig,\;
+                                       \mathbf{p}\cdot\ip\bigr),\;
+             \mathbf{p}\cdot\vhat\Bigr),
   \qquad
   \sigma = \operatorname{atan2}\bigl(\mathbf{p}\cdot\ip,\;
                                      \mathbf{p}\cdot\ig\bigr),
@@ -2625,8 +2711,66 @@ direction on the velocity triad and read
 \end{equation}
 which inverts \eqref{eq:athr} exactly, and is degenerate only at $\alpha=0$,
 where $\sigma$ is undefined because there is no incidence to roll --- but
-\eqref{eq:dirtoalpha} is written nowhere in the library. Worse, it is not
-purely a conversion. Equation~\eqref{eq:athr} ties thrust and lift to a single
+\eqref{eq:dirtoalpha} is written nowhere in the library.
+
+\paragraph{Why the two-argument form and not $\arccos(\mathbf{p}\cdot\vhat)$.}
+The two are analytically identical and the single-argument form is the wrong
+one to write down, for a reason that has nothing to do with the flight regime:
+\textbf{\code{atan2} is scale-robust and $\arccos$ is not.} The two-argument
+form is homogeneous of degree zero under positive scaling of $\mathbf{p}$ ---
+verified identical to twelve figures with $|\mathbf{p}|$ swept from $10^{-9}$
+to $10^{9}$ --- so it needs no defensive normalisation. $\arccos(\mathbf{p}
+\cdot\vhat)$ silently \emph{requires} $|\mathbf{p}| = 1$, and degrades at once
+when it does not hold: at $|\mathbf{p}| = 0.999$ it returns $6.522^{\circ}$ for
+a true $6^{\circ}$, an error of $8.7\,\%$, and at $|\mathbf{p}| = 1.001$ its
+argument leaves $[-1,1]$ and it returns garbage. A guidance law hands over a
+direction accumulated through a few floating-point operations, which will not
+be an exactly unit vector, so this is the case that actually arises. Measured
+over 720 forward-then-inverse round trips against \eqref{eq:athr} with a
+properly normalised $\mathbf{p}$, the two-argument form is also the more
+accurate of the two: worst error $2.22\times10^{-16}$~rad against
+$1.21\times10^{-11}$~rad.
+
+There is a second, weaker argument, and it is worth stating precisely so it is
+not overstated. $\arccos$ reads the incidence off the component \emph{along}
+$\vhat$, which is $1 - \alpha^2/2 + O(\alpha^4)$ near zero, so at very small
+$\alpha$ the information sits in digits that catastrophic cancellation has
+already destroyed, while the transverse components the \code{atan2} form uses
+are $O(\alpha)$ and lose nothing. \textbf{That regime is where a converged PEG
+command would live, and it is emphatically not where the shipped open-loop
+schedule flies.} Measured on \code{run\_ballistic}'s boost, 493 samples over
+an $80.52~\mathrm{s}$ burn: $|\alpha| < 1^{\circ}$ for only $7.0~\mathrm{s}$,
+while $|\alpha|$ sits \emph{exactly at the $6^{\circ}$ clamp} for
+$59.7~\mathrm{s}$, which is $74\,\%$ of the burn --- and at $6^{\circ}$ the
+$\arccos$ error is $5.6\times10^{-16}$~rad. On the trajectory this library
+actually flies today, $\arccos$ would be fine. Scaling is the reason to write
+the other form.
+
+Two conventions to state while the mapping is on the page, both of them things
+a reader will otherwise assume wrongly.
+
+\eqref{eq:dirtoalpha} returns $\alpha \geq 0$ by construction, the incidence
+being a magnitude with $\sigma$ carrying the direction. The library's
+\code{pitchProgram} does not: it returns a \emph{signed} $\alpha$ from the
+planar relation \eqref{eq:pitchprog}. This is not an edge case in the shipped
+configuration --- on the same 493-sample boost, \textbf{415 samples, $84.2\,\%$
+of them, are negative}, continuously from $t = 2.86~\mathrm{s}$ to burnout, and
+$53\,\%$ sit exactly at the $-6^{\circ}$ clamp. Both conventions are
+self-consistent and they are not the same convention, so anything consuming
+$\alpha$ from both sources has to say which it means.
+
+And the clamp that number is saturating against is itself worth a sentence,
+because the shipped nominal spends three quarters of its burn on a
+control-authority limit that belongs to a different vehicle.
+\code{coorbital.util.boosterDefaults} has \textbf{no \code{alphaMaxDeg} field at
+all}; the $6^{\circ}$ lives on \code{BM/vehicle\_bm}, the \emph{separated
+re-entry body}, while the boost phase flies the boosted stack. The script reads
+the payload's limit and applies it to the stack. Nothing corrects for that,
+and nothing would notice: \code{constLD} ignores $\alpha$ altogether, so a
+commanded incidence carries no drag penalty in this model and
+\code{veh.alphaMaxDeg} is the only feasibility check there is.
+
+The conversion is also not purely a conversion. Equation~\eqref{eq:athr} ties thrust and lift to a single
 roll orientation, so a guidance law that owns $\sigma$ owns the lift direction
 too, and during a boost with appreciable dynamic pressure the aerodynamic
 consequence of a PEG steering command is not something PEG was asked about.
@@ -2702,14 +2846,18 @@ without editing the equations of motion, and the $g_\phi$ terms exist for
 exactly that day, but they are unexercised today.
 \item \textbf{The rotating-Earth terms are off by default} and are exercised by
 the test suite, by the two-axis targeting cases of
-Section~\ref{sec:aimmeasured}, and by no shipped trajectory. In
-\code{HGV/run\_target} they are \emph{supported}, because that script solves
-the azimuth; the ballistic targeting script still refuses them.
-\item \textbf{The two-axis solve is exercised only where it is needed.} On the
-shipped non-rotating, zero-bank run the seed miss is already inside tolerance
-and the Newton exits at iteration zero, so that case demonstrates nothing about
-the solve (Section~\ref{sec:aimmeasured}). Coverage comes from the rotating and
-the banked cases.
+Section~\ref{sec:aimmeasured}, and by no shipped trajectory. Both targeting
+scripts \emph{support} them, because both solve the azimuth; what neither does
+is certify the reachable envelope at the azimuth it finally flies. In
+\code{BM/run\_ballistic\_target} that matters enough to be visible: turning
+rotation on moves the envelope by $30$ to $42~\mathrm{km}$ on the shipped
+geometry, and the shipped target leaves the depressed band because of it.
+\item \textbf{The two-axis solve is exercised only where it is needed.} On
+\code{run\_target}'s shipped non-rotating, zero-bank run the seed miss is
+already inside tolerance and the Newton exits at iteration zero, so that case
+demonstrates nothing about the solve (Section~\ref{sec:aimmeasured}). Coverage
+comes from the rotating and the banked cases there, and from
+\code{run\_ballistic\_target}'s rotating and \code{'lofted'} cases.
 \item \textbf{Guidance is open-loop and the loop is closed outside the flight.}
 Schedules are interpolated against a phase clock and never recomputed; the only
 feedback in the library is the targeting solve re-propagating whole

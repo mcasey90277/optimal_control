@@ -5,10 +5,12 @@
 > ## ⚠ READ THIS FIRST — this document is a pre-implementation spec
 >
 > Everything below §0 was written **before** the code existed and has **not**
-> been revised to match it. Twenty-one specific statements in it are now false
-> — fifteen catalogued when §10 shipped, plus the six §11.3 adds:
+> been revised to match it. Twenty-five specific statements in it are now false
+> — fifteen catalogued when §10 shipped, six more in §11.3, and four in §12.4:
 > files that were never written, tolerances that were relaxed or replaced,
-> validation checks that were delivered as something else. Taking any of it as
+> validation checks that were delivered as something else, and a fidelity
+> increment the spec called a one-line change that turned out to be one line in
+> the propagator and a new solver in the targeting layer. Taking any of it as
 > a description of the shipped library will mislead you.
 >
 > **`README.md` is the authority on delivered behaviour.** This file is kept
@@ -22,10 +24,16 @@
 >
 > - **[§10 As built — 2026-08-06](#10-as-built--2026-08-06)** — the glide propagator
 > - **[§11 As built — 2026-08-07](#11-as-built--2026-08-07)** — boost, descent, and the full chain
+> - **[§12 As built — 2026-08-07](#12-as-built--2026-08-07)** — targeting and visualization
+> - **[§13 As built — 2026-08-08](#13-as-built--2026-08-08)** — two-axis targeting
 >
-> **Where §10 and §11 disagree, §11 is the later record.** Several §10 entries
+> **The later section is always the later record.** Several §10 entries
 > ("boost is out of scope", "`stateConvert` will be written") were true when
-> written and are now superseded; §11 says so at each point.
+> written and are now superseded; §11 says so at each point, and §12 and §13 do
+> the same for their predecessors. **§12 and §13 were written together on
+> 2026-08-09**, after their milestones rather than on the day, and they say so
+> at their heads — they are reconstructions from the code and the commit record,
+> not same-day records like §10 and §11.
 
 Design for a MATLAB library that generates boost / glide / descent trajectories for
 hypersonic glide vehicles, with ballistic and ICBM variants sharing the same core.
@@ -492,3 +500,229 @@ existing checks could not see.
 | **Package name** | Resolved 2026-08-06: `+coorbital`. Unchanged. |
 | **Repository** | §10.5 corrected the spec's claim that nothing syncs to GitHub: `optimal_control` **does** have a remote, `git@github.com:mcasey90277/optimal_control.git`. Still true, and now more consequential — this milestone adds booster performance parameters. They are all marked open-literature placeholders today, but the assumption written into the spec is wrong and must not be relied on when real numbers arrive. |
 | **Vehicle parameters** | **Still open, and now larger.** `boosterDefaults` adds **eight** more PLACEHOLDER values — the five mass and propulsion fields (`massDry`, `massProp`, `thrustVac`, `Isp`, `Aexit`) **and the boosted-stack aerodynamic triple `Sref`, `CL`, `LD`**, which is not bookkeeping: it sets the stack's drag through the whole ascent and, with `separation = false`, the airframe for the entire unpowered flight. `vehicle_bm` adds a fourth vehicle parameter set. **Pinning, corrected 2026-08-07:** the five propulsion and mass fields are pinned exactly at `test_constThrust.m:50-56` (seven assertions, counting the 900 kg payload and `g0`); the aerodynamic triple was **not** pinned anywhere when this section was first written and now is, in its own block immediately below them, together with the derived `CD = 0.20`. `vehicleDefaults`' `Sref`, `CL` and `LD` are pinned in `test_runGlide`. Retuning any of these now fails loudly and says why rather than quietly changing every trajectory in the documentation. Both chain scripts print `(PLACEHOLDER values)` in their own summaries so the caveat travels with the output. |
+
+---
+
+## 12. As built — 2026-08-07
+
+**§10 and §11 above are the records of the first two milestones and are left
+unedited.** This section is the correction list for the third: point-to-point
+**targeting** and the **visualization** package. Same rules as before — it does
+not revise the spec, it says where the spec and the code disagree and which one
+won, and `README.md` remains the authority on delivered behaviour.
+
+**Written 2026-08-09, not on the day.** §10 and §11 were each written when their
+milestone shipped. This one was not, and that is a difference worth declaring:
+everything below was reconstructed on 2026-08-09 from the committed code and the
+commit record, so it has the accuracy of a code reading rather than of a
+same-day memory. Every entry was checked against the code on that date. Its
+milestone spans `2026-08-07` through `2026-08-08` and it is dated by the
+milestone, not by the writing.
+
+### 12.1 §10 and §11 entries this milestone supersedes
+
+| Said, correctly at the time | As of this milestone |
+|---|---|
+| §10.1: "`+viz/` with `trajPlot.m`, `groundTrack.m`, `profilePlot.m` — not delivered" | This one was already corrected **in place** in §10.1 on 2026-08-07, which is the single exception this document has made to its never-edit rule, and it is flagged there. `+viz` ships `groundTrack`, `profilePlot`, `globe3D` and `globeMovie`, plus three package-private helpers. `trajPlot.m` was never written. |
+| §10.1: "`BM/` — `run_ballistic.m`, `vehicle_bm.m`" (§11.1: "`BM/` exists") | `BM/` gains a second entry script, **`run_ballistic_target.m`**. `ICBM/` still does not exist and the case for it is now weak: `run_ballistic_target` *is* the ICBM case, driven from a user block. |
+| §11.1: "`+util/` — add `boosterDefaults.m`. Still no `stateConvert.m`" | Add **`greatCircleBearing.m`** and **`rangeSolve.m`**. Still no `stateConvert.m`, and §11.2's argument that it will never be written is unchanged. |
+| §11.1: "17 library functions under `+coorbital/`, 14 of them with a self-demo, three ruled exceptions" | The count moved again with `+viz` and the two `+util` additions. The three ruled exceptions — `missileConst`, `vehicleDefaults`, `boosterDefaults` — are unchanged and the reasoning is unchanged. §11.1's numbers are left standing as that dated record. |
+
+### 12.2 Files that exist and the spec's tree does not contain at all
+
+The §2 tree has no targeting script of any kind. It lists `run_glide.m`,
+`run_ballistic.m` and `run_icbm.m` — three scripts that fly *launch site +
+azimuth + schedule → wherever the physics puts it*. Inverting that was not in
+the spec, and two scripts now do it:
+
+- **`HGV/run_target.m`** — launch point to destination for the boost-glide
+  vehicle, ranging on **thrust-termination time**, chosen because range is
+  monotonic and single-valued in it and bisection is therefore safe.
+- **`BM/run_ballistic_target.m`** — the same problem for the ballistic vehicle,
+  ranging on the **loft angle**, which is *not* monotonic. Range rises to a
+  maximum and falls away on both sides, so every reachable range short of the
+  maximum is flown by two arcs and the script has to bracket and **certify** the
+  maximum before it can bisect either branch. It carries a
+  `'minimum-energy' | 'lofted' | 'depressed'` selector, and it **measures**
+  which branch it flew from the flown loft angle against the certified maximiser
+  interval rather than trusting its own label.
+
+Two library functions came with them, both in `+util`: `greatCircleBearing`,
+the initial course of a great-circle arc, which raises `:degenerateArc` and
+`:polarOrigin` rather than returning a plausible azimuth for a geometry that
+has none; and `rangeSolve`, the scalar range bisection, which **refuses by
+returning** — `converged = false`, the best-so-far point, and the bracket it
+searched — rather than throwing or handing back a nearest miss.
+
+### 12.3 The refusal contract, which the spec has no concept of
+
+This is the milestone's one genuine addition to the architecture, and it is
+worth recording as a design decision rather than as a feature.
+
+A targeting script can be asked for something it cannot do: a target beyond the
+reachable envelope, a target too close, a branch that does not reach. The spec
+treats every entry script as a propagation that either runs or errors. Neither
+is right here. Throwing loses the diagnostic — the caller wanted to know *how
+far* out of reach the request was — and returning the nearest trajectory is
+worse, because **a near miss looks exactly like a solution**.
+
+What was built instead: an empty `traj`, `info.refused = true`, an
+`info.refusedWhy` naming the gate, and the whole measurement record in `info`
+regardless, so the caller can phrase its own refusal. The reachable envelope
+comes free with the bracketing the solve does anyway, which is why it can be
+printed on every run, converged or refused.
+
+### 12.4 Statements about behaviour the milestone made false
+
+| Spec says | As built |
+|---|---|
+| §5 validation table has no targeting row | Delivered checks the spec does not contain: the max-range loft angle is **certified** by adaptive refinement to a single interior hump and returns an *interval*, not a point; the flown branch is re-derived from the flown angle against that interval; and `'minimum-energy'` is checked in the **vacuum equal-radius limit**, where the constrained minimisation must reproduce the classical γ\* and V\* — measured 1.583e−8 rad and 4.698e−16 relative. |
+| §1 capability table, "Terminal: prescribed CL and bank" (§11.3 already narrowed this to bank only) | `run_target` ships `descBank = 0` while `run_boost_glide` ships 75°. At the time this milestone shipped that was a **targeting limitation** — a banked descent turned the track off the departure arc and the script could only warn about the resulting cross-range. §13 removes the limitation; the shipped zero is now a default rather than a constraint. |
+| §2.1: "`env.omegaE = 0` → 7.292115e-5 rad/s to spin the Earth", and §6 build order item 9 lists "rotating Earth" as a one-line fidelity increment | True of the **propagator** and false of the **targeting layer**, which is the distinction this milestone discovered and §13 closed. Turning rotation on is indeed one line in `glide3DOF` and `boost3DOF`. It is not one line in a script that takes its launch azimuth from a closed form derived for a non-rotating sphere: at the end of this milestone both targeting scripts **refused** `earthSpin = true` outright rather than returning a 231.6 km (HGV) or 463.2 km (BM) miss and calling it a solution. |
+| §9 "Vehicle parameters" | `alphaMax` moved out of the entry scripts and became a **vehicle** property, `BM/vehicle_bm.m`'s `alphaMaxDeg = 6`, read by both `BM` entry scripts. It had been 12° in one and 6° in the other for one airframe, and the 12 had been chosen to bring a demonstration target inside the depressed branch — a placeholder tuned to make a demo work, which is the failure mode the whole PLACEHOLDER discipline exists to prevent. |
+
+### 12.5 One thing built that the spec did not ask for
+
+**`run_target` renders a movie.** `globeMovie` writes an MP4 of the trajectory
+developing over a 3-D Earth, with the track growing frame by frame, a per-frame
+time and altitude readout, and a phase legend — degrading to a plain grey sphere
+on black when pumpkyn's texture and starfield are not on the path, so it needs
+no network and no third-party toolbox to produce a working file. The spec's §2
+tree has `trajPlot.m` and stops there.
+
+It is off by default because it is the expensive part of a run, and its
+altitude exaggeration ships at **1** — true scale — with `'auto'` available as
+an opt-in adaptive rule. That default was itself a correction: exaggeration had
+been on by default, which is a rendering choice quietly making a physical claim.
+
+---
+
+## 13. As built — 2026-08-08
+
+**§10, §11 and §12 above are left unedited.** This section is the correction
+list for the fourth milestone: **two-axis targeting**. Written 2026-08-09, one
+day late, on the same terms as §12 — a reconstruction from the code and the
+commit record, checked against the code on that date.
+
+The closed-loop guidance seam specified in the same plan brief
+(`docs/plan_2026-08-08_aim_solve_and_closed_loop.md`, Task 4) is a separate
+piece of work with its own write-up at `docs/closed_loop_guidance.md`, and is
+not covered here.
+
+### 13.1 The milestone in one sentence
+
+Both targeting scripts stopped **computing** the launch azimuth and started
+**solving** it, beside the range control they already solved, against both
+components of the miss instead of one.
+
+`coorbital.util.aimSolve` is the new library function: a two-dimensional damped
+Newton over a finite-difference Jacobian, with the step taken from an SVD of
+that Jacobian rather than by backslash. It is the two-axis sibling of
+`rangeSolve` and it honours the same contract for the same reason — converge on
+the **achieved residual** and never on the step, never throw merely for failing
+to converge, and hand back an `info` rich enough for the caller to write its own
+refusal. A clean iteration costs exactly three evaluations, so the cost model is
+`1 + 3n` and each evaluation is one full trajectory propagation.
+
+### 13.2 §12 entries this milestone supersedes
+
+| §12 said, correctly at the time | As of 2026-08-08 |
+|---|---|
+| §12.4: "at the end of this milestone both targeting scripts **refused** `earthSpin = true` outright" | **Both fly it.** `run_target`: 231 551.628 m of seed miss down to **4.361 m** in 7 residual evaluations. `run_ballistic_target`: 463 211.19 m down to **52.461 m**, also 7. The refusal, the `'earthSpin'` value of `info.refusedWhy` and the assertions gating the azimuth prose on `env.omegaE == 0` are all deleted rather than left as dead code. |
+| §12.4: "a banked descent turned the track off the departure arc and the script could only warn about the resulting cross-range" | **Cross-range is a residual now, driven to zero.** At `run_boost_glide`'s 75° terminal bank `run_target` used to converge on range and land 21 524.695 m away; it now arrives at **54.795 m** in 4 evaluations. `info.crossWarn` is gone from both scripts, and so is the arcsin cross-track relation that produced it — nothing in the library computes it any more. |
+| §12.2: `run_ballistic_target` "ranging on the **loft angle**" | Still true, and now only of **stage one**. Stage two solves the azimuth beside the mode's own range control: the loft angle on the two full-burn branches, the **cutoff fraction** in `'minimum-energy'` mode, whose loft is held at the value the minimisation settled on. |
+| §11.1's and §12.1's library-function counts | Add `+coorbital/+util/aimSolve.m`, with `tests/test_aimSolve.m` beside it. |
+
+### 13.3 The design decision: one solver closes two gaps
+
+Recorded as a design change, because the two gaps did not look like one gap.
+
+Earth rotation and a banked descent were separate limitations with separate
+entries in `TODO.md`. They are the same limitation. The closed-form bearing is
+the answer under exactly two conditions — `omegaE = 0` **and** `sigma ≡ 0` —
+because only then is the flown ground track the great circle it departed on, so
+matching the *distance* matches the *point*. Drop either condition and the aim
+direction becomes an unknown. One extra degree of freedom, solved against a
+residual that was already being measured, closes both.
+
+**The mechanism that had been given for rotation was wrong, and its number
+outlived its retraction.** Both scripts, and this project's documentation, used
+to say that a turning Earth carries the target east under the vehicle so the
+vehicle must be aimed where the target *will be*. It does not. The integrated
+state is planet-relative and the target is a fixed ground point: neither moves
+in the rotating frame. What rotation does is **deflect the vehicle**, through
+the Coriolis and centrifugal terms that have been in the equations of motion
+since the first commit.
+
+The distinction is testable and was tested. A carried target is a down-range
+effect; a deflected vehicle is a cross-range one. Measured seed misses:
+
+| Script, rotating | Down-range | Cross-range | Ratio |
+|---|---|---|---|
+| `HGV/run_target` | −5 858.645 m | +231 477.499 m | 39.5 : 1 |
+| `BM/run_ballistic_target` | −17 764.166 m | +462 870.439 m | 26.1 : 1 |
+
+Both scripts deleted the eastward-ground-sweep figure they used to print
+(628 km on the rotating `run_target` case) because it is the scale of the
+mechanism the sentence above it had already retracted. **A retracted
+mechanism's number left standing under a corrected sentence is the harder error
+to notice, because the prose reads right.**
+
+### 13.4 What did not move, and why that is the point
+
+| Case | Before | After |
+|---|---|---|
+| `run_target`, shipped non-rotating zero bank | 511.243 m | **511.243 m, bit-for-bit**, 1 evaluation |
+| `run_ballistic_target`, shipped `'depressed'` | 457.270 m | **unchanged bit-for-bit**, 1 evaluation |
+| `run_ballistic_target`, shipped `'minimum-energy'` | 39.009 m | **unchanged bit-for-bit**, 1 evaluation |
+| `run_ballistic_target`, shipped `'lofted'` | 779.491 m seed | **0.365 m**, 4 evaluations |
+| `HGV/run_glide`, `HGV/run_boost_glide` | 6986.82 km, 7663.05 km | unmoved in every digit |
+
+`aimSolve` tests its tolerance before doing any work, so a seed already inside
+tolerance converges at iteration zero and hands the closed form back untouched.
+Three of the four shipped targeting cases are that case. The fourth,
+`'lofted'`, had a 779.491 m seed miss against a 707.107 m per-component
+tolerance and therefore moved.
+
+**That is also this milestone's coverage gap, and it is structural rather than
+a tolerance that could be tightened.** On a non-rotating zero-bank run the miss
+*is* the down-range residual the stage-one bisection has already driven inside
+the same tolerance, so the seed can never be outside it: measured across a
+twentyfold tightening of `run_target`'s tolerance, the solve still exits at
+iteration zero every time. The shipped run a user gets by typing `run_target`
+therefore exercises none of the Jacobian, the SVD, the step cap, the line
+search or the seven refusals. Coverage comes from the rotating and banked cases
+and from `tests/test_aimSolve`, which drives the solver against synthetic
+residuals with closed-form roots and integrates no equation of motion at all.
+
+### 13.5 What the milestone opened
+
+Solving on a **surface** with machinery certified on a **curve** has
+consequences, and they are open items rather than defects. All are in `TODO.md`
+with measured sizes; the two that bear on the architecture:
+
+- **The reachable envelope is measured at the seed azimuth.** Every guarantee
+  `run_ballistic_target`'s stage one makes — the hump, the certified maximiser
+  interval, the branch brackets, the reachable band and therefore the too-far
+  and too-close refusals — is a one-dimensional argument at one azimuth, and is
+  indicative rather than exact for the azimuth stage two settles on. Measured:
+  the maximum moves about 0.28° of loft per degree of azimuth against a
+  certified interval 0.043° wide, and turning rotation on moves the envelope by
+  30 to 42 km. The visible consequence is that `'depressed'` plus `earthSpin`
+  is refused for the shipped target — correct physics on an easterly launch,
+  and pinned by a test so a reader does not blame the new solve.
+- **The stage-two Newton is not boxed to the certified branch side**, and that
+  is a decision. The only interval available to draw a box on is the
+  seed-azimuth one, and at 0.28° of loft per degree of azimuth against a
+  0.043° interval a box drawn there would exclude genuine roots. Three layers
+  of **diagnosis** stand instead of a prohibition: a per-iteration step cap, a
+  measurement of the flown angle against the interval with a printed caution
+  when they disagree, and outright refusal when the Newton cannot converge.
+
+### 13.6 Open items (§9), as they now stand
+
+| §9 item | Status |
+|---|---|
+| **Package name** | Resolved 2026-08-06: `+coorbital`. Unchanged. |
+| **Repository** | Unchanged from §11.5, and unchanged in consequence: `optimal_control` has a remote, so the spec's assumption that none of this syncs to GitHub is still false. This milestone adds no new parameters, only a solver. |
+| **Vehicle parameters** | **Still open, and now with a sharper example of why it matters.** §12.4 records `alphaMax` being moved into `BM/vehicle_bm.m` after it was found set to 12° in one script and 6° in another for one airframe, the 12 having been chosen to make a demonstration target reachable. The shipped 6° is a placeholder awaiting a qualification basis, not a cleared limit, and it now says so in the vehicle file, in both `BM` user blocks and in the printed limitations. |

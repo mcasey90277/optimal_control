@@ -3,12 +3,12 @@
 *Coorbital, Inc.*
 
 MATLAB 3-DOF trajectory generation for hypersonic glide and ballistic vehicles
-over a spherical Earth. The library propagates **prescribed-control**
-trajectories: give it a vehicle, a launch or entry state, and a control
-schedule, and it integrates the flight and reports it. No optimization — see
-[Out of scope](#out-of-scope).
+over a spherical, optionally **rotating** Earth. The library propagates
+**prescribed-control** trajectories: give it a vehicle, a launch or entry state,
+and a control schedule, and it integrates the flight and reports it. No
+optimization — see [Out of scope](#out-of-scope).
 
-Three milestones have shipped:
+Five milestones have shipped:
 
 | Milestone | Delivers |
 |---|---|
@@ -16,9 +16,13 @@ Three milestones have shipped:
 | 2026-08-07 | Powered boost, a descent phase, and full three-phase chains — `boost3DOF`, `constThrust`, `pitchProgram`, `massConstant`, `BM/run_ballistic` (boost → coast → impact), `HGV/run_boost_glide` (boost → glide → descent) |
 | 2026-08-07 | **Point-to-point targeting and visualization** — `greatCircleBearing`, `rangeSolve`, the `+viz` package (`groundTrack`, `profilePlot`, `globe3D`, `globeMovie`), and `HGV/run_target`: give it a launch point and a destination and it solves the trajectory that connects them. See [Point-to-point targeting](#point-to-point-targeting) |
 | 2026-08-07 | **Ballistic point-to-point targeting** — `BM/run_ballistic_target`, which ranges on the **loft angle** rather than on thrust termination and therefore has to deal with the two branches that come with it: a lofted arc and a depressed one for every range short of maximum. See [Ballistic point-to-point targeting](#ballistic-point-to-point-targeting-two-branches) |
+| 2026-08-08 | **Two-axis targeting, and the closed-loop guidance seam** — `coorbital.util.aimSolve`, a damped Newton that solves the **launch azimuth beside a range control** against both components of the miss. Both targeting scripts now fly a **rotating Earth** and a **banked** track instead of refusing the first and warning about the second. `coorbital.guide.terminalConstraint` lands beside it as the interface PEG and VOA will both attach to; neither algorithm is implemented. See [Point-to-point targeting](#point-to-point-targeting) |
 
 The design rationale is in `DESIGN.md`; the running log of what broke and why is
-in `LESSONS_LEARNED.md`. This file covers layout, use, and extension.
+in `LESSONS_LEARNED.md`; `TODO.md` is the authority on what is *not* built. The
+mathematics behind the targeting solve is `hgv_dynamics_note.tex` §8, and the
+structural write-up of the two solvers is `software_design.tex`. This file
+covers layout, use, and extension.
 
 **Before you read a single trajectory number as a performance figure: every
 vehicle and booster parameter in this library is a marked PLACEHOLDER.** See
@@ -28,8 +32,13 @@ vehicle and booster parameter in this library is a marked PLACEHOLDER.** See
 
 ## Running
 
-Everything below was executed on 2026-08-07 against the code as committed.
-Every command shown was run; every number shown came out of that run.
+Everything below was executed against the code as committed. Every command shown
+was run; every number shown came out of that run. The **targeting** figures, the
+file counts and the suite result were re-measured on 2026-08-09 against two-axis
+targeting; the `run_glide`, `run_ballistic` and `run_boost_glide` headlines are
+from 2026-08-07, unmoved by that change and pinned to their last printed digit
+by the suite; the movie figures are from 2026-08-07 and are marked where they
+appear.
 
 ### The five entry scripts
 
@@ -39,14 +48,29 @@ Every command shown was run; every number shown came out of that run.
 | `BM/run_ballistic` | ballistic missile, pad to impact | 3 (boost, coast to apogee, descent) |
 | `HGV/run_boost_glide` | boost-glide vehicle, pad to impact | 3 (boost, glide, terminal descent) |
 | `HGV/run_target` | **launch point → destination point**, solved | 3 (boost to a solved cutoff, glide, descent) |
-| `BM/run_ballistic_target` | **launch point → destination point**, solved, ballistic | 3 (boost to burnout, coast to apogee, descent) |
+| `BM/run_ballistic_target` | **launch point → destination point**, solved, ballistic | 3 (boost to burnout or a solved cutoff, coast to apogee, descent) |
 
 The first three fly *launch site + azimuth + control schedule → wherever the
 physics puts it*. The last two invert that: they take two latitude/longitude
-pairs and solve for the trajectory that connects them. They are separate scripts
-because they solve on **different controls** — `run_target` on thrust
-termination, `run_ballistic_target` on the loft angle — and the ballistic one
-therefore has two answers where the boost-glide one has one.
+pairs and solve for the trajectory that connects them. Since 2026-08-08 both do
+it the same way — the closed-form great-circle bearing is the **seed**, and
+`coorbital.util.aimSolve` then solves the **launch azimuth beside a range
+control** until both components of the miss are inside tolerance. They remain
+separate scripts because the range control differs, and with it the whole
+one-dimensional stage that produces the seed: `run_target` bisects the
+thrust-termination time, which is monotonic in range, while
+`run_ballistic_target` ranges on the **loft angle**, which is not, and so must
+bracket and certify the max-range hump before it can bisect anything — which is
+also why the ballistic one has two answers where the boost-glide one has one.
+
+**What the second axis bought.** Both targeting scripts now fly a **rotating
+Earth** and a **banked** track instead of refusing the first and warning about
+the second: `earthSpin` true takes `run_target` from a 231551.628 m miss to
+**4.361 m** and `run_ballistic_target` from 463211.19 m to **52.461 m**. Each
+costs seven residual evaluations rather than the one a solve that converges at
+its seed spends — six extra propagations — inside whole runs of 23 and 701. Both
+figures, and what makes the second one large, are in
+[Turning the Earth on](#turning-the-earth-on-what-it-costs-and-what-it-buys).
 
 Each puts itself and the library root on the path, so it runs from anywhere
 once MATLAB can see the file. Each is driven from a fenced
@@ -69,7 +93,7 @@ the printed summary at full precision. `run_boost_glide`'s and `run_target`'s
 everything an independent checker needs to re-integrate the same chain with a
 different solver, which is exactly what `tests/test_fullChain.m` does.
 
-Headless, which is how all four were verified:
+Headless, which is how all five were verified:
 
 ```bash
 /Applications/MATLAB_R2025b.app/bin/matlab -batch \
@@ -88,6 +112,14 @@ Headless, which is how all four were verified:
   "cd('/Users/msc/Desktop/optimal_control/missiles/BM'); run_ballistic_target(struct('showPlots',false))"
 ```
 
+Either targeting script also takes `earthSpin` true, which since 2026-08-08 is
+flown rather than refused:
+
+```bash
+/Applications/MATLAB_R2025b.app/bin/matlab -batch \
+  "cd('/Users/msc/Desktop/optimal_control/missiles/BM'); run_ballistic_target(struct('showPlots',false,'earthSpin',true))"
+```
+
 ### The glide entry script in detail
 
 At the MATLAB prompt:
@@ -98,7 +130,7 @@ run_glide
 ```
 
 Called with an output — `traj = run_glide;` — it returns the trajectory struct;
-called bare it prints the summary and returns nothing. All three scripts behave
+called bare it prints the summary and returns nothing. All five scripts behave
 this way.
 
 The override struct exists so an automated test or a batch sweep can drive a
@@ -133,36 +165,55 @@ file, and raises `missiles:testsFailed` at the end if any failed, so `-batch`
 returns a non-zero exit code. Current state:
 
 ```
-  PASS  test_allenEggers      PASS  test_greatCircle
-  PASS  test_boost3DOF        PASS  test_greatCircleBearing
-  PASS  test_boostEvents      PASS  test_missileConst
-  PASS  test_constLD          PASS  test_phaseRun
-  PASS  test_constThrust      PASS  test_pitchProgram
-  PASS  test_equilibriumGlide PASS  test_rangeSolve
-  PASS  test_expAtmos         PASS  test_runBallistic
-  PASS  test_fullChain        PASS  test_runGlide
-  PASS  test_glide3DOF        PASS  test_runBallisticTarget
-                              PASS  test_runGlide
-                              PASS  test_runTarget
-                              PASS  test_sphereGrav
-                              PASS  test_viz
+  PASS  test_aimSolve
+  PASS  test_allenEggers
+  PASS  test_boost3DOF
+  PASS  test_boostEvents
+  PASS  test_constLD
+  PASS  test_constThrust
+  PASS  test_equilibriumGlide
+  PASS  test_expAtmos
+  PASS  test_fullChain
+  PASS  test_glide3DOF
+  PASS  test_greatCircle
+  PASS  test_greatCircleBearing
+  PASS  test_missileConst
+  PASS  test_phaseRun
+  PASS  test_pitchProgram
+  PASS  test_rangeSolve
+  PASS  test_runBallistic
+  PASS  test_runBallisticTarget
+  PASS  test_runGlide
+  PASS  test_runTarget
+  PASS  test_sphereGrav
+  PASS  test_terminalConstraint
+  PASS  test_viz
 
-21 passed, 0 failed
+23 passed, 0 failed
 ```
 
-42 s wall clock including MATLAB startup, measured 2026-08-07 on an Apple
-silicon Mac, and zero warnings. Fifteen of the twenty-one are unit or
-analytic-validation tests — thirteen exercise one library function apiece, and
-`test_allenEggers` and `test_equilibriumGlide` check the propagator against a
-closed-form solution. The other six test **compositions**, and they are the
-important ones:
+316 s wall clock including MATLAB startup, measured 2026-08-09 on an Apple
+silicon Mac, and zero warnings.
+
+**The suite got slower as it got sharper.** It was 42 s at 21 tests on
+2026-08-07, and almost all of the increase is `test_runTarget` and
+`test_runBallisticTarget`, which now fly whole two-axis targeting solves —
+hundreds of trajectory propagations apiece — where they used to fly a handful.
+That is the cost of covering the rotating and banked cases, and it is worth
+paying: those two cases are the *only* coverage the two-axis path has from an
+entry script.
+
+Seventeen of the twenty-three are unit or analytic-validation tests — fifteen
+exercise one library function apiece, and `test_allenEggers` and
+`test_equilibriumGlide` check the propagator against a closed-form solution. The
+other six test **compositions**, and they are the important ones:
 
 | Test | What it composes |
 |---|---|
 | `test_runGlide` | `HGV/run_glide` end to end — unit conversion, the `greatCircle` call site, the peak search, the termination diagnosis, and the printed summary, which it parses rather than recomputes. Also guards the deliberate duplication between `vehicle_hgv` and `vehicleDefaults`. |
 | `test_runBallistic` | `BM/run_ballistic` end to end — the boost → coast → descent chain, the staging link, and the Keplerian cross-check. |
-| `test_runTarget` | `HGV/run_target` end to end — the closed-form azimuth, the bisection on cutoff time, the separation link, the reachable-envelope refusal at BOTH ends of the band, and the printed summary. The miss it asserts is measured impact-to-target with `greatCircle` from the flown state, not read back out of the solver's own residual — and it flies a **banked** case as well as the shipped zero-bank one, because at zero bank those two numbers agree to 9.3e-10 m and nothing can tell a measurement from a substitution. |
-| `test_runBallisticTarget` | `BM/run_ballistic_target` end to end — the closed-form azimuth, the **certified bracketing of the max-range loft angle**, the two full-burn branch solves on the certified one-sided intervals either side of it, the **minimum-energy constrained minimisation**, and four separate refusals (beyond maximum range, too close, an unreachable *branch*, and `earthSpin`). What it checks that no other test in this suite can: the branch is **re-derived from the flown loft angle against the certified maximiser interval** rather than read off the script's own label; the lofted and depressed arcs are asserted to differ by more than twice in apogee and 1.3 times in flight time (measured 2.55 and 1.48 at the vehicle's 6° clamp); the minimum-energy answer is asserted to be **below the burnout energy of both neighbouring feasible points and of both full-burn arcs**, by a margin far above the measured noise of the inner solve; and part 6b asserts the **vacuum equal-radius limit** — the same constrained minimisation applied to an impulsive burn at r = rE must return the classical γ\* and V\*, which it does to 1.6e−8 rad and 4.7e−16 relative. `assertBetweenArcs` is the assertion that a mode quietly falling back to *selecting* a branch cannot pass. Part 11 exercises the branch **measurement** on the one geometry where it can legitimately disagree with the label, and asserts `coalesced`. Part 13 flies **Plesetsk to New York**: refused on the shipped booster (7132.320 km against a 5211.525 km maximum) and, on a booster sized to the range, landing on the classical 1205.989 km / 26.012 min reference to +1.03 % and +4.42 %. It also pins the `alphaMax` story: the clamp is `BM/vehicle_bm`'s `alphaMaxDeg = 6`, a −40° `loftMin` must refuse with `coorbital:runBallisticTarget:maximumNotBracketed` for bracket width, and a 12° sensitivity study must cost 156.224 km of maximum range while buying reach down to 1684.117 km. |
+| `test_runTarget` | `HGV/run_target` end to end — the **solved** azimuth, the bisection on cutoff time that seeds it, the separation link, the reachable-envelope refusal at BOTH ends of the band, and the printed summary. The miss it asserts is measured impact-to-target with `greatCircle` from the flown state, not read back out of the solver's own residual. It flies **three** configurations for that reason: the shipped zero-bank one, where the measured miss and the solver's residual agree to 9.3e-10 m and nothing can tell a measurement from a substitution; a **banked** case (part 6), 75° of terminal bank solved from a 21524.695 m seed miss to 54.795 m; and a **rotating** one (part 8b), flown rather than refused, 231551.628 m to 4.361 m. It also pins `aimIter == 0` on the shipped case — the correct assertion, and one that enshrines a coverage gap; see [What two-axis targeting left approximate](#what-two-axis-targeting-left-approximate). |
+| `test_runBallisticTarget` | `BM/run_ballistic_target` end to end — the **solved** azimuth, the **certified bracketing of the max-range loft angle**, the two full-burn branch solves on the certified one-sided intervals either side of it, the **minimum-energy constrained minimisation**, and refusals on every path the script has: beyond maximum range, too close and an unreachable *branch* in part 8, the loft bracket in part 9, and the two-axis solve's own in part 15. Part 12 **flies a rotating Earth** and pins the deflection — where it used to assert a refusal. What it checks that no other test in this suite can: the branch is **re-derived from the flown loft angle against the certified maximiser interval** rather than read off the script's own label; the lofted and depressed arcs are asserted to differ by more than twice in apogee and 1.3 times in flight time (measured 2.55 and 1.48 at the vehicle's 6° clamp); the minimum-energy answer is asserted to be **below the burnout energy of both neighbouring feasible points and of both full-burn arcs**, by a margin far above the measured noise of the inner solve; and part 6b asserts the **vacuum equal-radius limit** — the same constrained minimisation applied to an impulsive burn at r = rE must return the classical γ\* and V\*, which it does to 1.6e−8 rad and 4.7e−16 relative. `assertBetweenArcs` is the assertion that a mode quietly falling back to *selecting* a branch cannot pass. Part 11 exercises the branch **measurement** on the one geometry where it can legitimately disagree with the label, and asserts `coalesced`. Part 13 flies **Plesetsk to New York**: refused on the shipped booster (7132.320 km against a 5211.525 km maximum) and, on a booster sized to the range, landing on the classical 1205.989 km / 26.012 min reference to +1.03 % and +4.42 %. It also pins the `alphaMax` story: the clamp is `BM/vehicle_bm`'s `alphaMaxDeg = 6`, a −40° `loftMin` must refuse with `coorbital:runBallisticTarget:maximumNotBracketed` for bracket width, and a 12° sensitivity study must cost 156.224 km of maximum range while buying reach down to 1684.117 km. |
 | `test_fullChain` | The chain milestone's headline deliverable: boost, glide and descent on one seven-state vector. Re-integrates **across** each junction with `ode89` at 1e-12 — a different method at a hundred times the driver's tolerance — and asserts continuity in states 1–6 and the expected staging jump in state 7. |
 | `test_boostEvents` | `eventBurnout` and `eventApogee` inside a live propagation, not just as scalar function calls. |
 
@@ -175,6 +226,17 @@ off-axis geometry for the same reason, and both targeting tests prove their
 geometry is discriminating — it asserts that every transposition of the `greatCircle`
 arguments moves the range by more than fifty times the miss budget — rather
 than assuming it.
+
+`tests/test_aimSolve.m` is the solver's own coverage and it **integrates
+nothing**: it drives `coorbital.util.aimSolve` against synthetic residuals with
+closed-form roots, so the Jacobian, the SVD step, the conditioning ceiling, the
+step cap, the line search and all seven refusals are exercised without a
+propagation. It also pins the cost model — `nEval = 1 + 3*iterations + nShrink`
+— and the stall exit, which is the exit guarding the whole "never a silent near
+miss" contract and which had no coverage at all until 2026-08-08: deleting it,
+gutting its message or ignoring `opts.maxHalve` entirely all left the suite
+green. `tests/test_terminalConstraint.m` covers the five burnout constraints the
+same way.
 
 ### Self-demos
 
@@ -237,18 +299,18 @@ Everything reusable lives in one `+coorbital` package. Vehicle folders hold
 
 | Path | Contents |
 |---|---|
-| `+coorbital/+util/` | `missileConst.m`, `vehicleDefaults.m`, `boosterDefaults.m`, `greatCircle.m`, `greatCircleBearing.m`, `rangeSolve.m` |
+| `+coorbital/+util/` | `missileConst.m`, `vehicleDefaults.m`, `boosterDefaults.m`, `greatCircle.m`, `greatCircleBearing.m`, `rangeSolve.m`, `aimSolve.m` |
 | `+coorbital/+atmos/` | `expAtmos.m` |
 | `+coorbital/+grav/` | `sphereGrav.m` |
 | `+coorbital/+aero/` | `constLD.m` |
 | `+coorbital/+eom/` | `glide3DOF.m`, `boost3DOF.m`, `massConstant.m` |
-| `+coorbital/+guide/` | `prescribed.m`, `pitchProgram.m` |
+| `+coorbital/+guide/` | `prescribed.m`, `pitchProgram.m`, `terminalConstraint.m` |
 | `+coorbital/+prop/` | `phaseRun.m`, `constThrust.m`, `eventAltitude.m`, `eventApogee.m`, `eventBurnout.m` |
 | `+coorbital/+viz/` | `groundTrack.m`, `profilePlot.m`, `globe3D.m`, `globeMovie.m`, plus `private/` helpers |
 | `HGV/` | `run_glide.m`, `run_boost_glide.m`, `run_target.m`, `vehicle_hgv.m` |
 | `BM/` | `run_ballistic.m`, `run_ballistic_target.m`, `vehicle_bm.m` |
-| `tests/` | `run_tests.m` plus twenty `test_*.m` |
-| `docs/` | this file, `DESIGN.md`, `LESSONS_LEARNED.md`, the three plans, reviews |
+| `tests/` | `run_tests.m` plus twenty-three `test_*.m` |
+| `docs/` | this file, `DESIGN.md`, `LESSONS_LEARNED.md`, `closed_loop_guidance.md`, the four plan briefs, the two LaTeX notes (`hgv_dynamics_note.tex`, `software_design.tex`), reviews |
 
 Note the split: `+prop` holds both the **propagator** (`phaseRun`, the events)
 and **propulsion** (`constThrust`). One package, two meanings of the word,
@@ -280,7 +342,9 @@ law of cosines because that form loses half its significant digits below about
 **`util/greatCircleBearing`** is the companion *initial bearing* of the same
 arc, clockwise from north and wrapped into `[0,2π)` — which is exactly the
 library's heading convention `psi`, so it drops straight into a launch state
-with no sign flip. Bearing is **not** symmetric under exchange of the two
+with no sign flip. Since 2026-08-08 both targeting scripts use it as the **seed**
+of the two-axis solve rather than as the answer. Bearing is **not** symmetric
+under exchange of the two
 points: LAX→JFK is 65.867° while JFK→LAX is 273.841°, not the 245.867° a naive
 reversal would give. Its header states the three degenerate cases (coincident,
 antipodal, polar) and what it returns at each.
@@ -293,6 +357,78 @@ piecewise smooth, and bisection cannot be thrown off a cliff by a local kink.
 **An unreachable target is not an error**: it returns `converged = false` with
 the achievable band in `info`, so the caller can phrase the refusal in its own
 vocabulary. It never evaluates `fRange` twice at the same abscissa.
+
+**`util/aimSolve`** is the two-dimensional sibling, and it is deliberately the
+same contract: converge on the **achieved** residual rather than on the step,
+never throw merely for failing to converge, and hand back an `info` struct rich
+enough for the caller to write its own refusal. It drives a two-component
+residual to zero in two controls — in the intended use, the launch heading `psi`
+and a range control, against the down-range and cross-range miss in metres —
+though nothing in the file knows that: `fResid` is any handle taking a `[2x1]`
+and returning a `[2x1]`, treated as an opaque, expensive black box.
+
+**The method had to be Newton, and that is a consequence and not a preference.**
+`rangeSolve`'s entire safety argument is the bracket, and a bracket is a
+one-dimensional object — the intermediate value theorem has no cheap planar
+analogue. *Two coupled axes offer no bracket to preserve*, so every safeguard
+bisection got for free is written out by hand: a condition-number ceiling read
+off an SVD of the forward-difference Jacobian, tested **before** any step is
+computed; a cap on the step applied as one scale factor on the whole step, never
+component by component, which would rotate it off the Newton direction; and a
+backtracking line search that treats a trial pair whose flight does not complete
+as an **infeasible point** rather than as an error. The step comes out of that
+same SVD — rotate the residual into the singular basis, divide by the singular
+values, rotate back, `sDir = -(vJac*((uJac'*fCur)./sVal))` — rather than out of a
+backslash: no second factorisation, no inverse formed anywhere, and no
+near-singularity warning printed to the console from inside a loop a targeting
+script runs thousands of times.
+
+**The evaluation count is the cost, and it is part of the interface.** Each
+residual evaluation is a full trajectory propagation. A clean iteration costs
+**exactly three** — two difference probes and one accepted trial — because the
+base point is never re-evaluated; the accepted trial value becomes the next base
+value. So `nEval = 1 + 3*iterations + nShrink`, and `test_aimSolve` asserts it.
+`dx0` is one step **per control** and a scalar is refused outright: a heading in
+radians and a range control that may be an angle or a dimensionless fraction do
+not share a scale, and silently broadcasting one step would bury a wrong
+Jacobian column. `opts.maxStep` defaults to unbounded for the same reason in
+reverse — a library function cannot know the caller's scales, and a wrong
+default here would silently lengthen every solve. The callers set it;
+`run_target` caps at 10° of heading and 5 % of the burn per iteration.
+
+**Seven refusals, not one, because two of the remedies are opposites.**
+`toleranceNotMet`, `singularJacobian`, `stepStalled`, `jacobianFailed`,
+`stepUnderflow`, `jacobianNotFinite` and `stepNotFinite`. The last four all mean
+loosely "the Jacobian could not be used", and collapsing them was considered and
+rejected: `jacobianFailed` says **shrink** `dx0` and `stepUnderflow` says
+**enlarge** it. A single message telling a caller to shrink when the fix is to
+enlarge is worse than no message. The rule the library now applies generally:
+*group failures by remedy, not by mechanism.* The one thing that does throw is
+an unusable starting guess — a non-finite residual at `x0` raises
+`coorbital:aimSolve:nonFiniteEval`, because there is no step to shrink there and
+no earlier point to fall back on, which makes it an input error rather than a
+failure to converge.
+
+**`guide/terminalConstraint`** measures a burnout state against the five
+terminal constraints **PEG and VOA both enforce** — radius, speed, flight path
+angle, and the two components that fix the orbital plane — and returns a
+**dimensionless** `[5x1]` residual that is zero exactly on the target manifold,
+so a shooting or least-squares solver can drive it to zero without rescaling and
+neither algorithm has to re-derive the five. It is the shared interface of the
+closed-loop guidance seam; **neither algorithm exists**, and this file is the
+only part of either that does. The mathematics is `hgv_dynamics_note.tex` §9,
+"The five terminal constraints"; the design brief is
+`docs/closed_loop_guidance.md`.
+
+It takes **Cartesian position and velocity in the caller's own frame**, not a
+library state, and that is deliberate rather than lazy. Converting the
+seven-state spherical vector to an inertial Cartesian pair needs an inertial
+frame, and this library has not defined one: with `env.omegaE` nonzero the
+state's longitude is Earth-fixed and its speed is planet-relative, and there is
+no epoch anywhere that says where the inertial x-axis points. Baking a guess
+about that into the one interface both guidance laws share would put the guess
+somewhere it could not be seen. The conversion belongs with the caller that owns
+the epoch.
 
 **`+viz`** is the plotting package: `groundTrack` (lat/lon track, one coloured
 segment per phase, launch, target and impact marked), `profilePlot` (a chosen
@@ -373,7 +509,8 @@ so a phase given `tspan = [10 50]` contributes 40 s and opens no gap; and the
 sample at a phase boundary is recorded once, carrying the *outgoing* phase's
 control, so a control discontinuity does not appear in `traj.u`.
 
-Two more were added this milestone. **Any state dimension:** `nx` is taken
+Two more were added in the boost-and-chain milestone. **Any state dimension:**
+`nx` is taken
 from `numel(x0)` and the control width `nu` is measured by calling phase 1's
 guide once, before the loop, at `(tspan(1), x0)` — so a *stateful* guide sees one
 evaluation more than the integrator makes and must tolerate it. And an
@@ -546,10 +683,12 @@ Earth rotation is not a handle — it is the scalar `env.omegaE`. Set it to
 `c.omegaE` to turn on the Coriolis and centrifugal terms already present in
 `glide3DOF` and `boost3DOF`, or leave it at 0. In every entry script the switch
 is the boolean `earthSpin` in the user block, shipped `false`. In the two
-**targeting** scripts, `HGV/run_target` and `BM/run_ballistic_target`, `true` is
-now **refused** rather than flown: their launch azimuth is a closed form that is
-only the answer while the ground stands still. See "A rotating Earth is refused,
-not flown" below.
+**targeting** scripts, `HGV/run_target` and `BM/run_ballistic_target`, `true`
+used to be **refused** outright, because their launch azimuth was a closed form
+that is only the answer while the ground stands still. Since 2026-08-08 the
+azimuth is solved and both scripts **fly** it. See
+[Turning the Earth on](#turning-the-earth-on-what-it-costs-and-what-it-buys)
+for what that costs and buys.
 
 ### Why `sphereGrav` returns a `gLat` that is always zero
 
@@ -621,23 +760,31 @@ the user block.
 ## Point-to-point targeting
 
 `HGV/run_target` takes a launch point and a destination point and solves for the
-trajectory that connects them. That is **two separate solves**, and on a
-non-rotating Earth they do not interact.
+trajectory that connects them. Two unknowns have to be found — where to aim, and
+when to stop thrusting — and there is exactly **one** geometry in which they
+decouple. The library used to assume it. Since 2026-08-08 it solves them
+together, in two stages.
 
-**Azimuth — closed form, no iteration.** `coorbital.util.greatCircleBearing`
-gives the initial bearing of the launch-to-target great circle, clockwise from
-north, which is exactly the heading state `psi`. It is written straight into the
-launch state; `test_runTarget` asserts `traj.x(1,6)` equals it to machine
-precision, and the shipped run reproduces it bit-identically.
+**Stage one — the azimuth seed, and a bisection on thrust-termination time.**
+`coorbital.util.greatCircleBearing` gives the initial bearing of the
+launch-to-target great circle, clockwise from north, which is exactly the
+heading state `psi`, so it drops into the launch state with no conversion. That
+bearing is the whole answer under two conditions and no others: `env.omegaE = 0`
+**and** every commanded bank zero. With both, the only horizontal force is a
+lift vector held in the vertical plane, the ground track is the great circle the
+vehicle left on, and matching the *distance* matches the *point*. Drop either
+condition and the flown track is some other curve whose initial bearing is no
+longer the aim point. It is still a good guess, and that is exactly how the
+library now uses it: **as the seed**.
 
-**Range — bisection on thrust-termination time.** Of the available control
-parameters, only this one is monotonic and single-valued:
+The range control bisected at that seed is the thrust-termination time. Of the
+available control parameters, only this one is monotonic and single-valued:
 
 | Parameter | Behaviour | Verdict |
 |---|---|---|
 | Thrust-termination time | less burn, less energy, shorter range | **chosen** |
 | Pitch-program loft angle | two branches either side of a max-range hump | rejected — a root finder lands on whichever branch it started nearest |
-| Glide handoff altitude | bifurcates on the glide phugoid's troughs; 30 km costs `run_boost_glide` 1882 km while every phase still reports nominal | rejected outright |
+| Glide handoff altitude | bifurcates on the glide phugoid's troughs; 30 km costs `run_boost_glide` 1881 km while every phase still reports nominal | rejected outright |
 
 It also needs **no new machinery**: the boost phase already ends at `tspan(2)`
 when the burnout event has not fired first, so a shortened `tspan` *is* a
@@ -670,59 +817,165 @@ to change, at both ends:
 ```
 
 A refusal returns an empty trajectory and `info.refused = true`; it does **not**
-throw, so a caller can read the band out of `info` without a `try`/`catch`.
+throw, so a caller can read the band out of `info` without a `try`/`catch`. That
+band is measured at the **seed** azimuth, so it is indicative for the azimuth
+stage two settles on rather than exact — see
+[What two-axis targeting left approximate](#what-two-axis-targeting-left-approximate).
 
-### Two limitations: one refused outright, one printed in every summary
+### Stage two: two unknowns, two residuals, one damped Newton
 
-#### A rotating Earth is refused, not flown
+**The residual is a miss vector resolved at the target**, not a range residual
+beside a cross-track offset. Both components zero is exactly "the impact point
+*is* the target", and the pair references nothing but two points — the target
+and where the vehicle landed. The obvious alternative references a great circle
+the flown track no longer follows, which is precisely what fails once the Earth
+turns or a bank is commanded; it also couples both controls into both
+components, where this form comes out **nearly decoupled** — cond(J) 8.07 to
+8.57 on `run_target`'s two hard cases and 4.2 to 14.9 on the ballistic ones,
+against a `condMax` ceiling of 1e8. The components are
+built from `greatCircleBearing`'s own numerator and denominator rather than
+from a bearing, because **no bearing exists at coincidence** —
+`greatCircleBearing` rightly raises `degenerateArc` there — and a residual that
+throws exactly where the solve converges is useless. Taken as components the
+pair is smooth straight through coincidence and vanishes there, which is what a
+residual must do at its own root. `hgv_dynamics_note.tex` §8 derives it.
 
-**The azimuth is exact only for a non-rotating Earth.** With `env.omegaE = 0`
-the ground track of a zero-bank trajectory is a great circle, so the initial
-bearing is the whole answer. Turn rotation on and it is not: over the shipped
-1626 s flight the ground beneath a 35°N target sweeps **620 km** east, so the
-vehicle would have to be aimed where the target is going to be. That makes the
-azimuth depend on the flight time, the flight time on the cutoff, and the
-cutoff on the azimuth — an **outer iteration** around the range solve, which
-neither targeting script has.
+`coorbital.util.aimSolve` then runs the damped Newton on the launch azimuth and
+the range control together. `run_target` caps the step at 10° of heading and
+5 % of the burn per iteration; the seed is already range-converged, so a step
+anywhere near either cap means the Newton direction is wrong.
 
-`earthSpin` true used to run anyway behind a caution, and what came out was
+### Turning the Earth on: what it costs, and what it buys
+
+Both targeting scripts fly `earthSpin` true. Until 2026-08-08 both **refused**
+it, and before that `run_target` ran it anyway behind a caution and printed
 three statements that contradicted each other around a number that was not a
-miss:
+miss. Measured 2026-08-09, all on the shipped geometries at a 1 km range
+tolerance:
 
-| Script | Measured miss with `earthSpin` true | What the summary said beside it |
-|---|---|---|
-| `HGV/run_target` | **231.55 km** | rotation ON *and* "the initial bearing is the WHOLE answer"; a cross-track `*** WARNING ***` telling the user to zero banks that were already zero |
-| `BM/run_ballistic_target` | **315.69 km** | the same, plus a limitations paragraph attributing 3.15e5 m of cross-range to a bank angle of zero |
+| Case | Miss at the seed | Miss achieved | Residual evaluations | Propagations, whole run |
+|---|---|---|---|---|
+| `run_target`, `earthSpin` true | 231551.628 m | **4.361 m** | 7 | 23 |
+| `run_target`, 75° terminal bank | 21524.695 m | **54.795 m** | 4 | 18 |
+| `run_target`, shipped | 511.243 m | 511.243 m, unchanged bit-for-bit | 1 | 14 |
+| `run_ballistic_target`, `earthSpin` true | 463211.19 m | **52.461 m** | 7 | 701 |
+| `run_ballistic_target`, shipped `'lofted'` | 779.491 m | **0.365 m** | 4 | 67 |
+| `run_ballistic_target`, shipped `'depressed'` | 457.270 m | 457.270 m, unchanged bit-for-bit | 1 | 64 |
+| `run_ballistic_target`, shipped `'minimum-energy'` | 39.009 m | 39.009 m, unchanged bit-for-bit | 1 | 733 |
 
-Both now **refuse** — the same contract as the envelope refusals: nothing is
-thrown, `traj` comes back empty, `info.refused` is true and
-`info.refusedWhy = 'earthSpin'`. The refusal happens **before any propagation**,
-names the outer azimuth iteration that is missing, and prints the eastward
-ground speed under the target so the size of the effect is a number rather than
-an adjective. Everything the summary says about the azimuth in a normal run is
-gated on `env.omegaE == 0` by an assertion at the head of the report, so the
-prose can no longer describe a run it is not describing. `BM`'s cross-track
-`WARNING` also forks on the bank now: with a bank it blames the bank, and with
-the bank at zero it says so and points at the guidance schedules instead.
+**Read the cost column, because it is what decides whether rotation is
+affordable.** A residual evaluation is one full trajectory propagation, and the
+solve costs `1 + 3n` evaluations for `n` Newton iterations — so the hard rows
+are two iterations and the 4-evaluation rows are one. The *rest* of each run is
+stage one, and that is where `run_ballistic_target`'s cost lives: 62
+propagations to bracket the hump and bisect both branches, against **693 to 731**
+in `'minimum-energy'` mode. Two-axis targeting was cheap to add **here** because
+it is eight propagations on top of seven hundred; that is not a claim that it is
+cheap in general.
 
-**The miss is the residual of the range solve, along the great circle.**
-Bisection matches a *distance*; nothing in it steers sideways. Cross-range comes
-out at zero in the shipped configuration because every commanded bank angle is
-zero — and that is a property of *that configuration*, not a general guarantee.
-`run_target` **measures** the cross-track offset of the impact point from the
-launch-to-target great circle every run and warns when it exceeds the range
-tolerance. Give the descent `run_boost_glide`'s 75° terminal bank and it does:
-the heading turns 166.42° between handoff and impact, the range solve still
-converges to a 585.20 m residual, and the vehicle misses by **21524.70 m** — a
-factor of 36.8 over the residual. The summary then prints a `*** WARNING ***`
-and switches its limitations paragraph to the banked wording, because the
-zero-bank explanation printed under a bank angle contradicts the warning
-directly above it. `tests/test_runTarget.m` flies that exact case and pins all
-of it; without it the measure-and-warn behaviour is unpinned, since at zero bank
-the measured miss and the solver's own residual agree to 9.3e-10 m and no
-assertion can tell them apart. That is why `run_target` ships
-`descBank = 0` where `run_boost_glide` ships 75 — a targeting decision, not an
-aerodynamic one, and the user block says so at the point of definition.
+**Rotation deflects the vehicle. It does not move the target.** An earlier
+edition of this file said the opposite — that the ground beneath the target
+sweeps east under the vehicle, so the vehicle must be aimed where the target is
+*going to be*, which would make the azimuth depend on the flight time and force
+an outer iteration around the range solve. **That claim is withdrawn.** The
+integrated state is planet-relative and the target is a ground point: both live
+in the rotating frame and neither moves in it. What rotation does is bend the
+vehicle off course, through the Coriolis and centrifugal terms that have been in
+`glide3DOF` and `boost3DOF` from the first commit.
+
+The distinction is not pedantic, because the two mechanisms predict different
+**misses**: a target carried east under a fixed heading is largely a
+*down-range* effect on an easterly course, while a deflected vehicle is
+overwhelmingly a *cross-range* one. The decomposition settles it, on two
+independent geometries:
+
+| Rotating seed miss | Down-range | Cross-range | Ratio |
+|---|---|---|---|
+| `run_target`, 231551.628 m | −5858.645 m | +231477.499 m | 39.5 to 1 |
+| `run_ballistic_target`, 463211.19 m | −17764.17 m | +462870.44 m | 26.1 to 1 |
+
+Both scripts pin the ratio rather than the total, for exactly that reason —
+`tests/test_runTarget.m` part 8b and `tests/test_runBallisticTarget.m` part 12.
+The eastward-drift figure both scripts used to print (628 km on the rotating
+`run_target` case) is **deleted**, computation and `info` field and all, because
+it measures a mechanism the files no longer claim.
+
+**Turning the Earth on also MOVES the reachable envelope**, and that is correct
+physics rather than a solver artefact: an easterly launch is helped by the
+planet's rotation. On the shipped ballistic geometry the maximum range rises
+5211.5 → 5439.9 km and the depressed-branch floor 4708.5 → 5085.8 km, so the
+shipped 4828.045 km target leaves the depressed band altogether and
+`'depressed'` plus `earthSpin` is legitimately **refused**.
+
+### Bank breaks the same assumption by the same route
+
+A banked segment turns the heading, so the track leaves the arc it departed on
+for a reason that has nothing to do with the planet. Rotation and bank are
+therefore **one** failure of the closed form and not two, and one extra degree
+of freedom closes both. Give `run_target`'s descent `run_boost_glide`'s 75°
+terminal bank and the heading turns 166.28° between handoff and impact; the seed
+misses by **21524.695 m**, of which 21515.222 m is cross-range, and the solve
+brings it to **54.795 m** in four evaluations by aiming 0.3436° off the
+great-circle bearing. `tests/test_runTarget.m` part 6 flies that exact case.
+
+`run_target` still ships `descBank = 0` where `run_boost_glide` ships 75, but
+**no longer for the reason it used to**. That zero was a targeting limitation
+until 2026-08-08 — a banked descent was a case the script could only measure and
+warn about. It is now simply the simplest default an example script should ship,
+and the user block says so at the point of definition.
+
+### What two-axis targeting left approximate
+
+None of these is a defect. Each is a consequence of solving on a **surface**
+with stage-one machinery whose guarantees are **one-dimensional**, and each is
+stated in the code where it bites. Sizes measured 2026-08-09; `TODO.md` carries
+the full list of seven.
+
+**The envelope and the max-range bracket are computed at the SEED azimuth**, so
+the too-far and too-close refusal gate is slightly approximate. Everything
+`BM/run_ballistic_target`'s stage one certifies — the range hump, the certified
+maximiser interval, the two monotone branch brackets, the reachable band — is
+measured at one azimuth. Measured: **5.63° of aim moves the range hump 1.59°**,
+about **0.28° of loft per degree of azimuth**, against a certified maximiser
+interval **0.043° wide**; and turning rotation on moves the envelope by **30 to
+42 km**. The alternative — re-bracketing the hump inside every Newton evaluation
+— would multiply an already 700-propagation mode by the cost of a whole
+bracketing and would still certify nothing, because the certification is a
+one-dimensional argument.
+
+**`'minimum-energy'` is minimised at the seed azimuth and only re-trimmed at the
+solved one.** Stage two solves the azimuth beside the **cutoff fraction**,
+holding the loft angle at the value the seed-azimuth minimisation settled on, so
+the flown arc is not the minimum-energy arc at the azimuth it flies. Measured on
+the rotating shipped run: minimised **−45.977595 MJ/kg** at cutoff 0.992294,
+flown **−45.924475 MJ/kg** at 0.992621. The summary prints **two labelled
+columns**, `MINIMISED (seed)` and `FLOWN (solved)`, differences the valley
+evidence against the minimised one and says so, and reports the gap between
+them as the size of the approximation. When the aim solve is a no-op — the
+shipped non-rotating case — the two columns are exactly equal and the summary
+says they are the same run rather than printing them twice in silence. Closing
+this properly means minimising over the loft angle *at the solved azimuth*,
+which is a nested solve and not a re-trim.
+
+**The tolerance is sufficient but not necessary.** The convergence test is a
+max-norm on the two components, so the per-component tolerance is the user's
+range tolerance over √2 — 707.107 m for the shipped 1 km request. Components of
+**900 and 100 m are a 906 m miss**, comfortably inside a kilometre, and they
+**fail** the 707 m per-component test. The solver keeps working on a trajectory
+the user would have accepted. That is the right way round — the alternative is
+accepting one the user would not — but it should be read as a conservative test
+and not as a measurement of the miss.
+
+**And the shipped `run_target` case gives the two-axis path no coverage, and
+structurally cannot.** On a non-rotating zero-bank run the cross-range component
+is zero to rounding, so the miss *is* the down-range residual — which is the very
+quantity the stage-one bisection has already driven inside the same tolerance.
+The seed cannot be outside a tolerance the bisection was asked to meet, and
+tightening it tightens the bisection in the same proportion: measured across a
+**twentyfold** tightening, `aimIter` is 0 at every step. `tests/test_runTarget.m`
+pins `aimIter == 0` there, which is the correct assertion and also enshrines the
+gap. Coverage comes from the rotating and banked cases, and from
+`tests/test_aimSolve.m`.
 
 ### The movie
 
@@ -757,9 +1010,9 @@ which holds the apparent apogee at or under 0.3 rE, capped at 30 and floored at
 2. Any positive number is used as given, and anything else raises — before the
 solve, not after it.
 
-Rendered and looked at, 36 frames each at the new default:
+Rendered and looked at 2026-08-07, 36 frames each at the new default:
 
-| Run | apogee | fraction of rE | true-scale verdict |
+| Run | apogee, as rendered | fraction of rE | true-scale verdict |
 |---|---|---|---|
 | `BM/run_ballistic_target`, lofted arc | 2118.45 km | 33.2 % | **reads well.** The arc stands clearly off the limb; the coast and descent legs are separately visible and the ballistic hump is obvious without any exaggeration. `'auto'` gives 2x, a barely perceptible difference |
 | `HGV/run_target` | 118.09 km | 1.9 % | the ground track is crisp against the globe with both markers legible, but the **skip phugoid is invisible** on the sphere — it reads as a surface track. The inset carries it completely: six clear skips decaying from 121 km, in true scale, with axes. Ask for `'auto'` (16x) when the phugoid is the point of the picture |
@@ -768,14 +1021,26 @@ Neither is unreadable, so neither default was reverted. What changed is where a
 reader looks for altitude: the inset, which is honest, rather than the globe,
 which was not.
 
+**Read the first row's apogee as the arc that was rendered, not as the arc that
+ships.** `BM/run_ballistic_target`'s demonstration target and angle-of-attack
+clamp both moved on 2026-08-08 (see
+[The clamp is a VEHICLE limit](#the-clamp-is-a-vehicle-limit-and-it-is-not-a-targeting-knob)),
+and the shipped lofted arc now apogees at **1454.17 km, 22.8 % of rE** —
+re-measured 2026-08-09. That is a third lower than the arc in the picture, and
+the verdict above has **not** been re-checked at the new height. The `'auto'`
+rule still returns its 2x floor there, since 22.8 % is already inside the 0.3 rE
+target. `HGV/run_target`'s row is unaffected: its shipped run is bit-for-bit
+what it was, apogee included.
+
 ---
 
 ## Ballistic point-to-point targeting: two branches
 
 `BM/run_ballistic_target` takes a launch point and a destination and solves the
-**ballistic** trajectory that connects them. The azimuth solve is the same
-closed-form `greatCircleBearing` call `HGV/run_target` makes. The range solve is
-not, and the difference is the whole reason this is a separate script.
+**ballistic** trajectory that connects them. Stage two is the same as
+`HGV/run_target`'s in every respect — the same miss-vector residual, resolved in
+the same frame, driven by the same `coorbital.util.aimSolve`. Stage one is not,
+and the difference is the whole reason this is a separate script.
 
 **The ranging control is the loft angle, and range is not monotonic in it.**
 `run_target` bisects on thrust-termination time because less burn means less
@@ -795,11 +1060,14 @@ trajectories**:
 | impact angle | −22.97° | — | −43.40° |
 
 Measured on the shipped geometry: 45°N 100°W to 62°N 28°W, 4828.045 km required
-on a 40.555° azimuth, at the vehicle's 6° angle-of-attack clamp. **Both arcs are
-always solved and always reported**, and only one is flown, because the trade is
-the point. The depressed arc's commanded −126.73° is not a pitch programme
-anyone would fly: it is where that branch goes once the clamp saturates the
-achievable pitch-over, which is why `loftMin` ships at −140°.
+on a 40.555° **seed** azimuth, at the vehicle's 6° angle-of-attack clamp. **Both
+arcs are always solved and always reported**, and only one is flown, because the
+trade is the point — but only the flown one is then refined by the two-axis
+solve, so the table above is the trade at the seed azimuth and the flown arc's
+own solved numbers are reported separately. The depressed arc's commanded
+−126.73° is not a pitch programme anyone would fly: it is where that branch goes
+once the clamp saturates the achievable pitch-over, which is why `loftMin` ships
+at −140°.
 
 So the script **brackets the maximum first** — a 21-point coarse scan across the
 loft bracket, adaptively refined until it *certifies* a single interior hump,
@@ -810,6 +1078,20 @@ interval's **ends** — `[loftMin, aL]` and `[bL, loftMax]` — on which range
 provably is monotonic (the precondition `coorbital.util.rangeSolve` documents and
 does not check). Splitting at the interval's midpoint instead, which this script
 did until 2026-08-08, leaves one bracket straddling the true maximum.
+
+**All of stage one runs at the seed azimuth, and it has to.** Range against loft
+is a *curve* at a fixed azimuth and a *surface* otherwise, and a golden section
+on a surface certifies nothing — every guarantee the bracketing makes is a
+one-dimensional argument. The consequence is item 1 of
+[What two-axis targeting left approximate](#what-two-axis-targeting-left-approximate),
+and it is why the stage-two Newton is **not** boxed to its branch's side of the
+interval: the only interval available to draw the box on is the seed-azimuth
+one, and at 0.28° of loft per degree of azimuth against a 0.043° interval a box
+drawn there would exclude genuine roots. Three layers of *diagnosis* stand in
+place of that prohibition — `opts.maxStep` caps the travel per iteration, the
+branch is measured against the interval and the summary prints a caution naming
+stage 2 when the two disagree, and a Newton that cannot converge refuses
+outright rather than returning the arc it wandered onto.
 
 **The branch is measured from the root's POSITION against that interval**: below
 `aL` is depressed, above `bL` is lofted, inside is **coalesced** — at that range
@@ -890,7 +1172,10 @@ effect of the inner tolerance on the objective. On the shipped case:
 −45.555275 MJ/kg against −45.486364 and −44.818885 at the neighbours, a valley
 68 911 J/kg deep on its shallower side, against 101 J/kg of measured noise — a
 ratio of 1.5e−3. Cost: 5 scan points and 16 golden-section steps, 669
-propagations of a 731-propagation run, about 28 s.
+propagations of a 733-propagation run, about 28 s. **All of that evidence is at
+the seed azimuth**, differenced against the `MINIMISED (seed)` column and not
+against the flown one — see
+[What two-axis targeting left approximate](#what-two-axis-targeting-left-approximate).
 
 **And the objective reduces to the classical arc in the vacuum equal-radius
 limit**, which is the check that says it is the right objective. Take the boost
@@ -974,7 +1259,10 @@ at 6° the depressed branch cannot reach 3175 km at any loft angle, and that
 geometry is now part 7's second minimum-energy case and part 8's
 unreachable-branch refusal.
 
-### Three refusals, none of which throws
+### Four refusal paths, none of which throws
+
+`info.refusedWhy` names which gate stopped the run. Three of the four are
+envelope refusals raised before anything is flown to the target:
 
 | Case | What the summary says |
 |---|---|
@@ -984,9 +1272,29 @@ unreachable-branch refusal.
 
 The third has no counterpart in `run_target`. Silently flying the branch that
 does reach the target would be the worst outcome available: it converges, it
-hits, and it is not the trajectory that was asked for. All three return an empty
-trajectory with `info.refused = true`, and none throws, so a caller reads the
-band out of `info` without a `try`/`catch`.
+hits, and it is not the trajectory that was asked for. All three carry
+`refusedWhy = 'envelope'` or `'minimumEnergy'`, return an empty trajectory with
+`info.refused = true`, and none throws, so a caller reads the band out of `info`
+without a `try`/`catch`.
+
+The fourth and fifth arrived with two-axis targeting and with the certified
+bracketing respectively. **`refusedWhy = 'aimSolve'`** fires when the stage-two
+Newton cannot reach the tolerance: the run is refused with the best point it
+found rather than returned as a near miss, which is the whole contract
+`coorbital.util.aimSolve` was written to keep. **`refusedWhy = 'loftBracket'`**
+fires when the coarse scan's very first propagation raises
+`coorbital:pitchProgram:unreachableAttitude`.
+
+**One caution for anyone writing a caller.** `'loftBracket'`'s `info` is *not* a
+superset of the other three, and cannot be: it fires before `loftStarDeg`,
+`rngMaxM`, `rngMinM`, `maxRange`, `classical` and the per-branch records exist.
+It carries `bankAngleDeg`, `loftMinDeg`, `loftMaxDeg`, `alphaMaxDeg` and
+`libraryErr` instead. This is deliberate and pinned by a test, but a caller
+written against the other three as a template will break on it. The four are not
+interchangeable.
+
+`HGV/run_target` has two of the same paths, `'envelope'` and `'aimSolve'`, on
+the identical contract.
 
 ### Per-phase vehicles, carried on `ph.veh`
 
@@ -1078,7 +1386,7 @@ isolates the new terms exactly. It is the sharpest instrument in the suite.
 the mass ratio all cancel between the propagation and the closed form — doubling
 the thrust halves the burn time and leaves the delta-V untouched. It validates
 the *shape* of the rocket equation and nothing about the numbers fed into it.
-**Seven** exact-equality pins at `tests/test_constThrust.m:50-56` are the only
+**Seven** exact-equality pins at `tests/test_constThrust.m:51-57` are the only
 defence. Same disease as the `Hscale` blindness below; same cure.
 
 **The junction reference is tolerance-ordered, not solver-named.** What makes
@@ -1200,24 +1508,33 @@ it costs nothing, not because it is complete.
 ### What `run_target` produces
 
 Shipped block — launch 20°N 155°W, target 35°N 120°W, cutoff bracket 0.50 to
-1.00 of full burn, 1 km range tolerance, zero bank throughout. Run 2026-08-07:
+1.00 of full burn, 1 km range tolerance, zero bank throughout, Earth rotation
+off. Re-run 2026-08-09, abridged from the printed summary:
 
 ```
 boost            thrust terminated on command at t = 75.6820 s with 1801.8 kg
                  of propellant still aboard (nominal)
-required range      3811.240 km    (great circle, launch to target)
-achieved range      3811.751 km
-range residual        +511.24 m    (achieved minus required, signed)
-MISS DISTANCE          511.24 m    (impact to target, from the FLOWN state)
-launch azimuth       56.627204 deg (closed form, no iteration)
-flown azimuth        56.627204 deg (-6.488e-12 deg from the commanded one)
-cross-track              -0.00 m   (-4.064e-07 m)
-solved cutoff         75.6820 s    (0.939941 of the 80.5178 s full burn)
-propellant burned     28198.2 kg   of 30000.0 kg; 1801.8 kg thrown away unburned
-reachable            202.861 to 7737.630 km
-iterations                  10     (12 trajectory propagations, plus one to re-fly)
-flight time          1626.09 s     (27.10 min)
-impact               35.001317 N, 119.994629 W  (target 35.000000, -120.000000)
+required range     3811.240 km     (great circle, launch to target)
+achieved range     3811.751 km
+range residual      +511.24 m      (achieved minus required, signed. NOT what the
+                                    solve drives; see the two components below)
+MISS DISTANCE        511.24 m      (impact to target, from the FLOWN state)
+down-range miss     +511.24 m      (component along the intended course at the target)
+cross-range miss      -0.00 m      (component across it. BOTH are what the solve drives)
+tolerance            707.11 m      (on EACH component; 1000.00 m on the total miss)
+seed azimuth      56.627204 deg    (the closed-form initial bearing, which is the GUESS)
+launch azimuth    56.627204 deg    (SOLVED, +0.000000 deg from the seed)
+seed miss            511.24 m      (down-range +511.24, cross-range -0.00)
+flown azimuth     56.627204 deg    (-6.488e-12 deg from the commanded one)
+solved cutoff       75.6820 s      (0.939941 of the 80.5178 s full burn)
+seed cutoff         75.6820 s      (moved by +0.0000 s in stage 2)
+propellant burned   28198.2 kg     of 30000.0; 1801.8 kg thrown away unburned
+reachable           202.861 to 7737.630 km  (flown at the SEED azimuth)
+iterations               10        (10 bisection steps seeding 0 Newton step(s))
+propagations             14        (12 in the seed bisection, 1 in the Newton, plus
+                                    one to re-fly the answer)
+flight time         1626.09 s      (27.10 min)
+impact            35.001317 N, 119.994629 W  (target 35.000000, -120.000000)
 ```
 
 Three independent checks on that solve, all recomputed outside the script:
@@ -1226,25 +1543,35 @@ Three independent checks on that solve, all recomputed outside the script:
 |---|---|---|
 | Impact-to-target distance, `greatCircle` on the flown terminal state | the reported 511.243460471 m miss | `511.243460471 m`, difference **`0.000e+00`** |
 | Miss against the magnitude of the range residual — this is the zero-cross-range property, measured | equal | `9.286e-10 m` apart |
-| `traj.x(1,6)` against `greatCircleBearing(launch,target)` | equal | **bit-identical**, `0` ulp |
+| `traj.x(1,6)` against the **solved** azimuth `info.psiLaunch` | equal | to 1e-13 rad, and the solved azimuth is asserted **different** from the seed by more than a degree on the rotating case, which is the one mutation a reinstated closed form would not survive |
 
-The whole solve — twelve propagations, the re-fly, and the summary — takes about
-2 s. A propagation here is roughly 0.15 s, which is why the range tolerance can
-be tightened almost for free: each halving costs one more.
+The whole solve — fourteen propagations and the summary — takes about 2 s. A
+propagation here is roughly 0.15 s, which is why the range tolerance can be
+tightened almost for free: each halving of the bisection costs one more. Note
+what the propagation line says about this case: **zero Newton steps.** The seed
+miss is already inside the per-component tolerance, so the two-axis solve exits
+at iteration zero having spent one evaluation, and the shipped run is
+bit-for-bit what it was before `aimSolve` existed. That is a demonstration that
+the second axis costs nothing when there is nothing to do — it is *not* evidence
+that the solve works, and no tightening of the tolerance can make it so. The
+rotating case (23 propagations, 231551.628 m → 4.361 m) and the banked one (18
+propagations, 21524.695 m → 54.795 m) are where the evidence is.
 
 ### What `run_ballistic_target` produces
 
 Shipped block — launch 45°N 100°W, target 62°N 28°W, loft bracket −140° to 85°,
 `alphaMax` read from the vehicle (6°), 1 km range tolerance, 50 m constraint
-tolerance, `branch = 'minimum-energy'`, zero bank throughout. Run 2026-08-08:
+tolerance, `branch = 'minimum-energy'`, zero bank throughout, Earth rotation
+off. Re-run 2026-08-09, abridged from the printed summary:
 
 ```
 required range      4828.045 km   (great circle, launch to target)
 max-range loft      -42.9074 deg  (bracketed: 21 scan points + 13 golden steps)
 CERTIFIED interval  -42.9290 to -42.8858 deg   ranges 5211.525 and 5211.525 km
 MAXIMUM RANGE       5211.525 km   apogee 974.102 km, flight time 1314.777 s
-reachable            556.603 to 5211.525 km
+reachable            556.603 to 5211.525 km   (flown at the SEED azimuth)
 
+THE TWO ARCS THAT REACH THIS TARGET, both at the SEED azimuth
                           depressed           lofted
   loft angle (deg)        -126.7286          19.4336
   burnout gamma (deg)       21.8634          43.2151
@@ -1256,23 +1583,37 @@ reachable            556.603 to 5211.525 km
   IMPACT ANGLE (deg)       -22.9679         -43.4028
   burnout energy (MJ/kg)   -44.5365         -44.8168
   loft from max (deg)       83.8212          62.3409
+  bisection steps                 8               10
+  propagations                   11               13
 
 asked for   minimum-energy   flew minimum-energy (NOT ON A BRANCH)
-  loft angle             -31.7656 deg   cutoff 0.994976 of the 80.5178 s burn
-  BURNOUT ENERGY      -45.555275 MJ/kg  MINIMISED
-  neighbouring feasible -45.486364 and -44.818885 MJ/kg; valley 68911 J/kg deep
-  measured noise         1.010e+02 J/kg  = 1.47e-03 of that valley
+                             MINIMISED (seed)     FLOWN (solved)
+  loft angle (deg)                 -31.7656         held, same
+  cutoff fraction (-)              0.994976           0.994976
+  cutoff time (s)                   80.1132            80.1132
+  BURNOUT ENERGY (MJ/kg)         -45.555275         -45.555275
+  achieved range (km)             4828.0062          4828.0062
+    THE TWO COLUMNS ARE THE SAME RUN. The seed azimuth was already inside the
+    aim tolerance, so the two-axis solve converged at iteration 0.
+  neighbouring feasible -45.486364 and -44.818885 MJ/kg; valley 68911.0 J/kg deep
+                        on the near side and 736389.7 J/kg on the far side
+  measured noise         1.010e+02 J/kg  = 1.47e-03 of the shallower side
   APOGEE                 965.613 km     classical  952.696 km   +1.36 %
   FLIGHT TIME            21.2817 min    classical 20.1686 min   +5.52 %
   burnout gamma           33.3290 deg   gamma* 34.1572 deg  (DIAGNOSTIC)
   propellant unburned     150.7 kg      thrown away with the booster
-launch azimuth    40.555398 deg  (closed form, no iteration)
+seed azimuth      40.555398 deg  (the closed-form initial bearing, which is the GUESS)
+launch azimuth    40.555398 deg  (SOLVED, +0.000000 deg from the seed)
+seed miss             39.01 m    (down-range -39.01, cross-range -0.00)
 flown azimuth     40.555398 deg  (-1.134e-10 deg from the commanded one)
-cross-track            8.67e-06 m
+down-range miss      -39.01 m
+cross-range miss      -0.00 m
 MISS DISTANCE         39.01 m    (impact to target, from the FLOWN state)
 impact            62.000071 N, 28.000731 W  (target 62.000000, -28.000000)
-propagations             731     (37 bracketing the maximum, 1 re-flying it,
-                                  11 depressed, 13 lofted, 669 minimum-energy)
+propagations             733     (37 bracketing the maximum, 1 re-flying it,
+                                  11 depressed, 13 lofted, 669 minimum-energy,
+                                  1 in the two-axis aim solve and 1 to re-fly
+                                  the answer)
 ```
 
 `info.nProp` used to return **57** where the summary printed 59, the difference
@@ -1287,14 +1628,23 @@ Four independent checks, all recomputed outside the script:
 |---|---|---|
 | Impact-to-target distance, `greatCircle` on the flown terminal state | the reported 779.49087505 m lofted miss | `779.49087505 m`, difference **`0.000e+00`** |
 | Same for the depressed arc | the reported 457.26985976 m | `457.26985976 m`, difference **`0.000e+00`** |
-| Which branch was flown, re-derived from the flown loft angle against the certified maximiser interval −42.9290° to −42.8858° | `lofted` requested | +19.4336°, **above** `bL` — `lofted` |
-| `traj.x(1,6)` against `greatCircleBearing(launch,target)` | equal | **bit-identical**, `0` ulp |
+| Which branch was flown on a `branch = 'lofted'` run, re-derived from the flown loft angle against the certified maximiser interval −42.9290° to −42.8858° | `lofted` requested | +19.4831°, **above** `bL` — `lofted` |
+| `traj.x(1,6)` against the **solved** azimuth `info.psiLaunch` | equal | to 1e-13 rad, with the solved azimuth asserted more than a degree off the seed on the rotating case |
 
-A full-burn run — 62 propagations, both branches, the bracketing and the summary
-— takes about 3 s. A ballistic propagation is roughly 0.05 s, three times cheaper
-than the boost-glide chain, which is what makes a two-branch solve affordable at
-all. A `'minimum-energy'` run costs 731 and about 28 s: every outer evaluation of
-the objective is a whole inner feasibility solve.
+Note the third row's loft angle. The **seed-azimuth** table above reports the
+lofted arc at +19.4336°, because that is where stage one's bisection put it; the
+flown arc is at **+19.4831°**, because stage two then moved it to close a
+779.491 m seed miss to **0.365 m**. Those are two different numbers for two
+different things and neither may stand in for the other.
+
+Stage one costs **62 propagations** — both branches, the bracketing, the
+certified interval — and stage two adds the aim solve and one re-fly on top:
+**64** for a `'depressed'` run (3.3 s, no Newton step needed) and **67** for a
+`'lofted'` one (one Newton iteration, four evaluations). A ballistic propagation
+is roughly 0.05 s, three times cheaper than the boost-glide chain, which is what
+makes a two-branch solve affordable at all. A `'minimum-energy'` run costs
+**733** and about 28 s: every outer evaluation of the objective is a whole inner
+feasibility solve.
 
 ### The branch is measured, and the measurement is now pinned
 
@@ -1369,7 +1719,7 @@ been closed and the rest are stated honestly here:
 
 | Values | Pinned where |
 |---|---|
-| `boosterDefaults` `massDry`, `massProp`, `thrustVac`, `Isp`, `Aexit`; payload `mass`; `g0` | `test_constThrust.m:50-56`, exact equality — seven pins |
+| `boosterDefaults` `massDry`, `massProp`, `thrustVac`, `Isp`, `Aexit`; payload `mass`; `g0` | `test_constThrust.m:51-57`, exact equality — seven pins |
 | `boosterDefaults` `Sref`, `CL`, `LD`, plus the derived `CD = 0.20` | `test_constThrust.m`, own block immediately below — **added 2026-08-07.** Nothing in that file's hand arithmetic touches the triple, so every other check there stayed green at any positive values, while these three drive the 62.8 % range swing measured above |
 | `vehicleDefaults` `Sref`, `CL`, `LD` | `test_runGlide.m`, exact equality — **added 2026-08-07.** `test_equilibriumGlide` builds its closed-form `Veq(r)` from these very fields, so they cancel between model and reference and it cannot see them. Same disease as the `Hscale` blindness below; same cure |
 | `vehicle_bm` `mass`, `Sref`, `CL`, `LD` | `test_runBallistic.m`. `mass` is tied to the pinned 900 kg payload; the derived `CD = CL/LD = 0.25` is pinned at 1e-12; the ballistic coefficient `mass/(CD·Sref) = 9350.649350649351 kg/m²` at 1e-9; and **`CL` is pinned absolutely at 0.005**, which the other three do not cover — see below |
@@ -1412,7 +1762,8 @@ high-β re-entry vehicle, but driven entirely by a placeholder.
 
 ## The validation suite's structural blind spot
 
-The hardest-won lesson of this milestone, stated generally because it transfers:
+The hardest-won lesson of the glide milestone, stated generally because it
+transfers:
 
 > **An analytic reference computed from the same constants as the model cannot
 > detect a wrong constant.** The constant appears on both sides and cancels. No
@@ -1499,8 +1850,17 @@ Beyond the style guide, four rules this library enforces:
 - **Never `norm`** — use `vmag` with an explicit dimension. (Currently unused
   here; the rule stands for when vector work arrives.)
 
-Re-verified 2026-08-07 across all 39 `.m` files under `missiles/`: zero `%#ok`,
-zero `norm(`, zero `for i =` / `for j =`.
+Re-verified 2026-08-09 across all **59** `.m` files under `missiles/` — 25
+public library functions, 3 `+viz/private/` helpers, 5 entry scripts, 2 vehicle
+parameter files and 24 under `tests/` (`run_tests.m` plus 23 `test_*.m`):
+
+```bash
+find /Users/msc/Desktop/optimal_control/missiles -name '*.m' | wc -l
+```
+
+Zero `%#ok`, zero `for i =` / `for j =`, and the single `norm(` hit is a comment
+in `tests/test_viz.m` *explaining* why `norm()` is not used. A count refresh, not
+a violation.
 
 Three ruled exceptions to the self-demo rule: `missileConst`, `vehicleDefaults`
 and `boosterDefaults` are pure constant returns whose entire content is visible
@@ -1519,23 +1879,25 @@ Deliberately excluded. Each becomes its own plan.
 
 | Excluded | Why / what it needs |
 |---|---|
-| **Closed-loop boost guidance** — PEG and VOA | Prescribed pitch only. `hyperFLIGHT` uses both, and they are the natural next milestone. `pitchProgram` already reads the state, so the signature is ready. |
+| **Closed-loop boost guidance** — PEG and VOA | Still prescribed pitch only, and **neither algorithm exists**: no `+guide` file for either, no test, no entry script that calls one. What landed on 2026-08-08 is the *seam*, not the laws — `coorbital.guide.terminalConstraint` evaluates the five terminal constraints both enforce, and a design spike measured the two questions gating them. The four gaps are named in `software_design.tex` §*The closed-loop guidance seam*; `docs/closed_loop_guidance.md` turns them into decisions with numbers attached; the mathematics is `hgv_dynamics_note.tex` §9. |
 | **Multi-stage boosters** | One stage, one burn. `phaseRun`'s per-phase `link` is the mechanism a second stage would use; nothing else blocks it. |
 | **Terminal guidance laws** | The descent phase flies a prescribed schedule, not a homing law. |
 | **Aerothermal heating** | No Sutton–Graves anywhere. `noseRadius` remains a carried placeholder, flagged as such at its point of definition. |
-| **Rotating-Earth targeting** | Both targeting scripts' closed-form azimuth is exact only at `omegaE = 0`. Rotation needs an outer azimuth iteration around the range solve — and in `run_ballistic_target` it would need one *per branch*, the two arcs flying for 659 s and 1816 s over the same geometry. See [Point-to-point targeting](#point-to-point-targeting). |
-| **Cross-range steering with bank** | The range solve controls downrange only. `run_target` measures the cross-track offset and warns, but cannot close it. |
+| ~~**Rotating-Earth targeting**~~ | **Built, 2026-08-08.** Both targeting scripts fly `earthSpin` true instead of refusing it: 231551.628 m → 4.361 m on `run_target`, 463211.19 m → 52.461 m on `run_ballistic_target`. The *reason* this row gave was wrong as well as overtaken — there is no outer azimuth iteration, because the target does not move; the vehicle is deflected. See [Turning the Earth on](#turning-the-earth-on-what-it-costs-and-what-it-buys). |
+| ~~**Cross-range steering with bank**~~ | **Superseded, 2026-08-08.** Cross-range is no longer measured and warned about — it is one of the two residual components `coorbital.util.aimSolve` drives to zero, and `info.crossWarn` is gone from both scripts. It is closed by the **launch azimuth**, not by bank: bank as a *control variable* is still not solved for, and remains out of scope. |
 | ~~**Solving for loft angle rather than cutoff time**~~ | **Built.** `BM/run_ballistic_target` brackets the max-range hump and solves both full-burn branches — and, on `'minimum-energy'`, solves the loft angle and the *cutoff fraction* together for the textbook trajectory, which needs a burnout speed the full burn overshoots. See [Ballistic point-to-point targeting](#ballistic-point-to-point-targeting-two-branches). |
-| **`hgv_dynamics_note.tex`, `software_design.tex`** | Written *after* the interfaces survive contact with working code. Two milestones in, they now have. |
+| ~~**`hgv_dynamics_note.tex`, `software_design.tex`**~~ | **Both written**, and both re-swept against two-axis targeting — the math note's targeting and guidance sections rewritten on 2026-08-08, `software_design.tex` now on its third edition, 2026-08-09. They were deliberately deferred until the interfaces had survived contact with working code. The `.tex` sources are tracked; the PDFs are gitignored, so a fresh clone builds them. |
 | **Phase 2 optimization** against `orbit_transfer/verify_common` | Prescribed-control simulation first, deliberately: the throughput requirement (multiple trajectories per second) is what shapes the architecture. |
-| Further fidelity increments — rotating Earth on by default, `j2Grav`, geodetic altitude, tabulated aero, US76 atmosphere | Each behind its own validation test. All are one-line swaps by design; see [Adding a fidelity level](#adding-a-fidelity-level). |
+| Further fidelity increments — rotating Earth **on by default**, `j2Grav`, geodetic altitude, tabulated aero, US76 atmosphere | Rotation is now *supported* everywhere and still ships `false` in every user block, which is a default and not a limitation. The rest are each behind their own validation test. All are one-line swaps by design; see [Adding a fidelity level](#adding-a-fidelity-level). |
 
 **Delivered since the first milestone**, and no longer out of scope: `boost3DOF`
 with a prescribed pitch program, `constThrust`, the burnout and apogee events,
 `BM/run_ballistic`, the descent phase, the full boost → glide → descent chain
 in `HGV/run_boost_glide`, the **`+viz` package** — which was on this list for two
 milestones and has now absorbed the plotting that was triplicated inline across
-the entry scripts, and added `globeMovie` — and **point-to-point targeting** in
-`HGV/run_target`. `util/stateConvert.m` was **not** built and will not be
+the entry scripts, and added `globeMovie` — **point-to-point targeting** in
+`HGV/run_target` and `BM/run_ballistic_target`, and **two-axis targeting** in
+`coorbital.util.aimSolve`, which retired the rotating-Earth and cross-range rows
+above. `util/stateConvert.m` was **not** built and will not be
 — see [The seven-state convention](#the-seven-state-convention-and-the-inert-mass-trap)
 and `DESIGN.md` §11.

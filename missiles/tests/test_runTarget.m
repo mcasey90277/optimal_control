@@ -438,8 +438,17 @@ function test_runTarget()
 %% report as its answer. Pinned so the section keeps its teeth: if a future
 %% change made the bank harmless, the case would stop discriminating and this
 %% would say so rather than passing quietly:
-    assertRel(inBnk.seedMissM  ,21524.695285497215,1e-3,'banked-case SEED miss (m)');
-    assertRel(inBnk.seedXTrackM,21515.222106821158,1e-3,'banked-case SEED cross-range (m)');
+%% Both read at full precision out of a run of the COMMITTED code, like every
+%% other literal in this file. The cross-range in particular is NOT the
+%% 21515.222106821158 the previous version pinned: that figure came from the
+%% old asin(sin(angFly)*sin(dPsi)) cross-track formula, and the tangent-plane
+%% decomposition that replaced it gives 21515.222142760958. The two agree to
+%% 3.6e-5 m, which is a useful independent check of the new construction
+%% against the one it replaced -- but agreement is not provenance, and a
+%% literal carried across from the previous formula would be a number this
+%% suite never measured:
+    assertRel(inBnk.seedMissM  ,21524.695285497211,1e-3,'banked-case SEED miss (m)');
+    assertRel(inBnk.seedXTrackM,21515.222142760958,1e-3,'banked-case SEED cross-range (m)');
     assert(inBnk.seedMissM > 20.*tolM, ...
         ['the seed misses by only %.2f m at 75 deg of bank; this case no ' ...
          'longer discriminates a solved azimuth from a closed-form one'], ...
@@ -449,20 +458,20 @@ function test_runTarget()
     assert(inBnk.missM <= tolM, ...
         ['the banked run missed by %.2f m against a %.1f m tolerance; the ' ...
          'two-axis solve did not close the cross-range'],inBnk.missM,tolM);
-    assertRel(inBnk.missM  ,54.795200772747  ,1e-3,'banked-case miss distance (m)');
-    assertRel(inBnk.downM  ,-54.724069844196 ,1e-3,'banked-case down-range miss (m)');
-    assertRel(inBnk.xTrackM,-2.7910943019968 ,1e-2,'banked-case cross-range miss (m)');
+    assertRel(inBnk.missM  ,54.795200772654532,1e-3,'banked-case miss distance (m)');
+    assertRel(inBnk.downM  ,-54.72406984419969,1e-3,'banked-case down-range miss (m)');
+    assertRel(inBnk.xTrackM,-2.791094302003172,1e-2,'banked-case cross-range miss (m)');
 
 %% THE AZIMUTH MOVED, and by the pinned amount. A solve that converged by
 %% moving only the cutoff would leave the cross-range where it was, so the
 %% correction is the mechanism and not a by-product:
-    assertRel(rad2deg(inBnk.dPsiAim),-0.34363882645,1e-3, ...
+    assertRel(rad2deg(inBnk.dPsiAim),-0.3436388265495105,1e-3, ...
         'banked-case azimuth correction (deg)');
     assert(abs(inBnk.dPsiAim) > 1e-4, ...
         ['the banked case solved to an azimuth %.3e rad from the closed form; ' ...
          'it cannot have closed 21.5 km of cross-range without aiming off'], ...
         inBnk.dPsiAim);
-    assertRel(inBnk.tCut,75.860087783794,1e-6,'banked-case solved cutoff (s)');
+    assertRel(inBnk.tCut,75.860087783793503,1e-6,'banked-case solved cutoff (s)');
     assert(inBnk.aimIter >= 1, ...
         'the banked case took %d Newton iteration(s); the seed is not the answer there', ...
         inBnk.aimIter);
@@ -739,8 +748,8 @@ function test_runTarget()
 %% THE SEED STILL MISSES BY 231.552 KM. This is the measurement that used to be
 %% the answer, kept as evidence rather than as a memory in a comment. It is
 %% almost all cross-range, which is exactly why the second control was needed:
-    assertRel(inSpn.seedMissM  ,231551.62803,1e-4,'rotating-case SEED miss (m)');
-    assertRel(inSpn.seedXTrackM,231477.49940,1e-4,'rotating-case SEED cross-range (m)');
+    assertRel(inSpn.seedMissM  ,231551.6280300247,1e-4,'rotating-case SEED miss (m)');
+    assertRel(inSpn.seedXTrackM,231477.49939778377,1e-4,'rotating-case SEED cross-range (m)');
     assert(abs(inSpn.seedXTrackM) > 0.99.*inSpn.seedMissM, ...
         ['only %.2f m of the %.2f m seed miss is crosswise; a downrange-only ' ...
          'solve would have caught the rest, and this case would not be the ' ...
@@ -752,10 +761,10 @@ function test_runTarget()
         ['the rotating run missed by %.2f m against a %.1f m tolerance; the ' ...
          'two-axis solve did not remove the Coriolis deflection'], ...
         inSpn.missM,tolM);
-    assertRel(inSpn.missM,4.3614169745,1e-2,'rotating-case miss distance (m)');
-    assertRel(rad2deg(inSpn.dPsiAim),-3.579282425,1e-4, ...
+    assertRel(inSpn.missM,4.3614169744792672,1e-2,'rotating-case miss distance (m)');
+    assertRel(rad2deg(inSpn.dPsiAim),-3.5792824249972601,1e-4, ...
         'rotating-case azimuth correction (deg)');
-    assertRel(inSpn.tCut,75.207196173,1e-6,'rotating-case solved cutoff (s)');
+    assertRel(inSpn.tCut,75.207196173000099,1e-6,'rotating-case solved cutoff (s)');
     assert(inSpn.aimIter >= 1, ...
         'the rotating case took %d Newton iteration(s); it cannot have solved itself', ...
         inSpn.aimIter);

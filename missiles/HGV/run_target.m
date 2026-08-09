@@ -142,28 +142,42 @@ function [traj,info] = run_target(opts)
 %                                               junction [2 x 1] struct; the
 %                                                        first is the state
 %                                                        AFTER separation
-%                                               EMPTY when the target is
-%                                               outside the reachable envelope
-%                                               -- see info.refused
+%                                               EMPTY on EITHER of the two
+%                                               refusals -- a target outside the
+%                                               reachable envelope, or a
+%                                               two-axis solve that did not
+%                                               converge -- see info.refused and
+%                                               info.refusedWhy
 %
 %  info             Struct                      The summary's numbers at full
 %                                               precision, so a test does not
 %                                               have to read them back out of
 %                                               printed text; all SI except the
-%                                               *Km distances. Always carries
-%                                               refused (logical), refusedWhy
-%                                               ('envelope' or 'aimSolve'),
-%                                               rngReqM, psiSeed and psiLaunch.
-%                                               EITHER refusal adds rngMinM,
+%                                               *Km distances.
+%
+%                                               ALWAYS carries refused
+%                                               (logical), rngReqM, psiSeed and
+%                                               psiLaunch. refusedWhy is present
+%                                               ONLY when refused is true, so
+%                                               read it behind that flag and not
+%                                               on its own -- on a converged run
+%                                               the field does not exist and
+%                                               touching it raises.
+%
+%                                               A REFUSAL carries refusedWhy,
+%                                               either 'envelope' or 'aimSolve',
+%                                               and in both cases rngMinM,
 %                                               rngMaxM and the rangeSolve
 %                                               record in solveInfo, so it hands
 %                                               back the envelope it was
-%                                               measured against; an aimSolve
+%                                               measured against. An aimSolve
 %                                               refusal adds the aimSolve record
 %                                               in aimInfo as well, whose xHist
 %                                               and message say where the Newton
-%                                               got to and why it stopped. A run
-%                                               that was not refused additionally
+%                                               got to and why it stopped.
+%
+%                                               A RUN THAT WAS NOT REFUSED
+%                                               additionally
 %                                               carries the DISPLAY choices the
 %                                               figures were drawn with:
 %                                               altExag     [1 x 1] the
@@ -277,9 +291,13 @@ function [traj,info] = run_target(opts)
                                        %     aero model, which ignores it; becomes live only when
                                        %     aeroFn below is swapped for an alpha-dependent model
          glideBank = [0 0];            %deg, bank [-90 .. 90]. 0 keeps the track on the
-                                       %     launch-to-target great circle; anything else steers
-                                       %     the vehicle off it, and the SOLVE NOW SEES THAT --
-                                       %     the launch azimuth is aimed off to compensate
+                                       %     launch-to-target great circle ONLY while the Earth
+                                       %     is also still -- with earthSpin true the Coriolis
+                                       %     deflection walks a zero-bank track off that arc by
+                                       %     231.552 km on the shipped geometry. Either way the
+                                       %     SOLVE NOW SEES IT: a bank, a rotation, or both are
+                                       %     one cross-range residual to it, and the launch
+                                       %     azimuth is aimed off to cancel whatever produced it
           hHandoff = 15;               %km, glide-to-descent handoff, DESCENDING crossing only.
                                        %    Hard bound: hStop < hHandoff < the burnout altitude.
                                        %    With glideBank and descBank equal, as shipped, the
@@ -998,13 +1016,18 @@ function [traj,info] = run_target(opts)
                               tMaxDesc,'impact');
           allOK = ok1 && ok2 && ok3;
 
-%% How far the ground at the target's latitude sweeps east during this flight
-%% at the Earth's actual rate, WHETHER OR NOT this run turned it. It is the
-%% scale of the rotation effect, quoted so the limitations paragraph can put a
-%% number on what earthSpin switches on or off rather than merely naming it.
-%% Always c.omegaE and never env.omegaE: the point of the figure is the size of
-%% the physics the run either modelled or did not:
-            driftM = c.omegaE.*rI.*cos(latTargetR).*traj.t(end);
+%% THERE IS DELIBERATELY NO EASTWARD-DRIFT FIGURE HERE ANY MORE, and the
+%% deletion is the point. This script used to compute
+%% c.omegaE*rI*cos(latTarget)*tFlight -- how far the ground at the target's
+%% latitude sweeps east over the flight, 628 km on the rotating shipped case --
+%% and print it as "the scale of the rotation effect". It is not. It is the
+%% scale of a mechanism this file no longer claims: the state is Earth-fixed,
+%% so the target does not travel that 628 km relative to anything the solve can
+%% see. The quantity that IS the scale of the rotation effect is the deflection
+%% of the VEHICLE, and it is measured rather than derived -- seedMissM, 231.55
+%% km on that same run, a factor of 2.7 smaller. A retracted mechanism's number
+%% left standing under a corrected sentence is the harder error to notice of
+%% the two, because the prose reads right.
 
 %% Whether ANY phase commands a bank, and whether the Earth turned. Together
 %% they decide which paragraph the limitations block prints: a run with
@@ -1218,19 +1241,17 @@ function [traj,info] = run_target(opts)
     fprintf('       bearing is only the SEED. Earth rotation is %s on this run, env.omegaE =\n',spinTxt);
     fprintf('       %.6e rad/s, and the state is EARTH-FIXED with a planet-relative\n',env.omegaE);
     fprintf('       speed, so the target never slides east under the vehicle -- it sits still,\n');
-    fprintf('       and rotation instead DEFLECTS THE VEHICLE off the arc it left on. The\n');
-    fprintf('       scale of that physics here: over this %.0f s flight the ground at the\n', ...
-            traj.t(end));
-    fprintf('       target''s %.1f deg latitude sweeps %.0f km east.\n',latTarget,driftM./1000);
+    fprintf('       and rotation instead DEFLECTS THE VEHICLE off the arc it left on.\n');
     if spinsUp
-    fprintf('       IT IS MODELLED ON THIS RUN. The seed azimuth alone left the vehicle %.2f km\n', ...
+    fprintf('       IT IS MODELLED ON THIS RUN, and the size of it is MEASURED and not\n');
+    fprintf('       derived: the seed azimuth alone left the vehicle %.2f km from the target,\n', ...
             seedMissM./1000);
-    fprintf('       from the target; aiming off by %+.6f deg brought it to %.2f m.\n', ...
-            rad2deg(wrapPi(psiLaunch - psiSeed)),missM);
+    fprintf('       %.2f km of that crosswise. Aiming off by %+.6f deg brought it to %.2f m.\n', ...
+            abs(seedXtkM)./1000,rad2deg(wrapPi(psiLaunch - psiSeed)),missM);
     else
     fprintf('       IT IS NOT MODELLED ON THIS RUN, because earthSpin is false. Set it true and\n');
-    fprintf('       the case is flown, not refused: on the shipped geometry the seed azimuth\n');
-    fprintf('       alone misses by 231.552 km and the solve removes it.\n');
+    fprintf('       the case is flown, not refused: on the shipped geometry the deflection is\n');
+    fprintf('       231.552 km of miss, almost all of it crosswise, and the solve removes it.\n');
     end
     fprintf('    2. THE SOLVE CONTROLS BOTH AXES. Down-range and cross-range are driven to zero\n');
     fprintf('       together by a damped Newton on the launch azimuth and the cutoff time, so\n');
@@ -1397,7 +1418,6 @@ function [traj,info] = run_target(opts)
        info.qGldMax  = qGldMax;
        info.qDscMax  = qDscMax;
        info.nAerMax  = nAerMax;
-        info.driftM  = driftM;
         info.stopOK  = allOK;
        info.stopWhy  = {why1;why2;why3};
 
@@ -1815,8 +1835,28 @@ function fMiss = missVector(latIm,lonIm,aim)
                      sin(aim.latT).*cos(latIm).*cos(dLonI);
 
 %% Direction from the pair, length from the haversine, joined by the ratio
-%% Delta/sin(Delta). At coincidence both are zero and the ratio is unity in the
-%% limit, so the guard is on the divisor and not on the answer:
+%% Delta/sin(Delta). The guard is on the DIVISOR and not on the answer, and it
+%% catches two geometries rather than one -- sin(Delta) vanishes at both ends
+%% of the arc:
+%%
+%%    AT COINCIDENCE, Delta = 0, the ratio tends to unity and the components
+%%    are zero anyway, so unity is the right value and the branch is exact.
+%%
+%%    AT THE ANTIPODE, Delta = pi, sin(Delta) is zero again but the true miss
+%%    is rI*pi -- a hemisphere -- and this branch would report an exact hit.
+%%    It is left unguarded deliberately, and the reason is worth stating
+%%    because the obvious fix is to add a second test. The zero is ANALYTIC,
+%%    not numerical: at the exact antipode sin(pi) evaluates to 1.22e-16 rather
+%%    than to zero, and the two components come back finite, so sMag > 0 holds
+%%    and the ratio pi/1.22e-16 is taken. Measured on that geometry the
+%%    magnitude is right to 0.19 m in 20 000 km, with a direction that is
+%%    meaningless because every great circle joins an antipodal pair -- the
+%%    same ill-conditioning coorbital.util.greatCircleBearing refuses on a
+%%    1e-12 test. An elseif here would therefore be a branch no double can
+%%    reach, and an unreachable guard reads as protection that was never
+%%    exercised. What actually keeps this problem away from the antipode is
+%%    the envelope refusal: a target that far is unreachable and never gets
+%%    as far as the Newton.
               sMag = hypot(wNrth,wEast);
               dAng = coorbital.util.greatCircle(aim.latT,aim.lonT,latIm,lonIm);
                kSc = 1;

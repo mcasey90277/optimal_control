@@ -59,6 +59,7 @@ cat_.name = spec.name;
 cat_.description = spec.description;
 cat_.created = datestr(now, 'yyyy-mm-dd');
 cat_.provenance = spec.provenance;
+cat_.schema = catalog_schema('version');       % versioned since v2
 
 nTot = 0;
 sheets = struct([]);
@@ -96,12 +97,31 @@ for kf = 1:numel(files)
         end
     end
     tf = Q.TF;  tf(~Q.OK) = NaN;
-    sheets(nS,1).tauDRO          = ob.tauDRO;     % DEPARTURE period (ND; legacy name)
+    % v2 canonical keys + full recipes BOTH ends; legacy aliases kept so
+    % every v1 consumer works on v2 tulip catalogs (tauDRO = tau_dep; Np
+    % is the tulip petal count, NaN for non-tulip arrivals):
+    isTulipArr = strcmpi(ob.arrFamily, 'tulip');
+    % KEYS are the REQUESTED family parameters (what a user asks for),
+    % not the propagated periods (those are derivable via the recipes):
+    sheets(nS,1).tau_dep         = ob.tauDRO;     % departure period key (ND)
+    if isfield(ob.arrParams, 'tau')
+        sheets(nS,1).tau_arr     = ob.arrParams.tau;   % requested (halo etc.)
+    else
+        sheets(nS,1).tau_arr     = ob.periodTulip;     % tulip: locked period
+    end
+    sheets(nS,1).tauDRO          = ob.tauDRO;     % LEGACY alias of tau_dep
     sheets(nS,1).dep_family      = ob.depFamily;
     sheets(nS,1).dep_params      = ob.depParams;  % full reconstruction recipe
-    sheets(nS,1).Np              = ob.NpTulip;
-    sheets(nS,1).pm              = ob.pmTulip;
-    sheets(nS,1).period_tulip_nd = ob.periodTulip;
+    sheets(nS,1).arr_family      = ob.arrFamily;
+    sheets(nS,1).arr_params      = ob.arrParams;
+    if isTulipArr
+        sheets(nS,1).Np          = ob.NpTulip;
+        sheets(nS,1).pm          = ob.pmTulip;
+    else
+        sheets(nS,1).Np          = NaN;           % petal count: tulip-only
+        sheets(nS,1).pm          = ob.arrParams.pm;
+    end
+    sheets(nS,1).period_tulip_nd = ob.periodTulip;% LEGACY alias of tau_arr
     sheets(nS,1).sD_frac         = Q.sD(:)';
     sheets(nS,1).sA_frac         = Q.sA(:)';
     sheets(nS,1).has_solution    = Q.OK;
@@ -110,8 +130,8 @@ for kf = 1:numel(files)
     sheets(nS,1).z8              = z8;
     nTot = nTot + n;
 end
-% order sheets by (departure period, Np) for human readability
-[~, ord] = sortrows([[sheets.tauDRO]', [sheets.Np]']);
+% order sheets by (departure period, arrival period) for human readability
+[~, ord] = sortrows([[sheets.tau_dep]', [sheets.tau_arr]']);
 cat_.sheets = sheets(ord);
 cat_.n_entries = nTot;
 
@@ -129,6 +149,9 @@ cat_.usage = sprintf(['%% [tf_nd, z8, info] = costate_catalog_pick(cat, tauDep, 
     '%%                       depDays, arrDays, thrustN);\n', ...
     '%% info reports exactly which sheet/pair/rung you were actually given.\n']);
 
+problems = catalog_schema('validate', cat_);
+assert(isempty(problems), 'catalog fails schema validation:\n%s', ...
+       strjoin(problems, sprintf('\n')));
 S = struct(spec.name, cat_);
 save(outMat, '-struct', 'S');
 fprintf('%s: %d sheets, %d entries -> %s\n', spec.name, numel(cat_.sheets), nTot, outMat);

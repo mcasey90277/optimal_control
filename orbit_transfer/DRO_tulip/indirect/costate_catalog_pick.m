@@ -1,12 +1,18 @@
-function [tf_nd, z8, info] = costate_catalog_pick(cat_, tauDRO, Np, ...
+function [tf_nd, z8, info] = costate_catalog_pick(cat_, tauDep, arrKey, ...
                                  depPhaseDays, arrPhaseDays, thrustN, warnFlag)
 %% Purpose:
 %
-%   Looks up the multi-orbit costate CATALOG by five coordinates -- DRO
-%   period, tulip petal count, departure phase, arrival phase, thrust --
-%   and returns the minimum flight time (interpolated between the thrust
-%   rungs that bracket the request) plus a converged z8 seed from the
-%   nearest stored rung.
+%   Looks up the multi-orbit costate CATALOG by five coordinates --
+%   departure period, arrival key, departure phase, arrival phase, thrust
+%   -- and returns the minimum flight time (interpolated between the
+%   thrust rungs that bracket the request) plus a converged z8 seed from
+%   the nearest stored rung.
+%
+%   ARRIVAL KEY (schema v2, family-aware): for TULIP-arrival catalogs the
+%   third argument is the petal count Np, exactly as always. For catalogs
+%   whose arrival family is not tulip (e.g. halo-to-halo), it is the
+%   ARRIVAL PERIOD (ND) and sheets are selected by nearest
+%   (log tau_dep, log tau_arr). The mode is read off the catalog itself.
 %
 %   HONESTY CONTRACT (the warning flag): whenever what is RETURNED differs
 %   from what was REQUESTED, a WARNING states exactly what you are getting:
@@ -31,9 +37,12 @@ function [tf_nd, z8, info] = costate_catalog_pick(cat_, tauDRO, Np, ...
 %                                                   (any family: dro_tulip,
 %                                                   halo_tulip, ...)
 %
-%  tauDRO                   double                  Requested DRO period (ND)
+%  tauDep                   double                  Requested departure
+%                                                   period (ND)
 %
-%  Np                       double                  Requested petal count
+%  arrKey                   double                  Petal count Np (tulip
+%                                                   arrivals) or arrival
+%                                                   period (ND) otherwise
 %
 %  depPhaseDays             double                  Departure phase (days)
 %
@@ -77,28 +86,50 @@ if nargin == 0
     cat_ = L.(fn{1});
    fprintf('demo catalog: %s\n', F(1).name);
       sh = cat_.sheets(1);
-[tf,z,inf_] = costate_catalog_pick(cat_, sh.tauDRO*0.93, sh.Np+1, ...
+   if isfield(sh,'arr_family') && ~strcmpi(sh.arr_family,'tulip')
+       a2 = sh.tau_arr*1.07;          % arrival-period keying
+   else
+       a2 = sh.Np + 1;                % petal-count keying
+   end
+[tf,z,inf_] = costate_catalog_pick(cat_, sh.tauDRO*0.93, a2, ...
                                    3.3, 11.0, 4.0);
-   fprintf('tf = %.4f ND;  delivered sheet tau=%.2f Np=%d\n', ...
-           tf, inf_.delivered.tauDRO, inf_.delivered.Np);
+   fprintf('tf = %.4f ND;  delivered sheet tau=%.2f arrKey=%.4g\n', ...
+           tf, inf_.delivered.tauDRO, inf_.delivered.arrKey);
    return;
 end
 if ~exist('warnFlag','var'), warnFlag = true; end
     tStar = cat_.constants.tStar_s;
    warned = false;
 
-%% Nearest sheet (log-distance in period; petal count integer-nearest):
-     taus = [cat_.sheets.tauDRO];
-      nps = [cat_.sheets.Np];
-     dist = (log([cat_.sheets.tauDRO]) - log(tauDRO)).^2 ...
-          + 0.5*(nps - Np).^2;                   % petal mismatch weighted
+%% Nearest sheet -- keying mode read off the catalog (schema v2):
+arrByPeriod = isfield(cat_.sheets, 'arr_family') && ...
+              ~strcmpi(cat_.sheets(1).arr_family, 'tulip');
+if arrByPeriod
+    % (log tau_dep, log tau_arr) distance; arrKey is the arrival period
+     dist = (log([cat_.sheets.tau_dep]) - log(tauDep)).^2 ...
+          + (log([cat_.sheets.tau_arr]) - log(arrKey)).^2;
    [~, ks] = min(dist);
        sh = cat_.sheets(ks);
-if warnFlag && (abs(sh.tauDRO - tauDRO) > 1e-9 || sh.Np ~= Np)
-    fprintf(['WARNING (costate_catalog_pick): no sheet at DRO period %.3f ND / %d petals;\n', ...
-             '  you are getting the NEAREST SHEET: period %.2f ND (%.2f d), Np = %d.\n'], ...
-        tauDRO, Np, sh.tauDRO, sh.tauDRO*tStar/86400, sh.Np);
-    warned = true;
+    if warnFlag && (abs(sh.tau_dep - tauDep) > 1e-9 || ...
+                    abs(sh.tau_arr - arrKey) > 1e-9)
+        fprintf(['WARNING (costate_catalog_pick): no sheet at departure %.3f / arrival %.3f ND;\n', ...
+                 '  you are getting the NEAREST SHEET: departure %.4g ND, arrival %.4g ND.\n'], ...
+            tauDep, arrKey, sh.tau_dep, sh.tau_arr);
+        warned = true;
+    end
+else
+    % Petal-count keying, exactly as v1 (bit-identical on tulip catalogs)
+      nps = [cat_.sheets.Np];
+     dist = (log([cat_.sheets.tauDRO]) - log(tauDep)).^2 ...
+          + 0.5*(nps - arrKey).^2;               % petal mismatch weighted
+   [~, ks] = min(dist);
+       sh = cat_.sheets(ks);
+    if warnFlag && (abs(sh.tauDRO - tauDep) > 1e-9 || sh.Np ~= arrKey)
+        fprintf(['WARNING (costate_catalog_pick): no sheet at DRO period %.3f ND / %d petals;\n', ...
+                 '  you are getting the NEAREST SHEET: period %.2f ND (%.2f d), Np = %d.\n'], ...
+            tauDep, arrKey, sh.tauDRO, sh.tauDRO*tStar/86400, sh.Np);
+        warned = true;
+    end
 end
 
 %% Phase pair on that sheet's torus:
@@ -162,10 +193,12 @@ if warnFlag && abs(rung(kNear) - thrustN) > 1e-9
     warned = true;
 end
 
+if arrByPeriod, dArr = sh.tau_arr; else, dArr = sh.Np; end
 info = struct( ...
-    'requested', struct('tauDRO',tauDRO,'Np',Np,'depDays',depPhaseDays, ...
+    'requested', struct('tauDRO',tauDep,'Np',arrKey,'arrKey',arrKey, ...
+                        'depDays',depPhaseDays, ...
                         'arrDays',arrPhaseDays,'thrustN',thrustN), ...
-    'delivered', struct('tauDRO',sh.tauDRO,'Np',sh.Np, ...
+    'delivered', struct('tauDRO',sh.tauDRO,'Np',sh.Np,'arrKey',dArr, ...
                         'depDays',sh.sD_frac(iD)*Pd,'arrDays',sh.sA_frac(iA)*Pa, ...
                         'tfThrustN',min(max(thrustN,min(rAvail)),max(rAvail)), ...
                         'seedThrustN',rung(kNear)), ...

@@ -138,6 +138,8 @@ meta = struct('muStar',muStar,'lStar',lStar,'tStar',tStar, ...
     'depFamily',depFamily,'depParams',depParams, ...
     'arrFamily',arrFamily,'arrParams',arrParams, ...
     'periodDRO',tD(end),'periodTulip',tT(end), ...
+    'tauDep',tD(end),'tauArr',tT(end), ...     % schema-v2 canonical names
+    'sheetSchema',2, 'env',env_pin(), ...
     'ispS',ispS,'m0kg',m0kg,'N',N,'floorKm',floorKm,'gateKm',gateKm, ...
     'sD0',sD0,'sA0',sA0);
 
@@ -276,4 +278,28 @@ end
 function s = okstr(t)
 % OKSTR  OK/fail marker.  INPUTS: t logical.  OUTPUTS: s [char].
 if t, s = 'OK'; else, s = 'fail'; end
+end
+
+% ------------------------------------------------------------------------
+function e = env_pin()
+% ENV_PIN  Environment pinning for sheet metadata (schema v2): MATLAB
+% release plus the pumpkyn/pumpkynPie git revisions, best-effort.
+% INPUTS: none.  OUTPUTS: e struct (.matlab .pumpkynRev .pumpkynPieRev).
+e = struct('matlab', version, 'pumpkynRev', 'unknown', ...
+           'pumpkynPieRev', 'unknown');
+try
+    p = which('pumpkyn.cr3bp.prop');
+    if ~isempty(p)
+        root = fileparts(fileparts(fileparts(fileparts(p))));
+        [st, rev] = system(['git -C "' root '" rev-parse --short HEAD']);
+        if st == 0, e.pumpkynRev = strtrim(rev); end
+    end
+    p = which('pumpkynPie.cr3bp.getDRO');
+    if ~isempty(p)
+        root = fileparts(fileparts(fileparts(fileparts(fileparts(p)))));
+        [st, rev] = system(['git -C "' root '" rev-parse --short HEAD']);
+        if st == 0, e.pumpkynPieRev = strtrim(rev); end
+    end
+catch
+end
 end

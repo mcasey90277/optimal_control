@@ -1,24 +1,34 @@
 function test_runTarget()
 %% Purpose:
 %
-%  Pin HGV/run_target, the point-to-point targeting script: the closed-form
-%  launch azimuth, the bisection on thrust-termination time, the separation
-%  link that throws the whole booster away, the reachable-envelope refusal,
-%  and the summary that reports all of it. Every other entry-script test in
-%  this suite checks a trajectory that was flown FORWARD from a given azimuth;
-%  this one checks a trajectory that was SOLVED to arrive somewhere, which is
-%  a different claim and fails in different ways.
+%  Pin HGV/run_target, the point-to-point targeting script: the TWO-AXIS solve
+%  that drives the down-range and cross-range components of the miss to zero
+%  in the launch azimuth and the thrust-termination time, the bisection that
+%  seeds it, the separation link that throws the whole booster away, the
+%  reachable-envelope refusal, and the summary that reports all of it. Every
+%  other entry-script test in this suite checks a trajectory that was flown
+%  FORWARD from a given azimuth; this one checks a trajectory that was SOLVED
+%  to arrive somewhere, which is a different claim and fails in different ways.
 %
-%  THE THREE THINGS THIS TEST EXISTS TO CATCH, and how each is caught:
+%  THE FOUR THINGS THIS TEST EXISTS TO CATCH, and how each is caught:
 %
 %    A wrong azimuth.    The impact point walks off the launch-to-target great
-%                        circle while the range solve still converges, so the
-%                        RANGE residual stays small and the vehicle still
-%                        misses. Caught by measuring the miss impact-to-target
-%                        with coorbital.util.greatCircle, from the flown state,
-%                        rather than by reading the solver's own residual.
+%                        circle while the range residual stays small, so the
+%                        solve looks converged and the vehicle still misses.
+%                        Caught by measuring the miss impact-to-target with
+%                        coorbital.util.greatCircle, from the flown state,
+%                        rather than by reading any solver's own residual.
 %
-%    A range solve that  Caught by the same measured miss: a cutoff returned
+%    An azimuth that is  Caught by parts 6 and 8b, the banked and the rotating
+%    not SOLVED at all.  cases, which are the two configurations where the
+%                        closed-form great-circle bearing is NOT the answer.
+%                        Force it back to the closed form and both of them
+%                        miss -- by 21.5 km and by 231.6 km -- while the
+%                        shipped zero-bank non-rotating case, where the seed
+%                        IS the answer, carries on passing. That asymmetry is
+%                        the whole point of those two sections.
+%
+%    A seed solve that   Caught by the same measured miss: a cutoff returned
 %    did not converge.   without iterating lands thousands of kilometres away.
 %
 %    A staging slip.     The separation link is what makes the post-cutoff
@@ -38,8 +48,11 @@ function test_runTarget()
 %  is discriminating rather than assuming it.
 %
 %  COST. A trajectory propagation here is about 0.15 s and the shipped solve
-%  takes twelve of them, so the whole test runs in a few seconds and there was
-%  no need to loosen the tolerance or shrink the bracket for it. The SHIPPED
+%  takes fourteen of them -- twelve in the seed bisection, one in the Newton,
+%  one to re-fly the answer -- so the whole test runs in a few seconds and
+%  there was no need to loosen the tolerance or shrink the bracket for it. The
+%  rotating case in part 8b is the dearest at twenty-three, because its Newton
+%  has real work to do. The SHIPPED
 %  configuration is therefore flown at its shipped settings, which is the
 %  stronger test: what is pinned is exactly what a user gets. The second,
 %  range-tracking case does use a narrower bracket and a 5 km tolerance,
@@ -63,6 +76,11 @@ function test_runTarget()
 %                 exaggeration, its cap and floor, and the
 %                 hemisphere captions -- none of which was
 %                 pinned by anything                            08/07/2026
+%  Michael Casey  Two-axis targeting: the banked case now ARRIVES
+%                 rather than warning, the rotating case is flown
+%                 rather than refused, and both are pinned on the
+%                 miss they used to have and the miss they have
+%                 now                                           08/08/2026
 %  Copyright 2026 Coorbital, Inc.
 %% ------------------------ Begin Code Sequence ---------------------------
 
@@ -103,10 +121,9 @@ function test_runTarget()
         'the shipped run printed the truncation caution. Summary was:\n%s',outDef);
     assert(~contains(outDef,'WARNING'), ...
         'the shipped run printed a warning. Summary was:\n%s',outDef);
-    assert(~contains(outDef,'REFUSED'), ...
+    assert(~contains(outDef,'targeting: REFUSED'), ...
         'the shipped target must be reachable. Summary was:\n%s',outDef);
     assert(~inDef.refused,'info.refused must be false on a converged solve');
-    assert(~inDef.crossWarn,'info.crossWarn must be false at zero bank');
     assert(inDef.stopOK,'every phase must have ended as intended');
 
 %% Terminal altitude is the configured stop altitude. eventAltitude is a
@@ -154,11 +171,33 @@ function test_runTarget()
 %% change here means the range function moved, which the pinned ranges above
 %% should already have caught -- or that the solver stopped iterating, which
 %% they might not:
-    assert(inDef.iterations == 10, ...
-        'bisection took %d steps against the expected 10',inDef.iterations);
-    assert(inDef.nEval == inDef.iterations + 2, ...
+    assert(inDef.seedIter == 10, ...
+        'the seed bisection took %d steps against the expected 10',inDef.seedIter);
+    assert(inDef.seedEval == inDef.seedIter + 2, ...
         ['%d evaluations for %d iterations; rangeSolve must cost exactly two ' ...
-         'endpoint evaluations plus one per step'],inDef.nEval,inDef.iterations);
+         'endpoint evaluations plus one per step'],inDef.seedEval,inDef.seedIter);
+
+%% THE SHIPPED CASE IS THE ONE WHERE THE SEED IS ALREADY THE ANSWER, and the
+%% cheapest possible two-axis solve is the evidence: aimSolve tests its
+%% convergence BEFORE it does any work, so a guess already inside tolerance
+%% costs exactly one propagation and zero iterations, and the azimuth comes
+%% back bit-for-bit unmoved. A non-zero iteration count here would mean the
+%% closed form had stopped being exact on a non-rotating zero-bank run, which
+%% is a physics change and not a solver change:
+    assert(inDef.aimIter == 0, ...
+        ['the two-axis solve took %d iteration(s) on the shipped case; the ' ...
+         'seed is exact there and it must converge at its first evaluation'], ...
+        inDef.aimIter);
+    assert(inDef.aimEval == 1, ...
+        'the two-axis solve cost %d propagation(s) where 1 is the whole bill', ...
+        inDef.aimEval);
+    assert(inDef.nProp == inDef.seedEval + inDef.aimEval + 1, ...
+        ['%d propagations reported against %d + %d + 1; the total must be the ' ...
+         'two solves plus the one re-flight'], ...
+        inDef.nProp,inDef.seedEval,inDef.aimEval);
+    assert(inDef.tCut == inDef.tSeed, ...
+        ['the solved cutoff %.15f s differs from the seed %.15f s on a case ' ...
+         'the seed already solved'],inDef.tCut,inDef.tSeed);
 
 %% ---------------------------------------------------------------------
 %% 2. The impact point, checked INDEPENDENTLY from the flown trajectory
@@ -201,11 +240,20 @@ function test_runTarget()
 %% ---------------------------------------------------------------------
 %% 3. The azimuth, to machine precision, and the zero-cross-range property
 %% ---------------------------------------------------------------------
-%% The launch heading state must BE the closed-form bearing. Nothing
-%% integrates the initial condition, so this is an equality and not a
-%% tolerance -- 1e-13 rad is 6e-7 m of arc at Earth radius, far below any
-%% physical scale in this problem:
+%% The SEED is the closed-form bearing, and on this configuration the SOLVED
+%% azimuth is the same number to the bit -- not to a tolerance. That is the
+%% claim step 5 of the brief asks for: a two-axis solve over a case whose
+%% closed form is exact must return the closed form. Nothing integrates the
+%% initial condition either, so the flown heading is the same equality again:
             psiRef = coorbital.util.greatCircleBearing(latLn,lonLn,latTg,lonTg);
+    assertAbs(inDef.psiSeed,psiRef,1e-13,'reported seed azimuth (rad)');
+    assert(inDef.psiLaunch == inDef.psiSeed, ...
+        ['the solved azimuth %.17g rad is not the seed %.17g rad; on a ' ...
+         'non-rotating zero-bank run the closed form IS the answer and the ' ...
+         'solve must hand it back unchanged'],inDef.psiLaunch,inDef.psiSeed);
+    assert(inDef.dPsiAim == 0, ...
+        'the solve reported a %.3e rad azimuth correction where it made none', ...
+        inDef.dPsiAim);
     assertAbs(trDef.x(1,6),psiRef,1e-13,'flown initial heading against the bearing (rad)');
     assertAbs(inDef.psiLaunch,psiRef,1e-13,'reported launch azimuth (rad)');
 
@@ -223,12 +271,31 @@ function test_runTarget()
         abs(rad2deg(wrapPi(psiTrn - psiRef))));
 
 %% CROSS-RANGE IS ZERO IN THIS CONFIGURATION, and the whole miss is therefore
-%% the range residual. That is the claim the summary makes in its limitations
-%% block, and this is the measurement behind it. Not a general guarantee: it
-%% holds because every commanded bank angle is zero:
-    assertAbs(inDef.xTrackM,0,1e-3,'cross-track offset (m)');
+%% down-range. That is the claim the summary makes in its limitations block,
+%% and this is the measurement behind it. Not a general guarantee: it holds
+%% because every commanded bank angle is zero AND the Earth is not turning:
+    assertAbs(inDef.xTrackM,0,1e-3,'cross-range component of the miss (m)');
+    assertAbs(inDef.downM,inDef.missM,1e-6, ...
+        'the down-range component against the whole miss (m)');
     assertAbs(inDef.missM,abs(inDef.residM),1e-6, ...
         'the miss against the magnitude of the range residual (m)');
+
+%% ...and the decomposition must COMPOSE. hypot of the two components is the
+%% miss by construction, so this catches an aim frame that is not a unit basis
+%% -- a psiCourse taken at the wrong end of the arc, say, or a scale factor
+%% applied to one component and not the other -- which every zero-cross-range
+%% assertion above is blind to:
+    assertAbs(hypot(inDef.downM,inDef.xTrackM),inDef.missM,1e-6, ...
+        'the two components composed against the measured miss (m)');
+    assertAbs(inDef.missHypM,inDef.missM,1e-6, ...
+        'the reported composition against the measured miss (m)');
+
+%% THE SEED MISS IS THE MISS, here and only here, because the solve had
+%% nothing to do. It is pinned because parts 6 and 8b pin it too, and it is
+%% the number that makes those two sections mean something: the same field
+%% reads 21.5 km and 231.6 km there:
+    assertAbs(inDef.seedMissM,inDef.missM,1e-6, ...
+        'the seed miss against the solved miss on a case the seed solved (m)');
 
 %% ---------------------------------------------------------------------
 %% 4. The summary must REPORT what was computed
@@ -249,9 +316,19 @@ function test_runTarget()
     assertAbs(summaryNumber(outDef,'reachable +[-\d.]+ to ([-\d.]+) km'), ...
         inDef.rngMaxM./1000,1e-3,'reported envelope ceiling (km)');
     assertAbs(summaryNumber(outDef,'iterations +(\d+) '), ...
-        inDef.iterations,0.5,'reported iteration count');
+        inDef.seedIter + inDef.aimIter,0.5,'reported iteration count');
+    assertAbs(summaryNumber(outDef,'propagations +(\d+) '), ...
+        inDef.nProp,0.5,'reported propagation count');
+    assertAbs(summaryNumber(outDef,'seed azimuth +([-\d.]+) +deg'), ...
+        rad2deg(psiRef),1e-5,'reported seed azimuth (deg)');
     assertAbs(summaryNumber(outDef,'launch azimuth +([-\d.]+) +deg'), ...
         rad2deg(psiRef),1e-5,'reported launch azimuth (deg)');
+    assertAbs(summaryNumber(outDef,'seed miss +([-\d.]+) +m'), ...
+        inDef.seedMissM,0.01,'reported seed miss (m)');
+    assertAbs(summaryNumber(outDef,'down-range miss +([-+\d.]+) +m'), ...
+        inDef.downM,0.01,'reported down-range component (m)');
+    assertAbs(summaryNumber(outDef,'cross-range miss +([-+\d.]+) +m'), ...
+        inDef.xTrackM,0.01,'reported cross-range component (m)');
 
 %% The cutoff must be reported as a FRACTION of the full burn as well as in
 %% seconds -- the brief for this script asks for both, and seconds alone say
@@ -264,20 +341,28 @@ function test_runTarget()
     assertAbs(str2double(fracTok{1}),inDef.cutFrac,1e-5,'reported cutoff fraction');
     assertAbs(str2double(fracTok{2}),inDef.tBurn  ,1e-3,'reported full burn time (s)');
 
-%% THE TWO LIMITATIONS MUST BE STATED. Both are things a reader will otherwise
-%% not notice, and both were required in writing; a future edit that quietly
-%% drops either one is exactly what this checks:
-    assert(contains(outDef,'NON-ROTATING EARTH'), ...
-        'the summary must state that the azimuth is exact only for a non-rotating Earth');
-    assert(contains(outDef,'OUTER ITERATION'), ...
-        'the summary must say what rotation would require: an outer azimuth iteration');
-%% Matched on two CONTIGUOUS fragments rather than on the whole sentence: the
-%% claim is wrapped across printed lines, and a pattern spanning the wrap would
-%% break on any rewording of the line breaks while saying nothing about the
-%% content:
+%% THE THREE STANDING STATEMENTS MUST BE MADE. Each is something a reader will
+%% otherwise not notice, and a future edit that quietly drops one is exactly
+%% what this checks. They are also the three the file used to get WRONG in the
+%% opposite direction: it claimed a closed-form azimuth, claimed the solve saw
+%% only downrange, and claimed neither could be helped:
+    assert(contains(outDef,'THE AZIMUTH IS SOLVED, NOT CLOSED FORM'), ...
+        'the summary must say the azimuth is solved and the closed form is only a seed');
+    assert(contains(outDef,'THE SOLVE CONTROLS BOTH AXES'), ...
+        'the summary must say that cross-range is driven to zero, not merely measured');
+    assert(contains(outDef,'THE NEWTON IS LOCAL'), ...
+        'the summary must say the solve is local and that a failure is refused');
+    assert(~contains(outDef,'OUTER ITERATION'), ...
+        ['the summary still asks for the outer azimuth iteration that this ' ...
+         'script now has']);
+%% Matched on CONTIGUOUS fragments rather than on whole sentences: the claims
+%% are wrapped across printed lines, and a pattern spanning a wrap would break
+%% on any rewording of the line breaks while saying nothing about the content:
     assert(contains(outDef,'PROPERTY OF THIS CONFIGURATION') && ...
-           contains(outDef,'GUARANTEE'), ...
+           contains(outDef,'GENERAL GUARANTEE'), ...
         'the summary must say that zero cross-range is a property of this configuration');
+    assert(contains(outDef,'IT IS NOT MODELLED ON THIS RUN'), ...
+        'the shipped run must say plainly that it did not turn the Earth');
 
 %% ---------------------------------------------------------------------
 %% 5. A SECOND target, to prove the solve tracks it
@@ -295,7 +380,7 @@ function test_runTarget()
                       '''lonTarget'',%.10g,''cutFracMin'',0.70,' ...
                       '''cutFracMax'',0.90,''tolRangeKm'',%.10g,' ...
                       '''showPlots'',false));'],latTg2,lonTg2,tol2M./1000));
-    assert(contains(out2,'(nominal)') && ~contains(out2,'REFUSED'), ...
+    assert(contains(out2,'(nominal)') && ~contains(out2,'targeting: REFUSED'), ...
         'the second target did not solve. Summary was:\n%s',out2);
     assert(in2.missM <= tol2M, ...
         'the second solve missed by %.2f m against its %.0f m tolerance', ...
@@ -324,90 +409,114 @@ function test_runTarget()
          'returned without iterating'],in2.tCut);
 
 %% ---------------------------------------------------------------------
-%% 6. A BANKED case, which is the only thing that pins the cross-range
-%%    measurement and the warning that justifies shipping descBank = 0
+%% 6. A BANKED case, which is one of the two cases where the closed-form
+%%    azimuth is NOT the answer and the two-axis solve has to earn its keep
 %% ---------------------------------------------------------------------
-%% WHY THIS CASE EXISTS, and it is the most important section in the file.
-%% Everything above flies at zero bank, where the measured impact-to-target
-%% miss and the magnitude of the solver's own range residual agree to 9.3e-10 m.
-%% They are therefore INDISTINGUISHABLE there, and every "independent" check in
-%% part 2 passes just as happily if run_target were to substitute the residual
-%% for the measurement. Two mutations that did exactly that -- forcing
-%% crossWarn = false, and setting missM = abs(resM) -- SURVIVED an earlier
-%% version of this suite. The measure-and-warn behaviour is the entire
-%% justification for shipping descBank = 0 rather than run_boost_glide's 75 deg,
-%% and it was completely unpinned.
+%% WHY THIS CASE EXISTS, and it is one of the two most important sections in
+%% the file. Everything above flies at zero bank over a still Earth, where the
+%% seed azimuth is exact, the Newton converges at its first evaluation without
+%% moving anything, and the measured impact-to-target miss and the magnitude of
+%% the range residual agree to 9.3e-10 m. Nothing up there can tell a SOLVED
+%% azimuth from a closed-form one, and nothing up there can tell a measured
+%% miss from a restated residual: two mutations that did exactly that -- forcing
+%% crossWarn = false, and setting missM = abs(resM) -- survived an earlier
+%% version of this suite.
 %%
-%% A banked run separates the two by a factor of 36.8, so nothing can pass by
-%% reporting the residual, and the warning has a case in which it must fire.
-%% This is the same shape of blind spot as the due-east geometry in
-%% test_runGlide: a verification that is only independent in the one
-%% configuration that happens to be tested:
+%% A 75 deg terminal bank breaks all of that. It walks the impact point 21.5 km
+%% off the launch-to-target great circle while the range residual stays at
+%% 639 m, which is what this configuration USED TO SHIP as a converged solve
+%% beside a WARNING. It now arrives. What is pinned is therefore both numbers:
+%% the miss the seed alone still produces, which is the old failure preserved
+%% as a measurement, and the miss after the solve, which is the fix. Force the
+%% azimuth back to the closed form and the second of those becomes the first:
             outBnk = evalc(['[trBnk,inBnk] = run_target(struct(' ...
                             '''descBank'',[75 75],''showPlots'',false));']);
-    assert(contains(outBnk,'(nominal)') && ~contains(outBnk,'REFUSED'), ...
+    assert(contains(outBnk,'(nominal)') && ~contains(outBnk,'targeting: REFUSED'), ...
         'the banked case did not solve. Summary was:\n%s',outBnk);
 
-%% THE RANGE SOLVE STILL CONVERGES. That is the trap: a converged solve and a
-%% small residual, and the vehicle twenty-one kilometres away:
-    assert(abs(inBnk.residM) < tolM, ...
-        ['the banked run must still converge on RANGE -- that is what makes ' ...
-         'the cross-range miss dangerous -- but the residual is %.2f m'], ...
-        inBnk.residM);
+%% THE SEED STILL MISSES BY 21.5 KM, and that is the number this script used to
+%% report as its answer. Pinned so the section keeps its teeth: if a future
+%% change made the bank harmless, the case would stop discriminating and this
+%% would say so rather than passing quietly:
+    assertRel(inBnk.seedMissM  ,21524.695285497215,1e-3,'banked-case SEED miss (m)');
+    assertRel(inBnk.seedXTrackM,21515.222106821158,1e-3,'banked-case SEED cross-range (m)');
+    assert(inBnk.seedMissM > 20.*tolM, ...
+        ['the seed misses by only %.2f m at 75 deg of bank; this case no ' ...
+         'longer discriminates a solved azimuth from a closed-form one'], ...
+        inBnk.seedMissM);
 
-%% ...and the vehicle misses anyway, by the pinned amount:
-    assertRel(inBnk.missM,21524.695285497215,1e-3,'banked-case miss distance (m)');
-    assertRel(inBnk.xTrackM,21515.222106821158,1e-3,'banked-case cross-track (m)');
+%% ...AND THE SOLVE ARRIVES. This is the assertion the whole task turns on:
+    assert(inBnk.missM <= tolM, ...
+        ['the banked run missed by %.2f m against a %.1f m tolerance; the ' ...
+         'two-axis solve did not close the cross-range'],inBnk.missM,tolM);
+    assertRel(inBnk.missM  ,54.795200772747  ,1e-3,'banked-case miss distance (m)');
+    assertRel(inBnk.downM  ,-54.724069844196 ,1e-3,'banked-case down-range miss (m)');
+    assertRel(inBnk.xTrackM,-2.7910943019968 ,1e-2,'banked-case cross-range miss (m)');
 
-%% THE ASSERTION THAT KILLS THE RESIDUAL SUBSTITUTION. If missM were computed
-%% from the solver's residual instead of from the flown terminal state, it
-%% would be 585 m here rather than 21525 m. A factor of thirty is far inside
-%% the measured 36.8 and far outside anything roundoff can produce:
-    assert(inBnk.missM > 30.*abs(inBnk.residM), ...
-        ['the banked-case miss is %.2f m against a %.2f m range residual, a ' ...
-         'factor of only %.2f. The miss looks like it is being read back out ' ...
-         'of the range solve rather than measured from the flown impact ' ...
-         'point; at 75 deg of bank the two must differ by more than thirty'], ...
-        inBnk.missM,abs(inBnk.residM),inBnk.missM./abs(inBnk.residM));
+%% THE AZIMUTH MOVED, and by the pinned amount. A solve that converged by
+%% moving only the cutoff would leave the cross-range where it was, so the
+%% correction is the mechanism and not a by-product:
+    assertRel(rad2deg(inBnk.dPsiAim),-0.34363882645,1e-3, ...
+        'banked-case azimuth correction (deg)');
+    assert(abs(inBnk.dPsiAim) > 1e-4, ...
+        ['the banked case solved to an azimuth %.3e rad from the closed form; ' ...
+         'it cannot have closed 21.5 km of cross-range without aiming off'], ...
+        inBnk.dPsiAim);
+    assertRel(inBnk.tCut,75.860087783794,1e-6,'banked-case solved cutoff (s)');
+    assert(inBnk.aimIter >= 1, ...
+        'the banked case took %d Newton iteration(s); the seed is not the answer there', ...
+        inBnk.aimIter);
 
-%% ...checked once more from the flown state alone, which at nonzero bank is a
-%% genuinely independent number rather than the same one by construction:
+%% THE ASSERTION THAT KILLS THE RESIDUAL SUBSTITUTION, kept from the version
+%% that shipped the warning. It has moved to the SEED, which is where the
+%% separation between a measured miss and a restated range residual now lives:
+%% 21525 m against 639 m, a factor of 33.7:
+    assert(inBnk.seedMissM > 30.*abs(inBnk.seedDownM), ...
+        ['the banked seed miss is %.2f m against a %.2f m down-range ' ...
+         'component, a factor of only %.2f. The miss looks like it is being ' ...
+         'read back out of a downrange-only solve rather than measured from ' ...
+         'the flown impact point; at 75 deg of bank the two must differ by ' ...
+         'more than thirty'],inBnk.seedMissM,abs(inBnk.seedDownM), ...
+        inBnk.seedMissM./abs(inBnk.seedDownM));
+
+%% ...and the arrival checked once more from the flown state alone, which at
+%% nonzero bank is a genuinely independent number rather than the same one by
+%% construction:
             missBnk = c.rE.*coorbital.util.greatCircle(trBnk.x(end,3), ...
                                                        trBnk.x(end,2), ...
                                                        latTg,lonTg);
     assertRel(missBnk,inBnk.missM,1e-9, ...
         'independently measured banked-case miss against the reported one (m)');
-    assert(missBnk > 30.*abs(inBnk.residM), ...
-        ['the INDEPENDENTLY measured banked miss is %.2f m against a %.2f m ' ...
-         'residual'],missBnk,abs(inBnk.residM));
+    assert(missBnk <= tolM, ...
+        ['the INDEPENDENTLY measured banked impact point is %.2f m from the ' ...
+         'target, outside the %.1f m tolerance, whatever the summary said'], ...
+        missBnk,tolM);
 
-%% THE WARNING MUST FIRE, in the struct and on the page:
-    assert(inBnk.crossWarn, ...
-        ['info.crossWarn must be true when the impact point is %.2f m off the ' ...
-         'launch-to-target great circle against a %.1f m tolerance'], ...
-        abs(inBnk.xTrackM),tolM);
-    assert(contains(outBnk,'WARNING'), ...
-        'the banked run printed no WARNING. Summary was:\n%s',outBnk);
-    assert(contains(outBnk,'solve CONVERGED and the vehicle still missed'), ...
-        ['the warning must say that the solve converged and the vehicle still ' ...
-         'missed, which is the whole hazard. Summary was:\n%s'],outBnk);
+%% NO WARNING, AND NO REFUSAL. The cross-range warning was the old script's way
+%% of admitting it could not fly this case; a run that arrives must not print
+%% it, and the absence is pinned so that reinstating the warning without
+%% reinstating the failure would be caught:
+    assert(~contains(outBnk,'WARNING'), ...
+        ['the banked run printed a WARNING although it arrived within ' ...
+         'tolerance. Summary was:\n%s'],outBnk);
+    assert(~contains(outBnk,'solve CONVERGED and the vehicle still missed'), ...
+        ['the banked run still prints the converged-and-missed warning, which ' ...
+         'is no longer true of it. Summary was:\n%s'],outBnk);
 
-%% ...and the limitations paragraph must NOT then contradict it. The zero-bank
-%% wording -- "cross-range came out at N m because the bank angle is zero
-%% throughout" -- printed verbatim under a 75 deg descent bank, directly below
-%% the warning saying the opposite. A correct warning followed by a paragraph
-%% denying it is worse than no warning:
-    assert(~contains(outBnk,'because the bank angle is zero'), ...
-        ['the banked run printed the zero-bank explanation, which contradicts ' ...
-         'the warning immediately above it. Summary was:\n%s'],outBnk);
+%% The limitations paragraph must FORK on the bank, and each branch must be the
+%% one that fits its run. The zero-bank wording -- "a zero-bank track over a
+%% non-rotating sphere never leaves the great circle it departed on" -- printed
+%% verbatim under a 75 deg descent bank would be self-refuting:
     assert(contains(outBnk,'NON-ZERO BANK'), ...
         ['the banked run must say plainly that it commands a non-zero bank. ' ...
          'Summary was:\n%s'],outBnk);
-
-%% The shipped run must still take the OTHER branch, so this is a real fork and
-%% not a paragraph that was simply deleted:
-    assert(contains(outDef,'because the bank angle is zero'), ...
+    assert(~contains(outBnk,'and rotation is off, so the seed left only'), ...
+        'the banked run printed the zero-bank explanation. Summary was:\n%s', ...
+        outBnk);
+    assert(contains(outDef,'and rotation is off, so the seed left only'), ...
         'the zero-bank explanation vanished from the shipped run');
+    assert(contains(outDef,'seed azimuth WAS the answer here'), ...
+        'the shipped run must say that its seed was already the answer');
     assert(~contains(outDef,'NON-ZERO BANK'), ...
         'the shipped zero-bank run claimed a non-zero bank');
 
@@ -429,7 +538,7 @@ function test_runTarget()
 [outFar,infFar,threwFar,trFar] = tryRun(struct('latTarget',-30,'lonTarget',20, ...
                                                'showPlots',false));
     assert(~threwFar,'a target beyond the envelope must not throw:\n%s',outFar);
-    assert(contains(outFar,'REFUSED'),'no refusal banner for a too-far target:\n%s',outFar);
+    assert(contains(outFar,'targeting: REFUSED'),'no refusal banner for a too-far target:\n%s',outFar);
     assert(contains(outFar,'TOO FAR'),'the refusal must say the target is too far:\n%s',outFar);
     assert(infFar.refused,'info.refused must be true on a refusal');
     assert(~infFar.solveInfo.converged,'the solve must report converged = false');
@@ -456,7 +565,7 @@ function test_runTarget()
                                                  'lonTarget',-155, ...
                                                  'showPlots',false));
     assert(~threwNear,'a target inside the envelope floor must not throw:\n%s',outNear);
-    assert(contains(outNear,'REFUSED'),'no refusal banner for a too-close target:\n%s',outNear);
+    assert(contains(outNear,'targeting: REFUSED'),'no refusal banner for a too-close target:\n%s',outNear);
     assert(contains(outNear,'TOO CLOSE'), ...
         'the refusal must say the target is too close:\n%s',outNear);
     assert(infNear.refused,'info.refused must be true on a refusal');
@@ -494,7 +603,7 @@ function test_runTarget()
              hPkFlw = max(trDef.x(:,1)) - c.rE;
               outAu = evalc(['[trAu,inAu] = run_target(struct(''altExag'',' ...
                              '''auto'',''tolRangeKm'',25,''showPlots'',false));']);
-    assert(contains(outAu,'(nominal)') && ~contains(outAu,'REFUSED'), ...
+    assert(contains(outAu,'(nominal)') && ~contains(outAu,'targeting: REFUSED'), ...
         'the auto-exaggeration run did not solve. Summary was:\n%s',outAu);
     assert(inAu.altExag == 16, ...
         ['altExag = ''auto'' drew at %gx against the 16x the adaptive rule ' ...
@@ -577,7 +686,7 @@ function test_runTarget()
               outEx = evalc(sprintf( ...
                       ['[trEx,inEx] = run_target(struct(''altExag'',%d,' ...
                        '''tolRangeKm'',25,''showPlots'',false));'],exgWnt));
-    assert(contains(outEx,'(nominal)') && ~contains(outEx,'REFUSED'), ...
+    assert(contains(outEx,'(nominal)') && ~contains(outEx,'targeting: REFUSED'), ...
         'the altExag override run did not solve. Summary was:\n%s',outEx);
     assert(inEx.altExag == exgWnt, ...
         'the run was given altExag = %d and drew at %g',exgWnt,inEx.altExag);
@@ -598,33 +707,79 @@ function test_runTarget()
         'a mistyped altExag sentinel must raise, not be silently accepted');
 
 %% ---------------------------------------------------------------------
-%% 8b. A ROTATING EARTH IS REFUSED, not flown behind a caution
+%% 8b. A ROTATING EARTH IS FLOWN, not refused
 %% ---------------------------------------------------------------------
-%% earthSpin true used to run to completion and contradict itself three times
-%% over: a limitations paragraph reporting rotation ON and then that the initial
-%% bearing was the WHOLE answer, a cross-track WARNING telling the user to zero
-%% banks that were already zero, and a 231.552 km miss printed in the same
-%% format as a converged solution. The closed-form azimuth is simply not the
-%% answer on a turning Earth, so the run is refused, before the range solve:
+%% earthSpin true is the other case where the closed-form bearing is not the
+%% answer, and it is the harder of the two: the deflection is 231.552 km rather
+%% than 21.5 km, and it is almost entirely CROSSWISE, so a downrange-only solve
+%% converges on range and lands a quarter of a thousand kilometres away. This
+%% script first printed that as a converged solution, then refused the case
+%% outright; it now flies it.
+%%
+%% Note what rotation does and does not do here, because the refusal this
+%% replaces described it the other way round: the state is EARTH-FIXED with a
+%% planet-relative speed, so the target does not slide east under the vehicle.
+%% It sits still and the VEHICLE is deflected. The two descriptions differ in
+%% sign as well as in mechanism, and only one of them matches the equations of
+%% motion in coorbital.eom.glide3DOF:
              outSpn = evalc(['[trSpn,inSpn] = run_target(struct(''earthSpin'',' ...
                              'true,''showPlots'',false));']);
-    assert(contains(outSpn,'REFUSED'), ...
-        'no refusal banner for earthSpin true:\n%s',outSpn);
-    assert(contains(outSpn,'OUTER AZIMUTH ITERATION'), ...
-        'the refusal must name the iteration the script does not have:\n%s',outSpn);
-    assert(inSpn.refused && strcmp(inSpn.refusedWhy,'earthSpin'), ...
-        'info must carry refused with refusedWhy = "earthSpin"; got "%s"', ...
-        inSpn.refusedWhy);
-    assert(isempty(trSpn),'a refused run must return an empty trajectory');
-    assert(inSpn.omegaE > 0, ...
-        'the refusal must report the non-zero omegaE it refused on');
-    assert(~isfield(inSpn,'rngMinM'), ...
-        ['the earthSpin refusal must come BEFORE the range solve; it handed ' ...
-         'back a reachable envelope, so the solve was paid for and discarded']);
-    assert(~contains(outSpn,'MISS DISTANCE') && ~contains(outSpn,'WARNING') && ...
-           ~contains(outSpn,'WHOLE answer'), ...
-        ['the refusal must print none of the three statements the caution ' ...
-         'used to print beside each other:\n%s'],outSpn);
+    assert(contains(outSpn,'(nominal)') && ~contains(outSpn,'targeting: REFUSED'), ...
+        'the rotating case did not solve. Summary was:\n%s',outSpn);
+    assert(~inSpn.refused,'info.refused must be false on a flown rotating case');
+    assert(~isempty(trSpn),'a flown run must return a trajectory');
+    assert(contains(outSpn,'Earth rotation ON'), ...
+        'the rotating run must report Earth rotation ON:\n%s',outSpn);
+    assert(contains(outSpn,'IT IS MODELLED ON THIS RUN'), ...
+        'the rotating run must say the rotation was modelled:\n%s',outSpn);
+    assert(contains(outSpn,'THE ROTATION and not from any commanded turn'), ...
+        ['the rotating zero-bank run must attribute its cross-range to the ' ...
+         'rotation rather than to a bank:\n%s'],outSpn);
+
+%% THE SEED STILL MISSES BY 231.552 KM. This is the measurement that used to be
+%% the answer, kept as evidence rather than as a memory in a comment. It is
+%% almost all cross-range, which is exactly why the second control was needed:
+    assertRel(inSpn.seedMissM  ,231551.62803,1e-4,'rotating-case SEED miss (m)');
+    assertRel(inSpn.seedXTrackM,231477.49940,1e-4,'rotating-case SEED cross-range (m)');
+    assert(abs(inSpn.seedXTrackM) > 0.99.*inSpn.seedMissM, ...
+        ['only %.2f m of the %.2f m seed miss is crosswise; a downrange-only ' ...
+         'solve would have caught the rest, and this case would not be the ' ...
+         'discriminator it is claimed to be'],abs(inSpn.seedXTrackM), ...
+        inSpn.seedMissM);
+
+%% ...AND THE SOLVE ARRIVES:
+    assert(inSpn.missM <= tolM, ...
+        ['the rotating run missed by %.2f m against a %.1f m tolerance; the ' ...
+         'two-axis solve did not remove the Coriolis deflection'], ...
+        inSpn.missM,tolM);
+    assertRel(inSpn.missM,4.3614169745,1e-2,'rotating-case miss distance (m)');
+    assertRel(rad2deg(inSpn.dPsiAim),-3.579282425,1e-4, ...
+        'rotating-case azimuth correction (deg)');
+    assertRel(inSpn.tCut,75.207196173,1e-6,'rotating-case solved cutoff (s)');
+    assert(inSpn.aimIter >= 1, ...
+        'the rotating case took %d Newton iteration(s); it cannot have solved itself', ...
+        inSpn.aimIter);
+
+%% ...measured independently from the flown terminal state, on the impact
+%% sphere, exactly as part 2 does for the shipped case:
+            missSpn = c.rE.*coorbital.util.greatCircle(trSpn.x(end,3), ...
+                                                       trSpn.x(end,2), ...
+                                                       latTg,lonTg);
+    assertRel(missSpn,inSpn.missM,1e-9, ...
+        'independently measured rotating-case miss against the reported one (m)');
+    assert(missSpn <= tolM, ...
+        ['the INDEPENDENTLY measured rotating impact point is %.2f m from the ' ...
+         'target'],missSpn);
+
+%% THE ROTATION MUST ACTUALLY BE ON in the run that was flown. Without this,
+%% an override that silently failed to reach env.omegaE would make every
+%% assertion above pass by flying the shipped case twice:
+    assert(inSpn.env.omegaE > 0, ...
+        'the rotating run flew with env.omegaE = %.6e; the override did nothing', ...
+        inSpn.env.omegaE);
+    assert(abs(rad2deg(wrapPi(inSpn.psiLaunch - inDef.psiLaunch))) > 1, ...
+        ['the rotating case solved to the same azimuth as the shipped one to ' ...
+         'within a degree; it cannot have removed a 231 km deflection']);
 
 %% ---------------------------------------------------------------------
 %% 9. The override hook itself

@@ -15,13 +15,39 @@ reference material.
 | `GTO_ELFO/` | GTO → ELFO lunar frozen orbit, Earth–Moon CR3BP | **working** — front mapped, min-time anchor certified | not started (Route C open) |
 
 Each campaign folder keeps `README.md` + `TODO.md` at its root, campaign
-records in `process/`, technical notes in `doc/`.
+records in `process/`, technical notes in `doc/`. Program-level open items
+(spanning campaigns): **`TODO.md`** beside this file.
 
-## Shared library
+## Costate-catalog program (min-time, for Darin's pumpkyn tfMin)
+
+The August-2026 program: libraries of **converged min-time PMP costates**
+keyed by (orbit pair, phasing, thrust), consumed on Darin's side by
+`pumpkyn.cr3bp.tfMin`. Every entry passes three gates — multiple-shooting
+residual, flown arrival (<100 km), and **acceptance UNCHANGED by tfMin**
+(|Δz| < 1e-6, observed ~1e-9). Pipeline: direct solve → covector harvest →
+`ms_tfmin` → tfMin acceptance. Theory manual + architecture:
+`DRO_tulip/doc/costate_library_methodology.tex` + `costate_library_sdd.tex`
+(both externally reviewed).
+
+| folder | catalog | entries | shipped as |
+|---|---|---|---|
+| `DRO_tulip/` | DRO → tulip (τ×Np coarse sweep + 12×12 flagship torus) | 3,936 | deliverables 1–3 |
+| `HALO_tulip/` | L2-southern halo → tulip (τ ∈ 1.75–3.4 × Np ∈ 5–12) | 3,980 (92% pairs) | deliverable 4 |
+| `DPO_tulip/` | DPO → tulip (τ ∈ 1–4 × Np ∈ 5–12) | 3,932 (89% pairs) | deliverable 5 |
+| `HALO_HALO/` | L1 ↔ L2 halo-to-halo (probe stage: 2 pairs solved, movies) | 13 rungs | movie demos |
+
+Physics headlines: halo departures are the cheapest (0.65 km/s best,
+vs 0.98 DRO / 0.76 DPO); solvability improves with halo period; the hard
+corner everywhere is shortest-departure × longest-tulip; "blocky" tf maps
+= solution-family walls (`DRO_tulip/doc/note_blocky_behavior.md`).
+
+## Shared libraries
 
 | folder | what |
 |---|---|
 | `cr3bp_common/` | Single source for the CR3BP GTO problem definition — `cr3bp_lt_params`, `minfuel_config`, `gto_tulip_endpoints`, `gto_elfo_endpoints` — plus `setup_cr3bp_common()` (adds pumpkyn). Every GTO_tulip/GTO_ELFO module's `setup_paths` calls it. |
+| `costate_common/` | **The seed of the pumpkyn-style optimal-control library** (official goal 2026-08-06). Family-agnostic costate-pipeline core: `get_family_orbit`, `survey_family_bounds`, `duals_to_costates` (ALL covector station rules), `harvest_ms_seed`, `ms_bvp` (generic multiple-shooting engine), `ms_conjugate_test` (free-time Jacobi, second order), `flown_control_error` + `true_min_altitude` + `preflight_screen` + `assert_periodic_orbit`, `build_costate_catalog_family`, `golden_cells` (quality regression). Migration rule: code reused by a second campaign moves here on its next touch. |
+| `verify_common/` | First-order optimality gate layer (`foc_check`/`foc_report`/`foc_manifest`, IPOPT inertia, PMP residual, mesh tools, `certified_guard`) shared by all four direct campaigns; `foc_dual_to_costate` delegates to `costate_common` since migration #5, and `foc_check` exposes an advisory conjugate-point hook. |
 
 ## Tutorials (guided build-it-yourself, with `mytry/` + verified checkpoints)
 

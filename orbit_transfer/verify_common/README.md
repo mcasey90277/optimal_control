@@ -114,3 +114,16 @@ the three restates a derivation that lives in a header.
   multiplier rule above exists, and the reusable
   "is-it-the-duals-or-my-derivation" diagnostic.
 - `TODO.md` — open work on this module.
+
+## Update 2026-08-08 — migration #5 (covector unification + conjugate hook)
+
+- `foc_dual_to_costate` is now a **delegate**: the step-weighted nodal map
+  lives in `../costate_common/duals_to_costates` (scheme
+  `'trapezoid-nodal'`), the single home for all covector station rules.
+  Bitwise-equivalent (0.000e+00 over 20 random meshes); all 9 tests in
+  `tests/` unchanged.
+- `foc_check` gained an **advisory conjugate-point hook**: pass
+  `opts.msInfo` (an `ms_bvp` info struct with STMs) + `opts.msFlow` and the
+  free-time Jacobi test from `costate_common/ms_conjugate_test` is reported
+  as `rep.conj`. Not folded into `rep.pass`; reports without it are
+  bit-identical to before.

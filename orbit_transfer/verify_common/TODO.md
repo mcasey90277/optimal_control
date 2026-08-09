@@ -9,6 +9,12 @@ priority / Not-a-goal). Per-row results and the cross-campaign status live in
 
 ## Done
 
+### 2026-08-08 — migration #5 (task #24)
+
+- Covector map unified onto `costate_common/duals_to_costates`
+  (`foc_dual_to_costate` delegates, bitwise); advisory conjugate-point
+  hook in `foc_check` (`opts.msInfo`/`opts.msFlow` → `rep.conj`).
+
 ### 2026-07-25 — the layer, built and wired (plan `2026-07-25-foc-gate-layer.md`)
 `foc_check` / `foc_manifest` / `foc_dual_to_costate` / `foc_ipopt_inertia` /
 `foc_report`, plus wiring into all four campaigns and the explainer

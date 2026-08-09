@@ -287,17 +287,18 @@ function e = env_pin()
 % INPUTS: none.  OUTPUTS: e struct (.matlab .pumpkynRev .pumpkynPieRev).
 e = struct('matlab', version, 'pumpkynRev', 'unknown', ...
            'pumpkynPieRev', 'unknown');
+% git walks up to the nearest enclosing repo on its own -- no fragile
+% parent-counting (both external reviewers flagged the counted version,
+% and disagreed with each other on the right count)
 try
     p = which('pumpkyn.cr3bp.prop');
     if ~isempty(p)
-        root = fileparts(fileparts(fileparts(fileparts(p))));
-        [st, rev] = system(['git -C "' root '" rev-parse --short HEAD']);
+        [st, rev] = system(['git -C "' fileparts(p) '" rev-parse --short HEAD']);
         if st == 0, e.pumpkynRev = strtrim(rev); end
     end
     p = which('pumpkynPie.cr3bp.getDRO');
     if ~isempty(p)
-        root = fileparts(fileparts(fileparts(fileparts(fileparts(p)))));
-        [st, rev] = system(['git -C "' root '" rev-parse --short HEAD']);
+        [st, rev] = system(['git -C "' fileparts(p) '" rev-parse --short HEAD']);
         if st == 0, e.pumpkynPieRev = strtrim(rev); end
     end
 catch

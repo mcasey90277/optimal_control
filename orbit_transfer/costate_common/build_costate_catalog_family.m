@@ -130,10 +130,20 @@ for kf = 1:numel(files)
     sheets(nS,1).z8              = z8;
     nTot = nTot + n;
 end
+% One catalog = ONE arrival family (the picker reads the keying mode off
+% sheet 1; a mixed catalog would be silently mis-keyed -- both reviewers)
+assert(numel(unique({sheets.arr_family})) == 1, ...
+    'build_costate_catalog_family:mixedArrival', ...
+    'mixed arrival families in %s -- one catalog per arrival family', catDir);
 % order sheets by (departure period, arrival period) for human readability
 [~, ord] = sortrows([[sheets.tau_dep]', [sheets.tau_arr]']);
 cat_.sheets = sheets(ord);
 cat_.n_entries = nTot;
+if isfield(ob, 'env')
+    cat_.env = ob.env;                         % environment pinning (v2)
+else
+    cat_.env = struct('note', 'pre-v2 sheets: environment unrecorded');
+end
 
 cat_.derive = struct( ...
     'days_from_nd',   't_days = t_nd * constants.tStar_s / 86400', ...

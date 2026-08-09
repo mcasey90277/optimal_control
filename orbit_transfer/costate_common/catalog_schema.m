@@ -73,7 +73,14 @@ case 'validate'
              'tf_nd','entry_index','z8'};
     if v >= 2
         needS = [needS, {'tau_dep','tau_arr','dep_family','dep_params', ...
-                         'arr_family','arr_params'}];
+                         'arr_family','arr_params','period_tulip_nd'}];
+        if ~isfield(cat_, 'env')
+            p{end+1} = 'v2 catalog missing .env (environment pinning)';
+        end
+        af = arrayfun(@(sh) string(sh.arr_family), cat_.sheets);
+        if numel(unique(af)) > 1
+            p{end+1} = 'mixed arrival families (one catalog per arrival family)';
+        end
     end
     for ks = 1:numel(cat_.sheets)
         sh = cat_.sheets(ks);

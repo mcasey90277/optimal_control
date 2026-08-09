@@ -66,8 +66,12 @@ if nargin == 0
     cat_ = L.(fn{1});
    fprintf('demo catalog: %s\n', F(1).name);
       sh = cat_.sheets(ceil(numel(cat_.sheets)/2));
- outStem = costate_catalog_extremes_movies(cat_, ...
-               struct('tauDRO',sh.tauDRO,'Np',sh.Np,'thrustN',5));
+   if isnan(sh.Np)
+       fl = struct('tauDRO',sh.tauDRO,'tauArr',sh.tau_arr,'thrustN',5);
+   else
+       fl = struct('tauDRO',sh.tauDRO,'Np',sh.Np,'thrustN',5);
+   end
+ outStem = costate_catalog_extremes_movies(cat_, fl);
      return;
 end
 if ~exist('filt','var'),    filt = struct(); end

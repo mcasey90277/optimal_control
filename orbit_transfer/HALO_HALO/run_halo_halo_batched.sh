@@ -20,20 +20,21 @@ HERE="$(cd "$(dirname "$0")" && pwd)"
 MATLAB=/Applications/MATLAB_R2025b.app/bin/matlab
 CATDIR="$HERE/direct/results/catalog"
 LOG="$CATDIR/combined_progress.txt"
-MLOG="$HERE/direct/results/hhcat_matlab.log"
+MLOG="$HERE/direct/results/hhcat_matlab_${STAGE}.log"
 PUMPKYN=/Users/msc/Desktop/proj7/external/pumpkynPie
 
 if [ "$STAGE" = "allB" ]; then MARKER="CATALOG B (L2->L1) ALL SHEETS COMPLETE"; else MARKER="CATALOG ALL SHEETS COMPLETE"; fi
 
 mkdir -p "$CATDIR"
-LOCK="$HERE/direct/results/.hhcat_driver.lock"
+LOCK="$HERE/direct/results/.hhcat_driver_${STAGE}.lock"
 if ! mkdir "$LOCK" 2>/dev/null; then
   echo "another halo-halo driver appears to be running (lock: $LOCK) -- exiting"
   exit 1
 fi
 trap 'rmdir "$LOCK" 2>/dev/null' EXIT
 
-count_lines() { echo $(( $(cat "$CATDIR"/hh*_progress.txt 2>/dev/null | wc -l) )); }
+if [ "$STAGE" = "allB" ]; then PFX="hhB_d"; else PFX="hh_d"; fi
+count_lines() { echo $(( $(cat "$CATDIR"/${PFX}*_progress.txt 2>/dev/null | wc -l) )); }
 
 echo "=== hhcat run started $(date) (stage $STAGE, $CELLS cells/batch, ${BSEC}s clean, ${KILL_AFTER}s kill)" >> "$LOG"
 dry=0

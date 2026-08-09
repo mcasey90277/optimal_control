@@ -65,8 +65,12 @@ if nargin == 0
     cat_ = L.(fn{1});
    fprintf('demo catalog: %s\n', F(1).name);
       sh = cat_.sheets(ceil(numel(cat_.sheets)/2));
-[eMin,eMax] = costate_catalog_extremes(cat_, ...
-                  struct('tauDRO',sh.tauDRO,'Np',sh.Np,'thrustN',5), true);
+   if isnan(sh.Np)
+       fl = struct('tauDRO',sh.tauDRO,'tauArr',sh.tau_arr,'thrustN',5);
+   else
+       fl = struct('tauDRO',sh.tauDRO,'Np',sh.Np,'thrustN',5);
+   end
+[eMin,eMax] = costate_catalog_extremes(cat_, fl, true);
      return;
 end
 if ~exist('filt','var') || isempty(filt), filt = struct(); end
@@ -88,7 +92,13 @@ assert(any(strncmpi(metric, {'deltaV','time'}, 1)), ...
 for ks = 1:numel(cat_.sheets)
     sh = cat_.sheets(ks);
     if isfield(filt,'tauDRO') && abs(sh.tauDRO - filt.tauDRO) > 1e-9, continue, end
-    if isfield(filt,'Np')     && sh.Np ~= filt.Np,                    continue, end
+    if isfield(filt,'Np')
+        assert(~isnan(sh.Np), 'costate_catalog_extremes:NpFilter', ...
+            'this catalog''s arrival family is not tulip: filter by .tauArr, not .Np');
+        if sh.Np ~= filt.Np, continue, end
+    end
+    if isfield(filt,'tauArr') && isfield(sh,'tau_arr') && ...
+       abs(sh.tau_arr - filt.tauArr) > 1e-9,                          continue, end
     for kr = 1:numel(cat_.rungs_N)
         TN = cat_.rungs_N(kr);
         if isfield(filt,'thrustN') && abs(TN - filt.thrustN) > 1e-9, continue, end
@@ -211,6 +221,7 @@ function s = filtstr(filt)
 s = '';
 if isfield(filt,'tauDRO'), s = [s sprintf(' tau=%.2f', filt.tauDRO)]; end
 if isfield(filt,'Np'),     s = [s sprintf(' Np=%d', filt.Np)]; end
+if isfield(filt,'tauArr'), s = [s sprintf(' arr tau=%.2f', filt.tauArr)]; end
 if isfield(filt,'thrustN'),s = [s sprintf(' %.2g N', filt.thrustN)]; end
 if isempty(s), s = ' over the WHOLE catalog';
 else, s = [' (restricted to' s ')'];

@@ -57,6 +57,21 @@ optimal_control/
 │   │                            #   theory note in doc/. Front door:
 │   │                            #   run_booster_landing (no args, ~5 min).
 │   │                            #   Campaign history: process/CAMPAIGN_LEDGER.md
+├── missiles/                    # HGV + ballistic-missile 3-DOF trajectory library
+│   │                            #   (2026-08-07..09). Modular +coorbital package:
+│   │                            #   eom/ prop/ atmos/ grav/ aero/ guide/ util/ viz/,
+│   │                            #   models injected as handles so the EOMs name none.
+│   │                            #   Entry scripts: HGV/run_glide, run_boost_glide,
+│   │                            #   run_target; BM/run_ballistic, run_ballistic_target.
+│   │                            #   TWO-AXIS TARGETING (aimSolve): launch azimuth
+│   │                            #   solved beside the range control, so a ROTATING
+│   │                            #   Earth and a BANKED arc both hit -- HGV 4.4 m,
+│   │                            #   BM 52.5 m, from 232 km and 463 km seed misses.
+│   │                            #   Validated vs Shuttle entry, Allen-Eggers, Sanger,
+│   │                            #   Keplerian range, US76. Docs: hgv_dynamics_note.tex
+│   │                            #   (43 pp math), software_design.tex (48 pp SDD),
+│   │                            #   closed_loop_guidance.md (PEG/VOA brief -- SPECIFIED,
+│   │                            #   NOT BUILT; that is the next milestone).
 ├── mpc/mpc_cart_pole/           # Model Predictive Control for cart-pole
 │   ├── mpc_cart_pole_demo.m     # MPC controller (N=50 horizon, 20Hz control)
 │   └── mpc_cart_pole_explained.tex  # Step-by-step code walkthrough

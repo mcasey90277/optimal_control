@@ -166,7 +166,7 @@ drag-on re-solve on top):
 
 - Design spec: `../docs/superpowers/specs/2026-08-08-booster-landing-design.md`
 - Implementation plan (task-by-task): `../docs/superpowers/plans/2026-08-08-booster-landing.md`
-- Per-task briefs/reports: `../.superpowers/sdd/2026-08-08-booster-landing/task-{1..12}-{brief,report}.md`
+- Per-task briefs/reports: `../booster_landing/process/task-{1..12}-{brief,report}.md`
 
 ## Adjudication summary (the two numbers a cold reader needs)
 

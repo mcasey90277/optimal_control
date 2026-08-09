@@ -1626,8 +1626,8 @@ G2ff & below-$\Tmin$ and above-$\etaT\Tmax$ fractions $<10^{-6}$ &
 The same reconstruction, densely sampled at $20N+1$ points: is it
 \emph{admissible} between samples? \\
 G3 & $|\Delta m_f| < 1.0\,$kg, $|\Delta t_f| < 0.2$\,s,
-$L_\infty$ trajectory difference $< 5.0$\,m --- all
-$\times$\,\texttt{tolScale}, all scored &
+$L_\infty$ position-trajectory difference $< 5.0$\,m (defined precisely
+below) --- all $\times$\,\texttt{tolScale}, all scored &
 Cross-method agreement between two independently formulated solvers \\
 G4 & gap $< 10^{-4}\etaT\Tmax/m_0$ &
 $\max_t\lvert\lVert u\rVert-\sigma\rvert$: is the convex relaxation tight? \\
@@ -1638,6 +1638,61 @@ PMP necessary conditions: bang--bang structure and primer-vector alignment \\
 \bottomrule
 \end{longtable}
 \end{center}
+
+\paragraph{G3's trajectory metric, exactly as implemented.} ``$L_\infty$
+trajectory difference'' is not self-defining when the two routes carry
+different grids, different node counts and slightly different final times,
+so here is the computation verbatim from \file{certify\_pdg.m}:
+
+\begin{verbatim}
+tq  = linspace(0, min(solC.tf, solV.tf), 200);
+rC  = interp1(solC.t.', solC.X(1:3,:).', tq.', 'pchip');
+rV  = interp1(solV.t.', solV.X(1:3,:).', tq.', 'pchip');
+rep.G3_traj_Linf = max(sqrt(sum((rC - rV).^2, 2)));
+\end{verbatim}
+
+Point by point, so it is reproducible without reading the source:
+
+\begin{center}
+\begin{tabular}{@{}lL{9.6cm}@{}}
+\toprule
+Aspect & As implemented \\
+\midrule
+State components & \textbf{Position only}, rows 1--3 of \texttt{X}.
+  Velocity and mass do not enter; $|\Delta m_f|$ is the separate mass row \\
+Pointwise norm & Euclidean 3-vector norm of the position difference at each
+  sample \\
+Reduction & $\max$ over samples --- so $L_\infty$ \emph{in time} of an
+  $\ell_2$-in-space difference \\
+Comparison clock & \textbf{Physical time in seconds}, not normalized time
+  and not a shared node index \\
+Sampling grid & 200 uniformly spaced times on
+  $[0,\ \min(t_f^{(C)}, t_f^{(V)})]$ --- a \emph{common} window, so the
+  longer solution's tail beyond $\min(t_f)$ is never sampled \\
+Interpolation & \texttt{pchip} for both routes, each onto its own
+  \emph{node} grid (\texttt{solC.t}, $N{+}1$ nodes;
+  \texttt{solV.t}, $N_{conv}$ nodes). Route A's midpoint controls
+  \texttt{Um} and \texttt{hs\_quad\_ctrl} are \emph{not} used --- this row
+  is a state comparison, not a control reconstruction \\
+Terminal states & Included only for whichever route owns
+  $\min(t_f)$; the other route is evaluated at that same clock time, at
+  which it has not yet landed. The two terminal states are therefore
+  \textbf{not} compared to each other --- $|\Delta t_f|$ is the row that
+  scores the endpoint disagreement \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\textbf{Consequences a maintainer should know.} The window truncation means
+G3's trajectory row cannot see a disagreement confined to the last
+$|\Delta t_f|$ of flight (measured $3.4$\,ms on the flagship, so this is
+small but not structurally bounded). The 200-sample grid is fixed and
+independent of $N$ and $N_{conv}$, so the row does not sharpen with mesh
+refinement --- deliberately, since it is dimensioned from the mission
+($5.0$\,m, a third of \texttt{P.pad\_radius}) rather than from the
+measurement. Changing any of the seven rows above changes what the gate
+means; the threshold is calibrated against \emph{this} definition, whose
+measured value at the production grid is $0.373$\,m.
 
 \paragraph{G2ff is the second half of G2, not a sixth gate.} Same
 reconstruction, different question: G2 asks whether the control \emph{flies}

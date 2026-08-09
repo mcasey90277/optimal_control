@@ -66,7 +66,7 @@ Separate the losslessness **theorem** from the **implemented** program.
   certifies `‖u‖ = σ` for the program that was actually solved**; (ii) the
   Taylor restriction is a **separately measured model error**, reported as
   G3.
-- Non-vacuity of Eq. (12)'s upper bound added by measurement: `max δz =
+- Non-vacuity of Eq. (11)'s (the Taylor band's) upper bound added by measurement: `max δz =
   0.034` on the flagship Route-B solution (measured this session).
 
 **Glideslope activity — checked in the `.mat` as instructed.** The margin
@@ -133,7 +133,7 @@ net-deceleration form and to the 88.6 m form.
 ### N5 (GPT #4) — APPLIED
 "Coast-extension" and "the free part of the deceleration" renamed and
 corrected. The paragraph is now **"The minimum-throttle-arc extension
-mechanism"** and opens by refusing the old framing: by Eq. (6) the engine is
+mechanism"** and opens by refusing the old framing: by Eq. (5) the engine is
 never off, so the vehicle is on a continuous `Tmin` burn and is spending
 propellant the whole time. What is free is **drag's incremental
 deceleration**. Wording corrected throughout the paragraph and in the
@@ -359,3 +359,144 @@ document), 0 failures.
 **MATLAB probes.** Three read-only `matlab -batch` probes, run synchronously
 against `results/booster_run.mat` and the source. Nothing in the repository
 was modified by a probe.
+
+---
+
+## 7. Micro-pass: controller rulings on the four logged residuals
+
+The four items logged in §5 as "deliberately NOT applied" were subsequently
+authorized by the controller as a final micro-pass. All four are now applied.
+Everything below was transcribed from source, not invented.
+
+### R1 — GPT #10: G3's `L∞` metric. Ruling: **document as-implemented, no interface change.** APPLIED
+
+`certify_pdg.m`'s G3 block reads, verbatim:
+
+```matlab
+tq  = linspace(0, min(solC.tf, solV.tf), 200);
+rC  = interp1(solC.t.', solC.X(1:3,:).', tq.', 'pchip');
+rV  = interp1(solV.t.', solV.X(1:3,:).', tq.', 'pchip');
+rep.G3_traj_Linf = max(sqrt(sum((rC - rV).^2, 2)));
+```
+
+That is now transcribed into the SDD's certification section as a new
+paragraph, **"G3's trajectory metric, exactly as implemented"**, carrying the
+code block plus a seven-row table answering each of GPT's questions:
+
+| aspect | as implemented |
+|---|---|
+| state components | **position only** (rows 1–3); velocity and mass do not enter |
+| pointwise norm | Euclidean 3-vector norm of the position difference |
+| reduction | `max` over samples — `L∞` **in time** of an `ℓ2`-in-space difference |
+| comparison clock | **physical time in seconds** (not normalized time, not a shared node index) |
+| sampling grid | **200** uniform samples on `[0, min(tf_C, tf_V)]` — a common window, so the longer solution's tail is never sampled |
+| interpolation | **`pchip`** for both routes, each onto its own **node** grid (`solC.t` = N+1 nodes, `solV.t` = Nconv nodes); Route A's `Um` / `hs_quad_ctrl` are **not** used |
+| terminal states | included only for whichever route owns `min(tf)`; the two terminal states are **not** compared to each other — `|Δtf|` is the row that scores endpoint disagreement |
+
+Two consequences a maintainer needs are stated with it: the window
+truncation means the row cannot see a disagreement confined to the last
+`|Δtf|` of flight (3.4 ms on the flagship), and the 200-sample grid is fixed
+and independent of `N`/`Nconv`, so the row deliberately does not sharpen
+under refinement — it is dimensioned from the mission (5.0 m = one third of
+`P.pad_radius`), not from the measurement. Measured value at the production
+grid: 0.373 m. The gates longtable row now says "position-trajectory
+difference … (defined precisely below)". **No code was changed.**
+
+### R2 — Route B's discretization in note §2.2. APPLIED
+
+New **Transcription** paragraph, transcribed from `solve_pdg_convex.m`
+(`solve_fixed_tf`, lines ~200–255):
+
+- `t = linspace(0, tf, Nc)` with `Nc = Nconv = 120` **uniform nodes**
+  (hence 119 intervals), spacing `h`;
+- **trapezoidal** on the linear dynamics — new displayed Eq. (12) giving the
+  three defect rows for `r`, `v`, `z` in the paper's own notation, matching
+  the source's `Rh/Vh/Z` updates;
+- decision variables `(r, v, z, u, σ)` **at nodes only** — no midpoint
+  variables, so `u` and `σ` are node values and the trapezoid rule treats
+  them as piecewise linear;
+- all convex constraints imposed **per node**: SOC `‖u_k‖ ≤ σ_k`, the Taylor
+  band, `σ_k ≥ 0`, the `z` bracket, the glideslope in homogeneous quadratic
+  form, `z_k ≥ 0`, and the pointing cone `u_z,k ≥ cos(θ_max)·σ_k` only when
+  `θ_max` is finite;
+- boundary conditions at first and last node; objective `min −z(tf)`;
+  CasADi + **IPOPT**.
+
+Two order facts are drawn out because §2.3 leans on them: Route B is
+**second** order against Route A's third-order Hermite–Simpson, and its
+control representation is **piecewise linear** against Route A's per-segment
+quadratic — so the two routes share no discretization order and no control
+basis, and the `Nconv` sweep is what rules out Route B's own trapezoid error.
+
+The golden-section outer loop's **validity-code gating** is also now
+described where the transcription is: codes 3/2 contribute `mf`, codes 1/0
+contribute `−∞`, and the note records that the shipped `tf_curve` contains
+exactly one such probe. Verified against the artifact:
+
+```
+tf_curve (14 rows): tf | mf | code
+   14.5836          -Inf  0     <-- the only invalid probe
+   15.6656    26037.9840  3
+   ... (11 more, codes 3 and 2) ...
+   19.1672    26249.2084  3
+Nconv = 120 ; numel(solV.t) = 120
+```
+
+so the search optimizes a `−∞`-substituted surrogate, not `m(tf)` — which is
+legitimate here only because the infeasible region is a **left** tail (too
+little time to arrest), and the note now says exactly that.
+
+### R3 — §4.2 "PMP mandates bang–bang with a bounded number of switches". APPLIED
+
+Softened to what is actually true, in three separated claims:
+
+- PMP gives the bang–bang **form** — because the Hamiltonian is linear in
+  thrust magnitude, the optimal magnitude sits on a bound wherever the
+  switching function is nonzero. **That is all it gives here.**
+- It does **not** say which bound comes first (scenario-dependent — the
+  content of §4.2).
+- It does **not** bound the switch **count**: a count bound is an additional
+  result requiring extra structure and is **not a theorem being invoked**.
+  That the count is one on this problem family is an **empirical and
+  structural observation** (Hamiltonian linear in the control, no singular
+  arc detected at any grid) and is **measured, not derived** — G5 reports
+  bound fraction 0.9917 and a single interior switch at every grid from
+  `N = 15` to `N = 240`.
+
+### R4 — `Cd·A` caveat on the 434.7 kg headline. APPLIED
+
+One paragraph inserted in §7.1 immediately after the headline sentence,
+where the number is first developed:
+
+> the 434.7 kg is conditional on the drag model of Eq. (2) — `Cd = 1.0`,
+> `A = 10.75 m²` (the body frontal area `π·1.85²`, with no base-drag,
+> plume-interaction or grid-fin contribution and no Mach or attitude
+> dependence), and an exponential atmosphere — and over this range the saving
+> scales roughly with the product `Cd·A`. The **mechanism**
+> (minimum-throttle-arc extension, switch moves later) is robust to that
+> coefficient; the **number** is model-dependent, and a retro-propulsive base
+> flow is exactly the regime in which an effective `Cd·A` is hardest to pin
+> down.
+
+This protects the result rather than weakening it: the finding that survives
+is the mechanism, which is what §4 predicts independently.
+
+### Micro-pass verification
+
+Both documents recompiled **twice**, exit 0, **0 `!` errors**, **0 undefined
+references or citations**. Aux cleaned.
+
+| document | pages before micro-pass | pages after |
+|---|---|---|
+| `booster_landing_note.pdf` | 29 | **30** |
+| `booster_landing_sdd.pdf` | 37 | **38** |
+
+`verify-paper` re-run on both and **still green**: note (`--deep-figs`) 10
+verified / 1 to review (the pre-existing `betts2010` no-DOI monograph) / **0
+failed** / 1 skipped, 4 figures OK, deep-figs OK; SDD 0 citations, 0 figures,
+**0 failed**.
+
+One additional read-only `matlab -batch` probe was run to verify `tf_curve`'s
+validity codes and `Nconv` before the Route-B paragraph asserted them.
+Nothing in the repository was modified by a probe, and **no source file was
+changed by this micro-pass** — all four items are documentation-only.

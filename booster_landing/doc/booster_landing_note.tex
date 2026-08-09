@@ -379,6 +379,57 @@ constraints --- and by convexity any local optimum is the global
 one~\cite{boyd2004}. That is the structural advantage this route buys in
 exchange for the approximation in \eqref{eq:taylor}.
 
+\paragraph{Transcription.}
+Route~B's discretization is deliberately \emph{unlike} Route~A's, which is
+what makes the comparison in \S\ref{sec:crossval} informative. At a fixed
+$t_f$ the horizon is divided by $N_{conv} = 120$ uniform nodes,
+$t = \mathrm{linspace}(0, t_f, N_{conv})$ with spacing $h$, and the linear
+dynamics \eqref{eq:linear} are enforced by the \emph{trapezoid} rule on each
+of the $N_{conv} - 1$ intervals,
+%
+\begin{equation}
+\rvec_{k+1} = \rvec_k + \tfrac{h}{2}(\vvec_k + \vvec_{k+1}),
+\quad
+\vvec_{k+1} = \vvec_k + \tfrac{h}{2}(2\gvec + \uvec_k + \uvec_{k+1}),
+\quad
+z_{k+1} = z_k - \tfrac{h}{2}\alpha(\sigma_k + \sigma_{k+1}) .
+\label{eq:trap}
+\end{equation}
+%
+The decision variables are $(\rvec, \vvec, z, \uvec, \sigma)$ at the nodes
+and nothing else --- there are no midpoint variables, so $\uvec$ and
+$\sigma$ enter as node values and the trapezoid rule treats them as
+piecewise linear. All of the convex constraints are imposed
+\emph{per node}: the second-order cone $\lVert\uvec_k\rVert \le \sigma_k$,
+the Taylor band \eqref{eq:taylor}, $\sigma_k \ge 0$, the $z$ bracket, the
+glideslope in its homogeneous quadratic form, $z_k \ge 0$, and (only when
+$\theta_{\max}$ is finite) the pointing cone $u_{z,k} \ge
+\cos\theta_{\max}\,\sigma_k$. The boundary conditions are imposed at the
+first and last node and the objective is $\min -z(t_f)$. The subproblem is
+built in CasADi and solved with IPOPT, exactly as Route~A is.
+
+Two order-of-accuracy facts follow and matter later. Route~B is
+\emph{second} order in $h$ against Route~A's third-order Hermite--Simpson,
+and Route~B's control representation is piecewise linear against Route~A's
+per-segment quadratic. The two routes therefore share no discretization
+order and no control basis, and \S\ref{sec:crossval}'s $N_{conv}$ sweep is
+what rules out Route~B's own trapezoid error as the source of the residual.
+
+The outer loop over $t_f$ is the golden-section search described under
+\emph{Free final time} below, and it is worth recording here how an
+infeasible probe enters it. Each probe returns a validity code: $3$ (tight
+relaxation, \texttt{Solve\_Succeeded}), $2$ (tight, acceptable-level
+convergence only), $1$ (converged but not tight), or $0$ (solver failed or
+threw). Codes $3$ and $2$ contribute $m_f$; codes $1$ and $0$ contribute
+$-\infty$. The shipped \texttt{tf\_curve} shows exactly one such probe --- the
+first, at $t_f = 14.5836$~s, code $0$, entered as $-\infty$; the other
+thirteen are codes $3$ and $2$ --- which means the function the search actually
+optimizes is a $-\infty$-substituted surrogate rather than $m(t_f)$ itself.
+Unimodality of the latter does not by itself license golden section on the
+former; it is legitimate here because the infeasible region is a \emph{left}
+tail --- too little time to arrest --- so the surrogate inherits
+unimodality.
+
 Conservatism has a directional consequence, which we return to in
 \S\ref{sec:crossval}: the convex problem is a \emph{restriction} of the
 true continuous-time problem, so its optimum is bounded above by the true
@@ -952,10 +1003,21 @@ unreachable under a minimum-first policy, forcing an initial braking arc to
 bleed energy before the coast. That is the Mars regime the classical results
 were derived for, where $\Tmin/mg$ can be well below one and a genuine coast
 exists. Here, with $\Tmin/(m_0 g_0) = 1.149$ and only $2000$~m of altitude
-to work with at $180$~m/s, the approach is not hot enough. Pontryagin's
-principle mandates bang--bang with a bounded number of switches when there
-is no singular arc; it does \emph{not} mandate which bound comes first, and
-that is scenario-dependent.
+to work with at $180$~m/s, the approach is not hot enough.
+
+It is worth being precise about how much of this Pontryagin's principle
+actually gives. Because the Hamiltonian is linear in the thrust magnitude,
+PMP gives the bang--bang \emph{form}: wherever the switching function is
+nonzero, the optimal magnitude sits on a bound of the annulus. That is all
+it gives here. It does \emph{not} say which bound comes first --- that is
+scenario-dependent, and is the whole content of this section. And it does
+not by itself \emph{bound the number of switches}: a switch-count bound is
+an additional result requiring extra structure, and is not a theorem being
+invoked here. That the count is \emph{one} on this problem family is an
+empirical and structural observation --- a Hamiltonian linear in the
+control, and no singular arc detected at any grid --- and it is
+\emph{measured}, not derived: gate G5 reports a bound fraction of $0.9917$
+and a single interior switch at every grid from $N = 15$ to $N = 240$.
 
 The gate was therefore changed to keep the requirement that is a physical
 necessity for \emph{any} landing burn --- maximum thrust at touchdown ---
@@ -1526,6 +1588,17 @@ shows it. Drag \emph{saves} $434.7$~kg of propellant --- $12.3\%$ of the vacuum
 budget --- while \emph{lengthening} the flight by $0.94$~s. The saving is
 unsurprising once stated (the atmosphere brakes for free); the lengthening
 looks wrong until the arc structure is examined.
+
+\emph{One caveat on the magnitude, stated up front.} The $434.7$~kg is
+conditional on the drag model of Eq.~\eqref{eq:drag} --- $C_d = 1.0$,
+$A = 10.75$~m$^2$ (the body frontal area $\pi\cdot 1.85^2$, with no
+base-drag, plume-interaction or grid-fin contribution and no Mach or
+attitude dependence), and an exponential atmosphere --- and over this range
+the saving scales roughly with the product $C_d A$. The
+\emph{mechanism} below (minimum-throttle-arc extension, switch moves later)
+is robust to that coefficient; the \emph{number} is model-dependent, and a
+retro-propulsive base flow is exactly the regime in which an effective
+$C_d A$ is hardest to pin down.
 
 \paragraph{The minimum-throttle-arc extension mechanism.}
 There is no coast here and the name matters: by Eq.~\eqref{eq:tw} the

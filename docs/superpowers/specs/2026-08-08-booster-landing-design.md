@@ -42,6 +42,15 @@ v̇ = g + T/m          g = [0; 0; -g0]
 - Thrust annulus (the famous nonconvex one): `0 < Tmin ≤ ‖T‖ ≤ Tmax`.
   Engine burns continuously — single burn, no on/off switching (classic PDG
   assumption; min-fuel throttle is then max–min–max bang-bang).
+  *(Adjudicated 2026-08-09: GUIDANCE solves against a de-rated ceiling
+  η_T·Tmax with η_T = 0.87 (P.etaT); the tracker and sim keep the full
+  [Tmin, Tmax]. The min-fuel optimum rides its thrust ceiling with ~2% net-
+  deceleration margin, so a −5% engine-thrust dispersion was unrecoverable
+  by any tracker around the un-de-rated nominal (67 m/s impact; a fixed-
+  reference tracker cannot re-time the braking point). η=0.93 was tried
+  first and still failed 3.3σ thrust cases; η=0.87 passes the full 7-case
+  dispersion battery with margin, for ≈82 kg (~1.9%) of the propellant
+  budget. This is the standard control-authority reserve of real PDG.)*
 - Glideslope cone: `‖r_xy‖ ≤ z / tan(γ_gs)` with γ_gs the minimum elevation
   angle above horizon (default 30°, adjustable).
 - Optional thrust-pointing cone: angle of T from vertical ≤ θ_max (default

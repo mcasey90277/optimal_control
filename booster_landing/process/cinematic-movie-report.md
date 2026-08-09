@@ -135,3 +135,48 @@ the bang-bang switch and `TOUCHDOWN <vtd> m/s` at the end.
 - The thrust tilt numbers above (21.3 deg at t = 0, 19.6 deg at
   touchdown) are also a genuine property of this solution that neither of
   the existing static plots shows.
+
+## Legged-landing cosmetic ease (2026-08-09)
+
+The drawn booster used to stay aligned with the true thrust vector all the
+way to touchdown, so it landed leaning at its true ~20 deg primer tilt --
+correct physics, but it reads wrong for a vehicle with landing legs.
+Added a second, purely cosmetic layer: below 60 m altitude the *drawn*
+body axis (cylinder + cap + engine-bay band + the reticle that tracks
+them) cosine-eases away from the true thrust direction toward
+world-vertical, landing exactly vertical at z = 0 and staying vertical
+through the touchdown hold and engine-cutoff ramp. The ease is keyed on
+`Rq(:,3)` (interpolated altitude), computed once as a vectorized `Ub`
+array alongside the existing `Uq` (true thrust direction) array, so
+`update_scene` now carries two unit vectors per frame: `uk` (true) and
+`ub` (drawn). Everything that is a physics readout keeps using `uk`,
+unmodified:
+
+- the plume (both cones) and the ground-wash glow -- true exhaust
+  direction, including the ground-clip length calculation (`dGnd`)
+- the `THRUST TILT` instrument -- `acosd(uk(3))`, still the true
+  commanded tilt (confirmed 19.8 deg at touchdown in the rendered
+  key frame, unchanged from the 19.6-19.8 deg range recorded above)
+
+Only the drawn cylinder/cap/band (`Rot = rot_to(ub)`) and the tracking
+reticle's center (now `rk + 0.5*bLen*ub`, so the ring stays visually
+centered on the vehicle it is annotating) use the eased vector. The
+on-screen footnote was updated to say so: "body axis drawn along the
+thrust vector; eased to vertical in the final meters for legged-landing
+realism (3-DOF model has no attitude state)".
+
+**Verification (PNG key frames read as images):**
+- **901 m / T+6.24 s** (near the SLAM switch, well above the 60 m ease
+  threshold): body drawn thrust-aligned as before, `THRUST TILT` reads
+  2.5 deg -- visually unchanged from pre-ease behavior, confirming the
+  ease does not activate at altitude.
+- **Touchdown, T+16.63 s / 0 m**: booster drawn perfectly vertical,
+  sitting on the pad reticle; `THRUST TILT` reads **19.8 deg**, the true
+  commanded value, undisturbed by the cosmetic ease -- exactly the
+  intended split between drawn attitude and instrumented truth.
+
+**Re-verified after the change:** `results/landing_cinematic.mp4`
+re-rendered via `README.md`'s documented invocation --
+1920x1080, 60.00 fps, 1844 frames, 30.733 s (VideoReader), matching the
+original render byte-for-byte in every measured property. `tests/
+test_viz_smoke.m` (which includes the cinematic block) re-run and PASSES.

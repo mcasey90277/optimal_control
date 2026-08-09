@@ -27,6 +27,17 @@ function movie_landing_cinematic(out, sol, P, outfile, opts)
 %   simulation output; no attitude dynamics, rate limit or gimbal limit is
 %   implied or checked. The overlay says so in small print.
 %
+%   Below 60 m altitude the DRAWN axis is cosine-eased away from the
+%   thrust direction toward world-vertical, reaching exactly vertical at
+%   z=0 and staying vertical through the touchdown hold -- a legged
+%   vehicle sits on its landing legs, not leaning at its true ~20 deg
+%   primer tilt. This is a second, purely cosmetic layer on top of the
+%   already-cosmetic thrust-aligned convention above, and it touches ONLY
+%   the drawn cylinder/cap/band and the reticle that tracks it. The PLUME
+%   (true exhaust physics) and the THRUST TILT instrument both keep using
+%   the TRUE thrust direction, unmodified -- see update_scene, which keeps
+%   uk (true) and ub (drawn) as separate vectors.
+%
 % SCALE
 %   The booster is drawn at TRUE scale by default (opts.boosterScale = 1:
 %   P.boosterDiam-ish 3.7 m x 45 m, the Falcon-9 first stage). At the top
@@ -181,6 +192,17 @@ spdq = sqrt(sum(Vq.^2, 2));
 Tn   = sqrt(sum(Tq.^2, 2));
 Uq   = Tq ./ max(Tn, 1e-9);
 Uq(Tn < 1e-9, :) = repmat([0 0 1], nnz(Tn < 1e-9), 1);
+
+% Drawn (cosmetic) body axis: identical to Uq above 60 m altitude, then
+% cosine-eased toward world-vertical, exactly vertical at z=0. This is the
+% ONLY vector that feeds the drawn cylinder/cap/band and the tracking
+% reticle; the plume and the THRUST TILT readout keep using Uq (the true
+% thrust direction) untouched -- see the BODY-AXIS CONVENTION note above.
+zEaseBody = 60;                                    % [m] ease-start altitude
+sBody = min(max(1 - Rq(:,3)/zEaseBody, 0), 1);     % 0 above zEaseBody, 1 at z<=0
+eBody = 0.5 * (1 - cos(pi*sBody));                 % cosine ease 0 -> 1
+Ub    = Uq + (repmat([0 0 1], nFly, 1) - Uq) .* eBody;
+Ub    = Ub ./ max(sqrt(sum(Ub.^2, 2)), 1e-9);
 
 %% ---------------- Camera path (precomputed, no autoscale jitter) ------
 % Wide establishing shot easing to a low pad-side angle. The target rides
@@ -423,7 +445,8 @@ hSlow  = text(axO, 0.978, 0.925, '0.25x', 'Color', col.warn, 'FontSize',20, ...
 hEvent = text(axO, 0.270, 0.470, '', 'Color', col.accent, 'FontSize',64, ...
               'FontWeight','bold', 'FontName','Helvetica', ...
               'HorizontalAlignment','center', 'Visible','off');
-noteStr = 'body axis drawn along the thrust vector (3-DOF model has no attitude state)';
+noteStr = ['body axis drawn along the thrust vector; eased to vertical in the final ' ...
+    'meters for legged-landing realism (3-DOF model has no attitude state)'];
 if sc ~= 1
     noteStr = sprintf('booster drawn at %.3gx scale  |  %s', sc, noteStr);
 end
@@ -488,8 +511,11 @@ close(fig);
         % kk   - frame index into the per-frame flight arrays
         % pMul - plume scale (1 in flight, ramped to 0 through the hold)
         rk = Rq(kk,:).';   uk = Uq(kk,:).';   thk = thq(kk);
-        % --- body: rotate unit cylinder [0;0;1] -> uk, base at rk
-        Rot = rot_to(uk);
+        ub = Ub(kk,:).';   % drawn (cosmetic) body axis -- see Ub comment above
+        % --- body: rotate unit cylinder [0;0;1] -> ub (drawn axis, eased to
+        % vertical near the ground), base at rk. The plume below stays on uk
+        % (true thrust direction) -- the fiction stops at the airframe.
+        Rot = rot_to(ub);
         [bx, by, bz] = xform(Rot, rk, cylX*(bDiam/2), cylY*(bDiam/2), cylZ*bLen);
         set(hBody, 'XData',bx, 'YData',by, 'ZData',bz);
         [cx, cy, cz] = xform(Rot, rk, capX*(bDiam/2), capY*(bDiam/2), capZ*bLen);
@@ -555,7 +581,7 @@ close(fig);
             cdir = camT(kk,:).' - camP(kk,:).';   cdir = cdir / norm(cdir);
             e1 = cross(cdir, [0;0;1]);            e1 = e1 / max(norm(e1), 1e-9);
             e2 = cross(e1, cdir);
-            ctr = rk + 0.5*bLen*uk;
+            ctr = rk + 0.5*bLen*ub;   % track the DRAWN body, not the thrust vector
             rRet = 0.055 * vh;
             ring = ctr + rRet*(e1*cos(retTh) + e2*sin(retTh));
             tick = [];
@@ -577,7 +603,7 @@ close(fig);
                      'Color', col.accent + (col.hot - col.accent)*wHot);
         set(hAlt, 'String', sprintf('%6.0f m', max(Rq(kk,3),0)));
         set(hSpd, 'String', sprintf('%6.1f m/s', spdq(kk)));
-        set(hTlt, 'String', sprintf('%5.1f deg', acosd(min(max(uk(3),-1),1))));
+        set(hTlt, 'String', sprintf('%5.1f deg', acosd(min(max(uk(3),-1),1))));  % TRUE tilt (uk), never ub
         pf = max(min((Mq(kk) - P.mdry) / (P.m0 - P.mdry), 1), 0);
         set(hPrpFill, 'Position', [pX0 pY0 max((pX1-pX0)*pf,1e-6) pY1-pY0]);
         set(hPrpVal, 'String', sprintf('%5.0f kg remaining   (%4.0f kg burned)', ...

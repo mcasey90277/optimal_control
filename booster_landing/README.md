@@ -158,9 +158,12 @@ knowing before showing it to anyone:
 - The booster is drawn at **true scale** (3.7 m x 45 m) and its body axis
   is drawn **along the commanded thrust vector**, because the model is
   3-DOF and has no attitude state. The visible lean is therefore real —
-  the primer direction runs up to ~21 deg off vertical at both ends of
-  the burn — and the strip carries a live `THRUST TILT` readout so that
-  reads as data rather than as a rendering error.
+  the primer direction runs up to ~21 deg off vertical — and the strip
+  carries a live `THRUST TILT` readout so that reads as data rather than
+  as a rendering error. Below 60 m altitude the *drawn* axis only is
+  cosine-eased to world-vertical (exactly vertical at touchdown, legged-
+  landing realism); the plume and the `THRUST TILT` readout keep showing
+  the true thrust direction the whole time, unaffected by that ease.
 - `opts.stills` (playback times, in seconds) writes PNG key frames
   instead of a video — the fast way to check composition, and how the
   poster frames for this movie were made.

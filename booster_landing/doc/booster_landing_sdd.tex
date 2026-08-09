@@ -37,6 +37,20 @@ The \texttt{booster\_landing} Powered-Descent Guidance Campaign}
 \begin{document}
 \maketitle
 
+\begin{center}
+\fbox{\parbox{0.86\textwidth}{\small\textbf{As-built stamp.} This document
+describes the campaign at commit \texttt{77bf8e9} (2026-08-09), against the
+shipped \file{results/booster\_run.mat} of \textbf{09-Aug-2026 12:56:25} ---
+a full \texttt{cfg.phase2 = true} run, so the file carries the complete
+schema of \S\ref{sec:data}. Every measured number quoted below was read
+from that artifact or from the source at that commit. \emph{Refresh trigger:}
+re-stamp this box, and re-check \S\ref{sec:data}'s variable list and the
+flagship numbers in \S\ref{sec:tests:flagship}, after any run that replaces
+\file{booster\_run.mat}.}}
+\end{center}
+
+\vspace{0.6em}
+
 \begin{abstract}
 This is the software-as-built description of the \file{booster\_landing}
 campaign: a 3-DOF minimum-fuel powered-descent guidance (PDG) problem solved
@@ -202,8 +216,9 @@ not interface) \\
 \end{tabular}
 \end{center}
 
-Seventeen \texttt{.m} files ship: 1 front door, 1 path bootstrap, 8
-library, 2 certification, 4 visualization, plus the 11 test scripts.
+Sixteen \texttt{.m} files ship as production modules --- 1 front door,
+1 path bootstrap, 8 library, 2 certification, 4 visualization --- plus the
+11 test scripts, \textbf{27 \texttt{.m} files in all}.
 
 \subsection{Execution model}
 
@@ -379,8 +394,13 @@ touching down. A small legs-absorbed descent rate (inside the
 See \noteS{The singular terminal boundary condition}. \\
 G3 $|\Delta m_f| < 1.0$\,kg & \file{certify/certify\_pdg.m} &
 Reclassified from an agreement tolerance (0.1\,kg) to a \emph{measurement}
-threshold over the convex route's Taylor mass-bound model error
-($0.70$--$0.94$\,kg, non-shrinking under refinement). See
+threshold over the convex route's Taylor mass-bound model error. Measured
+mid-campaign: \textbf{$0.70$--$0.94$\,kg} over every refinement tried
+(the envelope, including the tightened golden-search $t_f$ reselection at
+\texttt{tolTf}=0.01), of which $0.73$--$0.74$\,kg is the fixed-$t_f$
+subset at $N_{conv} = 120/180/240$ --- non-shrinking either way. The
+flagship value, $0.428$\,kg, is the same quantity at the shipped
+$\etaT = 0.87$. See
 \noteS{Cross-validation, and what the residual is}. \\
 min--max, not max--min--max & \file{certify/certify\_pdg.m} (G5
 \texttt{structOk}) &
@@ -526,26 +546,42 @@ $a_D = -\tfrac12\rho(z)C_dA\lVert v\rVert v/m$ evaluated only when
 \paragraph{Invariants.}
 \begin{itemize}
 \item \textbf{Complex-step safe.} All magnitudes are computed as
-\texttt{sqrt(sum(.\^{}2) + 1e-12)}. No \texttt{norm}, \texttt{abs} or
+\texttt{sqrt(sum(.\^{}2) + magEps)} with \texttt{magEps = 1e-12}. No
+\texttt{norm}, \texttt{abs} or
 \texttt{max} appears anywhere in this file, because
 \file{tests/test\_dynamics\_jac.m} perturbs it with $h = 10^{-30}i$ and
 compares $\mathrm{Im}(f)/h$ against
 \texttt{A} and \texttt{B} to $10^{-12}$ relative. Introducing
 \texttt{norm()} here breaks that test silently in the sense that it will
 fail for a reason unrelated to the mathematics.
-\item \textbf{Division guards (2026-08-09).} The $+10^{-12}$ under both
-square roots is a guard, added after an external review, and it is what
-makes the previous bullet's ``no \texttt{max()}'' constraint compatible
-with being defined at the singular points. The raw forms divide by
-$\lVert v\rVert$ (drag Jacobian block $vv^\top/\lVert v\rVert$) and by
-$\lVert T\rVert$ (mass row of $B$), both $0/0$ at zero. Neither is
-hypothetical: \texttt{sim\_closed\_loop}'s arrest mode passes through
-$v_z=0$ by construction, and \texttt{tvlqr\_design} asks this function for
-$A$ and $B$ along the whole trajectory. The smoothed forms have the correct
+\item \textbf{Division guards (2026-08-09).} The $+10^{-12}$
+(\texttt{magEps} in the file) under both square roots is a guard, added
+after an external review, and it is what makes the previous bullet's ``no
+\texttt{max()}'' constraint compatible with being defined at the singular
+points. The raw forms divide by $\lVert v\rVert$ (drag Jacobian block
+$vv^\top/\lVert v\rVert$) and by $\lVert T\rVert$ (mass row of $B$), both
+$0/0$ at zero.
+
+The two guards have \emph{different} justifications, and only one of the
+two singular points is reachable in flight. For $v$ it is operational:
+\texttt{sim\_closed\_loop}'s arrest event is $v_z = 0$ by construction, so
+the velocity magnitude really does pass through (near) zero, and
+\texttt{tvlqr\_design} asks this function for $A$ and $B$ along the whole
+trajectory. For $T$ it is \emph{formal} smoothness only --- the control
+constraints hold $\lVert T\rVert \ge \Tmin = 338.0$\,kN at all times, so
+$\lVert T\rVert = 0$ is not a state this campaign can reach; the guard is
+there so the expression and its symbolic derivatives are defined and
+smooth everywhere on principle, matching the CasADi twin, rather than to
+rescue a real evaluation. \emph{Do not} justify it by claiming a zero-thrust
+state occurs.
+
+The smoothed forms have the correct
 limits (both tend to zero), the analytic Jacobians remain \emph{exact}
 derivatives of the smoothed $\dot x$ so complex-step still validates them
-to machine precision, and the same $10^{-12}$ has always been in the
-CasADi twin --- so the two implementations now smooth identically.
+to machine precision, and the same $10^{-12}$ is in the
+CasADi twin (\file{solve\_pdg\_colloc.m}, \texttt{sqrt(sum(T.\^{}2) +
+1e-12)} and the drag equivalent) --- so \textbf{both implementations use
+\texttt{sqrt(sum(.\^{}2) + 1e-12)} and smooth identically}.
 $\lVert T\rVert \sim 10^5$\,N and $\lVert v\rVert \sim 10^2$\,m/s here,
 making the guard $\sim10^{-22}$ relative: invisible away from the singular
 point.
@@ -1429,6 +1465,19 @@ Phase-1 final, Phase-2 checkpoint, Phase-2 final), each time as a full
 overwrite with \texttt{R.when} refreshed. A consumer that opens it while a
 campaign is running may therefore see a Phase-1-only schema.
 
+\textbf{The shipped artifact.} The \file{results/booster\_run.mat} this
+document and the theory note are written against is a completed
+\texttt{cfg.phase2 = true}, \texttt{cfg.doMC = true} run of
+09-Aug-2026 12:56:25, so all thirteen variables above are present:
+\texttt{P}, \texttt{Pd}, \texttt{ctrl}, \texttt{ctrlD}, \texttt{mc},
+\texttt{mcD}, \texttt{out0}, \texttt{rep}, \texttt{repD}, \texttt{solC},
+\texttt{solD}, \texttt{solV}, \texttt{when} (verified by
+\texttt{fieldnames} on the loaded struct). An earlier shipped copy predated
+\texttt{.ctrlD}/\texttt{.Pd}; that is closed. Because the schema is
+conditional, a consumer should still test \texttt{isfield} rather than
+assume, and this paragraph is what the as-built stamp's refresh trigger
+points at.
+
 Sub-struct schemas are documented at their producers:
 \texttt{solC}/\texttt{solD} at \S\ref{sec:mod:colloc}, \texttt{solV} at
 \S\ref{sec:mod:convex}, \texttt{rep}/\texttt{repD} at \S\ref{sec:certify},
@@ -1656,10 +1705,16 @@ vacuum, $10^{-11}$ drag). The gate carries four orders of margin over every
 shipped configuration, tolerates three orders of convergence degradation,
 and still fails an unconverged solve.
 
-\emph{Cone}: with a finite pointing cone the primer condition is simply not
-a necessary condition of the constrained problem. The optimal thrust rides
-the cone boundary (the KKT projection of the unconstrained direction), so
-$T$ is not parallel to $\lambda_v$ by design. Measured at
+\emph{Cone}: with a finite pointing cone the primer condition is no longer
+a necessary condition of the constrained problem. Note the conditionality:
+a finite cone can be \emph{inactive}, and while it is, the unconstrained
+primer law still holds. \textbf{When the cone constraint is active}, the
+constrained optimum lies on its boundary (the KKT projection of the
+unconstrained direction), and $T$ is then not parallel to $\lambda_v$ ---
+by design, not by bug. The software policy is deliberately more
+conservative than that: it leaves the primer row unscored \emph{whenever}
+the cone is finite, because nothing tells the gate in advance at which
+instants the cone binds. Measured at
 $\theta_{\max}=15^\circ$: both solvers independently bind the cone at
 $\approx15.000^\circ$ (agreeing to $\sim4\times10^{-3}$ deg --- itself a
 strong structural cross-check), while the primer angle reads $7.32^\circ$ on
@@ -1864,9 +1919,11 @@ is 100\% over a 50-run probe.
 
 \textbf{$N=40$ (the certification floor), and why that floor no longer
 exists.} G5's primer-alignment angle used to be a function of mesh
-resolution in vacuum --- $\approx1.7^\circ$ at $N=20$, $1.19^\circ$ at
-$N=30$, $0.92^\circ$ at $N=40$, $0.57^\circ$ at $N=60$ against a $1^\circ$
-gate --- so $N=40$ was chosen as the smallest grid on which all gates passed
+resolution in vacuum --- $1.72^\circ$ at $N=20$, $1.14^\circ$ at
+$N=30$, $0.85^\circ$ at $N=40$, $0.57^\circ$ at $N=60$ against a $1^\circ$
+gate (the same four values as \S\ref{sec:certify}, from
+\texttt{certify\_pdg.m}'s measurement table) --- so $N=40$ was chosen as
+the smallest grid on which all gates passed
 \emph{honestly} rather than by a loosened threshold, and it is the grid both
 \file{test\_certify\_nominal.m}'s first block and
 \file{test\_run\_front\_door.m} use. That grid dependence was the $O(h)$
@@ -1881,18 +1938,17 @@ never a \texttt{tolScale} question --- the primer check has never been in
 
 \textbf{$N=60$ (production).} \file{test\_closed\_loop\_nominal.m} was moved
 to the production grid deliberately, and the reason is the campaign's
-sharpest methodological lesson. At $N=30$, the pre-fix
-\texttt{hs\_quad\_ctrl} reconstruction dipped up to 18\% below $\Tmin$ over
-11.7\% of the flight \emph{between} nodes and midpoints --- invisible to
-every gate that existed at the time. The simulator's saturating clamp turned
-that into a real, grid-resolution-dependent open-loop altitude bias of
-$+0.6$ to $1$\,m, and \emph{two full rounds of TVLQR weight tuning were
-spent fighting a feedforward defect that was an artifact of the test grid}.
-The conclusion recorded in the ledger was that the ``structural tension''
-those rounds diagnosed did not exist. Two changes followed: the
-reconstruction is now annulus-feasible by construction at any grid, gate
-G2ff was added so the same class of bug cannot hide again, and closed-loop
-testing uses the grid the shipped defaults are actually tuned against.
+sharpest methodological lesson. The pre-fix \texttt{hs\_quad\_ctrl}
+reconstruction was inadmissible \emph{between} samples in a
+grid-resolution-dependent way (the mechanism and its measurements are at
+\S\ref{sec:mod:hs}), and at $N=30$ the simulator's saturating clamp turned
+that into a real open-loop altitude bias --- so \emph{two full rounds of
+TVLQR weight tuning were spent fighting a feedforward defect that was an
+artifact of the test grid}. The ``structural tension'' those rounds
+diagnosed did not exist. Three changes followed: the reconstruction is now
+annulus-feasible by construction at any grid, gate G2ff was added so the
+same class of bug cannot hide again, and closed-loop testing uses the grid
+the shipped defaults are actually tuned against.
 
 The general rule: \textbf{a coarse grid is legitimate for a property that is
 grid-independent and illegitimate for one that is not, and deciding which is
@@ -1976,11 +2032,13 @@ being intact. Loop variables here are \texttt{k}, \texttt{kk},
 \texttt{krun}, \texttt{kb}, \texttt{kx}, \texttt{r}.
 
 \item[Complex-step-safe dynamics.] \file{pdg\_dynamics.m} uses only
-\texttt{sqrt(sum(.\^{}2))} for magnitudes --- no \texttt{norm}, no
+\texttt{sqrt(sum(.\^{}2) + 1e-12)} for magnitudes --- no \texttt{norm}, no
 \texttt{abs}, no \texttt{max} --- so that complex-step differentiation
-validates its analytic Jacobians (\S\ref{sec:mod:dyn}). The CasADi RHS in
-\file{solve\_pdg\_colloc.m} instead adds a $10^{-12}$ regularizer under the
-square roots for symbolic smoothness at zero.
+validates its analytic Jacobians (\S\ref{sec:mod:dyn}). \textbf{Both}
+implementations of the dynamics use that same $10^{-12}$ regularizer: the
+CasADi RHS in \file{solve\_pdg\_colloc.m} always did, and
+\file{pdg\_dynamics.m} was brought into line on 2026-08-09, so the two
+smooth identically. Justification and limits are at \S\ref{sec:mod:dyn}.
 
 \item[Synchronous \texttt{-batch} discipline.] Runs are launched as a single
 foreground \texttt{-batch} call and waited on. The campaign lost time to two
@@ -2039,15 +2097,12 @@ channel the tracker leans on hardest during the margin arc.
 
 \subsection{\texttt{annulus\_switch}: first crossing only}
 
-The phase-schedule switch detector finds the \emph{first upward} mid-annulus
-crossing. On a max--min--max profile that is the second switch, and phase A
-would wrongly cover the leading $\Tmax$ arc. Drag could produce such a
-profile. The fix is to detect the \emph{last} upward crossing, or to build a
-per-arc schedule, and it becomes mandatory the moment G5 certifies more than
-one interior switch. The no-switch fallback ($t_s = -10\,t_{Blend}$) is
-conservative --- as of 2026-08-09; at its previous value of $0$ it was not,
-see \S\ref{sec:mod:tvlqr}. This is a live TODO in
-\file{lib/tvlqr\_design.m}.
+A live TODO in \file{lib/tvlqr\_design.m}, documented in full at
+\S\ref{sec:mod:tvlqr}: the phase-schedule switch detector finds the
+\emph{first upward} mid-annulus crossing, which on a max--min--max profile
+(which drag could produce) is the second switch. The fix is the \emph{last}
+upward crossing or a per-arc schedule, and it becomes mandatory the moment
+G5 certifies more than one interior switch.
 
 \subsection{G1's absolute-SI tolerance}
 \label{sec:extend:g1tol}
@@ -2104,9 +2159,9 @@ guidance law that re-solves in flight can, and the measured solve times
 (well under a second at $N=60$) suggest that is within reach.
 
 \item \textbf{IPOPT on an SOCP.} Route B's subproblems are second-order
-cone programs solved with a general nonlinear interior-point method. A
-dedicated conic solver is a documented drop-in and was deliberately not made
-a dependency.
+cone programs solved with a general nonlinear interior-point method
+(\S\ref{sec:mod:convex}); a dedicated conic solver is a documented drop-in,
+deliberately not made a dependency.
 
 \item \textbf{Costate recovery beyond alignment.} G5's primer check exploits
 the one place in the transcription where a defect dual and a control satisfy
@@ -2141,94 +2196,34 @@ threshold on \texttt{success\_rate} that anything enforces.
 \end{itemize}
 
 %==============================================================
-\section{Documented code-versus-documentation discrepancies}
+\section{Code-versus-documentation discrepancies: where the ledger lives}
 \label{sec:discrepancies}
 
-These were found while transcribing interfaces for this document. In each
-case the \emph{code} is what \S\ref{sec:modules} documents; the discrepancy
-is recorded here rather than silently resolved. None changed a certified
-number.
+This document is an \emph{as-built} description, not a changelog, so the
+per-item ledger that used to live here has been retired into the process
+archive. For the record: transcribing the interfaces for this SDD turned up
+nine places where a source header, the README or a code comment disagreed
+with the code. In every case the \emph{code} is what \S\ref{sec:modules}
+documents, none changed a certified number, and eight of the nine were
+corrected in code on 2026-08-09 in the same pass that applied an external
+code review. Two of them were substantive enough to have changed the
+software and are documented at the point where they now matter ---
+\file{certify\_pdg.m}'s ``never throws'' contract, which became gate~G0
+(\S\ref{sec:certify:g0}), and \file{plot\_pdg\_solution.m}'s
+``max--min--max'' label, which the certified min--max structure
+(\S\ref{sec:params:adj}) overturned. The ninth, a shipped
+\file{booster\_run.mat} that predated \texttt{.ctrlD}/\texttt{.Pd}, was
+closed by the full \texttt{phase2 = true} run recorded in the as-built stamp
+above; the file now carries the complete \S\ref{sec:data} schema.
 
-Eight of the nine were \textbf{corrected in code on 2026-08-09}, in the same
-pass that applied an external code review (\file{process/external-review-\allowbreak
-fixes-report.md}); each is marked \textsc{fixed} below and its entry now
-describes what was wrong and what it says instead. They are kept rather than
-deleted because the list is also a record of how this document was used.
-
-\begin{enumerate}
-
-\item \textsc{fixed.} \textbf{\file{run\_booster\_landing.m} header listed
-\texttt{.mc} unconditionally.} The \texttt{OUTPUTS} line read
-``\texttt{R - everything: .P .solC .solV .rep .ctrl .out0 .mc .when}'',
-while the code gates \texttt{R.mc} behind \texttt{cfg.doMC}. The README was
-corrected on this point; the function header was not. The header now states
-the \texttt{cfg.doMC} condition, matching how it already documented
-\texttt{.mcD}.
-
-\item \textsc{fixed.} \textbf{\file{certify\_pdg.m} said it ``never
-throws''.} The header stated ``This function is report-only and never
-throws'' while the file contained two time-base consistency assertions. The
-external review made the same finding independently and pushed further:
-throwing on a malformed \texttt{solC} destroys the report for \emph{all}
-gates in exactly the case a report is most wanted. The assertions are now
-gate G0 (\S\ref{sec:certify:g0}), with their messages preserved in
-\texttt{rep.G0\_msg}, and the contract is true as written.
-
-\item \textsc{fixed.} \textbf{\file{plot\_pdg\_solution.m} called panel (b)
-``the max--min--max money plot''.} The certified structure for these
-boundary conditions is \emph{min--max} --- a single $\Tmin\!\to\!\Tmax$
-switch --- a finding significant enough that the theory note devotes a
-section to it and G5's structure check was rewritten around it. The header
-comment predated that finding and now reads min--max, with a note recording
-the correction.
-
-\item \textsc{fixed.} \textbf{\file{movie\_landing.m}'s \texttt{sol}
-argument is unused.} The header documented it as ``\texttt{.tf} used for the
-throttle panel's x-axis extent only''; the body sets that axis from
-\texttt{out.t(end)} --- the closed-loop duration, which is the right choice
-for a movie of the closed-loop run --- and never dereferences \texttt{sol}.
-The argument is third of five and positional, so dropping it would silently
-re-bind \texttt{outfile}/\texttt{opts} in every caller. The header now says
-it is unused and says why it is kept.
-
-\item \textsc{fixed.} \textbf{\file{solve\_pdg\_colloc.m}'s \texttt{INPUTS}
-line said \texttt{.tol [def 1e-9]}.} The actual default is $10^{-11}$ when
-\texttt{P.drag.on}. The same line cross-referenced the adaptation note that
-explains this, so it was a stale summary rather than a missing explanation;
-it now states both defaults.
-
-\item \textbf{The shipped \file{results/booster\_run.mat} predates
-\texttt{.ctrlD}/\texttt{.Pd}.} Its top-level variables are \texttt{P},
-\texttt{ctrl}, \texttt{mc}, \texttt{mcD}, \texttt{out0}, \texttt{rep},
-\texttt{repD}, \texttt{solC}, \texttt{solD}, \texttt{solV}, \texttt{when}
---- no \texttt{ctrlD}, no \texttt{Pd}. The front door's own comment
-acknowledges this (``populates on the next full run''). The schema in
-\S\ref{sec:data} documents the code, which is what a fresh run will produce.
-
-\item \textsc{fixed.} \textbf{README described the test bootstrap as
-\texttt{addpath('..'); setup\_paths;}.} The tests actually use
-\texttt{addpath(fullfile(fileparts(mfilename('fullpath')), '..'))}, which is
-cwd-independent; the literal README form is not. A simplification in prose,
-not a defect, but the literal form should not be copied into a new test ---
-which the README now says explicitly, alongside the real form in its folder
-map.
-
-\item \textsc{fixed.} \textbf{\file{test\_monte\_carlo\_small.m} pointed at
-a probe that does not exist in code.} Its header said ``see
-\texttt{run\_monte\_carlo.m}'s own probe at \texttt{N=P.N} for that (task-8
-report, 50-run production-grid result)''. The 50-run production-grid probe
-is a one-off run recorded in the task-8 report; \file{run\_monte\_carlo.m}
-contains no such probe. The header now points at the report and the
-README's flagship table.
-
-\item \textsc{fixed.} \textbf{README's folder-map row for \file{results/}
-listed \texttt{phase2\_footprint.png} as a product of ``a \texttt{cfg.phase2}
-run''} without repeating the \texttt{cfg.doMC} condition, which the same
-README states correctly in its \texttt{cfg} listing above. The code requires
-both, and the folder map now says so (as it now does for
-\texttt{footprint.png}, which is under the same gate).
-
-\end{enumerate}
+The item-by-item ledger, with the wording of each header before and after,
+is in \file{process/final-fix-report.md} and
+\file{process/external-review-fixes-report.md}; the review findings that
+drove them are in \file{process/external-review-gpt56terra.md},
+\file{process/external-review-gemini31pro.md}, and for the document review
+of 2026-08-09, \file{process/docreview-\{gpt56terra,gemini31pro,host-\allowbreak
+claude\}.md} with dispositions in \file{process/docreview-fixes-report.md}.
+Those files are the archive. This section is the pointer to it.
 
 %==============================================================
 \section*{Related documents}

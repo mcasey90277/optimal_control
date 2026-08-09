@@ -105,9 +105,17 @@ where $\mathbf{w}$ is the wind. The guidance solves with $\mathbf{w} =
 model (Table~\ref{tab:dispersions}), which is the honest split --- the
 guidance does not know the wind.
 %
-Magnitudes are written as $\sqrt{\sum(\cdot)^2}$ rather than
-\texttt{norm}/\texttt{abs} throughout the implementation so that the
-dynamics function stays complex-step differentiable; analytic Jacobians
+Magnitudes are written as $\sqrt{\sum(\cdot)^2 + \varepsilon}$ with
+$\varepsilon = 10^{-12}$, rather than as \texttt{norm}/\texttt{abs},
+throughout the implementation, so that the dynamics function stays
+complex-step differentiable and stays defined at $\lVert\vvec\rVert = 0$
+and $\lVert\Tvec\rVert = 0$ without a \texttt{max} guard. Both
+implementations of the dynamics --- the plain-MATLAB
+\texttt{pdg\_dynamics} and the symbolic CasADi twin inside
+\texttt{solve\_pdg\_colloc} --- use the same $\varepsilon$, so they smooth
+identically. It is invisible in flight: $\lVert\Tvec\rVert \sim 10^5$~N and
+$\lVert\vvec\rVert \sim 10^2$~m/s here, making the guard $\sim10^{-22}$
+relative. Analytic Jacobians
 $A = \partial \dot{x}/\partial x$ and $B = \partial \dot{x} / \partial
 \Tvec$ are returned alongside $\dot x$ and are used by the tracker of
 Section~\ref{sec:tracking}.
@@ -139,8 +147,14 @@ singularity, and Section~\ref{sec:singular} explains it.
 
 \subsection{Parameters}
 
-Table~\ref{tab:params} is the complete parameter set; every number in this
-note follows from it plus the two solvers.
+Table~\ref{tab:params} is the complete \emph{physical and PDG} parameter
+set --- vehicle, boundary conditions, path constraints, discretization,
+mission criteria and atmosphere --- and every trajectory number in this note
+follows from it plus the two solvers. The remaining configuration lives in
+three other tables and is cross-referenced where it is used: the
+Monte-Carlo dispersions and seed (Table~\ref{tab:dispersions}), the tracker
+weights and schedule (\S\ref{sec:pole}, \S\ref{sec:battery}), and the
+certification thresholds (\S\ref{sec:certify}).
 
 \begin{table}[htbp]
 \centering
@@ -262,7 +276,7 @@ by characteristic scales derived from the parameter set ($L_c =
 with $V_c$ and $F_c$ following from $F = ma$ consistency) converges the
 identical physics cold in 30--60 iterations. Every returned field is
 unscaled back to SI, so the interface is unchanged, and the production solve
-at $N = 60$ converges in 30 IPOPT iterations.
+at $N = 60$ converges in 32 IPOPT iterations.
 
 One consequence matters for Section~\ref{sec:certify}: the collocation
 duals returned for the defect block, \verb|sol.lam_defect|, are duals of the
@@ -376,14 +390,41 @@ contradict.
 
 \paragraph{Tightness.}
 
+The theorem below is stated for the \emph{exact exponential relaxation}
+\eqref{eq:linear}--\eqref{eq:relax}, which is the object the literature
+proves it for. It is \emph{not} a statement about the program this campaign
+actually solves, which is the Taylor restriction \eqref{eq:taylor}; the
+boundary between the two is drawn explicitly after the proof.
+
 \begin{theorem}[Lossless convexification, \cite{acikmese2007,acikmese2011}]
 \label{thm:lossless}
-Let $(\rvec^\ast, \vvec^\ast, z^\ast, \uvec^\ast, \sigma^\ast)$ be an
-optimal solution of the relaxed problem \eqref{eq:linear}--\eqref{eq:relax}.
+Consider the relaxed problem \eqref{eq:linear}--\eqref{eq:relax} with
+$\rvec(t_f)$ and $\vvec(t_f)$ fully constrained, and assume
+%
+\begin{enumerate}
+\item[(A1)] \emph{Normality / controllability.} The linear system
+\eqref{eq:linear} is controllable and the extremal is normal, so the
+abnormal multiplier does not vanish the cost and the degenerate branch
+$\lamv \equiv \mathbf{0}$ is excluded (this is the technical content of
+\cite{acikmese2011}).
+\item[(A2)] \emph{Constraint qualification.} A constraint qualification
+holds at the optimum, so a KKT/maximum-principle multiplier set exists;
+in particular the state path constraints (glideslope, $z\ge0$,
+$m \ge m_{dry}$) admit multipliers of bounded variation.
+\item[(A3)] \emph{Existence.} The relaxed problem has an optimal solution
+on $[0,t_f]$.
+\end{enumerate}
+%
+Let $(\rvec^\ast, \vvec^\ast, z^\ast, \uvec^\ast, \sigma^\ast)$ be such an
+optimal solution.
 Then $\lVert \uvec^\ast(t)\rVert = \sigma^\ast(t)$ for almost every
 $t \in [0,t_f]$, so $(\rvec^\ast, \vvec^\ast, z^\ast)$ is feasible --- and
 hence optimal --- for the original nonconvex problem.
 \end{theorem}
+
+The sketch that follows is offered as \emph{intuition} for why the
+relaxation is tight, in the case where the argument is cleanest: it is not
+a self-contained proof, and the place it is loose is identified explicitly.
 
 \begin{proof}[Proof sketch via the maximum principle]
 Form the Hamiltonian for \eqref{eq:linear} with running cost $\alpha\sigma$:
@@ -396,7 +437,13 @@ Form the Hamiltonian for \eqref{eq:linear} with running cost $\alpha\sigma$:
 \end{equation}
 %
 Take for the sketch the unconstrained-path case (glideslope inactive), so
-that no state-constraint multiplier appears. The dynamics are then linear
+that no state-constraint multiplier appears. That case is the relevant one
+here: on the flagship solution the glideslope margin
+$z - \lVert(x,y)\rVert\tan\gamma_{gs}$ is strictly positive at every node,
+falling to $0.90$~m at the last interior node and to zero only at the pad
+itself, where both sides vanish because $\rvec(t_f) = \mathbf{0}$. The cone
+is therefore inactive on the whole interior, and what binds at the endpoint
+is the terminal boundary condition, not the cone. The dynamics are then linear
 and $\mathcal{H}$ is independent of $\rvec$ and $\vvec$ beyond the terms
 shown, so the costate equations are
 %
@@ -443,6 +490,38 @@ most at isolated instants and \eqref{eq:primer} holds a.e.
 Equation \eqref{eq:primer} is Lawden's primer-vector law
 \cite{lawden1963} in the convexified variables: \emph{thrust points along
 the velocity-costate direction, and its magnitude is bang--bang}.
+
+\paragraph{What the theorem covers, and what it does not.}
+Theorem~\ref{thm:lossless} is about the exact relaxation
+\eqref{eq:linear}--\eqref{eq:relax}. The \emph{implemented} Route~B program
+is the Taylor restriction \eqref{eq:taylor}, discretized. Two statements
+should be kept apart, because conflating them would over-claim:
+%
+\begin{itemize}
+\item \textbf{Losslessness transfers, and is certified.} The tightness
+argument turns entirely on the pointwise minimization of
+$\lamv\!\cdot\!\uvec$ over the ball $\lVert\uvec\rVert \le \sigma$. Replacing
+the exponential throttle band by the Taylor band alters only the
+\emph{$\sigma$-admissible set}; it never touches that pointwise
+minimization, so the argument goes through verbatim for
+\eqref{eq:taylor} as well. Gate G4 (\S\ref{sec:certify}) then
+\emph{measures} $\max_t\big|\lVert\uvec\rVert-\sigma\big|$ on the computed
+solution and certifies $\lVert\uvec\rVert = \sigma$ \emph{for the program
+that was actually solved}.
+\item \textbf{The Taylor restriction is a separate, measured model error.}
+What G4 does \emph{not} certify is that the solved program is the original
+problem. Equation~\eqref{eq:taylor} is an inner approximation of the true
+throttle band on both sides, so Route~B solves a slightly harder problem
+than the continuous-time original. That discrepancy is not argued away; it
+is measured, as gate G3's $|\Delta m_f|$, and \S\ref{sec:crossval} reports
+it and identifies it.
+\end{itemize}
+%
+One further condition makes \eqref{eq:taylor} non-vacuous rather than merely
+formal: its upper bound $\mu_2(1-\delta z)$ is positive only for
+$\delta z < 1$. That holds here with enormous room --- the measured maximum
+of $\delta z$ on the flagship Route~B solution is $0.034$ --- so the
+restriction is non-vacuous by measurement, not by assumption.
 
 \paragraph{A sign convention, stated once.}
 Equation~\eqref{eq:primer} carries a minus sign because $\lamv$ there is
@@ -517,17 +596,36 @@ propellant [kg]  & $3535.411$   & $3535.839$  & $0.428$ \\
 
 The two solvers agree on final time to $3.4$~ms and on final mass to
 $0.43$~kg out of $3535.4$~kg burned --- one part in $8\,300$ of the
-propellant, or $1.6\times10^{-5}$ of the vehicle mass.
+propellant, or $1.4\times10^{-5}$ of the ignition mass $m_0$.
 
 The honest framing of the residual matters more than its size.
 Early in the campaign the cross-method gate was specified at $0.1$~kg and
 the measured gap was $\sim 0.70$~kg, so the natural first move was to
-refine until it closed. It does not close. A dedicated sweep at
-\emph{fixed} $t_f$ (removing the golden search's own $t_f$-selection noise)
-across $N_{conv} \in \{120, 180, 240, 300\}$ held the gap in a $0.70$--$0.74$~kg
-band with no downward trend, and tightening the golden-section tolerance
-from $0.05$~s to $0.01$~s did not help either. The gap is not a
-discretization artifact.
+refine until it closed. It does not close. The refinement evidence
+(recorded in \texttt{process/task-5-report.md} and summarized in
+\texttt{certify\_pdg.m}'s own header) has two halves, and they should be
+quoted with their conditions:
+%
+\begin{itemize}
+\item at \emph{fixed} $t_f$ --- which removes the golden search's own
+$t_f$-selection noise --- sweeping $N_{conv} \in \{120, 180, 240\}$ moves
+the gap only from $0.737$ to $0.731$~kg, i.e.\ it sits in a
+$0.73$--$0.74$~kg band and if anything drifts the wrong way;
+\item allowing the golden search to reselect $t_f$ at a tightened
+tolerance ($0.05 \to 0.01$~s) does not help either, and widens the observed
+band to \textbf{$0.70$--$0.94$~kg} --- $0.699$~kg at $N_{conv}=120$ and
+$0.943$~kg at $N_{conv}=240$ --- because $m(t_f)$ is shallow but not flat
+near its optimum.
+\end{itemize}
+%
+The $0.70$--$0.94$~kg band is the one to quote, since it is the envelope of
+every refinement tried; the $0.73$--$0.74$~kg figure is the fixed-$t_f$
+subset of it. Both were measured mid-campaign at the then-current
+configuration (before the de-rate of \S\ref{sec:derate}), which is why
+their absolute level differs from the flagship's $0.428$~kg --- the
+flagship value is the same quantity measured at the shipped
+$\etaT = 0.87$. What no version of the experiment produces is a downward
+trend: the gap is not a discretization artifact.
 
 It is the Taylor bound. Equation~\eqref{eq:taylor} is a conservative inner
 approximation, so the convex route solves a slightly \emph{harder} problem
@@ -682,8 +780,20 @@ condition is therefore
 %
 and since the rows of $B$ that touch $\Tvec$ are $I/m$ (velocity) and
 $-\Tvec^\top/(\lVert\Tvec\rVert I_{sp}g_0)$ (mass, itself radial in
-$\Tvec$), \eqref{eq:midstat} forces $\Tvec_{k+1/2}$ exactly parallel to
-$\lamv$ at the \emph{discrete} level, with no discretization error at all.
+$\Tvec$), \emph{every} term in \eqref{eq:midstat} other than $\lamv$ is
+radial in $\Tvec_{k+1/2}$. Collecting them,
+\eqref{eq:midstat} reads $(4h/6)\,\lamv/m = c\,\Tvec_{k+1/2}$ for a scalar
+$c$ absorbing the annulus multiplier $\mu_k$ and the mass-flow term, and so
+forces $\Tvec_{k+1/2}$ exactly parallel to $\lamv$ at the \emph{discrete}
+level, with no discretization error at all.
+Two conditions are what make that collection possible, and both hold at the
+midpoint of this transcription: the midpoint state carries \emph{no} path
+constraint row (glideslope, $z \ge 0$ and $m \ge m_{dry}$ are imposed at
+nodes only), and there is no active pointing-cone row (this campaign runs
+with $\theta_{\max} = \infty$). A finite active cone would add a
+non-radial term and the alignment would no longer follow --- which is
+exactly why \texttt{certify\_pdg} stops scoring the primer angle when a
+cone is present (\S\ref{sec:future}).
 A node control has no such clean condition: $\Tvec_k$ appears in two
 adjacent defect blocks \emph{and} inside both neighbours' Hermite
 interpolants $x_{k\pm1/2} = \tfrac12(x_k + x_{k\pm1}) \pm \tfrac{h}{8}(f_k -
@@ -693,11 +803,20 @@ time-shifted comparison, and $O(h)$ is precisely what the old numbers were:
 the measured angle halved as $N$ doubled ($1.72^\circ$, $1.14^\circ$,
 $0.85^\circ$, $0.57^\circ$ at $N = 20, 30, 40, 60$ in vacuum, and
 $8.63^\circ, 5.11^\circ, 3.63^\circ, 2.61^\circ$ under drag). Compared at
-the midpoint, the same solutions and the same duals give $1.2\times
-10^{-6}$~degrees at \emph{every} grid, in vacuum and under drag alike ---
-which is not a physical number but the double-precision floor of
-$\arccos$ near unity, $\arccos(1-\epsilon) = 1.207\times10^{-6}$~degrees.
-The alignment is exact to floating point.
+the midpoint, the same solutions and the same duals give
+$8.5\times10^{-7}$ to $1.2\times10^{-6}$~degrees at \emph{every} grid, in
+vacuum and under drag alike --- which is not a physical number but the
+double-precision floor of $\arccos$ near unity. That floor is one to two
+ulps wide, because $\arccos$ is quantized there: $\arccos(1-\epsilon/2)$ is
+$8.54\times10^{-7}$~degrees, the smallest attainable nonzero value, and
+$\arccos(1-\epsilon)$ is $1.207\times10^{-6}$~degrees. Which of the two a
+given run reports depends only on which representable double the dot
+product lands on, and both values are observed: \texttt{certify\_pdg.m}'s
+own measurement table records $8.5\times10^{-7}$ across the four vacuum
+grids and $1.2\times10^{-6}$ across the four drag grids, while the
+flagship report below reads $1.207\times10^{-6}$ in vacuum. The factor of
+$1.4$ between them is arithmetic, not physics. The alignment is exact to
+floating point.
 
 This retired two open items at once. What the campaign had been calling a
 ``vacuum discretization artifact'' and a ``drag primer degradation''
@@ -966,12 +1085,15 @@ $q_r = 10^{-4}$ and $q_v = 10^{-2}$, that supremum is
 \end{equation}
 %
 \textbf{and no choice of $R$ whatsoever can beat it.} (At the shipped
-$r = 10^{-9}$ the term $2m\sqrt{q_r r} = 0.0187$ is already $1.9\times$
-larger than $q_v$, putting $\omega_r$ at $0.059$~rad/s, further below the
-bound.) These old weights do not in fact give a real pole pair: the exact
-closed-loop eigenvalues at the mean mass over the margin arc are
-$-0.0929 \pm 0.0497\mathrm{i}$, an underdamped pair whose envelope decays
-with a $10.8$~s time constant --- on a $16.6$~s flight. Either way the
+$r = 10^{-9}$ and $m = m_A$ the term $2m\sqrt{q_r r} = 0.0187$ is already
+$1.9\times$ larger than $q_v$, putting $\omega_r$ at $0.059$~rad/s, further
+below the bound.) These old weights do not in fact give a real pole pair:
+evaluated at $m_A = 29\,624$~kg, the mean mass over the margin arc
+$[0, t_{sw}]$ with $t_{sw} = 6.1552$~s --- the same $m_A$ the shipped
+design uses, and the mass that makes $2m_A\sqrt{q_r r} = 0.0187$ --- the
+exact closed-loop eigenvalues are
+$-0.0905 \pm 0.0499\mathrm{i}$, an underdamped pair whose envelope decays
+with an $11.0$~s time constant --- on a $16.6$~s flight. Either way the
 conclusion is the same and it is the \emph{bound} that carries it: every
 $R$ sweep had been buying gain \emph{magnitude} on both channels while the
 response speed stayed pinned by the $q_r{:}q_v$ ratio alone.
@@ -1011,10 +1133,11 @@ solution measures $K_{11}/m = 0.4808$ against the predicted
 $\omega^2 = 0.49$, and $K_{14}/m = 1.377$ against $2\zeta\omega = 1.40$.
 
 The ceiling on $\omega$ is a feasibility argument, not a taste: the initial
-lateral command is $\omega^2 |\Delta \rvec| = 0.49 \times 58 = 28$~m/s$^2
-\approx 840$~kN, which together with the $\sim 338$~kN vertical feed-forward
-sits just outside the $845$~kN rim, so $\omega = 0.70$ spends the margin
-arc's spare authority and marginally more. Beyond $\omega \approx 0.75$ the
+lateral command is $\omega^2 |\Delta \rvec| = 0.49 \times 58 = 28.4$~m/s$^2
+\approx 842$~kN, which together with the $\sim 338$~kN vertical feed-forward
+gives a commanded magnitude of $\sqrt{842^2 + 338^2} = 907$~kN --- $7\%$
+outside the $845$~kN rim --- so $\omega = 0.70$ spends the margin
+arc's spare authority and modestly more. Beyond $\omega \approx 0.75$ the
 command is annulus-limited rather than gain-limited and buys nothing; below
 $\approx 0.6$ it leaves residual offset for the braking arc to pay for.
 
@@ -1024,9 +1147,15 @@ braking arc) keeps the small position gain it always had, because there
 every degree of tilt is stolen straight out of vertical braking. The blend
 is a $\tanh$ of half-width $0.4$~s so the Riccati right-hand side stays
 smooth, and $t_{sw}$ is auto-detected from the solution by the mid-annulus
-crossing that G5 has already certified to be unique. Only the \emph{lateral}
-position weights are rescheduled; the vertical channel and all velocity
-weights are untouched, because the vertical channel demonstrably worked.
+crossing that G5 has already certified to be unique. What is rescheduled is
+the \emph{lateral} channel, position \emph{and} velocity: the derived pair
+$(q_{pos}, q_{vel})$ of \eqref{eq:inversion} occupies entries $(1,1),(2,2)$
+and $(4,4),(5,5)$ of $Q_A$, and phase B replaces both with the small
+constants it always had ($10^{-4}$ and $10^{-2}$). The \emph{vertical}
+channel is untouched --- $Q(3,3) = 10^{-4}$ and $Q(6,6) = q_{v_z}$ are the
+same in $Q_A$ and $Q_B$ --- because the vertical channel demonstrably
+worked. That is the split: the schedule moves the lateral loop and leaves
+the vertical one alone.
 
 Measured, same $R$, same grid, dispersion $\Delta\rvec_0 = [50;-30;0]$~m:
 
@@ -1044,6 +1173,20 @@ after (phase-scheduled $Q$) & $0.944$ & $1.363$ & $\sim 0.13$ \\
 Both gates now pass together, with $14$~m and $0.6$~m/s of margin, on the
 $R$ that a careful sweep had proved could not satisfy both --- because $R$
 was never the axis that controlled it.
+
+\emph{A note on the tables in this section.} The before/after pairs in
+\S\ref{sec:pole} and \S\ref{sec:altindex} are \textbf{mid-campaign
+snapshots}, each measured at the configuration current when that fix was
+made --- \S\ref{sec:pole}'s pair predates both the altitude indexing of
+\S\ref{sec:altindex} and the $\etaT = 0.87$ de-rate of \S\ref{sec:derate},
+and the reachability table of \S\ref{sec:derate} was measured at the
+then-shipped $\etaT = 0.93$. They are reported because the \emph{step} each
+one measures is the evidence for the corresponding diagnosis. The shipped
+configuration's numbers are Table~\ref{tab:battery}, which supersedes all of
+them; where a case appears in both (e.g.\ $\Delta\rvec_0 = [50;-30;0]$~m at
+$0.944$~m / $1.363$~m/s here versus $1.582$~m / $0.968$~m/s in
+Table~\ref{tab:battery}), the difference is the intervening configuration
+changes, not a discrepancy.
 
 \subsection{Altitude-indexed, not clock-indexed, tracking}
 \label{sec:altindex}
@@ -1109,18 +1252,47 @@ The cause is that the un-de-rated min-fuel optimum rides its thrust ceiling
 through the whole braking arc, by construction: with $\eta_T = 1$ the
 guidance's own upper bound \emph{is} the engine's, so on the max-thrust arc
 there is no reserve at all. Feedback cannot command thrust the engine does
-not have. The arithmetic is unforgiving: computed from the flagship
-solution, a $-5\%$ thrust scale costs $7.2$--$7.7\%$ of the net
-deceleration $\Tmax/m - g_0$ available on the braking arc, so any de-rate
-that reserves less than that is buying nothing on this dispersion.
+not have. The arithmetic is unforgiving, and it is worth doing in a
+\emph{single} currency, because the loss and the reserve are naturally
+quoted in two different ones. Take that currency to be the net
+decelerating acceleration on the braking arc, $\Tmax/m - g_0$:
+%
+\begin{itemize}
+\item a $-5\%$ thrust scale costs $0.05\,\Tmax/m$, which is
+$7.2$--$7.7\%$ of $\Tmax/m - g_0$ over the mass range
+$m \in [m_f, m_0] = [26\,465,\ 30\,000]$~kg;
+\item reserving a fraction $1 - \etaT$ of thrust returns
+$(1-\etaT)(\Tmax/m)\,/\,(\Tmax/m - g_0)$ of that same net deceleration ---
+so $\etaT = 0.93$ returns $10.1$--$10.7\%$ and $\etaT = 0.87$ returns
+$18.8$--$19.9\%$.
+\end{itemize}
+%
+In those terms $\etaT = 0.93$ covers a $-5\%$ dispersion by only about
+$1.4\times$, which is thin once the terminal arc's own demands are added,
+while $\etaT = 0.87$ covers it by about $2.5\times$. A de-rate reserving
+less than the loss is buying nothing at all on this dispersion. (The
+$0.95/0.93 = 2.1\%$ figure quoted later in this section is the same
+comparison in \emph{thrust} units, and is included only because that is
+the form in which the $0.93$ decision was originally recorded; the two are
+not directly comparable and $\etaT$'s sufficiency is judged in the net
+deceleration currency above.)
 
 This was proved to be an authority limit rather than a tuning limit by a
 \emph{reachability} argument rather than another sweep. Integrating the
 vertical dynamics in altitude under the optimal single-switch policy with
 zero tracking error, no lateral demand and the brake altitude found by
-bisection --- i.e.\ optimistically for any controller --- gives:
+bisection --- i.e.\ optimistically for any controller --- gives
+Table~\ref{tab:reach}.
 
-\begin{center}
+\begin{table}[htbp]
+\centering
+\caption{Reachability bound (\texttt{process/task-7-report.md} \S5).
+\textbf{Configuration:} measured at the \emph{then-shipped} $\etaT = 0.93$,
+with a vertical-only model (all thrust vertical, no lateral demand), zero
+tracking error, and the brake altitude located by bisection. It is a
+mid-campaign snapshot, kept because it is the evidence for the diagnosis;
+the shipped configuration is $\etaT = 0.87$.}
+\label{tab:reach}
 \begin{tabular}{lrr}
 \toprule
 thrust scale & minimum achievable $|v_{td}|$ [m/s] & required brake altitude [m] \\
@@ -1131,12 +1303,39 @@ $0.95$ & $0.635$ & $806.6$ \\
 $0.90$ & $0.755$ & $925.2$ \\
 \bottomrule
 \end{tabular}
-\end{center}
+\end{table}
 
-A $-5\%$ vehicle \emph{can} land softly --- but only by starting its brake
-$107$~m higher than nominal. \textbf{A fixed-reference tracker inherits the
-brake altitude from its feed-forward and structurally cannot re-time it.}
-Raising the loop bandwidth cannot close the gap either: a sweep from $5$ to
+Two cautions about reading it. The first column is a bisection
+\emph{residual}, not a physical minimum --- the search stops once it can
+hit the target, so the column is non-monotone (the nominal vehicle reads
+worst of the four) and nothing should be inferred from its ordering. The
+argument uses only the second column. And that column is a property of the
+\emph{model}, not of any particular guidance solution: its $699.6$~m at
+unit thrust scale is what a perfectly-flown vertical-only vehicle needs,
+whereas the $\etaT = 0.93$ guidance whose battery was failing actually
+braked at $718$~m and the shipped $\etaT = 0.87$ guidance brakes at
+$914.7$~m (\S\ref{sec:minmax}). Three distinct altitudes are therefore in
+play, and they answer three different questions.
+
+With that pinned down, the argument is:
+%
+\begin{itemize}
+\item \textbf{Why $\etaT = 0.93$ failed.} A $-5\%$ vehicle \emph{can} land
+softly, but only by braking at $806.6$~m --- $88.6$~m above the $718$~m at
+which the $0.93$ feed-forward actually brakes. \textbf{A fixed-reference
+tracker inherits the brake altitude from its feed-forward and structurally
+cannot re-time it}, so that $88.6$~m is unreachable by feedback and the
+$-5\%$ case fails.
+\item \textbf{Why $\etaT = 0.87$ passes.} The shipped feed-forward brakes
+at $914.7$~m, which is \emph{above} the $806.6$~m the $-5\%$ vehicle needs
+--- and within $11$~m of even the $-10\%$ vehicle's $925.2$~m. The
+de-rate's sufficiency can thus be stated in the reachability table's own
+currency and not only as reserved thrust headroom: the de-rate works
+because it moves the nominal brake altitude up past the dispersed
+vehicle's requirement.
+\end{itemize}
+%
+Raising the loop bandwidth cannot substitute: a sweep from $5$ to
 $20$~rad/s moved touchdown speed only from $3.91$ to $2.66$~m/s.
 
 The cure is therefore to give the tracker authority the guidance never
@@ -1147,8 +1346,11 @@ lost capability. $\Tmin$ is untouched --- it is an engine floor, not a
 budget.
 
 The cost is tabulated in Table~\ref{tab:derate}. $\etaT = 0.93$ was adjudicated first and shipped briefly, then \emph{measured
-to be insufficient}: it leaves only $0.95/0.93 = 2.1\%$ of margin against a
-$-5\%$ dispersion, and the terminal arc consumes more than that. A held-
+to be insufficient}: in thrust units it leaves only $0.95/0.93 = 2.1\%$ of
+margin against a $-5\%$ dispersion, and the terminal arc consumes more than
+that. The same insufficiency read in the net-deceleration currency above is
+the $1.4\times$ cover, and in the reachability table's currency it is the
+$88.6$~m the $0.93$ feed-forward cannot climb. A held-
 controller sweep in $\etaT$ then located $0.87$ as the point where the full
 seven-case dispersion battery passes with margin.
 
@@ -1175,6 +1377,7 @@ $\text{thrust\_scale} = 0.95$ case from a $67.4$~m/s crash to a $1.28$~m/s
 landing. It is a trade, and it was adjudicated as one.
 
 \subsection{Result: the acceptance battery}
+\label{sec:battery}
 
 Table~\ref{tab:battery} is the acceptance result. The shipped controller
 is a phase-scheduled TVLQR with $R = 10^{-9}I$,
@@ -1259,14 +1462,14 @@ failure modes & 1 propellant depletion, 0 arrests, 0 horizon expiries,
 miss: mean / median / p95 / max & $3.72$ / $3.67$ / $6.72$ / $9.24$ m \\
 $v_{td}$: mean / median / p95 / max & $1.054$ / $1.000$ / $1.206$ / $8.290$ m/s \\
 propellant remaining: min / mean / max & $0.0$ / $537.3$ / $882.7$ kg \\
-largest draws seen & $|\Delta\rvec_0| = 443.7$ m, $|\Delta\vvec_0| = 34.4$ m/s, thrust $\pm 4.5\%$ \\
+largest draws seen & $|\Delta\rvec_0| = 443.7$ m, $|\Delta\vvec_0| = 34.4$ m/s, thrust $-4.4\%$ / $+4.5\%$ \\
 \bottomrule
 \end{tabular}
 \end{table}
 
 Table~\ref{tab:mc} summarizes the campaign. The single failure is
 instructive rather than mysterious. Run 84 drew an
-initial position error of $\Delta\rvec_0 = [-34.3;\ 425.3;\ 121.6]$~m ---
+initial position error of $\Delta\rvec_0 = [-34.2;\ 425.3;\ 121.6]$~m ---
 a $4.25\sigma$ cross-range excursion, $443.7$~m in total --- together with
 $\Delta\vvec_0 = [2.1;\ 19.6;\ -7.4]$~m/s and a $-2\%$ engine. Correcting
 that much cross-range consumed the entire propellant margin: the run
@@ -1324,16 +1527,23 @@ budget --- while \emph{lengthening} the flight by $0.94$~s. The saving is
 unsurprising once stated (the atmosphere brakes for free); the lengthening
 looks wrong until the arc structure is examined.
 
-\paragraph{The coast-extension mechanism.}
+\paragraph{The minimum-throttle-arc extension mechanism.}
+There is no coast here and the name matters: by Eq.~\eqref{eq:tw} the
+engine is never off, so the vehicle is on a continuous $\Tmin$ burn
+throughout the first arc and is spending propellant the whole time. What is
+free is not the arc; it is drag's \emph{incremental} deceleration, which
+adds to the $\Tmin$ burn's own at no additional propellant cost.
+
 The extra time is not spread over the flight; it is concentrated in the
 minimum-throttle arc. That arc lengthens by $4.80$~s while the braking arc
-\emph{shortens} by $3.87$~s, netting $+0.94$~s. Drag decelerates the vehicle
-during the $\Tmin$ margin arc at no propellant cost, so the vehicle can
-afford to fall for longer and arrive at the braking point slower and lower
---- $119.1$~m/s at $378.9$~m instead of $175.4$~m/s at $914.7$~m. Less
-velocity to kill from a lower altitude means a shorter, cheaper burn. Flight
-time goes up precisely because the \emph{free} part of the deceleration is
-doing more of the work, which is the same trade the min--max argument of
+\emph{shortens} by $3.87$~s, netting $+0.94$~s. Because drag decelerates the
+vehicle during the $\Tmin$ margin arc without burning anything extra, the
+vehicle can afford to stay on minimum throttle for longer and arrive at the
+braking point slower and lower --- $119.1$~m/s at $378.9$~m instead of
+$175.4$~m/s at $914.7$~m. Less velocity to kill from a lower altitude means
+a shorter, cheaper braking burn. Flight time goes up precisely because the
+propellant-free \emph{increment} to the deceleration is doing more of the
+work, which is the same trade the min--max argument of
 \S\ref{sec:minmax} makes: delay the expensive braking as long as possible.
 It is also a direct corroboration of that section --- drag makes the
 approach colder, and the switch moves later, exactly as predicted.\footnote{Switch
@@ -1471,6 +1681,59 @@ but the tail is a miss-distance tail rather than a touchdown-speed tail.}
 \label{fig:phase2footprint}
 \end{figure}
 
+\section{Conclusion}
+\label{sec:conclusion}
+
+The campaign set out to solve a Falcon-9-class landing burn twice and prove
+the answer, and it did both. The certified optimum is a \emph{min--max}
+profile --- $6.155$~s at $\Tmin$, then $10.440$~s at $\etaT\Tmax$, one
+interior switch at $914.7$~m --- not the max--min--max structure the Mars
+PDG literature and this campaign's own specification anticipated. That is
+not a solver quirk but a consequence of a single inequality,
+$\Tmin > m g_0$ at every mass on the trajectory (\S\ref{sec:hoverslam}):
+a vehicle that cannot hover has no coast to buy, so the fuel-optimal policy
+is to fall at minimum throttle and brake as late as it can. Two
+independently formulated solvers agree on that answer to $0.428$~kg of
+final mass and $3.4$~ms of final time, and all six gate blocks pass with
+margins of one to five orders --- including a primer-alignment residual at
+the $\arccos$ machine floor once the comparison is made at the segment
+midpoint, where the transcription's discrete stationarity condition makes
+it exact.
+
+Most of the engineering content, however, came from the tracking problem
+rather than the optimization, and the pattern in it is worth naming: in
+every case the fix followed from a derivation or a reachability bound, and
+in every case a sweep had already searched the wrong axis. The
+$\vvec(t_f) = \mathbf{0}$ endpoint is singular for this vehicle for the
+same reason the optimum is min--max. The lateral response speed is capped
+at $\sqrt{q_r/q_v}$ for \emph{every} $R$, so three rounds of $R$ sweeps
+could not have succeeded and the fix was to invert the ARE for the pole
+instead. A min-fuel trajectory has no time margin, so the reference must be
+indexed by altitude and not by the clock --- a change that \emph{deleted}
+three special cases. And a $-5\%$ engine must brake $88.6$~m higher than a
+fixed feed-forward ever will, which is a reachability fact no gain can
+overcome and is what forced the $\etaT = 0.87$ de-rate at a cost of
+$82.30$~kg. The result is $99.5\%$ over $200$ dispersed vacuum runs, with
+the single failure a propellant depletion at a $4.25\sigma$ cross-range
+draw.
+
+The Phase-2 finding is the one that looks wrong and is not: drag
+\emph{saves} $434.7$~kg while \emph{lengthening} the flight by $0.94$~s.
+The mechanism is the min--max argument again --- the propellant-free
+increment drag adds to the deceleration lets the minimum-throttle arc run
+$4.80$~s longer, so the vehicle reaches the braking point slower and lower
+and the expensive arc contracts by $3.87$~s. Drag makes the approach
+colder and the switch moves later, exactly as \S\ref{sec:minmax} predicts.
+
+The campaign's methodological residue is smaller than its numerical one but
+probably more durable. A certification gate can produce a false negative
+and look like physics: G2's global-spline reconstruction failed an accurate
+solution by a factor of $60\,700$, and G5's node-versus-midpoint comparison
+manufactured both a ``vacuum discretization artifact'' and a ``drag primer
+degradation'' that were the same $O(h)$ bug. In both cases the correct
+response to ``there is no mechanism for this effect, and yet the number
+moves'' was to distrust the number.
+
 \section{Future work}
 \label{sec:future}
 
@@ -1485,10 +1748,18 @@ arc. The pointing cone constraint is already implemented and disabled;
 enabling it is the natural first step. One certification wrinkle is already
 handled: Gate~G5's primer-vector sub-check (thrust parallel to the velocity
 costate) is a necessary condition only for the \emph{unconstrained} problem,
-and is invalid once the cone is active --- with a finite cone the optimal
-thrust rides the cone boundary (the projection of the unconstrained
-direction onto it), so thrust need not be parallel to the costate by
-design, not by bug. \texttt{certify\_pdg.m} is cone-aware: when
+and is invalid once the cone is active. A finite cone does not by itself
+force anything: while the cone constraint is \emph{inactive} the
+unconstrained primer law still holds, and the check would still be valid.
+But \emph{when the cone constraint is active}, the constrained optimum lies
+on its boundary --- the KKT projection of the unconstrained direction onto
+it --- and thrust need not be parallel to the costate, by design rather than
+by bug. Since nothing tells the gate in advance which instants those are,
+the software takes the conservative policy of not scoring the primer angle
+whenever a finite cone is present; the measured $7.32^\circ$ at
+$\theta_{\max} = 15^\circ$ (which survives the midpoint fix, unlike the
+vacuum/drag artifact) shows the false-fail is real and not
+hypothetical. \texttt{certify\_pdg.m} is cone-aware: when
 \texttt{P.theta\_max\_deg} is finite the primer angle is still computed and
 reported but only as information (\texttt{G5\_primer\_mode =
 'skipped-cone'}), and G5's pass/fail rests on the bang-bang structure check
@@ -1515,9 +1786,10 @@ deliberately not made a dependency for this campaign.
 \item \textbf{Model-predictive guidance and replanning.} This is the
 most important item, and \S\ref{sec:derate} is the argument for it. The
 $82.30$~kg de-rate exists solely because \emph{a fixed-reference tracker
-cannot re-time the brake}: the reachability table shows a $-5\%$ vehicle
-must brake $107$~m higher, and no feedback gain around a fixed feed-forward
-can do that. A guidance law that re-solves the PDG problem in flight ---
+cannot re-time the brake}: the reachability table (Table~\ref{tab:reach})
+shows a $-5\%$ vehicle must brake at $806.6$~m, $88.6$~m above where the
+$\etaT = 0.93$ feed-forward braked, and no feedback gain around a fixed
+feed-forward can do that. A guidance law that re-solves the PDG problem in flight ---
 even coarsely, even a few times --- \emph{can}, and would recover most of
 the de-rate's propellant cost while improving robustness rather than
 trading against it. The solve times measured here (well under a second at
@@ -1561,7 +1833,17 @@ which solves both routes, certifies, designs the tracker, runs the
 Monte Carlo, and writes \texttt{booster\_run.mat} into \texttt{results/},
 along with the figures
 reproduced in this note. Passing the option \texttt{phase2 = true} adds the
-Phase-2 stage. Every number quoted here was read from that file. All
+Phase-2 stage, and it is a \texttt{phase2 = true} run --- the file shipped
+in \texttt{results/}, timestamped 2026-08-09 --- that this note is written
+against. Every result number quoted here, Phase~1 and Phase~2 alike, was
+read from that one file: the gate tables, the cross-validation table, the
+acceptance battery, both Monte Carlos, and the vacuum-versus-drag
+comparison. The exceptions are stated where they occur and are all
+mid-campaign sweeps at superseded configurations, recorded in
+\texttt{process/task-\{5,7\}-report.md}: the $\etaT$ cost table
+(Table~\ref{tab:derate}), the reachability table (Table~\ref{tab:reach}),
+the before/after tracking pairs in \S\ref{sec:pole}--\S\ref{sec:altindex},
+and the Taylor-gap refinement sweeps of \S\ref{sec:crossval}. All
 parameters are overridable through an optional \texttt{cfg} struct without
 editing a library file.
 \end{sloppypar}

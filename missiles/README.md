@@ -69,7 +69,7 @@ leaving the shipped value in place.
   "cd('/Users/msc/Desktop/optimal_control/missiles'); run('tests/run_tests')"
 ```
 
-Run 2026-08-09: **23 passed, 0 failed**, zero warnings, 314.6 s wall clock
+Run 2026-08-09: **24 passed, 0 failed**, zero warnings, 305 s wall clock
 including MATLAB startup. `run(...)` is required, not stylistic — `-batch` parses
 a bare `tests/run_tests` as the expression `tests / run_tests` and dies before
 the harness loads.
@@ -78,6 +78,30 @@ The suite got slower as it got sharper: it was about 15 s at 20 tests on
 2026-08-07, and most of the increase is `test_runBallisticTarget` and
 `test_runTarget`, which fly whole targeting solves — hundreds of trajectory
 propagations each — rather than checking a function against a closed form.
+
+### Saved figures
+
+`BM/run_ballistic_target` writes its three figures to disk through
+`coorbital.viz.saveFigure`. One user-block entry controls it, `plotFile`, a path
+**stem without an extension**, defaulting to
+`fullfile(tempdir,'run_ballistic_target')`:
+
+```bash
+/Applications/MATLAB_R2025b.app/bin/matlab -batch \
+  "cd('/Users/msc/Desktop/optimal_control/missiles/BM'); \
+   run_ballistic_target(struct('plotFile','/Users/msc/Desktop/optimal_control/missiles/results/china_to_la'))"
+```
+
+Each figure appends its own suffix and `.png` — `<stem>_profile.png`,
+`<stem>_ground_track.png`, `<stem>_globe.png` — so the names are **fixed** and a
+re-run overwrites its own pictures rather than piling up new ones. Saving
+happens whenever `showPlots` is true and the stem is non-empty; setting
+`plotFile` to `''` draws the figures without writing them. There is deliberately
+no second on/off flag, exactly as `movieFile` has none beside it. The paths are
+printed at the end of the run and handed back on `info.plotFiles`.
+
+`HGV/run_target` has the same gap and is **not** wired to `saveFigure`; that is
+a known follow-up and `TODO.md` carries it.
 
 ### The movie
 
@@ -98,8 +122,12 @@ a photographic Earth texture and a starfield; without it the run reports
 needs no network. `movieFile` defaults into `tempdir`.
 
 **`missiles/results/` is where rendered output goes, and it is gitignored**
-(`optimal_control/.gitignore:48`). Movies and frames are build artefacts — never
-commit them.
+(`optimal_control/.gitignore:48`). Movies, frames and saved figures are build
+artefacts — never commit them. The sanitised-title stills sitting there —
+`china_to_la_ground_track_10802_km_requi.png` and the rest of the
+`china_to_la_*` and `pacific_*` set — were written by an ad-hoc scratch driver
+in an earlier session, because until 2026-08-09 no entry script could write a
+figure at all. `plotFile` is how one does it now.
 
 ---
 
@@ -182,15 +210,15 @@ only parameter files and entry scripts, no physics.
 | `+coorbital/+eom/` | `glide3DOF` (6-state), `boost3DOF` (7-state powered), `massConstant` (lifts a 6-state EOM to 7) |
 | `+coorbital/+guide/` | `prescribed` schedule interpolation, `pitchProgram` boost pitch attitude, `terminalConstraint` the five burnout constraints PEG and VOA share (see `docs/closed_loop_guidance.md`) |
 | `+coorbital/+prop/` | the multi-phase driver `phaseRun`, the `constThrust` motor, and the altitude / apogee / burnout ODE events |
-| `+coorbital/+viz/` | `groundTrack`, `profilePlot`, `globe3D`, `globeMovie` (+ 3 `private/` helpers) |
+| `+coorbital/+viz/` | `groundTrack`, `profilePlot`, `globe3D`, `globeMovie`, and `saveFigure` — the one export helper the whole package shares (+ 3 `private/` helpers) |
 | `HGV/`, `BM/` | 5 entry scripts and 2 vehicle parameter files |
-| `tests/` | `run_tests.m` plus 23 `test_*.m` |
+| `tests/` | `run_tests.m` plus 24 `test_*.m` |
 | `docs/` | design spec, code-organization README, lessons learned, four plan briefs, the closed-loop guidance spike, two LaTeX notes (PDFs built locally, gitignored), archived reviews |
-| `results/` | rendered movies and frames — **gitignored** |
+| `results/` | rendered movies, frames and saved figures — **gitignored** |
 
-25 public library functions across the eight packages, 3 private helpers,
-5 entry scripts, 2 vehicle files, 24 files under `tests/` (`run_tests.m` plus
-23 `test_*.m`): **59 `.m` files in all**. Counted 2026-08-09 with
+26 public library functions across the eight packages, 3 private helpers,
+5 entry scripts, 2 vehicle files, 25 files under `tests/` (`run_tests.m` plus
+24 `test_*.m`): **61 `.m` files in all**. Counted 2026-08-09 with
 
 ```bash
 find /Users/msc/Desktop/optimal_control/missiles -name '*.m' -not -path '*/results/*' | wc -l
@@ -222,7 +250,7 @@ actually in the test files.
 Where those budgets live, if you want to read the assertion rather than trust
 the table: `tests/test_glide3DOF.m:43`, `tests/test_equilibriumGlide.m:184`,
 `tests/test_allenEggers.m:172` and `:177`, `tests/test_boost3DOF.m:180`, `:254`–`:275`
-and `:333`, `tests/test_fullChain.m:238`, `BM/run_ballistic.m:496`.
+and `:333`, `tests/test_fullChain.m:238`, `BM/run_ballistic.m:545`.
 
 **The two analytic entry checks are complementary, not redundant.** `Veq²(r)`
 has no drag term, so equilibrium glide is blind to `CD`; a zero-lift
@@ -293,7 +321,7 @@ table of all eighteen values, and what each of them is actually pinned by, is in
 | File | For |
 |---|---|
 | `docs/README.md` | **The detailed authority on delivered behaviour** — code organization, every interface, the seven-state convention, how to add a fidelity level, the full validated-results tables, out-of-scope list |
-| `docs/DESIGN.md` | The pre-implementation design spec, deliberately left unedited, plus its four dated as-built sections (§10 the glide propagator, §11 boost and the full chain, §12 targeting and visualization, §13 two-axis targeting) recording where the spec and the code diverged |
+| `docs/DESIGN.md` | The pre-implementation design spec, deliberately left unedited, plus its six dated as-built sections (§10 the glide propagator, §11 boost and the full chain, §12 targeting and visualization, §13 two-axis targeting, §14 the closed-loop guidance spike, §15 figure export) recording where the spec and the code diverged |
 | `docs/LESSONS_LEARNED.md` | The running log — what broke, what fixed it, and what would otherwise be rediscovered the hard way |
 | `docs/hgv_dynamics_note.tex` | **The mathematics** — frames, the 3-DOF equations term by term, the rotating-Earth projections, the seven closed-form references, the two-axis targeting solve, and a chapter separating targeting from the two specified-but-unimplemented closed-loop boost laws |
 | `docs/software_design.tex` | **The structure** — package boundaries, data flow from the user block to a rendered movie, the two solvers, the entry-script shape, the four structural blindnesses, and the closed-loop guidance seam |

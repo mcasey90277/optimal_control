@@ -43,7 +43,8 @@
 \title{Software Design\\
        \large Architecture and data flow of the \code{missiles/} trajectory library}
 \author{Coorbital, Inc.}
-\date{7 August 2026; second edition 8 August 2026; third edition 9 August 2026}
+\date{7 August 2026; second edition 8 August 2026; third edition 9 August 2026;
+      fourth edition 9 August 2026}
 
 \begin{document}
 \maketitle
@@ -88,6 +89,21 @@ Section~\ref{sec:entry}, which gains the measured cost of that conversion and
 the one thing it did not buy --- a reachable envelope certified at the azimuth
 the script actually flies. Section~\ref{sec:limits} is rewritten around the
 seven open items two-axis targeting opened in place of the two it closed.
+
+\medskip
+\noindent\textbf{Fourth edition, 9 August 2026.} Two changes, both small, and
+one of them exposes something the first three editions all missed: until
+\code{dbc8e4a} \textbf{nothing in this library could write a figure to disk}.
+\code{coorbital.viz.saveFigure} closes that as shared \pkg{viz} infrastructure
+and \code{BM/run\_ballistic\_target} gains one user-block entry,
+\code{plotFile}, on top of it (Sections~\ref{sec:viz} and~\ref{sec:entry}).
+Separately, \code{globeMovie}'s caption gained the semi-transparent backdrop
+the altitude inset and the legend already had, which is a design point and not
+a cosmetic fix --- the same legibility rule applied to two of three overlays is
+not a rule. Every count this document states as \emph{current} is re-measured
+against 61 \code{.m} files and a suite that now reads \textbf{24 passed}; the
+earlier editions' dated measurement tables are left as the dated records they
+are, and Section~\ref{sec:verify} carries the fourth edition's own.
 \end{abstract}
 
 \tableofcontents
@@ -180,11 +196,18 @@ package-private helpers in \code{+viz/private}), 23 under \code{tests/}
 first edition counted 53, 26, 21 and six, before
 \code{+coorbital/+util/aimSolve.m} and its test landed and before
 \code{BM/run\_ballistic\_target.m} --- which \code{TODO.md} then listed as
-``specified in full and never implemented'' --- was written. Recounted on
-9 August 2026 it is 59, 28 and 25: the closed-loop guidance spike added
-\code{+coorbital/+guide/terminalConstraint.m} and its test. Note that
-\code{docs/README.md}'s conventions section still says ``39 \code{.m} files'';
-\code{TODO.md} already records that as a stale count rather than a violation.
+``specified in full and never implemented'' --- was written.
+
+\textbf{Recounted for this edition, 9 August 2026: 61, 29 and 25.} Twenty-six
+public library functions plus the same three package-private helpers under
+\code{+coorbital}; \code{run\_tests.m} and twenty-four \code{test\_*.m} under
+\code{tests/}; seven across \code{HGV/} and \code{BM/}. Two arrivals since the
+third edition, each with its test: the closed-loop guidance spike's
+\code{+coorbital/+guide/terminalConstraint.m}, and
+\code{+coorbital/+viz/saveFigure.m}. The command is
+\code{find missiles -name '*.m' | wc -l}; count it rather than quoting this
+paragraph, which is what the third edition's own discrepancy list said about
+the count it inherited.
 
 \subsection{What each package owns}
 
@@ -198,9 +221,9 @@ Package & Kind & Owns \\
 \pkg{grav}  & model        & radial and latitudinal gravitational acceleration \\
 \pkg{aero}  & model        & lift and drag coefficients \\
 \pkg{eom}   & physics      & the six-state unpowered and seven-state powered right-hand sides, plus \code{massConstant}, the adapter between them \\
-\pkg{guide} & control      & control-schedule evaluation: open-loop \code{prescribed} and state-reading \code{pitchProgram} \\
+\pkg{guide} & control      & control-schedule evaluation: open-loop \code{prescribed} and state-reading \code{pitchProgram}; plus \code{terminalConstraint}, the five burnout constraints PEG and VOA share, which is an interface and not a law \\
 \pkg{prop}  & driver \emph{and} model & \code{phaseRun} and the three ODE events (propagator); \code{constThrust} (propulsion) \\
-\pkg{viz}   & presentation & four figure functions and three package-private helpers \\
+\pkg{viz}   & presentation & four figure functions, one export helper (\code{saveFigure}), and three package-private helpers \\
 \bottomrule
 \end{tabular}
 \end{center}
@@ -1343,8 +1366,9 @@ did not ask for.
 vocabulary is the block's own vocabulary. A caller never has to know which
 entries are in degrees.
 \item \textbf{Exactly the block is overridable, and nothing else.} The
-whitelists run from 16 entries (\code{run\_glide}) to 37
-(\code{run\_ballistic\_target}), with \code{run\_target} at 36. Every model
+whitelists run from 16 entries (\code{run\_glide}) to 38
+(\code{run\_ballistic\_target}, re-counted 9 August 2026 after \code{plotFile}
+joined it), with \code{run\_target} at 36. Every model
 handle is in them --- \code{atmosFn},
 \code{gravFn}, \code{aeroFn}, \code{propFn} --- which is what makes the
 one-line fidelity swap of Section~\ref{sec:injecttest} reachable
@@ -1359,8 +1383,51 @@ tracked file.
 \end{enumerate}
 
 \code{overrideOf} is a four-line local function at the bottom of each script.
-It is duplicated four times, and \code{TODO.md} lists the extraction into
-\pkg{util} as open, with the line numbers.
+It is duplicated \emph{five} times --- once per entry script --- and
+\code{TODO.md} lists the extraction into \pkg{util} as open, with the line
+numbers, re-read on 9 August 2026 after three of the five had drifted, one of
+them by more than seventeen hundred lines.
+
+\paragraph{One block entry names a file, and there is no flag beside it.}
+\code{BM/run\_ballistic\_target} writes its three figures to disk through
+\code{coorbital.viz.saveFigure}, and the whole interface for that is one
+whitelisted entry, \code{plotFile}: a path \textbf{stem without an extension},
+defaulting to \code{fullfile(tempdir,'run\_ballistic\_target')} for the same
+reason \code{movieFile} defaults there, that a picture is a build artefact and
+does not belong in the source tree. Three properties of that design are
+deliberate.
+
+\begin{enumerate}
+\item \textbf{The stem is the switch.} Saving happens when \code{showPlots} is
+true \emph{and} the stem is non-empty; \code{plotFile = ''} draws the figures
+without writing them. There is no second on/off flag, because two settings that
+must agree are a state a caller can get wrong, and the script already
+establishes the pattern with \code{movieFile} and \code{movieOn}. It is in the
+whitelist, so a mistyped \code{'plotfile'} raises rather than silently doing
+nothing --- which is design point 1 above doing exactly the work it was added
+for.
+\item \textbf{The suffixes are fixed, and name what each figure \emph{is}}:
+\code{\_profile.png}, \code{\_ground\_track.png}, \code{\_globe.png}. The
+alternative --- sanitising each figure's own title into a file name --- was
+rejected on evidence already on disk. A title carries a miss distance, a minus
+sign and a degree symbol, and what that sanitises to is
+\code{china\_to\_la\_ground\_track\_10802\_km\_requi.png}: truncated, and a
+\emph{different} name on every run, so the directory accumulates near-duplicates
+that no longer correspond to anything. Fixed suffixes mean a re-run
+\textbf{overwrites its own pictures}.
+\item \textbf{The paths are printed and returned.} Printed in the style of the
+existing \code{Movie:} line, and handed back on \code{info.plotFiles}, which is
+present only when the figures were drawn \emph{and} saved --- the same
+convention the rest of \code{info} follows, where a field's presence is itself
+information.
+\end{enumerate}
+
+\code{HGV/run\_target} has the same gap and is \textbf{deliberately not wired},
+which \code{TODO.md} carries as a scheduled follow-up rather than as a defect:
+\code{saveFigure}'s header names both scripts as its intended callers, and doing
+the second one in its own change keeps a diff that touches the block
+\code{run\_target}'s pinned $511.2434604708133~\mathrm{m}$ is produced from
+readable on its own.
 
 \subsection{The summary, and the return-value convention}
 
@@ -1692,6 +1759,11 @@ lat/lon grid cannot give the picture at intercontinental range; the spec's
 \code{trajPlot} was never written and \code{DESIGN.md} \S10.1 records the
 substitution.
 
+The package has a \emph{fifth} public function, \code{saveFigure}, and it is the
+one that deliberately does not take this argument list: it takes a figure handle
+and a path. It is infrastructure rather than a figure function and is described
+on its own below.
+
 \subsection{The single \code{figure()} call site}
 
 \code{private/vizParent.m} is the \textbf{only} place in the package allowed to
@@ -1753,7 +1825,7 @@ unreachable by the very syntax it demonstrates.
 
 \subsection{The movie, feature by feature}
 
-\code{globeMovie} is 969 lines, most of it header, and every visual feature in
+\code{globeMovie} is 979 lines, most of it header, and every visual feature in
 it exists because a plain rotating globe failed at something specific.
 
 \paragraph{The growing track.} Frame $k$ shows the last trajectory sample at or
@@ -1905,6 +1977,83 @@ inspected each time, and $1.02$ is the smallest that cures both the vehicle
 marker and the larger launch ring. Its residual is stated rather than hidden:
 near the limb the required lift grows without bound, and the launch ring is
 still clipped in the final frame of the default render.
+
+\paragraph{The same backdrop, three times --- and the third one was late.} The
+frame carries three overlays on top of the globe: the legend, the altitude
+inset, and the caption. All three are white or light text over whatever the
+camera happened to render behind them, and all three need the same remedy. The
+legend got an opaque dark \code{Color} with white text when it was written. The
+inset got a semi-transparent backdrop patch at $\alpha = 0.55$ after the glide
+was measured descending behind its left edge. \textbf{The caption --- white bold
+text at top centre, a figure-level annotation --- got nothing until
+\code{1fffdf0}}, and on a high-latitude arc what it crosses is the polar ice
+cap: measured on the Plesetsk-to-New-York flight, the middle of the caption
+rendered white on white and the launch coordinates were unreadable for the
+\emph{whole} flight, while both ends of the same line, over sky, were crisp. It
+now carries \code{'BackgroundColor',[0.06 0.06 0.06]} at the same
+\code{'FaceAlpha',0.55} --- low enough that the limb still reads through the
+strip, which is why it is a backdrop and not an opaque bar.
+
+The design point is not the fix, it is the shape of the defect. \emph{A
+legibility rule applied to two of three overlays is not a rule; it is two
+fixes.} Nothing in the package stated it, no test could see it --- the frame is
+gone by the time the function returns, which is why \code{FrameFcn} exists at
+all --- and the third overlay was therefore written without it and shipped
+illegible. It is the shape Section~\ref{sec:blind} catalogues: a property held
+by every existing case, enforced by nothing, and broken by the next case added.
+
+\subsection{\code{saveFigure}: the one thing \pkg{viz} could not do}
+
+Until \code{dbc8e4a} the package could draw a figure and could write an MP4,
+and could not write a \emph{picture}. That gap survived three editions of this
+document unremarked, and the evidence was sitting in \code{results/} the whole
+time: every still already there when \code{dbc8e4a} landed --- the
+\code{china\_to\_la\_*} and \code{pacific\_*} sets --- was produced by an ad-hoc
+scratch driver in an earlier session, because no entry script could have
+produced one.
+
+\code{coorbital.viz.saveFigure(hFig,fileName,opts)} is the fifth public entry in
+the package and the one that does not take \code{(traj,veh,env,opts)}: it takes
+a figure handle and a path and returns the absolute path actually written. It is
+\emph{infrastructure} rather than a figure function, and it exists for the same
+reason \code{earthSurface} does --- so that two consumers cannot diverge. Four
+decisions are made here rather than at each call site:
+
+\begin{center}
+\begin{tabular}{lp{4.0cm}p{6.4cm}}
+\toprule
+Decision & Default & Why not the obvious alternative \\
+\midrule
+Resolution & 200 dpi, an option & Zoomable and embeddable without resampling; a $6.5\times4.5$ inch figure lands near $1300\times900$ px. A slide and a paper want different answers, so it is an option and not a constant --- the same rule Section~\ref{sec:conv} states for the exaggeration factor \\
+Background & \code{'current'}, \textbf{not white} & \code{exportgraphics} will lay a white card behind a dark figure. \code{globeMovie} styles its figure black, so a dark still exported on the default loses the starfield, the white legend text and the white annotation boxes. \code{'current'} reads the figure's own \code{Color}, so the caller need not know which it has \\
+Missing directory & created & The entry scripts default their stem into \code{tempdir}, where it always exists, so this branch is reached only when a user has deliberately pointed elsewhere. Refusing that is a chore, not a safety property. A directory that \emph{cannot} be created still raises \\
+After the write & size on disk read back & \code{exportgraphics} returns nothing, so a caller that checks only for the file existing is satisfied by a zero-byte stub from a failed write. Reading the size back is the cheapest available evidence that pixels arrived \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+Two further properties are contracts rather than defaults. The extension is
+\emph{optional} and defaults to \code{.png}, because the callers hold a path
+\textbf{stem} --- one user-block entry from which several names are derived by
+suffix --- and appending \code{'.png'} at each call site would be the same
+string written once per figure. And \textbf{the figure is not closed and nothing
+about it is modified}: ownership belongs to whoever created it, which is the
+contract the rest of the package already keeps, and an export that disposed of
+its subject would make saving a figure and looking at it mutually exclusive.
+
+\paragraph{On the background default, one correction worth making explicitly.}
+The dark styling belongs to \code{globeMovie} alone. \code{private/vizParent}
+creates \emph{every} figure in this package with \code{'color',[1 1 1]},
+\code{globe3D}'s still included, and \code{globeMovie} is the one function that
+overrides it. So the \code{'current'} default is not there because \pkg{viz} is
+a dark package; it is there because \pkg{viz} is a package with \emph{both}, and
+a helper shared between them cannot assume either.
+
+\code{tests/test\_saveFigure.m} measures rather than trusts, in the discipline
+of Section~\ref{sec:test}: the resolution is read off the written pixels against
+a second export at a known 100 dpi, the background off the corner pixel of a
+deliberately black figure, and the write itself off \code{imread}. All three are
+properties an assertion on the return value alone would miss.
 
 \subsection{The pumpkyn dependency is optional}
 
@@ -2453,12 +2602,14 @@ draws is gone by the time the function returns.
 
 \subsection{What the discipline cost, and what it bought}
 
-The suite is 23 files against 34 library and script files: $12\,316$ lines of
-test against $15\,094$ lines of everything else, which is $44.9\,\%$ of the
-repository. (The first edition of this document said ``roughly $60\,\%$'', and
-that was true when it was written; the fraction fell because the two targeting
-scripts grew faster than their tests did, not because any test was cut.)
-Several of the tests are longer than the code they test. That is the price.
+The suite is 24 \code{test\_*.m} files against 36 library and script files:
+re-measured 9 August 2026, $13\,250$ lines of test against $16\,654$ lines of
+everything else, which is $44.3\,\%$ of the repository. (The first edition of
+this document said ``roughly $60\,\%$'', and that was true when it was written;
+the fraction fell because the two targeting scripts grew faster than their tests
+did, not because any test was cut. The third edition's $44.9\,\%$ was measured
+over 23 and 34 files on 8 August.) Several of the tests are longer than the code
+they test. That is the price.
 
 What it bought is enumerable: the \code{Hscale} blindness, the eight unpinned
 booster constants, the four surviving thrust mutations, the two surviving
@@ -2492,8 +2643,8 @@ colon-terminated \code{\%\%} step comments through the body; and an
 \code{if nargin == 0} self-demo in every library function, calling itself by
 full namespace.
 
-Counted against the source: \textbf{24 public library functions, 21 with a
-self-demo, three ruled exceptions} --- \code{missileConst},
+Counted against the source, 9 August 2026: \textbf{26 public library functions,
+23 with a self-demo, three ruled exceptions} --- \code{missileConst},
 \code{vehicleDefaults} and \code{boosterDefaults}, each a pure constant return
 whose entire content is visible in its header, so a demo would print back what
 the reader is already looking at. The three \code{+viz/private} helpers also
@@ -2609,8 +2760,8 @@ loop variable} --- they are the imaginary unit; use \code{k}, \code{kp},
 \code{kt}, \code{kb}, \code{ka}, \code{kf} or a meaningful name. And
 \textbf{never \code{norm}} --- use \code{vmag} with an explicit dimension,
 a rule currently unexercised (no vector work yet) that stands for when it
-arrives. \textbf{Re-swept over all 57 \code{.m} files for this edition,
-8 August 2026: zero \code{\%\#ok}, zero \code{for i =} or \code{for j =}, and
+arrives. \textbf{Re-swept over all 61 \code{.m} files for this edition,
+9 August 2026: zero \code{\%\#ok}, zero \code{for i =} or \code{for j =}, and
 one \code{norm(} --- inside a comment in \code{test\_viz} explaining why the
 three-vector normalisation beside it was written out rather than taken from
 \code{norm()}.} The first edition reported that last count as zero; the
@@ -2981,8 +3132,13 @@ and \code{prescribed.m}, \code{tests/test\_runTarget.m}, and the fourth plan
 brief, \code{docs/plan\_2026-08-08\_aim\_solve\_and\_closed\_loop.md}. For the
 third edition, additionally: \code{BM/run\_ballistic\_target.m} in full ---
 its header, its two-stage solve, its four refusal paths and its own
-\code{missVector} --- and \code{tests/test\_runBallisticTarget.m}. Every
-code fragment quoted above is copied from the source, not retyped.
+\code{missVector} --- and \code{tests/test\_runBallisticTarget.m}. For the
+fourth edition, additionally: \code{+coorbital/+viz/saveFigure.m} in full,
+\code{tests/test\_saveFigure.m}, \code{+coorbital/+viz/globeMovie.m}'s three
+overlay blocks (legend, caption, inset backdrop),
+\code{+coorbital/+viz/private/vizParent.m}, and
+\code{BM/run\_ballistic\_target.m}'s user block, whitelist and figure block.
+Every code fragment quoted above is copied from the source, not retyped.
 
 \paragraph{Re-measured for this edition, 8 August 2026, MATLAB R2025b.}
 
@@ -3031,8 +3187,45 @@ Wall clock, four entry-script runs     & $2.14$, $3.42$, $27.17$ and $27.04~\mat
 \end{tabular}
 \end{center}
 
+\paragraph{Measured for the fourth edition, 9 August 2026, MATLAB R2025b.} The
+suite was run twice, both green; the wall clock below is the second run, timed
+around the whole \code{matlab -batch} invocation.
+
+\begin{center}
+\begin{tabular}{ll}
+\toprule
+Measurement & Result \\
+\midrule
+Test suite                             & \textbf{24 passed, 0 failed}, zero warnings, $305~\mathrm{s}$ wall \\
+File count under \code{missiles/}      & \textbf{61} \code{.m}: 26 public, 3 private, 5 entry, 2 vehicle, 25 test \\
+\quad by folder                        & 29 under \code{+coorbital}, 25 under \code{tests/}, 7 across \code{HGV/} and \code{BM/} \\
+Self-demo count, \pkg{coorbital}       & 26 public functions, 23 demos, 3 ruled exceptions \\
+Convention sweep, 61 \code{.m} files   & 0 \code{\%\#ok}, 0 \code{for i/j =}, 1 \code{norm(} in a comment \\
+Line counts                            & $13\,250$ test (24 files) against $16\,654$ library and script (36 files) \\
+Override whitelist, longest            & \code{BM/run\_ballistic\_target}, 38 entries \\
+\code{globeMovie} length               & 979 lines \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+Two of the third edition's own recorded discrepancies are now closed, and are
+noted here rather than edited out of the list below, which is a dated record.
+Item~1, \code{docs/README.md}'s ``39 \code{.m} files'', was corrected in
+\code{40d5449} and that section now carries the current count. Item~4's
+statement that the longest whitelist is \code{BM/run\_ballistic\_target} at 37
+was true when written; \code{plotFile} made it 38.
+
+\paragraph{Not measured for the fourth edition.} No figure was exported and no
+movie rendered for this document. The \code{saveFigure} properties described in
+Section~\ref{sec:viz} --- the 200 dpi, the \code{'current'} background, the
+byte-check --- are read off the source and off
+\code{tests/test\_saveFigure.m}, which measures all three; the caption's
+illegibility on the Plesetsk-to-New-York arc is the measurement recorded in
+\code{1fffdf0} and in the source comment beside the annotation, not one taken
+here.
+
 Carried forward from the first edition, 7 August 2026, and not re-run here
-because nothing this milestone touched can move them:
+because nothing since can move them:
 
 \begin{center}
 \begin{tabular}{ll}

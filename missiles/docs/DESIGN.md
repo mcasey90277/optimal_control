@@ -26,14 +26,19 @@
 > - **[§11 As built — 2026-08-07](#11-as-built--2026-08-07)** — boost, descent, and the full chain
 > - **[§12 As built — 2026-08-07](#12-as-built--2026-08-07)** — targeting and visualization
 > - **[§13 As built — 2026-08-08](#13-as-built--2026-08-08)** — two-axis targeting
+> - **[§14 As built — 2026-08-09 (a)](#14-as-built--2026-08-09-a)** — the closed-loop guidance design spike
+> - **[§15 As built — 2026-08-09 (b)](#15-as-built--2026-08-09-b)** — figure export, and the caption backdrop
 >
 > **The later section is always the later record.** Several §10 entries
 > ("boost is out of scope", "`stateConvert` will be written") were true when
-> written and are now superseded; §11 says so at each point, and §12 and §13 do
-> the same for their predecessors. **§12 and §13 were written together on
+> written and are now superseded; §11 says so at each point, and §12 through §15
+> do the same for their predecessors. **§12 and §13 were written together on
 > 2026-08-09**, after their milestones rather than on the day, and they say so
 > at their heads — they are reconstructions from the code and the commit record,
-> not same-day records like §10 and §11.
+> not same-day records like §10 and §11. **§14 and §15 are same-day records**,
+> and neither is a milestone in the sense §10–§13 are: §14 is a design spike
+> that shipped an interface and no algorithm, and §15 is one small capability
+> the spec never asked for.
 
 Design for a MATLAB library that generates boost / glide / descent trajectories for
 hypersonic glide vehicles, with ballistic and ICBM variants sharing the same core.
@@ -726,3 +731,195 @@ with measured sizes; the two that bear on the architecture:
 | **Package name** | Resolved 2026-08-06: `+coorbital`. Unchanged. |
 | **Repository** | Unchanged from §11.5, and unchanged in consequence: `optimal_control` has a remote, so the spec's assumption that none of this syncs to GitHub is still false. This milestone adds no new parameters, only a solver. |
 | **Vehicle parameters** | **Still open, and now with a sharper example of why it matters.** §12.4 records `alphaMax` being moved into `BM/vehicle_bm.m` after it was found set to 12° in one script and 6° in another for one airframe, the 12 having been chosen to make a demonstration target reachable. The shipped 6° is a placeholder awaiting a qualification basis, not a cleared limit, and it now says so in the vehicle file, in both `BM` user blocks and in the printed limitations. |
+
+---
+
+## 14. As built — 2026-08-09 (a)
+
+**§10 through §13 above are left unedited.** This section records the
+**closed-loop guidance design spike**, `069715b`, reviewed and corrected in
+`de17475` and `a014304`. Written on the day.
+
+It is not a milestone in the sense §10–§13 are. Nothing was built that flies:
+the spike answered two questions by measurement and shipped the one piece PEG
+and VOA both need, so that whichever algorithm is written first inherits
+decisions rather than making them again. **No line of either algorithm exists.**
+
+### 14.1 What shipped
+
+| File | What it is |
+|---|---|
+| `+coorbital/+guide/terminalConstraint.m` | The five terminal constraints PEG and VOA both enforce — radius, speed, flight path angle, and the two components that fix the orbital plane — as a **dimensionless** `[5x1]` residual that is zero on the target manifold. It took the public-function count from 24 to 25; `saveFigure` made it 26 later the same day (§15). |
+| `tests/test_terminalConstraint.m` | Its coverage. It asserts that the specified five really are blind to the defect below **before** asserting the refusal, so the guard cannot be mistaken for belt and braces. |
+| `docs/closed_loop_guidance.md` | The brief: the two answered questions, a third specified but unbuilt (the dispersion campaign), the ordered task list, and the out-of-scope list. |
+
+### 14.2 The design decision the spec has no concept of: where a guidance cycle lives
+
+`DESIGN.md` §2.2 describes `phaseRun` as the phase driver and says nothing about
+a control loop, because there was not going to be one. There is now a decision
+about where one would sit, and it was settled by instrumenting the guidance
+handle through `phaseRun` on the shipped `BM` boost rather than by argument.
+
+Measured over 80.5 s of flight: **1323 guide calls**, of which 15 were rejected
+integrator attempts; **20.7 %** of the 829 stage calls were made at times
+already passed; **148** repeated a time with a different state; and the worst
+state shown to the guide was **2.12 m** off the trajectory actually flown — on
+an *accepted* step. That rules out any design that updates guidance state
+inside a `guide(t,x)` call, which is what both documented options assumed.
+
+The design adopted is neither: **a driver above `phaseRun`, one `phaseRun` call
+per guidance cycle.** `phaseRun` is untouched and the guide is constant within a
+cycle, which makes the purity contract §13-era `TODO.md` records as
+"forbidden by documentation, not by construction" satisfiable by construction
+for a closed-loop law. Cost measured at 0.5–1.0 ms per cycle; the restart
+artefact is bounded by integrator tolerance and flat in cycle count (806
+restarts no worse than 21); the zero-order-hold error is 326 m of burnout radius
+and first order in `dt`.
+
+### 14.3 The thrust-direction inverse
+
+`alpha = atan2(hypot(p.eGamma,p.ePsi), p.vHat)`, not the math note's `arccos`
+form. Verified by a 720-case round trip through `boost3DOF`'s own thrust terms:
+**2.22e−16 rad** worst against **1.21e−11 rad**. The reason recorded in
+`de17475` is **scale robustness**, not cancellation near zero incidence — 74 %
+of the shipped burn sits at the 6° clamp, where `arccos` errs by 4.4e−16.
+
+### 14.4 A specification defect caught here rather than downstream
+
+Residuals four and five ask that the achieved angular momentum have no
+component on `q1` and none on `q2`. That is satisfied when `h` is
+**antiparallel** to `wHat` as well as parallel: a retrograde burnout at the
+right radius, speed, flight path angle and plane returns
+`c = [0 2.2e-16 0 0 0]'` — five exact zeros, a wrong-way insertion scored as a
+perfect hit by both PEG's least squares and by a dispersion campaign ranking on
+`norm(c)`. The defect is inherited from the source deck. It is caught in the one
+place both algorithms pass through: `h·wHat <= 0` raises, and a caller wanting
+the other sheet negates `des.wHat`.
+
+Two further false zeros are guarded: a zero position or velocity vector left
+three of five residuals reading as satisfied with no NaN in `c`, and a radial
+achieved velocity made both plane residuals zero for the wrong reason.
+
+`a014304` then corrected the *justification* rather than the code: throwing
+rather than returning a large residual was cited to `aimSolve` as precedent, and
+`aimSolve`'s contract is not uniform — it shrinks only on a trial point,
+hard-refuses on a finite-difference probe, and lets a throw at the initial guess
+propagate. Whichever of PEG or VOA is built first has to decide this
+deliberately, and the header now says so.
+
+### 14.5 The frame question, and why the interface takes Cartesian vectors
+
+`terminalConstraint` takes Cartesian position and velocity in the caller's own
+frame rather than a library state, and that is a design position, not laziness.
+Converting the seven-state spherical vector needs an inertial frame, and this
+library has not defined one: with `env.omegaE` nonzero the state's longitude is
+Earth-fixed and its speed is planet-relative, and no epoch exists anywhere.
+Baking a guess into the one interface both laws share would hide it. The
+conversion belongs with the caller that owns the epoch.
+
+### 14.6 Open items (§9), as they now stand
+
+| §9 item | Status |
+|---|---|
+| **Package name** | Unchanged. |
+| **Repository** | Unchanged from §13.6. |
+| **Vehicle parameters** | **Still open, and the spike found a new instance of it.** `coorbital.util.boosterDefaults` has **no `alphaMaxDeg` field at all**, so `BM/run_ballistic_target` reads the separated re-entry body's 6° clamp off `BM/vehicle_bm.m` and applies it to the boosted stack. Measured over 493 samples of `run_ballistic`'s 80.52 s boost, `|alpha|` sits exactly at the clamp for 59.7 s — 74 % of the burn. Nothing notices, because `constLD` ignores alpha entirely and `veh.alphaMaxDeg` is the only feasibility check there is. `TODO.md` carries the action. |
+
+---
+
+## 15. As built — 2026-08-09 (b)
+
+**§10 through §14 above are left unedited.** This section records a small
+change with a disproportionate consequence: until `dbc8e4a` **nothing in this
+library could save a figure to disk.**
+
+### 15.1 A capability the spec never mentioned, and neither did anything else
+
+`DESIGN.md` §2 lists `+viz` as "trajectory, ground track, altitude/velocity/Mach
+profiles" and says nothing about output, because a figure on screen was the
+whole requirement. §12.2 recorded `globeMovie` writing an MP4 and stopped there.
+The consequence went unnoticed for two milestones. The evidence was in
+`results/` the whole time: every still already sitting there when `dbc8e4a`
+landed — the `china_to_la_*` and `pacific_*` sets — was written by an **ad-hoc
+scratch driver** in an earlier session, not by any entry script, because no
+entry script could have produced one. Their names say so as plainly as anything
+could: `china_to_la_ground_track_10802_km_requi.png` is a figure title
+sanitised, and truncated, into a file name.
+
+`missiles/results/` is gitignored (`optimal_control/.gitignore:48`), so movies
+and saved figures alike are local artefacts and are never tracked.
+
+### 15.2 `coorbital.viz.saveFigure` — one export helper for the package
+
+The library's twenty-sixth public function, `tests/test_saveFigure.m` beside it.
+Four decisions, each made once here rather than per call site:
+
+| Decision | Value | Why not the obvious alternative |
+|---|---|---|
+| Resolution | 200 dpi, an option | Zoomable and embeddable without resampling; three per run is not a nuisance on disk. A slide and a paper want different answers, so it is not a constant |
+| Background | `'current'`, **not white** | `exportgraphics` is willing to lay a white card behind a dark figure. `globeMovie` styles its figure black (`vizParent` creates every figure **white**, and `globeMovie` is the one function that overrides it), so a dark still exported on the default would lose the starfield, the white legend text and the white annotation boxes. `'current'` takes the figure's own `Color`, so the caller does not have to know which it has |
+| Missing directory | created | The entry scripts default their stem into `tempdir`, where the directory always exists, so this branch is only reached when a user has deliberately pointed somewhere of their own. Refusing that with "make the folder first" is a chore, not a safety property. A directory that cannot be created still raises |
+| After the write | size on disk read back | `exportgraphics` returns nothing, so a caller that only checks the file exists is satisfied by a zero-byte stub from a failed write |
+
+The extension is optional and defaults to `.png`, because callers hold a path
+**stem**. The figure is **not closed** and nothing about it is modified —
+ownership belongs to whoever created it, which is the contract the rest of
+`+viz` already keeps, and an export that disposed of its subject would make
+saving and looking at a figure mutually exclusive.
+
+### 15.3 `plotFile` — one user-block entry, no second flag
+
+`BM/run_ballistic_target` gains **`plotFile`**, a path stem without an
+extension, defaulting to `fullfile(tempdir,'run_ballistic_target')`. It is in
+the override whitelist, so a mistyped option raises rather than silently doing
+nothing, and the whitelist is now 38 entries — the longest in the library.
+
+Three files per run, **fixed** suffixes naming what each figure *is*:
+`<stem>_profile.png`, `<stem>_ground_track.png`, `<stem>_globe.png`. The
+alternative — sanitising the figure's own title into a file name — was rejected
+on the evidence already sitting in `results/`: a title carries a miss distance,
+a minus sign and a degree symbol, and
+`china_to_la_ground_track_10802_km_requi.png` is what that produces, a different
+truncated name on every run. Fixed suffixes mean a re-run **overwrites** its own
+pictures.
+
+Saving is gated by `showPlots` **and** a non-empty stem; setting `plotFile` to
+`''` draws the figures without writing them. There is deliberately no second
+on/off flag, mirroring `movieFile` and `movieOn` in the same script. The paths
+are printed in the style of the existing `Movie:` line and handed back on
+`info.plotFiles`, which is present only when the figures were drawn *and* saved.
+
+**`HGV/run_target` has exactly the same gap and is deliberately not wired.**
+That is a scheduled follow-up, recorded in `TODO.md`, not an oversight — the
+helper was written for both from the start and its header names both callers.
+
+### 15.4 The caption backdrop: the same legibility problem, solved a third time
+
+`1fffdf0`, and it belongs in the as-built record because the *file already knew
+the answer twice*. `globeMovie`'s legend carries an opaque-dark `Color` with
+white text; the altitude inset sits on a semi-transparent backdrop patch at
+`FaceAlpha 0.55`, added after the glide was measured descending behind its left
+edge. The caption — white bold text at top centre, a figure-level annotation —
+never got one.
+
+White bold text at the top of the frame crosses whatever the camera put there,
+and on a high-latitude arc that is the polar ice cap. Measured on the
+Plesetsk-to-New-York arc: the middle of the caption rendered white on white and
+the launch coordinates were unreadable **for the whole flight**, while both ends
+of the same line, over sky, were crisp. The caption now carries
+`'BackgroundColor',[0.06 0.06 0.06],'FaceAlpha',0.55` — the same treatment, at
+an alpha low enough that the limb still reads through the strip, which is why it
+is a backdrop and not an opaque bar.
+
+The general lesson, and the reason this is recorded rather than filed as a
+one-line fix: **a legibility rule applied to two of three overlays is not a
+rule, it is two fixes.** Nothing in the package stated it, so the third overlay
+was written without it and shipped illegible.
+
+### 15.5 Open items (§9), as they now stand
+
+| §9 item | Status |
+|---|---|
+| **Package name** | Unchanged. |
+| **Repository** | Unchanged from §14.6. |
+| **Vehicle parameters** | Unchanged from §14.6. This change adds no parameter of any kind: `plotFile` is a path, not a physical quantity, and `saveFigure`'s 200 dpi is a display choice living at its point of use, which is the rule §14 and `software_design.tex` both state for the exaggeration factor and the Mach-5 edge. |

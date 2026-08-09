@@ -185,15 +185,16 @@ returns a non-zero exit code. Current state:
   PASS  test_runBallisticTarget
   PASS  test_runGlide
   PASS  test_runTarget
+  PASS  test_saveFigure
   PASS  test_sphereGrav
   PASS  test_terminalConstraint
   PASS  test_viz
 
-23 passed, 0 failed
+24 passed, 0 failed
 ```
 
-316 s wall clock including MATLAB startup, measured 2026-08-09 on an Apple
-silicon Mac, and zero warnings.
+305 s wall clock including MATLAB startup, measured 2026-08-09 on an Apple
+silicon Mac, and zero warnings. The run was repeated and both were green.
 
 **The suite got slower as it got sharper.** It was 42 s at 21 tests on
 2026-08-07, and almost all of the increase is `test_runTarget` and
@@ -203,7 +204,7 @@ That is the cost of covering the rotating and banked cases, and it is worth
 paying: those two cases are the *only* coverage the two-axis path has from an
 entry script.
 
-Seventeen of the twenty-three are unit or analytic-validation tests — fifteen
+Eighteen of the twenty-four are unit or analytic-validation tests — sixteen
 exercise one library function apiece, and `test_allenEggers` and
 `test_equilibriumGlide` check the propagator against a closed-form solution. The
 other six test **compositions**, and they are the important ones:
@@ -306,10 +307,10 @@ Everything reusable lives in one `+coorbital` package. Vehicle folders hold
 | `+coorbital/+eom/` | `glide3DOF.m`, `boost3DOF.m`, `massConstant.m` |
 | `+coorbital/+guide/` | `prescribed.m`, `pitchProgram.m`, `terminalConstraint.m` |
 | `+coorbital/+prop/` | `phaseRun.m`, `constThrust.m`, `eventAltitude.m`, `eventApogee.m`, `eventBurnout.m` |
-| `+coorbital/+viz/` | `groundTrack.m`, `profilePlot.m`, `globe3D.m`, `globeMovie.m`, plus `private/` helpers |
+| `+coorbital/+viz/` | `groundTrack.m`, `profilePlot.m`, `globe3D.m`, `globeMovie.m`, `saveFigure.m`, plus `private/` helpers |
 | `HGV/` | `run_glide.m`, `run_boost_glide.m`, `run_target.m`, `vehicle_hgv.m` |
 | `BM/` | `run_ballistic.m`, `run_ballistic_target.m`, `vehicle_bm.m` |
-| `tests/` | `run_tests.m` plus twenty-three `test_*.m` |
+| `tests/` | `run_tests.m` plus twenty-four `test_*.m` |
 | `docs/` | this file, `DESIGN.md`, `LESSONS_LEARNED.md`, `closed_loop_guidance.md`, the four plan briefs, the two LaTeX notes (`hgv_dynamics_note.tex`, `software_design.tex`), reviews |
 
 Note the split: `+prop` holds both the **propagator** (`phaseRun`, the events)
@@ -435,12 +436,31 @@ segment per phase, launch, target and impact marked), `profilePlot` (a chosen
 subset of altitude, speed, Mach, dynamic pressure, load factor, mass and flight
 path against time), `globe3D` (a still 3-D Earth with the trajectory arc) and
 `globeMovie` (the same scene as an MP4 with the trajectory developing over
-time). Every one takes the same `(traj,veh,env,opts)` argument list — several
+time). All four take the same `(traj,veh,env,opts)` argument list — several
 of them do not read `veh` or `env` and say so in their headers — and every one
 reads the trajectory and never writes it, so no figure can move a number in a
-summary. The Earth texture and starfield come from the pumpkyn toolbox when it
-is on the path and degrade to a plain shaded sphere on a black background when
-it is not; both paths are a fully working figure and need no network.
+summary. **`globeMovie` is the one that styles itself dark**: `private/vizParent`
+creates every figure on a **white** background, including `globe3D`'s still, and
+`globeMovie` overrides it to black. It is also the only one that reaches for the
+pumpkyn toolbox — the Earth texture and the starfield come from there when it is
+on the path and degrade to a plain shaded sphere on black when it is not; both
+paths are a fully working movie and need no network.
+
+**`viz/saveFigure`** is the fifth public entry in the package and the odd one
+out: it takes a figure handle and a path rather than a trajectory, and writes
+the figure to an image file. It exists so the three decisions every caller needs
+made — what resolution, what background, and what happens when the target
+directory does not exist — are made **once** rather than in an inline
+`exportgraphics` call per script with whatever arguments were to hand. 200 dpi
+by default, an option because a slide and a paper want different answers; the
+background defaults to **`'current'`, not white**, so a dark figure exports dark
+and a light one exports light without the caller having to know which it has; a
+missing directory is created rather than refused; the extension is optional and
+defaults to `.png`, because callers hold a path *stem*; and the size on disk is
+read back after the write, because `exportgraphics` returning quietly is not
+evidence that pixels reached the file. It returns the absolute path actually
+written. **It does not close the figure and modifies nothing about it** — that
+is the same ownership contract the rest of the package keeps.
 
 **`atmos` / `grav` / `aero` / `prop`** are the four swappable model families. See
 [Adding a fidelity level](#adding-a-fidelity-level) — this split is the point of
@@ -1031,6 +1051,56 @@ the verdict above has **not** been re-checked at the new height. The `'auto'`
 rule still returns its 2x floor there, since 22.8 % is already inside the 0.3 rE
 target. `HGV/run_target`'s row is unaffected: its shipped run is bit-for-bit
 what it was, apogee included.
+
+### Saving the figures: `plotFile`
+
+Until 2026-08-09 nothing in this library could write a figure to disk. Every
+still that was in `results/` before that date was produced by an ad-hoc scratch
+driver, not by an entry script — no entry script could have produced one.
+
+`BM/run_ballistic_target` now exposes **`plotFile`** in its USER PARAMETERS
+block, a path **stem without an extension**, shipped at
+`fullfile(tempdir,'run_ballistic_target')` for the same reason `movieFile`
+defaults there: a picture is a build artefact and does not belong in the source
+tree. Each figure appends its own suffix and `.png`, and the three suffixes are
+**fixed**, naming what each figure *is*:
+
+| Figure | File |
+|---|---|
+| `coorbital.viz.profilePlot` | `<stem>_profile.png` |
+| `coorbital.viz.groundTrack` | `<stem>_ground_track.png` |
+| `coorbital.viz.globe3D` | `<stem>_globe.png` |
+
+Fixed rather than derived from each figure's title, so a re-run **overwrites**
+its own pictures instead of accumulating a pile of near-duplicates: a title
+carries a miss distance, a minus sign and a degree symbol, and the sanitised
+result is a different, truncated name on every run — which is exactly what the
+`china_to_la_ground_track_10802_km_requi.png` left in `results/` by the old
+scratch driver looks like.
+
+```matlab
+stem = '/Users/msc/Desktop/optimal_control/missiles/results/china_to_la';
+[traj,info] = run_ballistic_target(struct('plotFile',stem));
+info.plotFiles   % 1x3 cellstr: .../china_to_la_profile.png, _ground_track.png, _globe.png
+```
+
+Run 2026-08-09, that writes the three files and prints them, and the shipped
+miss is unmoved at **39.0092687975735 m** — `saveFigure` reads a figure and
+writes a file, and touches nothing the summary is computed from.
+
+Saving happens whenever `showPlots` is true **and** the stem is non-empty; set
+`plotFile` to `''` to draw the figures on screen without writing them. There is
+deliberately **no second on/off flag** — the pattern is the one `movieFile` and
+`movieOn` already establish in the same script, where the file name and the
+switch are one decision rather than two that can fall out of step. `plotFile` is
+in the override whitelist, so a mistyped option raises rather than silently
+doing nothing. The paths are printed at the end of the run in the same style as
+the existing `Movie:` line, and returned on `info.plotFiles` — present only when
+the figures were drawn *and* saved.
+
+**`HGV/run_target` has the same gap and is deliberately not wired.**
+`coorbital.viz.saveFigure` was written for both callers and its header names
+both; wiring the second is a scheduled follow-up in `TODO.md`, not an oversight.
 
 ---
 
@@ -1850,9 +1920,9 @@ Beyond the style guide, four rules this library enforces:
 - **Never `norm`** — use `vmag` with an explicit dimension. (Currently unused
   here; the rule stands for when vector work arrives.)
 
-Re-verified 2026-08-09 across all **59** `.m` files under `missiles/` — 25
+Re-verified 2026-08-09 across all **61** `.m` files under `missiles/` — 26
 public library functions, 3 `+viz/private/` helpers, 5 entry scripts, 2 vehicle
-parameter files and 24 under `tests/` (`run_tests.m` plus 23 `test_*.m`):
+parameter files and 25 under `tests/` (`run_tests.m` plus 24 `test_*.m`):
 
 ```bash
 find /Users/msc/Desktop/optimal_control/missiles -name '*.m' | wc -l
@@ -1896,8 +1966,11 @@ with a prescribed pitch program, `constThrust`, the burnout and apogee events,
 in `HGV/run_boost_glide`, the **`+viz` package** — which was on this list for two
 milestones and has now absorbed the plotting that was triplicated inline across
 the entry scripts, and added `globeMovie` — **point-to-point targeting** in
-`HGV/run_target` and `BM/run_ballistic_target`, and **two-axis targeting** in
+`HGV/run_target` and `BM/run_ballistic_target`, **two-axis targeting** in
 `coorbital.util.aimSolve`, which retired the rotating-Earth and cross-range rows
-above. `util/stateConvert.m` was **not** built and will not be
+above, and — 2026-08-09 — **figure export**, `coorbital.viz.saveFigure` with
+`BM/run_ballistic_target`'s `plotFile` on top of it, closing a gap nothing had
+noticed: no entry script could write a picture to disk.
+`util/stateConvert.m` was **not** built and will not be
 — see [The seven-state convention](#the-seven-state-convention-and-the-inert-mass-trap)
 and `DESIGN.md` §11.

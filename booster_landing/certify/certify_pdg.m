@@ -356,9 +356,12 @@ TU(:,1:2:end) = solC.U;  TU(:,2:2:end) = solC.Um;
 %% control representation Simpson's rule (hence the HS defects above) is
 %% actually built against, not a global spline across segment boundaries.
 odef = @(tt, xx) pdg_dynamics(xx, hs_quad_ctrl(tt, solC.U, solC.Um, h, N, P.Tmin, TmaxG), P);
-oo   = odeset('RelTol',1e-10,'AbsTol',1e-10);
-[~, XX] = ode45(odef, [0 solC.tf], solC.X(:,1), oo);
-ef = XX(end,:).' - solC.X(:,end);
+% Integration structure from the shared engine (oclib move 2, span mode =
+% this gate's single-call ode45 convention); dynamics + the
+% annulus-feasible control reconstruction stay THIS campaign's closures.
+zG2 = oc.fly_control(solC.X(:,1), [0 solC.tf], odef, ...
+    struct('mode','span', 'solver',@ode45, 'RelTol',1e-10, 'AbsTol',1e-10));
+ef = zG2 - solC.X(:,end);
 rep.G2_pos = sqrt(sum(ef(1:3).^2));  rep.G2_vel = sqrt(sum(ef(4:6).^2));
 rep.G2_dm  = abs(ef(7));
 rep.G2_pass = rep.G2_pos < 1 && rep.G2_vel < 0.1 && rep.G2_dm < 0.5;

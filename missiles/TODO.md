@@ -1,25 +1,29 @@
 # Missile Trajectory Library — Open Items
 
-*Coorbital, Inc. — recompiled 2026-08-09 against commit `069715b`. The previous
-edition was compiled against `0743a7d` on 2026-08-08. Two-axis targeting landed
+*Coorbital, Inc. — recompiled 2026-08-09 against commit `dbc8e4a`. The previous
+edition was compiled against `069715b` the same day. Two-axis targeting landed
 in both targeting scripts at `3cf70bb`, which closes the two largest items in
 the *Known limitations* section — one of them justified on a mechanism that is
 wrong — and opens seven smaller ones in their place; the closed-loop guidance
-design spike then landed at `069715b`.*
+design spike then landed at `069715b`, and figure export —
+`coorbital.viz.saveFigure` with `BM/run_ballistic_target`'s `plotFile` on top of
+it — at `dbc8e4a`.*
 
 Every claim below was checked against the code, or measured by running it, on
 2026-08-08 or 2026-08-09; the measurements and their sources are named inline.
-The suite was green at the time of writing: **23 passed, 0 failed**
-(`tests/run_tests`, re-run 2026-08-09, 314.6 s wall including MATLAB startup).
+The suite was green at the time of writing: **24 passed, 0 failed**
+(`tests/run_tests`, re-run 2026-08-09, 305 s wall including MATLAB startup,
+zero warnings).
 
-**A note on the counts, because they moved twice in two days.** There are now
-**59 `.m` files** under `missiles/` and **23 `test_*.m`** — 25 public library
-functions, 3 package-private helpers, 5 entry scripts, 2 vehicle files and 24
-files under `tests/`. The suite read 21 on 2026-08-08, 22 once
-`coorbital.util.aimSolve` and `tests/test_aimSolve` landed, and 23 once the
+**A note on the counts, because they moved three times in two days.** There are
+now **61 `.m` files** under `missiles/` and **24 `test_*.m`** — 26 public
+library functions, 3 package-private helpers, 5 entry scripts, 2 vehicle files
+and 25 files under `tests/`. The suite read 21 on 2026-08-08, 22 once
+`coorbital.util.aimSolve` and `tests/test_aimSolve` landed, 23 once the
 closed-loop guidance spike (`069715b`) added
-`+coorbital/+guide/terminalConstraint.m` and its test. Count it, do not quote
-it:
+`+coorbital/+guide/terminalConstraint.m` and its test, and 24 once figure export
+(`dbc8e4a`) added `+coorbital/+viz/saveFigure.m` and its test. Count it, do not
+quote it:
 
 ```bash
 find /Users/msc/Desktop/optimal_control/missiles -name '*.m' -not -path '*/results/*' | wc -l
@@ -318,14 +322,36 @@ open — below.
 
 ## Structural, deferred deliberately
 
+### Wire `HGV/run_target` to `coorbital.viz.saveFigure`
+
+**Deliberately left out of `dbc8e4a`, not overlooked.** That commit gave
+`BM/run_ballistic_target` a `plotFile` stem and wrote its three figures through
+the new shared helper. `HGV/run_target` draws the same three figures — profile,
+ground track, globe — and still cannot save any of them.
+
+The helper was written for both from the start: its header names
+`BM/run_ballistic_target` and `HGV/run_target` as the two callers whose exports
+must be comparable, which is the whole reason the resolution, the background
+rule and the missing-directory behaviour live in one file rather than at each
+call site. So this is scheduling, not design: copy the `plotFile` user-block
+entry, add it to the whitelist, capture the three figure handles the
+`coorbital.viz.*` calls already return, and write the same three fixed suffixes.
+
+Doing it in its own change is deliberate for the reason the rest of this section
+gives: `run_target`'s shipped miss, **511.2434604708133 m**, is pinned to its
+last digit, and a change that touches the block the summary is produced from
+should be a diff a reader can read on its own. Nothing here can move a number —
+`saveFigure` reads a figure, writes a file, and modifies neither the figure nor
+anything the summary is computed from — but expected is not verified.
+
 ### Migrate the entry scripts off their EOM closures onto `phase.veh`
 
 Now that `ph.veh` exists, the chain entry scripts still bind a per-phase vehicle
 inside an EOM closure and ignore the forwarded argument:
 
-- `BM/run_ballistic.m:281-282`
+- `BM/run_ballistic.m:318-319`
 - `HGV/run_boost_glide.m:365-366`
-- `HGV/run_target.m:439-440`
+- `HGV/run_target.m:558-559`
 - and `BM/run_ballistic_target.m`, which was written after `ph.veh` landed and
   still uses a closure
 
@@ -353,21 +379,25 @@ only the tightest of the seven components does any real work.
 `env.odeAbsTol` **already accepts a vector** — `odeset` takes one directly, and
 `phaseRun` passes it through unexamined. That is documented in `phaseRun`'s
 Notes with a worked per-component example. What is deferred is changing the
-**default**, because every pinned number in all 23 test files was measured under
+**default**, because every pinned number in all 24 test files was measured under
 the scalar and a new default moves all of them at once. Do it as its own change:
 pick the vector, re-measure the headline set, and re-pin deliberately rather
 than as a side effect.
 
 ### Extract the duplicated `overrideOf` and `maxOver` helpers into `+util`
 
-Re-measured 2026-08-08 by grep. Both counts went **up** with
+Re-measured 2026-08-09 by grep, and the line numbers below are the **function
+definitions**, re-read on that date. Six of the previous edition's nine had
+drifted, the two in `run_ballistic_target` by more than seventeen hundred lines
+each — which is the general caution `docs/LESSONS_LEARNED.md` gives about
+numbers copied into prose, applied to line numbers. Both counts went **up** with
 `run_ballistic_target`, which is the argument for doing it: a fifth and a fourth
 copy arrived by simply writing the next script.
 
 | Helper | Copies | Where |
 |---|---|---|
-| `overrideOf` | **5** | `HGV/run_glide.m:327`, `BM/run_ballistic.m:1084`, `HGV/run_boost_glide.m:1183`, `HGV/run_target.m:1811`, `BM/run_ballistic_target.m:3448` |
-| `maxOver` | **4** | `BM/run_ballistic.m:907`, `HGV/run_boost_glide.m:1047`, `HGV/run_target.m:1554`, `BM/run_ballistic_target.m:3167` |
+| `overrideOf` | **5** | `HGV/run_glide.m:327`, `BM/run_ballistic.m:1183`, `HGV/run_boost_glide.m:1183`, `HGV/run_target.m:2224`, `BM/run_ballistic_target.m:5200` |
+| `maxOver` | **4** | `BM/run_ballistic.m:1006`, `HGV/run_boost_glide.m:1047`, `HGV/run_target.m:1967`, `BM/run_ballistic_target.m:4919` |
 
 `run_glide` is single-phase and has no peak-over-a-mask search, which is why it
 carries `overrideOf` but not `maxOver`.
@@ -375,10 +405,10 @@ carries `overrideOf` but not `maxOver`.
 ### Extract `missVector` into `+coorbital/+util` when a third caller appears
 
 **Not now, and the reason is in the function's own header rather than in this
-file** (`BM/run_ballistic_target.m:3129`). `missVector` — the miss from target
+file** (`BM/run_ballistic_target.m:3168`). `missVector` — the miss from target
 to impact, resolved at the target into down-range and cross-range components —
 is duplicated verbatim between `HGV/run_target.m:1766` and
-`BM/run_ballistic_target.m:3101`, **deliberately**: the two targeting scripts
+`BM/run_ballistic_target.m:3137`, **deliberately**: the two targeting scripts
 are standalone worked examples a reader is meant to be able to follow end to
 end, and neither imports local machinery from the other.
 
@@ -394,7 +424,7 @@ already at five and four copies and have no such argument behind them.
 neither `info` carries the fields an independent checker needs to re-integrate
 the same chain with a different solver — `phases`, `env`, `x0` and the per-phase
 vehicle structs — which `HGV/run_boost_glide.m:909-913` and
-`HGV/run_target.m:1236-1240` do carry. Verified 2026-08-08: grep for
+`HGV/run_target.m:1429-1433` do carry. Verified 2026-08-08: grep for
 `info.phases` in `BM/` returns nothing.
 
 The consequence: `tests/test_fullChain.m` gives `run_boost_glide`'s two
@@ -725,7 +755,7 @@ own plan when it is wanted; none is an oversight.
 
 ## Documentation debt
 
-All re-checked 2026-08-08.
+All re-checked 2026-08-09.
 
 - ~~**`docs/DESIGN.md` needs TWO more dated as-built sections**~~ — **DONE
   2026-08-09.** §12 (targeting and visualization) and §13 (two-axis targeting)
@@ -733,37 +763,39 @@ All re-checked 2026-08-08.
   banner links all four. Both new sections declare at their heads that they
   were written after their milestones rather than on the day, which §10 and §11
   were not — that is a real difference in their standing and it is stated
-  rather than hidden.
+  rather than hidden. **§14 (the closed-loop guidance spike) and §15 (figure
+  export, and the caption backdrop) followed later the same day**, both same-day
+  records, both saying at their heads that neither is a milestone in the sense
+  §10–§13 are. The banner links all six.
 - ~~**`README.md` (the front door) is stale**~~ — **DONE 2026-08-09.** Counts,
   the entry-script table, the quickstart and the LaTeX-notes paragraph are all
   re-measured or rewritten. The front door now carries two-axis targeting: the
   five entry scripts, the accuracy and the propagation cost of turning rotation
   on, and `coorbital.util.aimSolve` in the function inventory.
-- **`docs/README.md` is now the single largest piece of documentation debt in
-  the repository, and none of it was touched by the 2026-08-09 sweep.** It is
-  1541 lines and it is the file `README.md`, `DESIGN.md` and
-  `software_design.tex` all defer to as *the authority on delivered behaviour*,
-  which makes each of these worse than it would be elsewhere. Verified
-  2026-08-09:
-  - **`:11` says "Three milestones have shipped" above a table with four rows,**
-    and there are now five milestones (two-axis targeting is not in the table
-    at all).
-  - **`:1526` still describes rotating-Earth targeting as unsupported** — "Both
-    targeting scripts' closed-form azimuth is exact only at `omegaE = 0`.
-    Rotation needs an outer azimuth iteration around the range solve." Both
-    halves are false, and the second is the **retracted mechanism**: it is the
-    outer-iteration story this file struck above.
-  - **`:695` attributes 315.69 km of `run_ballistic_target` cross-range "to a
-    bank angle of zero"** — a superseded measurement of a retracted mechanism.
-  - **`:165` describes `test_runBallisticTarget` as checking "the closed-form
-    azimuth" and an `earthSpin` refusal.** The azimuth is solved and part 12 of
-    that test now flies a rotating Earth rather than refusing one.
-  - **`:1502` says the style sweep covered "39 `.m` files".** Re-run 2026-08-09
-    over all **59**: still clean — zero `%#ok`, zero `for i =` or `for j =`,
-    and the single `norm(` hit is a comment in `tests/test_viz.m:1705`
-    *explaining* why `norm()` is not used. A count refresh, not a violation.
-  - **`aimSolve` and `terminalConstraint` are absent from its function
-    inventory.**
+- ~~**`docs/README.md` is the single largest piece of documentation debt in the
+  repository**~~ — **DONE 2026-08-09, `de8af54` and `40d5449`.** All six defects
+  this entry listed are closed, and each was re-verified against the current
+  file rather than taken from the commit messages:
+  - "Three milestones have shipped" above a four-row table now reads **five**,
+    with two-axis targeting as its own row.
+  - The paragraph describing rotating-Earth targeting as unsupported — and with
+    it the **retracted** outer-azimuth-iteration mechanism — is gone. The only
+    surviving mention says the reason that row used to give was wrong.
+  - The 315.69 km cross-range attribution to "a bank angle of zero" is gone;
+    the string no longer occurs in the file.
+  - `test_runBallisticTarget`'s description now says the azimuth is **solved**
+    and that part 12 flies a rotating Earth.
+  - The "39 `.m` files" style-sweep count is gone. The sweep is re-stated at the
+    current count and is still clean — zero `%#ok`, zero `for i =` or
+    `for j =`, and the single `norm(` hit is a comment in
+    `tests/test_viz.m:1705` *explaining* why `norm()` is not used.
+  - `aimSolve` and `terminalConstraint` are both in the function inventory, and
+    `saveFigure` joined them on 2026-08-09.
+
+  What replaced the debt is the standing obligation: `docs/README.md` is the
+  file `README.md`, `DESIGN.md` and `software_design.tex` all defer to as *the
+  authority on delivered behaviour*, so it is the one that must be swept
+  **first** after a change, not last.
 - **Two applied reviews were never archived under `docs/reviews/`.** The folder
   holds the two plan-brief review pairs, the two math-note reviews and the
   pipeline review — but not the review of `8ea960d` (applied in `aba5736`) nor

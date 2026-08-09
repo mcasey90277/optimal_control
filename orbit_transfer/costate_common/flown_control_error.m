@@ -56,23 +56,34 @@ function [erNd, evNd] = flown_control_error(o, muStar, Tmax, c)
 %  Copyright Coorbital Inc.
 %% ------------------------ Begin Code Sequence ---------------------------
 
+% Since oclib move 2 the integration structure lives in the shared engine
+% oc.fly_control (perInterval mode = the G1b convention: integrator
+% restarts at every node); this wrapper owns the CR3BP dynamics and the
+% scheme-matched control reconstruction closure.
 if isfield(o,'tNodes') && ~isempty(o.tNodes), t = o.tNodes(:).';
 else, t = o.s(:).' * o.tf; end
-odeo = odeset('RelTol',1e-12,'AbsTol',1e-14);
-hasMid = isfield(o,'Um') && ~isempty(o.Um);
-z = o.X(:,1);
-for k = 1:numel(t)-1
-    a = t(k);  b = t(k+1);  h = max(b-a,eps);
-    ua = o.U(:,k);  ub = o.U(:,k+1);
-    if hasMid
-        um = o.Um(:,k);  uOf = @(tt) ctrl_quad(ua, um, ub, (tt-a)/h);
-    else
-        uOf = @(tt) ua + ((tt-a)/h)*(ub-ua);
-    end
-    [~,Z] = ode113(@(tt,zz) cr3bp_thrust_rhs(zz, uOf(tt), muStar, Tmax, c), ...
-                   [a b], z, odeo);
-    z = Z(end,:).';
+if isempty(which('oc.fly_control'))
+    addpath(fullfile(fileparts(fileparts(fileparts( ...
+        mfilename('fullpath')))), 'oclib'));
 end
-erNd = norm(z(1:3) - o.X(1:3,end));
-evNd = norm(z(4:6) - o.X(4:6,end));
+hasMid = isfield(o,'Um') && ~isempty(o.Um);
+    function u = uOf(tt)
+    % Global-time control lookup: locate the interval, evaluate its own
+    % reconstruction. Continuous at nodes (both neighbors interpolate the
+    % node control exactly), so interval choice at a shared node is
+    % value-identical to the old per-interval closures.
+    k = min(max(1, find(tt >= t, 1, 'last')), numel(t)-1);
+    a = t(k);  h = max(t(k+1)-a, eps);
+    if hasMid
+        u = ctrl_quad(o.U(:,k), o.Um(:,k), o.U(:,k+1), (tt-a)/h);
+    else
+        u = o.U(:,k) + ((tt-a)/h)*(o.U(:,k+1)-o.U(:,k));
+    end
+    end
+zEnd = oc.fly_control(o.X(:,1), t, ...
+    @(tt,zz) cr3bp_thrust_rhs(zz, uOf(tt), muStar, Tmax, c), ...
+    struct('mode','perInterval', 'solver',@ode113, ...
+           'RelTol',1e-12, 'AbsTol',1e-14));
+erNd = norm(zEnd(1:3) - o.X(1:3,end));
+evNd = norm(zEnd(4:6) - o.X(4:6,end));
 end

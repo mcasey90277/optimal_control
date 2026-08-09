@@ -4,47 +4,64 @@ function [c,ach] = terminalConstraint(rVec,vVec,des)
 %  Measure a burnout state against the five terminal constraints that PEG and
 %  VOA both enforce: radius, speed, flight-path angle, and the two components
 %  that fix the orbital plane. Returns a DIMENSIONLESS residual vector that is
-%  zero exactly on the target manifold, so a shooting or least-squares solver
-%  can drive it to zero without rescaling and neither algorithm has to
-%  re-derive the five.
+%  zero on the target manifold, so a shooting or least-squares solver can
+%  drive it to zero without rescaling and neither algorithm has to re-derive
+%  the five.
 %
 %  The mathematics is docs/hgv_dynamics_note.tex, Section "The five terminal
 %  constraints", Eqs. (qbasis) and (termcon); it is not re-derived here. This
-%  file evaluates it and guards it.
+%  file evaluates it and guards it -- and the guards are the substance, not
+%  the packaging, because two of them catch states the five constraints as
+%  specified would score as a perfect hit.
 %
-%% THE FRAME IS THE CALLER'S, AND THAT IS DELIBERATE:
+%% THE NULL SET OF THE SPECIFIED FIVE HAS TWO SHEETS, AND THIS FILE SERVES ONE:
 %
-%  Inputs are CARTESIAN position and velocity, in whatever frame the caller's
-%  guidance problem is posed in -- for PEG and VOA that is the inertial frame
-%  of the two-body equations they integrate. This function never sees a
-%  library state and never asks what the frame is; it only requires that
-%  rVec, vVec and des.wHat are expressed in the SAME one.
+%  Residuals four and five ask that the achieved angular momentum have no
+%  component on q1 and none on q2, which says h_f is PARALLEL TO THE LINE
+%  through wHat -- not that it points the same way along it. A retrograde
+%  burnout at the right radius, the right speed, the right flight-path angle
+%  and in the right plane, flying round the wrong way, satisfies all five
+%  EXACTLY:
 %
-%  It takes Cartesian vectors rather than the library's seven-state spherical
-%  vector on purpose. Converting the library state to an inertial Cartesian
-%  pair needs an inertial frame, and this library has not defined one: with
-%  env.omegaE nonzero the state's longitude is Earth-fixed and its speed is
-%  planet-relative, and there is no epoch anywhere in the library that says
-%  where the inertial x-axis points. Baking a guess about that into the one
-%  interface both guidance laws share would put the guess somewhere it could
-%  not be seen. The conversion belongs with the caller that owns the epoch.
+%      c = [0  2.2e-16  0  0  0]',  and the plane angle is 180 degrees.
+%
+%  That is a defect in the specification, inherited from the source deck, and
+%  this is the right place to catch it: both algorithms call this function in
+%  their inner loop, and a dispersion campaign scoring runs on the norm of c
+%  would record a wrong-way insertion as a perfect one. So the achieved
+%  angular momentum is required to lie in the SAME half-space as wHat, and
+%  h_f . wHat <= 0 raises. The branch is therefore selected HERE, not by the
+%  caller, and a caller wanting the retrograde sheet must negate des.wHat.
+%
+%  A throw is the right refusal rather than a large residual because the
+%  library's solver contract already reads it that way: coorbital.util.aimSolve
+%  treats a residual that throws as an infeasible point and shrinks the step,
+%  which is exactly the behaviour wanted at the boundary between the sheets.
 %
 %% Inputs:
 %
-%  rVec             [3 x 1]                     Achieved burnout position (m)
+%  rVec             [3 x 1]                     Achieved burnout position (m).
+%                                               A row vector is accepted and
+%                                               reshaped
 %
 %  vVec             [3 x 1]                     Achieved burnout velocity
-%                                               (m/s), same frame as rVec
+%                                               (m/s), same frame as rVec. A
+%                                               row vector is accepted and
+%                                               reshaped
 %
 %  des              Struct                      Desired burnout condition:
 %                                               Rd     scalar (m), radius
 %                                               Vd     scalar (m/s), speed
 %                                               gammaD scalar (rad), flight
 %                                                      path angle, positive up
-%                                               wHat   [3 x 1], unit normal of
-%                                                      the desired orbit
-%                                                      plane, h/|h|; need not
-%                                                      arrive normalised
+%                                               wHat   [3 x 1], normal of the
+%                                                      desired orbit plane,
+%                                                      h/|h|; need not arrive
+%                                                      normalised. ITS SIGN IS
+%                                                      MEANINGFUL -- it picks
+%                                                      the direction of
+%                                                      travel, see the note
+%                                                      above
 %                                               bRef   [3 x 1], OPTIONAL roll
 %                                                      reference fixing which
 %                                                      way the in-plane basis
@@ -54,7 +71,9 @@ function [c,ach] = terminalConstraint(rVec,vVec,des)
 %                                                      individually and not
 %                                                      the surface c = 0 they
 %                                                      define, nor
-%                                                      hypot(c(4),c(5)).
+%                                                      hypot(c(4),c(5)). Its
+%                                                      LENGTH is irrelevant,
+%                                                      only its direction.
 %                                                      Absent or [] picks the
 %                                                      coordinate axis least
 %                                                      aligned with wHat
@@ -80,7 +99,47 @@ function [c,ach] = terminalConstraint(rVec,vVec,des)
 %                                               planeAngle (rad), angle
 %                                                      between the achieved
 %                                                      angular momentum and
-%                                                      des.wHat
+%                                                      des.wHat; strictly less
+%                                                      than pi/2 on any state
+%                                                      this function accepts
+%
+%                                               Raises, rather than returning
+%                                               a plausible number:
+%                                               coorbital:terminalConstraint:badVector
+%                                                      rVec or vVec is not
+%                                                      three finite real
+%                                                      components
+%                                               coorbital:terminalConstraint:badTarget
+%                                                      des is missing a field,
+%                                                      or Rd, Vd or gammaD is
+%                                                      not a usable scalar
+%                                               coorbital:terminalConstraint:radialBurnout
+%                                                      the DESIRED flight-path
+%                                                      angle is radial, so the
+%                                                      desired angular
+%                                                      momentum is zero and
+%                                                      the plane residuals
+%                                                      have no scale
+%                                               coorbital:terminalConstraint:badPlane
+%                                                      des.wHat is malformed or
+%                                                      cannot be normalised
+%                                               coorbital:terminalConstraint:badRef
+%                                                      des.bRef is malformed,
+%                                                      cannot be normalised, or
+%                                                      is parallel to des.wHat
+%                                               coorbital:terminalConstraint:degenerateState
+%                                                      the ACHIEVED position,
+%                                                      speed or angular
+%                                                      momentum is zero, which
+%                                                      would leave three of
+%                                                      the five residuals
+%                                                      reading as satisfied
+%                                               coorbital:terminalConstraint:retrograde
+%                                                      the achieved angular
+%                                                      momentum is in the
+%                                                      opposite half-space to
+%                                                      des.wHat, see the note
+%                                                      above
 %
 %% Notes:
 %
@@ -91,13 +150,33 @@ function [c,ach] = terminalConstraint(rVec,vVec,des)
 %  docs/hgv_dynamics_note.tex. This function takes the answer; it does not
 %  make it.
 %
-%  ONE ROTATIONAL FREEDOM SURVIVES BY CONSTRUCTION. Rotating the whole
+%  THE FRAME IS THE CALLER'S, AND THAT IS DELIBERATE. Inputs are CARTESIAN
+%  position and velocity, in whatever frame the caller's guidance problem is
+%  posed in -- for PEG and VOA that is the inertial frame of the two-body
+%  equations they integrate. This function never sees a library state and
+%  never asks what the frame is; it only requires that rVec, vVec and des.wHat
+%  are expressed in the SAME one. Converting the library's seven-state
+%  spherical planet-relative vector into an inertial Cartesian pair is a
+%  separate utility, because the velocity conversion v_inertial = v_rel +
+%  omega x r belongs with whoever owns the chain's rotation rate, not with the
+%  one function both guidance laws share.
+%
+%  ONE CONTINUOUS FREEDOM SURVIVES BY CONSTRUCTION. Rotating the whole
 %  terminal state rigidly about des.wHat leaves all five residuals' content
 %  unchanged -- c(1:3) exactly, and hypot(c(4),c(5)) exactly -- because the
 %  five say nothing about WHERE in the target orbit the vehicle arrives. That
 %  is not a defect; it is the freedom whose transversality condition VOA's
-%  seventh boundary condition expresses. tests/test_terminalConstraint.m
-%  asserts it.
+%  seventh boundary condition expresses. It is distinct from the discrete
+%  two-sheet freedom above, which IS a defect and is refused.
+%  tests/test_terminalConstraint.m asserts both.
+%
+%  THE JACOBIAN IS THE CALLER'S. None is returned and none is implied. PEG's
+%  five-by-five solve will finite-difference this five times per iteration and
+%  VOA's shooting seven times, which is affordable because the residual itself
+%  costs no propagation. On the prograde sheet, away from the guards, c is
+%  smooth in both vectors, so a central difference is well conditioned. At the
+%  guards it throws rather than returning a large value, and a caller
+%  differencing across a guard will see the throw, not a wrong derivative.
 %
 %% References:
 %   [1] docs/hgv_dynamics_note.tex, Sections sec:termcon and sec:voa.
@@ -106,28 +185,36 @@ function [c,ach] = terminalConstraint(rVec,vVec,des)
 %       Propelled Vehicles," AIAA Guidance and Control Conference, 1977.
 %
 %% Revision History:
-%  Michael Casey                                                08/09/2026
+%  Michael Casey                                                08/08/2026
 %  Copyright 2026 Coorbital, Inc.
 %% ------------------------ Begin Code Sequence ---------------------------
 
 %% Self-demo:
 if nargin == 0
                  c = coorbital.util.missileConst();
-             desD.Rd = c.rE + 180e3;
-             desD.Vd = 7100;
-         desD.gammaD = deg2rad(3);
-           desD.wHat = [0; -sin(deg2rad(50)); cos(deg2rad(50))];
+           desD.Rd = c.rE + 180e3;
+           desD.Vd = 7100;
+       desD.gammaD = deg2rad(3);
+         desD.wHat = [0; -sin(deg2rad(50)); cos(deg2rad(50))];
 %% A state built to sit exactly on the manifold, then the same state with one
-%% per cent more radius:
+%% per cent more radius, then the same state flown the wrong way round:
               uHat = [1; 0; 0];
               sHat = cross(desD.wHat,uHat);
               sHat = sHat./sqrt(sHat.'*sHat);
-              rOn  = desD.Rd.*uHat;
-              vOn  = desD.Vd.*(sin(desD.gammaD).*uHat + cos(desD.gammaD).*sHat);
+               rOn = desD.Rd.*uHat;
+               vOn = desD.Vd.*(sin(desD.gammaD).*uHat ...
+                               + cos(desD.gammaD).*sHat);
            [cOn,~] = coorbital.guide.terminalConstraint(rOn,vOn,desD);
           [cOff,~] = coorbital.guide.terminalConstraint(1.01.*rOn,vOn,desD);
+              vRet = desD.Vd.*(sin(desD.gammaD).*uHat ...
+                               - cos(desD.gammaD).*sHat);
     fprintf('on  the manifold: c = [%9.2e %9.2e %9.2e %9.2e %9.2e]''\n',cOn);
     fprintf('one per cent high: c = [%9.2e %9.2e %9.2e %9.2e %9.2e]''\n',cOff);
+    try
+        coorbital.guide.terminalConstraint(rOn,vRet,desD);
+    catch errD
+        fprintf('retrograde: refused, %s\n',errD.identifier);
+    end
     [c,ach] = deal([]);
     return;
 end
@@ -137,7 +224,7 @@ end
 %% the expensive failure mode, so the vectors are checked first:
 if ~isnumeric(rVec) || numel(rVec) ~= 3 || ~isreal(rVec) || ~all(isfinite(rVec))
     error('coorbital:terminalConstraint:badVector', ...
-        ['The position must be three finite real components; got %s.'], ...
+        'The position must be three finite real components; got %s.', ...
         mat2str(rVec(:).'));
 end
 if ~isnumeric(vVec) || numel(vVec) ~= 3 || ~isreal(vVec) || ~all(isfinite(vVec))
@@ -204,7 +291,7 @@ end
 if ~isfield(des,'bRef') || isempty(des.bRef)
           [~,kMin] = min(abs(wHat));
               bRef = zeros(3,1);
-       bRef(kMin) = 1;
+        bRef(kMin) = 1;
 else
               bRef = des.bRef;
     if ~isnumeric(bRef) || numel(bRef) ~= 3 || ~isreal(bRef) || ...
@@ -216,53 +303,82 @@ else
               bRef = bRef(:);
 end
 
-%% The in-plane orthonormal pair. A bRef parallel to wHat leaves nothing to
-%% cross with and would silently produce a q1 of arbitrary direction:
-             q1Raw = cross(bRef,wHat);
-             q1Mag = sqrt(q1Raw.'*q1Raw);
-if q1Mag < 1e-8.*max(1,sqrt(bRef.'*bRef))
+%% NORMALISE THE REFERENCE BEFORE TESTING IT. Only its direction matters, so
+%% the degeneracy test has to be on the SINE of the angle it makes with wHat.
+%% An absolute threshold on the raw cross product would reject a short but
+%% perfectly transverse bRef with a diagnosis -- "parallel to wHat" -- that is
+%% the opposite of the truth:
+              bMag = sqrt(bRef.'*bRef);
+if bMag < 1e-300
     error('coorbital:terminalConstraint:badRef', ...
-        ['des.bRef is parallel to des.wHat to within %.3g, so the in-plane ' ...
-         'basis is undefined. Any bRef off the plane normal will do.'],q1Mag);
+        'des.bRef has magnitude %.6g and has no direction.',bMag);
 end
-                q1 = q1Raw./q1Mag;
+              bHat = bRef./bMag;
+             q1Raw = cross(bHat,wHat);
+            sinSep = sqrt(q1Raw.'*q1Raw);
+if sinSep < 1e-8
+    error('coorbital:terminalConstraint:badRef', ...
+        ['des.bRef is parallel to des.wHat to within %.3g deg, so the ' ...
+         'in-plane basis is undefined. Any bRef off the plane normal will ' ...
+         'do; its length does not matter.'],rad2deg(asin(sinSep)));
+end
+                q1 = q1Raw./sinSep;
                 q2 = cross(wHat,q1);
 
-%% Achieved quantities:
+%% Achieved magnitudes. THE MAGNITUDES ARE GUARDED, not merely the
+%% finiteness: a zero position vector is finite, real and three components
+%% long, and it returns c = [-1  0  -sin(gammaD)  0  0] -- three of the five
+%% residuals reading as satisfied, and no NaN anywhere in c to give it away.
+%% A solver sees only c:
               rMag = sqrt(rVec.'*rVec);
               vMag = sqrt(vVec.'*vVec);
+if rMag < eps(Rd) || vMag < eps(Vd)
+    error('coorbital:terminalConstraint:degenerateState', ...
+        ['The achieved state is degenerate: |r| = %.6g m and |v| = %.6g ' ...
+         'm/s, against a desired %.6g m and %.6g m/s. The flight-path ' ...
+         'angle is undefined and three of the five residuals would read as ' ...
+         'satisfied.'],rMag,vMag,Rd,Vd);
+end
+
+%% Angular momentum, and the desired magnitude that makes the two plane
+%% residuals dimensionless direction-cosine errors:
               hVec = cross(rVec,vVec);
               hMag = sqrt(hVec.'*hVec);
-              rDotV = rVec.'*vVec;
-
-%% The desired angular momentum magnitude, which is what makes the two plane
-%% residuals dimensionless direction-cosine errors:
               hDes = Rd.*Vd.*abs(cos(gammaD));
+if hMag <= eps(hDes)
+    error('coorbital:terminalConstraint:degenerateState', ...
+        ['The achieved velocity is radial: |r x v| = %.6g against a desired ' ...
+         '%.6g, so the achieved plane is undefined and both plane residuals ' ...
+         'would be zero for the wrong reason.'],hMag,hDes);
+end
+
+%% THE SECOND SHEET. See the note in the header: residuals four and five
+%% cannot tell parallel from antiparallel, so the half-space is fixed here:
+             hDotW = hVec.'*wHat;
+if hDotW <= 0
+    error('coorbital:terminalConstraint:retrograde', ...
+        ['The achieved angular momentum is %.4f deg from des.wHat, in the ' ...
+         'opposite half-space. The five constraints cannot see the ' ...
+         'difference -- a retrograde burnout at the right radius, speed, ' ...
+         'flight-path angle and plane satisfies all five exactly -- so it ' ...
+         'is refused here. Negate des.wHat to target the retrograde ' ...
+         'sheet.'],rad2deg(atan2(hMag,hDotW)));
+end
 
 %% The five, in the order of the source: radius, speed, flight-path angle,
 %% then the two plane components:
+             rDotV = rVec.'*vVec;
                  c = [ rMag./Rd - 1; ...
                        vMag./Vd - 1; ...
                        rDotV./(Rd.*Vd) - sin(gammaD); ...
                        (q1.'*hVec)./hDes; ...
                        (q2.'*hVec)./hDes ];
 
-%% Diagnostics. gamma and the plane angle are undefined at a zero vector, so
-%% they are reported as NaN rather than as a division:
-    if rMag > 0 && vMag > 0
-             gammaF = asin(max(-1,min(1,rDotV./(rMag.*vMag))));
-    else
-             gammaF = NaN;
-    end
-    if hMag > 0
-              hCross = cross(hVec,wHat);
-          planeAngle = atan2(sqrt(hCross.'*hCross),hVec.'*wHat);
-    else
-          planeAngle = NaN;
-    end
+%% Diagnostics. Every quantity below is well defined, the guards above having
+%% removed the cases in which it would not be:
           ach.rMag = rMag;
           ach.vMag = vMag;
-         ach.gamma = gammaF;
+         ach.gamma = asin(max(-1,min(1,rDotV./(rMag.*vMag))));
           ach.hMag = hMag;
-    ach.planeAngle = planeAngle;
+    ach.planeAngle = atan2(sqrt(sum(cross(hVec,wHat).^2)),hDotW);
 end

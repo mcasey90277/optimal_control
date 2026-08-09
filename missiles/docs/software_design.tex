@@ -43,7 +43,7 @@
 \title{Software Design\\
        \large Architecture and data flow of the \code{missiles/} trajectory library}
 \author{Coorbital, Inc.}
-\date{7 August 2026}
+\date{7 August 2026; second edition 8 August 2026}
 
 \begin{document}
 \maketitle
@@ -63,6 +63,21 @@ measurements were re-run for this document rather than carried over. The full
 verification record is Section~\ref{sec:verify}. Where this document and the
 narrative in \code{docs/README.md} or \code{docs/DESIGN.md} disagree on a
 count or a number, the discrepancy is named at the point it occurs.
+
+\medskip
+\noindent\textbf{Second edition, 8 August 2026.} \code{HGV/run\_target} gained
+two-axis targeting: both controls solved together against both components of
+the miss, which is what lets it fly a rotating Earth and a banked trajectory
+instead of refusing the first and warning about the second. Three things are
+new here --- the two-axis solver
+\code{coorbital.util.aimSolve} and how it differs from its scalar sibling
+(Section~\ref{sec:solvers}), the changed data flow and the two refusal paths
+(Sections~\ref{sec:aimflow} and~\ref{sec:entry}), and a chapter on the
+closed-loop guidance seam (Section~\ref{sec:seam}), which describes an
+interface and \emph{no implemented algorithm}. A fourth structural blindness
+joins the three (Section~\ref{sec:blind}), an honest coverage gap is recorded
+(Section~\ref{sec:aimcoverage}), and six errors in the first edition are listed
+and corrected in Section~\ref{sec:verify}.
 \end{abstract}
 
 \tableofcontents
@@ -147,13 +162,17 @@ whatever. That rule is what makes the vehicle folders cheap: adding
 \code{ICBM/} costs two files and no library change, and \code{tests/run\_tests}
 already looks for it on the path and skips it silently when it is absent.
 
-Counted against the source on 7 August 2026: 53 \code{.m} files, of which 26
-are under \code{+coorbital} (23 public library functions plus three
-package-private helpers in \code{+viz/private}), 21 under \code{tests/}
-(\code{run\_tests.m} and twenty \code{test\_*.m}), and six across \code{HGV/}
-and \code{BM/}. Note that \code{README.md}'s conventions section still says
-``39 \code{.m} files''; \code{TODO.md} already records that as a stale count
-rather than a violation.
+Counted against the source on 8 August 2026: 57 \code{.m} files, of which 27
+are under \code{+coorbital} (24 public library functions plus three
+package-private helpers in \code{+viz/private}), 23 under \code{tests/}
+(\code{run\_tests.m} and twenty-two \code{test\_*.m}), and seven across
+\code{HGV/} and \code{BM/}. The count moved by four in a day: this document's
+first edition counted 53, 26, 21 and six, before
+\code{+coorbital/+util/aimSolve.m} and its test landed and before
+\code{BM/run\_ballistic\_target.m} --- which \code{TODO.md} then listed as
+``specified in full and never implemented'' --- was written. Note that
+\code{README.md}'s conventions section still says ``39 \code{.m} files'';
+\code{TODO.md} already records that as a stale count rather than a violation.
 
 \subsection{What each package owns}
 
@@ -162,7 +181,7 @@ rather than a violation.
 \toprule
 Package & Kind & Owns \\
 \midrule
-\pkg{util}  & foundation   & the constants (\code{missileConst}), the two vehicle and one booster parameter sets, spherical-trigonometry helpers (\code{greatCircle}, \code{greatCircleBearing}), and the black-box scalar solver \code{rangeSolve} \\
+\pkg{util}  & foundation   & the constants (\code{missileConst}), the two vehicle and one booster parameter sets, spherical-trigonometry helpers (\code{greatCircle}, \code{greatCircleBearing}), and the two black-box solvers --- scalar \code{rangeSolve} and two-axis \code{aimSolve} \\
 \pkg{atmos} & model        & density, pressure, temperature, sound speed from altitude \\
 \pkg{grav}  & model        & radial and latitudinal gravitational acceleration \\
 \pkg{aero}  & model        & lift and drag coefficients \\
@@ -246,7 +265,7 @@ Package & Depends on & Does \textbf{not} depend on \\
 \end{tabular}
 \end{center}
 
-Four properties of this graph are load-bearing.
+Five properties of this graph are load-bearing.
 
 \begin{enumerate}
 \item \textbf{\pkg{util} is a leaf.} \code{missileConst} imports nothing. That
@@ -270,6 +289,19 @@ function handles on an \code{env} struct. This is Section~\ref{sec:inject}.
 
 \item \textbf{\pkg{viz} is a sink.} It depends only on \pkg{util}, for the
 Earth radius, and nothing depends on it. That is what allows the claim below.
+
+\item \textbf{The two solvers in \pkg{util} add no edge, and that is the
+point.} \code{rangeSolve} and \code{aimSolve} both drive a whole trajectory
+propagation, which is to say they reach \pkg{prop}, \pkg{eom} and every model
+in the tree. Neither names any of them. Each takes a \emph{handle} supplied by
+the caller and treats it as an opaque, expensive black box, so \pkg{util}
+stays the leaf it has to be and the entry script keeps ownership of what a
+``residual'' means. What the picture cannot show is that at run time the
+arrows through those two boxes point \emph{up}: \code{HGV/run\_target} calls
+\code{coorbital.util.aimSolve}, which calls back into a closure that
+\code{run\_target} built. That inversion is invisible to a static graph and is
+worth naming, because it is the only place in the library where the bottom
+layer drives the top.
 \end{enumerate}
 
 \subsection{\pkg{viz} reads trajectories and never writes them}
@@ -333,6 +365,7 @@ with \code{boost3DOF} adding \code{[T,mdot] = env.prop(t,P,veh);}. There is no
 \code{switch}, no registry, no model name anywhere in either file.
 
 \subsection{Why handles and not a switch, a class, or a subclassed model}
+\label{sec:handles}
 
 Three alternatives were available and each is worse for this library.
 
@@ -600,6 +633,112 @@ same numbers go into the \code{info} output at full precision.
 \item \textbf{Figures.} Three \code{coorbital.viz} calls, all read-only
 (Section~\ref{sec:vizreadonly}), gated on \code{showPlots}.
 \end{enumerate}
+
+\subsection{The targeting trace: a residual closure over the whole chain}
+\label{sec:aimflow}
+
+\code{HGV/run\_target} runs the trace above \emph{inside} a solve, and since
+8~August~2026 inside a solve of two controls rather than one. The data-flow
+question that matters is what closes over what.
+
+Steps 1 through 8 are unchanged: the same user block, the same conversion, the
+same environment, the same three-phase struct array. What differs is that
+step~9 is not reached once. Between step~8 and step~9 the script builds an
+immutable \code{cfg} struct holding the phases' ingredients --- the two EOM
+closures, the three schedules, the masses, the handoff and stop altitudes, the
+horizons, the liftoff state template, the booster, the environment --- and a
+constant \code{aim} struct holding the target and the direction the residual
+is resolved in. Both are built once and never written again. Everything
+afterwards is a function of two scalars over those two structs:
+
+\begin{enumerate}
+\item[9a.] \textbf{The seed bearing, in closed form.}
+\code{coorbital.util.greatCircleBearing} gives the initial course of the
+launch-to-target great circle. Bearing and the library's heading state
+$\mathbf{x}_6$ share the clockwise-from-north convention, so it drops straight
+in with no conversion. \emph{It is retained as the seed, not as the answer.}
+
+\item[9b.] \textbf{The seed cutoff, by bisection at that bearing.}
+\code{fRange = @(tCut) flyRange(psiSeed,tCut,cfg,rI)} is a one-argument closure
+over the frozen configuration; \code{coorbital.util.rangeSolve} bisects it on
+the burn-fraction bracket until the flown surface range matches the required
+one. The bracket's two endpoint propagations \emph{are} the reachable envelope,
+which is why the envelope costs nothing extra to report.
+
+\item[9c.] \textbf{The two-axis solve.} \code{residF = @(xAim) flyMiss(xAim,cfg,aim)}
+is the same shape of closure over the same \code{cfg}, differing only in what
+it measures at the end. \code{coorbital.util.aimSolve} drives it from
+$[\psi_{\text{seed}};\,t_{\text{seed}}]$ until both components of the miss are
+inside tolerance.
+
+\item[9d.] \textbf{One more flight at the converged pair.} \code{aimSolve}
+returns two numbers and a two-component residual, not a state history, so the
+reported trajectory is re-flown through the same \code{flyChain}. The script
+then asserts that re-flying the solved controls reproduces the solver's own
+residual to $10^{-6}~\mathrm{m}$ --- a repeatability check, and the licence for
+every number in the summary.
+\end{enumerate}
+
+Three propagation paths, one propagator. \code{flyRange} and \code{flyMiss}
+both call \code{flyChain}, which is the only place in the file that builds the
+phase array and calls \code{phaseRun}; the final flight calls it too. That is
+deliberate and it is a data-flow property rather than a tidiness one: a seed
+solved against one propagator and a residual measured against a second is a
+targeting script that converges on a trajectory it never flies.
+
+\paragraph{The shape of the residual, and why it is not a range and an offset.}
+\code{flyMiss} returns the miss vector \emph{from the target to the impact
+point}, resolved at the \emph{target} into a down-range component (positive
+long) and a cross-range component (positive right of course). Both zero is
+exactly ``the impact point IS the target''. The basis is the arriving course of
+the launch-to-target great circle, computed once before the solve and held
+fixed --- a basis that moved with the impact point would make the
+finite-difference Jacobian describe the basis as much as the trajectory. The
+construction, including why the components are formed directly rather than
+from a bearing and a distance and why the magnitude comes from the haversine,
+is \code{missVector}'s own header and the dynamics note's business; the
+data-flow point is the pairing. The obvious alternative --- a great-circle
+range residual beside a cross-track offset from the departure arc --- is the
+same information in a worse basis, because it keeps quoting an arc the vehicle
+no longer flies the moment the Earth turns or a bank is commanded.
+
+\paragraph{What it bought, measured.} Three configurations, each run to
+completion and read out of \code{info} at full precision:
+
+\begin{center}
+\begin{tabular}{lrrr}
+\toprule
+Case & Miss, seed only & Miss, solved & Residual evaluations \\
+\midrule
+Rotating Earth (\code{earthSpin} true) & $231\,551.628~\mathrm{m}$ & $4.361~\mathrm{m}$ & 7 \\
+$75^\circ$ terminal bank               & $21\,524.695~\mathrm{m}$  & $54.795~\mathrm{m}$ & 4 \\
+Shipped: non-rotating, zero bank       & $511.243~\mathrm{m}$      & unchanged bit-for-bit & 1 \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+The first two are the cases the previous design could not fly: rotation was
+\emph{refused} outright and a bank was merely warned about. The third is the
+one that did not move, and the reason it did not move is the subject of
+Section~\ref{sec:aimcoverage} --- it is also the reason the new path is barely
+tested.
+
+\paragraph{Two interface changes a caller sees.} \code{info.crossWarn} is
+\textbf{gone}. There is no warning to raise: cross-range is driven to zero
+rather than measured and reported, and a field whose only value would now be
+\code{false} is a field that invites a caller to keep testing a condition the
+design has retired.
+
+\code{info.iterations} and \code{info.nEval} were \textbf{renamed} to
+\code{seedIter} and \code{seedEval}, with \code{aimIter}, \code{aimEval} and a
+total \code{nProp} added beside them. Renaming rather than redefining was the
+deliberate choice, and the general rule is worth stating: \textbf{a silently
+redefined field is a worse break than a missing one.} A caller reading
+\code{info.iterations} after this change would still get a number, and the
+number would still be plausible, and it would be the wrong count --- one of two
+solves rather than the whole solve. A caller reading \code{info.seedIter} on
+the old code gets an immediate error naming the field. Only one of those two
+failures happens at the moment it is introduced.
 
 \subsection{Where the control history comes from}
 
@@ -969,9 +1108,12 @@ The pattern, from \code{BM/run\_ballistic.m}:
 Note the \code{vehArg} parameter in both closures: it is the struct
 \code{phaseRun} forwards, and it is \emph{deliberately shadowed and unused},
 because a single chain-wide vehicle cannot describe both the stack and the
-separated body. All four entry scripts do this
-(\code{run\_ballistic.m}:281--282, \code{run\_boost\_glide.m}:365--366,
-\code{run\_target.m}:439--440), and \code{run\_ballistic} additionally asserts
+separated body. The three original chain scripts all do this
+(\code{run\_ballistic.m}:318--319, \code{run\_boost\_glide.m}:365--366,
+\code{run\_target.m}:558--559); \code{BM/run\_ballistic\_target}, written after
+the deferred structural fix below actually landed, sets \code{ph(k).veh}
+instead (lines 2267, 2284, 2292) and needs no shadowed argument at all.
+\code{run\_ballistic} additionally asserts
 after propagation that the flown mass equals the mass the coast vehicle was
 built around --- ``the only thing standing between a dropped link and a coast
 flown at the wrong weight,'' as its own comment puts it.
@@ -982,12 +1124,13 @@ $2853.71~\mathrm{km}$ without --- a $62.8\,\%$ loss of range driven entirely by
 the stack's \code{Sref}, \code{CL} and \code{LD}. Rebuilding mass alone would
 have left that on the table.
 
-\subsection{The deferred structural fix}
+\subsection{The structural fix, which has landed --- and the migration, which
+has not}
 
 The right answer is a per-phase \code{veh} field on the phase struct, so that
 ``which vehicle is this phase flying?'' has exactly one answer and
 \code{phaseRun} stops forwarding a chain-wide struct that a staged chain must
-ignore. \code{TODO.md} carries it under ``Structural, deferred deliberately''
+ignore. \code{TODO.md} carried it under ``Structural, deferred deliberately''
 with the reason:
 
 \begin{quote}
@@ -997,35 +1140,70 @@ outside the tests --- the four entry scripts plus \code{+coorbital/+viz/}
 current form. \textbf{Do it before closed-loop guidance adds more.}
 \end{quote}
 
-That is the honest reason and it is a scheduling reason, not a technical one.
-The guard is explicitly \emph{not} the fix: \code{massConstant}'s header says
-``the structural answer is a per-phase vehicle carried on the phase struct;
-until that exists, this guard is what stands in for it.'' Recording the
-interim as an interim is the point --- a guard that is quietly allowed to
-become the answer is how a workaround calcifies.
+\paragraph{Correction.} The first edition of this document described that as
+still deferred. It was already done: \code{ph.veh} landed in \code{23c3470} on
+7~August~2026, some hours before this file was first written, and
+\code{TODO.md} moved the item into ``Recently closed'' at the same time.
+\code{phaseRun} reads it at lines 247--251, and the field is \emph{purely
+additive} --- absent or \code{[]} falls back to the chain-wide argument and
+reproduces the old behaviour byte for byte, which is what let it land without
+touching a single existing consumer. \code{BM/run\_ballistic\_target}, written
+afterwards, uses it and carries no shadowed \code{vehArg} at all.
+
+What remains open is not the field but the \emph{migration}: the three older
+chain scripts still bind their per-phase vehicle inside an EOM closure, and
+\code{TODO.md} now lists ``migrate the entry scripts off their EOM closures
+onto \code{phase.veh}'' as the deferred item in its place. That is a
+different, smaller thing --- a duplicated idiom rather than a missing
+interface --- and the reason it is still deferred is worth keeping: a closure
+and \code{ph.veh} were \emph{measured} bit-identical, so the migration changes
+no number, and a change that changes no number is a change no
+before-and-after test can catch. It has to be reviewed on reading, not on
+running.
+
+The guard is still explicitly \emph{not} the fix, and now that the fix exists
+the distinction is sharper rather than softer: \code{massConstant} keeps
+refusing a mass state that disagrees with the vehicle the equations divide by,
+because \code{ph.veh} makes the right answer \emph{available} and does not
+make the wrong one \emph{impossible}. Recording the interim as an interim was
+the point, and the interim outlived the thing it was interim to.
 
 %=====================================================================
 \section{Entry-script design}
 \label{sec:entry}
 
-\subsection{Four scripts, one shape}
+\subsection{Five scripts, one shape}
 
 \begin{center}
-\begin{tabular}{llll}
+\begin{tabular}{llcp{4.0cm}}
 \toprule
 Script & Flight & Phases & Solves for \\
 \midrule
 \code{HGV/run\_glide}       & unpowered glide from an entry state & 1 & --- \\
 \code{BM/run\_ballistic}    & ballistic missile, pad to impact    & 3 & --- \\
 \code{HGV/run\_boost\_glide}& boost-glide vehicle, pad to impact  & 3 & --- \\
-\code{HGV/run\_target}      & launch point $\to$ destination      & 3 & azimuth, cutoff time \\
+\code{HGV/run\_target}      & launch point $\to$ destination      & 3 & azimuth \emph{and} cutoff time, together \\
+\code{BM/run\_ballistic\_target} & launch point $\to$ destination & 3 & loft angle; azimuth still closed form \\
 \bottomrule
 \end{tabular}
 \end{center}
 
 The first three fly \emph{launch site $+$ azimuth $+$ schedule $\to$ wherever
-the physics puts it}. \code{run\_target} inverts that. All four share one
-shape, and the shape is the design.
+the physics puts it}. The last two invert that. All five share one shape, and
+the shape is the design.
+
+Two notes on the table, both dated. \code{BM/run\_ballistic\_target} landed on
+8~August~2026, after the first edition of this document was written; every
+measurement below that says ``four entry scripts'' --- the \pkg{viz}
+read-only sweep, the injection experiment, the override-whitelist counts ---
+was taken over the four that existed then and has \emph{not} been re-run over
+the fifth. And the last two rows differ in exactly the way this milestone is
+about: \code{HGV/run\_target} solves both controls together against both
+components of the miss (Section~\ref{sec:aimflow}), while
+\code{BM/run\_ballistic\_target} still takes its azimuth from the closed-form
+bearing and therefore still refuses a rotating Earth. The two-axis solve is a
+\pkg{util} function and applies verbatim to it; that it has not yet been
+applied is scheduling, not architecture.
 
 \subsection{The fenced user block}
 
@@ -1047,9 +1225,12 @@ makes a doubled-conversion bug impossible rather than merely unlikely.
 \textbf{Every entry carries its unit and its range} in an inline comment, and
 the counter-intuitive ones say so at the point of definition:
 \code{alphaAngle} is annotated ``NO EFFECT with the default \code{constLD} aero
-model, which ignores it,'' and \code{run\_target}'s \code{descBank = 0} says it
-differs from \code{run\_boost\_glide}'s $75^\circ$ as ``a targeting decision,
-not an aerodynamic one.'' And \textbf{nothing below the fence needs editing for
+model, which ignores it,'' and \code{run\_target}'s \code{descBank = 0} now
+says it is ``SHIPPED AT ZERO because the simplest case is the one an example
+script should ship, NOT because the solve cannot handle a bank'' --- a
+comment that had to be rewritten the day the two-axis solve landed, because
+until then it read as a targeting limitation and it is now a default. And
+\textbf{nothing below the fence needs editing for
 a routine run}, which is what keeps the summary, the diagnosis and the figures
 out of the user's way.
 
@@ -1089,8 +1270,9 @@ did not ask for.
 vocabulary is the block's own vocabulary. A caller never has to know which
 entries are in degrees.
 \item \textbf{Exactly the block is overridable, and nothing else.} The
-whitelists run from 16 entries (\code{run\_glide}) to 38
-(\code{run\_target}). Every model handle is in them --- \code{atmosFn},
+whitelists run from 16 entries (\code{run\_glide}) to 37
+(\code{run\_ballistic\_target}), with \code{run\_target} at 36. Every model
+handle is in them --- \code{atmosFn},
 \code{gravFn}, \code{aeroFn}, \code{propFn} --- which is what makes the
 one-line fidelity swap of Section~\ref{sec:injecttest} reachable
 programmatically as well as by editing.
@@ -1136,17 +1318,143 @@ and the consequence is concrete: its two junctions get no independent
 cross-junction continuity check. \code{TODO.md} lists it, with the note that
 adding the five fields makes the check follow almost for free.
 
-\subsection{The refusal path in \code{run\_target}}
+\subsection{Two black-box solvers, and why the second could not be the first}
+\label{sec:solvers}
 
-\code{run\_target} performs two solves that, on a non-rotating Earth, do not
-interact: the launch azimuth in closed form
-(\code{coorbital.util.greatCircleBearing}, no iteration, dropped straight into
-$\mathbf{x}_6$ because bearing and heading share the clockwise-from-north
-convention), and the range by bisection on thrust-termination time.
+\pkg{util} holds two solvers. They share a contract and share almost nothing
+else, and the difference is the clearest illustration in the library of a
+method chosen by the shape of the problem rather than by preference.
 
-The design question is what happens when the target is unreachable. The library
-answer is a two-level split, and it is the clearest example in the tree of a
-boundary chosen for who knows what.
+\begin{center}
+\begin{tabular}{lll}
+\toprule
+ & \code{rangeSolve} & \code{aimSolve} \\
+\midrule
+Unknowns             & one scalar                 & two, as a $[2\times1]$ \\
+Residual             & one scalar                 & two, as a $[2\times1]$ \\
+Method               & bisection                  & damped Newton \\
+Derivative           & none needed                & forward difference, per column \\
+Safeguard            & the bracket, implicitly    & explicit: condition ceiling, step cap, line search \\
+Cost per step        & one evaluation             & three \\
+Refusal identifiers  & two                        & seven \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\textbf{Bisection was not available in two dimensions.} \code{rangeSolve}'s
+whole safety argument is the bracket: it cannot leave it, it needs no
+derivative, and no local kink can throw it off a cliff --- it just costs a
+fixed number of evaluations per decade of tolerance, which is the right trade
+against an expensive black box. \emph{Two coupled axes offer no bracket to
+preserve.} There is no interval in $\mathbb{R}^2$ whose corners straddle a root
+in a way any halving can maintain, so the method has to be Newton, and every
+safeguard bisection got for free has to be written out by hand. That is the
+entire reason \code{aimSolve} is the longer and more defensive of the two.
+
+\paragraph{The step is formed through an SVD, not a backslash.} The Jacobian is
+factored once, and both the conditioning test and the Newton step are read out
+of the same three factors: rotate the residual into the singular basis, divide
+by the singular values, rotate back. No inverse is formed. Two reasons, and
+neither is speed on a $2\times2$. The condition number
+$\kappa = \sigma_1/\sigma_2$ is then \emph{already in hand} and can be tested
+\textbf{before} any step is computed, so an ill-conditioned Jacobian reaches
+the caller as a number it can print rather than as an infinity in the step ---
+which matters here because near a maximum-range control the down-range
+sensitivity collapses, the two columns become parallel, and that geometry is
+the single most common way a two-axis targeting solve goes wrong. And a
+backslash on a matrix LU judges singular to working precision \emph{prints a
+warning to the console}, which a library function called inside a solve inside
+a batch sweep must never do.
+
+\paragraph{It never throws merely because it failed to converge.} The contract
+is \code{rangeSolve}'s, for \code{rangeSolve}'s stated reason: only the caller
+has the vocabulary, and \emph{a targeting script that silently returns a near
+miss is worse than one that refuses}. Every bad ending returns
+\code{info.converged = false}, the best-so-far point, an identifier, and a
+complete printable \code{info.message} naming the numbers a caller would
+otherwise have to dig out of the struct.
+
+There is exactly \textbf{one} exception and it is principled. A non-finite
+residual at $\mathbf{x}_0$ raises
+\code{coorbital:aimSolve:nonFiniteEval}, and an \code{fResid} that throws at
+$\mathbf{x}_0$ has its own error propagate untouched. There is no step to
+shrink there and no earlier point to fall back on, so it is not a failure to
+converge --- it is an unusable starting guess, which is an input error.
+
+\paragraph{Seven refusals, not one, because two of the remedies are opposites.}
+
+\begin{center}
+\begin{tabular}{lp{5.6cm}p{4.3cm}}
+\toprule
+Identifier & What happened & Remedy \\
+\midrule
+\code{toleranceNotMet}    & \code{maxIter} iterations went by                       & raise \code{maxIter}, loosen \code{tolF}, start nearer \\
+\code{singularJacobian}   & condition number over \code{condMax}                    & move the aim point inside the envelope \\
+\code{stepStalled}        & every halving failed to reduce the residual             & raise \code{maxHalve}, or the aim point is out of reach \\
+\code{jacobianFailed}     & a probe point would not fly                             & \textbf{shrink} \code{dx0} \\
+\code{stepUnderflow}      & a control reached a magnitude at which adding its \code{dx0} changes nothing & \textbf{enlarge} \code{dx0} \\
+\code{jacobianNotFinite}  & both residuals finite, their difference quotient overflowed & rescale \code{fResid} \\
+\code{stepNotFinite}      & finite, well-conditioned, denormal Jacobian; the step overflowed & shrink \code{dx0}, or rescale \code{fResid} \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+The last four all mean, loosely, ``the Jacobian could not be used'', and
+collapsing them into one message was considered and rejected. Look at rows four
+and five: one says shrink the difference step and the other says enlarge it.
+\textbf{A single message telling a caller to shrink when the fix is to enlarge
+is worse than no message}, because it converts a caller who would have
+experimented into a caller who follows instructions into a deeper failure. The
+general rule the library now applies: \emph{group failures by remedy, not by
+mechanism.} Two faults with the same cause and different cures are two
+refusals; two faults with different causes and the same cure may be one.
+
+\paragraph{The cost model is part of the interface.} Each residual evaluation
+is a full trajectory propagation, so the evaluation count \emph{is} the cost
+and \code{info.nEval} is the honest number --- it counts the calls that threw,
+too. A clean iteration costs \textbf{exactly three}: two finite-difference
+probes and one accepted trial. The base point is never re-evaluated; the
+accepted trial value becomes the next base value, which is the whole reason it
+is three and not four. The arithmetic is visible in the measurements of
+Section~\ref{sec:aimflow}: one evaluation for the initial guess plus three per
+iteration, so the rotating case's two iterations cost seven and the banked
+case's one iteration costs four.
+
+\paragraph{The library default for the step cap is unbounded, deliberately.}
+\code{opts.maxStep} defaults to \code{[Inf;Inf]}. That looks like an absent
+safeguard and is not: \emph{a library function cannot know the caller's
+scales.} One control is a heading in radians of order one; the other may be
+radians of order a tenth or a dimensionless burn fraction. There is no number
+\code{aimSolve} could pick that would not be either useless on one axis or
+crippling on the other, and a wrong default here is worse than none because it
+would silently lengthen every solve. The caller sets it, and
+\code{run\_target} does: $10^\circ$ of heading and $5\,\%$ of the burn time per
+iteration, written against \code{tBurn} rather than as a literal so a different
+booster carries it. Its own comment gives the reason --- the seed is already
+range-converged, so a step anywhere near either cap means the Newton direction
+is wrong, and an uncapped first step could swing the aim to the far side of the
+planet and refuse from somewhere nothing flies.
+
+The same argument runs the other way for \code{dx0}, and there the library is
+\emph{stricter} than the caller rather than looser: a \emph{scalar} difference
+step is refused outright, with its own \code{badStep} identifier, because the
+two controls do not share a scale and broadcasting one number across both would
+hide the mistake in a Jacobian column nobody looks at.
+
+\subsection{The two refusal paths in \code{run\_target}}
+
+\code{run\_target} performs two solves, and since 8~August~2026 the second is
+itself a solve of two controls: the cutoff by bisection at the seed bearing,
+then both the launch azimuth and the cutoff together by damped Newton against
+the two components of the miss (Section~\ref{sec:aimflow}). Each solve has its
+own way of failing and each gets its own refusal, printed in the same format
+and returned through the same fields.
+
+The design question in both cases is the same: what happens when the script
+cannot do what it was asked. The library answer is a two-level split, and it is
+the clearest example in the tree of a boundary chosen for who knows what.
+
+\paragraph{Refusal one: the target is outside the reachable envelope.}
 
 \textbf{\code{rangeSolve} refuses by returning.} Its header states the rule in
 capitals: \emph{an unreachable target is not an error}. When both bracket
@@ -1193,6 +1501,57 @@ is why the band can be printed on every run, converged or refused.
 and uses \code{xSol} anyway gets a bracket endpoint --- not an interior point
 that \emph{looks} like a solution.
 
+\paragraph{Refusal two: the two-axis solve did not converge.}
+
+A target inside the envelope can still be unreachable \emph{from this seed}.
+The Newton is local; it is seeded, damped and capped, and any of the seven
+endings of Section~\ref{sec:solvers} can arrive. So there is a second refusal,
+and it is deliberately built on exactly the terms the first uses: nothing
+thrown, an empty \code{traj}, \code{info.refused = true}, and the whole record
+handed back --- now \code{info.aimInfo} beside \code{info.solveInfo}, so a
+caller can read \code{xHist} to see where the Newton got to and
+\code{info.aimInfo.message} to see why it stopped.
+
+Three things about that second block are design decisions rather than
+formatting.
+
+\begin{itemize}
+\item \textbf{\code{info.refusedWhy} distinguishes them}, taking
+\code{'envelope'} or \code{'aimSolve'}. A single \code{refused} boolean would
+tell a batch sweep that the run failed and not which of two entirely different
+problems it had --- widen the bracket, or restart the aim.
+
+\item \textbf{The envelope is quoted, and quoted as indicative.} Both refusals
+print the reachable band, because both were measured against it. But the band
+was flown at the \emph{seed} azimuth, and the solved azimuth is a different
+flight, so the printed line says ``flown at the SEED azimuth'' on the
+aim-solve refusal. That is a small honesty and it costs nothing; the
+alternative is a number that is right to a few kilometres and presented as
+exact.
+
+\item \textbf{\code{refusedWhy} exists only when \code{refused} is true.} On a
+converged run the field is absent and touching it raises. That is the
+\emph{opposite} of the usual defensive instinct --- fill every field on every
+path --- and it is the right way round here, because a caller who reads
+\code{refusedWhy} without first reading \code{refused} has a bug, and an
+absent field is what makes the bug loud. Note this is a different judgement
+from the one \code{rangeSolve} makes internally, where \code{finishInfo}
+stamps every exit field on every path so that no return can hand back a struct
+missing a field. Both are right: the library guarantees a \emph{shape},
+the script signals a \emph{state}.
+\end{itemize}
+
+The printed block ends with the sentence that is the whole point of the file,
+and it is worth reproducing because it is the design rationale stated to the
+user rather than to a reader of source:
+
+\begin{lstlisting}
+  THE BEST POINT REACHED IS NOT AN ANSWER, and it is not being returned as
+  one. A targeting script that handed back its nearest miss would hand back
+  something that LOOKS like a solution: a cutoff, an azimuth, a trajectory
+  and a summary, all of them describing a flight that does not arrive.
+\end{lstlisting}
+
 \paragraph{Why cutoff time is the bisection parameter.} Of the three available
 controls only one is monotonic and single-valued, and the rejections are
 measured rather than argued:
@@ -1216,7 +1575,18 @@ or Newton method because there is no derivative, the function is only
 piecewise smooth, and bisection cannot be thrown off a cliff by a local kink.
 \code{rangeSolve} never evaluates \code{fRange} twice at the same abscissa,
 which at roughly $0.15~\mathrm{s}$ a call is the difference between a usable
-script and an unusable one; \code{info.nEval} reports what the caller paid.
+script and an unusable one; \code{info.seedEval} reports what the caller paid.
+
+The same three-way rejection carries over to the two-axis solve, which is why
+its second control is the cutoff again and not the loft angle: the branch
+problem does not go away when a Newton is doing the driving, it gets worse, and
+a two-dimensional root finder near a maximum-range hump is exactly the
+ill-conditioned Jacobian \code{aimSolve} refuses on. Nor does the arrival of
+\code{aimSolve} retire the bisection. The seed stage still has one control and
+one monotone residual with a bracket whose endpoints \emph{are} the envelope
+the script reports, and a method that cannot leave that bracket is strictly
+better there than a method that can. What the two-axis solve added is a stage
+where no bracket exists, and it is used only there.
 
 %=====================================================================
 \section{The visualization package}
@@ -1522,12 +1892,25 @@ dependency on a toolbox layer and a test-class boilerplate per file. Glob
 discovery means adding a test is adding a file --- there is no registry to
 forget to update.
 
-\textbf{Current state, re-run for this document on 7 August 2026:}
-\textbf{20 passed, 0 failed}, zero warnings, about $14.5~\mathrm{s}$ wall clock
-including MATLAB startup. Fifteen are unit or analytic-validation tests;
-\textbf{five test compositions} --- \code{test\_runGlide},
-\code{test\_runBallistic}, \code{test\_runTarget}, \code{test\_fullChain} and
+\textbf{Current state, re-run for this edition on 8 August 2026:}
+\textbf{22 passed, 0 failed}, zero warnings, $3~\mathrm{min}~44~\mathrm{s}$
+wall clock including MATLAB startup. Sixteen are unit or analytic-validation
+tests; \textbf{six test compositions} --- \code{test\_runGlide},
+\code{test\_runBallistic}, \code{test\_runTarget},
+\code{test\_runBallisticTarget}, \code{test\_fullChain} and
 \code{test\_boostEvents} --- and those are the important ones.
+
+The wall clock moved by a factor of fifteen in a day, from the
+$14.5~\mathrm{s}$ the first edition measured, and the reason is worth a
+sentence because it is a consequence of a design decision rather than of
+carelessness. Every composition test now \emph{solves} rather than merely
+propagating, and \code{test\_runTarget} alone flies three configurations
+through a seed bisection and a two-axis Newton apiece. A propagation is about
+$0.15~\mathrm{s}$; a solve is a dozen or more of them; a test that pins three
+solves is fifty. \code{DESIGN.md} \S1's throughput requirement is what keeps
+that from being minutes per case, and \code{aimSolve}'s three-evaluations-per-
+iteration accounting (Section~\ref{sec:solvers}) is what keeps it from being
+four.
 
 One invocation detail is load-bearing enough to have its own
 \code{LESSONS\_LEARNED.md} entry: \code{matlab -batch "cd(...); tests/run\_tests"}
@@ -1636,13 +2019,19 @@ schedule must split the reference at the junction.
 derived in the dynamics note \S6. Their measured agreements are tabulated in
 \code{README.md}; the design point relevant here is the next section.
 
-\subsection{Three structural blindnesses}
+\subsection{Four structural blindnesses}
+\label{sec:blind}
 
-All three were found by mutation, all three are recorded in
+The first three were found by mutation, all three are recorded in
 \code{LESSONS\_LEARNED.md}, and all three are the \emph{same} disease seen from
 different angles: something that appears on both sides of a comparison and
 cancels, leaving a sensitivity that is identically zero and that no tightening
 of a tolerance can recover.
+
+The fourth was found in review rather than by mutation, and it is a different
+disease --- a piece of \emph{reasoning} rather than a piece of arithmetic that
+cancels. It was added last, on 8~August~2026, and it is the only one of the
+four where the blindness produced a deletion that had to be undone.
 
 \paragraph{1. A shared constant cancels.}
 
@@ -1763,12 +2152,34 @@ mutations passed an earlier suite on exactly that: forcing
 The fix is a second configuration, not a tighter tolerance.
 \code{tests/test\_runTarget.m} flies the \emph{banked} case as well: give the
 descent \code{run\_boost\_glide}'s $75^\circ$ terminal bank and the heading
-turns $166.42^\circ$ between handoff and impact, the range solve still
-converges to a $585.20~\mathrm{m}$ residual, and the vehicle misses by
-$21524.70~\mathrm{m}$ --- a factor of $36.8$ over the residual. Both numbers
-are pinned. It is also why \code{run\_target} ships \code{descBank = 0} where
-\code{run\_boost\_glide} ships $75$: a targeting decision, stated as such in
-the user block.
+turns $166.4^\circ$ between handoff and impact, and the impact point walks off
+the launch-to-target great circle.
+
+\emph{What that case now measures has moved, and the discrimination survived
+the move.} When the script solved one control against one residual, the banked
+run converged on range and \emph{missed} by $21524.695~\mathrm{m}$; that miss
+was the discriminator, and it was pinned. The two-axis solve arrives instead,
+at $54.795~\mathrm{m}$, so the miss is no longer available to discriminate
+anything --- it is small in every configuration, which is exactly the
+condition that made the zero-bank case blind in the first place. The
+separation therefore moved one stage upstream, to the \emph{seed}: the test
+now pins the seed miss at $21524.695~\mathrm{m}$ against a down-range
+component of about $639~\mathrm{m}$, a factor of $33.7$, and asserts that
+ratio directly. A measured miss and a restated range residual still cannot
+agree there, and a solve that closed the gap by moving only the cutoff still
+cannot pass --- the azimuth correction, $-0.3436^\circ$, is pinned beside it.
+
+Two smaller consequences. The banked case's pinned cross-range moved from
+$21515.222106821158~\mathrm{m}$ to $21515.222142760958~\mathrm{m}$ when the
+old $\arcsin(\sin\Delta\sin\Delta\psi)$ cross-track formula was replaced by
+the tangent-plane decomposition of Section~\ref{sec:aimflow}. The two agree to
+$3.6\times10^{-5}~\mathrm{m}$, which is a useful independent check of the new
+construction against the one it replaced --- and the test's own comment refuses
+to carry the old literal across on the strength of it, on the ground that
+\emph{agreement is not provenance}. And \code{run\_target} still ships
+\code{descBank = 0}, but no longer for the reason it used to: it is now the
+simplest default rather than a targeting limitation, and the user block was
+rewritten to say so.
 
 The same principle appears twice more in the tree. \code{test\_runGlide} flies
 a south-east case as well as the shipped due-east one, because a due-east
@@ -1778,6 +2189,123 @@ angle is symmetric in the terminal latitude and longitude. And
 \code{README.md}'s recipe for adding \code{j2Grav} carries the same warning as
 step 3a: fly it on a non-eastward heading, because $\cos\psi = 0$ zeroes two of
 the three $g_\phi$ projections.
+
+\paragraph{4. An unreachability argument is only as good as the bound it rests
+on.}
+
+\begin{quote}
+\textbf{A relative bound is not a magnitude bound}, and a guard deleted on the
+strength of one is a guard deleted for no reason.
+\end{quote}
+
+\code{aimSolve} tests the Newton step for finiteness before handing it to the
+line search. That test was written, then \emph{deleted during review}, then
+restored when a reviewer showed the deletion argument was wrong. The episode is
+worth the space because the argument is a good one and it is still false.
+
+The argument for deleting it went: the condition-number ceiling already bounds
+$\sigma_2 \geq \sigma_1/\kappa_{\max}$, so the divisor cannot vanish, so the
+step cannot overflow, so the test is unreachable --- and \emph{unreachable code
+is worse than absent code}, because it reads as protection that was never
+exercised. That last clause is a rule this library applies elsewhere and
+applies correctly; \code{missVector} declines to add an antipodal guard on
+exactly those grounds, and says so in its source.
+
+It is wrong here, and the reason is one line:
+$\kappa = \sigma_1/\sigma_2$ is a \textbf{ratio}. It constrains nothing
+whatever about the magnitude of either singular value. \emph{Both can underflow
+together while $\kappa$ sits at exactly 1}, which is as far under any ceiling
+as a matrix can get. A difference step far larger than the range over which the
+residual actually varies produces precisely that: every difference quotient
+comes back finite but denormal, the Jacobian is finite, its conditioning is
+perfect, and dividing a finite residual by a denormal singular value overflows.
+
+The consequence of the deletion was not a crash but something worse. The
+non-finite direction reaches the line search, which halves a \code{NaN} twelve
+times --- every comparison against \code{NaN} being false, nothing is ever
+accepted --- and then reports \code{stepStalled}, whose message advises raising
+\code{opts.maxHalve}. \textbf{That is a remedy that cannot ever work}, because
+the fault is scaling and not conditioning, and the caller who follows it burns
+twice the propagations to reach the same wrong diagnosis. The restored guard
+reports \code{stepNotFinite} and says, in the message, that the condition
+number is a ratio, prints the smaller singular value, and names the difference
+steps as the thing to change.
+
+Three rules come out of it, and they generalise past this function.
+\textbf{Before deleting a guard as unreachable, state the bound that makes it
+unreachable and check that it bounds the right quantity} --- relative against
+absolute is the usual way this goes wrong, and it is the same confusion the
+mass guard's floor exists to avoid (Section~\ref{sec:mass}). \textbf{Weigh
+unreachable code against the failure it would otherwise be misdiagnosed as},
+not against nothing: a deleted guard here did not leave a gap, it silently
+rerouted one fault into another fault's error message. And \textbf{a refusal
+that gives wrong advice is worse than a refusal that gives none}, which is the
+same principle that keeps \code{aimSolve}'s seven identifiers apart
+(Section~\ref{sec:solvers}) --- this is that principle applied to the guard
+list rather than to the message list.
+
+The guard is covered: \code{tests/test\_aimSolve} constructs the denormal
+Jacobian directly and asserts the identifier, which is what turned it from a
+restored line into a restored line that will stay restored.
+
+\subsection{The coverage gap the shipped case enshrines}
+\label{sec:aimcoverage}
+
+The third row of Section~\ref{sec:aimflow}'s table is the honest one, and it
+needs saying in the register of this section rather than that one.
+
+\textbf{On the shipped configuration the two-axis solve is not exercised.} It
+exits at iteration zero. \code{aimSolve} tests convergence \emph{before} it
+does any work, so a seed already inside tolerance costs one propagation and
+nothing else, and the launch azimuth comes back bit-for-bit the closed-form
+bearing. Measured: \code{aimIter = 0}, \code{aimEval = 1},
+\code{psiLaunch == psiSeed} exactly. Every line of the Jacobian, the SVD, the
+step cap, the line search and all seven refusals is dead code on the run a user
+gets by typing \code{run\_target}.
+
+That is not a tolerance that could be tightened into coverage. It is
+structural, and the structure is worth stating precisely: \emph{on a
+non-rotating zero-bank run the miss IS the range residual the bisection
+already converged}. The impact point stays on the launch-to-target great
+circle, so the cross-range component is zero to rounding and the down-range
+component is the range residual; the seed bisection drove that inside
+\code{tolRangeKm}, and the two-axis tolerance is that same figure over
+$\sqrt2$, which the seed clears with room to spare. Tightening the tolerance
+tightens the bisection in exactly the same proportion, so the seed keeps
+arriving inside it. Measured across a twentyfold tightening:
+
+\begin{center}
+\begin{tabular}{rrrrr}
+\toprule
+\code{tolRangeKm} & Per-axis tolerance & Seed miss & \code{aimIter} & \code{aimEval} \\
+\midrule
+$1.00$ & $707.107~\mathrm{m}$ & $511.243~\mathrm{m}$ & 0 & 1 \\
+$0.50$ & $353.553~\mathrm{m}$ & $22.044~\mathrm{m}$  & 0 & 1 \\
+$0.20$ & $141.421~\mathrm{m}$ & $22.044~\mathrm{m}$  & 0 & 1 \\
+$0.10$ & $70.711~\mathrm{m}$  & $22.044~\mathrm{m}$  & 0 & 1 \\
+$0.05$ & $35.355~\mathrm{m}$  & $22.044~\mathrm{m}$  & 0 & 1 \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\textbf{And the test suite \emph{pins} \code{aimIter == 0} on that case}, with
+a comment explaining that a non-zero count would mean the closed form had
+stopped being exact on a non-rotating zero-bank run --- a physics change and
+not a solver change. That reasoning is right, and the pin is the correct
+assertion to make, and it also \textbf{enshrines the non-coverage}: the shipped
+case is now contractually forbidden from touching the code this milestone
+added.
+
+What actually covers the new path is the other two configurations ---
+\code{earthSpin} true and a $75^\circ$ terminal bank, both flown in
+\code{test\_runTarget} and both asserting \code{aimIter >= 1} --- and
+\code{tests/test\_aimSolve}, which drives the solver against synthetic
+residuals with known roots and does not involve a trajectory at all. That is
+adequate coverage and it is not the same thing as the default run exercising
+it. Recorded here because this document is the place the gap belongs: a
+reader who runs the shipped script, sees the same $511.243~\mathrm{m}$ it
+always produced, and concludes the two-axis solve works is drawing a
+conclusion from one propagation that measured nothing.
 
 \subsection{Looking at pictures}
 
@@ -1852,17 +2380,29 @@ draws is gone by the time the function returns.
 
 \subsection{What the discipline cost, and what it bought}
 
-The suite is 21 files against 32 library and script files, and roughly $60\,\%$
-of the repository's lines. Four of the twenty tests are longer than the code
-they test. That is the price.
+The suite is 23 files against 34 library and script files: $12\,316$ lines of
+test against $15\,094$ lines of everything else, which is $44.9\,\%$ of the
+repository. (The first edition of this document said ``roughly $60\,\%$'', and
+that was true when it was written; the fraction fell because the two targeting
+scripts grew faster than their tests did, not because any test was cut.)
+Several of the tests are longer than the code they test. That is the price.
 
-What it bought is enumerable: the \code{Hscale} blindness, the eight-unpinned
+What it bought is enumerable: the \code{Hscale} blindness, the eight unpinned
 booster constants, the four surviving thrust mutations, the two surviving
-\code{run\_target} mutations, the phase-boundary-position mutation, and ---
-outside the suite entirely, from exercising the extensibility promise --- the
-inherited-gravity defect in \code{run\_ballistic}'s Keplerian cross-check
+\code{run\_target} mutations, the phase-boundary-position mutation, the
+restored step-finiteness guard in \code{aimSolve}
+(Section~\ref{sec:blind}), and --- outside the suite entirely, from exercising
+the extensibility promise --- the inherited-gravity defect in
+\code{run\_ballistic}'s Keplerian cross-check
 (Section~\ref{sec:injecttest}). Every one of those was a test or a script that
 reported green while being wrong.
+
+And one item goes the other way, which belongs in the same list because
+leaving it out would make the discipline look better than it is: the shipped
+\code{run\_target} case pins \code{aimIter == 0} and therefore pins the new
+two-axis path out of its own coverage (Section~\ref{sec:aimcoverage}). The
+suite is green on a run that measures nothing about the thing this milestone
+built.
 
 %=====================================================================
 \section{Conventions and constraints}
@@ -1879,7 +2419,7 @@ colon-terminated \code{\%\%} step comments through the body; and an
 \code{if nargin == 0} self-demo in every library function, calling itself by
 full namespace.
 
-Counted against the source: \textbf{23 public library functions, 20 with a
+Counted against the source: \textbf{24 public library functions, 21 with a
 self-demo, three ruled exceptions} --- \code{missileConst},
 \code{vehicleDefaults} and \code{boosterDefaults}, each a pure constant return
 whose entire content is visible in its header, so a demo would print back what
@@ -1896,7 +2436,12 @@ does without reading it, and several are genuinely diagnostic:
 JFK$\to$LAX at $273.841^\circ$ and then prints the $27.974^\circ$ by which a
 naive reversal would be wrong, and \code{rangeSolve} demonstrates \emph{both}
 the solve and the refusal, ``because the refusal is the path a user meets
-first.''
+first.'' \code{aimSolve} copies that last convention verbatim, on a toy
+two-axis targeting law whose down-range saturates in the range control the way
+a real range-versus-loft curve does: it solves once, then moves the aim point
+outside the toy's envelope and prints the refusal message. Copying the
+convention rather than inventing one is the point --- a reader who has met one
+solver's demo already knows how to read the other's.
 
 \subsection{Single source of truth for constants}
 
@@ -1991,9 +2536,271 @@ loop variable} --- they are the imaginary unit; use \code{k}, \code{kp},
 \code{kt}, \code{kb}, \code{ka}, \code{kf} or a meaningful name. And
 \textbf{never \code{norm}} --- use \code{vmag} with an explicit dimension,
 a rule currently unexercised (no vector work yet) that stands for when it
-arrives. \textbf{Swept over all 53 \code{.m} files for this document,
-7 August 2026: zero \code{\%\#ok}, zero \code{norm(}, zero \code{for i =} or
-\code{for j =}.}
+arrives. \textbf{Re-swept over all 57 \code{.m} files for this edition,
+8 August 2026: zero \code{\%\#ok}, zero \code{for i =} or \code{for j =}, and
+one \code{norm(} --- inside a comment in \code{test\_viz} explaining why the
+three-vector normalisation beside it was written out rather than taken from
+\code{norm()}.} The first edition reported that last count as zero; the
+comment was there then too, and ``zero'' was the sweep's answer rather than
+the file's. The rule is unbroken in code and the sweep is now stated in a form
+that says so without overclaiming.
+
+%=====================================================================
+\section{The closed-loop guidance seam}
+\label{sec:seam}
+
+\begin{quote}
+\textbf{No closed-loop guidance law is implemented in this library.} Nothing of
+PEG and nothing of VOA is coded --- not a partial implementation, not a stub,
+not a disabled branch. This section describes an \emph{interface} and the work
+that would have to happen behind it, and every sentence below should be read
+that way.
+\end{quote}
+
+It is worth a chapter anyway, because the seam those algorithms will attach to
+already exists, was built for a different reason, and turns out to fit --- and
+because the four things it does \emph{not} yet provide are concrete enough to
+be listed, which is the useful part.
+
+\subsection{What exists today, and why it is open-loop}
+
+Guidance in this library is a function handle stored on a phase struct:
+
+\begin{lstlisting}
+    ph(1).guide = @(t,x) coorbital.guide.pitchProgram(t,x,schedBoost);
+    ph(2).guide = @(t,x) coorbital.guide.prescribed(t,x,schedGlide);
+\end{lstlisting}
+
+It is called with the \emph{live state} at every evaluation and returns the
+control vector. Both shipped guides receive $\mathbf{x}$; one of them uses it.
+\code{prescribed} interpolates its schedule and ignores the state entirely, its
+header saying the argument is ``present so the signature matches closed-loop
+guidance laws.'' \code{pitchProgram} genuinely reads it: it takes the
+flight-path angle from $\mathbf{x}_5$ and converts a commanded pitch
+\emph{attitude} into an angle of attack.
+
+That is \textbf{state-reading}, and it is not closed-loop. The distinction is
+the whole point of this section and it is worth making sharply.
+
+\begin{center}
+\begin{tabular}{p{4.0cm}p{5.2cm}p{5.2cm}}
+\toprule
+ & What the library does & What PEG and VOA do \\
+\midrule
+When the trajectory is decided & \textbf{Before the flight}, once  & \textbf{During the flight}, repeatedly \\
+What is solved in flight       & nothing                           & the guidance problem, every cycle \\
+What the state is used for     & evaluating a fixed schedule at the current condition & re-solving for a new command \\
+Where the loop closes          & \emph{outside} the propagation    & \emph{inside} it \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+Both shipped guides interpolate a schedule of commanded attitude against their
+own phase clock (Section~\ref{sec:phase}). Nothing is re-solved in flight.
+\code{pitchProgram} reading $\gamma$ changes \emph{how a fixed command is
+expressed}, not \emph{what is commanded}: the same schedule, at the same phase
+time, on a trajectory that arrived there differently, yields a different
+$\alpha$ but the same commanded attitude. That is a coordinate conversion with
+a live argument, not a feedback law.
+
+\textbf{The loop in this library closes outside the flight.} That is what
+\code{HGV/run\_target} is: propagate the whole trajectory, measure the miss,
+adjust two scalars, propagate again (Section~\ref{sec:aimflow}). Fourteen
+propagations on the shipped case, each of them open-loop from ignition to
+impact. \emph{Solve-then-fly.} PEG and VOA are \emph{re-solve-while-flying},
+and the difference is not one of accuracy or fidelity --- it is where in the
+software the solve happens, and it is the reason the four gaps below exist.
+
+\subsection{Why the seam already half-exists}
+
+A PEG guidance law is another handle of the same shape: \code{guide(t,x)}, live
+state in, control out. It needs no new argument, no new return convention, no
+change to \code{phaseRun}'s call site, and no change to any equation of motion.
+
+That is the design payoff of Section~\ref{sec:handles}, and this is the case
+that vindicates it. The argument made there was about \emph{models} --- swap an
+atmosphere without editing the derivative --- and the alternatives rejected
+were a \code{switch} on a name, a \code{classdef} hierarchy, and positional
+arguments. Consider what each would have cost here. A \code{switch} would put
+\code{case 'peg'} inside the guidance dispatcher and require editing it to add
+a law. A subclass hierarchy would have fixed the base class's method signature
+before anyone knew what a closed-loop law needs, and MATLAB's dispatch cost
+would land in the tightest loop in the library. Positional model arguments
+would have grown the EOM signature for a family that is not even a model.
+
+The handle-on-a-struct form costs nothing to extend because there is nothing to
+extend: a new law is a new file. \textbf{The seam is already the right shape.}
+What is missing is not the interface --- it is four things behind it.
+
+\subsection{Gap 1: statefulness, and the purity contract}
+
+PEG's cycle is \emph{navigate, solve, command, execute for an interval,
+repeat}. The solve produces a command that is held for a cycle and then
+re-solved from the new state; the previous cycle's solution seeds the next.
+That is state carried \emph{across} cycles, and it is intrinsic to the
+algorithm rather than an implementation convenience.
+
+\code{phaseRun} does not offer a cycle. It calls the guidance handle:
+
+\begin{itemize}
+\item once at $(\text{tspan}(1),\mathbf{x}_0)$, for phase~1 only, purely to
+measure $n_u$;
+\item as many times as \code{ode45}'s stages require --- not knowable in
+advance, not equal to the number of output samples, and including stages
+belonging to steps the integrator subsequently \emph{rejected};
+\item then once more per returned sample, on the reconstruction pass that
+fills \code{traj.u} (Section~\ref{sec:flow}), \emph{after} every solver-stage
+call for that phase has already been made.
+\end{itemize}
+
+So the library documents guidance handles as \textbf{pure}, and
+\code{phaseRun}'s header states the consequence plainly: a guide that latches,
+counts, integrates or otherwise remembers reports a \code{traj.u} that is not
+the control the integrator actually flew, and, worse, the reconstruction pass
+leaves its hidden state advanced before the next phase begins.
+
+A stateful guide dropped into this seam would therefore see a call pattern it
+does not expect, and would be wrong in a way that produces a plausible
+trajectory. There are two honest ways out.
+
+\begin{description}
+\item[Carry the guidance state in the integrated state vector.] The
+seven-state convention already anticipates it: \code{massConstant} exists
+precisely to lift a six-state EOM into a wider one whose extra component has
+$\dot{}=0$ (Section~\ref{sec:mass}), and the same machinery would carry a
+guidance parameter. The state is then visible in \code{traj.x}, recorded at
+every sample, and correct under rejected steps and under the reconstruction
+pass alike, because the integrator owns it. \emph{Cost:} the guidance
+parameters have to be expressible as continuous states with well-defined
+derivatives, which a piecewise-constant, cycle-updated command is not without
+some contortion; every phase in the chain grows the same extra components,
+whether it uses them or not; and a discrete update inside an adaptive
+integrator is a discontinuity the integrator will feel.
+
+\item[Give \code{phaseRun} a guidance cadence distinct from its integration
+steps.] An explicit update interval $\Delta t$, with the guide re-solved on
+that clock and its command held between updates. This is what the algorithm
+actually describes, and it makes the reconstruction pass unambiguous because
+the command at any sample is determined by which cycle it falls in.
+\emph{Cost:} it is a library interface change to the one file the whole suite
+rests on; the held command is a discontinuity that \code{ode45} must be
+stopped and restarted across if it is not to be integrated through, which
+means either an event per cycle or a sub-phase per cycle; and it introduces a
+second clock beside the two that already coexist (Section~\ref{sec:phase}),
+which is exactly the kind of thing this library has already been bitten by.
+\end{description}
+
+\textbf{The choice is open.} \code{phaseRun}'s header currently recommends the
+first --- ``carry controller state in the integrated state vector and read it
+back out of \code{traj.x}; do not hide it in the closure'' --- but that
+sentence was written as advice to a caller who might accidentally write a
+stateful guide, not as an architecture decision for a law that must be one.
+Nothing has been built either way, and this document is not the place the
+decision gets made.
+
+\subsection{Gap 2: the control mapping does not exist}
+
+The equations of motion are 3-DOF point-mass. There are no attitude dynamics,
+no moments, no rate limits: the vehicle's orientation is an instantaneous
+input, not a state. The library's controls are the angle of attack $\alpha$ and
+the bank angle $\sigma$, in that order, both in radians.
+
+PEG commands a \emph{thrust direction}. Nothing in the library converts one to
+the other. That mapping is not written, and writing it is not a transcription
+job, because \textbf{at nonzero bank the pitch-to-$\alpha$ relation is not the
+naive difference}. Readers of this library have already met that fact:
+\code{pitchProgram} was corrected for exactly it, and its header now derives
+the relation and states that $\alpha = \theta - \gamma$ is the zero-bank
+special case rather than the rule. Any thrust-direction-to-$(\alpha,\sigma)$
+map inherits the same trap, and inherits it in the harder direction --- the
+correction is on the inverse.
+
+There is a second, quieter part of the same gap: a commanded direction the
+airframe cannot hold is not distinguishable from one it can, because there is
+no attitude state to violate. A 3-DOF library will fly whatever direction it is
+handed. The mapping therefore has to carry the feasibility check that the
+dynamics cannot.
+
+\subsection{Gap 3: there is no navigation}
+
+Both algorithms close on a \emph{navigated} state --- an estimate, produced by
+a filter, from measurements, with errors. This library has \textbf{truth
+only}. There is no navigation model, no estimator, no measurement model, no
+dispersion, and no place in the phase struct where one would go.
+
+The consequence is worth stating because it is easy to get backwards.
+Closed-loop guidance flown against truth is not useless: it demonstrates the
+algorithm, exercises the seam, and produces trajectories that can be checked
+against the open-loop ones. But \textbf{it does not demonstrate the thing the
+algorithm exists for.} PEG's value is that it re-solves from where the vehicle
+actually is rather than where the plan said it would be; against a perfect
+state that value is invisible, because the two agree. A closed-loop run on
+truth and an open-loop run on the same nominal will agree to integration
+tolerance, and reporting that agreement as validation would be the same
+mistake as the reduction test of Section~\ref{sec:blind}: a bit-exact match
+proving identity while providing no evidence of correctness.
+
+\subsection{Gap 4: the terminal constraints are the wrong five}
+
+Both algorithms enforce five terminal constraints, and they are the same five:
+radius, velocity, flight-path angle, and two components fixing the orbital
+plane. They are orbital-\emph{insertion} constraints, which is what both laws
+were built for.
+
+\textbf{A ground target is not among them.} A boost-glide or re-entry
+application of either law therefore has to map its actual requirement --- reach
+this latitude and longitude --- into that set, and there is no unique way to do
+it: an impact point constrains the trajectory only through the whole
+downstream unpowered flight, so the burnout conditions that produce it are a
+family, not a point. Choosing which member of that family to aim at is the
+modelling decision, and it is a modelling decision and not a coding one. A
+shared \code{terminalConstraint} definition, so that neither algorithm
+re-derives the five and so that the mapping happens once, is the obvious first
+piece of work; it does not exist yet either.
+
+\subsection{What the two algorithms are, briefly}
+
+Kept short deliberately, because the mathematics is not this document's
+business and because describing an unimplemented algorithm at length is how a
+design note starts reading like a manual.
+
+\textbf{PEG} is a five-parameter vector linear-tangent steering law with a
+nonlinear correction, driven by the closed-loop cycle described above.
+\textbf{VOA} is a twelve-variable augmented state--costate formulation with
+seven shooting unknowns, minimising burnout time. Both are specified in
+\code{docs/Coorbital HGV Capabilities.pptx}, slides~8 and~9, which is the
+source of the five terminal constraints named above.
+
+Two honesty notes about that source. It \textbf{does not expand the VOA
+acronym}, and no expansion is invented here. And it is a capability deck rather
+than a specification document: it is enough to say what the algorithms need
+from the library, which is what this chapter uses it for, and it is not enough
+to implement from without further derivation. The mathematics, when it is
+written, belongs in \code{docs/hgv\_dynamics\_note.tex} and not here.
+
+\subsection{What would have to change, in dependency order}
+
+Not a plan --- \code{TODO.md} and the plan briefs own scheduling --- but the
+ordering is a structural fact and belongs in a structural document.
+
+\begin{enumerate}
+\item \textbf{The terminal-constraint definition} (Gap~4). It depends on
+nothing, both algorithms need it, and the target-mapping decision has to be
+made before either can be aimed at anything.
+\item \textbf{The control mapping} (Gap~2). It depends on the existing
+\code{pitchProgram} relation and on nothing new. It is the piece most likely
+to be got subtly wrong, and the piece most amenable to being tested on its own
+against a synthetic direction.
+\item \textbf{The statefulness decision} (Gap~1). It is the only one of the
+four that may change \code{phaseRun}, which is why it should be decided ---
+not necessarily built --- before anything is written against the current
+purity contract. \code{TODO.md}'s note on the per-phase vehicle applies here
+verbatim, one milestone late: \emph{do it before closed-loop guidance adds
+more consumers.}
+\item \textbf{Navigation} (Gap~3) last, and possibly never in this library. It
+is a larger thing than the other three together, it has an obvious home
+elsewhere, and the first three are worth having without it.
+\end{enumerate}
 
 %=====================================================================
 \section{Known limitations and deferred work}
@@ -2007,10 +2814,9 @@ knows what is in it:
 \toprule
 Section & Contains \\
 \midrule
-Not built yet          & \code{BM/run\_ballistic\_target.m}, specified in full and never implemented \\
-Unreviewed             & one commit that skipped the subagent review every other change had \\
-Structural, deferred   & the per-phase \code{veh} field; the duplicated \code{overrideOf}/\code{maxOver} helpers; \code{run\_ballistic}'s missing re-integration payload \\
-Known limitations      & rotating-Earth targeting; cross-range; the one-sided phugoid warning; the optimistic booster structural coefficient; loose event tolerances \\
+Recently closed        & \code{BM/run\_ballistic\_target.m}, now built; the per-phase \code{veh} field, now landed; the two targeting scripts' rotating-Earth refusal; three applied reviews \\
+Structural, deferred   & migrating the three older entry scripts off their EOM closures onto \code{phase.veh}; a state-scaled default \code{AbsTol}; the duplicated \code{overrideOf}/\code{maxOver} helpers; the two \code{BM} scripts' missing re-integration payload; a degenerate-input sweep \\
+Known limitations      & rotating-Earth targeting and cross-range \emph{for \code{BM/run\_ballistic\_target}}; \code{run\_ballistic\_target}'s jettisoned propellant; the one-sided phugoid warning; the optimistic booster structural coefficient; loose event tolerances \\
 Upstream in pumpkyn    & two defects to \emph{report, not patch} \\
 Out of scope by design & PEG/VOA, multi-stage, terminal homing, aerothermal heating, fidelity increments, Phase~2 optimisation \\
 Documentation debt     & \code{DESIGN.md} needs a third dated as-built section; one stale file count \\
@@ -2018,10 +2824,41 @@ Documentation debt     & \code{DESIGN.md} needs a third dated as-built section; 
 \end{tabular}
 \end{center}
 
-Three items bear directly on the design described above and are cross-referenced
-where they arise: the per-phase \code{veh} field (Section~\ref{sec:mass}),
-\code{run\_ballistic}'s \code{info} payload (Section~\ref{sec:entry}), and the
-pumpkyn upstream defects (Section~\ref{sec:viz}).
+Four items bear directly on the design described above and are cross-referenced
+where they arise: the per-phase \code{veh} field and its unfinished migration
+(Section~\ref{sec:mass}), the \code{BM} scripts' \code{info} payload
+(Section~\ref{sec:entry}), the pumpkyn upstream defects
+(Section~\ref{sec:viz}), and PEG/VOA, which are out of scope as
+\emph{algorithms} while the seam they attach to is very much in scope
+(Section~\ref{sec:seam}).
+
+\paragraph{Two rows of \code{TODO.md} are overtaken by this milestone, and one
+of them is overtaken in its reasoning as well as in its status.} Both sit under
+``Known limitations'' as of the version read for this edition, and both were
+written before the two-axis solve existed.
+
+``Rotating-Earth targeting needs an outer azimuth iteration'' is now false for
+\code{HGV/run\_target}, which flies it (Section~\ref{sec:aimflow}), and remains
+true for \code{BM/run\_ballistic\_target}, which does not. But the entry's
+\emph{mechanism} is wrong independently of that. It says the vehicle ``must be
+aimed where the target is \textbf{going to be}'', which would make the azimuth
+depend on the flight time and force an outer loop around the range solve. That
+is not what happens here. The state's latitude and longitude are Earth-fixed
+and the speed is planet-relative, so the target does not move at all --- it is
+the \emph{vehicle} that is deflected off the arc it left on, by the Coriolis
+and centrifugal terms. \code{run\_target}'s own header now says so, and the
+script deleted the eastward-drift figure it used to print
+($\omega_E r_I \cos\phi_T t_{\text{flight}}$, $628~\mathrm{km}$ on the rotating
+shipped case) precisely because that number measures a mechanism the file no
+longer claims. The deflection it \emph{does} claim is measured, not derived:
+$231.552~\mathrm{km}$, a factor of $2.7$ smaller. \emph{A retracted mechanism's
+number left standing under a corrected sentence is the harder error to notice
+of the two, because the prose reads right.}
+
+``Cross-range is measured and warned about, not solved'' is likewise now
+\code{BM/run\_ballistic\_target}'s limitation alone. \code{run\_target} drives
+it to zero, \code{info.crossWarn} is gone, and the cross-range line in the
+summary is evidence rather than a caveat.
 
 One addition this document generates: \code{TODO.md}'s documentation-debt
 section lists ``the two \LaTeX{} notes are forthcoming.'' Both now exist, and
@@ -2034,36 +2871,64 @@ that entry can be closed.
 Everything asserted above was checked against the committed source. Three
 classes of check, and what each covered.
 
-\paragraph{Read against the source.} All 26 files under \code{+coorbital},
-all four entry scripts, \code{tests/run\_tests.m} and a sample of the test
-files (\code{test\_fullChain}, \code{test\_phaseRun}, \code{test\_boost3DOF},
-\code{test\_constThrust}, \code{test\_viz}), plus \code{DESIGN.md},
-\code{README.md}, \code{LESSONS\_LEARNED.md}, \code{TODO.md}, the three plan
-briefs and \code{hgv\_dynamics\_note.tex}. Every code fragment quoted above is
-copied from the source, not retyped.
+\paragraph{Read against the source.} For the first edition: all 26 files then
+under \code{+coorbital}, all four entry scripts, \code{tests/run\_tests.m} and
+a sample of the test files (\code{test\_fullChain}, \code{test\_phaseRun},
+\code{test\_boost3DOF}, \code{test\_constThrust}, \code{test\_viz}), plus
+\code{DESIGN.md}, \code{README.md}, \code{LESSONS\_LEARNED.md},
+\code{TODO.md}, the three plan briefs and \code{hgv\_dynamics\_note.tex}. For
+this edition, additionally: \code{+coorbital/+util/aimSolve.m} and
+\code{+coorbital/+util/rangeSolve.m} in full, \code{HGV/run\_target.m},
+\code{+coorbital/+prop/phaseRun.m}, \code{+coorbital/+guide/pitchProgram.m}
+and \code{prescribed.m}, \code{tests/test\_runTarget.m}, and the fourth plan
+brief, \code{docs/plan\_2026-08-08\_aim\_solve\_and\_closed\_loop.md}. Every
+code fragment quoted above is copied from the source, not retyped.
 
-\paragraph{Re-measured for this document, 7 August 2026, MATLAB R2025b.}
+\paragraph{Re-measured for this edition, 8 August 2026, MATLAB R2025b.}
 
 \begin{center}
 \begin{tabular}{ll}
 \toprule
 Measurement & Result \\
 \midrule
-Test suite                                & 20 passed, 0 failed, zero warnings \\
-\pkg{viz} read-only, four scripts         & 423 summary lines, 0 differing, \code{isequaln} true \\
-Model injection, $J_2$ $+$ throttle       & all four calls ran on a one-field change \\
-Keplerian cross-check, inherited $J_2$    & $2.947\times10^{-3}$ relative (budget $10^{-6}$) \\
-Keplerian cross-check, pinned \code{sphereGrav} & $5.207\times10^{-12}$ relative \\
-Convention sweep, 53 \code{.m} files      & 0 \code{\%\#ok}, 0 \code{norm(}, 0 \code{for i/j =} \\
-Self-demo count, \pkg{coorbital}          & 23 public functions, 20 demos, 3 ruled exceptions \\
+Test suite                                & 22 passed, 0 failed, zero warnings, $3{:}44$ wall \\
+Targeting, shipped case                   & miss $511.243~\mathrm{m}$; \code{aimIter} 0, \code{aimEval} 1, \code{nProp} 14 \\
+Targeting, shipped case, azimuth          & \code{psiLaunch == psiSeed} bit-for-bit \\
+Targeting, \code{earthSpin} true          & seed $231\,551.628~\mathrm{m}$ $\to$ $4.361~\mathrm{m}$; 2 iterations, 7 evaluations \\
+Targeting, $75^\circ$ terminal bank       & seed $21\,524.695~\mathrm{m}$ $\to$ $54.795~\mathrm{m}$; 1 iteration, 4 evaluations \\
+Cost model, both hard cases               & $1 + 3n$ evaluations for $n$ iterations, exactly \\
+Coverage, tolerance $1.0 \to 0.05$~km     & \code{aimIter} 0 at every step (Section~\ref{sec:aimcoverage}) \\
+Convention sweep, 57 \code{.m} files      & 0 \code{\%\#ok}, 0 \code{for i/j =}, 1 \code{norm(} in a comment \\
+Self-demo count, \pkg{coorbital}          & 24 public functions, 21 demos, 3 ruled exceptions \\
+Line counts                               & $12\,316$ test against $15\,094$ library and script \\
 \bottomrule
 \end{tabular}
 \end{center}
 
+Carried forward from the first edition, 7 August 2026, and not re-run here
+because nothing this milestone touched can move them:
+
+\begin{center}
+\begin{tabular}{ll}
+\toprule
+Measurement & Result \\
+\midrule
+\pkg{viz} read-only, four scripts         & 423 summary lines, 0 differing, \code{isequaln} true \\
+Model injection, $J_2$ $+$ throttle       & all four calls ran on a one-field change \\
+Keplerian cross-check, inherited $J_2$    & $2.947\times10^{-3}$ relative (budget $10^{-6}$) \\
+Keplerian cross-check, pinned \code{sphereGrav} & $5.207\times10^{-12}$ relative \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+Both \pkg{viz} rows say ``four scripts'' and mean it: neither was re-run over
+\code{BM/run\_ballistic\_target}, which did not exist when they were taken.
+
 \paragraph{Quoted from the repository's own measurements.} The Allen--Eggers
 and equilibrium-glide agreements, the mutation tables, the junction residuals,
 the $62.8\,\%$ separation range swing, the $9.286\times10^{-10}~\mathrm{m}$
-zero-bank agreement and the $21524.70~\mathrm{m}$ banked miss, the $1882$~km
+zero-bank agreement and the $21524.695~\mathrm{m}$ banked \emph{seed} miss,
+the $1882$~km
 phugoid-trough loss, and the movie's pixel and shell sweeps. Each is attributed
 in the text to \code{README.md}, \code{LESSONS\_LEARNED.md}, \code{TODO.md} or
 the source comment it came from.
@@ -2072,10 +2937,10 @@ the source comment it came from.
 
 \begin{enumerate}
 \item \code{README.md}'s conventions section says the style sweep covered
-``39 \code{.m} files''. There are 53. \code{TODO.md} already logs this as a
+``39 \code{.m} files''. There are 57. \code{TODO.md} already logs this as a
 count refresh; the sweep is still clean.
 \item \code{DESIGN.md} \S11.1's ``17 library functions, 14 with a self-demo''
-predates \pkg{viz}. The count today is 23 and 20. \S11.1 is a dated record and
+predates \pkg{viz}. The count today is 24 and 21. \S11.1 is a dated record and
 is correctly left unedited.
 \item The plan brief's justification for \code{ode89} --- that a same-solver
 re-integration goes bitwise --- does not hold for the anchoring
@@ -2095,11 +2960,51 @@ $1\times$. The other three entry scripts use fixed factors chosen for their
 flights.
 \end{enumerate}
 
+\paragraph{Discrepancies in this document's own first edition, corrected here.}
+Listed separately from the six above because the fault is this file's rather
+than another's.
+
+\begin{enumerate}
+\item ``The deferred structural fix'' described the per-phase \code{veh} field
+as still open. It had landed in \code{23c3470} some hours before the file was
+written, and \code{TODO.md} had already moved it. Corrected in
+Section~\ref{sec:mass}; what is actually deferred is the migration of three
+older scripts onto it.
+\item ``All four entry scripts'' shadow a \code{vehArg}. Three do;
+\code{BM/run\_ballistic\_target} uses \code{ph.veh}. The three quoted line
+numbers had also drifted and are re-read.
+\item The convention sweep reported ``zero \code{norm(}''. There is one, in a
+comment in \code{test\_viz} that explains why \code{norm()} was not used. The
+rule is unbroken in code; the count was not.
+\item The override whitelists were reported as running to 38 entries in
+\code{run\_target}. It has 36; the longest is now
+\code{BM/run\_ballistic\_target} at 37.
+\item ``Roughly $60\,\%$ of the repository's lines'' are test. It is
+$44.9\,\%$, and the fraction fell because the targeting scripts grew, not
+because a test was cut.
+\item The banked-case cross-range pin of $21515.222106821158~\mathrm{m}$ came
+from the superseded $\arcsin$ cross-track formula. The current pin is
+$21515.222142760958~\mathrm{m}$ from the tangent-plane decomposition; they
+agree to $3.6\times10^{-5}~\mathrm{m}$, and the test declines to carry the old
+literal across on that agreement.
+\end{enumerate}
+
 \paragraph{Not verified here.} The wall-clock and file-size figures for the
 movie renders, the per-frame render costs, and the $480\times320$ visual
 findings are taken from \code{README.md} and the \code{globeMovie} header as
 recorded measurements; no movie was rendered for this document. The
 $g_\phi$ gravity terms remain unexercised by the shipped test suite and are
 verified only by \code{hgv\_dynamics\_note.tex} \S3.2, as that note states.
+
+And, most importantly for the newest chapter: \textbf{nothing in
+Section~\ref{sec:seam} was measured, because there is nothing there to
+measure.} It describes an interface, a purity contract, and four gaps. The
+statements about what \emph{exists} --- the handle signature, the call pattern,
+\code{pitchProgram} reading $\mathbf{x}_5$, the absence of any navigation model
+--- were read off the source. The statements about what PEG and VOA
+\emph{need} are read off \code{docs/Coorbital HGV Capabilities.pptx} slides~8
+and~9, which is a capability deck and not a specification, and which does not
+expand the VOA acronym. No expansion is invented here, and no line of either
+algorithm is written anywhere in this repository.
 
 \end{document}

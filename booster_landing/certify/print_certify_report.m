@@ -38,6 +38,13 @@ prow('G2 vel residual [m/s]', rep.G2_vel, 0.1, '<', 1);
 prow('G2 mass residual [kg]', rep.G2_dm,  0.5, '<', 1);
 gsummary('G2', rep.G2_pass);
 
+% G2b (task-7 fix report round 4, NEW): feedforward feasibility --
+% densely-sampled, gated at every grid (no tolScale accommodation, see
+% certify_pdg.m's G2b note for why):
+prow('G2ff below-Tmin frac',  rep.G2ff_below_tmin, 1e-6, '<', 1);
+prow('G2ff above-Tmax frac',  rep.G2ff_above_tmax, 1e-6, '<', 1);
+gsummary('G2ff', rep.G2ff_pass);
+
 % G3 (two data rows + one info row, dmf/dtf scaled by tolScale). |dmf|'s
 % nominal threshold is 1.0 kg (was 0.1 kg -- adjudicated 2026-08-08, a
 % measurement gate over the genuine Taylor mass-bound model error; see

@@ -63,13 +63,57 @@ function ctrl = tvlqr_design(sol, P, opts)
 % did not eliminate the arrest possibility under closed-loop tracking
 % error, and that low-R band is disjoint from the dispersed-safe band by
 % over an order of magnitude. See the task-7 fix report round 3 for the
-% full sweep and the resulting honest test status.
+% full sweep. -- ROUND-4 UPDATE: this round-3 "disjoint band" finding
+% turned out to be partly an N=30-grid ARTIFACT, not the physics itself
+% (see below); the ROUND-3 default (R=7e-10) is superseded here.
+%
+% ADAPTATION 4 (task-7 fix report round 4, 2026-08-08): default R lowered
+% to 1e-9. Root cause of round 3's "nominal never lands" finding, found
+% by a reviewer and confirmed here: at the N=30 grid the CLOSED-LOOP TEST
+% used (not the N=P.N=60 production grid the shipped defaults are meant
+% for), hs_quad_ctrl's PRE-round-4 reconstruction dipped up to 18% below
+% Tmin over 11.7% of the flight between nodes/midpoints -- invisible to
+% every gate that existed before round 4's new G2ff check (certify_pdg.m).
+% The closed-loop sim's saturating clamp turned that into a real,
+% grid-dependent +0.6-1 m open-loop altitude bias; two rounds of R tuning
+% were unknowingly buying feedback gain to cancel that feedforward defect,
+% not tuning against real closed-loop physics. hs_quad_ctrl is now
+% annulus-feasible BY CONSTRUCTION at any grid (see that function), and
+% the closed-loop test now uses N=P.N=60 (tests/test_closed_loop_nominal.m)
+% -- at that combination, the NOMINAL case lands cleanly (alt~0, vtd in
+% [1.4,2.1]) at EVERY R from 7e-10 to ~1e-7, confirmed by a fresh sweep.
+%
+% The DISPERSED-case R antagonism, however, is REAL and SURVIVES both the
+% hs_quad_ctrl fix and sim_closed_loop.m's altitude-scheduled
+% terminal-phase remedy (zeroed z-position feedback + v(z) tracking below
+% P.zTermBand, fixing the "past-tf freeze" where K(tf)'s structurally-zero
+% position columns silently strip ALL position feedback -- x,y included --
+% for any simulated time past nominal tf; see sim_closed_loop.m's
+% TERMINAL-PHASE note). At N=60, post-both-fixes: dispersed miss<15
+% needs R<~1.5e-9 (R=1.5e-9: miss=13.99, right at the edge; R=3e-9:
+% miss=20.4, over) while dispersed vtd<2 needs R>~5e-8 (R=3e-8: vtd=1.68;
+% R=1e-8: vtd=2.80, over) -- a ~20-30x gap with NO overlap in an
+% extensive sweep (task-7 fix report round 4 for the full table). Per
+% that round's explicit instruction ("if the antagonism survives the
+% structural remedy, STOP with the sweep table"), this is reported, not
+% forced: R=1e-9 is chosen as the shipped default because it gets the
+% NOMINAL case fully right (landed=true, vtd=1.51 m/s, comfortable margin
+% under vtd_max=2.0) and the DISPERSED miss comfortably inside pad_radius
+% (10.85 m vs 15 m) -- the geometric "did it reach the pad" requirement --
+% while being honest that dispersed vtd (6.82 m/s) badly fails the
+% vtd_max=2.0 safety gate at this setting. No R in the tested range
+% satisfies both dispersed gates at once; see the report for candidate
+% structural remedies beyond a weight/schedule retune (anisotropic R,
+% integral action, or revisiting whether a single 3-DOF thrust vector can
+% ever simultaneously correct a 50 m lateral offset AND arrest vertical
+% speed to 2 m/s under P.Tmin>weight -- a genuine actuator-authority
+% question, not a tuning one).
 %
 % REFERENCES:
 %   [1] Anderson & Moore, "Optimal Control: Linear Quadratic Methods."
 if nargin < 3, opts = struct(); end
 if ~isfield(opts,'Q'),  opts.Q  = diag([1e-4 1e-4 1e-4 1e-2 1e-2 1e-2 0]); end
-if ~isfield(opts,'R'),  opts.R  = 7e-10*eye(3);                            end
+if ~isfield(opts,'R'),  opts.R  = 1e-9*eye(3);                             end
 if ~isfield(opts,'Qf'), opts.Qf = diag([1e-2 1e-2 1e-2 1 1 1 0]);          end
 
 %% Nominal interpolants (state: pchip over nodes; thrust: shared
@@ -77,7 +121,7 @@ if ~isfield(opts,'Qf'), opts.Qf = diag([1e-2 1e-2 1e-2 1 1 1 0]);          end
 %% ADAPTATION note above):
 Nn = size(sol.X,2) - 1;  h = sol.tf/Nn;
 ctrl.xnom = @(t) interp1(sol.t.', sol.X.', clampt(t, sol.tf), 'pchip').';
-ctrl.Tnom = @(t) hs_quad_ctrl(clampt(t, sol.tf), sol.U, sol.Um, h, Nn);
+ctrl.Tnom = @(t) hs_quad_ctrl(clampt(t, sol.tf), sol.U, sol.Um, h, Nn, P.Tmin, P.Tmax);
 
 %% Backward Riccati on vec(P), dense output grid:
 M     = 4*(Nn+1);

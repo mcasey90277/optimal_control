@@ -36,8 +36,24 @@ P.vf     = [0; 0; -1.5];       % terminal velocity target [m/s] (ADJUDICATED
                                 % pad (measured: 0.53 m). Touching down
                                 % descending at 1.5 m/s (legs absorb it;
                                 % P.vtd_max=2.0 mission gate unchanged)
-                                % removes the arrest state entirely --
-                                % velocity never nulls above ground.
+                                % substantially improves closed-loop
+                                % touchdown behavior (a genuine landing near
+                                % this target IS achievable, which the old
+                                % v(tf)=0 endpoint never allowed at any
+                                % gain). CORRECTION (round-3 report,
+                                % retracted there, corrected here per round-
+                                % 4 review): this does NOT "remove the
+                                % arrest state entirely" as originally
+                                % claimed -- P.Tmin still exceeds weight at
+                                % every mass regardless of the target
+                                % velocity, so closed-loop tracking error
+                                % that falls behind the guidance's own
+                                % descent-rate schedule can still arrest
+                                % near the ground under some gain/grid
+                                % settings (see sim_closed_loop.m's
+                                % TERMINAL-PHASE note and P.zTermBand below
+                                % for the structural fix that round 4
+                                % applied on top of this BC change).
 
 %% Path constraints:
 P.gs_deg        = 30;          % glideslope min elevation angle [deg]
@@ -79,7 +95,30 @@ P.tf_hi  = 22;                 % ADAPTATION (task-7 fix report round 3,
                                 % scale (30->16 s) closer to the true
                                 % answer -- a tighter, more physically
                                 % grounded characteristic scale, not a
-                                % looser one.
+                                % looser one. NOTE for Phase 2 (P.drag.on):
+                                % this bracket was validated in vacuum only
+                                % -- drag will change the fuel-vs-tf curve
+                                % (and hence where the tf~27 s infeasibility
+                                % wall sits), so tf_hi may need widening
+                                % when drag is switched on; re-run the tf
+                                % sweep in this comment's block rather than
+                                % assume 22 still has headroom.
+
+P.zTermBand = 150;             % terminal-phase altitude gate [m] (task-7
+                                % fix report round 4, 2026-08-08): below
+                                % this altitude, sim_closed_loop.m's
+                                % control_law stops feeding z-position error
+                                % into the thrust command and instead tracks
+                                % the guidance's own v(z) profile -- the
+                                % structural fix for the closed-loop arrest
+                                % mechanism (see that file's TERMINAL-PHASE
+                                % note). 150 m is the reviewer-suggested
+                                % starting point (this trajectory's descent
+                                % rate near the end is ~15-20 m/s, so 150 m
+                                % is roughly the last ~8-10 s of NOMINAL
+                                % flight time before the final high-gain
+                                % braking arc -- not tightly tuned; a sweep
+                                % of this value was not run this round).
 
 %% Atmosphere (Phase 2, OFF by default -- vacuum keeps convexification exact):
 P.drag.on   = false;

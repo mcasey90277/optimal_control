@@ -6,12 +6,27 @@
 %
 % Uses solve_pdg_convex's single-tf mode (opts.tf fixed) to stay fast.
 %
+% tf PINNED AT 17 s (task-7 fix report round 4, 2026-08-08): was 25 s,
+% which is now OUTSIDE [P.tf_lo, P.tf_hi]=[10,22] (P.tf_hi narrowed from
+% 50 to 22 in round 3 -- see booster_params.m) and, per round 3's own
+% dedicated sweep, sits in a numerically marginal band (tf~25-26 s
+% measured both tight and untight for the identical call in separate
+% MATLAB processes -- IPOPT/BLAS-threading sensitivity, see
+% solve_pdg_convex.m's solve_fixed_tf_probe note). tf=18 was tried first
+% and turned out to be a SEPARATE, reproducible bad point (round 3's own
+% sweep already showed it: gap=4.702, Solve_Succeeded but untight -- an
+% oversight in round 4's first pass at this fix, not re-checked against
+% that data before picking it). tf=17 is confirmed clean and
+% deterministic (re-solved twice, identical Solve_Succeeded, gap=4.8e-5,
+% both at Nconv=60 -- the actual Nconv this test uses) and sits centrally
+% in the well-behaved band (tf=16-19 all clean per round 3's sweep).
+%
 % INPUTS: none   OUTPUTS: none (throws on failure)
 here_ = fileparts(mfilename('fullpath'));
 addpath(fullfile(here_, '..'));  setup_paths;
 
 P   = booster_params();
-sol = solve_pdg_convex(P, struct('tf', 25, 'Nconv', 60));
+sol = solve_pdg_convex(P, struct('tf', 17, 'Nconv', 60));
 assert(sol.stats.success, 'convex solve failed: %s', sol.stats.status);
 assert(sol.lossless_gap < 1e-4 * P.Tmax/P.m0, ...
        'relaxation not tight: gap=%.3e', sol.lossless_gap);

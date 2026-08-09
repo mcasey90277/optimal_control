@@ -93,6 +93,10 @@ function rep = certify_pdg(solC, solV, P, tolScale)
 %                  this to show EFFECTIVE thresholds, not nominal ones)
 %     .G1_defect, .G1_pass
 %     .G2_pos, .G2_vel, .G2_dm, .G2_pass
+%     .G2ff_below_tmin, .G2ff_above_tmax, .G2ff_pass (NEW, task-7 fix
+%       report round 4: feedforward-feasibility -- is the flyable
+%       reconstructed control ever outside [Tmin,Tmax] BETWEEN
+%       nodes+midpoints, dense-sampled; see the G2b note above G2ff_pass)
 %     .G3_dmf, .G3_dtf, .G3_traj_Linf, .G3_pass ('skipped' if solV==[])
 %     .G4_gap, .G4_pass ('skipped' if solV==[])
 %     .G5_bound_frac, .G5_switches, .G5_structOk, .G5_primer_deg, .G5_pass
@@ -148,13 +152,43 @@ TU(:,1:2:end) = solC.U;  TU(:,2:2:end) = solC.Um;
 %% exact per-segment quadratic Lagrange through (U_k, Um_k, U_{k+1}), the
 %% control representation Simpson's rule (hence the HS defects above) is
 %% actually built against, not a global spline across segment boundaries.
-odef = @(tt, xx) pdg_dynamics(xx, hs_quad_ctrl(tt, solC.U, solC.Um, h, N), P);
+odef = @(tt, xx) pdg_dynamics(xx, hs_quad_ctrl(tt, solC.U, solC.Um, h, N, P.Tmin, P.Tmax), P);
 oo   = odeset('RelTol',1e-10,'AbsTol',1e-10);
 [~, XX] = ode45(odef, [0 solC.tf], solC.X(:,1), oo);
 ef = XX(end,:).' - solC.X(:,end);
 rep.G2_pos = sqrt(sum(ef(1:3).^2));  rep.G2_vel = sqrt(sum(ef(4:6).^2));
 rep.G2_dm  = abs(ef(7));
 rep.G2_pass = rep.G2_pos < 1 && rep.G2_vel < 0.1 && rep.G2_dm < 0.5;
+
+%% G2b (task-7 fix report round 4, 2026-08-08, NEW): feedforward
+%% FEASIBILITY -- is the FLYABLE reconstructed control (the same
+%% hs_quad_ctrl call G2 just integrated, and the exact function Task 6's
+%% TVLQR feedforward and Task 7's closed-loop truth sim also call) ever
+%% outside [Tmin,Tmax] BETWEEN nodes+midpoints, not just at the sampled
+%% points G5's bound-fraction check below already covers? Root-cause gate
+%% for a real bug: before hs_quad_ctrl's round-4 direction/magnitude split
+%% (see that function's own ADAPTATION note), the single-vector
+%% reconstruction dipped up to 18% below Tmin over 11.7% of the flight at
+%% the N=30 test grid -- invisible to G1 (discrete defects only), G2's OWN
+%% pass/fail (a feedforward that under-thrusts for a while and
+%% over-thrusts elsewhere can still land close in aggregate), and G5
+%% (node+midpoint samples only). The closed-loop sim's saturating clamp
+%% turned that invisible feedforward defect into a real +0.6-1m open-loop
+%% altitude bias that two rounds of TVLQR weight tuning were unknowingly
+%% fighting. Densely sampled (20 points/segment, not just nodes+
+%% midpoints) so a dip strictly BETWEEN samples cannot hide. Gated at
+%% every grid (not just nominal): the direction/magnitude split makes a
+%% violation impossible by construction regardless of resolution, so a
+%% real regression here should never require a coarse-grid exemption.
+tdense = linspace(0, solC.tf, 20*N + 1);
+TmagD  = zeros(size(tdense));
+for kk = 1:numel(tdense)
+    Tvk = hs_quad_ctrl(tdense(kk), solC.U, solC.Um, h, N, P.Tmin, P.Tmax);
+    TmagD(kk) = sqrt(sum(Tvk.^2));
+end
+rep.G2ff_below_tmin = max(max(0, P.Tmin - TmagD) / P.Tmin);
+rep.G2ff_above_tmax = max(max(0, TmagD - P.Tmax) / P.Tmax);
+rep.G2ff_pass = rep.G2ff_below_tmin < 1e-6 && rep.G2ff_above_tmax < 1e-6;
 
 %% G3/G4: cross-method agreement + losslessness (skip if no convex twin):
 if isempty(solV)
@@ -225,7 +259,7 @@ rep.G5_primer_deg = max(acosd(min(1, max(-1, cosang))));
 rep.G5_pass = rep.G5_structOk && rep.G5_primer_deg < 1;
 
 %% Verdict:
-gates = [rep.G1_pass, rep.G2_pass, isequal(rep.G3_pass,true) || ...
+gates = [rep.G1_pass, rep.G2_pass, rep.G2ff_pass, isequal(rep.G3_pass,true) || ...
          isequal(rep.G3_pass,'skipped'), isequal(rep.G4_pass,true) || ...
          isequal(rep.G4_pass,'skipped'), rep.G5_pass];
 rep.all_pass = all(gates);

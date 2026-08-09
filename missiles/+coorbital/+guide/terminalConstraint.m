@@ -33,10 +33,18 @@ function [c,ach] = terminalConstraint(rVec,vVec,des)
 %  h_f . wHat <= 0 raises. The branch is therefore selected HERE, not by the
 %  caller, and a caller wanting the retrograde sheet must negate des.wHat.
 %
-%  A throw is the right refusal rather than a large residual because the
-%  library's solver contract already reads it that way: coorbital.util.aimSolve
-%  treats a residual that throws as an infeasible point and shrinks the step,
-%  which is exactly the behaviour wanted at the boundary between the sheets.
+%  A throw is preferred to a large residual, but BY ANALOGY rather than by
+%  established contract, and the distinction matters because the solver that
+%  will call this does not exist yet. The analogy is coorbital.util.aimSolve,
+%  which treats a residual that throws as an infeasible point and shrinks the
+%  step -- which is the behaviour wanted at the boundary between the sheets.
+%  But aimSolve does NOT do that uniformly: it shrinks only on a TRIAL point,
+%  hard-refuses with jacobianFailed on a finite-difference PROBE, and lets a
+%  throw at the initial guess propagate uncaught. So there is no library-wide
+%  rule here to appeal to. Whether a PEG least-squares or a VOA shooting
+%  iteration should steer away from this throw or die on it is an OPEN DESIGN
+%  QUESTION, and whichever builds first must decide it deliberately rather
+%  than inherit it from this comment.
 %
 %% Inputs:
 %

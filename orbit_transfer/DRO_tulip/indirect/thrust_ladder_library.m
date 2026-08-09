@@ -178,18 +178,16 @@ for kc = 1:min(size(todo,1), maxCells)
                iD, iA, TN, o.maxDefect);
             break
         end
-        % CHEAP SANITY PRE-CHECK. A solve can meet the discrete defect test
-        % to 1e-9 and still be physically wild; integrating such a trajectory
-        % crawls near the lunar singularity WITHOUT BOUND (measured: one cell
-        % pinned the run 16 min at 100% CPU). Screen on the discrete nodes --
-        % altitude floor and a plausible time of flight -- before ever
-        % handing the solution to an integrator.
-        rMoonKm = 1737.4;
-        dMoon = vecnorm(o.X(1:3,:) - [1-muStar;0;0], 2, 1)*lStar - rMoonKm;
-        tfBad = ~isempty(seedTf) && (o.tf > 3*seedTf || o.tf < 0.3*seedTf);
-        if min(dMoon) < 0.5*floorKm || tfBad
+        % Cheap sanity pre-check before any integrator touches the solve
+        % (one home: costate_common/preflight_screen).
+        if isempty(which('preflight_screen'))
+            addpath(fullfile(fileparts(fileparts(fileparts( ...
+                mfilename('fullpath')))), 'costate_common'));
+        end
+        [pfOK, ~, pfAltKm] = preflight_screen(o, muStar, lStar, floorKm, seedTf);
+        if ~pfOK
             lg('  (%2d,%2d) T=%5.1f  rejected pre-flight (minAlt %.0f km, tf %.4f) -- ladder stops', ...
-               iD, iA, TN, min(dMoon), o.tf);
+               iD, iA, TN, pfAltKm, o.tf);
             break
         end
         C = certify_dro_mintime(o, struct('muStar',muStar,'lStar',lStar,'tStar',tStar), ...

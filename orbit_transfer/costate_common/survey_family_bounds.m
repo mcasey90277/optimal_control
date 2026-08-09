@@ -59,9 +59,7 @@ for k = 1:numel(paramGrid)
         % are garbage (measured: periselene below the surface, distances of
         % 1e10 km). Label it, never trust it.
         perErr = norm(rv(end,1:6) - rv(1,1:6));
-        % NOTE the negated form: a NaN closure (integrator blow-up mid-arc)
-        % must fail this test too, and NaN passes any '>' comparison
-        if ~(perErr < 1e-6) || any(~isfinite(rv(:)))
+        if ~assert_periodic_orbit(tt, rv, 1e-6, false)
             fprintf('  %-26s  NON-PERIODIC (|closure| %.1e) -- excluded\n', ...
                     pstr(p), perErr);
             continue

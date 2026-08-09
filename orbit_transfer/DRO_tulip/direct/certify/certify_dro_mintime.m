@@ -116,7 +116,12 @@ G(end+1) = add('G1v','local VELOCITY accuracy (worst interval)', worstVms, 1.0, 
 
 globKm = NaN;
 if ~isempty(globTolKm)
-    [gr, gv] = local_global_error(o, mu, Tmax, c);
+    % shared verifier (migration #4): costate_common/flown_control_error
+    if isempty(which('flown_control_error'))
+        addpath(fullfile(fileparts(fileparts(fileparts(fileparts( ...
+            mfilename('fullpath'))))), 'costate_common'));
+    end
+    [gr, gv] = flown_control_error(o, mu, Tmax, c);
     globKm  = gr * lStar;
     globVms = gv * lStar/p.tStar * 1000;
     G(end+1) = add('G1b','GLOBAL POSITION accuracy (control flown end to end)', ...
@@ -156,7 +161,7 @@ end
 
 % the floor, if one was imposed, checked BETWEEN nodes as well as at them
 if isfield(o,'minAltKm') && ~isnan(o.minAltKm)
-    trueMinKm = local_true_min_alt(o, mu, Tmax, c, lStar, rMoonKm);
+    trueMinKm = true_min_altitude(o, mu, Tmax, c, lStar, rMoonKm);
     G(end+1) = add('G7','altitude floor honoured between nodes', trueMinKm, ...
                    o.minAltKm, trueMinKm >= o.minAltKm, 'km');
 end
@@ -208,28 +213,6 @@ if verbose
 end
 end
 
-% ---------------------------------------------------------------------------
-function [er, ev] = local_global_error(o, mu, Tmax, c)
-% LOCAL_GLOBAL_ERROR  Fly the reconstructed control ONCE from the initial node
-% to the end and return the terminal state error. This is the physically
-% meaningful number: 'if you flew this control, where would you arrive?'
-% INPUTS: o; mu; Tmax; c   OUTPUTS: e (ND norm of the terminal 6-state error)
-if isfield(o,'tNodes') && ~isempty(o.tNodes), t = o.tNodes(:).';
-else, t = o.s(:).' * o.tf; end
-odeo = odeset('RelTol',1e-12,'AbsTol',1e-14);
-hasMid = isfield(o,'Um') && ~isempty(o.Um);
-z = o.X(:,1);
-for k = 1:numel(t)-1
-    a = t(k);  b = t(k+1);  h = max(b-a,eps);
-    ua = o.U(:,k);  ub = o.U(:,k+1);
-    if hasMid
-        um = o.Um(:,k);  uOf = @(tt) local_q(ua, um, ub, (tt-a)/h);
-    else
-        uOf = @(tt) ua + ((tt-a)/h)*(ub-ua);
-    end
-    [~,Z] = ode113(@(tt,zz) local_f(zz, uOf(tt), mu, Tmax, c), [a b], z, odeo);
-    z = Z(end,:).';
-end
 er = norm(z(1:3) - o.X(1:3,end));
 ev = norm(z(4:6) - o.X(4:6,end));
 end
@@ -241,53 +224,9 @@ function s = local_accum(globKm, sumKm)
 if globKm < sumKm, s = 'CANCEL'; else, s = 'ACCUMULATE'; end
 end
 
-% ---------------------------------------------------------------------------
-function amin = local_true_min_alt(o, mu, Tmax, c, lStar, rMoonKm)
-% LOCAL_TRUE_MIN_ALT  Minimum lunar altitude of the PROPAGATED trajectory, not
-% of the nodes. A collocation floor binds at nodes only; this is what checks it.
-% INPUTS: o; mu; Tmax; c; lStar; rMoonKm   OUTPUTS: amin [km]
-if isfield(o,'tNodes') && ~isempty(o.tNodes), t = o.tNodes(:).';
-else, t = o.s(:).' * o.tf; end
-odeo = odeset('RelTol',1e-11,'AbsTol',1e-13);
-amin = inf;
-hasMid = isfield(o,'Um') && ~isempty(o.Um);
-for k = 1:numel(t)-1
-    a = t(k);  b = t(k+1);  h = max(b-a,eps);
-    ua = o.U(:,k);  ub = o.U(:,k+1);
-    if hasMid
-        um = o.Um(:,k);
-        uOf = @(tt) local_q(ua, um, ub, (tt-a)/h);
-    else
-        uOf = @(tt) ua + ((tt-a)/h)*(ub-ua);
-    end
-    % 65 samples, not 9. The floor is active at periselene, where the trajectory
-    % turns fastest, and a coarse sample can step straight over the minimum.
-    [~,Z] = ode113(@(tt,z) local_f(z, uOf(tt), mu, Tmax, c), linspace(a,b,65), o.X(:,k), odeo);
-    rr = vecnorm(Z(:,1:3) - [1-mu 0 0], 2, 2);
-    amin = min(amin, min(rr)*lStar - rMoonKm);
-end
 end
 
-% ---------------------------------------------------------------------------
-function u = local_q(ua, um, ub, w)
-% LOCAL_Q  Lagrange quadratic through ua, um, ub at w = 0, 1/2, 1.
-% INPUTS: ua, um, ub [4x1]; w   OUTPUTS: u [4x1]
-u = (2*w-1).*(w-1).*ua + 4*w.*(1-w).*um + w.*(2*w-1).*ub;
-end
 
-% ---------------------------------------------------------------------------
-function dz = local_f(z, u, mu, Tmax, c)
-% LOCAL_F  CR3BP with thrust; mirrors dro_residual/local_rhs.
-% INPUTS: z [7x1]; u [4x1]; mu; Tmax; c   OUTPUTS: dz [7x1]
-r = z(1:3);  v = z(4:6);  m = z(7);
-al = u(1:3);  al = al/max(norm(al),eps);  th = min(max(u(4),0),1);
-dd = sqrt((r(1)+mu)^2 + r(2)^2 + r(3)^2 + 1e-12);
-rr = sqrt((r(1)-1+mu)^2 + r(2)^2 + r(3)^2 + 1e-12);
-gr = [r(1) - (1-mu)*(r(1)+mu)/dd^3 - mu*(r(1)-1+mu)/rr^3;
-      r(2) - (1-mu)*r(2)/dd^3      - mu*r(2)/rr^3;
-           - (1-mu)*r(3)/dd^3      - mu*r(3)/rr^3];
-dz = [v; gr + [2*v(2); -2*v(1); 0] + (th*Tmax/m)*al; -(Tmax/c)*th];
-end
 
 % ---------------------------------------------------------------------------
 function s = local_mark(tf)

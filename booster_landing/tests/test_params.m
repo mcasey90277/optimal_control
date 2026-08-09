@@ -4,7 +4,9 @@
 %   1. m0 > mdry (there is landing propellant);
 %   2. min-throttle thrust-to-weight at DRY mass > 1 (hoverslam is forced:
 %      the booster cannot hover, so the optimizer must produce a terminal
-%      max-thrust arc arriving at v=0 exactly at touchdown);
+%      max-thrust arc arriving at v=P.vf, not v=0, at touchdown --
+%      v(tf)=0 is singular under this T/W, ADJUDICATED 2026-08-08, see
+%      P.vf's comment in booster_params.m);
 %   3. bounds ordered: 0 < Tmin < Tmax, tf_lo < tf_hi, gs in (0,90) deg.
 %
 % INPUTS: none   OUTPUTS: none (throws on failure)

@@ -28,10 +28,14 @@ function sol = solve_pdg_convex(P, opts)
 % OUTPUTS:
 %   sol  - .t .tf .mf .X .U .u .sigma .lossless_gap .tf_curve .stats .P
 %          .tf_curve is Kx3: [tf, mf_or_-Inf, validity_code] where
-%          validity_code 3=valid (Solve_Succeeded + tight gap), 2=solved
-%          but relaxation not tight, 1=only Solved_To_Acceptable_Level,
-%          0=solver failed (see mf_or_neginf below) -- so a downstream
-%          reader can see what the golden search rejected and why.
+%          validity_code 3=valid+Solve_Succeeded, 2=valid+
+%          Solved_To_Acceptable_Level-but-tight (ADAPTATION, task-7 fix
+%          report round 3: gating is tightness-first now, not
+%          status-string-first -- see mf_or_neginf's own note for why),
+%          1=converged but relaxation not tight, 0=solver failed (see
+%          mf_or_neginf below) -- so a downstream reader can see what the
+%          golden search rejected and why. v (column 2) is mf for BOTH
+%          code 2 and code 3 (both valid), -Inf otherwise.
 %
 % REFERENCES:
 %   [1] Acikmese & Ploen, JGCD 2007.  [2] Blackmore et al., JGCD 2010.
@@ -50,24 +54,24 @@ end
 phi = (sqrt(5)-1)/2;
 a = P.tf_lo;  b = P.tf_hi;  curve = [];
 c = b - phi*(b-a);  d = a + phi*(b-a);
-sc = solve_fixed_tf(P, c, opts.Nconv);  sd = solve_fixed_tf(P, d, opts.Nconv);
-[vc, codec] = mf_or_neginf(sc);  [vd, coded] = mf_or_neginf(sd);
+[sc, vc, codec] = solve_fixed_tf_probe(P, c, opts.Nconv);
+[sd, vd, coded] = solve_fixed_tf_probe(P, d, opts.Nconv);
 curve = [curve; c, vc, codec; d, vd, coded];
 if ~isfinite(vc) && ~isfinite(vd)
     error('solve_pdg_convex:infeasibleBracket', ...
-        ['Both golden-section probes (tf=%.3f, tf=%.3f) failed to solve. ' ...
-         'Widen the [P.tf_lo, P.tf_hi] bracket.'], c, d);
+        ['Both golden-section probes (tf=%.3f, tf=%.3f) failed to solve, ' ...
+         'even after a retry each. Widen the [P.tf_lo, P.tf_hi] bracket.'], c, d);
 end
 while (b - a) > opts.tolTf
     if vc > vd
         b = d;  d = c;  sd = sc;  vd = vc;
-        c = b - phi*(b-a);  sc = solve_fixed_tf(P, c, opts.Nconv);
-        [vc, codec] = mf_or_neginf(sc);
+        c = b - phi*(b-a);
+        [sc, vc, codec] = solve_fixed_tf_probe(P, c, opts.Nconv);
         curve = [curve; c, vc, codec];                      %#ok<AGROW>
     else
         a = c;  c = d;  sc = sd;  vc = vd;
-        d = a + phi*(b-a);  sd = solve_fixed_tf(P, d, opts.Nconv);
-        [vd, coded] = mf_or_neginf(sd);
+        d = a + phi*(b-a);
+        [sd, vd, coded] = solve_fixed_tf_probe(P, d, opts.Nconv);
         curve = [curve; d, vd, coded];                      %#ok<AGROW>
     end
 end
@@ -75,29 +79,101 @@ if vc > vd, sol = sc; else, sol = sd; end
 sol.tf_curve = sortrows(curve, 1);
 end
 
+function [sol, v, code] = solve_fixed_tf_probe(P, tf, Nconv)
+% SOLVE_FIXED_TF_PROBE  One golden-section probe, retried up to 3 attempts
+% total if it doesn't land on a VALID iterate (code>=2 -- see mf_or_neginf).
+%
+% ADAPTATION (task-7 fix report round 3, documented, discovered while
+% re-solving after the terminal-velocity BC change below): the golden
+% search's probes are IPOPT solves at specific, golden-ratio-derived tf
+% values and had no fallback if one landed on a bad iterate -- observed
+% for real: the same call (tf=25.2786, Nconv=120) measured a TIGHT gap
+% (6.5e-5) in one MATLAB process and an UNTIGHT gap (0.448) in another,
+% identical inputs, separate runs -- genuine run-to-run nondeterminism in
+% the fixed-tf IPOPT solve (most likely BLAS/IPOPT internal threading,
+% not a real feasibility difference; the true feasibility wall, confirmed
+% by a dedicated sweep, is a reproducible Infeasible_Problem_Detected
+% starting near tf~27 s, where required propellant for that much loiter
+% time hits P.mdry). This retry handles THAT case.
+%
+% It did NOT, by itself, fix a second and more important problem found
+% right after (see mf_or_neginf's own ADAPTATION note for the actual
+% root cause and fix): the golden search's final answer sat 52 kg below
+% a direct fixed-tf query at collocation's own tf, because ONE golden-
+% section probe deterministically converged to
+% 'Solved_To_Acceptable_Level' with an excellent, tight gap, and the
+% classification at the time rejected any non-'Solve_Succeeded' status
+% outright regardless of tightness -- reproducing bit-for-bit on every
+% retry, since it was a deterministic IPOPT outcome at that exact tf, not
+% noise. Retrying alone cannot fix a deterministic misclassification;
+% mf_or_neginf's tightness-first reordering is the actual fix. This
+% retry stays for the genuinely nondeterministic case it targets.
+%
+% INPUTS:
+%   P     - booster_params
+%   tf    - probe final time [scalar, s]
+%   Nconv - trapezoid nodes [scalar]
+% OUTPUTS:
+%   sol  - the accepted solve_fixed_tf result (best code among attempts)
+%   v    - mf if code>=2, else -Inf (see mf_or_neginf)
+%   code - mf_or_neginf's code for the accepted attempt
+sol = solve_fixed_tf(P, tf, Nconv);
+[v, code] = mf_or_neginf(sol);
+attempt = 1;
+while code < 2 && attempt < 3
+    solK = solve_fixed_tf(P, tf, Nconv);
+    [vK, codeK] = mf_or_neginf(solK);
+    if codeK > code
+        sol = solK;  v = vK;  code = codeK;
+    end
+    attempt = attempt + 1;
+end
+end
+
 function [v, code] = mf_or_neginf(s)
-% A probe counts toward the golden search ONLY if IPOPT fully converged
-% (Solve_Succeeded, not merely Solved_To_Acceptable_Level) AND the
-% relaxation is actually tight there (lossless_gap under the same
-% threshold test_convex_lossless checks). Without the second condition, a
-% "successful" but untight iterate (observed at tf=17: status
-% Solved_To_Acceptable_Level, gap ~1e-2, ~100x the optimum's ~1e-4) biases
-% mf UPWARD -- exactly the direction that wins a maximization search --
-% and the golden section has no other defense against picking it.
-%   code: 3 = valid; 2 = converged but relaxation not tight;
-%         1 = only Solved_To_Acceptable_Level (not Solve_Succeeded);
+% A probe counts toward the golden search ONLY if IPOPT converged to a
+% feasible point (stats.success) AND the relaxation is actually tight
+% there (lossless_gap under the same threshold test_convex_lossless
+% checks). Without the tightness condition, a "successful" but untight
+% iterate (observed at tf=17: status Solved_To_Acceptable_Level, gap
+% ~1e-2, ~100x the optimum's ~1e-4) biases mf UPWARD -- exactly the
+% direction that wins a maximization search -- and the golden section has
+% no other defense against picking it.
+%
+% ADAPTATION (task-7 fix report round 3, documented): tightness is now
+% checked BEFORE the exact status string, not after -- was: any status
+% other than the literal 'Solve_Succeeded' (i.e. also
+% 'Solved_To_Acceptable_Level') was rejected outright regardless of gap.
+% That blanket rule turned out to be over-strict: re-solving after the
+% terminal-velocity BC change (see booster_params.m), a genuine
+% golden-section probe deterministically converged to
+% 'Solved_To_Acceptable_Level' with an EXCELLENT gap (3.66e-5, same order
+% as fully-"Solve_Succeeded" points elsewhere on the same curve) --
+% reproducible bit-for-bit across three separate re-solves at that exact
+% tf, so not the run-to-run nondeterminism documented in
+% solve_fixed_tf_probe above. Rejecting it regardless of its (tight) gap
+% censored a physically valid point sitting right next to the search's
+% true optimum, and the golden section converged 52 kg short of it (see
+% report). The original rationale -- guard against a bad iterate biasing
+% mf upward -- only needs the TIGHTNESS test; whether IPOPT's internal
+% tolerance tier says "fully succeeded" or "acceptable level" is not by
+% itself evidence the relaxation failed. code 2 (tight, acceptable-level)
+% is now valid (v=mf) alongside code 3 (tight, fully succeeded); the
+% distinction is kept only as a diagnostic breadcrumb in tf_curve.
+%   code: 3 = valid, fully converged; 2 = valid, acceptable-level only;
+%         1 = converged but relaxation not tight (any status);
 %         0 = solver failed/threw (opti.debug iterate, not a solution).
 tightTol = 1e-4 * s.P.Tmax / s.P.m0;
 if ~s.stats.success
     code = 0;
-elseif ~strcmp(s.stats.status, 'Solve_Succeeded')
-    code = 1;
 elseif s.lossless_gap >= tightTol
+    code = 1;
+elseif ~strcmp(s.stats.status, 'Solve_Succeeded')
     code = 2;
 else
     code = 3;
 end
-if code == 3, v = s.mf; else, v = -Inf; end
+if code >= 2, v = s.mf; else, v = -Inf; end
 end
 
 function sol = solve_fixed_tf(P, tf, Nc)
@@ -143,9 +219,12 @@ for k = 1:Nc
 end
 
 %% Boundary conditions, objective:
+% Terminal velocity ADJUDICATED 2026-08-08 (task-7 fix report round 3):
+% Vh(:,end) == P.vf/Vc, was zeros(3,1) -- see P.vf's comment in
+% booster_params.m for why (Tmin>weight makes v(tf)=0 singular).
 opti.subject_to(Rh(:,1) == P.r0/Lc);   opti.subject_to(Vh(:,1) == P.v0/Vc);
 opti.subject_to(Z(1)   == log(P.m0));
-opti.subject_to(Rh(:,end) == zeros(3,1));  opti.subject_to(Vh(:,end) == zeros(3,1));
+opti.subject_to(Rh(:,end) == zeros(3,1));  opti.subject_to(Vh(:,end) == P.vf/Vc);
 opti.subject_to(Z(end) >= log(P.mdry));
 opti.minimize(-Z(end));
 

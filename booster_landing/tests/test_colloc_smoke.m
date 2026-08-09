@@ -1,6 +1,8 @@
 % TEST_COLLOC_SMOKE  Coarse-grid (N=15) nonconvex NLP solve converges and
 % obeys physics: solved status, mass in (mdry, m0), thrust annulus and
-% glideslope satisfied at nodes, terminal state at the pad at rest.
+% glideslope satisfied at nodes, terminal state on the pad descending at
+% P.vf (ADJUDICATED 2026-08-08: was v(tf)=0 at rest, singular under this
+% T/W -- see booster_params.m).
 %
 % INPUTS: none   OUTPUTS: none (throws on failure)
 here_ = fileparts(mfilename('fullpath'));
@@ -14,6 +16,7 @@ Tmag = sqrt(sum(sol.U.^2, 1));
 assert(all(Tmag >= P.Tmin - 1) && all(Tmag <= P.Tmax + 1), 'annulus violated');
 rxy  = sqrt(sum(sol.X(1:2,:).^2, 1));
 assert(all(rxy <= sol.X(3,:)/tand(P.gs_deg) + 1e-3), 'glideslope violated');
-assert(max(abs(sol.X(1:6,end))) < 1e-3, 'terminal state not at rest on pad');
+assert(max(abs(sol.X(1:6,end) - [0;0;0;P.vf])) < 1e-3, ...
+       'terminal state not on pad at P.vf');
 fprintf('test_colloc_smoke PASS  tf=%.2f s  mf=%.1f kg  fuel=%.1f kg\n', ...
         sol.tf, sol.mf, P.m0 - sol.mf);

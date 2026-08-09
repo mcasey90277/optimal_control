@@ -25,6 +25,19 @@ P.gvec   = [0; 0; -P.g0];      % flat-Earth gravity, z up [m/s^2]
 %% Boundary conditions (pad at origin, z up):
 P.r0     = [500; 100; 2000];   % post-entry-burn position [m]
 P.v0     = [-30; 0; -180];     % descending ~180 m/s [m/s]
+P.vf     = [0; 0; -1.5];       % terminal velocity target [m/s] (ADJUDICATED
+                                % 2026-08-08, task-7 fix report round 3: was
+                                % v(tf)=0. With P.Tmin exceeding vehicle
+                                % weight at every mass on this trajectory,
+                                % the v=0-at-z=0 endpoint is singular -- the
+                                % closed loop cannot complete the last
+                                % stretch of descent under pure vertical
+                                % thrust and instead arrests just above the
+                                % pad (measured: 0.53 m). Touching down
+                                % descending at 1.5 m/s (legs absorb it;
+                                % P.vtd_max=2.0 mission gate unchanged)
+                                % removes the arrest state entirely --
+                                % velocity never nulls above ground.
 
 %% Path constraints:
 P.gs_deg        = 30;          % glideslope min elevation angle [deg]
@@ -34,7 +47,39 @@ P.theta_max_deg = Inf;         % thrust-pointing cone half-angle, Inf = off
 P.N      = 60;                 % Hermite-Simpson segments (collocation)
 P.Nconv  = 120;                % trapezoid nodes for the convex solver
 P.tf_lo  = 10;                 % free-final-time bracket [s]
-P.tf_hi  = 50;
+P.tf_hi  = 22;                 % ADAPTATION (task-7 fix report round 3,
+                                % 2026-08-08): was 50. A dedicated sweep
+                                % after the P.vf terminal-BC change (above)
+                                % found solve_pdg_convex's fixed-tf
+                                % subproblem hits a genuine, reproducible
+                                % Infeasible_Problem_Detected wall around
+                                % tf~27 s (loitering that long burns past
+                                % P.mdry -- Tmin exceeds weight everywhere,
+                                % so there is no free coast), with a
+                                % numerically marginal/nondeterministic
+                                % band just below that (tf~25-26 s:
+                                % lossless_gap measured both ~6e-5 tight
+                                % and ~0.45 untight for the IDENTICAL call
+                                % in separate runs -- IPOPT/BLAS-threading
+                                % sensitivity, not a real feasibility
+                                % change). The old tf_hi=50 golden-section
+                                % bracket's fixed initial probes (at the
+                                % golden-ratio points of [tf_lo,tf_hi])
+                                % landed exactly in that marginal-to-
+                                % infeasible zone and intermittently failed
+                                % outright. Both solvers agree the true
+                                % mass-optimal tf is ~15.6-16 s (unimodal,
+                                % confirmed by a tf sweep); 22 keeps
+                                % generous headroom around that peak while
+                                % moving the golden search's own probe
+                                % points (~14.6, ~17.4) into the
+                                % consistently well-behaved region. Also
+                                % narrows solve_pdg_colloc's free-tf upper
+                                % bound and its Tc=(tf_lo+tf_hi)/2 ND time
+                                % scale (30->16 s) closer to the true
+                                % answer -- a tighter, more physically
+                                % grounded characteristic scale, not a
+                                % looser one.
 
 %% Atmosphere (Phase 2, OFF by default -- vacuum keeps convexification exact):
 P.drag.on   = false;

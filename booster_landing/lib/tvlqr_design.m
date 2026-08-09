@@ -33,35 +33,43 @@ function ctrl = tvlqr_design(sol, P, opts)
 % a pchip state interpolant (states are smooth between HS nodes, no
 % representation mismatch there).
 %
-% ADAPTATION 2 (task-7 fix report, 2026-08-08): default R raised from
-% 1e-10 to 1.5e-9. Root cause (task-7 fix report "Important 4" sweep,
-% ~30 configurations over R, Q(1:3), Qf(1:3), Qf(4:6)): under the deep
-% terminal-arc saturation this trajectory forces (P.Tmin exceeds vehicle
-% weight at every mass -- see sim_closed_loop.m), a saturated control law
-% only has DIRECTION left to work with, not magnitude; at R=1e-10 the
-% direction is chosen almost entirely to null a large dispersed
-% horizontal error, leaving little of the saturated thrust vector's
-% direction "budget" for arresting vertical speed, so a 50 m lateral
-% offset closed-loop-simulates to a 4.6-6.4 m/s touchdown (fails
-% P.vtd_max=2.0 by 2-3x). Raising R softens the gains enough to recover
-% some magnitude modulation before saturation binds. R=1.5e-9 is the
-% narrowest evidenced window (1.45-1.55e-9-ish; R=1.4e-9 still fails vtd
-% at 2.17 m/s, R=1.6e-9 already fails miss at 15.3 m and reverts to an
-% arrest) where sim_closed_loop's dispersed 50 m case genuinely lands
-% (td.landed=true) inside both P.pad_radius and P.vtd_max. This does NOT
-% fully resolve the zero-dispersion case to a genuine touchdown (still an
-% arrest a few tenths of a meter up, td.landed=false) -- see the task-7
-% fix report for the full sweep table and why a single scalar R could not
-% jointly satisfy both a soft nominal crossing and a safe dispersed
-% touchdown (evidence points to a structural tension from Tmin>weight,
-% not a search failure); flagged there as a spec-level question rather
-% than forced further.
+% ADAPTATION 2 (task-7 fix report round 2, 2026-08-08): default R raised
+% from 1e-10 to 1.5e-9 at the time, under a v(tf)=0 terminal BC. Root
+% cause: under the deep terminal-arc saturation this trajectory forces
+% (P.Tmin exceeds vehicle weight at every mass -- see sim_closed_loop.m),
+% a saturated control law only has DIRECTION left to work with, not
+% magnitude; at R=1e-10 the direction is chosen almost entirely to null a
+% large dispersed horizontal error, leaving little of the saturated
+% thrust vector's direction "budget" for arresting vertical speed.
+%
+% ADAPTATION 3 (task-7 fix report round 3, 2026-08-08): default R lowered
+% again, to 7e-10, after P.vf changed the guidance terminal velocity from
+% 0 to [0;0;-1.5] m/s (booster_params.m; the v=0 endpoint was singular
+% under P.Tmin>weight). A fresh mini-sweep under the new BC (R from 1e-12
+% to 2e-9, plus a Qf(4:6) probe at R=7e-10 -- task-7 fix report round 3
+% for the full table) found the dispersed-50m-safe window narrowed to
+% R in [6.5e-10, 7.0e-10] (R<=6e-10 fails vtd>2; R>=7.5e-10 reverts to an
+% arrest, td.landed=false, even though its vtd number looks fine).
+% R=7e-10 sits at the good end of that window with markedly more margin
+% than round 2's R=1.5e-9 gave under the old BC (dispersed miss=9.64 m
+% vs pad_radius=15, vtd=0.88 vs vtd_max=2.0 -- round 2's setting was
+% razor-thin at miss=14.77/vtd=1.377).
+%
+% The zero-dispersion case STILL does not reach a genuine touchdown at
+% ANY R tested in the dispersed-safe window (arrest ~0.65 m up, vtd~0.64
+% m/s, far from the P.vf=-1.5 m/s target) -- removing the v(tf)=0
+% singularity substantially improved nominal tracking (a LOW R, ~1e-11 to
+% 7e-11, now DOES achieve a genuine landing near the -1.5 m/s target) but
+% did not eliminate the arrest possibility under closed-loop tracking
+% error, and that low-R band is disjoint from the dispersed-safe band by
+% over an order of magnitude. See the task-7 fix report round 3 for the
+% full sweep and the resulting honest test status.
 %
 % REFERENCES:
 %   [1] Anderson & Moore, "Optimal Control: Linear Quadratic Methods."
 if nargin < 3, opts = struct(); end
 if ~isfield(opts,'Q'),  opts.Q  = diag([1e-4 1e-4 1e-4 1e-2 1e-2 1e-2 0]); end
-if ~isfield(opts,'R'),  opts.R  = 1.5e-9*eye(3);                           end
+if ~isfield(opts,'R'),  opts.R  = 7e-10*eye(3);                            end
 if ~isfield(opts,'Qf'), opts.Qf = diag([1e-2 1e-2 1e-2 1 1 1 0]);          end
 
 %% Nominal interpolants (state: pchip over nodes; thrust: shared

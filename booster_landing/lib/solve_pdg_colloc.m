@@ -2,7 +2,8 @@ function sol = solve_pdg_colloc(P, opts)
 % SOLVE_PDG_COLLOC  Min-fuel PDG as a free-tf Hermite-Simpson NLP (IPOPT).
 %
 % max m(tf) s.t. 3-DOF dynamics, thrust annulus Tmin<=|T|<=Tmax (nonconvex,
-% handled directly), glideslope cone, optional pointing cone, r(tf)=v(tf)=0.
+% handled directly), glideslope cone, optional pointing cone, r(tf)=0,
+% v(tf)=P.vf (ADJUDICATED 2026-08-08: was v(tf)=0, see booster_params.m).
 % Time normalized: t = tf*tau, tau in [0,1], tf a decision variable.
 %
 % ADAPTATION FROM SPEC (documented per task-3 brief): the NLP is built and
@@ -100,11 +101,15 @@ for k = 1:N+1
 end
 
 %% Boundary conditions + tf bounds (scaled):
-r0_h = P.r0 / Lc;  v0_h = P.v0 / Vc;  m0_h = P.m0 / Mc;
+% Terminal velocity ADJUDICATED 2026-08-08 (task-7 fix report round 3):
+% X(4:6,end) == vf_h, was zeros(3,1) -- see P.vf's comment in
+% booster_params.m for why (Tmin>weight makes v(tf)=0 singular).
+r0_h = P.r0 / Lc;  v0_h = P.v0 / Vc;  vf_h = P.vf / Vc;  m0_h = P.m0 / Mc;
 opti.subject_to(X(1:3,1) == r0_h);
 opti.subject_to(X(4:6,1) == v0_h);
 opti.subject_to(X(7,1)   == m0_h);
-opti.subject_to(X(1:6,end) == zeros(6,1));
+opti.subject_to(X(1:3,end) == zeros(3,1));
+opti.subject_to(X(4:6,end) == vf_h);
 opti.subject_to(P.tf_lo/Tc <= tf <= P.tf_hi/Tc);
 
 %% Objective: min fuel == max final mass:

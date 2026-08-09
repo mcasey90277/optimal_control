@@ -1,7 +1,8 @@
 % TEST_CONVEX_LOSSLESS  Fixed-tf convexified PDG at a plausible tf: solved
 % status, losslessness gap ||u||-sigma ~ 0 (the relaxation is TIGHT at the
 % optimum -- the Acikmese/Ploen theorem, checked numerically), annulus in
-% original variables, terminal conditions met.
+% original variables, terminal conditions met (pad, descending at P.vf --
+% ADJUDICATED 2026-08-08, was v(tf)=0, see booster_params.m).
 %
 % Uses solve_pdg_convex's single-tf mode (opts.tf fixed) to stay fast.
 %
@@ -17,6 +18,6 @@ assert(sol.lossless_gap < 1e-4 * P.Tmax/P.m0, ...
 Tmag = sqrt(sum(sol.U.^2,1));
 assert(all(Tmag >= P.Tmin*(1-1e-4)) && all(Tmag <= P.Tmax*(1+1e-4)), ...
        'annulus violated in original variables');
-assert(max(abs(sol.X(1:6,end))) < 1e-2, 'terminal not met');
+assert(max(abs(sol.X(1:6,end) - [0;0;0;P.vf])) < 1e-2, 'terminal not met');
 fprintf('test_convex_lossless PASS  gap=%.2e  mf=%.1f kg\n', ...
         sol.lossless_gap, sol.mf);

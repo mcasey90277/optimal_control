@@ -314,6 +314,20 @@ function [traj,info] = run_ballistic_target(opts)
 %  bank and a rotation are one cross-range residual to it rather than two
 %  separate faults.
 %
+%  A BANK NEEDS loftMin RAISED WITH IT, though, and that is a property of the
+%  VEHICLE and not of the solve. Banking tilts the lift vector out of the
+%  vertical plane, so less of it is left to push the nose over, and the shipped
+%  loftMin of -140 deg -- the degenerate tail the depressed branch collapses
+%  into at zero bank -- stops being a commandable attitude at all. Even 0.5 deg
+%  of bank puts the first scan point outside what the alphaMax clamp can
+%  deliver. The run is REFUSED for that rather than left to throw a library
+%  identifier, and the refusal names both entries. At loftMin = -60 deg on the
+%  shipped geometry a 2 deg bank flies and misses by 1.59 m with the azimuth
+%  aimed off +3.271 deg, and 5 deg by 173.75 m aimed off +8.205 deg -- which is
+%  the capability claim above, measured. It follows that the two bank-specific
+%  paragraphs in the summary are UNREACHABLE at shipped settings, and reaching
+%  them takes the companion change.
+%
 %  WHAT REMAINS TRUE, and all of it is stated in the summary. Everything stage 1
 %  certifies -- the hump, the maximiser interval, the branch brackets, the
 %  reachable band, and therefore the too-far and too-close refusals -- is
@@ -329,6 +343,22 @@ function [traj,info] = run_ballistic_target(opts)
 %  near miss. And the tolerance is on the MISS ITSELF: each component is held to
 %  tolRangeKm/sqrt(2), so the two together cannot exceed the distance the user
 %  asked for.
+%
+%  THE NEWTON IS NOT BOXED TO THE CERTIFIED BRANCH SIDE, and that is a decision
+%  rather than an omission. Stage 1's root came from a bisection that cannot
+%  leave its bracket; stage 2's Newton has no bracket, so on the two full-burn
+%  modes it CAN walk the loft angle towards the maximiser interval and past it.
+%  Observed: rotating, 'lofted', a target at 5420 km -- the loft marched 1.33 deg
+%  past the interval before the solve refused. A box is the obvious fix and it
+%  is the wrong one, because the only interval available to draw it on is the
+%  SEED-AZIMUTH one, and the maximum moves with the aim: about 0.28 deg of loft
+%  per degree of azimuth on this geometry, against an interval 0.043 deg wide.
+%  A box drawn there would exclude genuine roots. What stands instead is
+%  DIAGNOSIS rather than prohibition, in three layers: opts.maxStep caps the
+%  travel per iteration, branchOfLoft MEASURES the flown angle against the
+%  interval and the summary prints a CAUTION naming stage 2 when they disagree,
+%  and a Newton that cannot converge refuses outright rather than returning the
+%  arc it wandered onto.
 %
 %% Note -- two vehicles, one chain, carried on ph.veh:
 %
@@ -629,15 +659,28 @@ function [traj,info] = run_ballistic_target(opts)
                                        %     a PLACEHOLDER awaiting a qualification basis, not a
                                        %     cleared value, and it is not a targeting degree of
                                        %     freedom -- see the alphaMax note in the header
-         bankAngle = 0;                %deg, bank [-90 .. 90], all phases. SHIPPED AT ZERO because
-                                       %     the simplest case is the one an example script
-                                       %     should ship, NOT because the solve cannot handle a
-                                       %     bank: a banked segment turns the heading and walks
-                                       %     the impact point off the launch-to-target great
-                                       %     circle, and the SOLVE NOW SEES THAT -- the launch
-                                       %     azimuth is aimed off to compensate. It is still a
-                                       %     large control authority on a body with almost no
-                                       %     lift, so it moves the whole envelope
+         bankAngle = 0;                %deg, bank, all phases. SHIPPED AT ZERO because the
+                                       %     simplest case is the one an example script should
+                                       %     ship, NOT because the solve cannot handle a bank: a
+                                       %     banked segment turns the heading and walks the
+                                       %     impact point off the launch-to-target great circle,
+                                       %     and the SOLVE NOW SEES THAT -- the launch azimuth is
+                                       %     aimed off to compensate.
+                                       %     A NON-ZERO VALUE NEEDS loftMin RAISED WITH IT, and
+                                       %     the run is REFUSED rather than left to throw a
+                                       %     library error if it is not. The bank tilts the lift
+                                       %     vector out of the vertical plane, so less of it is
+                                       %     left to push the nose over and the shipped
+                                       %     loftMin = -140 deg stops being a commandable
+                                       %     attitude at all -- even 0.5 deg of bank is enough.
+                                       %     Measured, at loftMin = -60 deg on the shipped
+                                       %     geometry: 2 deg of bank misses by 1.59 m with the
+                                       %     azimuth aimed off +3.271 deg, and 5 deg by 173.75 m
+                                       %     aimed off +8.205 deg. Useful range is therefore
+                                       %     roughly [-10 .. 10] with a raised loftMin, not the
+                                       %     [-90 .. 90] the attitude schedule would accept:
+                                       %     this is a near-symmetric re-entry body with almost
+                                       %     no lift, and a bank is a large authority on it
 
 %% Staging -- whether the spent booster is thrown away at burnout:
         separation = true;             %true jettisons bst.massDry and flies the re-entry body
@@ -1108,8 +1151,69 @@ function [traj,info] = run_ballistic_target(opts)
 %% that interval, not its midpoint, is what splits the loft axis into the two
 %% one-sided brackets on which range provably IS monotonic. It also supplies the
 %% max-range arc, whose apogee and flight time are reported beside the flown
-%% ones as DESCRIPTIVE quantities:
+%% ones as DESCRIPTIVE quantities.
+%%
+%% THE ONE LIBRARY REFUSAL THAT CAN SURFACE HERE IS TRANSLATED, on the same
+%% terms as greatCircleBearing's above. coorbital.guide.pitchProgram refuses an
+%% attitude the alphaMax clamp cannot deliver, and a NON-ZERO BANK makes the
+%% deepest end of the loft bracket exactly that: the bank tilts the lift vector
+%% out of the vertical plane, so less of it is available to push the nose over,
+%% and a commanded terminal attitude of loftMin = -140 deg becomes unreachable.
+%% The scan evaluates loftLoR FIRST, so this fires on the very first propagation
+%% of the run and it fires for a reason the user can act on. Left raw it is an
+%% unhandled library identifier out of a script whose bank entry now invites a
+%% non-zero value; caught, it is a refusal that names the two entries that have
+%% to move together:
+    try
 [loftStarR,rngMax,mr] = maxRangeLoft(fRange,loftLoR,loftHiR,nScanLoft,tolLoftR);
+    catch errLoft
+        if ~strcmp(errLoft.identifier,'coorbital:pitchProgram:unreachableAttitude')
+            rethrow(errLoft);
+        end
+        fprintf('\n');
+        fprintf('===== Ballistic point-to-point targeting: REFUSED =======\n');
+        fprintf('  The loft bracket reaches attitudes this vehicle cannot be commanded to\n');
+        fprintf('  at a %.4f deg bank.\n',bankAngle);
+        fprintf('\n');
+        fprintf('    bank angle       %10.4f %-5s (all phases)\n',bankAngle,'deg');
+        fprintf('    loft bracket     %10.4f to %.4f deg   (loftMin is the end that fails:\n', ...
+                loftMin,loftMax);
+        fprintf('                                      the scan evaluates it first)\n');
+        fprintf('    alphaMax         %10.4f %-5s (the vehicle''s own clamp, from %s)\n', ...
+                alphaMax,'deg',func2str(vehicleFn));
+        fprintf('\n');
+        fprintf('  %s\n',errLoft.message);
+        fprintf('\n');
+        fprintf('  WHY THE TWO ENTRIES HAVE TO MOVE TOGETHER. A bank tilts the lift vector out\n');
+        fprintf('  of the vertical plane, so less of it is left to push the nose over, and the\n');
+        fprintf('  deepest commanded attitudes in the bracket stop being reachable at all. The\n');
+        fprintf('  shipped loftMin of %.1f deg is not a pitch programme anyone would fly; it is\n', ...
+                loftMin);
+        fprintf('  the degenerate tail the DEPRESSED branch collapses into at zero bank once\n');
+        fprintf('  the clamp saturates, and a banked run simply does not have that tail.\n');
+        fprintf('  RAISE loftMin. Measured on the shipped geometry at loftMin = -60 deg: a\n');
+        fprintf('  2 deg bank flies and misses by 1.59 m, aimed off +3.271 deg; a 5 deg bank\n');
+        fprintf('  flies and misses by 173.75 m, aimed off +8.205 deg. THE TWO-AXIS SOLVE\n');
+        fprintf('  HANDLES THE CROSS-RANGE A BANK PRODUCES -- that is what this refusal is NOT\n');
+        fprintf('  about. What it is about is a bracket the vehicle cannot be flown across.\n');
+        fprintf('=========================================================\n\n');
+              traj = [];
+       info.refused = true;
+    info.refusedWhy = 'loftBracket';
+  info.branchAsked  = branch;
+       info.rngReqM = rngReq;
+      info.psiSeed  = psiSeed;
+     info.psiLaunch = psiSeed;
+    info.bankAngleDeg = bankAngle;
+     info.loftMinDeg = loftMin;
+     info.loftMaxDeg = loftMax;
+   info.alphaMaxDeg  = alphaMax;
+    info.libraryErr  = errLoft.identifier;
+        if nargout == 0
+            clear traj info;
+        end
+        return;
+    end
        [~,trajStar]   = fRange(loftStarR);
               kApStar = find(trajStar.phaseIdx == 2,1,'last');
               hApoStar = trajStar.x(kApStar,1) - c.rE;
@@ -1554,7 +1658,11 @@ function [traj,info] = run_ballistic_target(opts)
      info.seedDownM = seedDwnM;
    info.seedXTrackM = seedXtkM;
       info.tolAimM  = tolAimM;
+      info.aimIter  = av.iterations;
+      info.aimEval  = av.nEval;
       info.aimInfo  = av;
+      info.propOne  = propOne;
+        info.nProp  = propOne + av.nEval;
         if nargout == 0
             clear traj info;
         end
@@ -1587,17 +1695,52 @@ function [traj,info] = run_ballistic_target(opts)
                                latTargetR,lonTargetR);
               pick = mergeInto(pick,flwn);
     if isMinE
+
+%% THE MINIMISATION'S OWN ANSWER IS SAVED BEFORE THE FLOWN ONE OVERWRITES IT,
+%% and this is the whole of the fix to a report that used to mix two operating
+%% points inside one paragraph. The merge below is right for everything that
+%% DESCRIBES THE FLIGHT -- apogee, flight time, burnout state, mass, miss -- and
+%% wrong for the four numbers that SUBSTANTIATE THE MINIMUM, because those were
+%% all measured at the seed azimuth and one of them is the minimum itself.
+%%
+%% What went wrong when it did not: on the rotating shipped run the minimisation
+%% settled -45.977595 MJ/kg at a cutoff of 0.992294, stage 2 moved the cutoff to
+%% 0.992621 to close the cross-range and the vehicle flew -45.924475 MJ/kg, and
+%% the summary printed the FLOWN energy in a column headed MINIMISED and then
+%% differenced it against neighbours measured at the OTHER azimuth. The valley
+%% depths came out 284203.3 and 59729.3 J/kg against the true seed-azimuth
+%% 337323.6 and 112849.6 -- the far side understated by 47 per cent -- and the
+%% printed noise ratio did not even close against the printed depths, because it
+%% was formed from the unprinted one. Every one of those numbers was individually
+%% computed correctly; what was wrong was putting them in the same sentence.
+%%
+%% The still-Earth shipped run is honest either way, because there the aim solve
+%% is a no-op and all four numbers share one basis. That is exactly why nothing
+%% caught it, and why the assertions that now do are in part 12 rather than
+%% part 6:
+       me.seedEpsBo   = me.epsBo;
+      me.seedCutFrac  = me.cutFrac;
+        me.seedTCutS  = me.tCutS;
+         me.seedRngM  = me.rngM;
                 me = mergeInto(me,flwn);
         me.propLeftKg = me.mCutKg - cfg.mBurnout;
         me.hApoKepM   = keplerApogee(c.rE + me.hBoM,me.vBoM,me.gamBoR,c) - c.rE;
 
-%% ...and the one-line grounds this mode reports itself on, rebuilt from the
-%% FLOWN cutoff and the FLOWN burnout energy. It was first written before stage
-%% 2 ran, from the minimisation's own record, which on a run where the azimuth
-%% moved is a cutoff and an energy the vehicle did not fly:
-          pickWhy  = sprintf(['MINIMISED, not selected: loft %.4f deg, burn cut at ' ...
-                              '%.6f of full, burnout energy %.6f MJ/kg'], ...
-                             rad2deg(me.loftR),me.cutFrac,me.epsBo./1e6);
+%% How far stage 2 moved the range control and what it cost in burnout energy.
+%% Zero on any run where the aim solve is a no-op, which is the case the two
+%% columns of the table below then agree in:
+        me.dCutFrac   = me.cutFrac - me.seedCutFrac;
+        me.dEpsBoJkg  = me.epsBo   - me.seedEpsBo;
+
+%% ...and the one-line grounds this mode reports itself on. It names BOTH
+%% points, because naming only the minimised one describes an arc the vehicle
+%% did not fly and naming only the flown one calls a number MINIMISED that
+%% nothing minimised:
+          pickWhy  = sprintf(['MINIMISED at the seed azimuth to %.6f MJ/kg at loft ' ...
+                              '%.4f deg and cutoff %.6f, FLOWN at %.6f MJ/kg at ' ...
+                              'cutoff %.6f after the aim solve'], ...
+                             me.seedEpsBo./1e6,rad2deg(me.loftR),me.seedCutFrac, ...
+                             me.epsBo./1e6,me.cutFrac);
     end
 
 %% Phase boundaries. phaseRun records the boundary sample ONCE, carrying the
@@ -2029,11 +2172,27 @@ function [traj,info] = run_ballistic_target(opts)
     elseif ~branchOK
         fprintf('  *** CAUTION ***  the flown trajectory MEASURES as %s while the solve was run\n', ...
                 flownName);
-        fprintf('                   on the %s bracket. That bracket lies entirely on one\n', ...
+        fprintf('                   on the %s bracket. STAGE 1''S ROOT WAS ON THE RIGHT SIDE:\n', ...
                 pickName);
-        fprintf('                   certified side of the maximiser interval, so a root outside\n');
-        fprintf('                   it should be impossible. Do not read the branch label;\n');
-        fprintf('                   read the loft angle against the interval printed above.\n');
+        fprintf('                   that bracket lies entirely on one certified side of the\n');
+        fprintf('                   maximiser interval and bisection cannot leave a bracket.\n');
+        fprintf('                   STAGE 2''S NEWTON IS NOT BRACKETED, and it is what moved the\n');
+        fprintf('                   loft angle here: %.4f deg at the seed against %.4f deg\n', ...
+                rad2deg(xSeed(2)),rad2deg(loftSol));
+        fprintf('                   flown, %+.4f deg of travel while it aimed off %+.4f deg to\n', ...
+                rad2deg(loftSol - xSeed(2)),rad2deg(wrapPi(psiLaunch - psiSeed)));
+        fprintf('                   close the cross-range. THE BRACKETING IS NOT SUSPECT. Two\n');
+        fprintf('                   things to know before reading this as a fault: the certified\n');
+        fprintf('                   interval printed above is a SEED-AZIMUTH quantity, and the\n');
+        fprintf('                   maximum itself moves with the aim -- about 0.28 deg of loft\n');
+        fprintf('                   per degree of azimuth on this geometry, against an interval\n');
+        fprintf('                   only %.4f deg wide -- so a flown angle just outside it may\n', ...
+                rad2deg(loftBML - loftAML));
+        fprintf('                   still be on the named branch AT THE AZIMUTH IT WAS FLOWN.\n');
+        fprintf('                   That is why the Newton is not boxed to the interval: a box\n');
+        fprintf('                   drawn at the seed azimuth could exclude the genuine root.\n');
+        fprintf('                   Do not read the branch label; read the loft angle against\n');
+        fprintf('                   the interval, and treat both as approximate by that much.\n');
     end
 %% THE MINIMUM-ENERGY PARAGRAPH, and it is the only place in this summary that
 %% compares a flown trajectory against a result computed from the geometry
@@ -2049,32 +2208,61 @@ function [traj,info] = run_ballistic_target(opts)
     fprintf('    and one constraint leave a ONE-DIMENSIONAL feasible family; the cutoff is\n');
     fprintf('    solved for the constraint at each loft angle and the energy is minimised\n');
     fprintf('    along what is left.\n');
-    fprintf('    %-22s %16s %16s\n','','solved','residual');
-    fprintf('    %-22s %16.4f %16s\n','loft angle (deg)',rad2deg(me.loftR),'-');
-    fprintf('    %-22s %16.6f %16s\n','cutoff fraction (-)',me.cutFrac,'-');
-    fprintf('    %-22s %16.4f %16s\n','cutoff time (s)',me.tCutS,'-');
-    fprintf('    %-22s %16.6f %16s\n','BURNOUT ENERGY (MJ/kg)',me.epsBo./1e6,'MINIMISED');
-    fprintf('    %-22s %16.4f %16.2f\n','achieved range (km)', ...
-            me.rngM./1000,me.rngM - rngReq);
-    fprintf('      the range residual is in METRES. The %.1f m tolerance quoted for the\n', ...
-            tolRngMEM);
-    fprintf('      inner constraint governed STAGE 1, at the seed azimuth; what governs the\n');
-    fprintf('      figures above is the two-axis tolerance of %.1f m PER COMPONENT, because\n', ...
-            tolAimM);
-    fprintf('      stage 2 re-solved the cutoff beside the azimuth at the held loft angle.\n');
+%% TWO COLUMNS, AND THE COLUMN HEADINGS ARE THE POINT. The minimisation ran at
+%% the SEED azimuth; the two-axis solve then moved the cutoff to close the
+%% cross-range, and what the vehicle flew is the second column. They are equal
+%% on any run where the aim solve is a no-op -- which is the shipped one -- and
+%% they must be shown apart rather than silently merged wherever it is not,
+%% because only the first column is the MINIMISED quantity and only the second
+%% describes the flight:
+    fprintf('    %-22s %18s %18s\n','','MINIMISED (seed)','FLOWN (solved)');
+    fprintf('    %-22s %18.4f %18s\n','loft angle (deg)',rad2deg(me.loftR),'held, same');
+    fprintf('    %-22s %18.6f %18.6f\n','cutoff fraction (-)',me.seedCutFrac,me.cutFrac);
+    fprintf('    %-22s %18.4f %18.4f\n','cutoff time (s)',me.seedTCutS,me.tCutS);
+    fprintf('    %-22s %18.6f %18.6f\n','BURNOUT ENERGY (MJ/kg)', ...
+            me.seedEpsBo./1e6,me.epsBo./1e6);
+    fprintf('    %-22s %18.4f %18.4f\n','achieved range (km)', ...
+            me.seedRngM./1000,me.rngM./1000);
+    if me.dCutFrac == 0
+    fprintf('      THE TWO COLUMNS ARE THE SAME RUN. The seed azimuth was already inside the\n');
+    fprintf('      aim tolerance, so the two-axis solve converged at iteration 0 and returned\n');
+    fprintf('      the minimisation''s own answer unmoved. The minimised energy IS the flown\n');
+    fprintf('      energy here, and every number below shares one basis with both.\n');
+    else
+    fprintf('      THE TWO COLUMNS ARE DIFFERENT OPERATING POINTS, and the difference is the\n');
+    fprintf('      price of the aim: stage 2 moved the cutoff by %+.6f of the burn to close\n', ...
+            me.dCutFrac);
+    fprintf('      %.2f km of cross-range, and that cost %+.1f J/kg of burnout energy. THE\n', ...
+            abs(seedXtkM)./1000,me.dEpsBoJkg);
+    fprintf('      FLOWN COLUMN IS NOT A MINIMUM OF ANYTHING -- the minimisation is the first\n');
+    fprintf('      column, at the seed azimuth, and the valley evidence below is on THAT\n');
+    fprintf('      basis. Re-minimising the loft angle at the solved azimuth is the work this\n');
+    fprintf('      mode does not do; see the closing block.\n');
+    end
+    fprintf('      The range residual is %+.2f m against the flown column. The %.1f m\n', ...
+            me.rngM - rngReq,tolRngMEM);
+    fprintf('      tolerance quoted for the inner constraint governed STAGE 1, at the seed\n');
+    fprintf('      azimuth; what governs the flown column is the two-axis tolerance of\n');
+    fprintf('      %.1f m PER COMPONENT.\n',tolAimM);
     fprintf('      %d scan points and %d golden-section steps closed the loft angle to\n', ...
             me.nScan,me.nGolden);
     fprintf('      %.4f deg, over %d propagations.\n',rad2deg(me.widthR),me.nProp);
-    fprintf('    IT IS A MINIMUM, and here is the evidence rather than the assertion. The\n');
-    fprintf('    two neighbouring FEASIBLE points -- same range, different loft -- leave\n');
-    fprintf('    burnout at %.6f and %.6f MJ/kg against this one''s %.6f, so the\n', ...
-            me.epsNeighLo./1e6,me.epsNeighHi./1e6,me.epsBo./1e6);
-    fprintf('    valley is %.1f J/kg deep on the near side and %.1f J/kg on the far side.\n', ...
-            me.epsNeighLo - me.epsBo,me.epsNeighHi - me.epsBo);
+    fprintf('    IT IS A MINIMUM, and here is the evidence rather than the assertion. ALL OF\n');
+    fprintf('    IT IS AT THE SEED AZIMUTH, against the MINIMISED column above and not the\n');
+    fprintf('    flown one. The two neighbouring FEASIBLE points -- same range, different\n');
+    fprintf('    loft -- leave burnout at %.6f and %.6f MJ/kg against that one''s\n', ...
+            me.epsNeighLo./1e6,me.epsNeighHi./1e6);
+    fprintf('    %.6f, so the valley is %.1f J/kg deep on the near side and %.1f J/kg\n', ...
+            me.seedEpsBo./1e6,me.epsNeighLo - me.seedEpsBo, ...
+            me.epsNeighHi - me.seedEpsBo);
+    fprintf('    on the far side.\n');
     fprintf('    AND THE NOISE IS MEASURED, NOT ASSUMED SMALL. Re-solving the constraint at\n');
     fprintf('    the settled loft angle with a tolerance ten times tighter moves the burnout\n');
-    fprintf('    energy by %.3e J/kg, which is %.2e of the shallower side of that valley.\n', ...
+    fprintf('    energy by %.3e J/kg, which is %.2e of the shallower side of that valley\n', ...
             me.epsNoiseJkg,me.epsNoiseRel);
+    fprintf('    -- %.1f J/kg, the shallower depth, which is the one the ratio divides by\n', ...
+            me.epsDepthJkg);
+    fprintf('    so that the arithmetic closes against the numbers printed here.\n');
     if me.epsNoiseRel > 0.1
     fprintf('    *** CAUTION *** that ratio is not small. The minimum is not resolved against\n');
     fprintf('    the inner tolerance; tighten tolRangeMEKm before believing the loft angle.\n');
@@ -2119,15 +2307,19 @@ function [traj,info] = run_ballistic_target(opts)
             100.*abs(lof.epsBo - dep.epsBo)./abs(dep.epsBo));
     fprintf('    propellant load is fixed and both burn all of it; this one leaves at\n');
     fprintf('    %.4f MJ/kg, having thrown %.1f kg of propellant away unburned. That gap\n', ...
-            me.epsBo./1e6,me.propLeftKg);
-    fprintf('    is the whole reason neither full-burn arc is the trajectory above.\n');
+            me.seedEpsBo./1e6,me.propLeftKg);
+    fprintf('    is the whole reason neither full-burn arc is the trajectory above. All\n');
+    fprintf('    three energies here are at the SEED azimuth, which is the only basis the\n');
+    fprintf('    two full-burn arcs were ever measured on.\n');
     else
     fprintf('    ONLY ONE FULL-BURN ARC REACHES THIS TARGET, so there is no pair of burnout\n');
     fprintf('    energies to contrast this one against; the %s arc alone leaves at\n', ...
             onlyBranch(dep.exists));
-    fprintf('    %.4f MJ/kg against this trajectory''s %.4f MJ/kg, which threw %.1f kg of\n', ...
-            onlyEps(dep,lof),me.epsBo./1e6,me.propLeftKg);
-    fprintf('    propellant away unburned. THE MINIMUM-ENERGY SOLVE IS UNAFFECTED by the\n');
+    fprintf('    %.4f MJ/kg against this trajectory''s %.4f MJ/kg -- both at the SEED\n', ...
+            onlyEps(dep,lof),me.seedEpsBo./1e6);
+    fprintf('    azimuth, which is the only basis the full-burn arc was measured on. This\n');
+    fprintf('    one threw %.1f kg of propellant away unburned.\n',me.propLeftKg);
+    fprintf('    THE MINIMUM-ENERGY SOLVE IS UNAFFECTED by the\n');
     fprintf('    missing branch: it uses the loft bracket''s own end there, and the arc it\n');
     fprintf('    found is the same one the geometry asks for either way.\n');
     end
@@ -2301,11 +2493,22 @@ function [traj,info] = run_ballistic_target(opts)
     fprintf('       Newton moved the azimuth and the CUTOFF FRACTION and left the loft angle at\n');
     fprintf('       the %.4f deg the energy minimisation settled on at the seed azimuth. The\n', ...
             rad2deg(loftSol));
-    fprintf('       constraint is therefore met exactly and the MINIMISATION is the part that\n');
-    fprintf('       is indicative: the valley evidence below was measured at the seed azimuth,\n');
-    fprintf('       and the valley is flat at its bottom, so a %+.6f deg change of aim moves\n', ...
-            rad2deg(wrapPi(psiLaunch - psiSeed)));
-    fprintf('       the minimising loft angle by far less than it moves the energy.\n');
+    fprintf('       constraint is therefore met EXACTLY at the solved azimuth -- the vehicle\n');
+    fprintf('       arrives -- and the MINIMISATION is the part that is indicative. SO THE\n');
+    fprintf('       BURNOUT ENERGY IS REPORTED TWICE ABOVE, in two columns: the MINIMISED one,\n');
+    fprintf('       at the seed azimuth, which is the number the valley evidence is\n');
+    fprintf('       differenced against, and the FLOWN one, which is what the vehicle left\n');
+    fprintf('       burnout with after the cutoff moved by %+.6f of the burn. Neither column\n', ...
+            me.dCutFrac);
+    fprintf('       may stand in for the other: the flown energy is not a minimum of anything,\n');
+    fprintf('       and the minimised one is not what was flown.\n');
+    fprintf('       WHAT IS NOT DONE is re-minimising the loft angle at the solved azimuth. The\n');
+    fprintf('       valley is flat at its bottom -- tolLoftMEDeg is %.3f deg against an energy\n', ...
+            tolLoftMEDeg);
+    fprintf('       resolved to parts in a thousand -- so the answer moves by far less than the\n');
+    fprintf('       cost, which is a whole inner solve inside every outer evaluation. The size\n');
+    fprintf('       of the approximation is the %+.1f J/kg between the two columns.\n', ...
+            me.dEpsBoJkg);
     end
     fprintf('    4. THE LOFT ANGLE IS A COMMANDED ATTITUDE, NOT THE BURNOUT GAMMA. The %.1f deg\n', ...
             alphaMax);
@@ -2459,7 +2662,18 @@ info.branchTimeAgrees = flownAgree;
 %% false and every other field of it is absent -- there was no solve -- while
 %% classical is populated regardless, because it depends on the GEOMETRY and not
 %% on what was flown. The three me*RelE / me*ResR fields are DIAGNOSTICS against
-%% that reference and not residuals of anything this script drove to zero:
+%% that reference and not residuals of anything this script drove to zero.
+%%
+%% minEnergy CARRIES TWO OPERATING POINTS AND THE PREFIX SAYS WHICH. The seed*
+%% fields -- seedEpsBo, seedCutFrac, seedTCutS, seedRngM -- are the
+%% MINIMISATION'S OWN answer, at the seed azimuth, and they are the basis the
+%% valley evidence epsNeighLo, epsNeighHi, epsDepthJkg, epsNoiseJkg and
+%% epsNoiseRel is differenced against. The unprefixed epsBo, cutFrac, tCutS and
+%% rngM are what the vehicle FLEW, after the two-axis solve moved the cutoff to
+%% close the cross-range. dCutFrac and dEpsBoJkg are the gap, and they are
+%% exactly zero whenever the aim solve is a no-op. A caller comparing epsBo
+%% against epsNeighLo is comparing two azimuths and will be wrong by the size of
+%% dEpsBoJkg; that is what the seed prefix exists to prevent:
     info.minEnergy  = me;
     info.classical  = refME;
      info.gamStarR  = gamStarR;
@@ -3981,6 +4195,7 @@ function me = minEnergySolve(psiL,rngReq,cfg,rI,c,latTgR,lonTgR,dep,lof, ...
          depths(2) = epsNeighB - me.epsBo;
     end
             depthM = min(depths);
+   me.epsDepthJkg = depthM;
     me.epsNoiseRel = Inf;
     if isfinite(depthM) && depthM > 0
     me.epsNoiseRel = me.epsNoiseJkg./depthM;

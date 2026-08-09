@@ -12,27 +12,75 @@ function [traj,info] = run_ballistic_target(opts)
 %  to the library's SI units (m, m/s, rad, s) immediately after the block, in
 %  one place, and nothing below that point works in any other unit.
 %
-%% Note -- the targeting problem is TWO separate solves:
+%% Note -- the targeting problem is TWO controls and TWO residuals:
 %
 %  BM/run_ballistic flies launch site + azimuth + pitch program and lands
-%  wherever the physics puts it. This script inverts that. Two unknowns, two
-%  independent solves, and they do not interact on a non-rotating Earth:
+%  wherever the physics puts it. This script inverts that. Two unknowns and two
+%  misses, and on anything but a non-rotating unbanked run they COUPLE:
 %
-%    Azimuth, CLOSED FORM.  coorbital.util.greatCircleBearing returns the
-%                           initial bearing of the great-circle arc from the
-%                           launch point to the target, clockwise from north,
-%                           which is exactly this library's heading convention
-%                           psi. It drops straight into the launch state. No
-%                           iteration, no propagation, no tolerance. It REFUSES
-%                           coincident, antipodal and polar geometries rather
-%                           than returning a plausible azimuth for them, and
-%                           the refusal is caught below and re-phrased against
-%                           the USER PARAMETERS entries that caused it.
+%    LAUNCH AZIMUTH psi.    Rotating the launch heading rotates the whole ground
+%                           track about the pad, so it moves the impact point
+%                           mostly CROSSWISE to the intended course.
 %
-%    Range, ONE-DIMENSIONAL ROOT SOLVE ON THE LOFT ANGLE.  See the next note.
-%                           This is where a ballistic missile differs from the
-%                           boost-glide vehicle of HGV/run_target, and it is
-%                           the whole reason this script exists separately.
+%    A RANGE CONTROL.       Which one depends on the mode, and the next two
+%                           notes are about that: the LOFT ANGLE at the full
+%                           burn for 'lofted' and 'depressed', the CUTOFF
+%                           FRACTION for 'minimum-energy'. Either way it moves
+%                           the impact point mostly ALONG the course. This is
+%                           where a ballistic missile differs from the
+%                           boost-glide vehicle of HGV/run_target, which ranges
+%                           on thrust termination in every mode, and it is the
+%                           whole reason this script exists separately.
+%
+%  THE TWO RESIDUALS ARE THE COMPONENTS OF THE MISS VECTOR, target to impact,
+%  resolved at the TARGET along the intended course: down-range, positive long,
+%  and cross-range, positive right of course. Both zero is exactly "the impact
+%  point IS the target", and it refers to no great circle at all -- which
+%  matters, because once the Earth turns or a bank is commanded the flown track
+%  is not one. Writing the pair instead as a great-circle range residual beside
+%  a cross-track offset would be the same information in a worse basis: it would
+%  keep quoting an arc the vehicle no longer flies, and its Jacobian would be
+%  further off diagonal.
+%
+%  SOLVED IN TWO STAGES, and the first is what makes the second safe:
+%
+%    STAGE 1, A SEED, AT     coorbital.util.greatCircleBearing returns the
+%    ONE FIXED AZIMUTH.      initial bearing of the launch-to-target great
+%                            circle, clockwise from north, which is exactly this
+%                            library's heading convention psi. It REFUSES
+%                            coincident, antipodal and polar geometries rather
+%                            than returning a plausible azimuth for them, and
+%                            the refusal is caught below and re-phrased against
+%                            the USER PARAMETERS entries that caused it -- which
+%                            still belongs at the seed, because a geometry with
+%                            no bearing has no starting point and a Newton is no
+%                            remedy for that. EVERYTHING ELSE IN STAGE 1 IS
+%                            FLOWN AT THAT ONE AZIMUTH: the max-range hump, the
+%                            certified maximiser interval, the two monotone
+%                            branch brackets, both branch solves and the
+%                            minimum-energy minimisation. That is deliberate and
+%                            it is what preserves them. Range against loft is a
+%                            CURVE at a fixed azimuth and a SURFACE otherwise,
+%                            and a golden section on a surface certifies
+%                            nothing.
+%
+%    STAGE 2, THE SOLVE.     coorbital.util.aimSolve runs a damped Newton on
+%                            BOTH controls at once, over a finite-difference
+%                            Jacobian, until both components of the miss are
+%                            inside tolerance. On a non-rotating unbanked run
+%                            the seed is usually already inside it, so this
+%                            stage converges at its first evaluation and hands
+%                            the stage-1 answer back unmoved.
+%
+%  WHAT STAGE 1 MEASURES IS THEREFORE APPROXIMATE FOR THE AZIMUTH STAGE 2
+%  SETTLES ON, and this file says so in four places rather than one: here, in
+%  the reachable line of the summary, in the aim-solve refusal banner and in
+%  item 3 of the summary's closing block. The reachable band, the maximum range
+%  and the too-far/too-close refusals are all quantities of the SEED azimuth.
+%  The alternative -- re-bracketing the hump inside every Newton evaluation --
+%  would multiply an already 700-propagation mode by the cost of a whole
+%  bracketing, and would still not certify anything, because the certification
+%  is a one-dimensional argument.
 %
 %% Note -- the ranging control is the LOFT ANGLE, and it has TWO BRANCHES:
 %
@@ -105,6 +153,29 @@ function [traj,info] = run_ballistic_target(opts)
 %  cutoff fraction be whatever makes the range, and minimise the burnout
 %  specific energy along it. That is a real objective with a real minimum, which
 %  is what makes the name 'minimum-energy' accurate.
+%
+%  WHERE THE AZIMUTH GOES IN THIS MODE, and why it is not a third search
+%  variable. The minimisation above runs at the SEED azimuth and settles a loft
+%  angle. Stage 2 then HOLDS that loft angle and solves the azimuth beside the
+%  CUTOFF FRACTION, so the two-component miss goes to zero while the range
+%  control that enforces it stays the one this mode was built around. The
+%  constraint is therefore met exactly at the solved azimuth; what is
+%  approximate is the MINIMISATION, whose valley was mapped at the seed one.
+%
+%  THAT IS A CHOICE, AND HERE IS THE ONE IT WAS MADE AGAINST. Adding the azimuth
+%  properly gives three parameters and two constraints -- still a
+%  one-dimensional family, still well posed -- solved by putting a two-axis
+%  aimSolve on (psi, cutFrac) INSIDE every outer evaluation, where the
+%  one-dimensional cutoff bisection sits now. It is the more honest problem and
+%  it was rejected on cost and on evidence: every outer evaluation is already
+%  about 25 propagations, there are about 27 of them, and wrapping each in a
+%  Newton multiplies the mode's 700 propagations by something between one and
+%  two. What is bought is a loft angle re-minimised at the solved azimuth, and
+%  the valley is FLAT AT ITS BOTTOM -- that is why tolLoftMEDeg is 0.05 deg
+%  against an energy resolved to parts in a thousand -- so the answer moves by
+%  far less than the cost. The approximation is stated in the summary rather
+%  than hidden, and the aim solve reports the azimuth correction it applied so a
+%  reader can judge how far the family was moved.
 %
 %  WHY IT IS NOT SOLVED AS A GAMMA MATCH ANY MORE. The classical closed form,
 %  reference [1],
@@ -223,29 +294,41 @@ function [traj,info] = run_ballistic_target(opts)
 %  saturates the achievable pitch-over, and it is reported as such rather than
 %  dressed up.
 %
-%% Note -- TWO LIMITATIONS, one REFUSED outright and one printed in the summary:
+%% Note -- WHAT THIS SOLUTION IS AND IS NOT, printed in the summary rather than
+%% buried:
 %
-%  THE AZIMUTH IS EXACT ONLY BECAUSE THE EARTH DOES NOT ROTATE HERE, and
-%  earthSpin true is therefore REFUSED rather than flown. With env.omegaE = 0
-%  the ground track of an unbanked trajectory is a great circle, so the initial
-%  bearing of the launch-to-target arc is the whole answer. Switch earthSpin on
-%  and the target is carried east under the vehicle for the whole flight, the
-%  vehicle has to be aimed where the target is GOING TO BE, and closing that
-%  needs an OUTER AZIMUTH ITERATION around the two branch solves -- PER BRANCH,
-%  the two arcs flying for 659 s and 1816 s on the shipped case. This script
-%  does not have one. It used to run anyway and print a caution; measured, that
-%  produced a 315.690 km miss printed as a converged solution, beside a
-%  cross-track WARNING blaming a banked segment when the bank was already zero.
-%  It now refuses on the same terms as the envelope refusals -- empty traj,
-%  info.refused true, nothing thrown -- and names the iteration it lacks.
+%  THE AZIMUTH IS SOLVED, NOT CLOSED FORM, and that is what lets earthSpin be
+%  true. Note what rotation actually does here: the state longitude and latitude
+%  are EARTH-FIXED and the speed is planet-relative, so the target does NOT
+%  slide east under the vehicle -- it sits still, and the VEHICLE is deflected
+%  off the arc it left on by the Coriolis and centrifugal terms, to the right in
+%  the northern hemisphere. Measured on the shipped geometry with earthSpin
+%  true, the closed-form bearing alone left the impact point 463.211 km from the
+%  target, of which 462.870 km is CROSSWISE and only 17.764 km down-range -- a
+%  ratio of 26 to 1, which is the signature of a deflection and not of a moving
+%  aim point. The second stage removes it, so the case is flown instead of
+%  refused.
 %
-%  THE SOLVE CONTROLS DOWNRANGE ONLY. Bisection matches the great-circle
-%  distance from launch to impact; nothing in it steers the track sideways.
-%  Cross-range comes out at zero in the SHIPPED configuration because the bank
-%  angle is zero throughout, and an unbanked trajectory over a non-rotating
-%  sphere stays on the great circle it left on. That is a property of THIS
-%  CONFIGURATION, not a general guarantee, and this script MEASURES it rather
-%  than asserting it.
+%  THE SOLVE CONTROLS BOTH AXES, so a banked trajectory is targetable too.
+%  Cross-range is driven to zero rather than measured and warned about, and a
+%  bank and a rotation are one cross-range residual to it rather than two
+%  separate faults.
+%
+%  WHAT REMAINS TRUE, and all of it is stated in the summary. Everything stage 1
+%  certifies -- the hump, the maximiser interval, the branch brackets, the
+%  reachable band, and therefore the too-far and too-close refusals -- is
+%  measured at the SEED azimuth and is indicative rather than exact for the
+%  solved one. On a rotating run that is not a small caveat: at earthSpin true
+%  the shipped geometry's maximum range rises from 5211.5 km to 5439.9 km and
+%  the depressed band floor from 4708.5 km to 5085.8 km, so the shipped 4828 km
+%  target leaves the depressed branch altogether and 'depressed' is REFUSED
+%  there. That is a real physical result and not an artefact -- an easterly
+%  launch gains from the planet's rotation -- but it is measured on one azimuth.
+%  The Newton is LOCAL: seeded, damped and capped, and when it cannot converge
+%  the run is REFUSED with the best point it reached rather than returned as a
+%  near miss. And the tolerance is on the MISS ITSELF: each component is held to
+%  tolRangeKm/sqrt(2), so the two together cannot exceed the distance the user
+%  asked for.
 %
 %% Note -- two vehicles, one chain, carried on ph.veh:
 %
@@ -297,25 +380,41 @@ function [traj,info] = run_ballistic_target(opts)
 %                                               have to read them back out of
 %                                               printed text; all SI except the
 %                                               *Km distances and the *Deg
-%                                               angles. Always carries refused
-%                                               (logical), refusedWhy
-%                                               ('envelope', 'earthSpin' or
-%                                               'minimumEnergy'), rngReqM and
-%                                               psiLaunch. An ENVELOPE refusal
-%                                               adds loftStarDeg, rngMaxM,
-%                                               rngMinM, classical, gamStarR
-%                                               and the per-branch records in
-%                                               depressed and lofted, so it
-%                                               hands back the envelope it
-%                                               refused against; a
-%                                               MINIMUMENERGY refusal adds all
-%                                               of those plus minEnergy, whose
+%                                               angles.
+%
+%                                               ALWAYS carries refused
+%                                               (logical), branchAsked, rngReqM,
+%                                               psiSeed and psiLaunch.
+%                                               refusedWhy is present ONLY when
+%                                               refused is true, so read it
+%                                               behind that flag and not on its
+%                                               own.
+%
+%                                               A REFUSAL carries refusedWhy,
+%                                               one of 'envelope',
+%                                               'minimumEnergy' or 'aimSolve'.
+%                                               ALL THREE add loftStarDeg,
+%                                               rngMaxM, rngMinM, hApoStarM,
+%                                               tFlyStarS, maxRange, classical,
+%                                               gamStarR and the per-branch
+%                                               records in depressed and lofted,
+%                                               so every one of them hands back
+%                                               the envelope it was measured
+%                                               against -- AT THE SEED AZIMUTH.
+%                                               An ENVELOPE refusal adds
+%                                               shortfallM; a MINIMUMENERGY
+%                                               refusal adds minEnergy, whose
 %                                               why says what could not be
-%                                               solved; an earthSpin refusal
-%                                               happens before any propagation
-%                                               and adds omegaE and tgSpeedM
-%                                               instead. A run that was not
-%                                               refused additionally carries the
+%                                               solved; an AIMSOLVE refusal adds
+%                                               minEnergy as well plus the
+%                                               aimSolve record in aimInfo,
+%                                               whose xHist and message say
+%                                               where the Newton got to and why
+%                                               it stopped, beside the seed and
+%                                               best miss components.
+%
+%                                               A RUN THAT WAS NOT REFUSED
+%                                               additionally carries the
 %                                               flown trajectory's own numbers,
 %                                               the CERTIFIED maximiser interval
 %                                               in maxRange.aL and maxRange.bL
@@ -341,13 +440,18 @@ function [traj,info] = run_ballistic_target(opts)
 %       range, and the VACUUM EQUAL-RADIUS minimum-energy values V* and
 %       gammaStar = 45 deg - Lambda/4, used here as a diagnostic reference.
 %   [2] Bowditch, N., "The American Practical Navigator," Pub. No. 9, NGA,
-%       chapter on Great-Circle Sailing. The initial course used for the launch
-%       azimuth; see coorbital.util.greatCircleBearing.
+%       chapter on Great-Circle Sailing. The initial course used to SEED the
+%       launch azimuth, and the four-parts components the miss vector is built
+%       from; see coorbital.util.greatCircleBearing and missVector below.
 %   [3] Press, W.H., et al., "Numerical Recipes," 3rd ed., Cambridge, 2007,
 %       Sections 9.1 and 10.2. Bisection, used by coorbital.util.rangeSolve,
 %       and golden-section search, used below both to bracket the maximum-range
 %       loft angle and to minimise the burnout energy along the feasible family.
-%   [4] Vinh, N.X., Busemann, A., Culp, R.D., "Hypersonic and Planetary Entry
+%   [4] Dennis, J.E. and Schnabel, R.B., "Numerical Methods for Unconstrained
+%       Optimization and Nonlinear Equations," SIAM, 1996, Chapters 5 and 6.
+%       The finite-difference Jacobian and line-search damped Newton method
+%       used by coorbital.util.aimSolve for the two-axis solve.
+%   [5] Vinh, N.X., Busemann, A., Culp, R.D., "Hypersonic and Planetary Entry
 %       Flight Mechanics," Univ. Michigan Press, 1980.
 %
 %% Revision History:
@@ -355,6 +459,11 @@ function [traj,info] = run_ballistic_target(opts)
 %  Michael Casey  minimum-energy solved as an explicit          08/08/2026
 %                 constrained minimisation; certified branch
 %                 brackets; alphaMax read from the vehicle
+%  Michael Casey  Two-axis targeting: the azimuth is SOLVED     08/08/2026
+%                 beside the mode's own range control by
+%                 coorbital.util.aimSolve, which retires the
+%                 rotating-Earth refusal and the downrange-only
+%                 cross-track warning
 %  Copyright 2026 Coorbital, Inc.
 %% ------------------------ Begin Code Sequence ---------------------------
 
@@ -374,8 +483,9 @@ function [traj,info] = run_ballistic_target(opts)
                                        %     a moment after first motion
 
 %% Target point -- where the missile is to arrive. There is NO azimuth entry:
-%% the launch azimuth is SOLVED from these two points, in closed form, and any
-%% azimuth given here could only contradict it:
+%% the launch azimuth is SOLVED from these two points, seeded on the
+%% great-circle bearing between them, and any azimuth given here could only
+%% contradict it:
          latTarget = 62;               %deg, geocentric latitude [-89 .. 89]
          lonTarget = -28;              %deg, longitude [-180 .. 180]
                                        %     The shipped pair is the central United States to
@@ -453,10 +563,15 @@ function [traj,info] = run_ballistic_target(opts)
                                        %   REFINED by interleaving midpoints, up to four times,
                                        %   and only a refinement that still cannot certify is an
                                        %   error
-        tolRangeKm = 1.0;              %km, convergence tolerance on the ACHIEVED range of each
-                                       %    branch [0.05 .. 50]. Each halving of this costs one
-                                       %    more trajectory propagation per branch, and a
-                                       %    propagation is about 0.05 s, so tightening it is cheap
+        tolRangeKm = 1.0;              %km, convergence tolerance on the MISS DISTANCE, impact
+                                       %    point to target [0.05 .. 50]. The two-axis solve is
+                                       %    held to this over sqrt(2) on EACH component, so the
+                                       %    down-range and cross-range misses together cannot
+                                       %    exceed the figure asked for here. The stage-1 branch
+                                       %    bisections use the bare figure on range. Each halving
+                                       %    costs about one more trajectory propagation per
+                                       %    branch, and a propagation is about 0.05 s, so
+                                       %    tightening it is cheap
 
 %% MINIMUM-ENERGY MODE ONLY. Ignored by 'lofted' and 'depressed', which fly the
 %% full burn and have no cutoff to solve for. See the THREE MODES note:
@@ -514,11 +629,15 @@ function [traj,info] = run_ballistic_target(opts)
                                        %     a PLACEHOLDER awaiting a qualification basis, not a
                                        %     cleared value, and it is not a targeting degree of
                                        %     freedom -- see the alphaMax note in the header
-         bankAngle = 0;                %deg, bank [-90 .. 90], all phases. MUST BE 0 for the
-                                       %     closed-form azimuth to be the answer; anything else
-                                       %     turns the heading and walks the impact point off
-                                       %     the launch-to-target great circle, which the solve
-                                       %     cannot see. Measured and warned about, not assumed
+         bankAngle = 0;                %deg, bank [-90 .. 90], all phases. SHIPPED AT ZERO because
+                                       %     the simplest case is the one an example script
+                                       %     should ship, NOT because the solve cannot handle a
+                                       %     bank: a banked segment turns the heading and walks
+                                       %     the impact point off the launch-to-target great
+                                       %     circle, and the SOLVE NOW SEES THAT -- the launch
+                                       %     azimuth is aimed off to compensate. It is still a
+                                       %     large control authority on a body with almost no
+                                       %     lift, so it moves the whole envelope
 
 %% Staging -- whether the spent booster is thrown away at burnout:
         separation = true;             %true jettisons bst.massDry and flies the re-entry body
@@ -543,13 +662,19 @@ function [traj,info] = run_ballistic_target(opts)
             gravFn = @coorbital.grav.sphereGrav;  %[gr,gLat]   = gravFn(r,lat)
             aeroFn = @coorbital.aero.constLD;     %[CL,CD]     = aeroFn(alpha,mach,veh)
             propFn = @coorbital.prop.constThrust; %[T,mdot]    = propFn(t,P,veh)
-         earthSpin = false;            %MUST BE false. true enables the Coriolis and centrifugal
-                                       %terms, which INVALIDATE the closed-form azimuth, and the
-                                       %run is then REFUSED rather than flown: aiming at where
-                                       %the target is going to be needs an outer azimuth
-                                       %iteration this script does not have. Measured before the
-                                       %refusal existed, on the shipped geometry: a 315.690 km
-                                       %miss printed as though it were a converged solution
+         earthSpin = false;            %true enables the Coriolis and centrifugal terms. It is
+                                       %SUPPORTED: the state is Earth-fixed, so the target does
+                                       %not move, but the vehicle is deflected off the arc it
+                                       %left on -- 463.211 km of miss on the shipped geometry
+                                       %with the closed-form bearing alone, 462.870 km of it
+                                       %crosswise -- and the two-axis solve aims off to remove
+                                       %it. Shipped false only so the default run is the simplest
+                                       %one. IT ALSO MOVES THE ENVELOPE, which stage 1 measures
+                                       %at the SEED azimuth: on this north-easterly geometry it
+                                       %raises maximum range from 5211.5 to 5439.9 km and the
+                                       %depressed band floor from 4708.5 to 5085.8 km, so
+                                       %branch = 'depressed' is then REFUSED for the shipped
+                                       %4828 km target while the other two modes fly
 
 %% Output:
          showPlots = true;             %false to skip the figures, e.g. under matlab -batch
@@ -846,19 +971,26 @@ function [traj,info] = run_ballistic_target(opts)
                             'sigma',[bankRad bankRad]);
 
 %% -----------------------------------------------------------------
-%% The azimuth solve: closed form, one call, no iteration
+%% The seed azimuth: the closed-form bearing, which is a GUESS
 %% -----------------------------------------------------------------
 %% The initial bearing of the launch-to-target great circle IS the library's
 %% heading state psi -- both are measured clockwise from north -- so it goes
-%% straight into the launch state below with no conversion.
+%% straight into the launch state below with no conversion. It is the whole
+%% answer only on a non-rotating unbanked run; everywhere else it is the
+%% starting point the two-axis solve improves on, and it is the right starting
+%% point precisely because it is exact in the easy case and close in the hard
+%% ones.
 %%
 %% coorbital.util.greatCircleBearing REFUSES the geometries that have no
 %% azimuth rather than returning the rounding artefact atan2 makes of them, and
 %% the refusal arrives here as an error identifier. It is re-phrased against the
 %% USER PARAMETERS entries that caused it, because the library function cannot
-%% know that the two points it was handed came from latLaunch and latTarget:
+%% know that the two points it was handed came from latLaunch and latTarget.
+%% The translation still belongs here and not in the solve: a geometry with no
+%% bearing has no SEED, and a Newton with no starting point is not a remedy for
+%% one:
     try
-         psiLaunch = coorbital.util.greatCircleBearing(latLaunchR,lonLaunchR, ...
+           psiSeed = coorbital.util.greatCircleBearing(latLaunchR,lonLaunchR, ...
                                                        latTargetR,lonTargetR);
     catch errAz
         if strcmp(errAz.identifier,'coorbital:greatCircleBearing:degenerateArc')
@@ -881,15 +1013,18 @@ function [traj,info] = run_ballistic_target(opts)
         end
     end
 
-%% Liftoff state. Everything but the loft angle is fixed across every
-%% propagation this script makes; the pad flight-path angle is the first
-%% commanded pitch attitude, so the angle of attack starts at zero:
+%% Liftoff state TEMPLATE. Everything but the loft angle and the HEADING is
+%% fixed across every propagation this script makes; the pad flight-path angle
+%% is the first commanded pitch attitude, so the angle of attack starts at zero.
+%% Entry 6 is the heading, and flyLoft overwrites it per trial rather than
+%% rebuilding the state, so a trial flight can differ from the seed in the
+%% azimuth and in nothing else:
                 x0 = [c.rE + hLaunchM; ...
                       lonLaunchR; ...
                       latLaunchR; ...
                       vLaunch; ...
                       pitchRefR(1); ...
-                      psiLaunch; ...
+                      psiSeed; ...
                       mLiftoff];
 
 %% Everything the propagation needs, gathered once so the range function is a
@@ -928,73 +1063,41 @@ function [traj,info] = run_ballistic_target(opts)
             rngReq = rI.*angReqR;
 
 %% The FULL-BURN range function, the one the max-range bracketing and both
-%% branch solves ride on. The second argument of flyLoft is the cutoff fraction
-%% and 1 means "no commanded cutoff": phase 1 keeps its horizon tspan and ends
-%% on propellant exhaustion, exactly as it always has. Only the minimum-energy
-%% solve ever passes anything else:
-            fRange = @(loftR) flyLoft(loftR,1,cfg,rI);
+%% branch solves ride on, bound to the SEED AZIMUTH. The cutoff-fraction
+%% argument of flyLoft is 1 here, meaning "no commanded cutoff": phase 1 keeps
+%% its horizon tspan and ends on propellant exhaustion, exactly as it always
+%% has. Only the minimum-energy solve ever passes anything else.
+%%
+%% BINDING THE AZIMUTH IS WHAT KEEPS STAGE 1 ONE-DIMENSIONAL, and that is not a
+%% shortcut, it is what preserves everything the bracketing certifies. Range
+%% against loft has one interior hump; range against loft AND azimuth is a
+%% surface, and a golden section on a surface certifies nothing. The hump, the
+%% certified maximiser interval, the two monotone one-sided brackets and the
+%% two branch solves are all statements about one azimuth, and they are made
+%% about the seed one:
+            fRange = @(loftR) flyLoft(psiSeed,loftR,1,cfg,rI);
 
 %% -----------------------------------------------------------------
-%% Refuse a ROTATING Earth, before a single trajectory is propagated
+%% The aim frame: the basis both residuals are resolved in
 %% -----------------------------------------------------------------
-%% The closed-form azimuth above is the whole answer only while the ground does
-%% not move under the vehicle. With env.omegaE non-zero it is not an answer at
-%% all, and everything downstream of it -- the branch solves, the miss, the
-%% cross-track, the limitations paragraph -- would be describing a target that
-%% stood still. This used to run anyway behind a caution, and what it produced
-%% was three mutually contradictory statements around a 315.690 km miss. It
-%% refuses instead, on the same terms as the envelope refusals below: nothing is
-%% thrown, traj comes back empty and info.refused is true. It refuses HERE,
-%% before the bracketing, because 57 propagations spent on an answer that will
-%% be discarded are 57 propagations wasted:
-    if env.omegaE ~= 0
-            tgSpdM = c.omegaE.*rI.*cos(latTargetR);
-        fprintf('\n');
-        fprintf('===== Ballistic point-to-point targeting: REFUSED =======\n');
-        fprintf('  earthSpin is TRUE. This script cannot target a ROTATING Earth.\n');
-        fprintf('\n');
-        fprintf('    launch           %10.4f %-5s %10.4f deg  (lat, lon)\n', ...
-                latLaunch,'deg',lonLaunch);
-        fprintf('    target           %10.4f %-5s %10.4f deg  (lat, lon)\n', ...
-                latTarget,'deg',lonTarget);
-        fprintf('    required range   %10.3f %-5s (great circle on the r = %.3f km sphere,\n', ...
-                rngReq./1000,'km',rI./1000);
-        fprintf('                                      measured to where the target is NOW)\n');
-        fprintf('    launch azimuth   %10.6f %-5s (the closed form, computed and then NOT\n', ...
-                rad2deg(psiLaunch),'deg');
-        fprintf('                                      used: it is not the answer here)\n');
-        fprintf('    env.omegaE     %.6e rad/s (Coriolis and centrifugal terms ON)\n', ...
-                env.omegaE);
-        fprintf('    target moves     %10.2f %-5s (eastward ground speed under the target at\n', ...
-                tgSpdM,'m/s');
-        fprintf('                                      %.4f deg latitude; every second of\n',latTarget);
-        fprintf('                                      flight carries the aim point this far)\n');
-        fprintf('\n');
-        fprintf('  WHAT IS MISSING IS AN OUTER AZIMUTH ITERATION, and this script does not\n');
-        fprintf('  have one. On a turning Earth the vehicle must be aimed where the target is\n');
-        fprintf('  GOING TO BE, which makes the azimuth depend on the flight time, the flight\n');
-        fprintf('  time depend on the loft angle, and the loft angle depend on the azimuth.\n');
-        fprintf('  Worse here than in HGV/run_target: the loop would have to run PER BRANCH,\n');
-        fprintf('  the lofted and depressed arcs flying for very different times over the\n');
-        fprintf('  same geometry, so the two branches do not even share an aim point.\n');
-        fprintf('  Running anyway is what this refusal replaces. It converged, reported a\n');
-        fprintf('  315.690 km miss on the shipped geometry as though it were a solution, and\n');
-        fprintf('  blamed the cross-range on a banked segment while the bank was zero. Set\n');
-        fprintf('  earthSpin false, or bring an azimuth iteration.\n');
-        fprintf('=========================================================\n\n');
-              traj = [];
-       info.refused = true;
-    info.refusedWhy = 'earthSpin';
-      info.branchAsked = branch;
-       info.rngReqM = rngReq;
-     info.psiLaunch = psiLaunch;
-       info.omegaE  = env.omegaE;
-      info.tgSpeedM = tgSpdM;
-        if nargout == 0
-            clear traj info;
-        end
-        return;
-    end
+%% One direction, fixed for the whole solve: the course of the launch-to-target
+%% great circle AT THE TARGET, which is the arriving bearing and therefore the
+%% direction "long" points in. greatCircleBearing is not symmetric, so the
+%% arriving course is the DEPARTING course of the reversed arc turned through
+%% pi; taking the launch-end bearing instead would tilt the basis by the
+%% convergence of the meridians, several degrees at this range.
+%%
+%% Fixed rather than recomputed per trial on purpose. A basis that moved with
+%% the impact point would make the Jacobian describe the basis as much as the
+%% trajectory, and the finite-difference columns would stop meaning what the
+%% Newton step assumes they mean:
+         psiCourse = mod(coorbital.util.greatCircleBearing(latTargetR,lonTargetR, ...
+                                                           latLaunchR,lonLaunchR) + pi, ...
+                         2.*pi);
+          aim.latT = latTargetR;
+          aim.lonT = lonTargetR;
+          aim.psiC = psiCourse;
+          aim.rI   = rI;
 
 %% -----------------------------------------------------------------
 %% Bracket the MAXIMUM-RANGE loft angle, before either branch is solved
@@ -1029,12 +1132,12 @@ function [traj,info] = run_ballistic_target(opts)
 %% needs both sets of numbers in front of them. coorbital.util.rangeSolve
 %% returns converged = false with the achievable band rather than throwing, so a
 %% branch that cannot reach this target simply reports that it does not exist:
-               dep = solveBranch('depressed',rngReq,fRange,loftLoR,loftAML, ...
-                                 tolRngM,cfg,rI,c,latTargetR,lonTargetR, ...
-                                 loftAML,loftBML,tolLoftR);
-               lof = solveBranch('lofted'   ,rngReq,fRange,loftBML,loftHiR, ...
-                                 tolRngM,cfg,rI,c,latTargetR,lonTargetR, ...
-                                 loftAML,loftBML,tolLoftR);
+               dep = solveBranch('depressed',psiSeed,rngReq,fRange,loftLoR, ...
+                                 loftAML,tolRngM,cfg,rI,c,latTargetR, ...
+                                 lonTargetR,loftAML,loftBML,tolLoftR);
+               lof = solveBranch('lofted'   ,psiSeed,rngReq,fRange,loftBML, ...
+                                 loftHiR,tolRngM,cfg,rI,c,latTargetR, ...
+                                 lonTargetR,loftAML,loftBML,tolLoftR);
 
 %% The reachable envelope, as the union of the two branch bands. Its ceiling is
 %% the maximum range by construction -- both branches meet there -- and its
@@ -1182,7 +1285,8 @@ function [traj,info] = run_ballistic_target(opts)
     info.refusedWhy = 'envelope';
       info.branchAsked = branch;
        info.rngReqM = rngReq;
-     info.psiLaunch = psiLaunch;
+      info.psiSeed  = psiSeed;
+     info.psiLaunch = psiSeed;
    info.loftStarDeg = rad2deg(loftStarR);
        info.rngMaxM = rngMax;
        info.rngMinM = rngMin;
@@ -1207,7 +1311,7 @@ function [traj,info] = run_ballistic_target(opts)
 %% needs known to exist. See the THREE MODES note for the method:
                 me = struct('solved',false);
     if isMinE
-                me = minEnergySolve(rngReq,cfg,rI,c, ...
+                me = minEnergySolve(psiSeed,rngReq,cfg,rI,c, ...
                                     latTargetR,lonTargetR,dep,lof, ...
                                     loftLoR,loftHiR,tolRngMEM,tolLoftMER, ...
                                     cutFracMin,nScanME);
@@ -1248,7 +1352,8 @@ function [traj,info] = run_ballistic_target(opts)
     info.refusedWhy = 'minimumEnergy';
   info.branchAsked  = branch;
        info.rngReqM = rngReq;
-     info.psiLaunch = psiLaunch;
+      info.psiSeed  = psiSeed;
+     info.psiLaunch = psiSeed;
    info.loftStarDeg = rad2deg(loftStarR);
        info.rngMaxM = rngMax;
        info.rngMinM = rngMin;
@@ -1272,18 +1377,228 @@ function [traj,info] = run_ballistic_target(opts)
                              rad2deg(me.loftR),me.cutFrac,me.epsBo./1e6);
     end
 
+%% What stage 1 cost, gathered before stage 2 adds to it. A mode that ran no
+%% minimisation spent nothing on one, and NaN would be wrong here rather than
+%% merely unhelpful -- this figure is summed, not printed on its own:
+            meProp = 0;
+    if isMinE
+            meProp = me.nProp;
+    end
+           propOne = mr.nEval + 1 + dep.nProp + lof.nProp + meProp;
+
 %% -----------------------------------------------------------------
-%% Fly the chosen trajectory
+%% Stage 2: drive BOTH components of the miss to zero
 %% -----------------------------------------------------------------
-%% Whichever solve produced it already flew this trajectory and kept it, so
-%% nothing is re-integrated here. The check is that the kept trajectory is the
-%% one the solver reported, which a struct copied from the wrong record would
-%% fail:
-              traj = pick.traj;
-    assert(abs(pick.rngM - rI.*coorbital.util.greatCircle(latLaunchR,lonLaunchR, ...
-                                                          traj.x(end,3),traj.x(end,2))) < 1e-6, ...
-        ['the trajectory carried by the %s branch does not land where that ' ...
-         'branch reported; the branch records have been crossed'],pickName);
+%% Everything above ran at the SEED azimuth and closed the DOWN-RANGE half of
+%% the problem. This closes the other half, on the mode's own two controls:
+%%
+%%    'lofted' and 'depressed'   the azimuth and the LOFT ANGLE, at the full
+%%                               burn. Their seed is the branch root, which
+%%                               stage 1 already flew.
+%%
+%%    'minimum-energy'           the azimuth and the CUTOFF FRACTION, with the
+%%                               loft angle HELD at the value the minimisation
+%%                               settled on. See the THREE MODES note for why
+%%                               the loft angle is held rather than solved a
+%%                               third time.
+%%
+%% The safeguards are the caller's job because only the caller knows the scales:
+%%
+%%    dx0        1e-4 rad of heading swings the impact point about 640 m
+%%               crosswise at this range, and 1e-4 of the range control's own
+%%               span is about 0.0225 deg of loft or 5e-5 of the burn -- both
+%%               worth hundreds of metres of range here. All three are far above
+%%               the few metres an adaptive integrator's own step selection
+%%               moves the impact point by, which is the floor a difference step
+%%               has to clear, and all three are small enough to be a chord and
+%%               not a secant across real curvature. Written against the SPANS
+%%               rather than as literals so a different bracket carries them.
+%%
+%%    maxStep    10 deg of heading and 5 % of the range control's span per
+%%               iteration. aimSolve defaults to unbounded because a library
+%%               function cannot know these; this one can. The seed is already
+%%               range-converged, so a step anywhere near either cap means the
+%%               Newton direction is wrong -- and on THIS script the loft cap
+%%               does a second job the HGV one does not have to: an unbounded
+%%               loft step can cross the max-range hump and land the solve on
+%%               the other branch, which the branch measurement below would then
+%%               report as a disagreement rather than as a step nobody wanted.
+%%
+%%    tolF       the user's tolerance over sqrt(2), so that BOTH components
+%%               inside it puts the total miss inside the figure asked for.
+%%               aimSolve tests max(abs(f)), which is the infinity norm, and the
+%%               worst case for the hypotenuse is the two components equal.
+%%
+%% THE SEED IS A CONTROL PAIR THIS RUN HAS ALREADY FLOWN TO COMPLETION, which is
+%% the sanity check aimSolve's contract asks of a caller: it throws at x0 rather
+%% than shrinking a step it has not got, so a seed that will not fly is an input
+%% error and not a failure to converge. Every path into this block came through
+%% a solve that propagated exactly these controls and kept the trajectory. The
+%% try/catch is belt and braces for the one thing that would defeat that -- a
+%% propagation that is not repeatable -- and it turns the throw into this
+%% script's own refusal rather than letting a library identifier out:
+           spanCtl = loftHiR - loftLoR;
+    if isMinE
+           spanCtl = 1 - cutFracMin;
+    end
+           tolAimM = tolRngM./sqrt(2);
+            loftHd = pick.loftR;
+    if isMinE
+            residF = @(xAim) flyMiss(xAim(1),loftHd,xAim(2),cfg,aim);
+             xSeed = [psiSeed; pick.cutFrac];
+    else
+            residF = @(xAim) flyMiss(xAim(1),xAim(2),1,cfg,aim);
+             xSeed = [psiSeed; pick.loftR];
+    end
+             dxAim = [1.0e-4; 1.0e-4.*spanCtl];
+           optsAim = struct('maxStep',[deg2rad(10); 0.05.*spanCtl]);
+    try
+    [xAim,fAch,av] = coorbital.util.aimSolve(residF,xSeed,dxAim,tolAimM,optsAim);
+    catch errAim
+        error('coorbital:runBallisticTarget:seedWillNotFly', ...
+            ['The two-axis solve could not evaluate its own SEED, which is a ' ...
+             'control pair this run had already propagated to completion: ' ...
+             'azimuth %.6f deg with %s. That means the propagation is not ' ...
+             'repeatable, and nothing downstream of it could be trusted. The ' ...
+             'solver said: %s'],rad2deg(xSeed(1)), ...
+            ctlWord(isMinE,loftHd,xSeed(2)),errAim.message);
+    end
+         psiLaunch = xAim(1);
+    if isMinE
+           loftSol = loftHd;
+            cutSol = xAim(2);
+    else
+           loftSol = xAim(2);
+            cutSol = 1;
+    end
+
+%% The residual at the SEED, which aimSolve records as the first column of its
+%% history and which therefore costs nothing to read. It is the miss the
+%% closed-form bearing and the stage-1 range control produce on their own --
+%% exactly what this script used to report as its answer -- so the summary can
+%% print the before and the after side by side:
+          seedDwnM = av.fHist(1,1);
+          seedXtkM = av.fHist(2,1);
+         seedMissM = hypot(seedDwnM,seedXtkM);
+
+%% -----------------------------------------------------------------
+%% Refuse, loudly, when the two-axis solve did not converge
+%% -----------------------------------------------------------------
+%% aimSolve returns converged = false with the best point it reached rather than
+%% throwing, for the same reason rangeSolve does: only this script has the
+%% vocabulary. A NEAR MISS RETURNED AS AN ANSWER IS THE FAILURE MODE THIS WHOLE
+%% FILE EXISTS TO PREVENT, so it is refused on exactly the terms the envelope
+%% refusal uses -- nothing thrown, empty traj, info.refused true:
+    if ~av.converged
+        fprintf('\n');
+        fprintf('===== Ballistic point-to-point targeting: REFUSED =======\n');
+        fprintf('  The two-axis aim solve did not converge on the target.\n');
+        fprintf('\n');
+        fprintf('    launch           %10.4f %-5s %10.4f deg  (lat, lon)\n', ...
+                latLaunch,'deg',lonLaunch);
+        fprintf('    target           %10.4f %-5s %10.4f deg  (lat, lon)\n', ...
+                latTarget,'deg',lonTarget);
+        fprintf('    required range   %10.3f %-5s (great circle on the r = %.3f km sphere)\n', ...
+                rngReq./1000,'km',rI./1000);
+        fprintf('    branch asked     %-16s (%s)\n',branch,pickShort);
+        fprintf('    reachable        %10.3f to %.3f km  (flown at the SEED azimuth)\n', ...
+                rngMin./1000,rngMax./1000);
+        fprintf('    seed azimuth     %10.6f %-5s (the closed-form great-circle bearing)\n', ...
+                rad2deg(psiSeed),'deg');
+        fprintf('    best azimuth     %10.6f %-5s (%+.6f deg from the seed)\n', ...
+                rad2deg(psiLaunch),'deg',rad2deg(wrapPi(psiLaunch - psiSeed)));
+        fprintf('    best %s\n',ctlWord(isMinE,loftSol,cutSol));
+        fprintf('    seed miss        %10.2f %-5s (down-range %+.2f, cross-range %+.2f)\n', ...
+                seedMissM,'m',seedDwnM,seedXtkM);
+        fprintf('    best miss        %10.2f %-5s (down-range %+.2f, cross-range %+.2f)\n', ...
+                hypot(fAch(1),fAch(2)),'m',fAch(1),fAch(2));
+        fprintf('    tolerance        %10.2f %-5s (per component; %.2f m on the total miss)\n', ...
+                tolAimM,'m',tolRngM);
+        fprintf('    propagations     %10d %-5s (%d before the Newton, %d in it)\n', ...
+                propOne + av.nEval,'',propOne,av.nEval);
+        fprintf('    solver said      %s\n',av.identifier);
+        fprintf('\n');
+        fprintf('  %s\n',av.message);
+        fprintf('\n');
+        fprintf('  THE BEST POINT REACHED IS NOT AN ANSWER, and it is not being returned as\n');
+        fprintf('  one. A targeting script that handed back its nearest miss would hand back\n');
+        fprintf('  something that LOOKS like a solution: a loft angle, an azimuth, a\n');
+        fprintf('  trajectory and a summary, all of them describing a flight that does not\n');
+        fprintf('  arrive. The numbers above are in info.aimInfo for anyone who wants to\n');
+        fprintf('  restart from them.\n');
+        fprintf('=========================================================\n\n');
+              traj = [];
+       info.refused = true;
+    info.refusedWhy = 'aimSolve';
+  info.branchAsked  = branch;
+       info.rngReqM = rngReq;
+      info.psiSeed  = psiSeed;
+     info.psiLaunch = psiLaunch;
+   info.loftStarDeg = rad2deg(loftStarR);
+       info.rngMaxM = rngMax;
+       info.rngMinM = rngMin;
+     info.hApoStarM = hApoStar;
+     info.tFlyStarS = tFlyStar;
+     info.depressed = dep;
+        info.lofted = lof;
+      info.maxRange = mr;
+     info.classical = refME;
+      info.gamStarR = gamStarR;
+    info.minEnergy  = me;
+      info.loftDeg  = rad2deg(loftSol);
+      info.cutFrac  = cutSol;
+        info.missM  = hypot(fAch(1),fAch(2));
+        info.downM  = fAch(1);
+      info.xTrackM  = fAch(2);
+     info.seedMissM = seedMissM;
+     info.seedDownM = seedDwnM;
+   info.seedXTrackM = seedXtkM;
+      info.tolAimM  = tolAimM;
+      info.aimInfo  = av;
+        if nargout == 0
+            clear traj info;
+        end
+        return;
+    end
+
+%% -----------------------------------------------------------------
+%% Fly the solved trajectory
+%% -----------------------------------------------------------------
+%% One more propagation at the converged controls. aimSolve already flew them
+%% but returns only the two-component residual, so the state history is
+%% re-created here rather than carried out through a persistent variable. The
+%% assert is the repeatability check that licenses everything below: if the same
+%% controls give a different impact point, no number in the summary means
+%% anything:
+     [misVec,traj]  = flyMiss(psiLaunch,loftSol,cutSol,cfg,aim);
+    assert(max(abs(misVec - fAch)) < 1e-6, ...
+        ['re-flying the solved controls gave a miss of [%.6f, %.6f] m against ' ...
+         'the solver''s [%.6f, %.6f] m; the propagation is not repeatable and ' ...
+         'nothing below can be trusted'],misVec(1),misVec(2),fAch(1),fAch(2));
+
+%% The flown arc, re-measured from the trajectory that was actually integrated
+%% rather than carried forward from the stage-1 record it started as. Written
+%% back onto pick -- and onto me, which pick is a copy of in that mode -- so
+%% every line of the summary below describes the FLOWN controls and not the
+%% seed ones. The stage-1 branch records dep and lof are deliberately left
+%% alone: they are the two-arc TRADE TABLE, measured at the seed azimuth, and
+%% only one of the two was ever refined:
+              flwn = arcRecord(traj,psiLaunch,loftSol,cutSol,cfg,rI,c, ...
+                               latTargetR,lonTargetR);
+              pick = mergeInto(pick,flwn);
+    if isMinE
+                me = mergeInto(me,flwn);
+        me.propLeftKg = me.mCutKg - cfg.mBurnout;
+        me.hApoKepM   = keplerApogee(c.rE + me.hBoM,me.vBoM,me.gamBoR,c) - c.rE;
+
+%% ...and the one-line grounds this mode reports itself on, rebuilt from the
+%% FLOWN cutoff and the FLOWN burnout energy. It was first written before stage
+%% 2 ran, from the minimisation's own record, which on a run where the azimuth
+%% moved is a cutoff and an energy the vehicle did not fly:
+          pickWhy  = sprintf(['MINIMISED, not selected: loft %.4f deg, burn cut at ' ...
+                              '%.6f of full, burnout energy %.6f MJ/kg'], ...
+                             rad2deg(me.loftR),me.cutFrac,me.epsBo./1e6);
+    end
 
 %% Phase boundaries. phaseRun records the boundary sample ONCE, carrying the
 %% outgoing phase's control, so the last row of phase k is that phase's
@@ -1296,38 +1611,51 @@ function [traj,info] = run_ballistic_target(opts)
         mat2str(unique(traj.phaseIdx).'));
 
 %% -----------------------------------------------------------------
-%% Independent check of the two solves, from the FLOWN state
+%% The miss, measured from the FLOWN state
 %% -----------------------------------------------------------------
-%% The miss is measured impact-to-target, not read back out of the solver's own
-%% bookkeeping. With zero bank the two agree, and the agreement is the evidence
-%% for the zero-cross-range claim rather than a restatement of it:
+%% missM is the great-circle distance impact-to-target, measured directly, and
+%% the two components are the same vector resolved in the aim frame. They agree
+%% BY CONSTRUCTION -- the components are the arc times a unit direction -- so the
+%% assert below is checking the arithmetic and not the physics, which is why it
+%% is an equality and not a tolerance a reader is invited to judge:
              latIm = traj.x(end,3);
              lonIm = traj.x(end,2);
              missM = rI.*coorbital.util.greatCircle(latIm,lonIm, ...
                                                     latTargetR,lonTargetR);
+             downM = misVec(1);
+           xTrackM = misVec(2);
+          missHypM = hypot(downM,xTrackM);
+    assert(abs(missHypM - missM) < 1e-6, ...
+        ['the miss components [%.6f, %.6f] m compose to %.6f m against the ' ...
+         '%.6f m measured directly; the aim frame is not a unit basis'], ...
+        downM,xTrackM,missHypM,missM);
+
+%% The achieved great-circle range, launch to impact, and its residual against
+%% the required one. NOT what the solve drives any more -- that is the miss above
+%% -- but it is the number a reader has always used to judge whether the loft
+%% angle came out sensible, and on a rotating or banked run the gap between it
+%% and the down-range component is itself informative: it is the part of the
+%% miss the old downrange-only solve could not see:
               resM = pick.rngM - rngReq;
 
-%% Cross-track offset of the impact point from the launch-to-target great
-%% circle, positive to the right of the intended course. The standard
-%% cross-track formula: the sine of the offset angle is the sine of the flown
-%% central angle times the sine of the bearing error at the launch point:
+%% How far the flown track ended up from the arc it left on. With rotation off
+%% and the bank zero this is zero to rounding; with either on it is the
+%% deflection the azimuth solve had to aim off against, so it is a measurement
+%% of the coupling rather than a caveat about it:
             angFly = coorbital.util.greatCircle(latLaunchR,lonLaunchR,latIm,lonIm);
             psiFly = coorbital.util.greatCircleBearing(latLaunchR,lonLaunchR, ...
                                                        latIm,lonIm);
             dPsiR  = wrapPi(psiFly - psiLaunch);
-           xTrackM = rI.*asin(sin(angFly).*sin(dPsiR));
-          missHypM = hypot(resM,xTrackM);
-        crossWarn  = abs(xTrackM) > tolRngM;
 
-%% The heading the vehicle actually left the pad on must be the bearing the
-%% closed form asked for, to machine precision -- x0(6) is written from
-%% psiLaunch above and ode45 never touches the initial condition, so any
-%% disagreement here means the state was assembled wrong:
-           psiSeed = traj.x(1,6);
-    assert(abs(wrapPi(psiSeed - psiLaunch)) < 1e-12, ...
+%% The heading the vehicle actually left the pad on must be the one the solve
+%% asked for, to machine precision -- flyLoft writes entry 6 of the state from it
+%% and ode45 never touches the initial condition, so any disagreement here means
+%% the launch state was assembled wrong:
+             psiX0 = traj.x(1,6);
+    assert(abs(wrapPi(psiX0 - psiLaunch)) < 1e-12, ...
         ['the flown initial heading %.15f rad is not the solved launch ' ...
          'azimuth %.15f rad; the launch state was assembled wrong'], ...
-        psiSeed,psiLaunch);
+        psiX0,psiLaunch);
 
 %% -----------------------------------------------------------------
 %% WHICH BRANCH DID IT ACTUALLY FLY
@@ -1458,10 +1786,8 @@ function [traj,info] = run_ballistic_target(opts)
 %% fault. Passing the full-burn case a NaN is deliberate: every comparison
 %% against NaN is false, so the cutoff clause simply cannot fire there:
               tCut = NaN;
-            meProp = 0;
     if isMinE
               tCut = me.tCutS;
-            meProp = me.nProp;
     end
         [why1,ok1] = whyBurnout(traj.t(kBO),massS(kBO),mBurnoutT,tMaxBoost,tCut);
         [why2,ok2] = whyApogee(traj.t(kApo) - traj.t(kBO),traj.t(kApo), ...
@@ -1470,20 +1796,27 @@ function [traj,info] = run_ballistic_target(opts)
                                traj.x(nS,1) - c.rE,hStopM,hStop,tMaxDesc);
              allOK = ok1 && ok2 && ok3;
 
-%% How far the ground under the target would have moved during this flight had
-%% the Earth been turning. Quantifies the non-rotating caveat instead of merely
-%% stating it, and it is quantified for BOTH branches because their flight times
-%% differ by a factor of nearly three. A branch that does not reach the target
-%% has no flight time, so the pair is only reported when both exist -- a NaN
-%% printed in that sentence would read as a measurement:
-          driftDep = c.omegaE.*rI.*cos(latTargetR).*dep.tFlyS;
-          driftLof = c.omegaE.*rI.*cos(latTargetR).*lof.tFlyS;
+%% THERE ARE DELIBERATELY NO EASTWARD-DRIFT FIGURES HERE ANY MORE, and the
+%% deletion is the point. This script used to compute
+%% c.omegaE*rI*cos(latTarget)*tFly for each branch -- how far the ground at the
+%% target's latitude sweeps east over that arc's flight, hundreds of kilometres
+%% -- and print the pair as "how much it would matter" that the Earth turns. It
+%% is not. It is the scale of a mechanism this file no longer claims: the state
+%% is Earth-fixed and the speed planet-relative, so the target does not travel
+%% relative to anything the solve can see. The quantity that IS the scale of the
+%% rotation effect is the deflection of the VEHICLE, and it is measured rather
+%% than derived -- seedMissM, and its cross-range component beside it. A
+%% retracted mechanism's number left standing under a corrected sentence is the
+%% harder error to notice of the two, because the prose reads right.
 
-%% Earth rotation is necessarily OFF from here down: earthSpin true is refused
-%% above, before the bracketing, and the assert at the head of the report
-%% re-checks it so that no paragraph below can describe a run it did not
-%% describe:
+%% Whether the Earth turned on this run. It decides which paragraph the
+%% limitations block prints, and it is read from env.omegaE rather than from the
+%% user block so that a run driven through opts cannot be described wrongly:
+           spinsUp = env.omegaE ~= 0;
            spinTxt = 'OFF';
+    if spinsUp
+           spinTxt = 'ON';
+    end
             sepTxt = 'booster JETTISONED at burnout';
     if isMinE
             sepTxt = 'WHOLE booster JETTISONED at cutoff, unburned propellant with it';
@@ -1503,16 +1836,6 @@ function [traj,info] = run_ballistic_target(opts)
       defaultAtmos = isequal(atmosFn,@coorbital.atmos.expAtmos);
        defaultGrav = isequal(gravFn,@coorbital.grav.sphereGrav);
        defaultProp = isequal(propFn,@coorbital.prop.constThrust);
-
-%% EVERY STATEMENT THE SUMMARY MAKES ABOUT THE AZIMUTH, the cross-range and the
-%% great-circle ground track is conditional on a non-rotating Earth. earthSpin
-%% true is refused above precisely so that the prose below cannot contradict the
-%% run it is describing; this re-checks the condition at the point of use rather
-%% than trusting a refusal two hundred lines away:
-    assert(env.omegaE == 0, ...
-        ['the summary is about to describe a closed-form azimuth on a ' ...
-         'non-rotating Earth while env.omegaE = %.6e rad/s; the earthSpin ' ...
-         'refusal above should have made this unreachable'],env.omegaE);
 
 %% Report:
     fprintf('\n');
@@ -1536,53 +1859,41 @@ function [traj,info] = run_ballistic_target(opts)
     fprintf('                                        r = %.3f km impact sphere)\n',rI./1000);
     fprintf('    achieved range   %10.3f %-5s  (great circle, launch to the flown impact)\n', ...
             pick.rngM./1000,'km');
-    fprintf('    range residual   %+10.2f %-5s  (achieved minus required, signed)\n',resM,'m');
+    fprintf('    range residual   %+10.2f %-5s  (achieved minus required, signed. NOT what the\n',resM,'m');
+    fprintf('                                        solve drives; see the two components below)\n');
     fprintf('    MISS DISTANCE    %10.2f %-5s  (great circle, impact point to target,\n', ...
             missM,'m');
     fprintf('                                        computed from the FLOWN state and not\n');
     fprintf('                                        from the solver''s own bookkeeping)\n');
-    fprintf('    tolerance        %10.2f %-5s  (requested on the achieved range)\n', ...
-            tolRngM,'m');
+    fprintf('    down-range miss  %+10.2f %-5s  (component along the intended course at the\n', ...
+            downM,'m');
+    fprintf('                                        target, positive LONG)\n');
+    fprintf('    cross-range miss %+10.2f %-5s  (component across it, positive RIGHT of\n', ...
+            xTrackM,'m');
+    fprintf('                                        course. BOTH are what the solve drives to\n');
+    fprintf('                                        zero, and they compose to the %.2f m miss)\n', ...
+            missHypM);
+    fprintf('    tolerance        %10.2f %-5s  (on EACH component; %.2f m on the total miss,\n', ...
+            tolAimM,'m',tolRngM);
+    fprintf('                                        which is what tolRangeKm asks for)\n');
     fprintf('\n');
-    fprintf('    launch azimuth   %10.6f %-5s  (clockwise from north, CLOSED FORM: the\n', ...
-            rad2deg(psiLaunch),'deg');
-    fprintf('                                        initial bearing of the launch-to-target\n');
-    fprintf('                                        great circle. No iteration)\n');
+    fprintf('    seed azimuth     %10.6f %-5s  (clockwise from north; the closed-form initial\n', ...
+            rad2deg(psiSeed),'deg');
+    fprintf('                                        bearing of the launch-to-target great\n');
+    fprintf('                                        circle, which is the GUESS)\n');
+    fprintf('    launch azimuth   %10.6f %-5s  (SOLVED, %+.6f deg from the seed)\n', ...
+            rad2deg(psiLaunch),'deg',rad2deg(wrapPi(psiLaunch - psiSeed)));
+    fprintf('    seed miss        %10.2f %-5s  (down-range %+.2f, cross-range %+.2f: where the\n', ...
+            seedMissM,'m',seedDwnM,seedXtkM);
+    fprintf('                                        seed azimuth and the stage-1 range control\n');
+    fprintf('                                        put the vehicle on their own)\n');
     fprintf('    flown azimuth    %10.6f %-5s  (bearing launch to impact, from the flown\n', ...
             rad2deg(psiFly),'deg');
-    fprintf('                                        state; %+.3e deg from the commanded one)\n', ...
+    fprintf('                                        state; %+.3e deg from the commanded one.\n', ...
             rad2deg(dPsiR));
-    fprintf('    cross-track      %+10.2f %-5s  (offset of the impact point from the\n', ...
-            xTrackM,'m');
-    fprintf('                                        launch-to-target great circle, positive\n');
-    fprintf('                                        right of course. THE SOLVE DOES NOT\n');
-    fprintf('                                        CONTROL THIS -- see the limitations)\n');
-    fprintf('    residual + cross %10.2f %-5s  (hypotenuse of the two above, against the\n', ...
-            missHypM,'m');
-    fprintf('                                        %.2f m miss measured directly. They\n',missM);
-    fprintf('                                        agree to %.2e m)\n',abs(missHypM - missM));
-    if crossWarn
-        fprintf('  *** WARNING ***  the impact point is %.2f km off the launch-to-target great\n', ...
-                abs(xTrackM)./1000);
-        fprintf('                   circle, more than the %.2f km range tolerance. The range\n', ...
-                tolRngM./1000);
-        fprintf('                   solve CONVERGED and the vehicle still missed.\n');
-        if bankRad ~= 0
-        fprintf('                   THE CAUSE IS THE %.1f deg BANK: a banked segment turns the\n', ...
-                bankAngle);
-        fprintf('                   heading and walks the track off the arc it left on. Set\n');
-        fprintf('                   bankAngle to zero, or accept the cross-range -- closing it\n');
-        fprintf('                   needs an outer azimuth iteration this script does not have.\n');
-        else
-        fprintf('                   THE BANK ANGLE IS ALREADY ZERO, so a banked segment is NOT\n');
-        fprintf('                   the cause and setting bankAngle to zero would change\n');
-        fprintf('                   nothing. An unbanked track over a NON-ROTATING sphere\n');
-        fprintf('                   cannot leave the great circle it departed on, and a\n');
-        fprintf('                   rotating one is refused above, so the sideways motion came\n');
-        fprintf('                   from neither. Look at the guidance schedules: something is\n');
-        fprintf('                   commanding a sigma other than bankAngle.\n');
-        end
-    end
+    fprintf('                                        Non-zero means the track was deflected off\n');
+    fprintf('                                        the arc it left on -- by rotation, by bank,\n');
+    fprintf('                                        or by both)\n');
     fprintf('\n');
     fprintf('  The range-versus-loft hump, bracketed before either branch was solved\n');
     fprintf('    max-range loft   %10.4f %-5s  (commanded terminal pitch attitude)\n', ...
@@ -1605,8 +1916,10 @@ function [traj,info] = run_ballistic_target(opts)
     fprintf('    loft bracket     %10.4f to %.4f deg   (searched; the maximum is INTERIOR,\n', ...
             loftMin,loftMax);
     fprintf('                                        which is what gives two branches at all)\n');
-    fprintf('    reachable        %10.3f to %.3f km   (union of the two branch bands)\n', ...
+    fprintf('    reachable        %10.3f to %.3f km   (union of the two branch bands, flown\n', ...
             rngMin./1000,rngMax./1000);
+    fprintf('                                        at the SEED azimuth, so indicative for the\n');
+    fprintf('                                        solved one rather than exact)\n');
     fprintf('    search cost      %10d %-5s  (%d coarse scan points after %d refinement(s),\n', ...
             mr.nEval,'',mr.nScan,mr.nRefine);
     fprintf('                                        %d golden-section steps, closed to %.4f deg)\n', ...
@@ -1622,7 +1935,9 @@ function [traj,info] = run_ballistic_target(opts)
         fprintf('                   tolLoftDeg, or move the target inside the envelope.\n');
     end
     fprintf('\n');
-    fprintf('  THE TWO ARCS THAT REACH THIS TARGET\n');
+    fprintf('  THE TWO ARCS THAT REACH THIS TARGET, both at the SEED azimuth\n');
+    fprintf('    Only the flown one was refined by the two-axis solve; this table is the\n');
+    fprintf('    TRADE, and the flown arc''s own solved numbers are above and below it.\n');
     fprintf('    %-22s %16s %16s\n','','depressed','lofted');
     fprintf('    %-22s %16s %16s\n','reaches the target', ...
             yesNo(dep.exists),yesNo(lof.exists));
@@ -1741,8 +2056,12 @@ function [traj,info] = run_ballistic_target(opts)
     fprintf('    %-22s %16.6f %16s\n','BURNOUT ENERGY (MJ/kg)',me.epsBo./1e6,'MINIMISED');
     fprintf('    %-22s %16.4f %16.2f\n','achieved range (km)', ...
             me.rngM./1000,me.rngM - rngReq);
-    fprintf('      the range residual is in METRES against a %.1f m constraint tolerance.\n', ...
+    fprintf('      the range residual is in METRES. The %.1f m tolerance quoted for the\n', ...
             tolRngMEM);
+    fprintf('      inner constraint governed STAGE 1, at the seed azimuth; what governs the\n');
+    fprintf('      figures above is the two-axis tolerance of %.1f m PER COMPONENT, because\n', ...
+            tolAimM);
+    fprintf('      stage 2 re-solved the cutoff beside the azimuth at the held loft angle.\n');
     fprintf('      %d scan points and %d golden-section steps closed the loft angle to\n', ...
             me.nScan,me.nGolden);
     fprintf('      %.4f deg, over %d propagations.\n',rad2deg(me.widthR),me.nProp);
@@ -1877,17 +2196,20 @@ function [traj,info] = run_ballistic_target(opts)
             loftedOrNot((traj.x(kApo,1) - c.rE)./pick.rngM));
     fprintf('    samples          %10d %-5s  (ode45 adaptive steps over 3 phases)\n',nS,'');
     fprintf('    propagations     %10d %-5s  (whole trajectories flown to produce this run:\n', ...
-            mr.nEval + 1 + dep.nProp + lof.nProp + meProp,'');
+            propOne + av.nEval + 1,'');
     fprintf('                                        %d bracketing the maximum, 1 re-flying it,\n', ...
             mr.nEval);
     if isMinE
     fprintf('                                        %d on the depressed branch, %d on the lofted,\n', ...
             dep.nProp,lof.nProp);
-    fprintf('                                        %d on the minimum-energy solve)\n',meProp);
+    fprintf('                                        %d on the minimum-energy solve,\n',meProp);
     else
-    fprintf('                                        %d on the depressed branch, %d on the lofted)\n', ...
+    fprintf('                                        %d on the depressed branch, %d on the lofted,\n', ...
             dep.nProp,lof.nProp);
     end
+    fprintf('                                        %d in the two-axis aim solve and 1 to re-fly\n', ...
+            av.nEval);
+    fprintf('                                        the answer)\n');
     fprintf('\n');
     fprintf('  Impact\n');
     fprintf('    altitude         %10.6f %-5s  (%+.2e m from the %.3f km stop, event residual)\n', ...
@@ -1911,47 +2233,81 @@ function [traj,info] = run_ballistic_target(opts)
     fprintf('    re-entry decel   %10.2f %-5s  (%.2f m/s^2 aero only, at t = %.1f s, h = %.2f km)\n', ...
             nReMax,'g',nReMax.*c.g0,traj.t(kNR),hKm(kNR));
     fprintf('\n');
-    fprintf('  LIMITATIONS OF THIS TARGETING SOLUTION\n');
-    fprintf('    1. THE AZIMUTH IS EXACT ONLY FOR A NON-ROTATING EARTH, which is why earthSpin\n');
-    fprintf('       true is declined at the top of this script. This run has Earth rotation %s,\n',spinTxt);
-    fprintf('       env.omegaE = %.6e rad/s, so the ground track of an unbanked\n',env.omegaE);
-    fprintf('       trajectory is a great circle and the initial bearing of the\n');
-    fprintf('       launch-to-target arc is the WHOLE answer -- one closed-form call, no\n');
-    fprintf('       iteration. Turn the Earth on and it stops being the answer, which is what\n');
-    fprintf('       the refusal is for.\n');
-    if bothHere
-    fprintf('       The two branches show how much it would matter: the ground under the\n');
-    fprintf('       target sweeps %.0f km east during the depressed arc''s %.0f s and %.0f km\n', ...
-            driftDep./1000,dep.tFlyS,driftLof./1000);
-    fprintf('       during the lofted arc''s %.0f s, so the aim point is not even the same for\n', ...
-            lof.tFlyS);
-    fprintf('       the two arcs and the outer azimuth iteration this script lacks would have\n');
-    fprintf('       to run PER BRANCH. Rotating-Earth targeting is out of scope for it.\n');
+    fprintf('  WHAT THIS TARGETING SOLUTION IS, AND WHAT IT IS NOT\n');
+    fprintf('    1. THE AZIMUTH IS SOLVED, NOT CLOSED FORM. The closed-form great-circle\n');
+    fprintf('       bearing is only the SEED. Earth rotation is %s on this run, env.omegaE =\n',spinTxt);
+    fprintf('       %.6e rad/s, and the state is EARTH-FIXED with a planet-relative\n',env.omegaE);
+    fprintf('       speed, so the target never slides east under the vehicle -- it sits still,\n');
+    fprintf('       and rotation instead DEFLECTS THE VEHICLE off the arc it left on.\n');
+    if spinsUp
+    fprintf('       IT IS MODELLED ON THIS RUN, and the size of it is MEASURED and not\n');
+    fprintf('       derived: the seed azimuth alone left the vehicle %.2f km from the target,\n', ...
+            seedMissM./1000);
+    fprintf('       %.2f km of that crosswise. Aiming off by %+.6f deg brought it to %.2f m.\n', ...
+            abs(seedXtkM)./1000,rad2deg(wrapPi(psiLaunch - psiSeed)),missM);
+    else
+    fprintf('       IT IS NOT MODELLED ON THIS RUN, because earthSpin is false. Set it true and\n');
+    fprintf('       the case is flown, not refused: on the shipped geometry the deflection is\n');
+    fprintf('       463.211 km of miss, 462.870 km of it crosswise, and the solve removes it.\n');
     end
-    fprintf('    2. THE MISS IS THE RESIDUAL OF THE RANGE SOLVE, ALONG THE GREAT CIRCLE.\n');
-    fprintf('       Bisection matches a DISTANCE; nothing in it steers sideways.\n');
+    fprintf('    2. THE SOLVE CONTROLS BOTH AXES. Down-range and cross-range are driven to zero\n');
+    fprintf('       together by a damped Newton on the launch azimuth and the mode''s own range\n');
+    fprintf('       control, so cross-range is a MEASUREMENT of the solve here and not a caveat\n');
+    fprintf('       about it.\n');
     if bankRad ~= 0
     fprintf('       THIS RUN COMMANDS A NON-ZERO BANK of %.1f deg, so the ground track is NOT\n', ...
             bankAngle);
-    fprintf('       the launch-to-target great circle and the range solve cannot see the\n');
-    fprintf('       difference. Measured on this run: %.2f m of cross-track offset against a\n', ...
+    fprintf('       the launch-to-target great circle and a downrange-only solve could not see\n');
+    fprintf('       the difference. Measured on this run: the seed put the vehicle %.2f m off,\n', ...
+            seedMissM);
+    fprintf('       %.2f m of it crosswise, and the second control closed it to %.2f m.\n', ...
+            abs(seedXtkM),missM);
+    elseif spinsUp
+    fprintf('       THE BANK ANGLE IS ZERO ON THIS RUN, so the %.2f m of cross-range the seed\n', ...
+            abs(seedXtkM));
+    fprintf('       left came ENTIRELY FROM THE ROTATION and not from any commanded turn. It is\n');
+    fprintf('       now %.2f m. Bank as well and the two effects simply add into the same\n', ...
             abs(xTrackM));
-    fprintf('       %.2f m range residual, for a %.2f m total miss.\n',abs(resM),missM);
-    elseif crossWarn
-    fprintf('       Cross-range came out at %.2e m WITH THE BANK ANGLE AT ZERO, which the\n', ...
-            abs(xTrackM));
-    fprintf('       WARNING above already declines to blame on a bank. The sentence normally\n');
-    fprintf('       printed here -- that an unbanked track over a non-rotating sphere never\n');
-    fprintf('       leaves the great circle it departed on -- is CONTRADICTED by that\n');
-    fprintf('       measurement, so it is not printed. Read the warning instead.\n');
+    fprintf('       residual; the solve does not need to tell them apart.\n');
     else
-    fprintf('       Cross-range came out at %.2e m here because the bank angle is zero\n', ...
-            abs(xTrackM));
-    fprintf('       throughout, and an unbanked trajectory over a non-rotating sphere never\n');
-    fprintf('       leaves the great circle it departed on. THAT IS A PROPERTY OF THIS\n');
-    fprintf('       CONFIGURATION, NOT A GENERAL GUARANTEE. It is measured above, not assumed.\n');
+    fprintf('       THE BANK ANGLE IS ZERO ON THIS RUN and rotation is off, so the seed left\n');
+    fprintf('       only %.2e m of cross-range: an unbanked track over a non-rotating sphere\n', ...
+            abs(seedXtkM));
+    fprintf('       never leaves the great circle it departed on, so the seed azimuth WAS the\n');
+    fprintf('       answer here and the Newton returned it unchanged.\n');
+    fprintf('       THAT IS A PROPERTY OF THIS CONFIGURATION, NOT A GENERAL GUARANTEE, and it\n');
+    fprintf('       is measured above rather than assumed. Bank a phase, or turn the Earth on,\n');
+    fprintf('       and the track curves off the arc: at earthSpin true this geometry puts the\n');
+    fprintf('       seed 463.2 km wide, and the azimuth is aimed off to cancel it.\n');
     end
-    fprintf('    3. THE LOFT ANGLE IS A COMMANDED ATTITUDE, NOT THE BURNOUT GAMMA. The %.1f deg\n', ...
+    fprintf('    3. THE NEWTON IS LOCAL, AND WHAT IT WAS SEEDED FROM WAS MEASURED AT ONE\n');
+    fprintf('       AZIMUTH. The hump, the CERTIFIED maximiser interval, the two monotone\n');
+    fprintf('       branch brackets and the reachable band above were all flown at the SEED\n');
+    fprintf('       azimuth -- range against loft is a curve there and a surface otherwise, and\n');
+    fprintf('       a golden section on a surface certifies nothing. They are therefore\n');
+    fprintf('       indicative for the %.6f deg azimuth the solve settled on rather than\n', ...
+            rad2deg(psiLaunch));
+    fprintf('       exact -- it moved %+.6f deg off the seed -- and\n', ...
+            rad2deg(wrapPi(psiLaunch - psiSeed)));
+    fprintf('       the too-far and too-close refusals are approximate by the same amount. The\n');
+    fprintf('       Newton itself is seeded, damped and capped at 10 deg of heading per\n');
+    fprintf('       iteration; when it cannot reach the tolerance the run is REFUSED with the\n');
+    fprintf('       best point it found, never returned as a near miss. The tolerance is\n');
+    fprintf('       %.2f m PER COMPONENT so the two together stay inside the %.2f m tolRangeKm\n', ...
+            tolAimM,tolRngM);
+    fprintf('       asks for.\n');
+    if isMinE
+    fprintf('       THE LOFT ANGLE WAS HELD, NOT SOLVED, in stage 2 of this mode: the two-axis\n');
+    fprintf('       Newton moved the azimuth and the CUTOFF FRACTION and left the loft angle at\n');
+    fprintf('       the %.4f deg the energy minimisation settled on at the seed azimuth. The\n', ...
+            rad2deg(loftSol));
+    fprintf('       constraint is therefore met exactly and the MINIMISATION is the part that\n');
+    fprintf('       is indicative: the valley evidence below was measured at the seed azimuth,\n');
+    fprintf('       and the valley is flat at its bottom, so a %+.6f deg change of aim moves\n', ...
+            rad2deg(wrapPi(psiLaunch - psiSeed)));
+    fprintf('       the minimising loft angle by far less than it moves the energy.\n');
+    end
+    fprintf('    4. THE LOFT ANGLE IS A COMMANDED ATTITUDE, NOT THE BURNOUT GAMMA. The %.1f deg\n', ...
             alphaMax);
     fprintf('       clamp on angle of attack limits how fast the flight path can be pushed\n');
     fprintf('       over, so the %.4f deg commanded here produced a %.4f deg burnout flight\n', ...
@@ -2043,12 +2399,22 @@ info.branchTimeAgrees = flownAgree;
        info.rngAchM = pick.rngM;
          info.missM = missM;
         info.residM = resM;
+         info.downM = downM;
        info.xTrackM = xTrackM;
       info.missHypM = missHypM;
-     info.crossWarn = crossWarn;
+      info.psiSeed  = psiSeed;
      info.psiLaunch = psiLaunch;
+      info.dPsiAim  = wrapPi(psiLaunch - psiSeed);
         info.psiFly = psiFly;
          info.dPsiR = dPsiR;
+    info.seedMissM  = seedMissM;
+    info.seedDownM  = seedDwnM;
+   info.seedXTrackM = seedXtkM;
+      info.tolAimM  = tolAimM;
+      info.aimIter  = av.iterations;
+      info.aimEval  = av.nEval;
+      info.aimInfo  = av;
+      info.cutFrac  = cutSol;
    info.loftStarDeg = rad2deg(loftStarR);
        info.rngMaxM = rngMax;
        info.rngMinM = rngMin;
@@ -2084,8 +2450,6 @@ info.branchTimeAgrees = flownAgree;
       info.qReMax   = qReMax;
       info.nBstMax  = nBstMax;
       info.nReMax   = nReMax;
-       info.driftDepM = driftDep;
-       info.driftLofM = driftLof;
         info.stopOK = allOK;
        info.stopWhy = {why1;why2;why3};
 
@@ -2110,8 +2474,11 @@ info.branchTimeAgrees = flownAgree;
 %% The SAME sum the summary prints above, from the SAME fields. nProp counts
 %% whole trajectories flown, and a branch costs its solver evaluations plus the
 %% one propagation that re-creates the state history at the converged loft
-%% angle, which is br.nProp and not br.nEval:
-        info.nProp  = mr.nEval + 1 + dep.nProp + lof.nProp + meProp;
+%% angle, which is br.nProp and not br.nEval. propOne is everything stage 1
+%% spent; the two-axis solve and the single re-flight of its answer are what
+%% stage 2 adds:
+      info.propOne  = propOne;
+        info.nProp  = propOne + av.nEval + 1;
 
 %% Vertical exaggeration for the globe. TRUE SCALE IS THE SHIPPED DEFAULT: the
 %% movie carries a true-scale altitude inset, which is what the globe used to
@@ -2292,14 +2659,21 @@ function ph = buildPhases(loftR,cutFrac,cfg)
          ph(3).veh = cfg.coastVeh;
 end
 
-function [rngM,traj] = flyLoft(loftR,cutFrac,cfg,rI)
+function [rngM,traj] = flyLoft(psiL,loftR,cutFrac,cfg,rI)
 %% Purpose:
 %
-%  Fly the whole boost-coast-descent chain at one loft angle and one cutoff
-%  fraction and return the great-circle surface range from the launch point to
-%  the impact point. This is the function the max-range search maximises, the
-%  function coorbital.util.rangeSolve bisects on at BOTH levels of the
-%  minimum-energy solve, and the only place any of them touches the physics.
+%  Fly the whole boost-coast-descent chain at one launch azimuth, one loft angle
+%  and one cutoff fraction and return the great-circle surface range from the
+%  launch point to the impact point. This is the function the max-range search
+%  maximises, the function coorbital.util.rangeSolve bisects on at BOTH levels of
+%  the minimum-energy solve, the function flyMiss builds the two-axis residual
+%  from, and the only place any of them touches the physics.
+%
+%  THE AZIMUTH IS WRITTEN INTO THE STATE, NOT REBUILT AROUND IT. cfg.x0 is a
+%  launch-state TEMPLATE and entry 6 is the heading, so a trial flight differs
+%  from the seed in the azimuth and in nothing else. Assembling a fresh launch
+%  state here would be a second copy of the seven lines that build it, free to
+%  drift from the first.
 %
 %  A PROPAGATION THAT DID NOT COMPLETE IS AN ERROR, NOT A SHORT RANGE. If a
 %  phase runs out of horizon -- the usual cause being a loft angle so depressed
@@ -2325,6 +2699,9 @@ function [rngM,traj] = flyLoft(loftR,cutFrac,cfg,rI)
 %
 %% Inputs:
 %
+%  psiL             [1 x 1]                     Launch azimuth (rad), clockwise
+%                                               from north
+%
 %  loftR            [1 x 1]                     Commanded terminal pitch
 %                                               attitude (rad)
 %
@@ -2333,7 +2710,8 @@ function [rngM,traj] = flyLoft(loftR,cutFrac,cfg,rI)
 %                                               1 commands no cutoff
 %
 %  cfg              Struct                      Immutable configuration; see
-%                                               buildPhases, plus x0 [7 x 1],
+%                                               buildPhases, plus x0 [7 x 1]
+%                                               (the launch-state TEMPLATE),
 %                                               env (struct), rE (m), lat0
 %                                               (rad), lon0 (rad)
 %
@@ -2351,11 +2729,15 @@ function [rngM,traj] = flyLoft(loftR,cutFrac,cfg,rI)
 %
 %% Revision History:
 %  Michael Casey                                                08/07/2026
+%  Michael Casey  Azimuth is now an argument, not a fixed
+%                 property of cfg.x0                            08/08/2026
 %  Copyright 2026 Coorbital, Inc.
 %% ------------------------ Begin Code Sequence ---------------------------
 
+              xLau = cfg.x0;
+           xLau(6) = psiL;
                 ph = buildPhases(loftR,cutFrac,cfg);
-              traj = coorbital.prop.phaseRun(ph,cfg.x0,cfg.bst,cfg.env);
+              traj = coorbital.prop.phaseRun(ph,xLau,cfg.bst,cfg.env);
 
 %% All three phases must have run at all, before any of their endpoints can be
 %% asked about:
@@ -2363,14 +2745,16 @@ function [rngM,traj] = flyLoft(loftR,cutFrac,cfg,rI)
              nPhRn = numel(unique(traj.phaseIdx));
     if nPhRn < 3
         error('coorbital:runBallisticTarget:propagationIncomplete', ...
-            ['A loft angle of %.6f deg at a cutoff fraction of %.6f produced ' ...
-             '%d of 3 phases and ended at h = %.3f km against a %.3f km stop ' ...
-             'altitude. The flight did not complete, so its range is ' ...
-             'meaningless to the search. Two usual causes: a loft angle so ' ...
-             'depressed that the vehicle burns out already descending and the ' ...
-             'apogee event never fires -- raise loftMin; or a cutoff so early ' ...
-             'that it never leaves the atmosphere -- raise cutFracMin.'], ...
-            rad2deg(loftR),cutFrac,nPhRn,hEndM./1000,cfg.hStop./1000);
+            ['A loft angle of %.6f deg at a cutoff fraction of %.6f on a ' ...
+             '%.6f deg azimuth produced %d of 3 phases and ended at ' ...
+             'h = %.3f km against a %.3f km stop altitude. The flight did not ' ...
+             'complete, so its range is meaningless to the search. Two usual ' ...
+             'causes: a loft angle so depressed that the vehicle burns out ' ...
+             'already descending and the apogee event never fires -- raise ' ...
+             'loftMin; or a cutoff so early that it never leaves the ' ...
+             'atmosphere -- raise cutFracMin.'], ...
+            rad2deg(loftR),cutFrac,rad2deg(psiL),nPhRn,hEndM./1000, ...
+            cfg.hStop./1000);
     end
 
 %% Each phase against the event it was supposed to end on. The budgets are the
@@ -2405,17 +2789,280 @@ function [rngM,traj] = flyLoft(loftR,cutFrac,cfg,rI)
                               cfg.hStop./1000,hEndM./1000,rad2deg(traj.x(end,5)));
     if ~(boostOK && coastOK && impactOK)
         error('coorbital:runBallisticTarget:propagationIncomplete', ...
-            ['A loft angle of %.6f deg at a cutoff fraction of %.6f produced a ' ...
-             'trajectory that did not end as intended, so its range is ' ...
-             'meaningless to the search. boost %s: %s. coast %s: %s. impact ' ...
-             '%s: %s. Three phase labels and a final altitude do not prove a ' ...
-             'completed flight, which is why each is checked against its own ' ...
-             'event.'],rad2deg(loftR),cutFrac,okWord(boostOK),boostTx, ...
+            ['A loft angle of %.6f deg at a cutoff fraction of %.6f on a ' ...
+             '%.6f deg azimuth produced a trajectory that did not end as ' ...
+             'intended, so its range is meaningless to the search. boost %s: ' ...
+             '%s. coast %s: %s. impact %s: %s. Three phase labels and a final ' ...
+             'altitude do not prove a completed flight, which is why each is ' ...
+             'checked against its own event.'], ...
+            rad2deg(loftR),cutFrac,rad2deg(psiL),okWord(boostOK),boostTx, ...
             okWord(coastOK),coastTx,okWord(impactOK),impactTx);
     end
 
               rngM = rI.*coorbital.util.greatCircle(cfg.lat0,cfg.lon0, ...
                                                     traj.x(end,3),traj.x(end,2));
+end
+
+function [fMiss,traj] = flyMiss(psiL,loftR,cutFrac,cfg,aim)
+%% Purpose:
+%
+%  The two-component residual coorbital.util.aimSolve drives to zero in stage 2:
+%  fly the chain for one control triple and return the miss vector from the
+%  TARGET to the impact point, resolved in the aim frame. Sibling of flyLoft and
+%  built on it, differing only in what it measures at the end -- a distance from
+%  the LAUNCH point there, a two-component offset from the TARGET here.
+%
+%  WHY A VECTOR MISS AND NOT A RANGE RESIDUAL BESIDE A CROSS-TRACK OFFSET. The
+%  two carry the same information and one of them is better. Both components of
+%  this one zero is exactly "the impact point IS the target", with no reference
+%  to a great circle the flown track no longer follows once the Earth turns or a
+%  bank is commanded; and the Jacobian is nearly diagonal, because the azimuth
+%  moves the impact point almost purely crosswise and the range control almost
+%  purely along the course. A range-residual pairing would keep quoting an arc
+%  the vehicle is not on and would mix both controls into both residuals.
+%
+%  ONLY TWO OF THE THREE ARGUMENTS ARE EVER SOLVED FOR AT ONCE. The caller binds
+%  the third: the two full-burn branches hold cutFrac at 1 and solve
+%  (psiL,loftR), while minimum-energy holds loftR at the angle its minimisation
+%  settled on and solves (psiL,cutFrac). Which two is a property of the MODE, not
+%  of this function, so this one takes all three and closes over none of them.
+%
+%  A CUTOFF FRACTION ABOVE 1 IS REFUSED HERE AND NOT CLAMPED, and the reason is
+%  that clamping would be silent. buildPhases reads any value at or above 1 as
+%  "no commanded cutoff", so a Newton step that overshot past a full burn would
+%  be handed back the FULL-BURN trajectory for a control it did not ask for --
+%  the residual would go flat in that direction, the Jacobian column with it,
+%  and the solve would stall or step wildly with nothing in the record saying
+%  why. Refusing turns it into an infeasible trial, which aimSolve already knows
+%  how to handle: it halves the step and tries again. The unbounded search is
+%  otherwise unavoidable -- aimSolve is a root finder and has no box.
+%
+%% Inputs:
+%
+%  psiL             [1 x 1]                     Launch azimuth (rad), clockwise
+%                                               from north
+%
+%  loftR            [1 x 1]                     Commanded terminal pitch
+%                                               attitude (rad)
+%
+%  cutFrac          [1 x 1]                     Thrust-termination time as a
+%                                               fraction of the full burn (-);
+%                                               1 commands no cutoff
+%
+%  cfg              Struct                      Immutable configuration; see
+%                                               flyLoft
+%
+%  aim              Struct                      The aim frame; see missVector
+%
+%% Outputs:
+%
+%  fMiss            [2 x 1]                     Down-range and cross-range
+%                                               components of the miss (m); see
+%                                               missVector. Throws
+%                                               coorbital:runBallisticTarget:propagationIncomplete
+%                                               for a control set that does not
+%                                               fly, which aimSolve treats as an
+%                                               infeasible trial
+%
+%  traj             Struct                      The trajectory itself, from
+%                                               coorbital.prop.phaseRun
+%
+%% Revision History:
+%  Michael Casey                                                08/08/2026
+%  Copyright 2026 Coorbital, Inc.
+%% ------------------------ Begin Code Sequence ---------------------------
+
+    if cutFrac > 1
+        error('coorbital:runBallisticTarget:cutoffAboveFullBurn', ...
+            ['A cutoff fraction of %.6f asks for more burn than the booster ' ...
+             'carries. It is refused rather than clamped to 1, because ' ...
+             'buildPhases reads 1 as "no commanded cutoff" and a clamp would ' ...
+             'silently return the full-burn trajectory for a control the ' ...
+             'solver did not ask for.'],cutFrac);
+    end
+            [~,traj] = flyLoft(psiL,loftR,cutFrac,cfg,aim.rI);
+               fMiss = missVector(traj.x(end,3),traj.x(end,2),aim);
+end
+
+function fMiss = missVector(latIm,lonIm,aim)
+%% Purpose:
+%
+%  The miss vector from the TARGET to the IMPACT POINT, as surface distances
+%  along and across the intended course. Zero in both components is exactly
+%  coincidence, and hypot of the two is exactly the great-circle miss distance,
+%  so the decomposition loses nothing and adds a direction.
+%
+%  THE COMPONENTS ARE FORMED DIRECTLY, NOT FROM A BEARING AND A DISTANCE. The
+%  pair (wNrth,wEast) below is the same pair coorbital.util.greatCircleBearing
+%  forms before it takes their arctangent: the northward and eastward parts of
+%  the direction from the target to the impact point, both scaled by the sine of
+%  the central angle between them. Taken as COMPONENTS they are smooth straight
+%  through coincidence, which is where a bearing does not exist at all --
+%  greatCircleBearing rightly REFUSES there, and a residual that threw as it
+%  converged would have the Newton halving its way into an infeasible point
+%  every time it succeeded.
+%
+%  THE MAGNITUDE COMES FROM THE HAVERSINE, NOT FROM ASIN. hypot(wNrth,wEast) is
+%  sin(Delta), and asin of it would fold every central angle past 90 degrees
+%  back on itself -- reachable early in a solve, when the trial controls can land
+%  most of a hemisphere away. coorbital.util.greatCircle gives Delta over the
+%  whole range, so the components are rescaled by Delta/sin(Delta) instead: the
+%  direction is taken from the pair, the length from the haversine.
+%
+%  SIGNS. Down-range is positive LONG -- the impact point is beyond the target
+%  along the course -- and cross-range is positive RIGHT of that course.
+%
+%  This is the same construction HGV/run_target uses, deliberately duplicated
+%  rather than shared: the two scripts are standalone worked examples that a
+%  reader is meant to be able to follow end to end, and neither imports local
+%  machinery from the other. If a third caller ever wants it, it belongs in
+%  +coorbital/+util and all three should take it from there.
+%
+%% Inputs:
+%
+%  latIm            [1 x 1]                     Impact latitude (rad)
+%
+%  lonIm            [1 x 1]                     Impact longitude (rad)
+%
+%  aim              Struct                      The aim frame, built once by the
+%                                               caller and constant for the
+%                                               whole solve:
+%                                               latT [1 x 1] target latitude
+%                                                    (rad)
+%                                               lonT [1 x 1] target longitude
+%                                                    (rad)
+%                                               psiC [1 x 1] course of the
+%                                                    launch-to-target great
+%                                                    circle AT THE TARGET (rad),
+%                                                    clockwise from north
+%                                               rI   [1 x 1] radius of the
+%                                                    impact sphere (m)
+%
+%% Outputs:
+%
+%  fMiss            [2 x 1]                     [down-range; cross-range]
+%                                               components of the miss (m)
+%
+%% References:
+%   [1] Bowditch, N., "The American Practical Navigator," Pub. No. 9, NGA,
+%       chapter on Great-Circle Sailing. The four-parts course components are
+%       the same ones coorbital.util.greatCircleBearing builds.
+%
+%% Revision History:
+%  Michael Casey                                                08/08/2026
+%  Copyright 2026 Coorbital, Inc.
+%% ------------------------ Begin Code Sequence ---------------------------
+
+             dLonI = lonIm - aim.lonT;
+             wEast = sin(dLonI).*cos(latIm);
+             wNrth = cos(aim.latT).*sin(latIm) - ...
+                     sin(aim.latT).*cos(latIm).*cos(dLonI);
+
+%% Direction from the pair, length from the haversine, joined by the ratio
+%% Delta/sin(Delta). The guard is on the DIVISOR and not on the answer, and
+%% sin(Delta) vanishes at both ends of the arc rather than at one:
+%%
+%%    AT COINCIDENCE, Delta = 0, the ratio tends to unity and the components are
+%%    zero anyway, so unity is the right value and the branch is exact.
+%%
+%%    AT THE ANTIPODE, Delta = pi, sin(Delta) is analytically zero again and
+%%    this branch would report an exact hit on a hemisphere of miss. It is left
+%%    unguarded deliberately: the zero is ANALYTIC, not numerical -- sin(pi)
+%%    evaluates to 1.22e-16 rather than to zero -- so sMag > 0 holds, the ratio
+%%    is taken and the magnitude comes back right, with a direction that is
+%%    meaningless because every great circle joins an antipodal pair. An elseif
+%%    here would be a branch no double can reach, and an unreachable guard reads
+%%    as protection that was never exercised. What actually keeps this problem
+%%    away from the antipode is the envelope refusal above: a target that far is
+%%    unreachable and never gets as far as the Newton:
+              sMag = hypot(wNrth,wEast);
+              dAng = coorbital.util.greatCircle(aim.latT,aim.lonT,latIm,lonIm);
+               kSc = 1;
+    if sMag > 0
+               kSc = dAng./sMag;
+    end
+              arcN = aim.rI.*kSc.*wNrth;
+              arcE = aim.rI.*kSc.*wEast;
+
+%% Rotate north-east into along-across. A course psiC clockwise from north
+%% points along cos(psiC) north + sin(psiC) east, and right of it is the same
+%% turned a further quarter turn:
+             fMiss = [ arcN.*cos(aim.psiC) + arcE.*sin(aim.psiC); ...
+                      -arcN.*sin(aim.psiC) + arcE.*cos(aim.psiC)];
+end
+
+function o = arcRecord(traj,psiL,loftR,cutFrac,cfg,rI,c,latTgR,lonTgR)
+%% Purpose:
+%
+%  Reduce ONE flown trajectory to the scalar quantities every record in this
+%  file is built from -- burnout state, apogee, impact, burnout specific energy,
+%  miss -- so that the branch solves, the minimum-energy solve and the final
+%  re-flight all describe an arc in the same words and cannot drift apart.
+%
+%  IT MEASURES; IT DOES NOT FLY. The caller supplies the trajectory, which is
+%  what lets the same reduction serve a propagation made for a bisection, one
+%  made for a minimisation, and the single re-flight at the solved controls.
+%
+%% Inputs:
+%
+%  traj             Struct                      Trajectory from
+%                                               coorbital.prop.phaseRun
+%
+%  psiL             [1 x 1]                     Launch azimuth flown (rad)
+%
+%  loftR            [1 x 1]                     Loft angle flown (rad)
+%
+%  cutFrac          [1 x 1]                     Cutoff fraction flown (-)
+%
+%  cfg              Struct                      Immutable configuration; lat0
+%                                               and lon0 are read
+%
+%  rI               [1 x 1]                     Impact sphere radius (m)
+%
+%  c                Struct                      coorbital.util.missileConst
+%
+%  latTgR, lonTgR   [1 x 1]                     Target coordinates (rad)
+%
+%% Outputs:
+%
+%  o                Struct                      psiL, loftR, cutFrac (controls);
+%                                               tCutS (s); rngM, missM (m);
+%                                               gamBoR (rad); vBoM (m/s); hBoM
+%                                               (m); mCutKg (kg); hApoM (m);
+%                                               tFlyS (s); vImpM (m/s); gamImR
+%                                               (rad); epsBo (J/kg); traj; ok
+%                                               (logical, always true)
+%
+%% Revision History:
+%  Michael Casey                                                08/08/2026
+%  Copyright 2026 Coorbital, Inc.
+%% ------------------------ Begin Code Sequence ---------------------------
+
+               kBO = find(traj.phaseIdx == 1,1,'last');
+              kApo = find(traj.phaseIdx == 2,1,'last');
+            o.traj = traj;
+            o.psiL = psiL;
+           o.loftR = loftR;
+         o.cutFrac = cutFrac;
+           o.tCutS = traj.t(kBO);
+            o.rngM = rI.*coorbital.util.greatCircle(cfg.lat0,cfg.lon0, ...
+                                                    traj.x(end,3),traj.x(end,2));
+          o.gamBoR = traj.x(kBO,5);
+            o.vBoM = traj.x(kBO,4);
+            o.hBoM = traj.x(kBO,1) - c.rE;
+          o.mCutKg = traj.x(kBO,7);
+           o.hApoM = traj.x(kApo,1) - c.rE;
+           o.tFlyS = traj.t(end);
+           o.vImpM = traj.x(end,4);
+          o.gamImR = traj.x(end,5);
+
+%% Specific orbital energy at burnout, the quantity the minimum-energy
+%% discussion in the header turns on. Measured from the flown burnout state, so
+%% it carries whatever the boost actually lost to drag and to gravity:
+           o.epsBo = traj.x(kBO,4).^2./2 - c.muE./traj.x(kBO,1);
+           o.missM = rI.*coorbital.util.greatCircle(traj.x(end,3),traj.x(end,2), ...
+                                                    latTgR,lonTgR);
+              o.ok = true;
 end
 
 function [loftStarR,rngStar,mr] = maxRangeLoft(fRange,loftLoR,loftHiR,nScan,tolLoftR)
@@ -2798,8 +3445,8 @@ function name = branchOfLoft(loftR,aL,bL,tolLoftR)
     end
 end
 
-function br = solveBranch(name,rngReq,fRange,loftAR,loftBR,tolRngM,cfg,rI,c, ...
-                          latTgR,lonTgR,aMaxR,bMaxR,tolLoftR)
+function br = solveBranch(name,psiL,rngReq,fRange,loftAR,loftBR,tolRngM,cfg, ...
+                          rI,c,latTgR,lonTgR,aMaxR,bMaxR,tolLoftR)
 %% Purpose:
 %
 %  Solve ONE branch of the two-branch loft problem and gather everything the
@@ -2823,6 +3470,13 @@ function br = solveBranch(name,rngReq,fRange,loftAR,loftBR,tolRngM,cfg,rI,c, ...
 %
 %  name             Char [1 x n]                'lofted' or 'depressed', for
 %                                               the messages
+%
+%  psiL             [1 x 1]                     Launch azimuth (rad) fRange is
+%                                               bound to, carried so the kept
+%                                               record says which one it was
+%                                               flown at. It is the SEED
+%                                               azimuth; the cross-range half of
+%                                               the aim is closed afterwards
 %
 %  rngReq           [1 x 1]                     Required surface range (m)
 %
@@ -2915,35 +3569,21 @@ function br = solveBranch(name,rngReq,fRange,loftAR,loftBR,tolRngM,cfg,rI,c, ...
         return;
     end
 
-%% One propagation at the converged loft angle, kept:
+%% One propagation at the converged loft angle, kept, and reduced by the same
+%% arcRecord the minimum-energy solve and the final re-flight use:
       [rngFly,traj]   = fRange(loftR);
     assert(abs(rngFly - rngAch) < 1e-6, ...
         ['re-flying the solved %s loft angle gave %.6f m of range against the ' ...
          'solver''s %.6f m; the propagation is not repeatable and nothing ' ...
          'below can be trusted'],name,rngFly,rngAch);
-           br.traj    = traj;
            br.nProp   = sv.nEval + 1;
            br.why     = 'reaches the target';
-              kBO     = find(traj.phaseIdx == 1,1,'last');
-              kApo    = find(traj.phaseIdx == 2,1,'last');
-           br.missM   = rI.*coorbital.util.greatCircle(traj.x(end,3),traj.x(end,2), ...
-                                                       latTgR,lonTgR);
-           br.hApoM   = traj.x(kApo,1) - c.rE;
-           br.tFlyS   = traj.t(end);
-           br.vImpM   = traj.x(end,4);
-           br.gamImR  = traj.x(end,5);
-           br.gamBoR  = traj.x(kBO,5);
-           br.vBoM    = traj.x(kBO,4);
-           br.hBoM    = traj.x(kBO,1) - c.rE;
-
-%% Specific orbital energy at burnout, the quantity the minimum-energy
-%% discussion in the header turns on. Measured from the flown burnout state, so
-%% it carries whatever the boost actually lost to drag and to gravity:
-           br.epsBo   = traj.x(kBO,4).^2./2 - c.muE./traj.x(kBO,1);
+                br    = mergeInto(br,arcRecord(traj,psiL,loftR,1,cfg,rI,c, ...
+                                               latTgR,lonTgR));
         br.measured   = branchOfLoft(loftR,aMaxR,bMaxR,tolLoftR);
 end
 
-function me = minEnergySolve(rngReq,cfg,rI,c,latTgR,lonTgR,dep,lof, ...
+function me = minEnergySolve(psiL,rngReq,cfg,rI,c,latTgR,lonTgR,dep,lof, ...
                              loftLoR,loftHiR,tolRngMEM,tolLoftMER, ...
                              cutFracMin,nScanME)
 %% Purpose:
@@ -3003,6 +3643,16 @@ function me = minEnergySolve(rngReq,cfg,rI,c,latTgR,lonTgR,dep,lof, ...
 %  the noise is small; the ratio is handed back and printed.
 %
 %% Inputs:
+%
+%  psiL             [1 x 1]                     Launch azimuth (rad) every
+%                                               propagation this minimisation
+%                                               makes is flown on. It is the
+%                                               SEED azimuth: the cross-range
+%                                               half of the aim is closed
+%                                               afterwards, by the two-axis
+%                                               solve, over the cutoff fraction
+%                                               and the azimuth at the loft
+%                                               angle this returns
 %
 %  rngReq           [1 x 1]                     Required surface range (m)
 %
@@ -3158,35 +3808,18 @@ function me = minEnergySolve(rngReq,cfg,rI,c,latTgR,lonTgR,dep,lof, ...
         end
     end
 
-%% Range only, for the sign-change sampling and the bisection:
+%% Range only, for the sign-change sampling and the bisection. Every propagation
+%% in this minimisation is flown at the SEED azimuth psiL:
     function rngM = flyCount(loftR,cutF)
              nProp = nProp + 1;
-              rngM = flyLoft(loftR,cutF,cfg,rI);
+              rngM = flyLoft(psiL,loftR,cutF,cfg,rI);
     end
 
 %% One propagation, kept, and reduced to the quantities the record needs:
     function o = flyMeasure(loftR,cutF)
              nProp = nProp + 1;
-        [rngM,trj] = flyLoft(loftR,cutF,cfg,rI);
-               kBO = find(trj.phaseIdx == 1,1,'last');
-              kApo = find(trj.phaseIdx == 2,1,'last');
-            o.traj = trj;
-           o.loftR = loftR;
-         o.cutFrac = cutF;
-           o.tCutS = trj.t(kBO);
-            o.rngM = rngM;
-          o.gamBoR = trj.x(kBO,5);
-            o.vBoM = trj.x(kBO,4);
-            o.hBoM = trj.x(kBO,1) - c.rE;
-          o.mCutKg = trj.x(kBO,7);
-           o.hApoM = trj.x(kApo,1) - c.rE;
-           o.tFlyS = trj.t(end);
-           o.vImpM = trj.x(end,4);
-          o.gamImR = trj.x(end,5);
-           o.epsBo = trj.x(kBO,4).^2./2 - c.muE./trj.x(kBO,1);
-           o.missM = rI.*coorbital.util.greatCircle(trj.x(end,3),trj.x(end,2), ...
-                                                    latTgR,lonTgR);
-              o.ok = true;
+             [~,trj] = flyLoft(psiL,loftR,cutF,cfg,rI);
+                 o = arcRecord(trj,psiL,loftR,cutF,cfg,rI,c,latTgR,lonTgR);
     end
 
 %% THE COARSE SCAN of the feasible family. It does three jobs: it finds a
@@ -3828,6 +4461,45 @@ function printPair(label,vDep,vLof,dep,lof,fmt)
               txtL = sprintf(fmt,vLof);
     end
     fprintf('    %-22s %s %s\n',label,txtD,txtL);
+end
+
+function w = ctlWord(isMinE,loftR,cutFrac)
+%% Purpose:
+%
+%  Name the mode's SECOND control and give its value, in one phrase, so a
+%  refusal banner can report what the two-axis solve was moving without the
+%  banner itself having to know which mode it is in. The two full-burn branches
+%  solve the loft angle at a burn that is never cut; minimum-energy holds the
+%  loft angle and solves the cutoff fraction instead.
+%
+%  Written as a phrase rather than as a label-and-number pair because the two
+%  cases want different units, different precisions and different companion
+%  facts, and a printf format flexible enough for both would be less readable
+%  than this.
+%
+%% Inputs:
+%
+%  isMinE           Logical [1 x 1]             True on the minimum-energy mode
+%
+%  loftR            [1 x 1]                     Loft angle (rad)
+%
+%  cutFrac          [1 x 1]                     Cutoff fraction (-)
+%
+%% Outputs:
+%
+%  w                Char [1 x n]                The phrase
+%
+%% Revision History:
+%  Michael Casey                                                08/08/2026
+%  Copyright 2026 Coorbital, Inc.
+%% ------------------------ Begin Code Sequence ---------------------------
+
+                 w = sprintf(['loft angle   %10.6f deg (at the full burn; the ' ...
+                              'cutoff is not a control here)'],rad2deg(loftR));
+    if isMinE
+                 w = sprintf(['cutoff       %10.6f of full burn (at the held ' ...
+                              '%.4f deg loft angle)'],cutFrac,rad2deg(loftR));
+    end
 end
 
 function s = yesNo(tf)

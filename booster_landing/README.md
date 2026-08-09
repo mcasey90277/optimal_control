@@ -132,6 +132,39 @@ for t in test_params test_dynamics_jac test_colloc_smoke \
 done
 ```
 
+## Cinematic movie (presentation product, not part of the pipeline)
+
+`viz/movie_landing_cinematic.m` renders a 1920x1080 / 60 fps cinematic
+version of the same closed-loop landing: dark 3D scene, lit true-scale
+booster, throttle-driven plume, animated camera, a slow-motion finale and
+an instrument strip. It is **not** called by `run_booster_landing` —
+`viz/movie_landing.m` (the 2-D diagnostic movie) stays the front door's
+movie. Render it by hand from a saved run:
+
+```matlab
+cd('/Users/msc/Desktop/optimal_control/booster_landing'); setup_paths;
+R = load('results/booster_run.mat');
+movie_landing_cinematic(R.out0, R.solC, R.P, 'results/landing_cinematic.mp4', ...
+    struct('mcRate', R.mc.success_rate, 'mcRuns', numel(R.mc.vtd)));
+```
+
+`mcRate`/`mcRuns` are optional and only add the Monte-Carlo line to the
+title card. Runtime ~31 s of playback from ~93 s of rendering (1844
+frames) on this machine; the file is ~60 MB. Every knob (fps, title/hold
+durations, slow-motion lead and rate, trail length, booster scale, title
+text) is an `opts` field — see the function header. Two things worth
+knowing before showing it to anyone:
+
+- The booster is drawn at **true scale** (3.7 m x 45 m) and its body axis
+  is drawn **along the commanded thrust vector**, because the model is
+  3-DOF and has no attitude state. The visible lean is therefore real —
+  the primer direction runs up to ~21 deg off vertical at both ends of
+  the burn — and the strip carries a live `THRUST TILT` readout so that
+  reads as data rather than as a rendering error.
+- `opts.stills` (playback times, in seconds) writes PNG key frames
+  instead of a video — the fast way to check composition, and how the
+  poster frames for this movie were made.
+
 ## Folder map
 
 | Folder | Contents |
@@ -140,7 +173,7 @@ done
 | `setup_paths.m` | Adds campaign dirs + CasADi 3.7 to the MATLAB path |
 | `lib/` | `booster_params` (single source of truth for all constants/BCs/grid/MC settings), `pdg_dynamics` (3-DOF EOM), `solve_pdg_colloc` (Hermite-Simpson NLP, CasADi+IPOPT), `solve_pdg_convex` (lossless convexification + golden-section tf search), `hs_quad_ctrl` (flyable per-segment control reconstruction, shared by certify/tvlqr/sim), `tvlqr_design` (phase-scheduled time-varying LQR), `sim_closed_loop` (truth-model dispersed sim, altitude-indexed tracking), `run_monte_carlo` (dispersed landing campaign) |
 | `certify/` | `certify_pdg` (gates G0 time-base consistency, G1 discrete defect, G2 continuous residual, G2ff feedforward feasibility, G3 cross-method agreement, G4 losslessness, G5 PMP bang-bang + primer structure), `print_certify_report` (gate table) |
-| `viz/` | `plot_pdg_solution` (2x2 trajectory/throttle/mass/speed comparison), `plot_footprint` (MC landing scatter + dispersion ellipse), `movie_landing` (booster + throttle-trace MP4, 1280x720 locked), `plot_vacuum_vs_drag` (Phase-2 1x3 trajectory/throttle/mass overlay, vacuum vs drag) |
+| `viz/` | `plot_pdg_solution` (2x2 trajectory/throttle/mass/speed comparison), `plot_footprint` (MC landing scatter + dispersion ellipse), `movie_landing` (booster + throttle-trace MP4, 1280x720 locked), `movie_landing_cinematic` (1920x1080/60fps presentation movie, hand-run only — see above), `plot_vacuum_vs_drag` (Phase-2 1x3 trajectory/throttle/mass overlay, vacuum vs drag) |
 | `tests/` | One `test_*.m` per unit (self-bootstrapping: `addpath(fullfile(fileparts(mfilename('fullpath')), '..')); setup_paths;` — cwd-independent, throws on failure), `test_run_front_door.m` (end-to-end contract on a fast grid), `test_phase2_drag.m` (Phase-2 drag solve + gates + `plot_vacuum_vs_drag` smoke) |
 | `results/` | Generated products (git-ignored except `.gitkeep`): `booster_run.mat`, `pdg_solution.png`, `landing.mp4`, plus `footprint.png` when `cfg.doMC`; from a `cfg.phase2` run, `phase2_vac_vs_drag.png`, and `phase2_footprint.png` only when `cfg.phase2` **and** `cfg.doMC` are both true (it plots the wind Monte Carlo, which `doMC` gates) |
 

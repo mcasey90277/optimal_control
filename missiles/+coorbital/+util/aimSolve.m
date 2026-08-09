@@ -266,13 +266,17 @@ function [xSol,fAch,info] = aimSolve(fResid,x0,dx0,tolF,opts)
 %  and it is a geometry statement about the trajectory, not a numerical
 %  accident.
 %
-%  Because that test bounds the smallest singular value below by
-%  sigma_max/condMax, it also bounds the step, and there is deliberately no
-%  separate finiteness test on the step itself: such a test would be
-%  unreachable, and unreachable code is worse than absent code because it
-%  reads as protection that was never exercised. A Jacobian whose columns are
-%  parallel to the last bit gives sigma_min exactly zero, an infinite
-%  condition number, and the singularJacobian refusal.
+%  A Jacobian whose columns are parallel to the last bit gives sigma_min
+%  exactly zero, an infinite condition number, and the singularJacobian
+%  refusal.
+%
+%  THE CONDITION TEST DOES NOT BOUND THE STEP, and the step is tested for
+%  finiteness separately because of it. The tempting argument is that
+%  condMax bounds sigma_min below by sigma_max/condMax and therefore bounds
+%  the division. It does not: the condition number is a RATIO, and a ratio
+%  constrains nothing about magnitude. Both singular values can underflow
+%  together while the condition number sits at exactly 1. See the
+%  stepNotFinite refusal above and the reasoning at the step itself.
 %
 %  THE STEP IS BOUNDED TWICE. opts.maxStep caps the change in each control
 %  per iteration, applied as ONE scale factor on the whole step so the Newton

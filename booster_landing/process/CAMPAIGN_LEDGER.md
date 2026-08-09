@@ -66,3 +66,7 @@ Task 12: note written (fce8617, 22 pp, verify-paper green 12/12 cites 4/4 figs).
 Task 12: fix round 1/5 (Critical p95 + 5 Important + all minors addressed; deletions preferred over hedging for the untraceable figure; note now compiles from clean clone via doc/figs; re-review clean; commits fce8617..8ca11df)
 Task 12: complete (commits 15421e9..8ca11df, review clean after round 1). Note: 23 pp, verify-paper green.
 ALL 12 TASKS COMPLETE. Final whole-branch review next.
+
+## Post-campaign: external code review + SDD (2026-08-09)
+External three-way review (GPT-5.6-terra + Gemini 3.1 Pro + host-internal): findings in external-review-*.md; fix wave in external-review-fixes-report.md (commits 1dad25d, a008563, c4a992b; re-review clean). HEADLINE: G5 primer node-vs-midpoint bug found by BOTH labs — midpoint comparison = machine-epsilon alignment on all grids both phases; drag-loosened gate DELETED, single 0.01-deg gate. 'depleted' stop class added (MC run 84 reclassified). SDD written (doc/booster_landing_sdd.tex, 35 pp).
+Undisposed-finding rulings (controller, 2026-08-09): GPT#12 (tBlend/R validation) — PARKED, defensive-hardening tier, fold into next code touch; GPT#15 (scheduler on unsupported throttle structures) — PARKED, the annulus_switch TODO documents it, becomes live only with max-min-max profiles; GPT#13 input-validation half (Nrun/sig/seed finiteness) — PARKED, same tier as #12. None affect certified results.

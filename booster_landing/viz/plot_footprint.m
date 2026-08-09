@@ -4,13 +4,14 @@ function fig = plot_footprint(mc, P, outfile)
 % Landing/terminal xy scatter colored by success (mc.ok), pad-radius
 % circle, 3-sigma dispersion ellipse from cov(mc.land), and an annotation
 % box with the success rate, the failure-mode breakdown
-% (n_landed/n_arrest/n_horizon -- an arrest or horizon run never reaches
-% a real touchdown, see sim_closed_loop.m's ADAPTATION note), and
+% (n_landed/n_arrest/n_depleted/n_horizon -- only a touchdown is a real
+% landing, see sim_closed_loop.m's stop-classification note; n_depleted
+% was split out of n_arrest by the 2026-08-09 external code review), and
 % touchdown-speed statistics.
 %
 % INPUTS:
 %   mc      - run_monte_carlo output (.land .ok .vtd .n_landed .n_arrest
-%             .n_horizon .success_rate)
+%             .n_depleted .n_horizon .success_rate)
 %   P       - booster_params (.pad_radius)
 %   outfile - (optional) PNG path; exportgraphics at 200 dpi if given
 % OUTPUTS:
@@ -68,10 +69,10 @@ legend(ax, 'Location', 'southoutside', 'NumColumns', 2);
 
 %% Annotation box: success rate, failure-mode breakdown, vtd stats:
 txt = sprintf(['success rate: %5.1f%% (%d/%d)\n' ...
-               'landed=%d  arrest=%d  horizon=%d\n' ...
+               'landed=%d  arrest=%d  depleted=%d  horizon=%d\n' ...
                'vtd: mean=%.2f  max=%.2f  gate=%.1f m/s'], ...
     100*mc.success_rate, nnz(ok), numel(mc.ok), ...
-    mc.n_landed, mc.n_arrest, mc.n_horizon, ...
+    mc.n_landed, mc.n_arrest, mc.n_depleted, mc.n_horizon, ...
     mean(mc.vtd), max(mc.vtd), P.vtd_max);
 annotation(fig, 'textbox', [0.14 0.70 0.32 0.16], 'String', txt, ...
     'FontName', 'FixedWidth', 'FontSize', 10, 'EdgeColor', [0.7 0.7 0.7], ...

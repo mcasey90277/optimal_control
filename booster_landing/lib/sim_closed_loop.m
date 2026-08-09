@@ -39,10 +39,23 @@ function out = sim_closed_loop(sol, ctrl, P, dsp)
 %                     event -- .landed is what distinguishes a genuine
 %                     safe landing from that structurally optimistic
 %                     number).
-%           .stop   - 'touchdown' | 'arrest' | 'horizon' (no terminal
-%                     event fired before the 1.5*sol.tf integration
-%                     horizon; .td is then just the last integrated
-%                     state, not any kind of landing)
+%           .stop   - 'touchdown' | 'arrest' | 'depleted' | 'horizon'
+%                     'touchdown' - event [1], real z=0 crossing while
+%                                   still descending. The only success.
+%                     'arrest'    - event [2], vz crossed 0 upward before
+%                                   z did: the closed loop ran out of
+%                                   descent, not out of fuel.
+%                     'depleted'  - event [3], mass fell through P.mdry:
+%                                   ran out of PROPELLANT. A distinct
+%                                   class since the 2026-08-09 external
+%                                   review (it used to be reported as
+%                                   'arrest', which misattributed a
+%                                   fuel-budget failure to a
+%                                   controllability failure).
+%                     'horizon'   - no terminal event fired before the
+%                                   1.5*sol.tf integration horizon; .td is
+%                                   then just the last integrated state,
+%                                   not any kind of landing.
 %
 % ALTITUDE-INDEXED GUIDANCE (task-7b, 2026-08-08 -- supersedes the round-4
 % "terminal-phase altitude schedule", which was a partial version of this
@@ -116,8 +129,10 @@ function out = sim_closed_loop(sol, ctrl, P, dsp)
 % while still descending (vz<0), so event [1] fires first exactly as
 % specified and out.td.landed=true. Event [2] or [3] firing instead means
 % the closed loop did NOT complete the landing -- out.td.stop records
-% which, and out.td.landed=false, so a caller can never mistake an arrest
-% for a touchdown by reading .miss/.vtd alone.
+% which ('arrest' for [2], 'depleted' for [3]; they were merged into
+% 'arrest' until the 2026-08-09 external review), and out.td.landed=false,
+% so a caller can never mistake either for a touchdown by reading
+% .miss/.vtd alone.
 %
 % REFERENCES:
 %   [1] docs/superpowers/specs/2026-08-08-booster-landing-design.md
@@ -171,12 +186,27 @@ onBound = double(Tmag > P.Tmax*0.999 | Tmag < P.Tmin*1.001);
 out.sat_frac = trapz(tt, onBound) / max(tt(end) - tt(1), eps);
 
 xend = XX(end,:).';
+% STOP CLASSIFICATION (event index -> class). 'depleted' is a distinct
+% class as of the 2026-08-09 external code review: event [3] (mass through
+% P.mdry) used to be folded into 'arrest', so run_monte_carlo reported
+% propellant-depletion failures as n_arrest and the campaign's failure-mode
+% accounting was simply wrong about WHY a run failed -- an arrest is a
+% controllability/authority failure with fuel still in the tanks, a
+% depletion is a fuel-budget failure, and the two point at different fixes.
+% Ordering when more than one event fires at the same step: touchdown
+% first (a real z=0 crossing is the only success, and if the vehicle
+% reached the pad the other events are moot), then depleted (a dry tank is
+% a hard physical terminal condition -- if both [2] and [3] fire, the
+% arrest is a CONSEQUENCE of running out of propellant, so reporting the
+% cause is more useful than reporting the symptom), then arrest.
 if isempty(ie)
     stop = 'horizon';                  % ran to 1.5*sol.tf, no event fired
 elseif any(ie == 1)
     stop = 'touchdown';                % real z=0 crossing, still descending
+elseif any(ie == 3)
+    stop = 'depleted';                 % mass fell through P.mdry
 else
-    stop = 'arrest';                   % vz=0 proxy [2] or mdry cap [3]
+    stop = 'arrest';                   % vz=0 proxy [2]
 end
 out.td = struct('r', xend(1:3), 'v', xend(4:6), 'm', xend(7), ...
                 'miss', sqrt(sum(xend(1:2).^2)), 'vtd', sqrt(sum(xend(4:6).^2)), ...

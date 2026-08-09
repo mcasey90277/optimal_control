@@ -23,7 +23,11 @@ function R = run_booster_landing(cfg)
 %         is automatically re-derived unless the dependent is ALSO
 %         overridden explicitly -- see the re-derive block below.
 % OUTPUTS:
-%   R   - everything: .P .solC .solV .rep .ctrl .out0 .mc .when, and, when
+%   R   - everything: .P .solC .solV .rep .ctrl .out0 .when; plus .mc
+%         (Phase-1 Monte Carlo) ONLY when cfg.doMC is true -- corrected
+%         2026-08-09, this line used to list .mc unconditionally while the
+%         code has always gated it, the same conditional the .mcD entry
+%         below states correctly; and, when
 %         cfg.phase2 is true: .solD .repD .ctrlD .Pd (drag-on collocation
 %         solution, its certify_pdg report, its TVLQR design, and the
 %         drag-on params -- the same product KINDS as .solC/.rep/.ctrl/.P,
@@ -192,8 +196,9 @@ fprintf('gates     %s\n', ternary(R.rep.all_pass, 'ALL PASS', 'FAILURES -- see t
 fprintf('nom miss  %.2f m  vtd %.2f m/s  (landed=%d, stop=%s)\n', ...
         R.out0.td.miss, R.out0.td.vtd, R.out0.td.landed, R.out0.td.stop);
 if cfg.doMC
-    fprintf('MC        %d runs, success %.1f%%  (landed %d / arrest %d / horizon %d)\n', ...
-            cfg.Nrun, 100*R.mc.success_rate, R.mc.n_landed, R.mc.n_arrest, R.mc.n_horizon);
+    fprintf('MC        %d runs, success %.1f%%  (landed %d / arrest %d / depleted %d / horizon %d)\n', ...
+            cfg.Nrun, 100*R.mc.success_rate, R.mc.n_landed, R.mc.n_arrest, ...
+            R.mc.n_depleted, R.mc.n_horizon);
 end
 if cfg.phase2
     fprintf('phase2    tf %.3f s (d%+.3f)  fuel %.1f kg (dfuel %+.1f)  gates %s\n', ...
@@ -201,8 +206,9 @@ if cfg.phase2
             (P.m0 - R.solC.mf) - (P.m0 - R.solD.mf), ...
             ternary(R.repD.all_pass, 'ALL PASS', 'FAILURES -- see table'));
     if cfg.doMC
-        fprintf('          MC(wind) %d runs, success %.1f%%  (landed %d / arrest %d / horizon %d)\n', ...
-                cfg.Nrun, 100*R.mcD.success_rate, R.mcD.n_landed, R.mcD.n_arrest, R.mcD.n_horizon);
+        fprintf('          MC(wind) %d runs, success %.1f%%  (landed %d / arrest %d / depleted %d / horizon %d)\n', ...
+                cfg.Nrun, 100*R.mcD.success_rate, R.mcD.n_landed, R.mcD.n_arrest, ...
+                R.mcD.n_depleted, R.mcD.n_horizon);
     else
         fprintf('          MC(wind) skipped (cfg.doMC=false)\n');
     end

@@ -196,9 +196,22 @@ function ctrl = tvlqr_design(sol, P, opts)
 %      tilt, and nothing needed changing there. The blend is a tanh over
 %      +-tBlend so the Riccati RHS stays smooth; tSwitch is auto-detected
 %      from sol (|T*| crossing mid-annulus, one switch by G5).
-%  (b) ANISOTROPIC position weight: only the LATERAL (x,y) position
-%      weights are re-scheduled. The z-position weight and ALL velocity
-%      weights keep their pre-round-5 values, and R stays the isotropic
+%  (b) ANISOTROPIC position weight: only the LATERAL (x,y) channels are
+%      re-scheduled -- BOTH their position weights (qP) and their velocity
+%      weights (qV). (CORRECTED, external code review 2026-08-09: this
+%      paragraph used to claim "only the LATERAL (x,y) POSITION weights"
+%      are re-scheduled and that "ALL velocity weights keep their
+%      pre-round-5 values", which the code below contradicts --
+%      opts.QA = diag([qP qP 1e-4 qV qV qVelZ 0]) sets QA(4,4)=QA(5,5)=qV
+%      from the same pole-placement derivation. The CODE is right and the
+%      old comment was wrong: qP alone does not place a pole, it only sets
+%      the undamped frequency; qV is what buys the specified damping
+%      ratio zetaA, and pricing position without repricing velocity would
+%      give phase A an underdamped lateral loop, not the critically
+%      damped one this design specifies.) The z-POSITION weight (1e-4)
+%      and the vertical VELOCITY weight (qVelZ, set by the separate
+%      vertical-loop design below) are common to both phases and are NOT
+%      re-scheduled, and R stays the isotropic
 %      1e-9*eye(3). This is deliberately more surgical than the
 %      anisotropic-R form of the same idea: the vertical channel already
 %      demonstrably works (nominal vz tracked the guidance to <0.3 m/s
@@ -246,11 +259,14 @@ Nn = size(sol.X,2) - 1;  h = sol.tf/Nn;
 ctrl.xnom = @(t) interp1(sol.t.', sol.X.', clampt(t, sol.tf), 'pchip').';
 ctrl.Tnom = @(t) hs_quad_ctrl(clampt(t, sol.tf), sol.U, sol.Um, h, Nn, P.Tmin, P.etaT*P.Tmax);
 
-%% Phase schedule: Tmin-arc -> Tmax-arc switch, auto-detected from sol:
-if isfield(opts,'tSwitch'), ctrl.tSwitch = opts.tSwitch;
-else,                       ctrl.tSwitch = annulus_switch(sol, P);  end
+%% Phase schedule: Tmin-arc -> Tmax-arc switch, auto-detected from sol.
+%% tBlend is resolved FIRST because annulus_switch's no-switch fallback is
+%% expressed in units of it (external code review, 2026-08-09 -- see that
+%% local function's NO-SWITCH FALLBACK note).
 if isfield(opts,'tBlend'),  ctrl.tBlend  = opts.tBlend;
 else,                       ctrl.tBlend  = 0.4;                     end
+if isfield(opts,'tSwitch'), ctrl.tSwitch = opts.tSwitch;
+else,   ctrl.tSwitch = annulus_switch(sol, P, ctrl.tBlend);         end
 
 %% Phase-A lateral weights BY POLE PLACEMENT (see ADAPTATION 5 part (a)).
 %% Derived from (omegaA, zetaA) and the ACTUAL R and phase-A mass rather
@@ -260,7 +276,9 @@ else,                       ctrl.tBlend  = 0.4;                     end
 if ~isfield(opts,'omegaA'), opts.omegaA = 0.70; end   % lateral wn [rad/s]
 if ~isfield(opts,'zetaA'),  opts.zetaA  = 1.00; end   % lateral damping
 inA = sol.t <= ctrl.tSwitch;
-if ~any(inA), inA(1) = true; end                      % ts=0 fallback guard
+if ~any(inA), inA(1) = true; end                      % no-switch fallback
+                                                      % guard (ts<0 then,
+                                                      % so no node is inA)
 mA  = mean(sol.X(7, inA));                            % mass over the margin arc
 mB  = mean(sol.X(7, ~inA));                           % mass over the braking arc
 if isnan(mB), mB = sol.X(7,end); end
@@ -340,7 +358,7 @@ end
 
 function t = clampt(t, tf), t = min(max(t, 0), tf); end
 
-function ts = annulus_switch(sol, P)
+function ts = annulus_switch(sol, P, tBlend)
 % ANNULUS_SWITCH  Time the nominal thrust magnitude crosses mid-annulus.
 %
 % The min-fuel solution is bang-bang on |T*| (certify_pdg's G5 gate counts
@@ -353,21 +371,37 @@ function ts = annulus_switch(sol, P)
 % Generalize to "last upward crossing" or to a per-arc schedule if G5 ever
 % certifies more than one interior switch.
 %
-% INPUTS:  sol - collocation solution;  P - booster_params (Tmin,Tmax)
-% OUTPUTS: ts  - switch time [s]
+% INPUTS:  sol    - collocation solution;  P - booster_params (Tmin,Tmax)
+%          tBlend - the caller's tanh blend half-width [s], needed only to
+%                   express the no-switch fallback (see below)
+% OUTPUTS: ts     - switch time [s]
 %
-% NO-SWITCH FALLBACK is ts=0, i.e. phase B (the conservative braking-arc
-% weights) over the whole flight. An all-Tmax profile has NO margin arc to
-% schedule against, so there is nothing to be aggressive with; returning
-% sol.tf instead -- as this function did when first written -- would apply
-% the aggressive phase-A LATERAL weights across the entire flight
-% INCLUDING the braking arc, which is precisely the failure mode the
-% schedule exists to prevent.
+% NO-SWITCH FALLBACK: phase B (the conservative braking-arc weights) over
+% the whole flight. An all-Tmax profile has NO margin arc to schedule
+% against, so there is nothing to be aggressive with; returning sol.tf
+% instead -- as this function did when first written -- would apply the
+% aggressive phase-A LATERAL weights across the entire flight INCLUDING
+% the braking arc, which is precisely the failure mode the schedule exists
+% to prevent.
+%
+% BUG FIX (external code review, 2026-08-09): the fallback used to return
+% ts=0, which does NOT deliver that intent. The caller's schedule is
+%   Qfun(t) = (1 - w(t))*QA + w(t)*QB,   w(t) = 0.5*(1 + tanh((t-ts)/tb)),
+% so ts=0 gives tanh(0)=0 and w(0)=0.5 at t=0 -- a 50/50 QA/QB blend,
+% i.e. HALF the aggressive phase-A lateral gains injected into the first
+% moments of flight, exactly where the fallback was supposed to be
+% conservative. (The error decays over ~tBlend, so it corrupts the opening
+% transient rather than the whole flight, but the opening transient is
+% where a large lateral dispersion is corrected.) The fix places the
+% switch far enough in the PAST that the tanh saturates: at ts=-10*tBlend,
+% w(0) = 0.5*(1+tanh(10)) = 1 - 2.1e-9, i.e. pure QB to nine digits.
+% Expressed in units of tBlend rather than as a bare constant so it stays
+% saturated for any caller-supplied blend width.
 Tmag = sqrt(sum(sol.U.^2, 1));
 mid  = 0.5*(P.Tmin + P.etaT*P.Tmax);   % GUIDANCE ceiling, not the engine's
 kx   = find(Tmag(1:end-1) < mid & Tmag(2:end) >= mid, 1, 'first');
 if isempty(kx)
-    ts = 0;  return
+    ts = -10 * tBlend;  return
 end
 w  = (mid - Tmag(kx)) / (Tmag(kx+1) - Tmag(kx));
 ts = sol.t(kx) + w*(sol.t(kx+1) - sol.t(kx));

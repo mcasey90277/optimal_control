@@ -2,8 +2,8 @@ function fig = plot_pdg_solution(solC, solV, outfile)
 % PLOT_PDG_SOLUTION  2x2 comparison figure: collocation vs convex PDG.
 %
 % Panels: (a) 3D trajectory + glideslope cone + thrust arrows every 5th
-% node, both solvers overlaid; (b) throttle ||T||/Tmax vs t (the
-% max-min-max "money plot"), both solvers, WITH the two guidance bounds
+% node, both solvers overlaid; (b) throttle ||T||/Tmax vs t (the MIN-MAX
+% "money plot"), both solvers, WITH the two guidance bounds
 % (Tmin/Tmax and the etaT de-rated ceiling) labeled; (c) mass vs t;
 % (d) speed vs t (terminal target is P.vf, NOT zero -- see booster_params).
 %
@@ -14,6 +14,15 @@ function fig = plot_pdg_solution(solC, solV, outfile)
 % header for the measured consequence of getting this wrong). The convex
 % solver has no midpoint samples (no .Um field) and is plotted directly
 % off its own dense node grid.
+%
+% "MIN-MAX", corrected 2026-08-09: this header called panel (b) the
+% "max-min-max money plot" from the first draft onward. The certified
+% structure for these boundary conditions is min-max -- a single
+% Tmin->Tmax switch held to touchdown -- because P.Tmin already exceeds
+% vehicle weight at every mass on this trajectory, so there is no
+% hover-capable arc to open with. The finding is significant enough that
+% the theory note gives it a section and G5's structure check was written
+% around it; only this comment was left behind.
 %
 % INPUTS:
 %   solC    - solve_pdg_colloc solution (.t .X .U .Um .tf .mf .P)

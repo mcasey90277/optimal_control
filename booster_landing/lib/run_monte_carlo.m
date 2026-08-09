@@ -6,13 +6,24 @@ function mc = run_monte_carlo(sol, ctrl, P, opts)
 % P.seed (rng(P.seed) once, all draws via randn in a fixed order).
 %
 % TASK-7 EVOLUTION (binding, supersedes the task-8 brief): sim_closed_loop
-% now classifies every run as touchdown/arrest/horizon (out.td.landed,
-% out.td.stop). An arrest or horizon run is a FAILURE even when its
-% miss/vtd/m look good -- an arrest's vtd is structurally optimistic (vz=0
-% IS the arrest event, so vtd excludes the vertical-speed failure it
-% actually represents). mc.ok therefore ALSO requires out.td.landed, and
-% the failure-mode breakdown (n_landed/n_arrest/n_horizon) is tracked so a
-% caller can tell a tracking failure from a genuine miss/vtd failure.
+% classifies every run as touchdown/arrest/depleted/horizon
+% (out.td.landed, out.td.stop). Anything but a touchdown is a FAILURE even
+% when its miss/vtd/m look good -- an arrest's vtd is structurally
+% optimistic (vz=0 IS the arrest event, so vtd excludes the vertical-speed
+% failure it actually represents). mc.ok therefore ALSO requires
+% out.td.landed, and the failure-mode breakdown
+% (n_landed/n_arrest/n_depleted/n_horizon) is tracked so a caller can tell
+% a tracking failure from a fuel-budget failure from a genuine miss/vtd
+% failure.
+%
+% DISPERSION DRAWS are unbounded Gaussians (1 + sig*randn for the
+% multiplicative thrust/Isp factors). Adjudicated and left as-is
+% 2026-08-09: at sig.thrust=0.015 a sign reversal needs a 66-sigma draw
+% and at sig.isp=0.01 it needs 100 sigma, so the nonphysical tail is not
+% reachable in any campaign of remotely feasible size (200 runs here).
+% Recorded rather than "fixed" because truncating the draw would change
+% the sampled distribution -- and therefore every reported success rate --
+% to defend against an event that cannot occur.
 %
 % INPUTS:
 %   sol   - solve_pdg_colloc solution struct (Task 3)
@@ -37,11 +48,16 @@ function mc = run_monte_carlo(sol, ctrl, P, opts)
 %                           touchdown vs. arrest/horizon -- see
 %                           sim_closed_loop's ADAPTATION note)
 %        .stop{Nrun x 1}   cellstr, out.td.stop per run ('touchdown' |
-%                           'arrest' | 'horizon')
+%                           'arrest' | 'depleted' | 'horizon')
 %        .ok(Nrun x 1)     logical: landed AND miss<P.pad_radius AND
 %                           vtd<P.vtd_max AND m>=P.mdry
 %        .success_rate     mean(mc.ok)
-%        .n_landed/.n_arrest/.n_horizon  counts over Nrun (sum to Nrun)
+%        .n_landed/.n_arrest/.n_depleted/.n_horizon  counts over Nrun
+%                           (asserted to sum to Nrun). n_depleted counts
+%                           propellant exhaustion (mass through P.mdry),
+%                           which was reported as n_arrest before the
+%                           2026-08-09 external code review -- see
+%                           sim_closed_loop's stop-classification note.
 %        .dr0/.dv0(Nrun x 3), .thrust_scale/.isp_scale(Nrun x 1) [,.wind
 %          (Nrun x 3) when P.drag.on] -- the drawn dispersions themselves,
 %          kept so a failure population's draw magnitudes are attributable
@@ -120,13 +136,27 @@ for krun = 1:Nr
 end
 
 mc.success_rate = mean(mc.ok);
-% All three counts derive from mc.stop (single source of truth); the
+% All FOUR counts derive from mc.stop (single source of truth); the
 % landed/stop invariant sim_closed_loop is supposed to maintain
 % (.landed <=> stop=='touchdown') is then checked, not assumed.
+% n_depleted is new as of the 2026-08-09 external code review: mass
+% depletion used to be classified 'arrest' by sim_closed_loop, so a
+% fuel-budget failure was counted and reported as a tracking failure.
 mc.n_landed     = nnz(strcmp(mc.stop, 'touchdown'));
 mc.n_arrest     = nnz(strcmp(mc.stop, 'arrest'));
+mc.n_depleted   = nnz(strcmp(mc.stop, 'depleted'));
 mc.n_horizon    = nnz(strcmp(mc.stop, 'horizon'));
 assert(mc.n_landed == nnz(mc.landed), 'run_monte_carlo:landedStopMismatch', ...
     ['n_landed (from mc.stop==touchdown) disagrees with nnz(mc.landed) -- ' ...
      'sim_closed_loop returned an inconsistent td.landed/td.stop pair']);
+% EXHAUSTIVENESS (same review): the four counts must partition the run
+% set. Without this, a future fifth stop class added in sim_closed_loop
+% would silently vanish from the breakdown -- which is exactly how
+% 'depleted' hid inside 'arrest' for as long as it did.
+assert(mc.n_landed + mc.n_arrest + mc.n_depleted + mc.n_horizon == Nr, ...
+    'run_monte_carlo:stopClassesIncomplete', ...
+    ['the stop-class counts (%d landed + %d arrest + %d depleted + %d horizon) ' ...
+     'do not sum to Nrun=%d -- sim_closed_loop returned a td.stop value this ' ...
+     'function does not know about'], mc.n_landed, mc.n_arrest, ...
+    mc.n_depleted, mc.n_horizon, Nr);
 end

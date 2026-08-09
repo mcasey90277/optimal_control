@@ -8,8 +8,17 @@ function sol = solve_pdg_convex(P, opts)
 % The relaxation is provably tight (lossless) at the optimum; we CHECK
 % that numerically (sol.lossless_gap) rather than assume it.
 %
-% Convex problem solved with IPOPT: local = global by convexity. A conic
-% solver (ECOS/CVX) is a documented drop-in, deliberately not a dependency.
+% Convex problem solved with IPOPT: any point IPOPT converges to is global
+% BY CONVEXITY OF THE FEASIBLE SET AND OBJECTIVE, verified after the fact
+% via certify_pdg's G4 (relaxation tightness) and G3 (agreement with the
+% independently-formulated nonconvex collocation solve) -- not by any
+% globality property of IPOPT itself, which is a local NLP method, and not
+% by the SOC being handed to a cone solver as a cone (the annulus is
+% written here in the squared form sum(u.^2) <= sigma^2). Wording sharpened
+% 2026-08-09 after an external review flagged the bare phrase "convex
+% global solver" as claiming more than this implementation establishes. A
+% conic solver (ECOS/CVX) is a documented drop-in, deliberately not a
+% dependency.
 %
 % ADAPTATION FROM BRIEF (documented, same lesson as Task 3): the brief's
 % verbatim raw-SI R,V (position O(1e3) m, velocity O(1e2) m/s) mixed with

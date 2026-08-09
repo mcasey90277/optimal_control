@@ -30,8 +30,16 @@ function movie_landing(out, sol, P, outfile, opts)
 %
 % INPUTS:
 %   out     - sim_closed_loop trace (.t .X .Tcmd)
-%   sol     - guidance solution, either solver (.tf used for the throttle
-%             panel's x-axis extent only)
+%   sol     - guidance solution, either solver. CURRENTLY UNUSED
+%             (corrected 2026-08-09): this line used to claim ".tf used
+%             for the throttle panel's x-axis extent only", but the body
+%             sets that axis from out.t(end) -- the CLOSED-LOOP duration,
+%             which is the right choice for a movie of the closed-loop
+%             run and can differ from sol.tf -- and never dereferences
+%             sol. The argument is kept, and kept positional, for
+%             interface stability: it is third of five, so dropping it
+%             would silently re-bind outfile/opts in every existing
+%             caller. Documented rather than removed.
 %   P       - booster_params (.Tmax .Tmin .etaT .pad_radius)
 %   outfile - output .mp4 path
 %   opts    - (optional) .duration [s of playback, def 12], .fps [def 30]

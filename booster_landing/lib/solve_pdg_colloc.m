@@ -52,9 +52,13 @@ function sol = solve_pdg_colloc(P, opts)
 % INPUTS:
 %   P    - booster_params struct
 %   opts - (optional) .N segments [def P.N], .init prior sol (warm start),
-%          .maxIter [def 3000], .tol [def 1e-9] (IPOPT overall NLP
-%          convergence tolerance, NONDIMENSIONAL -- see the "G1 tol"
-%          ADAPTATION note below for why a caller ever needs this)
+%          .maxIter [def 3000], .tol (IPOPT overall NLP convergence
+%          tolerance, NONDIMENSIONAL) -- default 1e-9 in VACUUM, 1e-11
+%          whenever P.drag.on; see the "G1 tol under drag" ADAPTATION
+%          note below both for the drag default and for why a caller
+%          would ever set this by hand. (The default was documented as a
+%          flat "1e-9" until 2026-08-09; the drag branch has been in the
+%          code since task-11.)
 % OUTPUTS:
 %   sol  - .t .tf .mf .X(7xN+1) .U(3xN+1) .Um(3xN) .lam_defect(7xN)
 %          .stats .P   (see plan Task 3 Interfaces; sol.X/.U/.Um/.tf/.t are
@@ -179,7 +183,16 @@ else
     opti.set_initial(X, [Xg(1:3,:)/Lc; Xg(4:6,:)/Vc; Xg(7,:)/Mc]);
     opti.set_initial(U, Tg/Fc);
     opti.set_initial(Um, Tg(:,1:N)/Fc);
-    opti.set_initial(tf, 30/Tc);
+    % COLD-START tf GUESS: the midpoint of the [tf_lo, tf_hi] bracket.
+    % Was a hardcoded 30 s (external code review, 2026-08-09) -- stale
+    % from before the bracket narrowed to [10, 22] s, so every cold solve
+    % started OUTSIDE its own scalar bound on tf and IPOPT had to push it
+    % back in (restoration) before it could begin optimizing. Since
+    % Tc = 0.5*(tf_lo + tf_hi) this evaluates to exactly 1 in scaled
+    % units; it is written as the ratio so it tracks any future bracket
+    % change instead of silently going stale a second time. Verified to
+    % reach the same optimum (tf=16.595 s, mf=26464.6 kg at N=60).
+    opti.set_initial(tf, 0.5*(P.tf_lo + P.tf_hi)/Tc);
 end
 
 %% Solve:

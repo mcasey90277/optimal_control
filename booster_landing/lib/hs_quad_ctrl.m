@@ -66,7 +66,23 @@ L0  = 2*tau^2 - 3*tau + 1;                     % Lagrange basis at tau=0
 L1  = -4*tau^2 + 4*tau;                        % at tau=0.5 (midpoint)
 L2  = 2*tau^2 - tau;                           % at tau=1
 
-%% Direction: quadratic vector interpolant, then normalized:
+%% Direction: quadratic vector interpolant, then normalized.
+%% DEFENSIVE NOTE (external code review, 2026-08-09): if Traw were exactly
+%% the zero vector the max(.,1e-9) guard returns dirT=0 and hence Tv=0, an
+%% infeasible (sub-Tmin) thrust despite the magnitude clamp below -- the
+%% one way this function's feasibility guarantee could be broken. It is
+%% unreachable on this campaign and is left guarded rather than handled:
+%% Traw=0 needs the quadratic through three vectors of magnitude >= Tmin =
+%% 338 kN to pass through the origin, which requires the thrust DIRECTION
+%% to reverse by ~180 deg inside a single segment. The pointing geometry
+%% forbids it (the glideslope cone and the min-fuel structure keep T in an
+%% upward half-space throughout; with a finite P.theta_max_deg it is
+%% confined to a narrow cone about vertical), and G2ff would catch it if
+%% it ever happened -- it dense-samples 20 points per segment and fails on
+%% any sub-Tmin magnitude. Handling it properly (borrowing a neighbouring
+%% sample's direction) would add an untested branch to the one function
+%% every other component's control reconstruction routes through, so the
+%% guard stays and the reasoning is recorded here instead.
 Traw = L0*U(:,k) + L1*Um(:,k) + L2*U(:,k+1);
 Traw_mag = sqrt(sum(Traw.^2));
 dirT = Traw / max(Traw_mag, 1e-9);

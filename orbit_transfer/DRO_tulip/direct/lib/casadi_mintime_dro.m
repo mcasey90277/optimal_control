@@ -77,6 +77,18 @@ function out = casadi_mintime_dro(rv0, rvf, Tmax, c, muStar, N, X0, U0, tf0, opt
 %              .sundmanP [1.5] the exponent p in kappa = rho^p
 %              .maxCpuSec [] IPOPT max_cpu_time -- the fail-fast wall bound
 %                       that iteration budgets cannot provide
+%              .objective ['time'] or 'energy'. 'energy' is the fixed-t_f
+%                       MINIMUM-ENERGY problem: J = Int s^2 dt (Bertrand-Epenoy
+%                       eps = 1 endpoint -- the same convention GTO_tulip's
+%                       energy->fuel homotopy uses), Simpson-quadratured with
+%                       the midpoint throttle under Hermite-Simpson, trapezoid
+%                       otherwise; under Sundman the measure is kappa dtau.
+%                       Requires .tfFix. The smooth twin of the min-time
+%                       problem for the costate catalogs (2026-08-14).
+%              .tfFix   [] fixed final time (ND). When set, every lifted copy
+%                       is pinned TF(k) == tfFix (plain form) or the time
+%                       state is pinned X(8,end) == tfFix (Sundman, span
+%                       free) -- the pattern casadi_minfuel_sundman uses.
 %              .muInit  [] IPOPT initial barrier parameter, for NEAR-FEASIBLE
 %                       warm starts (e.g. 1e-6). Default lets IPOPT use 0.1,
 %                       which re-inflates the barrier and can eject a warm
@@ -84,6 +96,8 @@ function out = casadi_mintime_dro(rv0, rvf, Tmax, c, muStar, N, X0, U0, tf0, opt
 %
 % OUTPUTS:
 %   out - struct: .X [7x(N+1)] .U [4x(N+1)] .tf .s (the grid) .success
+%         .objective ('time'|'energy') .J (the energy cost Int s^2 dt at the
+%         solution; NaN for 'time')
 %         .scheme, and .Um [4xN] midpoint controls (hermite-simpson only, else [])
 %         .minAltKm (the constraint applied, NaN if none)
 %         .altMinKm (the ACHIEVED minimum altitude at the nodes)
@@ -114,6 +128,15 @@ lStarKm  = g('lStarKm', 389703.264829278);
 rMoonKm  = g('rMoonKm', 1737.4);
 muInit   = g('muInit', []);
 maxCpuSec= g('maxCpuSec', []);
+objective= lower(g('objective', 'time'));
+tfFix    = g('tfFix', []);
+if ~any(strcmp(objective, {'time','energy'}))
+    error('casadi_mintime_dro:objective', ...
+        'unknown objective ''%s''; use ''time'' or ''energy''.', objective);
+end
+if strcmp(objective, 'energy') && isempty(tfFix)
+    error('casadi_mintime_dro:tfFix', 'objective ''energy'' requires opts.tfFix.');
+end
 
 import casadi.*
 nN = N + 1;
@@ -293,10 +316,50 @@ if ~isempty(minAltKm)
     if retModel, creg(end+1) = struct('label','minAlt','rows',r0:size(opti.g,1)); end
 end
 
-if sundman
-    opti.minimize(X(8,end));      % minimize PHYSICAL time; TF is the pseudo-span
-else
-    opti.minimize(TF(1));
+% --- fixed final time (energy mode, or a pinned min-time re-solve) ---------
+if ~isempty(tfFix)
+    r0 = size(opti.g,1)+1;
+    if sundman
+        opti.subject_to(X(8,end) == tfFix);   % physical time pinned, span free
+    else
+        opti.subject_to(TF(1) == tfFix);      % + continuity pins every copy
+    end
+    if retModel, creg(end+1) = struct('label','tfFix','rows',r0:size(opti.g,1)); end
+end
+
+% --- objective ---------------------------------------------------------------
+Jexpr = [];
+switch objective
+case 'time'
+    if sundman
+        opti.minimize(X(8,end));  % minimize PHYSICAL time; TF is the pseudo-span
+    else
+        opti.minimize(TF(1));
+    end
+case 'energy'
+    % J = Int s^2 dt on the physical-time measure. Plain form: dt = tf ds.
+    % Sundman: dt = kappa(rho) dtau with the lifted span as the tau length, so
+    % the integrand carries kappa exactly as the dynamics do.
+    if sundman
+        kapN = X(1:3,:) - repmat([1-muStar;0;0],1,nN);
+        kapN = sum(kapN.^2,1).^(sundP/2);                       % 1 x nN
+        qN   = U(4,:).^2 .* kapN;
+        if ~isempty(Um)
+            kapM = Xm(1:3,:) - repmat([1-muStar;0;0],1,N);
+            kapM = sum(kapM.^2,1).^(sundP/2);
+            qM   = Um(4,:).^2 .* kapM;
+        end
+    else
+        qN = U(4,:).^2;
+        if ~isempty(Um), qM = Um(4,:).^2; end
+    end
+    hq = TF(1:end-1).*ds;                                        % 1 x N
+    if isempty(Um)
+        Jexpr = sum((hq/2).*(qN(1:end-1) + qN(2:end)));          % trapezoid
+    else
+        Jexpr = sum((hq/6).*(qN(1:end-1) + 4*qM + qN(2:end)));   % Simpson
+    end
+    opti.minimize(Jexpr);
 end
 
 % --- warm start -------------------------------------------------------------
@@ -414,6 +477,8 @@ else
     out.tfSpread = max(abs(full(sol.value(TF)) - out.tf));
 end
 out.s  = s;
+out.objective = objective;
+if isempty(Jexpr), out.J = NaN; else, out.J = full(sol.value(Jexpr)); end
 out.ipoptStatus = opti.stats().return_status;
 out.success = ok && any(strcmp(out.ipoptStatus, ...
     {'Solve_Succeeded','Solved_To_Acceptable_Level'}));

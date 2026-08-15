@@ -765,3 +765,88 @@ numbers above (2.92 s, 0.396 km, 0.0056 m/s at matched s). The heavy machinery
    campaigns as a costate-catalog seeding check (it is the mechanism
    [[goal-costate-catalog]] needs: a direct solve now demonstrably produces
    costates good to 1e-3 deg, which is far better than any hand-built guess).
+
+## MIN-ENERGY PILOT (2026-08-14): the fixed-t_f pipeline works end to end, 5/5
+
+The first non-min-time run of the costate pipeline. Problem: fixed-t_f
+minimum energy, J = ∫ s² dt (Bertrand–Epenoy ε = 1 — the same convention
+GTO_tulip's energy→fuel homotopy starts from), throttle s ∈ [0,1], primer
+direction, final mass free; t_f = γ · t_f^min(cell). PMP: same 14-state
+field as min-time except the throttle law s* = clip((T/2)(‖λ_v‖/m + λ_m/c),
+0, 1); terminal r, v matched + λ_m(t_f) = 0 (seven for seven); H is a
+first integral, not zero.
+
+Machinery added (all TDD, all tests green, golden cells bitwise unchanged):
+`costate_common/ms_bvp` `opts.fixedTf` (drops the t_f unknown — a real
+structural switch, not a guard) plus a Newton polish after an early fsolve
+exit (its ‖JᵀR‖ < 1e-6 test fires with ‖R‖ ~ 4e-10 on short arcs; disabling
+it instead made fsolve grind 1 → 7 iterations at the 1e-13 floor on the
+golden DRO cell — the quality regression caught that); the min-energy field
+`cr3bp_minenergy_pmp` (+ `_prop`) with exact CasADi-AD Jacobian, equal to
+`pumpkyn.cr3bp.tfMinEoM` at saturation to 1.7e-13 (F) / 2.7e-13 rel (A);
+`casadi_mintime_dro` `objective='energy'` + `tfFix` (default path bitwise
+identical, trapezoid and HS); the binding `indirect/ms_minenergy`; and the
+generic single-shooting acceptance gate `costate_common/ss_bvp_accept`
+(K = 1 on the same closures — the role tfMin plays for min-time entries).
+
+**Pilot** (`run_minenergy_pilot`, records in `direct/results/minenergy_pilot.mat`,
+figures `minenergy_<iD>_<iA>_g<γ>.png`): three flagship 12×12 cells at
+γ = 1.2 and a γ ladder on the golden cell. Warm start = the min-time cell's
+trajectory stretched to γ t_f. Direct solves 6–150 s (N = 800 Sundman HS);
+ms K = 12 converged every time in 2–3 iterations, 1–2 s.
+
+| cell | γ | t_f [d] | J = ∫s² | m_f (energy) | m_f (min-time) | thr min | ‖R‖ ms | accept |Δz| | flown dir. [km] | indirect arrival [km] | J rel diff |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| (2,5) | 1.10 | 17.83 | 2.4724 | 0.9379 | 0.9260 | 0.243 | 2.6e-11 | 0.0 | 1.05 | 0.000 | 1.1e-5 |
+| (2,5) | 1.20 | 19.45 | 1.9877 | 0.9421 | 0.9260 | 0.216 | 6.9e-12 | 0.0 | 1.10 | 0.000 | 2.7e-5 |
+| (2,5) | 1.40 | 22.69 | 2.0452 | 0.9374 | 0.9260 | 0.192 | 3.6e-11 | 1.5e-10 | 3.77 | 0.000 | 7.5e-6 |
+| (6,8) | 1.20 | 19.91 | 2.2828 | 0.9381 | 0.9242 | 0.378 | 6.5e-11 | 3.1e-10 | 12.18 | 0.031 | 2.8e-5 |
+| (1,2) | 1.20 | 30.24 | 1.8160 | 0.9331 | 0.8849 | 0.118 | 4.4e-11 | 0.0 | 40.20 | 0.053 | 2.1e-5 |
+
+All seven gates pass on all five: G1b flown direct control (< 100 km / 10
+m/s), ms converged, single-shooting acceptance, |ΔH| along the indirect
+flight 3e-9..4e-8 (integrator level), indirect flight lands, direct-vs-
+indirect J agree to ~1e-5 (collocation-order), throttle interior. The direct
+node throttle and the indirect flight's s(t) overlay to the eye
+(`minenergy_2_5_g1.20.png`); saturation plateaus sit at periselene where
+λ_r spikes. Final masses agree between routes to six digits.
+
+### Two lessons that changed the gate definitions mid-pilot
+
+1. **The single-shooting residual has a floor, and it is not ms_bvp's.** The
+   same λ₀ propagated over the full arc WITH and WITHOUT the variational
+   equations lands 6e-7 apart (ode113 RelTol 1e-10 × STM growth over 4–7
+   ND). So "returned unchanged" must be judged at that floor: ss_bvp_accept
+   now defaults tolR = 1e-6 (documented as the floor), verdict = |Δz| < 1e-6
+   at that tolerance — which is also how tfMin's own gate reads. Before the
+   change two cells "failed" acceptance with |Δz| = 3e-10 and 2e-11.
+2. **Judge H conservation absolutely, not relatively.** Cell (1,2) has
+   H = 0.093, so a 4e-8 absolute drift read as 4.6e-7 relative and "failed"
+   the 1e-8 relative gate. The gate is now |ΔH| < 1e-6 absolute (measured
+   3e-9..4e-8) — a PMP-shape sanity check, not a precision certificate; the
+   precision certificates are the ms residual and the flown arrival.
+
+### Observations worth carrying forward
+
+- **J and m_f are not monotone in γ** on cell (2,5): m_f 0.9379 → 0.9421 →
+  0.9374 and J 2.47 → 1.99 → 2.05 for γ = 1.1 → 1.2 → 1.4. Fixed rotating-
+  frame endpoints mean the fixed-time problems at different γ are not nested
+  (you cannot append a coast), and the γ = 1.4 solve, warm-started from the
+  stretched min-time arc, may sit in a different family. A γ grid per cell —
+  the "min-fuel = t_f-grid convergence map" lesson from GTO_tulip — will be
+  needed before any min-energy catalog axis is declared; basin discipline
+  applies here too.
+- The min-energy m_f exceeds the min-time m_f by 1.2–4.8 % of m₀ at
+  γ = 1.2 — a first quantitative "time-vs-fuel" number on this pair without
+  yet solving min-fuel.
+- Harvested collocation costates seed ms to 2–3 iterations at K = 12 for
+  every cell; no K escalation was needed (the min-time torus needed 12→24→48
+  on some cells). The smooth energy problem is the easy end, as predicted.
+
+### What is NOT yet done (deliberately)
+
+No second-order verdict for min-energy entries: `ms_conjugate_test` is the
+free-time quotiented Jacobi test and does not apply verbatim (no flow
+column; the λ scaling invariance is broken by L = s²). No catalog schema
+axis for γ. No energy→fuel homotopy yet — that is the next step toward
+min-fuel entries and reuses these seeds directly (`GTO_tulip`'s ε walk).

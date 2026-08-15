@@ -27,8 +27,16 @@ thrust 1–15 N), every entry accepted UNCHANGED by `pumpkyn.cr3bp.tfMin`.
   `costate_compare`), `viz/`, `results/` (incl.
   `dsweep_12x12_cells.mat` — the full-data-contract flagship torus that
   feeds `costate_common/golden_cells`).
+- **`run_minenergy_pilot.m`** (root) — the first NON-min-time run of the
+  pipeline (2026-08-14): fixed-t_f MIN-ENERGY (J = ∫s² dt) on flagship
+  12×12 cells at t_f = γ·t_f^min — direct energy solve
+  (`casadi_mintime_dro` `objective='energy'`, `tfFix`) → harvest →
+  `indirect/ms_minenergy` (fixed-tf `ms_bvp`) → gates incl. the generic
+  single-shooting acceptance. Records in `direct/results/minenergy_pilot.mat`.
 - **`indirect/`** — `ms_tfmin.m` (multiple shooting; thin binding of
-  `costate_common/ms_bvp` since migration #3), `thrust_ladder_library.m`
+  `costate_common/ms_bvp` since migration #3), **`ms_minenergy.m`** (its
+  fixed-t_f min-energy sibling, 2026-08-14; `tests/test_ms_minenergy.m`
+  = synthetic known-answer BVP), `thrust_ladder_library.m`
   (THE ladder engine, family-agnostic endpoints — halo/DPO campaigns call
   it unmodified), `extend_thrust_ladder`/`densify_ladder`, packagers
   (`build_costate_catalog.m`, `build_costate_lib*.m`), pickers + examples

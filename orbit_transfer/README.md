@@ -36,6 +36,14 @@ residual, flown arrival (<100 km), and **acceptance UNCHANGED by tfMin**
 | `DPO_tulip/` | DPO → tulip (τ ∈ 1–4 × Np ∈ 5–12) | 3,932 (89% pairs) | deliverable 5 |
 | `HALO_HALO/` | L1 ↔ L2 halo-to-halo, BOTH directions (schema v2, arrival-period axis; directions measurably asymmetric) | 4,048 (A: 1,952 @ 90%; B: 2,096 @ 96%) | deliverable 6 |
 
+**Beyond min-time (2026-08-14):** the pipeline's first fixed-t_f run —
+MIN-ENERGY (J = ∫s² dt) at t_f = γ·t_f^min on flagship DRO→tulip cells,
+5/5 through all gates (`DRO_tulip/run_minenergy_pilot`, findings in
+`DRO_tulip/FINDINGS.md`). New shared pieces: fixed-tf `ms_bvp`, the
+min-energy PMP field (`cr3bp_minenergy_pmp`), and the generic
+single-shooting acceptance gate `ss_bvp_accept` (no pumpkyn twin needed).
+Min-fuel entries = energy→fuel homotopy on these seeds (next).
+
 Physics headlines: halo departures are the cheapest (0.65 km/s best,
 vs 0.98 DRO / 0.76 DPO); solvability improves with halo period; the hard
 corner everywhere is shortest-departure × longest-tulip; "blocky" tf maps

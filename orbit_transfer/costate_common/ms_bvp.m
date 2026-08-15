@@ -23,8 +23,11 @@ function [p, info] = ms_bvp(prob, seed, opts)
 %   finding, Gemini 2026-08-04).
 % • prob.prop must THROW on integrator collapse; the engine converts the
 %   throw into a rejected iterate.
-% • Final time tf is always an unknown here (free-tf problems). A fixed-tf
-%   variant is a future need; do not fake it with tight guards.
+% • Final time tf is an unknown by default (free-tf problems). With
+%   opts.fixedTf = true the trailing tf unknown is DROPPED, tf = seed.tf is
+%   held constant, and prob.terminal must then supply exactly nf conditions
+%   (min-energy / fixed-time catalogs). This is a real structural switch,
+%   not a tight tf guard (which would leave a singular Jacobian column).
 %
 %% Inputs:
 %
@@ -60,13 +63,21 @@ function [p, info] = ms_bvp(prob, seed, opts)
 %                                                   .tfLo [0.3], .tfHi [3]
 %                                                   (x seed.tf guards),
 %                                                   .pMax [1e5], .rejectR
-%                                                   [1e8], .keepSTMs [false]
+%                                                   [1e8], .keepSTMs [false],
+%                                                   .fixedTf [false] (drop
+%                                                   the tf unknown; tf =
+%                                                   seed.tf), .polishMax
+%                                                   [5] Newton polish steps
+%                                                   after an early fsolve
+%                                                   exit
 %
 %% Outputs:
 %
 %  p                        [n x 1]                 Best iterate:
 %                                                   [y1(freeIdx0); y2..yK;
 %                                                   tf], n = nf+ny(K-1)+1
+%                                                   (fixedTf: no trailing
+%                                                   tf, n = nf+ny(K-1))
 %
 %  info                     struct                  .converged, .normR,
 %                                                   .iters, .wall (s),
@@ -79,6 +90,7 @@ function [p, info] = ms_bvp(prob, seed, opts)
 %
 %% Revision History:
 %  M. Casey                                                   (c) 08/08/2026
+%  M. Casey  fixed-tf variant (opts.fixedTf) for min-energy    (c) 08/14/2026
 %  Copyright Coorbital Inc.
 %% ------------------------ Begin Code Sequence ---------------------------
 
@@ -97,6 +109,16 @@ if nargin == 0
              p_(1), p_(end), pi/2);
      fprintf('      converged = %d, ||R|| = %.1e, iters = %d\n', ...
              inf_.converged, inf_.normR, inf_.iters);
+   %Demo 2: FIXED tf = pi/2, y(0)=0 fixed, y'(0) free, hit y(tf)=1 only
+   %(one terminal condition for one unknown). Exact answer: y'(0) = 1.
+     prF = pr;  prF.terminal = @(y,nJ) deal(y(1)-1, [1 0]);
+     tgF = linspace(0, pi/2, K+1);
+     sdF = struct('tf', pi/2, 'tGrid', tgF, 'Y', 0.9*[sin(tgF); cos(tgF)]);
+     [pF, infF] = ms_bvp(prF, sdF, struct('tolR',1e-8,'fixedTf',true));
+     fprintf('demo (fixed tf): y''(0) = %.9f (exact 1), n = %d unknowns\n', ...
+             pF(1), numel(pF));
+     fprintf('      converged = %d, ||R|| = %.1e, iters = %d\n', ...
+             infF.converged, infF.normR, infF.iters);
      return
 end
 
@@ -111,6 +133,7 @@ tfHi     = d('tfHi', 3);
 pMax     = d('pMax', 1e5);
 rejectR  = d('rejectR', 1e8);
 keepSTMs = d('keepSTMs', false);
+fixedTf  = d('fixedTf', false);
 
 ny  = prob.ny;
 fi0 = prob.freeIdx0(:)';
@@ -121,8 +144,10 @@ dsg = diff(sig);                               % [1 x K]
 y1fix = seed.Y(:,1);                           % fixed part of column 1
 
 % unknown vector p = [y1(freeIdx0); Y_2..Y_K (ny each); tf]
-p = [seed.Y(fi0,1); reshape(seed.Y(:,2:K), ny*(K-1), 1); seed.tf];
-n = numel(p);                                  % = nf + ny(K-1) + 1
+% (fixedTf: the trailing tf is absent and tf = seed.tf throughout)
+p = [seed.Y(fi0,1); reshape(seed.Y(:,2:K), ny*(K-1), 1)];
+if ~fixedTf, p(end+1) = seed.tf; end
+n = numel(p);                                  % = nf + ny(K-1) (+1 free tf)
 
 % Trust-region-dogleg on the multiple-shooting system with the analytic
 % block Jacobian. A plain Newton + backtracking loop stalls on rough seeds
@@ -135,28 +160,55 @@ fopts = optimoptions('fsolve', 'Display', dispmode(verbose), ...
     'MaxIterations', maxIter, 'MaxFunctionEvaluations', 10*maxIter, ...
     'OutputFcn', @(x,ov,st) toc(tStart) > wallSec);   % wall budget
 [p, ~, ~, fout] = fsolve(@residual, p, fopts);
-[R, ~] = residual(p);
+[R, J] = residual(p);
 normR = norm(R, inf);
+iters = fout.iterations;
+
+% NEWTON POLISH. fsolve's own exit test (first-order optimality ||J'R|| <
+% 1e-6) fires early on a short, well-conditioned arc where ||J|| is small:
+% measured on the min-energy binding, "Equation solved" at ||R|| = 3.9e-10
+% with tolR = 1e-10 -- one Newton step short. Disabling that test instead
+% makes fsolve grind at the residual floor (golden DRO cell: 1 -> 7 iters
+% for the same 1.2e-13). So: leave fsolve alone, and when it returns above
+% tolR take plain Newton steps with the analytic Jacobian while they help
+% (at most polishMax, default 5). Already-converged runs are untouched.
+polishMax = d('polishMax', 5);
+kp = 0;
+while normR > tolR && kp < polishMax && toc(tStart) < wallSec
+    pTry = p - J\R;
+    [Rt, Jt] = residual(pTry);
+    nt = norm(Rt, inf);
+    if ~(nt < normR), break, end             % no improvement (or NaN): stop
+    p = pTry;  R = Rt;  J = Jt;  normR = nt;
+    kp = kp + 1;
+end
+iters = iters + kp;
 
 info = struct('converged', normR < tolR, 'normR', normR, ...
-              'iters', fout.iterations, 'wall', toc(tStart), ...
-              'tGrid', sig*p(end), 'Y', junctions(p));
+              'iters', iters, 'wall', toc(tStart), ...
+              'tGrid', sig*tfOf(p), 'Y', junctions(p));
 if keepSTMs
     info.PHI = collectSTMs(p);
 end
 
 % ------------------------------------------------------------------------
+    function tf = tfOf(p)
+    % TFOF  Final time of an iterate: the trailing unknown, or the fixed
+    % seed value.  INPUTS: p [n x 1].  OUTPUTS: tf double.
+    if fixedTf, tf = seed.tf; else, tf = p(end); end
+    end
+
     function Yj = junctions(p)
     % JUNCTIONS  Junction START states from the unknown vector.
     % INPUTS: p [n x 1].  OUTPUTS: Yj [ny x K].
     y1 = y1fix;  y1(fi0) = p(1:nf);
-    Yj = [y1, reshape(p(nf+1:end-1), ny, K-1)];
+    Yj = [y1, reshape(p(nf+(1:ny*(K-1))), ny, K-1)];
     end
 
     function PHI = collectSTMs(p)
     % COLLECTSTMS  Segment STMs at the final iterate (for the conjugate-
     % point test).  INPUTS: p.  OUTPUTS: PHI {1 x K} of [ny x ny].
-    Yj = junctions(p);  tf = p(end);
+    Yj = junctions(p);  tf = tfOf(p);
     PHI = cell(1, K);
     for k = 1:K
         [~, PHI{k}] = prob.prop(dsg(k)*tf, Yj(:,k), true);
@@ -166,12 +218,13 @@ end
     function [R, J] = residual(p)
     % RESIDUAL  Multiple-shooting residual and (optionally) dense Jacobian.
     % INPUTS:  p [n x 1] unknown vector.  OUTPUTS: R [n x 1]; J [n x n].
-    tf = p(end);
+    tf = tfOf(p);
     needJ = nargout > 1;
     % Iterate sanity guard: a wild trust-region iterate can drive a segment
     % propagation into integrator collapse (step size -> eps, unbounded
     % memory -- observed killing the process). Reject it with the large
-    % residual instead of propagating it.
+    % residual instead of propagating it. (The tf window is vacuous when
+    % tf is fixed.)
     if ~all(isfinite(p)) || tf < tfLo*seed.tf || tf > tfHi*seed.tf ...
             || max(abs(p)) > pMax
         R = rejectR*ones(n,1);
@@ -197,7 +250,7 @@ end
             if needJ
                 J(rows, colsK)       = segsel(PHIk, k);
                 J(rows, colidx(k+1)) = -eye(ny);
-                J(rows, n)           = J(rows, n) + Fh*dsg(k);
+                if ~fixedTf, J(rows, n) = J(rows, n) + Fh*dsg(k); end
             end
         else
             [g, dgdy] = prob.terminal(yh, needJ);
@@ -205,7 +258,7 @@ end
             R(rows) = g;
             if needJ
                 J(rows, colsK) = segsel(dgdy*PHIk, k);
-                J(rows, n)     = J(rows, n) + dgdy*Fh*dsg(k);
+                if ~fixedTf, J(rows, n) = J(rows, n) + dgdy*Fh*dsg(k); end
             end
         end
     end

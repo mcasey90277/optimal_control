@@ -17,6 +17,12 @@ exists.
   densification of the remaining pairs.
 - [ ] **Sub-0.5 N rungs** deferred by Darin "until customers need it."
 - [ ] Min-fuel catalogs: explicitly NOT yet (Darin, Aug 2026).
+- [~] **Min-energy / fixed-t_f pipeline** — pilot DONE 2026-08-14 on three
+  flagship DRO→tulip cells + a γ ladder (`DRO_tulip/run_minenergy_pilot`):
+  fixed-tf `ms_bvp`, `ms_minenergy`, min-energy PMP field, generic
+  single-shooting acceptance gate. Next: a t_f-multiplier axis in the
+  catalog schema, a fixed-tf conjugate test, then energy→fuel homotopy on
+  the same seeds (the min-fuel catalog route).
 
 ## Optimal-control library (goal-oc-library)
 
@@ -32,9 +38,9 @@ exists.
 - [x] Schema versioning — DONE 2026-08-09 (schema v2: `catalog_schema`
   validator + named derive registry + environment pinning; v1
   compatibility proven bitwise).
-- [ ] Acceptance-gate harness: generalize the tfMin acceptance gate as a
-  per-family independent-solver harness (the 1 of 11 verification checks
-  that is not yet generic).
+- [~] Acceptance-gate harness: `costate_common/ss_bvp_accept` (2026-08-14)
+  is the generic single-shooting form, used by min-energy; still open:
+  route the min-time tfMin gate through the same interface.
 - [ ] Batched-driver template + monitor template into the library (the
   halo/DPO drivers differ only in names; monitors must watch process
   liveness, not just log errors).

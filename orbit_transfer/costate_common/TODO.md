@@ -9,11 +9,18 @@
   (versioned validator + named derive registry + environment pinning);
   v1 compatibility proven bitwise; first v2 catalogs = HALO_HALO
   deliverable 6.
-- [ ] **Acceptance-gate harness**: the tfMin acceptance gate is the one
-  pipeline check not yet generic — generalize as a harness taking a
-  per-family independent solver.
-- [ ] **ms_bvp fixed-tf variant** (the header forbids faking it with tight
-  guards); needed the day a fixed-time catalog appears.
+- [~] **Acceptance-gate harness**: first concrete form DONE 2026-08-14 —
+  `ss_bvp_accept` (single shooting on the same closures, K = 1) serves any
+  cost with no pumpkyn twin; used by `ms_minenergy` (opts.accept). Still
+  open: route the min-time tfMin gate through the same harness interface.
+- [x] **ms_bvp fixed-tf variant** — DONE 2026-08-14 (`opts.fixedTf`; tests
+  in `tests/`; golden cells bitwise unchanged). First consumer:
+  `DRO_tulip/indirect/ms_minenergy` (min-energy pilot PASSED on flagship
+  cells — see `DRO_tulip/FINDINGS.md`).
+- [ ] **Fixed-tf conjugate-point test**: `ms_conjugate_test` quotients the
+  free-time flow column; a fixed-tf variant (no flow column, λ-scaling
+  invariance only partially present since L = s² fixes the scale) is
+  needed before min-energy entries get a second-order verdict.
 - [ ] **Conjugate test refinements**: junction-resolution disclaimer could
   be closed by dense STM sampling inside flagged intervals; an exact-zero
   det sample is currently counted as a crossing — refine to a bracketed

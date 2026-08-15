@@ -10,13 +10,11 @@ exists.
   DPO 65 pairs, DRO s_A=0.075 row + 6 stragglers — tasks #14/#15). The
   engines revisit any no-OK cell automatically; run `densify_ladder`-style
   passes with fresh attempt budgets.
-- [ ] **L1↔L2 halo-to-halo catalog** (Darin liked the movies). Blocked on a
-  schema extension: the catalog format keys arrivals by petal count `Np`;
-  a halo arrival needs an **arrival-period axis** — the "new parameter
-  axis" step in `DRO_tulip/doc/costate_library_sdd.tex`'s extension guide.
-  Only two admissible L1 members exist (τ = 1.8037, 2.7433), so the box is
-  2 × 11 L2 members. Watch item: one 10 N rung showed a lone
-  tfMin-acceptance NaN with a healthy 0.08 km flown miss.
+- [x] **L1↔L2 halo-to-halo catalog** — DONE 2026-08-09, BOTH directions,
+  shipped as deliverable 6 on the schema-v2 arrival-period axis (A: 1,952
+  entries / 90%; B: 2,096 / 96%; directions measurably asymmetric). Still
+  open from it: the lone 10 N tfMin-acceptance-NaN watch item, and
+  densification of the remaining pairs.
 - [ ] **Sub-0.5 N rungs** deferred by Darin "until customers need it."
 - [ ] Min-fuel catalogs: explicitly NOT yet (Darin, Aug 2026).
 
@@ -25,11 +23,15 @@ exists.
 - [x] Migrations #2–#5 (duals_to_costates, ms_bvp + conjugate test +
   golden cells, flown-control verifier, foc covector unification) — done
   2026-08-08, each with an equivalence gate.
-- [ ] Promote `costate_common` to a proper MATLAB package (`+oc` or
-  similar), pumpkyn house style; SDD is the architecture document.
-- [ ] Version the sheet-.mat schema and compact catalog format BEFORE a
-  second data consumer exists (accepted debt in the SDD; includes the
-  `cat.derive` formula-registry replacement and environment pinning).
+- [~] Promote to a MATLAB package — STARTED 2026-08-09 as the top-level
+  cross-folder `../oclib/+oc` (moves 1–2 done: `oc.duals_to_costates`,
+  `oc.fly_control`, both with bit-identical acceptance on orbit AND
+  booster flagship data). Next: move 3 = `oc.ms_bvp` +
+  `oc.ms_conjugate_test` promotion + cart-pole PMP-BVP integration demo.
+  See `../oclib/README.md` and `../OCP_UNIFYING_MATH.md` §5.
+- [x] Schema versioning — DONE 2026-08-09 (schema v2: `catalog_schema`
+  validator + named derive registry + environment pinning; v1
+  compatibility proven bitwise).
 - [ ] Acceptance-gate harness: generalize the tfMin acceptance gate as a
   per-family independent-solver harness (the 1 of 11 verification checks
   that is not yet generic).

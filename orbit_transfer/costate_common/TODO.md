@@ -1,13 +1,14 @@
 # costate_common — TODO
 
-- [ ] **Promote to a proper MATLAB package** (`+oc` or similar) once the
-  interfaces settle; the SDD is the architecture document. Until then this
-  flat folder + `addpath` is the contract.
-- [ ] **Schema versioning** (accepted debt, SDD): version the sheet-.mat
-  schema and the compact catalog format before a second data consumer
-  exists; replace `cat.derive` executable strings with a named formula
-  registry; pin environment (MATLAB/CasADi/IPOPT/pumpkyn revisions) in
-  campaign metadata enforcement, not just recording.
+- [~] **Package promotion** — IN PROGRESS as the top-level cross-folder
+  `../../oclib/+oc` (2026-08-09): `duals_to_costates` and the
+  flown-control engine live there now (delegates here); `ms_bvp` +
+  `ms_conjugate_test` are next (roadmap move 3, incl. a cart-pole PMP-BVP
+  integration demo).
+- [x] **Schema versioning** — DONE 2026-08-09: `catalog_schema.m`
+  (versioned validator + named derive registry + environment pinning);
+  v1 compatibility proven bitwise; first v2 catalogs = HALO_HALO
+  deliverable 6.
 - [ ] **Acceptance-gate harness**: the tfMin acceptance gate is the one
   pipeline check not yet generic — generalize as a harness taking a
   per-family independent solver.

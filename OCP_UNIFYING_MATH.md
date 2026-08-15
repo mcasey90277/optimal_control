@@ -264,11 +264,14 @@ consumers whose copies can be diffed, not by aesthetics. With that filter:
 1. **Covector station rules** (`duals_to_costates`) — booster's G5 is the
    second consumer *by evidence of the shared bug*. Extraction test: route
    booster G5 through it and reproduce the corrected 1.2e-6-deg primer angle.
+   **DONE 2026-08-09** (`oc.duals_to_costates`; G5 primer 1.20742e-06 deg
+   identical, orbit golden cells green).
 2. **Flown-control verifier pattern** — three implementations exist (orbit
    `flown_control_error`, booster G2, and the tutorials' ad-hoc re-simulation).
    The engine (interval loop + *scheme-matched* control reconstruction +
    tight ODE) is identical; only the RHS differs. Same closure pattern as
-   `ms_bvp`.
+   `ms_bvp`. **DONE 2026-08-09** (`oc.fly_control`; orbit globKm and booster
+   G2 residuals identical to 0.000e+00).
 3. **`ms_bvp` promotion out of `orbit_transfer`** — nothing in it is
    astrodynamical; it would solve the cart-pole swing-up's PMP BVP as a
    tutorial exercise (worth doing purely as a demo that route 2 machinery is

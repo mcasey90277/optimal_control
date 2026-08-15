@@ -1,4 +1,14 @@
-# HALO_HALO — L1 ↔ L2 halo-to-halo transfers (probe stage)
+# HALO_HALO — L1 ↔ L2 halo-to-halo transfers (COMPLETE, both directions)
+
+**Status 2026-08-09: catalogs shipped as deliverable 6** — the first
+schema-v2 (arrival-period-axis) catalogs. A (L1→L2): 8 sheets, 1,952
+entries, 258/288 pairs (90%). B (L2→L1): 2,096 entries, 277/288 (96%).
+Cheapest 1.0129 km/s (τ=1.80→1.75 @ 1 N); fastest 6.3 h @ 15 N; the
+directions are measurably asymmetric (2.052 vs 2.125 d on the same pair),
+so they ship as separate catalogs. Front door `run_halo_halo_catalog.m`
+(pilot/all/allB), packager `build_hh_catalog.m`, driver
+`run_halo_halo_batched.sh` (stage-scoped locks). The probe-stage record
+below is retained as history.
 
 Darin's ask (2026-08-07): transfers between L1 and L2 halos — "visually it
 will look really nice." Feasibility is PROVEN: the shared pipeline needed

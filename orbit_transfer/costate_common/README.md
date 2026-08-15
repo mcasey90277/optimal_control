@@ -24,7 +24,7 @@ Both externally reviewed (GPT-5.6-terra + Gemini 3.1, 2026-08-07/08).
 
 | file | what |
 |---|---|
-| `duals_to_costates.m` | ALL station-association rules in one home: Hermite-Simpson midpoints, trapezoid left-nodes, trapezoid-nodal step-weighted average (the earth campaigns' map; `verify_common/foc_dual_to_costate` delegates here). Sign vote, λ_t = +1 check, active-constraint diagnostics. Output is a SEED (~1e-3), never a shooting solution. |
+| `duals_to_costates.m` | **DELEGATE** since 2026-08-09: the covector rules were promoted to the cross-folder library — `../../oclib/+oc/duals_to_costates` — when booster_landing's G5 gate became the second top-level consumer. This delegate keeps all costate_common callers working. |
 | `harvest_ms_seed.m` | Direct solution → multiple-shooting seed (delegates the covector rules; owns only interpolation onto segment boundaries). |
 
 **Multiple shooting / second order**
@@ -38,7 +38,7 @@ Both externally reviewed (GPT-5.6-terra + Gemini 3.1, 2026-08-07/08).
 
 | file | what |
 |---|---|
-| `flown_control_error.m` | The G1b gate: fly the reconstructed control end-to-end, report where you actually arrive. |
+| `flown_control_error.m` | The G1b gate: fly the reconstructed control end-to-end, report where you actually arrive. Since oclib move 2 a thin wrapper: CR3BP dynamics + scheme-matched control closure over the shared engine `oc.fly_control` (bitwise-equivalent). |
 | `true_min_altitude.m` | Propagated (between-nodes) minimum lunar altitude — checks a collocation floor where it actually binds. |
 | `cr3bp_thrust_rhs.m`, `ctrl_quad.m` | Shared physics + Hermite-Simpson control reconstruction for the two above. |
 | `preflight_screen.m` | Node-level sanity (altitude, tf plausibility) BEFORE any integrator touches a solve. |

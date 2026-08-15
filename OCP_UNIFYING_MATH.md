@@ -37,6 +37,7 @@ Every folder is a choice of (x, f, L, φ, ψ, g, U, free-or-fixed t_f):
 | `earth_..._CR3BP` | same + lunar term | 2-body + third body | fuel | ball+throttle | fixed multiple | orbit → orbit |
 | `GTO_tulip`, `GTO_ELFO` | Cartesian/Sundman (7) | CR3BP + thrust | fuel (via energy homotopy); min-time anchors | ball+throttle | fixed multiple / free | orbit → orbit |
 | costate catalogs (`DRO/HALO/DPO_tulip`, `HALO_HALO`) | [r v m] (7) | CR3BP + thrust | **min-time** (all-burn) | ball, throttle ≡ 1 | **free** | orbit-phase → orbit-phase |
+| min-energy pilot (`DRO_tulip/run_minenergy_pilot`, 2026-08-14) | [r v m] (7) | CR3BP + thrust | ∫s² (energy, smooth interior throttle) | ball, throttle ∈ [0,1] | **fixed** γ·t_f^min | orbit-phase → orbit-phase |
 | `booster_landing` | [r v m] (7) | const gravity (+opt drag) + thrust | fuel | **annulus** T∈[Tmin,Tmax] + cones | free | state → landing set |
 | `missiles` (Phase 2, future) | 3-DOF point mass (6–7) | spherical rotating Earth + aero | TBD (range/heat/time) | bank/AoA schedules | free | launch → impact |
 
@@ -141,7 +142,10 @@ smooth problem, then slide ε→0). Min-time with low thrust (the catalogs) is
 the easy extreme in disguise: the optimal control is *all-burn* (provable
 from λ̇_m ≤ 0 + transversality — continuous burn is a theorem, not an
 observation), so there are no switches at all, which is precisely why direct
-+ multiple shooting handles thousands of catalog cells unattended.
++ multiple shooting handles thousands of catalog cells unattended. The
+fixed-t_f min-energy pilot (2026-08-14) confirmed the other easy end from
+the same machinery: smooth interior throttle, harvested seeds converge in
+2–3 multiple-shooting iterations at K = 12 on every flagship cell tried.
 **Diagnostic: is L strictly convex in u (smooth), or linear in throttle
 (bang-bang), or is time itself the cost (structure depends on U)?**
 
@@ -251,7 +255,7 @@ re-fixed. That is the one-home-per-rule argument in one sentence.
 
 | library | contents | genericity today |
 |---|---|---|
-| `costate_common` | `ms_bvp` (generic multiple-shooting engine — problem enters as three closures), `ms_conjugate_test`, `duals_to_costates` (all covector station rules), `harvest_ms_seed`, flown-control verifier + preflight, catalog packager + schema, golden-cell regression | `ms_bvp` and `duals_to_costates` are **already problem-agnostic**; the flown verifier is CR3BP-specific only through its RHS |
+| `costate_common` | `ms_bvp` (generic multiple-shooting engine — problem enters as three closures; free OR fixed t_f since 2026-08-14), `ss_bvp_accept` (generic single-shooting acceptance gate = `ms_bvp` at K=1), `ms_conjugate_test`, `duals_to_costates` (all covector station rules), `harvest_ms_seed`, flown-control verifier + preflight, `cr3bp_minenergy_pmp` (min-energy PMP field), catalog packager + schema, golden-cell regression | `ms_bvp`, `ss_bvp_accept` and `duals_to_costates` are **already problem-agnostic**; the flown verifier and the min-energy field are CR3BP-specific only through their RHS |
 | `verify_common` | AD-based first-order gate (`foc_check`/`foc_report`), IPOPT inertia, PMP residual, mesh tools | transcription-native, already runs on four campaigns |
 | `cr3bp_common` | CR3BP GTO problem definition | problem data, correctly not generic |
 

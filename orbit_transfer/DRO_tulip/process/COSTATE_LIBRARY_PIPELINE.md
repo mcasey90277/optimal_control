@@ -131,3 +131,30 @@ alongside pumpkyn's astrodynamics:
 The Halo campaign (HALO_tulip/) proceeds on L2 southern, coarse periods
 {1.75, 2.2, 2.8, 3.4} ND, reusing the ladder pipeline through
 get_family_orbit.
+
+## Fixed-time costs: the min-energy pilot (added 2026-08-14)
+
+The three steps carry over unchanged in *shape* to a fixed-t_f cost; only
+the bindings change. Proven on flagship 12×12 DRO→tulip cells with
+MINIMUM ENERGY, J = ∫s² dt at t_f = γ·t_f^min (`DRO_tulip/run_minenergy_pilot`):
+
+1. **Direct** — the same transcription (`casadi_mintime_dro`) with
+   `objective='energy'` + `tfFix`, warm-started from the min-time cell
+   stretched to γ t_f. Same Sundman HS mesh, floor, covector extraction.
+2. **Refine** — `indirect/ms_minenergy`, a fixed-t_f binding of `ms_bvp`
+   (`opts.fixedTf`): unknowns λ₀ (7), terminal r/v matched + λ_m(t_f) = 0,
+   no H(t_f) = 0 (H is a first integral, reported and checked). Seeds from
+   the harvest converge in 2–3 iterations at K = 12 — no K escalation.
+3. **Accept** — pumpkyn has no min-energy solver, so the gate is the
+   generic `costate_common/ss_bvp_accept`: single shooting (`ms_bvp` at
+   K = 1) on the same closures, PASS = |Δz| < 1e-6 at the single-shooting
+   residual floor (1e-6; with/without-STM full-arc flights differ ~6e-7).
+
+Extra gates for a fixed-time cost: |ΔH| along the indirect flight
+(absolute, < 1e-6), direct-vs-indirect J agreement (~1e-5, collocation
+order), throttle interior somewhere (else it is min-time in disguise).
+Result: 5/5 records pass every gate; full table in `FINDINGS.md`. Lesson to
+carry: fixed-time problems at different γ are NOT nested (fixed rotating-
+frame endpoints), so J and m_f can be non-monotone in γ — grid γ per cell
+before declaring a catalog axis. Min-fuel entries are the energy→fuel
+homotopy on these seeds.

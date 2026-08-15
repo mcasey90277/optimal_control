@@ -100,7 +100,21 @@ Continuous verification: re-integrates the solved control end-to-end;
 reports flown arrival error.\\
 \texttt{ms\_tfmin} &
 Multiple-shooting solve of the PMP BVP; analytic block Jacobian from
-pumpkyn segment STMs; iterate guards, wall budget.\\
+pumpkyn segment STMs; iterate guards, wall budget. Since migration \#3 a
+thin binding of \texttt{costate\_common/ms\_bvp}, which since 2026-08-14
+also runs in a structural fixed-$t_f$ mode (\texttt{opts.fixedTf}).\\
+\texttt{ms\_minenergy} &
+The fixed-$t_f$ minimum-energy binding of \texttt{ms\_bvp} (2026-08-14):
+seven unknown costates, terminal $\bm r,\bm v$ matched $+\ \lambda_m(t_f)=0$,
+Hamiltonian first integral reported; field + STM from
+\texttt{costate\_common/cr3bp\_minenergy\_pmp/\_prop} (CasADi-AD
+Jacobian, equal to \texttt{tfMinEoM} at saturation). Front door
+\texttt{run\_minenergy\_pilot}.\\
+\texttt{ss\_bvp\_accept} (costate\_common) &
+Generic single-shooting acceptance gate: \texttt{ms\_bvp} at $K=1$ on the
+same closures; residual at the seed, move $|\Delta z|$, verdict at the
+single-shooting floor ($10^{-6}$). Plays tfMin's Stage-3 role for costs
+with no pumpkyn solver.\\
 \texttt{mesh\_policy} &
 The one place discretization is chosen: $N \sim 250/$rev,
 $K \sim 10/$rev, Sundman from 1.5 rev.\\
@@ -248,11 +262,30 @@ front door over a new engine; keep continuation steps small where the
 $t_f$ response steepens; record the axis value in \texttt{meta} and in
 every packaged entry.
 
+\paragraph{New cost functional (worked example: fixed-$t_f$ minimum energy,
+2026-08-14).} Three bindings change, nothing structural: (i) the direct
+transcription gains an objective option and a pinned $t_f$
+(\texttt{casadi\_mintime\_dro} \texttt{objective='energy'}, \texttt{tfFix};
+default path bitwise identical, proven by a stored-reference test); (ii) a
+PMP field with its Jacobian for the new cost (\texttt{cr3bp\_minenergy\_pmp},
+unit-tested against \texttt{tfMinEoM} at saturation) and a
+\texttt{ms\_bvp} binding with the new terminal conditions
+(\texttt{ms\_minenergy}, \texttt{fixedTf}); (iii) the acceptance gate ---
+\texttt{ss\_bvp\_accept} when no production single-shooting solver exists.
+Add cost-specific gates (Hamiltonian first integral, direct-vs-indirect
+cost agreement, throttle-interior check) to the front door, pilot on a few
+flagship cells with pre-registered gates, and only then consider a catalog
+axis; expect fixed-time solutions at different $t_f$ NOT to be nested
+(non-monotone cost in $\gamma$ was measured), so grid $t_f$ per cell.
+
 \paragraph{Toward a pumpkyn-style optimal-control library.} Migration
 rule: code reused by a second campaign moves to \texttt{costate\_common/}
-in its next touch. Current residents: the endpoint provider and the bounds
-survey; next candidates: \texttt{ms\_tfmin}, \texttt{mesh\_policy}, the
-generic pickers/describer, the batched-driver template.
+in its next touch. Residents now include the endpoint provider, the bounds survey,
+\texttt{ms\_bvp} (free/fixed $t_f$), \texttt{ss\_bvp\_accept}, the covector
+mapping delegate, the flown-control verifier, the min-energy field, and the
+schema'd packager; next candidates: \texttt{mesh\_policy}, the generic
+pickers/describer, the batched-driver template, and promotion of
+\texttt{ms\_bvp} to the cross-folder \texttt{oclib/+oc} package.
 
 \section{Known limitations}
 

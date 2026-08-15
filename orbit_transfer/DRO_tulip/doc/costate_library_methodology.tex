@@ -247,6 +247,63 @@ system \texttt{pumpkyn.cr3bp.tfMin} solves; \textbf{a costate library is a
 catalog of its roots}, indexed by the problem parameters (phases, thrust,
 orbit-family parameters).
 
+\subsection{The fixed-time minimum-energy variant (added 2026-08-14)}
+\label{sec:minenergy}
+
+The pipeline's first cost beyond minimum time. Fix the final time at
+$t_f = \gamma\,t_f^{\min}$ (the cell's minimum time, $\gamma>1$) and minimize
+the \emph{energy} endpoint of the Bertrand--Epenoy family,
+\begin{equation}
+J_E = \int_0^{t_f} \delta^2\,dt ,
+\end{equation}
+the same convention the GTO$\to$tulip campaign's energy$\to$fuel homotopy
+starts from ($\varepsilon=1$), so that min-fuel entries can later be reached
+from these solutions by the $\varepsilon$ walk. Dynamics \eqref{eq:dyn} and
+endpoints are unchanged. The Hamiltonian becomes
+\begin{equation}
+H_E \;=\; \delta^2 + \lr^{\!\top}\Vv
+      + \lv^{\!\top}\!\Big(\bm a_{\rm 3B} + \delta\frac{T_{\max}}{m}\uh\Big)
+      - \lambda_m\,\delta\,\frac{T_{\max}}{c},
+\end{equation}
+the direction law is the primer vector as before, and the throttle is now
+\emph{smooth and interior}: $\partial H_E/\partial\delta = 0$ gives
+\begin{equation}
+\delta^\star = \operatorname{clip}\!\Big(\tfrac{T_{\max}}{2}\Big(\tfrac{\lVert\lv\rVert}{m}
+      + \tfrac{\lambda_m}{c}\Big),\,0,\,1\Big),
+\end{equation}
+which saturates to the minimum-time engine wherever the bracket exceeds~1
+(at saturation the vector field and its Jacobian coincide with
+\texttt{tfMinEoM}'s to $10^{-13}$ --- the unit test that pins every
+convention). The costate equations are those of the minimum-time problem
+with $\delta\to\delta^\star$. Free final mass still gives
+$\lambda_m(t_f)=0$; fixed $t_f$ removes the transversality row, so the
+shooting residual has \emph{seven} rows for the seven unknown initial
+costates,
+\begin{equation}
+\bm R_E(\bm\lambda(0)) = \big[\Rv(t_f)-\Rv_f;\ \Vv(t_f)-\Vv_f;\ \lambda_m(t_f)\big] = \bm 0 ,
+\end{equation}
+and $H_E$ is a \emph{first integral} (autonomous, fixed time) rather than
+zero --- reported along every solved arc as a PMP-shape check (measured
+drift $3\times10^{-9}$--$4\times10^{-8}$ absolute over 18--30 days at
+integrator tolerance).
+
+Machinery: the multiple-shooting engine \texttt{ms\_bvp} gained a
+structural fixed-$t_f$ mode (\texttt{opts.fixedTf}: the $t_f$ unknown and its
+Jacobian column are dropped, not guarded), bound as
+\texttt{ms\_minenergy}; the field lives in
+\texttt{costate\_common/cr3bp\_minenergy\_pmp} with an exact automatic-
+differentiation Jacobian (pumpkyn has no min-energy EoM, so this is the one
+pipeline dynamics that is not a pumpkyn call); the direct stage is the same
+transcription with an energy objective and pinned $t_f$. Because no
+production single-shooting solver exists for this cost, Stage~3 is played by
+the generic gate \texttt{ss\_bvp\_accept} (Section~\ref{sec:accept}). Pilot
+result on flagship $12\times12$ cells ($\gamma=1.1,1.2,1.4$): every record
+passed all gates; harvested seeds converged in 2--3 multiple-shooting
+iterations at $K=12$; final masses agree between routes to six digits;
+$J_E$ and $m_f$ are \emph{not} monotone in $\gamma$ (fixed rotating-frame
+endpoints make the fixed-time problems non-nested), so a $\gamma$ grid per
+cell must precede any catalog axis (\texttt{DRO\_tulip/FINDINGS.md}).
+
 \section{Why a library: sensitivity and solution families}
 
 \subsection{Exponential sensitivity of single shooting}
@@ -479,6 +536,25 @@ library entry is a root of the production solver's own residual, usable
 downstream with zero adaptation. As an independent cross-check, direct and
 indirect flight times agree to a median of $2\times10^{-8}$ ND across the
 torus --- a certification of \emph{both} methods at every phase pair.
+
+\paragraph{The gate for costs with no production solver.}
+\label{sec:accept}
+For fixed-time costs (Section~\ref{sec:minenergy}) pumpkyn has no
+single-shooting twin, so the same acceptance semantics are provided
+generically by \texttt{costate\_common/ss\_bvp\_accept}: the multiple-
+shooting engine run with $K=1$ --- one full-arc propagation, unknowns
+$\bm\lambda(0)$, terminal residual only, i.e.\ exactly single shooting ---
+on the same problem closures, reporting the residual \emph{at} the seed, the
+move $\lVert\Delta z\rVert$, and the verdict \emph{accepted} $=$ converged
+$\wedge$ $\lVert\Delta z\rVert<10^{-6}$. Its residual tolerance is the
+\emph{single-shooting floor}, not the multiple-shooting one: a full CR3BP
+arc at RelTol $10^{-10}$ amplifies integrator round-off by the STM growth
+($10^3$--$10^4$ over 4--7~ND), and the same $\bm\lambda(0)$ propagated with
+and without the variational equations lands $6\times10^{-7}$ apart. Hence
+the default tolerance $10^{-6}$; the precision certificates remain the
+multiple-shooting residual and the flown arrival, and this gate certifies
+\emph{usability in a single-shooting workflow} --- which is what tfMin's own
+gate certifies too.
 
 \section{The thrust axis: ladders and continuation}
 

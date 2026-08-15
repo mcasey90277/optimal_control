@@ -45,6 +45,21 @@ optimal_control/
 │   ├── GTO_ELFO/                # CR3BP GTO->ELFO
 │   │   ├── direct/              #   elfo (CasADi campaign; reuses tulip Sundman engine)
 │   │   └── indirect/            #   placeholder (Route C future work)
+│   ├── costate_common/          # COSTATE-PIPELINE CORE (seed of the OC library, Aug 2026):
+│   │                            #   get_family_orbit, survey_family_bounds, harvest_ms_seed,
+│   │                            #   ms_bvp (generic multiple shooting, free OR fixed tf),
+│   │                            #   ms_conjugate_test, ss_bvp_accept (generic single-shooting
+│   │                            #   acceptance gate), cr3bp_minenergy_pmp/_prop (min-energy
+│   │                            #   PMP field + STM), flown_control_error, catalog packager +
+│   │                            #   schema v2, golden_cells regression, tests/
+│   ├── verify_common/           # first-order optimality gate layer (foc_check/foc_report,
+│   │                            #   IPOPT inertia, PMP residual, mesh tools, certified_guard)
+│   ├── DRO_tulip/               # COSTATE-CATALOG CAMPAIGNS (min-time PMP costates for Darin's
+│   ├── HALO_tulip/              #   pumpkyn tfMin; direct solve -> covector harvest -> ms_tfmin
+│   ├── DPO_tulip/               #   -> tfMin acceptance). DRO_tulip = reference implementation
+│   ├── HALO_HALO/               #   + theory manual/SDD in doc/; ~15,900 accepted entries shipped
+│   │                            #   as deliverables 1-6. DRO_tulip/run_minenergy_pilot = the first
+│   │                            #   fixed-tf MIN-ENERGY run (2026-08-14, 5/5 cells pass).
 │   ├── min_fuel_paper/          # paper outline (co-author Koblick)
 │   ├── min_fuel_papers/         # reference PDFs
 │   └── abstracts/               # conference abstract drafts

@@ -94,6 +94,19 @@ case 'validate'
             p{end+1} = sprintf('sheet %d: z8 columns (%d) ~= solved entries (%d)', ...
                 ks, size(sh.z8,2), nnz(sh.has_solution));
         end
+        % conjugate-point verdicts (OPTIONAL, added 2026-08-23): when a
+        % sheet carries conj_pass it must be an int8 grid shaped like
+        % has_solution, and the catalog must carry the .conj_test
+        % provenance block (conj_catalog_pass writes both or neither):
+        if isfield(sh, 'conj_pass') && ~isempty(sh.conj_pass)
+            if ~isequal(size(sh.conj_pass), size(sh.has_solution))
+                p{end+1} = sprintf('sheet %d: conj_pass shape ~= has_solution', ks);
+            end
+            if ~isfield(cat_, 'conj_test') && ...
+               ~any(contains(p, 'conj_test provenance'))
+                p{end+1} = 'sheets carry conj_pass but catalog missing .conj_test provenance';
+            end
+        end
         if v >= 2 && isfield(sh,'tau_dep') && isfield(sh,'tauDRO') && ...
            abs(sh.tau_dep - sh.tauDRO) > 1e-12
             p{end+1} = sprintf('sheet %d: tau_dep ~= tauDRO alias', ks);

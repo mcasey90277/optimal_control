@@ -33,3 +33,18 @@
 - [ ] `golden_cells` engine cells converge in 1 iteration (wide Newton
   basin) — consider a rougher engineered seed so the iteration channel has
   more dynamic range.
+
+- [x] Conjugate-point sweep at catalog scale — DONE 2026-08-23
+  (`conj_catalog_pass`, 15,896 entries, 15,895/1/0; record in
+  `DRO_tulip/process/COSTATE_LIBRARY_PIPELINE.md`). Standing rule: run it
+  before packaging any new catalog/deliverable.
+- [ ] Sweep the deliverable-2 fine-sheet library (1,105 entries, v2-library
+  format) — needs a small adapter from the entry-array format to
+  `conj_catalog_pass`'s sheet walk.
+- [ ] Wire the conjugate sweep into the packaging path
+  (`build_costate_catalog_family` or the deliverable checklist) so a catalog
+  cannot ship without verdicts.
+
+- [x] Library moves `seed_from_z8` + `ms_tfmin` -> here — DONE 2026-08-26
+  (3 call sites rerouted; golden_cells 20/20; seed builder bit-identical;
+  full test suite green).

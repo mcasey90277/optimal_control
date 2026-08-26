@@ -25,7 +25,8 @@ far: τ=1.75 halo → Np=12 tulip at 1.5 N = **0.6546 km/s** (5.74 kg) —
 halos sit energetically closer to the tulips than DROs (best DRO 0.984).
 Solvability **improves** with halo period: τ=3.4 sheets run 35–36/36 pairs,
 τ=1.75 runs 25–34/36. All entries three-gate verified; conjugate-point
-(Jacobi necessary) check passes on the golden cell.
+(Jacobi necessary) verdicts stored catalog-wide 2026-08-23: **3,980/3,980
+pass** (`conj_pass` grids; sweep engine `costate_common/conj_catalog_pass`).
 
 Ops note: the original run stopped at 84% by exhausting the driver's
 200-pass loop limit (not an error); the limit is now 600 and resume is free.

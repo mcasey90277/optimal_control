@@ -47,13 +47,8 @@ ok = true;
 %% Cells 1-3: engine goldens (flown-then-perturbed seeds):
 for kc = 1:numel(G.cells)
     c = G.cells(kc);
-    tG = linspace(0, c.z8(8), c.K+1);
-    [tj, yj] = pumpkyn.cr3bp.tfMinProp(c.z8(8), [c.rv0(:); 1; c.z8(1:7)], ...
-                                       c.Tnd, c.cnd, c.muStar);
-    [tu, iu] = unique(tj);
-    Y = interp1(tu, yj(iu,1:14), tG, 'pchip')';
-    Y(8:14,1) = Y(8:14,1)*(1 + c.pert);
-    seed = struct('tf', c.z8(8), 'tGrid', tG, 'Y', Y);
+    seed = seed_from_z8(c.z8, c.rv0, c.K, c.Tnd, c.cnd, c.muStar);
+    seed.Y(8:14,1) = seed.Y(8:14,1)*(1 + c.pert);
     [z, info] = ms_tfmin(c.rv0, c.rvf, seed, c.Tnd, c.cnd, c.muStar, ...
                          struct('conjTest', true));
     ok = check(c.name, 'converged', info.converged) && ok;

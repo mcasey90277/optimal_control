@@ -25,3 +25,13 @@ the longest-period tulip (τ=1 × Np=12: 27/36), mirroring the halo pattern
 one source of partial ladders. Integer-ND periods are incommensurate with
 the lunar and tulip periods, so no exact-resonance degeneracies (review
 observation, Gemini).
+
+## Conjugate-point sweep (2026-08-23)
+
+All 3,932 entries carry a Jacobi (conjugate-point) verdict in the catalog's
+`conj_pass` grids: **3,931 pass, 1 FAIL** — the τ=2 → Np=7 sheet at phases
+(2/3, 2/3), 15 N (tf = 0.115 ND, ΔV 5.12 km/s) has one interior sign change
+(re-solve fidelity 1.6e-12) and is **refuted as a local minimum**: a cheaper
+neighboring transfer exists for that cell. Its lower-thrust rungs pass. It
+still flies and tfMin still accepts it, but continuation seeded from it walks
+a non-minimizing branch. Sweep engine: `costate_common/conj_catalog_pass`.

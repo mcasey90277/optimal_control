@@ -19,6 +19,12 @@ function [tau, rv, info] = get_family_orbit(family, p)
 %                                     pm = +1 north / -1 south
 %     'dpo'    [.tau]                 distant prograde orbit, period tau
 %     'lyapunov' [.tau, .Lpt]         planar Lyapunov about L1-L3
+%     'gto'    [.orientDeg, .sma_km, .ecc]   PSEUDO-family: an algebraic
+%                                     (unpropagated) GTO departure locus at
+%                                     fixed orientation, sampled uniform in
+%                                     eccentric anomaly; tau is a LOCUS
+%                                     PARAMETER (time since perigee over one
+%                                     Kepler period), never an epoch offset
 %
 %% Inputs:
 %
@@ -80,6 +86,45 @@ switch lower(family)
         [tau0, rv0] = pumpkynPie.cr3bp.getDPO(p.tau);
     case 'lyapunov'
         [tau0, rv0] = pumpkynPie.cr3bp.getLyapunov(p.tau, p.Lpt);
+    case 'gto'
+        % GTO pseudo-family (Stage B spec 2026-08-26): the locus of departure
+        % states at FIXED orientation, parametrized by TIME fraction (mean
+        % anomaly) over one Kepler period. Algebraic construction -- no
+        % propagation; orientation is a sheet key, not a flow consequence.
+        % orientDeg: Earth->Moon line to perigee direction, rotation sense.
+        % tau is a LOCUS PARAMETER (time-since-perigee / period), NEVER an
+        % epoch offset -- the pseudo-family carries no flight direction.
+        smaKm  = fieldd(p, 'sma_km', (6378+350 + 6378+35786)/2);
+        eccGto = fieldd(p, 'ecc', (35786-350)/(2*((6378+350+6378+35786)/2)));
+        orient = fieldd(p, 'orientDeg', -25);
+        lStar  = 389703.264829278;
+        tStar  = 382981.289129055;
+        muE = 6.67384e-20*(1 - muStar)*(5.9736E24 + 7.35E22);
+        % REVIEW FIX (GPT+Gemini, critical): sample uniform in ECCENTRIC
+        % anomaly (dense) so perigee is resolved on an e~0.72 ellipse; tau
+        % comes from Kepler's equation M(E). orb2eci's element 6 is TRUE
+        % anomaly (per its own header, unconditionally -- the trailing flag
+        % `dim3` only controls array-shape flattening, not the anomaly
+        % convention), so E is converted to true anomaly analytically
+        % (exact, no Newton solve needed in this forward direction) before
+        % each call.
+        M  = 2001;                                  % odd: sample lands on apogee
+        E_ = linspace(0, 2*pi, M);
+        mAnom  = E_ - eccGto*sin(E_);                % Kepler: M(E), monotone
+        nuAnom = 2*atan2(sqrt(1+eccGto)*sin(E_/2), sqrt(1-eccGto)*cos(E_/2));
+        Tkep   = 2*pi*sqrt((smaKm)^3/muE);           % s
+        rvLoc  = zeros(M, 6);
+        for km = 1:M
+            [rr, vv] = pumpkyn.cr3bp.orb2eci(muE, ...
+                         [smaKm, eccGto, 0, orient*pi/180, 0, nuAnom(km)], 2);
+            rvLoc(km,:) = pumpkyn.cr3bp.fromPCI(0, [rr, vv], muStar, ...
+                         tStar, lStar, 1);
+        end
+        tau  = (mAnom.'/(2*pi)) * (Tkep/tStar);
+        rv   = rvLoc;
+        info = struct('family', 'gto', 'periodND', tau(end), 'params', p, ...
+                      'sma_km', smaKm, 'ecc', eccGto, 'orientDeg', orient);
+        return;                                     % algebraic -- no cont_np/prop
     otherwise
         error('get_family_orbit:family', 'unknown family ''%s''', family);
 end

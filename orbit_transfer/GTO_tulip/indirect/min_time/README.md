@@ -45,7 +45,7 @@ here.
 | method | tulip | ELFO retarget |
 |---|---|---|
 | single shooting (`mintime_solve`, `elfo_mintime`) | floors **~1e-3** (13-rev STM-product sensitivity) | stalls at s=0.05 |
-| **multiple shooting** (`mintime_ms_*`) | **‖R‖=4e-9 ✓** (beats the wall, MS validated; J confirmed vs the solve) | homotopy fights min-time sensitivity even with predictor–corrector — impractically slow |
+| **multiple shooting** (`mintime_ms_*`) | **‖R‖=4e-9 ✓** (beats the wall, MS validated; J confirmed vs the solve). **SUPERSEDED 2026-08-25 by the shared-engine root** (`mintime_ms_bvp_probe`, `costate_common/ms_bvp` via `ms_tfmin`, K=60): ‖R‖=2.0e-11 in 10.3 s, **t_f = 6.290694 ND — exactly the certified direct reference** (old root was 47 s off at 6.290815); flown arrival 4.3 km; tfMin accepts (|Δz|=5.1e-7, at the ss floor for a 6.3 ND arc); **conjugate test PASS, 0 crossings** — first second-order verdict in the 25 mN regime. Probe artifact: `results/mintime_ms_bvp_probe.mat` | homotopy fights min-time sensitivity even with predictor–corrector — impractically slow |
 | direct fmincon (`direct_mintime_elfo`) | does not converge / scale (t_f plunges, infeasible at usable N) | — |
 
 **Bottom line:** the min-time MS machinery WORKS (tulip 4e-9) and answers
@@ -68,3 +68,44 @@ The STMs are integrated across throttle-switch events without a saltation
 correction, so J is exact only while the arc is all-burn (S<0 throughout);
 `out.nSwitch` reports the converged arc's switch count. The tulip min-time is
 all-burn (nSwitch 0), as expected.
+
+## TWO-ROOT finding (2026-08-26, systematic-debugging record)
+
+During the `seed_from_z8`/`ms_tfmin` library-move verification, the probe
+converged to a DIFFERENT root than the day before — from bit-identical seed
+and code (both verified). Root cause: the K=60 seed sits on a **basin
+boundary between two genuine extremals**, and last-bit arithmetic
+differences between MATLAB runtimes select the root (desktop session →
+t_f = 6.290449990, 11 iters; `-batch` → t_f = 6.290693961, 16 iters; each
+environment internally deterministic, ‖R‖ ≈ 2e-11 both).
+
+- **Canonical root** (`results/mintime_ms_bvp_probe.mat`): t_f = 6.290694,
+  = the certified direct reference.
+- **Alternate root** (`results/mintime_ms_bvp_probe_altroot.mat`):
+  t_f = 6.290450 — **94 s FASTER**, physically screened (periselene
+  6,039 km, ΔV 4.4663 vs 4.4665 km/s), tfMin-accepted, conjugate test not
+  yet run on it.
+
+**ADJUDICATED 2026-08-26 (same day): there is ONE extremal, not two.**
+Flying both roots head-to-head: trajectory separation max 23.5 km over the
+28-day arc (median 1.3 km), periselene identical, λ_v0 directions identical
+to 0.000°. The cross-fly is the proof — each root reaches the target only
+in the environment that produced it (4.3 km at home; 123–132 km in the
+other), symmetrically. The 94 s "faster root" is NOT a faster transfer; it
+is the same extremal expressed in a different integrator's arithmetic.
+
+**The real finding — z8 identifiability in the ~40-rev regime:** the
+end-to-end flow amplifies last-bit arithmetic differences beyond the root
+separation, so a bare z8 determines t_f only to ~1e-4 ND (~1 min) and the
+arrival only to ~100 km. Each environment's Newton is internally tight
+(‖R‖ ~ 2e-11) about ITS OWN rendering of the extremal. tfMin accepts both
+because its own arithmetic re-polishes within the identifiability tube.
+
+Consequences: (1) **the certified direct t_f = 6.290694 STANDS** — the
+faster-basin scare is withdrawn; (2) **a GTO-regime costate catalog cannot
+ship bare z8 entries** — it must ship the full multiple-shooting solution
+(junction states), the refined-library lesson
+(direct-duals-not-shooting-seeds) reappearing at the mN scale; (3) quote
+flagship t_f from the ms solve + direct agreement, never from a single
+end-to-end flight; (4) the conjugate test on the "alt root" is moot (same
+extremal — the canonical PASS covers it).

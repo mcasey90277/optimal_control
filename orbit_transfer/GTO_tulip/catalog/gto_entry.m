@@ -1,0 +1,263 @@
+function [entry, gates] = gto_entry(orientDeg, Np, depFrac, arrFrac, thrustN, opts)
+%% Purpose:
+%
+%   THE SINGLE-ENTRY DRIVER for the GTO -> tulip costate campaign (Mike's
+%   product request 2026-08-26): solve ONE (departure phase x arrival
+%   phase) cell at a single requested thrust level, through the SAME
+%   engine the sheet sweep uses (DRO_tulip/indirect/thrust_ladder_library,
+%   family-agnostic via costate_common/get_family_orbit) -- never a
+%   bespoke solver. Runs a 1x1 phasing grid with the standard rung ladder
+%   truncated to keep only rungs <= thrustN, with thrustN itself always
+%   prepended as the top rung (so the ladder always starts exactly at the
+%   requested thrust and continuation warm-starts every rung below it);
+%   the returned entry is the top rung, i.e. thrustN.
+%
+%   Self-demo (nargin==0): orient 0 deg, Np 7, 15 N. Departure phase is
+%   PERIGEE (0.0), not apogee (0.5), even though the original spec named
+%   apogee: Task 2 of this campaign measured an apogee cold-start at this
+%   exact (orient, Np, thrust) miss the flown-arrival gate by ~5 orders of
+%   magnitude (11.95e6 km vs a 100 km gate) -- a bad local minimum for a
+%   15 N cold start at that phase, not a scale/unit bug (the GTO locus
+%   itself checks out physically). Perigee converges cleanly on the first
+%   try. See task-2-report.md / task-3-report.md for the numbers.
+%
+%% Inputs:
+%
+%  orientDeg                double                  GTO departure-locus
+%                                                   orientation (deg,
+%                                                   Earth->Moon line to
+%                                                   perigee direction)
+%
+%  Np                       double                  Tulip petal count
+%
+%  depFrac                  double                  Departure phase: TIME
+%                                                   fraction since perigee
+%                                                   over one Kepler period
+%                                                   (0 = perigee, 0.5 =
+%                                                   apogee)
+%
+%  arrFrac                  double                  Arrival phase: time
+%                                                   fraction along the
+%                                                   tulip's own period
+%
+%  thrustN                  double                  Thrust level (N); the
+%                                                   solved rung and the top
+%                                                   of the truncated ladder
+%
+%  opts                     struct                  (optional):
+%                                                   .conjTest [false] re-
+%                                                     solve ms_tfmin seeded
+%                                                     at the accepted z8
+%                                                     with conjTest=true
+%                                                     (costate_common
+%                                                     conj_catalog_pass
+%                                                     pattern); sets
+%                                                     gates.conjPass
+%                                                   .writeSheet [false]
+%                                                     merge this entry into
+%                                                     results/catalog/
+%                                                     gto_o<..>_Np<..>.mat
+%                                                     on the STANDARD
+%                                                     nD=12/nA=6/9-rung
+%                                                     campaign grid
+%                                                     (nearest-phase snap),
+%                                                     creating the sheet
+%                                                     file if absent
+%                                                   .force [false] required
+%                                                     to let .writeSheet
+%                                                     overwrite a cell the
+%                                                     REAL campaign sweep
+%                                                     already marked OK
+%                                                     (refused otherwise --
+%                                                     see merge_entry_
+%                                                     into_sheet)
+%                                                   .m0kg [150], .ispS
+%                                                     [1710] thruster
+%                                                     params (campaign
+%                                                     standard)
+%
+%% Outputs:
+%
+%  entry                    struct                  .ok, .z8 [8x1],
+%                                                   .tf_nd, .dV_kms,
+%                                                   .mf_kg, .coordinates
+%                                                   (orientDeg, Np,
+%                                                   depFrac, arrFrac,
+%                                                   thrustN)
+%
+%  gates                    struct                  .msNormR, .flownKm,
+%                                                   .acceptDz, .conjPass
+%                                                   (NaN unless
+%                                                   opts.conjTest)
+%
+%% Revision History:
+%  M. Casey                                                   (c) 08/26/2026
+%  Copyright Coorbital Inc.
+%% ------------------------ Begin Code Sequence ---------------------------
+
+if nargin == 0
+    orientDeg = 0;  Np = 7;  depFrac = 0.0;  arrFrac = 0;  thrustN = 15;
+end
+if nargin < 6, opts = struct(); end
+conjTest   = fdef(opts, 'conjTest',   false);
+writeSheet = fdef(opts, 'writeSheet', false);
+force      = fdef(opts, 'force',      false);
+m0kg       = fdef(opts, 'm0kg',       150);
+ispS       = fdef(opts, 'ispS',       1710);
+tulipPm    = -1;
+
+setup_paths();
+
+here   = fileparts(mfilename('fullpath'));
+resDir = fullfile(here, 'results');
+if ~isfolder(resDir), mkdir(resDir); end
+
+%% Truncated ladder: keep standard rungs below thrustN, prepend thrustN
+%% itself as the top so the accepted entry is always exactly thrustN:
+rungsStd = [15 12 10 7 5 3 2 1.5 1];
+rungs = [thrustN, rungsStd(rungsStd < thrustN)];
+
+outMat  = fullfile(resDir, 'gto_entry_scratch.mat');
+logFile = fullfile(resDir, 'gto_entry_scratch.log');
+if isfile(logFile), delete(logFile); end
+
+muStar = 0.012150585609624;
+lStar  = 389703.264829278;
+tStar  = 382981.289129055;
+
+optsEngine = struct( ...
+    'rungs',     rungs, ...
+    'ispS',      ispS, ...
+    'm0kg',      m0kg, ...
+    'nD',        1, ...
+    'nA',        1, ...
+    'sD0',       depFrac, ...
+    'sA0',       arrFrac, ...
+    'muStar',    muStar, 'lStar', lStar, 'tStar', tStar, ...
+    'depFamily', 'gto', ...
+    'depParams', struct('orientDeg', orientDeg), ...
+    'arrFamily', 'tulip', ...
+    'arrParams', struct('Np', Np, 'pm', tulipPm), ...
+    'tauDRO',    orientDeg, ...        % sheet-key rule
+    'resume',    false, ...            % single-entry: never mixes with a
+    ...                                % sheet file on disk
+    'logFile',   logFile);
+
+thrust_ladder_library(outMat, optsEngine);
+Q = load(outMat);
+
+entry = struct('ok', Q.OK(1,1,1), 'z8', Q.Z8(:,1,1,1), ...
+    'tf_nd', Q.TF(1,1,1), 'dV_kms', NaN, 'mf_kg', NaN, ...
+    'coordinates', struct('orientDeg', orientDeg, 'Np', Np, ...
+        'depFrac', depFrac, 'arrFrac', arrFrac, 'thrustN', thrustN));
+gates = struct('msNormR', Q.RES(1,1,1), 'flownKm', Q.FLYKM(1,1,1), ...
+    'acceptDz', Q.ACCDZ(1,1,1), 'conjPass', NaN);
+
+if entry.ok
+    %% Mass fraction + delta-V (all-burn min-time), formulas from
+    %% costate_common/catalog_schema.m ('m_final' / 'deltav_kms'):
+    g0  = 9.80665*tStar^2/(1000*lStar);
+    cnd = (ispS/tStar)*g0;
+    Tnd = (thrustN/m0kg)*tStar^2/(lStar*1000);
+    mfFrac = 1 - Tnd*entry.tf_nd/cnd;
+    entry.mf_kg = m0kg*mfFrac;
+    entry.dV_kms = cnd*log(1/mfFrac)*lStar/tStar;
+
+    if conjTest
+        [tD, rvD] = get_family_orbit('gto', struct('orientDeg', orientDeg));
+        [tA, rvA] = get_family_orbit('tulip', struct('Np', Np, 'pm', tulipPm));
+        rv0 = interp1(tD, rvD, mod(depFrac,1)*tD(end), 'spline');
+        rvf = interp1(tA, rvA, mod(arrFrac,1)*tA(end), 'spline');
+        z8  = entry.z8;
+        K   = fdef(opts, 'K', 24);
+        seed = seed_from_z8(z8, rv0(1:6), K, Tnd, cnd, muStar);
+        [z, info] = ms_tfmin(rv0(1:6), rvf(1:6), seed, Tnd, cnd, muStar, ...
+            struct('conjTest', true, 'wallSec', 60));
+        dz = norm(z - z8);
+        if info.converged && dz < 1e-6
+            gates.conjPass = info.conj.pass;
+        else
+            fprintf('gto_entry: conjTest re-solve did not reproduce z8 (dz=%.1e) -- conjPass left NaN\n', dz);
+        end
+    end
+
+    if writeSheet
+        sheetMat = fullfile(here, 'results', 'catalog', ...
+            sprintf('gto_o%03d_Np%d.mat', orientDeg, Np));
+        merge_entry_into_sheet(sheetMat, orientDeg, Np, depFrac, arrFrac, ...
+            rungsStd, Q, force);
+    end
+end
+end
+
+% ------------------------------------------------------------------------
+function v = fdef(s, f, v0)
+% FDEF  s.(f) if present else v0.  INPUTS: s; f; v0.  OUTPUTS: v.
+if isfield(s, f), v = s.(f); else, v = v0; end
+end
+
+% ------------------------------------------------------------------------
+function merge_entry_into_sheet(sheetMat, orientDeg, Np, depFrac, arrFrac, ...
+    rungsStd, Qlocal, force)
+% MERGE_ENTRY_INTO_SHEET  Fold a gto_entry() 1x1 result into the STANDARD
+% nD=12/nA=6/9-rung campaign grid (nearest-phase snap on depFrac/arrFrac),
+% creating the sheet file if it does not already exist.
+%
+% SAFETY (review finding, 2026-08-26): a real campaign sweep's OK cells are
+% never clobbered by a single-entry write -- if the snapped (iD,iA,krFull)
+% is already OK, the write is REFUSED unless force is true (a warning
+% names the cell either way). The per-cell attempt counter S.ATT belongs
+% to thrust_ladder_library's own resume/maxAtt bookkeeping alone; this
+% merge path never touches it (gto_entry's scratch solve is accounted for
+% in its own scratch .mat, not the campaign sheet).
+%
+% INPUTS: sheetMat path; orientDeg; Np; depFrac; arrFrac; rungsStd [1x9];
+% Qlocal (the thrust_ladder_library output loaded from gto_entry's 1x1
+% scratch run); force (logical, overwrite-already-OK permission).
+% OUTPUTS: none (writes sheetMat).
+nD = 12;  nA = 6;  nR = numel(rungsStd);
+iD = mod(round(depFrac*nD), nD) + 1;
+iA = mod(round(arrFrac*nA), nA) + 1;
+sheetDir = fileparts(sheetMat);
+if ~isfolder(sheetDir), mkdir(sheetDir); end
+if isfile(sheetMat)
+    S = load(sheetMat);
+    if ~isequal(size(S.OK), [nD nA nR])
+        error('gto_entry:writeSheet', ...
+            '%s has an incompatible grid size for the merge', sheetMat);
+    end
+else
+    S = struct('TF',nan(nD,nA,nR), 'FLYKM',nan(nD,nA,nR), ...
+        'ACCDZ',nan(nD,nA,nR), 'RES',nan(nD,nA,nR), 'WALL',nan(nD,nA,nR), ...
+        'OK',false(nD,nA,nR), 'Z8',nan(8,nD,nA,nR), 'ATT',zeros(nD,nA), ...
+        'rungs',rungsStd, 'sD',(0:nD-1)/nD, 'sA',(0:nA-1)/nA, ...
+        'meta', struct('depFamily','gto', ...
+            'depParams',struct('orientDeg',orientDeg), ...
+            'arrFamily','tulip','arrParams',struct('Np',Np,'pm',-1), ...
+            'tauDRO',orientDeg,'source','gto_entry writeSheet'));
+end
+for kr = 1:numel(Qlocal.rungs)
+    if ~Qlocal.OK(1,1,kr), continue, end
+    krFull = find(abs(rungsStd - Qlocal.rungs(kr)) < 1e-9, 1);
+    if isempty(krFull)
+        fprintf(['gto_entry: writeSheet -- requested thrust %.6g N matches no ' ...
+                 'standard rung (tol 1e-9); not written into %s\n'], ...
+                 Qlocal.rungs(kr), sheetMat);
+        continue
+    end
+    if S.OK(iD,iA,krFull) && ~force
+        fprintf(['gto_entry: writeSheet -- cell (iD=%d,iA=%d,kr=%d) in %s is ' ...
+                 'already OK from a real campaign sweep; refusing to overwrite ' ...
+                 '(pass opts.force=true to override)\n'], iD, iA, krFull, sheetMat);
+        continue
+    end
+    S.TF(iD,iA,krFull)    = Qlocal.TF(1,1,kr);
+    S.FLYKM(iD,iA,krFull) = Qlocal.FLYKM(1,1,kr);
+    S.ACCDZ(iD,iA,krFull) = Qlocal.ACCDZ(1,1,kr);
+    S.RES(iD,iA,krFull)   = Qlocal.RES(1,1,kr);
+    S.WALL(iD,iA,krFull)  = Qlocal.WALL(1,1,kr);
+    S.OK(iD,iA,krFull)    = true;
+    S.Z8(:,iD,iA,krFull)  = Qlocal.Z8(:,1,1,kr);
+end
+save(sheetMat, '-struct', 'S');
+end

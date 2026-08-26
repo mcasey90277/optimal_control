@@ -71,6 +71,12 @@ exists.
   halo/DPO drivers differ only in names; monitors must watch process
   liveness, not just log errors).
 
+- [ ] **HALO catalog driver path gap** (found by Stage B task 3, 2026-08-26):
+  `run_halo_catalog`'s addpath set predates the oclib moves — a fresh run
+  would fail resolving `oc.local_residual` via the dro_residual reroute.
+  Add `oclib/` to its setup (one line) + verify-campaign fast tier before
+  the next HALO catalog run. Same check for the DPO/HALO_HALO drivers.
+
 ## Certification (see OPTIMALITY_CERTIFICATION.md before planning any of this)
 
 - [ ] STRICT second-order sufficiency is still nowhere; the live path is

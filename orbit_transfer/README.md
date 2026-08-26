@@ -1,5 +1,9 @@
 # orbit_transfer — optimal orbit-transfer campaigns
 
+**Status + roadmap:** `STATUS_AND_ROADMAP.md` — the case-by-case answer to
+"what have we solved, by which method, how well do we know it is right, and
+what remains" (case table, verification ladder, ordered next steps).
+
 Container for all orbit-transfer work in this repo. Organization: **one folder
 per transfer problem**, each split into `direct/` (collocation NLP → IPOPT) and
 `indirect/` (PMP shooting) codebases, plus shared libraries, tutorials, and

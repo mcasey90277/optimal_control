@@ -4,7 +4,7 @@
 existing pumpkyn/pumpkynPie orbit catalogs, so the goal — every problem, both
 methods, all three flavors — has a concrete scope.
 
-Surveyed 2026-07-31 against pumpkyn `5f5ca31` / pumpkynPie `47be599`.
+Surveyed 2026-07-31 against pumpkyn `5f5ca31` / pumpkynPie `47be599`; status tables refreshed 2026-08-23 (catalogs 3–6 shipped, min-energy pilot).
 
 ---
 
@@ -66,13 +66,20 @@ For each transfer problem: **2 methods × 3 flavors = 6 cells.**
 
 ### Currently in play
 
+> **Updated 2026-08-23.** The case-by-case status view (entry counts, thrust
+> rungs, verification ladder, roadmap) now lives in `../STATUS_AND_ROADMAP.md`;
+> this table is kept as the goal-map summary.
+
 | problem | direct | indirect | status |
 |---|---|---|---|
-| GTO → tulip | ✅ all three | partial (min-time; min-fuel stalled at IFS) | most complete |
+| GTO → tulip | ✅ all three | partial (min-time; min-fuel stalled at IFS) | most complete campaign; **no costate catalog** (the 25 mN / ~40-rev regime is beyond where `ms_bvp` has been shown to close) |
 | GTO → ELFO | ✅ min-fuel front + min-time anchor | not started | |
-| elliptic → GEO (2-body) | ✅ certified ladder | reference only | |
+| elliptic → GEO (2-body) | ✅ certified ladder | external cross-check only (MfMax v0+v1 built & validated); our own MATLAB indirect not built | |
 | elliptic → GEO (CR3BP) | ✅ certified ladder | not started | |
-| DRO → tulip | ✅ **min-time CERTIFIED**, and a **NEW faster basin found+certified 2026-08-03: t_f=3.8170 vs 4.0152, periselene 3954 km, cold lineage** | ✅ min-time (Darin's demo — now known to be a beaten local extremal) | **the two methods AGREE**: direct t_f = 4.0152501 vs indirect 4.0152425, 5 sig figs, 3.3 m worst position error. Agreement is on t_f + endpoints; a trajectory/costate comparison is still to do |
+| DRO → tulip | ✅ **min-time CERTIFIED**, and a **NEW faster basin found+certified 2026-08-03: t_f=3.8170 vs 4.0152, periselene 3954 km, cold lineage** | ✅ min-time (Darin's demo — now known to be a beaten local extremal) | **the two methods AGREE**: direct t_f = 4.0152501 vs indirect 4.0152425, 5 sig figs, 3.3 m worst position error. Costate comparison also DONE (see below). **Min-time catalogs SHIPPED** (deliverables 2+3: coarse 4×4×6×6 + fine 12×12 sheet). **Min-energy fixed-t_f pilot 2026-08-14: 5/5 cells pass** |
+| HALO(L2 S) → tulip | ✅ (pipeline direct leg) | ✅ min-time | **catalog SHIPPED** (deliverable 4: 3,980 entries, 92% pairs) |
+| DPO → tulip | ✅ (pipeline direct leg) | ✅ min-time | **catalog SHIPPED** (deliverable 5: 3,932 entries, 89% pairs) |
+| L1 halo ↔ L2 halo | ✅ (pipeline direct leg) | ✅ min-time | **catalogs SHIPPED, BOTH directions** (deliverable 6, schema v2 arrival-period axis: 1,952 + 2,096 entries; directions measurably asymmetric) |
 
 ### The expansion
 
@@ -80,16 +87,20 @@ Pairs among the nine families. Not all are equally interesting; a sensible
 first tranche, ordered by expected tractability (few revolutions first, since
 revolution count — not the objective — is what decides whether indirect works):
 
-1. **DRO → tulip** — already has an indirect min-time solution. Build the
-   direct twin and the other two flavors. *Best first target: it validates the
-   direct↔indirect handoff on a problem where the indirect answer is already
-   known.*
-2. **GEO → DRO** — named by Darin on the call as a catalog example.
-3. **DPO → tulip**, **LPO → tulip** — same target, different departure.
-4. **DRO → Halo**, **DRO → NRHO-like Halo** — the operationally common pair.
+1. ~~**DRO → tulip**~~ — **DONE** (direct twin built, methods agree, catalogs
+   shipped as deliverables 2+3; min-energy pilot passed 2026-08-14).
+2. **GEO → DRO** — named by Darin on the call as a catalog example. *Still
+   open — now the top untouched pair.*
+3. **DPO → tulip** — **DONE** (deliverable 5). **LPO → tulip** still open.
+4. **DRO → Halo**, **DRO → NRHO-like Halo** — still open. (Halo↔halo L1↔L2
+   is DONE — deliverable 6 — which partly de-risks these.)
 5. **Lyapunov ↔ Halo** at the same Lagrange point — a well-studied benchmark
-   with published comparisons, useful for external validation.
-6. **Cycler → anything** — resonance structure makes these distinctive.
+   with published comparisons, useful for external validation. Still open.
+6. **Cycler → anything** — resonance structure makes these distinctive. Still
+   open.
+
+*(HALO → tulip, not on the original tranche list, is also DONE — deliverable
+4 — and produced the cheapest transfer in any catalog: 0.6546 km/s.)*
 
 ---
 

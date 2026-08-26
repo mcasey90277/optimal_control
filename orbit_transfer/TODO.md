@@ -1,7 +1,8 @@
 # orbit_transfer — TODO (program level)
 
 Per-campaign items live in each subfolder's `TODO.md`; this file holds only
-what spans campaigns. Task numbering follows the session task list where one
+what spans campaigns. The organized long-form view (case table, verification
+ladder, ordered roadmap) is `STATUS_AND_ROADMAP.md`. Task numbering follows the session task list where one
 exists.
 
 ## Costate-catalog program (Darin roadmap)
@@ -17,6 +18,15 @@ exists.
   densification of the remaining pairs.
 - [ ] **Sub-0.5 N rungs** deferred by Darin "until customers need it."
 - [ ] Min-fuel catalogs: explicitly NOT yet (Darin, Aug 2026).
+- [ ] **When min-fuel work restarts anywhere in this repo, check MfMax first.**
+  It solves this class already and is built + validated here (runbook:
+  `earth_elliptic_to_geo/indirect/mfmax/MFMAX_V1_RUNBOOK.md`). Four things
+  worth borrowing: HOMPACK arclength continuation for energy→fuel instead of
+  our hand-scheduled ε ladder; the start-at-the-target initial-condition
+  homotopy (`lambda(1)`) as a seeding trick we do not use; freeing an unknown
+  scalar by carrying it as a zero-derivative state with a normalized terminal
+  condition (v1 does this for `t_f`); and its PMP-converged costates as clean
+  shooting seeds where direct-KKT duals are unreliable.
 - [~] **Min-energy / fixed-t_f pipeline** — pilot DONE 2026-08-14 on three
   flagship DRO→tulip cells + a γ ladder (`DRO_tulip/run_minenergy_pilot`):
   fixed-tf `ms_bvp`, `ms_minenergy`, min-energy PMP field, generic
@@ -24,8 +34,24 @@ exists.
   catalog schema, a fixed-tf conjugate test, then energy→fuel homotopy on
   the same seeds (the min-fuel catalog route).
 
-## Optimal-control library (goal-oc-library)
+## GTO→tulip costate catalog (Stage B — next up)
 
+- [ ] **Stage B design**: the GTO departure-phase axis (GTO is not a periodic
+  rotating-frame orbit — define the phase coordinate), catalog propulsion =
+  Darin standard 150 kg / 1–15 N first (adjudicated 2026-08-25), walk toward
+  mN later. Stage A (shared-engine min-time solve, 25 mN) DONE 2026-08-25.
+- [ ] Add dual capture (`lamDef`) to `gen_tulip_mintime` so harvest seeding
+  works (found missing 2026-08-25).
+- [x] Library moves `seed_from_z8` + `ms_tfmin` → `costate_common` — DONE
+  2026-08-26, golden_cells 20/20, seed bit-identical.
+- [x] **Two-root question ADJUDICATED 2026-08-26 (same day): ONE extremal.**
+  Head-to-head flight: trajectories coincide to 23.5 km / 28 d; cross-fly is
+  symmetric (each z8 lands 4.3 km only in its home environment, ~125 km in
+  the other). The 94 s difference is z8 IDENTIFIABILITY, not a faster basin
+  — bare z8 pins t_f only to ~1e-4 ND at ~40 revs. Certified direct
+  t_f = 6.290694 STANDS. **Stage B consequence: GTO-regime catalog entries
+  must ship full ms junction states, not bare z8.** Record:
+  `GTO_tulip/indirect/min_time/README.md`.
 - [x] Migrations #2–#5 (duals_to_costates, ms_bvp + conjugate test +
   golden cells, flown-control verifier, foc covector unification) — done
   2026-08-08, each with an equivalence gate.
@@ -54,6 +80,20 @@ exists.
   multiple-shooting solution to actually exercise it.
 - [ ] foc gate coverage is uneven across the four direct campaigns
   (see the Part A matrix); close the standing gaps.
+- [~] **Continuous-residual (G1) gate everywhere** — engine promoted
+  (`oc.local_residual`), DRO rerouted, earth-MEE gated (2026-08-25, first
+  ever: switch-interval concentration finding). CR3BP-GEO wrapper DONE
+  2026-08-26 (shared `verify_common/mee_residual`, switch-interval finding
+  generalizes). Ladder sweep DONE 2026-08-26 (14/14,
+  `verify_common/doc/g1_sweep_results.md`). Open: ELFO wrapper only; optional:
+  the lunar-phase-feedback check (replace t-row by quadrature on one deep rung).
+- [x] **Run `ms_conjugate_test` across the shipped catalogs and store the
+  verdict** — DONE 2026-08-23 (`costate_common/conj_catalog_pass`, K=24,
+  ~33 min): 15,896 entries, **15,895 pass / 1 FAIL / 0 unverified**; verdicts
+  in the catalog .mats (`conj_pass` grids + `conj_test` provenance,
+  schema-validated). The FAIL — DPO τ=2 → Np=7, (2/3,2/3), 15 N — is refuted
+  as a local minimum. Residue: deliverable-2 fine-sheet library (1,105
+  entries, old format) not swept; shipped zips predate the verdicts.
 
 ## Legacy campaign items (tracked in their own TODOs)
 

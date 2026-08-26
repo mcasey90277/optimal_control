@@ -1,7 +1,8 @@
 # orbit_transfer/doc — cross-campaign reference documents
 
 Documents that span campaigns (campaign-specific notes live in each
-campaign's own `doc/`).
+campaign's own `doc/`). The live cross-campaign status + roadmap is
+**`../STATUS_AND_ROADMAP.md`** (one level up, beside the program TODO).
 
 | file | what |
 |---|---|
@@ -9,4 +10,4 @@ campaign's own `doc/`).
 | `pumpkyn_catalog.md` (+ `gen_pumpkyn_catalog.py`) | Generated catalog of pumpkyn/pumpkynPie orbit families and getters. |
 | `pumpkyn_reference.md` | Working reference for the pumpkyn API surface this repo uses. |
 | `direct_vs_indirect.md` | The sensitivity-vs-combinatorics axis: when each method wins (min-time low-thrust favors direct; indirect for precision once seeded). |
-| `campaign_status.tex/.pdf` | Point-in-time campaign status rollup (check the date inside before trusting it). |
+| `campaign_status.tex/.pdf` | Point-in-time rollup, **SUPERSEDED 2026-08-23 by `../STATUS_AND_ROADMAP.md`** (it predates the entire costate-catalog program). Kept as a historical snapshot only. |

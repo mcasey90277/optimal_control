@@ -17,7 +17,7 @@
 - orientDeg convention: **angle from the Earth→Moon line to the ellipse's perigee direction, in the frame's rotation sense**; the flagship geometry is orientDeg = −25° (spec §3.1). `sD_frac` = TIME fraction from perigee (mean-anomaly fraction), because every engine interpolates `frac*tau(end)` on a time-parametrized locus.
 - MATLAB house style: pumpkyn headers (`%% Purpose/Inputs/Outputs/Revision History`), never `i`/`j`, no `%#ok` pragmas, `check_matlab_code` clean on new files.
 - Long runs: matlab-campaign discipline — nohup + script file, file logging, resume from sidecar/progress files, OS kill at budget+grace, Monitor with stall detection. Never `matlab -batch` inline `&`.
-- **Do NOT `git commit`** — Mike commits. Each task's final step = report the exact file list + a suggested commit message and STOP.
+- **Commits (rule updated by Mike 2026-08-26): the CONTROLLER commits and pushes after each task's review comes back clean** — one commit per task, message from the task's report, `Co-Authored-By: Claude Fable 5` trailer, then `git push origin main`. Implementer subagents still never commit (review-before-commit integrity).
 - Prefer the `matlab` MCP tools (shared session) for short verifications; `matlab -batch` (nohup) for anything over ~10 min.
 - Order correction vs spec §4: **packaging (Task 6) precedes the conjugate sweep (Task 7)** — `conj_catalog_pass` consumes a packaged catalog .mat.
 

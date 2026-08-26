@@ -1,0 +1,575 @@
+\documentclass[10pt,aspectratio=169]{beamer}
+%==============================================================================
+%  Running MfMax v1 -- slide deck
+%  Companion to doc/mfmax_v1_howto.tex (the full how-to).
+%  Source of record: indirect/mfmax/MFMAX_V1_RUNBOOK.md
+%  All numbers measured on this machine 2026-08-15.
+%==============================================================================
+\usetheme{default}
+\usecolortheme{dolphin}
+\setbeamertemplate{navigation symbols}{}
+\setbeamertemplate{footline}[frame number]
+\setbeamercolor{frametitle}{fg=black}
+\setbeamerfont{frametitle}{series=\bfseries}
+\setbeamertemplate{itemize item}{\textendash}
+\setbeamertemplate{itemize subitem}{\textperiodcentered}
+\setbeamercolor{block title}{bg=gray!18,fg=black}
+\setbeamercolor{block body}{bg=gray!8}
+\setbeamercolor{block title alerted}{bg=orange!25,fg=black}
+\setbeamercolor{block body alerted}{bg=orange!10}
+
+\usepackage{amsmath,amssymb}
+\usepackage{booktabs}
+\usepackage{xcolor}
+\usepackage{listings}
+
+\definecolor{codegray}{gray}{0.94}
+\definecolor{codekw}{rgb}{0.13,0.13,0.7}
+\definecolor{codecomment}{rgb}{0.0,0.5,0.0}
+\definecolor{codestr}{rgb}{0.6,0.1,0.1}
+
+\lstdefinestyle{sh}{
+  language=bash, basicstyle=\ttfamily\scriptsize,
+  keywordstyle=\color{codekw}, commentstyle=\color{codecomment}\itshape,
+  stringstyle=\color{codestr}, backgroundcolor=\color{codegray},
+  numbers=none, breaklines=true, frame=none,
+  showstringspaces=false, columns=fullflexible, keepspaces=true,
+  aboveskip=4pt, belowskip=4pt}
+\lstdefinestyle{plain}{
+  basicstyle=\ttfamily\tiny, backgroundcolor=\color{codegray},
+  numbers=none, breaklines=true, frame=none,
+  showstringspaces=false, columns=fullflexible, keepspaces=true,
+  aboveskip=4pt, belowskip=4pt}
+\lstdefinestyle{py}{
+  language=Python, basicstyle=\ttfamily\scriptsize,
+  keywordstyle=\color{codekw}, commentstyle=\color{codecomment}\itshape,
+  stringstyle=\color{codestr}, backgroundcolor=\color{codegray},
+  numbers=none, breaklines=true, frame=none,
+  showstringspaces=false, columns=fullflexible, keepspaces=true,
+  aboveskip=4pt, belowskip=4pt}
+\lstset{style=sh}
+
+\newcommand{\code}[1]{\texttt{\small #1}}
+\newcommand{\file}[1]{\texttt{\small #1}}
+\newcommand{\Tmax}{T_{\max}}
+\newcommand{\Lf}{L_f}
+
+\title{\bfseries Running MfMax v1}
+\subtitle{Build, drive and read the Gergaud-group indirect minimum-fuel solver}
+\author{\file{earth\_elliptic\_to\_geo/indirect/mfmax}}
+\date{2026-08-23}
+
+\begin{document}
+
+%------------------------------------------------------------------
+\begin{frame}
+\titlepage
+\begin{center}\small
+Full how-to: \file{doc/mfmax\_v1\_howto.tex} \quad$\cdot$\quad
+Source of record: \file{indirect/mfmax/MFMAX\_V1\_RUNBOOK.md}\\[2pt]
+All numbers measured on this machine, 2026-08-15
+\end{center}
+\end{frame}
+
+%------------------------------------------------------------------
+\begin{frame}{What MfMax is, and why we keep it}
+
+\begin{columns}[T]
+\begin{column}{0.52\textwidth}
+\textbf{What}
+\begin{itemize}
+\item Gergaud group's Fortran solver, ENSEEIHT-IRIT 2004
+\item Low-thrust \textbf{minimum-fuel} orbit transfer in modified equinoctial
+      elements
+\item \textbf{Indirect}: PMP single shooting $+$ HOMPACK90 differential
+      homotopy
+\item Solves \emph{exactly} the transfer our
+      \file{earth\_elliptic\_to\_geo} campaign reproduces by direct
+      collocation
+\end{itemize}
+\end{column}
+\begin{column}{0.44\textwidth}
+\textbf{Why we care}
+\begin{itemize}
+\item Our one genuinely \textbf{independent indirect cross-check}
+\item Built + validated here: \textbf{0.7 s} to a converged transfer
+\item Its ideas are borrowable (last slide)
+\item Its converged costates are clean shooting seeds
+\end{itemize}
+\end{column}
+\end{columns}
+
+\vspace{4pt}
+\begin{block}{The whole talk in one line}
+\code{make} with two legacy flags, drop an \file{in.dat} in a directory, run
+\code{path}, then check four things that the program does \emph{not} check for
+you.
+\end{block}
+\end{frame}
+
+%------------------------------------------------------------------
+\begin{frame}{The problem it solves}
+
+With MEE state $x = (P,e_x,e_y,h_x,h_y)$, mass $m$, control $u$ in the unit
+ball ($T = \Tmax u$):
+\begin{equation*}
+\min_{\|u\|\le 1}\ \int_{0}^{t_f}\!\|u\|\,\mathrm{d}t
+\qquad\text{s.t.}\qquad
+\dot x = f(x,u),\quad \dot m = -\beta\,\Tmax\|u\|
+\end{equation*}
+
+\vspace{2pt}
+Benchmark case (HMG-2004), all units \textbf{Mm, hours, kg}:
+
+\begin{center}\small
+\begin{tabular}{@{}ll@{}}
+\toprule
+depart & $P = 11.625$ Mm, $e = 0.75$, $i = 7^\circ$, $m_0 = 1500$ kg,
+$L_0 = \pi$\\
+arrive & GEO: $P = 42.165$ Mm, circular, equatorial\\
+engine & $\Tmax = 10$ N, $\mathrm{Isp} = 1994.75$ s\\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\begin{alertblock}{Engine constant --- before you compare masses}
+\code{par(3)}$= 0.0142$ h/Mm $\Rightarrow v_e = 19\,561.8$ m/s
+$\Rightarrow \mathrm{Isp} = 1994.75$ s. That is the benchmark's \emph{exact}
+value; our direct campaign defaults to a round $2000$ s. A $0.27\%$
+difference.
+\end{alertblock}
+\end{frame}
+
+%------------------------------------------------------------------
+\begin{frame}{The v1 device: fixed longitude span, free final time}
+
+\begin{itemize}
+\item Independent variable is the \textbf{longitude} $L$, integrated
+      $L_0 \to \Lf$ \hfill (Sundman-like)
+\item $\Lf$ is \textbf{fixed}: $\;\Lf = L_0 + \mathrm{par}(1)\,(L_{\min}-L_0)$
+\item $t_f$ is \textbf{free} --- carried as state $x_8$ with
+      $\mathrm{d}x_8/\mathrm{d}L \equiv 0$
+\item Normalized time $s = t/t_f$ is state $x_6$; the condition
+      $s(\Lf) = 1$ closes the system
+\end{itemize}
+
+\begin{center}\small
+\begin{tabular}{@{}llllllllc@{}}
+\toprule
+index & 1 & 2 & 3 & 4 & 5 & 6 & 7 & 8 \quad|\quad 9--16\\
+\midrule
+meaning & $P$ & $e_x$ & $e_y$ & $h_x$ & $h_y$ & $s = t/t_f$ & $m$ &
+$t_f$ \quad|\quad costates\\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\begin{block}{The transferable trick}
+Free an unknown scalar by carrying it as a \textbf{zero-derivative state} and
+closing with a \textbf{normalized terminal condition}. Worth stealing
+independently of MfMax.
+\end{block}
+
+\begin{alertblock}{Slot 6 is aliased --- read \file{ftir.f90:74--102} first}
+What \code{Ufun}/\code{Dhfun} see as $x_6$ is overwritten with the longitude
+$l$; the \emph{integrated} slot 6 is $s$, passed separately as \code{t}.
+\code{Phifun} then scales every derivative by
+$\mathrm{d}s/\mathrm{d}L = 1/F(6)$.
+\end{alertblock}
+\end{frame}
+
+%------------------------------------------------------------------
+\begin{frame}{\code{lambda} is a pair --- two unrelated jobs}
+
+\begin{center}\small
+\begin{tabular}{@{}llll@{}}
+\toprule
+ & drives & $0$ means & $1$ means\\
+\midrule
+$\lambda_1$ & initial-condition homotopy & start \emph{at the target orbit} &
+the true departure orbit\\
+$\lambda_2$ & energy $\to$ fuel & smooth, energy-like control &
+true bang-bang minimum fuel\\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\vspace{2pt}
+\textbf{$\lambda_1$} (\code{homCI}, discrete continuation):
+$y(1{:}5) = (1-\lambda_1)\,\mathrm{par}(5{:}9) + \lambda_1\,y_0(1{:}5)$.
+At $\lambda_1 = 0$ you start \emph{on the target orbit} --- a trivial problem.
+Step \code{par(10)}, halved on failure down to \code{par(11)}.
+
+\textbf{$\lambda_2$} (\code{Fullpath}, HOMPACK arclength):
+\begin{equation*}
+\min \int_0^{t_f}\Big[\lambda_2\|u\| + (1-\lambda_2)\|u\|^2\Big]\mathrm{d}t
+\qquad
+\rho =
+\begin{cases}
+0, & \|\Phi\| \le \sigma\\
+\frac{\|\Phi\|-\sigma}{2(1-\lambda_2)}, & \text{ramp}\\
+1, & \|\Phi\| \ge \sigma + 2(1-\lambda_2)
+\end{cases}
+\end{equation*}
+with $\sigma = \lambda_2 - \beta\Tmax p_m$. At $\lambda_2 = 1$ the ramp
+collapses: exactly bang-bang.
+
+\begin{block}{}
+Same energy-to-fuel idea as our $\varepsilon$-homotopy --- but by
+\textbf{arclength continuation with automatic steplength}, not a
+hand-scheduled ladder.
+\end{block}
+\end{frame}
+
+%------------------------------------------------------------------
+\begin{frame}[fragile]{Quick start --- five commands, 90 seconds}
+
+\begin{lstlisting}
+MFMAX=~/Desktop/optimal_control/orbit_transfer/earth_elliptic_to_geo/indirect/mfmax
+
+export SDKROOT=$(xcrun --show-sdk-path)
+cp -R $MFMAX/mfmax-v1 /tmp/mfmax-v1
+cd /tmp/mfmax-v1 && rm -f src/*.o src/*.mod
+make -C src F90=gfortran OPTF="-O3 -c -std=legacy -fallow-argument-mismatch" \
+     OPTO="-O3 -o"
+mkdir -p run10N && cd run10N && cp ../matlab/IN/in10N.dat in.dat && ../bin/path
+\end{lstlisting}
+
+\begin{block}{Success looks like this}
+\begin{lstlisting}[style=plain]
+Final mass (kg) =    1381.4074215554372
+Final time (h)  =    146.39467958103148
+** Total execution time  (secs) =   0.69800000000395812
+\end{lstlisting}
+\end{block}
+
+\textbf{Prerequisites:} gfortran (verified 13.1.0) and Xcode command line
+tools. No MATLAB, no CasADi.
+\end{frame}
+
+%------------------------------------------------------------------
+\begin{frame}[fragile]{Step 1--2 --- copy out of tree, then build}
+
+\textbf{Build out of tree.} The repository copy has eight \file{.o} and four
+\file{.mod} files from a 2007 build \emph{committed into it}, and \file{bin/}
+is empty.
+
+\begin{lstlisting}
+cp -R $MFMAX/mfmax-v1 /tmp/mfmax-v1 && cd /tmp/mfmax-v1
+rm -f src/*.o src/*.mod        # else make skips recompiles
+export SDKROOT=$(xcrun --show-sdk-path)
+make -C src F90=gfortran OPTF="-O3 -c -std=legacy -fallow-argument-mismatch" \
+     OPTO="-O3 -o"
+\end{lstlisting}
+
+\begin{itemize}
+\item \code{F90=gfortran} overrides the makefile's \code{g95}, which is long
+      dead. \textbf{No source edit needed.}
+\item \code{-std=legacy -fallow-argument-mismatch} are \textbf{required}:
+      HOMPACK90 and the LAPACK/rkf45 slices are F77 with mismatched argument
+      types that gfortran $\ge 10$ rejects.
+\item Expect only noise warnings: clang deployment version, duplicate
+      \code{-lemutls\_w}/\code{-lgcc}, ``built for newer macOS''.
+\item Result: 8 objects $+$ \file{bin/path}.
+\end{itemize}
+\end{frame}
+
+%------------------------------------------------------------------
+\begin{frame}[fragile]{Step 3 --- run}
+
+\code{path} takes \textbf{no arguments}. It reads \file{./in.dat} from the
+current directory and writes beside it --- so give every case its own
+directory.
+
+\begin{lstlisting}
+mkdir run10N && cd run10N
+cp ../matlab/IN/in10N.dat in.dat
+../bin/path | tee run.log
+\end{lstlisting}
+
+\begin{center}\small
+\begin{tabular}{@{}ll@{}}
+\toprule
+\file{out.dat} & header $+$ $\mathrm{NIT}+1$ trajectory records\\
+\file{next.dat} & restart file in \file{in.dat} format, $\lambda = (1,1)$\\
+\file{fort.2} & HOMPACK arclength trace (unit $=$ the \code{TRACE} value)\\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\begin{block}{Warm start}
+\file{next.dat} \emph{is} an \file{in.dat}. \code{cp next.dat in.dat}, change
+what you want, rerun. Strongly preferred for a nearby case.
+\end{block}
+\end{frame}
+
+%------------------------------------------------------------------
+\begin{frame}{Step 4 --- verify (the program will not do this for you)}
+
+\begin{enumerate}
+\item \textbf{Did it reach $\lambda = (1,1)$?} The \code{AFTER REFINEMENT}
+      block must show both entries at $1.0$. Anything less and you solved a
+      \emph{regularized} problem, not minimum fuel.
+\item \textbf{Is the residual small?} \code{|| Ftir(Ysol) ||} at the
+      $10^{-9}$ level. Reference run: $2.24\times10^{-9}$.
+\item \textbf{Did it hit the target?} \emph{Not printed} --- read
+      \file{out.dat}. Reference: $P = 42.164999999$ Mm, i.e.
+      $8.9\times10^{-10}$ Mm error; $e = 1.4\times10^{-11}$;
+      $h_x,h_y \sim 10^{-13}$.
+\item \textbf{Do the invariants hold?} $\|u\| \in \{0,1\}$ exactly (genuine
+      bang-bang, so $\lambda_2 = 1$ really was attained); $x_8$ constant
+      (measured spread \emph{exactly} $0$); $s$ monotone $0\to1$; mass
+      monotone decreasing.
+\end{enumerate}
+
+\begin{alertblock}{And check where the \code{IFAIL} lines sit --- see the
+gotchas slide}
+\end{alertblock}
+\end{frame}
+
+%------------------------------------------------------------------
+\begin{frame}{The reference run --- reproduce this before trusting anything}
+
+Stock \file{in10N.dat}, unmodified. $\Lf = \pi + 2.0(29.9012-\pi) = 56.6608$
+rad fixed, $t_f$ free.
+
+\begin{center}
+\begin{tabular}{@{}ll@{}}
+\toprule
+wall time & $0.70$ s ($0.47$ s in the differential homotopy)\\
+Jacobian evaluations & 18\\
+shooting residual $\|F\|$ & $2.24\times10^{-9}$\\
+\textbf{final mass} & \textbf{1381.4074 kg} \; (118.5926 kg propellant)\\
+\textbf{final time} (the free unknown) & \textbf{146.3947 h $=$ 6.0998 d}\\
+revolutions & 8.5178\\
+thrust structure & 18 arcs / 17 switches, 19.0\% burn duty\\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\begin{block}{Plausibility against our own campaign}
+Our certified direct run gives 1377.10 kg at 7.326 rev ($c_{t_f}=1.5$); its
+$c_{t_f}$ front runs 1377--1385 kg over $c_{t_f}\in[2.0,2.5]$. MfMax's
+1381.41 kg at 8.518 rev sits inside that band, in the right direction --- a
+longer transfer needs less propellant.
+\end{block}
+\end{frame}
+
+%------------------------------------------------------------------
+\begin{frame}[fragile]{\file{in.dat} --- twelve records}
+
+\begin{columns}[T]
+\begin{column}{0.46\textwidth}
+\begin{lstlisting}[style=plain]
+ 10. 0. 0. 0. 0. 0. 0. 0.
+ 8   9  10  11  12  13  14 15
+ 11.625 0.75 0. 0.0612 0. 0. 1500. 0. ...
+ 3.14159
+ 29.901174314034
+ 0. 0.
+ 2. 10. 0.0142 0.516586E+04 42.165 ...
+  1
+ 1000
+ 1.0E-4
+ 2
+ 0. 0.
+\end{lstlisting}
+\end{column}
+\begin{column}{0.52\textwidth}
+\scriptsize
+1 \code{ZI(1:8)} initial guess for the unknowns\\
+2 \code{FREE0(1:8)} which \code{Y0} slots they occupy\\
+3 \code{Y0(1:16)} initial state $+$ costate\\
+4 \code{L0} initial longitude [rad]\\
+5 \code{Lmin} reference final longitude\\
+6 \code{lambda(1:2)} homotopy start\\
+7 \code{PAR(1:11)} (next slide)\\
+8 \code{IPAR(1)} run mode\\
+9 \code{NIT} trajectory samples\\
+10 \code{jac\_step} finite-difference step\\
+11 \code{TRACE} \textbf{a unit number}, not a verbosity\\
+12 \code{SSPAR(1:2)} HOMPACK steplength (0 $=$ auto)
+\end{column}
+\end{columns}
+
+\vspace{3pt}
+\code{FREE0 = [8..15]}: the eight unknowns are $t_f$ plus the seven costates
+$p_P,p_{e_x},p_{e_y},p_{h_x},p_{h_y},p_s,p_m$ at $L_0$. So \textbf{\code{ZI(1)}
+is the $t_f$ guess in hours} --- forced to 10 if you pass $\le 0$.
+\end{frame}
+
+%------------------------------------------------------------------
+\begin{frame}{\code{PAR} and \code{IPAR}}
+
+\begin{center}\small
+\begin{tabular}{@{}l p{9.4cm} c@{}}
+\toprule
+slot & meaning & 10 N\\
+\midrule
+\code{par(1)} & \textbf{longitude-span multiplier}
+$\Lf = L_0 + \mathrm{par}(1)(L_{\min}-L_0)$ --- v1's analogue of $c_{t_f}$ &
+2.0\\
+\code{par(2)} & max thrust [N] (internally $\times 12.96$ to kg\,Mm/h$^2$) &
+10.\\
+\code{par(3)} & $\beta$ mass-flow coefficient [h/Mm],
+$\dot m = -\beta\Tmax\|u\|$ & 0.0142\\
+\code{par(4)} & $\mu$ [Mm$^3$/h$^2$] & 5165.86\\
+\code{par(5:9)} & \textbf{target orbit} $(P,e_x,e_y,h_x,h_y)$ --- terminal
+constraint \emph{and} the $\lambda_1{=}0$ easy start & 42.165 0 0 0 0\\
+\code{par(10:11)} & initial / minimum $\lambda_1$ continuation step &
+0.1, 0.01\\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\begin{center}\small
+\begin{tabular}{@{}cl@{}}
+\toprule
+\code{IPAR(1)} & behaviour\\
+\midrule
+$\le 1$ & full homotopy (\code{Fullpath}) --- \textbf{the normal mode}\\
+$2$ & no solve; integrate from the given \code{ZI} and write the trajectory\\
+$3$ & single shooting at the given \code{lambda}, print residual, write\\
+\bottomrule
+\end{tabular}
+\end{center}
+\end{frame}
+
+%------------------------------------------------------------------
+\begin{frame}[fragile]{Reading \file{out.dat} --- two traps}
+
+\begin{alertblock}{Trap 1: the header lies}
+The \code{\# LF =} line prints \code{Lmin}, \textbf{not} the actual final
+longitude. The real $\Lf$ is $L_0 + \mathrm{par}(1)(L_{\min}-L_0)$ --- and it
+is the last value in column 1 of the data block.
+\end{alertblock}
+
+\begin{alertblock}{Trap 2: one record spans twenty lines}
+Each record is 20 numbers ($L$, $Y(1{:}16)$, $u(1{:}3)$), but the write format
+\code{'(e24.16,2x,(e24.16e3))'} triggers Fortran \textbf{format reversion}.
+Never read it line-by-line.
+\end{alertblock}
+
+\begin{lstlisting}[style=py]
+vals = [float(t) for l in open('out.dat').read().split('# Data')[1].split('\n')
+                 for t in l.split()]
+rows = [vals[k:k+20] for k in range(0, len(vals), 20)]   # L, Y(1:16), u(1:3)
+\end{lstlisting}
+
+\code{rows[-1][1]} $=$ final $P$, \quad \code{rows[-1][7]} $=$ final mass,
+\quad \code{rows[-1][8]} $= t_f$. \\
+(Tested against the reference run's \file{out.dat}.)
+\end{frame}
+
+%------------------------------------------------------------------
+\begin{frame}{Setting up a new case}
+
+\begin{enumerate}
+\item \textbf{Reproduce the reference run first.} If it does not match, the
+      problem is your build, not your case.
+\item Start from \file{in10N.dat} (cold) or a converged \file{next.dat}
+      (warm --- preferred).
+\item \code{par(2)} $\leftarrow$ new thrust [N].
+\item \code{par(5:9)} if the target changes; \code{Y0(1:5)}, \code{Y0(7)},
+      \code{L0} if the departure orbit or mass changes.
+\item \alert{\code{Lmin} --- this is the one that bites.} The shipped
+      $29.901174314034$ is the minimum-time final longitude \emph{for 10 N},
+      and is wrong at any other thrust. Getting $L_{\min}$ at a new thrust is
+      its own minimum-time problem. No shortcut inside v1.
+\item \code{par(1)}: larger $=$ longer, more leisurely, higher final mass.
+\item Cold start? Reset \code{lambda} to \code{0. 0.} and give \code{ZI(1)} a
+      positive $t_f$ guess in hours.
+\item Run, then work the four verification checks in order.
+\end{enumerate}
+\end{frame}
+
+%------------------------------------------------------------------
+\begin{frame}{Gotchas}
+
+\begin{alertblock}{The one real hazard: \code{Pfun} ignores integration
+failure}
+rkf45 \code{iflag = 6} means \emph{``integration was not completed''}.
+\code{Pfun} prints it and then uses \code{Y} as though it were at $\Lf$.
+It fires \textbf{32 times} in the reference run --- which is still correct,
+because all 32 sit in the $\lambda_1$ / Jacobian phase and none in the final
+refinement.\\[3pt]
+\textbf{Check:} where do the \code{[PFUN] IFAIL} lines sit relative to the
+\code{BEFORE/AFTER REFINEMENT} blocks? Any inside or after them invalidates
+the answer.
+\end{alertblock}
+
+\begin{itemize}\small
+\item \code{TRACE} is a \textbf{unit number} --- \code{2} writes
+      \file{fort.2}. \code{0} disables; $>1$ also turns on verbose stdout.
+\item Two \textbf{silent clamps} in \code{Phifun}: $x_1 = \max(10^{-3},P)$,
+      and $\mathrm{d}t = 0$ when $F(6)\le 0$. Both hide non-physical
+      excursions rather than erroring.
+\item \code{homCI} can bail: \code{Initial conditions homotopy failed}.
+      Loosen \code{par(10)}/\code{par(11)}, or warm start.
+\item \file{matlab/main.m} is \textbf{not part of the solver} --- an old
+      NN-toolbox script training a five-neuron $t_f$ estimator.
+\end{itemize}
+\end{frame}
+
+%------------------------------------------------------------------
+\begin{frame}{v0 versus v1}
+
+\begin{center}\small
+\begin{tabular}{@{}lll@{}}
+\toprule
+ & v0 & v1\\
+\midrule
+independent variable & time $t$ & longitude $L$\\
+state dimension $n$ & 7 & 8 ($t_f$ added)\\
+fixed & $t_f$ \emph{and} $\Lf$ & $\Lf$ only\\
+free & --- & $t_f$\\
+span control & $\mathrm{par}(1)=c_{t_f}$ on $[t_0,t_{\min}]$ &
+$\mathrm{par}(1)$ on $[L_0,L_{\min}]$\\
+\code{lpar} / \code{lipar} & 14 / 2 & 11 / 1\\
+tolerances & \code{arcre/ae} $10^{-5}$, \code{ansre/ae} $10^{-8}$ &
+$10^{-6}$, $10^{-10}$ (tighter)\\
+validated here & 2026-07-20: \textbf{1378.37 kg} &
+2026-08-15: \textbf{1381.41 kg}, $t_f$ free\\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\file{hybrd.f}, \file{rkf45.f}, \file{LAPACK.f} are \textbf{byte-identical}
+between the two --- same solver core, different formulation.
+
+\begin{alertblock}{Not the same problem instance}
+The fixed/free roles are swapped and the span multipliers act on different
+axes. Do \emph{not} read 1381.41 vs 1378.37 as a discrepancy.
+\end{alertblock}
+\end{frame}
+
+%------------------------------------------------------------------
+\begin{frame}{What to borrow when minimum-fuel work resumes}
+
+\begin{enumerate}
+\item \textbf{Arclength continuation for energy $\to$ fuel.} HOMPACK
+      predictor--corrector with automatic steplength and re-refinement, versus
+      our hand-scheduled $\varepsilon$ ladder. Candidate cure for where our
+      ladder stalls --- the \file{GTO\_tulip} $1.01$--$1.11\times$
+      near-minimum-time band, and the deep thrust rungs.
+\item \textbf{The start-at-the-target initial-condition homotopy.} A seeding
+      trick we use nowhere; it removes the need for a good cold guess.
+\item \textbf{Freeing a scalar as a zero-derivative state.} Note the
+      direction: v1 fixes the span and frees time, while the tulip's open
+      problem needs the \emph{span} freed. The \emph{device} transfers, not
+      the formulation --- carry the span as the zero-derivative state.
+\item \textbf{Its converged costates as clean seeds.} \code{\# Z} in
+      \file{out.dat} is PMP-converged, unlike our direct-KKT duals at high
+      eccentricity. Already the recorded plan for our own MATLAB indirect
+      solver.
+\end{enumerate}
+
+\begin{block}{Open cross-check}
+Give v0 the same transfer with $t_f$ fixed at $146.3947$ h. If it returns
+$1381.41$ kg and $\Lf = 56.66$ rad, the two formulations validate each other
+\emph{and} our direct campaign. Blocker is clerical: decode v0's
+$\mathrm{lpar} = 14$ \code{PAR} layout.
+\end{block}
+\end{frame}
+
+\end{document}

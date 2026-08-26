@@ -158,3 +158,73 @@ carry: fixed-time problems at different γ are NOT nested (fixed rotating-
 frame endpoints), so J and m_f can be non-monotone in γ — grid γ per cell
 before declaring a catalog axis. Min-fuel entries are the energy→fuel
 homotopy on these seeds.
+
+## The conjugate-point sweep (added 2026-08-23)
+
+The pipeline's first **second-order** pass over shipped product: every entry
+of all five catalogs now carries a Jacobi (conjugate-point) verdict. Engine:
+`costate_common/conj_catalog_pass`; instrument:
+`costate_common/ms_conjugate_test` (free-time quotiented form, migration #3).
+
+**Per entry:** rebuild both endpoint orbits from the sheet recipes (v1 sheets
+fall back to dep = dro(tauDRO), arr = tulip(Np, pm)), fly the stored z8 with
+`tfMinProp`, cut into K = 24 junctions, re-solve `ms_tfmin(conjTest)` seeded
+AT the converged solution — 1 Newton iteration — then sweep the quotiented
+determinant along the chained segment STMs.
+
+**Result (33 min wall, 3 batched passes, ~0.14 s/entry):**
+
+| catalog | entries | pass | fail | unverified |
+|---|---|---|---|---|
+| DRO → tulip | 3,936 | 3,936 | 0 | 0 |
+| HALO → tulip | 3,980 | 3,980 | 0 | 0 |
+| DPO → tulip | 3,932 | 3,931 | **1** | 0 |
+| L1 → L2 | 1,952 | 1,952 | 0 | 0 |
+| L2 → L1 | 2,096 | 2,096 | 0 | 0 |
+
+**The one refuted entry:** DPO τ=2 → tulip Np=7, phases (2/3, 2/3), 15 N
+(t_f = 0.115 ND, ΔV 5.12 km/s): one sign change strictly interior
+(atFinal = 0) at re-solve fidelity 1.6e-12. A shipped, tfMin-accepted
+extremal that is **not a local minimum** — its cell has a cheaper
+neighboring transfer. Its lower-thrust rungs all pass, so it is an expensive
+branch, not a corrupt solve. The single hit is also the sweep's best
+validation: the test discriminates rather than rubber-stamps.
+
+### Findings worth keeping
+
+1. **The re-solve honesty gate is what makes 15,896 verdicts trustworthy.**
+   A verdict is recorded only when the ms re-solve reproduces the stored
+   entry (|z − z8| < 1e-6); measured 1e-12..1e-10 on every entry, zero
+   exceptions. Seeded at its own solution, ms converges in 1 iteration —
+   so the sweep certifies exactly the shipped solutions.
+2. **Second order at catalog scale costs minutes, not campaigns.** 0.13–0.18 s
+   per entry warm; the STMs ride free on the Newton Jacobian. There is no
+   longer a cost argument for shipping entries without a Jacobi verdict.
+3. **99.994% of accepted min-time entries are conjugate-point-free.** The
+   three-gate acceptance pipeline almost always lands on locally minimizing
+   branches — but not always, which is precisely why the verdict must be
+   stored per entry rather than assumed.
+4. **Storage:** per-sheet `conj_pass` / `conj_ncross` / `conj_atfinal` int8
+   grids + a top-level `conj_test` provenance block, validated by
+   `catalog_schema` (optional fields, v1/v2 compatible). Canonical .mats
+   updated with `.bak_conj` backups; `*_conjprog.mat` sidecars kept.
+
+### Standing rule going forward
+
+**Run `conj_catalog_pass` before packaging any new catalog or deliverable.**
+The sweep is cheap, resumable, and upgrades every entry from "certified
+extremal" to "extremal with no conjugate point in (0, t_f)".
+
+### Residue
+
+- The deliverable zips (3–6) predate the verdicts; re-ship when Darin wants
+  them (the DPO refuted entry is documented in `DPO_tulip/README.md`).
+- The deliverable-2 fine-sheet library (1,105 entries, v2-library format)
+  is not swept — needs a small format adapter.
+- Free-time form only: min-energy (fixed-t_f) entries still have no
+  applicable test (`costate_common/TODO.md`).
+- Junction resolution: K = 24 sampling means a conjugate pair inside one
+  segment can hide; "no sign change" is strong, not airtight.
+
+Presentation deck (rigorous + intuitive walkthrough of the test):
+`~/Documents/myLatex/conjugate_test_slides.html`.

@@ -1,0 +1,510 @@
+THRUST LADDER: 36 cells x 9 rungs [15           12           10            7            5            3            2          1.5            1] N, Isp=1710 s, m0=150 kg, N=400 (0 cells resumed/skipped)
+  ( 1, 1) T= 15.0  tf=0.13229 (0.586 d)  fly=0.00km  acc=0.0e+00  OK (41s)
+  ( 1, 1) T= 12.0  tf=0.14921 (0.661 d)  fly=0.00km  acc=0.0e+00  OK (2s)
+  ( 1, 1) T= 10.0  tf=0.16449 (0.729 d)  fly=0.00km  acc=0.0e+00  OK (1s)
+  ( 1, 1) T=  7.0  tf=0.19863 (0.880 d)  fly=0.00km  acc=0.0e+00  OK (2s)
+  ( 1, 1) T=  5.0  tf=0.23683 (1.050 d)  fly=0.00km  acc=0.0e+00  OK (2s)
+  ( 1, 1) T=  3.0  tf=0.30869 (1.368 d)  fly=0.00km  acc=0.0e+00  OK (1s)
+  ( 1, 1) T=  2.0  tf=0.38167 (1.692 d)  fly=0.00km  acc=0.0e+00  OK (2s)
+  ( 1, 1) T=  1.5  tf=0.44594 (1.977 d)  fly=0.00km  acc=0.0e+00  OK (1s)
+  ( 1, 1) T=  1.0  tf=0.56618 (2.510 d)  fly=0.00km  acc=0.0e+00  OK (1s)
+  ( 2, 1) T= 15.0  tf=0.13019 (0.577 d)  fly=0.00km  acc=0.0e+00  OK (11s)
+  ( 2, 1) T= 12.0  tf=0.14689 (0.651 d)  fly=0.00km  acc=0.0e+00  OK (2s)
+  ( 2, 1) T= 10.0  tf=0.16197 (0.718 d)  fly=0.00km  acc=0.0e+00  OK (2s)
+  ( 2, 1) T=  7.0  tf=0.19573 (0.868 d)  fly=0.00km  acc=0.0e+00  OK (1s)
+  ( 2, 1) T=  5.0  tf=0.23352 (1.035 d)  fly=0.00km  acc=0.0e+00  OK (2s)
+  ( 2, 1) T=  3.0  tf=0.30457 (1.350 d)  fly=0.00km  acc=0.0e+00  OK (2s)
+  ( 2, 1) T=  2.0  tf=0.37611 (1.667 d)  fly=0.00km  acc=0.0e+00  OK (1s)
+  ( 2, 1) T=  1.5  tf=0.43806 (1.942 d)  fly=0.00km  acc=0.0e+00  OK (1s)
+  ( 2, 1) T=  1.0  tf=0.54967 (2.437 d)  fly=0.00km  acc=0.0e+00  OK (1s)
+  ( 3, 1) T= 15.0  tf=0.11474 (0.509 d)  fly=0.00km  acc=0.0e+00  OK (52s)
+  ( 3, 1) T= 12.0  tf=0.12909 (0.572 d)  fly=0.00km  acc=0.0e+00  OK (1s)
+  ( 3, 1) T= 10.0  tf=0.14201 (0.629 d)  fly=0.00km  acc=0.0e+00  OK (1s)
+  ( 3, 1) T=  7.0  tf=0.17078 (0.757 d)  fly=0.00km  acc=0.0e+00  OK (1s)
+  ( 3, 1) T=  5.0  tf=0.20280 (0.899 d)  fly=0.00km  acc=0.0e+00  OK (1s)
+  ( 3, 1) T=  3.0  tf=0.26233 (1.163 d)  fly=0.00km  acc=0.0e+00  OK (1s)
+  ( 3, 1) T=  2.0  tf=0.32132 (1.424 d)  fly=0.00km  acc=0.0e+00  OK (1s)
+  ( 3, 1) T=  1.5  tf=0.37144 (1.646 d)  fly=0.00km  acc=0.0e+00  OK (1s)
+  ( 3, 1) T=  1.0  tf=0.45895 (2.034 d)  fly=0.00km  acc=0.0e+00  OK (1s)
+  ( 4, 1) T= 15.0  tf=0.10027 (0.444 d)  fly=0.00km  acc=0.0e+00  OK (10s)
+  ( 4, 1) T= 12.0  tf=0.11287 (0.500 d)  fly=0.00km  acc=0.0e+00  OK (1s)
+  ( 4, 1) T= 10.0  tf=0.12428 (0.551 d)  fly=0.00km  acc=0.0e+00  OK (2s)
+  ( 4, 1) T=  7.0  tf=0.14985 (0.664 d)  fly=0.00km  acc=0.0e+00  OK (1s)
+  ( 4, 1) T=  5.0  tf=0.17861 (0.792 d)  fly=0.00km  acc=0.0e+00  OK (1s)
+  ( 4, 1) T=  3.0  tf=0.23307 (1.033 d)  fly=0.00km  acc=0.0e+00  OK (1s)
+  ( 4, 1) T=  2.0  tf=0.28841 (1.278 d)  fly=0.00km  acc=0.0e+00  OK (2s)
+  ( 4, 1) T=  1.5  rejected pre-flight (minAlt 32965 km, tf 1.3095) -- ladder stops
+  ( 5, 1) T= 15.0  tf=0.11807 (0.523 d)  fly=0.00km  acc=0.0e+00  OK (11s)
+  ( 5, 1) T= 12.0  tf=0.13320 (0.590 d)  fly=0.00km  acc=0.0e+00  OK (2s)
+  ( 5, 1) T= 10.0  tf=0.14689 (0.651 d)  fly=0.00km  acc=0.0e+00  OK (1s)
+  ( 5, 1) T=  7.0  tf=0.17761 (0.787 d)  fly=0.00km  acc=0.0e+00  OK (2s)
+  ( 5, 1) T=  5.0  tf=0.21210 (0.940 d)  fly=0.00km  acc=0.0e+00  OK (1s)
+  ( 5, 1) T=  3.0  tf=0.27691 (1.227 d)  fly=0.00km  acc=0.0e+00  OK (2s)
+  ( 5, 1) T=  2.0  tf=0.34151 (1.514 d)  fly=0.00km  acc=0.0e+00  OK (2s)
+  ( 5, 1) T=  1.5  rejected pre-flight (minAlt 29042 km, tf 1.2824) -- ladder stops
+  ( 6, 1) T= 15.0  tf=0.15117 (0.670 d)  fly=0.08km  acc=NaN  fail (241s)
+  ( 6, 1) T= 12.0  tf=0.14604 (0.647 d)  fly=0.00km  acc=0.0e+00  OK (4s)
+  ( 6, 1) T= 10.0  tf=0.16085 (0.713 d)  fly=0.00km  acc=0.0e+00  OK (3s)
+  ( 6, 1) T=  7.0  tf=0.19385 (0.859 d)  fly=0.00km  acc=0.0e+00  OK (2s)
+  ( 6, 1) T=  5.0  tf=0.23054 (1.022 d)  fly=0.00km  acc=0.0e+00  OK (1s)
+  ( 6, 1) T=  3.0  tf=0.29870 (1.324 d)  fly=0.00km  acc=0.0e+00  OK (7s)
+  ( 6, 1) T=  2.0  tf=0.36635 (1.624 d)  fly=0.00km  acc=0.0e+00  OK (1s)
+  ( 6, 1) T=  1.5  direct fail (defect 7.3e-07) -- ladder stops
+THRUST LADDER DONE: 47 verified entries over 36 cells, 10.7 min
+THRUST LADDER: 30 cells x 9 rungs [15           12           10            7            5            3            2          1.5            1] N, Isp=1710 s, m0=150 kg, N=400 (6 cells resumed/skipped)
+  ( 1, 2) T= 15.0  tf=0.13034 (0.578 d)  fly=0.00km  acc=0.0e+00  OK (8s)
+  ( 1, 2) T= 12.0  tf=0.14712 (0.652 d)  fly=0.00km  acc=0.0e+00  OK (2s)
+  ( 1, 2) T= 10.0  tf=0.16229 (0.719 d)  fly=0.00km  acc=0.0e+00  OK (2s)
+  ( 1, 2) T=  7.0  tf=0.19626 (0.870 d)  fly=0.00km  acc=0.0e+00  OK (2s)
+  ( 1, 2) T=  5.0  tf=0.23435 (1.039 d)  fly=0.00km  acc=0.0e+00  OK (3s)
+  ( 1, 2) T=  3.0  tf=0.30606 (1.357 d)  fly=0.00km  acc=0.0e+00  OK (1s)
+  ( 1, 2) T=  2.0  tf=0.37834 (1.677 d)  fly=0.00km  acc=0.0e+00  OK (1s)
+  ( 1, 2) T=  1.5  tf=0.44083 (1.954 d)  fly=0.00km  acc=0.0e+00  OK (2s)
+  ( 1, 2) T=  1.0  tf=0.55256 (2.449 d)  fly=0.00km  acc=0.0e+00  OK (1s)
+  ( 2, 2) T= 15.0  tf=0.13300 (0.590 d)  fly=0.00km  acc=0.0e+00  OK (9s)
+  ( 2, 2) T= 12.0  tf=0.15024 (0.666 d)  fly=0.00km  acc=0.0e+00  OK (2s)
+  ( 2, 2) T= 10.0  tf=0.16584 (0.735 d)  fly=0.00km  acc=0.0e+00  OK (2s)
+  ( 2, 2) T=  7.0  tf=0.20084 (0.890 d)  fly=0.00km  acc=0.0e+00  OK (2s)
+  ( 2, 2) T=  5.0  tf=0.24020 (1.065 d)  fly=0.00km  acc=0.0e+00  OK (1s)
+  ( 2, 2) T=  3.0  tf=0.31459 (1.394 d)  fly=0.00km  acc=0.0e+00  OK (2s)
+  ( 2, 2) T=  2.0  tf=0.38989 (1.728 d)  fly=0.00km  acc=0.0e+00  OK (2s)
+  ( 2, 2) T=  1.5  tf=0.45509 (2.017 d)  fly=0.00km  acc=0.0e+00  OK (1s)
+  ( 2, 2) T=  1.0  tf=0.57102 (2.531 d)  fly=0.00km  acc=0.0e+00  OK (1s)
+  ( 3, 2) T= 15.0  tf=0.12058 (0.535 d)  fly=0.74km  acc=NaN  fail (72s)
+  ( 3, 2) T= 12.0  tf=0.13604 (0.603 d)  fly=0.00km  acc=0.0e+00  OK (1s)
+  ( 3, 2) T= 10.0  tf=0.15004 (0.665 d)  fly=0.00km  acc=0.0e+00  OK (1s)
+  ( 3, 2) T=  7.0  tf=0.18148 (0.804 d)  fly=0.00km  acc=0.0e+00  OK (2s)
+  ( 3, 2) T=  5.0  tf=0.21690 (0.961 d)  fly=0.00km  acc=0.0e+00  OK (1s)
+  ( 3, 2) T=  3.0  tf=0.28403 (1.259 d)  fly=0.00km  acc=0.0e+00  OK (1s)
+  ( 3, 2) T=  2.0  tf=0.35204 (1.560 d)  fly=0.00km  acc=0.0e+00  OK (1s)
+  ( 3, 2) T=  1.5  tf=0.41066 (1.820 d)  fly=0.00km  acc=0.0e+00  OK (1s)
+  ( 3, 2) T=  1.0  tf=0.51318 (2.275 d)  fly=0.00km  acc=0.0e+00  OK (1s)
+  [batch wall budget reached -- exiting cleanly after 3 cells]
+THRUST LADDER DONE: 73 verified entries over 30 cells, 2.1 min
+THRUST LADDER: 27 cells x 9 rungs [15           12           10            7            5            3            2          1.5            1] N, Isp=1710 s, m0=150 kg, N=400 (9 cells resumed/skipped)
+  ( 4, 2) T= 15.0  tf=0.10096 (0.448 d)  fly=0.00km  acc=0.0e+00  OK (57s)
+  ( 4, 2) T= 12.0  tf=0.11406 (0.506 d)  fly=0.00km  acc=0.0e+00  OK (2s)
+  ( 4, 2) T= 10.0  tf=0.12600 (0.558 d)  fly=0.00km  acc=0.0e+00  OK (1s)
+  ( 4, 2) T=  7.0  tf=0.15303 (0.678 d)  fly=0.00km  acc=0.0e+00  OK (1s)
+  ( 4, 2) T=  5.0  tf=0.18383 (0.815 d)  fly=0.00km  acc=0.0e+00  OK (1s)
+  ( 4, 2) T=  3.0  tf=0.24303 (1.077 d)  fly=0.00km  acc=0.0e+00  OK (1s)
+  ( 4, 2) T=  2.0  tf=0.30369 (1.346 d)  fly=0.00km  acc=0.0e+00  OK (1s)
+  ( 4, 2) T=  1.5  tf=0.35611 (1.579 d)  fly=0.00km  acc=0.0e+00  OK (1s)
+  ( 4, 2) T=  1.0  tf=0.44695 (1.981 d)  fly=0.00km  acc=0.0e+00  OK (1s)
+  ( 5, 2) T= 15.0  tf=0.11052 (0.490 d)  fly=0.00km  acc=0.0e+00  OK (50s)
+  ( 5, 2) T= 12.0  tf=0.12488 (0.554 d)  fly=0.00km  acc=0.0e+00  OK (1s)
+  ( 5, 2) T= 10.0  tf=0.13793 (0.611 d)  fly=0.00km  acc=0.0e+00  OK (1s)
+  ( 5, 2) T=  7.0  tf=0.16735 (0.742 d)  fly=0.00km  acc=0.0e+00  OK (1s)
+  ( 5, 2) T=  5.0  tf=0.20060 (0.889 d)  fly=0.00km  acc=0.0e+00  OK (2s)
+  ( 5, 2) T=  3.0  tf=0.26356 (1.168 d)  fly=0.00km  acc=0.0e+00  OK (2s)
+  ( 5, 2) T=  2.0  tf=0.32660 (1.448 d)  fly=0.00km  acc=0.0e+00  OK (1s)
+  ( 5, 2) T=  1.5  tf=0.37976 (1.683 d)  fly=0.00km  acc=0.0e+00  OK (1s)
+  ( 5, 2) T=  1.0  tf=0.46915 (2.080 d)  fly=0.00km  acc=0.0e+00  OK (1s)
+  ( 6, 2) T= 15.0  tf=0.12319 (0.546 d)  fly=0.00km  acc=0.0e+00  OK (40s)
+  ( 6, 2) T= 12.0  tf=0.13889 (0.616 d)  fly=0.00km  acc=0.0e+00  OK (2s)
+  ( 6, 2) T= 10.0  tf=0.15307 (0.679 d)  fly=0.00km  acc=0.0e+00  OK (1s)
+  ( 6, 2) T=  7.0  tf=0.18476 (0.819 d)  fly=0.00km  acc=0.0e+00  OK (1s)
+  ( 6, 2) T=  5.0  tf=0.22015 (0.976 d)  fly=0.00km  acc=0.0e+00  OK (1s)
+  ( 6, 2) T=  3.0  tf=0.28617 (1.268 d)  fly=0.00km  acc=0.0e+00  OK (2s)
+  ( 6, 2) T=  2.0  tf=0.35165 (1.559 d)  fly=0.00km  acc=0.0e+00  OK (1s)
+  ( 6, 2) T=  1.5  tf=0.40722 (1.805 d)  fly=0.00km  acc=0.0e+00  OK (1s)
+  ( 6, 2) T=  1.0  direct fail (defect 4.4e-07) -- ladder stops
+  [batch wall budget reached -- exiting cleanly after 3 cells]
+THRUST LADDER DONE: 99 verified entries over 27 cells, 5.8 min
+THRUST LADDER: 24 cells x 9 rungs [15           12           10            7            5            3            2          1.5            1] N, Isp=1710 s, m0=150 kg, N=400 (12 cells resumed/skipped)
+  ( 1, 3) T= 15.0  tf=0.12296 (0.545 d)  fly=0.00km  acc=0.0e+00  OK (10s)
+  ( 1, 3) T= 12.0  tf=0.13895 (0.616 d)  fly=0.00km  acc=0.0e+00  OK (2s)
+  ( 1, 3) T= 10.0  tf=0.15344 (0.680 d)  fly=0.00km  acc=0.0e+00  OK (2s)
+  ( 1, 3) T=  7.0  tf=0.18602 (0.825 d)  fly=0.00km  acc=0.0e+00  OK (1s)
+  ( 1, 3) T=  5.0  tf=0.22272 (0.987 d)  fly=0.00km  acc=0.0e+00  OK (1s)
+  ( 1, 3) T=  3.0  tf=0.29217 (1.295 d)  fly=0.00km  acc=0.0e+00  OK (1s)
+  ( 1, 3) T=  2.0  tf=0.39259 (1.740 d)  fly=0.00km  acc=0.0e+00  OK (41s)
+  ( 1, 3) T=  1.5  tf=0.46382 (2.056 d)  fly=0.00km  acc=0.0e+00  OK (10s)
+  ( 1, 3) T=  1.0  tf=0.52851 (2.343 d)  fly=0.00km  acc=0.0e+00  OK (3s)
+  ( 2, 3) T= 15.0  tf=0.13206 (0.585 d)  fly=0.00km  acc=0.0e+00  OK (11s)
+  ( 2, 3) T= 12.0  tf=0.14931 (0.662 d)  fly=0.00km  acc=0.0e+00  OK (2s)
+  ( 2, 3) T= 10.0  tf=0.16494 (0.731 d)  fly=3.05km  acc=NaN  fail (2s)
+  ( 2, 3) T=  7.0  tf=0.20006 (0.887 d)  fly=0.00km  acc=0.0e+00  OK (2s)
+  ( 2, 3) T=  5.0  tf=0.23962 (1.062 d)  fly=0.00km  acc=0.0e+00  OK (2s)
+  ( 2, 3) T=  3.0  tf=0.31460 (1.394 d)  fly=0.00km  acc=0.0e+00  OK (1s)
+  ( 2, 3) T=  2.0  tf=0.39074 (1.732 d)  fly=0.00km  acc=0.0e+00  OK (1s)
+  ( 2, 3) T=  1.5  tf=0.45681 (2.025 d)  fly=0.00km  acc=0.0e+00  OK (42s)
+  ( 2, 3) T=  1.0  tf=0.57418 (2.545 d)  fly=0.00km  acc=0.0e+00  OK (1s)
+  ( 3, 3) T= 15.0  tf=0.12469 (0.553 d)  fly=0.00km  acc=0.0e+00  OK (20s)
+  ( 3, 3) T= 12.0  tf=0.14099 (0.625 d)  fly=0.00km  acc=0.0e+00  OK (2s)
+  ( 3, 3) T= 10.0  tf=0.15581 (0.691 d)  fly=0.00km  acc=0.0e+00  OK (2s)
+  ( 3, 3) T=  7.0  tf=0.18926 (0.839 d)  fly=12.94km  acc=NaN  fail (2s)
+  ( 3, 3) T=  5.0  tf=0.22726 (1.007 d)  fly=0.00km  acc=0.0e+00  OK (2s)
+  ( 3, 3) T=  3.0  tf=0.30015 (1.330 d)  fly=0.00km  acc=0.0e+00  OK (3s)
+  ( 3, 3) T=  2.0  tf=0.37518 (1.663 d)  fly=0.00km  acc=0.0e+00  OK (1s)
+  ( 3, 3) T=  1.5  tf=0.44073 (1.954 d)  fly=0.00km  acc=0.0e+00  OK (1s)
+  ( 3, 3) T=  1.0  tf=0.55655 (2.467 d)  fly=0.00km  acc=0.0e+00  OK (6s)
+THRUST LADDER: 21 cells x 9 rungs [15           12           10            7            5            3            2          1.5            1] N, Isp=1710 s, m0=150 kg, N=400 (15 cells resumed/skipped)
+  ( 4, 3) T= 15.0  tf=0.10459 (0.464 d)  fly=0.00km  acc=0.0e+00  OK (228s)
+  ( 4, 3) T= 12.0  tf=0.11847 (0.525 d)  fly=0.00km  acc=0.0e+00  OK (2s)
+  ( 4, 3) T= 10.0  tf=0.13120 (0.582 d)  fly=0.00km  acc=0.0e+00  OK (2s)
+  ( 4, 3) T=  7.0  tf=0.16031 (0.711 d)  fly=0.00km  acc=0.0e+00  OK (1s)
+  ( 4, 3) T=  5.0  tf=0.19398 (0.860 d)  fly=0.00km  acc=0.0e+00  OK (1s)
+  ( 4, 3) T=  3.0  tf=0.26017 (1.153 d)  fly=0.00km  acc=0.0e+00  OK (1s)
+  ( 4, 3) T=  2.0  tf=0.32980 (1.462 d)  fly=0.00km  acc=0.0e+00  OK (1s)
+  ( 4, 3) T=  1.5  tf=0.39111 (1.734 d)  fly=0.00km  acc=0.0e+00  OK (1s)
+  ( 4, 3) T=  1.0  tf=0.49885 (2.211 d)  fly=0.00km  acc=0.0e+00  OK (1s)
+  [batch wall budget reached -- exiting cleanly after 1 cells]
+THRUST LADDER DONE: 133 verified entries over 21 cells, 4.0 min
+THRUST LADDER: 20 cells x 9 rungs [15           12           10            7            5            3            2          1.5            1] N, Isp=1710 s, m0=150 kg, N=400 (16 cells resumed/skipped)
+  ( 5, 3) T= 15.0  tf=0.10106 (0.448 d)  fly=0.00km  acc=0.0e+00  OK (48s)
+  ( 5, 3) T= 12.0  tf=0.11435 (0.507 d)  fly=0.00km  acc=0.0e+00  OK (2s)
+  ( 5, 3) T= 10.0  tf=0.12650 (0.561 d)  fly=0.00km  acc=0.0e+00  OK (1s)
+  ( 5, 3) T=  7.0  tf=0.15421 (0.684 d)  fly=0.00km  acc=0.0e+00  OK (1s)
+  ( 5, 3) T=  5.0  tf=0.18609 (0.825 d)  fly=0.00km  acc=0.0e+00  OK (1s)
+  ( 5, 3) T=  3.0  tf=0.24816 (1.100 d)  fly=0.00km  acc=0.0e+00  OK (1s)
+  ( 5, 3) T=  2.0  tf=0.31249 (1.385 d)  fly=0.00km  acc=0.0e+00  OK (1s)
+  ( 5, 3) T=  1.5  tf=0.36818 (1.632 d)  fly=0.00km  acc=0.0e+00  OK (1s)
+  ( 5, 3) T=  1.0  tf=0.46388 (2.056 d)  fly=0.00km  acc=0.0e+00  OK (2s)
+  ( 6, 3) T= 15.0  tf=0.11091 (0.492 d)  fly=0.00km  acc=0.0e+00  OK (43s)
+  ( 6, 3) T= 12.0  tf=0.12513 (0.555 d)  fly=0.00km  acc=0.0e+00  OK (1s)
+  ( 6, 3) T= 10.0  tf=0.13802 (0.612 d)  fly=0.00km  acc=0.0e+00  OK (1s)
+  ( 6, 3) T=  7.0  tf=0.16707 (0.741 d)  fly=0.00km  acc=0.0e+00  OK (1s)
+  ( 6, 3) T=  5.0  tf=0.19988 (0.886 d)  fly=0.00km  acc=0.0e+00  OK (1s)
+  ( 6, 3) T=  3.0  tf=0.26213 (1.162 d)  fly=0.00km  acc=0.0e+00  OK (1s)
+  ( 6, 3) T=  2.0  tf=0.32497 (1.440 d)  fly=0.00km  acc=0.0e+00  OK (1s)
+  ( 6, 3) T=  1.5  tf=0.37881 (1.679 d)  fly=0.00km  acc=0.0e+00  OK (1s)
+  ( 6, 3) T=  1.0  tf=0.47289 (2.096 d)  fly=0.00km  acc=0.0e+00  OK (1s)
+  ( 1, 4) T= 15.0  tf=0.36872 flown 485059.1 km > gate -- ladder stops
+  ( 2, 4) T= 15.0  tf=0.11964 (0.530 d)  fly=0.00km  acc=0.0e+00  OK (13s)
+  ( 2, 4) T= 12.0  tf=0.13521 (0.599 d)  fly=0.00km  acc=0.0e+00  OK (8s)
+  ( 2, 4) T= 10.0  tf=0.14932 (0.662 d)  fly=0.00km  acc=0.0e+00  OK (4s)
+  ( 2, 4) T=  7.0  tf=0.18105 (0.803 d)  fly=0.00km  acc=0.0e+00  OK (16s)
+  ( 2, 4) T=  5.0  tf=0.21687 (0.961 d)  fly=0.00km  acc=NaN  fail (4s)
+  ( 2, 4) T=  3.0  tf=0.28496 (1.263 d)  fly=0.00km  acc=0.0e+00  OK (3s)
+  ( 2, 4) T=  2.0  tf=0.35416 (1.570 d)  fly=0.00km  acc=0.0e+00  OK (3s)
+  ( 2, 4) T=  1.5  tf=0.41395 (1.835 d)  fly=0.00km  acc=0.0e+00  OK (4s)
+  ( 2, 4) T=  1.0  tf=0.51919 (2.301 d)  fly=0.00km  acc=0.0e+00  OK (8s)
+  ( 3, 4) T= 15.0  tf=0.13386 (0.593 d)  fly=0.00km  acc=0.0e+00  OK (14s)
+  ( 3, 4) T= 12.0  tf=0.15281 (0.677 d)  fly=0.00km  acc=0.0e+00  OK (3s)
+  ( 3, 4) T= 10.0  tf=0.14998 (0.665 d)  fly=0.00km  acc=0.0e+00  OK (5s)
+  ( 3, 4) T=  7.0  tf=0.18409 (0.816 d)  fly=0.00km  acc=0.0e+00  OK (5s)
+  ( 3, 4) T=  5.0  tf=0.22388 (0.992 d)  fly=0.00km  acc=0.0e+00  OK (6s)
+  ( 3, 4) T=  3.0  tf=0.30304 (1.343 d)  fly=0.00km  acc=0.0e+00  OK (26s)
+  ( 3, 4) T=  2.0  tf=0.38835 (1.721 d)  fly=0.00km  acc=0.0e+00  OK (5s)
+  ( 3, 4) T=  1.5  rejected pre-flight (minAlt 500 km, tf 3.9686) -- ladder stops
+  [batch wall budget reached -- exiting cleanly after 5 cells]
+THRUST LADDER DONE: 166 verified entries over 20 cells, 4.5 min
+THRUST LADDER: 16 cells x 9 rungs [15           12           10            7            5            3            2          1.5            1] N, Isp=1710 s, m0=150 kg, N=400 (20 cells resumed/skipped)
+  ( 1, 4) T= 15.0  tf=0.36872 flown 485059.1 km > gate -- ladder stops
+  ( 4, 4) T= 15.0  tf=0.11354 (0.503 d)  fly=0.00km  acc=0.0e+00  OK (164s)
+  ( 4, 4) T= 12.0  tf=0.12981 (0.575 d)  fly=0.00km  acc=0.0e+00  OK (4s)
+  ( 4, 4) T= 10.0  tf=0.14485 (0.642 d)  fly=0.00km  acc=0.0e+00  OK (6s)
+  ( 4, 4) T=  7.0  tf=0.17943 (0.795 d)  fly=0.00km  acc=NaN  fail (3s)
+  ( 4, 4) T=  5.0  tf=0.21931 (0.972 d)  fly=0.00km  acc=NaN  fail (3s)
+  ( 4, 4) T=  3.0  tf=0.29635 (1.314 d)  fly=0.01km  acc=NaN  fail (3s)
+  ( 4, 4) T=  2.0  tf=0.37522 (1.663 d)  fly=0.02km  acc=NaN  fail (11s)
+  ( 4, 4) T=  1.5  tf=0.44313 (1.964 d)  fly=0.00km  acc=0.0e+00  OK (9s)
+  ( 4, 4) T=  1.0  rejected pre-flight (minAlt 4160 km, tf 5.7907) -- ladder stops
+  [batch wall budget reached -- exiting cleanly after 2 cells]
+THRUST LADDER DONE: 170 verified entries over 16 cells, 4.0 min
+THRUST LADDER: 14 cells x 9 rungs [15           12           10            7            5            3            2          1.5            1] N, Isp=1710 s, m0=150 kg, N=400 (22 cells resumed/skipped)
+  ( 5, 4) T= 15.0  tf=0.10045 (0.445 d)  fly=0.00km  acc=0.0e+00  OK (34s)
+  ( 5, 4) T= 12.0  tf=0.11227 (0.498 d)  fly=0.00km  acc=0.0e+00  OK (32s)
+  ( 5, 4) T= 10.0  tf=0.12301 (0.545 d)  fly=0.00km  acc=0.0e+00  OK (2s)
+  ( 5, 4) T=  7.0  tf=0.14747 (0.654 d)  fly=0.00km  acc=0.0e+00  OK (2s)
+  ( 5, 4) T=  5.0  tf=0.17619 (0.781 d)  fly=0.00km  acc=NaN  fail (3s)
+  ( 5, 4) T=  3.0  tf=0.23622 (1.047 d)  fly=0.00km  acc=NaN  fail (3s)
+  ( 5, 4) T=  2.0  tf=0.30488 (1.351 d)  fly=0.00km  acc=0.0e+00  OK (2s)
+  ( 5, 4) T=  1.5  rejected pre-flight (minAlt 4302 km, tf 1.2525) -- ladder stops
+  ( 6, 4) T= 15.0  tf=0.10131 (0.449 d)  fly=0.00km  acc=0.0e+00  OK (38s)
+  ( 6, 4) T= 12.0  tf=0.11293 (0.501 d)  fly=0.00km  acc=0.0e+00  OK (4s)
+  ( 6, 4) T= 10.0  tf=0.12340 (0.547 d)  fly=0.00km  acc=0.0e+00  OK (1s)
+  ( 6, 4) T=  7.0  tf=0.14691 (0.651 d)  fly=0.00km  acc=0.0e+00  OK (3s)
+  ( 6, 4) T=  5.0  tf=0.17386 (0.771 d)  fly=0.00km  acc=0.0e+00  OK (3s)
+  ( 6, 4) T=  3.0  tf=0.22822 (1.012 d)  fly=0.00km  acc=NaN  fail (3s)
+  ( 6, 4) T=  2.0  direct fail (defect 1.1e-07) -- ladder stops
+  [batch wall budget reached -- exiting cleanly after 2 cells]
+THRUST LADDER DONE: 180 verified entries over 14 cells, 5.3 min
+THRUST LADDER: 12 cells x 9 rungs [15           12           10            7            5            3            2          1.5            1] N, Isp=1710 s, m0=150 kg, N=400 (24 cells resumed/skipped)
+  ( 1, 5) T= 15.0  tf=0.11851 (0.525 d)  fly=0.00km  acc=0.0e+00  OK (19s)
+  ( 1, 5) T= 12.0  tf=0.13378 (0.593 d)  fly=0.00km  acc=0.0e+00  OK (2s)
+  ( 1, 5) T= 10.0  tf=0.14781 (0.655 d)  fly=0.00km  acc=0.0e+00  OK (1s)
+  ( 1, 5) T=  7.0  tf=0.18059 (0.800 d)  fly=0.00km  acc=0.0e+00  OK (1s)
+  ( 1, 5) T=  5.0  tf=0.22110 (0.980 d)  fly=0.00km  acc=0.0e+00  OK (1s)
+  ( 1, 5) T=  3.0  tf=0.31391 (1.391 d)  fly=0.00km  acc=0.0e+00  OK (2s)
+  ( 1, 5) T=  2.0  tf=0.31283 (1.387 d)  fly=0.00km  acc=0.0e+00  OK (5s)
+  ( 1, 5) T=  1.5  tf=0.36915 (1.636 d)  fly=0.00km  acc=0.0e+00  OK (4s)
+  ( 1, 5) T=  1.0  tf=0.60758 (2.693 d)  fly=0.00km  acc=0.0e+00  OK (43s)
+  ( 2, 5) T= 15.0  tf=0.14434 (0.640 d)  fly=0.07km  acc=NaN  fail (143s)
+  ( 2, 5) T= 12.0  tf=0.12713 (0.564 d)  fly=0.00km  acc=0.0e+00  OK (4s)
+  ( 2, 5) T= 10.0  tf=0.14112 (0.626 d)  fly=0.00km  acc=0.0e+00  OK (1s)
+  ( 2, 5) T=  7.0  tf=0.17430 (0.773 d)  fly=0.00km  acc=0.0e+00  OK (1s)
+  ( 2, 5) T=  5.0  tf=0.21608 (0.958 d)  fly=0.00km  acc=0.0e+00  OK (1s)
+  ( 2, 5) T=  3.0  tf=0.31878 (1.413 d)  fly=0.00km  acc=0.0e+00  OK (2s)
+  ( 2, 5) T=  2.0  tf=0.45812 (2.031 d)  fly=8.33km  acc=NaN  fail (4s)
+  ( 2, 5) T=  1.5  rejected pre-flight (minAlt 500 km, tf 3.1648) -- ladder stops
+  [batch wall budget reached -- exiting cleanly after 2 cells]
+THRUST LADDER DONE: 194 verified entries over 12 cells, 4.3 min
+THRUST LADDER: 10 cells x 9 rungs [15           12           10            7            5            3            2          1.5            1] N, Isp=1710 s, m0=150 kg, N=400 (26 cells resumed/skipped)
+  ( 3, 5) T= 15.0  tf=0.14878 (0.659 d)  fly=0.19km  acc=NaN  fail (333s)
+  ( 3, 5) T= 12.0  tf=0.11071 (0.491 d)  fly=0.00km  acc=0.0e+00  OK (12s)
+  ( 3, 5) T= 10.0  tf=0.12261 (0.543 d)  fly=0.00km  acc=0.0e+00  OK (2s)
+  ( 3, 5) T=  7.0  tf=0.15079 (0.668 d)  fly=0.00km  acc=0.0e+00  OK (1s)
+  ( 3, 5) T=  5.0  tf=0.18642 (0.826 d)  fly=0.00km  acc=0.0e+00  OK (1s)
+  ( 3, 5) T=  3.0  tf=0.27731 (1.229 d)  fly=0.00km  acc=0.0e+00  OK (14s)
+  ( 3, 5) T=  2.0  tf=0.41360 (1.833 d)  fly=0.00km  acc=0.0e+00  OK (3s)
+THRUST LADDER: 9 cells x 9 rungs [15           12           10            7            5            3            2          1.5            1] N, Isp=1710 s, m0=150 kg, N=400 (27 cells resumed/skipped)
+  ( 4, 5) T= 15.0  tf=0.10075 (0.447 d)  fly=0.00km  acc=0.0e+00  OK (26s)
+  ( 4, 5) T= 12.0  tf=0.11354 (0.503 d)  fly=0.00km  acc=0.0e+00  OK (2s)
+  ( 4, 5) T= 10.0  tf=0.12520 (0.555 d)  fly=0.00km  acc=0.0e+00  OK (1s)
+  ( 4, 5) T=  7.0  tf=0.15188 (0.673 d)  fly=0.00km  acc=0.0e+00  OK (3s)
+  ( 4, 5) T=  5.0  tf=0.18328 (0.812 d)  fly=0.00km  acc=0.0e+00  OK (1s)
+  ( 4, 5) T=  3.0  tf=0.25155 (1.115 d)  fly=0.00km  acc=0.0e+00  OK (2s)
+  ( 4, 5) T=  2.0  tf=0.34867 (1.546 d)  fly=0.00km  acc=0.0e+00  OK (23s)
+  ( 4, 5) T=  1.5  tf=0.45104 (1.999 d)  fly=0.00km  acc=0.0e+00  OK (11s)
+  ( 4, 5) T=  1.0  rejected pre-flight (minAlt 6984 km, tf 5.7357) -- ladder stops
+  ( 5, 5) T= 15.0  tf=0.12078 (0.535 d)  fly=0.00km  acc=0.0e+00  OK (21s)
+  ( 5, 5) T= 12.0  tf=0.13581 (0.602 d)  fly=0.00km  acc=0.0e+00  OK (3s)
+  ( 5, 5) T= 10.0  tf=0.14934 (0.662 d)  fly=0.00km  acc=0.0e+00  OK (3s)
+  ( 5, 5) T=  7.0  tf=0.17958 (0.796 d)  fly=0.00km  acc=0.0e+00  OK (1s)
+  ( 5, 5) T=  5.0  tf=0.21367 (0.947 d)  fly=0.00km  acc=0.0e+00  OK (1s)
+  ( 5, 5) T=  3.0  tf=0.27952 (1.239 d)  fly=0.00km  acc=0.0e+00  OK (3s)
+  ( 5, 5) T=  2.0  tf=0.34755 (1.541 d)  fly=0.00km  acc=0.0e+00  OK (3s)
+  ( 5, 5) T=  1.5  tf=0.40370 (1.789 d)  fly=0.00km  acc=NaN  fail (12s)
+  ( 5, 5) T=  1.0  tf=0.48800 (2.163 d)  fly=0.00km  acc=0.0e+00  OK (18s)
+  ( 6, 5) T= 15.0  tf=0.34777 flown 734238.9 km > gate -- ladder stops
+  ( 1, 6) T= 15.0  tf=0.12807 (0.568 d)  fly=0.00km  acc=0.0e+00  OK (28s)
+  ( 1, 6) T= 12.0  tf=0.14428 (0.640 d)  fly=0.00km  acc=0.0e+00  OK (1s)
+  ( 1, 6) T= 10.0  tf=0.15889 (0.704 d)  fly=0.00km  acc=0.0e+00  OK (3s)
+  ( 1, 6) T=  7.0  tf=0.19158 (0.849 d)  fly=0.00km  acc=0.0e+00  OK (1s)
+  ( 1, 6) T=  5.0  tf=0.22836 (1.012 d)  fly=0.00km  acc=0.0e+00  OK (3s)
+  ( 1, 6) T=  3.0  tf=0.29936 (1.327 d)  fly=0.00km  acc=0.0e+00  OK (1s)
+  ( 1, 6) T=  2.0  tf=0.37683 (1.670 d)  fly=0.00km  acc=0.0e+00  OK (1s)
+  ( 1, 6) T=  1.5  tf=0.45300 (2.008 d)  fly=0.00km  acc=0.0e+00  OK (1s)
+  ( 1, 6) T=  1.0  tf=0.61381 (2.721 d)  fly=0.00km  acc=0.0e+00  OK (2s)
+  ( 2, 6) T= 15.0  tf=0.15330 (0.680 d)  fly=0.06km  acc=NaN  fail (81s)
+  ( 2, 6) T= 12.0  tf=0.13725 (0.608 d)  fly=0.00km  acc=0.0e+00  OK (3s)
+  ( 2, 6) T= 10.0  tf=0.15120 (0.670 d)  fly=0.00km  acc=0.0e+00  OK (1s)
+  ( 2, 6) T=  7.0  tf=0.18248 (0.809 d)  fly=0.00km  acc=0.0e+00  OK (1s)
+  ( 2, 6) T=  5.0  tf=0.21771 (0.965 d)  fly=0.00km  acc=0.0e+00  OK (1s)
+  ( 2, 6) T=  3.0  tf=0.28531 (1.265 d)  fly=0.00km  acc=0.0e+00  OK (1s)
+  ( 2, 6) T=  2.0  tf=0.35740 (1.584 d)  fly=0.00km  acc=0.0e+00  OK (1s)
+  ( 2, 6) T=  1.5  tf=0.42619 (1.889 d)  fly=0.00km  acc=0.0e+00  OK (1s)
+  ( 2, 6) T=  1.0  rejected pre-flight (minAlt 3458 km, tf 4.3581) -- ladder stops
+  [batch wall budget reached -- exiting cleanly after 5 cells]
+THRUST LADDER DONE: 232 verified entries over 9 cells, 5.3 min
+THRUST LADDER: 5 cells x 9 rungs [15           12           10            7            5            3            2          1.5            1] N, Isp=1710 s, m0=150 kg, N=400 (31 cells resumed/skipped)
+  ( 6, 5) T= 15.0  tf=0.34777 flown 734238.9 km > gate -- ladder stops
+  ( 3, 6) T= 15.0  tf=0.17458 (0.774 d)  fly=1.77km  acc=NaN  fail (60s)
+  ( 3, 6) T= 12.0  tf=0.11633 (0.516 d)  fly=0.00km  acc=0.0e+00  OK (5s)
+  ( 3, 6) T= 10.0  tf=0.12765 (0.566 d)  fly=0.00km  acc=0.0e+00  OK (2s)
+  ( 3, 6) T=  7.0  tf=0.15279 (0.677 d)  fly=0.00km  acc=0.0e+00  OK (1s)
+  ( 3, 6) T=  5.0  tf=0.18071 (0.801 d)  fly=0.00km  acc=0.0e+00  OK (1s)
+  ( 3, 6) T=  3.0  tf=0.23320 (1.034 d)  fly=0.00km  acc=0.0e+00  OK (1s)
+  ( 3, 6) T=  2.0  tf=0.28770 (1.275 d)  fly=0.00km  acc=0.0e+00  OK (1s)
+  ( 3, 6) T=  1.5  tf=0.33875 (1.502 d)  fly=0.00km  acc=0.0e+00  OK (1s)
+  ( 3, 6) T=  1.0  rejected pre-flight (minAlt 500 km, tf 3.9040) -- ladder stops
+  ( 4, 6) T= 15.0  tf=0.09725 (0.431 d)  fly=0.00km  acc=0.0e+00  OK (37s)
+  ( 4, 6) T= 12.0  tf=0.10930 (0.485 d)  fly=0.00km  acc=0.0e+00  OK (1s)
+  ( 4, 6) T= 10.0  tf=0.12020 (0.533 d)  fly=0.00km  acc=0.0e+00  OK (1s)
+  ( 4, 6) T=  7.0  tf=0.14466 (0.641 d)  fly=0.00km  acc=0.0e+00  OK (1s)
+  ( 4, 6) T=  5.0  tf=0.17230 (0.764 d)  fly=0.00km  acc=0.0e+00  OK (1s)
+  ( 4, 6) T=  3.0  tf=0.22549 (1.000 d)  fly=0.00km  acc=0.0e+00  OK (1s)
+  ( 4, 6) T=  2.0  tf=0.28140 (1.247 d)  fly=0.00km  acc=0.0e+00  OK (1s)
+  ( 4, 6) T=  1.5  tf=0.33210 (1.472 d)  fly=0.00km  acc=0.0e+00  OK (1s)
+  ( 4, 6) T=  1.0  tf=0.42970 (1.905 d)  fly=0.00km  acc=0.0e+00  OK (1s)
+  ( 5, 6) T= 15.0  tf=0.12099 (0.536 d)  fly=0.00km  acc=0.0e+00  OK (19s)
+  ( 5, 6) T= 12.0  tf=0.13637 (0.604 d)  fly=0.00km  acc=0.0e+00  OK (1s)
+  ( 5, 6) T= 10.0  tf=0.15026 (0.666 d)  fly=0.00km  acc=0.0e+00  OK (2s)
+  ( 5, 6) T=  7.0  tf=0.18136 (0.804 d)  fly=0.00km  acc=0.0e+00  OK (1s)
+  ( 5, 6) T=  5.0  tf=0.21620 (0.958 d)  fly=0.00km  acc=0.0e+00  OK (1s)
+  ( 5, 6) T=  3.0  tf=0.28175 (1.249 d)  fly=0.00km  acc=0.0e+00  OK (1s)
+  ( 5, 6) T=  2.0  tf=0.34802 (1.543 d)  fly=0.00km  acc=0.0e+00  OK (1s)
+  ( 5, 6) T=  1.5  tf=0.40610 (1.800 d)  fly=0.00km  acc=0.0e+00  OK (1s)
+  ( 5, 6) T=  1.0  tf=0.51561 (2.286 d)  fly=0.00km  acc=0.0e+00  OK (1s)
+  ( 6, 6) T= 15.0  tf=0.13488 (0.598 d)  fly=0.00km  acc=6.4e-13  OK (116s)
+  ( 6, 6) T= 12.0  tf=0.14650 (0.649 d)  fly=0.00km  acc=0.0e+00  OK (4s)
+  ( 6, 6) T= 10.0  tf=0.16118 (0.714 d)  fly=0.00km  acc=0.0e+00  OK (1s)
+  ( 6, 6) T=  7.0  tf=0.19378 (0.859 d)  fly=0.00km  acc=0.0e+00  OK (1s)
+  ( 6, 6) T=  5.0  tf=0.22997 (1.019 d)  fly=0.00km  acc=0.0e+00  OK (1s)
+  ( 6, 6) T=  3.0  tf=0.29797 (1.321 d)  fly=0.00km  acc=0.0e+00  OK (1s)
+  ( 6, 6) T=  2.0  tf=0.36909 (1.636 d)  fly=0.00km  acc=0.0e+00  OK (1s)
+  ( 6, 6) T=  1.5  tf=0.43647 (1.935 d)  fly=0.00km  acc=0.0e+00  OK (2s)
+  ( 6, 6) T=  1.0  tf=0.47919 (2.124 d)  fly=0.00km  acc=0.0e+00  OK (2s)
+THRUST LADDER DONE: 266 verified entries over 5 cells, 5.1 min
+THRUST LADDER: 0 cells x 9 rungs [15           12           10            7            5            3            2          1.5            1] N, Isp=1710 s, m0=150 kg, N=400 (36 cells resumed/skipped)
+THRUST LADDER DONE: 266 verified entries over 0 cells, 0.0 min
+THRUST LADDER: 0 cells x 9 rungs [15           12           10            7            5            3            2          1.5            1] N, Isp=1710 s, m0=150 kg, N=400 (36 cells resumed/skipped)
+THRUST LADDER DONE: 266 verified entries over 0 cells, 0.0 min
+THRUST LADDER: 0 cells x 9 rungs [15           12           10            7            5            3            2          1.5            1] N, Isp=1710 s, m0=150 kg, N=400 (36 cells resumed/skipped)
+THRUST LADDER DONE: 266 verified entries over 0 cells, 0.0 min
+THRUST LADDER: 0 cells x 9 rungs [15           12           10            7            5            3            2          1.5            1] N, Isp=1710 s, m0=150 kg, N=400 (36 cells resumed/skipped)
+THRUST LADDER DONE: 266 verified entries over 0 cells, 0.0 min
+THRUST LADDER: 0 cells x 9 rungs [15           12           10            7            5            3            2          1.5            1] N, Isp=1710 s, m0=150 kg, N=400 (36 cells resumed/skipped)
+THRUST LADDER DONE: 266 verified entries over 0 cells, 0.0 min
+THRUST LADDER: 0 cells x 9 rungs [15           12           10            7            5            3            2          1.5            1] N, Isp=1710 s, m0=150 kg, N=400 (36 cells resumed/skipped)
+THRUST LADDER DONE: 266 verified entries over 0 cells, 0.0 min
+THRUST LADDER: 0 cells x 9 rungs [15           12           10            7            5            3            2          1.5            1] N, Isp=1710 s, m0=150 kg, N=400 (36 cells resumed/skipped)
+THRUST LADDER DONE: 266 verified entries over 0 cells, 0.0 min
+THRUST LADDER: 0 cells x 9 rungs [15           12           10            7            5            3            2          1.5            1] N, Isp=1710 s, m0=150 kg, N=400 (36 cells resumed/skipped)
+THRUST LADDER DONE: 266 verified entries over 0 cells, 0.0 min
+THRUST LADDER: 0 cells x 9 rungs [15           12           10            7            5            3            2          1.5            1] N, Isp=1710 s, m0=150 kg, N=400 (36 cells resumed/skipped)
+THRUST LADDER DONE: 266 verified entries over 0 cells, 0.0 min
+THRUST LADDER: 0 cells x 9 rungs [15           12           10            7            5            3            2          1.5            1] N, Isp=1710 s, m0=150 kg, N=400 (36 cells resumed/skipped)
+THRUST LADDER DONE: 266 verified entries over 0 cells, 0.0 min
+THRUST LADDER: 0 cells x 9 rungs [15           12           10            7            5            3            2          1.5            1] N, Isp=1710 s, m0=150 kg, N=400 (36 cells resumed/skipped)
+THRUST LADDER DONE: 266 verified entries over 0 cells, 0.0 min
+THRUST LADDER: 0 cells x 9 rungs [15           12           10            7            5            3            2          1.5            1] N, Isp=1710 s, m0=150 kg, N=400 (36 cells resumed/skipped)
+THRUST LADDER DONE: 266 verified entries over 0 cells, 0.0 min
+THRUST LADDER: 0 cells x 9 rungs [15           12           10            7            5            3            2          1.5            1] N, Isp=1710 s, m0=150 kg, N=400 (36 cells resumed/skipped)
+THRUST LADDER DONE: 266 verified entries over 0 cells, 0.0 min
+THRUST LADDER: 0 cells x 9 rungs [15           12           10            7            5            3            2          1.5            1] N, Isp=1710 s, m0=150 kg, N=400 (36 cells resumed/skipped)
+THRUST LADDER DONE: 266 verified entries over 0 cells, 0.0 min
+THRUST LADDER: 0 cells x 9 rungs [15           12           10            7            5            3            2          1.5            1] N, Isp=1710 s, m0=150 kg, N=400 (36 cells resumed/skipped)
+THRUST LADDER DONE: 266 verified entries over 0 cells, 0.0 min
+THRUST LADDER: 0 cells x 9 rungs [15           12           10            7            5            3            2          1.5            1] N, Isp=1710 s, m0=150 kg, N=400 (36 cells resumed/skipped)
+THRUST LADDER DONE: 266 verified entries over 0 cells, 0.0 min
+THRUST LADDER: 0 cells x 9 rungs [15           12           10            7            5            3            2          1.5            1] N, Isp=1710 s, m0=150 kg, N=400 (36 cells resumed/skipped)
+THRUST LADDER DONE: 266 verified entries over 0 cells, 0.0 min
+THRUST LADDER: 0 cells x 9 rungs [15           12           10            7            5            3            2          1.5            1] N, Isp=1710 s, m0=150 kg, N=400 (36 cells resumed/skipped)
+THRUST LADDER DONE: 266 verified entries over 0 cells, 0.0 min
+THRUST LADDER: 0 cells x 9 rungs [15           12           10            7            5            3            2          1.5            1] N, Isp=1710 s, m0=150 kg, N=400 (36 cells resumed/skipped)
+THRUST LADDER DONE: 266 verified entries over 0 cells, 0.0 min
+THRUST LADDER: 0 cells x 9 rungs [15           12           10            7            5            3            2          1.5            1] N, Isp=1710 s, m0=150 kg, N=400 (36 cells resumed/skipped)
+THRUST LADDER DONE: 266 verified entries over 0 cells, 0.0 min
+THRUST LADDER: 0 cells x 9 rungs [15           12           10            7            5            3            2          1.5            1] N, Isp=1710 s, m0=150 kg, N=400 (36 cells resumed/skipped)
+THRUST LADDER DONE: 266 verified entries over 0 cells, 0.0 min
+THRUST LADDER: 0 cells x 9 rungs [15           12           10            7            5            3            2          1.5            1] N, Isp=1710 s, m0=150 kg, N=400 (36 cells resumed/skipped)
+THRUST LADDER DONE: 266 verified entries over 0 cells, 0.0 min
+THRUST LADDER: 0 cells x 9 rungs [15           12           10            7            5            3            2          1.5            1] N, Isp=1710 s, m0=150 kg, N=400 (36 cells resumed/skipped)
+THRUST LADDER DONE: 266 verified entries over 0 cells, 0.0 min
+THRUST LADDER: 0 cells x 9 rungs [15           12           10            7            5            3            2          1.5            1] N, Isp=1710 s, m0=150 kg, N=400 (36 cells resumed/skipped)
+THRUST LADDER DONE: 266 verified entries over 0 cells, 0.0 min
+THRUST LADDER: 0 cells x 9 rungs [15           12           10            7            5            3            2          1.5            1] N, Isp=1710 s, m0=150 kg, N=400 (36 cells resumed/skipped)
+THRUST LADDER DONE: 266 verified entries over 0 cells, 0.0 min
+THRUST LADDER: 0 cells x 9 rungs [15           12           10            7            5            3            2          1.5            1] N, Isp=1710 s, m0=150 kg, N=400 (36 cells resumed/skipped)
+THRUST LADDER DONE: 266 verified entries over 0 cells, 0.0 min
+THRUST LADDER: 0 cells x 9 rungs [15           12           10            7            5            3            2          1.5            1] N, Isp=1710 s, m0=150 kg, N=400 (36 cells resumed/skipped)
+THRUST LADDER DONE: 266 verified entries over 0 cells, 0.0 min
+THRUST LADDER: 0 cells x 9 rungs [15           12           10            7            5            3            2          1.5            1] N, Isp=1710 s, m0=150 kg, N=400 (36 cells resumed/skipped)
+THRUST LADDER DONE: 266 verified entries over 0 cells, 0.0 min
+THRUST LADDER: 0 cells x 9 rungs [15           12           10            7            5            3            2          1.5            1] N, Isp=1710 s, m0=150 kg, N=400 (36 cells resumed/skipped)
+THRUST LADDER DONE: 266 verified entries over 0 cells, 0.0 min
+THRUST LADDER: 0 cells x 9 rungs [15           12           10            7            5            3            2          1.5            1] N, Isp=1710 s, m0=150 kg, N=400 (36 cells resumed/skipped)
+THRUST LADDER DONE: 266 verified entries over 0 cells, 0.0 min
+THRUST LADDER: 0 cells x 9 rungs [15           12           10            7            5            3            2          1.5            1] N, Isp=1710 s, m0=150 kg, N=400 (36 cells resumed/skipped)
+THRUST LADDER DONE: 266 verified entries over 0 cells, 0.0 min
+THRUST LADDER: 0 cells x 9 rungs [15           12           10            7            5            3            2          1.5            1] N, Isp=1710 s, m0=150 kg, N=400 (36 cells resumed/skipped)
+THRUST LADDER DONE: 266 verified entries over 0 cells, 0.0 min
+THRUST LADDER: 0 cells x 9 rungs [15           12           10            7            5            3            2          1.5            1] N, Isp=1710 s, m0=150 kg, N=400 (36 cells resumed/skipped)
+THRUST LADDER DONE: 266 verified entries over 0 cells, 0.0 min
+THRUST LADDER: 0 cells x 9 rungs [15           12           10            7            5            3            2          1.5            1] N, Isp=1710 s, m0=150 kg, N=400 (36 cells resumed/skipped)
+THRUST LADDER DONE: 266 verified entries over 0 cells, 0.0 min
+THRUST LADDER: 0 cells x 9 rungs [15           12           10            7            5            3            2          1.5            1] N, Isp=1710 s, m0=150 kg, N=400 (36 cells resumed/skipped)
+THRUST LADDER DONE: 266 verified entries over 0 cells, 0.0 min
+THRUST LADDER: 0 cells x 9 rungs [15           12           10            7            5            3            2          1.5            1] N, Isp=1710 s, m0=150 kg, N=400 (36 cells resumed/skipped)
+THRUST LADDER DONE: 266 verified entries over 0 cells, 0.0 min
+THRUST LADDER: 0 cells x 9 rungs [15           12           10            7            5            3            2          1.5            1] N, Isp=1710 s, m0=150 kg, N=400 (36 cells resumed/skipped)
+THRUST LADDER DONE: 266 verified entries over 0 cells, 0.0 min
+THRUST LADDER: 0 cells x 9 rungs [15           12           10            7            5            3            2          1.5            1] N, Isp=1710 s, m0=150 kg, N=400 (36 cells resumed/skipped)
+THRUST LADDER DONE: 266 verified entries over 0 cells, 0.0 min
+THRUST LADDER: 0 cells x 9 rungs [15           12           10            7            5            3            2          1.5            1] N, Isp=1710 s, m0=150 kg, N=400 (36 cells resumed/skipped)
+THRUST LADDER DONE: 266 verified entries over 0 cells, 0.0 min
+THRUST LADDER: 0 cells x 9 rungs [15           12           10            7            5            3            2          1.5            1] N, Isp=1710 s, m0=150 kg, N=400 (36 cells resumed/skipped)
+THRUST LADDER DONE: 266 verified entries over 0 cells, 0.0 min
+THRUST LADDER: 0 cells x 9 rungs [15           12           10            7            5            3            2          1.5            1] N, Isp=1710 s, m0=150 kg, N=400 (36 cells resumed/skipped)
+THRUST LADDER DONE: 266 verified entries over 0 cells, 0.0 min
+THRUST LADDER: 0 cells x 9 rungs [15           12           10            7            5            3            2          1.5            1] N, Isp=1710 s, m0=150 kg, N=400 (36 cells resumed/skipped)
+THRUST LADDER DONE: 266 verified entries over 0 cells, 0.0 min
+THRUST LADDER: 0 cells x 9 rungs [15           12           10            7            5            3            2          1.5            1] N, Isp=1710 s, m0=150 kg, N=400 (36 cells resumed/skipped)
+THRUST LADDER DONE: 266 verified entries over 0 cells, 0.0 min
+THRUST LADDER: 0 cells x 9 rungs [15           12           10            7            5            3            2          1.5            1] N, Isp=1710 s, m0=150 kg, N=400 (36 cells resumed/skipped)
+THRUST LADDER DONE: 266 verified entries over 0 cells, 0.0 min
+THRUST LADDER: 0 cells x 9 rungs [15           12           10            7            5            3            2          1.5            1] N, Isp=1710 s, m0=150 kg, N=400 (36 cells resumed/skipped)
+THRUST LADDER DONE: 266 verified entries over 0 cells, 0.0 min
+THRUST LADDER: 0 cells x 9 rungs [15           12           10            7            5            3            2          1.5            1] N, Isp=1710 s, m0=150 kg, N=400 (36 cells resumed/skipped)
+THRUST LADDER DONE: 266 verified entries over 0 cells, 0.0 min
+THRUST LADDER: 0 cells x 9 rungs [15           12           10            7            5            3            2          1.5            1] N, Isp=1710 s, m0=150 kg, N=400 (36 cells resumed/skipped)
+THRUST LADDER DONE: 266 verified entries over 0 cells, 0.0 min
+THRUST LADDER: 0 cells x 9 rungs [15           12           10            7            5            3            2          1.5            1] N, Isp=1710 s, m0=150 kg, N=400 (36 cells resumed/skipped)
+THRUST LADDER DONE: 266 verified entries over 0 cells, 0.0 min
+THRUST LADDER: 0 cells x 9 rungs [15           12           10            7            5            3            2          1.5            1] N, Isp=1710 s, m0=150 kg, N=400 (36 cells resumed/skipped)
+THRUST LADDER DONE: 266 verified entries over 0 cells, 0.0 min
+THRUST LADDER: 0 cells x 9 rungs [15           12           10            7            5            3            2          1.5            1] N, Isp=1710 s, m0=150 kg, N=400 (36 cells resumed/skipped)
+THRUST LADDER DONE: 266 verified entries over 0 cells, 0.0 min
+THRUST LADDER: 0 cells x 9 rungs [15           12           10            7            5            3            2          1.5            1] N, Isp=1710 s, m0=150 kg, N=400 (36 cells resumed/skipped)
+THRUST LADDER DONE: 266 verified entries over 0 cells, 0.0 min
+THRUST LADDER: 0 cells x 9 rungs [15           12           10            7            5            3            2          1.5            1] N, Isp=1710 s, m0=150 kg, N=400 (36 cells resumed/skipped)
+THRUST LADDER DONE: 266 verified entries over 0 cells, 0.0 min
+THRUST LADDER: 0 cells x 9 rungs [15           12           10            7            5            3            2          1.5            1] N, Isp=1710 s, m0=150 kg, N=400 (36 cells resumed/skipped)
+THRUST LADDER DONE: 266 verified entries over 0 cells, 0.0 min
+THRUST LADDER: 0 cells x 9 rungs [15           12           10            7            5            3            2          1.5            1] N, Isp=1710 s, m0=150 kg, N=400 (36 cells resumed/skipped)
+THRUST LADDER DONE: 266 verified entries over 0 cells, 0.0 min
+THRUST LADDER: 0 cells x 9 rungs [15           12           10            7            5            3            2          1.5            1] N, Isp=1710 s, m0=150 kg, N=400 (36 cells resumed/skipped)
+THRUST LADDER DONE: 266 verified entries over 0 cells, 0.0 min
+THRUST LADDER: 0 cells x 9 rungs [15           12           10            7            5            3            2          1.5            1] N, Isp=1710 s, m0=150 kg, N=400 (36 cells resumed/skipped)
+THRUST LADDER DONE: 266 verified entries over 0 cells, 0.0 min
+THRUST LADDER: 0 cells x 9 rungs [15           12           10            7            5            3            2          1.5            1] N, Isp=1710 s, m0=150 kg, N=400 (36 cells resumed/skipped)
+THRUST LADDER DONE: 266 verified entries over 0 cells, 0.0 min
+THRUST LADDER: 0 cells x 9 rungs [15           12           10            7            5            3            2          1.5            1] N, Isp=1710 s, m0=150 kg, N=400 (36 cells resumed/skipped)
+THRUST LADDER DONE: 266 verified entries over 0 cells, 0.0 min
+THRUST LADDER: 0 cells x 9 rungs [15           12           10            7            5            3            2          1.5            1] N, Isp=1710 s, m0=150 kg, N=400 (36 cells resumed/skipped)
+THRUST LADDER DONE: 266 verified entries over 0 cells, 0.0 min
+THRUST LADDER: 0 cells x 9 rungs [15           12           10            7            5            3            2          1.5            1] N, Isp=1710 s, m0=150 kg, N=400 (36 cells resumed/skipped)
+THRUST LADDER DONE: 266 verified entries over 0 cells, 0.0 min
+THRUST LADDER: 0 cells x 9 rungs [15           12           10            7            5            3            2          1.5            1] N, Isp=1710 s, m0=150 kg, N=400 (36 cells resumed/skipped)
+THRUST LADDER DONE: 266 verified entries over 0 cells, 0.0 min
+THRUST LADDER: 0 cells x 9 rungs [15           12           10            7            5            3            2          1.5            1] N, Isp=1710 s, m0=150 kg, N=400 (36 cells resumed/skipped)
+THRUST LADDER DONE: 266 verified entries over 0 cells, 0.0 min
+THRUST LADDER: 0 cells x 9 rungs [15           12           10            7            5            3            2          1.5            1] N, Isp=1710 s, m0=150 kg, N=400 (36 cells resumed/skipped)
+THRUST LADDER DONE: 266 verified entries over 0 cells, 0.0 min
+THRUST LADDER: 0 cells x 9 rungs [15           12           10            7            5            3            2          1.5            1] N, Isp=1710 s, m0=150 kg, N=400 (36 cells resumed/skipped)
+THRUST LADDER DONE: 266 verified entries over 0 cells, 0.0 min
+THRUST LADDER: 0 cells x 9 rungs [15           12           10            7            5            3            2          1.5            1] N, Isp=1710 s, m0=150 kg, N=400 (36 cells resumed/skipped)
+THRUST LADDER DONE: 266 verified entries over 0 cells, 0.0 min
+THRUST LADDER: 0 cells x 9 rungs [15           12           10            7            5            3            2          1.5            1] N, Isp=1710 s, m0=150 kg, N=400 (36 cells resumed/skipped)
+THRUST LADDER DONE: 266 verified entries over 0 cells, 0.0 min
+THRUST LADDER: 0 cells x 9 rungs [15           12           10            7            5            3            2          1.5            1] N, Isp=1710 s, m0=150 kg, N=400 (36 cells resumed/skipped)
+THRUST LADDER DONE: 266 verified entries over 0 cells, 0.0 min
+THRUST LADDER: 0 cells x 9 rungs [15           12           10            7            5            3            2          1.5            1] N, Isp=1710 s, m0=150 kg, N=400 (36 cells resumed/skipped)
+THRUST LADDER DONE: 266 verified entries over 0 cells, 0.0 min
+THRUST LADDER: 0 cells x 9 rungs [15           12           10            7            5            3            2          1.5            1] N, Isp=1710 s, m0=150 kg, N=400 (36 cells resumed/skipped)
+THRUST LADDER DONE: 266 verified entries over 0 cells, 0.0 min
+THRUST LADDER: 0 cells x 9 rungs [15           12           10            7            5            3            2          1.5            1] N, Isp=1710 s, m0=150 kg, N=400 (36 cells resumed/skipped)
+THRUST LADDER DONE: 266 verified entries over 0 cells, 0.0 min
+THRUST LADDER: 0 cells x 9 rungs [15           12           10            7            5            3            2          1.5            1] N, Isp=1710 s, m0=150 kg, N=400 (36 cells resumed/skipped)
+THRUST LADDER DONE: 266 verified entries over 0 cells, 0.0 min
+THRUST LADDER: 0 cells x 9 rungs [15           12           10            7            5            3            2          1.5            1] N, Isp=1710 s, m0=150 kg, N=400 (36 cells resumed/skipped)
+THRUST LADDER DONE: 266 verified entries over 0 cells, 0.0 min
+THRUST LADDER: 0 cells x 9 rungs [15           12           10            7            5            3            2          1.5            1] N, Isp=1710 s, m0=150 kg, N=400 (36 cells resumed/skipped)
+THRUST LADDER DONE: 266 verified entries over 0 cells, 0.0 min
+THRUST LADDER: 0 cells x 9 rungs [15           12           10            7            5            3            2          1.5            1] N, Isp=1710 s, m0=150 kg, N=400 (36 cells resumed/skipped)
+THRUST LADDER DONE: 266 verified entries over 0 cells, 0.0 min
+THRUST LADDER: 0 cells x 9 rungs [15           12           10            7            5            3            2          1.5            1] N, Isp=1710 s, m0=150 kg, N=400 (36 cells resumed/skipped)
+THRUST LADDER DONE: 266 verified entries over 0 cells, 0.0 min
+THRUST LADDER: 0 cells x 9 rungs [15           12           10            7            5            3            2          1.5            1] N, Isp=1710 s, m0=150 kg, N=400 (36 cells resumed/skipped)
+THRUST LADDER DONE: 266 verified entries over 0 cells, 0.0 min
+THRUST LADDER: 0 cells x 9 rungs [15           12           10            7            5            3            2          1.5            1] N, Isp=1710 s, m0=150 kg, N=400 (36 cells resumed/skipped)
+THRUST LADDER DONE: 266 verified entries over 0 cells, 0.0 min
+THRUST LADDER: 0 cells x 9 rungs [15           12           10            7            5            3            2          1.5            1] N, Isp=1710 s, m0=150 kg, N=400 (36 cells resumed/skipped)
+THRUST LADDER DONE: 266 verified entries over 0 cells, 0.0 min
+THRUST LADDER: 0 cells x 9 rungs [15           12           10            7            5            3            2          1.5            1] N, Isp=1710 s, m0=150 kg, N=400 (36 cells resumed/skipped)
+THRUST LADDER DONE: 266 verified entries over 0 cells, 0.0 min
+THRUST LADDER: 0 cells x 9 rungs [15           12           10            7            5            3            2          1.5            1] N, Isp=1710 s, m0=150 kg, N=400 (36 cells resumed/skipped)
+THRUST LADDER DONE: 266 verified entries over 0 cells, 0.0 min
+THRUST LADDER: 0 cells x 9 rungs [15           12           10            7            5            3            2          1.5            1] N, Isp=1710 s, m0=150 kg, N=400 (36 cells resumed/skipped)
+THRUST LADDER DONE: 266 verified entries over 0 cells, 0.0 min
+THRUST LADDER: 0 cells x 9 rungs [15           12           10            7            5            3            2          1.5            1] N, Isp=1710 s, m0=150 kg, N=400 (36 cells resumed/skipped)
+THRUST LADDER DONE: 266 verified entries over 0 cells, 0.0 min
+THRUST LADDER: 0 cells x 9 rungs [15           12           10            7            5            3            2          1.5            1] N, Isp=1710 s, m0=150 kg, N=400 (36 cells resumed/skipped)
+THRUST LADDER DONE: 266 verified entries over 0 cells, 0.0 min
+THRUST LADDER: 0 cells x 9 rungs [15           12           10            7            5            3            2          1.5            1] N, Isp=1710 s, m0=150 kg, N=400 (36 cells resumed/skipped)
+THRUST LADDER DONE: 266 verified entries over 0 cells, 0.0 min
+THRUST LADDER: 0 cells x 9 rungs [15           12           10            7            5            3            2          1.5            1] N, Isp=1710 s, m0=150 kg, N=400 (36 cells resumed/skipped)
+THRUST LADDER DONE: 266 verified entries over 0 cells, 0.0 min
+THRUST LADDER: 0 cells x 9 rungs [15           12           10            7            5            3            2          1.5            1] N, Isp=1710 s, m0=150 kg, N=400 (36 cells resumed/skipped)
+THRUST LADDER DONE: 266 verified entries over 0 cells, 0.0 min
+THRUST LADDER: 0 cells x 9 rungs [15           12           10            7            5            3            2          1.5            1] N, Isp=1710 s, m0=150 kg, N=400 (36 cells resumed/skipped)
+THRUST LADDER DONE: 266 verified entries over 0 cells, 0.0 min
+THRUST LADDER: 0 cells x 9 rungs [15           12           10            7            5            3            2          1.5            1] N, Isp=1710 s, m0=150 kg, N=400 (36 cells resumed/skipped)
+THRUST LADDER DONE: 266 verified entries over 0 cells, 0.0 min
+THRUST LADDER: 0 cells x 9 rungs [15           12           10            7            5            3            2          1.5            1] N, Isp=1710 s, m0=150 kg, N=400 (36 cells resumed/skipped)
+THRUST LADDER DONE: 266 verified entries over 0 cells, 0.0 min
+THRUST LADDER: 0 cells x 9 rungs [15           12           10            7            5            3            2          1.5            1] N, Isp=1710 s, m0=150 kg, N=400 (36 cells resumed/skipped)
+THRUST LADDER DONE: 266 verified entries over 0 cells, 0.0 min

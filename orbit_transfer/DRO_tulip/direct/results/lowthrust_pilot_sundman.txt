@@ -1,0 +1,12 @@
+LOW-THRUST LADDER (sundman mesh): 3 cells, climbing [0.1        0.15         0.2         0.3         0.4         0.5] N from 0.07 N
+  ( 1, 3) reanchor 0.07N Isp1710  tf=4.0284  fly=5663.66km  fail (12s)
+  ( 2, 5) reanchor 0.07N Isp1710  tf=3.6823  fly=0.00km  OK (3s)
+  ( 2, 5) T=0.10N  tf=2.9258 (12.97 d, 2.93 rev)  fly=0.00km  acc=0.0e+00  sund=1  OK (21s)
+  ( 2, 5) T=0.15N  tf=1.8936 ( 8.39 d, 1.89 rev)  fly=0.00km  acc=0.0e+00  sund=1  OK (16s)
+  ( 2, 5) T=0.20N  tf=1.5030 ( 6.66 d, 1.50 rev)  fly=0.00km  acc=0.0e+00  sund=1  OK (52s)
+  ( 2, 5) T=0.30N  tf=1.2182 ( 5.40 d, 1.22 rev)  fly=0.00km  acc=0.0e+00  sund=1  OK (3s)
+  ( 2, 5) T=0.40N  tf=1.0366 ( 4.59 d, 1.04 rev)  fly=0.00km  acc=0.0e+00  sund=1  OK (4s)
+  ( 2, 5) T=0.50N  tf=0.9050 ( 4.01 d, 0.90 rev)  fly=0.00km  acc=0.0e+00  sund=1  OK (3s)
+  ( 3, 9) reanchor 0.07N Isp1710  tf=4.3457  fly=0.00km  OK (10s)
+  ( 3, 9) T=0.10N  tf=4.3457 (19.26 d, 4.35 rev)  fly=Infkm  acc=NaN  sund=0  fail (403s)
+LOW-THRUST LADDER DONE: 8 verified entries, 1 cells at the top rung, 8.8 min

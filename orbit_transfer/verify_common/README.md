@@ -127,3 +127,7 @@ the three restates a derivation that lives in a header.
   free-time Jacobi test from `costate_common/ms_conjugate_test` is reported
   as `rep.conj`. Not folded into `rep.pass`; reports without it are
   bit-identical to before.
+**`mee_residual.m`** (added 2026-08-26): the shared continuous-residual (G1)
+gate for BOTH MEE campaigns (earth 2-body + CR3BP-GEO via `par.pert`),
+on the `oc.local_residual` engine; drivers: `run` from each campaign's
+verify layer (`cr3bp_residual_gate` on the CR3BP side).

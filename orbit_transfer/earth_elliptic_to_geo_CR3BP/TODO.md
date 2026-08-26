@@ -144,3 +144,17 @@ certificates, and the indirect Phase 2.
   representation shared with PSR.
 - [ ] **SOSC tier 3:** Jacobi-field conjugate-point test with the Phase-2
   indirect solver (BCP 2010 pattern).
+
+- [x] First rung-2 (continuous-residual) gate — 2026-08-26,
+  `direct/cr3bp_residual_gate.m` on the certified 10 N lunar-aware row:
+  39.89 km max at switch-straddling intervals (same as 2-body), 2.6 m
+  interior floor. Remaining rungs
+  swept 2026-08-26 (ladder-complete, incl. 0.2/0.1 N): same switch-interval
+  law as 2-body; RPmax falls 39.9->4.6 km with depth while >1 km count grows
+  57->1974. Table: `../verify_common/doc/g1_sweep_results.md`.
+- [ ] **Lunar-phase-feedback check** (from the sweep): the interior residual
+  floor grows 2.6 m -> 75 m with depth, tracking the t-row error — the
+  hypothesis is that time drift misphases the lunar term (phi0 + nM*t).
+  Test: re-run one deep rung's gate with the time row replaced by
+  quadrature; if the floor collapses, the hypothesis is confirmed and the
+  fix is a better t-row discretization, not a finer mesh.

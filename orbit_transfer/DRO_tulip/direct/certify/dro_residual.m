@@ -81,33 +81,30 @@ else
     t = o.s(:).' * o.tf;
 end
 N  = numel(t) - 1;
-Rx = nan(1,N);  Rr = nan(1,N);  Rv = nan(1,N);  Rm = nan(1,N);
 minDir = inf;  thrOver = 0;
-odeo = odeset('RelTol',relTol,'AbsTol',absTol);
 
+% Reconstruction health, sampled across every interval (unchanged policy):
 for k = 1:N
-    a = t(k);  b = t(k+1);  h = max(b-a, eps);
-    if hasMid
-        % quadratic through u(a), u(mid), u(b) -- the Hermite-Simpson control
-        ua = o.U(:,k);  um = o.Um(:,k);  ub = o.U(:,k+1);
-        uOf = @(tt) local_quad(ua, um, ub, (tt-a)/h);
-    else
-        ua = o.U(:,k);  ub = o.U(:,k+1);
-        uOf = @(tt) ua + ((tt-a)/h)*(ub-ua);
-    end
-    % reconstruction health, sampled across the interval
+    a = t(k);  h = max(t(k+1)-a, eps);
     for w = [0.25 0.5 0.75]
-        uw = uOf(a + w*h);
+        uw = local_u_at(a + w*h, t, o, hasMid);
         minDir = min(minDir, norm(uw(1:3)));
         thrOver = max(thrOver, max(0, max(uw(4)-1, -uw(4))));
     end
-    [~, Z] = ode113(@(tt,z) local_rhs(z, uOf(tt), muStar, Tmax, c), [a b], o.X(:,k), odeo);
-    e = Z(end,:).' - o.X(:,k+1);
-    Rx(k) = norm(e);            % mixed norm -- dimensionally meaningless, see below
-    Rr(k) = norm(e(1:3));       % POSITION only, convertible to km
-    Rv(k) = norm(e(4:6));       % VELOCITY only, convertible to km/s
-    Rm(k) = abs(e(7));          % mass fraction
 end
+
+% The integration itself now routes through THE library engine (oclib move
+% 3: oc.local_residual): restart from each left node, integrate the true
+% dynamics with this campaign's reconstructed control, miss at the right
+% node. The control convention (linear / Hermite-Simpson quadratic) stays
+% HERE -- it is domain policy; the engine owns only the structure.
+dXall = oc.local_residual(o.X(1:7,:), t, ...
+    @(tt,z) local_rhs(z, local_u_at(tt, t, o, hasMid), muStar, Tmax, c), ...
+    struct('solver', @ode113, 'RelTol', relTol, 'AbsTol', absTol));
+Rx = sqrt(sum(dXall.^2, 1));    % mixed norm -- dimensionally meaningless, see below
+Rr = sqrt(sum(dXall(1:3,:).^2, 1));   % POSITION only, convertible to km
+Rv = sqrt(sum(dXall(4:6,:).^2, 1));   % VELOCITY only, convertible to km/s
+Rm = abs(dXall(7,:));                 % mass fraction
 
 % SEPARATE THE COMPONENTS, and this is not pedantry. The original version of
 % this function returned only the 7-component norm and the caller multiplied it
@@ -126,6 +123,24 @@ R = struct('Rx',Rx, 'RxMax',RxMax, 'RxMed',median(Rx), 'kWorst',kWorst, ...
            'tMid',0.5*(t(1:end-1)+t(2:end)), 'scheme',scheme, ...
            'minDirNorm',minDir, 'thrOvershoot',thrOver, ...
            'relTol',relTol, 'absTol',absTol);
+end
+
+% ---------------------------------------------------------------------------
+function u = local_u_at(tt, t, o, hasMid)
+% LOCAL_U_AT  Reconstructed control at global time tt: locate the interval,
+% then apply this campaign's convention (linear, or the Hermite-Simpson
+% Lagrange quadratic through node/midpoint/node). Identical values to the
+% former per-interval closures; at a shared node both intervals give the
+% node control, so the lookup tie is harmless.
+% INPUTS: tt; t [1xN+1]; o (solution struct); hasMid   OUTPUTS: u [4x1]
+k = find(tt >= t, 1, 'last');
+k = min(max(k, 1), numel(t)-1);
+a = t(k);  h = max(t(k+1)-a, eps);  w = (tt-a)/h;
+if hasMid
+    u = local_quad(o.U(:,k), o.Um(:,k), o.U(:,k+1), w);
+else
+    u = o.U(:,k) + w*(o.U(:,k+1) - o.U(:,k));
+end
 end
 
 % ---------------------------------------------------------------------------

@@ -424,3 +424,12 @@ numbers:
   path for all thrust levels.
 - **Routine live certification of 0.2/0.1 N.** Until item 1 is solved these are
   research probes, not a supported `auto`-mode row.
+
+- [x] Rung-2 (continuous-residual) coverage of the full certified ladder —
+  DONE 2026-08-26 via the shared `verify_common/mee_residual` gate (G1
+  sweep, 7/7 rows). Certification language sharpened: the rows are
+  km-accurate AT throttle switches (39.9 km at 10 N falling to 4.6 km at
+  0.1 N, always on switch-straddling intervals) and machine-accurate
+  (1e-14..3e-13 ND) everywhere else. Quantitative case for switch-aware
+  (PSR-style) refinement if switch-resolution trajectories are ever needed.
+  Table: `../verify_common/doc/g1_sweep_results.md`.

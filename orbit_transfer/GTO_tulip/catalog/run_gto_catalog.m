@@ -1,4 +1,4 @@
-function run_gto_catalog(sheetSel, maxCellsIn, batchSecIn)
+function run_gto_catalog(sheetSel, maxCellsIn, batchSecIn, rungsIn)
 %% Purpose:
 %
 %   FRONT DOOR for the GTO -> TULIP costate catalog: the proven three-gate
@@ -83,6 +83,27 @@ function run_gto_catalog(sheetSel, maxCellsIn, batchSecIn)
 %                                                   across the selected
 %                                                   sheets this call
 %
+%  rungsIn                  [1 x r]                 Optional thrust-ladder
+%                                                   override (N, high to
+%                                                   low). Default (omitted
+%                                                   or empty) is the full
+%                                                   9-rung [15 12 10 7 5 3
+%                                                   2 1.5 1] -- byte-
+%                                                   identical to the prior
+%                                                   no-arg behavior.
+%                                                   Deliverable-7 v1 fleet
+%                                                   calls this with the
+%                                                   5-rung truncation
+%                                                   [15 12 10 7 5] (see
+%                                                   task-4-brief.md
+%                                                   amendment, 2026-08-27
+%                                                   re-census adjudication:
+%                                                   pilot measured a
+%                                                   closure wall below 5 N
+%                                                   -- 0 entries at
+%                                                   3/2/1.5/1 N by both
+%                                                   routes).
+%
 %% Outputs:
 %
 %   none (files under results/catalog/, relative to this file's folder):
@@ -102,6 +123,7 @@ if ~exist('sheetSel','var') || isempty(sheetSel), sheetSel = 1:16; end
 maxCells = inf;  batchSec = inf;
 if exist('maxCellsIn','var') && ~isempty(maxCellsIn), maxCells = maxCellsIn; end
 if exist('batchSecIn','var') && ~isempty(batchSecIn), batchSec = batchSecIn; end
+if ~exist('rungsIn','var'), rungsIn = []; end
 
 %% ===================== ADJUSTABLE PARAMETERS ============================
 
@@ -119,8 +141,9 @@ if exist('batchSecIn','var') && ~isempty(batchSecIn), batchSec = batchSecIn; end
            sD0 = 0;
            sA0 = 0;
 
-%% Thrust ladder (N, high to low -- the proven set):
+%% Thrust ladder (N, high to low -- the proven set; rungsIn overrides):
         rungs = [15 12 10 7 5 3 2 1.5 1];
+if ~isempty(rungsIn), rungs = rungsIn; end
          ispS = 1710;                % specific impulse (s)
          m0kg = 150;                 % initial mass (kg)
 
@@ -180,6 +203,30 @@ for ks = sheetSel
     logFile = fullfile(catDir, [s.tag '_progress.txt']);
     fprintf('\n=== GTO sheet %d/%d: %s (orient=%d deg, Np=%d) ===\n', ...
             ks, nSheets, s.tag, s.orientDeg, s.Np);
+    % GUARD (Important review finding, task-4 fix, 2026-08-27): a sheet's
+    % on-disk rungs MUST match this call's rungs before the engine ever
+    % touches it. thrust_ladder_library's resume path is a bare size
+    % compare (isequal(size(Q.OK), [nD nA nR])); a caller that omits
+    % rungsIn on a truncated sheet (silently reverting to the 9-rung
+    % default) would fail that compare, the engine would treat every
+    % cell as fresh (ATT reset to 0), and the very next save() would
+    % overwrite the sheet's accumulated entries with all-NaN/all-false
+    % arrays sized to the WRONG rung count -- the exact silent-wipe
+    % mechanism the pilot trim (task 4) defused, standing re-armed for
+    % every future call. This turns that into a loud stop instead.
+    if isfile(outMat)
+        Qchk = load(outMat, 'rungs');
+        if ~isequal(Qchk.rungs(:)', rungs(:)')
+            error('run_gto_catalog:rungMismatch', ...
+                ['sheet %s on disk has rungs=[%s] but this call requests ' ...
+                 'rungs=[%s] -- refusing to run (the engine''s resume ' ...
+                 'check would silently re-solve from scratch and ' ...
+                 'overwrite the sheet''s accumulated entries). Remedy: ' ...
+                 'pass rungsIn matching the sheet, or move the sheet ' ...
+                 'aside deliberately.'], s.tag, num2str(Qchk.rungs), ...
+                num2str(rungs));
+        end
+    end
     optsCommon = struct('rungs',rungs, 'ispS',ispS, 'm0kg',m0kg, ...
         'N',N, 'floorKm',floorKm, 'maxIter',maxIter, 'maxCpuSec',maxCpuSec, ...
         'gateKm',gateKm, 'nD',nD, 'nA',nA, 'sD0',sD0, 'sA0',sA0, ...

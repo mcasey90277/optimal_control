@@ -10,16 +10,25 @@
 # 'pilot'/'all'/'report' stage string like the halo driver, so this script
 # forwards a MATLAB index-vector expression instead of a stage word.
 #
-# Usage:   ./run_gto_batched.sh [sheetSel] [cells_per_batch] [batch_seconds]
+# Usage:   ./run_gto_batched.sh [sheetSel] [cells_per_batch] [batch_seconds] [rungs]
 # Example (pilot, orient=0 x Np=7 == sheet 2 of 16):
 #          ./run_gto_batched.sh 2 8 240
 # Example (whole catalog):
 #          ./run_gto_batched.sh 1:16 8 240
+# Example (deliverable-7 v1 fleet, 5-N-truncated ladder, task 4 amendment):
+#          ./run_gto_batched.sh "[1 3:16]" 8 240 "[15 12 10 7 5]"
+#
+# rungs (optional, 4th arg): MATLAB vector expression forwarded as
+# run_gto_catalog's rungsIn override. Omitted/empty -> run_gto_catalog's own
+# default (full 9-rung ladder) -- byte-identical prior behavior.
 
 set -u
 SHEETSEL=${1:-1:16}
 CELLS=${2:-8}
 BSEC=${3:-240}
+RUNGS=${4:-}
+RUNGS_ARG=""
+if [ -n "$RUNGS" ]; then RUNGS_ARG=", $RUNGS"; fi
 KILL_AFTER=$(( BSEC + 140 ))
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
@@ -39,14 +48,14 @@ trap 'rmdir "$LOCK" 2>/dev/null' EXIT
 
 count_lines() { echo $(( $(cat "$CATDIR"/gto_*_progress.txt 2>/dev/null | wc -l) )); }
 
-echo "=== gtocat run started $(date) (sheetSel=$SHEETSEL, $CELLS cells/batch, ${BSEC}s clean, ${KILL_AFTER}s kill)" >> "$LOG"
+echo "=== gtocat run started $(date) (sheetSel=$SHEETSEL, $CELLS cells/batch, ${BSEC}s clean, ${KILL_AFTER}s kill, rungs=${RUNGS:-default})" >> "$LOG"
 dry=0
 for pass in $(seq 1 600); do
   before=$(count_lines); before=${before:-0}
 
   "$MATLAB" -batch "here=pwd; cd('$PUMPKYN'); startup(); cd(here); \
                   addpath('$HERE'); \
-                  run_gto_catalog($SHEETSEL, $CELLS, $BSEC);" \
+                  run_gto_catalog($SHEETSEL, $CELLS, $BSEC$RUNGS_ARG);" \
           >> "$MLOG" 2>&1 &
   MPID=$!
   ( sleep $KILL_AFTER; kill -9 $MPID 2>/dev/null && \

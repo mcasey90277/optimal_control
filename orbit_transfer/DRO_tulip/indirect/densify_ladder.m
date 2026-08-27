@@ -44,6 +44,22 @@ function P = densify_ladder(ladderMat, opts)
 %   .maxCells, .batchSec    double                  batch control     [inf]
 %   .maxAtt                 double                  attempts per gap  [2]
 %   .logFile                char                    append-mode log [stdout]
+%   .seedNeverSolved        logical                 opt-in: drop the
+%                                                   any(Q.OK(iD,iA,:)) gap
+%                                                   precondition so cells
+%                                                   with NO converged rung
+%                                                   at all are still
+%                                                   eligible for Route B
+%                                                   (torus-neighbor seed).
+%                                                   Route A (same-cell
+%                                                   rung continuation)
+%                                                   still needs a source
+%                                                   rung and self-skips.
+%                                                   Default false matches
+%                                                   today's "never-solved
+%                                                   pairs are a separate,
+%                                                   harder campaign" rule
+%                                                   exactly                [false]
 %
 %% Outputs:
 %
@@ -67,6 +83,7 @@ tfExpList= d('tfExpList', [0.56 1.0 1.7 2.4]);
 maxCells = d('maxCells', inf);
 batchSec = d('batchSec', inf);
 maxAtt   = d('maxAtt', 2);
+seedNeverSolved = d('seedNeverSolved', false);
 logFile  = d('logFile', '');
 lg = @(varargin) logmsg(logFile, sprintf(varargin{:}));
 
@@ -80,12 +97,31 @@ g0  = 9.80665*tStar^2/(1000*lStar);
 cnd = (ob.ispS/tStar)*g0;
 ndT = @(TN) (TN/ob.m0kg)*tStar^2/(lStar*1000);
 
-[~, rvD0] = pumpkynPie.cr3bp.getDRO(ob.tauDRO);
-rvD0 = pumpkyn.cr3bp.cont_np(rvD0, ob.tauDRO, muStar, 1e-12);
-[tD, rvD] = pumpkyn.cr3bp.prop(ob.tauDRO, rvD0, muStar);
-[~, rvT0] = pumpkyn.cr3bp.getTulip(ob.tauTulip, ob.NpTulip, ob.pmTulip);
-rvT0 = pumpkyn.cr3bp.cont_np(rvT0, ob.tauTulip, muStar, 1e-12);
-[tT, rvT] = pumpkyn.cr3bp.prop(ob.tauTulip, rvT0, muStar);
+% FAMILY-AGNOSTIC ENDPOINTS (diagnostic-A, 2026-08-26): route through the
+% shared costate_common/get_family_orbit provider using the sheet's OWN
+% dep/arr recipes (schema-v2 meta fields, already written by
+% thrust_ladder_library for every campaign since it went family-agnostic).
+% A sheet built before those fields existed (no .depFamily/.arrFamily)
+% falls back to the ORIGINAL hardcoded DRO/tulip construction verbatim,
+% so old sheets densify byte-identically to today.
+if isfield(ob, 'depFamily') && isfield(ob, 'depParams')
+    depParams = ob.depParams;
+    if ~isfield(depParams, 'muStar'), depParams.muStar = muStar; end
+    [tD, rvD] = get_family_orbit(ob.depFamily, depParams);
+else
+    [~, rvD0] = pumpkynPie.cr3bp.getDRO(ob.tauDRO);
+    rvD0 = pumpkyn.cr3bp.cont_np(rvD0, ob.tauDRO, muStar, 1e-12);
+    [tD, rvD] = pumpkyn.cr3bp.prop(ob.tauDRO, rvD0, muStar);
+end
+if isfield(ob, 'arrFamily') && isfield(ob, 'arrParams')
+    arrParams = ob.arrParams;
+    if ~isfield(arrParams, 'muStar'), arrParams.muStar = muStar; end
+    [tT, rvT] = get_family_orbit(ob.arrFamily, arrParams);
+else
+    [~, rvT0] = pumpkyn.cr3bp.getTulip(ob.tauTulip, ob.NpTulip, ob.pmTulip);
+    rvT0 = pumpkyn.cr3bp.cont_np(rvT0, ob.tauTulip, muStar, 1e-12);
+    [tT, rvT] = pumpkyn.cr3bp.prop(ob.tauTulip, rvT0, muStar);
+end
 dep = @(f) interp1(tD, rvD, mod(f,1)*tD(end), 'spline');
 arr = @(f) interp1(tT, rvT, mod(f,1)*tT(end), 'spline');
 
@@ -99,7 +135,8 @@ for kr = 1:nR
     if ~any(abs(Q.rungs(kr) - rungSel) < 1e-9), continue, end
     for iD = 1:nD
         for iA = 1:nA
-            if any(Q.OK(iD,iA,:)) && ~Q.OK(iD,iA,kr) ...
+            eligible = any(Q.OK(iD,iA,:)) || seedNeverSolved;
+            if eligible && ~Q.OK(iD,iA,kr) ...
                     && Q.ATTD(iD,iA,kr) < maxAtt
                 gaps(end+1,:) = [iD iA kr]; %#ok<AGROW>
             end

@@ -31,6 +31,16 @@ function P = thrust_ladder_library(outMat, opts)
 %                         low-thrust library grid            [0, 0.075378]
 %              .maxIter   NLP iteration cap                [3000]
 %              .logFile   append-mode log path             [stdout]
+%              .thrLock   pin thr==1 in casadi_mintime_dro (classical
+%                         min-time form; deletes the mass-floor coast
+%                         manifold a free throttle can fall into on a
+%                         sub-revolution transfer)                [false]
+%              .tf0       cold t_f guess (ND) for a cell's TOP rung only;
+%                         [] leaves casadi_mintime_dro's own internal
+%                         default (4.0 ND) in effect, same as today
+%                                                                    [[]]
+%              .maxCpuSec IPOPT max_cpu_time per rung (s), passed straight
+%                         through to casadi_mintime_dro               [300]
 %
 % OUTPUTS:
 %   P - struct with [nD x nA x nRung] arrays .TF (ND), .FLYKM, .ACCDZ,
@@ -58,6 +68,16 @@ nA      = d('nA', 12);
 sD0     = d('sD0', 0);
 sA0     = d('sA0', 0.075378);
 maxIter = d('maxIter', 3000);
+% Diagnostic-A pass-throughs (2026-08-26): the two decisive GTO-recipe
+% knobs already existed inside casadi_mintime_dro but were unreachable
+% from here. Defaults reproduce today's behavior byte-for-byte: thrLock
+% off (free throttle, the historical formulation test), tf0Top empty
+% (casadi_mintime_dro's own cold default, 4.0 ND -- the DRO-campaign
+% number), maxCpuSec 300 (the value that used to be hardcoded at the
+% call site below).
+thrLock   = d('thrLock',   false);
+tf0Top    = d('tf0',       []);
+maxCpuSec = d('maxCpuSec', 300);
 % maxCells: process at most this many fresh cells then return. Lets a shell
 % driver run the ladder in small batches under an OS-level timeout, so a
 % hang inside an uninterruptible solver call costs minutes, not the run.
@@ -154,7 +174,7 @@ for kc = 1:min(size(todo,1), maxCells)
     iD = todo(kc,1);  iA = todo(kc,2);
     rv0 = interp1(tD, rvD, mod(sD(iD),1)*tD(end), 'spline');
     rvf = interp1(tT, rvT, mod(sA(iA),1)*tT(end), 'spline');
-    seedX = [];  seedU = [];  seedTf = [];  Tprev = [];
+    seedX = [];  seedU = [];  seedTf = tf0Top;  Tprev = [];
     ATT(iD,iA) = ATT(iD,iA) + 1;      % record BEFORE solving (hang-proof)
     save(outMat, 'TF','FLYKM','ACCDZ','RES','WALL','OK','Z8','ATT', ...
          'rungs','sD','sA','meta');
@@ -170,7 +190,8 @@ for kc = 1:min(size(todo,1), maxCells)
                     seedX, seedU, seedTf, ...
                     struct('maxIter',maxIter,'scheme','hermite-simpson', ...
                            'sundman',false,'returnModel',true, ...
-                           'minAltKm',floorKm,'maxCpuSec',300));
+                           'minAltKm',floorKm,'maxCpuSec',maxCpuSec, ...
+                           'thrLock',thrLock));
         catch ME
             lg('  (%2d,%2d) T=%5.1f  direct ERROR: %s', iD, iA, TN, ME.message);
             break

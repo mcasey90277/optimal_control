@@ -1,0 +1,157 @@
+THRUST LADDER: 72 cells x 9 rungs [15           12           10            7            5            3            2          1.5            1] N, Isp=1710 s, m0=150 kg, N=400 (0 cells resumed/skipped)
+  ( 1, 1) T= 15.0  tf=0.28302 (1.255 d)  fly=0.00km  acc=1.2e-12  OK (68s)
+  ( 1, 1) T= 12.0  tf=0.32629 flown 165.4 km > gate -- ladder stops
+  ( 2, 1) T= 15.0  direct fail (defect 3.7e+02) -- ladder stops
+  ( 3, 1) T= 15.0  direct fail (defect 5.0e-02) -- ladder stops
+  [batch wall budget reached -- exiting cleanly after 3 cells]
+THRUST LADDER DONE: 1 verified entries over 72 cells, 6.0 min
+THRUST LADDER: 71 cells x 9 rungs [15           12           10            7            5            3            2          1.5            1] N, Isp=1710 s, m0=150 kg, N=400 (1 cells resumed/skipped)
+  ( 2, 1) T= 15.0  direct fail (defect 3.7e+02) -- ladder stops
+  ( 3, 1) T= 15.0  direct fail (defect 5.0e-02) -- ladder stops
+  [batch wall budget reached -- exiting cleanly after 2 cells]
+THRUST LADDER DONE: 1 verified entries over 71 cells, 4.7 min
+THRUST LADDER: 69 cells x 9 rungs [15           12           10            7            5            3            2          1.5            1] N, Isp=1710 s, m0=150 kg, N=400 (3 cells resumed/skipped)
+  ( 4, 1) T= 15.0  direct fail (defect 4.8e-02) -- ladder stops
+THRUST LADDER: 69 cells x 9 rungs [15           12           10            7            5            3            2          1.5            1] N, Isp=1710 s, m0=150 kg, N=400 (3 cells resumed/skipped)
+  ( 4, 1) T= 15.0  direct fail (defect 4.8e-02) -- ladder stops
+THRUST LADDER: 67 cells x 9 rungs [15           12           10            7            5            3            2          1.5            1] N, Isp=1710 s, m0=150 kg, N=400 (5 cells resumed/skipped)
+  ( 6, 1) T= 15.0  direct fail (defect 8.1e+01) -- ladder stops
+  ( 7, 1) T= 15.0  direct fail (defect 3.9e+04) -- ladder stops
+  [batch wall budget reached -- exiting cleanly after 2 cells]
+THRUST LADDER DONE: 1 verified entries over 67 cells, 5.4 min
+THRUST LADDER: 67 cells x 9 rungs [15           12           10            7            5            3            2          1.5            1] N, Isp=1710 s, m0=150 kg, N=400 (5 cells resumed/skipped)
+  ( 6, 1) T= 15.0  direct fail (defect 8.1e+01) -- ladder stops
+  ( 7, 1) T= 15.0  direct fail (defect 3.9e+04) -- ladder stops
+  [batch wall budget reached -- exiting cleanly after 2 cells]
+THRUST LADDER DONE: 1 verified entries over 67 cells, 5.4 min
+THRUST LADDER: 65 cells x 9 rungs [15           12           10            7            5            3            2          1.5            1] N, Isp=1710 s, m0=150 kg, N=400 (7 cells resumed/skipped)
+  ( 8, 1) T= 15.0  direct fail (defect 7.2e-01) -- ladder stops
+  [batch wall budget reached -- exiting cleanly after 1 cells]
+THRUST LADDER DONE: 1 verified entries over 65 cells, 5.0 min
+THRUST LADDER: 65 cells x 9 rungs [15           12           10            7            5            3            2          1.5            1] N, Isp=1710 s, m0=150 kg, N=400 (7 cells resumed/skipped)
+  ( 8, 1) T= 15.0  direct fail (defect 7.2e-01) -- ladder stops
+  [batch wall budget reached -- exiting cleanly after 1 cells]
+THRUST LADDER DONE: 1 verified entries over 65 cells, 5.0 min
+THRUST LADDER: 64 cells x 9 rungs [15           12           10            7            5            3            2          1.5            1] N, Isp=1710 s, m0=150 kg, N=400 (8 cells resumed/skipped)
+  ( 9, 1) T= 15.0  direct fail (defect 5.5e+00) -- ladder stops
+  [batch wall budget reached -- exiting cleanly after 1 cells]
+THRUST LADDER DONE: 1 verified entries over 64 cells, 4.1 min
+THRUST LADDER: 64 cells x 9 rungs [15           12           10            7            5            3            2          1.5            1] N, Isp=1710 s, m0=150 kg, N=400 (8 cells resumed/skipped)
+  ( 9, 1) T= 15.0  direct fail (defect 5.5e+00) -- ladder stops
+  [batch wall budget reached -- exiting cleanly after 1 cells]
+THRUST LADDER DONE: 1 verified entries over 64 cells, 4.0 min
+THRUST LADDER: 63 cells x 9 rungs [15           12           10            7            5            3            2          1.5            1] N, Isp=1710 s, m0=150 kg, N=400 (9 cells resumed/skipped)
+  (10, 1) T= 15.0  tf=0.29406 (1.303 d)  fly=0.00km  acc=3.0e-12  OK (55s)
+  (10, 1) T= 12.0  tf=0.33779 (1.497 d)  fly=0.00km  acc=1.2e-12  OK (52s)
+  (10, 1) T= 10.0  tf=0.37767 (1.674 d)  fly=0.00km  acc=3.8e-12  OK (44s)
+  (10, 1) T=  7.0  rejected pre-flight (minAlt 36263 km, tf 1.5666) -- ladder stops
+  (11, 1) T= 15.0  tf=1.23736 flown 13081170.5 km > gate -- ladder stops
+  [batch wall budget reached -- exiting cleanly after 2 cells]
+THRUST LADDER DONE: 4 verified entries over 63 cells, 4.1 min
+THRUST LADDER: 62 cells x 9 rungs [15           12           10            7            5            3            2          1.5            1] N, Isp=1710 s, m0=150 kg, N=400 (10 cells resumed/skipped)
+  (11, 1) T= 15.0  tf=1.23736 flown 13081170.5 km > gate -- ladder stops
+  (12, 1) T= 15.0  tf=2.63568 flown 11254243.6 km > gate -- ladder stops
+  ( 1, 2) T= 15.0  tf=0.28174 flown 102.9 km > gate -- ladder stops
+  ( 2, 2) T= 15.0  tf=1.13574 flown 1622071.6 km > gate -- ladder stops
+  [batch wall budget reached -- exiting cleanly after 4 cells]
+THRUST LADDER DONE: 4 verified entries over 62 cells, 4.3 min
+THRUST LADDER: 61 cells x 9 rungs [15           12           10            7            5            3            2          1.5            1] N, Isp=1710 s, m0=150 kg, N=400 (11 cells resumed/skipped)
+  (12, 1) T= 15.0  tf=2.63568 flown 11254243.6 km > gate -- ladder stops
+  ( 1, 2) T= 15.0  tf=0.28174 flown 102.9 km > gate -- ladder stops
+  ( 2, 2) T= 15.0  tf=1.13574 flown 1622071.6 km > gate -- ladder stops
+  ( 3, 2) T= 15.0  tf=1.03408 flown 6242443.3 km > gate -- ladder stops
+  [batch wall budget reached -- exiting cleanly after 4 cells]
+THRUST LADDER DONE: 4 verified entries over 61 cells, 4.6 min
+THRUST LADDER: 58 cells x 9 rungs [15           12           10            7            5            3            2          1.5            1] N, Isp=1710 s, m0=150 kg, N=400 (14 cells resumed/skipped)
+  ( 3, 2) T= 15.0  tf=1.03408 flown 6242443.3 km > gate -- ladder stops
+  ( 4, 2) T= 15.0  tf=0.89683 flown 1034403.1 km > gate -- ladder stops
+  ( 5, 2) T= 15.0  tf=0.62243 flown 3281861.8 km > gate -- ladder stops
+THRUST LADDER: 57 cells x 9 rungs [15           12           10            7            5            3            2          1.5            1] N, Isp=1710 s, m0=150 kg, N=400 (15 cells resumed/skipped)
+  ( 4, 2) T= 15.0  tf=0.89683 flown 1034403.1 km > gate -- ladder stops
+  ( 5, 2) T= 15.0  tf=0.62243 flown 3281861.8 km > gate -- ladder stops
+THRUST LADDER: 54 cells x 9 rungs [15           12           10            7            5            3            2          1.5            1] N, Isp=1710 s, m0=150 kg, N=400 (18 cells resumed/skipped)
+  ( 7, 2) T= 15.0  tf=3.72687 flown 270976.8 km > gate -- ladder stops
+  ( 8, 2) T= 15.0  tf=0.30009 (1.330 d)  fly=0.00km  acc=1.1e-12  OK (69s)
+  ( 8, 2) T= 12.0  rejected pre-flight (minAlt 31417 km, tf 1.3984) -- ladder stops
+THRUST LADDER: 53 cells x 9 rungs [15           12           10            7            5            3            2          1.5            1] N, Isp=1710 s, m0=150 kg, N=400 (19 cells resumed/skipped)
+  ( 7, 2) T= 15.0  tf=3.72687 flown 270976.8 km > gate -- ladder stops
+  ( 9, 2) T= 15.0  tf=0.29657 (1.315 d)  fly=0.00km  acc=2.8e-13  OK (162s)
+THRUST LADDER: 51 cells x 9 rungs [15           12           10            7            5            3            2          1.5            1] N, Isp=1710 s, m0=150 kg, N=400 (21 cells resumed/skipped)
+  (10, 2) T= 15.0  direct fail (defect 1.6e-02) -- ladder stops
+  [batch wall budget reached -- exiting cleanly after 1 cells]
+THRUST LADDER DONE: 6 verified entries over 51 cells, 5.0 min
+THRUST LADDER: 51 cells x 9 rungs [15           12           10            7            5            3            2          1.5            1] N, Isp=1710 s, m0=150 kg, N=400 (21 cells resumed/skipped)
+  (10, 2) T= 15.0  direct fail (defect 1.6e-02) -- ladder stops
+  [batch wall budget reached -- exiting cleanly after 1 cells]
+THRUST LADDER DONE: 6 verified entries over 51 cells, 5.0 min
+THRUST LADDER: 50 cells x 9 rungs [15           12           10            7            5            3            2          1.5            1] N, Isp=1710 s, m0=150 kg, N=400 (22 cells resumed/skipped)
+  (11, 2) T= 15.0  tf=1.23756 flown 13056306.5 km > gate -- ladder stops
+  (12, 2) T= 15.0  tf=2.63568 flown 11401906.1 km > gate -- ladder stops
+  ( 1, 3) T= 15.0  direct fail (defect 2.4e-03) -- ladder stops
+  [batch wall budget reached -- exiting cleanly after 3 cells]
+THRUST LADDER DONE: 6 verified entries over 50 cells, 5.2 min
+THRUST LADDER: 50 cells x 9 rungs [15           12           10            7            5            3            2          1.5            1] N, Isp=1710 s, m0=150 kg, N=400 (22 cells resumed/skipped)
+  (11, 2) T= 15.0  tf=1.23756 flown 13056306.5 km > gate -- ladder stops
+  (12, 2) T= 15.0  tf=2.63568 flown 11401906.1 km > gate -- ladder stops
+  ( 1, 3) T= 15.0  direct fail (defect 2.4e-03) -- ladder stops
+  [batch wall budget reached -- exiting cleanly after 3 cells]
+THRUST LADDER DONE: 6 verified entries over 50 cells, 5.1 min
+THRUST LADDER: 47 cells x 9 rungs [15           12           10            7            5            3            2          1.5            1] N, Isp=1710 s, m0=150 kg, N=400 (25 cells resumed/skipped)
+  ( 2, 3) T= 15.0  direct fail (defect 2.2e-01) -- ladder stops
+  ( 3, 3) T= 15.0  tf=1.07238 flown 2641394.2 km > gate -- ladder stops
+  ( 4, 3) T= 15.0  tf=0.70764 flown 770472.6 km > gate -- ladder stops
+  [batch wall budget reached -- exiting cleanly after 3 cells]
+THRUST LADDER DONE: 6 verified entries over 47 cells, 5.0 min
+THRUST LADDER: 47 cells x 9 rungs [15           12           10            7            5            3            2          1.5            1] N, Isp=1710 s, m0=150 kg, N=400 (25 cells resumed/skipped)
+  ( 2, 3) T= 15.0  direct fail (defect 2.2e-01) -- ladder stops
+  ( 3, 3) T= 15.0  tf=1.07238 flown 2641394.2 km > gate -- ladder stops
+  ( 4, 3) T= 15.0  tf=0.70764 flown 770472.6 km > gate -- ladder stops
+  [batch wall budget reached -- exiting cleanly after 3 cells]
+THRUST LADDER DONE: 6 verified entries over 47 cells, 5.0 min
+THRUST LADDER: 44 cells x 9 rungs [15           12           10            7            5            3            2          1.5            1] N, Isp=1710 s, m0=150 kg, N=400 (28 cells resumed/skipped)
+  ( 5, 3) T= 15.0  tf=0.62361 flown 650991.6 km > gate -- ladder stops
+  ( 6, 3) T= 15.0  direct fail (defect 5.0e-12) -- ladder stops
+  [batch wall budget reached -- exiting cleanly after 2 cells]
+THRUST LADDER DONE: 6 verified entries over 44 cells, 5.4 min
+THRUST LADDER: 44 cells x 9 rungs [15           12           10            7            5            3            2          1.5            1] N, Isp=1710 s, m0=150 kg, N=400 (28 cells resumed/skipped)
+  ( 5, 3) T= 15.0  tf=0.62361 flown 650991.6 km > gate -- ladder stops
+  ( 6, 3) T= 15.0  direct fail (defect 5.0e-12) -- ladder stops
+  [batch wall budget reached -- exiting cleanly after 2 cells]
+THRUST LADDER DONE: 6 verified entries over 44 cells, 5.4 min
+THRUST LADDER: 42 cells x 9 rungs [15           12           10            7            5            3            2          1.5            1] N, Isp=1710 s, m0=150 kg, N=400 (30 cells resumed/skipped)
+  ( 7, 3) T= 15.0  direct fail (defect 1.4e-02) -- ladder stops
+  ( 8, 3) T= 15.0  tf=1.03571 flown 11068338.4 km > gate -- ladder stops
+THRUST LADDER: 42 cells x 9 rungs [15           12           10            7            5            3            2          1.5            1] N, Isp=1710 s, m0=150 kg, N=400 (30 cells resumed/skipped)
+  ( 7, 3) T= 15.0  direct fail (defect 1.4e-02) -- ladder stops
+  ( 8, 3) T= 15.0  tf=1.03571 flown 11068338.4 km > gate -- ladder stops
+THRUST LADDER: 39 cells x 9 rungs [15           12           10            7            5            3            2          1.5            1] N, Isp=1710 s, m0=150 kg, N=400 (33 cells resumed/skipped)
+  (10, 3) T= 15.0  tf=0.29061 (1.288 d)  fly=0.00km  acc=2.9e-12  OK (293s)
+  (10, 3) T= 12.0  tf=0.33347 (1.478 d)  fly=0.00km  acc=1.3e-12  OK (56s)
+THRUST LADDER: 38 cells x 9 rungs [15           12           10            7            5            3            2          1.5            1] N, Isp=1710 s, m0=150 kg, N=400 (34 cells resumed/skipped)
+  (11, 3) T= 15.0  tf=1.23778 flown 13025607.3 km > gate -- ladder stops
+  (12, 3) T= 15.0  direct fail (defect 2.6e+01) -- ladder stops
+  ( 1, 4) T= 15.0  direct fail (defect 4.2e+02) -- ladder stops
+  [batch wall budget reached -- exiting cleanly after 3 cells]
+THRUST LADDER DONE: 8 verified entries over 38 cells, 6.2 min
+THRUST LADDER: 38 cells x 9 rungs [15           12           10            7            5            3            2          1.5            1] N, Isp=1710 s, m0=150 kg, N=400 (34 cells resumed/skipped)
+  (11, 3) T= 15.0  tf=1.23778 flown 13025607.3 km > gate -- ladder stops
+  (12, 3) T= 15.0  direct fail (defect 2.6e+01) -- ladder stops
+  ( 1, 4) T= 15.0  direct fail (defect 4.2e+02) -- ladder stops
+  [batch wall budget reached -- exiting cleanly after 3 cells]
+THRUST LADDER DONE: 8 verified entries over 38 cells, 6.1 min
+THRUST LADDER: 35 cells x 9 rungs [15           12           10            7            5            3            2          1.5            1] N, Isp=1710 s, m0=150 kg, N=400 (37 cells resumed/skipped)
+  ( 2, 4) T= 15.0  direct fail (defect 3.8e+03) -- ladder stops
+  ( 3, 4) T= 15.0  tf=1.13010 flown 2809447.7 km > gate -- ladder stops
+  ( 4, 4) T= 15.0  tf=0.89767 flown 1209119.1 km > gate -- ladder stops
+  [batch wall budget reached -- exiting cleanly after 3 cells]
+THRUST LADDER DONE: 8 verified entries over 35 cells, 4.5 min
+THRUST LADDER: 35 cells x 9 rungs [15           12           10            7            5            3            2          1.5            1] N, Isp=1710 s, m0=150 kg, N=400 (37 cells resumed/skipped)
+  ( 2, 4) T= 15.0  direct fail (defect 3.8e+03) -- ladder stops
+  ( 3, 4) T= 15.0  tf=1.13010 flown 2809447.7 km > gate -- ladder stops
+  ( 4, 4) T= 15.0  tf=0.89767 flown 1209119.1 km > gate -- ladder stops
+  [batch wall budget reached -- exiting cleanly after 3 cells]
+THRUST LADDER DONE: 8 verified entries over 35 cells, 4.4 min
+THRUST LADDER: 32 cells x 9 rungs [15           12           10            7            5            3            2          1.5            1] N, Isp=1710 s, m0=150 kg, N=400 (40 cells resumed/skipped)
+  ( 5, 4) T= 15.0  tf=0.60292 flown 2027196.0 km > gate -- ladder stops
+THRUST LADDER: 32 cells x 9 rungs [15           12           10            7            5            3            2          1.5            1] N, Isp=1710 s, m0=150 kg, N=400 (40 cells resumed/skipped)
+  ( 5, 4) T= 15.0  tf=0.60292 flown 2027196.0 km > gate -- ladder stops

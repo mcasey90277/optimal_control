@@ -6,11 +6,24 @@ function [entry, gates] = gto_entry(orientDeg, Np, depFrac, arrFrac, thrustN, op
 %   phase) cell at a single requested thrust level, through the SAME
 %   engine the sheet sweep uses (DRO_tulip/indirect/thrust_ladder_library,
 %   family-agnostic via costate_common/get_family_orbit) -- never a
-%   bespoke solver. Runs a 1x1 phasing grid with the standard rung ladder
-%   truncated to keep only rungs <= thrustN, with thrustN itself always
-%   prepended as the top rung (so the ladder always starts exactly at the
-%   requested thrust and continuation warm-starts every rung below it);
-%   the returned entry is the top rung, i.e. thrustN.
+%   bespoke solver. Runs a 1x1 phasing grid.
+%
+%   LADDER DIRECTION (fixed 2026-08-27, review finding -- the original
+%   construction was inverted): solves the standard ladder from 15 N DOWN
+%   to the requested thrustN (higher rungs are warm-start stepping stones
+%   only, never returned) and returns the entry AT thrustN. For thrustN =
+%   15 this is a single solve, since there is no standard rung above 15 N.
+%   A request for a deep rung (e.g. 1 N) is never cold-solved directly --
+%   it is reached by continuation down from 15 N, exactly like the
+%   campaign sweep, because a cold cold-start at a deep rung is precisely
+%   the non-convergent case the pilot measured.
+%
+%   WARM RECIPE (matches run_gto_catalog's pass-A recipe, 2026-08-26
+%   diagnostic-A): thrLock=true, tf0=0.30 (ND, seeds the ladder's TOP
+%   rung only), maxCpuSec=600 -- the campaign abandoned the cold defaults
+%   (free throttle, casadi_mintime_dro's own 4.0 ND seed) after measuring
+%   67/72 GTO cells unreachable with them; this driver never falls back to
+%   them.
 %
 %   Self-demo (nargin==0): orient 0 deg, Np 7, 15 N. Departure phase is
 %   PERIGEE (0.0), not apogee (0.5), even though the original spec named
@@ -40,9 +53,12 @@ function [entry, gates] = gto_entry(orientDeg, Np, depFrac, arrFrac, thrustN, op
 %                                                   fraction along the
 %                                                   tulip's own period
 %
-%  thrustN                  double                  Thrust level (N); the
-%                                                   solved rung and the top
-%                                                   of the truncated ladder
+%  thrustN                  double                  Thrust level (N): the
+%                                                   BOTTOM (returned) rung
+%                                                   of the ladder; standard
+%                                                   rungs above it are
+%                                                   warm-start stepping
+%                                                   stones only
 %
 %  opts                     struct                  (optional):
 %                                                   .conjTest [false] re-
@@ -62,7 +78,20 @@ function [entry, gates] = gto_entry(orientDeg, Np, depFrac, arrFrac, thrustN, op
 %                                                     campaign grid
 %                                                     (nearest-phase snap),
 %                                                     creating the sheet
-%                                                     file if absent
+%                                                     file if absent --
+%                                                     writeSheet also banks
+%                                                     the stepping-stone
+%                                                     rungs solved along the
+%                                                     way to thrustN, not
+%                                                     just thrustN itself
+%                                                   .thrLock [true],
+%                                                     .tf0 [0.30],
+%                                                     .maxCpuSec [600]
+%                                                     the warm-recipe knobs
+%                                                     (see LADDER DIRECTION
+%                                                     above); overridable,
+%                                                     default = campaign
+%                                                     pass-A recipe
 %                                                   .force [false] required
 %                                                     to let .writeSheet
 %                                                     overwrite a cell the
@@ -75,6 +104,17 @@ function [entry, gates] = gto_entry(orientDeg, Np, depFrac, arrFrac, thrustN, op
 %                                                     [1710] thruster
 %                                                     params (campaign
 %                                                     standard)
+%                                                   .N [400], .floorKm
+%                                                     [500], .maxIter
+%                                                     [6000], .gateKm
+%                                                     [100], .accTol
+%                                                     [1e-6] solver/gate
+%                                                     knobs, campaign
+%                                                     pass-A recipe
+%                                                     (maxIter=6000, not
+%                                                     the engine's own
+%                                                     3000 default -- see
+%                                                     WARM RECIPE above)
 %
 %% Outputs:
 %
@@ -104,6 +144,21 @@ writeSheet = fdef(opts, 'writeSheet', false);
 force      = fdef(opts, 'force',      false);
 m0kg       = fdef(opts, 'm0kg',       150);
 ispS       = fdef(opts, 'ispS',       1710);
+thrLock    = fdef(opts, 'thrLock',    true);   % campaign pass-A recipe
+tf0Warm    = fdef(opts, 'tf0',        0.30);   % campaign pass-A recipe
+maxCpuSec  = fdef(opts, 'maxCpuSec',  600);    % campaign pass-A recipe
+% N/floorKm/gateKm/accTol already equal thrust_ladder_library's own
+% defaults; maxIter does NOT -- the engine default (3000) is the cold
+% recipe run_gto_catalog abandoned (measured: 3000 stopped a right-family
+% cell one iteration budget short, defect 1.3e-11). All five are wired
+% here anyway so gto_entry tracks the campaign recipe by construction
+% instead of by coincidence with the engine's defaults:
+N          = fdef(opts, 'N',          400);    % campaign recipe (= engine default)
+floorKm    = fdef(opts, 'floorKm',    500);    % campaign recipe (= engine default)
+maxIterOpt = fdef(opts, 'maxIter',    6000);   % campaign pass-A recipe (NOT the
+                                                 % engine's own 3000 default)
+gateKm     = fdef(opts, 'gateKm',     100);    % campaign recipe (= engine default)
+accTol     = fdef(opts, 'accTol',     1e-6);   % campaign recipe (= engine default)
 tulipPm    = -1;
 
 setup_paths();
@@ -112,10 +167,14 @@ here   = fileparts(mfilename('fullpath'));
 resDir = fullfile(here, 'results');
 if ~isfolder(resDir), mkdir(resDir); end
 
-%% Truncated ladder: keep standard rungs below thrustN, prepend thrustN
-%% itself as the top so the accepted entry is always exactly thrustN:
+%% Ladder from 15 N DOWN to thrustN: standard rungs ABOVE the request are
+%% warm-start stepping stones (never returned), thrustN is always last --
+%% the accepted/returned entry is the BOTTOM rung. If thrustN matches a
+%% standard rung exactly, the '>' filter drops it from the stepping-stone
+%% set so it is not duplicated:
 rungsStd = [15 12 10 7 5 3 2 1.5 1];
-rungs = [thrustN, rungsStd(rungsStd < thrustN)];
+rungs = [rungsStd(rungsStd > thrustN), thrustN];
+krEntry = numel(rungs);                % thrustN's position in Q.rungs
 
 outMat  = fullfile(resDir, 'gto_entry_scratch.mat');
 logFile = fullfile(resDir, 'gto_entry_scratch.log');
@@ -129,6 +188,11 @@ optsEngine = struct( ...
     'rungs',     rungs, ...
     'ispS',      ispS, ...
     'm0kg',      m0kg, ...
+    'N',         N, ...
+    'floorKm',   floorKm, ...
+    'maxIter',   maxIterOpt, ...
+    'gateKm',    gateKm, ...
+    'accTol',    accTol, ...
     'nD',        1, ...
     'nA',        1, ...
     'sD0',       depFrac, ...
@@ -139,6 +203,7 @@ optsEngine = struct( ...
     'arrFamily', 'tulip', ...
     'arrParams', struct('Np', Np, 'pm', tulipPm), ...
     'tauDRO',    orientDeg, ...        % sheet-key rule
+    'thrLock',   thrLock, 'tf0', tf0Warm, 'maxCpuSec', maxCpuSec, ...
     'resume',    false, ...            % single-entry: never mixes with a
     ...                                % sheet file on disk
     'logFile',   logFile);
@@ -146,12 +211,18 @@ optsEngine = struct( ...
 thrust_ladder_library(outMat, optsEngine);
 Q = load(outMat);
 
-entry = struct('ok', Q.OK(1,1,1), 'z8', Q.Z8(:,1,1,1), ...
-    'tf_nd', Q.TF(1,1,1), 'dV_kms', NaN, 'mf_kg', NaN, ...
+% krEntry (computed above from the REQUESTED ladder, before the solve)
+% must still index thrustN's slot in Q.rungs -- assert it does, since
+% thrust_ladder_library saves opts.rungs verbatim and in order:
+assert(isequal(Q.rungs(krEntry), thrustN), 'gto_entry:rungIndex', ...
+    'Q.rungs(%d)=%.4g does not match requested thrustN=%.4g', ...
+    krEntry, Q.rungs(krEntry), thrustN);
+entry = struct('ok', Q.OK(1,1,krEntry), 'z8', Q.Z8(:,1,1,krEntry), ...
+    'tf_nd', Q.TF(1,1,krEntry), 'dV_kms', NaN, 'mf_kg', NaN, ...
     'coordinates', struct('orientDeg', orientDeg, 'Np', Np, ...
         'depFrac', depFrac, 'arrFrac', arrFrac, 'thrustN', thrustN));
-gates = struct('msNormR', Q.RES(1,1,1), 'flownKm', Q.FLYKM(1,1,1), ...
-    'acceptDz', Q.ACCDZ(1,1,1), 'conjPass', NaN);
+gates = struct('msNormR', Q.RES(1,1,krEntry), 'flownKm', Q.FLYKM(1,1,krEntry), ...
+    'acceptDz', Q.ACCDZ(1,1,krEntry), 'conjPass', NaN);
 
 if entry.ok
     %% Mass fraction + delta-V (all-burn min-time), formulas from

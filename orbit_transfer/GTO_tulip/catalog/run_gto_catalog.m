@@ -196,6 +196,7 @@ assert(~isempty(sheetSel), 'run_gto_catalog:sheetSel', ...
 
 tAll = tic;
 allDone = true;
+logComb = fullfile(catDir, 'combined_progress.txt');
 for ks = sheetSel
     if toc(tAll) > batchSec, allDone = false; break, end
     s = sheets{ks};
@@ -245,7 +246,21 @@ for ks = sheetSel
     optsA = optsCommon;
     optsA.tf0      = tf0Fleet;
     optsA.batchSec = max(0, batchSec - toc(tAll));
-    P = thrust_ladder_library(outMat, optsA);
+    % FAIL LOUD (fix round 2, 2026-08-27 review): no silent continue past a
+    % sheet whose engine call errors -- log which sheet+pass failed to both
+    % stdout and the combined log, then rethrow so the shell driver's own
+    % non-zero-exit abort path fires instead of the loop quietly moving on
+    % to the next sheet with this one left in an unknown state.
+    try
+        thrust_ladder_library(outMat, optsA);
+    catch ME
+        failMsg = sprintf('FATAL: sheet %s pass A (thrust_ladder_library) errored -- %s', ...
+            s.tag, ME.message);
+        fprintf(2, '%s\n', failMsg);
+        fidF = fopen(logComb, 'a');
+        if fidF > 0, fprintf(fidF, '%s\n', failMsg); fclose(fidF); end
+        rethrow(ME);
+    end
     % Pass B -- cold tf0 (casadi_mintime_dro's own internal default, 4.0
     % ND), SCOPED to the mop-up set: cells pass A itself just attempted
     % (ATT>=1) and could not clear (no OK rung). Computed fresh from the
@@ -266,19 +281,44 @@ for ks = sheetSel
             optsB = optsCommon;
             optsB.cells    = mopCells;
             optsB.batchSec = max(0, batchSec - toc(tAll));
-            P = thrust_ladder_library(outMat, optsB);
+            try
+                thrust_ladder_library(outMat, optsB);
+            catch ME
+                failMsg = sprintf('FATAL: sheet %s pass B (thrust_ladder_library) errored -- %s', ...
+                    s.tag, ME.message);
+                fprintf(2, '%s\n', failMsg);
+                fidF = fopen(logComb, 'a');
+                if fidF > 0, fprintf(fidF, '%s\n', failMsg); fclose(fidF); end
+                rethrow(ME);
+            end
         end
     end
-    open_ = false;
-    for iD = 1:nD
-        for iA = 1:nA
-            if ~any(P.OK(iD,iA,:)) && P.ATT(iD,iA) < 2, open_ = true; end
+    % OPEN-CELL SWEEP (fix round 2, 2026-08-27 review): reload THIS sheet's
+    % just-saved data FRESH FROM DISK rather than trusting the in-memory
+    % struct thrust_ladder_library returned. Both passes already save to
+    % outMat before returning (on the happy path this is not a behavior
+    % change) -- it is the review-required guarantee that the completion
+    % marker below can NEVER be based on stale/in-memory state, only on
+    % what is actually persisted for this sheet. Guard the degenerate case
+    % where outMat still does not exist: a brand-new sheet whose pass A
+    % ran out of this call's leftover batchSec budget before its very
+    % first per-cell save (thrust_ladder_library's only save() sits INSIDE
+    % its per-cell loop, gated by its own batchSec check, so zero cells
+    % attempted means zero bytes written) -- that sheet is trivially open.
+    if isfile(outMat)
+        Qsweep = load(outMat, 'OK', 'ATT');
+        open_ = false;
+        for iD = 1:nD
+            for iA = 1:nA
+                if ~any(Qsweep.OK(iD,iA,:)) && Qsweep.ATT(iD,iA) < 2, open_ = true; end
+            end
         end
+    else
+        open_ = true;
     end
     if open_, allDone = false; end
 end
 
-logComb = fullfile(catDir, 'combined_progress.txt');
 if allDone && numel(sheetSel) == nSheets
     fid = fopen(logComb, 'a');
     fprintf(fid, 'CATALOG ALL SHEETS COMPLETE\n');  fclose(fid);

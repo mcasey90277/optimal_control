@@ -48,6 +48,20 @@ trap 'rmdir "$LOCK" 2>/dev/null' EXIT
 
 count_lines() { echo $(( $(cat "$CATDIR"/gto_*_progress.txt 2>/dev/null | wc -l) )); }
 
+# ROOT-CAUSE FIX (fix round 2, 2026-08-27): $LOG (combined_progress.txt) is
+# append-only across EVERY invocation ever run -- it is never truncated.
+# A bare `grep "SHEETS COMPLETE" "$LOG"` therefore matches a completion
+# marker left by ANY prior run (e.g. an earlier pilot-only sheetSel that
+# legitimately finished), even though THIS invocation's own sheets are far
+# from done. That false positive is exactly what stopped the 15-sheet fleet
+# after a single partial pass: a "SELECTED SHEETS COMPLETE (2)" line from
+# the earlier pilot run was still sitting in the file, and the very first
+# pass's blind grep found it immediately. Fix: snapshot the log's line
+# count BEFORE this invocation writes anything, and scope every completion
+# check to lines strictly AFTER that snapshot for the rest of this run.
+START_LINE=$( { [ -f "$LOG" ] && wc -l < "$LOG"; } 2>/dev/null || echo 0 )
+START_LINE=${START_LINE:-0}
+
 echo "=== gtocat run started $(date) (sheetSel=$SHEETSEL, $CELLS cells/batch, ${BSEC}s clean, ${KILL_AFTER}s kill, rungs=${RUNGS:-default})" >> "$LOG"
 dry=0
 for pass in $(seq 1 600); do
@@ -74,7 +88,9 @@ for pass in $(seq 1 600); do
 
   after=$(count_lines); after=${after:-0}
   echo "  [pass $pass: $after log lines total]" >> "$LOG"
-  if grep -qa "SHEETS COMPLETE" "$LOG" 2>/dev/null; then
+  # Scoped to THIS invocation's own appended lines only -- see the
+  # START_LINE comment above for why an unscoped grep is unsafe.
+  if tail -n +"$((START_LINE+1))" "$LOG" 2>/dev/null | grep -qa "SHEETS COMPLETE"; then
     echo "=== completion marker seen -- stopping" >> "$LOG"; break
   fi
   if [ "$after" -le "$before" ]; then dry=$((dry+1)); else dry=0; fi

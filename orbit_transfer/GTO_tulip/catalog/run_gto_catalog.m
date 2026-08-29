@@ -86,23 +86,39 @@ function run_gto_catalog(sheetSel, maxCellsIn, batchSecIn, rungsIn)
 %  rungsIn                  [1 x r]                 Optional thrust-ladder
 %                                                   override (N, high to
 %                                                   low). Default (omitted
-%                                                   or empty) is the full
-%                                                   9-rung [15 12 10 7 5 3
-%                                                   2 1.5 1] -- byte-
-%                                                   identical to the prior
-%                                                   no-arg behavior.
-%                                                   Deliverable-7 v1 fleet
-%                                                   calls this with the
-%                                                   5-rung truncation
-%                                                   [15 12 10 7 5] (see
-%                                                   task-4-brief.md
-%                                                   amendment, 2026-08-27
-%                                                   re-census adjudication:
-%                                                   pilot measured a
+%                                                   or empty) is the
+%                                                   shipped deliverable-7 v1
+%                                                   fleet's 5-rung
+%                                                   [15 12 10 7 5] (RE-
+%                                                   BASED 2026-08-29 review
+%                                                   fix -- this now matches
+%                                                   every on-disk sheet's
+%                                                   Q.rungs; the guard
+%                                                   below throws on any
+%                                                   mismatch, so a default
+%                                                   that disagreed with the
+%                                                   shipped sheets meant
+%                                                   the argument-less call
+%                                                   ERRORED on every real
+%                                                   sheet). The full 9-rung
+%                                                   ladder [15 12 10 7 5 3
+%                                                   2 1.5 1] -- the pilot's
+%                                                   original recipe before
+%                                                   the 2026-08-27 re-census
+%                                                   adjudication measured a
 %                                                   closure wall below 5 N
-%                                                   -- 0 entries at
-%                                                   3/2/1.5/1 N by both
-%                                                   routes).
+%                                                   (0 entries at 3/2/1.5/1
+%                                                   N by both routes) --
+%                                                   still exists but must
+%                                                   now be requested
+%                                                   explicitly via rungsIn,
+%                                                   and only ever against a
+%                                                   sheet that itself
+%                                                   carries all 9 rungs
+%                                                   (moved aside from the
+%                                                   shipped 5-rung sheet,
+%                                                   per the guard's own
+%                                                   remedy message).
 %
 %% Outputs:
 %
@@ -141,8 +157,12 @@ if ~exist('rungsIn','var'), rungsIn = []; end
            sD0 = 0;
            sA0 = 0;
 
-%% Thrust ladder (N, high to low -- the proven set; rungsIn overrides):
-        rungs = [15 12 10 7 5 3 2 1.5 1];
+%% Thrust ladder (N, high to low -- the shipped deliverable-7 v1 fleet's
+%% 5-rung set; rungsIn overrides. Re-based 2026-08-29 review fix: this
+%% MUST match every on-disk sheet's Q.rungs, or the guard below throws on
+%% the very first argument-less call -- see the rungsIn header note for
+%% the full 9-rung ladder's new explicit-only status):
+        rungs = [15 12 10 7 5];
 if ~isempty(rungsIn), rungs = rungsIn; end
          ispS = 1710;                % specific impulse (s)
          m0kg = 150;                 % initial mass (kg)
@@ -204,17 +224,19 @@ for ks = sheetSel
     logFile = fullfile(catDir, [s.tag '_progress.txt']);
     fprintf('\n=== GTO sheet %d/%d: %s (orient=%d deg, Np=%d) ===\n', ...
             ks, nSheets, s.tag, s.orientDeg, s.Np);
-    % GUARD (Important review finding, task-4 fix, 2026-08-27): a sheet's
-    % on-disk rungs MUST match this call's rungs before the engine ever
-    % touches it. thrust_ladder_library's resume path is a bare size
-    % compare (isequal(size(Q.OK), [nD nA nR])); a caller that omits
-    % rungsIn on a truncated sheet (silently reverting to the 9-rung
-    % default) would fail that compare, the engine would treat every
-    % cell as fresh (ATT reset to 0), and the very next save() would
-    % overwrite the sheet's accumulated entries with all-NaN/all-false
-    % arrays sized to the WRONG rung count -- the exact silent-wipe
-    % mechanism the pilot trim (task 4) defused, standing re-armed for
-    % every future call. This turns that into a loud stop instead.
+    % GUARD (Important review finding, task-4 fix, 2026-08-27; default
+    % re-based to match it, 2026-08-29 review fix): a sheet's on-disk
+    % rungs MUST match this call's rungs before the engine ever touches
+    % it. thrust_ladder_library's resume path is a bare size compare
+    % (isequal(size(Q.OK), [nD nA nR])); a caller that passes rungsIn NOT
+    % matching a sheet already on disk (e.g. the full 9-rung ladder
+    % against a shipped 5-rung sheet) would fail that compare, the engine
+    % would treat every cell as fresh (ATT reset to 0), and the very next
+    % save() would overwrite the sheet's accumulated entries with
+    % all-NaN/all-false arrays sized to the WRONG rung count -- the exact
+    % silent-wipe mechanism the pilot trim (task 4) defused, standing
+    % re-armed for every future call. This turns that into a loud stop
+    % instead.
     if isfile(outMat)
         Qchk = load(outMat, 'rungs');
         if ~isequal(Qchk.rungs(:)', rungs(:)')

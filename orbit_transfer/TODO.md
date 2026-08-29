@@ -41,7 +41,10 @@ exists.
   phasing grid, rungs `[15 12 10 7 5]` N at Darin-standard 150 kg / 1710 s.
   **2,625 entries, 840/1,152 pairs (73%), conjugate 2,625/0/0.** Orientation
   coverage 240/207/156/237 of 288 — a real π-dip at 180° (apogee toward the
-  Moon), traced (Diagnostic A) to a cold-start defect, not a mesh problem.
+  Moon). Diagnostic A traced the *initial* failure mode there to a
+  cold-start defect (not a mesh problem); the residual gap that remains
+  after the warm-recipe fix is *inferred*, not traced, to be genuine
+  cold-basin difficulty of that geometry (see README Coverage section).
   Two drivers shipped: `gto_entry` (single cell) + `run_gto_catalog`
   (swath/regen); dedicated zero-safe `costate_catalog_pick.m` (the generic
   picker's log-distance metric breaks at orientDeg=0). README:

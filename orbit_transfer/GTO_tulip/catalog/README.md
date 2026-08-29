@@ -28,6 +28,12 @@ propulsion standard as its siblings (150 kg / 1710 s) walked down to 5 N, not
 | `setup_paths.m` | This module's path setup (costate_common, DRO_tulip/indirect engine, pumpkynPie) |
 | `results/catalog/gto_o*_Np*.mat` | The 16 engine-native sheet files (`OK/TF/Z8/ATT/rungs/sD/sA/meta`) the packager reads |
 
+**The 16 per-sheet `.mat` files are gitignored (only their `_progress.txt` companions are tracked); the packaged catalog `.mat` IS committed (force-added), so a fresh clone carries the catalog itself but not the raw sheets**
+(`*.mat` in the repo `.gitignore`) — a fresh clone of this repo does not
+carry them. To reproduce them, re-run the fleet (`run_gto_catalog()`, ~40 h
+wall per the Provenance notes below) or obtain the data files directly
+from whoever ran the campaign.
+
 ## Dependencies
 
 pumpkyn + pumpkynPie on the MATLAB path (`setup_paths` handles this). The
@@ -71,7 +77,24 @@ gto_entry(270, 5, 0.10, 0.30, 5, struct('writeSheet', true, 'conjTest', true));
 ```matlab
 setup_paths
 run_gto_catalog();              % all 16 sheets, default rungs [15 12 10 7 5]
-run_gto_catalog([1 5], [], [], [15 12 10 7 5 3]);  % sheets 1,5 only, try a 3 N rung
+```
+
+**Extending a shipped sheet's rung ladder is a deliberate act, not a
+drop-in override.** `run_gto_catalog`'s rung-mismatch guard refuses any
+call whose `rungsIn` does not match a sheet's on-disk `Q.rungs` exactly —
+this is what catches an accidental silent re-solve-from-scratch that would
+wipe the sheet's accumulated entries (task-4 fix, 2026-08-27). So passing
+a longer ladder (e.g. `[15 12 10 7 5 3]`) against a shipped 5-rung sheet
+**errors**, by design — it does not append the new rung. To extend a rung
+deliberately, move the sheet aside first so the call starts a fresh sheet
+at the new rung count:
+
+```matlab
+setup_paths
+movefile('results/catalog/gto_o000_Np5.mat', ...
+         'results/catalog/gto_o000_Np5_5rung.bak.mat');   % move aside
+run_gto_catalog(1, [], [], [15 12 10 7 5 3]);              % sheet 1 only,
+                                                            % fresh 6-rung ladder
 ```
 (`run_gto_batched.sh` wraps this under `nohup` with per-pass OS-kill and
 resume for unattended multi-hour/day runs — see the matlab-campaign skill.)
@@ -111,6 +134,12 @@ propagation is needed to reconstruct it (`get_family_orbit('gto', p)`, the
   1.308 days, m_f = 0.32612, ΔV = 18.79 km/s — all three derive-registry
   formulas (`days`, `m_final`, `deltav_kms`) evaluate cleanly against this
   catalog's `.constants`/`.thruster`.
+- **Catalog-wide ranges** (all 2,625 entries, every sheet/rung, via the
+  same three derive-registry formulas): t_f = 0.2343 – 0.7155 ND =
+  1.04 – 3.17 days; ΔV = 8.11 – 26.48 km/s; m_f = 30.9 – 92.5 kg (mass
+  fraction 0.2061 – 0.6164, m0 = 150 kg). Fastest/lightest-ΔV entries sit
+  at the 15 N rung, slowest/heaviest-ΔV at the 5 N rung, as expected for a
+  thrust-limited all-burn min-time family.
 
 ### Coverage by orientation (the headline physics finding)
 

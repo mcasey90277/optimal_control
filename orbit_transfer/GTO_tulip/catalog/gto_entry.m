@@ -74,16 +74,30 @@ function [entry, gates] = gto_entry(orientDeg, Np, depFrac, arrFrac, thrustN, op
 %                                                     results/catalog/
 %                                                     gto_o<..>_Np<..>.mat
 %                                                     on the STANDARD
-%                                                     nD=12/nA=6/9-rung
-%                                                     campaign grid
-%                                                     (nearest-phase snap),
-%                                                     creating the sheet
-%                                                     file if absent --
-%                                                     writeSheet also banks
-%                                                     the stepping-stone
-%                                                     rungs solved along the
-%                                                     way to thrustN, not
-%                                                     just thrustN itself
+%                                                     nD=12/nA=6 campaign
+%                                                     grid (nearest-phase
+%                                                     snap); the rung AXIS
+%                                                     is taken from the
+%                                                     sheet already on
+%                                                     disk if one exists,
+%                                                     else a brand-new
+%                                                     sheet is stamped with
+%                                                     the campaign's actual
+%                                                     5-rung fleet default
+%                                                     [15 12 10 7 5] (fixed
+%                                                     2026-08-29 review --
+%                                                     a hardcoded 9-rung
+%                                                     grid here made
+%                                                     writeSheet THROW on
+%                                                     every shipped 5-rung
+%                                                     sheet), creating the
+%                                                     sheet file if absent
+%                                                     -- writeSheet also
+%                                                     banks the
+%                                                     stepping-stone rungs
+%                                                     solved along the way
+%                                                     to thrustN, not just
+%                                                     thrustN itself
 %                                                   .thrLock [true],
 %                                                     .tf0 [0.30],
 %                                                     .maxCpuSec [600]
@@ -256,7 +270,7 @@ if entry.ok
         sheetMat = fullfile(here, 'results', 'catalog', ...
             sprintf('gto_o%03d_Np%d.mat', orientDeg, Np));
         merge_entry_into_sheet(sheetMat, orientDeg, Np, depFrac, arrFrac, ...
-            rungsStd, Q, force);
+            Q, force);
     end
 end
 end
@@ -269,10 +283,26 @@ end
 
 % ------------------------------------------------------------------------
 function merge_entry_into_sheet(sheetMat, orientDeg, Np, depFrac, arrFrac, ...
-    rungsStd, Qlocal, force)
+    Qlocal, force)
 % MERGE_ENTRY_INTO_SHEET  Fold a gto_entry() 1x1 result into the STANDARD
-% nD=12/nA=6/9-rung campaign grid (nearest-phase snap on depFrac/arrFrac),
+% nD=12/nA=6 campaign grid (nearest-phase snap on depFrac/arrFrac),
 % creating the sheet file if it does not already exist.
+%
+% RUNG-GRID SOURCE (Important review finding, 2026-08-29): the merge
+% validates/writes against the SHEET'S OWN rung set, not a literal passed
+% in from gto_entry's ladder-planning step. gto_entry's internal rungsStd
+% (the full 9-rung [15 12 10 7 5 3 2 1.5 1] set it uses to plan warm-start
+% stepping stones down to an arbitrary requested thrustN) is NOT the same
+% thing as a campaign sheet's grid: the shipped deliverable-7 v1 fleet's
+% sheets all carry the 5-rung [15 12 10 7 5] truncation (run_gto_catalog's
+% own default, matching its own rung-mismatch guard). Validating a merge
+% against the 9-rung literal made this function THROW on every shipped
+% sheet the first time it ran post-solve (isequal(size(S.OK),[nD nA nR])
+% failed at nR=9 vs the on-disk nR=5). Fix: when sheetMat already exists,
+% its own S.rungs is the grid of record (nR and the match set both come
+% from it); only a BRAND-NEW sheet is stamped with a rung set at all, and
+% that stamp is the campaign's actual 5-rung fleet default [15 12 10 7 5]
+% -- not gto_entry's internal ladder-planning literal.
 %
 % SAFETY (review finding, 2026-08-26): a real campaign sweep's OK cells are
 % never clobbered by a single-entry write -- if the snapped (iD,iA,krFull)
@@ -282,26 +312,32 @@ function merge_entry_into_sheet(sheetMat, orientDeg, Np, depFrac, arrFrac, ...
 % merge path never touches it (gto_entry's scratch solve is accounted for
 % in its own scratch .mat, not the campaign sheet).
 %
-% INPUTS: sheetMat path; orientDeg; Np; depFrac; arrFrac; rungsStd [1x9];
-% Qlocal (the thrust_ladder_library output loaded from gto_entry's 1x1
-% scratch run); force (logical, overwrite-already-OK permission).
+% INPUTS: sheetMat path; orientDeg; Np; depFrac; arrFrac; Qlocal (the
+% thrust_ladder_library output loaded from gto_entry's 1x1 scratch run);
+% force (logical, overwrite-already-OK permission).
 % OUTPUTS: none (writes sheetMat).
-nD = 12;  nA = 6;  nR = numel(rungsStd);
+nD = 12;  nA = 6;
 iD = mod(round(depFrac*nD), nD) + 1;
 iA = mod(round(arrFrac*nA), nA) + 1;
 sheetDir = fileparts(sheetMat);
 if ~isfolder(sheetDir), mkdir(sheetDir); end
 if isfile(sheetMat)
     S = load(sheetMat);
+    rungsGrid = S.rungs;
+    nR = numel(rungsGrid);
     if ~isequal(size(S.OK), [nD nA nR])
         error('gto_entry:writeSheet', ...
             '%s has an incompatible grid size for the merge', sheetMat);
     end
 else
+    rungsGrid = [15 12 10 7 5];    % campaign fleet default -- matches
+                                    % run_gto_catalog.m's own rungsIn
+                                    % default and rung-mismatch guard
+    nR = numel(rungsGrid);
     S = struct('TF',nan(nD,nA,nR), 'FLYKM',nan(nD,nA,nR), ...
         'ACCDZ',nan(nD,nA,nR), 'RES',nan(nD,nA,nR), 'WALL',nan(nD,nA,nR), ...
         'OK',false(nD,nA,nR), 'Z8',nan(8,nD,nA,nR), 'ATT',zeros(nD,nA), ...
-        'rungs',rungsStd, 'sD',(0:nD-1)/nD, 'sA',(0:nA-1)/nA, ...
+        'rungs',rungsGrid, 'sD',(0:nD-1)/nD, 'sA',(0:nA-1)/nA, ...
         'meta', struct('depFamily','gto', ...
             'depParams',struct('orientDeg',orientDeg), ...
             'arrFamily','tulip','arrParams',struct('Np',Np,'pm',-1), ...
@@ -309,11 +345,11 @@ else
 end
 for kr = 1:numel(Qlocal.rungs)
     if ~Qlocal.OK(1,1,kr), continue, end
-    krFull = find(abs(rungsStd - Qlocal.rungs(kr)) < 1e-9, 1);
+    krFull = find(abs(rungsGrid - Qlocal.rungs(kr)) < 1e-9, 1);
     if isempty(krFull)
         fprintf(['gto_entry: writeSheet -- requested thrust %.6g N matches no ' ...
-                 'standard rung (tol 1e-9); not written into %s\n'], ...
-                 Qlocal.rungs(kr), sheetMat);
+                 'rung in %s''s grid [%s]; not written\n'], ...
+                 Qlocal.rungs(kr), sheetMat, num2str(rungsGrid));
         continue
     end
     if S.OK(iD,iA,krFull) && ~force

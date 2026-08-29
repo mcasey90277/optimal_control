@@ -20,14 +20,24 @@ function [tf_nd, z8, info] = costate_catalog_pick(cat_, tauDep, arrKey, ...
 %       tauDRO / .tau_dep hold orientDeg in {0,90,180,270} for this
 %       catalog (the review-mandated sheet-key override, Stage B task 6).
 %       orientation degrees are LINEARLY spaced, so the nearest-sheet
-%       metric on the departure axis here is PLAIN LINEAR (ABSOLUTE/
-%       SQUARED) DIFFERENCE, unlike the period-keyed catalogs' LOG-
-%       DISTANCE convention (log tau_dep). Log-distance is zero-UNSAFE:
-%       log(0) = -Inf, so orientDeg = 0 produced a NaN self-distance in
-%       the generic picker and a SILENT WRONG-SHEET return for exactly
-%       that (a full quarter of the sheet space). The Np / tau_arr axis
-%       is untouched -- tulip petal counts and halo/dpo periods are never
+%       metric on the departure axis here is LINEAR (ABSOLUTE/SQUARED)
+%       DIFFERENCE, unlike the period-keyed catalogs' LOG-DISTANCE
+%       convention (log tau_dep). Log-distance is zero-UNSAFE: log(0) =
+%       -Inf, so orientDeg = 0 produced a NaN self-distance in the
+%       generic picker and a SILENT WRONG-SHEET return for exactly that
+%       (a full quarter of the sheet space). The Np / tau_arr axis is
+%       untouched -- tulip petal counts and halo/dpo periods are never
 %       zero, so the generic log/linear choice there is unaffected.
+%
+%       The linear difference is also CIRCULAR (fixed 2026-08-29 review):
+%       orientDeg wraps at 360, so the raw difference is taken mod
+%       (delta+180,360)-180 before squaring. Without the wrap, a request
+%       of e.g. 335 deg or -25 deg (both 25 deg from the 0-deg sheet, the
+%       true nearest) computed a PLAIN difference of 335 deg / -25 deg
+%       against sheet 0 -- scoring it as if it were nearly opposite,
+%       silently handing back the 270-deg sheet instead while the
+%       honesty-contract warning still printed "NEAREST SHEET" as if the
+%       delivered sheet were correct.
 %
 %   (2) DEPARTURE-PHASE DAY CONVERSION uses the sheet's TRUE GTO Kepler
 %       period, reconstructed from dep_params.sma_km -- NOT sh.tauDRO
@@ -142,12 +152,17 @@ if ~exist('warnFlag','var'), warnFlag = true; end
 arrByPeriod = isfield(cat_.sheets, 'arr_family') && ...
               ~strcmpi(cat_.sheets(1).arr_family, 'tulip');
 if arrByPeriod
-    % departure axis: LINEAR (deg), zero-safe; arrival axis: log tau_arr
-     dist = ([cat_.sheets.tau_dep] - tauDep).^2 ...
+    % departure axis: LINEAR (deg), zero-safe, CIRCULAR (deg wrap to
+    % +-180 -- fixed 2026-08-29 review: a plain linear difference is
+    % wrong-sheet-silent for any request past the 0/360 seam, e.g. -25 or
+    % 335 deg both belong on the 0-deg sheet, not the 270-deg one a bare
+    % linear |delta| would pick); arrival axis: log tau_arr
+       depDelta = mod([cat_.sheets.tau_dep] - tauDep + 180, 360) - 180;
+     dist = depDelta.^2 ...
           + (log([cat_.sheets.tau_arr]) - log(arrKey)).^2;
    [~, ks] = min(dist);
        sh = cat_.sheets(ks);
-    if warnFlag && (abs(sh.tau_dep - tauDep) > 1e-9 || ...
+    if warnFlag && (abs(mod(sh.tau_dep - tauDep + 180, 360) - 180) > 1e-9 || ...
                     abs(sh.tau_arr - arrKey) > 1e-9)
         fprintf(['WARNING (costate_catalog_pick): no sheet at departure %.3f deg / arrival %.3f ND;\n', ...
                  '  you are getting the NEAREST SHEET: departure %.4g deg, arrival %.4g ND.\n'], ...
@@ -157,13 +172,20 @@ if arrByPeriod
 else
     % Petal-count keying. Departure axis: LINEAR (deg), zero-safe --
     % NOT log(tauDRO), which is -Inf at orientDeg = 0 (a quarter of this
-    % catalog's key space) and silently mis-selects the sheet:
+    % catalog's key space) and silently mis-selects the sheet -- AND
+    % CIRCULAR (deg wrap to +-180 -- fixed 2026-08-29 review: a plain
+    % linear difference is wrong-sheet-silent past the 0/360 seam, e.g. a
+    % request of -25 or 335 deg both belong on the 0-deg sheet, not the
+    % 270-deg one a bare linear |delta| would pick, yet the honesty
+    % contract below would still print "NEAREST SHEET" for the WRONG
+    % sheet):
       nps = [cat_.sheets.Np];
-     dist = ([cat_.sheets.tauDRO] - tauDep).^2 ...
+   depDelta = mod([cat_.sheets.tauDRO] - tauDep + 180, 360) - 180;
+     dist = depDelta.^2 ...
           + 0.5*(nps - arrKey).^2;               % petal mismatch weighted
    [~, ks] = min(dist);
        sh = cat_.sheets(ks);
-    if warnFlag && (abs(sh.tauDRO - tauDep) > 1e-9 || sh.Np ~= arrKey)
+    if warnFlag && (abs(mod(sh.tauDRO - tauDep + 180, 360) - 180) > 1e-9 || sh.Np ~= arrKey)
         fprintf(['WARNING (costate_catalog_pick): no sheet at orientation %.3f deg / %d petals;\n', ...
                  '  you are getting the NEAREST SHEET: orientation %.2f deg, Np = %d.\n'], ...
             tauDep, arrKey, sh.tauDRO, sh.Np);

@@ -20,7 +20,12 @@
 #
 # rungs (optional, 4th arg): MATLAB vector expression forwarded as
 # run_gto_catalog's rungsIn override. Omitted/empty -> run_gto_catalog's own
-# default (full 9-rung ladder) -- byte-identical prior behavior.
+# default, which is the shipped deliverable-7 v1 fleet's 5-rung ladder
+# [15 12 10 7 5] (RE-BASED 2026-08-29 review fix -- this now matches every
+# on-disk sheet's Q.rungs; the front door's own rung-mismatch guard throws
+# otherwise). The full 9-rung ladder [15 12 10 7 5 3 2 1.5 1] still exists
+# but must be requested explicitly via this 4th arg, and only against a
+# sheet that itself carries all 9 rungs.
 
 set -u
 SHEETSEL=${1:-1:16}

@@ -250,14 +250,16 @@ Grouped by the goals as stated, each with the concrete next action.
 | **do** | (1) extend the four catalogs to 0.5 N using the existing `extend_thrust_ladder`/`densify_ladder` machinery; (2) pilot a single cell at 0.1 N and at 25 mN to find where `ms_bvp` stops closing — that boundary is the real deliverable, and it is currently unknown |
 | **risk** | low thrust ⇒ many revolutions ⇒ the regime where GTO→tulip indirect already stalls. Expect a wall; locating it is the point |
 
-### B. A GTO → tulip costate library
+### B. A GTO → tulip costate library — BUILT 2026-08-29
 
 | | |
 |---|---|
-| **now** | certified *direct* min-fuel; indirect built but uncertified; **no catalog** |
-| **want** | the same (phasing × thrust) catalog product for the GTO departure |
-| **do** | the blocker is not the catalog machinery — it is that the indirect leg does not close at 25 mN / ~40 rev. Sequence: (1) get `ms_bvp` (multiple shooting, K≫1) onto the GTO→tulip min-time problem, since single shooting is known to fail there; (2) only then wrap it in `build_costate_catalog_family` |
-| **note** | this is the one case where the catalog pipeline's *easy* assumption (few revolutions) breaks. It may need the Sundman independent-variable change the direct engine already uses |
+| **now** | **catalog SHIPPED at the Darin-standard propulsion regime** (150 kg / 1710 s, few-rev): `GTO_tulip/catalog/results/costate_catalog_gto_tulip.mat`, 16 sheets (4 orientations × 4 Np), **2,625 entries, 840/1,152 phase pairs (73%)**, rungs `[15 12 10 7 5]` N, schema v2 valid, conjugate census **2,625/0/0** (stronger than DPO's 3,931/1/0). Coverage by orientation: 240/207/156/237 of 288 (83/72/54/82%) — a real π-dip at orientDeg=180° (apogee toward the Moon), traced to a genuine cold-basin difficulty, not a mesh artifact. |
+| **how it got unblocked** | the sequence this row used to prescribe (§6 step 6) ran as planned: `ms_bvp` closed on the GTO→tulip min-time problem at K=60 (2026-08-25, Stage A), agreeing exactly with the certified direct anchor (t_f = 6.290694 ND); the catalog fleet (Stage B, this row) then wrapped the **standard 1–15 N regime first** (adjudicated 2026-08-25), not the 25 mN flagship — the flagship-regime catalog is still open, see below. |
+| **the closure wall** | the ladder was attempted down to 1 N; **3–1 N produced zero entries** by both the warm (thrLock, tf0=0.30) and cold-mop-up recipes across the full fleet — a measured wall (every cell's attempt counter shows it was tried), not a budget artifact. Deliverable-7 v1 ships the 5-rung `[15 12 10 7 5]` fleet; the 3–1 N deep-rung leg is split off as **the open item** below. |
+| **the 25 mN flagship regime** | still **no catalog** — this campaign deliberately stayed at the few-rev standard-thrust regime the pipeline is proven at (spec adjudication 2026-08-26); the flagship's ~40-rev/25 mN regime carries its own binding rule: **many-rev entries must ship full ms junction states, not bare z8** (measured on this same campaign's min-time anchor — two independently-converged bare-z8 seeds agreed to only ~1e-4 ND in t_f / ~100 km in arrival before a head-to-head flight proved they were one extremal, not two; `OPTIMALITY_CERTIFICATION.md` §6, 2026-08-26 two-root adjudication). A future mN extension of this catalog must apply that rule from the start. |
+| **do next (open item)** | the **deep-rung investigation** (3–1 N closure wall) — root-cause it before attempting any deep-rung extension of this or any catalog; densify-style grinding at deep rungs already showed no per-attempt wall-time cap in this campaign (13 h churn, 8.3 MB log — needs a `wallSec`/attempt cap first) |
+| **product + record** | catalog README `GTO_tulip/catalog/README.md`; full build/pilot/diagnostic/fleet/audit/conjugate-sweep record in `.superpowers/sdd/2026-08-26-gto-tulip-catalog/` (progress.md + task 1–8 reports) |
 
 ### C. Both direct and indirect everywhere
 
@@ -342,10 +344,14 @@ Ordered by (value delivered) ÷ (work required), not by ambition:
    reference** (the 2026-07-13 module root was 47 s off — shallower root).
    Direct↔indirect agreement is now closed on the flagship min-time anchor.
    Stage B (the GTO→tulip catalog, standard 150 kg / 1–15 N first per
-   adjudication 2026-08-25) is unblocked; needs its own design (GTO departure
-   is not a periodic orbit — the phase axis needs defining) plus dual capture
-   in `gen_tulip_mintime` for harvest seeds.
-7. **The switching-time Hessian.** The largest piece, and the only path to a
+   adjudication 2026-08-25) — **DONE 2026-08-29**: 2,625 entries / 16 sheets /
+   73% pair coverage / conjugate 2,625/0/0, shipped at rungs `[15 12 10 7 5]`
+   N (see §5.B). Dual capture in `gen_tulip_mintime` for harvest seeds is
+   still open only for a future flagship-regime (25 mN) extension of this
+   catalog, not for the shipped v1.
+7. **The GTO deep-rung investigation** (3–1 N closure wall, split off from
+   Stage B — see §5.B) — root-cause before any deep-rung catalog extension.
+8. **The switching-time Hessian.** The largest piece, and the only path to a
    strictness claim worth putting in a paper.
 
 ---

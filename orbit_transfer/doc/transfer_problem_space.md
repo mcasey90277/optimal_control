@@ -72,7 +72,7 @@ For each transfer problem: **2 methods × 3 flavors = 6 cells.**
 
 | problem | direct | indirect | status |
 |---|---|---|---|
-| GTO → tulip | ✅ all three | partial (min-time; min-fuel stalled at IFS) | most complete campaign; **no costate catalog** (the 25 mN / ~40-rev regime is beyond where `ms_bvp` has been shown to close) |
+| GTO → tulip | ✅ all three | partial (min-time; min-fuel stalled at IFS) | most complete campaign at the 25 mN / ~40-rev flagship regime (no costate catalog there yet). **Separate min-time catalog SHIPPED-pending-review** at the Darin-standard 150 kg / 1–15 N few-rev regime (`GTO_tulip/catalog/`, 2026-08-29): 2,625 entries, 16 sheets, 840/1,152 pairs (73%), conjugate 2,625/0/0 — first catalog on a non-periodic (`'gto'` pseudo-family) departure orbit; 3–1 N deep-rung leg is a measured closure wall, split off open |
 | GTO → ELFO | ✅ min-fuel front + min-time anchor | not started | |
 | elliptic → GEO (2-body) | ✅ certified ladder | external cross-check only (MfMax v0+v1 built & validated); our own MATLAB indirect not built | |
 | elliptic → GEO (CR3BP) | ✅ certified ladder | not started | |

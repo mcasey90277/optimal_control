@@ -39,6 +39,7 @@ objective):
 | `indirect/ifs/` | IFS — Indirect Finishing Solve: direct-seeded indirect certification machinery. `IFS_data/` holds its gitignored caches. |
 | `indirect/ztl/` | Zhang-thrust-ladder indirect probes (P0 findings recorded in its docs). |
 | `indirect/min_time/` | PMP min-time root (always-burn shooting; seeds retargeting for tulip and ELFO). |
+| `catalog/` | **Costate-catalog product** (Stage B, 2026-08-29): min-time PMP costates at the Darin-standard propulsion regime (150 kg / 1710 s, few-rev), NOT the 25 mN/~40-rev direct campaign above — a separate, non-periodic-departure (`'gto'` pseudo-family) member of the `costate_common` catalog line alongside DRO/HALO/DPO/L1↔L2-halo → tulip. 16 sheets (4 GTO orientations × 4 Np), 2,625 entries, 73% pair coverage, rungs [15 12 10 7 5] N, conjugate 2,625/0/0. Two drivers: `gto_entry` (single cell), `run_gto_catalog` (swath/regen). Start at `catalog/README.md`. |
 | `process/` | Campaign narratives + plans (see Key documents below). |
 | `doc/` | Technical notes, figures, briefing, and `doc/reviews/` (external code-review records). |
 | `attic/` | Superseded code: fmincon-era min-time/min-fuel NLPs, Sundman prototypes, old continuation experiments. Do not use; see `attic/README.md`. The fmincon min-time formulation notes (density-matched mesh, throttle-on-bound gotcha, mesh-refinement table) are preserved in `attic/README_legacy_fmincon_era.md`. |

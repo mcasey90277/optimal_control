@@ -34,14 +34,32 @@ exists.
   catalog schema, a fixed-tf conjugate test, then energy→fuel homotopy on
   the same seeds (the min-fuel catalog route).
 
-## GTO→tulip costate catalog (Stage B — next up)
+## GTO→tulip costate catalog (Stage B — BUILT 2026-08-29)
 
-- [ ] **Stage B design**: the GTO departure-phase axis (GTO is not a periodic
-  rotating-frame orbit — define the phase coordinate), catalog propulsion =
-  Darin standard 150 kg / 1–15 N first (adjudicated 2026-08-25), walk toward
-  mN later. Stage A (shared-engine min-time solve, 25 mN) DONE 2026-08-25.
+- [x] **Stage B catalog — SHIPPED 2026-08-29**: `GTO_tulip/catalog/`,
+  16 sheets (4 GTO orientations {0,90,180,270}° × 4 Np {5,7,9,12}), 12×6
+  phasing grid, rungs `[15 12 10 7 5]` N at Darin-standard 150 kg / 1710 s.
+  **2,625 entries, 840/1,152 pairs (73%), conjugate 2,625/0/0.** Orientation
+  coverage 240/207/156/237 of 288 — a real π-dip at 180° (apogee toward the
+  Moon), traced (Diagnostic A) to a cold-start defect, not a mesh problem.
+  Two drivers shipped: `gto_entry` (single cell) + `run_gto_catalog`
+  (swath/regen); dedicated zero-safe `costate_catalog_pick.m` (the generic
+  picker's log-distance metric breaks at orientDeg=0). README:
+  `GTO_tulip/catalog/README.md`. Stage A (shared-engine min-time solve,
+  25 mN) DONE 2026-08-25.
+- [ ] **Deep-rung investigation (OPEN, split off 2026-08-27)**: the 3–1 N
+  legs of the standard ladder produced **zero entries** on this fleet by
+  both the warm and cold-mop-up recipes — a measured closure wall, not an
+  attempt-budget artifact. Root-cause before attempting any deep-rung
+  extension; `densify_ladder`-style grinding at deep rungs needs a
+  `wallSec`/attempt cap first (measured: 13 h churn, 8.3 MB log, no wall).
 - [ ] Add dual capture (`lamDef`) to `gen_tulip_mintime` so harvest seeding
-  works (found missing 2026-08-25).
+  works (found missing 2026-08-25) — now scoped to a future **flagship
+  (25 mN) regime** extension of this catalog only; the shipped v1 (1–15 N,
+  few-rev) does not need it. **Binding rule for that future extension**
+  (spec, verbatim): many-rev entries must ship full ms junction states, not
+  bare z8 — bare z8 pins t_f only to ~1e-4 ND / arrival to ~100 km at ~40
+  revs (measured on this campaign's own flagship two-root adjudication).
 - [x] Library moves `seed_from_z8` + `ms_tfmin` → `costate_common` — DONE
   2026-08-26, golden_cells 20/20, seed bit-identical.
 - [x] **Two-root question ADJUDICATED 2026-08-26 (same day): ONE extremal.**

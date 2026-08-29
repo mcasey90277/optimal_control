@@ -1,6 +1,6 @@
 # Orbit-transfer library catalog — generated function reference
 
-Generated 2026-08-27 by `gen_library_catalog.py`.
+Generated 2026-08-29 by `gen_library_catalog.py`.
 **Do not edit by hand** — regenerate with:
 ```sh
 python3 orbit_transfer/doc/gen_library_catalog.py

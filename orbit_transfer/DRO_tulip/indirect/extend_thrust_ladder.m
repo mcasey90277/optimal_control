@@ -20,12 +20,30 @@ function P = extend_thrust_ladder(ladderMat, newRungs, opts)
 % first.
 %
 % INPUTS:
-%   ladderMat - thrust_ladder_12x12.mat to extend (modified in place)
+%   ladderMat - engine-native ladder/sheet .mat to extend, modified in
+%               place: the DRO fine sheet (thrust_ladder_12x12.mat) or any
+%               catalog sheet from thrust_ladder_library (any family --
+%               endpoints rebuild from the sheet's own meta recipe via
+%               ladder_endpoints)
 %   newRungs  - new thrust rungs, N, in DESCENDING order, all below the
 %               existing minimum, e.g. [0.9 0.8 0.7 0.6 0.5]
 %   opts      - (optional) struct:
 %                 .K        multiple-shooting segments        [24]
 %                 .wallSec  ms_tfmin budget per attempt, s    [120]
+%                 .attemptSec  cumulative budget per (cell, rung), s:
+%                           checked before each flight-time guess and
+%                           before the tfMin acceptance call, so a
+%                           grinding cell cannot stall the fleet (the
+%                           2026-08-31 smoke test measured a >30 min
+%                           single-cell grind at 0.45 N without it) [600]
+%                 .fromRungMax  only continue cells whose LOWEST converged
+%                           rung is <= this thrust (N). Default: the
+%                           original ladder's floor, so only full-depth
+%                           cells are extended; cells stalled higher are
+%                           densification work, and the continuation jump
+%                           from a high rung measurably fails. inf =
+%                           continue from anywhere (the old behavior)
+%                           [min existing rung]
 %                 .gateKm   flown-arrival gate, km            [100]
 %                 .tfExp    t_f ~ T^-tfExp scaling for the
 %                           flight-time guess                 [0.56]
@@ -52,7 +70,9 @@ gateKm   = d('gateKm', 100);
 % poor guess. Try several and keep the fastest solution that converges --
 % this is a minimum-time problem, so smaller t_f is the better answer.
 tfExpList = d('tfExpList', [0.56 1.0 1.7 2.4]);
+attemptSec = d('attemptSec', 600);
 maxAtt   = d('maxAtt', 2);
+% fromRungMax needs Q loaded -- resolved after the load below.
 maxCells = d('maxCells', inf);
 batchSec = d('batchSec', inf);
 logFile  = d('logFile', '');
@@ -75,6 +95,9 @@ else
     assert(all(newRungs < min(Q.rungs)), ...
         'new rungs must all lie below the existing minimum (%.3f N)', min(Q.rungs));
 end
+% Only continue cells converged down to this rung (default: the original
+% ladder's floor -- see the todo-list comment below):
+fromRungMax = d('fromRungMax', min(Q.rungs(1:nR0)));
 if ~alreadyExtended                         % first extension: grow arrays
     bak = strrep(ladderMat, '.mat', sprintf('_pre_ext.mat'));
     if ~isfile(bak), copyfile(ladderMat, bak); end
@@ -94,18 +117,26 @@ g0  = 9.80665*tStar^2/(1000*lStar);
 cnd = (ob.ispS/tStar)*g0;
 ndT = @(TN) (TN/ob.m0kg)*tStar^2/(lStar*1000);
 
-[~, rvD0] = pumpkynPie.cr3bp.getDRO(ob.tauDRO);
-rvD0 = pumpkyn.cr3bp.cont_np(rvD0, ob.tauDRO, muStar, 1e-12);
-[tD, rvD] = pumpkyn.cr3bp.prop(ob.tauDRO, rvD0, muStar);
-[~, rvT0] = pumpkyn.cr3bp.getTulip(ob.tauTulip, ob.NpTulip, ob.pmTulip);
-rvT0 = pumpkyn.cr3bp.cont_np(rvT0, ob.tauTulip, muStar, 1e-12);
-[tT, rvT] = pumpkyn.cr3bp.prop(ob.tauTulip, rvT0, muStar);
+% Family-agnostic endpoints (2026-08-31, 0.5 N extension campaign): rebuilt
+% from the sheet's OWN meta recipe via ladder_endpoints -- sheets carrying
+% depFamily/arrFamily fields (halo/dpo/halo_halo/gto) route through
+% get_family_orbit; legacy sheets (the DRO fine sheet, the DRO catalog)
+% reproduce the original hardcoded construction bitwise
+% (tests/test_ladder_endpoints.m).
+[tD, rvD, tT, rvT] = ladder_endpoints(ob);
 
-% cells that have a converged rung to continue from, and no extension yet
+% cells that have a converged rung to continue from, and no extension yet.
+% By default only cells converged all the way down to fromRungMax (the
+% existing ladder's floor) are continued: a cell whose ladder stalled at
+% e.g. 1.5 N would face a 1.5 -> 0.45 continuation jump that measurably
+% fails every guess (2026-08-31 smoke) -- such cells are densification
+% work, not extension work. Pass opts.fromRungMax = inf for the old
+% continue-from-anywhere behavior.
 todo = [];
 for iD = 1:nD
     for iA = 1:nA
-        hasOld = any(Q.OK(iD,iA,1:nR0));
+        kLow = find(Q.OK(iD,iA,1:nR0), 1, 'last');
+        hasOld = ~isempty(kLow) && Q.rungs(kLow) <= fromRungMax + 1e-12;
         hasNew = any(Q.OK(iD,iA,nR0+1:nR));
         if hasOld && ~hasNew && Q.EXT(iD,iA) < maxAtt
             todo(end+1,:) = [iD iA]; %#ok<AGROW>
@@ -141,10 +172,29 @@ for kc = 1:min(size(todo,1), maxCells)
             % flight-time guess re-maps it onto a differently stretched arc
             [tj, yj] = pumpkyn.cr3bp.tfMinProp(zPrev(8), ...
                 [rv0(1:6)'; 1; zPrev(1:7)], ndT(Tprev), cnd, muStar);
+            lg('    prev-rung propagation (%.1f N, tf=%.4f): %.0fs', ...
+               Tprev, zPrev(8), toc(t0));
             [tu, iu] = unique(tj);
             sGrid = linspace(0, 1, K+1);
             for tfExp = tfExpList
+                % cumulative per-(cell,rung) budget -- a grinding cell must
+                % not stall the fleet (measured 2026-08-31: >30 min on one
+                % 0.45 N cell without this):
+                if toc(t0) > attemptSec
+                    lg('    [attemptSec budget %.0fs reached -- rung abandoned]', ...
+                       attemptSec);
+                    break
+                end
                 tfGuess = zPrev(8) * (Tprev/TN)^tfExp;
+                % mass-depletion margin: the all-burn mass m = 1 - T t/c
+                % hits zero at t = c/T; a guess near it lets fsolve wander
+                % into the T/m blow-up where one integration grinds
+                % unboundedly (the 2026-08-31 guess-4 grind). Skip it:
+                if tfGuess > 0.6*cnd/ndT(TN)
+                    lg('    guess tfExp=%.2f skipped: tf0=%.3f > 0.6 x depletion tf %.3f', ...
+                       tfExp, tfGuess, cnd/ndT(TN));
+                    continue
+                end
                 Yg = interp1(tu/tu(end), yj(iu,1:14), sGrid, 'pchip')';
                 % mass: DERIVED from the all-burn identity m(t) = 1 - T t/c
                 % rather than rescaled from the old trajectory. A derivation
@@ -152,14 +202,32 @@ for kc = 1:min(size(todo,1), maxCells)
                 % previous rescale-based construction did (review finding).
                 Yg(7,:) = 1 - ndT(TN)*(sGrid*tfGuess)/cnd;
                 seed = struct('tf', tfGuess, 'tGrid', sGrid*tfGuess, 'Y', Yg);
+                tG = tic;
                 [zt, it] = ms_tfmin(rv0(1:6), rvf(1:6), seed, ndT(TN), cnd, ...
                                     muStar, struct('wallSec', wallSec));
+                % NEVER fly an unconverged ms result: its tf can be garbage
+                % (tens of ND), and the verification propagation below has
+                % no wall cap -- flying it is the measured >70 min
+                % single-cell grind of 2026-08-31, not the ms solve itself:
+                if ~it.converged
+                    lg('    guess tfExp=%.2f (tf0=%.4f): ms conv=0 normR=%.1e [not flown] (%.0fs)', ...
+                       tfExp, tfGuess, it.normR, toc(tG));
+                    continue
+                end
                 [~, rvFly] = pumpkyn.cr3bp.tfMinProp(zt(8), ...
                     [rv0(1:6)'; 1; zt(1:7)], ndT(TN), cnd, muStar);
                 mk = norm(rvFly(end,1:3) - rvf(1:3))*lStar;
-                if ~(it.converged && mk < gateKm), continue, end
+                lg('    guess tfExp=%.2f (tf0=%.4f): ms conv=1 normR=%.1e fly=%.1fkm (%.0fs)', ...
+                   tfExp, tfGuess, it.normR, mk, toc(tG));
+                if ~(mk < gateKm), continue, end
+                if toc(t0) > attemptSec
+                    lg('    [attemptSec budget reached before acceptance -- rung abandoned]');
+                    break
+                end
+                tA = tic;
                 evalc('zA = pumpkyn.cr3bp.tfMin(rv0(1:6), rvf(1:6), zt, ndT(TN), cnd, muStar);');
                 ad = norm(zA - zt);
+                lg('    acceptance tfMin: |dz|=%.1e (%.0fs)', ad, toc(tA));
                 if ad >= 1e-6, continue, end
                 if ~okCell || zt(8) < z(8)          % keep the FASTEST valid
                     okCell = true;  z = zt;  info = it;  missKm = mk;  accDz = ad;

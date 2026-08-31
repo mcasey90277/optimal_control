@@ -20,6 +20,10 @@ propulsion standard as its siblings (150 kg / 1710 s) walked down to 5 N, not
 |---|---|
 | `results/costate_catalog_gto_tulip.mat` | The catalog: 16 sheets, 2,625 entries (schema v2) |
 | `costate_catalog_pick.m` | **This catalog's own** five-coordinate lookup (NOT the shared/generic picker — see Schema notes) |
+| `costate_lib_describe.m` | **This catalog's own** describe tool (orientDeg-aware labels + true-Kepler-period rows; the shared copy mislabels this catalog — see Schema notes) |
+| `costate_catalog_gto_example.m` | Worked example: pick → derive → rebuild orbits → fly z8 (0.004 km miss) → tfMin acceptance (\|Δz\| ~ 1e-11) → plots |
+| `costate_catalog_extremes.m` | **This catalog's own** extremes finder (min/max ΔV or flight time, filterable; true-Kepler phase-day conversion, `orient=` labels) |
+| `costate_catalog_extremes_movies.m` | Side-by-side extremes movie (pumpkynPie lit scene, shared clock, 1280×720; carries an ephemeris guard — see Gotchas) |
 | `build_gto_catalog.m` | Packager: sheet .mats → the single schema-v2 catalog variable |
 | `run_gto_catalog.m` | THE SWATH DRIVER — solves/resumes/regenerates any subset of the 16 sheets |
 | `gto_entry.m` | THE SINGLE-ENTRY DRIVER — one (orientation, Np, phase, phase, thrust) cell through the same engine, with `nargin==0` self-demo |
@@ -137,9 +141,15 @@ propagation is needed to reconstruct it (`get_family_orbit('gto', p)`, the
 - **Catalog-wide ranges** (all 2,625 entries, every sheet/rung, via the
   same three derive-registry formulas): t_f = 0.2343 – 0.7155 ND =
   1.04 – 3.17 days; ΔV = 8.11 – 26.48 km/s; m_f = 30.9 – 92.5 kg (mass
-  fraction 0.2061 – 0.6164, m0 = 150 kg). Fastest/lightest-ΔV entries sit
-  at the 15 N rung, slowest/heaviest-ΔV at the 5 N rung, as expected for a
-  thrust-limited all-burn min-time family.
+  fraction 0.2061 – 0.6164, m0 = 150 kg). The *fastest* entry (1.039 d)
+  sits at the 15 N rung and the *slowest* (3.172 d) at 5 N, but the ΔV
+  ordering is the reverse: the *lightest-ΔV* entry (8.11 km/s) is a 5 N
+  entry and the *heaviest* (26.48 km/s) a 15 N one — for an all-burn
+  min-time family, t_f shrinks slower than 1/T as thrust rises, so the
+  burned impulse T·t_f (hence ΔV) *grows* with thrust. (Measured by
+  `costate_catalog_extremes` over all 2,625 entries, 2026-08-31; an
+  earlier revision of this paragraph attributed both minima to 15 N —
+  wrong for ΔV.)
 
 ### Coverage by orientation (the headline physics finding)
 
@@ -161,7 +171,7 @@ remains after the warm recipe is the genuine cold-basin difficulty of that
 geometry, not a leftover solver defect. Best/worst sheets: `orientDeg=0,
 Np=7` (89%, 173 entries) vs `orientDeg=180, Np=12` (53%, 95 entries).
 
-### Per-sheet coverage (from `costate_lib_describe`)
+### Per-sheet coverage (from this folder's `costate_lib_describe`)
 
 ```
 sheet                pairs solved   entries   full ladders
@@ -182,9 +192,10 @@ sheet                pairs solved   entries   full ladders
   orient=270 Np= 9     63/72 ( 88%)     218     15
   orient=270 Np=12     53/72 ( 74%)     186     10
 ```
-(Reproduced from `costate_lib_describe`'s coverage table, relabeled —
-see the describe-tool caveat below for why the raw tool output should not
-be quoted as-is for this catalog.)
+(Generated verbatim by **this folder's own** `costate_lib_describe.m`
+(2026-08-31), which detects `dep_family = 'gto'` and labels the sheet axis
+in degrees with the true Kepler period — the *shared* describe tool in
+`DRO_tulip/indirect` still mislabels this catalog; see the caveat below.)
 
 ## Conjugate census
 
@@ -213,16 +224,17 @@ the full sweep record.
   orientations* — keying on it would make 3 of 4 sheets unreachable. The
   true Kepler period lives in `dep_params.sma_km`/`.ecc` (reconstruct via
   `get_family_orbit('gto', dep_params)`), never in `tauDRO`.
-- **The shared `costate_lib_describe` tool's labels are WRONG for this
-  catalog.** It prints `"DRO periods (tau = period): ND [0.00 90.00 180.00
-  270.00]"` and a bogus `"days [0.00 398.94 797.88 1196.82]"` row (it
-  multiplies the degree-valued key by `tStar_s/86400` as if it were an ND
-  time). **Ignore both rows entirely** — the sheet labels in its coverage
-  table (`"tau=90.00 Np=7"`, etc.) are `orientDeg` values mislabeled as
-  `tau`, but the coverage/entries/full-ladder *numbers* themselves are
-  correct and meaningful. This is a known, disclosed limitation of the
-  shared tool (out of scope to fix generically here), not a defect in the
-  catalog.
+- **Use THIS folder's `costate_lib_describe.m`; the shared copy's labels
+  are WRONG for this catalog.** The shared tool (`DRO_tulip/indirect`)
+  prints `"DRO periods (tau = period): ND [0.00 90.00 180.00 270.00]"` and
+  a bogus `"days [0.00 398.94 797.88 1196.82]"` row (it multiplies the
+  degree-valued key by `tStar_s/86400` as if it were an ND time); its
+  coverage *numbers* are correct but every sheet label misreads `orientDeg`
+  as `tau`. This folder's own copy (added 2026-08-31) detects
+  `dep_family = 'gto'` and prints the orientation axis in degrees, the one
+  physical GTO's sma/ecc and true Kepler period (0.4402 d, from
+  `dep_params.sma_km`), and `orient=… Np=…` sheet labels; period-keyed
+  catalogs fall through to the shared behavior unchanged.
 - **Use THIS folder's `costate_catalog_pick.m`, not the shared/generic
   copy** vendored into the other deliverables. The generic picker's
   departure-axis distance metric is `(log(tauDRO) - log(tauDep))^2` —
@@ -298,11 +310,27 @@ across 3 orientations and 2 rung classes, all pass both hard gates.
 - **27% of phase pairs have no solution at any rung** (840/1,152) —
   consult `sheets(k).has_solution` (or the picker's warnings) before
   trusting a request; orientDeg=180 is the weak quadrant.
-- The generic/shared `costate_catalog_pick.m` and `costate_lib_describe.m`
-  vendored elsewhere in this repo will silently mis-serve this catalog at
-  `orientDeg = 0` and mislabel every coverage row — always use this
-  folder's own picker, and read the describe-tool caveat above before
-  quoting its printed labels.
+- The generic/shared `costate_catalog_pick.m`, `costate_lib_describe.m`
+  and `costate_catalog_extremes.m` vendored elsewhere in this repo will
+  silently mis-serve this catalog (wrong sheet at `orientDeg = 0`,
+  mislabeled coverage rows, wrong departure phase-days) — always use THIS
+  folder's own copies, which are orientDeg-aware.
+- **Endpoint reconstruction must use `'spline'` interpolation** (as
+  `audit_gto_entries` and `costate_catalog_gto_example` do). The min-time
+  flow is sensitive: a 0.03 km linear-interp error in the departure state
+  grows to ~500 km at arrival and pushes tfMin's `|Δz|` to ~7e-5; spline
+  endpoints reproduce the audit's <0.01 km miss and `|Δz|` ~ 1e-11. (The
+  `derive.orbit_reconstruction` text's bare `interp1` for the GTO omits
+  this — read it as spline.)
+- **Ephemeris guard for movies:** `pumpkynPie.plot.SatelliteAnimator`'s
+  `ShowEarth` chain auto-selects the Aerospace Toolbox's `planetEphemeris`
+  whenever it is on the path and errors if its data package
+  (`aeroDataPackage`) was never installed — while pumpkyn's own analytic
+  Earth–Moon fallback (used when the toolbox is absent) works fine.
+  `costate_catalog_extremes_movies.m` probes for this and temporarily
+  removes the aero folder from the path for the render (restored on exit).
+  Any *other* SatelliteAnimator movie on a toolbox-licensed,
+  data-pack-free machine will hit the same error.
 - `z8` is never interpolated between thrust rungs — only `tf` is (linear);
   you always get a converged vector at the nearest stored rung.
 - This is one physical GTO sampled at 4 orientations, not 4 different

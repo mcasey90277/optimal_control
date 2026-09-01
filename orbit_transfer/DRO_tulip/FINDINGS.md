@@ -850,3 +850,50 @@ free-time quotiented Jacobi test and does not apply verbatim (no flow
 column; the λ scaling invariance is broken by L = s²). No catalog schema
 axis for γ. No energy→fuel homotopy yet — that is the next step toward
 min-fuel entries and reuses these seeds directly (`GTO_tulip`'s ε walk).
+
+## 17. Deep-rung probe: the closure wall is a basin wall at 90 mN, not a sensitivity wall (2026-09-01)
+
+Single-cell continuation walk (`probe_deep_rungs.m`) from the fine sheet's
+fastest 0.5 N entry — cell (1,11), t_f = 3.18 d — down a 0.75-ratio rung
+schedule toward 25 mN, same engine and gates as the catalogs, hard-capped
+per call via `costate_common/run_capped`. The roadmap's "probe 0.1 N and
+25 mN on one cell" item (§5A / §6 step 4).
+
+**Result: six rungs closed, wall located between 0.09 and 0.067 N.**
+
+| T (N) | t_f (d) | swept revs | perilune passes | ms normR | tfMin accept |
+|---|---|---|---|---|---|
+| 0.375 | 4.05 | 0.44 | 0 | 2e-13 | dz = 0 |
+| 0.280 | 5.42 | 0.58 | 0 | 6e-14 | dz = 0 |
+| 0.210 | 7.26 | 0.79 | 0 | 2e-14 | dz = 0 |
+| 0.160 | 9.55 | 0.92 | 0 | 4e-13 | dz = 0 |
+| 0.120 | 11.57 | 1.26 | 1 | 8e-14 | dz = 0 |
+| 0.090 | 13.37 | 1.28 | 1 | 7e-14 | dz = 0 |
+| 0.067 | — | — | — | stalls 0.8–2.4 | — |
+| 0.050 | — | — | — | stalls 1.3–6.1 | — |
+
+Three findings:
+
+1. **The 0.1 N roadmap target CLOSES** (bracketed by clean 0.12 and 0.09 N
+   entries); the 25 mN target does NOT close by single-step continuation.
+2. **The wall is a BASIN wall, not a sensitivity wall.** Even at 90 mN the
+   transfer sweeps only ~1.3 revolutions (petal-to-petal geometry, no
+   spiral) — so pumpkyn tfMin single shooting accepted every closed rung at
+   |dz| = 0 exactly, the regime where the GTO flagship's ~40-rev
+   identifiability problem never appears. At 0.067 N every guess stalls at
+   normR ~ O(1) (not divergence, not conditioning) — the stretched
+   low-winding seed no longer matches a solution that presumably needs more
+   winding. This is the free-time cousin of the fixed-τf tulip
+   topology wall (ladder-prep P2, 2026-07): continuation cannot GROW
+   winding from a topologically short seed.
+3. **Junction states are banked** for all six closed rungs
+   (`indirect/results/probe_deep_rungs.mat`, `R.Y` = full K+1 ms junctions
+   per the identifiability rule) — ready seeds for any future deep-rung
+   campaign.
+
+**Follow-up route to 25 mN** (not attempted, recorded): a winding-aware
+continuation — seed the sub-67 mN regime from a HIGHER-winding family
+member (e.g. a longer-t_f branch at 0.09 N, or the multi-rev Lambert-style
+initializers), or walk t_f upward at fixed thrust before descending
+further. Finer thrust steps alone are unlikely to help across a topology
+boundary.

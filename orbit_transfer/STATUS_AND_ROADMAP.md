@@ -241,14 +241,15 @@ buy the Earth campaigns.
 
 Grouped by the goals as stated, each with the concrete next action.
 
-### A. More thrust levels
+### A. More thrust levels — EXTENDED TO 0.5 N + WALL LOCATED (2026-09-01)
 
 | | |
 |---|---|
-| **now** | catalogs 1–15 N; one fine sheet to 0.5 N; campaigns at 25 mN |
-| **want** | continuous coverage down to the mN regime |
-| **do** | (1) extend the four catalogs to 0.5 N using the existing `extend_thrust_ladder`/`densify_ladder` machinery; (2) pilot a single cell at 0.1 N and at 25 mN to find where `ms_bvp` stops closing — that boundary is the real deliverable, and it is currently unknown |
-| **risk** | low thrust ⇒ many revolutions ⇒ the regime where GTO→tulip indirect already stalls. Expect a wall; locating it is the point |
+| **now** | **all four catalogs at 0.5 N floors** (rungs `[15 … 1 0.75 0.5]`, 18,360 entries, conjugate-swept 18,249/61/50 with verdicts in the .mats, golden 20/20): 1,348 eligible cells → 97.5% closed at 0.75 N, 85.3% at 0.5 N (HALO_HALO best at 100%/93%). Fleet: 4.3 h, median 1.2 s/cell-rung, one hard-cap worker kill in 2,662 solves. |
+| **the wall** | **located at 0.09 → 0.067 N** by the single-cell probe (`DRO_tulip/indirect/probe_deep_rungs`, FINDINGS §17): six rungs 0.375→0.09 N all closed with tfMin acceptance \|dz\| = 0 exactly; 0.067 and 0.05 N stall at normR ~ O(1). **The 0.1 N target CLOSES.** |
+| **the surprise** | the wall is a BASIN/topology wall, not the predicted many-rev sensitivity wall — the transfer sweeps only ~1.3 revs even at 90 mN (petal-to-petal, no spiral), so single shooting never degrades; the low-winding continuation seed simply stops matching a deeper (higher-winding) solution. The free-time cousin of the fixed-τf tulip topology wall. |
+| **second-order at depth** | 60 of the 61 sweep refutations sit on the two new rungs — ~2.4% of sub-1 N entries carry interior conjugate points. Below 1 N, consult `conj_pass`, not just `has_solution`. |
+| **do next** | 25 mN needs a winding-aware continuation (seed from a higher-winding family member, or walk t_f up at fixed thrust before descending) — recorded in FINDINGS §17, not attempted. |
 
 ### B. A GTO → tulip costate library — BUILT 2026-08-29
 
@@ -335,8 +336,12 @@ Ordered by (value delivered) ÷ (work required), not by ambition:
 3. ~~**Update the two stale records** found here (§4.4)~~ — **DONE
    2026-08-23** (register conjugate row + log entry; `transfer_problem_space`
    tables refreshed; `campaign_status.tex` marked superseded).
-4. **Extend the catalogs to 0.5 N, then probe 0.1 N and 25 mN on one cell.**
-   Locate the closure wall.
+4. ~~**Extend the catalogs to 0.5 N, then probe 0.1 N and 25 mN on one
+   cell.** Locate the closure wall.~~ — **DONE 2026-09-01**: 2,464 new
+   entries (97.5%/85.3% closure), full conjugate re-sweep with verdicts,
+   wall located at 0.09→0.067 N (a basin wall, not sensitivity — §5A).
+   Residue: 25 mN needs the winding-aware route; deliverable zips predate
+   the extension.
 5. **γ grid → γ axis → energy→fuel homotopy** on catalog seeds.
 6. ~~`ms_bvp` on GTO→tulip min-time~~ — **DONE 2026-08-25 (Stage A)**:
    shared engine closes at K=60 in 10.3 s, ‖R‖=2e-11, tfMin accepts, conjugate

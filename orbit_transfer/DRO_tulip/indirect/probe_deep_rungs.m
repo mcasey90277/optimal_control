@@ -152,11 +152,13 @@ for kr = 1:nR
         end
     end
     if ~isempty(best)
-        % revolutions: accumulated Moon-centered polar angle of the flight
+        % revolutions: TOTAL SWEPT Moon-centered angle of the flight (the
+        % end-minus-start form under-reads petal geometries -- measured
+        % 0.2 "revs" on a 1.3-rev transfer, fixed 2026-09-01):
         [~, yb] = pumpkyn.cr3bp.tfMinProp(best.z(8), ...
             [rv0(1:6)'; 1; best.z(1:7)], ndT(TN), cnd, muStar);
         ang = unwrap(atan2(yb(:,2), yb(:,1) - (1 - muStar)));
-        R.revs(kr) = abs(ang(end) - ang(1))/(2*pi);
+        R.revs(kr) = sum(abs(diff(ang)))/(2*pi);
         % tfMin acceptance under the hard cap (recorded, not required):
         [okA, zA] = run_capped(pool, ...
             @(a,b,z,T,c,mu) pumpkyn.cr3bp.tfMin(a,b,z,T,c,mu), 1, 180, ...

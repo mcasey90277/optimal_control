@@ -16,7 +16,32 @@ exists.
   entries / 90%; B: 2,096 / 96%; directions measurably asymmetric). Still
   open from it: the lone 10 N tfMin-acceptance-NaN watch item, and
   densification of the remaining pairs.
-- [ ] **Sub-0.5 N rungs** deferred by Darin "until customers need it."
+- [x] **Thrust-depth extension to 0.5 N — DONE 2026-09-01** (roadmap §6
+  step 4): all four catalogs extended onto rungs `[0.75 0.5]` N by the
+  family-agnostic `extend_thrust_ladder` (warm continuation from each
+  full-depth cell). 1,348 eligible → 1,314 at 0.75 N (97.5%) → 1,150 at
+  0.5 N (85.3%); 2,464 new entries; median 1.2 s/cell-rung, one hard-cap
+  worker kill in 2,662 solves. Catalogs repackaged (18,360 entries,
+  schema v2 clean), FULL conjugate re-sweep 18,249/61/50 with verdicts
+  written back, golden cells 20/20. **Finding: 60 of the 61 refutations
+  sit on the two new rungs** (2.4% of deep entries develop interior
+  conjugate points as t_f grows — consult `conj_pass`, not just
+  `has_solution`, below 1 N); the 61st is the known DPO 15 N refutation,
+  reproduced. Deliverable zips now predate both the extension and the
+  verdicts — re-ship when Darin wants them.
+- [x] **Deep probe (0.1 N + 25 mN, one cell) — DONE 2026-09-01** (roadmap
+  §6 step 4, second half): `DRO_tulip/indirect/probe_deep_rungs` walked
+  the fine sheet's fastest 0.5 N cell down to **0.09 N** (six rungs, all
+  tfMin-accepted at |dz| = 0) and located the closure wall at
+  **0.09 → 0.067 N**. It is a BASIN/topology wall, not sensitivity: only
+  ~1.3 swept revs even at 90 mN, ms stalls at normR ~ O(1). 0.1 N target
+  CLOSES; 25 mN needs winding-aware continuation (recorded route).
+  Junction states banked for all closed rungs per the identifiability
+  rule. Full record: `DRO_tulip/FINDINGS.md` §17.
+- [ ] **Sub-0.5 N rungs** deferred by Darin "until customers need it" —
+  the probe (above) now bounds what is reachable: catalog-recipe
+  continuation closes to ~0.09 N on a well-behaved cell; 25 mN requires
+  the winding-aware route first.
 - [ ] Min-fuel catalogs: explicitly NOT yet (Darin, Aug 2026).
 - [ ] **When min-fuel work restarts anywhere in this repo, check MfMax first.**
   It solves this class already and is built + validated here (runbook:

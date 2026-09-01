@@ -36,6 +36,13 @@ function P = extend_thrust_ladder(ladderMat, newRungs, opts)
 %                           grinding cell cannot stall the fleet (the
 %                           2026-08-31 smoke test measured a >30 min
 %                           single-cell grind at 0.45 N without it) [600]
+%                 .hardCap  run each ms_tfmin guess and tfMin acceptance
+%                           on a parfeval worker with a hard wall-clock
+%                           cap (worker killed on timeout) -- the only
+%                           bound that reaches a single crawling
+%                           integration (near-primary iterate; measured
+%                           twice, >4 h each). [true if Parallel toolbox
+%                           licensed]
 %                 .fromRungMax  only continue cells whose LOWEST converged
 %                           rung is <= this thrust (N). Default: the
 %                           original ladder's floor, so only full-depth
@@ -71,6 +78,15 @@ gateKm   = d('gateKm', 100);
 % this is a minimum-time problem, so smaller t_f is the better answer.
 tfExpList = d('tfExpList', [0.56 1.0 1.7 2.4]);
 attemptSec = d('attemptSec', 600);
+% HARD per-call timeout (2026-08-31, pilot grind #2): ms_bvp's iterate
+% guards bound tf and |p|, but a trust-region trial can still park a
+% junction near a primary, where ONE segment integration crawls for hours
+% inside every in-process fence (measured: cell 4 of the tau=2/Np=7 pilot,
+% >4 h at a legal iterate). The only airtight bound is external: run each
+% ms_tfmin guess and each tfMin acceptance on a parfeval worker and CANCEL
+% the worker at the deadline. Requires Parallel Computing Toolbox; falls
+% back to direct (unbounded) calls without it.
+hardCap  = d('hardCap', license('test', 'Distrib_Computing_Toolbox'));
 maxAtt   = d('maxAtt', 2);
 % fromRungMax needs Q loaded -- resolved after the load below.
 maxCells = d('maxCells', inf);
@@ -124,6 +140,14 @@ ndT = @(TN) (TN/ob.m0kg)*tStar^2/(lStar*1000);
 % reproduce the original hardcoded construction bitwise
 % (tests/test_ladder_endpoints.m).
 [tD, rvD, tT, rvT] = ladder_endpoints(ob);
+
+if hardCap
+    pool = gcp;                    % warm once; workers inherit client path
+    lg('EXTEND: hard per-call timeout ACTIVE (%d workers)', pool.NumWorkers);
+else
+    pool = [];
+    lg('EXTEND: no Parallel toolbox -- solver calls UNBOUNDED (grind risk)');
+end
 
 % cells that have a converged rung to continue from, and no extension yet.
 % By default only cells converged all the way down to fromRungMax (the
@@ -203,8 +227,19 @@ for kc = 1:min(size(todo,1), maxCells)
                 Yg(7,:) = 1 - ndT(TN)*(sGrid*tfGuess)/cnd;
                 seed = struct('tf', tfGuess, 'tGrid', sGrid*tfGuess, 'Y', Yg);
                 tG = tic;
-                [zt, it] = ms_tfmin(rv0(1:6), rvf(1:6), seed, ndT(TN), cnd, ...
-                                    muStar, struct('wallSec', wallSec));
+                if hardCap
+                    [okRun, zt, it] = run_capped(pool, @ms_tfmin, 2, ...
+                        wallSec + 60, rv0(1:6), rvf(1:6), seed, ndT(TN), ...
+                        cnd, muStar, struct('wallSec', wallSec));
+                    if ~okRun
+                        lg('    guess tfExp=%.2f (tf0=%.4f): HARD TIMEOUT -- worker killed (>%.0fs)', ...
+                           tfExp, tfGuess, wallSec + 60);
+                        continue
+                    end
+                else
+                    [zt, it] = ms_tfmin(rv0(1:6), rvf(1:6), seed, ndT(TN), ...
+                                        cnd, muStar, struct('wallSec', wallSec));
+                end
                 % NEVER fly an unconverged ms result: its tf can be garbage
                 % (tens of ND), and the verification propagation below has
                 % no wall cap -- flying it is the measured >70 min
@@ -225,7 +260,17 @@ for kc = 1:min(size(todo,1), maxCells)
                     break
                 end
                 tA = tic;
-                evalc('zA = pumpkyn.cr3bp.tfMin(rv0(1:6), rvf(1:6), zt, ndT(TN), cnd, muStar);');
+                if hardCap
+                    [okRun, zA] = run_capped(pool, ...
+                        @(a,b,z,T,c,mu) pumpkyn.cr3bp.tfMin(a,b,z,T,c,mu), ...
+                        1, 120, rv0(1:6), rvf(1:6), zt, ndT(TN), cnd, muStar);
+                    if ~okRun
+                        lg('    acceptance tfMin: HARD TIMEOUT -- worker killed (>120s)');
+                        continue
+                    end
+                else
+                    evalc('zA = pumpkyn.cr3bp.tfMin(rv0(1:6), rvf(1:6), zt, ndT(TN), cnd, muStar);');
+                end
                 ad = norm(zA - zt);
                 lg('    acceptance tfMin: |dz|=%.1e (%.0fs)', ad, toc(tA));
                 if ad >= 1e-6, continue, end
@@ -254,6 +299,9 @@ nNew = nnz(Q.OK(:,:,nR0+1:nR));
 lg('EXTEND DONE: %d new entries on rungs [%s] N, %.1f min', ...
    nNew, num2str(newRungs), toc(tAll)/60);
 end
+
+% run_capped now lives in costate_common (promoted 2026-09-01 on its
+% second consumer, probe_deep_rungs -- consolidation queue item 4).
 
 % ------------------------------------------------------------------------
 function v = fdef(s, f, v0)

@@ -33,6 +33,18 @@ exists.
   single-shooting acceptance gate. Next: a t_f-multiplier axis in the
   catalog schema, a fixed-tf conjugate test, then energy→fuel homotopy on
   the same seeds (the min-fuel catalog route).
+  - [ ] **PLQ-penalty experiment for the energy→fuel homotopy** (Mike,
+    2026-08-31 — do not forget): mlabTools `optim/` ships Rockafellar's
+    piecewise linear-quadratic penalty class (`plq_make`/`plq_penalty`:
+    Huber, quantile, Vapnik ε-insensitive, subgradients free from the QP
+    dual; already on every session's path via startup). Try PLQ shapes as
+    the smoothing family between the energy (L2) and fuel (L1) objectives —
+    e.g. Huber's quadratic-core/linear-tails as a *parametrized* L2→L1
+    bridge with κ as the continuation knob instead of the discrete ε
+    ladder, and `vapnik2`'s flat dead-zone + quadratic tails for
+    soft-constraint experiments. Compare against the hand-scheduled ε
+    ladder AND MfMax's arclength continuation (the standing MfMax-first
+    rule still applies).
 
 ## GTO→tulip costate catalog (Stage B — BUILT 2026-08-29)
 
@@ -91,6 +103,40 @@ exists.
 - [ ] Batched-driver template + monitor template into the library (the
   halo/DPO drivers differ only in names; monitors must watch process
   liveness, not just log errors).
+
+## Library consolidation queue (recorded 2026-08-31, Mike-approved)
+
+Promotion candidates under the reuse-twice rule, ordered by readiness.
+Discipline per `consolidation-discipline`: measure before extracting, each
+move carries an equivalence gate; refusals get documented too.
+
+1. [ ] **Catalog consumer-helper suite** — `costate_catalog_pick`,
+   `costate_lib_describe`, `costate_catalog_extremes`,
+   `costate_catalog_extremes_movies` each exist twice in-repo
+   (`DRO_tulip/indirect` master + `GTO_tulip/catalog` copy) plus vendored
+   deliverable copies. The GTO copies are strict supersets (orientDeg-aware
+   labels, zero-safe CIRCULAR picker metric — the period-keyed copies'
+   log-metric is latent-unsafe at key 0/wrap — plus the ephemeris guard in
+   the movies). Consolidate into `costate_common` with the GTO versions as
+   the base; DRO copies become delegates. **Do AFTER the 0.5 N extension
+   ships** (avoid churning the deliverable surface mid-campaign).
+2. [ ] **oclib move 3**: promote `oc.ms_bvp` + `oc.ms_conjugate_test` +
+   cart-pole PMP-BVP integration demo (already on the oclib roadmap above).
+3. [ ] **`ladder_endpoints` ↔ `densify_ladder`** — the family-aware
+   endpoint rebuild now exists as a function (`DRO_tulip/indirect/
+   ladder_endpoints.m`, extend path) AND as densify_ladder's older inline
+   block. Merge (reroute densify through the function) when densification
+   work restarts, with its own bitwise gate.
+4. [ ] **`run_capped`** (parfeval hard per-call timeout, born inside
+   `extend_thrust_ladder` 2026-08-31) — the only fence that bounds a
+   crawling integration (measured twice, >4 h each). Promote to
+   `costate_common` on its second consumer (densify at deep rungs, the
+   0.1 N / 25 mN probes, any grinding solver call).
+5. [ ] Batched-driver + monitor templates (the standing item above —
+   listed here so the queue is complete).
+6. [ ] **`gto_entry` → generic `costate_common/catalog_entry`** — promotion
+   path documented in `GTO_tulip/catalog/README.md`; waits for a second
+   campaign to want single-entry solves.
 
 - [ ] **HALO catalog driver path gap** (found by Stage B task 3, 2026-08-26):
   `run_halo_catalog`'s addpath set predates the oclib moves — a fresh run

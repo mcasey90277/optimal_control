@@ -897,3 +897,39 @@ member (e.g. a longer-t_f branch at 0.09 N, or the multi-rev Lambert-style
 initializers), or walk t_f upward at fixed thrust before descending
 further. Finer thrust steps alone are unlikely to help across a topology
 boundary.
+
+## 18. The energy->fuel race: eps ladder wins by knockout; Huber-in-throttle is structurally unsuited (2026-09-02)
+
+The pinned PLQ experiment (`run_minfuel_race`, cell (2,5) at gamma = 1.2,
+both arms from the same min-energy seed, fixed-tf ms_minfuel + pilot gates,
+pre-registered scoring).
+
+**Arm A — Bertrand-Epenoy eps ladder: 1 -> 0.0017 in 15 clean steps** (2-5
+Newton iterations, ~3 s each; bisection only below 0.002). m_f rose
+MONOTONICALLY 0.942108 -> 0.947046 with zero basin flips, Hdrift ~1e-12
+throughout, coast fraction growing 0.17 -> 0.33 as the bang structure
+emerged, and the acceptance gate took the deepest solution at |dz| = 0.
+m_f converged to six decimals by eps ~ 0.005: **the min-fuel answer is
+m_f = 0.94705** (vs 0.94211 min-energy — the fuel saving is 0.49% of m0
+at this cell, "free" for the same t_f).
+
+**Arm B — PLQ Huber kappa walk: could not leave kappa ~ 1.** kappa = 1
+reproduced the energy solution exactly (m_f 0.942108 — as it must: L =
+s^2/2 is a positive scaling of the energy objective), and then EVERY step
+below kappa ~ 0.91 failed — not by divergence but by a RESIDUAL FLOOR:
+normR stalls at 4e-10..1e-6, just above tolR = 1e-10, exactly the
+signature of the recorded structural defect (cr3bp_minfuel_pmp header):
+for kappa < 1 the Huber throttle law JUMPS from kappa to 1 wherever an arc
+crosses Q = 1, and the discontinuous field caps the achievable shooting
+residual; the floor RISES as kappa falls (jump size 1 - kappa). Deepest
+converged: kappa = 0.915. Loosening tolR would only postpone the wall.
+
+**Verdict: the eps ladder is the production continuation family.** The
+PLQ-in-throttle embedding is refuted with mechanism (switch-jump residual
+floor + no-coast property), not just outscored — a clean negative result
+for the experiment. PLQ penalties remain interesting for OTHER embeddings
+(soft path constraints, direct-transcription objectives) where the control
+box does not interact with an affine tail.
+
+Race data (all steps, junction states, both arms):
+`direct/results/minfuel_race.mat`.

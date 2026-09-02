@@ -79,8 +79,8 @@ real axis, not a symmetry.
 
 | case | objective | status |
 |---|---|---|
-| DRO → tulip, 3 flagship cells | **min-energy**, fixed t_f = γ·t_f^min, γ ∈ {1.1, 1.2, 1.4} | **pilot complete 2026-08-14, 5/5 cells through all seven gates.** Not a catalog — a proof the pipeline generalizes off min-time |
-| any | min-fuel | **not started.** Explicitly deferred by Darin (Aug 2026) |
+| DRO → tulip, 3 flagship cells | **min-energy**, fixed t_f = γ·t_f^min | **pilot 2026-08-14 (5/5), γ grid 2026-09-01** (band [1.1, 1.4] reliable; high-γ direct fails + a measured basin split); all 7 backbone records carry fixed-t_f conjugate PASS |
+| DRO → tulip, 3 cells × γ {1.1, 1.2, 1.4} | **min-fuel** (Bertrand–Epenoy ε ladder to ε ~ 0.001–0.005) | **FIRST MIN-FUEL CATALOG 2026-09-02**: `costate_catalog_dro_tulip_minfuel.mat`, schema v3 (objective/γ axis), 7 entries all conjugate-certified (one via γ-continuation rescue), fuel gain +0.13…+0.95% of m₀ over min-energy, coasts to 58%. Race verdict: ε ladder beats PLQ-Huber by knockout (FINDINGS §18–21) |
 
 ### 2.3 Transfer-campaign cases (deep single-problem studies)
 
@@ -346,8 +346,11 @@ Ordered by (value delivered) ÷ (work required), not by ambition:
    **SUBSTANTIALLY DONE 2026-09-01/02**: γ grid (band [1.1, 1.4]), the
    ε-vs-PLQ race (ε wins by knockout, FINDINGS §18), and the FIRST
    MIN-FUEL RECORD SET (7/7 backbone records, fuel gain +0.13…+0.95% of
-   m₀, FINDINGS §19). Residue: fixed-t_f conjugate test (the second-order
-   verdict), schema-v3 γ/objective axis, band widening at high γ.
+   m₀, FINDINGS §19), the fixed-t_f conjugate test (13/14, the one
+   refutation = the γ anomaly, FINDINGS §20), the γ-continuation rescue,
+   and **schema v3 + the first min-fuel catalog**
+   (`costate_catalog_dro_tulip_minfuel.mat`, FINDINGS §21). **STEP 5
+   CLOSED 2026-09-02.** Residue: band widening at high γ only.
 6. ~~`ms_bvp` on GTO→tulip min-time~~ — **DONE 2026-08-25 (Stage A)**:
    shared engine closes at K=60 in 10.3 s, ‖R‖=2e-11, tfMin accepts, conjugate
    PASS, and **t_f = 6.290694 ND lands exactly on the certified direct

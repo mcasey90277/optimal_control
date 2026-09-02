@@ -49,17 +49,28 @@ optimal_control/
 │   │                            #   get_family_orbit, survey_family_bounds, harvest_ms_seed,
 │   │                            #   ms_bvp (generic multiple shooting, free OR fixed tf),
 │   │                            #   ms_conjugate_test, ss_bvp_accept (generic single-shooting
-│   │                            #   acceptance gate), cr3bp_minenergy_pmp/_prop (min-energy
-│   │                            #   PMP field + STM), flown_control_error, catalog packager +
-│   │                            #   schema v2, golden_cells regression, tests/
+│   │                            #   acceptance gate), cr3bp_minenergy_pmp/_prop +
+│   │                            #   cr3bp_minfuel_pmp/_prop (fixed-tf PMP fields + STM; the
+│   │                            #   minfuel field carries the eps/huber smoothing families),
+│   │                            #   run_capped (parfeval hard timeouts), flown_control_error,
+│   │                            #   catalog packager + schema v2/v3 (v3 = objective/gamma
+│   │                            #   axis, 2026-09-02), golden_cells regression, tests/
 │   ├── verify_common/           # first-order optimality gate layer (foc_check/foc_report,
 │   │                            #   IPOPT inertia, PMP residual, mesh tools, certified_guard)
 │   ├── DRO_tulip/               # COSTATE-CATALOG CAMPAIGNS (min-time PMP costates for Darin's
 │   ├── HALO_tulip/              #   pumpkyn tfMin; direct solve -> covector harvest -> ms_tfmin
 │   ├── DPO_tulip/               #   -> tfMin acceptance). DRO_tulip = reference implementation
 │   ├── HALO_HALO/               #   + theory manual/SDD in doc/; ~15,900 accepted entries shipped
-│   │                            #   as deliverables 1-6. DRO_tulip/run_minenergy_pilot = the first
-│   │                            #   fixed-tf MIN-ENERGY run (2026-08-14, 5/5 cells pass).
+│   │                            #   as deliverables 1-6; ALL FOUR catalogs extended to 0.5 N
+│   │                            #   floors 2026-09-01 (18,360 entries, conj-swept, wall located
+│   │                            #   at 0.09->0.067 N = basin wall). DRO_tulip also hosts the
+│   │                            #   FIXED-tf OBJECTIVE line (STEP 5 CLOSED 2026-09-02):
+│   │                            #   min-energy pilot + gamma grid, the energy->fuel RACE (eps
+│   │                            #   beats PLQ-Huber, refuted w/ mechanism), the FIRST MIN-FUEL
+│   │                            #   CATALOG costate_catalog_dro_tulip_minfuel.mat (schema v3,
+│   │                            #   7 conj-certified entries incl. a gamma-continuation
+│   │                            #   rescue), fixed-tf conjugate test (LQ-pi validated).
+│   │                            #   Record: FINDINGS.md sections 17-21.
 │   ├── min_fuel_paper/          # paper outline (co-author Koblick)
 │   ├── min_fuel_papers/         # reference PDFs
 │   └── abstracts/               # conference abstract drafts

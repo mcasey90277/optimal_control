@@ -67,8 +67,15 @@ exists.
   existing instrument with the fixed-tf spec, validated on the analytic LQ
   π-conjugate case; 7/7 energy + 6/7 fuel PASS; the one refutation IS the
   γ-anomaly record — second-order gate now production policy: refuted
-  cells re-walk from a γ neighbor). Remaining: schema-v3 γ/objective axis
-  design; high-γ band widening; re-walk of the refuted (2,5)@1.4 cell.
+  cells re-walk from a γ neighbor). **SCHEMA V3 + RESCUE DONE
+  2026-09-02 (STEP 5 CLOSED)**: catalog_schema v3 (objective/γ axis, one
+  catalog per objective, named axis3, stored mf_frac + deltav_from_mf,
+  mandatory Yj junctions for minfuel; TDD 12/12, v1/v2 compat clean); the
+  refuted (2,5)@1.4 REPLACED via γ-continuation at fixed deep ε
+  (m_f = 0.949005, conj PASS, γ-monotonicity restored — recipe: descend ε
+  once on a good branch, then move γ; family jumps measurably fail);
+  first v3 artifact `costate_catalog_dro_tulip_minfuel.mat` (7 entries,
+  FINDINGS §21). Remaining: high-γ band widening only.
   - [ ] **PLQ-penalty experiment for the energy→fuel homotopy** (Mike,
     2026-08-31 — do not forget): mlabTools `optim/` ships Rockafellar's
     piecewise linear-quadratic penalty class (`plq_make`/`plq_penalty`:

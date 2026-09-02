@@ -62,9 +62,13 @@ exists.
   growing with γ, coast up to 58%, junction states banked;
   `run_minfuel_grid` / `minfuel_grid.mat`). **Learned: ss acceptance is
   not a valid gate at deep ε** (shooting fragility over 20–30 d near-bang
-  arcs) — certification = ms + absolute-H + endpoints. Remaining:
-  fixed-t_f conjugate test (Task 4 — the second-order verdict for BOTH
-  objective families), then the schema-v3 γ/objective axis design.
+  arcs) — certification = ms + absolute-H + endpoints + the conjugate
+  verdict. **FIXED-t_f CONJUGATE TEST DONE 2026-09-02** (FINDINGS §20: the
+  existing instrument with the fixed-tf spec, validated on the analytic LQ
+  π-conjugate case; 7/7 energy + 6/7 fuel PASS; the one refutation IS the
+  γ-anomaly record — second-order gate now production policy: refuted
+  cells re-walk from a γ neighbor). Remaining: schema-v3 γ/objective axis
+  design; high-γ band widening; re-walk of the refuted (2,5)@1.4 cell.
   - [ ] **PLQ-penalty experiment for the energy→fuel homotopy** (Mike,
     2026-08-31 — do not forget): mlabTools `optim/` ships Rockafellar's
     piecewise linear-quadratic penalty class (`plq_make`/`plq_penalty`:

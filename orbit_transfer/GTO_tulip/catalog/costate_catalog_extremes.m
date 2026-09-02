@@ -44,6 +44,10 @@ function [eMin, eMax] = costate_catalog_extremes(cat_, filt, doPlot, metric)
 %                                                     this catalog)
 %                                                   .Np      petal count
 %                                                   .thrustN rung (N)
+%                                                   .requireConj true =
+%                                                     only entries whose
+%                                                     stored conjugate
+%                                                     verdict is PASS
 %                                                   [] or omitted = search
 %                                                   the whole catalog
 %
@@ -97,6 +101,11 @@ if ~exist('metric','var'), metric = 'deltaV'; end
 assert(any(strncmpi(metric, {'deltaV','time'}, 1)), ...
        'metric must be ''deltaV'' or ''time'', got ''%s''', metric);
 if isfield(filt, 'orientDeg'), filt.tauDRO = filt.orientDeg; end
+% .requireConj (2026-09-01, post 0.5 N extension): skip entries whose stored
+% conjugate verdict is not PASS -- ~2.4% of sub-1 N entries are refuted as
+% weak local minima, and an extreme should never showcase one. Catalogs
+% without verdicts are unaffected.
+requireConj = isfield(filt, 'requireConj') && filt.requireConj;
 
    tStar = cat_.constants.tStar_s;
    lStar = cat_.constants.lStar_km;
@@ -126,6 +135,8 @@ for ks = 1:numel(cat_.sheets)
         for iD = 1:numel(sh.sD_frac)
             for iA = 1:numel(sh.sA_frac)
                 if ~sh.has_solution(iD,iA,kr), continue, end
+                if requireConj && isfield(sh, 'conj_pass') && ...
+                   sh.conj_pass(iD,iA,kr) ~= 1,                      continue, end
                 tf = sh.tf_nd(iD,iA,kr);
                 mf = 1 - ndT(TN)*tf/cnd;
                 if ~(mf > 0 && mf <= 1), continue, end   % corrupt entry
@@ -266,6 +277,8 @@ if isfield(filt,'tauDRO'), s = [s sprintf(' dep-key=%g', filt.tauDRO)]; end
 if isfield(filt,'Np'),     s = [s sprintf(' Np=%d', filt.Np)]; end
 if isfield(filt,'tauArr'), s = [s sprintf(' arr tau=%.2f', filt.tauArr)]; end
 if isfield(filt,'thrustN'),s = [s sprintf(' %.2g N', filt.thrustN)]; end
+if isfield(filt,'requireConj') && filt.requireConj
+                           s = [s ' conj-pass only']; end
 if isempty(s), s = ' over the WHOLE catalog';
 else, s = [' (restricted to' s ')'];
 end

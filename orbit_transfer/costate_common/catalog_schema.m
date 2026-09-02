@@ -16,6 +16,17 @@ function out = catalog_schema(action, varargin)
 %        kept (NaN for non-tulip arrivals) so every v1 consumer keeps
 %        working on v2 tulip catalogs. Catalog carries .schema = 2 and
 %        .env (environment pinning).
+%     3  OBJECTIVE/GAMMA axis (fixed-final-time catalogs, 2026-09-02): one
+%        catalog per objective (.objective 'minenergy'|'minfuel'; min-TIME
+%        catalogs stay v1/v2, untouched). The per-sheet third array axis is
+%        NAMED: top-level .axis3 = struct('name','gamma','values',[...])
+%        replaces .rungs_N (tf = gamma * sheet.tfmin_nd). Sheets carry
+%        .tfmin_nd [nD x nA], .p_floor and .mf_frac grids (mf is STORED --
+%        the all-burn m_final derivation is wrong once coasts exist),
+%        .lam0 [7 x n] (no free tf), and -- REQUIRED for minfuel, the
+%        identifiability rule -- .Yj [14 x K+1 x n] ms junction states.
+%        Top level adds .smoothing (family + notes). Derive registry gains
+%        'deltav_from_mf'.
 %
 %% Inputs:
 %
@@ -54,23 +65,33 @@ function out = catalog_schema(action, varargin)
 switch lower(action)
 
 case 'version'
-    out = 2;
+    out = 3;
 
 case 'validate'
     cat_ = varargin{1};
     p = {};
-    need = {'name','description','constants','thruster','rungs_N', ...
+    v = 1;
+    if isfield(cat_, 'schema'), v = cat_.schema; end
+    need = {'name','description','constants','thruster', ...
             'sheets','n_entries','derive'};
+    if v >= 3
+        need = [need, {'axis3','objective','smoothing'}];
+    else
+        need = [need, {'rungs_N'}];
+    end
     for k = 1:numel(need)
         if ~isfield(cat_, need{k})
             p{end+1} = sprintf('missing top-level field .%s', need{k});
         end
     end
     if ~isempty(p), out = p; return, end
-    v = 1;
-    if isfield(cat_, 'schema'), v = cat_.schema; end
     needS = {'tauDRO','Np','pm','sD_frac','sA_frac','has_solution', ...
-             'tf_nd','entry_index','z8'};
+             'tf_nd','entry_index'};
+    if v >= 3
+        needS = [needS, {'lam0','tfmin_nd','p_floor','mf_frac'}];
+    else
+        needS = [needS, {'z8'}];
+    end
     if v >= 2
         needS = [needS, {'tau_dep','tau_arr','dep_family','dep_params', ...
                          'arr_family','arr_params','period_tulip_nd'}];
@@ -89,10 +110,34 @@ case 'validate'
                 p{end+1} = sprintf('sheet %d: missing .%s', ks, needS{k});
             end
         end
-        if isfield(sh,'z8') && isfield(sh,'has_solution') && ...
+        if v < 3 && isfield(sh,'z8') && isfield(sh,'has_solution') && ...
            size(sh.z8,2) ~= nnz(sh.has_solution)
             p{end+1} = sprintf('sheet %d: z8 columns (%d) ~= solved entries (%d)', ...
                 ks, size(sh.z8,2), nnz(sh.has_solution));
+        end
+        if v >= 3 && isfield(sh,'has_solution')
+            nSol = nnz(sh.has_solution);
+            if isfield(sh,'lam0') && size(sh.lam0,2) ~= nSol
+                p{end+1} = sprintf('sheet %d: lam0 columns (%d) ~= solved entries (%d)', ...
+                    ks, size(sh.lam0,2), nSol);
+            end
+            for gf = {'p_floor','mf_frac'}
+                if isfield(sh, gf{1}) && ...
+                   ~isequal(size(sh.(gf{1})), size(sh.has_solution))
+                    p{end+1} = sprintf('sheet %d: %s shape ~= has_solution', ks, gf{1});
+                end
+            end
+            if isfield(cat_,'axis3') && isfield(cat_.axis3,'values') && ...
+               size(sh.has_solution,3) ~= numel(cat_.axis3.values)
+                p{end+1} = sprintf('sheet %d: axis-3 length ~= axis3.values', ks);
+            end
+            if isfield(cat_,'objective') && strcmpi(cat_.objective,'minfuel')
+                % identifiability rule: minfuel entries ship junction states
+                if ~isfield(sh,'Yj') || size(sh.Yj,3) ~= nSol || size(sh.Yj,1) ~= 14
+                    p{end+1} = sprintf(['sheet %d: minfuel catalog requires ' ...
+                        '.Yj [14 x K+1 x nSolved] junction states'], ks);
+                end
+            end
         end
         % conjugate-point verdicts (OPTIONAL, added 2026-08-23): when a
         % sheet carries conj_pass it must be an int8 grid shaped like
@@ -141,6 +186,10 @@ case 'derive'
             out = cnd*log(1/mf) * lStar/tStar;
         case 'phase_days'
             out = a.frac * a.period_nd * tStar/86400;
+        case 'deltav_from_mf'
+            % v3 objectives: mf is STORED (coasts break the all-burn
+            % identity); dV follows from the rocket equation alone.
+            out = cnd*log(1/a.mf_frac) * lStar/tStar;
         otherwise
             error('catalog_schema:derive', 'unknown derivation ''%s''', name);
     end

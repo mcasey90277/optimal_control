@@ -997,3 +997,29 @@ Consequence for the future min-fuel catalog: the fixed-tf conjugate
 verdict is a PRODUCTION gate (it caught exactly the entry a consumer
 should not fly), and refuted cells should be re-walked from a different
 gamma neighbor before packaging.
+
+## 21. Gamma-continuation rescues the refuted record; schema v3 ships with the first min-fuel catalog (2026-09-02)
+
+**The re-walk (production rule, first application).** A direct family jump
+failed instructively (deep-fuel junctions stretched into an eps = 0.25
+solve: too far in BOTH smoothing and time). The winning recipe is
+GAMMA-CONTINUATION AT FIXED DEEP EPS: walk the healthy (2,5)@1.2 solution
+1.2 -> 1.225 -> 1.25 -> 1.3 -> 1.35 -> 1.375 -> 1.4 (two bisections),
+staying on the good fuel branch and moving only the time axis. Result at
+gamma = 1.4: **m_f = 0.949005, conjugate test PASS** (0 crossings,
+normR 1.3e-11) -- +0.50% of m0 over the refuted branch (0.944025), and
+gamma-monotonicity RESTORED (0.9411 -> 0.9470 -> 0.9490): the anomaly was
+the basin, not the physics. Continuation recipe note: eps-then-gamma
+ordering matters -- descend eps once on a good branch, then move gamma at
+fixed depth; do not re-descend eps from every gamma's own energy seed.
+
+**Schema v3 + the first v3 catalog.** catalog_schema gains version 3
+(objective/gamma axis): one catalog per objective; named .axis3 replaces
+rungs_N; sheets carry tfmin_nd, p_floor, STORED mf_frac (coasts break the
+all-burn identity; dV via the new deltav_from_mf derivation), lam0 [7 x n],
+and -- REQUIRED for minfuel -- .Yj [14 x K+1 x n] junction states
+(identifiability rule). Validator TDD 12/12 with all five shipped v1/v2
+catalogs still validating clean (compat preserved). First v3 artifact:
+`costate_catalog_dro_tulip_minfuel.mat` (7 entries, gamma {1.1,1.2,1.4},
+fixed-tf conjugate verdicts inside incl. the rescued (2,5)@1.4;
+build_minfuel_catalog.m is the packager). Step 5 is now CLOSED end to end.

@@ -75,10 +75,25 @@ for f = {'accept', 'tolDz', 'tolRss'}
 end
 mo.fixedTf = true;
 
+conjTest = isfield(opts, 'conjTest') && opts.conjTest;
+if conjTest, mo.keepSTMs = true; end
+if isfield(mo, 'conjTest'), mo = rmfield(mo, 'conjTest'); end
+
 seed.tf = tf;
 seed.Y(1:7,1) = [rv0; 1];                      % state part of col 1 is fixed
 [p, info] = ms_bvp(prob, seed, mo);
 z = p(1:7);
+
+if conjTest
+    % FIXED-tf Jacobi test (validated on the analytic LQ pi-conjugate case,
+    % tests/test_conj_fixedtf): no flow column, no scaling quotient (L
+    % breaks the invariance), rows = the components vanishing under the
+    % terminal conditions (r, v fixed; lam_m(tf) = 0), cols = ALL seven
+    % initial costates (the throttle law depends on lam_m here).
+    info.conj = ms_conjugate_test(info, struct( ...
+        'stateRows', [1:6 14], 'costateCols', 8:14, ...
+        'quotientDir', [], 'freeTime', false));
+end
 
 % Hamiltonian and throttle at the junction starts (first-integral check).
 K = size(info.Y, 2);

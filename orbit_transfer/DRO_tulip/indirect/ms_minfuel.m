@@ -55,10 +55,22 @@ for f = {'accept', 'tolDz', 'tolRss'}
 end
 mo.fixedTf = true;
 
+conjTest = isfield(opts, 'conjTest') && opts.conjTest;
+if conjTest, mo.keepSTMs = true; end
+if isfield(mo, 'conjTest'), mo = rmfield(mo, 'conjTest'); end
+
 seed.tf = tf;
 seed.Y(1:7,1) = [rv0; 1];
 [p, info] = ms_bvp(prob, seed, mo);
 z = p(1:7);
+
+if conjTest
+    % Fixed-tf Jacobi spec as in ms_minenergy (validated on the analytic
+    % LQ case): no flow column, no quotient, rows [1:6 14], cols 8:14.
+    info.conj = ms_conjugate_test(info, struct( ...
+        'stateRows', [1:6 14], 'costateCols', 8:14, ...
+        'quotientDir', [], 'freeTime', false));
+end
 
 K = size(info.Y, 2);
 info.H = zeros(1, K);  info.s = zeros(1, K);

@@ -967,3 +967,33 @@ Findings:
    independent second-order verdict is Task 4's fixed-tf conjugate test.
 3. The walk itself is robust: 2-10 endgame bisection failures per record,
    all in the eps < 0.005 sliver where m_f is already converged to ~1e-5.
+
+## 20. Fixed-tf conjugate test: 13/14 verdicts pass; the one refutation explains the gamma anomaly (2026-09-02)
+
+The fixed-final-time Jacobi test needed NO new instrument: the existing
+ms_conjugate_test with the right spec -- freeTime = false (no flow
+column), quotientDir = [] (the running cost breaks the min-time scaling
+invariance), rows [1:6, 14] (the components vanishing under the terminal
+conditions: r, v fixed, lam_m(tf) = 0), cols 8:14 (all seven initial
+costates; lam_m is NOT degenerate here, the throttle law depends on it).
+The monitored det equals the single-shooting BVP Jacobian at tf exactly.
+Validated on the analytic LQ pi-conjugate case
+(tests/test_conj_fixedtf, 5/5: crossings detected and bracketing pi at
+junction resolution); wired into ms_minenergy and ms_minfuel as
+opts.conjTest.
+
+Verdicts (conj_fixedtf_verdicts.mat; every re-solve converged at
+normR ~ 1e-11): all 7 MIN-ENERGY backbone records PASS; 6 of 7 MIN-FUEL
+records PASS; **min-fuel (2,5)/gamma=1.4 (eps = 0.005) is REFUTED -- one
+interior conjugate point.**
+
+The refutation closes an open loop: that record was the grid's gamma
+anomaly (m_f = 0.9440 at gamma = 1.4, WORSE than 0.9470 at gamma = 1.2
+despite more time, and the shallowest eps its endgame reached). The
+second-order test now identifies it as a non-minimizing extremal -- the
+eps walk at gamma = 1.4 drifted into a weaker basin, consistent with the
+gamma-basin structure measured on the energy side ((6,8) gate-1 splits).
+Consequence for the future min-fuel catalog: the fixed-tf conjugate
+verdict is a PRODUCTION gate (it caught exactly the entry a consumer
+should not fly), and refuted cells should be re-walked from a different
+gamma neighbor before packaging.

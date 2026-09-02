@@ -933,3 +933,37 @@ box does not interact with an affine tail.
 
 Race data (all steps, junction states, both arms):
 `direct/results/minfuel_race.mat`.
+
+## 19. The first min-fuel record set: 7/7 backbone records walked to eps ~ 0.001-0.005 (2026-09-02)
+
+`run_minfuel_grid` (the race-winning eps ladder over every passing
+min-energy backbone record; full ms junction states saved per the
+identifiability rule; `direct/results/minfuel_grid.mat` + per-record mats).
+
+| cell | gamma | eps reached | m_f fuel | m_f energy | gain [% m0] | coast |
+|---|---|---|---|---|---|---|
+| (2,5) | 1.10 | 0.0018 | 0.941107 | 0.937899 | +0.32 | 0.17 |
+| (2,5) | 1.20 | 0.0017 | 0.947046 | 0.942108 | +0.49 | 0.33 |
+| (2,5) | 1.40 | 0.0050 | 0.944025 | 0.937432 | +0.66 | 0.42 |
+| (6,8) | 1.10 | 0.0012 | 0.928082 | 0.926771 | +0.13 | 0.08 |
+| (6,8) | 1.20 | 0.0013 | 0.943936 | 0.938120 | +0.58 | 0.33 |
+| (1,2) | 1.10 | 0.0034 | 0.901113 | 0.896934 | +0.42 | 0.25 |
+| (1,2) | 1.20 | 0.0010 | 0.942523 | 0.933072 | +0.95 | 0.58 |
+
+Findings:
+
+1. **The fuel gain grows with gamma** (+0.13% of m0 at the tightest
+   (6,8)/1.1 to +0.95% at (1,2)/1.2 with 58% coast): more time buys more
+   coast buys more propellant, quantified per cell for the first time.
+   Note m_f is NOT monotone in gamma within a cell ((2,5): 0.9411 ->
+   0.9470 -> 0.9440) -- the gamma-basin structure survives into min-fuel.
+2. **Single-shooting acceptance is NOT a valid gate at deep eps.** Only
+   the 19.4-day (2,5)/1.2 passed (|dz| = 0); one more was a floor artifact
+   ((2,5)/1.1 moved 4.4e-7 < tolDz but the ss residual could not reach
+   1e-6), and the rest moved 2e-5..3.6 -- single shooting over 20-30 days
+   of near-bang dynamics wanders, the min-time "shooting dies at depth"
+   lesson reappearing in min-fuel. Entries are certified by ms convergence
+   (1e-10), absolute H conservation, and the enforced endpoint match; the
+   independent second-order verdict is Task 4's fixed-tf conjugate test.
+3. The walk itself is robust: 2-10 endgame bisection failures per record,
+   all in the eps < 0.005 sliver where m_f is already converged to ~1e-5.

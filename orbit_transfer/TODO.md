@@ -52,12 +52,19 @@ exists.
   scalar by carrying it as a zero-derivative state with a normalized terminal
   condition (v1 does this for `t_f`); and its PMP-converged costates as clean
   shooting seeds where direct-KKT duals are unreliable.
-- [~] **Min-energy / fixed-t_f pipeline** — pilot DONE 2026-08-14 on three
-  flagship DRO→tulip cells + a γ ladder (`DRO_tulip/run_minenergy_pilot`):
-  fixed-tf `ms_bvp`, `ms_minenergy`, min-energy PMP field, generic
-  single-shooting acceptance gate. Next: a t_f-multiplier axis in the
-  catalog schema, a fixed-tf conjugate test, then energy→fuel homotopy on
-  the same seeds (the min-fuel catalog route).
+- [~] **Min-energy → MIN-FUEL pipeline (roadmap §6 step 5)** — pilot DONE
+  2026-08-14; **γ grid DONE 2026-09-01** (15 records attempted, band
+  [1.1, 1.4] reliable; high-γ direct fails + a measured basin split at
+  (6,8)); **energy→fuel RACE DONE 2026-09-02** (FINDINGS §18: ε ladder
+  beats PLQ-Huber by knockout, Huber refuted with mechanism);
+  **FIRST MIN-FUEL RECORD SET DONE 2026-09-02** (FINDINGS §19: 7/7
+  backbone records to ε ~ 0.001–0.005, fuel gain +0.13…+0.95% of m₀
+  growing with γ, coast up to 58%, junction states banked;
+  `run_minfuel_grid` / `minfuel_grid.mat`). **Learned: ss acceptance is
+  not a valid gate at deep ε** (shooting fragility over 20–30 d near-bang
+  arcs) — certification = ms + absolute-H + endpoints. Remaining:
+  fixed-t_f conjugate test (Task 4 — the second-order verdict for BOTH
+  objective families), then the schema-v3 γ/objective axis design.
   - [ ] **PLQ-penalty experiment for the energy→fuel homotopy** (Mike,
     2026-08-31 — do not forget): mlabTools `optim/` ships Rockafellar's
     piecewise linear-quadratic penalty class (`plq_make`/`plq_penalty`:

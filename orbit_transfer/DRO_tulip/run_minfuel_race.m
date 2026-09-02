@@ -38,6 +38,7 @@ P.wallSec  = 300;                % ms budget per solve (hard-capped +90 s)
 P.maxBisect = 3;                 % midpoint inserts per failed gap
 P.maxGaps  = 2;                  % abandoned gaps before the arm retires
 P.HdriftTol = 1e-6;              % absolute first-integral gate (pilot rule)
+P.outMat   = '';                 % '' = direct/results/minfuel_race.mat
 P.logFile  = '';
 if nargin >= 1 && ~isempty(cfg)
     fn = fieldnames(cfg);
@@ -52,7 +53,10 @@ if isempty(which('pumpkyn.cr3bp.tfMinEoM'))
     run(fullfile(fileparts(here), 'cr3bp_common', 'setup_cr3bp_common.m'));
 end
 if isempty(which('casadi.SX')), addpath(fullfile(getenv('HOME'), 'casadi-3.7.0')); end
-outMat = fullfile(here, 'direct', 'results', 'minfuel_race.mat');
+outMat = P.outMat;
+if isempty(outMat)
+    outMat = fullfile(here, 'direct', 'results', 'minfuel_race.mat');
+end
 L = load(fullfile(here, 'direct', 'results', 'minenergy_pilot.mat'));
 ki = find(arrayfun(@(r) isequal([r.iD r.iA], P.cell) && ...
                         abs(r.gam - P.gamma) < 1e-9, L.R), 1);
@@ -159,7 +163,7 @@ for kf = 1:numel(P.families)
 end
 
 %% Compare -----------------------------------------------------------------
-if all(isfield(out.arms, P.families)) && ...
+if isfield(out.arms, 'eps') && isfield(out.arms, 'huber') && ...
    ~isempty(out.arms.eps.p) && ~isempty(out.arms.huber.p)
     out.compare = struct( ...
         'deepestP',  [out.arms.eps.p(end), out.arms.huber.p(end)], ...

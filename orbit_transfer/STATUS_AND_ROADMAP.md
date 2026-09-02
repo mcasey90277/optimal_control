@@ -342,7 +342,12 @@ Ordered by (value delivered) ÷ (work required), not by ambition:
    wall located at 0.09→0.067 N (a basin wall, not sensitivity — §5A).
    Residue: 25 mN needs the winding-aware route; deliverable zips predate
    the extension.
-5. **γ grid → γ axis → energy→fuel homotopy** on catalog seeds.
+5. ~~**γ grid → γ axis → energy→fuel homotopy** on catalog seeds.~~ —
+   **SUBSTANTIALLY DONE 2026-09-01/02**: γ grid (band [1.1, 1.4]), the
+   ε-vs-PLQ race (ε wins by knockout, FINDINGS §18), and the FIRST
+   MIN-FUEL RECORD SET (7/7 backbone records, fuel gain +0.13…+0.95% of
+   m₀, FINDINGS §19). Residue: fixed-t_f conjugate test (the second-order
+   verdict), schema-v3 γ/objective axis, band widening at high γ.
 6. ~~`ms_bvp` on GTO→tulip min-time~~ — **DONE 2026-08-25 (Stage A)**:
    shared engine closes at K=60 in 10.3 s, ‖R‖=2e-11, tfMin accepts, conjugate
    PASS, and **t_f = 6.290694 ND lands exactly on the certified direct

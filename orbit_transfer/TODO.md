@@ -100,11 +100,20 @@ exists.
     corrected instrument: the 18,249 verdicts were produced before the
     t_f sample existed (golden cells unchanged; the change can only ADD
     refutations). `conj_catalog_pass` unchanged; ~hours at K=24.
-  - [ ] **Huber as a continuation family, revisited** — with the saltation
-    fix it walked (2,5)@1.2 with 0 bisections vs ε's 7. One cell; repeat on
-    the other six grid records before drawing a conclusion. Note the
-    κ = 1 seed asymmetry (Huber's first rung minimises at s* = Q, so the
-    energy seed is cold for it — seed with λ/2).
+  - [x] **Huber over the whole grid — DONE 2026-09-05 (FINDINGS §23,
+    `run_huber_race_grid`, `huber_grid.mat`):** 4 of 7 records reach
+    p = 0.001 with 0–1 fails in 1–2 min (ε: 8–10 fails, 6–11 min), same
+    solution to <7e-6, conj PASS; (6,8)@1.2 walls at p≈0.033; (1,2) fails
+    its first rung from the energy seed at both γ — λ/2 seed fixes the
+    first rung (κ=1 asymmetry confirmed) but (1,2) still walls at p≈0.77.
+    Huber = fast-or-walls, ε = slow-but-arrives. ε stays shipped.
+  - [ ] **Huber follow-ups (from §23):** (a) mechanism — per-segment count
+    and transversality of Q=1 crossings and the saltation condition number
+    nᵀF⁻ along the (6,8)@1.2 and (1,2) walks; test the coast-fraction
+    hypothesis; (b) hedged race + Huber→ε handoff at the wall (same
+    junctions, same limit problem); (c) Huber on the cells ε cannot enter
+    (high-γ band, deep-thrust wall, GTO_tulip 1.01–1.11× band) — the "new
+    line of attack" test proper; (d) make λ/2 the standard Huber seed.
   - [ ] **PLQ-penalty experiment for the energy→fuel homotopy** (Mike,
     2026-08-31 — do not forget): mlabTools `optim/` ships Rockafellar's
     piecewise linear-quadratic penalty class (`plq_make`/`plq_penalty`:

@@ -1105,3 +1105,72 @@ junction count, not a time fraction; the min-time catalogs' 18,249 verdicts
 were produced by the pre-fix instrument (same PASS on the 20 golden cells;
 the new t_f sample could only ADD refutations -- a re-sweep is cheap and
 pending); the race's per-gap bisection cap; `tGrid` persistence.
+
+## 23. Huber over the whole grid: a second continuation family, cell-dependent, with a different failure character (2026-09-05)
+
+Section 22 retracted the Huber "knockout" on one cell. This is the
+robustness test: the saltation-correct Huber arm on all 7 min-fuel grid
+records (same 17-rung schedule, gates and caps as the stored eps arms),
+plus two lambda/2-seed controls, each deepest solution re-tested with the
+corrected fixed-tf conjugate instrument (`run_huber_race_grid`,
+`direct/results/huber_grid.mat`, 15.7 min total).
+
+| cell | gamma | seed | rungs H/E | p_min H / E | m_f H / E | dm_f | fails H/E | bisects H/E | wall H/E [min] | coast H/E | conj |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| (2,5) | 1.10 | 1 | 17/19 | 0.001 / 0.0018 | 0.941104 / 0.941107 | -2.4e-6 | **0**/10 | 0/8 | **1.0**/8.8 | 0.17/0.17 | PASS |
+| (2,5) | 1.20 | 1 | 17/17 | 0.001 / 0.0017 | 0.947041 / 0.947046 | -4.5e-6 | **0**/9 | 0/7 | **1.2**/7.5 | 0.33/0.33 | PASS |
+| (2,5) | 1.40 | 1 | 17/14 | 0.001 / 0.005 | 0.944018 / 0.944025 | -6.2e-6 | **0**/8 | 0/6 | **1.9**/5.7 | 0.42/0.42 | PASS |
+| (6,8) | 1.10 | 1 | 18/19 | 0.001 / 0.0012 | 0.928081 / 0.928082 | -8.4e-7 | 1/9 | 1/7 | **1.8**/10.5 | 0.08/0.08 | PASS |
+| (6,8) | 1.20 | 1 | 13/19 | **0.033** / 0.0013 | 0.943751 / 0.943936 | -1.8e-4 | 9/9 | 7/7 | 6.6/6.2 | 0.00/0.33 | PASS (at 0.033) |
+| (1,2) | 1.10 | 1 | **0**/17 | -- / 0.0034 | -- / 0.901113 | -- | 2/9 | 0/7 | 1.3/11.8 | --/0.25 | -- |
+| (1,2) | 1.20 | 1 | **0**/19 | -- / 0.001 | -- / 0.942523 | -- | 2/2 | 0/2 | 1.6/2.5 | --/0.58 | -- |
+| (2,5) | 1.20 | **0.5** | 17/17 | 0.001 / 0.0017 | 0.947041 / 0.947046 | -4.5e-6 | 0/9 | 0/7 | **0.8**/7.5 | 0.33/0.33 | PASS |
+| (1,2) | 1.20 | **0.5** | 6/19 | **0.77** / 0.001 | 0.933445 / 0.942523 | -9.1e-3 | 11/2 | 9/2 | 8.3/2.5 | 0.00/0.58 | PASS (at 0.77) |
+
+("rungs E" counts the eps arm's bisection inserts; the eps arms are the
+09-02 records, not re-run.)
+
+**Findings.**
+
+1. **Where Huber works it is strictly better than eps on this protocol:**
+   four of seven records reach p = 0.001 with 0-1 failures in 1.0-1.9 min
+   against eps's 8-10 failures and 5.7-10.5 min, and land on the SAME
+   solution (|dm_f| < 7e-6, coast fractions identical, conjugate PASS on the
+   corrected instrument). The 09-02 "knockout" ran the wrong way.
+2. **Where it fails it fails HARD, not softly.** eps never retires -- its
+   failures are recoverable bisections. Huber hits Newton residual floors
+   (normR stalls at 1e-3..3e-5 over 7 bisections on (6,8)@1.2 at p ~ 0.033;
+   normR 1e-2..8e-3 on (1,2)@1.2 at p ~ 0.77) and retires. Those are
+   walls with the Jacobian now correct -- a property of the field on those
+   cells, not of the solver.
+3. **The kappa = 1 seed asymmetry is real and measurable** (Astra's point):
+   with the energy costates verbatim, (1,2) cannot solve its FIRST rung
+   at either gamma (normR 1.5, Hdrift 0.25); with lambda/2 the p = 1 rung
+   converges and the walk proceeds to p ~ 0.77. On the clean cell the
+   lambda/2 seed gives the identical answer 33% faster (0.8 vs 1.2 min).
+   Use lambda/2 as Huber's standard seed from the energy solution.
+4. **The wall correlates with the coast structure the FUEL solution wants,
+   not cleanly but suggestively:** the cell that never works, (1,2), is the
+   longest transfer (30 d) whose eps solution coasts 25-58% of the arc;
+   (6,8)@1.2 walls at 33% coast; the four clean records have eps coast
+   0.08-0.42. Huber never coasts exactly (s = kappa Q > 0 wherever Q > 0),
+   so on a cell whose extremal is mostly coast Huber must represent long
+   near-zero-throttle arcs with a tiny positive s -- and its Q hovers near
+   the jump at 1 across the whole arc. A grazing/near-grazing crossing
+   (n'F- -> 0 in the saltation denominator) is the natural suspect for the
+   residual floors. This is a HYPOTHESIS; the mechanism campaign
+   (diagnostics along the walk: number and transversality of Q = 1
+   crossings per segment, saltation condition numbers) would settle it.
+
+**What this changes.** Huber is a legitimate second continuation family --
+faster and failure-free on the cells it can enter, brittle on the
+coast-dominated ones -- and the two families fail in complementary ways
+(eps: slow, always recovers; Huber: fast, or walls). The obvious production
+move is a **hedged race**: run both from the energy seed (Huber on lambda/2),
+take whichever reaches the floor, and keep eps as the fallback that always
+arrives. What it does NOT change: eps remains the shipped convention and
+the catalog is unchanged. Recorded, not yet built: the mechanism study
+(item 4), a Huber-then-eps handoff at the wall (Huber to 0.03, then switch
+family on the same junctions -- the two limits are the same problem), and
+Huber on the hard cells where eps itself fails (the high-gamma band, the
+deep-thrust wall).

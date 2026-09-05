@@ -40,6 +40,11 @@ P.maxGaps  = 2;                  % abandoned gaps before the arm retires
 P.HdriftTol = 1e-6;              % absolute first-integral gate (pilot rule)
 P.outMat   = '';                 % '' = direct/results/minfuel_race.mat
 P.logFile  = '';
+P.seedScale = 1;                 % multiply the seed COSTATES (rows 8:14) by
+                                 % this before the first rung. 1 = the energy
+                                 % costates verbatim (the 09-02 protocol).
+                                 % huber kappa=1 minimises at s* = Q, not Q/2,
+                                 % so 0.5 is its warm seed (Astra, 2026-09-05).
 if nargin >= 1 && ~isempty(cfg)
     fn = fieldnames(cfg);
     for k = 1:numel(fn), P.(fn{k}) = cfg.(fn{k}); end
@@ -89,6 +94,8 @@ for kf = 1:numel(P.families)
     lg('RACE ARM %s: start', fam);
     tArm = tic;
     seed = seed0;
+    seed.Y(8:14,:) = P.seedScale * seed.Y(8:14,:);
+    if P.seedScale ~= 1, lg('RACE ARM %s: seed costates scaled by %.3g', fam, P.seedScale); end
     A = struct('p', [], 'mf', [], 'coastFrac', [], 'Hdrift', [], ...
                'iters', [], 'wall', [], 'nBisect', 0, 'nFail', 0, ...
                'retired', false, 'z', [], 'Y', {{}});

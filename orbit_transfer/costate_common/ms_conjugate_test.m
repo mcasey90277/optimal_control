@@ -30,14 +30,22 @@ function out = ms_conjugate_test(info, spec)
 %   Isp all-burn flight the control never depends on lam_m and mass is a
 %   known function of time, so the lam_m column of Phi_xl is exactly zero
 %   effect -- a third degeneracy if included.
-% • Junction resolution: the det is sampled at junctions 2..K, so a
-%   conjugate PAIR closer together than one segment can hide, and the
-%   final endpoint itself is not sampled. K = 12-48 in the catalogs; treat
-%   "no sign change" as strong but not airtight.
-% • det is scaled to det^(1/m) magnitude for readable reporting.
-% • A sign change on the LAST sampled interval is reported with
-%   .atFinal = true; by itself it does not refute local minimality on
-%   [0, tf).
+% • Junction resolution: the det is sampled at junctions 2..K+1 (= tf),
+%   so a conjugate PAIR closer together than one segment can hide. K =
+%   12-48 in the catalogs; treat "no sign change" as strong but not
+%   airtight.
+% • det is scaled to det^(1/m) magnitude for readable reporting; the SIGN
+%   is taken from the equilibrated block (robust to bad scaling).
+% • INITIAL COAST: until the control has acted, the state block is
+%   structurally zero (sigma_min/sigma_max <= spec.rankTol [1e-13]);
+%   those samples are skipped, .firstFullRank reports where testing
+%   starts. (Review 2026-09-05: the old code counted them as focal points.)
+% • A sign change on the bracket ending at tf IS counted (it lies in
+%   (t_K, tf]) and is additionally flagged .atFinal.
+% • FIXED-tf callers: use stateRows = 1:ny_state (ALL state rows, mass
+%   included) -- the interior Jacobi field must vanish in the full state.
+%   The mixed block [1:6 14] is the terminal shooting Jacobian and is valid
+%   only AT tf (review 2026-09-05, P0.3).
 % • This is a NECESSARY-condition check (Jacobi), not a full sufficiency
 %   proof: passing means "no disqualifying focal point found at junction
 %   resolution".
@@ -47,7 +55,10 @@ function out = ms_conjugate_test(info, spec)
 %  info                     struct                  ms_bvp info with .PHI
 %                                                   {1 x K} segment STMs,
 %                                                   .Y [ny x K] junction
-%                                                   starts, .tGrid
+%                                                   starts, .tGrid, and
+%                                                   .Yend [ny x 1] y(tf)
+%                                                   (needed to sample the
+%                                                   flow column at tf)
 %
 %  spec                     struct
 %   .flow                   fhandle                 f = flow(y): state rows
@@ -64,17 +75,27 @@ function out = ms_conjugate_test(info, spec)
 %                                                   pass [] to disable
 %   .freeTime               logical                 Append the flow column
 %                                                   [default true]
+%   .rankTol                double                  sigma_min/sigma_max
+%                                                   below which a sample is
+%                                                   structurally rank-
+%                                                   deficient [1e-13]
 %
 %% Outputs:
 %
 %  out                      struct
-%   .t                      [1 x K-1]               Junction times sampled
-%   .detScaled              [1 x K-1]               sign(det)*|det|^(1/m)
-%   .nCrossings             double                  Sign changes strictly
-%                                                   inside
-%   .atFinal                logical                 Sign change on the last
-%                                                   sampled interval
+%   .t                      [1 x K]                 Junction times sampled
+%                                                   (t_2 .. tf)
+%   .detScaled              [1 x K]                 sign(det)*|det|^(1/m)
+%   .sigRatio               [1 x K]                 sigma_min/sigma_max of
+%                                                   the equilibrated block
+%   .firstFullRank          double                  First sample index with
+%                                                   full rank (K+1: never)
+%   .nCrossings             double                  Sign changes / zeros
+%                                                   from firstFullRank on
+%   .atFinal                logical                 The last crossing is on
+%                                                   the bracket ending at tf
 %   .pass                   logical                 nCrossings == 0
+%   .stateRows/.costateCols/.freeTime               Spec echo (provenance)
 %
 %% Revision History:
 %  M. Casey                                                   (c) 08/08/2026
@@ -110,30 +131,69 @@ if freeT
         'freeTime test needs spec.flow (state-rows dynamics at a junction)');
 end
 
+rankTol = fieldd(spec, 'rankTol', 1e-13);
+
+% Chain ALL K segment STMs: samples at t_2 .. t_{K+1} = t_f (review
+% 2026-09-05: the old loop stopped at t_K and left the final segment
+% unmonitored). For each sample the block is EQUILIBRATED (positive
+% row/column scaling, which preserves sign(det)) before the sign test and
+% the rank diagnostic sigma_min/sigma_max.
 K = numel(info.PHI);
+% The flow column at tf needs y(tf) (info.Yend, returned by ms_bvp's
+% keepSTMs since 2026-09-05); a free-time caller without it is sampled to
+% t_K as before.
+nS = K;
+if freeT && ~(isfield(info, 'Yend') && ~isempty(info.Yend)), nS = K - 1; end
 PhiCum = eye(size(info.PHI{1}));
-dets = zeros(1, K-1);
-for k = 1:K-1
+dets = zeros(1, nS);  sigR = zeros(1, nS);
+for k = 1:nS
     PhiCum = info.PHI{k} * PhiCum;             % Phi(t_{k+1}, 0)
     M = PhiCum(rows, cols) * P;
     if freeT
-        M = [M, spec.flow(info.Y(:,k+1))];
+        if k < K, yk = info.Y(:,k+1); else, yk = info.Yend; end
+        M = [M, spec.flow(yk)];
     end
     dk = det(M);
     dets(k) = sign(dk) * abs(dk)^(1/m);
+    Me = equilibrate(M);
+    sv = svd(Me);
+    if all(isfinite(sv)) && sv(1) > 0, sigR(k) = sv(end)/sv(1); end
+    if all(isfinite(Me(:))), dets(k) = sign(det(Me)) * abs(dets(k)); end
 end
 
-% Crossing detection over nonzero samples, on ORIGINAL indices so that
-% index compression cannot misclassify atFinal (review finding, GPT
-% 2026-08-08). An exactly-zero sample is itself a sampled focal point.
-idxNZ = find(dets ~= 0);
-sgn = sign(dets(idxNZ));
+% STRUCTURAL rank deficiency: until the control has acted on the state
+% (an initial coast, s == 0), the state block of Phi_xl is identically
+% zero -- those samples are not focal points (Astra, review 2026-09-05).
+% Samples before the first full-rank one are skipped; crossings are
+% counted only from there on.
+kFull = find(sigR > rankTol, 1);
+if isempty(kFull), kFull = nS + 1; end         % never attained: nothing to test
+live = kFull:nS;
+dl = dets(live);
+idxNZ = find(dl ~= 0);
+sgn = sign(dl(idxNZ));
 flips = find(diff(sgn) ~= 0);                  % between idxNZ(f), idxNZ(f+1)
-atFinal = ~isempty(flips) && idxNZ(flips(end)+1) == numel(dets);
-nIn = numel(flips) - double(atFinal) + nnz(dets == 0);
+% Every bracket is inside (0, t_f]; the one ending at t_f is COUNTED and
+% additionally flagged .atFinal (a root exactly at t_f is a measure-zero
+% boundary case a consumer may choose to examine; the old rule subtracted
+% it, which demoted a strictly interior crossing -- sol/Astra, 2026-09-05).
+atFinal = ~isempty(flips) && idxNZ(flips(end)+1) == numel(dl);
+nIn = numel(flips) + nnz(dl == 0);
 
-out = struct('t', info.tGrid(2:K), 'detScaled', dets, ...
-             'nCrossings', nIn, 'atFinal', atFinal, 'pass', nIn == 0);
+out = struct('t', info.tGrid(2:nS+1), 'detScaled', dets, 'sigRatio', sigR, ...
+             'firstFullRank', kFull, ...
+             'nCrossings', nIn, 'atFinal', atFinal, 'pass', nIn == 0, ...
+             'stateRows', rows, 'costateCols', cols, 'freeTime', freeT);
+end
+
+% ------------------------------------------------------------------------
+function Me = equilibrate(M)
+% EQUILIBRATE  Positive row then column scaling by max-abs (sign(det)
+% invariant).  INPUTS: M [m x m].  OUTPUTS: Me [m x m].
+r = max(abs(M), [], 2);  r(r == 0) = 1;
+Me = M ./ r;
+c = max(abs(Me), [], 1);  c(c == 0) = 1;
+Me = Me ./ c;
 end
 
 % ------------------------------------------------------------------------

@@ -66,11 +66,15 @@ optimal_control/
 │   │                            #   at 0.09->0.067 N = basin wall). DRO_tulip also hosts the
 │   │                            #   FIXED-tf OBJECTIVE line (STEP 5 CLOSED 2026-09-02):
 │   │                            #   min-energy pilot + gamma grid, the energy->fuel RACE (eps
-│   │                            #   beats PLQ-Huber, refuted w/ mechanism), the FIRST MIN-FUEL
+│   │                            #   ships; the 09-02 "Huber refuted" verdict was RETRACTED
+│   │                            #   09-05 -- it was our missing saltation matrix; with it
+│   │                            #   Huber walks the full ladder, 0 fails), the FIRST MIN-FUEL
 │   │                            #   CATALOG costate_catalog_dro_tulip_minfuel.mat (schema v3,
-│   │                            #   7 conj-certified entries incl. a gamma-continuation
-│   │                            #   rescue), fixed-tf conjugate test (LQ-pi validated).
-│   │                            #   Record: FINDINGS.md sections 17-21.
+│   │                            #   7 entries, Isp 900 s / 0.07 N -- the 09-02 build mislabelled
+│   │                            #   1710 s; conj 15/15 on the CORRECTED fixed-tf instrument:
+│   │                            #   rows 1:7, initial-coast skip, t_f sampled).
+│   │                            #   Record: FINDINGS.md sections 17-22; three-way code
+│   │                            #   review in DRO_tulip/reviews/minfuel_code_review_2026-09-05.md.
 │   ├── min_fuel_paper/          # paper outline (co-author Koblick)
 │   ├── min_fuel_papers/         # reference PDFs
 │   └── abstracts/               # conference abstract drafts

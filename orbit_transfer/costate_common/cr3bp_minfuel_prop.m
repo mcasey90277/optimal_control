@@ -13,8 +13,18 @@ function [yh, PHI, T, Y] = cr3bp_minfuel_prop(dt, y0, needSTM, Tmax, c, muStar, 
 % • Throws (via ode113) on integrator collapse -- ms_bvp converts the
 %   throw into a rejected iterate, as required by its contract.
 % • The 'huber' family's throttle law is DISCONTINUOUS at Q = 1 (see
-%   cr3bp_minfuel_pmp); ode113 handles isolated crossings by step
-%   rejection, at a cost the race is designed to measure.
+%   cr3bp_minfuel_pmp). It is propagated EVENT-SPLIT: each smooth branch
+%   with the law pinned, and at every crossing the STM gets the saltation
+%   update Phi+ = [I + (F+ - F-) n'/(n'F-)] Phi-, n = grad Q. Without it
+%   the shooting Jacobian is wrong on every switching segment (measured
+%   2026-09-05: 1.35e-3 vs 1.35e-7 against finite differences;
+%   tests/test_huber_saltation). Grazing crossings throw.
+%
+%% References:
+%   [1] Bertrand & Epenoy, "New smoothing techniques for solving bang-bang
+%       optimal control problems," OCAM 23(4), 2002 (the 'eps' family).
+%   [2] Hairer, Norsett & Wanner, "Solving ODEs I", II.6 (sensitivity
+%       across a discontinuity: the saltation / jump matrix).
 %
 %% Inputs:
 %
@@ -63,6 +73,10 @@ if dt == 0
     return
 end
 odeOpts = odeset('RelTol', 1e-10, 'AbsTol', 1e-12);
+if strcmp(smooth.family, 'huber')
+    [yh, PHI, T, Y] = propHuber(dt, y0, needSTM, Tmax, c, muStar, smooth, odeOpts);
+    return
+end
 if needSTM
     z0 = [y0; reshape(eye(14), [], 1)];
     [T, Z] = ode113(@(t, z) rhsSTM(z, Tmax, c, muStar, smooth), [0 dt], z0, odeOpts);
@@ -75,6 +89,85 @@ else
     yh  = Y(end, :)';
     PHI = [];
 end
+end
+
+% ------------------------------------------------------------------------
+function [yh, PHI, T, Y] = propHuber(dt, y0, needSTM, Tmax, c, muStar, smooth, odeOpts)
+% PROPHUBER  Event-split propagation for the DISCONTINUOUS huber law.
+% The throttle jumps at Q = 1 (s: p*Q -> 1). Each smooth branch is
+% integrated with the law PINNED (smooth.branch 'lo'|'hi'); at a crossing
+% the STM receives the saltation update
+%     Phi+ = [ I + (F+ - F-) n' / (n' F-) ] Phi-,   n = grad Q,
+% which the branchwise variational equation alone omits (review
+% 2026-09-05, P0.2). Grazing crossings (n'F- ~ 0) throw.
+% INPUTS: as cr3bp_minfuel_prop + odeOpts.  OUTPUTS: as cr3bp_minfuel_prop.
+sLo = smooth;  sLo.branch = 'lo';
+sHi = smooth;  sHi.branch = 'hi';
+hi  = switchQ(y0, Tmax, c) > 1;
+t0  = 0;  y = y0;  PHI = eye(14);
+T = zeros(0,1);  Y = zeros(0,14);
+maxSw = 200;  nSw = 0;
+while true
+    if hi, sm = sHi;  dirn = -1;  else, sm = sLo;  dirn = +1; end
+    eo = odeset(odeOpts, 'Events', @(t, z) evQ(z, Tmax, c, dirn));
+    if needSTM
+        z0 = [y; reshape(PHI, [], 1)];
+        [Ts, Zs, te, ze] = ode113(@(t, z) rhsSTM(z, Tmax, c, muStar, sm), [t0 dt], z0, eo);
+        Ys = Zs(:, 1:14);
+    else
+        [Ts, Ys, te, ze] = ode113(@(t, z) cr3bp_minfuel_pmp(z, Tmax, c, muStar, sm), ...
+                                  [t0 dt], y, eo);
+        Zs = Ys;
+    end
+    T = [T; Ts];  Y = [Y; Ys];                     %#ok<AGROW>
+    hit = ~isempty(te) && te(end) < dt - 1e-14;
+    if ~hit
+        yh = Zs(end, 1:14)';
+        if needSTM, PHI = reshape(Zs(end, 15:210), 14, 14); else, PHI = []; end
+        return
+    end
+    nSw = nSw + 1;
+    assert(nSw <= maxSw, 'cr3bp_minfuel_prop:chatter', ...
+           'huber law: more than %d switches in one segment', maxSw);
+    t0 = te(end);  ye = ze(end, :)';
+    y = ye(1:14);
+    if needSTM
+        PHI = reshape(ye(15:210), 14, 14);
+        Fm = cr3bp_minfuel_pmp(y, Tmax, c, muStar, sm);            % incoming branch
+        if hi, smP = sLo; else, smP = sHi; end
+        Fp = cr3bp_minfuel_pmp(y, Tmax, c, muStar, smP);           % outgoing branch
+        n  = gradQ(y, Tmax, c);
+        den = n' * Fm;
+        assert(abs(den) > 1e-12 * max(1, abs(n' * Fp)), ...
+               'cr3bp_minfuel_prop:grazing', 'huber switch is grazing (n''F- ~ 0)');
+        PHI = (eye(14) + (Fp - Fm) * n' / den) * PHI;
+    end
+    hi = ~hi;
+end
+end
+
+function Q = switchQ(y, Tmax, c)
+% SWITCHQ  Q = T(|lam_v|/m + lam_m/c) (as cr3bp_minfuel_pmp).
+% INPUTS: y [14x1]; Tmax; c.  OUTPUTS: Q double.
+rho = sqrt(y(11)^2 + y(12)^2 + y(13)^2 + 1e-300);
+Q = Tmax * (rho / y(7) + y(14) / c);
+end
+
+function n = gradQ(y, Tmax, c)
+% GRADQ  dQ/dy [14x1]: nonzero in m (7), lam_v (11:13), lam_m (14).
+% INPUTS: y [14x1]; Tmax; c.  OUTPUTS: n [14x1].
+rho = sqrt(y(11)^2 + y(12)^2 + y(13)^2 + 1e-300);
+n = zeros(14, 1);
+n(7)     = -Tmax * rho / y(7)^2;
+n(11:13) =  Tmax * y(11:13) / (y(7) * rho);
+n(14)    =  Tmax / c;
+end
+
+function [val, isterm, dirn] = evQ(z, Tmax, c, dirn)
+% EVQ  Terminal event Q - 1 = 0, crossing in direction dirn only.
+% INPUTS: z [14 or 210 x1]; Tmax; c; dirn.  OUTPUTS: val; isterm; dirn.
+val = switchQ(z(1:14), Tmax, c) - 1;
+isterm = 1;
 end
 
 % ------------------------------------------------------------------------

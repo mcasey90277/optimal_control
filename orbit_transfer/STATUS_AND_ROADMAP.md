@@ -80,7 +80,7 @@ real axis, not a symmetry.
 | case | objective | status |
 |---|---|---|
 | DRO → tulip, 3 flagship cells | **min-energy**, fixed t_f = γ·t_f^min | **pilot 2026-08-14 (5/5), γ grid 2026-09-01** (band [1.1, 1.4] reliable; high-γ direct fails + a measured basin split); all 7 backbone records carry fixed-t_f conjugate PASS |
-| DRO → tulip, 3 cells × γ {1.1, 1.2, 1.4} | **min-fuel** (Bertrand–Epenoy ε ladder to ε ~ 0.001–0.005) | **FIRST MIN-FUEL CATALOG 2026-09-02**: `costate_catalog_dro_tulip_minfuel.mat`, schema v3 (objective/γ axis), 7 entries all conjugate-certified (one via γ-continuation rescue), fuel gain +0.13…+0.95% of m₀ over min-energy, coasts to 58%. Race verdict: ε ladder beats PLQ-Huber by knockout (FINDINGS §18–21) |
+| DRO → tulip, 3 cells × γ {1.1, 1.2, 1.4} | **min-fuel** (Bertrand–Epenoy ε ladder to ε ~ 0.001–0.005) | **FIRST MIN-FUEL CATALOG 2026-09-02**: `costate_catalog_dro_tulip_minfuel.mat`, schema v3 (objective/γ axis), 7 entries all conjugate-certified on the **corrected** fixed-t_f instrument (2026-09-05: full-state block, initial-coast skip, t_f sampled; the earlier refutation/rescue was a structural-zero artifact — the rescue stays on mass), fuel gain +0.13…+0.95% of m₀ over min-energy, coast junction-fraction to 58%. **Propulsion is Isp 900 s / 0.07 N / 150 kg** (the 09-02 build mislabelled 1710 s; ΔV 0.46–0.92 km/s). Race: ε ships; the "PLQ-Huber refuted" verdict was retracted — it was our missing saltation matrix (FINDINGS §18–22) |
 
 ### 2.3 Transfer-campaign cases (deep single-problem studies)
 
@@ -344,10 +344,11 @@ Ordered by (value delivered) ÷ (work required), not by ambition:
    the extension.
 5. ~~**γ grid → γ axis → energy→fuel homotopy** on catalog seeds.~~ —
    **SUBSTANTIALLY DONE 2026-09-01/02**: γ grid (band [1.1, 1.4]), the
-   ε-vs-PLQ race (ε wins by knockout, FINDINGS §18), and the FIRST
-   MIN-FUEL RECORD SET (7/7 backbone records, fuel gain +0.13…+0.95% of
-   m₀, FINDINGS §19), the fixed-t_f conjugate test (13/14, the one
-   refutation = the γ anomaly, FINDINGS §20), the γ-continuation rescue,
+   ε-vs-PLQ race (ε ships; the "Huber knockout" of FINDINGS §18 was
+   RETRACTED 2026-09-05 — missing saltation matrix, FINDINGS §22), the
+   FIRST MIN-FUEL RECORD SET (7/7 backbone records, fuel gain
+   +0.13…+0.95% of m₀, FINDINGS §19), the fixed-t_f conjugate test
+   (corrected instrument 15/15, FINDINGS §20 → §22), the γ-continuation rescue,
    and **schema v3 + the first min-fuel catalog**
    (`costate_catalog_dro_tulip_minfuel.mat`, FINDINGS §21). **STEP 5
    CLOSED 2026-09-02.** Residue: band widening at high γ only.

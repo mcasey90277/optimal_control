@@ -1023,3 +1023,85 @@ catalogs still validating clean (compat preserved). First v3 artifact:
 `costate_catalog_dro_tulip_minfuel.mat` (7 entries, gamma {1.1,1.2,1.4},
 fixed-tf conjugate verdicts inside incl. the rescued (2,5)@1.4;
 build_minfuel_catalog.m is the packager). Step 5 is now CLOSED end to end.
+
+## 22. Review fixes: the Huber "knockout" was our Jacobian; the conjugate refutation was a coast artifact; the catalog was mislabelled (2026-09-05)
+
+A three-way external code review of the step-5 line (GPT-5.6-sol + GPT-6
+Astra + host; `reviews/minfuel_code_review_2026-09-05.md`) found four P0
+defects. All four are fixed, TDD (four new failing tests written first, all
+green), the golden cells still 20/20, and the verdicts re-swept. Three of
+the four change what sections 18, 20 and 21 claim.
+
+**P0.2 -- section 18 RETRACTED in its mechanism.** The Huber throttle jumps
+at Q = 1; `cr3bp_minfuel_prop` integrated Phi_dot = A Phi straight through
+the jump, omitting the saltation update
+Phi+ = [I + (F+ - F-) n'/(n'F-)] Phi-, n = grad Q. Measured against finite
+differences on a one-switch arc: STM error 1.35e-3 (eps control case:
+1.35e-7). With event-split propagation and the saltation matrix
+(`tests/test_huber_saltation`: 2.1e-6, the FD floor) the SAME race cell
+(2,5)@1.2 gives:
+
+| arm | rungs | p deepest | m_f | fails | bisects | wall |
+|---|---|---|---|---|---|---|
+| eps (09-02) | 17 | 0.00168 | 0.947046 | 9 | 7 | 7.5 min |
+| huber, no saltation (09-02) | 2 | 0.91 | 0.942176 | 8 | 6 | 3.7 min |
+| **huber, saltation (09-05)** | **17** | **0.001** | **0.947041** | **0** | **0** | **1.2 min** |
+
+Huber walks the full ladder with ZERO failures and lands within 4.5e-6 of
+the eps mass. The "switch-jump residual floor" was Newton fighting a wrong
+Jacobian; "Huber-in-throttle is structurally unsuited" is withdrawn. What
+survives of section 18: the eps family has exact coast arcs at every
+finite p and Huber does not (true, and visible: Huber's coast fraction is
+0.00 until p = 0.001), and eps remains the shipped convention. Whether
+Huber's cleaner walk (0 bisections vs 7) generalises is an open, cheap
+experiment. Note also (Astra): both arms start at p = 1 from the energy
+seed, but Huber kappa = 1 minimises at s* = Q, not Q/2, so its first rung
+was a cold solve -- the race was never symmetric at the top.
+
+**P0.3 + P0.4 -- section 20's block was wrong and its one refutation was
+an artifact.** The fixed-tf test monitored `Phi([1:6 14], 8:14)` -- the
+terminal shooting Jacobian, whose singularity means something only AT t_f.
+An interior conjugate point is a Jacobi field vanishing in the FULL state
+(mass included): only then does its zero-extension give an admissible
+variation with zero second variation. Correct block: `Phi(1:7, 8:14)`
+(sol; settled by Astra's admissible-variation argument after the host
+defended the old block). Separately, on an initial COAST the state block
+is structurally zero and the old instrument counted an exact-zero sample
+as a focal point. The refuted record (2,5)@1.4 (p = 0.005) starts on a
+coast: its first det sample is exactly 0 (sigma_min/sigma_max = 0) -- that
+was the "conjugate point". `ms_conjugate_test` now: monitors the full
+block, equilibrates before the sign test, skips samples until full rank is
+first attained (`.firstFullRank`), samples THROUGH t_f (the old loop left
+the final 1/K of every transfer unmonitored -- 8.3% at K = 12), counts the
+last bracket (the old `atFinal` rule subtracted a strictly interior
+crossing; it never fired in 14 + 4,405 verdicts), and echoes its spec.
+`ms_bvp` returns `.Yend` so the free-time flow column exists at t_f.
+
+Re-sweep (`run_conj_fixedtf_sweep`, 0.6 min; every verdict bound to the
+lambda0 it was computed on): **15/15 PASS** -- 7 energy, 7 fuel grid
+records, and the gamma-continuation rewalk. The section-21 narrative
+"the refutation explains the gamma anomaly" is therefore wrong in
+mechanism: the anomaly was a basin (the rewalk found the better optimum,
+m_f 0.949005 vs 0.944025, and stays in the catalog on MASS, not on a
+verdict), and the conjugate test never disagreed with the walk. The
+second-order gate remains production policy; it simply had not yet caught
+anything real.
+
+**P0.1 -- the catalog mislabelled its propulsion.** `build_minfuel_catalog`
+hardcoded `isp_s = 1710` (the min-time catalogs' value) beside
+`c_nd = 8.673746`, which is Isp 900 s exactly -- the 12x12 torus substrate
+(0.07 N / 900 s / 150 kg). A consumer recomputing c from `isp_s`, as every
+other builder does, got delta-V 1.90x too large. Fixed: Isp and thrust are
+now DERIVED from the record's `c_nd`/`Tmax_nd` (900 s, 0.070 N, asserted),
+and `catalog_schema('validate')` rejects any catalog whose `c_nd` disagrees
+with its `isp_s` (all five shipped min-time catalogs still validate
+clean). The rebuilt `costate_catalog_dro_tulip_minfuel.mat`: 7 entries,
+isp_s 900, thrustN 0.07, conj_pass 7/7 from the new sweep, verdicts bound
+to lam0 and to rows 1:7 by assertion; reflight via the catalog's own
+recipe: worst position miss < 0.2 km; delta-V 0.46-0.92 km/s.
+
+**Not changed (P1/P2 of the review, recorded in TODO):** `coastFrac` is a
+junction count, not a time fraction; the min-time catalogs' 18,249 verdicts
+were produced by the pre-fix instrument (same PASS on the 20 golden cells;
+the new t_f sample could only ADD refutations -- a re-sweep is cheap and
+pending); the race's per-gap bisection cap; `tGrid` persistence.

@@ -1,5 +1,17 @@
 # Step-5 min-fuel line -- external code review, adjudicated (2026-09-05)
 
+> **STATUS (same day): all four P0s FIXED and re-measured -- FINDINGS 22.**
+> TDD: four new failing tests first (`test_conj_fixedtf` +3 cases,
+> `test_catalog_schema_v3` +1, `test_huber_saltation` new), all green;
+> golden cells 20/20. P0.2: Huber STM error 1.35e-3 -> 2.1e-6, and the
+> re-raced Huber arm walks all 17 rungs with 0 fails (was 2 rungs / 8
+> fails) -- section 18's mechanism retracted. P0.3+P0.4: instrument fixed
+> (rows 1:7, coast skip, t_f sampled, last bracket counted), re-sweep
+> 15/15 PASS -- the old refutation was a structural zero, confirmed.
+> P0.1: catalog rebuilt with isp_s 900 / thrustN 0.07 derived from the
+> record, validator now enforces Isp/c consistency. P1.1 was fixed with
+> P0.4 (same lines). Remaining P1/P2 items are in `TODO.md`.
+
 **Scope.** The fixed-t_f objective line closed 2026-09-02 (FINDINGS 18-21):
 `costate_common/{cr3bp_minfuel_pmp,cr3bp_minfuel_prop,cr3bp_minenergy_pmp,
 cr3bp_minenergy_prop,ms_bvp,ms_conjugate_test,catalog_schema}.m`,

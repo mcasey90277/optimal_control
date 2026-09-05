@@ -1,0 +1,71 @@
+function ok = test_huber_saltation()
+%% Purpose:
+%
+%   The STM returned by cr3bp_minfuel_prop must equal the true sensitivity
+%   of the state map, INCLUDING across a throttle DISCONTINUITY. The 'huber'
+%   family jumps at Q = 1 (s: p*Q -> 1); integrating Phi_dot = A*Phi with
+%   the branchwise AD Jacobian misses the switching-time sensitivity, and
+%   the correct STM carries the saltation update
+%       Phi+ = [ I + (F+ - F-) n' / (n' F-) ] Phi-,   n = grad Q,
+%   at each crossing (review 2026-09-05, P0.2, sol + Astra). The 'eps'
+%   family is continuous at its clip knees, so its STM needs no update --
+%   it serves as the control case for the finite-difference harness.
+%
+%   Fixture: the field's own demo state, dt = 0.6, huber p = 0.3 -- the
+%   arc crosses Q = 1 once, at t ~ 0.153 (measured). Reference: central
+%   finite differences of the 14-state map with the same integrator
+%   tolerances (RelTol 1e-10), which resolve the switch by step control.
+%
+%% Inputs:
+%
+%  none
+%
+%% Outputs:
+%
+%  ok                       logical                 All cases passed
+%
+%% Revision History:
+%  M. Casey                                                   (c) 09/05/2026
+%  Copyright Coorbital Inc.
+%% ------------------------ Begin Code Sequence ---------------------------
+
+ok = true;
+if isempty(which('cr3bp_minfuel_prop'))
+    addpath(fileparts(fileparts(mfilename('fullpath'))));
+end
+mu_ = 0.012150585609624;  T_ = 0.1756418;  c_ = 8.673746;
+y0  = [0.85; 0.05; 0.01; 0.05; 0.55; -0.02; 0.97; ...
+       15.6; 32.9; -0.09; -0.10; 0.045; -0.00015; 0.13];
+dt  = 0.6;
+h   = 1e-6;
+
+fams = {struct('family','eps','p',0.3),   'eps   (continuous, control case)', 1e-5; ...
+        struct('family','huber','p',0.3), 'huber (Q=1 jump at t~0.153)',       1e-5};
+for k = 1:size(fams, 1)
+    sm = fams{k,1};
+    [~, PHI] = cr3bp_minfuel_prop(dt, y0, true, T_, c_, mu_, sm);
+    PHIfd = zeros(14);
+    for j = 1:14
+        e = zeros(14,1);  e(j) = h;
+        yp = cr3bp_minfuel_prop(dt, y0 + e, false, T_, c_, mu_, sm);
+        ym = cr3bp_minfuel_prop(dt, y0 - e, false, T_, c_, mu_, sm);
+        PHIfd(:, j) = (yp - ym) / (2*h);
+    end
+    err = max(abs(PHI(:) - PHIfd(:))) / max(abs(PHIfd(:)));
+    ok = chk(ok, err < fams{k,3}, ...
+             sprintf('%s: max|PHI - PHI_fd| / max|PHI_fd| = %.2e (tol %.0e)', ...
+                     fams{k,2}, err, fams{k,3}));
+end
+
+if ok, fprintf('TEST_HUBER_SALTATION: ALL PASS\n');
+else,  fprintf('TEST_HUBER_SALTATION: FAILURE (see lines above)\n');
+end
+end
+
+% ------------------------------------------------------------------------
+function ok = chk(ok, cond, label)
+% CHK  Accumulate a labeled pass/fail.  INPUTS: ok; cond; label. OUTPUTS: ok.
+if cond, fprintf('  PASS  %s\n', label);
+else,    fprintf('  FAIL  %s\n', label);  ok = false;
+end
+end

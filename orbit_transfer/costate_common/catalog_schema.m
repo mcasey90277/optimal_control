@@ -157,6 +157,20 @@ case 'validate'
             p{end+1} = sprintf('sheet %d: tau_dep ~= tauDRO alias', ks);
         end
     end
+    % Propulsion self-consistency (review 2026-09-05, P0.1): the stored
+    % exhaust velocity must be the one implied by the stored Isp, else a
+    % consumer recomputing c from isp_s gets a different dV than
+    % 'deltav_from_mf' (the shipped min-fuel catalog carried Isp 1710 s
+    % beside c_nd for 900 s: dV off 1.90x).
+    th = cat_.thruster;  cn = cat_.constants;
+    if all(isfield(th, {'isp_s','c_nd'})) && all(isfield(cn, {'lStar_km','tStar_s'}))
+        cExp = th.isp_s * 9.80665 * cn.tStar_s / (1000 * cn.lStar_km);
+        if abs(th.c_nd - cExp) > 1e-6 * cExp
+            p{end+1} = sprintf(['thruster.c_nd (%.6f) inconsistent with isp_s = %g s ' ...
+                '(implies %.6f, i.e. Isp %.1f s)'], th.c_nd, th.isp_s, cExp, ...
+                th.c_nd * 1000 * cn.lStar_km / (9.80665 * cn.tStar_s));
+        end
+    end
     nTot = 0;
     for ks = 1:numel(cat_.sheets)
         nTot = nTot + nnz(cat_.sheets(ks).has_solution);

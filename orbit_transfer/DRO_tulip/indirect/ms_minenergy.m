@@ -85,13 +85,14 @@ seed.Y(1:7,1) = [rv0; 1];                      % state part of col 1 is fixed
 z = p(1:7);
 
 if conjTest
-    % FIXED-tf Jacobi test (validated on the analytic LQ pi-conjugate case,
-    % tests/test_conj_fixedtf): no flow column, no scaling quotient (L
-    % breaks the invariance), rows = the components vanishing under the
-    % terminal conditions (r, v fixed; lam_m(tf) = 0), cols = ALL seven
+    % FIXED-tf Jacobi test (tests/test_conj_fixedtf): no flow column, no
+    % scaling quotient (L breaks the invariance), rows 1:7 = the FULL state
+    % -- an interior conjugate point is a Jacobi field vanishing in r, v
+    % AND m (review 2026-09-05 P0.3; the earlier [1:6 14] block is the
+    % terminal shooting Jacobian, meaningful only at tf), cols = ALL seven
     % initial costates (the throttle law depends on lam_m here).
     info.conj = ms_conjugate_test(info, struct( ...
-        'stateRows', [1:6 14], 'costateCols', 8:14, ...
+        'stateRows', 1:7, 'costateCols', 8:14, ...
         'quotientDir', [], 'freeTime', false));
 end
 

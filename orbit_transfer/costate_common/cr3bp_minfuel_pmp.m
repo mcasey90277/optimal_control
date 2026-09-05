@@ -59,7 +59,12 @@ function [F, A, aux] = cr3bp_minfuel_pmp(y, Tmax, c, muStar, smooth)
 %                                                   .p the smoothing
 %                                                   parameter (eps in
 %                                                   (0,1], or the Huber
-%                                                   knee kappa > 0)
+%                                                   knee kappa in (0,1]);
+%                                                   optional .branch
+%                                                   'lo'|'hi' pins the
+%                                                   huber law to one side
+%                                                   of Q = 1 (used by the
+%                                                   event-split propagator)
 %
 %% Outputs:
 %
@@ -94,9 +99,17 @@ end
 
 assert(isstruct(smooth) && all(isfield(smooth, {'family','p'})) && ...
        smooth.p > 0, 'cr3bp_minfuel_pmp: smooth must be {family, p > 0}');
+assert(~strcmp(smooth.family, 'huber') || smooth.p <= 1, ...
+       'cr3bp_minfuel_pmp: huber knee must satisfy 0 < p <= 1 (s <= 1)');
+% Optional branch pin for the discontinuous huber law (event-split
+% propagation, cr3bp_minfuel_prop): 'lo' = the p*Q core, 'hi' = s = 1.
+branch = '';
+if isfield(smooth, 'branch') && ~isempty(smooth.branch), branch = smooth.branch; end
+key = smooth.family;
+if ~isempty(branch), key = [smooth.family '_' branch]; end
 
-persistent fn                              % fn.(family) = {fF, fA, fAux}
-if isempty(fn) || ~isfield(fn, smooth.family)
+persistent fn                              % fn.(key) = {fF, fA, fAux}
+if isempty(fn) || ~isfield(fn, key)
     if isempty(which('casadi.SX'))
         addpath(fullfile(getenv('HOME'), 'casadi-3.7.0'));
     end
@@ -124,7 +137,11 @@ if isempty(fn) || ~isfield(fn, smooth.family)
             % core for Q < 1, saturation for Q > 1 (degenerate AT Q = 1;
             % the min-norm selection p*Q is taken there):
             sRaw = ps*Q;
-            s = if_else(Q > 1, 1, fmin(fmax(sRaw, 0), ps));
+            switch branch
+                case 'lo',  s = fmin(fmax(sRaw, 0), ps);
+                case 'hi',  s = casadi.SX(1);
+                otherwise,  s = if_else(Q > 1, 1, fmin(fmax(sRaw, 0), ps));
+            end
             Lc = if_else(s <= ps, s^2/(2*ps), s - ps/2);
         otherwise
             error('cr3bp_minfuel_pmp:family', ...
@@ -141,13 +158,13 @@ if isempty(fn) || ~isfield(fn, smooth.family)
     lamdot = -jacobian(Hs, x7)';
     F14 = [f7; lamdot];
     A14 = jacobian(F14, ys);
-    fn.(smooth.family) = { ...
+    fn.(key) = { ...
         casadi.Function('F',   {ys, Ts, cs, mus, ps}, {F14}).expand(), ...
         casadi.Function('A',   {ys, Ts, cs, mus, ps}, {A14}).expand(), ...
         casadi.Function('aux', {ys, Ts, cs, mus, ps}, {s, alpha, Hs, Q, sRaw}).expand()};
 end
 
-fset = fn.(smooth.family);
+fset = fn.(key);
 F = full(fset{1}(y, Tmax, c, muStar, smooth.p));
 if nargout > 1
     A = full(fset{2}(y, Tmax, c, muStar, smooth.p));

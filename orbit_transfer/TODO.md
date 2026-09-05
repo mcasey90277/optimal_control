@@ -56,7 +56,10 @@ exists.
   2026-08-14; **γ grid DONE 2026-09-01** (15 records attempted, band
   [1.1, 1.4] reliable; high-γ direct fails + a measured basin split at
   (6,8)); **energy→fuel RACE DONE 2026-09-02** (FINDINGS §18: ε ladder
-  beats PLQ-Huber by knockout, Huber refuted with mechanism);
+  walks to ε ~ 0.002 — but its "Huber refuted with mechanism" verdict was
+  **RETRACTED 2026-09-05, FINDINGS §22**: the Huber STM lacked the
+  saltation matrix; corrected, Huber walks all 17 rungs with 0 fails to
+  m_f within 4.5e-6 of ε — ε remains the shipped convention);
   **FIRST MIN-FUEL RECORD SET DONE 2026-09-02** (FINDINGS §19: 7/7
   backbone records to ε ~ 0.001–0.005, fuel gain +0.13…+0.95% of m₀
   growing with γ, coast up to 58%, junction states banked;
@@ -65,9 +68,11 @@ exists.
   arcs) — certification = ms + absolute-H + endpoints + the conjugate
   verdict. **FIXED-t_f CONJUGATE TEST DONE 2026-09-02** (FINDINGS §20: the
   existing instrument with the fixed-tf spec, validated on the analytic LQ
-  π-conjugate case; 7/7 energy + 6/7 fuel PASS; the one refutation IS the
-  γ-anomaly record — second-order gate now production policy: refuted
-  cells re-walk from a γ neighbor). **SCHEMA V3 + RESCUE DONE
+  π-conjugate case; 7/7 energy + 6/7 fuel PASS at the time — **corrected
+  2026-09-05, FINDINGS §22**: the instrument monitored the terminal block
+  `[1:6 14]` instead of the full state `1:7`, and the one "refutation" was
+  an initial-coast structural zero; fixed instrument re-sweep = 15/15
+  PASS; the second-order gate stays production policy). **SCHEMA V3 + RESCUE DONE
   2026-09-02 (STEP 5 CLOSED)**: catalog_schema v3 (objective/γ axis, one
   catalog per objective, named axis3, stored mf_frac + deltav_from_mf,
   mandatory Yj junctions for minfuel; TDD 12/12, v1/v2 compat clean); the
@@ -76,6 +81,30 @@ exists.
   once on a good branch, then move γ; family jumps measurably fail);
   first v3 artifact `costate_catalog_dro_tulip_minfuel.mat` (7 entries,
   FINDINGS §21). Remaining: high-γ band widening only.
+  - [x] **Code-review P0s FIXED 2026-09-05** (three-way review, `DRO_tulip/
+    reviews/minfuel_code_review_2026-09-05.md`; FINDINGS §22): Huber
+    saltation (`test_huber_saltation`), conjugate block 1:7 + initial-coast
+    skip + t_f sampled + last bracket counted (`test_conj_fixedtf` +3),
+    catalog Isp label derived from c_nd + validator consistency check
+    (`test_catalog_schema_v3` +1); catalog rebuilt (Isp 900 / 0.07 N,
+    conj 7/7 bound to lam0); golden 20/20.
+  - [ ] **Review P1/P2 still open** (same doc): `coastFrac` is a junction
+    count, not a time fraction (§19's "58%" = 7/12 junctions) — integrate
+    the indicator; persist `tGrid` per entry; race `maxBisect` is per-arm
+    not per-gap; race resume never reloads its queue; `ode113` completion
+    check in both propagators; `catalog_schema` `1./mf`, version whitelist,
+    `conj_pass ∈ {0,1}` on solved entries; REFERENCES blocks on the
+    `costate_common` math functions; store a neighbouring-ε m_f delta per
+    entry.
+  - [ ] **Re-sweep the min-time catalogs' conjugate verdicts** with the
+    corrected instrument: the 18,249 verdicts were produced before the
+    t_f sample existed (golden cells unchanged; the change can only ADD
+    refutations). `conj_catalog_pass` unchanged; ~hours at K=24.
+  - [ ] **Huber as a continuation family, revisited** — with the saltation
+    fix it walked (2,5)@1.2 with 0 bisections vs ε's 7. One cell; repeat on
+    the other six grid records before drawing a conclusion. Note the
+    κ = 1 seed asymmetry (Huber's first rung minimises at s* = Q, so the
+    energy seed is cold for it — seed with λ/2).
   - [ ] **PLQ-penalty experiment for the energy→fuel homotopy** (Mike,
     2026-08-31 — do not forget): mlabTools `optim/` ships Rockafellar's
     piecewise linear-quadratic penalty class (`plq_make`/`plq_penalty`:

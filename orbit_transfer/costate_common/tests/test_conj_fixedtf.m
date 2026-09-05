@@ -55,9 +55,48 @@ for kc = 1:size(cases, 1)
     end
 end
 
+%% Review fixes 2026-09-05 (Astra/sol findings, minfuel_code_review):
+% (a) the LAST segment must be monitored: put the pi crossing INSIDE the
+%     final segment (K = 4, T = 3.5: t_K = 2.625 < pi < t_f = 3.5). The
+%     old instrument stopped at t_K and passed this extremal.
+info = lqInfo(3.5, 4);
+out  = ms_conjugate_test(info, spec);
+ok = chk(ok, out.nCrossings == 1 && ~out.pass, ...
+         sprintf('LQ T=3.5 K=4: crossing in the FINAL segment counted (n=%d, pass=%d)', ...
+                 out.nCrossings, out.pass));
+ok = chk(ok, numel(out.t) == 4 && abs(out.t(end) - 3.5) < 1e-12, ...
+         sprintf('LQ T=3.5 K=4: samples run through t_f (last sample %.3f)', out.t(end)));
+
+% (b) an INITIAL COAST makes the state block structurally zero (no costate
+%     dependence until the first burn). Those samples are not focal points:
+%     skip them, report where full rank is first attained, and PASS when the
+%     rest of the arc has no sign change. Fixture: 2 coast segments (state
+%     block exactly zero) then the LQ rotation flow with T = 2 (< pi).
+info = lqInfo(2.0, 8);
+Z = [0 0; 0 1];                                   % costate row survives, state row dead
+info.PHI(1:2) = {Z};                              % Phi_xl == 0 through junctions 2,3
+out = ms_conjugate_test(info, spec);
+ok = chk(ok, out.pass && out.nCrossings == 0, ...
+         sprintf('initial coast: structural zeros skipped, no refutation (n=%d)', out.nCrossings));
+ok = chk(ok, isfield(out, 'firstFullRank') && out.firstFullRank == 3, ...
+         sprintf('initial coast: firstFullRank = %d (want 3)', ...
+                 ternary(isfield(out,'firstFullRank'), out.firstFullRank, -1)));
+
+% (c) provenance: the spec actually used is echoed in the output so a verdict
+%     record can prove which block it monitored (P0.3 traceability).
+ok = chk(ok, isfield(out, 'stateRows') && isequal(out.stateRows, spec.stateRows) && ...
+             isfield(out, 'costateCols') && isequal(out.costateCols, spec.costateCols), ...
+         'spec echo: out.stateRows / out.costateCols present and equal to the spec');
+
 if ok, fprintf('TEST_CONJ_FIXEDTF: ALL PASS\n');
 else,  fprintf('TEST_CONJ_FIXEDTF: FAILURE (see lines above)\n');
 end
+end
+
+% ------------------------------------------------------------------------
+function v = ternary(c, a, b)
+% TERNARY  a if c else b.  INPUTS: c logical; a; b.  OUTPUTS: v.
+if c, v = a; else, v = b; end
 end
 
 % ------------------------------------------------------------------------

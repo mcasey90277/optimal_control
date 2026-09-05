@@ -65,10 +65,13 @@ seed.Y(1:7,1) = [rv0; 1];
 z = p(1:7);
 
 if conjTest
-    % Fixed-tf Jacobi spec as in ms_minenergy (validated on the analytic
-    % LQ case): no flow column, no quotient, rows [1:6 14], cols 8:14.
+    % Fixed-tf Jacobi spec as in ms_minenergy: no flow column, no quotient,
+    % rows 1:7 = the FULL state (a conjugate point is a Jacobi field
+    % vanishing in r, v AND m; review 2026-09-05 P0.3 -- the earlier
+    % [1:6 14] block is the terminal shooting Jacobian, valid only at tf),
+    % cols 8:14 (the throttle depends on lam_m).
     info.conj = ms_conjugate_test(info, struct( ...
-        'stateRows', [1:6 14], 'costateCols', 8:14, ...
+        'stateRows', 1:7, 'costateCols', 8:14, ...
         'quotientDir', [], 'freeTime', false));
 end
 

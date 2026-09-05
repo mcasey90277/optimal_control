@@ -188,7 +188,7 @@ info = struct('converged', normR < tolR, 'normR', normR, ...
               'iters', iters, 'wall', toc(tStart), ...
               'tGrid', sig*tfOf(p), 'Y', junctions(p));
 if keepSTMs
-    info.PHI = collectSTMs(p);
+    [info.PHI, info.Yend] = collectSTMs(p);
 end
 
 % ------------------------------------------------------------------------
@@ -205,13 +205,16 @@ end
     Yj = [y1, reshape(p(nf+(1:ny*(K-1))), ny, K-1)];
     end
 
-    function PHI = collectSTMs(p)
+    function [PHI, Yend] = collectSTMs(p)
     % COLLECTSTMS  Segment STMs at the final iterate (for the conjugate-
-    % point test).  INPUTS: p.  OUTPUTS: PHI {1 x K} of [ny x ny].
+    % point test) and the terminal state y(tf) (so the test can sample the
+    % final segment's flow).  INPUTS: p.  OUTPUTS: PHI {1 x K} of
+    % [ny x ny]; Yend [ny x 1].
     Yj = junctions(p);  tf = tfOf(p);
     PHI = cell(1, K);
+    Yend = [];
     for k = 1:K
-        [~, PHI{k}] = prob.prop(dsg(k)*tf, Yj(:,k), true);
+        [Yend, PHI{k}] = prob.prop(dsg(k)*tf, Yj(:,k), true);
     end
     end
 

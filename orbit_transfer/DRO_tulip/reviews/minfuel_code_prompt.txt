@@ -1,0 +1,127 @@
+You are performing an ADVERSARIAL technical code review of a MATLAB optimal-control
+codebase. Your job is to find real defects, not to praise the code. Assume the author
+is a competent engineer who wants to be told where he is wrong.
+
+## DOMAIN
+
+Low-thrust orbit transfer in the Circular Restricted Three-Body Problem (CR3BP),
+Earth-Moon system, nondimensional units (mass parameter mu, length unit LU = Earth-Moon
+distance, time unit TU). Spacecraft: m0 = 150 kg, Isp = 1710 s, thrust rungs 0.5-15 N.
+Transfers depart a Distant Retrograde Orbit (DRO) and arrive on a "tulip" orbit.
+
+State: x = [r(3); v(3); m] in the CR3BP rotating frame. Control: thrust direction u
+(unit vector) and throttle delta in [0,1].
+
+The pipeline under review is the FIXED-FINAL-TIME objective line:
+
+1. A direct collocation NLP (IPOPT, not in this bundle) solves a fixed-t_f min-ENERGY
+   problem, where t_f = gamma * t_f_minTime for a continuation parameter gamma > 1.
+2. The NLP duals are harvested as costate seeds.
+3. `ms_bvp` (generic multiple shooting) refines those seeds into a true PMP solution of
+   the indirect two-point boundary value problem, at FIXED t_f.
+4. An epsilon-homotopy continuation deforms the smooth min-energy problem into the
+   nonsmooth min-FUEL (bang-bang, L1-in-throttle) problem as eps -> 0.
+5. A second-order check (`ms_conjugate_test`) looks for interior conjugate points.
+6. Accepted records are packaged into a "catalog" (`catalog_schema`, schema v3).
+
+The min-fuel switching function is the standard one; the smoothed throttle uses the
+Bertrand-Epenoy regularization, delta = (1/2)(1 + tanh(-S/eps)) or an equivalent
+logistic form -- VERIFY the exact form used and whether it is self-consistent between
+the field (`cr3bp_minfuel_pmp`) and the propagator (`cr3bp_minfuel_prop`).
+
+## THE CLAIMS THE CODE IS SUPPOSED TO SUPPORT
+
+These claims are recorded in the project's findings log. Treat each as a HYPOTHESIS TO
+ATTACK: does the code, as written, actually establish it? Where could the claim be an
+artifact of a bug, a mis-specified gate, or a too-weak test rather than real physics?
+
+<<FINDINGS>>
+
+## WHAT TO REVIEW
+
+Everything in the SOURCE section. Prioritize in this order:
+
+### A. PMP / math correctness (highest priority)
+- `cr3bp_minfuel_pmp.m` and `cr3bp_minenergy_pmp.m`: are the costate equations
+  lambda_dot = -(df/dx)^T lambda correct for the CR3BP? Check the gravity-gradient
+  block, the Coriolis/rotating-frame terms (the 2*Omega cross-terms), and the centrifugal
+  terms. Check the MASS costate equation and its sign. Check the transversality /
+  terminal costate handling at fixed t_f.
+- Is the optimal control (primer vector) recovered correctly? u* = -lambda_v/||lambda_v||.
+  What happens when ||lambda_v|| -> 0 (singular arc)?
+- Is the switching function S correct, including the 1/m and Isp*g0 factors? A common
+  error is dropping the mass costate term or getting the sign of S backwards.
+- Is the smoothed throttle CONSISTENT with the Hamiltonian being minimized? A smoothing
+  applied to the control without the matching term in the running cost gives a control
+  that is not the minimizer of the smoothed Hamiltonian -- check this specifically.
+- STATE TRANSITION MATRIX: if the variational equations are propagated, does the
+  Jacobian used for the STM include the derivative of the SMOOTHED control with respect
+  to the state and costate? Omitting d(delta)/d(S) * d(S)/d(z) makes the STM wrong at
+  small eps exactly where it matters most, and would silently corrupt both the shooting
+  Jacobian and the conjugate-point test.
+
+### B. The conjugate-point test
+- `ms_conjugate_test.m`: at FIXED final time the conjugate-point condition is NOT the
+  same as the free-time one. The free-time test looks for a singularity of the
+  restricted variational flow on the subspace orthogonal to the extremal's own
+  direction; the fixed-time test uses the full block. Which is implemented? Is the
+  correct sub-block of the STM used (the d(delta x_f)/d(delta lambda_0) block)?
+- Is a "conjugate point" declared from a sign change of a determinant, a rank drop, or a
+  singular value crossing? Determinant sign changes are numerically fragile when the
+  block is badly scaled -- check for scaling and for missed DOUBLE crossings (a
+  determinant that dips through zero and back between sample times is missed entirely by
+  a sign test on a coarse grid).
+- Does the test EXCLUDE the endpoints correctly? A conjugate point exactly at t_f is a
+  boundary case, not an interior refutation.
+
+### C. Continuation / homotopy logic
+- `ms_minfuel.m`, `run_minfuel_race.m`, `run_minfuel_grid.m`: is the eps ladder
+  monotone, and is the step-back / retry logic correct on failure? Are converged
+  solutions at eps_k actually reused as the seed for eps_{k+1}, or is something reset?
+- The "gamma-continuation rescue" claim: descend eps first, THEN move gamma. Does the
+  code as written actually do that, or does it also change eps when gamma moves?
+- Is the acceptance gate applied at the FINAL eps or at some intermediate eps? Accepting
+  at a loose eps and reporting it as a min-fuel solution would be a significant overclaim.
+
+### D. Catalog schema / data integrity
+- `catalog_schema.m` (v3): is v1/v2 backward compatibility actually preserved, or do the
+  new required fields silently break old catalogs? Are the derived quantities
+  (mf_frac, deltav_from_mf) computed with the right rocket equation and the right units?
+  deltav = Isp*g0*log(m0/mf) -- check g0's units and whether Isp is in seconds.
+- `build_minfuel_catalog.m`: are conjugate verdicts and junction states written for every
+  entry, or can an entry be packaged with a missing/stale verdict?
+
+### E. Numerical robustness
+- Integration tolerances vs. the eps of the homotopy: is the ODE tolerance tightened as
+  eps shrinks? A fixed RelTol=1e-10 with eps=1e-3 may be fine; the reverse is not.
+- Division by near-zero: ||lambda_v||, mass, eps itself.
+- tanh/exp overflow at small eps (S/eps can be enormous) -- is it guarded?
+- Event detection / discontinuity handling across switches.
+
+### F. MATLAB code quality
+- Function headers must document purpose, INPUTS with sizes, OUTPUTS with sizes, and
+  REFERENCES where the math comes from. Flag any that do not.
+- House rules: never use `i` or `j` as loop indices (imaginary unit). Pre-allocate.
+  Vectorize where it matters.
+- Off-by-one and indexing errors, especially in the multiple-shooting node bookkeeping
+  in `ms_bvp.m` (segment k -> node k+1 mapping is a classic source of silent bugs).
+
+## RULES FOR YOUR OUTPUT
+
+- Cite `file:line` for every finding. Line numbers are given in the source listing.
+- Give a CONCRETE fix, not "consider reviewing this".
+- If you claim a math error, SHOW the correct expression.
+- Do not report a finding you are not reasonably confident in; instead, list genuinely
+  uncertain items in a separate "QUESTIONS / COULD NOT VERIFY" section at the end.
+- Explicitly state which of the four claims above you believe the code does NOT
+  establish, and why.
+- Do not summarize what the code does. Only report defects and risks.
+
+Format each finding as:
+- **[SEVERITY]** `file:line` — Issue description. Concrete fix recommendation.
+
+Where SEVERITY is one of:
+  CORRECTNESS — wrong math, wrong result, or will break at runtime
+  ROBUSTNESS  — edge case, numerical instability, or overflow risk
+  EFFICIENCY  — unnecessary computation, missed vectorization
+  STYLE       — documentation, naming, conventions

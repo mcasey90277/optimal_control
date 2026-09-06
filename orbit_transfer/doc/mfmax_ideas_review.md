@@ -136,7 +136,23 @@ target rather than at the Huber walls.
   is "depart from the arrival orbit", which needs the arrival state to be a
   legal departure -- true for periodic orbits, so it transfers.
 
-## 3. Recommended order for step 1 ("Huber where eps cannot enter")
+## 2b. Outcome of steps 1-2 (same day, FINDINGS 24)
+
+Both walls diagnosed with `cond(J)` (idea 1.2's test) and re-walked with
+MfMax's loose acceptance (idea 1.1): **neither fold nor gate**. cond(J) is
+flat across every failed iterate near the branch; the loose gate bought one
+rung on (6,8) that would not tighten (net shallower) and never fired on
+(1,2). `huber_switch_diag` then found the actual mechanism: **grazing
+bifurcations** of the Q = 1 switch structure -- a near-tangent crossing
+(|dQ/dt| = 0.045 vs 0.10-0.80 on clean cells) on (6,8), a Q maximum of
+0.9907 about to cross on (1,2). The solution curve has a corner there; no
+parametrization passes it. Ideas 1.1 and 1.2 are closed for the Huber
+walls. Idea 1.3 (rescaling) is moot for a corner. Idea 1.5 (IC homotopy)
+stands, for the high-gamma seeds. Idea 1.4 (FD cross-check) stands as the
+standing test. The cure is a FAMILY change at the corner: eps handoff, a
+Huber-eps hybrid ramp, or stepping over the bifurcation.
+
+## 3. Recommended order for step 1 ("Huber where eps cannot enter") -- as written before 2b
 
 1. **Diagnose the two Huber walls first, cheaply (one afternoon):** re-run
    the (6,8)@1.2 and (1,2)@1.2 Huber walks with `ms_bvp` returning

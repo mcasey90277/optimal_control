@@ -1174,3 +1174,72 @@ the catalog is unchanged. Recorded, not yet built: the mechanism study
 family on the same junctions -- the two limits are the same problem), and
 Huber on the hard cells where eps itself fails (the high-gamma band, the
 deep-thrust wall).
+
+## 24. The Huber walls are grazing bifurcations of the switch structure -- not folds, not the gate (2026-09-06)
+
+MfMax review (`doc/mfmax_ideas_review.md`) offered two explanations for the
+section-23 walls that its machinery would cure: a FOLD in p (arclength
+continuation passes it) or an over-tight rung gate (its `homCI` accepts
+continuation points at |S| < 1e-3). Both were tested on both walls
+(`run_huber_wall_diag`, `huber_wall_diag.mat`; `ms_bvp` now reports
+`cond(J)` at every final iterate, `run_minfuel_race` gained a loose-rung /
+tight-floor gate with floor refinement). Both are ruled out.
+
+**Not a fold.** cond(J) rises smoothly along the (6,8)@1.2 walk
+(1.7e7 -> 1.3e8 over 13 rungs) and is FLAT across all nine failed iterates
+(1.27-1.29e8). On (1,2)@1.2 (lambda/2 seed) it is 6.6-8.3e8 along the
+accepted rungs and 8.6-9.1e8 at the failures near the branch; the 1e10-3e11
+values occur only at iterates that had already diverged (normR 0.1-0.4).
+A turning point would show dS/dz going singular on approach; nothing does.
+
+**Not the gate.** With MfMax's own acceptance (normR < 1e-3, Hdrift < 1e-2)
+the (6,8) arm accepted one extra rung (p = 0.03198 at normR 8.5e-4), which
+then could not be tightened at the floor, so the arm fell back to its
+deepest tight rung -- net one rung SHALLOWER than the tight protocol
+(0.03409 vs 0.03275). On (1,2) every failure sat at normR >= 4.8e-3 and the
+loose gate never fired. The walls are sharp in p (converges in 31
+iterations at 0.03275, stalls at 0.03236) and the residual floor WORSENS
+as p decreases (3e-5 at 0.0330, 2e-3 at 0.0300): the field, not the gate.
+
+**What it is: a grazing bifurcation.** `huber_switch_diag` on the last
+good rung of each wall, with three clean cells as controls:
+
+| cell | gamma | p | Q = 1 crossings | min |dQ/dt| at a crossing | imminent graze |
+|---|---|---|---|---|---|
+| **wall (6,8)** | 1.2 | 0.0328 | 8 | **0.045** | -- |
+| **wall (1,2)** | 1.2 | 0.774 | 2 | 2.51 | **Q_max = 0.9907 at t/t_f = 0.01** |
+| clean (2,5) | 1.2 | 0.001 | 8 | 0.80 | none |
+| clean (2,5) | 1.1 | 0.001 | 9 | 0.10 | none |
+| clean (6,8) | 1.1 | 0.001 | 7 | 0.19 | none |
+
+(6,8) has a crossing that is 2-18x less transversal than any on the clean
+cells: the saltation denominator n'F- = dQ/dt is heading to zero -- two
+crossings about to annihilate (a burn arc closing). (1,2) has a local
+maximum of Q 0.9% below the jump at the very start of the transfer -- a
+burn arc about to be BORN. In both cases, as p decreases a little further,
+the switch structure changes at a tangency. At that point the trajectory
+map is not differentiable in the unknowns (the saltation matrix
+[I + (F+ - F-)n'/(n'F-)] blows up as n'F- -> 0); Newton stalls at a
+residual floor with a perfectly finite cond(J), and no reparametrization
+of p -- ladder, bisection, arclength -- passes it, because the solution
+curve itself has a corner there. The eps ramp never meets this: its control
+is continuous, so a new switch is born smoothly. The lambda/2 seed, by the
+way, is confirmed exact: the p = 1 rung converges in 2 iterations from it.
+
+**Consequences.**
+1. Ideas 1.1 (loose gate) and 1.2 (arclength) of the MfMax review are
+   closed for these walls; 1.3 (rescaling) is untested but cannot fix a
+   corner; 1.5 (IC homotopy for the high-gamma band) is untouched by this.
+2. The cure has to change the FAMILY at the corner, not the walk:
+   (a) hand off to eps at the wall (continuous law, passes the structural
+   change), optionally returning to Huber after -- the FINDINGS 23 handoff,
+   now with a reason; (b) a Huber-eps hybrid: replace the jump by a ramp of
+   tiny width delta (a PLQ with one more knee) so grazes become smooth --
+   one field function, the same tests; (c) step OVER the bifurcation: when
+   a rung fails, try a LARGER step past the graze and re-converge with the
+   new structure -- our bisection does the opposite and walks straight
+   into the singular point.
+3. `huber_switch_diag` (indirect/) is the standing instrument: run it on
+   every accepted rung during a walk and a wall becomes predictable
+   (min |dQ/dt| falling, or an extremum of Q approaching 1) one or two
+   rungs before it happens -- which is exactly when to hand off.

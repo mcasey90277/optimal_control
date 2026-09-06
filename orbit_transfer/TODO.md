@@ -107,13 +107,29 @@ exists.
     its first rung from the energy seed at both γ — λ/2 seed fixes the
     first rung (κ=1 asymmetry confirmed) but (1,2) still walls at p≈0.77.
     Huber = fast-or-walls, ε = slow-but-arrives. ε stays shipped.
-  - [ ] **Huber follow-ups (from §23):** (a) mechanism — per-segment count
-    and transversality of Q=1 crossings and the saltation condition number
-    nᵀF⁻ along the (6,8)@1.2 and (1,2) walks; test the coast-fraction
-    hypothesis; (b) hedged race + Huber→ε handoff at the wall (same
-    junctions, same limit problem); (c) Huber on the cells ε cannot enter
-    (high-γ band, deep-thrust wall, GTO_tulip 1.01–1.11× band) — the "new
-    line of attack" test proper; (d) make λ/2 the standard Huber seed.
+  - [x] **Huber wall mechanism — DONE 2026-09-06 (FINDINGS §24):** not a
+    fold (cond(J) flat), not the gate (MfMax loose acceptance tested, net
+    worse); **grazing bifurcations** of the switch structure — near-tangent
+    crossing |dQ/dt|=0.045 on (6,8), Q_max=0.9907 about to cross on (1,2);
+    clean cells show neither. Instrument: `indirect/huber_switch_diag`.
+    λ/2 seed confirmed exact (2 iterations at p=1). MfMax review §2b.
+  - [ ] **Huber follow-ups (from §23/§24):** (a) the cure is a FAMILY change
+    at the corner: Huber→ε handoff when `huber_switch_diag` predicts a
+    graze (min|dQ/dt| falling / Q extremum → 1), or a Huber-ε hybrid (jump
+    replaced by a ramp of width δ — one field function), or step OVER the
+    bifurcation (larger p step on failure, not bisection); (b) hedged race
+    in the builder; (c) Huber on the cells ε cannot enter (high-γ band via
+    MfMax idea 1.5 IC-homotopy seeds, deep-thrust wall, GTO_tulip
+    1.01–1.11× band); (d) λ/2 as the standard Huber seed.
+  - [ ] **Independent verifier for the fixed-t_f extremals (Mike,
+    2026-09-06):** (i) MATLAB `bvp5c` on the same PMP BVP (collocation, not
+    shooting — different algorithm, an afternoon; shares our field); (ii)
+    MfMax **v0** (fixed-t_f, time domain) with a new CR3BP `user.f90`
+    (Dhfun/Ufun/B2fun/Pfun hand-written in ND from the equations — a true
+    foreign witness: Fortran, rkf45, hybrd, FD Jacobian), run in `ipar=3`
+    single-shoot mode from our λ₀; agreement ceiling ~1e-6 |dz| (single
+    shooting over 20–30 d), same as `ss_bvp_accept`, but independent.
+    Closes survey gap 3.5 for case B.
   - [ ] **PLQ-penalty experiment for the energy→fuel homotopy** (Mike,
     2026-08-31 — do not forget): mlabTools `optim/` ships Rockafellar's
     piecewise linear-quadratic penalty class (`plq_make`/`plq_penalty`:

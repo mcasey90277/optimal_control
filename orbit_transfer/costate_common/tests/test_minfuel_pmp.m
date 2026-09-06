@@ -52,7 +52,9 @@ ok = chk(ok, max(abs(Ff - Fe)) < 1e-12*(1 + max(abs(Fe))) && ...
 fams = { struct('family','eps',  'p',0.35); ...
          struct('family','eps',  'p',0.05); ...
          struct('family','huber','p',0.6);  ...
-         struct('family','huber','p',0.15) };
+         struct('family','huber','p',0.15); ...
+         struct('family','huberc','p',0.6);                 % delta defaults to p
+         struct('family','huberc','p',0.15,'delta',0.05) };
 worst = 0;
 for kf = 1:numel(fams)
     for Qt = [0.3, 0.8, 0.999, 1.2, 2.5]
@@ -67,7 +69,7 @@ for kf = 1:numel(fams)
     end
 end
 ok = chk(ok, worst < 1e-7, ...
-         sprintf('throttle law is the H(s) argmin, both families (worst dH %.1e)', worst));
+         sprintf('throttle law is the H(s) argmin, all families (worst dH %.1e)', worst));
 
 %% 3. common bang-bang limit away from the switch. Above the switch the
 %  agreement is exact; BELOW it huber converges only FIRST-ORDER in kappa
@@ -85,7 +87,7 @@ for Qt = [0.7, 1.4]
 end
 
 %% 4. AD Jacobian vs central finite differences:
-for kf = [1 3]
+for kf = [1 3 5]
     y = setQ(yb, 1.25);
     [~, A] = cr3bp_minfuel_pmp(y, T_, c_, mu_, fams{kf});
     Afd = zeros(14);
@@ -109,6 +111,23 @@ kap = 0.3;
 ok = chk(ok, abs(axLo.s - kap*0.995) < 1e-3 && abs(axHi.s - 1) < 1e-12, ...
          sprintf('huber law jumps kappa->1 across Q=1 (s %.3f -> %.3f)', ...
                  axLo.s, axHi.s));
+
+%% 6. the Huber-eps HYBRID 'huberc' (FINDINGS 24 cure): Huber's core
+%  s = p*Q below Q = 1, then a CONTINUOUS ramp p -> 1 over Q in [1, 1+delta]
+%  instead of the jump. (a) continuous at both knees; (b) delta -> 0
+%  recovers huber away from the ramp; (c) the ramp really is the law.
+hc = struct('family','huberc','p',0.3,'delta',0.1);
+sAt = @(Qt, fam) sAtFun(setQ(yb, Qt), T_, c_, mu_, fam);
+ok = chk(ok, abs(sAt(1-1e-7, hc) - sAt(1+1e-7, hc)) < 1e-5 && ...
+             abs(sAt(1.1-1e-7, hc) - sAt(1.1+1e-7, hc)) < 1e-5, ...
+         sprintf('huberc continuous at Q=1 and Q=1+delta (jumps %.1e, %.1e)', ...
+                 abs(sAt(1-1e-7,hc)-sAt(1+1e-7,hc)), abs(sAt(1.1-1e-7,hc)-sAt(1.1+1e-7,hc))));
+hc0 = struct('family','huberc','p',0.3,'delta',1e-9);
+hu  = struct('family','huber','p',0.3);
+ok = chk(ok, abs(sAt(0.8, hc0) - sAt(0.8, hu)) < 1e-12 && abs(sAt(1.5, hc0) - sAt(1.5, hu)) < 1e-12, ...
+         'huberc(delta->0) == huber away from the ramp');
+ok = chk(ok, abs(sAt(1.05, hc) - (0.3 + 0.7*0.5)) < 1e-9, ...
+         sprintf('huberc ramp: s(Q=1+delta/2) = p + (1-p)/2 = %.4f', sAt(1.05, hc)));
 
 if ok, fprintf('TEST_MINFUEL_PMP: ALL PASS\n');
 else,  fprintf('TEST_MINFUEL_PMP: FAILURE (see lines above)\n');
@@ -144,5 +163,16 @@ switch fam.family
         L = (1 - p)*s + p*s.^2;
     case 'huber'
         L = (s <= p).*(s.^2/(2*p)) + (s > p).*(s - p/2);
+    case 'huberc'
+        d = p;  if isfield(fam, 'delta') && ~isempty(fam.delta), d = fam.delta; end
+        L = (s <= p).*(s.^2/(2*p)) + ...
+            (s > p).*(p/2 + (s - p) + d*(s - p).^2/(2*(1 - p)));
 end
+end
+
+function s = sAtFun(y, T, c, mu, fam)
+% SATFUN  Throttle of a smoothing family at a state.
+% INPUTS: y [14x1]; T; c; mu; fam struct.  OUTPUTS: s double.
+[~, ~, ax] = cr3bp_minfuel_pmp(y, T, c, mu, fam);
+s = ax.s;
 end

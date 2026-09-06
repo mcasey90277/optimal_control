@@ -25,6 +25,14 @@ function [F, A, aux] = cr3bp_minfuel_pmp(y, Tmax, c, muStar, smooth)
 %            measures whether these structural differences matter in
 %            continuation practice.
 %
+%     'huberc' (Huber-eps HYBRID, 2026-09-06, FINDINGS 24): Huber's core
+%            s = p*Q for Q < 1, then a CONTINUOUS ramp p -> 1 over
+%            Q in [1, 1+delta] (default delta = p), s = 1 beyond. L is the
+%            integral of the inverse law (matched at s = p), so the law is
+%            the exact argmin of a convex H(s). Removes Huber's jump -- and
+%            with it the grazing-bifurcation walls -- while keeping its
+%            gentle core. Needs no saltation (generic propagation).
+%
 %   with Q = Tmax(|lam_v|/m + lam_m/c) the switch quantity: the fuel
 %   (p -> 0) bang-bang law is s = 1 where Q > 1, s = 0 where Q < 1.
 %
@@ -60,6 +68,8 @@ function [F, A, aux] = cr3bp_minfuel_pmp(y, Tmax, c, muStar, smooth)
 %                                                   parameter (eps in
 %                                                   (0,1], or the Huber
 %                                                   knee kappa in (0,1]);
+%                                                   optional .delta (huberc
+%                                                   ramp width, default p);
 %                                                   optional .branch
 %                                                   'lo'|'hi' pins the
 %                                                   huber law to one side
@@ -99,12 +109,15 @@ end
 
 assert(isstruct(smooth) && all(isfield(smooth, {'family','p'})) && ...
        smooth.p > 0, 'cr3bp_minfuel_pmp: smooth must be {family, p > 0}');
-assert(~strcmp(smooth.family, 'huber') || smooth.p <= 1, ...
+assert(~any(strcmp(smooth.family, {'huber','huberc'})) || smooth.p <= 1, ...
        'cr3bp_minfuel_pmp: huber knee must satisfy 0 < p <= 1 (s <= 1)');
 % Optional branch pin for the discontinuous huber law (event-split
 % propagation, cr3bp_minfuel_prop): 'lo' = the p*Q core, 'hi' = s = 1.
 branch = '';
 if isfield(smooth, 'branch') && ~isempty(smooth.branch), branch = smooth.branch; end
+% huberc ramp width: a Function INPUT (like p), default delta = p.
+delta = smooth.p;
+if isfield(smooth, 'delta') && ~isempty(smooth.delta), delta = smooth.delta; end
 key = smooth.family;
 if ~isempty(branch), key = [smooth.family '_' branch]; end
 
@@ -115,7 +128,7 @@ if isempty(fn) || ~isfield(fn, key)
     end
     ys = casadi.SX.sym('y', 14);  Ts = casadi.SX.sym('T');
     cs = casadi.SX.sym('c');      mus = casadi.SX.sym('mu');
-    ps = casadi.SX.sym('p');
+    ps = casadi.SX.sym('p');      ds = casadi.SX.sym('delta');
     r = ys(1:3);  v = ys(4:6);  m = ys(7);
     lr = ys(8:10);  lv = ys(11:13);  lm = ys(14);
     dd = sqrt((r(1)+mus)^2 + r(2)^2 + r(3)^2);
@@ -143,6 +156,21 @@ if isempty(fn) || ~isfield(fn, key)
                 otherwise,  s = if_else(Q > 1, 1, fmin(fmax(sRaw, 0), ps));
             end
             Lc = if_else(s <= ps, s^2/(2*ps), s - ps/2);
+        case 'huberc'
+            % HUBER-EPS HYBRID (FINDINGS 24 cure): Huber's core s = p*Q for
+            % Q < 1, then a CONTINUOUS ramp p -> 1 over Q in [1, 1+delta]
+            % instead of the jump, s = 1 beyond. L is the integral of the
+            % inverse law dL/ds = Q(s), matched at s = p, so H(s) = L - sQ
+            % is convex and this IS its argmin. delta -> 0 recovers huber;
+            % continuous => no saltation, generic propagation.
+            sRaw = ps*Q;
+            om = 1 - ps + 1e-300;                         % (1-p), safe at p = 1
+            sRamp = ps + om*(Q - 1)/ds;
+            s = if_else(Q < 1, fmax(sRaw, 0), if_else(Q < 1 + ds, sRamp, 1));
+            Lcore = s^2/(2*ps);
+            Lramp = ps/2 + (s - ps) + ds*(s - ps)^2/(2*om);
+            Lsat  = ps/2 + (1 - ps) + ds*(1 - ps)/2;
+            Lc = if_else(Q < 1, Lcore, if_else(Q < 1 + ds, Lramp, Lsat));
         otherwise
             error('cr3bp_minfuel_pmp:family', ...
                   'unknown smoothing family ''%s''', smooth.family);
@@ -159,18 +187,18 @@ if isempty(fn) || ~isfield(fn, key)
     F14 = [f7; lamdot];
     A14 = jacobian(F14, ys);
     fn.(key) = { ...
-        casadi.Function('F',   {ys, Ts, cs, mus, ps}, {F14}).expand(), ...
-        casadi.Function('A',   {ys, Ts, cs, mus, ps}, {A14}).expand(), ...
-        casadi.Function('aux', {ys, Ts, cs, mus, ps}, {s, alpha, Hs, Q, sRaw}).expand()};
+        casadi.Function('F',   {ys, Ts, cs, mus, ps, ds}, {F14}).expand(), ...
+        casadi.Function('A',   {ys, Ts, cs, mus, ps, ds}, {A14}).expand(), ...
+        casadi.Function('aux', {ys, Ts, cs, mus, ps, ds}, {s, alpha, Hs, Q, sRaw}).expand()};
 end
 
 fset = fn.(key);
-F = full(fset{1}(y, Tmax, c, muStar, smooth.p));
+F = full(fset{1}(y, Tmax, c, muStar, smooth.p, delta));
 if nargout > 1
-    A = full(fset{2}(y, Tmax, c, muStar, smooth.p));
+    A = full(fset{2}(y, Tmax, c, muStar, smooth.p, delta));
 end
 if nargout > 2
-    [s_, al_, H_, Q_, sr_] = fset{3}(y, Tmax, c, muStar, smooth.p);
+    [s_, al_, H_, Q_, sr_] = fset{3}(y, Tmax, c, muStar, smooth.p, delta);
     aux = struct('s', full(s_), 'alpha', full(al_), 'H', full(H_), ...
                  'Q', full(Q_), 'sRaw', full(sr_));
 end

@@ -1,0 +1,673 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Huber: A Second Road to Min-Fuel</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css">
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"></script>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
+
+:root {
+  --bg: #09090b; --surface: #111118; --border: #1c1c28;
+  --text: #e4e4ec; --text-muted: #6b6b84; --text-dim: #44445a;
+  --accent: #00d4aa; --accent-glow: rgba(0, 212, 170, 0.12); --accent-border: rgba(0, 212, 170, 0.3);
+  --warn: #f59e0b; --warn-glow: rgba(245, 158, 11, 0.10); --warn-border: rgba(245, 158, 11, 0.3);
+  --error: #ef4444; --error-glow: rgba(239, 68, 68, 0.10); --error-border: rgba(239, 68, 68, 0.3);
+  --pass: #22c55e; --sidebar-w: 190px; --transition: 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+}
+*, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+html, body { height: 100%; overflow: auto; font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif; background: var(--bg); color: var(--text); -webkit-font-smoothing: antialiased; }
+body.slideshow { overflow: hidden; }
+#progress { position: fixed; top: 0; left: 0; height: 2px; z-index: 200; background: var(--accent); transition: width var(--transition); box-shadow: 0 0 12px rgba(0,212,170,0.4); display: none; }
+body.slideshow #progress { display: block; }
+#sidebar { position: fixed; left: 0; top: 50%; transform: translateY(-50%); z-index: 100; padding: 0 1.4rem; display: none; flex-direction: column; gap: 0.2rem; }
+body.slideshow #sidebar { display: flex; }
+.nav-item { display: flex; align-items: center; gap: 0.65rem; padding: 0.4rem 0; cursor: pointer; text-decoration: none; transition: all 0.3s; }
+.nav-dot { width: 5px; height: 5px; border-radius: 50%; flex-shrink: 0; background: var(--text-dim); transition: all 0.3s; }
+.nav-label { font-size: 0.68rem; font-weight: 400; letter-spacing: 0.06em; text-transform: uppercase; color: var(--text-dim); transition: color 0.3s; white-space: nowrap; }
+.nav-item.active .nav-dot { background: var(--accent); box-shadow: 0 0 8px rgba(0,212,170,0.5); width: 6px; height: 6px; }
+.nav-item.active .nav-label { color: var(--accent); font-weight: 500; }
+.nav-item.visited .nav-dot { background: var(--text-muted); }
+.nav-item.visited .nav-label { color: var(--text-muted); }
+.nav-item:hover .nav-label { color: var(--text); }
+#counter { position: fixed; bottom: 1.5rem; right: 2rem; z-index: 100; font-size: 0.75rem; color: var(--text-dim); font-variant-numeric: tabular-nums; letter-spacing: 0.05em; display: none; }
+body.slideshow #counter { display: block; }
+.slide { display: flex; align-items: center; justify-content: center; padding: 3rem 2rem; min-height: 100vh; border-bottom: 1px solid var(--border); }
+body.slideshow .slide { position: absolute; inset: 0; padding: 3rem 3rem 3rem calc(var(--sidebar-w) + 3rem); opacity: 0; pointer-events: none; transition: opacity var(--transition), transform var(--transition); transform: translateY(8px); border-bottom: none; min-height: 0; }
+body.slideshow .slide.active { opacity: 1; pointer-events: auto; transform: translateY(0); }
+.slide-inner { width: 100%; max-width: 960px; }
+.slide-chapter { font-size: 0.65rem; font-weight: 500; letter-spacing: 0.12em; text-transform: uppercase; color: var(--accent); margin-bottom: 0.6rem; opacity: 0.8; }
+.slide-title { font-size: 1.7rem; font-weight: 600; line-height: 1.3; margin-bottom: 2rem; letter-spacing: -0.01em; }
+p, li { font-size: 1.02rem; line-height: 1.75; color: var(--text); }
+p + p { margin-top: 0.8rem; }
+ul, ol { padding-left: 1.3rem; }
+li { margin-bottom: 0.35rem; }
+li::marker { color: var(--text-dim); }
+strong, b { font-weight: 600; }
+.muted { color: var(--text-muted); } .dim { color: var(--text-dim); } .small { font-size: 0.88rem; } .accent { color: var(--accent); } .warn { color: var(--warn); }
+.result-box { border: 1px solid var(--accent-border); background: var(--accent-glow); border-radius: 10px; padding: 1.3rem 1.8rem; margin: 1.5rem 0; }
+.result-box .result-label { font-size: 0.7rem; font-weight: 500; letter-spacing: 0.1em; text-transform: uppercase; color: var(--accent); margin-bottom: 0.6rem; }
+.warn-box { border: 1px solid var(--warn-border); background: var(--warn-glow); border-radius: 10px; padding: 1.3rem 1.8rem; margin: 1.5rem 0; }
+.warn-box .warn-label { font-size: 0.7rem; font-weight: 500; letter-spacing: 0.1em; text-transform: uppercase; color: var(--warn); margin-bottom: 0.6rem; }
+.error-box { border: 1px solid var(--error-border); background: var(--error-glow); border-radius: 10px; padding: 1.3rem 1.8rem; margin: 1.5rem 0; }
+.error-box .error-label { font-size: 0.7rem; font-weight: 500; letter-spacing: 0.1em; text-transform: uppercase; color: var(--error); margin-bottom: 0.6rem; }
+.insight-box { border-left: 3px solid var(--accent); padding: 1rem 0 1rem 1.5rem; margin: 1.5rem 0; background: rgba(0,212,170,0.03); border-radius: 0 8px 8px 0; }
+.insight-box .insight-label { font-size: 0.7rem; font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase; color: var(--accent); margin-bottom: 0.4rem; }
+.block-box { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 1.2rem 1.6rem; margin: 1.2rem 0; }
+.code-box { background: #0d0d14; border: 1px solid var(--border); border-radius: 8px; padding: 1rem 1.4rem; margin: 1rem 0; font-family: 'JetBrains Mono', monospace; font-size: 0.82rem; line-height: 1.7; overflow-x: auto; }
+.code-box .kw { color: #7c8cf5; } .code-box .cm { color: #5a6a3a; } .code-box .fn { color: #00d4aa; } .code-box .str { color: #e5a06e; } .code-box .num { color: #d4a0e0; }
+.columns { display: grid; gap: 2.5rem; align-items: start; }
+.columns-60-40 { grid-template-columns: 3fr 2fr; } .columns-50-50 { grid-template-columns: 1fr 1fr; } .columns-45-55 { grid-template-columns: 9fr 11fr; }
+.spacer-sm { height: 0.6rem; } .spacer { height: 1.2rem; } .spacer-lg { height: 2rem; }
+.data-table { width: 100%; border-collapse: collapse; font-size: 0.92rem; }
+.data-table th { text-align: left; padding: 0.7rem 1rem; border-bottom: 2px solid var(--border); color: var(--accent); font-weight: 500; font-size: 0.85rem; letter-spacing: 0.03em; }
+.data-table td { padding: 0.55rem 1rem; border-bottom: 1px solid var(--border); color: var(--text); line-height: 1.6; }
+.data-table tr:last-child td { border-bottom: none; }
+.katex { font-size: 1.08em; } .katex-display { margin: 1rem 0; } .katex-display > .katex { font-size: 1.15em; }
+.title-slide { text-align: center; }
+.title-slide .main-title { font-size: 2.6rem; font-weight: 700; letter-spacing: -0.02em; line-height: 1.2; margin-bottom: 1rem; }
+.title-slide .subtitle { font-size: 1.1rem; color: var(--text-muted); font-weight: 300; line-height: 1.6; max-width: 600px; margin: 0 auto 2.5rem; }
+.title-slide .divider { width: 60px; height: 2px; background: var(--accent); margin: 0 auto 2rem; border-radius: 1px; }
+.title-slide .meta { font-size: 0.8rem; color: var(--text-dim); letter-spacing: 0.05em; }
+.end-slide { text-align: center; }
+.end-slide .end-text { font-size: 3rem; font-weight: 300; color: var(--text-muted); letter-spacing: 0.05em; }
+.end-slide .end-accent { width: 40px; height: 2px; background: var(--accent); margin: 1.5rem auto 0; border-radius: 1px; }
+.outline-list { list-style: none; padding: 0; display: flex; flex-direction: column; gap: 0.5rem; }
+.outline-list li { display: flex; align-items: center; gap: 0.8rem; font-size: 1.05rem; color: var(--text-muted); line-height: 2; }
+.outline-list .ol-num { font-variant-numeric: tabular-nums; font-size: 0.8rem; color: var(--accent); font-weight: 500; min-width: 1.5rem; text-align: right; }
+.ref-list { list-style: none; padding: 0; }
+.ref-list li { padding: 0.5rem 0; font-size: 0.9rem; line-height: 1.6; color: var(--text-muted); border-bottom: 1px solid var(--border); }
+.ref-list li:last-child { border-bottom: none; }
+.ref-list .ref-num { color: var(--accent); font-weight: 500; margin-right: 0.5rem; }
+.ref-list em { color: var(--text); font-style: italic; } .ref-list strong { color: var(--text); font-weight: 500; }
+.click-prev, .click-next { position: fixed; top: 0; bottom: 0; z-index: 50; cursor: pointer; display: none; }
+body.slideshow .click-prev, body.slideshow .click-next { display: block; }
+.click-prev { left: var(--sidebar-w); width: 80px; } .click-next { right: 0; width: 120px; }
+#keyhint { position: fixed; bottom: 1.5rem; left: 50%; transform: translateX(-50%); font-size: 0.65rem; color: var(--text-dim); letter-spacing: 0.05em; opacity: 0.6; transition: opacity 1s; display: none; }
+body.slideshow #keyhint { display: block; }
+.fig-img { width: 100%; border-radius: 8px; border: 1px solid var(--border); }
+.fig-caption { font-size: 0.8rem; color: var(--text-muted); text-align: center; margin-top: 0.5rem; }
+.fig-pair { display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; align-items: start; }
+.fig-cell { text-align: center; }
+.law-svg { width: 100%; height: auto; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; }
+.law-svg text { font-family: 'Inter', sans-serif; font-size: 11px; fill: var(--text-muted); }
+.tag { display: inline-block; padding: 0.1rem 0.55rem; border-radius: 999px; font-size: 0.72rem; font-weight: 600; letter-spacing: 0.04em; }
+.tag-pass { background: rgba(34,197,94,0.15); color: var(--pass); border: 1px solid rgba(34,197,94,0.35); }
+.tag-fail { background: var(--error-glow); color: var(--error); border: 1px solid var(--error-border); }
+.tag-warn { background: var(--warn-glow); color: var(--warn); border: 1px solid var(--warn-border); }
+@media (max-width: 768px) {
+  html, body { overflow-x: hidden; }
+  body.slideshow #sidebar, body.slideshow #keyhint, body.slideshow .click-prev, body.slideshow .click-next { display: none; }
+  body.slideshow #counter { bottom: 0.8rem; right: 1rem; font-size: 0.7rem; }
+  .slide { padding: 1.5rem 1.2rem 2rem 1.2rem; min-height: auto; }
+  body.slideshow .slide { padding: 1.5rem 1.2rem 3rem 1.2rem; position: relative; opacity: 1; pointer-events: auto; transform: none; display: none; align-items: flex-start; min-height: 100vh; min-height: 100dvh; overflow-y: auto; border-bottom: none; }
+  body.slideshow .slide.active { display: flex; }
+  .slide-inner { max-width: 100%; }
+  .slide-title { font-size: 1.3rem; margin-bottom: 1.2rem; } .slide-chapter { font-size: 0.6rem; }
+  .title-slide .main-title { font-size: 1.8rem; } .title-slide .subtitle { font-size: 0.95rem; }
+  p, li { font-size: 0.92rem; line-height: 1.65; } .small { font-size: 0.82rem; }
+  .columns, .columns-50-50, .columns-60-40, .columns-45-55 { grid-template-columns: 1fr !important; gap: 1rem; }
+  .fig-pair { grid-template-columns: 1fr; }
+  .data-table { font-size: 0.78rem; display: block; overflow-x: auto; white-space: nowrap; }
+  .data-table th { padding: 0.4rem 0.5rem; font-size: 0.72rem; } .data-table td { padding: 0.35rem 0.5rem; }
+  .result-box, .warn-box, .error-box, .insight-box, .block-box { padding: 1rem 1.2rem; margin: 1rem 0; }
+  pre, code { font-size: 0.75rem !important; } .code-box { padding: 0.8rem 1rem; overflow-x: auto; }
+  .katex-display { margin: 0.6rem 0; overflow-x: auto; overflow-y: hidden; } .katex { font-size: 0.95em; }
+  .end-slide .end-text { font-size: 1.6rem; } ol, ul { padding-left: 1rem; }
+}
+</style>
+</head>
+<body>
+
+<div id="progress"></div>
+
+<nav id="sidebar">
+  <a class="nav-item" data-chapter="problem" onclick="goToChapter('problem')"><span class="nav-dot"></span><span class="nav-label">The Problem</span></a>
+  <a class="nav-item" data-chapter="melt" onclick="goToChapter('melt')"><span class="nav-dot"></span><span class="nav-label">Melting It</span></a>
+  <a class="nav-item" data-chapter="bug" onclick="goToChapter('bug')"><span class="nav-dot"></span><span class="nav-label">The Bug</span></a>
+  <a class="nav-item" data-chapter="results" onclick="goToChapter('results')"><span class="nav-dot"></span><span class="nav-label">Results</span></a>
+  <a class="nav-item" data-chapter="why" onclick="goToChapter('why')"><span class="nav-dot"></span><span class="nav-label">Why</span></a>
+  <a class="nav-item" data-chapter="use" onclick="goToChapter('use')"><span class="nav-dot"></span><span class="nav-label">How To Use It</span></a>
+  <a class="nav-item" data-chapter="lessons" onclick="goToChapter('lessons')"><span class="nav-dot"></span><span class="nav-label">Lessons</span></a>
+  <a class="nav-item" data-chapter="next" onclick="goToChapter('next')"><span class="nav-dot"></span><span class="nav-label">Next</span></a>
+</nav>
+
+<div id="counter"></div>
+<div class="click-prev" onclick="prev()"></div>
+<div class="click-next" onclick="next()"></div>
+<div id="keyhint">Arrow keys to navigate</div>
+
+<!-- ============== SLIDES ============== -->
+
+<section class="slide" data-chapter="">
+  <div class="slide-inner title-slide">
+    <div class="main-title">Huber: A Second Road to Min-Fuel</div>
+    <p class="subtitle">How a "refuted" idea turned out to be a bug in our own Jacobian, what the corrected experiments show, and how we might use it</p>
+    <div class="divider"></div>
+    <p class="meta">Optimal Control &middot; DRO &rarr; Tulip Low-Thrust Transfers &middot; September 2026</p>
+  </div>
+</section>
+
+<section class="slide" data-chapter="">
+  <div class="slide-inner">
+    <div class="slide-chapter">Outline</div>
+    <div class="slide-title">What this deck covers</div>
+    <ul class="outline-list">
+      <li><span class="ol-num">01</span> The problem: minimum fuel means an engine that is ON or OFF</li>
+      <li><span class="ol-num">02</span> Melting it: two ways to make on/off smooth, then sharpen it back</li>
+      <li><span class="ol-num">03</span> The bug: why Huber looked "structurally unsuited" and was not</li>
+      <li><span class="ol-num">04</span> Results: Huber on all seven cells of the grid</li>
+      <li><span class="ol-num">05</span> Why it wins where it wins and walls where it walls</li>
+      <li><span class="ol-num">06</span> How to use it: a hedged race and a handoff</li>
+      <li><span class="ol-num">07</span> Lessons from the three-way code review</li>
+      <li><span class="ol-num">08</span> Next steps</li>
+    </ul>
+  </div>
+</section>
+
+<!-- ============== 01 THE PROBLEM ============== -->
+
+<section class="slide" data-chapter="problem">
+  <div class="slide-inner">
+    <div class="slide-chapter">01 &middot; The Problem</div>
+    <div class="slide-title">A tiny engine, a long trip, and one question: when do I fire?</div>
+    <div class="columns columns-60-40">
+      <div>
+        <p>Our spacecraft leaves a Distant Retrograde Orbit around the Moon and has to arrive on a tulip orbit at a fixed time. Its engine is a weak ion thruster: <strong>0.07 N</strong> pushing <strong>150 kg</strong>. Think of blowing on a bowling ball.</p>
+        <p>The only decisions are: <em>which way to point</em> the thruster and <em>how hard to run it</em>, every instant, for 20&ndash;30 days.</p>
+        <p class="muted small">"Which way" turns out to be easy: point against the so-called primer vector. The whole difficulty is "how hard".</p>
+      </div>
+      <div>
+        <div class="block-box">
+          <p><strong>ELI5</strong></p>
+          <p class="small">You are pushing a shopping cart across a huge, bumpy parking lot to a spot you must reach by 5 pm. You may push as gently or as hard as you like at any moment. Use the least total effort.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="slide" data-chapter="problem">
+  <div class="slide-inner">
+    <div class="slide-chapter">01 &middot; The Problem</div>
+    <div class="slide-title">Minimum fuel wants the engine ON or OFF, never in between</div>
+    <p>Fuel used is proportional to how hard you run the engine, summed over the trip: $J = \int_0^{t_f} s\,dt$ with throttle $s \in [0,1]$. Because that cost is a <em>straight line</em> in $s$, the best plan never uses half-throttle: it is <strong>bang-bang</strong> &mdash; full burn when firing helps enough, coast otherwise.</p>
+    <div class="result-box">
+      <div class="result-label">The switch rule (Pontryagin)</div>
+      <p>A single number $Q(t)$ &mdash; built from the costates, our "shadow prices" &mdash; decides everything:</p>
+      $$ s^*(t) = \begin{cases} 1 & Q(t) > 1 \\ 0 & Q(t) < 1 \end{cases} \qquad Q = T\left(\frac{\|\lambda_v\|}{m} + \frac{\lambda_m}{c}\right) $$
+    </div>
+    <div class="warn-box">
+      <div class="warn-label">Why this is hard for a computer</div>
+      <p>A step function has no slope. Newton's method &mdash; the workhorse behind every solver we use &mdash; steers by slopes. Aim it at a bang-bang problem cold and it has nothing to hold on to.</p>
+    </div>
+  </div>
+</section>
+
+<!-- ============== 02 MELTING IT ============== -->
+
+<section class="slide" data-chapter="melt">
+  <div class="slide-inner">
+    <div class="slide-chapter">02 &middot; Melting It</div>
+    <div class="slide-title">The trick: solve an easy, smooth problem first, then sharpen it step by step</div>
+    <div class="columns columns-50-50">
+      <div>
+        <p>Replace the fuel cost by a <em>softened</em> cost with a dial $p$. At $p = 1$ the problem is smooth and friendly (minimum <strong>energy</strong>, $\int s^2\,dt$). As $p \to 0$ it becomes exactly minimum fuel.</p>
+        <p>Solve at $p = 1$. Nudge $p$ down. Use the last answer as the guess for the next. Repeat down a <strong>ladder</strong> of 17 rungs to $p = 0.001$.</p>
+        <p class="muted small">This is a <em>homotopy</em>, or continuation. Each rung is a small step for Newton.</p>
+      </div>
+      <div>
+        <div class="block-box">
+          <p><strong>ELI5</strong></p>
+          <p class="small">You cannot carve a sharp corner in frozen butter. So you warm the butter, shape it roughly, and put it back in the fridge a little at a time, tidying the corner as it firms up. The dial $p$ is the fridge temperature.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="slide" data-chapter="melt">
+  <div class="slide-inner">
+    <div class="slide-chapter">02 &middot; Melting It</div>
+    <div class="slide-title">Two ways to soften a step: the &epsilon; ramp and the Huber knee</div>
+    <div class="columns columns-50-50">
+      <div>
+        <svg class="law-svg" viewBox="0 0 320 200" aria-label="throttle laws">
+          <line x1="40" y1="170" x2="300" y2="170" stroke="#44445a"/>
+          <line x1="40" y1="170" x2="40" y2="20" stroke="#44445a"/>
+          <text x="290" y="188">Q</text><text x="12" y="30">s</text>
+          <text x="165" y="188" text-anchor="middle">1</text>
+          <line x1="170" y1="166" x2="170" y2="174" stroke="#6b6b84"/>
+          <text x="20" y="46">1</text><text x="20" y="174">0</text>
+          <!-- bang-bang -->
+          <polyline points="40,170 170,170 170,40 300,40" fill="none" stroke="#6b6b84" stroke-width="1.5" stroke-dasharray="4 3"/>
+          <!-- eps -->
+          <polyline points="40,170 130,170 210,40 300,40" fill="none" stroke="#00d4aa" stroke-width="2.5"/>
+          <!-- huber -->
+          <polyline points="40,170 170,120" fill="none" stroke="#f59e0b" stroke-width="2.5"/>
+          <line x1="170" y1="120" x2="170" y2="40" stroke="#f59e0b" stroke-width="2.5" stroke-dasharray="3 3"/>
+          <polyline points="170,40 300,40" fill="none" stroke="#f59e0b" stroke-width="2.5"/>
+          <text x="215" y="66" fill="#00d4aa" style="fill:#00d4aa">&epsilon; ramp</text>
+          <text x="90" y="138" style="fill:#f59e0b">Huber: s = pQ</text>
+          <text x="180" y="100" style="fill:#f59e0b">jump</text>
+          <text x="200" y="160" style="fill:#6b6b84">bang-bang (p = 0)</text>
+        </svg>
+      </div>
+      <div>
+        <div class="block-box">
+          <p><strong class="accent">&epsilon; (Bertrand&ndash;Epenoy)</strong> &mdash; cost $(1-p)s + p s^2$. Throttle is a <em>ramp</em> from 0 to 1 across $Q \in (1-p,\,1+p)$. <strong>Continuous.</strong> Coasts exactly when $Q < 1-p$.</p>
+        </div>
+        <div class="block-box">
+          <p><strong class="warn">Huber (PLQ)</strong> &mdash; cost $s^2/2p$ below the knee, linear above. Throttle $s = pQ$ up to $Q = 1$, then <strong>jumps</strong> to 1. Never coasts <em>exactly</em>: $s = pQ > 0$.</p>
+        </div>
+        <p class="small muted">Both become bang-bang as $p \to 0$. Which walks the ladder better was the "race" of 2 September.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="slide" data-chapter="melt">
+  <div class="slide-inner">
+    <div class="slide-chapter">02 &middot; Melting It</div>
+    <div class="slide-title">The race as first reported (2 Sep): &epsilon; wins by knockout</div>
+    <table class="data-table">
+      <thead><tr><th>arm</th><th>rungs reached</th><th>deepest p</th><th>failures</th><th>verdict then</th></tr></thead>
+      <tbody>
+        <tr><td><span class="accent">&epsilon; ramp</span></td><td>17 / 17</td><td>0.0017</td><td>9 (all recovered by bisection)</td><td><span class="tag tag-pass">production family</span></td></tr>
+        <tr><td><span class="warn">Huber</span></td><td>2 / 17</td><td>0.91</td><td>8, then retired</td><td><span class="tag tag-fail">"structurally unsuited"</span></td></tr>
+      </tbody>
+    </table>
+    <div class="error-box">
+      <div class="error-label">The mechanism we wrote down</div>
+      <p>"Huber's throttle <em>jumps</em> at the switch, so Newton fights a residual floor it can never get under. The jump is the problem." It sounded right. It was wrong.</p>
+    </div>
+  </div>
+</section>
+
+<!-- ============== 03 THE BUG ============== -->
+
+<section class="slide" data-chapter="bug">
+  <div class="slide-inner">
+    <div class="slide-chapter">03 &middot; The Bug</div>
+    <div class="slide-title">Newton needs to know how the <em>end</em> of the trip moves when the <em>start</em> wiggles</div>
+    <p>That sensitivity is the <strong>state transition matrix</strong> $\Phi$. We get it by integrating $\dot\Phi = A\,\Phi$ alongside the trajectory, where $A$ is the local slope of the dynamics.</p>
+    <div class="columns columns-50-50">
+      <div>
+        <div class="block-box">
+          <p><strong>ELI5</strong></p>
+          <p class="small">You roll a marble down a ramp and want to know how far the landing spot shifts if you nudge the start. On a smooth ramp: easy, follow the slope. But if the ramp has a <em>step</em> in it, the marble flies off the edge &mdash; and a nudge at the start changes <em>when</em> it reaches the edge, which changes the landing spot a lot. Following the local slope alone misses that.</p>
+        </div>
+      </div>
+      <div>
+        <div class="warn-box">
+          <div class="warn-label">The Huber law has a step</div>
+          <p>At $Q = 1$ the throttle jumps from $pQ$ to 1. Our propagator integrated $\dot\Phi = A\Phi$ straight through it &mdash; local slope only. The <em>switching-time sensitivity</em> was missing.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="slide" data-chapter="bug">
+  <div class="slide-inner">
+    <div class="slide-chapter">03 &middot; The Bug</div>
+    <div class="slide-title">The fix: a "saltation" (jump) matrix at every crossing</div>
+    <div class="result-box">
+      <div class="result-label">What the STM must do at a switch surface $Q(y) = 1$</div>
+      $$ \Phi^{+} \;=\; \Big[\, I \;+\; \frac{(F^{+} - F^{-})\,\nabla Q^{\mathsf T}}{\nabla Q^{\mathsf T} F^{-}} \Big]\, \Phi^{-} $$
+      <p class="small muted">$F^-$, $F^+$ are the dynamics just before and after the jump; $\nabla Q$ points across the switch surface. The bracket is how much a change in <em>arrival time at the step</em> moves the state.</p>
+    </div>
+    <p>Implementation: integrate each smooth branch with the law pinned, detect the crossing with an event function, apply the matrix, restart on the other branch. The &epsilon; ramp is continuous ($F^+ = F^-$), so it needs none of this &mdash; which is why &epsilon; was never affected.</p>
+    <table class="data-table">
+      <thead><tr><th>STM vs finite differences (one-switch arc)</th><th>before</th><th>after</th></tr></thead>
+      <tbody>
+        <tr><td>&epsilon; ramp (control case)</td><td>1.35 &times; 10<sup>-7</sup></td><td>1.35 &times; 10<sup>-7</sup></td></tr>
+        <tr><td><strong>Huber</strong></td><td><span class="warn">1.35 &times; 10<sup>-3</sup></span></td><td><span class="accent">2.1 &times; 10<sup>-6</sup></span></td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<section class="slide" data-chapter="bug">
+  <div class="slide-inner">
+    <div class="slide-chapter">03 &middot; The Bug</div>
+    <div class="slide-title">Same cell, same schedule, correct Jacobian</div>
+    <table class="data-table">
+      <thead><tr><th>arm (cell (2,5), &gamma; = 1.2)</th><th>rungs</th><th>deepest p</th><th>m<sub>f</sub></th><th>fails</th><th>bisects</th><th>wall</th></tr></thead>
+      <tbody>
+        <tr><td>&epsilon; ramp (2 Sep)</td><td>17</td><td>0.0017</td><td>0.947046</td><td>9</td><td>7</td><td>7.5 min</td></tr>
+        <tr><td>Huber, no saltation (2 Sep)</td><td>2</td><td>0.91</td><td>0.942176</td><td>8</td><td>6</td><td>3.7 min</td></tr>
+        <tr><td><strong>Huber, with saltation (5 Sep)</strong></td><td><strong>17</strong></td><td><strong>0.001</strong></td><td><strong>0.947041</strong></td><td><strong class="accent">0</strong></td><td><strong class="accent">0</strong></td><td><strong class="accent">1.2 min</strong></td></tr>
+      </tbody>
+    </table>
+    <div class="insight-box">
+      <div class="insight-label">What the "residual floor" really was</div>
+      <p>Newton, handed a wrong map, walking in circles. The floor vanished the moment the map was right. Two arms now land on the same final mass to $4.5 \times 10^{-6}$ &mdash; the same solution, reached six times faster.</p>
+    </div>
+  </div>
+</section>
+
+<!-- ============== 04 RESULTS ============== -->
+
+<section class="slide" data-chapter="results">
+  <div class="slide-inner">
+    <div class="slide-chapter">04 &middot; Results</div>
+    <div class="slide-title">Real result or one lucky cell? Run all seven</div>
+    <p class="small muted">Same 17-rung schedule, gates and caps as the stored &epsilon; arms. Every deepest Huber solution re-checked with the corrected conjugate-point test. 15.7 minutes total.</p>
+    <table class="data-table">
+      <thead><tr><th>cell</th><th>&gamma;</th><th>Huber rungs</th><th>deepest p H / &epsilon;</th><th>|&Delta;m<sub>f</sub>|</th><th>fails H / &epsilon;</th><th>wall H / &epsilon; [min]</th><th>conj</th></tr></thead>
+      <tbody>
+        <tr><td>(2,5)</td><td>1.10</td><td>17 <span class="tag tag-pass">floor</span></td><td>0.001 / 0.0018</td><td>2e-6</td><td><strong>0</strong> / 10</td><td><strong>1.0</strong> / 8.8</td><td>PASS</td></tr>
+        <tr><td>(2,5)</td><td>1.20</td><td>17 <span class="tag tag-pass">floor</span></td><td>0.001 / 0.0017</td><td>5e-6</td><td><strong>0</strong> / 9</td><td><strong>1.2</strong> / 7.5</td><td>PASS</td></tr>
+        <tr><td>(2,5)</td><td>1.40</td><td>17 <span class="tag tag-pass">floor</span></td><td>0.001 / 0.005</td><td>6e-6</td><td><strong>0</strong> / 8</td><td><strong>1.9</strong> / 5.7</td><td>PASS</td></tr>
+        <tr><td>(6,8)</td><td>1.10</td><td>18 <span class="tag tag-pass">floor</span></td><td>0.001 / 0.0012</td><td>8e-7</td><td>1 / 9</td><td><strong>1.8</strong> / 10.5</td><td>PASS</td></tr>
+        <tr><td>(6,8)</td><td>1.20</td><td>13 <span class="tag tag-warn">wall</span></td><td><span class="warn">0.033</span> / 0.0013</td><td>&mdash;</td><td>9 / 9</td><td>6.6 / 6.2</td><td>PASS (at 0.033)</td></tr>
+        <tr><td>(1,2)</td><td>1.10</td><td>0 <span class="tag tag-fail">cold</span></td><td>&mdash; / 0.0034</td><td>&mdash;</td><td>2 / 9</td><td>1.3 / 11.8</td><td>&mdash;</td></tr>
+        <tr><td>(1,2)</td><td>1.20</td><td>0 <span class="tag tag-fail">cold</span></td><td>&mdash; / 0.001</td><td>&mdash;</td><td>2 / 2</td><td>1.6 / 2.5</td><td>&mdash;</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<section class="slide" data-chapter="results">
+  <div class="slide-inner">
+    <div class="slide-chapter">04 &middot; Results</div>
+    <div class="slide-title">Two families, two personalities</div>
+    <div class="columns columns-50-50">
+      <div>
+        <div class="result-box">
+          <div class="result-label">&epsilon; ramp &mdash; slow, but always arrives</div>
+          <p>Reached the floor on <strong>7 of 7</strong> cells. Failed 8&ndash;10 times per cell, every time recovered by bisecting the step. 6&ndash;12 minutes each.</p>
+        </div>
+      </div>
+      <div>
+        <div class="warn-box">
+          <div class="warn-label">Huber &mdash; fast, or walls</div>
+          <p>Reached the floor on <strong>4 of 7</strong> cells with 0&ndash;1 failures in 1&ndash;2 minutes, landing on the identical solution. On the other three it hit a hard residual floor and <em>retired</em>.</p>
+        </div>
+      </div>
+    </div>
+    <div class="insight-box">
+      <div class="insight-label">ELI5</div>
+      <p>&epsilon; is the friend who drives the speed limit and always gets there. Huber is the friend who takes the back roads &mdash; usually much faster, occasionally stuck behind a closed bridge with no way round.</p>
+    </div>
+  </div>
+</section>
+
+<section class="slide" data-chapter="results">
+  <div class="slide-inner">
+    <div class="slide-chapter">04 &middot; Results</div>
+    <div class="slide-title">A control that paid off: the cold start was our seed, not Huber</div>
+    <p>Both arms start at $p = 1$ from the min-energy solution. For &epsilon; that <em>is</em> the energy problem. For Huber at $p = 1$ the cost is $s^2/2$, whose minimizer is $s^* = Q$ &mdash; not the energy law's $s^* = Q/2$. Same trajectory, but Huber wants <strong>half the costates</strong>.</p>
+    <table class="data-table">
+      <thead><tr><th>control run</th><th>seed</th><th>outcome</th></tr></thead>
+      <tbody>
+        <tr><td>(2,5) &gamma; = 1.2</td><td>&lambda;/2</td><td>identical answer, <strong>33% faster</strong> (0.8 vs 1.2 min)</td></tr>
+        <tr><td>(1,2) &gamma; = 1.2</td><td>&lambda; (as before)</td><td>first rung fails, normR 1.5 <span class="tag tag-fail">cold</span></td></tr>
+        <tr><td>(1,2) &gamma; = 1.2</td><td>&lambda;/2</td><td>first rung converges; walks to $p \approx 0.77$, then a genuine wall</td></tr>
+      </tbody>
+    </table>
+    <p class="small muted">Credit: this was GPT-6 Astra's observation in the code review. &lambda;/2 is now Huber's standard seed.</p>
+  </div>
+</section>
+
+<!-- ============== 05 WHY ============== -->
+
+<section class="slide" data-chapter="why">
+  <div class="slide-inner">
+    <div class="slide-chapter">05 &middot; Why</div>
+    <div class="slide-title">Why Huber walks cleaner where it works (hypothesis)</div>
+    <div class="columns columns-50-50">
+      <div>
+        <p>The &epsilon; ramp's slope is $1/2p$. At $p = 0.001$ that is <strong>500</strong>: a near-vertical ramp Newton must balance on at every switch. Its "failures" are Newton overshooting that ramp and the ladder bisecting to a gentler step.</p>
+        <p>Huber's core is $s = pQ$, slope $p$ &mdash; <em>gentle</em> and getting gentler as $p \to 0$. The sharpness lives entirely in the jump, which the saltation matrix now handles exactly. There is nothing steep left for Newton to slip on.</p>
+      </div>
+      <div>
+        <div class="block-box">
+          <p><strong>ELI5</strong></p>
+          <p class="small">&epsilon; hides the cliff by turning it into a very steep hill; you still have to climb it carefully. Huber keeps the cliff but tells you exactly where it is and how to step off it. Once you trust the map, the cliff is the easier route.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="slide" data-chapter="why">
+  <div class="slide-inner">
+    <div class="slide-chapter">05 &middot; Why</div>
+    <div class="slide-title">Why it walls where it walls (hypothesis)</div>
+    <p>Huber <strong>never coasts exactly</strong>: wherever $Q > 0$, $s = pQ > 0$. On a cell whose true fuel solution is mostly coast, Huber must represent long near-zero arcs with a tiny positive throttle, and $Q$ hovers <em>near</em> the jump at 1 for long stretches.</p>
+    <table class="data-table">
+      <thead><tr><th>cell</th><th>&epsilon; coast fraction</th><th>transfer length</th><th>Huber outcome</th></tr></thead>
+      <tbody>
+        <tr><td>(6,8) &gamma;=1.1</td><td>0.08</td><td>18 d</td><td><span class="tag tag-pass">floor</span></td></tr>
+        <tr><td>(2,5) &gamma;=1.1 / 1.2 / 1.4</td><td>0.17 / 0.33 / 0.42</td><td>18&ndash;23 d</td><td><span class="tag tag-pass">floor</span></td></tr>
+        <tr><td>(6,8) &gamma;=1.2</td><td>0.33</td><td>20 d</td><td><span class="tag tag-warn">wall at 0.033</span></td></tr>
+        <tr><td>(1,2) &gamma;=1.1 / 1.2</td><td>0.25 / <strong>0.58</strong></td><td><strong>28&ndash;30 d</strong></td><td><span class="tag tag-fail">wall at 0.77</span></td></tr>
+      </tbody>
+    </table>
+    <div class="warn-box">
+      <div class="warn-label">Suspect, not convicted</div>
+      <p>A near-<em>grazing</em> crossing &mdash; $Q$ touching 1 without crossing cleanly &mdash; makes the saltation denominator $\nabla Q^{\mathsf T}F^-$ tiny and the jump matrix huge. That would produce exactly the residual floors we see. The correlation with coast fraction is suggestive, not monotone. The mechanism study would settle it.</p>
+    </div>
+  </div>
+</section>
+
+<!-- ============== 06 HOW TO USE IT ============== -->
+
+<section class="slide" data-chapter="use">
+  <div class="slide-inner">
+    <div class="slide-chapter">06 &middot; How To Use It</div>
+    <div class="slide-title">Idea 1: the hedged race</div>
+    <p>Run both families from the same energy seed (Huber on $\lambda/2$). Take whichever reaches the floor first. Keep &epsilon; as the fallback that always arrives.</p>
+    <div class="columns columns-50-50">
+      <div>
+        <div class="result-box">
+          <div class="result-label">Expected payoff on this grid</div>
+          <p>4 of 7 cells finish in 1&ndash;2 min instead of 6&ndash;11; the other 3 cost one extra failed Huber attempt (~2&ndash;7 min) before &epsilon; runs as usual. Net: roughly <strong>half the wall time</strong> for a catalog build, same answers.</p>
+        </div>
+      </div>
+      <div>
+        <div class="block-box">
+          <p><strong>ELI5</strong></p>
+          <p class="small">Send both friends. Whoever texts "I'm here" first wins; the other turns around. You never arrive later than the reliable friend alone.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="slide" data-chapter="use">
+  <div class="slide-inner">
+    <div class="slide-chapter">06 &middot; How To Use It</div>
+    <div class="slide-title">Idea 2: the handoff at the wall</div>
+    <p>Both families converge to the <em>same</em> bang-bang problem as $p \to 0$. So when Huber walls at, say, $p = 0.033$, its junction states are already an excellent seed for &epsilon; at a nearby $p$ &mdash; deep in the ladder, past &epsilon;'s own slow early rungs.</p>
+    <div class="code-box">
+<span class="cm">% sketch: Huber fast to the wall, epsilon from there</span><br>
+[zH, itH] = <span class="fn">walk</span>(<span class="str">'huber'</span>, seedEnergyHalf, sched);   <span class="cm">% stops at pWall or floor</span><br>
+<span class="kw">if</span> itH.pDeepest &gt; pFloor<br>
+&nbsp;&nbsp;seedE = itH.Y;                                  <span class="cm">% same junctions, same limit problem</span><br>
+&nbsp;&nbsp;[zE, itE] = <span class="fn">walk</span>(<span class="str">'eps'</span>, seedE, sched(sched &lt; itH.pDeepest));<br>
+<span class="kw">end</span>
+    </div>
+    <p class="small muted">Unbuilt. The two families' $p$ values are not the same "temperature", so the handoff $p$ needs one calibration experiment.</p>
+  </div>
+</section>
+
+<section class="slide" data-chapter="use">
+  <div class="slide-inner">
+    <div class="slide-chapter">06 &middot; How To Use It</div>
+    <div class="slide-title">Idea 3: send Huber where &epsilon; could not go</div>
+    <p>The real test of a "new line of attack" is not the cells &epsilon; already solves. It is the cells it cannot enter:</p>
+    <ul>
+      <li>the <strong>high-&gamma; band</strong> (long flight times) where the direct min-energy solve itself fails;</li>
+      <li>the <strong>deep-thrust wall</strong> at 0.09 &rarr; 0.067 N (a basin wall, ~1.3 revolutions);</li>
+      <li>the GTO &rarr; tulip <strong>1.01&ndash;1.11 &times; t<sub>f,min</sub> band</strong>, open since July.</li>
+    </ul>
+    <div class="insight-box">
+      <div class="insight-label">Why there is hope</div>
+      <p>&epsilon;'s trouble on hard cells is the steep ramp at small $p$ &mdash; exactly the thing Huber does not have. Whether Huber's own weakness (long coasts) bites on those cells is unknown; the deep-thrust cells are all-burn-ish, which is Huber's good regime.</p>
+    </div>
+  </div>
+</section>
+
+<section class="slide" data-chapter="use">
+  <div class="slide-inner">
+    <div class="slide-chapter">06 &middot; How To Use It</div>
+    <div class="slide-title">Idea 4: Huber is one member of a family (PLQ)</div>
+    <p>Huber is the simplest <em>piecewise linear-quadratic</em> (PLQ) penalty in Rockafellar's sense &mdash; quadratic near zero, linear far away. Our mlabTools <code>optim/</code> already ships the general class (<code>plq_make</code>, <code>plq_penalty</code>).</p>
+    <div class="columns columns-50-50">
+      <div>
+        <div class="block-box">
+          <p><strong>Knobs we have not turned</strong></p>
+          <ul class="small">
+            <li>the knee position and a <em>dead zone</em> (a PLQ that <em>does</em> coast exactly &mdash; fixing Huber's one structural weakness);</li>
+            <li>asymmetric slopes on the two sides of the knee;</li>
+            <li>PLQ in the <em>direct</em> NLP objective, not just the indirect throttle law.</li>
+          </ul>
+        </div>
+      </div>
+      <div>
+        <div class="block-box">
+          <p><strong>ELI5</strong></p>
+          <p class="small">Huber is one recipe for softening the step. PLQ is the whole cookbook. We tried one page and it worked; the page about "soft step <em>with</em> an exact off-switch" is the one to try next.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============== 07 LESSONS ============== -->
+
+<section class="slide" data-chapter="lessons">
+  <div class="slide-inner">
+    <div class="slide-chapter">07 &middot; Lessons</div>
+    <div class="slide-title">How we found out: a three-way code review</div>
+    <p>The step-5 code (PMP fields, propagators, conjugate test, catalog builder &mdash; 15 files) was reviewed by GPT-5.6-sol, GPT-6 Astra and the host Claude, with the host verifying every claim against the shipped <code>.mat</code> files in MATLAB.</p>
+    <table class="data-table">
+      <thead><tr><th>finding</th><th>who</th><th>consequence</th></tr></thead>
+      <tbody>
+        <tr><td>Huber STM missing the saltation matrix</td><td>sol, Astra</td><td>this whole deck</td></tr>
+        <tr><td>conjugate test monitored the wrong block ([1:6 14] vs 1:7)</td><td>sol; <strong>settled by Astra</strong> after the host defended the code</td><td>14 verdicts re-run</td></tr>
+        <tr><td>initial-coast structural zero counted as a focal point</td><td><strong>Astra alone</strong></td><td>the one "refutation" was an artifact</td></tr>
+        <tr><td>catalog labelled Isp 1710 s beside a 900 s exhaust velocity</td><td>host (needed the data file)</td><td>&Delta;V would read 1.9&times; high</td></tr>
+        <tr><td>Huber &kappa;=1 seed asymmetry (&lambda;/2)</td><td><strong>Astra alone</strong></td><td>the cold-start control</td></tr>
+      </tbody>
+    </table>
+    <p class="small muted">Astra wedges silently in the crush CLI on real bundles; called through the raw OpenRouter API it reviewed 53 KB in 146 s for $0.59 and was the best of the three on theory.</p>
+  </div>
+</section>
+
+<section class="slide" data-chapter="lessons">
+  <div class="slide-inner">
+    <div class="slide-chapter">07 &middot; Lessons</div>
+    <div class="slide-title">Three things worth remembering</div>
+    <div class="error-box">
+      <div class="error-label">1 &middot; A wrong Jacobian looks exactly like a structural wall</div>
+      <p>Newton stalling at a residual floor is what you see when the problem is hard <em>and</em> when your map is wrong. Before declaring a method "structurally unsuited", check the map against finite differences. Ten lines; it would have saved a wrong conclusion.</p>
+    </div>
+    <div class="warn-box">
+      <div class="warn-label">2 &middot; Discontinuous control needs saltation, everywhere</div>
+      <p>Any sensitivity, first- or second-order, that passes through a switch without the jump matrix is wrong. This applies to the conjugate-point test and to the future switching-time Hessian too.</p>
+    </div>
+    <div class="insight-box">
+      <div class="insight-label">3 &middot; Test the seed, not just the method</div>
+      <p>Two of seven "Huber failures" were a cold seed. The $\lambda/2$ fix cost nothing and came from someone reading the Hamiltonian, not running code.</p>
+    </div>
+  </div>
+</section>
+
+<!-- ============== 08 NEXT ============== -->
+
+<section class="slide" data-chapter="next">
+  <div class="slide-inner">
+    <div class="slide-chapter">08 &middot; Next</div>
+    <div class="slide-title">Next steps, in order of value per hour</div>
+    <ol>
+      <li><strong>Huber on the cells &epsilon; cannot enter</strong> &mdash; the high-&gamma; band and the deep-thrust wall. This is the actual "new line of attack" test; everything so far was calibration.</li>
+      <li><strong>Mechanism study</strong> on (6,8)@1.2 and (1,2): count the $Q = 1$ crossings per segment, log $\nabla Q^{\mathsf T}F^-$ at each, test the grazing hypothesis. Decides whether the wall is fixable.</li>
+      <li><strong>Hedged race + handoff</strong> in the catalog builder, &lambda;/2 as Huber's default seed. Halves catalog wall time if the 4-of-7 rate holds.</li>
+      <li><strong>PLQ with a dead zone</strong> &mdash; a softened step that coasts exactly. One field function, the same tests.</li>
+    </ol>
+    <div class="result-box">
+      <div class="result-label">What does not change</div>
+      <p>&epsilon; remains the shipped continuation family and the min-fuel catalog is unchanged. Huber is a second road, not a replacement &mdash; yet.</p>
+    </div>
+  </div>
+</section>
+
+<section class="slide" data-chapter="">
+  <div class="slide-inner">
+    <div class="slide-chapter">References</div>
+    <div class="slide-title">Sources</div>
+    <ol class="ref-list">
+      <li><span class="ref-num">1.</span> Bertrand, R. and Epenoy, R., <strong>"New smoothing techniques for solving bang-bang optimal control problems,"</strong> <em>Optimal Control Applications and Methods</em> 23(4), 2002.</li>
+      <li><span class="ref-num">2.</span> Rockafellar, R.T. and Wets, R.J-B., <strong>"Linear-quadratic programming and optimal control,"</strong> <em>SIAM J. Control Optim.</em> 25, 1987 (the PLQ penalty class).</li>
+      <li><span class="ref-num">3.</span> Hairer, E., N&oslash;rsett, S.P. and Wanner, G., <strong><em>Solving Ordinary Differential Equations I</em></strong>, ch. II.6 (sensitivity across a discontinuity: the saltation matrix).</li>
+      <li><span class="ref-num">4.</span> <strong>DRO_tulip/FINDINGS.md</strong> &sect;18 (the race as first reported), &sect;22 (the saltation fix and retraction), &sect;23 (Huber over the grid).</li>
+      <li><span class="ref-num">5.</span> <strong>DRO_tulip/reviews/minfuel_code_review_2026-09-05.md</strong> (the three-way review, adjudicated); <strong>costate_common/tests/test_huber_saltation.m</strong>.</li>
+      <li><span class="ref-num">6.</span> <strong>orbit_transfer/doc/extremal_and_local_min_survey.md</strong> (what a rigorous local-minimum certificate needs).</li>
+    </ol>
+  </div>
+</section>
+
+<section class="slide" data-chapter="">
+  <div class="slide-inner end-slide">
+    <div class="end-text">Questions?</div>
+    <div class="end-accent"></div>
+  </div>
+</section>
+
+<!-- ============== SCRIPT ============== -->
+<script>
+document.addEventListener("DOMContentLoaded", function() {
+  document.body.classList.add('slideshow');
+  renderMathInElement(document.body, {
+    delimiters: [ {left: '$$', right: '$$', display: true}, {left: '$', right: '$', display: false} ],
+    macros: { "\\vect": "\\boldsymbol{#1}", "\\matr": "\\boldsymbol{#1}", "\\T": "^{\\mathsf{T}}", "\\tr": "\\operatorname{tr}", "\\diag": "\\operatorname{diag}" },
+    throwOnError: false
+  });
+  const slides = document.querySelectorAll('.slide');
+  const navItems = document.querySelectorAll('.nav-item');
+  const progress = document.getElementById('progress');
+  const counter = document.getElementById('counter');
+  const keyhint = document.getElementById('keyhint');
+  let current = 0; let hintVisible = true;
+  const chapterFirstSlide = {};
+  slides.forEach((s, i) => { const ch = s.dataset.chapter; if (ch && !(ch in chapterFirstSlide)) chapterFirstSlide[ch] = i; });
+  function goTo(n) {
+    if (n < 0 || n >= slides.length) return;
+    slides[current].classList.remove('active'); current = n; slides[current].classList.add('active');
+    updateUI(); if (hintVisible) { keyhint.style.opacity = '0'; hintVisible = false; }
+  }
+  function updateUI() {
+    const pct = slides.length > 1 ? (current / (slides.length - 1)) * 100 : 0;
+    progress.style.width = pct + '%'; counter.textContent = (current + 1) + ' / ' + slides.length;
+    const currentChapter = slides[current].dataset.chapter; const visitedChapters = new Set();
+    for (let i = 0; i <= current; i++) { const ch = slides[i].dataset.chapter; if (ch) visitedChapters.add(ch); }
+    navItems.forEach(item => {
+      const ch = item.dataset.chapter; item.classList.remove('active', 'visited');
+      if (ch === currentChapter && currentChapter !== '') item.classList.add('active');
+      else if (visitedChapters.has(ch)) item.classList.add('visited');
+    });
+  }
+  window.next = function() { goTo(current + 1); };
+  window.prev = function() { goTo(current - 1); };
+  window.goToChapter = function(ch) { if (ch in chapterFirstSlide) goTo(chapterFirstSlide[ch]); };
+  document.addEventListener('keydown', function(e) {
+    if (e.key === 'ArrowRight' || e.key === ' ' || e.key === 'PageDown') { e.preventDefault(); next(); }
+    else if (e.key === 'ArrowLeft' || e.key === 'PageUp') { e.preventDefault(); prev(); }
+    else if (e.key === 'Home') { e.preventDefault(); goTo(0); }
+    else if (e.key === 'End') { e.preventDefault(); goTo(slides.length - 1); }
+  });
+  let touchStartX = 0;
+  document.addEventListener('touchstart', e => { touchStartX = e.touches[0].clientX; });
+  document.addEventListener('touchend', e => { const dx = e.changedTouches[0].clientX - touchStartX; if (Math.abs(dx) > 50) { dx < 0 ? next() : prev(); } });
+  goTo(0);
+});
+</script>
+</body>
+</html>

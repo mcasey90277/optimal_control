@@ -1,6 +1,6 @@
 # Orbit-transfer library catalog — generated function reference
 
-Generated 2026-08-29 by `gen_library_catalog.py`.
+Generated 2026-09-06 by `gen_library_catalog.py`.
 **Do not edit by hand** — regenerate with:
 ```sh
 python3 orbit_transfer/doc/gen_library_catalog.py
@@ -64,6 +64,16 @@ The MINIMUM-ENERGY PMP vector field for the CR3BP low-thrust transfer, with its 
 Propagates the min-energy PMP state (and optionally its 14x14 STM) for a time dt -- the fixed-tf sibling of pumpkyn.cr3bp.tfMinProp, in the [yh, PHI] = prop(dt, y0, needSTM) shape ms_bvp expects. Variational equations dPHI/dt = A(y) PHI ride along as 196 extra states, with A the exact AD Jacobian from cr3bp_minenergy_pmp. Integrator ode113 at tfMinProp's tolerances (RelTol 1e-10, AbsTol 1e-12).
 *in: `dt`, `y0`, `needSTM` · out: `yh`, `PHI`, `T`, `Y`*
 
+### `cr3bp_minfuel_pmp.m`
+`[F, A, aux] = cr3bp_minfuel_pmp(y, Tmax, c, muStar, smooth)`  
+The SMOOTHED ENERGY->FUEL PMP vector field for the CR3BP low-thrust transfer, with its exact 14x14 Jacobian -- the homotopy sibling of cr3bp_minenergy_pmp. Same 14-state PMP y = [r; v; m; lam_r; lam_v; lam_m], same dynamics and costate ODEs; only the running cost L(s) changes, selected by the smoothing family:
+*in: `y`, `Tmax`, `c`, `muStar`, `smooth` · out: `F`, `A`, `aux`*
+
+### `cr3bp_minfuel_prop.m`
+`[yh, PHI, T, Y] = cr3bp_minfuel_prop(dt, y0, needSTM, Tmax, c, muStar, smooth)`  
+Propagates the smoothed energy->fuel PMP state (and optionally its 14x14 STM) for a time dt -- the homotopy sibling of cr3bp_minenergy_prop, in the [yh, PHI] = prop(dt, y0, needSTM) shape ms_bvp expects. Variational equations ride along with A from cr3bp_minfuel_pmp (exact AD). Integrator ode113 at tfMinProp's tolerances (RelTol 1e-10, AbsTol 1e-12).
+*in: `dt`, `y0`, `needSTM`, `smooth` · out: `yh`, `PHI`, `T`, `Y`*
+
 ### `cr3bp_thrust_rhs.m`
 `dz = cr3bp_thrust_rhs(z, u, muStar, Tmax, c)`  
 CR3BP dynamics with thrust and mass flow -- the single shared RHS for flown-control verification (flown_control_error, true_min_altitude). Extracted verbatim from certify_dro_mintime/local_f, which itself mirrors dro_residual/local_rhs. One home (migration #4).
@@ -107,7 +117,7 @@ GENERIC multiple-shooting two-point BVP engine -- the family- and problem-agnost
 ### `ms_conjugate_test.m`
 `out = ms_conjugate_test(info, spec)`  
 CONJUGATE-POINT TEST on a converged multiple-shooting extremal -- the first piece of second-order optimality checking this pipeline has had. First-order (PMP) conditions admit maxima and saddle extremals too; a conjugate point in (0, tf) means the extremal STOPS being locally minimizing there (Jacobi's necessary condition).
-*in: `info`, `spec`, `flow`, `stateRows`, `costateCols`, `quotientDir`, `freeTime` · out: `out`, `t`, `detScaled`, `nCrossings`, `atFinal`, `pass`*
+*in: `info`, `spec`, `flow`, `stateRows`, `costateCols`, `quotientDir`, `freeTime`, `rankTol` · out: `out`, `t`, `detScaled`, `sigRatio`, `firstFullRank`, `nCrossings`, `atFinal`, `pass`*
 
 ### `ms_tfmin.m`
 `[z, info] = ms_tfmin(rv0, rvf, seed, Tmax, c, muStar, opts)`  
@@ -118,6 +128,11 @@ MS_TFMIN  Multiple-shooting solve of the CR3BP minimum-time PMP problem.
 `[ok, why, minAltKm] = preflight_screen(o, muStar, lStar, floorKm, seedTf)`  
 CHEAP SANITY PRE-CHECK on a direct solution BEFORE any integrator touches it, made a single-home helper (migration #4). A solve can meet the discrete defect test to 1e-9 and still be physically wild; integrating such a trajectory crawls near the lunar singularity WITHOUT BOUND (measured: one cell pinned a catalog run 16 min at 100% CPU). Screens on the discrete nodes only -- altitude floor and a plausible time of flight -- so it costs microseconds.
 *in: `o`, `muStar`, `lStar`, `floorKm`, `seedTf` · out: `ok`, `why`, `minAltKm`*
+
+### `run_capped.m`
+`[ok, varargout] = run_capped(pool, fcn, nout, capSec, varargin)`  
+Runs fcn(args) on a parfeval worker under a HARD wall-clock cap; on timeout or worker error the future is CANCELLED (the worker is killed and restarted), so no single stuck computation can stall the caller.
+*in: `pool`, `fcn`, `nout`, `capSec`, `varargin` · out: `ok`, `varargout`*
 
 ### `seed_from_z8.m`
 `seed = seed_from_z8(z8, rv0, K, Tmax, c, muStar)`  
@@ -139,7 +154,7 @@ Finds the "REASONABLE" members of ANY orbit family, by Darin's criteria: perisel
 Minimum lunar altitude of the PROPAGATED trajectory, not of the nodes. A collocation altitude floor binds at nodes only; this checks it BETWEEN nodes, where periselene actually happens. Extracted verbatim from certify_dro_mintime/local_true_min_alt (migration #4).
 *in: `o`, `muStar`, `Tmax`, `c`, `lStar`, `rMoonKm` · out: `amin`*
 
-**tests/**: `test_cr3bp_minenergy_pmp.m`, `test_gto_family.m`, `test_ms_bvp_fixedtf.m`, `test_ss_bvp_accept.m`
+**tests/**: `test_catalog_schema_v3.m`, `test_conj_fixedtf.m`, `test_cr3bp_minenergy_pmp.m`, `test_gto_family.m`, `test_huber_saltation.m`, `test_minfuel_pmp.m`, `test_ms_bvp_fixedtf.m`, `test_ss_bvp_accept.m`
 
 ## verify_common
 

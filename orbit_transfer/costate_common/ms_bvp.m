@@ -184,8 +184,13 @@ while normR > tolR && kp < polishMax && toc(tStart) < wallSec
 end
 iters = iters + kp;
 
+% Jacobian conditioning at the final iterate (converged or stalled): the
+% fold-vs-grazing diagnostic for continuation walls (MfMax review
+% 2026-09-06). A singular dS/dz at a turning point in the continuation
+% parameter shows up as cond(J) blowing up as the wall is approached.
+if all(isfinite(J(:))), condJ = cond(J); else, condJ = Inf; end
 info = struct('converged', normR < tolR, 'normR', normR, ...
-              'iters', iters, 'wall', toc(tStart), ...
+              'iters', iters, 'wall', toc(tStart), 'condJ', condJ, ...
               'tGrid', sig*tfOf(p), 'Y', junctions(p));
 if keepSTMs
     [info.PHI, info.Yend] = collectSTMs(p);

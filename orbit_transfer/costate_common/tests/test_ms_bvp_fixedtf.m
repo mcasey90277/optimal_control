@@ -51,6 +51,10 @@ sd3 = struct('tf', 1.2, 'tGrid', tg3, 'Y', [sin(tg3); cos(tg3)]);
 check('free tf: y''(0) = 1', abs(p3(1) - 1) < 1e-7);
 check('free tf: tf = pi/2', abs(p3(end) - pi/2) < 1e-7);
 check('free tf: converged', info3.converged);
+% --- 4: Jacobian conditioning is reported (fold / wall diagnosis, 2026-09-06)
+check('info.condJ present, finite, >= 1', isfield(info3, 'condJ') && ...
+      isfinite(info3.condJ) && info3.condJ >= 1, ...
+      sprintf('got %s', mat2str(ternary(isfield(info3,'condJ'), info3.condJ, NaN))));
 fprintf('test_ms_bvp_fixedtf: ALL PASS\n');
 end
 
@@ -62,6 +66,10 @@ else
     fprintf('  [FAIL] %s %s\n', label, detail);
     error('test_ms_bvp_fixedtf:fail', '%s', label);
 end
+end
+
+function v = ternary(c, a, b)
+if c, v = a; else, v = b; end
 end
 
 function [yh, PHI] = demo_prop(A, dt, y0, needSTM)

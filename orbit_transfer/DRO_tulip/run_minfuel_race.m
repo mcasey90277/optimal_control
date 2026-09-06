@@ -40,6 +40,14 @@ P.maxGaps  = 2;                  % abandoned gaps before the arm retires
 P.HdriftTol = 1e-6;              % absolute first-integral gate (pilot rule)
 P.outMat   = '';                 % '' = direct/results/minfuel_race.mat
 P.logFile  = '';
+P.rungTolR  = [];                % LOOSE-RUNG gate (MfMax review 2026-09-06,
+                                 % idea 1.1): [] = a rung must CONVERGE to
+                                 % ms tolR (the 09-02 protocol); a number
+                                 % accepts a rung when normR < rungTolR
+                                 % (MfMax's homCI uses 1e-3) -- continuation
+                                 % points are predictors, not deliverables.
+                                 % The FLOOR is always refined to full tolR.
+P.rungHdriftTol = [];            % Hdrift gate for LOOSE rungs ([] = HdriftTol)
 P.seedScale = 1;                 % multiply the seed COSTATES (rows 8:14) by
                                  % this before the first rung. 1 = the energy
                                  % costates verbatim (the 09-02 protocol).
@@ -98,7 +106,9 @@ for kf = 1:numel(P.families)
     if P.seedScale ~= 1, lg('RACE ARM %s: seed costates scaled by %.3g', fam, P.seedScale); end
     A = struct('p', [], 'mf', [], 'coastFrac', [], 'Hdrift', [], ...
                'iters', [], 'wall', [], 'nBisect', 0, 'nFail', 0, ...
-               'retired', false, 'z', [], 'Y', {{}});
+               'retired', false, 'z', [], 'Y', {{}}, ...
+               'tight', logical([]), 'condJ', [], ...
+               'failP', [], 'failCondJ', [], 'failNormR', []);
     pGood = [];  gaps = 0;
     queue = P.sched;
     while ~isempty(queue)
@@ -108,8 +118,13 @@ for kf = 1:numel(P.families)
         [okRun, z, it] = run_capped(pool, @ms_minfuel, 2, P.wallSec + 90, ...
             rv0, rvf, tf, seed, Tmax, c, muStar, sm, ...
             struct('wallSec', P.wallSec));
-        okStep = okRun && it.converged && it.Hdrift < P.HdriftTol;
+        tight = okRun && it.converged && it.Hdrift < P.HdriftTol;
+        loose = okRun && ~isempty(P.rungTolR) && ~tight && ...
+                it.normR < P.rungTolR && it.Hdrift < dflt(P.rungHdriftTol, P.HdriftTol);
+        okStep = tight || loose;
+        cj = NaN;  if okRun && isfield(it, 'condJ'), cj = it.condJ; end
         if okStep
+            A.tight(end+1) = tight;  A.condJ(end+1) = cj;
             % final mass from this arm's own flight of its own solution:
             [~, ~, ~, Yfly] = cr3bp_minfuel_prop(tf, it.Y(:,1), false, ...
                                                  Tmax, c, muStar, sm);
@@ -122,13 +137,17 @@ for kf = 1:numel(P.families)
                                      it.Y(:,end), false, Tmax, c, muStar, sm);
             seed = struct('tf', tf, 'tGrid', it.tGrid(:)', 'Y', [it.Y, yT2]);
             pGood = pTry;
-            lg('  %s p=%.4g OK: mf=%.6f coast=%.2f Hdrift=%.1e iters=%d (%.0fs)', ...
-               fam, pTry, mf, it.coastFrac, it.Hdrift, it.iters, toc(t0));
+            lg('  %s p=%.4g %s: mf=%.6f coast=%.2f normR=%.1e Hdrift=%.1e condJ=%.2e iters=%d (%.0fs)', ...
+               fam, pTry, tern(tight, 'OK', 'ok-LOOSE'), mf, it.coastFrac, it.normR, ...
+               it.Hdrift, cj, it.iters, toc(t0));
         else
             A.nFail = A.nFail + 1;
+            A.failP(end+1) = pTry;  A.failCondJ(end+1) = cj;
+            A.failNormR(end+1) = NaN;
             if okRun
-                lg('  %s p=%.4g FAIL: conv=%d normR=%.1e Hdrift=%.1e (%.0fs)', ...
-                   fam, pTry, it.converged, it.normR, it.Hdrift, toc(t0));
+                A.failNormR(end) = it.normR;
+                lg('  %s p=%.4g FAIL: conv=%d normR=%.1e Hdrift=%.1e condJ=%.2e (%.0fs)', ...
+                   fam, pTry, it.converged, it.normR, it.Hdrift, cj, toc(t0));
             else
                 lg('  %s p=%.4g FAIL: HARD TIMEOUT/worker error (%.0fs)', ...
                    fam, pTry, toc(t0));
@@ -147,6 +166,36 @@ for kf = 1:numel(P.families)
             end
         end
         out.arms.(fam) = A;  save(outMat, 'out');   % after EVERY step
+    end
+    % FLOOR REFINEMENT (MfMax Fullpath pattern): if the deepest accepted rung
+    % was a LOOSE one, re-solve it at full tolerance from its own junctions;
+    % a loose point that cannot be tightened is dropped back to the deepest
+    % tight rung. Loose rungs are never reported as the arm's answer.
+    if ~isempty(A.p) && ~A.tight(end)
+        sm = struct('family', fam, 'p', A.p(end));
+        yT2 = cr3bp_minfuel_prop(seed.tGrid(end) - seed.tGrid(end-1), ...
+                                 A.Y{end}(:,end), false, Tmax, c, muStar, sm);
+        seedR = struct('tf', tf, 'tGrid', seed.tGrid, 'Y', [A.Y{end}, yT2]);
+        [okR, zR, itR] = run_capped(pool, @ms_minfuel, 2, P.wallSec + 90, ...
+            rv0, rvf, tf, seedR, Tmax, c, muStar, sm, struct('wallSec', P.wallSec));
+        if okR && itR.converged && itR.Hdrift < P.HdriftTol
+            [~, ~, ~, Yfly] = cr3bp_minfuel_prop(tf, itR.Y(:,1), false, Tmax, c, muStar, sm);
+            A.mf(end) = Yfly(end, 7);  A.z = zR;  A.Y{end} = itR.Y;
+            A.tight(end) = true;  A.Hdrift(end) = itR.Hdrift;  A.condJ(end) = itR.condJ;
+            lg('  %s FLOOR REFINED at p=%.4g: mf=%.6f normR=%.1e (tight)', fam, A.p(end), A.mf(end), itR.normR);
+        else
+            kT = find(A.tight, 1, 'last');
+            lg('  %s floor p=%.4g could NOT be tightened (normR %.1e); falling back to deepest TIGHT rung p=%s', ...
+               fam, A.p(end), tern(okR, itR.normR, NaN), tern(isempty(kT), 'NONE', sprintf('%.4g', A.p(max(kT,1)))));
+            if isempty(kT)
+                A.p = []; A.mf = []; A.coastFrac = []; A.Hdrift = []; A.iters = []; A.wall = [];
+                A.tight = logical([]); A.condJ = []; A.Y = {}; A.z = [];
+            else
+                A.p = A.p(1:kT); A.mf = A.mf(1:kT); A.coastFrac = A.coastFrac(1:kT);
+                A.Hdrift = A.Hdrift(1:kT); A.iters = A.iters(1:kT); A.wall = A.wall(1:kT);
+                A.tight = A.tight(1:kT); A.condJ = A.condJ(1:kT); A.Y = A.Y(1:kT);
+            end
+        end
     end
     % acceptance gate at the arm's deepest converged parameter:
     if ~isempty(A.p)
@@ -187,6 +236,16 @@ save(outMat, 'out');
 end
 
 % ------------------------------------------------------------------------
+function v = dflt(x, d)
+% DFLT  x, or d when x is empty.  INPUTS: x; d.  OUTPUTS: v.
+if isempty(x), v = d; else, v = x; end
+end
+
+function s = tern(c, a, b)
+% TERN  a if c else b.  INPUTS: c; a; b.  OUTPUTS: s.
+if c, s = a; else, s = b; end
+end
+
 function logmsg(f, s)
 % LOGMSG  Append to log file or stdout.  INPUTS: f path; s.  OUTPUTS: none.
 if isempty(f), fprintf('%s\n', s);

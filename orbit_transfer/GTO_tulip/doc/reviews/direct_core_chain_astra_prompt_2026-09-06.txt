@@ -1,0 +1,103 @@
+CODE REVIEW REQUEST --- the direct min-fuel core chain of a low-thrust GTO -> lunar
+"tulip" orbit transfer campaign (Earth-Moon CR3BP), MATLAB + CasADi/IPOPT.
+
+You are reviewing a chain of MATLAB files, inlined and line-numbered below, for three
+things in this order: (1) MATHEMATICAL CORRECTNESS, (2) PHYSICS / UNITS / FRAMES,
+(3) READABILITY against a stated house style. This is a working, certified pipeline
+(collocation defects ~1e-14, PMP primer alignment 0.058 deg, sign law 100%), so the
+question is not "does it run" but "is every formula right, and would a careful reader
+be misled anywhere."
+
+THE PROBLEM. Minimum-fuel transfer from a GTO (350 x 35,786 km) to a point on a
+south-pole "tulip" orbit near the Moon, in the Earth-Moon circular restricted
+three-body problem, rotating frame, nondimensional units (lStar = 389,703 km,
+tStar = 382,981 s, muStar = 0.012150585609624). Spacecraft 15 kg, 25 mN, Isp 2100 s,
+~40-revolution spiral. Fixed transfer time t_f = factor * tfMin. Control = throttle
+s in [0,1] times a unit direction alpha. Objective J = int s dt (propellant), reached
+by the Bertrand-Epenoy homotopy J(eps) = int [s - eps s(1-s)] dt from eps = 1 (energy,
+int s^2 dt) to eps = 0 (fuel, bang-bang). Discretisation: Sundman regularisation
+dt/dtau = kappa = r1^1.5 with time carried as an 8th state, tau_f held FIXED, uniform-
+in-nothing sigma grid inherited from a seed, trapezoidal defects, CasADi + IPOPT with
+exact Hessian. The KKT multipliers of the defect constraints are read back as discrete
+costates and checked against Pontryagin (primer direction, transversality lambda_m(tf)
+= 0, switching-function sign law). Min-time anchors are solved separately by a
+free-final-time all-burn variant with a "cScale" slack state (dt/dtau = c kappa,
+dc/dtau = 0).
+
+FILES IN THE CHAIN (in call order):
+  cr3bp_common/cr3bp_lt_params.m        nondimensional constants (Tmax, c, muStar...)
+  cr3bp_common/minfuel_config.m         campaign constants, schedules, tfMin anchors
+  cr3bp_common/gto_tulip_endpoints.m    the departure/arrival states
+  cr3bp_common/insertion_states.m       endpoint selection shared by all pipelines
+  cr3bp_common/cr3bp_ipopt_opts.m       IPOPT option sets (tight / loose warm start)
+  direct/lib/sundman_seed_map.m         the no-resample time->tau seed map
+  direct/lib/casadi_minfuel_sundman.m   THE ENGINE: dynamics, Sundman, NLP, homotopy
+                                        objective, KKT duals -> costates, primer check
+  direct/lib/minfuel_at_tf.m            the per-t_f driver (re-clean + eps sweep)
+  direct/run_certified_minfuel.m        the flagship reproduction chain
+  direct/certify/certify_minfuel_pmp.m  LS reconstruction of continuous costates
+                                        (independent of the NLP duals; known PARTIAL)
+  direct/certify/run_foc_tulip.m        wrapper for the generic first-order gate
+  verify_common/foc_check.m             the generic FOC gate (KKT stationarity, primer,
+                                        sign law, mapped terminal covector, Sdot)
+  direct/lib/gen_tulip_mintime.m        min-time anchor driver
+  GTO_ELFO/direct/elfo/casadi_mintime_freetf.m   free-t_f all-burn min-time solver
+
+WHAT TO CHECK, SPECIFICALLY (say PASS or give the defect + fix for each):
+ A. CR3BP rotating-frame dynamics in casadi_minfuel_sundman: the centrifugal term
+    [x; y; 0], the Coriolis term hv = [2 vy; -2 vx; 0], the Earth/Moon position
+    vectors dd, rr with muStar, the 1e-12 guards, and sign conventions. Compare
+    against the indirect EOM style (G = gravity gradient) implied by foc_check.
+ B. The Sundman transformation: is EVERY state ODE, including dt/dtau = kappa and
+    dm/dtau, multiplied correctly; is the objective integrand carried on the physical-
+    time measure (s*kappa, s(1-s)*kappa) consistently with the trapezoid in sigma;
+    is the fixed tau_f + terminal t(tau_f) = tf enforcement mathematically equivalent
+    to a fixed-time problem; are the defects D = X_{k+1} - X_k - tauf*(dsig/2)(F_k +
+    F_{k+1}) dimensionally right given dX/dsigma = tauf * dX/dtau.
+ C. The homotopy objective and the claim "eps=1 gives int s^2 dt": s - s(1-s) = s^2,
+    yes --- but check the sign/scale of the eps term as coded and that the objective
+    equals propellant up to a positive constant at eps = 0 given mdot = -(Tmax/c) s
+    (with Tmax = ND acceleration at m = 1 --- is "Tmax/m" the right thrust
+    acceleration and (Tmax/c) s the right mass rate, in ND units? Check
+    cr3bp_lt_params for how Tmax and c are nondimensionalised).
+ D. Cone-eliminated control: ||alpha|| = 1 enforced as an equality on sum(alpha^2)
+    with box [-1.1, 1.1] --- any issue for IPOPT (degenerate constraint qualification
+    at ||alpha|| = 1 with a box that never binds)?
+ E. The dual -> costate identification: lamDef = reshape(lamAll(1:8N), 8, N)
+    relies on the defect constraints being the FIRST 8N rows of opti.g in
+    column-major order --- verify against the order of subject_to calls; the
+    primer check primer = -lamV/||lamV|| vs the NLP direction at interval
+    midpoints with a global sign absorbed; lamMassEnd = lamDef(7,end) as a
+    transversality proxy (which interval's multiplier is that, and is it the right
+    object versus the mapped terminal covector foc_check uses?).
+ F. The derived quantities in minfuel_at_tf: dV = c*log(1/mf)*lStar/tStar and
+    prop_kg = m0kg*(1 - mf). Verify the ND -> km/s conversion (c is an ND exhaust
+    velocity), and that the rescaling of the time state for a neighbor seed,
+    Xk(8,:) = Xk(8,:)*(tf/Xk(8,end)), is the right thing to do to a Sundman seed.
+ G. certify_minfuel_pmp: the discrete adjoint recursion it fits by least squares,
+    the primer-direction and switching residuals, the scale pinning, and WHY it can
+    disagree with the raw-dual foc_check on the same solution (it is documented as
+    disagreeing on the flagship: primer error 2.0 vs 5e-18). Is the LS route
+    fundamentally sound over a 40-rev spiral, or is its disagreement expected?
+ H. foc_check: the mapped terminal covector (Hager 2000) for transversality, the
+    Sdot regularity measure and whether it is mesh-normalised, the KKT stationarity
+    assembly from opti.lam_g via the manifest. Anything that would make a PASS
+    unearned.
+ I. casadi_mintime_freetf: the cScale slack (dt/dtau = c kappa, dc/dtau = 0), the
+    objective min t(tau_f) with throttle pinned at 1, and the free-final-time
+    transversality H(t_f) = 0 --- is the dual form that foc_check reports
+    (lambda_t(t_f) = -1) the right condition for THIS formulation with the slack
+    state, and could the observed ~5% variation of lambda_t along the trajectory
+    (lamTimeCoV) be a formulation artifact rather than a convergence defect?
+ J. READABILITY against the house style: every function has a header with purpose /
+    INPUTS (with sizes) / OUTPUTS (with sizes) / REFERENCES; no i or j as loop
+    variables; aligned assignments where the house style uses them. Flag headers that
+    are out of date with the code (a header that describes a feature the body no
+    longer has, or vice versa), stale cross-references to renamed files, and
+    comments that assert things the code does not do.
+
+FORMAT: "## Errors" / "## Imprecisions" / "## Readability", each ranked most serious
+first, each item with file, line number, quote, why, and a concrete fix (code, where
+the fix is code). Then "## Checklist verdicts" --- one line per item A-J: PASS, or
+the defect number. Then "## Verdict" on the chain as a whole. Do not summarise the
+code back to me. Say plainly if a file is clean.

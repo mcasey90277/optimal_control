@@ -306,13 +306,25 @@ maps the propellant--trip-time trade for both targets and exposes a dense
 local-minimum landscape and a hard near-min-time transition band.
 
 \begin{itemize}
-  \item \textbf{Certified tulip solution} ($1.15\times$): 25 switches, 99.4\%
-        bang-bang, propellant 2.264~kg, $\Delta V=3.370$~km/s, max defect
-        $2.4\times10^{-14}$, terminal error 0. Contrast with the 3-switch local
-        optimum (2.950~kg) to show the global many-switch structure.
+  \item \textbf{Certified tulip solution} ($1.15\times$ legacy scale $=1.24\times$
+        target-consistent): best certified row 24 switches, $\sim$99.4\%
+        bang-bang, propellant 2.2487~kg, $\Delta V=3.345$~km/s, max defect
+        $1.3\times10^{-13}$, terminal error 0 --- one of \textbf{at least six
+        certified local optima at this $t_f$} (24--26 switches, $m_f$ spread
+        0.847--0.850; the originally published 25-switch row, 2.264~kg /
+        3.370~km/s, is 15~g worse). Report the multiplicity as a result: the
+        seed route and the continuation path select the basin, and the switch
+        count is a band. Contrast with the 3-switch local optimum (2.950~kg) to
+        show the global many-switch structure. \emph{[Sources:
+        \texttt{process/BASIN\_1150\_SWEEP.md}, \texttt{FRONT\_SWEEP.md};
+        multiplicity is concentrated at $t_f\le1.35\times$ legacy, absent from
+        $1.40\times$ up. Updated 2026-09-06.]}
   \item \textbf{Tulip $\Delta V$--$t_f$ front}: certified band $1.12$--$1.25\times$
-        (+$1.85\times$); campaign-best $\Delta V=2.434$~km/s at $1.65\times$
-        (46~d, $\sim$45\% below min-time). Switch count grows/shrinks with
+        (+$1.85\times$) legacy $=1.21$--$1.35\times$ (+$2.00\times$)
+        target-consistent; campaign-best $\Delta V=2.434$~km/s at $1.65\times$
+        legacy $=1.78\times$ (46~d, $\sim$45\% below the legacy min-time
+        $\Delta V$ of 4.4665~km/s; recompute against the 5.8267~ND anchor's own
+        $\Delta V$). Switch count grows/shrinks with
         $t_f$; dense-local-minima scatter and the lower envelope.
         \emph{[Outline note.]} ``Certified'' here $=$ PMP first-order via the
         KKT-dual costates (primer alignment + switching-law sign test); the
@@ -323,9 +335,14 @@ local-minimum landscape and a hard near-min-time transition band.
         against $6.2907$~ND; recompute them against the target-consistent tulip
         anchor ($\sim$5.8~ND, \S2) --- physical $t_f$ and $\Delta V$ values are
         unchanged, only the min-time-relative labels shift.]}
-  \item \textbf{Hard transition band} $1.01$--$1.11\times$: resists all methods;
-        near-min-time conditioning wall that afflicts even the smooth energy
-        problem---itself a structural finding.
+  \item \textbf{Hard transition band} $1.01$--$1.11\times$ legacy scale
+        $=$ \textbf{$1.09$--$1.20\times$ target-consistent} (the certified front
+        starts at $1.21\times$): resists all methods; near-min-time conditioning
+        wall that afflicts even the smooth energy problem---itself a structural
+        finding, and a nine-percent-above-min-time wall reads differently from
+        a one-percent one. Thrust ladder (not in the original outline):
+        25 $\to$ 20~mN closes in 4\% steps; ceiling $\sim$19.5--21~mN, cause
+        open.
   \item \textbf{ELFO $\Delta V$--$t_f$ front}: monotone $3.344$~km/s
         ($1.11\times$/31~d) $\to$ minimum $2.693$~km/s ($1.73\times$/48~d), then
         flat; optimum sits at a fold. 11/14 grid factors certified bang-bang.

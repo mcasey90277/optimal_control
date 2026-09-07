@@ -440,13 +440,19 @@ independent re-solves of the certified recipe (2026-07-21, and twice on
 final mass agreeing to $\sim0.1\%$. The switch integer is basin-sensitive even
 at fixed mesh. Report it as a band.
 
-\item \textbf{There are at least two certified optima at the flagship $t_f$.}
-The energy-backbone route and the \file{run\_certified\_minfuel} chain both
-converge machine-tight to 25 switches at the \emph{same} $t_f$ and land on
-different local optima ($m_f = 0.847086$ versus $0.849066$; $\Delta V$
-$3.4176$ versus \SI{3.3696}{\kilo\meter\per\second}). The seed route decides
-which. Stage 2 prints a basin check against the reference so this cannot pass
-unnoticed.
+\item \textbf{There are at least six certified optima at the flagship $t_f$,
+and the published one is not the best.} The energy-backbone route and the
+\file{run\_certified\_minfuel} chain converge machine-tight to 25 switches at
+the \emph{same} $t_f$ and land on different local optima ($m_f = 0.847086$
+versus $0.849066$). A thirteen-seed sweep on the flagship's own mesh
+(\file{process/BASIN\_1150\_SWEEP.md}, 2026-07-29) found six, with 24, 25 and
+26 switches, and its best --- 24 switches, $m_f = 0.850087$, \SI{2.2487}{kg}
+of propellant, \SI{15.3}{g} (0.68\%) better than the flagship --- is certified
+at parity with it. The seed route, and even the continuation path, decide
+which basin a solve lands in. The multiplicity is concentrated at the
+short-$t_f$ end of the front (\file{process/FRONT\_SWEEP.md}): report the best
+certified row at each $t_f$ together with the multiplicity, and the switch
+count as a band.
 \end{itemize}
 
 \begin{center}
@@ -454,6 +460,7 @@ unnoticed.
 \toprule
 route & {switches} & {$m_f$} & {$\Delta V$ (km/s)} & {prop (kg)} \\
 \midrule
+best certified, basin sweep 2026-07-29 & 24 & 0.850087 & 3.3449 & 2.2487 \\
 published flagship             & 25 & 0.849066 & 3.3696 & 2.2640 \\
 energy backbone $\to$ homotopy & 25 & 0.847086 & 3.4176 & 2.2937 \\
 re-solve, 2026-07-26           & 24 & 0.849279 & 3.3644 & 2.2608 \\
@@ -471,16 +478,31 @@ No certified solution exists there, and the obstruction is not the bang--bang
 structure: the \emph{smooth} minimum-energy backbone itself will not converge
 in that band. It is a conditioning wall approaching minimum time, where coast
 arcs shrink toward zero measure. The front therefore starts at $1.12$.
+One caution on the scale: these factors are against $t_{f,\min} = 6.2907$~ND,
+which is the minimum time to a \emph{different} tulip point (the max-$\dot y$
+point of \file{indirect/min\_time/mintime\_params}). The certified minimum time
+to the rendezvous the front actually targets is $5.8267$~ND
+(\file{gen\_tulip\_mintime}, 2026-07-15), so against the target-consistent
+anchor the front starts at $1.21\times$, the flagship sits at $1.24\times$, and
+the unsolved band is $1.09$--$1.20\times$ --- a wall nine percent above minimum
+time, not one. Physical $t_f$ and $\Delta V$ are unaffected; the configuration
+value is left as it is because every stored artifact keys on it.
 
-\paragraph{The thrust ladder.} Off-nominal thrust is not merely untested, it is
-blocked. Chaining the certified \SI{25}{\milli\newton} solution to
-\SI{20}{\milli\newton} at the same factor fails at the $\varepsilon=1$ energy
-step: a lower-thrust rung needs \emph{more} revolutions, and with $\tau_f$
-fixed (\S3.2) the winding number of a chained seed cannot grow. This is a
-topology wall, not a tuning problem, and escaping it needs a free-span
-reformulation ($\Delta\theta$-free, the analogue of the MEE campaigns' free
-longitude span). \file{run\_gto\_tulip} therefore \emph{refuses} off-nominal
-thrust with that explanation rather than running a solve expected to fail.
+\paragraph{The thrust ladder.} Off-nominal thrust is reachable, but not far.
+The recorded ``topology wall'' --- chaining \SI{25}{\milli\newton} to
+\SI{20}{\milli\newton} in one step fails at the $\varepsilon=1$ energy step ---
+turned out to be the continuation step size: walked in $\sim$4\% steps
+(\file{run\_tulip\_ladder}, 2026-07-27) every rung to \SI{20}{\milli\newton}
+converges machine-tight, and the \SI{20}{\milli\newton} rung sharpens to
+$\varepsilon=0$ (11 switches, \SI{2.104}{kg},
+\SI{3.113}{\kilo\meter\per\second}; certified-quality, not yet through the full
+gate set). Two stacked limits remain: the fixed-$\tau_f$ solver stops at
+\SI{21}{\milli\newton}, and the free-time (\texttt{cScale}) solver at
+$\sim$\SI{19.5}{\milli\newton}, where the energy problem itself will not
+converge. That ceiling is \emph{not} resolution (190 nodes per revolution) and
+\emph{not} transfer-time margin (tested); the cause is open.
+\file{run\_gto\_tulip} still refuses off-nominal thrust and points to the
+ladder script.
 
 \paragraph{Indirect certification.} The indirect campaigns
 (\file{indirect/ms\_band}, \file{ifs}, \file{ztl}) have working machinery but

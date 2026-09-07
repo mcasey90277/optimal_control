@@ -464,3 +464,37 @@ Today: machinery built and validated, no certified indirect solve yet.
 
 - [ ] `indirect/min_time/` serves both tulip and ELFO retargeting — if it grows,
   consider promoting it to a shared home (noted in the restructure spec).
+
+
+## 2026-09-06 doc pass (host Claude, on Mike's request)
+
+Records made consistent with the TODO's own findings: root `README.md`,
+`direct/README.md`, `doc/gto_tulip_guide.tex` (§certified, §not solved),
+`indirect/min_time/README.md`, and `../min_fuel_paper/min_fuel_paper_outline.tex`
+now carry the six-optima result with the 24-switch best certified row
+(`direct/lib/sundman_minfuel_basin24_f1150.mat`, ΔV 3.3449 km/s, 2.2487 kg), the
+front-sweep improvements, the publication rule (best certified row + the
+multiplicity, switch count as a band), the ladder outcome (20 mN reached; ceiling
+~19.5–21 mN, cause open) in place of the "topology wall" text, and the
+**factor-scale** caveat. Two items this pass makes explicit:
+
+- [ ] **Rebase the factor scale — a decision, not a doc edit.** `cfg.tfMin =
+  6.2907 ND` is the min-time to the max-ẏ tulip point; the front's target has
+  its own certified min-time 5.8267 ND (`gen_tulip_mintime`, 2026-07-15).
+  Labels are off by ×1.0796 (front starts at 1.21× true, flagship 1.24×, band
+  1.09–1.20×). Options: (a) keep the config and relabel at presentation (what
+  the docs now do); (b) change `cfg.tfMin` — which renames every artifact
+  (`fname` keys on factor), breaks fingerprints and neighbor-seed lookups, so it
+  needs a migration script and a re-run of `test_artifact_paths`. Recommend (a)
+  until the paper's figure pipeline is built, then decide.
+- [x] Follow-up on the RESOLVED six-optima item ("certify the winner … before
+  it replaces the flagship"): winner certified 2026-07-29 (`BASIN_1150_SWEEP.md`),
+  front re-swept 2026-07-29/30 (`FRONT_SWEEP.md`). It now replaces the flagship
+  in the docs above. `run_certified_minfuel` still reproduces the *published*
+  25-switch recipe — its expected numbers are unchanged and correct for what it
+  reproduces.
+- [ ] **Gate the 20 mN rung** (boundSat, fingerprint, `certify_minfuel_pmp`,
+  `run_foc_tulip`) before it is banked as a campaign artifact; and port
+  `cScale` into `casadi_minfuel_sundman` as an opt-in branch (TODO ladder item
+  step iii). Until then the 20 mN numbers in the docs are labelled
+  certified-quality, not certified.

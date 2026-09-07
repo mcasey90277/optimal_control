@@ -2,9 +2,12 @@
 
 Direct (collocation NLP) solvers for the low-thrust GTO → south-pole tulip
 transfer in the Earth–Moon CR3BP (15 kg, 25 mN, Isp 2100 s, ~40-rev spiral).
-Min-time reference: t_f = 6.290694 ND = 27.8845 d, ΔV 4.4665 km/s. The
-flagship result is the **certified sharp bang-bang min-fuel solution**
-(1.15× min-time, 25 switches, defect 2.4e-14, ΔV 3.3696 km/s) and the
+Min-time reference: t_f = 6.290694 ND = 27.8845 d, ΔV 4.4665 km/s (to the
+max-ẏ tulip point; the min-time to the front's own target is 5.8267 ND — see
+**Factor scale** below). The flagship result is the **certified sharp bang-bang
+min-fuel solution** at 1.15× (published row: 25 switches, defect 2.4e-14,
+ΔV 3.3696 km/s; **best certified row, 2026-07-29: 24 switches, 2.2487 kg,
+15.3 g better** — one of at least six optima at that t_f, see below) and the
 ΔV-vs-t_f front built around it.
 
 ## Goals
@@ -83,26 +86,50 @@ open campaign problems, not settings:
 
 | request | what happens | why |
 |---|---|---|
-| `thrustN` ≠ 25 mN | refused, with the explanation | fixed-τ_f topology wall; the 20 mN pilot was an honest failure (`process/LADDER_PREP_PILOT_FINDINGS.md`) |
-| `factor` < ~1.12 | refused, lists the backbones on disk | the ε=1 energy backbone itself will not converge approaching min-time |
+| `thrustN` ≠ 25 mN | refused, redirected to `direct/run_tulip_ladder` | not a topology wall after all (2026-07-27): the ladder walks 25 → 20 mN in ~4% steps, every rung machine-tight, and sharpens 20 mN to ε=0 (11 sw, 2.104 kg, ΔV 3.113 km/s; certified-quality, full gate set pending). The fixed-τ_f solver stops at 21 mN and the free-time (`cScale`) solver at ~19.5 mN; that ceiling is **not** resolution (190 nodes/rev) and **not** t_f margin (tested) — cause open. `process/LADDER_PREP_PILOT_FINDINGS.md` records the original one-jump failure; `TODO.md` the ladder |
+| `factor` < ~1.12 | refused, lists the backbones on disk | the ε=1 energy backbone itself will not converge approaching min-time (1.12× here ≈ 1.21× of the target-consistent min-time; see Factor scale) |
 
-**Two certified optima at the flagship t_f (measured 2026-07-26).** At
-factor 1.150 the energy-backbone route the front door drives and the
-`run_certified_minfuel` chain both converge machine-tight to 25 switches at the
-*same* t_f — and land on **different** local optima:
+**At least six certified optima at the flagship t_f (2026-07-26 → 07-29).** At
+factor 1.150 the energy-backbone route and the `run_certified_minfuel` chain
+first showed two machine-tight optima 1.43% apart in ΔV; a 13-seed sweep on the
+flagship's own mesh (`process/BASIN_1150_SWEEP.md`) then found **six**, with
+24, 25 and 26 switches at the same t_f, and the best of them beats the
+published flagship:
 
-| route | m_f | ΔV | propellant |
-|---|---|---|---|
-| `run_certified_minfuel` (flagship) | 0.849066 | 3.3696 km/s | 2.2640 kg |
-| energy backbone → `minfuel_at_tf` | 0.847086 | 3.4176 km/s | 2.2937 kg |
-| | **−0.00198** | **+1.43%** | **+0.0297 kg** |
+| route | m_f | sw | ΔV | propellant |
+|---|---|---|---|---|
+| **best certified — `direct/lib/sundman_minfuel_basin24_f1150.mat`** | **0.850087** | **24** | **3.3449 km/s** | **2.2487 kg** |
+| `run_certified_minfuel` (published flagship) | 0.849066 | 25 | 3.3696 km/s | 2.2640 kg |
+| energy backbone → `minfuel_at_tf` | 0.847086 | 25 | 3.4176 km/s | 2.2937 kg |
 
-Both are valid extremals; min-fuel here has closely spaced optima and the **seed
-route** decides which you land on. `run_gto_tulip` cross-checks every certified
-run against `sundman_minfuel_certified.mat` when the t_f matches and says plainly
-which basin it found, so a front-door run can no longer quietly report numbers
-1.4% off the headline result. **Quote the flagship numbers as the campaign
-result.**
+The 24-switch winner passed `run_foc_tulip` at parity with the flagship (KKT
+5.5e-13, primer 4.8e-18, sign law 100%, Ṡ_min 28.3). Distinct seeds stay in
+distinct basins; the **seed route** and even the **continuation path** decide
+which you land on (third confirmation: the 20 mN rung reached by two paths,
+4.4% apart in ΔV). The follow-up front sweep (`process/FRONT_SWEEP.md`) found
+the same multiplicity concentrated at the short-t_f end (+53 g at 1.12×, +11 g
+at 1.14×, +14 g at 1.30×, +9 g at 1.35×, nothing from 1.40× up; the four
+improved rows certified 2026-07-30 as `direct/lib/minfuel_best_f####.mat`), so
+the published front is a **lower bound in its left third and accurate in its
+right two thirds**. `run_gto_tulip` cross-checks every certified run against
+the reference when the t_f matches and says which basin it found.
+
+**Publication rule (2026-09-06):** report the best certified row at each t_f
+*together with* the multiplicity (six optima at 1.15×, switch count 24–26); the
+multiplicity is itself a result. Do not quote the 25-switch 3.3696 km/s row as
+"the" optimum.
+
+**Factor scale (2026-07-15 finding, not yet rebased).** `cfg.tfMin = 6.2907 ND`
+is the min-time to a *different* tulip point (max-ẏ,
+`indirect/min_time/mintime_params`); the certified min-time to the rendezvous
+the front actually targets is **5.8267 ND** (`direct/lib/gen_tulip_mintime`,
+hard all-burn, mesh-invariant, 2026-07-15). Every "×" label in this campaign is
+therefore against the wrong anchor by a factor 1.0796: the certified front
+starts at **1.21×** the target-consistent min-time, the flagship 1.15× is
+**1.24×**, and the unsolved "1.01–1.11×" band is **1.09–1.20×**. Physical t_f
+and ΔV are unchanged. The config value is deliberately *not* changed here ---
+file names, fingerprints and every stored artifact key on it --- so relabel at
+presentation time until a coordinated rebase (`TODO.md`).
 
 The lower-level entries remain available:
 

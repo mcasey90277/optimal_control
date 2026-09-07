@@ -51,8 +51,14 @@ here.
 **Bottom line:** the min-time MS machinery WORKS (tulip 4e-9) and answers
 "is indirect min-time viable? yes." But **retargeting to the ELFO via shooting
 is impractical** (sensitivity); the ELFO seed is still open. See
-`../elfo/ELFO_RETARGET.md`. Leading next candidate: a **direct min-time
-collocation** (free t_f) built on `casadi_minfuel_sundman`.
+`../../../GTO_ELFO/direct/elfo/ELFO_RETARGET.md`. That candidate was **built
+2026-07-15**: `casadi_mintime_freetf` (Route B, free t_f via the `cScale` slack
+state) anchors both targets — ELFO 6.0962 ND, and tulip **5.8267 ND to the
+backbone rendezvous** (`../../direct/lib/gen_tulip_mintime`). Note that the two
+tulip min-times are to *different* points: this module's `mintime_params`
+targets the max-ẏ point (6.2907 ND, the value `minfuel_config.tfMin` still
+carries), whereas the min-fuel front targets the backbone point (5.8267 ND) —
+see the root README's *Factor scale* note.
 
 ## Run
 

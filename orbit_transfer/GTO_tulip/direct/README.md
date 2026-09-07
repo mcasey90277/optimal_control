@@ -173,21 +173,27 @@ competing pipelines. It was never two pipelines:
 
 | request | what happens | why |
 |---|---|---|
-| `factor` < ~1.12 | refused, lists the backbones on disk | the ε=1 energy backbone itself will not converge approaching min-time |
-| off-nominal thrust | not exposed | fixed-τ_f topology wall; the 20 mN pilot (`lib/pilot_rung_20mN.m`) was an honest failure — `../process/LADDER_PREP_PILOT_FINDINGS.md` |
+| `factor` < ~1.12 | refused, lists the backbones on disk | the ε=1 energy backbone itself will not converge approaching min-time (1.12× here ≈ 1.21× of the target-consistent min-time 5.8267 ND — see the root README's *Factor scale* note) |
+| off-nominal thrust | not exposed here — use `run_tulip_ladder` | the "topology wall" was an oversized continuation step (2026-07-27): the ladder reaches 20 mN in ~4% steps; the fixed-τ_f solver walls at 21 mN, the free-time one at ~19.5 mN, cause open. `lib/pilot_rung_20mN.m` / `../process/LADDER_PREP_PILOT_FINDINGS.md` record the original one-jump failure; `../TODO.md` the ladder |
 
-## Two certified optima at the flagship t_f
+## At least six certified optima at the flagship t_f
 
 At factor 1.150 the energy-backbone route and the `run_certified_minfuel` chain
-both converge machine-tight to 25 switches at the **same** t_f — and land on
-**different** local optima:
+converge machine-tight to 25 switches at the **same** t_f and land on
+**different** local optima — and a 13-seed sweep on the flagship's own mesh
+(`../process/BASIN_1150_SWEEP.md`, 2026-07-29) found four more, with 24, 25 and
+26 switches:
 
-| route | m_f | ΔV | propellant |
-|---|---|---|---|
-| `run_certified_minfuel` | 0.849066 | 3.3696 km/s | 2.2640 kg |
-| energy backbone → `minfuel_at_tf` | 0.847086 | 3.4176 km/s | 2.2937 kg |
+| route | m_f | sw | ΔV | propellant |
+|---|---|---|---|---|
+| **best certified — `lib/sundman_minfuel_basin24_f1150.mat`** | **0.850087** | **24** | **3.3449 km/s** | **2.2487 kg** |
+| `run_certified_minfuel` (published flagship) | 0.849066 | 25 | 3.3696 km/s | 2.2640 kg |
+| energy backbone → `minfuel_at_tf` | 0.847086 | 25 | 3.4176 km/s | 2.2937 kg |
 
-The seed route decides the basin. Stage 2 prints a basin check against the
-certified reference whenever the t_f matches, so this cannot pass unnoticed.
-Quote the `run_certified_minfuel` numbers as the campaign result. Open item in
-`../TODO.md`.
+The winner is certified at parity with the flagship (`run_foc_tulip`, all
+gates). The seed route — and the continuation path — decide the basin. Stage 2
+prints a basin check against the reference whenever the t_f matches. Report
+the best certified row **with** the multiplicity; the switch count is a band
+(24–26). The same sweep across the front (`../process/FRONT_SWEEP.md`) improved
+1.12×/1.14×/1.30×/1.35× (`lib/minfuel_best_f####.mat`, certified 2026-07-30)
+and found nothing from 1.40× up.

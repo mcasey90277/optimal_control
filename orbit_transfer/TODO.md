@@ -119,16 +119,26 @@ exists.
     Cost: with δ=p the ramp is as steep as ε's at the floor — huberc
     inherits ε's 8–22 bisections and even stalls at 0.0039 on the clean
     cell where plain Huber went to 0.001 with 0 fails.
-  - [ ] **Huber follow-ups (from §25):** (a) δ schedule — fixed δ (0.02–0.05)
-    during the p-walk then a δ-walk, or δ=2p to match ε's steepness;
+  - [x] **δ schedule — DONE 2026-09-06 (FINDINGS §26):** `run_minfuel_race`
+    walks (p, δ) rungs (δ rule + optional stage-2 δ-walk). **Fixed δ=0.03
+    makes the p-walk failure-free** on (6,8) and (2,5) (0 fails, 17/17 to
+    p=0.001, ε's coast structure); all difficulty is in the sharpening,
+    which stops at δ≈0.0014–0.004 for EVERY family/rule and changes m_f
+    only at 1e-6. Decomposition: structure (fixed-δ p-walk) → sharpen to
+    δ~0.003 → STOP; beyond is a switching-time problem (survey item 4).
+    Fixed-δ floor solutions pass the ss acceptance gate.
+  - [ ] **Huber follow-ups (from §25/§26):** (a) `ms_bvp` tolR 1e-10 sits ON
+    the 30-d residual floor — spurious fails at 1.0–2.0e-10 cost (1,2) an
+    abandoned gap; set 3e-10 or floor-aware (one line, measurable);
     (b) **family schedule in `run_minfuel_race`**: Huber (fast) → huberc
-    the rung before `huber_switch_diag` predicts a graze → ε fallback; the
-    hedge the FINDINGS-25 table argues for; (c) Huber/huberc on the cells ε
-    cannot enter (high-γ band via MfMax idea 1.5 IC-homotopy seeds,
-    deep-thrust wall, GTO_tulip 1.01–1.11× band); (d) λ/2 as the standard
-    Huber/huberc seed; (e) `ms_bvp` tolR 1e-10 sits at the residual floor
-    on 30-d arcs — several "FAIL normR=1.0e-10..1.4e-10" on (1,2); consider
-    2e-10 or a floor-aware tolR.
+    fixed-δ when `huber_switch_diag` predicts a graze → ε fallback;
+    (c) Huber/huberc on the cells ε cannot enter (high-γ band via MfMax
+    idea 1.5 IC-homotopy seeds, deep-thrust wall, GTO_tulip 1.01–1.11×
+    band); (d) λ/2 as the standard Huber/huberc seed; (e) **switching-time
+    refinement as the endgame**: from a δ≈0.003 huberc solution, fix the
+    switch structure and Newton on the switch times (Maurer–Osmolovskii
+    reduced problem) instead of walking the homotopy to its floor — the
+    same build the certification survey wants for strictness.
   - [ ] **Independent verifier for the fixed-t_f extremals (Mike,
     2026-09-06):** (i) MATLAB `bvp5c` on the same PMP BVP (collocation, not
     shooting — different algorithm, an afternoon; shares our field); (ii)

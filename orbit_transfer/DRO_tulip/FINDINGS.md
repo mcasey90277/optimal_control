@@ -1309,3 +1309,74 @@ a `family schedule` (which family at which rung, with the diag as the
 trigger) is the missing piece.
 
 Records: `direct/results/minfuel_huberc_c{68,12,25}_g120.mat`.
+
+## 26. The delta schedule: decouple the structural walk from the sharpening (2026-09-06)
+
+Section 25 left huberc with eps's steep ramp at the floor because delta
+shrank with p. `run_minfuel_race` now walks (p, delta) rungs: a delta RULE
+for the p-walk (fixed, or a function of p) and an optional STAGE 2 that
+holds p at its deepest value and walks delta down. Three rules on the two
+former walls and the clean control (lambda/2 seed, tight protocol):
+
+| cell | delta rule | p-walk fails | p reached | delta-walk fails | final delta | m_f | eps m_f | wall |
+|---|---|---|---|---|---|---|---|---|
+| (6,8) | delta = p (s.25) | 9 | 0.0026 (wall) | -- | -- | 0.943921 | 0.943936 | 6.1 min |
+| (6,8) | delta = 2p | 9 | 0.0012 | -- | -- | 0.943929 | | 5.5 min |
+| (6,8) | **delta = 0.03 fixed** | **0** | **0.001** | 8 | 0.0026 | 0.943930 | | 5.3 min |
+| (1,2) | delta = p (s.25) | 22 | 0.0014 | -- | -- | 0.942505 | 0.942523 | 18.2 min |
+| (1,2) | delta = 2p | 10 | 0.001 | -- | -- | 0.942510 | | 12.3 min |
+| (1,2) | **delta = 0.03 fixed** | 15 | **0.001** | 12 | 0.0014 | 0.942510 | | 19.8 min |
+| (2,5) | delta = p (s.25) | 8 | 0.0039 (stall) | -- | -- | 0.947028 | 0.947046 | 5.8 min |
+| (2,5) | delta = 2p | 10 | 0.0019 | -- | -- | 0.947037 | | 7.2 min |
+| (2,5) | **delta = 0.03 fixed** | **0** | **0.001** | 8 | 0.0038 | 0.947041 | | 8.0 min |
+
+**1. With delta fixed, the p-walk is trivial.** On (6,8) and (2,5) it went
+17/17 to p = 0.001 with ZERO failures, three Newton iterations per rung
+at the end, and landed on eps's coast structure (0.33 on (6,8), exactly
+eps's) -- the two cells where delta = p had walled or stalled. (1,2), the
+30-day cell, still spent 15 failures in the p = 0.5-0.7 band, which every
+rule and both other families also found hard (a structural change region
+for that cell, not a delta effect); at least one of those was the
+spurious tolR floor (normR 1.3e-10 vs tolR 1e-10, see 3).
+
+**2. All the difficulty is in the sharpening, and it is the same for every
+family.** Stage 2 costs 8-12 failures on every cell and stops at
+delta ~ 0.0014-0.0038 -- the same place delta = p (0.0026), delta = 2p
+(0.0022-0.0039) and eps's own ramp (p 0.001-0.0017) all stop. That is the
+bang-bang-limit floor, not a property of Huber, huberc or eps: as the
+ramp width goes below ~0.003 the switches become too sharp for Newton on
+a 12-segment multiple-shooting mesh, whichever family produced them. And
+by then m_f has CONVERGED: on (6,8) it moves 0.943928 -> 0.943930 from
+delta 0.03 to 0.0026; on (2,5) 0.947041 at delta 0.0038 equals plain
+Huber's floor value to 6 digits. Sharpening past delta ~ 0.003 changes
+the answer at the 1e-6 level and costs most of the wall time.
+
+**3. Two side observations.** (a) The fixed-delta floor solutions PASS the
+single-shooting acceptance gate on (6,8) and (2,5) (`accept ok=1`,
+|dz| = 0) -- most deep-eps entries do not (FINDINGS 19); a gentler ramp
+at the same m_f is a friendlier solution for any single-shooting
+consumer. (b) `ms_bvp`'s tolR = 1e-10 sits ON the residual floor of the
+30-day arcs: three "failures" on (1,2) were normR 1.0e-10 .. 2.0e-10 and
+one of them abandoned a gap. tolR 3e-10 (or floor-aware) is a one-line
+fix with measurable effect on (1,2).
+
+**What this changes.** The right decomposition of the energy -> fuel
+homotopy is not "which family" but "structure, then sharpness":
+
+  1. p-walk at FIXED delta ~ 0.03 (huberc): the switch structure forms with
+     no drama -- 0 failures where the jump family walled;
+  2. sharpen delta to ~ 0.003-0.005: m_f converged to 1e-6, ss-acceptable;
+  3. STOP. Beyond that the problem is bang-bang with a fixed switch
+     structure, which is a SWITCHING-TIME problem, not a homotopy -- the
+     Maurer-Osmolovskii reduced problem the certification survey already
+     wants for strictness (doc/extremal_and_local_min_survey.md, item 4).
+     The homotopy's last, most expensive rungs are doing badly what a
+     switching-time Newton would do exactly.
+
+Plain Huber keeps one honour: on cells with no grazing bifurcation it
+reaches p = 0.001 in 1-2 minutes with no ramp at all (s.23) -- the fixed-
+delta recipe costs 5-8 minutes there. The family schedule of s.25 (Huber
+first, huberc when `huber_switch_diag` predicts a graze) is still the
+fastest route on the grid; the fixed-delta huberc walk is the ROBUST one.
+
+Records: `direct/results/minfuel_huberc_c{68,12,25}_g120_{d2p,dfix}.mat`.

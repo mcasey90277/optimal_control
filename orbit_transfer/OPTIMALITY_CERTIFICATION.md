@@ -694,6 +694,52 @@ independent check is still Tier 5 (an indirect multiple-shooting re-solve),
 or fitting the DISCRETE adjoint of trapezoid collocation instead of the
 continuous one.
 
+**FRONT RESULT (2026-09-07) — the restriction is LARGE away from 1.15×.** The
+same probe swept the whole stored ΔV–t_f front (17 rows, `results/e1_freetauf/
+front_list.txt`; `skipFixed` = stored m_f as baseline, `resume`; two batched
+passes, 2.5–14 min per row). all 17 converged on the DIRECT ε=0 route (1.600× on a 4000-iteration retry; defect ≤ 2e-11, 14 rows ≤ 1e-13; raw-dual primer alignment 0.06–0.12° max over burn
+nodes; 99.6–99.7% of control nodes on a bound). Δm_f ranges from **+3.2e-5
+(1.140×) to +9.45e-3 (1.400×)**, median 2.9e-3 — i.e. **0.5 g to 141.7 g of
+propellant, 0.02–7.6% of the row's propellant**, comparable to or larger than
+the basin spreads (1.4–3e-3). cScale 0.982–1.047. The mechanism is visible in
+the log: **every stored row carries the SAME τ_f0 = 151.683747** (the
+regularized length of the original 1.150× seed; `minfuel_at_tf`'s neighbour
+path rescales the time state to the new t_f but never τ_f0, and the energy
+backbones inherit it), so each row was forced to keep ∫dt/κ at the 1.150×
+value while t_f ran from 7.05 to 11.64 ND. The two 1.150× rows measured on
+09-06 were therefore the LEAST restricted rows of the campaign; the +2e-4
+"lower bound by ~2e-4" statement is retracted as a campaign-wide bound — the
+correct statement is per-row, and the front minimum moves: fixed-τ_f best
+1.650× 2.4339 km/s (0.88853) → free-τ_f best **1.700× 2.3741 km/s
+(m_f 0.89111697, 1.633 kg)**, with 1.650× at 2.3795 km/s. The 1.400× fixed
+row's flat spot (0.86608 vs 0.86592 at 1.350×) is repaired (0.87553). The
+1.750–1.850× rows still lose mass with more time (0.8896 → 0.8834): they
+remain the few-switch feasible-envelope family, not the lower envelope.
+Status of the free rows: **converged IPOPT optima with raw-dual primer
+alignment; NOT yet through `foc_check`** (9-state, cScale row not mapped) and
+not yet a results set for `aggregate_front` — both open in `GTO_tulip/TODO.md`.
+Switch counts move freely under release (50→36, 32→50, 26→44): the free rows are
+NOT the fixed rows with a slightly longer clock, they are different extremals.
+
+| row | t_f (×6.2907) | m_f fixed | m_f free | Δm_f | prop free | ΔV free | cScale | sw fixed→free |
+|---|---|---|---|---|---|---|---|---|
+| minfuel_best_f1120 | 1.120 | 0.83393143 | 0.83639357 | +2.46e-3 | 2.4541 kg (−36.9 g) | 3.6792 km/s | 0.9919 | 20→22 |
+| minfuel_best_f1140 | 1.140 | 0.84481147 | 0.84484351 | +3.20e-5 | 2.3274 kg (−0.5 g) | 3.4722 | 0.9986 | 23→21 |
+| basin24_f1150 | 1.150 | 0.85008728 | 0.85033334 | +2.46e-4 | 2.2450 kg (−3.7 g) | 3.3388 | 1.0060 | 24→24 |
+| certified flagship | 1.150 | 0.84906583 | 0.84927223 | +2.06e-4 | 2.2609 kg (−3.1 g) | 3.3645 | 1.0048 | 25→23 |
+| legacy_ms_f1250 | 1.250 | 0.85854384 | 0.86218414 | +3.64e-3 | 2.0672 kg (−54.6 g) | 3.0538 | 1.0466 | 50→36 |
+| minfuel_best_f1300 | 1.300 | 0.86310443 | 0.86602873 | +2.92e-3 | 2.0096 kg (−43.9 g) | 2.9622 | 1.0308 | 42→50 |
+| minfuel_best_f1350 | 1.350 | 0.86591759 | 0.87025005 | +4.33e-3 | 1.9462 kg (−65.0 g) | 2.8620 | 1.0269 | 32→50 |
+| minfuel_f1400_en | 1.400 | 0.86608135 | 0.87552797 | **+9.45e-3** | 1.8671 kg (**−141.7 g**) | 2.7375 | 1.0266 | 26→44 |
+| minfuel_f1450_dn | 1.450 | 0.87364942 | 0.87696258 | +3.31e-3 | 1.8456 kg (−49.7 g) | 2.7038 | 0.9822 | 43→31 |
+| minfuel_f1500_dn | 1.500 | 0.87939106 | 0.88093493 | +1.54e-3 | 1.7860 kg (−23.2 g) | 2.6107 | 0.9890 | 35→29 |
+| minfuel_f1550_dn | 1.550 | 0.88483258 | 0.88495233 | +1.20e-4 | 1.7257 kg (−1.8 g) | 2.5170 | 0.9972 | 31→29 |
+| minfuel_f1600_dn | 1.600 | 0.88809287 | 0.88858967 | +4.97e-4 | 1.6712 kg (−7.5 g) | 2.4326 | 1.0058 | 27→29 (needed 4000 iters, 1612 s; the 1500-iter pass stalled at defect 2e-4) |
+| minfuel_f1650_dn | 1.650 | 0.88853098 | 0.89088354 | +2.35e-3 | 1.6368 kg (−35.3 g) | 2.3795 | 1.0129 | 23→29 |
+| minfuel_f1700_dn | 1.700 | 0.88713131 | **0.89111697** | +3.99e-3 | **1.6333 kg** (−59.8 g) | **2.3741** | 1.0183 | 23→29 |
+| minfuel_f1750_dn | 1.750 | 0.88470081 | 0.88958381 | +4.88e-3 | 1.6562 kg (−73.3 g) | 2.4095 | 1.0212 | 23→31 |
+| minfuel_f1800_dn | 1.800 | 0.88177282 | 0.88692859 | +5.16e-3 | 1.6961 kg (−77.3 g) | 2.4711 | 1.0225 | 23→31 |
+| legacy_ms_f1850 | 1.850 | 0.87854350 | 0.88342635 | +4.88e-3 | 1.7486 kg (−73.2 g) | 2.5526 | 1.0229 | 22→33 |
 
 
 ## 5. Decision — what to build next, and why
@@ -774,6 +820,7 @@ campaign/row, verdict, and what it changed in Part A or §1–§5.
 | 2026-08-29 (GTO→tulip catalog conjugate sweep) | `ms_conjugate_test` at catalog scale via `costate_common/conj_catalog_pass` (same instrument as the 2026-08-23 catalog sweep row: fly stored z8 → K=24 junction seed → 1-iteration ms re-solve with STMs → quotiented Jacobi dets; verdict only when re-solve reproduces the entry) | the GTO→tulip catalog above — 2,625 min-time entries, 16 sheets | **2,625 PASS / 0 FAIL / 0 unverified** (100%) — every accepted entry has zero interior conjugate-point crossings (`conj_ncross = 0` on all 2,625); re-solve fidelity 9.6e-16..1.1e-8, comfortably inside the 1e-6 honesty gate; 610 s wall (0.232 s/entry). **Stronger than the DPO precedent** (3,931 PASS / 1 FAIL, 99.97%) — two plausible, unconfirmed structural differences recorded: this fleet's warm-recipe multistart (vs DPO's cold-start ladder) and its 5 N thrust floor (vs DPO's 1 N floor, where deep many-rev rungs carry more junction structure) | every GTO→tulip catalog entry now carries a second-order-necessary verdict (rung 3½ of the ladder), matching the other five shipped catalogs; verdicts stored in the catalog itself (`conj_pass`/`conj_ncross`/`conj_atfinal` per sheet + `conj_test` provenance, schema-validated `{}`); the zero-refutation contrast with DPO is recorded as an open hypothesis, not proof — a genuine test needs a comparable deep-rung GTO sweep, which does not exist yet |
 | 2026-09-06 (external code review, direct core chain) | GPT-6 Astra (raw API, $1.11) over 14 files: cr3bp_lt_params → minfuel_config → endpoints → ipopt opts → seed map → `casadi_minfuel_sundman` → `minfuel_at_tf` → `run_certified_minfuel` → `certify_minfuel_pmp` → `run_foc_tulip` → `foc_check` → `gen_tulip_mintime` → `casadi_mintime_freetf` | GTO→tulip direct campaign, code not rows | **9 errors / 7 imprecisions / 5 readability.** Clean: rotating-frame forces, Sundman scaling of every state and the objective measure, homotopy sign, dual-block extraction order, ΔV/propellant conversions. **E1** fixed τ_f + pinned t_f = extra isoperimetric constraint (→ LEAD-5, probe running); E2 tangential direction check sign-blind + engine picks the costate sign from steering (**fixed**: signed `dirSignedMax` gated in `foc_check`); E3 mapped covector could absorb an active terminal-box multiplier (**fixed**: objective+defect assembly, full-gradient value kept as companion); E4 LS certifier fits the physical adjoint (caveat written into its header; adjudication waits on E1); E5 λ_t = −1 is the defect-multiplier condition, not H(t_f)=0, and 5% lamTimeCoV is not intrinsic to cScale (open, feeds LEAD-4); E6 'apoapsis' was min rotating speed (**fixed**: apolune; old criterion kept as 'minspeed'); E7 zero unit direction on coast nodes in the seed map (**fixed**); E8 min-time driver published without enforcing acceptance (**fixed**: assert + "agrees", not "certifies"); E9 stale `../elfo` addpath + nonexistent `lib/results` (**fixed**; second flatten casualty `test_artifact_paths` cannot see — it checks .mat paths, not addpath targets); I4 Ṡ statistic missing the clock factor (**added** `sdotMinRelPhys`, report-only) | Part A A1 row 9 gains the signed minimum condition; A6 finding I2 CLOSED by the signed check; LEAD-5 opened; the engine/config files (in use by the running probe) and the guide's "fixed τ_f is equivalent" wording are deferred to the probe's verdict |
 | 2026-09-06 (E1 probe: free τ_f vs fixed τ_f) | `GTO_tulip/direct/certify/probe_e1_free_tauf.m` — fixed-τ_f engine re-solve at ε=0 (baseline), then `casadi_energy_freetf` (single-primary clock, τ_f free via cScale, t_f PINNED) at ε=0 from that baseline, same mesh | GTO→tulip 1.150×: published flagship + basin-24 winner | **REAL shift, both rows:** m_f +2.06e-4 (−3.10 g, cScale 1.00484, 25→23 sw) and +2.46e-4 (−3.69 g, cScale 1.00598, 24→24 sw); defects 3.4e-14 / 7.0e-15; direct ε=0 convergence, no fallback | LEAD-5 → FINDING: the fixed-τ_f transcription certifies a restricted problem; published m_f are lower bounds by ~2e-4; engine header + guide corrected; cScale port promoted to correctness; front re-solve free-τ_f is an open campaign decision; E4 NOT adjudicated by E1 — the LS certifier fails identically on the free-τ_f rows (primer err 2.000, sign match 40–42%), scatter not sign; see LEAD-5 (iv) |
+| 2026-09-07 (E1 front sweep: free τ_f vs fixed τ_f, all rows) | same probe, `skipFixed` + `resume`, batched `matlab -batch` (2 passes, 75-min watchdog) | GTO→tulip ΔV–t_f front, 17 stored rows 1.120–1.850× | **17/17 converged direct ε=0** (defect ≤2e-11, primer 0.06–0.12°); Δm_f +3.2e-5 … **+9.45e-3** (0.5 g … **141.7 g**, median 2.9e-3 ≈ basin spreads); cScale 0.982–1.047; 1.600× needed a 4000-iter retry (+4.97e-4, 7.5 g) | LEAD-5 FRONT RESULT: the restriction is large away from 1.15× because every row carries the 1.15× seed's τ_f0 = 151.68 (fossil regularized length); the "~2e-4" bound was the least-restricted rows; free-τ_f front minimum 1.700× 2.3741 km/s (was 1.650× 2.4339); free rows are converged but not yet `foc_check`-gated (9-state) — publication of the front must use them |
 
 ---
 

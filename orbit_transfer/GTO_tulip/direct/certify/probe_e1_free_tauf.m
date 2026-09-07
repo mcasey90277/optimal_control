@@ -33,6 +33,11 @@ function res = probe_e1_free_tauf(opts)
 %     .maxIter  - IPOPT cap per solve                       [1500]
 %     .sched    - fallback eps schedule if the direct eps=0 free re-solve does
 %                 not converge tight                        [cfg.schedNeighbor]
+%     .skipFixed - true: use the STORED m_f as the fixed-tau_f baseline instead
+%                 of re-solving it (stored rows reproduce to ~3e-9)   [false]
+%     .resume   - true: skip files whose probe_e1_<base>.mat already holds a
+%                 non-FAILED result; the summary is rebuilt from ALL probe
+%                 files on disk (crash-safe batch driver contract)    [false]
 %
 % OUTPUTS:
 %   res - struct array, one per file: .file .mf_stored .mf_fixed .mf_free
@@ -55,6 +60,8 @@ outDir = gd('outDir', fullfile(here, '..', 'results', 'e1_freetauf'));
 if ~exist(outDir, 'dir'), mkdir(outDir); end
 logFile = gd('logFile', fullfile(outDir, 'probe.log'));
 maxIter = gd('maxIter', 1500);
+skipFixed = gd('skipFixed', false);
+resume    = gd('resume', false);
 cfg     = minfuel_config();
 sched   = gd('sched', cfg.schedNeighbor);
 lg = @(varargin) logmsg(logFile, sprintf(varargin{:}));
@@ -66,6 +73,15 @@ lg('thrust %.4g N  m0 %g kg  Isp %g s  pSund %g  maxIter %d', cfg.thrustN, cfg.m
 res = struct([]);
 for k = 1:numel(files)
     f = files{k};  [~, base] = fileparts(f);
+    pf = fullfile(outDir, ['probe_e1_' base '.mat']);
+    if resume && isfile(pf)
+        P = load(pf, 'r');
+        if isfield(P, 'r') && ~strcmp(P.r.route, 'FAILED')
+            lg('--- [%d/%d] %s  (resume: done, skipping)', k, numel(files), base);
+            if isempty(res), res = P.r; else, res(end+1) = P.r; end
+            continue
+        end
+    end
     lg('--- [%d/%d] %s', k, numel(files), base);
     R = load(f);
     if isfield(R, 'out'), X = R.out.X(1:8,:);  U = R.out.U; else, X = R.X(1:8,:); U = R.U; end
@@ -80,16 +96,22 @@ for k = 1:numel(files)
                'route', 'FAILED', 'tf', tf, 'tauf0', tauf0);
 
     % --- (1) like-for-like baseline: fixed-tau_f engine, eps = 0, tight -----
-    tA = tic;
-    oF = casadi_minfuel_sundman(sigma, tf, rv0, rvf, p.Tmax, p.c, p.muStar, ...
-                                X, U, tauf0, cfg.pSund, maxIter, 0, true);
+    if skipFixed
+        oF = struct('mf', mfStored, 'switches', sum(abs(diff(U(4,:) > 0.5))), ...
+                    'maxDefect', NaN, 'ipoptStatus', 'stored (skipFixed)');
+        lg('    FIXED baseline: stored m_f=%.8f sw=%d (skipFixed)', oF.mf, oF.switches);
+    else
+        tA = tic;
+        oF = casadi_minfuel_sundman(sigma, tf, rv0, rvf, p.Tmax, p.c, p.muStar, ...
+                                    X, U, tauf0, cfg.pSund, maxIter, 0, true);
+        lg('    FIXED re-solve: %s  defect=%.2e  m_f=%.8f  sw=%d  (%.0f s)', ...
+           oF.ipoptStatus, oF.maxDefect, oF.mf, oF.switches, toc(tA));
+        okF = strcmp(oF.ipoptStatus, 'Solve_Succeeded') && oF.maxDefect < 1e-6;
+        if okF, X = oF.X;  U = oF.U; end
+    end
     r.mf_fixed = oF.mf;  r.sw_fixed = oF.switches;  r.defect_fixed = oF.maxDefect;
     r.status_fixed = oF.ipoptStatus;
-    lg('    FIXED re-solve: %s  defect=%.2e  m_f=%.8f  sw=%d  (%.0f s)', ...
-       oF.ipoptStatus, oF.maxDefect, oF.mf, oF.switches, toc(tA));
-    okF = strcmp(oF.ipoptStatus, 'Solve_Succeeded') && oF.maxDefect < 1e-6;
-    if okF, X = oF.X;  U = oF.U; end
-    save(fullfile(outDir, ['probe_e1_' base '.mat']), 'r', 'oF', 'sigma', 'tauf0', 'rv0', 'rvf', 'tf');
+    save(pf, 'r', 'oF', 'sigma', 'tauf0', 'rv0', 'rvf', 'tf');
 
     % --- (2) free tau_f: cScale slack, t_f pinned, eps = 0 tight from (1) ----
     o = struct('epsilon', 0, 'tfTarget', tf, 'moonZone', -1, 'pSund', cfg.pSund, ...
@@ -128,8 +150,8 @@ for k = 1:numel(files)
         r.status_free = oE.ipoptStatus;  r.route = 'FAILED';
         lg('    FREE re-solve FAILED to converge tight (status %s)', oE.ipoptStatus);
     end
-    save(fullfile(outDir, ['probe_e1_' base '.mat']), 'r', 'oF', 'oE', 'sigma', 'tauf0', 'rv0', 'rvf', 'tf');
-    if isempty(res), res = r; else, res(end+1) = r; end %#ok<AGROW>
+    save(pf, 'r', 'oF', 'oE', 'sigma', 'tauf0', 'rv0', 'rvf', 'tf');
+    if isempty(res), res = r; else, res(end+1) = r; end
 end
 
 lg('=== SUMMARY ===');

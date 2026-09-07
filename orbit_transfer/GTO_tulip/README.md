@@ -135,13 +135,20 @@ presentation time until a coordinated rebase (`TODO.md`).
 `casadi_minfuel_sundman` holds τ_f fixed *and* pins t(τ_f) = t_f, which adds the
 constraint ∫dt/κ = τ_f0 (inherited from the seed) to the fixed-time problem.
 Releasing τ_f through the free-time solver's `cScale` at the same pinned t_f
-raises m_f by **+2.06e-4** on the published flagship (→ 2.2609 kg, ΔV 3.3645 km/s,
-cScale 1.00484) and **+2.46e-4** on the basin-24 winner (→ 2.2450 kg, ΔV 3.3388
-km/s, cScale 1.00598): 3–4 g per row, below the basin spread, but real. Every
-fixed-τ_f m_f in this campaign is a lower bound on the free-τ_f optimum by
-~2e-4. Probe and artifacts: `direct/certify/probe_e1_free_tauf.m`,
-`direct/results/e1_freetauf/`; record: `../OPTIMALITY_CERTIFICATION.md` LEAD-5.
-Open decision in `TODO.md`: re-solve the front free-τ_f before publication.
+raises m_f by +2.06e-4 on the published flagship (→ 2.2609 kg, ΔV 3.3645 km/s,
+cScale 1.00484) and +2.46e-4 on the basin-24 winner (→ 2.2450 kg, ΔV 3.3388
+km/s) — and those 1.150× rows turn out to be the *least* restricted rows of the
+campaign. The whole stored front was re-solved free-τ_f on 2026-09-07 (all 17 rows, direct ε=0, defects ≤ 2e-11): Δm_f runs from +3.2e-5 (1.140×) to
+**+9.45e-3 at 1.400× (141.7 g)**, median 2.9e-3, cScale 0.982–1.047. The reason
+is that every stored row carries the 1.150× seed's τ_f0 = 151.68 (the neighbour
+seed rescales the time state but not τ_f0), so the fixed-τ_f constraint bit
+harder the further t_f was from 1.150×. **The free-τ_f numbers are the ones to
+quote**: front minimum 1.700× at **ΔV 2.3741 km/s, 1.633 kg** (fixed-τ_f best
+was 1.650× at 2.4339 km/s). The free rows are converged with raw-dual primer
+alignment ≤ 0.12° but not yet `foc_check`-gated (9-state layout) and not yet a
+results set for `aggregate_front` — open items in `TODO.md`. Probe and
+artifacts: `direct/certify/probe_e1_free_tauf.m`, `direct/results/e1_freetauf/`
+(full table in `../OPTIMALITY_CERTIFICATION.md` LEAD-5 FRONT RESULT).
 
 The lower-level entries remain available:
 

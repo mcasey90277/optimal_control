@@ -1,0 +1,17 @@
+lib/minfuel_best_f1120.mat
+lib/minfuel_best_f1140.mat
+lib/sundman_minfuel_basin24_f1150.mat
+lib/sundman_minfuel_certified.mat
+results/minfuel/legacy_ms_f1250.mat
+lib/minfuel_best_f1300.mat
+lib/minfuel_best_f1350.mat
+results/minfuel/minfuel_f1400_en.mat
+results/minfuel/minfuel_f1450_dn.mat
+results/minfuel/minfuel_f1500_dn.mat
+results/minfuel/minfuel_f1550_dn.mat
+results/minfuel/minfuel_f1600_dn.mat
+results/minfuel/minfuel_f1650_dn.mat
+results/minfuel/minfuel_f1700_dn.mat
+results/minfuel/minfuel_f1750_dn.mat
+results/minfuel/minfuel_f1800_dn.mat
+results/minfuel/legacy_ms_f1850.mat

@@ -514,15 +514,35 @@ t_f, τ_f freed through `casadi_energy_freetf`'s cScale, ε=0 direct re-solve):
 ~3–4 g per row, 0.15% of propellant, an order of magnitude below the basin
 spreads (so the six-optima ordering stands) but 200× the pre-registered "real"
 threshold. Every published fixed-τ_f m_f is a lower bound on the free-τ_f
-optimum by ~2e-4. Record: `OPTIMALITY_CERTIFICATION.md` LEAD-5 + §6.
+optimum by ~2e-4 *at 1.15×* — see the front sweep below: elsewhere on the
+front the gap is up to 9.4e-3. Record: `OPTIMALITY_CERTIFICATION.md` LEAD-5 + §6.
 
-- [ ] **Decide: re-solve the ΔV–t_f front free-τ_f before the paper quotes it.**
-  The machinery exists (`casadi_energy_freetf`, moonZone ≤ 0, tfTarget = t_f,
-  ε=0 from each stored row — the probe's recipe, ~2 min per row on the stored
-  mesh). Suggested: a `probe_e1_free_tauf` sweep over every `minfuel_best_f####`
-  and front row, reported as a Δm_f column; then either (a) publish the free-τ_f
-  numbers with the fixed-τ_f rows as the seeds, or (b) publish fixed-τ_f with the
-  ~2e-4 caveat. (a) is the honest one.
+- [x] **Re-solve the ΔV–t_f front free-τ_f — DONE 2026-09-07 (17/17 rows), and it changes the front.** `probe_e1_free_tauf` with `skipFixed` + `resume` over
+  the 17 stored rows (`direct/results/e1_freetauf/front_list.txt`; 2.5–14 min
+  per row, not the "~2 min" guessed above; two batched passes under a 75-min
+  watchdog). Every row converged on the direct ε=0 route; 1.600× needed 4000 iterations (the 1500-iter pass stalled at defect 2e-4) and lands at +4.97e-4 (7.5 g, cScale 1.0058, 27→29 sw). Δm_f from
+  +3.2e-5 (1.140×) to **+9.45e-3 (1.400×, 141.7 g)**, median 2.9e-3 — the size
+  of the basin spreads, not 10× below them. Cause, visible in `front.log`:
+  **every stored row has τ_f0 = 151.683747**, the 1.150× seed's regularized
+  length — `minfuel_at_tf`'s neighbour path rescales the time state to the new
+  t_f but leaves τ_f0 alone, and the backbones inherit it — so the constraint
+  ∫dt/κ = 151.68 was imposed on transfers whose t_f ran 7.05–11.64 ND. The two
+  1.150× rows were the least-restricted rows of the campaign. Decision (a) is
+  now forced: the paper quotes the free-τ_f numbers. Free-τ_f front minimum
+  **1.700×, ΔV 2.3741 km/s, m_f 0.89111697 (1.633 kg)** — was 1.650×, 2.4339.
+  1.750–1.850× still lose mass with more time (few-switch envelope family).
+  Full table: `OPTIMALITY_CERTIFICATION.md` LEAD-5 FRONT RESULT.
+
+- [ ] **Gate the free-τ_f rows.** They are converged IPOPT optima with raw-dual
+  primer alignment 0.06–0.12° and defects ≤ 2e-11, but `foc_check` /
+  `run_foc_tulip` assume the 8-state fixed-τ_f layout; the cScale row and its
+  single multiplier need mapping before the rows can be called certified.
+- [ ] **Make the free rows a results set.** Save them in the `results/minfuel/`
+  schema (or a `results/minfuel_freetauf/` sibling) so `aggregate_front` and the
+  paper figures read them; re-plot the honest front with both curves.
+- [ ] **Fix the τ_f0 fossil at the source:** `minfuel_at_tf`'s neighbour seed
+  should rescale τ_f0 with t_f (or the engine should free it — the cScale port
+  below), so no future fixed-τ_f row inherits the 1.150× length.
 - [ ] **Port cScale into `casadi_minfuel_sundman` as an opt-in branch** (was
   ladder item iii, now a correctness item, not a convenience). Until then the
   free-time solver is the reference formulation for tulip too.

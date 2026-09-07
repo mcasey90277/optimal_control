@@ -127,6 +127,17 @@ exists.
     only at 1e-6. Decomposition: structure (fixed-δ p-walk) → sharpen to
     δ~0.003 → STOP; beyond is a switching-time problem (survey item 4).
     Fixed-δ floor solutions pass the ss acceptance gate.
+  - [x] **Astra review #2 P0 + P1 — DONE 2026-09-06 (FINDINGS §27,
+    `reviews/huber_review_adjudicated_2026-09-06.md`):** conjugate test
+    verdict states (PASS/FAIL/ENDPOINT/UNDETERMINED, LU-parity sign +
+    log-det, zero-merge); closed-form Q̇ (`cr3bp_minfuel_qdot`, n'(F+−F−)=0
+    measured) in the propagator's branch/grazing logic and in
+    `huber_switch_diag`; huberc validation + p=1 dispatch; sweep/builder
+    bindings; race bookkeeping (stage-2 anchor, retirement, full trimming,
+    seed/z binding, metric refresh, guarded flights). Re-sweep 15/15,
+    golden 20/20. Language of §24/§26 corrected ((6,8) min|Q̇| = 0.080 with
+    the exact Q̇); survey case B strengthened, case A hypotheses audit
+    listed; register M1 disputed.
   - [ ] **Huber follow-ups (from §25/§26):** (a) `ms_bvp` tolR 1e-10 sits ON
     the 30-d residual floor — spurious fails at 1.0–2.0e-10 cost (1,2) an
     abandoned gap; set 3e-10 or floor-aware (one line, measurable);

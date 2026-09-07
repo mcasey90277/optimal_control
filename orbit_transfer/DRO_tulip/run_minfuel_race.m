@@ -115,9 +115,10 @@ for kf = 1:numel(P.families)
     if P.seedScale ~= 1, lg('RACE ARM %s: seed costates scaled by %.3g', fam, P.seedScale); end
     A = struct('p', [], 'delta', [], 'mf', [], 'coastFrac', [], 'Hdrift', [], ...
                'iters', [], 'wall', [], 'nBisect', 0, 'nFail', 0, ...
-               'retired', false, 'z', [], 'Y', {{}}, ...
+               'retired', false, 'retiredStage1', false, 'z', [], 'Y', {{}}, 'zAll', {{}}, ...
                'tight', logical([]), 'condJ', [], ...
                'failP', [], 'failDelta', [], 'failCondJ', [], 'failNormR', []);
+    perRung = {'p','delta','mf','coastFrac','Hdrift','iters','wall','tight','condJ','Y','zAll'};
     % delta rule for the p-walk (huberc only; NaN = field default delta = p)
     if isempty(P.delta),               deltaOf = @(p) NaN(size(p));
     elseif isa(P.delta, 'function_handle'), deltaOf = P.delta;
@@ -136,7 +137,8 @@ for kf = 1:numel(P.families)
         queue = [A.p(end)*ones(1, numel(ds)); ds];  mv = 2;
         lg('RACE ARM %s: STAGE 2 -- p held at %.4g, walking delta %s', fam, A.p(end), mat2str(ds, 3));
     end
-    xGood = [];  gaps = 0;
+    gaps = 0;
+    if stage == 1, xGood = []; else, xGood = dLast; end   % stage 2 starts FROM an accepted point
     while ~isempty(queue)
         pTry = queue(1,1);  dTry = queue(2,1);  queue(:,1) = [];
         sm = struct('family', fam, 'p', pTry);
@@ -152,18 +154,24 @@ for kf = 1:numel(P.families)
         okStep = tight || loose;
         cj = NaN;  if okRun && isfield(it, 'condJ'), cj = it.condJ; end
         if okStep
+            % reconstruction flights can collapse on a loose predictor: a
+            % collapse is a FAILED rung, not a crashed race (Astra review #2)
+            try
+                [~, ~, ~, Yfly] = cr3bp_minfuel_prop(tf, it.Y(:,1), false, Tmax, c, muStar, sm);
+                mf = Yfly(end, 7);
+                seedNew = seedFrom(it.Y, it.tGrid, tf, Tmax, c, muStar, sm);
+            catch ME
+                okStep = false;
+                lg('  %s p=%.4g%s FAIL: reconstruction flight collapsed (%s)', fam, pTry, dtag(dTry), ME.message);
+            end
+        end
+        if okStep
             A.tight(end+1) = tight;  A.condJ(end+1) = cj;
-            % final mass from this arm's own flight of its own solution:
-            [~, ~, ~, Yfly] = cr3bp_minfuel_prop(tf, it.Y(:,1), false, ...
-                                                 Tmax, c, muStar, sm);
-            mf = Yfly(end, 7);
             A.p(end+1) = pTry;  A.delta(end+1) = dTry;  A.mf(end+1) = mf;
             A.coastFrac(end+1) = it.coastFrac;  A.Hdrift(end+1) = it.Hdrift;
             A.iters(end+1) = it.iters;  A.wall(end+1) = toc(t0);
-            A.z = z;  A.Y{end+1} = it.Y;
-            yT2 = cr3bp_minfuel_prop(it.tGrid(end) - it.tGrid(end-1), ...
-                                     it.Y(:,end), false, Tmax, c, muStar, sm);
-            seed = struct('tf', tf, 'tGrid', it.tGrid(:)', 'Y', [it.Y, yT2]);
+            A.z = z;  A.Y{end+1} = it.Y;  A.zAll{end+1} = z;
+            seed = seedNew;
             xGood = xTry;
             lg('  %s p=%.4g%s %s: mf=%.6f coast=%.2f normR=%.1e Hdrift=%.1e condJ=%.2e iters=%d (%.0fs)', ...
                fam, pTry, dtag(dTry), tern(tight, 'OK', 'ok-LOOSE'), mf, it.coastFrac, it.normR, ...
@@ -198,8 +206,15 @@ for kf = 1:numel(P.families)
         end
         out.arms.(fam) = A;  save(outMat, 'out');   % after EVERY step
     end
-    if A.retired && stage == 1 && ~isempty(P.deltaSched)
-        A.retired = false;                          % stage 2 still gets its chance
+    if A.retired && stage == 1
+        % stage 2 gets its chance only if it will actually run (huberc, an
+        % accepted rung, an eligible smaller delta); record stage-1 retirement
+        stage2ok = ~isempty(P.deltaSched) && ~isempty(A.p) && strcmp(fam, 'huberc');
+        if stage2ok
+            dl_ = A.delta(end);  if isnan(dl_), dl_ = A.p(end); end
+            stage2ok = any(P.deltaSched < dl_);
+        end
+        if stage2ok, A.retiredStage1 = true;  A.retired = false; end
     end
     end                                             % stage loop
     % FLOOR REFINEMENT (MfMax Fullpath pattern): if the deepest accepted rung
@@ -208,27 +223,49 @@ for kf = 1:numel(P.families)
     % tight rung. Loose rungs are never reported as the arm's answer.
     if ~isempty(A.p) && ~A.tight(end)
         sm = smOf(fam, A.p(end), A.delta(end));
-        yT2 = cr3bp_minfuel_prop(seed.tGrid(end) - seed.tGrid(end-1), ...
-                                 A.Y{end}(:,end), false, Tmax, c, muStar, sm);
-        seedR = struct('tf', tf, 'tGrid', seed.tGrid, 'Y', [A.Y{end}, yT2]);
-        [okR, zR, itR] = run_capped(pool, @ms_minfuel, 2, P.wallSec + 90, ...
-            rv0, rvf, tf, seedR, Tmax, c, muStar, sm, struct('wallSec', P.wallSec));
-        if okR && itR.converged && itR.Hdrift < P.HdriftTol
-            [~, ~, ~, Yfly] = cr3bp_minfuel_prop(tf, itR.Y(:,1), false, Tmax, c, muStar, sm);
-            A.mf(end) = Yfly(end, 7);  A.z = zR;  A.Y{end} = itR.Y;
+        tR = tic;
+        try
+            seedR = seedFrom(A.Y{end}, seed.tGrid, tf, Tmax, c, muStar, sm);
+            [okR, zR, itR] = run_capped(pool, @ms_minfuel, 2, P.wallSec + 90, ...
+                rv0, rvf, tf, seedR, Tmax, c, muStar, sm, struct('wallSec', P.wallSec));
+        catch
+            okR = false;  zR = [];  itR = struct();
+        end
+        refined = okR && isstruct(itR) && isfield(itR, 'converged') && itR.converged && itR.Hdrift < P.HdriftTol;
+        if refined
+            try
+                [~, ~, ~, Yfly] = cr3bp_minfuel_prop(tf, itR.Y(:,1), false, Tmax, c, muStar, sm);
+                seed = seedFrom(itR.Y, itR.tGrid, tf, Tmax, c, muStar, sm);
+            catch
+                refined = false;
+            end
+        end
+        if refined
+            % every solution-dependent metric now describes the REFINED solve
+            A.mf(end) = Yfly(end, 7);  A.z = zR;  A.zAll{end} = zR;  A.Y{end} = itR.Y;
             A.tight(end) = true;  A.Hdrift(end) = itR.Hdrift;  A.condJ(end) = itR.condJ;
-            lg('  %s FLOOR REFINED at p=%.4g: mf=%.6f normR=%.1e (tight)', fam, A.p(end), A.mf(end), itR.normR);
+            A.coastFrac(end) = itR.coastFrac;
+            A.iters(end) = A.iters(end) + itR.iters;  A.wall(end) = A.wall(end) + toc(tR);
+            lg('  %s FLOOR REFINED at p=%.4g%s: mf=%.6f normR=%.1e (tight)', ...
+               fam, A.p(end), dtag(A.delta(end)), A.mf(end), itR.normR);
         else
             kT = find(A.tight, 1, 'last');
-            lg('  %s floor p=%.4g could NOT be tightened (normR %.1e); falling back to deepest TIGHT rung p=%s', ...
-               fam, A.p(end), tern(okR, itR.normR, NaN), tern(isempty(kT), 'NONE', sprintf('%.4g', A.p(max(kT,1)))));
-            if isempty(kT)
-                A.p = []; A.mf = []; A.coastFrac = []; A.Hdrift = []; A.iters = []; A.wall = [];
-                A.tight = logical([]); A.condJ = []; A.Y = {}; A.z = [];
+            nr = NaN;  if okR && isstruct(itR) && isfield(itR, 'normR'), nr = itR.normR; end
+            if isempty(kT), pT = 'NONE'; else, pT = sprintf('%.4g', A.p(kT)); end
+            lg('  %s floor p=%.4g%s could NOT be tightened (normR %.1e); falling back to deepest TIGHT rung p=%s', ...
+               fam, A.p(end), dtag(A.delta(end)), nr, pT);
+            % trim EVERY per-rung array to the retained rung, restore z and
+            % rebuild the seed from it, so the acceptance gate below is bound
+            % to the solution actually reported (Astra review #2)
+            if isempty(kT), kT = 0; end
+            for f_ = perRung
+                A.(f_{1}) = A.(f_{1})(1:kT);
+            end
+            if kT == 0
+                A.z = [];
             else
-                A.p = A.p(1:kT); A.mf = A.mf(1:kT); A.coastFrac = A.coastFrac(1:kT);
-                A.Hdrift = A.Hdrift(1:kT); A.iters = A.iters(1:kT); A.wall = A.wall(1:kT);
-                A.tight = A.tight(1:kT); A.condJ = A.condJ(1:kT); A.Y = A.Y(1:kT);
+                A.z = A.zAll{kT};
+                seed = seedFrom(A.Y{kT}, seed.tGrid, tf, Tmax, c, muStar, smOf(fam, A.p(kT), A.delta(kT)));
             end
         end
     end
@@ -274,6 +311,15 @@ end
 function v = dflt(x, d)
 % DFLT  x, or d when x is empty.  INPUTS: x; d.  OUTPUTS: v.
 if isempty(x), v = d; else, v = x; end
+end
+
+function seed = seedFrom(Yj, tGrid, tf, Tmax, c, muStar, sm)
+% SEEDFROM  ms seed from K junction starts: propagate the last segment for
+% the K+1-th column.  INPUTS: Yj [14 x K]; tGrid [1 x K+1]; tf; field
+% params; sm.  OUTPUTS: seed struct(.tf, .tGrid, .Y [14 x K+1]).
+tGrid = tGrid(:)';
+yT = cr3bp_minfuel_prop(tGrid(end) - tGrid(end-1), Yj(:,end), false, Tmax, c, muStar, sm);
+seed = struct('tf', tf, 'tGrid', tGrid, 'Y', [Yj, yT]);
 end
 
 function sm = smOf(fam, p, delta)

@@ -140,7 +140,7 @@ Survey 2.1 case B: branchwise-AD STM is the true flow derivative under
 regular crossings; case A: the hypotheses-audit list above replaces
 "two cheap additions"; note M1 disputed.
 
-## Fix plan (proposed, not yet executed)
+## Fix plan -- EXECUTED same day (P0 commit 8ed9fde, P1 following); exact-Qdot correction: (6,8) min|Qdot| = 0.080, not 0.045
 
 P0 (instrument correctness, re-sweep after):
   1. `ms_conjugate_test`: UNDETERMINED when no sample is testable

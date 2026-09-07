@@ -523,6 +523,9 @@ These are the transferable content. Each is a property of the *problem class*,
 not of an implementation.
 
 ### M1 — bang-bang extremals are weak, non-strict minima
+
+> **Disputed 2026-09-06 (GPT-6 Astra review #2, `DRO_tulip/reviews/huber_theory_astra_2026-09-06.md` §4D):** the measurement (270 flat directions at earth 10 N) stands; the impossibility argument drawn from it does not — the Lagrangian's reduced Hessian on the kernel of the endpoint-constraint Jacobian includes the nonlinear dynamics and need not vanish because L(s) = s. Treat M1 as an observed property of that transcription, not a theorem about the problem class.
+
 The fuel objective is linear in throttle, so naive control-space curvature is
 zero and the reduced Hessian is genuinely flat in many directions (270 of them
 at earth 10 N, with a clean spectral gap: ~270 eigenvalues at 1e-10, nothing

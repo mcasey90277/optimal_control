@@ -92,24 +92,60 @@ the *sufficient* certificate:
        (12-48 samples; a conjugate PAIR inside one segment hides);
   (iii) normality  -- implied by tfMin acceptance (1.7), never stated.
 
+  **Audit required before any of this is called a certificate (Astra
+  review #2, 2026-09-06):** (1) the theorem must be applied with our
+  ACTUAL endpoint manifold -- r, v fixed, mass FREE with lambda_m(tf) = 0
+  and H(tf) = 0; for all-burn min-time mass is eliminable
+  (m = m0 - Tt/c, delta m_f = -(T/c) delta t_f), which is why the
+  6-state block rows 1:6 / cols 8:13 is the right object, but the
+  reduced exponential map / accessory BVP whose kernel is the admissible
+  null space of the second variation must be written down, not assumed
+  from "the free-time quotient as in HamPath"; (2) tfMin acceptance
+  gives a normal LIFT -- it does not exclude an abnormal lift of the same
+  trajectory, and if the theorem needs strict/strong normality or a
+  corank-one endpoint map, that is a separate hypothesis; (3) the
+  costate-scaling quotient is an invariance of the CONTROL
+  (Phi_xl * lam0 = 0 exactly), but with lambda_0 = 1 and H = 0 it is not
+  a symmetry of the BVP -- its equivalence to the theorem's construction
+  must be shown; (4) "no conjugate time at integrator resolution" is a
+  numerical ASSESSMENT (needs between-sample bounds, even-multiplicity
+  handling, endpoint focal degeneracy), not a proof; a rigorous
+  certificate needs validated enclosures; (5) the catalog's "min-time" is
+  the ALL-BURN problem -- optimality against throttle variations is
+  assumed, not tested. Items (i)-(ii) remain the right cheap additions;
+  they upgrade the assessment, they do not close the proof.
+
 **Case B (smoothed fuel, p > 0).** On interior arcs H_ss = 2p > 0 (eps) or
-1/p (huber) -- strong Legendre holds. On bound-active arcs the control
-does not vary; the accessory problem has the active set frozen, and the
-branchwise-AD STM `ms_conjugate_test` consumes is exactly the second
-variation of *that* problem. Its verdict is therefore the Jacobi necessary
-condition **conditional on strict complementarity** (Q stays off the band
-edges except at transversal crossings). Sufficiency for this mixed class
-needs the Maurer-Osmolovskii-Buskens conditions: a Riccati/no-focal-point
-test on the interior arcs *plus* the switching-time second variation at
-the bound arcs. Neither the transversality gate (1.9) nor the switching-time
-part exists. What we can claim for the 7 shipped min-fuel entries after
+1/p (huber) -- strong Legendre holds. **Corrected 2026-09-06 (Astra review
+#2):** for a CONTINUOUS clipped law (eps, huberc) the minimized field is
+continuous and piecewise smooth, so at a transversal branch boundary
+F+ = F- and the saltation matrix is the identity: the branchwise-AD STM
+`ms_conjugate_test` consumes IS the derivative of the full flow, not of an
+active-set-frozen surrogate. Its verdict is the ordinary Jacobi necessary
+condition under the regularity hypotheses (strict sign of Q - 1 inside
+active arcs, isolated transversal crossings, positive interior throttle
+curvature). "Frozen active set" is legitimate only as a statement about
+the critical cone (delta s = 0 a.e. on bound-active arcs), not as a
+restriction on perturbed trajectories. Sufficiency for continuous
+saturation of a strictly convex control cost can be analysed with
+critical-cone / Riccati methods; a separate bang-bang switching-time
+Hessian is NOT automatically required. The original Huber family (jump at
+Q = 1, nonunique minimizer there) is a genuinely different, discontinuous
+case and does need the bang-bang machinery. The transversality gate (1.9)
+still does not exist. What we can claim for the 7 shipped min-fuel entries after
 the 09-05 fix: *no interior conjugate point at junction resolution for the
 frozen-active-set accessory problem* -- a necessary condition, honestly
 labelled in the catalog as such.
 
-**Case C (bang-bang, p = 0).** No NLP-level Hessian test can reach strictness
-(register M1/M2: the fuel cost is linear in s; the reduced Hessian is flat
-in every throttle direction). Strictness lives in the switch times:
+**Case C (bang-bang, p = 0).** The register's M1 argument -- "the fuel cost
+is linear in s, so no NLP-level Hessian can reach strictness" -- is
+**disputed (Astra review #2)**: the Lagrangian's reduced Hessian on the
+kernel of the endpoint-constraint Jacobian includes the nonlinear dynamics
+and need not vanish because L(s) = s. The 270 flat directions measured at
+earth 10 N stand as a measurement of THAT transcription; the impossibility
+theorem inferred from it does not. (Register M2 -- strict complementarity
+fails at the throttle bounds in an eps -> 0 approach -- is a separate,
+valid point.) Strictness lives in the switch times:
 Maurer-Osmolovskii's sufficient condition is (i) positive-definite Hessian
 of the reduced problem over the switch times, (ii) Sdot != 0 at every
 switch, (iii) primer/Legendre optimality of alpha. (ii) and (iii) are

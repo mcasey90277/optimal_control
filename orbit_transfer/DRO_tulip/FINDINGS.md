@@ -1175,7 +1175,7 @@ family on the same junctions -- the two limits are the same problem), and
 Huber on the hard cells where eps itself fails (the high-gamma band, the
 deep-thrust wall).
 
-## 24. The Huber walls are grazing bifurcations of the switch structure -- not folds, not the gate (2026-09-06)
+## 24. The Huber walls carry grazing-bifurcation signatures -- not folds, not the gate (2026-09-06; wording corrected in section 27)
 
 MfMax review (`doc/mfmax_ideas_review.md`) offered two explanations for the
 section-23 walls that its machinery would cure: a FOLD in p (arclength
@@ -1310,7 +1310,7 @@ trigger) is the missing piece.
 
 Records: `direct/results/minfuel_huberc_c{68,12,25}_g120.mat`.
 
-## 26. The delta schedule: decouple the structural walk from the sharpening (2026-09-06)
+## 26. The delta schedule: decouple the structural walk from the sharpening (2026-09-06; "family-independent floor" corrected in section 27)
 
 Section 25 left huberc with eps's steep ramp at the floor because delta
 shrank with p. `run_minfuel_race` now walks (p, delta) rungs: a delta RULE
@@ -1380,3 +1380,53 @@ first, huberc when `huber_switch_diag` predicts a graze) is still the
 fastest route on the grid; the fixed-delta huberc walk is the ROBUST one.
 
 Records: `direct/results/minfuel_huberc_c{68,12,25}_g120_{d2p,dfix}.mat`.
+
+## 27. Corrections from Astra review #2 (2026-09-06): what sections 24-26 may and may not claim
+
+A second GPT-6 Astra pass (code + theory; `reviews/huber_review_adjudicated_2026-09-06.md`)
+and the resulting P0/P1 fixes change the wording, one number, and nothing
+in the measured tables.
+
+**Section 24 -- "grazing bifurcation" is a RISK SIGNATURE, not a proven
+event.** (a) `Qdot` is throttle-independent and continuous across the
+switch: `Qdot = -Tmax lam_v'lam_r/(m rho)` exactly (n'(F+-F-) = 9e-16
+measured), so `huber_switch_diag` now uses it instead of a secant on the
+ode113 grid. With the exact value the (6,8) wall's least-transversal
+crossing is |Qdot| = 0.080 (not 0.045) against 0.108-0.80 on the clean
+cells -- still the smallest, a 1.4-10x contrast, not 2-18x. The (1,2)
+Q-maximum of 0.9907 at t/tf = 0.01 stands. (b) A grazing bifurcation
+requires h = 0, hdot = 0, hddot != 0 on the branch plus a nonzero
+unfolding in p; we observed the two indicators, not the event. (c) "No
+parametrization of p passes a corner" is WRONG: the local behaviour at a
+graze is typically square-root (switch-time sensitivity ~ mu^-1/2), which
+w = sqrt(mu), explicit switching times, or a structure-change step can
+traverse. The defensible statement: the smooth Newton-on-p walk stalls
+there, and a continuous family passes it -- both measured. (d) Flat
+cond(J) is weaker evidence against a fold than stated (finite-distance
+samples at nonzero residual). The family change was A cure, not the only
+one; it is the one that worked.
+
+**Section 26 -- the sharpening floor is CONFIGURATION-dependent.** Three
+cells on one solver setup (tolerances, scaling, K = 12, step policy)
+establish an empirical floor for that setup, not a family-independent
+one; ramp width in Q is not a temporal resolution (dt_ramp ~
+delta/|Qdot|); segment count alone does not set switch resolution; and
+delta -> 0 at fixed p = 0.001 recovers the Huber JUMP (s = pQ below Q = 1),
+not exact bang-bang fuel. m_f convergence to 1e-6 is one scalar; switch
+times may still differ. The switching-time endgame remains sensible; its
+convergence certifies stationarity, not minimality, and the direction
+control alpha(t) on burns must be in the accessory problem.
+
+**The conjugate instrument** now reports `verdict` in {PASS, FAIL,
+ENDPOINT, UNDETERMINED}: nothing-testable is no longer a PASS, a root on
+the bracket ending at t_f is ENDPOINT (a weak, non-strict minimum -- to
+examine, not a refutation), zero samples merge with adjacent sign changes,
+and the determinant sign comes from a pivoted LU of the equilibrated block
+with the magnitude kept as a log-determinant (an underflowing raw det no
+longer reads as a root). Re-sweep on the fixed instrument: 15/15 PASS, all
+tested, none endpoint-only; golden 20/20; the catalog rebuilt clean and its
+verdicts are bound to converged re-solves at the entry's own p.
+
+**Not changed by the review:** every measured table in sections 22-26
+(the walls, huberc passing them, the delta schedule) and the shipped
+catalog's entries.

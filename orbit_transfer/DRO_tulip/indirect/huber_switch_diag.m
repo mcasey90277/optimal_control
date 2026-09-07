@@ -18,10 +18,13 @@ function D = huber_switch_diag(Y1, tf, Tmax, c, muStar, smooth)
 %
 % OUTPUTS:
 %   D - struct: .T [nT x 1] times, .Q [nT x 1] switch quantity along the arc,
-%       .tCross [1 x nC] crossing times of Q = 1, .dQdtCross [1 x nC] dQ/dt
-%       there (transversality; small = near-grazing), .minAbsDQdt,
-%       .graze struct array of imminent grazes (.t, .Q, .kind
-%       'max-below-1' | 'min-above-1'), .nCross
+%       .Qdot [nT x 1] EXACT dQ/dt (cr3bp_minfuel_qdot), .tCross [1 x nC]
+%       interpolated crossing times of Q = 1, .dQdtCross [1 x nC] exact
+%       Qdot there (transversality; small = near-grazing), .minAbsDQdt,
+%       .tTouch tangential touches (Q == 1 without a sign change),
+%       .graze struct array of grazing-RISK extrema (.t, .Q, .kind
+%       'max-below-1' | 'min-above-1', .Qdot) -- a screen, not a verdict,
+%       .nCross, .nTouch, .note
 %
 % REFERENCES:
 %   [1] DRO_tulip/FINDINGS.md section 24 (the measurement this packages).
@@ -29,26 +32,62 @@ function D = huber_switch_diag(Y1, tf, Tmax, c, muStar, smooth)
 %       dQ/dt at the crossing; grazing = that denominator -> 0).
 
 [~, ~, T, Yt] = cr3bp_minfuel_prop(tf, Y1(:), false, Tmax, c, muStar, smooth);
-[T, iu] = unique(T, 'stable');  Yt = Yt(iu, :);     % drop duplicated event samples
-Q = Tmax * (sqrt(sum(Yt(:, 11:13).^2, 2)) ./ Yt(:, 7) + Yt(:, 14) / c);
+% drop (near-)duplicate event samples: tolerance-aware, keep the first
+keep = [true; diff(T) > 1e-12 * max(tf, 1)];
+T = T(keep);  Yt = Yt(keep, :);
+Q  = Tmax * (sqrt(sum(Yt(:, 11:13).^2, 2)) ./ Yt(:, 7) + Yt(:, 14) / c);
+Qd = cr3bp_minfuel_qdot(Yt', Tmax, c)';           % EXACT dQ/dt at every sample
 
-s = sign(Q - 1);  s(s == 0) = 1;
-kx = find(diff(s) ~= 0);
-dQ = gradient(Q, T);
-tCross = T(kx)';  dQdtCross = dQ(kx)';
+% Crossings vs touches (Astra review #2): a sample with Q == 1 exactly is a
+% crossing only if the signs on its two sides differ; same sign = a TOUCH.
+g = Q - 1;  sg = sign(g);
+kx = [];  touch = [];
+n = numel(sg);  k = 1;
+while k < n
+    if sg(k) ~= 0 && sg(k+1) ~= 0
+        if sg(k) ~= sg(k+1), kx(end+1) = k; end                 %#ok<AGROW> crossing in (k, k+1)
+        k = k + 1;
+    elseif sg(k+1) == 0
+        k2 = k + 1;  while k2 < n && sg(k2+1) == 0, k2 = k2 + 1; end   % zero run k+1..k2
+        prevS = sg(k);  nextS = 0;  if k2 < n, nextS = sg(k2+1); end
+        if prevS ~= 0 && nextS ~= 0 && prevS ~= nextS, kx(end+1) = k+1;   %#ok<AGROW> crossing AT the sample
+        elseif prevS ~= 0 && nextS ~= 0,              touch(end+1) = k+1; %#ok<AGROW> tangency
+        end
+        k = k2 + 1;
+    else
+        k = k + 1;
+    end
+end
+% crossing time by linear interpolation of g, transversality = exact Qdot there
+tCross = zeros(1, numel(kx));  dQdtCross = zeros(1, numel(kx));
+for j = 1:numel(kx)
+    a = kx(j);
+    if g(a) == 0 || a == n
+        tCross(j) = T(a);  dQdtCross(j) = Qd(a);
+    else
+        w = g(a) / (g(a) - g(a+1));
+        tCross(j) = T(a) + w*(T(a+1) - T(a));
+        dQdtCross(j) = (1-w)*Qd(a) + w*Qd(a+1);
+    end
+end
 minAbsDQdt = NaN;  if ~isempty(kx), minAbsDQdt = min(abs(dQdtCross)); end
 
-% local extrema not coincident with a crossing, within 10% of the jump
-d2  = diff(sign(diff(Q)));  ext = find(d2 ~= 0) + 1;
-ext = ext(arrayfun(@(e) all(abs(T(e) - T(kx)) > 1e-3 * tf), ext));
-isMax = d2(ext - 1) < 0;
-gz = ext((isMax & Q(ext) < 1 & Q(ext) > 0.9) | (~isMax & Q(ext) > 1 & Q(ext) < 1.1));
-graze = struct('t', {}, 'Q', {}, 'kind', {});
+% Grazing-RISK screen (not a bifurcation verdict): local extrema of Q
+% located as sign changes of the EXACT Qdot, not at a crossing, with Q
+% within a configurable window of 1.
+win = 0.1;
+ext = find(diff(sign(Qd)) ~= 0) + 1;
+ext = ext(arrayfun(@(e) all(abs(T(e) - tCross) > 1e-3 * tf), ext));
+isMax = Qd(max(ext-1, 1)) > 0;
+gz = ext((isMax & Q(ext) < 1 & Q(ext) > 1 - win) | (~isMax & Q(ext) > 1 & Q(ext) < 1 + win));
+graze = struct('t', {}, 'Q', {}, 'kind', {}, 'Qdot', {});
 for e = gz(:)'
     k = 'min-above-1';  if Q(e) < 1, k = 'max-below-1'; end
-    graze(end+1) = struct('t', T(e), 'Q', Q(e), 'kind', k); %#ok<AGROW>
+    graze(end+1) = struct('t', T(e), 'Q', Q(e), 'kind', k, 'Qdot', Qd(e)); %#ok<AGROW>
 end
 
-D = struct('T', T, 'Q', Q, 'tCross', tCross, 'dQdtCross', dQdtCross, ...
-           'minAbsDQdt', minAbsDQdt, 'graze', graze, 'nCross', numel(kx));
+D = struct('T', T, 'Q', Q, 'Qdot', Qd, 'tCross', tCross, 'dQdtCross', dQdtCross, ...
+           'minAbsDQdt', minAbsDQdt, 'tTouch', T(touch)', 'graze', graze, ...
+           'nCross', numel(kx), 'nTouch', numel(touch), ...
+           'note', 'graze = risk screen (extremum of Q within a window of 1), not a proven bifurcation');
 end

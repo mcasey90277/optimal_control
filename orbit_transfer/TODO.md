@@ -138,6 +138,25 @@ exists.
     golden 20/20. Language of §24/§26 corrected ((6,8) min|Q̇| = 0.080 with
     the exact Q̇); survey case B strengthened, case A hypotheses audit
     listed; register M1 disputed.
+  - [x] **Min-time second-order audit — DONE 2026-09-06**
+    (`doc/mintime_second_order_audit.tex`): the instrument's quotiented
+    6×6 determinant is PROVEN equivalent to the BCT free-time conjugate
+    test on the H=0 slice (image-space lemma); free terminal mass adds no
+    competitors in the all-burn problem (m(t) = m₀−Tt/c); the three
+    missing hypotheses are now GATES in `mintime_hypothesis_gates`
+    (min|λ_v|, min Q_mt, and the abnormal-lift probe dim S = 1), 15/15 on
+    the golden cells. What a PASS licenses is stated verbatim in §6.
+  - [ ] **Run the hypothesis gates at catalog scale** (one tfMinProp flight
+    + one 7×7 adjoint integration per entry, ~2–3 s; ~1 h for the DRO fine
+    sheet, overnight for all 18,360) and store min|λ_v|, min Q_mt, dim S per
+    entry; then the sampling upgrade (dense det from the STM integration).
+    Machine is busy with the high-γ races — queue after.
+  - [ ] **High-γ band (running 2026-09-06 evening):** `run_gamma_walk` opened
+    (2,5) to γ=2.0 in 3 min (direct solve had failed at ≥1.7); (6,8)'s
+    min-ENERGY walk walls at γ≈1.43 (the §19 basin split, now a measured
+    wall on the smooth problem — plan B is the target-orbit IC homotopy or
+    a larger K); (1,2) walking. Then `run_highgamma_race` (huberc fixed-δ /
+    ε / huber) on every reached record → FINDINGS §28.
   - [ ] **Huber follow-ups (from §25/§26):** (a) `ms_bvp` tolR 1e-10 sits ON
     the 30-d residual floor — spurious fails at 1.0–2.0e-10 cost (1,2) an
     abandoned gap; set 3e-10 or floor-aware (one line, measurable);

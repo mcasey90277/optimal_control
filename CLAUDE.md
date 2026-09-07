@@ -78,8 +78,11 @@ optimal_control/
 │   │                            #   PASS on the CORRECTED fixed-tf instrument). Min-time
 │   │                            #   sufficiency audit + hypothesis gates (min|lam_v|, Q_mt,
 │   │                            #   dim S = 1): doc/mintime_second_order_audit.tex,
-│   │                            #   gates_catalog_pass. Record: FINDINGS.md sections
-│   │                            #   17-29; reviews in DRO_tulip/reviews/.
+│   │                            #   gates_catalog_pass (18,360/18,360 pass 2026-09-07,
+│   │                            #   lift_space_dim rank rule). Record: FINDINGS.md
+│   │                            #   sections 17-30; reviews in DRO_tulip/reviews/.
+│   │                            #   ALGORITHM DOC: doc/algorithms_orbit_transfer.tex
+│   │                            #   (OCP + both pipelines, ELI5/intuition/rigor).
 │   ├── min_fuel_paper/          # paper outline (co-author Koblick)
 │   ├── min_fuel_papers/         # reference PDFs
 │   └── abstracts/               # conference abstract drafts

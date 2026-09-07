@@ -1586,3 +1586,61 @@ energy problem (FINDINGS 19, 28). (6,8) is still rising at its wall
 (0.9521 at 1.40); (1,2) is barely started (0.9415 at 1.223). Where the
 walls fall (FINDINGS 28: gamma 1.43 and 1.27, on the SMOOTH problem) is
 now the limiting factor for this catalog, not the fuel homotopy.
+
+## 30. The sufficiency-hypothesis gates at catalog scale: 18,360/18,360 pass -- after a rank-rule correction (2026-09-07)
+
+`gates_catalog_pass` ran `mintime_hypothesis_gates` over every accepted entry
+of the five min-time catalogs (DRO/HALO/DPO -> tulip, L1<->L2 halo):
+one dense `tfMinProp` flight + one 7x7 adjoint integration per entry,
+~0.75 s each, 4 h wall for 18,360 entries, sidecars `*_gatesprog.mat`.
+
+**First census (fixed rank tolerance 1e-8): H2 0 fails, H3 0 fails, 512
+"abnormal" (dim S = 0).** Every one of the 512 had `dimS = 0` -- not 2 --
+with spectral gaps sv7/sv6 between 1.4e-7 and 2.5e-6 and lift residuals
+|C lam0|/|lam0| between 1e-7 and 2.2e-6. dim S = 0 is impossible for a
+solution: the accepted normal lift is a member of S by construction, and it
+IS one numerically (nullResid ~ 1e-7). What the flag measured was the
+rank tolerance: 1e-8 * sv1 is finer than the accuracy to which the known
+member satisfies the constraints, so the one small singular value was
+counted as "not small". A null space cannot be resolved finer than its
+known member's residual.
+
+**The rule (`lift_space_dim`, TDD 5/5):** dim S = #{sv < tol}, tol =
+min(max(rankTol * sv1, 10 * nullResid), 1e-3 * sv1). The 1e-3 cap keeps a
+noisy lift from ever inflating the count: a poor lift reads dim S = 0
+(unresolved), never > 1. Golden cells unchanged (15/15; their residuals
+are 4e-8..1.3e-7, below the old threshold anyway).
+
+**Re-gated the 512 under the rule: 0 abnormal.** Final census, written
+back into all five catalogs (`gate_min_lamv`, `gate_min_qmt`, `gate_dimS`,
+`hyp_gates` provenance; backups `*.mat.bak_gates`):
+
+| catalog | entries | min\|lam_v\| min / median | min Q_mt | max nullResid | max sv7/sv6 | dim S |
+|---|---|---|---|---|---|---|
+| DRO -> tulip | 4,439 | 9.3e-6 / 4.4e-3 | 1.5e-3 | 2.2e-6 | 2.5e-6 | 1, all |
+| HALO -> tulip | 4,596 | 8.1e-6 / 2.8e-3 | 1.1e-3 | 1.4e-6 | 1.4e-6 | 1, all |
+| DPO -> tulip | 4,457 | 2.4e-5 / 5.0e-3 | 9.7e-4 | 8.2e-7 | 1.1e-6 | 1, all |
+| L1 -> L2 halo | 2,338 | 3.3e-6 / 2.4e-3 | 8.7e-4 | 7.9e-7 | 7.7e-7 | 1, all |
+| L2 -> L1 halo | 2,530 | 2.8e-6 / 2.7e-3 | 1.8e-3 | 8.5e-7 | 8.4e-7 | 1, all |
+
+**What this licenses (audit section 6).** For every entry with
+`conj_pass = 1`: a normal extremal (H = 0 with lambda_0 = 1, checked to
+~1e-10), no abnormal lift (dim S = 1 with a spectral gap of at least five
+orders), strong Legendre and the all-burn control hold along the flown arc,
+and the BCT determinant has no sign change at the sampled times. The
+sampling caveat is the only one left on the min-time side.
+
+**A graded quantity worth carrying: min|lam_v| falls with thrust.** The
+primer never vanishes (H2 holds everywhere, floor 2.8e-6 against a
+1e-6 gate), but it comes closest on the HIGH-thrust rungs: 20 entries
+below 1e-5 and 593 below 1e-4, of which 248 sit at 15 N, 167 at 12 N, 122
+at 10 N, and none below 2 N (medians 3e-4 at 15 N vs 1e-1 at 0.5 N; the
+scale is pinned by H = 0, so these are comparable). A near-null of the
+primer is where its direction turns fastest -- the fast reorientations of
+short high-thrust transfers -- and it is where the Legendre form
+(T/m)|lam_v| is weakest. Those are the entries a strict certificate would
+find hardest, and the first to examine if the dense-det sampling upgrade
+ever reports a near-root.
+
+Reproduce: `gates_catalog_pass(catMat)` (resumes from the sidecar);
+`test_lift_space_dim`, `test_mintime_gates`.

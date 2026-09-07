@@ -146,11 +146,13 @@ exists.
     missing hypotheses are now GATES in `mintime_hypothesis_gates`
     (min|λ_v|, min Q_mt, and the abnormal-lift probe dim S = 1), 15/15 on
     the golden cells. What a PASS licenses is stated verbatim in §6.
-  - [ ] **Run the hypothesis gates at catalog scale** (one tfMinProp flight
-    + one 7×7 adjoint integration per entry, ~2–3 s; ~1 h for the DRO fine
-    sheet, overnight for all 18,360) and store min|λ_v|, min Q_mt, dim S per
-    entry; then the sampling upgrade (dense det from the STM integration).
-    Machine is busy with the high-γ races — queue after.
+  - [x] **Hypothesis gates at catalog scale — DONE 2026-09-07 (FINDINGS
+    §30):** 18,360/18,360 pass H2/H3/dim S = 1, written back into all five
+    catalogs (`gate_min_lamv`, `gate_min_qmt`, `gate_dimS`). The first
+    census flagged 512 "dim S = 0" — a rank-tolerance artifact (null space
+    cannot be resolved finer than the known member's residual); fixed by
+    the `lift_space_dim` rule (TDD 5/5), re-gated, 0 abnormal. Carry:
+    min|λ_v| falls with thrust (593 entries < 1e-4, all ≥ 2 N).
   - [x] **High-γ band — DONE 2026-09-07 (FINDINGS §28):** γ-walk opened
     (2,5) to 2.0, (6,8) to 1.40, (1,2) to 1.25 (12 records, all conj PASS);
     three-arm race: **10 new min-fuel records** on cells the direct solver
@@ -164,10 +166,13 @@ exists.
     builder binds by source+λ₀+p+family+rows; **18 entries, γ 1.1→2.0**
     (8 huber, 2 huberc, 8 eps), validates clean, reflight of all 18 via
     the recipe passes. Bisected γ values kept on axis3 (sheets sparse).
-  - [ ] **Catalog-scale hypothesis gates (running 2026-09-07 08:22):**
-    `gates_catalog_pass` over all five min-time catalogs (0.7 s/entry,
-    ~4 h); sidecars `*_gatesprog.mat`; writeback + FINDINGS entry when
-    the census completes. Then the dense-det sampling upgrade.
+  - [x] **Catalog-scale hypothesis gates — DONE 2026-09-07** (see the
+    item above; 4 h wall). Still open: the dense-det sampling upgrade
+    (det from the STM integration between junctions), whose first targets
+    are the 20 entries with min|λ_v| < 1e-5.
+  - [ ] **Algorithm document** `doc/algorithms_orbit_transfer.tex` (2026-09-07,
+    16 pp, ELI5/intuition/rigor layering, 7 TikZ flow diagrams) — Mike's
+    review pending; feed corrections back into FINDINGS/manual.
   - [ ] **The two SMOOTH walls (γ≈1.43 on (6,8), ≈1.27 on (1,2)):** cond(J)
     grows 1–2 orders on approach — fold signature, unlike the Huber walls.
     First real candidate for pseudo-arclength continuation in `ms_bvp`

@@ -46,3 +46,6 @@ matlab_crash_dump.*
 
 # missiles: rendered movies and frames are build artefacts, never committed
 missiles/results/
+
+# catalog writeback backups (conj / gates passes), regenerable
+*.mat.bak_*

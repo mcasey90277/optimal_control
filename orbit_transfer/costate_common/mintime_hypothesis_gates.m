@@ -32,8 +32,11 @@ function g = mintime_hypothesis_gates(z8, rv0, Tmax, c, muStar, opts)
 % • The fixed-control Jacobian A(t) = df/dx|_{alpha(t), s = 1} is built by
 %   CasADi from the same CR3BP expressions as cr3bp_minfuel_pmp; alpha(t)
 %   is the FLOWN direction -lam_v/|lam_v| of the accepted lift.
-% • dim S is a numerical rank: sv(7)/sv(6) of C reported; dimS = 1 when
-%   sv(7) < rankTol*sv(1) and sv(6) >= rankTol*sv(1).
+% • dim S is a numerical rank (lift_space_dim): #{sv < tol} with
+%   tol = min(max(rankTol*sv(1), 10*nullResid), 1e-3*sv(1)) -- the null
+%   space cannot be resolved finer than the accepted lift's own residual
+%   (2026-09-07: a fixed 1e-8 under-counted 512 catalog entries). sv(7)/sv(6)
+%   is reported as the spectral gap.
 %
 %% Inputs:
 %
@@ -52,6 +55,7 @@ function g = mintime_hypothesis_gates(z8, rv0, Tmax, c, muStar, opts)
 %  g                        struct                  .minLamV .tMinLamV
 %                                                   .minQmt .tMinQmt .dimS
 %                                                   .sv [7x1] .svRatio
+%                                                   .rankTolUsed
 %                                                   .nullResid .Hresid
 %                                                   .nSwitchFlown (samples
 %                                                   with Q_mt <= 0)
@@ -101,9 +105,8 @@ PsiT = reshape(PSI(end, :), 7, 7);
 C(end, :) = PsiT(7, :);                              % lam_m(tf) = 0
 sv = svd(C);
 g.sv = sv;
-g.svRatio = sv(7) / max(sv(6), realmin);
-g.dimS = nnz(sv < rankTol * sv(1));
 g.nullResid = norm(C * z8(1:7)) / norm(z8(1:7));
+[g.dimS, g.rankTolUsed, g.svRatio] = lift_space_dim(sv, g.nullResid, rankTol);
 end
 
 % ------------------------------------------------------------------------

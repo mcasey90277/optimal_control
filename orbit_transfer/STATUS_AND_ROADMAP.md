@@ -67,7 +67,7 @@ All four use the **same pipeline**: direct collocation solve → covector harves
 accepted min-time PMP solutions.** Common propulsion for all of them:
 **Isp 1710 s, m₀ 150 kg.** Every entry passes three gates — multiple-shooting
 residual, flown arrival (<100 km), and **acceptance unchanged by `tfMin`**
-(|Δz| < 1e-6, observed ~1e-9).
+(|Δz| < 1e-6, observed ~1e-9). **Since 2026-09-07 every entry also carries the three BCT sufficiency-hypothesis gates** (`gate_min_lamv`, `gate_min_qmt`, `gate_dimS`; 18,360/18,360 pass after the `lift_space_dim` rank-rule correction — FINDINGS §30), so `conj_pass = 1` now reads as "BCT test satisfied at the sampled times with its hypotheses verified", not "determinant only".
 
 Physics headlines worth carrying: halo departures are cheapest (0.65 km/s best,
 vs 0.76 DPO / 0.92–0.98 DRO); solvability improves with departure period; the

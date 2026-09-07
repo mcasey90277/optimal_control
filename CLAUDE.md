@@ -68,13 +68,18 @@ optimal_control/
 │   │                            #   min-energy pilot + gamma grid, the energy->fuel RACE (eps
 │   │                            #   ships; the 09-02 "Huber refuted" verdict was RETRACTED
 │   │                            #   09-05 -- it was our missing saltation matrix; with it
-│   │                            #   Huber walks the full ladder, 0 fails), the FIRST MIN-FUEL
-│   │                            #   CATALOG costate_catalog_dro_tulip_minfuel.mat (schema v3,
-│   │                            #   7 entries, Isp 900 s / 0.07 N -- the 09-02 build mislabelled
-│   │                            #   1710 s; conj 15/15 on the CORRECTED fixed-tf instrument:
-│   │                            #   rows 1:7, initial-coast skip, t_f sampled).
-│   │                            #   Record: FINDINGS.md sections 17-22; three-way code
-│   │                            #   review in DRO_tulip/reviews/minfuel_code_review_2026-09-05.md.
+│   │                            #   Huber walks the full ladder, 0 fails; its walls are
+│   │                            #   grazing-risk switch-structure changes, cured by the
+│   │                            #   'huberc' hybrid at fixed delta, FINDINGS 24-26), the
+│   │                            #   MIN-FUEL CATALOG costate_catalog_dro_tulip_minfuel.mat
+│   │                            #   (schema v3.1 mixed families, 18 entries, gamma 1.1->2.0
+│   │                            #   -- the high-gamma band opened by the gamma-walk seed
+│   │                            #   route, FINDINGS 28-29; Isp 900 s / 0.07 N; 26/26 conj
+│   │                            #   PASS on the CORRECTED fixed-tf instrument). Min-time
+│   │                            #   sufficiency audit + hypothesis gates (min|lam_v|, Q_mt,
+│   │                            #   dim S = 1): doc/mintime_second_order_audit.tex,
+│   │                            #   gates_catalog_pass. Record: FINDINGS.md sections
+│   │                            #   17-29; reviews in DRO_tulip/reviews/.
 │   ├── min_fuel_paper/          # paper outline (co-author Koblick)
 │   ├── min_fuel_papers/         # reference PDFs
 │   └── abstracts/               # conference abstract drafts

@@ -57,6 +57,29 @@ for k = 1:size(muts, 1)
     ok = chk(ok, ~isempty(pb), sprintf('mutation rejected: %s', muts{k,2}));
 end
 
+%% 3b. v3.1: MIXED smoothing families (2026-09-07, the high-gamma records):
+%  a catalog whose entries come from different continuation families must
+%  carry per-entry family_code + delta_floor grids; a 'mixed' catalog without
+%  them is rejected, a well-formed one validates clean, and an unknown code
+%  is rejected.
+c31 = c3;
+c31.smoothing = struct('family', 'mixed', 'codes', struct('eps', 1, 'huber', 2, 'huberc', 3), ...
+                       'note', 'per-entry family in sheets.family_code');
+pb = catalog_schema('validate', c31);
+ok = chk(ok, ~isempty(pb), 'v3.1: mixed smoothing WITHOUT family_code rejected');
+c31.sheets(1).family_code = int8(c31.sheets(1).has_solution);          % all eps (=1)
+c31.sheets(1).family_code(1,2,2) = int8(3);                             % one huberc
+c31.sheets(1).delta_floor = nan(size(c31.sheets(1).has_solution));
+c31.sheets(1).delta_floor(1,2,2) = 0.003;
+pb = catalog_schema('validate', c31);
+ok = chk(ok, isempty(pb), sprintf('v3.1: mixed with family_code + delta_floor clean (%s)', strjoin(pb, '; ')));
+bad = c31;  bad.sheets(1).family_code(2,2,1) = int8(7);
+pb = catalog_schema('validate', bad);
+ok = chk(ok, ~isempty(pb), 'v3.1: unknown family code on a solved entry rejected');
+bad = c31;  bad.sheets(1).delta_floor(1,2,2) = NaN;                     % huberc entry without delta
+pb = catalog_schema('validate', bad);
+ok = chk(ok, ~isempty(pb), 'v3.1: huberc entry without delta_floor rejected');
+
 %% 4. deltav_from_mf derivation:
 dv = catalog_schema('derive', c3, 'deltav_from_mf', struct('mf_frac', 0.9));
 ref = c3.thruster.c_nd*log(1/0.9)*c3.constants.lStar_km/c3.constants.tStar_s;

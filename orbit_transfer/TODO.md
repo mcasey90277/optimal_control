@@ -157,12 +157,17 @@ exists.
     never touched, three-family agreement ~1e-5; **huberc alone reaches the
     floor at γ=2.0**; Huber 0-fail/1–2 min on 8/10; fuel gain saturates
     near γ≈1.8 on (2,5).
-  - [ ] **Catalog inclusion of the 10 high-γ records:** `build_minfuel_catalog`
-    reads only `minfuel_grid.mat`; add `highgamma_race.mat` as a second
-    source (pick the deepest-p family per record, bind the conj verdict to
-    that solution via the sweep), extend axis3 to the walked γ values (they
-    are bisected: 1.4714, 1.7734, 1.8113, …; either keep them or re-walk to
-    round γ), rebuild + validate + reflight.
+  - [x] **Catalog inclusion — DONE 2026-09-07 (FINDINGS §29):** schema v3.1
+    (per-entry `family_code` + `delta_floor`, `smoothing.family='mixed'`,
+    validator + 4 tests), `highgamma_select` (sharpest arrived arm),
+    sweep verdicts each selected solution in its own family (26/26 PASS),
+    builder binds by source+λ₀+p+family+rows; **18 entries, γ 1.1→2.0**
+    (8 huber, 2 huberc, 8 eps), validates clean, reflight of all 18 via
+    the recipe passes. Bisected γ values kept on axis3 (sheets sparse).
+  - [ ] **Catalog-scale hypothesis gates (running 2026-09-07 08:22):**
+    `gates_catalog_pass` over all five min-time catalogs (0.7 s/entry,
+    ~4 h); sidecars `*_gatesprog.mat`; writeback + FINDINGS entry when
+    the census completes. Then the dense-det sampling upgrade.
   - [ ] **The two SMOOTH walls (γ≈1.43 on (6,8), ≈1.27 on (1,2)):** cond(J)
     grows 1–2 orders on approach — fold signature, unlike the Huber walls.
     First real candidate for pseudo-arclength continuation in `ms_bvp`

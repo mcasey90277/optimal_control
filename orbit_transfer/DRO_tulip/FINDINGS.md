@@ -1515,3 +1515,74 @@ next frontier, and for the first time the evidence points at a fold.
 
 Records: `direct/results/minenergy_highgamma.mat` (12 records),
 `highgamma_race.mat` (36 arms), `minfuel_hg_*.mat`.
+
+## 29. Catalog v3.1: 18 min-fuel entries to gamma = 2, mixed continuation families, every verdict re-bound (2026-09-07)
+
+The eleven high-gamma solutions of section 28 are packaged with the seven
+grid entries: `costate_catalog_dro_tulip_minfuel.mat`, schema 3 minor 1.
+
+**What changed in the schema (v3.1).** Entries from different continuation
+families in one catalog: `sheets.family_code` (int8; `smoothing.codes` =
+eps 1, huber 2, huberc 3) and `sheets.delta_floor` (finite for huberc
+entries) beside `p_floor`; `smoothing.family = 'mixed'`. The validator
+rejects a mixed catalog without `family_code`, an unknown code on a solved
+entry, and a huberc entry without a positive `delta_floor`
+(`test_catalog_schema_v3`, 17/17; the five shipped min-time catalogs still
+validate clean). The reconstruction recipe is unchanged in form -- fly
+`cr3bp_minfuel_prop` from `Yj(:,1,n)` over `tf_nd` -- with the entry's own
+(family, p_floor, delta_floor); huber entries use the event-split
+saltation propagator automatically.
+
+**Which arm is packaged (`highgamma_select`).** The SHARPEST solution
+among the arms that reached the floor (p <= 0.0015): ramp width of the
+throttle law -- huber 0 (jump), huberc delta_floor, eps 2p; ties to eps.
+Result: 8 huber (0 width), 2 huberc ((2,5)@1.773 delta 0.0093, @2.000
+delta 0.0039 -- the two records where huber walled), 1 eps
+((1,2)@1.223, the only arrival there). The other arriving arm of each
+record is recorded (`altArms`) but not packaged; where two arrived they
+agree to ~1e-5 in m_f.
+
+**Every verdict re-bound.** `run_conj_fixedtf_sweep` now verdicts the
+selected high-gamma solution in its OWN family (huber with saltation STMs,
+huberc with the generic path): 26/26 PASS on the corrected instrument
+(7 energy, 7 grid, 1 rewalk, 11 high-gamma), all tested, none endpoint-
+only; the builder binds each verdict to the packaged entry by source,
+lambda0, p, family and rows 1:7, and refuses unconverged or untested
+verdicts.
+
+**The catalog, entry by entry** (gamma axis now 13 values, 1.1 -> 2.0;
+sheets sparse along gamma by design):
+
+| cell | gamma | family | p_floor | delta | m_f | dV [km/s] |
+|---|---|---|---|---|---|---|
+| (1,2) | 1.10 | eps | 0.0034 | -- | 0.901113 | 0.919 |
+| (1,2) | 1.20 | eps | 0.0010 | -- | 0.942523 | 0.522 |
+| (1,2) | 1.223 | eps | 0.0013 | -- | 0.941482 | 0.532 |
+| (2,5) | 1.10 | eps | 0.0018 | -- | 0.941107 | 0.536 |
+| (2,5) | 1.20 | eps | 0.0017 | -- | 0.947046 | 0.480 |
+| (2,5) | 1.40 | eps (rewalk) | 0.0017 | -- | 0.949005 | 0.462 |
+| (2,5) | 1.473 | huber | 0.0010 | -- | 0.947039 | 0.480 |
+| (2,5) | 1.55 | huber | 0.0010 | -- | 0.948679 | 0.465 |
+| (2,5) | 1.70 | huber | 0.0010 | -- | 0.949240 | 0.460 |
+| (2,5) | 1.773 | huberc | 0.0010 | 0.0093 | 0.949310 | 0.459 |
+| (2,5) | 1.811 | huber | 0.0010 | -- | 0.949297 | 0.459 |
+| (2,5) | 1.85 | huber | 0.0010 | -- | 0.949242 | 0.460 |
+| (2,5) | 2.00 | huberc | 0.0010 | 0.0039 | 0.948585 | 0.466 |
+| (6,8) | 1.10 | eps | 0.0012 | -- | 0.928082 | 0.659 |
+| (6,8) | 1.20 | eps | 0.0013 | -- | 0.943936 | 0.509 |
+| (6,8) | 1.296 | huber | 0.0010 | -- | 0.950396 | 0.449 |
+| (6,8) | 1.347 | huber | 0.0010 | -- | 0.951971 | 0.434 |
+| (6,8) | 1.40 | huber | 0.0010 | -- | 0.952114 | 0.433 |
+
+(dV from `deltav_from_mf`, Isp 900 s.) Reflight of all 18 entries through
+the catalog's own recipe (per-entry family, p_floor, delta_floor): worst
+position miss 0.220 km ((6,8)@1.347, huber), median ~0.012 km.
+
+**Reading the table.** On (2,5) the min-fuel m_f rises from 0.9411 (gamma
+1.1) to a plateau of 0.9493 at gamma 1.7-1.85 and falls to 0.9486 at 2.0:
+the propellant saved by more time saturates at about +0.8% of m0 over the
+energy solutions and turns over -- a basin structure inherited from the
+energy problem (FINDINGS 19, 28). (6,8) is still rising at its wall
+(0.9521 at 1.40); (1,2) is barely started (0.9415 at 1.223). Where the
+walls fall (FINDINGS 28: gamma 1.43 and 1.27, on the SMOOTH problem) is
+now the limiting factor for this catalog, not the fuel homotopy.

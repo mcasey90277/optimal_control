@@ -138,6 +138,33 @@ case 'validate'
                         '.Yj [14 x K+1 x nSolved] junction states'], ks);
                 end
             end
+            % v3.1 (2026-09-07): MIXED continuation families -- entries from
+            % eps / huber / huberc in one catalog carry a per-entry
+            % family_code (int8, codes in smoothing.codes) and, for huberc
+            % entries, a finite delta_floor. The reconstruction recipe needs
+            % (family, p_floor, delta_floor) per entry.
+            if isfield(cat_,'smoothing') && isfield(cat_.smoothing,'family') && ...
+               strcmpi(cat_.smoothing.family,'mixed')
+                if ~isfield(cat_.smoothing,'codes') || ~isstruct(cat_.smoothing.codes)
+                    p{end+1} = 'mixed smoothing requires .smoothing.codes (struct name -> int code)';
+                elseif ~isfield(sh,'family_code') || ~isequal(size(sh.family_code), size(sh.has_solution))
+                    p{end+1} = sprintf('sheet %d: mixed smoothing requires .family_code shaped like has_solution', ks);
+                else
+                    codes = cell2mat(struct2cell(cat_.smoothing.codes));
+                    fc = double(sh.family_code(sh.has_solution));
+                    if any(~ismember(fc, codes))
+                        p{end+1} = sprintf('sheet %d: family_code outside smoothing.codes on a solved entry', ks);
+                    end
+                    if isfield(cat_.smoothing.codes,'huberc')
+                        isHc = sh.has_solution & double(sh.family_code) == cat_.smoothing.codes.huberc;
+                        if any(isHc(:)) && (~isfield(sh,'delta_floor') || ...
+                           ~isequal(size(sh.delta_floor), size(sh.has_solution)) || ...
+                           any(~isfinite(sh.delta_floor(isHc))) || any(sh.delta_floor(isHc) <= 0))
+                            p{end+1} = sprintf('sheet %d: huberc entries need a finite positive delta_floor', ks);
+                        end
+                    end
+                end
+            end
         end
         % conjugate-point verdicts (OPTIONAL, added 2026-08-23): when a
         % sheet carries conj_pass it must be an int8 grid shaped like

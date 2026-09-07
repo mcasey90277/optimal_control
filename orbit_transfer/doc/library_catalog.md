@@ -1,6 +1,6 @@
 # Orbit-transfer library catalog — generated function reference
 
-Generated 2026-09-06 by `gen_library_catalog.py`.
+Generated 2026-09-07 by `gen_library_catalog.py`.
 **Do not edit by hand** — regenerate with:
 ```sh
 python3 orbit_transfer/doc/gen_library_catalog.py
@@ -74,6 +74,11 @@ The SMOOTHED ENERGY->FUEL PMP vector field for the CR3BP low-thrust transfer, wi
 Propagates the smoothed energy->fuel PMP state (and optionally its 14x14 STM) for a time dt -- the homotopy sibling of cr3bp_minenergy_prop, in the [yh, PHI] = prop(dt, y0, needSTM) shape ms_bvp expects. Variational equations ride along with A from cr3bp_minfuel_pmp (exact AD). Integrator ode113 at tfMinProp's tolerances (RelTol 1e-10, AbsTol 1e-12).
 *in: `dt`, `y0`, `needSTM`, `smooth` · out: `yh`, `PHI`, `T`, `Y`*
 
+### `cr3bp_minfuel_qdot.m`
+`Qd = cr3bp_minfuel_qdot(y, Tmax, c)`  
+Time derivative of the switch quantity Q = Tmax(|lam_v|/m + lam_m/c) along the CR3BP min-fuel PMP flow, in CLOSED FORM:
+*in: `y`, `Tmax`, `c` · out: `Qd`*
+
 ### `cr3bp_thrust_rhs.m`
 `dz = cr3bp_thrust_rhs(z, u, muStar, Tmax, c)`  
 CR3BP dynamics with thrust and mass flow -- the single shared RHS for flown-control verification (flown_control_error, true_min_altitude). Extracted verbatim from certify_dro_mintime/local_f, which itself mirrors dro_residual/local_rhs. One home (migration #4).
@@ -94,6 +99,11 @@ DELEGATE. The covector mapping -- defect-constraint KKT multipliers to continuou
 THE flown-control verifier (migration #4): flies a direct solution's RECONSTRUCTED CONTROL once, end to end, and reports where the spacecraft actually arrives relative to the solution's own terminal state. This is the physically meaningful accuracy number -- 'if you flew this control, where would you arrive?' -- and it is the G1b gate of every campaign's certification. Extracted verbatim from certify_dro_mintime (the math is family-free: CR3BP + thrust + quadratic control reconstruction).
 *in: `o`, `X`, `U`, `Um`, `tNodes`, `s`, `tf`, `muStar`, `Tmax`, `c` · out: `erNd`, `evNd`*
 
+### `gates_catalog_pass.m`
+`S = gates_catalog_pass(catMat, opts)`  
+GATES_CATALOG_PASS  Run the min-time sufficiency-hypothesis gates (mintime_hypothesis_gates: strong Legendre min|lam_v|, all-burn min Q_mt, abnormal-lift dim S) over every entry of a compact costate catalog and record them -- the catalog-scale form of the audit (doc/mintime_second_order_audit.tex, section 7). Same campaign contract as conj_catalog_pass: endpoints rebuilt from the sheet recipes, one tfMinProp flight + one 7x7 adjoint integration per entry, sidecar progress .mat after EVERY entry, attempt counter before each flight, clean batch-budget exit, resume for free; writeback into the catalog only on an explicit call after a complete census. INPUTS: catMat - path to a catalog .mat (single variable, schema v1/v2) [char] opts   - (optional) struct: .logFile [''], .batchSec [inf], .maxEntries [inf], .maxAtt [2], .nSamp [200], .rankTol [1e-8], .sideMat [<catMat minus .mat>_gatesprog.mat], .writeback [false] OUTPUTS: S - struct: .done, .nDone, .nTodo, .nH2fail (min|lam_v| <= lamVTol), .nH3fail (min Q_mt <= 0), .nAbnormal (dim S ~= 1), .sideMat REFERENCES: [1] costate_common/mintime_hypothesis_gates.m (the instrument) [2] costate_common/conj_catalog_pass.m (the campaign skeleton) [3] doc/mintime_second_order_audit.tex (why these three)
+*in: `catMat`, `opts` · out: `S`*
+
 ### `get_family_orbit.m`
 `[tau, rv, info] = get_family_orbit(family, p)`  
 THE one place a costate campaign turns a family name + parameters into a propagated periodic orbit. Every engine (thrust ladders, densifiers, surveys, pickers' examples) builds its endpoints through this helper, so adding a family here makes it available to the whole pipeline -- this is what generalized the DRO->tulip machinery to Halo and beyond.
@@ -109,6 +119,11 @@ GOLDEN-CELL QUALITY REGRESSION for the costate pipeline (principle 7c): fixed be
 Builds a multiple-shooting SEED from a direct collocation solution -- the harvest path, made a single-home library function (migration #3; the sign-vote + midpoint-association rules previously lived inline in thrust_ladder_library, the exact one-home-per-rule violation that let the Hermite-Simpson midpoint bug exist in two places).
 *in: `o`, `X`, `lamDef`, `Um`, `tNodes`, `tf`, `K` · out: `seed`, `diag_`*
 
+### `mintime_hypothesis_gates.m`
+`g = mintime_hypothesis_gates(z8, rv0, Tmax, c, muStar, opts)`  
+Per-entry checks of the hypotheses under which the free-time conjugate test (ms_conjugate_test, BCT form) is a SUFFICIENT second-order certificate for a min-time catalog entry -- the gates the audit (doc/mintime_second_order_audit.tex, section 4) found missing:
+*in: `z8`, `rv0`, `opts` · out: `g`*
+
 ### `ms_bvp.m`
 `[p, info] = ms_bvp(prob, seed, opts)`  
 GENERIC multiple-shooting two-point BVP engine -- the family- and problem-agnostic core of ms_tfmin, moved to the shared library (migration #3). The arc is split into K segments whose junction states are extra unknowns; short segments kill the Lyapunov amplification that makes single shooting from approximate seeds intractable (measured on the CR3BP min-time problem: collocation seeds miss by 36,000-560,000 km single-shot, converge in a few iterations here).
@@ -117,7 +132,7 @@ GENERIC multiple-shooting two-point BVP engine -- the family- and problem-agnost
 ### `ms_conjugate_test.m`
 `out = ms_conjugate_test(info, spec)`  
 CONJUGATE-POINT TEST on a converged multiple-shooting extremal -- the first piece of second-order optimality checking this pipeline has had. First-order (PMP) conditions admit maxima and saddle extremals too; a conjugate point in (0, tf) means the extremal STOPS being locally minimizing there (Jacobi's necessary condition).
-*in: `info`, `spec`, `flow`, `stateRows`, `costateCols`, `quotientDir`, `freeTime`, `rankTol` · out: `out`, `t`, `detScaled`, `sigRatio`, `firstFullRank`, `nCrossings`, `atFinal`, `pass`*
+*in: `info`, `spec`, `flow`, `stateRows`, `costateCols`, `quotientDir`, `freeTime`, `rankTol`, `zeroTol` · out: `out`, `t`, `detScaled`, `sigRatio`, `firstFullRank`, `tested`, `sampledThrough`, `nCrossings`, `nInterior`, `nTouch`, `atFinal`, `verdict`, `pass`*
 
 ### `ms_tfmin.m`
 `[z, info] = ms_tfmin(rv0, rvf, seed, Tmax, c, muStar, opts)`  
@@ -154,7 +169,7 @@ Finds the "REASONABLE" members of ANY orbit family, by Darin's criteria: perisel
 Minimum lunar altitude of the PROPAGATED trajectory, not of the nodes. A collocation altitude floor binds at nodes only; this checks it BETWEEN nodes, where periselene actually happens. Extracted verbatim from certify_dro_mintime/local_true_min_alt (migration #4).
 *in: `o`, `muStar`, `Tmax`, `c`, `lStar`, `rMoonKm` · out: `amin`*
 
-**tests/**: `test_catalog_schema_v3.m`, `test_conj_fixedtf.m`, `test_cr3bp_minenergy_pmp.m`, `test_gto_family.m`, `test_huber_saltation.m`, `test_minfuel_pmp.m`, `test_ms_bvp_fixedtf.m`, `test_ss_bvp_accept.m`
+**tests/**: `test_catalog_schema_v3.m`, `test_conj_fixedtf.m`, `test_cr3bp_minenergy_pmp.m`, `test_gto_family.m`, `test_huber_saltation.m`, `test_minfuel_pmp.m`, `test_mintime_gates.m`, `test_ms_bvp_fixedtf.m`, `test_ss_bvp_accept.m`
 
 ## verify_common
 
@@ -168,7 +183,7 @@ CERTIFIED_GUARD  Refuse to verify against a re-solve that is not the certified p
 ### `foc_check.m`
 `rep = foc_check(out, sigma, man, opts)`  
 FOC_CHECK  Generic AD-based first-order optimality (PMP/KKT) gate.
-*in: `out`, `X`, `U`, `sigma`, `man`, `opts`, `tolStat`, `tolSign`, `sdotMin` · out: `rep`, `kktStatInf`, `sLag`, `dirTanMax`, `dirTanMed`, `signPct`, `Sd`, `lam`, `lamTimeCoV`, `lamTimeEnd`, `sdotMinRel`, `nSwitches`, `horizonNote`, `checksRun`, `pass`*
+*in: `out`, `X`, `U`, `sigma`, `man`, `opts`, `tolStat`, `tolSign`, `sdotMin` · out: `rep`, `kktStatInf`, `sLag`, `dirTanMax`, `dirTanMed`, `signPct`, `Sd`, `lam`, `lamTimeCoV`, `lamTimeEnd`, `dirSignedMax`, `dirSignedMed`, `dirSignedPct`, `sdotMinRelPhys`, `sdotMinRel`, `nSwitches`, `horizonNote`, `checksRun`, `pass`*
 
 ### `foc_dual_to_costate.m`
 `lam = foc_dual_to_costate(LamDef, sigma)`  

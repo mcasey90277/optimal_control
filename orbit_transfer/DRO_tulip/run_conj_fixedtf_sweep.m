@@ -67,7 +67,7 @@ for k = 1:numel(Lg.G)
     g = Lg.G(k);
     rec = Lp.R(find(arrayfun(@(r) isequal([r.iD r.iA], g.cellIdx) && ...
                              abs(r.gam - g.gamma) < 1e-9, Lp.R), 1));
-    V = fuelVerdict(V, 'grid', g.cellIdx, g.gamma, g.pDeepest, g.Y, rec, mo, lg);
+    V = fuelVerdict(V, 'grid', g.cellIdx, g.gamma, struct('family','eps','p',g.pDeepest), g.Y, rec, mo, lg);
     save(outMat, 'V');
 end
 
@@ -77,8 +77,24 @@ if isfile(rwFile)
     Lr = load(rwFile);  R = Lr.R;
     rec = Lp.R(find(arrayfun(@(r) isequal([r.iD r.iA], R.cellIdx) && ...
                              abs(r.gam - R.gamma) < 1e-9, Lp.R), 1));
-    V = fuelVerdict(V, 'rewalk', R.cellIdx, R.gamma, R.pDeepest, R.Y, rec, mo, lg);
+    V = fuelVerdict(V, 'rewalk', R.cellIdx, R.gamma, struct('family','eps','p',R.pDeepest), R.Y, rec, mo, lg);
     save(outMat, 'V');
+end
+
+%% The high-gamma records (FINDINGS 28): the selected arm of each record,
+%  in its OWN family (eps / huber / huberc with delta), if the race ran:
+if isfile(fullfile(resDir, 'highgamma_race.mat'))
+    Lh = load(fullfile(resDir, 'minenergy_highgamma.mat'));
+    GH = highgamma_select(resDir);
+    for k = 1:numel(GH)
+        g = GH(k);
+        rec = Lh.R(find(arrayfun(@(r) isequal([r.iD r.iA], g.cellIdx) && ...
+                                 abs(r.gam - g.gamma) < 1e-9, Lh.R), 1));
+        sm = struct('family', g.family, 'p', g.pDeepest);
+        if ~isnan(g.delta), sm.delta = g.delta; end
+        V = fuelVerdict(V, 'highgamma', g.cellIdx, g.gamma, sm, g.Y, rec, mo, lg);
+        save(outMat, 'V');
+    end
 end
 
 lg('SWEEP DONE: %d verdicts, %d PASS, %d FAIL, %d unconverged (%.1f min) -> %s', ...
@@ -87,19 +103,22 @@ lg('SWEEP DONE: %d verdicts, %d PASS, %d FAIL, %d unconverged (%.1f min) -> %s',
 end
 
 % ------------------------------------------------------------------------
-function V = fuelVerdict(V, src, cell, gam, p, Yj, rec, mo, lg)
-% FUELVERDICT  Re-solve one min-fuel record at its p from its junctions and
-% record the verdict.  INPUTS: V; src; cell; gam; p; Yj [14 x K]; rec; mo;
-% lg.  OUTPUTS: V.
-sm = struct('family', 'eps', 'p', p);
+function V = fuelVerdict(V, src, cell, gam, sm, Yj, rec, mo, lg)
+% FUELVERDICT  Re-solve one min-fuel record in its own smoothing family at
+% its floor from its junctions and record the verdict.  INPUTS: V; src;
+% cell; gam; sm struct(family, p[, delta]); Yj [14 x K]; rec; mo; lg.
+% OUTPUTS: V.
+p = sm.p;
 K = size(Yj, 2);
 yT = cr3bp_minfuel_prop(rec.tf/K, Yj(:,end), false, rec.Tmax, rec.c, rec.muStar, sm);
 seed = struct('tf', rec.tf, 'tGrid', linspace(0, rec.tf, K+1), 'Y', [Yj, yT]);
 t0 = tic;
 [z, it] = ms_minfuel(rec.rv0(:), rec.rvf(:), rec.tf, seed, rec.Tmax, rec.c, rec.muStar, sm, mo);
 V = addRec(V, 'fuel', src, cell, gam, p, z, it);
-lg('fuel %-6s (%d,%d)@%.2f p=%.4g: conv=%d normR=%.1e -> %s nCross=%d firstFullRank=%d atFinal=%d s1=%.2f (%.0fs)', ...
-   src, cell, gam, p, it.converged, it.normR, it.conj.verdict, ...
+V(end).family = sm.family;
+V(end).delta  = NaN;  if isfield(sm, 'delta'), V(end).delta = sm.delta; end
+lg('fuel %-9s (%d,%d)@%.3f %s p=%.4g: conv=%d normR=%.1e -> %s nCross=%d firstFullRank=%d atFinal=%d s1=%.2f (%.0fs)', ...
+   src, cell, gam, sm.family, p, it.converged, it.normR, it.conj.verdict, ...
    it.conj.nCrossings, it.conj.firstFullRank, it.conj.atFinal, it.s(1), toc(t0));
 end
 
@@ -118,14 +137,10 @@ r = struct('kind', kind, 'source', src, 'cellIdx', cell, 'gamma', gam, 'p', p, .
     'firstFullRank', c.firstFullRank, 'sampledThrough', c.sampledThrough, ...
     'dets', c.detScaled, 'sigRatio', c.sigRatio, ...
     'stateRows', c.stateRows, 'costateCols', c.costateCols, ...
-    's1', it.s(1), 'mf', mf);
+    's1', it.s(1), 'mf', mf, 'family', '', 'delta', NaN);
 if isempty(V), V = r; else, V(end+1) = r; end
 end
 
-function s = tern(c, a, b)
-% TERN  a if c else b.  INPUTS: c; a; b.  OUTPUTS: s.
-if c, s = a; else, s = b; end
-end
 
 function logmsg(f, s)
 % LOGMSG  Append to log file or stdout.  INPUTS: f; s.  OUTPUTS: none.

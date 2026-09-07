@@ -235,9 +235,9 @@ trajectories with the same endpoints.} Applied to \eqref{eq:dyn6} via
 \toprule
 hypothesis & what it means here & status / gate \\
 \midrule
-H1 normal extremal & a lift with $\lambda_0=1$ exists & \textbf{have} (the BVP is solved with $\lambda_0=1$ to $10^{-10}$; pumpkyn agrees to $|\Delta z|\sim10^{-9}$). \gap{Does not exclude an abnormal lift of the same trajectory; see \S\ref{sec:abnormal}} \\
-H2 strong Legendre & $H_{\alpha\alpha}|_{TS^2}=\tfrac{T}{m}|\lv|\,I\succ0$, i.e.\ $|\lv(t)|>0$ on $[0,\tf]$ & \textbf{gate to add}: $\min_t|\lv|$ from the flown arc (junction states give a lower bound only at $K$ points) \\
-H3 all-burn is the PMP control & $Q_{mt}(t)>0$ on $[0,\tf]$, eq.~\eqref{eq:Qmt} & \textbf{gate to add}; without it the catalog's problem is the all-burn problem, not the throttle-bounded one \\
+H1 normal extremal & a lift with $\lambda_0=1$ exists & \textbf{have} (the BVP is solved with $\lambda_0=1$ to $10^{-10}$; pumpkyn agrees to $|\Delta z|\sim10^{-9}$). Abnormal lifts of the same trajectory: \textbf{excluded by the $\dim S=1$ probe} (\S\ref{sec:abnormal}), built and passing on the golden cells \\
+H2 strong Legendre & $H_{\alpha\alpha}|_{TS^2}=\tfrac{T}{m}|\lv|\,I\succ0$, i.e.\ $|\lv(t)|>0$ on $[0,\tf]$ & \textbf{gated} (\texttt{mintime\_hypothesis\_gates}, dense flight): golden cells $\min|\lv|=0.091$ (dro), $0.012$ (halo), $0.143$ (dpo) \\
+H3 all-burn is the PMP control & $Q_{mt}(t)>0$ on $[0,\tf]$, eq.~\eqref{eq:Qmt} & \textbf{gated}: $\min Q_{mt}=0.099$, $0.045$, $0.178$; this is \texttt{tfMinEoM}'s own switching function, so it also certifies that the event-driven propagator flew no switch \\
 H4 smoothness / no collision & $m>0$, $r$ away from the primaries & \textbf{have} (\texttt{true\_min\_altitude} screen) \\
 H5 no conjugate time on $(0,\tf]$ & $\det[\Phi_{rv}P,f_{rv}]\neq0$ on $(0,\tf]$ & \textbf{assessed}, not proved: sign changes at $K$ junctions (now including $\tf$); even-multiplicity zeros and pairs within one segment are invisible \\
 \bottomrule
@@ -255,10 +255,27 @@ whether the same trajectory also admits an abnormal lift; for control-affine
 systems with $\alpha\in S^2$ that would require $\lv\equiv0$ along an arc of the
 abnormal lift, which is incompatible with the unique direction law unless the
 trajectory is a coasting geodesic of the drift --- not the case for any
-all-burn catalog entry. This is an argument, not a computation; the computation
-would be: form the abnormal shooting function (drop the constant, keep
-$H\equiv0$ and the endpoint conditions) and check that the accepted
-$(\lr,\lv)$ direction is not a root of it. Cheap; not done. \gap{open}
+all-burn catalog entry. That is an argument; the computation is cleaner than
+a second shooting problem. The lifts of a \emph{fixed} trajectory form a
+linear space
+\[
+S=\{\lambda(\cdot):\ \dot\lambda=-A(t)^{\!\top}\lambda,\ \ \lv(t)\parallel\alpha(t)\ \forall t,\ \ \lm(\tf)=0\},
+\]
+with $A(t)=\partial f/\partial x$ at the \emph{frozen} flown control. Along any
+$\lambda\in S$ the quantity $\lambda\cdot f$ is conserved (it is $H-1$ for the
+normal lift, and $d(\lambda\cdot f)/dt=\lambda\cdot\partial_u f\,\dot u=0$ at a
+stationary control), so $\lambda\mapsto\lambda\cdot f$ is a linear functional on
+$S$ whose kernel is exactly the abnormal lifts. Our normal lift has
+$\lambda\cdot f=-1\neq0$. Therefore \emph{no abnormal lift exists iff $\dim S=1$}
+(if $\dim S\ge2$ the kernel is nontrivial). $\dim S=7-\operatorname{rank}C$ with
+$C=\big[\,[\alpha_k]_\times\Psi_v(t_k)\ ;\ e_m^{\!\top}\Psi(\tf)\,\big]$ stacked over
+samples $t_k$, $\Psi$ the fundamental matrix of the fixed-control adjoint.
+Implemented in \texttt{mintime\_hypothesis\_gates}: on the three golden cells
+$\dim S=1$ with singular-value ratios $\sigma_7/\sigma_6=1.8\times10^{-7}$,
+$4.3\times10^{-8}$, $5.4\times10^{-8}$; the accepted $\lambda(0)$ lies in $S$
+to $10^{-7}$ (integration tolerance) and $\lambda\cdot f=-1$ to $10^{-10}$ along
+each arc. (The positivity of the multiplier $\rho$ in $\lv=-\rho\alpha$ is
+automatic for elements of a one-dimensional $S$ containing the normal lift.)
 
 \subsection{On the sampled determinant}\label{sec:sampling}
 Even with H1--H4 established, H5 is checked by sign changes at $K$ points.
@@ -286,12 +303,15 @@ Proposition~\ref{prop:equiv}, shows no sign change at the $K$ junction samples
 on $(0,\tf]$ (an initial arc where the state block is structurally rank-deficient
 having been skipped).}
 \end{quote}
-It is \emph{not} yet ``a strict strong local minimizer'', because H2 and H3 are
-not gated, the abnormal-lift computation of \S\ref{sec:abnormal} has not been
-done, and H5 is sampled. Adding the two gates and dense sampling upgrades this
-to ``satisfies the hypotheses of the BCT sufficiency theorem to the extent they
-are numerically checkable''; that is the sentence a methods paper can carry,
-with the sampling caveat stated.
+With \texttt{mintime\_hypothesis\_gates} (H1$'$, H2, H3 on the dense flight,
+passing on the golden cells) the statement becomes: \emph{the entry is a
+normal extremal admitting no abnormal lift, with the strong Legendre condition
+and the all-burn condition holding along the whole flown arc, and no sign
+change of the BCT conjugate determinant at the sampled times on $(0,\tf]$.}
+That satisfies every hypothesis of the BCT sufficiency theorem except that H5
+is sampled rather than proved; it is the sentence a methods paper can carry,
+with the sampling caveat stated. Running the gates over the catalogs is a
+one-hour campaign (one flight per entry) and is the natural next step.
 
 \section{The fixed-$\tf$ line, for contrast}\label{sec:fixedtf}
 In the smoothed-fuel problems the throttle varies, so $m(\tf)$ is genuinely free
@@ -311,15 +331,16 @@ STM.
 
 \section{Recommended additions to the instrument (min-time)}
 \begin{enumerate}
-\item Gate $\min_{t}|\lv(t)|$ and $\min_t Q_{mt}(t)$ along the flown arc
-(\texttt{seed\_from\_z8} already flies it); store both per entry. Cost: one
-propagation per entry, already performed by \texttt{conj\_catalog\_pass}.
+\item \textbf{Done:} \texttt{mintime\_hypothesis\_gates} gates $\min_t|\lv|$,
+$\min_t Q_{mt}$ and $\dim S$ on the dense flight (\texttt{tests/test\_mintime\_gates},
+15/15 on the golden cells). Next: store all three per catalog entry
+(\texttt{conj\_catalog\_pass} already flies each entry).
 \item Dense determinant sampling: in \texttt{collectSTMs}, keep the variational
 ODE's dense output for each segment and evaluate the quotiented determinant at
 every integrator step; report the finest bracket of each sign change and the
 minimum of $\sigma_{\min}$.
-\item The abnormal-lift probe of \S\ref{sec:abnormal} on the golden cells first,
-then at catalog scale if cheap.
+\item \textbf{Done} on the golden cells (\S\ref{sec:abnormal}); catalog scale
+with the item above.
 \item Rename the catalog field's documentation from ``conjugate-certified'' to
 the statement of \S\ref{sec:meaning}.
 \end{enumerate}

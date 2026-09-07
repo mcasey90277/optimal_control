@@ -48,6 +48,15 @@ P.rungTolR  = [];                % LOOSE-RUNG gate (MfMax review 2026-09-06,
                                  % points are predictors, not deliverables.
                                  % The FLOOR is always refined to full tolR.
 P.rungHdriftTol = [];            % Hdrift gate for LOOSE rungs ([] = HdriftTol)
+P.delta     = [];                % huberc ramp width during the p-walk: [] =
+                                 % the field default delta = p; a scalar =
+                                 % FIXED delta; a function handle @(p) ->
+                                 % delta (e.g. @(p) 2*p to match eps's width).
+                                 % Ignored by eps/huber. (FINDINGS 25 knob.)
+P.deltaSched = [];               % optional SECOND STAGE: after the p-walk,
+                                 % hold p at its deepest value and walk delta
+                                 % down through this decreasing schedule
+                                 % (same gates, bisection on delta).
 P.seedScale = 1;                 % multiply the seed COSTATES (rows 8:14) by
                                  % this before the first rung. 1 = the energy
                                  % costates verbatim (the 09-02 protocol).
@@ -104,16 +113,35 @@ for kf = 1:numel(P.families)
     seed = seed0;
     seed.Y(8:14,:) = P.seedScale * seed.Y(8:14,:);
     if P.seedScale ~= 1, lg('RACE ARM %s: seed costates scaled by %.3g', fam, P.seedScale); end
-    A = struct('p', [], 'mf', [], 'coastFrac', [], 'Hdrift', [], ...
+    A = struct('p', [], 'delta', [], 'mf', [], 'coastFrac', [], 'Hdrift', [], ...
                'iters', [], 'wall', [], 'nBisect', 0, 'nFail', 0, ...
                'retired', false, 'z', [], 'Y', {{}}, ...
                'tight', logical([]), 'condJ', [], ...
-               'failP', [], 'failCondJ', [], 'failNormR', []);
-    pGood = [];  gaps = 0;
-    queue = P.sched;
+               'failP', [], 'failDelta', [], 'failCondJ', [], 'failNormR', []);
+    % delta rule for the p-walk (huberc only; NaN = field default delta = p)
+    if isempty(P.delta),               deltaOf = @(p) NaN(size(p));
+    elseif isa(P.delta, 'function_handle'), deltaOf = P.delta;
+    else,                              deltaOf = @(p) P.delta*ones(size(p));
+    end
+    % Rungs are (p, delta) pairs; stage 1 walks p (delta from the rule),
+    % stage 2 (optional) holds p at its deepest value and walks delta.
+    for stage = 1:2
+    if stage == 1
+        queue = [P.sched; deltaOf(P.sched)];  mv = 1;
+    else
+        if isempty(P.deltaSched) || isempty(A.p) || ~strcmp(fam, 'huberc'), break, end
+        dLast = A.delta(end);  if isnan(dLast), dLast = A.p(end); end
+        ds = P.deltaSched(P.deltaSched < dLast);
+        if isempty(ds), break, end
+        queue = [A.p(end)*ones(1, numel(ds)); ds];  mv = 2;
+        lg('RACE ARM %s: STAGE 2 -- p held at %.4g, walking delta %s', fam, A.p(end), mat2str(ds, 3));
+    end
+    xGood = [];  gaps = 0;
     while ~isempty(queue)
-        pTry = queue(1);  queue(1) = [];
+        pTry = queue(1,1);  dTry = queue(2,1);  queue(:,1) = [];
         sm = struct('family', fam, 'p', pTry);
+        if ~isnan(dTry), sm.delta = dTry; end
+        xTry = pTry;  if mv == 2, xTry = dTry; end
         t0 = tic;
         [okRun, z, it] = run_capped(pool, @ms_minfuel, 2, P.wallSec + 90, ...
             rv0, rvf, tf, seed, Tmax, c, muStar, sm, ...
@@ -129,50 +157,57 @@ for kf = 1:numel(P.families)
             [~, ~, ~, Yfly] = cr3bp_minfuel_prop(tf, it.Y(:,1), false, ...
                                                  Tmax, c, muStar, sm);
             mf = Yfly(end, 7);
-            A.p(end+1) = pTry;  A.mf(end+1) = mf;
+            A.p(end+1) = pTry;  A.delta(end+1) = dTry;  A.mf(end+1) = mf;
             A.coastFrac(end+1) = it.coastFrac;  A.Hdrift(end+1) = it.Hdrift;
             A.iters(end+1) = it.iters;  A.wall(end+1) = toc(t0);
             A.z = z;  A.Y{end+1} = it.Y;
             yT2 = cr3bp_minfuel_prop(it.tGrid(end) - it.tGrid(end-1), ...
                                      it.Y(:,end), false, Tmax, c, muStar, sm);
             seed = struct('tf', tf, 'tGrid', it.tGrid(:)', 'Y', [it.Y, yT2]);
-            pGood = pTry;
-            lg('  %s p=%.4g %s: mf=%.6f coast=%.2f normR=%.1e Hdrift=%.1e condJ=%.2e iters=%d (%.0fs)', ...
-               fam, pTry, tern(tight, 'OK', 'ok-LOOSE'), mf, it.coastFrac, it.normR, ...
+            xGood = xTry;
+            lg('  %s p=%.4g%s %s: mf=%.6f coast=%.2f normR=%.1e Hdrift=%.1e condJ=%.2e iters=%d (%.0fs)', ...
+               fam, pTry, dtag(dTry), tern(tight, 'OK', 'ok-LOOSE'), mf, it.coastFrac, it.normR, ...
                it.Hdrift, cj, it.iters, toc(t0));
         else
             A.nFail = A.nFail + 1;
-            A.failP(end+1) = pTry;  A.failCondJ(end+1) = cj;
+            A.failP(end+1) = pTry;  A.failDelta(end+1) = dTry;  A.failCondJ(end+1) = cj;
             A.failNormR(end+1) = NaN;
             if okRun
                 A.failNormR(end) = it.normR;
-                lg('  %s p=%.4g FAIL: conv=%d normR=%.1e Hdrift=%.1e condJ=%.2e (%.0fs)', ...
-                   fam, pTry, it.converged, it.normR, it.Hdrift, cj, toc(t0));
+                lg('  %s p=%.4g%s FAIL: conv=%d normR=%.1e Hdrift=%.1e condJ=%.2e (%.0fs)', ...
+                   fam, pTry, dtag(dTry), it.converged, it.normR, it.Hdrift, cj, toc(t0));
             else
-                lg('  %s p=%.4g FAIL: HARD TIMEOUT/worker error (%.0fs)', ...
-                   fam, pTry, toc(t0));
+                lg('  %s p=%.4g%s FAIL: HARD TIMEOUT/worker error (%.0fs)', ...
+                   fam, pTry, dtag(dTry), toc(t0));
             end
-            if ~isempty(pGood) && A.nBisect < P.maxBisect*numel(P.sched) && ...
-               abs(pGood - pTry)/pGood > 0.02
-                pMid = sqrt(pGood*pTry);          % geometric midpoint
-                queue = [pMid, pTry, queue]; %#ok<AGROW>
+            if ~isempty(xGood) && A.nBisect < P.maxBisect*numel(P.sched) && ...
+               abs(xGood - xTry)/xGood > 0.02
+                xMid = sqrt(xGood*xTry);          % geometric midpoint on the moving coordinate
+                if mv == 1, ins = [xMid, pTry; deltaOf(xMid), dTry];
+                else,       ins = [pTry, pTry; xMid, dTry];
+                end
+                queue = [ins, queue]; %#ok<AGROW>
                 A.nBisect = A.nBisect + 1;
-                lg('  %s bisect -> %.4g', fam, pMid);
+                lg('  %s bisect -> %s=%.4g', fam, tern(mv == 1, 'p', 'delta'), xMid);
             else
                 gaps = gaps + 1;
-                lg('  %s gap ABANDONED at p=%.4g (gap %d/%d)', ...
-                   fam, pTry, gaps, P.maxGaps);
+                lg('  %s gap ABANDONED at p=%.4g%s (gap %d/%d)', ...
+                   fam, pTry, dtag(dTry), gaps, P.maxGaps);
                 if gaps >= P.maxGaps, A.retired = true; break, end
             end
         end
         out.arms.(fam) = A;  save(outMat, 'out');   % after EVERY step
     end
+    if A.retired && stage == 1 && ~isempty(P.deltaSched)
+        A.retired = false;                          % stage 2 still gets its chance
+    end
+    end                                             % stage loop
     % FLOOR REFINEMENT (MfMax Fullpath pattern): if the deepest accepted rung
     % was a LOOSE one, re-solve it at full tolerance from its own junctions;
     % a loose point that cannot be tightened is dropped back to the deepest
     % tight rung. Loose rungs are never reported as the arm's answer.
     if ~isempty(A.p) && ~A.tight(end)
-        sm = struct('family', fam, 'p', A.p(end));
+        sm = smOf(fam, A.p(end), A.delta(end));
         yT2 = cr3bp_minfuel_prop(seed.tGrid(end) - seed.tGrid(end-1), ...
                                  A.Y{end}(:,end), false, Tmax, c, muStar, sm);
         seedR = struct('tf', tf, 'tGrid', seed.tGrid, 'Y', [A.Y{end}, yT2]);
@@ -199,7 +234,7 @@ for kf = 1:numel(P.families)
     end
     % acceptance gate at the arm's deepest converged parameter:
     if ~isempty(A.p)
-        sm = struct('family', fam, 'p', A.p(end));
+        sm = smOf(fam, A.p(end), A.delta(end));
         [okA, ~, itA] = run_capped(pool, @ms_minfuel, 2, 2*P.wallSec, ...
             rv0, rvf, tf, seed, Tmax, c, muStar, sm, ...
             struct('wallSec', P.wallSec, 'accept', true));
@@ -208,8 +243,8 @@ for kf = 1:numel(P.families)
         else
             A.acceptDz = NaN;  A.acceptOk = false;
         end
-        lg('RACE ARM %s DONE: deepest p=%.4g, mf=%.6f, coast=%.2f, accept ok=%d dz=%.1e, %d fails/%d bisects, %.1f min', ...
-           fam, A.p(end), A.mf(end), A.coastFrac(end), A.acceptOk, ...
+        lg('RACE ARM %s DONE: deepest p=%.4g%s, mf=%.6f, coast=%.2f, accept ok=%d dz=%.1e, %d fails/%d bisects, %.1f min', ...
+           fam, A.p(end), dtag(A.delta(end)), A.mf(end), A.coastFrac(end), A.acceptOk, ...
            A.acceptDz, A.nFail, A.nBisect, toc(tArm)/60);
     else
         lg('RACE ARM %s DONE: NO converged steps', fam);
@@ -239,6 +274,19 @@ end
 function v = dflt(x, d)
 % DFLT  x, or d when x is empty.  INPUTS: x; d.  OUTPUTS: v.
 if isempty(x), v = d; else, v = x; end
+end
+
+function sm = smOf(fam, p, delta)
+% SMOF  Smoothing spec for a (family, p, delta) rung; NaN delta = field
+% default.  INPUTS: fam; p; delta.  OUTPUTS: sm struct.
+sm = struct('family', fam, 'p', p);
+if ~isnan(delta), sm.delta = delta; end
+end
+
+function s = dtag(delta)
+% DTAG  ' delta=...' log tag, empty for the field default.  INPUTS: delta.
+% OUTPUTS: s char.
+if isnan(delta), s = ''; else, s = sprintf(' delta=%.4g', delta); end
 end
 
 function s = tern(c, a, b)

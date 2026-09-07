@@ -150,7 +150,12 @@ parametrization passes it. Ideas 1.1 and 1.2 are closed for the Huber
 walls. Idea 1.3 (rescaling) is moot for a corner. Idea 1.5 (IC homotopy)
 stands, for the high-gamma seeds. Idea 1.4 (FD cross-check) stands as the
 standing test. The cure is a FAMILY change at the corner: eps handoff, a
-Huber-eps hybrid ramp, or stepping over the bifurcation.
+Huber-eps hybrid ramp, or stepping over the bifurcation. **Built the same
+day (`huberc`, FINDINGS 25): both walls gone** ((6,8) to p = 0.0026,
+(1,2) to p = 0.0014, m_f within 2e-5 of eps), at the price of eps's steep
+ramp at the floor. So of MfMax's five ideas the two aimed at the WALK
+(1.1, 1.2) did not apply here; the diagnosis they prompted found the real
+mechanism in the FIELD, and the field fix worked.
 
 ## 3. Recommended order for step 1 ("Huber where eps cannot enter") -- as written before 2b
 

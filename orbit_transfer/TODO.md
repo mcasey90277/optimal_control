@@ -113,14 +113,22 @@ exists.
     crossing |dQ/dt|=0.045 on (6,8), Q_max=0.9907 about to cross on (1,2);
     clean cells show neither. Instrument: `indirect/huber_switch_diag`.
     λ/2 seed confirmed exact (2 iterations at p=1). MfMax review §2b.
-  - [ ] **Huber follow-ups (from §23/§24):** (a) the cure is a FAMILY change
-    at the corner: Huber→ε handoff when `huber_switch_diag` predicts a
-    graze (min|dQ/dt| falling / Q extremum → 1), or a Huber-ε hybrid (jump
-    replaced by a ramp of width δ — one field function), or step OVER the
-    bifurcation (larger p step on failure, not bisection); (b) hedged race
-    in the builder; (c) Huber on the cells ε cannot enter (high-γ band via
-    MfMax idea 1.5 IC-homotopy seeds, deep-thrust wall, GTO_tulip
-    1.01–1.11× band); (d) λ/2 as the standard Huber seed.
+  - [x] **Huber-ε hybrid `huberc` BUILT + both walls PASSED — 2026-09-06
+    (FINDINGS §25):** (6,8)@1.2 to p=0.0026 (Huber walled at 0.033),
+    (1,2)@1.2 to p=0.0014 (Huber walled at 0.77), m_f within 2e-5 of ε.
+    Cost: with δ=p the ramp is as steep as ε's at the floor — huberc
+    inherits ε's 8–22 bisections and even stalls at 0.0039 on the clean
+    cell where plain Huber went to 0.001 with 0 fails.
+  - [ ] **Huber follow-ups (from §25):** (a) δ schedule — fixed δ (0.02–0.05)
+    during the p-walk then a δ-walk, or δ=2p to match ε's steepness;
+    (b) **family schedule in `run_minfuel_race`**: Huber (fast) → huberc
+    the rung before `huber_switch_diag` predicts a graze → ε fallback; the
+    hedge the FINDINGS-25 table argues for; (c) Huber/huberc on the cells ε
+    cannot enter (high-γ band via MfMax idea 1.5 IC-homotopy seeds,
+    deep-thrust wall, GTO_tulip 1.01–1.11× band); (d) λ/2 as the standard
+    Huber/huberc seed; (e) `ms_bvp` tolR 1e-10 sits at the residual floor
+    on 30-d arcs — several "FAIL normR=1.0e-10..1.4e-10" on (1,2); consider
+    2e-10 or a floor-aware tolR.
   - [ ] **Independent verifier for the fixed-t_f extremals (Mike,
     2026-09-06):** (i) MATLAB `bvp5c` on the same PMP BVP (collocation, not
     shooting — different algorithm, an afternoon; shares our field); (ii)

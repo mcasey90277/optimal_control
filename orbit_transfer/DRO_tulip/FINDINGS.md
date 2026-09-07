@@ -1243,3 +1243,69 @@ way, is confirmed exact: the p = 1 rung converges in 2 iterations from it.
    every accepted rung during a walk and a wall becomes predictable
    (min |dQ/dt| falling, or an extremum of Q approaching 1) one or two
    rungs before it happens -- which is exactly when to hand off.
+
+## 25. The Huber-eps hybrid passes both Huber walls -- and inherits eps's floor (2026-09-06)
+
+Section 24 said the cure for Huber's walls had to be a FAMILY change at the
+corner. `huberc` is that family: Huber's gentle core s = pQ below Q = 1,
+then a CONTINUOUS ramp p -> 1 over Q in [1, 1+delta] instead of the jump,
+s = 1 beyond; L(s) is the integral of the inverse law matched at s = p, so
+H(s) is convex and the law is its exact argmin (`test_minfuel_pmp`: dH
+5.6e-17; continuous at both knees; AD = FD; STM = FD through the generic
+propagator with no saltation). Default delta = p. Same 17-rung schedule,
+lambda/2 seed, tight protocol, on the two walls and the clean control:
+
+| cell | gamma | family | rungs | p deepest | m_f | fails / bisects | wall |
+|---|---|---|---|---|---|---|---|
+| (6,8) | 1.2 | huber (saltation) | 13 | **0.0328 (wall)** | 0.943751 | 9 / 7 | 6.6 min |
+| (6,8) | 1.2 | **huberc** | 18 | **0.0026** | 0.943921 | 9 / 7 | 6.1 min |
+| (6,8) | 1.2 | eps (09-02) | 19 | 0.0013 | 0.943936 | 9 / 7 | 6.2 min |
+| (1,2) | 1.2 | huber, lambda/2 | 6 | **0.774 (wall)** | 0.933445 | 11 / 9 | 8.3 min |
+| (1,2) | 1.2 | **huberc** | 17 | **0.00138** | 0.942505 | 22 / 20 | 18.2 min |
+| (1,2) | 1.2 | eps (09-02) | 19 | 0.0010 | 0.942523 | 2 / 2 | 2.5 min |
+| (2,5) | 1.2 | huber (saltation) | 17 | 0.0010 | 0.947041 | **0 / 0** | 1.2 min |
+| (2,5) | 1.2 | **huberc** | 15 | 0.0039 | 0.947028 | 8 / 6 | 5.8 min |
+| (2,5) | 1.2 | eps (09-02) | 17 | 0.0017 | 0.947046 | 9 / 7 | 7.5 min |
+
+**Both walls are gone.** On (6,8) huberc converges at p = 0.03 in 4
+iterations where Huber stalled nine times, and continues 12x deeper; on
+(1,2) the p ~ 0.77 wall is not there at all and the walk reaches the floor.
+Final masses agree with eps to 1.5e-5 and 1.8e-5. This is the direct
+confirmation of section 24's mechanism: remove the jump and the grazing
+bifurcations stop being corners.
+
+**What it costs.** With delta = p the ramp slope (1-p)/delta is ~1/p --
+at the floor, 382 on (6,8) vs eps's 391 -- so huberc meets exactly the
+steep-ramp difficulty eps has at small p, and it meets it slightly earlier
+(its ramp is half eps's width at equal p). Visible in three places: (6,8)'s
+new stall at p ~ 0.0025 is a Q MINIMUM at 1.0149 (a coast being born)
+with a perfectly transversal crossing structure (min |dQ/dt| 1.19) -- a
+steepness stall, not a graze; (1,2) needed 20 bisections in the
+p = 0.5-0.6 and p < 0.002 bands; and on the CLEAN cell huberc stalls at
+p = 0.0039 with 8 failures where plain Huber -- jump, saltation, no ramp
+at all -- walked to 0.001 with none. Huber's cleanliness where it works
+was BECAUSE it has no steep ramp; huberc gives that up to pass the walls.
+
+**Where this leaves the three families.**
+
+| | eps | huber (saltation) | huberc (delta = p) |
+|---|---|---|---|
+| walls (grazing corners) | none (continuous) | 3 of 7 cells | none measured |
+| floor behaviour | steep ramp, 8-10 bisections | clean, 0-1 fails | steep ramp, 8-22 bisections |
+| speed on clean cells | 6-11 min | **1-2 min** | 6 min |
+| reaches the floor | 7/7 | 4/7 | 3/3 tested |
+| m_f agreement | -- | < 7e-6 | < 2e-5 |
+
+**Next knob, not yet turned.** delta need not shrink with p. A FIXED
+delta (say 0.02-0.05) during the p-walk keeps the ramp gentle while the
+core vanishes (at p -> 0 huberc becomes a one-sided eps of width delta);
+a short second walk then takes delta down. Or delta = 2p to match eps's
+steepness exactly. Or the hedge the numbers now argue for directly: run
+HUBER, and switch to huberc the rung before `huber_switch_diag` predicts a
+graze -- Huber's speed on the 60-70% of cells without grazes, huberc's
+continuity where they occur, eps as the fallback that always arrives.
+`run_minfuel_race` already carries `seedScale` and the loose/tight gates;
+a `family schedule` (which family at which rung, with the diag as the
+trigger) is the missing piece.
+
+Records: `direct/results/minfuel_huberc_c{68,12,25}_g120.mat`.

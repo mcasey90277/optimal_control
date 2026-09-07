@@ -94,7 +94,7 @@ point its engine any direction and run it anywhere between off and full. We
 want either the fastest trip, or --- if the trip length is fixed --- the one
 that burns the least propellant. Fastest means ``engine on the whole way,
 point it well.'' Least propellant means ``engine either full on or fully off,
-never in between, and switch at exactly the right moments.'' Finding \emph{when}
+never in between, and switch at exactly the right moments'' (the only exception is a singular stretch where the dial of \S\ref{sec:pmp} sits exactly on its threshold, which these transfers do not show). Finding \emph{when}
 to switch is the whole difficulty.
 \end{eli}
 
@@ -111,7 +111,7 @@ direction and $s\in[0,1]$ the throttle:
 with $g(r)$ the gravity of both primaries plus the centrifugal term,
 $h(v)=(2v_y,-2v_x,0)$ the Coriolis term, $T$ the thrust acceleration at unit
 mass fraction, $c$ the exhaust velocity ($c = I_{sp}g_0$ in ND). Mass is a
-fraction: $m(0)=1$.
+fraction: $m(0)=1$. Admissible arcs keep $m(t)>0$ and stay clear of both primaries; no dry-mass bound is imposed, so the free-mass condition $\lm(\tf)=0$ below is unconditional.
 
 \subsection{The optimal control problem, once}
 \begin{rig}
@@ -132,7 +132,7 @@ $\tf^{\min}$ is the min-time value for the same endpoints; $\gamma$ is the
 time-of-flight multiplier (the catalog's third axis).
 \end{rig}
 
-\subsection{Pontryagin's principle, once}
+\subsection{Pontryagin's principle, once}\label{sec:pmp}
 \begin{intu}
 The maximum principle turns ``choose a whole control history'' into
 ``choose seven numbers.'' It introduces a costate $\lambda=(\lr,\lv,\lm)$ ---
@@ -145,7 +145,7 @@ fixed by the seven (eight) end conditions. Everything in this document is a
 way of solving that root-finding problem well, and of checking the root.
 \end{intu}
 \begin{rig}
-With the normal multiplier $\lambda_0=1$,
+With the normal multiplier $\lambda_0=1$ and, for min-time, the running-cost form $L\equiv1$, $\phi=0$ (used from here on: it gives $H(\tf)=0$ and $\lambda\cdot f=-1$; in the Mayer form the same conditions read $H(\tf)+1=0$),
 \begin{equation}\label{eq:H}
 H = L(s) + \lr\!\cdot v + \lv\!\cdot\big(g(r)+h(v)\big) + sT\Big(\frac{\lv\!\cdot\alpha}{m}-\frac{\lm}{c}\Big).
 \end{equation}
@@ -153,7 +153,7 @@ H = L(s) + \lr\!\cdot v + \lv\!\cdot\big(g(r)+h(v)\big) + sT\Big(\frac{\lv\!\cdo
 \begin{equation}\label{eq:costate}
 \dot\lr = -\big(\partial_r g\big)^{\!\top}\lv,\qquad
 \dot\lv = -\lr - \big(\partial_v h\big)^{\!\top}\lv,\qquad
-\dot\lm = \frac{sT}{m^2}\,|\lv| .
+\dot\lm = -\frac{sT}{m^2}\,|\lv|\qquad(\text{after }\alpha^*;\ \lm\text{ falls to its terminal zero, so }\lm\ge0).
 \end{equation}
 \textbf{Minimum condition.} Over $\alpha\in S^2$: $\alpha^*=-\lv/|\lv|$ (the
 primer direction; requires $|\lv|\ne0$). Over $s\in[0,1]$, $H$ is
@@ -199,7 +199,7 @@ object & shape & meaning \\
 \midrule
 $y$ & $14\times1$ & the augmented state $[r;v;m;\lr;\lv;\lm]$ --- what every propagator integrates \\
 $z_8$ & $8\times1$ & a \textbf{min-time} solution: $[\lambda(0);\ \tf]$ in \file{tfMin}'s convention; the catalog entry \\
-$\lambda_0$, $Y_j$ & $7\times1$, $14\times(K{+}1)$ & a \textbf{fixed-$\tf$} solution: the initial costate and the $K{+}1$ junction states of the multiple-shooting mesh (the ``identifiability rule'': ship the junctions, not just $\lambda_0$) \\
+$\lambda_0$, $Y_j$ & $7\times1$, $14\times(K{+}1)$ & a \textbf{fixed-$\tf$} solution: the initial costate and the $K{+}1$ junction states of the multiple-shooting mesh, shipped in full: at many revolutions a $\lambda_0$-only reconstruction amplifies rounding into $\sim$100 km of ambiguity (measured on the 40-rev min-time flagship), so the junctions keep a numerically usable representation \\
 seed & struct & $\{\tf, \mathrm{tGrid}\,[1{\times}K{+}1], Y\,[14{\times}K{+}1]\}$ --- the multiple-shooting input contract \\
 $\Phi(t,0)$ & $14\times14$ & state transition matrix of the PMP flow (variational equations integrated with $y$) \\
 record & struct & one (cell, $\gamma$) of the fixed-$\tf$ line: endpoints, $\tf$, $\lambda_0$, $K$, gates \\
@@ -211,6 +211,20 @@ sheet & struct & one (departure orbit, arrival orbit) pair: 3-D grids over (depa
 A \textbf{cell} is a (departure phase, arrival phase) pair on the $12\times12$
 phasing torus of one sheet; \emph{(2,5)}, \emph{(6,8)}, \emph{(1,2)} are the
 three flagship cells of the fixed-$\tf$ line.
+
+
+\subsection{Conventions a reimplementer needs}\label{sec:conv}
+\begin{itemize}\itemsep2pt
+\item \textbf{Units.} $L^\star=389{,}703.26$ km, $T^\star=1/n$ (the Earth--Moon mean motion). Thrust and exhaust velocity enter as
+$T_{nd}=\dfrac{T_{[N]}/m_0}{1000\,L^\star}\,{T^\star}^2$, $c_{nd}=\dfrac{I_{sp}\,g_0\,T^\star}{1000\,L^\star}$; the catalog validator recomputes $c_{nd}$ from the stored $I_{sp}$ and refuses a mismatch (that check is how the Isp mislabel of 2026-09-02 was caught).
+\item \textbf{Gravity.} With $d=|r-(-\mu,0,0)|$, $\rho=|r-(1-\mu,0,0)|$:
+$g(r)=\big(x-(1-\mu)\tfrac{x+\mu}{d^3}-\mu\tfrac{x-1+\mu}{\rho^3},\ y-(1-\mu)\tfrac{y}{d^3}-\mu\tfrac{y}{\rho^3},\ -(1-\mu)\tfrac{z}{d^3}-\mu\tfrac{z}{\rho^3}\big)$.
+\item \textbf{Endpoints.} A cell is a pair of phase fractions $(s_D,s_A)\in[0,1)^2$; the endpoint is the periodic orbit's state at time $s\cdot\tau$ after the family getter's reference point (spline interpolation of the propagated orbit). Endpoints are \emph{fixed} rotating-frame states; the phasing torus is the $12\times12$ (or $6\times6$) grid of these pairs, and $\tf^{\min}$ is the accepted, \file{tfMin}-confirmed min-time value of the same cell --- a numerically resolved reference, not a proven minimum.
+\item \textbf{Direct transcription} (\file{casadi\_mintime\_dro}, objective \texttt{'time'} or \texttt{'energy'}). Hermite--Simpson in separated form on $N$ uniform intervals of the normalized time $\sigma\in[0,1]$, $h=1/N$: node variables $X_k,U_k$ and midpoint variables $\bar X_k,\bar U_k$ with the interpolation equality $\bar X_k=\tfrac12(X_k+X_{k+1})+\tfrac{h\tf}{8}(f_k-f_{k+1})$ and the defect $X_{k+1}-X_k-\tfrac{h\tf}{6}(f_k+4\bar f_k+f_{k+1})=0$; $U=(\alpha,s)$ with $|\alpha|=1$ as an equality and $s\in[0,1]$ at nodes and midpoints; $\tf$ is carried as one lifted copy per interval with the continuity $T_{k+1}=T_k$ (this keeps the KKT matrix banded; a single scalar $\tf$ produced a dense column that crashed MUMPS) and pinned to $\gamma\tf^{\min}$ for the energy problem; the energy cost is Simpson-quadratured $\int s^2\,dt$; an optional minimum-altitude path constraint. $N$ of order $10^3$ (1600 for the certified flagship).
+\item \textbf{Dual map} (\file{oc.duals\_to\_costates}). The multiplier $\mu_k$ of the defect on interval $k$ is a sample of $\lambda$ at that interval's \emph{midpoint} for Hermite--Simpson (at the node, step-weighted over the two adjacent intervals, for trapezoid); with unit-scaled defects $\lambda\approx\pm\mu$; the global sign is fixed by a majority vote that the implied primer $-\lv/|\lv|$ align with the solved thrust direction; the multiplier paired with the lifted $\tf$ must then read $+1$ (it is $-H$), the cheapest quality gate on a harvest. \file{harvest\_ms\_seed} interpolates these samples onto the $K{+}1$ breakpoints.
+\item \textbf{Segments.} Uniform breakpoints. Fixed-$\tf$ line: the ladder $K\in\{12,24,48\}$ is escalated until multiple shooting converges (12 sufficed on every record). Min-time: $K=24$ in the catalog conjugate pass, 12--48 elsewhere.
+\item \textbf{``ms residual''} is $\|R(p)\|_\infty$ of \eqref{eq:msres}, all rows, in ND units. \textbf{``Reflight''} is the propagation of the entry's own field from its first junction over the full $\tf$; the number quoted is $|r(\tf)-r_f|$ in km.
+\end{itemize}
 
 %======================================================================
 \section{Min-time: the catalog pipeline}
@@ -235,10 +249,11 @@ three flagship cells of the fixed-$\tf$ line.
 \draw[arr] (dir)--(nlp); \draw[arr] (nlp)--(harv); \draw[arr] (harv)--(seed); \draw[arr] (seed)--(ms);
 \draw[arr] (ms)--(z8); \draw[arr] (z8)--(acc); \draw[arr] (acc)--node[lbl,above]{yes}(cat); \draw[arr] (cat)--(lad);
 \draw[arr] (tfmin)--(acc);
+\draw[arr,dashed] (z8.south) |- node[lbl,pos=0.75,above]{$z_8$, endpoints, $T$, $c$} (tfmin.west);
 \draw[arr,dashed] (lad.south) -- ++(0,-3.1) -| ($(ms.west)+(-0.5,0)$) -- (ms.west);
 \node[lbl] at (8.6,-8.1) {next rung: warm seed back into multiple shooting};
 \end{tikzpicture}
-\caption{The min-time pipeline. Blue = our algorithms, green = pumpkyn (Darin's astrodynamics toolbox, used as physics source and as the independent acceptance solver), yellow = data. Every catalog entry has passed through all three stages: direct, indirect, and a foreign single-shooting re-solve.}
+\caption{The min-time pipeline. Blue = our algorithms, green = pumpkyn (Darin's astrodynamics toolbox, used as physics source and as the independent acceptance solver), yellow = data. Every catalog entry has passed the indirect solve and the foreign single-shooting re-solve; the direct stage seeds the first rung of each cell and later rungs are warm-started from the accepted neighbour.}
 \label{fig:mt-pipeline}
 \end{figure}
 
@@ -316,9 +331,7 @@ several revolutions of the Moon that product amplifies initial errors by
 $10^3$--$10^4$. Newton then has a basin of attraction too small to hit from
 any harvested seed. Multiple shooting adds the junction states as unknowns:
 the problem gets bigger ($7+14(K-1)$ unknowns, $K=12$--$48$) but each residual
-depends only on a \emph{short} propagation, the Jacobian is block-banded and
-well-conditioned, and Newton converges from the collocation seed in 1--3
-iterations. The price --- a bigger linear solve --- is trivial at this size.
+depends only on a \emph{short} propagation, the Jacobian is block-banded with the amplification confined to one short segment per block (the assembled Jacobian can still be ill-conditioned --- cond$(J)$ is reported for exactly that reason), and Newton converges from the collocation seed in 1--3 iterations. The price --- a bigger linear solve --- is trivial at this size.
 \end{intu}
 
 \begin{rig}
@@ -330,12 +343,10 @@ R(p)=\begin{bmatrix}\Phi^{(1)}(Y_1)-Y_2\\ \vdots\\ \Phi^{(K-1)}(Y_{K-1})-Y_K\\ g
 \qquad
 g(y)=\begin{bmatrix} r-r_f\\ v-v_f\\ \lm\\ (H)\end{bmatrix},
 \end{equation}
-where $\Phi^{(k)}$ propagates segment $k$ over $\sigma_k\tf$ ($\sigma_k$ the fixed
-normalized breakpoints) and the $H$ row exists only when $\tf$ is free.
+where $\Phi^{(k)}$ propagates segment $k$ over the duration $\beta_k\tf$, $\beta_k=\tau_{k+1}-\tau_k$, with $\tau_k=t_k/\tf$ the fixed normalized breakpoints ($\tau_1=0$, $\tau_{K+1}=1$), and the $H$ row exists only when $\tf$ is free.
 \textbf{Jacobian.} Each segment's propagator returns its STM; the blocks are
 $\partial R_k/\partial Y_k=\Phi_k$, $\partial R_k/\partial Y_{k+1}=-I$, and, for free
-$\tf$, $\partial R_k/\partial\tf=\sigma_k f(y_{k+1}^-)$; the last block row is
-$\partial g/\partial y\cdot\Phi_K$. \textbf{Solve.} \texttt{fsolve}
+$\tf$, $\partial R_k/\partial\tf=\beta_k F(y_{k+1}^-)$ with $F$ the 14-state PMP field; the last block row is $Dg\,\Phi_K$ and, for free $\tf$, $Dg\,\beta_K F(y_{K+1}^-)$. \textbf{Solve.} \texttt{fsolve}
 trust-region dogleg with the analytic Jacobian, then up to five plain Newton
 polish steps (fsolve's first-order-optimality exit fires one step early on
 short, well-conditioned arcs; measured). \textbf{Guards.} An iterate with a
@@ -352,10 +363,10 @@ terminal state $y(\tf)$ for the second-order test.
 \caption{\texttt{ms\_bvp}: generic multiple shooting (min-time and fixed-$\tf$)}
 \begin{algorithmic}[1]
 \Require problem closures \{prop, rhs, terminal\}, seed $\{\tf,\mathrm{tGrid},Y\}$, tolR
-\State $p\gets[\,Y_1(\mathcal F);\,Y_{2:K};\,(\tf)\,]$; $\sigma\gets\mathrm{tGrid}/\tf$
+\State $p\gets[\,Y_1(\mathcal F);\,Y_{2:K};\,(\tf)\,]$; $\tau\gets\mathrm{tGrid}/\tf$, $\beta_k\gets\tau_{k+1}-\tau_k$
 \Function{residual}{$p$}
   \If{$p$ non-finite or outside the guards} \Return $R\gets 10^8\mathbf 1$, $J\gets I$ \EndIf
-  \For{$k=1..K$} $[y^-_{k+1},\Phi_k]\gets\mathrm{prop}(\sigma_k\tf,\,Y_k)$ \Comment{one short propagation + STM}
+  \For{$k=1..K$} $[y^-_{k+1},\Phi_k]\gets\mathrm{prop}(\beta_k\tf,\,Y_k)$ \Comment{one short propagation + STM}
     \State assemble block row $k$ of $R,J$ per \eqref{eq:msres}
   \EndFor
 \EndFunction
@@ -369,8 +380,7 @@ terminal state $y(\tf)$ for the second-order test.
 \begin{intu}
 A converged multiple-shooting solution is \emph{our} answer. The catalog's
 consumer is pumpkyn's single-shooting \file{tfMin}. So the acceptance gate
-is literally ``hand $z_8$ to \file{tfMin}; does it come back unchanged?''
---- PASS if $|\Delta z|<10^{-6}$ (observed $\sim10^{-9}$). That is a
+is literally ``hand $z_8$ to \file{tfMin}; does it come back unchanged?'' --- PASS if \file{tfMin} reports convergence on its own terminal residual \emph{and} moves the eight numbers by less than $10^{-6}$ (norm of the ND $z_8$ difference; observed $\sim10^{-9}$). Both halves matter: a solver that did not move because it did not run would also return $\Delta z=0$. That is a
 \emph{foreign witness}: a different code, integrator and root finder agreeing
 on the same seven numbers. It is the strongest first-order evidence in the
 program and it exists only for min-time (pumpkyn has no min-fuel twin).
@@ -397,19 +407,12 @@ continuation on the $12\times12$ (or $6\times6$) phasing torus of each
 \draw[arr] (ext.south) |- ($(c1.north)+(0,3mm)$) -| (c1.north);
 \draw[arr] (c1)--(c2); \draw[arr] (c2)--(c3); \draw[arr] (c3)--(c4); \draw[arr] (c4)--(loc);
 \end{tikzpicture}}
-\caption{What a min-time entry has passed. Top row: level 1, the Pontryagin extremal --- every catalog entry. Bottom row: level 2, local minimality --- the hypotheses of the Bonnard--Caillau--Tr\'elat sufficiency theorem, checked numerically by \texttt{conj\_catalog\_pass} and \texttt{gates\_catalog\_pass} (the determinant is sampled at junctions, so this is an assessment, not a proof --- \S\ref{sec:proves}).}
+\caption{What a min-time entry has passed. Top row: level 1, the Pontryagin extremal --- every catalog entry. Bottom row: additional assessment with a stored verdict --- 61 entries are refuted and 50 unverified by the conjugate test, so a catalog entry is not automatically a level-2 pass; the hypotheses of the Bonnard--Caillau--Tr\'elat sufficiency theorem are checked numerically by \texttt{conj\_catalog\_pass} and \texttt{gates\_catalog\_pass} (the determinant is sampled at junctions, so this is an assessment, not a proof --- \S\ref{sec:proves}).}
 \label{fig:mt-verify}
 \end{figure}
 
 \begin{eli}
-Being a root of the equations only means the trajectory is a \emph{candidate}
---- a hilltop and a valley bottom both have zero slope. To know it is a valley
-we look at the second derivative, which for trajectories means: does a nearby
-trajectory that starts at the same place and satisfies the same equations
-come back and touch this one somewhere in the middle? If it does (a
-\emph{conjugate point}), the trajectory is not the shortest; think of two great
-circles from the north pole meeting again at the south pole --- past the south
-pole, the arc is no longer shortest.
+Being a root of the equations only means the trajectory is a \emph{candidate} --- a hilltop and a valley bottom both have zero slope. To know it is a valley we look at the second derivative, which for trajectories means: can an infinitesimally nearby trajectory that starts at the same place and satisfies the same equations be bent back to touch this one before the end? If it can (a \emph{conjugate point}), the trajectory stops being shortest from that point on. Think of great circles leaving the north pole: every arc is shortest until it reaches the south pole, and the moment it continues past it (the first conjugate point) a shorter route exists.
 \end{eli}
 
 \begin{intu}
@@ -421,43 +424,35 @@ exact degeneracies must be removed first or the determinant is identically
 zero: the control depends only on the \emph{direction} of $\lv$, so scaling
 $\lambda(0)$ changes nothing ($\Phi_{x\lambda}\lambda(0)=0$ exactly), and $\lm$
 never enters the control (its column is zero). The instrument therefore
-projects out $\lambda(0)$ (columns $P$ spanning its complement) and appends
+projects out $\lambda_{rv}(0)$ (columns $P$ spanning its complement) and appends
 the flow direction $f$ (free time). \emph{This quotient is proven equivalent
 to the Bonnard--Caillau--Tr\'elat construction on the $H=0$ slice}
-(\file{doc/mintime\_second\_order\_audit.tex}, image-space lemma).
+(\file{doc/mintime\_second\_order\_audit.tex}, image-space lemma), under the theorem's hypotheses --- normal extremal, all-burn control, $|\lv|>0$ so the feedback is smooth --- which is what the three gates below check.
 \end{intu}
 
 \begin{rig}
 \textbf{Instrument} (\file{ms\_conjugate\_test}, free-time form): with the
 segment STMs from the converged solve, $\Phi(t_{k+1},0)=\Phi_k\cdots\Phi_1$,
 \[
-D(t_{k+1})=\det\big[\,\Phi_{rv,\lambda_{rv}}(t_{k+1},0)\,P,\ \ f_{rv}(y(t_{k+1}))\,\big]\in\R^{6\times6},\qquad k=1..K,
+D(t_{k+1})=\det M(t_{k+1}),\qquad M=\big[\,\Phi_{rv,\lambda_{rv}}(t_{k+1},0)\,P,\ \ f_{rv}(y(t_{k+1}))\,\big]\in\R^{6\times6},\qquad k=1..K,
 \]
-sampled through $\tf$ (the terminal state comes from the engine). The block is
+with $P\in\R^{6\times5}$ an orthonormal basis of $\lambda_{rv}(0)^\perp$ (the $\lm$ column of $\Phi$ is dropped: $\lm$ never enters the control on the all-burn branch), sampled through $\tf$ (the terminal state comes from the engine). The block is
 equilibrated (positive row/column scaling, sign-safe), the sign is taken from a
 pivoted LU, the magnitude kept as a log-determinant (an underflowing raw det can
 never read as a root). Samples before the state block first attains full rank
 (an initial coast or saturated arc: structurally zero, not a focal point) are
 skipped. Verdict: FAIL if a sign change (or an isolated zero run) lies strictly
-before the last bracket; ENDPOINT if the only root is on the bracket ending
-at $\tf$ (a weak, non-strict minimum --- examine, do not refute); UNDETERMINED
+before the last bracket; ENDPOINT if the only sign change lies in the last bracket $(t_K,\tf]$: the root may sit at $\tf$ or strictly before it and the instrument cannot tell at junction resolution, so the verdict is inconclusive (never a PASS; refine the bracket before classifying --- 2 of 18,360 catalog entries); UNDETERMINED
 if nothing was testable; PASS otherwise.
 \textbf{Hypothesis gates} (\file{mintime\_hypothesis\_gates}, on the dense
 \file{tfMinProp} flight): $\min_t|\lv|>0$ (strong Legendre,
 $H_{\alpha\alpha}|_{TS^2}=\frac{T}{m}|\lv|I$); $\min_t \Qmt>0$ with
 $\Qmt=|\lv|/m+\lm/c$ (the all-burn assumption is the PMP control; this is
-\file{tfMinEoM}'s own switching function); and the abnormal-lift probe: lifts of
-a fixed trajectory form a linear space $S=\{\lambda:\dot\lambda=-A(t)^{\!\top}\lambda,\ \lv\parallel\alpha(t),\ \lm(\tf)=0\}$
-with $A$ the fixed-control Jacobian; $\lambda\cdot f$ is a linear functional on
-$S$ whose kernel is the abnormal lifts; our normal lift has $\lambda\cdot f=-1$,
-so \emph{no abnormal lift exists iff $\dim S=1$}, computed as $7-\operatorname{rank}C$
-for the stacked constraint matrix $C$, with the rank threshold tied to the
+\file{tfMinEoM}'s own switching function); and the abnormal-lift probe: \emph{stationary} lifts of a fixed trajectory form a linear space $S=\{\lambda:\dot\lambda=-A(t)^{\!\top}\lambda,\ \lv\parallel\alpha(t),\ \lm(\tf)=0\}$ with $A$ the fixed-control Jacobian (only the stationarity part of the direction condition is imposed, not the inequalities); $\lambda\cdot f$ is a linear functional on $S$, our normal lift has $\lambda\cdot f=-1$, so its kernel has dimension $\dim S-1$; a nonzero kernel element is an abnormal stationary lift, and every PMP abnormal lift is one of those. Hence \emph{$\dim S=1$ excludes every abnormal lift} --- the gate is sufficient for exclusivity of the normal lift, and conservative in the other direction ($\dim S>1$ would flag a stationary abnormal lift that need not satisfy the minimum condition). $\dim S=7-\operatorname{rank}C$ with $C=[\,[\alpha_k]_\times\Psi_v(t_k),\ k=1..200;\ e_m^{\!\top}\Psi(\tf)\,]$ stacked from the fundamental matrix $\Psi$ of $\dot\Psi=-A^{\!\top}\Psi$ ($\Psi_v$ its $\lv$ rows), with the rank threshold tied to the
 accuracy of the known member: $\mathrm{tol}=\min(\max(10^{-8}\sigma_1,\,10\,\|C\lambda_0\|/\|\lambda_0\|),\,10^{-3}\sigma_1)$
 (a null space cannot be resolved finer than its known member's residual; a
-fixed $10^{-8}$ under-counted 512 entries as ``$\dim S=0$'' on the first pass).
-\textbf{Status.} Conjugate test: 18,249 entries PASS / 61 refuted / 50
-unverified on the (pre-09-05) instrument; the corrected instrument reproduces
-the 20 golden verdicts. Gates: 18,360/18,360 pass, written into the catalogs
+fixed $10^{-8}$ under-counted 512 entries as ``$\dim S=0$'' on the first pass). This is a residual-informed numerical-rank heuristic, not a bound: when the residual scale exceeds the cap the dimension is reported unresolved (flagged, never counted as one), and the gate stores the singular values and the threshold it used.
+\textbf{Status.} Conjugate test (stored verdicts, produced by the pre-09-05 legacy instrument; the re-sweep on the corrected one is queued): 18,249 PASS / 61 refuted / 50 unverified, 2 of them ENDPOINT; the corrected instrument reproduces the 20 golden verdicts. Gates: 18,360/18,360 pass, written into the catalogs
 as \texttt{gate\_min\_lamv}, \texttt{gate\_min\_qmt}, \texttt{gate\_dimS};
 spectral gap $\sigma_7/\sigma_6\le2.5\times10^{-6}$ everywhere; $\min|\lv|$
 falls with thrust (593 entries below $10^{-4}$, all at $\ge2$ N) --- the
@@ -483,14 +478,14 @@ one segment or an even-multiplicity root is invisible. \textbf{Normality}:
 \begin{tikzpicture}[font=\small]
 \node[data] (mt) at (0,0) {min-time entry $z_8$\\$\tf^{\min}$, endpoints};
 \node[proc] (dir) at (4.3,0) {\textbf{direct min-energy}\\fixed $\tf=\gamma\tf^{\min}$\\CasADi+IPOPT};
-\node[proc] (msE) at (8.6,0) {\textbf{ms\_minenergy}\\$p=1$, fixed $\tf$\\7 unknown costates};
+\node[proc] (msE) at (8.6,0) {\textbf{ms\_minenergy}\\$p=1$, fixed $\tf$\\7 costates + $K{-}1$ junctions};
 \node[data] (rec) at (12.9,0) {record: $\lambda_0$, $K$, gates\\\file{minenergy\_pilot.mat}};
 \node[proc] (walk) at (12.9,-2.6) {\textbf{continuation walk}\\\texttt{run\_minfuel\_race}\\family $\in$ \{eps, huber, huberc\}\\$p:1\to0.001$ (+ $\delta$)};
-\node[data] (fuel) at (8.6,-2.6) {min-fuel solution\\$\lambda_0$, $Y_j$, $m_f$\\family, $p_{\rm floor}$, $\delta$};
+\node[data] (fuel) at (8.6,-2.6) {smoothed fuel candidate\\$\lambda_0$, $Y_j$, $m_f$\\family, $p_{\rm floor}$, $\delta$};
 \node[proc] (sweep) at (4.3,-2.6) {\textbf{conjugate sweep}\\\texttt{run\_conj\_fixedtf\_sweep}\\re-solve + verdict};
 \node[data] (cat) at (0,-2.6) {\textbf{min-fuel catalog} v3.1\\18 entries\\$\gamma$ 1.1$\to$2.0};
 \node[proc] (gw) at (12.9,-5.2) {\textbf{$\gamma$-walk}\\\texttt{run\_gamma\_walk}\\seeds where the direct\\solve fails ($\gamma\ge1.4$--$1.7$)};
-\draw[arr] (mt)--(dir); \draw[arr] (dir)--(msE); \draw[arr] (msE)--(rec); \draw[arr] (rec)--(walk);
+\draw[arr] (mt)--(dir); \draw[arr] (dir)--node[lbl,above]{duals $\to$ seed}(msE); \draw[arr] (msE)--(rec); \draw[arr] (rec)--(walk);
 \draw[arr] (walk)--(fuel); \draw[arr] (fuel)--(sweep); \draw[arr] (sweep)--(cat);
 \draw[arr] (gw)--node[lbl,right]{seeds}(walk);
 \draw[arr,dashed] (gw.east) -- ++(0.5,0) |- node[lbl,pos=0.25,right,align=left]{new records\\at higher $\gamma$} (rec.east);
@@ -531,7 +526,7 @@ sharpness is $p$.
 \addplot[green!45!black,thick,domain=1.2:1.8,samples=2,forget plot] {1};
 \end{axis}
 \end{tikzpicture}
-\caption{Throttle law $s^*=\arg\min_{[0,1]}(L(s)-sQ)$ for the three families at $p=0.3$ ($\delta=0.2$ for huberc). All three tend to the bang-bang step as $p\to0$; they differ in \emph{how} the step is approached --- and that difference decides where Newton walks and where it walls.}
+\caption{Throttle law $s^*=\arg\min_{[0,1]}(L(s)-sQ)$ for the three families at $p=0.3$ ($\delta=0.2$ for huberc). eps and huber tend to the bang-bang step as $p\to0$; huberc needs $\delta\to0$ too. They differ in \emph{how} the step is approached --- and that difference decides where Newton walks and where it walls.}
 \label{fig:families}
 \end{figure}
 
@@ -541,14 +536,13 @@ Each family is a running cost $L(s)$; the throttle law is its exact argmin
 \[
 \begin{array}{lll}
 \text{eps (Bertrand--Epenoy)} & L=(1-p)s+ps^2 & s^*=\mathrm{clip}\big(\tfrac{Q-(1-p)}{2p},0,1\big)\\[2pt]
-\text{huber (PLQ)} & L=\begin{cases}s^2/2p & s\le p\\ s-p/2 & s>p\end{cases} & s^*=\begin{cases}pQ&Q<1\\ 1&Q>1\end{cases}\ \text{(jump at }Q=1)\\[8pt]
-\text{huberc (hybrid)} & L=\begin{cases}s^2/2p & s\le p\\ \tfrac p2+(s-p)+\tfrac{\delta(s-p)^2}{2(1-p)} & s>p\end{cases} & s^*=\begin{cases}pQ&Q<1\\ p+(1-p)\tfrac{Q-1}{\delta}&1\le Q<1+\delta\\ 1&Q\ge1+\delta\end{cases}
+\text{huber (PLQ)} & L=\begin{cases}s^2/2p & s\le p\\ s-p/2 & s>p\end{cases} & s^*=\begin{cases}\max(pQ,0)&Q<1\\ [p,1]&Q=1\\ 1&Q>1\end{cases}\ \text{(jump; set-valued at }Q=1)\\[8pt]
+\text{huberc (hybrid)} & L=\begin{cases}s^2/2p & s\le p\\ \tfrac p2+(s-p)+\tfrac{\delta(s-p)^2}{2(1-p)} & s>p\end{cases} & s^*=\begin{cases}\max(pQ,0)&Q<1\\ p+(1-p)\tfrac{Q-1}{\delta}&1\le Q<1+\delta\\ 1&Q\ge1+\delta\end{cases}
 \end{array}
 \]
 At $p=1$, eps \emph{is} the min-energy field (exactly, dF $=0$); huber and
 huberc at $p=1$ give $s^*=\mathrm{clip}(Q,0,1)$ --- the same trajectory as
-min-energy but with costates halved (\S\ref{sec:seed}). At $p\to0$ all three
-tend to the bang-bang law. huberc is $C^0$ in $Q$ with $L$ strictly convex
+min-energy but with costates halved (\S\ref{sec:seed}). As $p\to0$, eps and huber tend to the bang-bang law; huberc at fixed $\delta$ tends instead to $s^*=\mathrm{clip}((Q-1)/\delta,0,1)$ and needs $\delta\to0$ as well --- which is exactly why its schedule has a second stage (\S\ref{sec:seed}). huberc is $C^0$ in $Q$ with $L$ strictly convex
 ($L''>0$ on both pieces, $C^1$ at $s=p$), so its argmin is unique; $\delta\to0$
 recovers huber.
 \end{rig}
@@ -564,11 +558,10 @@ below the jump its slope is $p$, gentle and getting gentler. But it walls on
 $\sim30\%$ of cells, and the wall has a signature: a switch about to be born or
 annihilated at a tangency of $Q$ with 1 (a grazing-risk structure change), where
 the trajectory map is not smooth in the unknowns. huberc keeps Huber's gentle
-core and replaces the jump with a short ramp of width $\delta$: continuous
-$\Rightarrow$ no corner $\Rightarrow$ it passed both Huber walls --- and, when
+core and replaces the jump with a short ramp of width $\delta$: continuous in $Q$ (its derivative still has corners at the band edges) --- it passed the two Huber walls tested --- and, when
 $\delta$ is held fixed at $\sim0.03$ during the $p$-walk, that walk is
 failure-free; the sharpening of $\delta$ afterwards costs what every family pays
-at the floor, and by then $m_f$ has converged to $10^{-6}$.
+at the floor, and by then $m_f$ has stabilized to $10^{-6}$ across rungs (an observed stabilization, not an error bound against the exact bang-bang optimum).
 \end{intu}
 
 \subsection{The seed and the walk}\label{sec:seed}
@@ -629,7 +622,7 @@ $Q=1$; the sensitivity matrix Newton needs must include the step.
 At a crossing of the switch surface $h(y)=Q(y)-1=0$ with incoming field $F^-$
 and outgoing $F^+$, the state transition matrix receives the jump
 \begin{equation}\label{eq:salt}
-\Phi^+=\Big[I+\frac{(F^+-F^-)\,n^{\!\top}}{n^{\!\top}F^-}\Big]\Phi^-,\qquad n=\nabla_y Q,
+\Phi^+=\Big[I+\frac{(F^+-F^-)\,n^{\!\top}}{n^{\!\top}F^-}\Big]\Phi^-,\qquad n=\nabla_y Q,\qquad n^{\!\top}F^-\neq0\ (\text{transversal crossing}),
 \end{equation}
 implemented by event-split propagation: integrate each smooth branch with the
 law pinned, stop at the event, apply \eqref{eq:salt}, restart on the other
@@ -691,9 +684,7 @@ minutes, every step conjugate-tested, and located two \emph{smooth} walls
 
 \begin{rig}
 \textbf{Level 1.} The ms residual and $H$ conservation certify the extremal;
-the reflight (fly \file{cr3bp\_minfuel\_prop} from $Y_j(:,1)$ over $\tf$ in the
-entry's own family) certifies the deliverable's recipe --- worst 0.22 km over
-the 18 entries. There is no foreign witness for min-fuel (pumpkyn has no twin;
+the reflight (fly \file{cr3bp\_minfuel\_prop} from the first junction, i.e. from $\lambda_0$ alone, over the full $\tf$ in the entry's own family) checks that the deliverable's own recipe reproduces the arc --- worst 0.22 km over the 18 entries, all $\le30$ d and about three revolutions, which is why $\lambda_0$-only reconstruction still works here; the junctions are shipped for the multiple-shooting re-solve and for longer arcs. There is no foreign witness for min-fuel (pumpkyn has no twin;
 MfMax is two-body). \textbf{Level 2.} \file{ms\_conjugate\_test} in its
 fixed-$\tf$ form: no flow column, no quotient (the running cost breaks the
 scaling invariance), rows $1{:}7$ --- the FULL state, mass included: an interior
@@ -702,24 +693,21 @@ then does its zero-extension give an admissible variation. (The mixed block
 $[1{:}6\ 14]$ used until 2026-09-05 is the terminal shooting Jacobian, meaningful
 only at $\tf$; the one ``refutation'' it produced was an initial-coast
 structural zero.) For the continuous families the branchwise-AD STM is the
-true flow derivative at transversal band crossings, so this is the ordinary
-Jacobi necessary condition; for huber entries the saltation STMs are used.
+true flow derivative provided every band-edge crossing ($Q=1\pm p$; $Q=1$ and $1+\delta$) is transversal ($\dot Q\neq0$ there; the feedback is Lipschitz with a piecewise-smooth derivative, so the flow is $C^1$), and then this is the Jacobi necessary condition; for huber entries the saltation STMs are used under the same transversality. Skipping the initial-coast samples is a diagnostic convention (the block is structurally rank-deficient there), not a theorem.
 \textbf{Binding.} \file{run\_conj\_fixedtf\_sweep} re-solves every packaged
 solution in its own family with STMs kept and stores the verdict with the
-$\lambda_0$, $p$, family and rows it was computed on; \file{build\_minfuel\_catalog}
-refuses any verdict that does not match the entry. Current: 26/26 PASS, all
+$\lambda_0$, $p$, family and rows it was computed on; \file{build\_minfuel\_catalog} looks the verdict up by source, cell and $\gamma$, then requires the re-solved initial costate to agree with the packaged one to $10^{-8}$ relative, rows $1{:}7$, and a converged re-solve --- the agreement test that ties the verdict to the shipped solution (the re-solve starts from the packaged junctions in the packaged family at its $p$ and $\delta$; the packaged junctions are kept, the re-solve is not substituted). Current: 26/26 PASS, all
 tested, none endpoint-only.
 \end{rig}
 \begin{warn}
 The catalog entries are solutions of the \emph{smoothed} problem at
 $p_{\rm floor}\approx10^{-3}$ (ramp width $\sim0.002$--$0.009$), not of the exact
-bang-bang problem; $m_f$ has converged to $\sim10^{-6}$ by then, switch times
+bang-bang problem; $m_f$ has stabilized to $\sim10^{-6}$ across rungs by then, switch times
 may still differ. Sufficiency for the fixed-$\tf$ free-mass problem needs the
 terminal-manifold (focal/backward-Riccati) construction, not built; the
 interior test is necessary-only. Below ramp width $\sim0.003$ every family
 stalls on this solver configuration --- past that the problem is a
-switching-time problem with fixed structure, which is the natural endgame and
-the same build as a strict certificate (Maurer--Osmolovskii).
+switching-time problem with fixed structure, which is the natural endgame and the base on which a strict certificate (reduced second variation plus switching regularity, Maurer--Osmolovskii) could then be tested.
 \end{warn}
 
 %======================================================================
@@ -738,7 +726,7 @@ the same build as a strict certificate (Maurer--Osmolovskii).
 \draw[arr] (a)--(b); \draw[arr] (b)--(c); \draw[arr] (b)--(d); \draw[arr] (c)--(d); \draw[arr] (d)--(e);
 \draw[arr] (e)--(f); \draw[arr] (f)--(g); \draw[arr] (e)--(h); \draw[arr] (h)--(g);
 \end{tikzpicture}
-\caption{Files of the fixed-$\tf$ line and what each carries. Everything downstream of a record is reproducible from the record's $\lambda_0$ and $K$ (or, for min-fuel, from $Y_j$ --- the identifiability rule: at deep $p$ the junctions, not $\lambda_0$ alone, identify the solution).}
+\caption{Files of the fixed-$\tf$ line and what each carries. Everything downstream of a record is reproducible from the record's $\lambda_0$ and $K$ (or, for min-fuel, from $Y_j$: the junctions carry the numerically stable representation the re-solve needs; energy records get by with $\lambda_0$ and $K$ because the smooth $p=1$ flow is far better conditioned).}
 \label{fig:files}
 \end{figure}
 
@@ -761,7 +749,7 @@ claim & min-time entry & min-fuel entry \\
 PMP extremal & ms residual $10^{-10}$; \textbf{foreign witness} (\texttt{tfMin}) to $|\Delta z|\sim10^{-9}$ & ms residual $3\!\times\!10^{-10}$, $H$ const, reflight; \emph{no foreign witness} \\
 no interior conjugate point & BCT determinant (proven equivalent to the theorem's construction), sampled at $K$ junctions & fixed-$\tf$ full-state determinant, sampled; necessary condition only \\
 sufficiency hypotheses & $\min|\lv|>0$, $\min\Qmt>0$, $\dim S=1$ --- gated, 18,360/18,360 pass & not applicable in this form (mixed bang / interior arcs; needs the terminal-manifold focal test) \\
-what a PASS licenses & ``normal extremal, no abnormal lift, strong Legendre and all-burn hold along the arc, no sign change of the BCT determinant at the sampled times'' & ``extremal of the smoothed problem at $p_{\rm floor}$, reflies to $<0.25$ km, no interior conjugate point at junction resolution'' \\
+what a PASS licenses & ``a numerically resolved normal PMP candidate, independently re-solved by a second code; the sampled Legendre and all-burn gates hold, the numerical lift space is one-dimensional, and the BCT determinant detector finds no conjugate-point evidence at the sampled times'' & ``a numerically resolved extremal candidate of the specified smoothed problem, reflying to $<0.25$ km, with no interior conjugate point detected by the sampled instrument'' \\
 not claimed & strict local minimality as a theorem (sampling); global optimality & bang-bang optimality (finite $p$); local minimality \\
 \bottomrule
 \end{tabular}
@@ -780,7 +768,7 @@ blows up on approach; no throttle family can help (no switch structure at
 $p=1$); pseudo-arclength in \file{ms\_bvp} ($\partial F/\partial\tf$ is available)
 is the candidate.
 \item \textbf{The floor} (ramp width $\lesssim0.003$): a switching-time Newton
-with fixed structure, which is also the strict second-order certificate.
+with fixed structure, which is also the base a strict second-order certificate would be tested on.
 \item \textbf{Deep thrust} (0.09 $\to$ 0.067 N): a basin wall at $\sim1.3$ revs,
 needs a winding-aware route.
 \end{itemize}

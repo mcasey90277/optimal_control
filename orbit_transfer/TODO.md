@@ -171,8 +171,14 @@ exists.
     (det from the STM integration between junctions), whose first targets
     are the 20 entries with min|λ_v| < 1e-5.
   - [ ] **Algorithm document** `doc/algorithms_orbit_transfer.tex` (2026-09-07,
-    16 pp, ELI5/intuition/rigor layering, 7 TikZ flow diagrams) — Mike's
-    review pending; feed corrections back into FINDINGS/manual.
+    18 pp, ELI5/intuition/rigor layering, 7 TikZ flow diagrams). **GPT-6
+    Astra doc-review applied 2026-09-07** (`doc/reviews/algorithms_doc_review_adjudicated_2026-09-07.md`:
+    4 P0 real — mass-costate sign, undeclared L≡1 normalization, huberc
+    needs δ→0 too, breakpoints used as durations — + 8 P1 accepted, 1
+    premise corrected, 1 partly declined; new §2.1 reimplementer
+    conventions). Mike's review pending; feed corrections back into
+    FINDINGS/manual. Queued from the review: refine ENDPOINT brackets
+    (2 catalog entries), min-time conj re-sweep on the corrected instrument.
   - [ ] **The two SMOOTH walls (γ≈1.43 on (6,8), ≈1.27 on (1,2)):** cond(J)
     grows 1–2 orders on approach — fold signature, unlike the Huber walls.
     First real candidate for pseudo-arclength continuation in `ms_bvp`

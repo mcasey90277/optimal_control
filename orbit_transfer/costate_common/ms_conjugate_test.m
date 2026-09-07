@@ -110,7 +110,7 @@ function out = ms_conjugate_test(info, spec)
 %   .verdict                char                    'PASS' | 'FAIL' (interior
 %                                                   root) | 'ENDPOINT' (root
 %                                                   only on the last bracket:
-%                                                   weak minimum, examine) |
+%                                                   inconclusive, refine) |
 %                                                   'UNDETERMINED' (nothing
 %                                                   testable)
 %   .pass                   logical                 verdict == 'PASS'
@@ -208,8 +208,11 @@ tested = ~isempty(live) && ~any(isnan(dets(live)));
 % zeros; a zero run between opposite signs is ONE root (the crossing), an
 % isolated zero run (same sign both sides, or at an end) is one touch/root.
 % A root whose bracket ends at the LAST sample (t = tf, or t_K when Yend is
-% absent) is an ENDPOINT root: flagged, never counted as interior -- a root
-% exactly at tf is a weak, non-strict minimum, not a refutation.
+% absent) is an ENDPOINT root: flagged, never counted as interior AND never
+% a PASS. At junction resolution the root may sit at tf or strictly before
+% it, so the verdict is INCONCLUSIVE -- refine the bracket before classifying
+% (Astra doc review 2026-09-07; the earlier 'weak minimum' reading was
+% unjustified).
 zeroTol = fieldd(spec, 'zeroTol', 0);
 nIn = 0;  nEnd = 0;  nTouch = 0;
 if tested

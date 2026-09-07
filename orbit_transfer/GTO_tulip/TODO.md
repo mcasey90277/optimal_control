@@ -526,9 +526,17 @@ optimum by ~2e-4. Record: `OPTIMALITY_CERTIFICATION.md` LEAD-5 + §6.
 - [ ] **Port cScale into `casadi_minfuel_sundman` as an opt-in branch** (was
   ladder item iii, now a correctness item, not a convenience). Until then the
   free-time solver is the reference formulation for tulip too.
-- [ ] Re-run `certify_minfuel_pmp` on a FREE-τ_f row: its physical-adjoint fit
-  is the wrong adjoint for fixed-τ_f rows (E4 adjudicated) and should now agree
-  with the raw duals where it did not before — a clean test of both instruments.
+- [x] ~~Re-run `certify_minfuel_pmp` on a FREE-τ_f row~~ DONE, negative: it
+  fails identically on both free rows (primer err 2.000, sign match 40–42%,
+  0–1 switches matched) while the raw duals are at 0.03°. Not sign-blindness
+  (1.3% anti-aligned) but scatter (61% of burn nodes) and a 10× drift of
+  |λ_LS|/|λ_raw| along the arc. E1 is real but does not explain E4; the LS
+  certifier's own "continuous-vs-discrete adjoint" account stands, and the
+  discriminator was run: its recursion's residual on the raw duals is UNIFORM
+  (median 1.8e-4/interval, no spikes at perigee or switches) — accumulation,
+  not a construction error. If the instrument is to be kept, fit the DISCRETE
+  adjoint of trapezoid collocation (the transposed scheme with the σ-weights,
+  Hager 2000), not a trapezoid discretisation of the continuous one.
 - [ ] The 25 → 23 switch-count change on the flagship under release deserves a
   look (basin move under the relaxed constraint vs. a genuinely shorter coast).
 - [x] Fixed today from the same review (files not in use by the probe):

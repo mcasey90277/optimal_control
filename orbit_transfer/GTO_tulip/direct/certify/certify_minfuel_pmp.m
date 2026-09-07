@@ -17,10 +17,16 @@ function cert = certify_minfuel_pmp(solFile, makePlot)
 % recursion fitted below is the PHYSICAL-time adjoint (lam_r' = -G' lam_v, ...).
 % The NLP this certifies holds tau_f FIXED as well as t_f, i.e. it carries the
 % isoperimetric constraint int dt/kappa = tauf0, whose adjoint has an extra
-% -grad(kappa)*(K/kappa) term in lam_r'. If that constraint binds (probe:
-% results/e1_freetauf), a physical-adjoint fit CANNOT reproduce the NLP's
-% costates and its disagreement with the raw-dual gate is expected -- the
-% "40-rev truncation" explanation above is then not established. Also note:
+% -grad(kappa)*(K/kappa) term in lam_r'. That constraint DOES bind (probe:
+% results/e1_freetauf, +2e-4 in m_f) -- but it is NOT why this fit fails: run
+% on the free-tau_f rows, where the physical adjoint is the right one, it
+% fails identically (primer err 2.000, sign match 40-42%), with 61% of burn
+% nodes scattered (not anti-aligned: 1.3%), a tenfold drift of
+% |lam_LS|/|lam_raw| along the arc, and a UNIFORM per-interval residual of
+% this recursion on the raw duals (median 1.8e-4, no spikes at perigee or
+% switches). So the "40-rev truncation" account above stands: this trapezoid
+% discretisation of the CONTINUOUS adjoint is not the discrete adjoint of
+% trapezoid collocation, and the two diverge over the arc. Also note:
 % the scale normalization rho=1 is a penalty, not a hard constraint; the mass
 % reconstruction assumes the primer fit succeeded; W(swIdx) samples the left
 % node of a switching interval. The description of the fit immediately below

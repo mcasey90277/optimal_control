@@ -17,9 +17,9 @@ function [rep, cert, info] = run_foc_tulip(matPath)
 %
 % INPUTS:
 %   matPath - certified row (.mat), e.g. 'sundman_minfuel_certified.mat'
-%             [char, default: that file beside this one -- the certified
-%             25-switch, 1.15x-min-time flagship, README.md "Certified
-%             result"]. Expected fields: out.X [8xnN], out.U [4xnN], sigma
+%             [char, default: ../lib/sundman_minfuel_certified.mat -- the
+%             published 25-switch 1.15x flagship; the best certified row at
+%             that t_f is ../lib/sundman_minfuel_basin24_f1150.mat]. Expected fields: out.X [8xnN], out.U [4xnN], sigma
 %             [nNx1], tauf0, pSund, rv0, rvf (sundman_homotopy.m save list).
 %
 % OUTPUTS:
@@ -50,7 +50,7 @@ end
 addpath(here);
 % cr3bp_common (cr3bp_lt_params) only -- pumpkyn/gto_tulip_endpoints not
 % needed here since rv0/rvf come straight from the artifact (same addpath
-% this folder's own sundman_homotopy.m uses).
+% ../lib/sundman_homotopy.m uses).
 addpath(fullfile(here, '..', '..', '..', 'cr3bp_common'));
 vcDir = fullfile(here, '..', '..', '..', 'verify_common');
 addpath(vcDir);
@@ -135,5 +135,6 @@ end
 % =============================================================================
 function v = getfield_default(s, f, dflt)
 % GETFIELD_DEFAULT  s.(f) if present and nonempty, else dflt.
+% INPUTS: s [struct]; f [char]; dflt [any].   OUTPUTS: v [any].   REFERENCES: none.
 if isfield(s, f) && ~isempty(s.(f)), v = s.(f); else, v = dflt; end
 end

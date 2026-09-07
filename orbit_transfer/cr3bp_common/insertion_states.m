@@ -6,7 +6,11 @@ function [rv0, rvf, meta] = insertion_states(target, criterion)
 %
 % INPUTS:
 %   target    - 'tulip' | 'elfo' [char]
-%   criterion - (optional) tulip: 'campaign'(default)|'maxydot'|'apoapsis'
+%   criterion - (optional) tulip: 'campaign'(default)|'maxydot'|'apoapsis'|'minspeed'
+%                 ('apoapsis' = apolune: the sampled tulip point FARTHEST from the
+%                 Moon. Until 2026-09-06 it was coded as the minimum rotating-
+%                 frame speed, which is not apolune in the CR3BP; that criterion
+%                 is kept as 'minspeed'.)
 %                          elfo:  'nearest'(default)|'apolune'|'perilune' [char]
 %
 % OUTPUTS:
@@ -64,11 +68,17 @@ switch lower(target)
       case 'maxydot'
         [~, rvf] = gto_tulip_endpoints(p);                      % max-ydot
         label = 'tulipMaxYdot';
-      case 'apoapsis'
+            case 'apoapsis'                                           % apolune
         [~, ~, tr] = gto_tulip_endpoints(p);
-        [~, idx] = min(vecnorm(tr(:,4:6), 2, 2));               % slowest point
+        rMoon = [1 - p.muStar, 0, 0];
+        [~, idx] = max(vecnorm(tr(:,1:3) - rMoon, 2, 2));       % farthest sampled point from the Moon
         rvf = tr(idx, 1:6);
         label = 'tulipApoapsis';
+      case 'minspeed'                                           % the pre-2026-09-06 'apoapsis'
+        [~, ~, tr] = gto_tulip_endpoints(p);
+        [~, idx] = min(vecnorm(tr(:,4:6), 2, 2));               % slowest rotating-frame point
+        rvf = tr(idx, 1:6);
+        label = 'tulipMinSpeed';
       otherwise, error('insertion_states:crit','unknown tulip criterion %s', criterion);
     end
   case 'elfo'

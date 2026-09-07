@@ -182,10 +182,28 @@ time state,
 t(\tau_f) \;=\; t_f ,
 \end{equation}
 which is a single scalar constraint and costs nothing structurally. The price
-is paid elsewhere, and it is the campaign's main open problem: with $\tau_f$
-fixed the winding number of the trajectory cannot grow, so a solution cannot be
-continued to a regime that needs \emph{more} revolutions (see
-\S\ref{sec:open}).
+is paid elsewhere, and it was misidentified for a month. It is \emph{not} that
+the winding number cannot grow (the thrust ladder later walked 25 to
+\SI{20}{\milli\newton} on this very formulation, \S\ref{sec:open}). It is
+that the two conditions together restrict the problem: every physical
+trajectory has its own regularized length,
+\begin{equation}
+\tau_f \;=\; \int_0^{t_f}\frac{\ud t}{\kappa(\vect{x}(t))} ,
+\end{equation}
+so holding $\tau_f$ at the seed's value adds the isoperimetric constraint
+$\int_0^{t_f}\ud t/\kappa = \tau_{f,0}$ to the fixed-time problem, and the
+solutions are extremals of that restricted problem. First-order checks cannot
+see it --- the control minimization is unaffected; only the costate equation
+acquires a $-\nabla\kappa\,(K/\kappa)$ term. It was found by external code
+review (2026-09-06) and measured the same day: releasing $\tau_f$ through the
+free-time solver's \texttt{cScale} slack state at the \emph{same} pinned $t_f$
+raises $m_f$ by $2.06\times10^{-4}$ on the published flagship and
+$2.46\times10^{-4}$ on the best certified row ($3$--$4$~g of propellant,
+$\texttt{cScale}\approx1.005$), an order of magnitude below the basin spreads
+but real. Every $m_f$ in this guide from the fixed-$\tau_f$ engine is a lower
+bound on the free-$\tau_f$ optimum by about $2\times10^{-4}$; the honest fix is
+the sparse slack state, which keeps the KKT matrix banded and is already what
+the min-time anchor and the thrust ladder use.
 
 \subsection{The nonlinear program}
 
@@ -420,6 +438,11 @@ never saved.
 That word is doing limited work, and the limits should be explicit:
 
 \begin{itemize}
+\item \textbf{It is a statement about a restricted problem.} With $\tau_f$
+fixed the NLP carries the isoperimetric constraint of \S3.2; the certified
+$m_f$ values are lower bounds on the free-$\tau_f$ optima by $\sim2\times10^{-4}$
+(measured 2026-09-06 on two rows). The rows are genuine extremals of the
+problem the solver poses, not of the problem the campaign states.
 \item \textbf{It is a first-order, discrete statement.} The NLP satisfies its
 own KKT conditions to tolerance. The generic first-order gate
 (\file{verify\_common}) additionally checks the discrete costates against the

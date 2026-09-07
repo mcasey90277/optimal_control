@@ -3,7 +3,7 @@ function p = cr3bp_ipopt_opts(maxIter, warmTight)
 %
 % Single source for the solver options shared, verbatim, by the three
 % CR3BP-family Sundman transcriptions:
-%   GTO_tulip/direct/sundman_minfuel/casadi_minfuel_sundman.m
+%   GTO_tulip/direct/lib/casadi_minfuel_sundman.m
 %   GTO_ELFO/direct/elfo/casadi_energy_freetf.m
 %   GTO_ELFO/direct/elfo/casadi_mintime_freetf.m
 %

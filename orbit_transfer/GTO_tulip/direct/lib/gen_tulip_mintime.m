@@ -1,27 +1,40 @@
 function outFile = gen_tulip_mintime(opts)
 % GEN_TULIP_MINTIME  Solve the GTO->tulip minimum-time (hard all-burn, s==1)
-% transfer directly, to certify tfMin_tulip and cross-check the pumpkyn/MS
-% indirect reference (cfg.tfMin). The tulip analog of elfo/gen_elfo_mintime: it
-% reuses the SAME target-agnostic solver casadi_mintime_freetf (in elfo/), with
-% the SINGLE-primary clock (moonZone=0 -> kappa=r1^pSund) matching the tulip
-% energy backbone. Loads the lowest tulip energy backbone, overrides throttle to
-% s==1, minimizes t(tau_f), saves + reports the acceptance diagnostics.
+% transfer directly, as a converged all-burn local min-time CANDIDATE to the
+% declared insertion point, and compare it with the pumpkyn/MS indirect
+% reference (cfg.tfMin). The tulip analog of GTO_ELFO/direct/elfo/
+% gen_elfo_mintime: it reuses the SAME target-agnostic free-final-time solver
+% casadi_mintime_freetf, by default with the TWO-primary Sundman clock
+% (opts.moonZone = 0.15; the single-primary clock, moonZone <= 0, overflows the
+% exact Hessian at the near-Moon terminal -- see the note in the body). Loads a
+% two-primary tulip energy seed, overrides the throttle to s==1, minimizes
+% t(tau_f), gates the result, saves + reports.
 %
-% Warm start: sundman_minfuel/results/energy/energy_f1120.mat (tf 7.046 ND =
-% 1.12x, single-primary, targets the far-Moon tulip point rvf the min-fuel front
-% uses). X is 8-row [r;v;m;t] (solver appends cScale); U is 4-row [alpha;s]
-% (solver drops the throttle row, enforcing s==1).
+% What a saved result IS: a converged all-burn extremal candidate that passes
+% the acceptance gate below. What it is NOT: a proof of the unrestricted
+% minimum-time problem (pinning s==1 must be justified by the throttle minimum
+% condition separately) nor of global minimality. Wording elsewhere should say
+% "agrees with the reference", not "certifies" it (external review 2026-09-06).
+%
+% Warm start: <campaign results>/energy_tulip_2p_<insertionLabel>.mat, the
+% two-primary energy seed written by gen_tulip_energy_2p for the same
+% insertion criterion. X is 8-row [r;v;m;t] (the solver appends cScale); U is
+% 4-row [alpha;s] (the solver drops the throttle row, enforcing s==1).
 %
 % INPUTS:
-%   opts - (optional) struct: .seedFile[results/energy/energy_f1120.mat]
-%          .maxIter[3000] .warmTight[false]
+%   opts - (optional) struct [scalar]:
+%          .seedFile  two-primary energy seed .mat   [<results>/energy_tulip_2p_<label>.mat]
+%          .moonZone  clock crossover radius, ND; <=0 = single-primary   [0.15]
+%          .maxIter   IPOPT cap                                          [3000]
+%          .warmTight tight (true) vs loose (false) warm start           [false]
 %
 % OUTPUTS:
-%   outFile - results/mintime_tulip_<insertionLabel>.mat (e.g. mintime_tulip_
-%             tulipCampaign.mat): X[9xnN], U[4xnN] (alpha + s==1 row for
-%             drop-in verify_elfo_seed compat), sigma, rv0, rvf, tauf0, tf(=tfMin),
-%             mf, cScale, maxDefect, minR1, pSund, qSund, moonZone(=0), insertion
-%             (= insMeta.label, the declared endpoint criterion; provenance only)
+%   outFile - <campaign results>/mintime_tulip_<insertionLabel>.mat [char]:
+%             X[9xnN], U[4xnN] (alpha + s==1 row for drop-in verify_elfo_seed
+%             compat), sigma[nNx1], rv0, rvf [1x6], tauf0, tf (the candidate
+%             min-time), mf, cScale, maxDefect, minR1, pSund, qSund, moonZone
+%             (the value used), insertion (= insMeta.label, the declared
+%             endpoint criterion; provenance only), fp (fingerprint)
 %
 % REFERENCES:
 %   [1] elfo/casadi_mintime_freetf.m (the solver, target-agnostic);
@@ -31,9 +44,17 @@ function outFile = gen_tulip_mintime(opts)
 if nargin < 1, opts = struct(); end
 gd = @(f,d) getdef(opts,f,d);
 here = fileparts(mfilename('fullpath'));  cd(here);  setup_paths();
-addpath(fullfile(here, '..', 'elfo'));      % casadi_mintime_freetf + verify_elfo_seed
-resDir = fullfile(here,'results');
+% The free-time solver lives in the ELFO campaign. Resolve it repo-relative:
+% this file sits in GTO_tulip/direct/lib, so '../elfo' (the pre-flatten
+% location) does not exist -- that stale addpath was masked by setup_paths
+% until the 2026-09-06 review caught it.
+repoRoot = fileparts(fileparts(fileparts(here)));           % .../orbit_transfer
+elfoDir  = fullfile(repoRoot, 'GTO_ELFO', 'direct', 'elfo');
+assert(isfolder(elfoDir), 'gen_tulip_mintime:noELFO', ...
+    'free-time solver folder not found: %s', elfoDir);
+addpath(elfoDir);                          % casadi_mintime_freetf + verify_elfo_seed
 cfg = minfuel_config();  p = cr3bp_lt_params(cfg.thrustN, cfg.m0kg, cfg.ispS);
+resDir = cfg.dirs.root;                    % the campaign results tree (direct/results)
 
 % ---- INSERTION POINT (edit here to retarget) ---------------------------------
 insertion = 'campaign';        % tulip: 'campaign'|'maxydot'|'apoapsis'  (elfo: 'nearest'|'apolune'|'perilune')
@@ -77,16 +98,34 @@ fprintf('  maxDefect=%.2e  maxUnit=%.2e  rendezvous=%.2e\n', out.maxDefect, out.
 fprintf('  minR1=%.4f (GTO perigee=%.4f)  tMonotone=%d  primerAlign=%.3f deg\n', ...
         out.minR1, rperi, out.tMonotone, out.primerAlignDeg);
 
-% cross-check vs the pumpkyn/MS indirect reference (cfg.tfMin)
+% acceptance gate (external review 2026-09-06, E8): the solver returns its
+% debug iterate on failure, and the diagnostics above are printed either way.
+% Refuse to compare or publish anything that is not converged, feasible,
+% unit-direction, on target, time-monotone and free of artificial-box hits.
+boxHit = isfield(out, 'boundSat') && isstruct(out.boundSat) && out.boundSat.hit;
+accept = out.success && strcmp(out.ipoptStatus, 'Solve_Succeeded') && ...
+         out.maxDefect < 1e-8 && out.maxUnit < 1e-8 && rferr < 1e-8 && ...
+         out.tMonotone && ~boxHit;
+if ~accept
+    error('gen_tulip_mintime:uncertified', ...
+        ['refusing to publish an unaccepted min-time candidate: status %s, ' ...
+         'defect %.2e, unit %.2e, rendezvous %.2e, tMonotone %d, boxHit %d'], ...
+        out.ipoptStatus, out.maxDefect, out.maxUnit, rferr, out.tMonotone, boxHit);
+end
+
+% comparison with the pumpkyn/MS indirect reference (cfg.tfMin). NOTE the two
+% need not target the same tulip point: cfg.tfMin (6.2907 ND) is the min-time
+% to the max-ydot point, while the 'campaign' insertion is the front's own
+% target (5.8267 ND, 2026-07-15). Agreement is a cross-check, not a proof.
 dRef = out.tf - cfg.tfMin;
-fprintf('\n  CROSS-CHECK vs indirect reference cfg.tfMin = %.6f ND:\n', cfg.tfMin);
-fprintf('    direct tfMin_tulip = %.6f ND   delta = %+.3e ND (%+.4f%%)\n', ...
+fprintf('\n  COMPARISON vs indirect reference cfg.tfMin = %.6f ND:\n', cfg.tfMin);
+fprintf('    direct candidate tf = %.6f ND   delta = %+.3e ND (%+.4f%%)\n', ...
         out.tf, dRef, 100*dRef/cfg.tfMin);
 if abs(dRef) < 1e-3
-    fprintf('    -> MATCH: direct solve CERTIFIES the indirect reference.\n');
+    fprintf('    -> AGREES with the indirect reference to %.1e ND (converged all-burn candidate).\n', abs(dRef));
 else
-    fprintf('    -> DIFFERS: 6.2907 likely a different tulip target; this is the\n');
-    fprintf('       true direct min-time to the front target (rvf). See notes.\n');
+    fprintf('    -> DIFFERS: the reference targets a different tulip point; this is the\n');
+    fprintf('       all-burn min-time candidate to the declared insertion (rvf). See notes.\n');
 end
 
 % save with a 4-row U (s==1 row) for drop-in compat with verify_elfo_seed / movie
@@ -108,5 +147,7 @@ end
 
 % ---------------------------------------------------------------------------
 function v = getdef(s, f, d)
+% GETDEF  s.(f) if present and nonempty, else d.
+% INPUTS: s [struct]; f [char]; d [any].   OUTPUTS: v [any].   REFERENCES: none.
 if isfield(s, f) && ~isempty(s.(f)), v = s.(f); else, v = d; end
 end

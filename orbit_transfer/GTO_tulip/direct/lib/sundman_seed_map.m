@@ -16,7 +16,9 @@ function [sigma, X0, U0, tauf0] = sundman_seed_map(Xseed, Useed, tf, sgNorm, pSu
 %   Useed  - seed controls [4xM]; rows 1:3 a thrust direction (unit OR cone
 %            [w] with |w|=s), row 4 the throttle s in [0,1]
 %   tf     - transfer time (ND) [scalar]
-%   sgNorm - seed node parameter [Mx1], any monotone range (normalized inside)
+%   sgNorm - seed node parameter [Mx1], AFFINE in physical seed time (any
+%            affine range; normalized inside). An arbitrary monotone
+%            parameter is not enough: tSeed = sgNorm*tf below assumes it.
 %   pSund  - Sundman power [scalar]
 %   muStar - CR3BP mass ratio [scalar]
 %   rv0    - departure state to pin at node 1 [1x6]
@@ -27,12 +29,33 @@ function [sigma, X0, U0, tauf0] = sundman_seed_map(Xseed, Useed, tf, sgNorm, pSu
 %   X0    - warm-start states [8x M'] ([r;v;m;t])
 %   U0    - warm-start controls [4x M'] ([alpha;s], ||alpha||=1)
 %   tauf0 - total regularized length [scalar]
+%
+% REFERENCES:
+%   [1] casadi_minfuel_sundman.m (the consumer; its carried-time trapezoid is
+%       inverted exactly here so the seed carries no time defect).
+%   [2] ../../process/LOW_THRUST_MINFUEL_CAMPAIGN.md, "no-resample seed".
 
 sgNorm = sgNorm(:);  sgNorm = (sgNorm - sgNorm(1))/(sgNorm(end) - sgNorm(1));
 tSeed  = sgNorm * tf;                                  % physical time per node
 
 w = Useed(1:3,:);  s = Useed(4,:);
-alpha = w ./ max(sqrt(sum(w.^2,1)), 1e-9);             % unit direction (guarded)
+% unit direction. A cone seed has w = 0 on coast nodes; the old guard returned
+% alpha = 0 there, which is NOT a unit vector and makes the gradient of the
+% ||alpha||=1 constraint vanish at the warm start (review 2026-09-06, E7). Use
+% the nearest valid direction along the mesh, else a fixed unit fallback.
+nw = sqrt(sum(w.^2, 1));  good = nw > 1e-12;
+alpha = zeros(size(w));
+alpha(:, good) = w(:, good) ./ nw(good);
+if any(~good)
+    if any(good)
+        gi = find(good);
+        for kb = find(~good)
+            [~, jn] = min(abs(gi - kb));  alpha(:, kb) = alpha(:, gi(jn));
+        end
+    else
+        alpha(:, ~good) = repmat([1; 0; 0], 1, nnz(~good));
+    end
+end
 
 r1  = sqrt((Xseed(1,:)+muStar).^2 + Xseed(2,:).^2 + Xseed(3,:).^2).';
 kap = r1.^pSund;

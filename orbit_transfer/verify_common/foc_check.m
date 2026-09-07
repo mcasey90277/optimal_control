@@ -41,7 +41,26 @@ function rep = foc_check(out, sigma, man, opts)
 %         .lamTimeCoV       time-costate coefficient of variation
 %         .lamTimeEnd       time-costate value at the final node
 %         .lamMassEndMapped free-final-mass transversality residual (relative),
-%                           Hager-mapped terminal covector -- THE GATED VALUE
+%                           Hager-mapped terminal covector assembled from the
+%                           OBJECTIVE and DEFECT rows only -- THE GATED VALUE
+%         .lamMassEndFullGL the same entry read off the FULL Lagrangian
+%                           gradient (includes any other constraint touching
+%                           the terminal mass, e.g. an active box); reported
+%                           beside the gated value so a box multiplier can
+%                           never silently cancel a nonzero mapped costate
+%                           (review 2026-09-06, E3)
+%         .dirSignedMax     max over burn nodes of ||beta + q/||q|||| with q the
+%                           Lagrangian gradient w.r.t. beta minus the unit-norm
+%                           dual: the SIGNED Hamiltonian minimum condition
+%                           beta = -q/||q|| (0 = minimum, 2 = maximum). The
+%                           tangential residual .dirTanMax is sign-blind
+%                           (review 2026-09-06, E2). GATED at 1e-2.
+%         .dirSignedMed     median of the same over burn nodes
+%         .sdotMinRelPhys   as .sdotMinRel but differenced against the carried
+%                           TIME state, so the sigma->t clock (tauf*kappa, and
+%                           cScale where present) is divided out; NaN when the
+%                           manifest has no timeRow (review 2026-09-06, I4;
+%                           report-only, not gated)
 %         .singularArcNodes count of >=3-node near-zero switching-function runs
 %         .sdotMinRel       minimum relative |Sdot| across detected switches
 %         .nSwitches        number of burn/coast sign changes
@@ -157,6 +176,37 @@ else
     rep.dirTanMax = 0;  rep.dirTanMed = 0;
 end
 
+% --- (3b) minimum condition, direction part, SIGNED ---------------------------
+% The tangential residual above is zero for BOTH the Hamiltonian-minimizing
+% direction (beta antiparallel to the coefficient q) and the maximizing one
+% (parallel), and the engines pick the global costate sign from the observed
+% steering -- so (3) cannot tell a minimum from a maximum (review 2026-09-06,
+% E2). The signed test: q = gradient of the Lagrangian w.r.t. beta WITHOUT the
+% unit-norm (betaNorm) dual. Because the sign s was resolved so that
+% stationarity holds for the actual Lagrangian, q is (a positive mesh weight
+% times) the Hamiltonian's beta-gradient with the minimizing sign -- no sign
+% guess is involved. Minimizing q'beta over the unit sphere gives
+% beta = -q/||q||; the maximizer gives +q/||q||. Direction-box duals are
+% inactive at ||beta||=1 (box +-1.1) and contribute nothing.
+if ~isempty(man.dirRows)
+    lamQ = lamAll;  lamQ(rowsOf('betaNorm')) = 0;
+    gQ = gf + s*(A.'*lamQ);
+    signedErr = nan(1,N1);
+    for k = 1:N1
+        b = U(man.dirRows,k);  b = b/norm(b);
+        q = gQ(uix(man.dirRows,k));
+        if norm(q) > 0, signedErr(k) = norm(b + q/norm(q)); end
+    end
+    if any(burn & ~isnan(signedErr))
+        rep.dirSignedMax = max(signedErr(burn));  rep.dirSignedMed = median(signedErr(burn), 'omitnan');
+    else
+        rep.dirSignedMax = NaN;  rep.dirSignedMed = NaN;
+    end
+    checks{end+1} = 'dirSigned';
+else
+    rep.dirSignedMax = NaN;  rep.dirSignedMed = NaN;
+end
+
 % --- (4) nodal costates (sign-resolved) --------------------------------------
 assert(numel(defRows) == nx*Nseg, ...
     'foc_check: defect group has %d rows, expected nx*Nseg = %d -- creg mis-registered?', ...
@@ -210,13 +260,26 @@ end
 % spurious 1.265e-03 "finding" on the earth 2.5 N row that the mapped covector
 % resolves to 2.27e-18. History: verify_common/doc/first_order_checks.tex and
 % OPTIMALITY_CERTIFICATION.md.
+% CORRECTION 2026-09-06 (review E3): the full-gradient entry gL(...) is NOT in
+% general the mapped terminal covector -- if another constraint touches the
+% terminal mass (an active box), its multiplier can cancel a NONZERO mapped
+% mass costate and the full entry reads zero. The gated value is therefore
+% assembled from the OBJECTIVE and the DEFECT rows only; the full-gradient
+% entry is kept as a companion so any such cancellation is visible as a
+% difference between the two. (The "cannot fail unless kktStat has" claim in
+% the earlier comment is also false for the RELATIVE test, whose divisor can
+% be small.) Neither objective in the current campaigns has a terminal mass
+% cost, which the objective+defect assembly assumes.
 if ~isempty(man.massRow) && man.massFreeAtTf
     scale = max(abs(rep.lam(man.massRow,:)));
     xix   = @(rows,k) (k-1)*nx + rows;
-    rep.lamMassEndMapped = abs(gL(xix(man.massRow, N1))) / max(scale,1e-30);
+    lamD  = zeros(size(lamAll));  lamD(defRows) = lamAll(defRows);
+    gObjDef = gf + s*(A.'*lamD);
+    rep.lamMassEndMapped = abs(gObjDef(xix(man.massRow, N1))) / max(scale,1e-30);
+    rep.lamMassEndFullGL = abs(gL(xix(man.massRow, N1))) / max(scale,1e-30);
     checks{end+1} = 'transversality';
 else
-    rep.lamMassEndMapped = NaN;
+    rep.lamMassEndMapped = NaN;  rep.lamMassEndFullGL = NaN;
 end
 
 % --- (7) singular arcs + regular switching (Sdot != 0) -----------------------
@@ -243,7 +306,7 @@ end
 % CAVEAT that survives this fix (GPT): no threshold on a SINGLE mesh is
 % defensible. Regularity should be asserted only if R stays above the floor on
 % two meshes; the sdotMin gate is provisional until recalibrated.
-rep.singularArcNodes = NaN;  rep.sdotMinRel = NaN;
+rep.singularArcNodes = NaN;  rep.sdotMinRel = NaN;  rep.sdotMinRelPhys = NaN;
 rep.nSwitches = 0;  rep.Sdeweighted = [];
 if ~isempty(man.thrRow)
     hs = diff(sg(:).');
@@ -272,10 +335,20 @@ if bangBang
         if nearZ(k), runL = runL+1; else, runL = 0; end
         if runL >= 3, rep.singularArcNodes = rep.singularArcNodes + 1; end
     end
-    if ~isempty(swI)
+        if ~isempty(swI)
         ka = max(swI,1);  kb = min(swI+1,N1);
         D  = abs(rep.Sdeweighted(kb) - rep.Sdeweighted(ka)) ./ max(sg(kb).' - sg(ka).', 1e-30);
         rep.sdotMinRel = min( (sg(end)-sg(1)) * D / Sref );
+        % PHYSICAL-TIME variant (review 2026-09-06, I4): the sigma statistic
+        % above still carries the sigma->t clock (tauf*kappa, and cScale where
+        % present), so a switch at perigee and one at apogee are not on the
+        % same footing. Differencing against the carried time state divides
+        % the clock out without the manifest having to know its form.
+        if ~isempty(man.timeRow)
+            tt = X(man.timeRow,:);
+            Dt = abs(rep.Sdeweighted(kb) - rep.Sdeweighted(ka)) ./ max(tt(kb) - tt(ka), 1e-30);
+            rep.sdotMinRelPhys = min( (tt(end)-tt(1)) * Dt / Sref );
+        end
     end
     checks = [checks, {'singularArc','sdotRegular'}];
 end
@@ -305,8 +378,9 @@ okSign  = isnan(rep.signPct)          || rep.signPct >= tolSign;
 okTrans = isnan(rep.lamMassEndMapped) || rep.lamMassEndMapped <= tolTrans;
 okSdot  = isnan(rep.sdotMinRel)       || rep.sdotMinRel > sdotMin;
 okSing  = isnan(rep.singularArcNodes) || rep.singularArcNodes == 0;
+okDir   = isnan(rep.dirSignedMax)      || rep.dirSignedMax <= 1e-2;   % signed minimum condition (E2)
 rep.pass = rep.kktStatInf <= tolStat && rep.dirTanMax <= tolStat && ...
-           okSign && okTrans && okSing && okSdot;
+           okSign && okTrans && okSing && okSdot && okDir;
 
 % --- (opt) conjugate-point test (second-order, ADVISORY) ---------------------
 % Available since migration #5: pass opts.msInfo (an ms_bvp info struct with
@@ -325,5 +399,7 @@ end
 end
 
 function v = fcdef(o, f, dflt)
+% FCDEF  o.(f) if present and nonempty, else dflt.
+% INPUTS: o [struct]; f [char]; dflt [any].   OUTPUTS: v [any].   REFERENCES: none.
 if isfield(o,f) && ~isempty(o.(f)), v = o.(f); else, v = dflt; end
 end

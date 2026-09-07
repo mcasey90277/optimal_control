@@ -13,6 +13,20 @@ function cert = certify_minfuel_pmp(solFile, makePlot)
 % consistency diagnostic + scaffold (report/figure/switch-alignment reusable).
 % See TIER1_PMP_CERTIFICATION_SCOPE.md (FINDING) for the full account.
 %
+% CAVEAT ADDED 2026-09-06 (external code review, findings E1/E4): the adjoint
+% recursion fitted below is the PHYSICAL-time adjoint (lam_r' = -G' lam_v, ...).
+% The NLP this certifies holds tau_f FIXED as well as t_f, i.e. it carries the
+% isoperimetric constraint int dt/kappa = tauf0, whose adjoint has an extra
+% -grad(kappa)*(K/kappa) term in lam_r'. If that constraint binds (probe:
+% results/e1_freetauf), a physical-adjoint fit CANNOT reproduce the NLP's
+% costates and its disagreement with the raw-dual gate is expected -- the
+% "40-rev truncation" explanation above is then not established. Also note:
+% the scale normalization rho=1 is a penalty, not a hard constraint; the mass
+% reconstruction assumes the primer fit succeeded; W(swIdx) samples the left
+% node of a switching interval. The description of the fit immediately below
+% is the original design; the implementation has since evolved to a signed,
+% bounded lsqlin fit with auxiliary magnitude variables -- read the code.
+%
 % Independent verification that the converged Sundman-regularized minimum-fuel
 % GTO -> tulip solution is a genuine Pontryagin extremal. The position-velocity
 % costate block is a LINEAR homogeneous system driven only by the state; the
@@ -43,7 +57,7 @@ function cert = certify_minfuel_pmp(solFile, makePlot)
 % INPUTS:
 %   solFile  - (optional) path to a certified-solution .mat OR a struct with
 %              fields {out,sigma,tauf0,pSund,eps,rv0,rvf}. Default:
-%              'sundman_minfuel_certified.mat' beside this file. [char|struct]
+%              '../lib/sundman_minfuel_certified.mat'. [char|struct]
 %   makePlot - (optional) draw the S(t) vs throttle figure [logical, default true]
 %
 % OUTPUTS:
@@ -212,8 +226,8 @@ signMatchFrac = mean(sgnok(strict));
 
 sSwIdx = find(diff(double(Sv < 0)) ~= 0);
 tolNodes = 3;  matched = 0;
-for i = 1:numel(swIdx)
-    if any(abs(sSwIdx - swIdx(i)) <= tolNodes), matched = matched + 1; end
+for kSw = 1:numel(swIdx)
+    if any(abs(sSwIdx - swIdx(kSw)) <= tolNodes), matched = matched + 1; end
 end
 
 primerDirErr = 0;
@@ -260,8 +274,8 @@ if makePlot
     yyaxis right
     plot(cert.tDays, s, 'LineWidth', 1.0);
     ylabel('throttle  s'); ylim([-0.05 1.05]);
-    for i = 1:numel(swIdx)
-        xline(cert.tDays(swIdx(i)), '-', 'Alpha', 0.12, 'HandleVisibility','off');
+        for kSw = 1:numel(swIdx)
+        xline(cert.tDays(swIdx(kSw)), '-', 'Alpha', 0.12, 'HandleVisibility','off');
     end
     xlabel('time (days)');
     title(sprintf('S sign-changes at %d/%d throttle switches   (primer err %.1e)', ...
@@ -271,5 +285,7 @@ end
 end
 
 function out = ternary(cond, a, b)
+% TERNARY  a if cond else b.
+% INPUTS: cond [logical]; a, b [any].   OUTPUTS: out [any].   REFERENCES: none.
 if cond, out = a; else, out = b; end
 end

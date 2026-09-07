@@ -498,3 +498,51 @@ multiplicity, switch count as a band), the ladder outcome (20 mN reached; ceilin
   `cScale` into `casadi_minfuel_sundman` as an opt-in branch (TODO ladder item
   step iii). Until then the 20 mN numbers in the docs are labelled
   certified-quality, not certified.
+
+## 2026-09-06 — E1: the fixed-τ_f transcription solves a restricted problem (MEASURED)
+
+External code review (Astra, `doc/reviews/direct_core_chain_gpt6astra_review_2026-09-06.md`, E1):
+fixing τ_f = tauf0 AND pinning t(τ_f) = t_f adds the isoperimetric constraint
+∫dt/κ = tauf0. Probe `direct/certify/probe_e1_free_tauf.m` (same mesh, same pinned
+t_f, τ_f freed through `casadi_energy_freetf`'s cScale, ε=0 direct re-solve):
+
+| row | m_f fixed | m_f free | Δm_f | ΔV free | prop free | cScale | sw |
+|---|---|---|---|---|---|---|---|
+| published flagship (25 sw) | 0.84906583 | 0.84927223 | +2.06e-4 | 3.3645 km/s | 2.2609 kg | 1.00484 | 23 |
+| basin-24 winner | 0.85008728 | 0.85033334 | +2.46e-4 | 3.3388 km/s | 2.2450 kg | 1.00598 | 24 |
+
+~3–4 g per row, 0.15% of propellant, an order of magnitude below the basin
+spreads (so the six-optima ordering stands) but 200× the pre-registered "real"
+threshold. Every published fixed-τ_f m_f is a lower bound on the free-τ_f
+optimum by ~2e-4. Record: `OPTIMALITY_CERTIFICATION.md` LEAD-5 + §6.
+
+- [ ] **Decide: re-solve the ΔV–t_f front free-τ_f before the paper quotes it.**
+  The machinery exists (`casadi_energy_freetf`, moonZone ≤ 0, tfTarget = t_f,
+  ε=0 from each stored row — the probe's recipe, ~2 min per row on the stored
+  mesh). Suggested: a `probe_e1_free_tauf` sweep over every `minfuel_best_f####`
+  and front row, reported as a Δm_f column; then either (a) publish the free-τ_f
+  numbers with the fixed-τ_f rows as the seeds, or (b) publish fixed-τ_f with the
+  ~2e-4 caveat. (a) is the honest one.
+- [ ] **Port cScale into `casadi_minfuel_sundman` as an opt-in branch** (was
+  ladder item iii, now a correctness item, not a convenience). Until then the
+  free-time solver is the reference formulation for tulip too.
+- [ ] Re-run `certify_minfuel_pmp` on a FREE-τ_f row: its physical-adjoint fit
+  is the wrong adjoint for fixed-τ_f rows (E4 adjudicated) and should now agree
+  with the raw duals where it did not before — a clean test of both instruments.
+- [ ] The 25 → 23 switch-count change on the flagship under release deserves a
+  look (basin move under the relaxed constraint vs. a genuinely shorter coast).
+- [x] Fixed today from the same review (files not in use by the probe):
+  `gen_tulip_mintime` stale `../elfo` addpath + `lib/results` target, acceptance
+  gate before publishing, "agrees" not "certifies"; `insertion_states`
+  'apoapsis' now apolune ('minspeed' keeps the old criterion); `sundman_seed_map`
+  unit-direction fallback on coast nodes; `foc_check` signed primer minimum
+  condition (gated), objective+defect mapped terminal covector (full-gradient
+  value kept as companion), physical-time Ṡ regularity (report-only); stale
+  cross-references in `cr3bp_ipopt_opts`, `run_foc_tulip`, `certify_minfuel_pmp`
+  (+ its E1/E4 caveat), the engine header (equivalence claim retracted).
+- [ ] `test_run_gto_tulip` has been red since the ladder landed (2026-07-27), not
+  from today's changes: its declared-name check reads `run_tulip_ladder.m` --
+  a SCRIPT with local functions -- as "declares sharpenLabel()". Either exempt
+  scripts (no leading `function`) in the check or give the ladder's helpers
+  their own files. The other three fast tests and both `verify_common` toy
+  tests pass on 2026-09-06 with the signed-primer / mapped-covector changes.

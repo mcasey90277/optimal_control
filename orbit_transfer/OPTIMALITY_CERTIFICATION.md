@@ -636,6 +636,46 @@ above, not be flattened to a bare PASS.
 
 ---
 
+**LEAD-5 (new, 2026-09-06) — the fixed-τ_f transcription may certify a restricted
+problem.** External code review of the direct core chain (GPT-6 Astra,
+`GTO_tulip/doc/reviews/direct_core_chain_gpt6astra_review_2026-09-06.md`, E1):
+`casadi_minfuel_sundman` holds τ_f FIXED (= tauf0 from the seed) and pins
+t(τ_f) = t_f. Every physical trajectory has its own regularized length
+τ_f = ∫₀^{t_f} dt/κ(x), so fixing it adds the isoperimetric constraint
+∫dt/κ = tauf0 to the fixed-time problem — the certified rows are then extremals
+of a restricted problem. First-order checks cannot see it (the control
+minimisation is unaffected; only the costate ODE gains a −∇κ·(K/κ) term), which
+is also the most economical explanation of the recorded raw-dual PASS vs
+LS-reconstruction FAIL on the flagship (Part A, Task-8 note): the raw duals
+belong to the constrained NLP, `certify_minfuel_pmp` fits the physical adjoint.
+Existing evidence that the constraint binds: TODO P0 (2026-07-26) freed τ_f via
+`cScale` at the flagship t_f and got cScale = 1.0051. UNMEASURED: the effect on
+m_f at ε = 0. Probe launched 2026-09-06:
+`GTO_tulip/direct/certify/probe_e1_free_tauf.m` (fixed-τ_f re-solve as the
+like-for-like baseline, then `casadi_energy_freetf` with τ_f free and t_f
+pinned; pre-registered reading |Δm_f| < 1e-7 formal / > 1e-6 real).
+
+**RESULT (2026-09-06, same day) — CONFIRMED, number-changing.** Both rows
+re-solved directly at ε = 0 (tight warm start, no fallback) on their own mesh
+at the same pinned t_f: published flagship m_f 0.84906583 → **0.84927223**
+(Δm_f +2.06e-4, −3.10 g propellant, cScale 1.00484, 25 → 23 switches, defect
+3.4e-14); basin-24 winner 0.85008728 → **0.85033334** (Δm_f +2.46e-4, −3.69 g,
+cScale 1.00598, 24 → 24 switches, defect 7.0e-15). 200× the "real" threshold,
+~0.15% of propellant, an order of magnitude below the basin spreads (1.4–3e-3):
+the six-optima ordering stands, but **every published fixed-τ_f m_f is a lower
+bound on the free-τ_f optimum by ~2e-4**, and every fixed-τ_f row is an
+extremal of the restricted problem. Artifacts `GTO_tulip/direct/results/
+e1_freetauf/`. Consequences: (i) `casadi_minfuel_sundman`'s "equivalent to a
+fixed-time problem" claim is retracted in its header and in the guide; (ii) the
+port of `cScale` into the tulip engine (TODO ladder item iii) is promoted from
+convenience to correctness; (iii) the front's published m_f values should be
+re-solved free-τ_f before the paper quotes them — a campaign decision, not
+done here; (iv) `certify_minfuel_pmp`'s physical-adjoint fit is the wrong
+adjoint for the fixed-τ_f rows (E4 adjudicated in E1's favour); on free-τ_f
+rows it becomes the right one and should be re-run there.
+
+
+
 ## 5. Decision — what to build next, and why
 
 **Build the STM / multiple-shooting switching-time Hessian.**
@@ -712,6 +752,8 @@ campaign/row, verdict, and what it changed in Part A or §1–§5.
 | 2026-08-14 (min-energy pilot) | first-order, indirect route: fixed-t_f `ms_minenergy` residual, generic single-shooting acceptance `ss_bvp_accept`, Hamiltonian first-integral check, direct-vs-indirect cost agreement, flown arrival | DRO→tulip 12×12 cells (2,5)/(6,8)/(1,2), fixed t_f = γ·t_f^min, γ ∈ {1.1,1.2,1.4}, MIN-ENERGY J=∫s² | **5/5 PASS all seven gates**: ms ‖R‖ ≤ 7e-11 (2–3 iters, K=12), accept |Δz| ≤ 3e-10, |ΔH| 3e-9..4e-8, indirect flight lands 0.000–0.053 km, J agree ~1e-5, m_f agree to 6 digits | first non-min-time coverage; **no second-order verdict for min-energy entries** (`ms_conjugate_test` is free-time-specific — a fixed-tf Jacobi test is an open item); single-shooting residual floor measured at ~6e-7 (with/without-STM flights) — acceptance must be judged by |Δz| at that floor, never at the ms 1e-10 (record in `DRO_tulip/FINDINGS.md`) |
 | 2026-08-27..29 (GTO→tulip catalog fleet, Stage B) | the standing three-gate pipeline at catalog scale (multiple-shooting `ms_tfmin` residual, flown-arrival <100 km, `pumpkyn.cr3bp.tfMin` acceptance |Δz|<1e-6), run over 16 sheets via the warm-recipe two-point top-rung multistart (thrLock, tf0=0.30 primary + scoped cold tf0=4.0 mop-up), following the 2026-08-25 flagship-anchor row above onto the Darin-standard 1–15 N (few-rev) regime instead of the 25 mN flagship | GTO (4 orientations {0,90,180,270}° × 4 Np {5,7,9,12}) → tulip, 12×6 phasing grid, rungs `[15 12 10 7 5]` N | **2,625 entries accepted, 840/1,152 phase pairs (73%)**, 136 full 5-rung ladders, all three-gate certified (independently re-verified by a 3-entry sheet-local replay audit, `audit_gto_entries.m`, 2/2 hard gates on all 3 rows); coverage by orientation 240/207/156/237 of 288 (83/72/54/82%) — orientDeg=180° (apogee toward the Moon) is a genuine cold-basin hard corner (53–56% per sheet, 1–2 full ladders), not a mesh artifact (Diagnostic A: escalating mesh resolution made the original failure *worse*) | Stage B (§6 step 6 of `STATUS_AND_ROADMAP.md`) **DONE**; first costate catalog built on a non-periodic departure family (`'gto'` pseudo-family, Task 1); the 3–1 N legs of the standard ladder produced **zero** entries by both recipes — a measured closure wall, split off as the deep-rung investigation (open item, `STATUS_AND_ROADMAP.md` §5.B); catalog README `GTO_tulip/catalog/README.md` |
 | 2026-08-29 (GTO→tulip catalog conjugate sweep) | `ms_conjugate_test` at catalog scale via `costate_common/conj_catalog_pass` (same instrument as the 2026-08-23 catalog sweep row: fly stored z8 → K=24 junction seed → 1-iteration ms re-solve with STMs → quotiented Jacobi dets; verdict only when re-solve reproduces the entry) | the GTO→tulip catalog above — 2,625 min-time entries, 16 sheets | **2,625 PASS / 0 FAIL / 0 unverified** (100%) — every accepted entry has zero interior conjugate-point crossings (`conj_ncross = 0` on all 2,625); re-solve fidelity 9.6e-16..1.1e-8, comfortably inside the 1e-6 honesty gate; 610 s wall (0.232 s/entry). **Stronger than the DPO precedent** (3,931 PASS / 1 FAIL, 99.97%) — two plausible, unconfirmed structural differences recorded: this fleet's warm-recipe multistart (vs DPO's cold-start ladder) and its 5 N thrust floor (vs DPO's 1 N floor, where deep many-rev rungs carry more junction structure) | every GTO→tulip catalog entry now carries a second-order-necessary verdict (rung 3½ of the ladder), matching the other five shipped catalogs; verdicts stored in the catalog itself (`conj_pass`/`conj_ncross`/`conj_atfinal` per sheet + `conj_test` provenance, schema-validated `{}`); the zero-refutation contrast with DPO is recorded as an open hypothesis, not proof — a genuine test needs a comparable deep-rung GTO sweep, which does not exist yet |
+| 2026-09-06 (external code review, direct core chain) | GPT-6 Astra (raw API, $1.11) over 14 files: cr3bp_lt_params → minfuel_config → endpoints → ipopt opts → seed map → `casadi_minfuel_sundman` → `minfuel_at_tf` → `run_certified_minfuel` → `certify_minfuel_pmp` → `run_foc_tulip` → `foc_check` → `gen_tulip_mintime` → `casadi_mintime_freetf` | GTO→tulip direct campaign, code not rows | **9 errors / 7 imprecisions / 5 readability.** Clean: rotating-frame forces, Sundman scaling of every state and the objective measure, homotopy sign, dual-block extraction order, ΔV/propellant conversions. **E1** fixed τ_f + pinned t_f = extra isoperimetric constraint (→ LEAD-5, probe running); E2 tangential direction check sign-blind + engine picks the costate sign from steering (**fixed**: signed `dirSignedMax` gated in `foc_check`); E3 mapped covector could absorb an active terminal-box multiplier (**fixed**: objective+defect assembly, full-gradient value kept as companion); E4 LS certifier fits the physical adjoint (caveat written into its header; adjudication waits on E1); E5 λ_t = −1 is the defect-multiplier condition, not H(t_f)=0, and 5% lamTimeCoV is not intrinsic to cScale (open, feeds LEAD-4); E6 'apoapsis' was min rotating speed (**fixed**: apolune; old criterion kept as 'minspeed'); E7 zero unit direction on coast nodes in the seed map (**fixed**); E8 min-time driver published without enforcing acceptance (**fixed**: assert + "agrees", not "certifies"); E9 stale `../elfo` addpath + nonexistent `lib/results` (**fixed**; second flatten casualty `test_artifact_paths` cannot see — it checks .mat paths, not addpath targets); I4 Ṡ statistic missing the clock factor (**added** `sdotMinRelPhys`, report-only) | Part A A1 row 9 gains the signed minimum condition; A6 finding I2 CLOSED by the signed check; LEAD-5 opened; the engine/config files (in use by the running probe) and the guide's "fixed τ_f is equivalent" wording are deferred to the probe's verdict |
+| 2026-09-06 (E1 probe: free τ_f vs fixed τ_f) | `GTO_tulip/direct/certify/probe_e1_free_tauf.m` — fixed-τ_f engine re-solve at ε=0 (baseline), then `casadi_energy_freetf` (single-primary clock, τ_f free via cScale, t_f PINNED) at ε=0 from that baseline, same mesh | GTO→tulip 1.150×: published flagship + basin-24 winner | **REAL shift, both rows:** m_f +2.06e-4 (−3.10 g, cScale 1.00484, 25→23 sw) and +2.46e-4 (−3.69 g, cScale 1.00598, 24→24 sw); defects 3.4e-14 / 7.0e-15; direct ε=0 convergence, no fallback | LEAD-5 → FINDING: the fixed-τ_f transcription certifies a restricted problem; published m_f are lower bounds by ~2e-4; engine header + guide corrected; cScale port promoted to correctness; front re-solve free-τ_f is an open campaign decision; E4 adjudicated (LS certifier fits the wrong adjoint on fixed-τ_f rows) |
 
 ---
 

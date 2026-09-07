@@ -17,12 +17,29 @@ function out = casadi_minfuel_sundman(sigma, tf, rv0, rvf, Tmax, c, muStar, X0, 
 % carried time state instead keeps the Jacobian sparse; the trajectory adjusts
 % so that int(kappa dtau) = tf.
 %
+% !! NOT EQUIVALENT TO THE FIXED-TIME PROBLEM (external review 2026-09-06, E1;
+% measured the same day, GTO_tulip/direct/certify/probe_e1_free_tauf.m). Every
+% physical trajectory has its own regularized length tau_f = int_0^tf dt/kappa,
+% so fixing tau_f = tauf0 ADDS the isoperimetric constraint int dt/kappa = tauf0
+% inherited from the seed. Solutions of this NLP are extremals of that
+% restricted problem: releasing tau_f through a cScale slack state (see
+% GTO_ELFO/direct/elfo/casadi_energy_freetf, opts.tfTarget) at the SAME pinned
+% t_f raised m_f by +2.06e-4 on the published 1.15x flagship and +2.46e-4 on the
+% basin-24 winner (~3-4 g of propellant, cScale ~1.005). First-order PMP checks
+% cannot detect this (the control minimization is unaffected; only the costate
+% ODE gains a -grad(kappa)*(K/kappa) term). Treat every m_f from this solver as
+% a lower bound on the free-tau_f optimum by ~2e-4 until cScale is ported here
+% (TODO: ladder item iii), and read the LS-certifier disagreement on the
+% flagship in that light (it fits the physical adjoint, which is the wrong one
+% for this NLP).
+%
 % The objective is the Bertrand-Epenoy energy->fuel homotopy in epsilon:
 %   J(eps) = Int[s]dt - eps*Int[s(1-s)]dt   (physical-time measure dt=kappa dtau)
 %   eps=1 -> Int[s^2]dt (energy, strictly convex, smooth ramp)
 %   eps=0 -> Int[s]dt   (fuel, linear -> bang-bang; equals propellant up to a
 %                        positive constant, since m(tf)=1-(Tmax/c)Int[s]dt).
-% Sweep eps 1->0, warm-starting each solve from the last (see run_sundman_*).
+% Sweep eps 1->0, warm-starting each solve from the last (see minfuel_at_tf,
+% the per-t_f driver, and sundman_homotopy).
 %
 % State  x = [r(3); v(3); m; t]  (8).   Control u = [alpha(3); s]  (4).
 % Cone-eliminated: thrust = s*Tmax*alpha/m, ||alpha|| = 1, s in [0,1].
@@ -40,7 +57,8 @@ function out = casadi_minfuel_sundman(sigma, tf, rv0, rvf, Tmax, c, muStar, X0, 
 %   epsilon - homotopy parameter in [0,1]: 0=fuel, 1=energy [scalar, default 0]
 %   warmTight - true (default): tight warm start for re-solving AT a
 %           near-bang-bang solution (homotopy sharpening); false: loose
-%           (adaptive barrier, default bound_push) for a genuine continuation
+%           (monotone barrier with larger mu_init, default bound_push -- see
+%           cr3bp_ipopt_opts) for a genuine continuation
 %           move such as an energy re-solve at a shifted t_f [logical]
 %   opts    - (optional) struct: .vBox position/velocity... see below
 %           .vBox - velocity box half-width, ND [scalar, default 12]
@@ -82,8 +100,11 @@ function out = casadi_minfuel_sundman(sigma, tf, rv0, rvf, Tmax, c, muStar, X0, 
 %   [3] Andersson et al., "CasADi," Math. Prog. Comp. 11 (2019); Wachter &
 %       Biegler (IPOPT), Math. Prog. 106 (2006).
 %   [4] earth_elliptic_to_geo/direct/core/casadi_lt_mee.m (returnModel/creg
-%       registry pattern this mirrors); GTO_tulip/direct/lib/
-%       casadi_minfuel_sundman.m (regHistory capture pattern this mirrors).
+%       registry pattern this mirrors); the regHistory capture was ported from
+%       the former PSR/lib copy of this file (dissolved 2026-07-26).
+%   [5] GTO_ELFO/direct/elfo/casadi_energy_freetf.m -- the free-tau_f (cScale)
+%       sibling; doc/reviews/direct_core_chain_gpt6astra_review_2026-09-06.md
+%       (E1) and results/e1_freetauf/ for why that matters.
 
 if nargin < 11 || isempty(pSund),  pSund  = 1.5;  end
 if nargin < 12 || isempty(maxIter), maxIter = 3000; end

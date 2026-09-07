@@ -73,7 +73,7 @@ ok = chk(ok, numel(out.t) == 4 && abs(out.t(end) - 3.5) < 1e-12, ...
 %     rest of the arc has no sign change. Fixture: 2 coast segments (state
 %     block exactly zero) then the LQ rotation flow with T = 2 (< pi).
 info = lqInfo(2.0, 8);
-Z = [0 0; 0 1];                                   % costate row survives, state row dead
+Z = eye(2);                                       % frozen subsystem: Phi_xl == 0, still a fundamental matrix
 info.PHI(1:2) = {Z};                              % Phi_xl == 0 through junctions 2,3
 out = ms_conjugate_test(info, spec);
 ok = chk(ok, out.pass && out.nCrossings == 0, ...
@@ -87,6 +87,53 @@ ok = chk(ok, isfield(out, 'firstFullRank') && out.firstFullRank == 3, ...
 ok = chk(ok, isfield(out, 'stateRows') && isequal(out.stateRows, spec.stateRows) && ...
              isfield(out, 'costateCols') && isequal(out.costateCols, spec.costateCols), ...
          'spec echo: out.stateRows / out.costateCols present and equal to the spec');
+
+%% Astra review #2 (2026-09-06):
+% (d) NOTHING TESTABLE must not be a PASS: state row never sees the costate.
+info = lqInfo(2.0, 6);  info.PHI(:) = {eye(2)};
+out = ms_conjugate_test(info, spec);
+okD = isfield(out,'tested') && isfield(out,'verdict') && ~out.tested && ~out.pass && strcmp(out.verdict, 'UNDETERMINED');
+ok = chk(ok, okD, sprintf('no testable sample -> UNDETERMINED, pass=false (tested=%d pass=%d)', ...
+                 ternary(isfield(out,'tested'), double(out.tested), -1), out.pass));
+
+% (e) raw-determinant UNDERFLOW must not create fictitious zero roots: TWO
+%     independent LQ copies (2x2 state/costate block), each segment STM
+%     scaled so the block's ENTRIES stay representable (~1e-160) while its
+%     determinant (~1e-330) underflows to exactly 0 in double. T = 2 < pi:
+%     no root expected; the old raw-det path reported a zero root here.
+K = 4;  tg = linspace(0, 2, K+1);  h = tg(2);
+R = [cos(h), -sin(h); sin(h), cos(h)];  sc = 10^(-165/K);
+P4 = sc*blkdiag(R, R);                                % states 1,3; costates 2,4
+info = struct('PHI', {repmat({P4}, 1, K)}, 'Y', zeros(4, K), 'tGrid', tg);
+out = ms_conjugate_test(info, struct('stateRows', [1 3], 'costateCols', [2 4], ...
+                                     'quotientDir', [], 'freeTime', false));
+ok = chk(ok, out.pass && out.nCrossings == 0 && all(isfinite(out.detScaled)) && out.tested, ...
+         sprintf('underflowing raw det (2x2 block, entries 1e-160): no fictitious roots (n=%d, pass=%d)', ...
+                 out.nCrossings, out.pass));
+
+% (f) an EXACT-ZERO sample adjacent to a sign flip is ONE root, not two:
+%     LQ T = 4 with the junction nearest pi forced to det == 0.
+%     Fixture: three quarter-turn rotations (exact matrices). Phi_xl at the
+%     samples: -1 (t = pi/2), 0 EXACTLY (t = pi, [0 -1;1 0]^2 = -I), +1.
+%     Samples [-, 0, +]: one root at pi, not "one flip plus one zero".
+tg = [0 pi/2 pi 3*pi/2];
+info = struct('PHI', {{[0 -1; 1 0], [0 -1; 1 0], [0 -1; 1 0]}}, 'Y', zeros(2,3), 'tGrid', tg);
+out = ms_conjugate_test(info, spec);
+ok = chk(ok, out.nCrossings == 1, ...
+         sprintf('[-, 0, +] samples (exact zero at pi, flip across it) count ONE root (n=%d)', out.nCrossings));
+
+% (g) a root ONLY on the bracket ending at t_f is ENDPOINT, not a refutation:
+%     LQ with T = pi + tiny: the crossing sits at pi, inside the last bracket.
+K = 48;  T = pi + 1e-3;
+info = lqInfo(T, K);
+out = ms_conjugate_test(info, spec);
+ok = chk(ok, out.atFinal && out.nInterior == 0 && strcmp(out.verdict, 'ENDPOINT') && ~out.pass, ...
+         sprintf('root in the last bracket only -> ENDPOINT (atFinal=%d nInterior=%d verdict=%s)', ...
+                 out.atFinal, ternary(isfield(out,'nInterior'), out.nInterior, -1), ...
+                 ternary(isfield(out,'verdict'), out.verdict, '?')));
+% and sampledThrough is reported:
+ok = chk(ok, isfield(out, 'sampledThrough') && abs(out.sampledThrough - T) < 1e-12, ...
+         'sampledThrough == t_f when Yend is not needed (fixed tf)');
 
 if ok, fprintf('TEST_CONJ_FIXEDTF: ALL PASS\n');
 else,  fprintf('TEST_CONJ_FIXEDTF: FAILURE (see lines above)\n');

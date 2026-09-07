@@ -101,9 +101,16 @@ function [yh, PHI, T, Y] = propHuber(dt, y0, needSTM, Tmax, c, muStar, smooth, o
 % which the branchwise variational equation alone omits (review
 % 2026-09-05, P0.2). Grazing crossings (n'F- ~ 0) throw.
 % INPUTS: as cr3bp_minfuel_prop + odeOpts.  OUTPUTS: as cr3bp_minfuel_prop.
+assert(dt > 0, 'cr3bp_minfuel_prop:backward', ...
+       'event-split huber propagation supports dt > 0 only (got %g)', dt);
 sLo = smooth;  sLo.branch = 'lo';
 sHi = smooth;  sHi.branch = 'hi';
-hi  = switchQ(y0, Tmax, c) > 1;
+Q0 = switchQ(y0, Tmax, c);
+if abs(Q0 - 1) <= 1e-12                          % ON the switch surface: outgoing branch
+    hi = cr3bp_minfuel_qdot(y0, Tmax, c) > 0;    % from the (throttle-independent) Qdot
+else
+    hi = Q0 > 1;
+end
 t0  = 0;  y = y0;  PHI = eye(14);
 T = zeros(0,1);  Y = zeros(0,14);
 maxSw = 200;  nSw = 0;
@@ -131,16 +138,25 @@ while true
            'huber law: more than %d switches in one segment', maxSw);
     t0 = te(end);  ye = ze(end, :)';
     y = ye(1:14);
+    if t0 > dt - 1e-9*dt
+        warning('cr3bp_minfuel_prop:boundarySwitch', ...
+                'huber switch within 1e-9*dt of the segment end (t = %.12g): one-sided STM', t0);
+    end
+    % Transversality of the crossing = Qdot, which is continuous across the
+    % switch (n'F+ == n'F-, measured 9e-16), so it is tested against the
+    % size of its own terms, in BOTH propagation modes (Astra review #2):
+    Qd = cr3bp_minfuel_qdot(y, Tmax, c);
+    qScale = Tmax * sqrt(sum(y(8:10).^2)) / y(7);
+    assert(abs(Qd) > 1e-10 * max(qScale, 1e-300), ...
+           'cr3bp_minfuel_prop:grazing', ...
+           'huber switch is grazing (|Qdot| = %.2e vs scale %.2e)', abs(Qd), qScale);
     if needSTM
         PHI = reshape(ye(15:210), 14, 14);
         Fm = cr3bp_minfuel_pmp(y, Tmax, c, muStar, sm);            % incoming branch
         if hi, smP = sLo; else, smP = sHi; end
         Fp = cr3bp_minfuel_pmp(y, Tmax, c, muStar, smP);           % outgoing branch
         n  = gradQ(y, Tmax, c);
-        den = n' * Fm;
-        assert(abs(den) > 1e-12 * max(1, abs(n' * Fp)), ...
-               'cr3bp_minfuel_prop:grazing', 'huber switch is grazing (n''F- ~ 0)');
-        PHI = (eye(14) + (Fp - Fm) * n' / den) * PHI;
+        PHI = (eye(14) + (Fp - Fm) * n' / (n' * Fm)) * PHI;        % n'Fm == Qd
     end
     hi = ~hi;
 end

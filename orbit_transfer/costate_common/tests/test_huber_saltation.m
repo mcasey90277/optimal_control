@@ -58,6 +58,40 @@ for k = 1:size(fams, 1)
                      fams{k,2}, err, fams{k,3}));
 end
 
+%% Astra review #2 (2026-09-06): switch-surface kinematics and edge cases
+% (a) Qdot closed form: Qdot = -Tmax lam_v'lam_r / (m |lam_v|), independent of
+%     the throttle -- so n'F+ == n'F- at every switch.
+%     Two independent checks: the chain rule n'F with the eps field, and a
+%     SHORT forward difference (Q is strongly curved at this state:
+%     dt = 1e-3 is 10x off, dt = 1e-7 agrees to 1e-3 -- measured).
+Qd = cr3bp_minfuel_qdot(y0, T_, c_);
+Fe = cr3bp_minfuel_pmp(y0, T_, c_, mu_, struct('family','eps','p',0.3));
+rho0 = norm(y0(11:13));  n0 = zeros(14,1);
+n0(7) = -T_*rho0/y0(7)^2;  n0(11:13) = T_*y0(11:13)/(y0(7)*rho0);  n0(14) = T_/c_;
+Qof = @(y) T_*(norm(y(11:13))/y(7) + y(14)/c_);
+yh = cr3bp_minfuel_prop(1e-7, y0, false, T_, c_, mu_, struct('family','eps','p',0.3));
+Qfd = (Qof(yh) - Qof(y0)) / 1e-7;
+ok = chk(ok, abs(Qd - n0'*Fe) < 1e-10 && abs(Qd - Qfd) < 2e-3*abs(Qd), ...
+         sprintf('closed-form Qdot %.6f == n''F %.6f; short FD %.6f', Qd, n0'*Fe, Qfd));
+
+% (b) starting EXACTLY on the switch surface with Qdot > 0 must take the HI
+%     branch immediately (s = 1 just after t = 0), not default to 'lo'.
+y1 = y0;  y1(14) = y1(14) + (1 - T_*(norm(y0(11:13))/y0(7) + y0(14)/c_))*c_/T_;   % set Q(y1) = 1 exactly
+assert(abs(T_*(norm(y1(11:13))/y1(7) + y1(14)/c_) - 1) < 1e-12, 'fixture: Q != 1');
+assert(cr3bp_minfuel_qdot(y1, T_, c_) > 0, 'fixture: need Qdot > 0 at the start');
+[~, ~, Ts, Ys] = cr3bp_minfuel_prop(0.05, y1, false, T_, c_, mu_, struct('family','huber','p',0.3));
+[~, ~, axs] = cr3bp_minfuel_pmp(Ys(2,:)', T_, c_, mu_, struct('family','huber','p',0.3));
+ok = chk(ok, abs(axs.s - 1) < 1e-12 && Ts(end) > 0.05 - 1e-12, ...
+         sprintf('start at Q = 1 with Qdot > 0: hi branch immediately (s = %.4f), reached dt', axs.s));
+
+% (c) backward propagation is not supported by the event-split path:
+try
+    cr3bp_minfuel_prop(-0.1, y0, false, T_, c_, mu_, struct('family','huber','p',0.3));
+    ok = chk(ok, false, 'huber dt < 0 rejected');
+catch E
+    ok = chk(ok, contains(E.identifier, 'cr3bp_minfuel_prop'), sprintf('huber dt < 0 rejected (%s)', E.identifier));
+end
+
 if ok, fprintf('TEST_HUBER_SALTATION: ALL PASS\n');
 else,  fprintf('TEST_HUBER_SALTATION: FAILURE (see lines above)\n');
 end

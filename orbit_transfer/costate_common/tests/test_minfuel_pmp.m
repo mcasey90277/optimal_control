@@ -129,6 +129,23 @@ ok = chk(ok, abs(sAt(0.8, hc0) - sAt(0.8, hu)) < 1e-12 && abs(sAt(1.5, hc0) - sA
 ok = chk(ok, abs(sAt(1.05, hc) - (0.3 + 0.7*0.5)) < 1e-9, ...
          sprintf('huberc ramp: s(Q=1+delta/2) = p + (1-p)/2 = %.4f', sAt(1.05, hc)));
 
+%% 7. Astra review #2 (2026-09-06): huberc validation, p = 1 dispatch, sRaw
+% (a) delta must be a finite positive scalar:
+bad = 0;
+for d = {0, -0.1, NaN, Inf}
+    try, cr3bp_minfuel_pmp(yb, T_, c_, mu_, struct('family','huberc','p',0.3,'delta',d{1})); catch, bad = bad + 1; end
+end
+ok = chk(ok, bad == 4, sprintf('huberc rejects delta in {0, <0, NaN, Inf} (%d/4 rejected)', bad));
+% (b) p = 1: huberc must equal huber(p = 1) exactly (no 1/(1-p) evaluation):
+y = setQ(yb, 0.6);
+[F1, A1] = cr3bp_minfuel_pmp(y, T_, c_, mu_, struct('family','huberc','p',1));
+[F2, A2] = cr3bp_minfuel_pmp(y, T_, c_, mu_, struct('family','huber','p',1));
+ok = chk(ok, all(isfinite(F1)) && max(abs(F1-F2)) < 1e-13 && max(abs(A1(:)-A2(:))) < 1e-12, ...
+         sprintf('huberc(p=1) == huber(p=1): dF %.1e dA %.1e', max(abs(F1-F2)), max(abs(A1(:)-A2(:)))));
+% (c) sRaw on the ramp is the piecewise inverse law (unclipped), not p*Q:
+[~, ~, axr] = cr3bp_minfuel_pmp(setQ(yb, 1.15), T_, c_, mu_, struct('family','huberc','p',0.3,'delta',0.3));
+ok = chk(ok, abs(axr.sRaw - 0.65) < 1e-9, sprintf('huberc sRaw on the ramp = p + (1-p)(Q-1)/delta = %.4f', axr.sRaw));
+
 if ok, fprintf('TEST_MINFUEL_PMP: ALL PASS\n');
 else,  fprintf('TEST_MINFUEL_PMP: FAILURE (see lines above)\n');
 end

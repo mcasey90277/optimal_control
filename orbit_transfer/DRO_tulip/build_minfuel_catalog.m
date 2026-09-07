@@ -114,6 +114,11 @@ for k = 1:numel(G)
            src, g.cellIdx, g.gamma, norm(v.z - g.z));
     assert(isequal(v.stateRows, 1:7), 'verdict for (%d,%d)@%.2f used rows %s, need 1:7', ...
            g.cellIdx, g.gamma, mat2str(v.stateRows));
+    assert(v.converged, '%s verdict for (%d,%d)@%.2f is from an UNCONVERGED re-solve', src, g.cellIdx, g.gamma);
+    assert(abs(v.p - g.pDeepest) < 1e-12, '%s verdict for (%d,%d)@%.2f at p=%.6g, entry at p=%.6g', ...
+           src, g.cellIdx, g.gamma, v.p, g.pDeepest);
+    assert(isfield(v, 'tested') && v.tested, '%s verdict for (%d,%d)@%.2f is UNDETERMINED (nothing testable)', ...
+           src, g.cellIdx, g.gamma);
     sh.conj_pass(iD, iA, kg) = int8(v.conjPass);
 end
 assert(all(sh.conj_pass(sh.has_solution) >= 0), 'an entry is missing its conjugate verdict');

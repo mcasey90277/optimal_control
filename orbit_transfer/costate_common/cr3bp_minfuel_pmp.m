@@ -118,7 +118,13 @@ if isfield(smooth, 'branch') && ~isempty(smooth.branch), branch = smooth.branch;
 % huberc ramp width: a Function INPUT (like p), default delta = p.
 delta = smooth.p;
 if isfield(smooth, 'delta') && ~isempty(smooth.delta), delta = smooth.delta; end
+assert(isscalar(smooth.p) && isfinite(smooth.p), 'cr3bp_minfuel_pmp: p must be a finite scalar');
+assert(~strcmp(smooth.family, 'huberc') || (isscalar(delta) && isfinite(delta) && delta > 0), ...
+       'cr3bp_minfuel_pmp: huberc needs a finite scalar delta > 0 (delta = 0 is the ''huber'' family)');
 key = smooth.family;
+if strcmp(smooth.family, 'huberc') && smooth.p == 1
+    key = 'huberc_p1';                        % ramp interval vanishes: L = s^2/2, s = clip(Q,0,1)
+end
 if ~isempty(branch), key = [smooth.family '_' branch]; end
 
 persistent fn                              % fn.(key) = {fF, fA, fAux}
@@ -140,12 +146,16 @@ if isempty(fn) || ~isfield(fn, key)
     nlv = sqrt(lv(1)^2 + lv(2)^2 + lv(3)^2 + 1e-300);
     alpha = -lv/nlv;
     Q = Ts*(nlv/m + lm/cs);
-    switch smooth.family
+    switch key
+        case 'huberc_p1'
+            sRaw = Q;
+            s = fmin(fmax(Q, 0), 1);
+            Lc = s^2/2;
         case 'eps'
             sRaw = (Q - (1 - ps)) / (2*ps);
             s = fmin(fmax(sRaw, 0), 1);
             Lc = (1 - ps)*s + ps*s^2;
-        case 'huber'
+        case {'huber', 'huber_lo', 'huber_hi'}
             % argmin of huber_p(s) - s*Q on [0,1]: p*Q on the quadratic
             % core for Q < 1, saturation for Q > 1 (degenerate AT Q = 1;
             % the min-norm selection p*Q is taken there):
@@ -163,17 +173,17 @@ if isempty(fn) || ~isfield(fn, key)
             % inverse law dL/ds = Q(s), matched at s = p, so H(s) = L - sQ
             % is convex and this IS its argmin. delta -> 0 recovers huber;
             % continuous => no saltation, generic propagation.
-            sRaw = ps*Q;
-            om = 1 - ps + 1e-300;                         % (1-p), safe at p = 1
+            om = 1 - ps;                                  % p == 1 is dispatched to 'huberc_p1'
             sRamp = ps + om*(Q - 1)/ds;
-            s = if_else(Q < 1, fmax(sRaw, 0), if_else(Q < 1 + ds, sRamp, 1));
+            sRaw = if_else(Q < 1, ps*Q, sRamp);           % the piecewise inverse law, unclipped
+            s = if_else(Q < 1, fmax(ps*Q, 0), if_else(Q < 1 + ds, sRamp, 1));
             Lcore = s^2/(2*ps);
             Lramp = ps/2 + (s - ps) + ds*(s - ps)^2/(2*om);
             Lsat  = ps/2 + (1 - ps) + ds*(1 - ps)/2;
             Lc = if_else(Q < 1, Lcore, if_else(Q < 1 + ds, Lramp, Lsat));
         otherwise
             error('cr3bp_minfuel_pmp:family', ...
-                  'unknown smoothing family ''%s''', smooth.family);
+                  'unknown smoothing family ''%s''', key);
     end
     acc = gr + hv + (s*Ts/m)*alpha;
     mdot = -s*Ts/cs;

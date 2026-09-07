@@ -1430,3 +1430,88 @@ verdicts are bound to converged re-solves at the entry's own p.
 **Not changed by the review:** every measured table in sections 22-26
 (the walls, huberc passing them, the delta schedule) and the shipped
 catalog's entries.
+
+## 28. The high-gamma band: the gamma-walk opens it, three families race in it, huberc alone reaches the floor at gamma = 2 (2026-09-07)
+
+**The seed route.** The direct min-energy solve fails for gamma >= 1.7 on
+(2,5) and gamma >= 1.4 on (6,8) and (1,2) (FINDINGS 19), so eps never had a
+seed there. `run_gamma_walk` -- the MfMax homCI idea (a continuation in the
+BOUNDARY DATA, here tf = gamma*tfMin) in the form FINDINGS 21 already
+trusted -- walks the SMOOTH min-energy problem from each cell's deepest
+PASS record, each step seeded by the previous junction states at the same
+fractional times, geometric bisection on gamma, conj-tested at every step:
+
+| cell | from | reached | walled at | steps | notes |
+|---|---|---|---|---|---|
+| (2,5) | 1.40 | **2.00** (1.47, 1.55, 1.70, 1.77, 1.81, 1.85, 2.00) | -- | 9, 2 bisections | cond(J) IMPROVES toward gamma 2 (3.4e6); 3 min total |
+| (6,8) | 1.20 | 1.40 (1.30, 1.35, 1.40) | **1.43** | 7 | cond(J) 6e8 -> 5e9 -> 6.5e10 on approach |
+| (1,2) | 1.20 | 1.247 (1.223, 1.247) | **1.27** | 6 | cond(J) 4e9 -> 1.2e10 on approach |
+
+Twelve records, all conj PASS. Two walls are on the p = 1 smooth problem --
+no switch structure exists there, so no throttle family can help -- and on
+both, cond(J) grows by 1-2 orders of magnitude on approach, the signature
+of a FOLD in gamma that the Huber walls did NOT show (FINDINGS 24). This
+is where MfMax idea 1.2 (arclength) may finally apply; a target-orbit IC
+homotopy and a larger K are the other candidates. Not attempted.
+
+**The race** (`run_highgamma_race`: huberc fixed delta 0.03 + delta-walk
+to 0.003, eps, huber with lambda/2; every deepest solution re-tested with
+the corrected fixed-tf conjugate instrument; race tolR 3e-10 after the
+1e-10 floor cost one arm -- see below):
+
+| cell | gamma | huberc | eps | huber | m_f (best) | m_f energy | gain [% m0] |
+|---|---|---|---|---|---|---|---|
+| (2,5) | 1.47 | floor | 0.0089 | **floor, 0 fails, 1.1 min** | 0.947045 | 0.939708 | +0.73 |
+| (2,5) | 1.55 | floor | 0.0017 | **floor, 0, 1.4 min** | 0.948688 | 0.941156 | +0.75 |
+| (2,5) | 1.70 | floor | 0.0053 | **floor, 0, 1.7 min** | 0.949246 | 0.942154 | +0.71 |
+| (2,5) | 1.77 | floor | 0.0045 | wall 0.051 | 0.949319 | 0.941559 | +0.78 |
+| (2,5) | 1.81 | floor | 0.0040 | **floor, 0, 2.0 min** | 0.949306 | 0.940983 | +0.83 |
+| (2,5) | 1.85 | floor | 0.0037 | **floor, 0, 2.1 min** | 0.949251 | 0.940300 | +0.90 |
+| (2,5) | **2.00** | **floor (alone)** | wall 0.66 | wall 0.32 | 0.948585 | 0.937705 | +1.09 |
+| (6,8) | 1.30 | floor | 0.0020 | **floor, 0, 1.1 min** | 0.950404 | 0.942911 | +0.75 |
+| (6,8) | 1.35 | floor | 0.0080 | **floor, 0, 1.3 min** | 0.951979 | 0.944307 | +0.77 |
+| (6,8) | 1.40 | floor | 0.0050 | **floor, 0, 1.4 min** | 0.952123 | 0.944933 | +0.72 |
+| (1,2) | 1.22 | wall 0.81 | **0.0013** | wall 0.82 | 0.941482 | 0.931678 | +0.98 |
+| (1,2) | 1.25 | wall 0.85 | 0.067 (re-run) | wall 0.85 | (0.939797) | 0.930044 | -- |
+
+"floor" = p = 0.001 (huberc: then delta to 0.003). Every reached solution
+is conj PASS on the corrected instrument. Where two or three families
+arrive they agree to ~1e-5.
+
+**Findings.**
+
+1. **Ten new min-fuel records on cells the direct solver never touched**
+   ((2,5) x 7 at gamma 1.47-2.00, (6,8) x 3 at 1.30-1.40), all three-family
+   agreed where the families arrive, all conjugate-tested. These are the
+   first min-fuel solutions above gamma = 1.4 in the program.
+2. **At gamma = 2.0, huberc is the only family that reaches the floor.**
+   eps stalls at p = 0.66 (m_f 0.9401 -- not close), huber at 0.32. The
+   "cells eps cannot enter" test has an unambiguous answer on one cell.
+3. **Huber's 0-fail / 1-2-minute pattern holds in the band** (8 of 10
+   records where anything arrives), exactly as on the grid; it walled on
+   (2,5)@1.77 and @2.00. The family schedule of FINDINGS 25 (Huber first,
+   huberc at a predicted graze, eps fallback) is the reading of this table.
+4. **The fuel gain saturates near gamma ~ 1.8 on (2,5)** (m_f 0.94931 at
+   1.77, 0.94925 at 1.85, 0.94859 at 2.00 despite +1.09% over ITS energy
+   value): more time stops buying propellant, and the gamma-basin
+   structure of the energy problem survives into fuel. Physics, not
+   numerics -- three families agree.
+5. **(1,2) near its smooth wall is hard for every family.** At 1.22 only
+   eps arrives (0.0013, 16 fails); at 1.247 nobody does (eps 0.067 with
+   11 fails, the Huber pair 0.85). This is the 30-day cell one bisection
+   from a fold-like wall; nothing to conclude about families from it.
+6. **tolR = 1e-10 cost an entire arm**: the (1,2)@1.247 eps p = 1 rung
+   "failed" at normR 1.0e-10 and the arm retired in 0.9 min. The race now
+   runs at tolR 3e-10; the re-run is the row above. The gamma-walk records
+   and all other arms were unaffected (their p = 1 rungs converged below
+   1e-10).
+
+**What this changes.** The high-gamma band is no longer "where the direct
+solve fails"; it is where the boundary-data homotopy seeds and huberc
+finishes. The ten records are catalog material (schema v3, one sheet,
+axis3 = gamma); the builder currently reads only `minfuel_grid.mat` and
+needs a second source. The two smooth walls at gamma 1.43 / 1.27 are the
+next frontier, and for the first time the evidence points at a fold.
+
+Records: `direct/results/minenergy_highgamma.mat` (12 records),
+`highgamma_race.mat` (36 arms), `minfuel_hg_*.mat`.

@@ -151,12 +151,23 @@ exists.
     sheet, overnight for all 18,360) and store min|λ_v|, min Q_mt, dim S per
     entry; then the sampling upgrade (dense det from the STM integration).
     Machine is busy with the high-γ races — queue after.
-  - [ ] **High-γ band (running 2026-09-06 evening):** `run_gamma_walk` opened
-    (2,5) to γ=2.0 in 3 min (direct solve had failed at ≥1.7); (6,8)'s
-    min-ENERGY walk walls at γ≈1.43 (the §19 basin split, now a measured
-    wall on the smooth problem — plan B is the target-orbit IC homotopy or
-    a larger K); (1,2) walking. Then `run_highgamma_race` (huberc fixed-δ /
-    ε / huber) on every reached record → FINDINGS §28.
+  - [x] **High-γ band — DONE 2026-09-07 (FINDINGS §28):** γ-walk opened
+    (2,5) to 2.0, (6,8) to 1.40, (1,2) to 1.25 (12 records, all conj PASS);
+    three-arm race: **10 new min-fuel records** on cells the direct solver
+    never touched, three-family agreement ~1e-5; **huberc alone reaches the
+    floor at γ=2.0**; Huber 0-fail/1–2 min on 8/10; fuel gain saturates
+    near γ≈1.8 on (2,5).
+  - [ ] **Catalog inclusion of the 10 high-γ records:** `build_minfuel_catalog`
+    reads only `minfuel_grid.mat`; add `highgamma_race.mat` as a second
+    source (pick the deepest-p family per record, bind the conj verdict to
+    that solution via the sweep), extend axis3 to the walked γ values (they
+    are bisected: 1.4714, 1.7734, 1.8113, …; either keep them or re-walk to
+    round γ), rebuild + validate + reflight.
+  - [ ] **The two SMOOTH walls (γ≈1.43 on (6,8), ≈1.27 on (1,2)):** cond(J)
+    grows 1–2 orders on approach — fold signature, unlike the Huber walls.
+    First real candidate for pseudo-arclength continuation in `ms_bvp`
+    (MfMax idea 1.2; ∂F/∂γ = ∂F/∂tf is available); alternatives: larger K,
+    target-orbit IC homotopy.
   - [ ] **Huber follow-ups (from §25/§26):** (a) ~~tolR~~ **DONE 2026-09-07:
     `run_minfuel_race` P.tolR = 3e-10** (the 1e-10 floor cost (1,2)@1.25
     an entire ε arm in the high-γ race, `p=1 FAIL normR=1.0e-10`);

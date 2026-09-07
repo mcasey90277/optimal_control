@@ -533,19 +533,47 @@ front the gap is up to 9.4e-3. Record: `OPTIMALITY_CERTIFICATION.md` LEAD-5 + §
   1.750–1.850× still lose mass with more time (few-switch envelope family).
   Full table: `OPTIMALITY_CERTIFICATION.md` LEAD-5 FRONT RESULT.
 
-- [ ] **Gate the free-τ_f rows.** They are converged IPOPT optima with raw-dual
-  primer alignment 0.06–0.12° and defects ≤ 2e-11, but `foc_check` /
-  `run_foc_tulip` assume the 8-state fixed-τ_f layout; the cScale row and its
-  single multiplier need mapping before the rows can be called certified.
-- [ ] **Make the free rows a results set.** Save them in the `results/minfuel/`
-  schema (or a `results/minfuel_freetauf/` sibling) so `aggregate_front` and the
-  paper figures read them; re-plot the honest front with both curves.
-- [ ] **Fix the τ_f0 fossil at the source:** `minfuel_at_tf`'s neighbour seed
-  should rescale τ_f0 with t_f (or the engine should free it — the cScale port
-  below), so no future fixed-τ_f row inherits the 1.150× length.
-- [ ] **Port cScale into `casadi_minfuel_sundman` as an opt-in branch** (was
-  ladder item iii, now a correctness item, not a convenience). Until then the
-  free-time solver is the reference formulation for tulip too.
+- [x] **Port cScale into `casadi_minfuel_sundman`** — DONE 2026-09-07
+  (`opts.freeTauf`; off = byte-identical, checked at maxIter 5 against the
+  pre-port file; on: 9th constant slack state, t_f pinned, 8-row X/lamDef
+  contract kept, `out.cScale`/`X9`/`lamDef9`/`tauf` = effective length,
+  `model.manifest = 'tulip_free'`). Validated on the flagship: free mode from
+  the FIXED seed reproduces `casadi_energy_freetf`'s m_f to 5.7e-13 (83 s,
+  23 sw, cScale 1.004841); warm at the free solution it sits still; the fixed
+  engine at the effective length cScale·τ_f0 sits still to 4.9e-13 — a free
+  solution IS a fixed-τ_f KKT point at that length. Contract test
+  `tests/test_freetauf_port.m`.
+- [x] **Fix the τ_f0 fossil at the source** — DONE 2026-09-07: `minfuel_at_tf`
+  runs `freeTauf` by default (all seed kinds), stores the EFFECTIVE length as
+  the row's `tauf0`, writes free rows to `results/minfuel_freetauf/` with
+  `_free_<branch>` names, looks there first for neighbour seeds, and warns in
+  `'freeTauf', false` mode that the seed's τ_f0 is inherited. The front doors
+  (`run_gto_tulip`, `run_one`) pass explicit `outFile`s and are unaffected in
+  layout; their direct stage is now free-τ_f.
+- [x] **Gate the free-τ_f rows + make them a results set** — DONE 2026-09-07,
+  `certify/gate_free_tauf.m`: per row, sit-still re-solve in the ported engine
+  (returnModel), `certified_guard`, `foc_check` on manifest `tulip_free`
+  (nx = 9) + IPOPT inertia, `foc_report` sidecar `certify/results/foc_free_*`,
+  and a `minfuel_at_tf`-layout row in `results/minfuel_freetauf/`
+  (`aggregate_front` scans it and marks free rows with a diamond overlay;
+  `run_foc_tulip` detects free rows and gates them on the 9-state manifest).
+  Results: `results/minfuel_freetauf/gate_summary.txt`; verdicts recorded in
+  `OPTIMALITY_CERTIFICATION.md` §6 (2026-09-07 gate row).
+- [x] Found on the way: `foc_check`'s signed minimum condition (E2, added
+  09-06) gated on the MAX over burn nodes, and ONE burn-edge node per row
+  (throttle just past 0.5, ‖q‖ ≈ 0) reads 2.000 while >99.9% read 0.000 — it
+  would have failed every row. Gate is now `dirSignedPct` ≥ 99% (max and median
+  still reported; `foc_report` prints the line). The same diagnostic shows
+  dot(β, λ_v^IPOPT) = +1 on every burn node: the engines' `primer = −λ_v/‖λ_v‖`
+  is the ANTI-primer in IPOPT's convention (ψ_PMP = −λ for defects written
+  X_{k+1} − X_k − h f) and their `if mean(cang) < 0` flip absorbs it. Harmless
+  for the reported angle; the flip-free instrument is the signed check.
+- [ ] **PSR refinement is still fixed-τ_f.** `refine_loop` / `prep_refine_seed`
+  re-solve at the stored (effective) length on the refined mesh — right for the
+  row's own length, but the refined solution is never re-released. Thread
+  `freeTauf` through `refine_loop` (the re-solve call is one line) and re-gate.
+- [ ] Re-plot the honest front (`aggregate_front(true)`) with the free rows in
+  and re-read the paper outline's numbers off the plot.
 - [x] ~~Re-run `certify_minfuel_pmp` on a FREE-τ_f row~~ DONE, negative: it
   fails identically on both free rows (primer err 2.000, sign match 40–42%,
   0–1 switches matched) while the raw duals are at 0.03°. Not sign-blindness

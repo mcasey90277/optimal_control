@@ -16,14 +16,18 @@ function [pts, pmp] = aggregate_front(makePlot)
 % BELOW it is information (a better local minimum exists there), never noise.
 %
 % Sources scanned (all optional): results/minfuel/minfuel_f*_*.mat (new
-% layout), legacy ms_*.mat and tf_front_results.mat in the library root.
-% Multiple solutions at the same factor are all kept and plotted.
+% layout), results/minfuel_freetauf/minfuel_f*_free*.mat (the FREE-tau_f
+% results set, certify/gate_free_tauf.m, 2026-09-07 -- same row layout, tau_f
+% released through the engine's cScale slack; flagged .freeTauf and drawn
+% with a diamond overlay), legacy ms_*.mat and tf_front_results.mat in the
+% library root. Multiple solutions at the same factor are all kept and
+% plotted.
 %
 % INPUTS:
 %   makePlot - true (default): write results/plots/front_honest.png
 % OUTPUTS:
 %   pts - struct array per solution: .factor .tf_days .dV .switches .edge
-%         .defect .class (1|2|3) .source
+%         .defect .class (1|2|3) .source .freeTauf (logical)
 %   pmp - verify_tf_front output for the combined set
 %
 % REFERENCES:
@@ -45,6 +49,14 @@ if exist(cfg.dirs.minfuel,'dir')
         [res, src] = add_point(res, src, R.out, flds, dd(k).name);
     end
 end
+% --- free-tau_f results set (gate_free_tauf; 8-row contract, .cScale extra) --
+if isfield(cfg.dirs, 'minfuelFree') && exist(cfg.dirs.minfuelFree, 'dir')
+    dd = dir(fullfile(cfg.dirs.minfuelFree, 'minfuel_f*_free*.mat'));
+    for k = 1:numel(dd)
+        R = load(fullfile(dd(k).folder, dd(k).name));
+        [res, src] = add_point(res, src, R.out, flds, ['freetauf/' dd(k).name]);
+    end
+end
 % --- legacy per-factor files (legacy_ms_f####.mat carry `out`, no meta) -------
 dd = dir(fullfile(cfg.dirs.minfuel, 'legacy_ms_f*.mat'));
 for k = 1:numel(dd)
@@ -64,6 +76,7 @@ if isempty(res), error('aggregate_front:noData','no stored solutions found'); en
 % sort by factor NOW: verify_tf_front sorts internally (stable), so pre-sorting
 % here keeps pmp(k) aligned with res(k)/src{k} below.
 [~, ix] = sort([res.factor]);  res = res(ix);  src = src(ix);
+isFree = startsWith(src, 'freetauf/');     % the free-tau_f results set is tagged by its source prefix
 
 % --- PMP-verify the combined set ---------------------------------------------
 if ~exist(cfg.dirs.fronts,'dir'), mkdir(cfg.dirs.fronts); end
@@ -74,17 +87,17 @@ pmp = verify_tf_front(combF, false);
 
 % --- classify ----------------------------------------------------------------
 pts = struct('factor',{},'tf_days',{},'dV',{},'switches',{},'edge',{}, ...
-             'defect',{},'class',{},'source',{});
+             'defect',{},'class',{},'source',{},'freeTauf',{});
 for k = 1:numel(res)
     cls = 1 + pmp(k).pmpPass;                  % 1 feasible / 2 interior / 3 full
     % class 4 (direct+indirect) is set once the ms_band certifier stamps a
     % matching indirect solution -- reserved, no data yet.
     pts(end+1) = struct('factor',res(k).factor,'tf_days',res(k).tf_days, ...
         'dV',res(k).dV,'switches',res(k).switches,'edge',res(k).edge, ...
-        'defect',NaN,'class',cls,'source',src{k}); %#ok<AGROW>
+        'defect',NaN,'class',cls,'source',src{k},'freeTauf',isFree(k)); %#ok<AGROW>
 end
-fprintf('\naggregate_front: %d solutions | %d FULL | %d interior | %d feasible-only\n', ...
-        numel(pts), sum([pts.class]==3), sum([pts.class]==2), sum([pts.class]==1));
+fprintf('\naggregate_front: %d solutions | %d FULL | %d interior | %d feasible-only | %d free-tau_f\n', ...
+        numel(pts), sum([pts.class]==3), sum([pts.class]==2), sum([pts.class]==1), sum([pts.freeTauf]));
 
 % --- plot ---------------------------------------------------------------------
 if makePlot
@@ -138,6 +151,12 @@ if makePlot
         hh(end+1) = plot(d(c==4), v(c==4), 's', 'Color',[0.05 0.25 0.55], ...
              'MarkerFaceColor',[0.15 0.45 0.80],'MarkerSize',10,'LineWidth',1.2);
         lbl{end+1} = 'direct+indirect certified';
+    end
+    fr = [pts.freeTauf];
+    if any(fr)   % free-tau_f rows: diamond overlay on top of their class marker
+        hh(end+1) = plot(d(fr), v(fr), 'd', 'Color',[0.55 0.15 0.55], ...
+             'MarkerSize',13, 'LineWidth',1.3);
+        lbl{end+1} = 'free \tau_f (cScale) re-solve';
     end
     hh(end+1) = plot(cfg.tfMin*tStar/86400, 4.4665, 'ks', 'MarkerFaceColor','k','MarkerSize',9);
     lbl{end+1} = 'min-time';

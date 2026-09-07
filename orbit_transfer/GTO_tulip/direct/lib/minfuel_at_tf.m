@@ -17,6 +17,21 @@ function out = minfuel_at_tf(factor, varargin)
 %   <path>     seed = explicit .mat with X,U (top level or in `out`), treated
 %              like 'neighbor'.
 %
+% FREE tau_f (default since 2026-09-07). The engine is run with
+% opts.freeTauf = true: the regularized length is released through a cScale
+% slack state while t(tau_f) = t_f stays pinned, so the NLP IS the fixed-time
+% problem. Before this every row inherited its seed's tau_f0 unchanged -- the
+% neighbour path rescaled the time state but never tau_f0, and the energy
+% backbones carried the original 1.150x length -- which added the
+% isoperimetric constraint int dt/kappa = tau_f0(seed) to every solve and cost
+% up to 9.4e-3 in m_f across the front (review E1; OPTIMALITY_CERTIFICATION.md
+% LEAD-5). The stored top-level tauf0 of a free row is the EFFECTIVE length
+% cScale*tau_f0(seed), so a later neighbour seed starts from a consistent
+% value, and free rows are written to cfg.dirs.minfuelFree with '_free' in
+% the name (results/minfuel/ keeps the fixed-tau_f originals). Pass
+% 'freeTauf', false to reproduce the pre-2026-09-07 fixed-tau_f behaviour
+% (a warning then names the inherited tau_f0).
+%
 % INPUTS:
 %   factor  - t_f / t_f^min [scalar]
 %   options (name-value):
@@ -31,19 +46,25 @@ function out = minfuel_at_tf(factor, varargin)
 %                    mismatched seed rather than silently warm-start wrong.
 %     'branch'     - branch tag recorded in meta + filename suffix, e.g.
 %                    'up','dn','en'                          [default 'en'|'nb']
+%     'freeTauf'   - release tau_f through the engine's cScale slack
+%                    (see above)                             [default true]
 %     'outFile'    - output path override                   [default results/minfuel/]
 %     'save'       - write the .mat                          [default true]
 %
 % OUTPUTS:
-%   out - solver struct (X,U,lamDef,switches,edge,maxDefect,primerAlignDeg,...)
-%         plus .factor .tf .tf_days .dV .prop_kg .certified (logical: at least
-%         one schedule step converged tight) .meta (provenance: date, git hash,
-%         seed source, schedule, per-step table, ipopt statuses). An uncertified
+%   out - solver struct (X,U,lamDef,switches,edge,maxDefect,primerAlignDeg,...;
+%         in free-tau_f mode also .cScale .X9 .lamDef9 .taufSeed, with .tauf
+%         the effective length) plus .factor .tf .tf_days .dV .prop_kg
+%         .certified (logical: at least one schedule step converged tight)
+%         .meta (provenance: date, git hash, seed source, schedule, per-step
+%         table, ipopt statuses, freeTauf, cScale, taufSeed). An uncertified
 %         result is NOT saved -- a loose iterate must never become a neighbor seed.
 %
 % REFERENCES:
 %   [1] LOW_THRUST_MINFUEL_CAMPAIGN.md ("Down-sweep CRACKED": backbone+sharpen).
 %   [2] CODE_CLEANUP_PLAN.md (driver consolidation rationale).
+%   [3] casadi_minfuel_sundman.m header (freeTauf port) and
+%       certify/probe_e1_free_tauf.m (the measurement behind the default).
 
 here = fileparts(mfilename('fullpath'));  addpath(here);
 addpath(fullfile(here, '..', '..', '..', 'cr3bp_common'));  % cr3bp_fingerprint/check_cr3bp_fp
@@ -75,10 +96,17 @@ switch op.seedKind
         [S, seedDesc, seedFn] = load_seed_file(here, cfg, op);
         check_cr3bp_fp(S, fp, seedFn, 'neighbor-seed');
         sigma=S.sigma; rv0=S.rv0; rvf=S.rvf; tauf0=S.tauf0;
-        Xk=S.X; Uk=S.U;
+        Xk=S.X(1:8,:); Uk=S.U;                  % 8-row contract (free rows carry the slack separately)
         Xk(8,:) = Xk(8,:) * (tf / Xk(8,end));   % rescale time state to new t_f
         firstLoose=true; needClean=false;       % first sched step is the move
+        if ~op.freeTauf
+            warning('minfuel_at_tf:inheritedTauf0', ...
+                ['fixed-tau_f mode: the neighbour seed''s regularized length tau_f0 = %.6f is ' ...
+                 'inherited UNCHANGED at the new t_f -- this is the isoperimetric restriction ' ...
+                 'of review E1 (LEAD-5); pass ''freeTauf'', true (the default) to release it'], tauf0);
+        end
 end
+engOpts = struct('freeTauf', op.freeTauf);
 
 fprintf('MINFUEL_AT_TF: factor=%.3f  t_f=%.4f ND (%.2f d)  seed=%s\n', ...
         factor, tf, tf*p.tStar/86400, seedDesc);
@@ -87,7 +115,7 @@ fprintf('MINFUEL_AT_TF: factor=%.3f  t_f=%.4f ND (%.2f d)  seed=%s\n', ...
 stat = {};
 if needClean
     oT = casadi_minfuel_sundman(sigma,tf,rv0,rvf,p.Tmax,p.c,p.muStar, ...
-                                Xk,Uk,tauf0,cfg.pSund,op.maxIter,1,true);
+                                Xk,Uk,tauf0,cfg.pSund,op.maxIter,1,true,engOpts);
     fprintf('  re-clean energy: ok=%d defect=%.2g\n', oT.success, oT.maxDefect);
     stat{end+1} = sprintf('reclean:%s', oT.ipoptStatus);
     if strcmp(oT.ipoptStatus,'Solve_Succeeded') && oT.maxDefect < 1e-6, Xk=oT.X; Uk=oT.U; end   % triage C1: full convergence only
@@ -99,12 +127,17 @@ for ke = 1:numel(op.sched)
     e = op.sched(ke);
     tight = ~(firstLoose && ke==1);
     o = casadi_minfuel_sundman(sigma,tf,rv0,rvf,p.Tmax,p.c,p.muStar, ...
-                               Xk,Uk,tauf0,cfg.pSund,op.maxIter,e,tight);
+                               Xk,Uk,tauf0,cfg.pSund,op.maxIter,e,tight,engOpts);
     ok = strcmp(o.ipoptStatus,'Solve_Succeeded') && o.maxDefect < 1e-6;   % triage C1
     tbl(ke,:) = [e, o.maxDefect, o.switches, 100*o.edge];
     stat{end+1} = sprintf('eps=%.4g:%s', e, o.ipoptStatus); %#ok<AGROW>
-    fprintf('  eps=%.4g: ok=%d defect=%.2g sw=%d edge=%.1f%%\n', ...
-            e, ok, o.maxDefect, o.switches, 100*o.edge);
+    if op.freeTauf
+        fprintf('  eps=%.4g: ok=%d defect=%.2g sw=%d edge=%.1f%% cScale=%.6f\n', ...
+                e, ok, o.maxDefect, o.switches, 100*o.edge, o.cScale);
+    else
+        fprintf('  eps=%.4g: ok=%d defect=%.2g sw=%d edge=%.1f%%\n', ...
+                e, ok, o.maxDefect, o.switches, 100*o.edge);
+    end
     if ok, Xk=o.X; Uk=o.U; best=o; bestEps=e; end
 end
 anyClean = ~isempty(best);
@@ -130,11 +163,15 @@ out.epsReached = bestEps;
 out.factor  = factor;  out.tf = tf;  out.tf_days = tf*p.tStar/86400;
 out.dV      = p.c*log(1/best.mf)*p.lStar/p.tStar;
 out.prop_kg = p.m0kg*(1-best.mf);
+cScale = 1;  if op.freeTauf && isfield(best, 'cScale'), cScale = best.cScale; end
 out.meta = struct('date', char(datetime('now','Format','yyyy-MM-dd HH:mm')), ...
     'githash', git_hash(here), 'seed', seedDesc, 'branch', op.branch, ...
     'sched', op.sched, 'maxIter', op.maxIter, 'pSund', cfg.pSund, ...
     'tfMin', cfg.tfMin, 'stepTable', tbl, 'ipoptStatuses', {stat}, ...
+    'freeTauf', op.freeTauf, 'taufSeed', tauf0, 'cScale', cScale, ...
+    'taufEffective', best.tauf, ...
     'solver', 'casadi_minfuel_sundman (CasADi+IPOPT, Sundman trapezoid)');
+if op.freeTauf, out.meta.solver = [out.meta.solver ' freeTauf=true (cScale slack, t_f pinned)']; end
 
 fprintf('MINFUEL_AT_TF done: f=%.3f dV=%.4f km/s sw=%d edge=%.1f%% defect=%.2g primer=%.3f\n', ...
         factor, out.dV, best.switches, 100*best.edge, best.maxDefect, best.primerAlignDeg);
@@ -145,12 +182,21 @@ if op.save && ~certified
          'iterate would poison neighbor-seed lookups). Inspect the returned struct instead.'], factor);
 elseif op.save
     if isempty(op.outFile)
-        if ~exist(cfg.dirs.minfuel,'dir'), mkdir(cfg.dirs.minfuel); end
         base = cfg.fname('minfuel', factor);
-        op.outFile = fullfile(cfg.dirs.minfuel, strrep(base, '.mat', ['_' op.branch '.mat']));
+        if op.freeTauf
+            if ~exist(cfg.dirs.minfuelFree,'dir'), mkdir(cfg.dirs.minfuelFree); end
+            op.outFile = fullfile(cfg.dirs.minfuelFree, strrep(base, '.mat', ['_free_' op.branch '.mat']));
+        else
+            if ~exist(cfg.dirs.minfuel,'dir'), mkdir(cfg.dirs.minfuel); end
+            op.outFile = fullfile(cfg.dirs.minfuel, strrep(base, '.mat', ['_' op.branch '.mat']));
+        end
     end
+    % top-level tauf0 = the EFFECTIVE regularized length (cScale*tauf0 in free
+    % mode, tauf0 itself in fixed mode), so a neighbour seed never inherits a
+    % length the solution did not actually have.
+    tauf0 = best.tauf;
     save(op.outFile, 'out', 'sigma', 'tauf0', 'rv0', 'rvf', 'factor', 'fp');
-    fprintf('  WROTE %s\n', op.outFile);
+    fprintf('  WROTE %s  (tauf0 stored = %.6f%s)\n', op.outFile, tauf0, ternary(op.freeTauf, ' effective', ''));
 end
 end
 
@@ -158,7 +204,7 @@ end
 function op = parse_opts(args, cfg)
 % Name-value option parsing with seed-dependent defaults.
 op = struct('seedKind','energy','seedFactor',NaN,'sched',[],'maxIter',cfg.maxIter, ...
-            'thrustN',cfg.thrustN, ...
+            'thrustN',cfg.thrustN, 'freeTauf',true, ...
             'branch','','outFile','','save',true,'seedFile','');
 for k = 1:2:numel(args)
     switch lower(args{k})
@@ -173,6 +219,7 @@ for k = 1:2:numel(args)
         case 'branch',     op.branch     = args{k+1};
         case 'outfile',    op.outFile    = args{k+1};
         case 'save',       op.save       = args{k+1};
+        case 'freetauf',   op.freeTauf   = logical(args{k+1});
         otherwise, error('minfuel_at_tf:badOption','unknown option %s', args{k});
     end
 end
@@ -207,10 +254,15 @@ function [S, desc, fn] = load_seed_file(here, cfg, op)
 if strcmp(op.seedKind, 'file')
     fn = op.seedFile;
 else
-    cand = {fullfile(cfg.dirs.minfuel, strrep(cfg.fname('minfuel',op.seedFactor),'.mat','_en.mat')), ...
-            fullfile(cfg.dirs.minfuel, strrep(cfg.fname('minfuel',op.seedFactor),'.mat','_nb.mat')), ...
+    % free-tau_f rows first (results/minfuel_freetauf: gate_free_tauf rows and
+    % free-mode minfuel_at_tf rows), then the fixed-tau_f originals.
+    mf = cfg.fname('minfuel', op.seedFactor);
+    sfx = {'_free.mat','_free_basin24.mat','_free_flagship.mat','_free_en.mat','_free_nb.mat','_free_dn.mat','_free_up.mat'};
+    cand = cellfun(@(x) fullfile(cfg.dirs.minfuelFree, strrep(mf, '.mat', x)), sfx, 'UniformOutput', false);
+    cand = [cand, {fullfile(cfg.dirs.minfuel, strrep(mf,'.mat','_en.mat')), ...
+            fullfile(cfg.dirs.minfuel, strrep(mf,'.mat','_nb.mat')), ...
             fullfile(cfg.dirs.minfuel, cfg.fname('legacy_ms', op.seedFactor)), ...
-            fullfile(here, 'sundman_minfuel_certified.mat')};
+            fullfile(here, 'sundman_minfuel_certified.mat')}];
     fn = '';
     for k = 1:numel(cand)
         if isfile(cand{k}), fn = cand{k}; break; end
@@ -222,6 +274,13 @@ if isfield(R,'out'), S.X = R.out.X; S.U = R.out.U; else, S.X = R.X; S.U = R.U; e
 S.sigma = R.sigma;  S.tauf0 = R.tauf0;  S.rv0 = R.rv0;  S.rvf = R.rvf;
 if isfield(R,'fp'), S.fp = R.fp; end
 [~, b, ext] = fileparts(fn);  desc = [b ext];
+end
+
+% ---------------------------------------------------------------------------
+function v = ternary(c, a, b)
+% TERNARY  a if c else b.
+% INPUTS: c [logical]; a, b [any].  OUTPUTS: v [any].  REFERENCES: none.
+if c, v = a; else, v = b; end
 end
 
 % ---------------------------------------------------------------------------

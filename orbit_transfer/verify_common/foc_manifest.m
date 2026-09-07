@@ -10,7 +10,7 @@ function man = foc_manifest(name)
 %
 % INPUTS:
 %   name - campaign identifier [char]; valid values: 'earth_mee', 'earth_cr3bp',
-%          'tulip', 'elfo_fuel', 'elfo_mintime', 'toy'
+%          'tulip', 'tulip_free', 'elfo_fuel', 'elfo_mintime', 'toy'
 %
 % OUTPUTS:
 %   man  - struct with fields [struct]:
@@ -49,6 +49,9 @@ switch lower(name)
         man = foc_manifest('earth_mee'); man.name='earth_cr3bp'; man.autonomous=false;
     case 'tulip'
         man = base; man.name='tulip'; man.nx=8; man.nu=4; man.massRow=7; man.timeRow=8;
+    case 'tulip_free'   % tulip engine with opts.freeTauf: [r;v;m;t;cScale]
+        man = foc_manifest('tulip'); man.name='tulip_free'; man.nx=9;
+        man.horizonKind = 'freetf-cscale';
     case 'elfo_fuel'
         man = base; man.name='elfo_fuel'; man.nx=9; man.nu=4; man.massRow=7; man.timeRow=8;
         man.horizonKind = 'freetf-cscale';

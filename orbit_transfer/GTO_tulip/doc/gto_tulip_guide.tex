@@ -212,9 +212,21 @@ front minimum moves from $1.65\times$ (\SI{2.434}{\kilo\metre\per\second})
 to $1.70\times$ (\SI{2.374}{\kilo\metre\per\second}, $m_f=0.89112$). Every
 $m_f$ in this guide from the fixed-$\tau_f$ engine is therefore a lower bound
 on the free-$\tau_f$ optimum by a row-dependent amount; the numbers to quote
-are the free-$\tau_f$ ones. The honest fix in the engine is the sparse slack
-state, which keeps the KKT matrix banded and is already what the min-time
-anchor and the thrust ladder use.
+are the free-$\tau_f$ ones. The fix is now in the engine (2026-09-07):
+\texttt{casadi\_minfuel\_sundman} takes \texttt{opts.freeTauf}, which adds
+the constant slack state $c$ with $\ud t/\ud\tau = c\,\kappa$ and
+$\ud c/\ud\tau = 0$ (Betts' sparse free-time trick), so the regularized
+length is effectively $c\,\tau_{f,0}$ while $t(\tau_f)=t_f$ stays pinned
+and the KKT matrix stays banded; off, the solver is byte-identical to the one
+every stored artifact was built with. \texttt{minfuel\_at\_tf} now runs it
+by default, stores the effective length as the row's $\tau_{f,0}$ so no
+neighbour seed inherits a length its solution did not have, and writes free
+rows to \texttt{results/minfuel\_freetauf/}. A free-$\tau_f$ solution with
+slack $c$ is exactly a fixed-$\tau_f$ KKT point at $c\,\tau_{f,0}$ (rows
+1--8 of the defects and the objective coincide), which is how the two engine
+modes were checked against each other: the port reproduces the free-time
+solver's flagship answer to $6\times10^{-13}$ in $m_f$ from the fixed seed,
+and the fixed engine sits still at the effective length to $5\times10^{-13}$.
 
 \subsection{The nonlinear program}
 

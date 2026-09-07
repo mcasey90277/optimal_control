@@ -18,7 +18,7 @@ the first mandatory:
 | stage | what | optional? |
 |---|---|---|
 | 1 | parameters | — |
-| 2 | **direct solve** — energy→fuel homotopy (ε:1→0) via `minfuel_at_tf` | always runs |
+| 2 | **direct solve** — energy→fuel homotopy (ε:1→0) via `minfuel_at_tf`, τ_f free through the engine's cScale slack (default since 2026-09-07, see below) | always runs |
 | 3 | **PSR refine** — PMP-steered mesh refinement, sharpens switch times | yes |
 | 4 | export data products (also a ready-made IFS seed) | yes |
 | 5 | first-order PMP verification | yes |
@@ -86,7 +86,8 @@ direct/
 ├── certify/             PMP verification, second-order (SSOSC), front aggregation
 ├── viz/                 movies and frames
 ├── tests/               guardrail tests
-├── results/             solver artifacts + caches (results/psr = pipeline intermediates)
+├── results/             solver artifacts + caches (results/psr = pipeline intermediates;
+│                        results/minfuel = fixed-τ_f rows, results/minfuel_freetauf = FREE-τ_f rows)
 └── data/                exported data products
 ```
 
@@ -149,6 +150,46 @@ mesh was adequate.
 
 Full mathematical treatment: `../doc/gto_tulip_guide.pdf` §3.4.
 
+## τ_f is released, not inherited (2026-09-07) — read before comparing rows
+
+The regularized length `tauf0` read off the backbone is a *seed*, not a
+constraint, since 2026-09-07. The engine `lib/casadi_minfuel_sundman.m` takes
+`opts.freeTauf`: a constant slack state `cScale` multiplies the clock
+(dt/dτ = cScale·κ, dcScale/dτ = 0, Betts' sparse free-time trick), so the
+effective length is cScale·tauf0 while t(τ_f) = t_f stays pinned and the KKT
+matrix stays banded. `minfuel_at_tf` runs it **by default**, writes the row to
+`results/minfuel_freetauf/` with `_free` in the name, and stores the
+*effective* length as the row's `tauf0`, so a later neighbour seed starts from
+a length its solution actually had. Why it matters: with τ_f fixed, every row
+of the ΔV–t_f front had carried the 1.150× seed's `tauf0 = 151.68` whatever
+its t_f (the neighbour path rescaled the time state, never `tauf0`), which is
+an isoperimetric restriction that cost up to 9.4e-3 in m_f (142 g at 1.400×;
+`../../OPTIMALITY_CERTIFICATION.md` LEAD-5). Facts to keep straight:
+
+- **Rows in `results/minfuel/` and `lib/*.mat` are fixed-τ_f** (the restricted
+  problem); rows in `results/minfuel_freetauf/` are free-τ_f. `aggregate_front`
+  reads both and marks the free ones. Quote the free numbers.
+- A free-τ_f solution with slack c is *exactly* a fixed-τ_f KKT point at
+  c·tauf0 (rows 1–8 of the defects and the objective coincide), which is how
+  the two modes were checked against each other (flagship: free mode from the
+  fixed seed reproduces the free-time solver's m_f to 6e-13; fixed mode at the
+  effective length sits still to 5e-13). It is also why the 8-row `out.X` /
+  `out.lamDef` contract survives: the slack is a scalar (`out.cScale`), and the
+  9-row objects for the first-order gate are `out.X9` / `out.lamDef9`.
+- Gating a free row: `certify/run_foc_tulip` detects `out.cScale` /
+  `meta.freeTauf`, re-solves in free mode from the effective `tauf0` (cScale
+  should return ≈1) and uses the 9-state manifest `tulip_free`.
+  `certify/gate_free_tauf.m` did this for the whole front and wrote the results
+  set (`results/minfuel_freetauf/gate_summary.txt`).
+- `'freeTauf', false` reproduces the pre-2026-09-07 behaviour (a warning names
+  the inherited τ_f0). The PSR refinement loop (`refine_loop`,
+  `prep_refine_seed`) still re-solves fixed-τ_f at the stored length — for a
+  free row that is its own effective length, but the refined solution is not
+  re-released (open item in `../TODO.md`).
+- `run_certified_minfuel` (the flagship reproduction) goes through
+  `sundman_homotopy`, not `minfuel_at_tf`, and is unchanged: it reproduces the
+  published fixed-τ_f 25-switch row.
+
 ## Why it looks like this (2026-07-26 flatten)
 
 It used to be `sundman_minfuel/` and `PSR/` side by side, which read as two
@@ -189,6 +230,12 @@ converge machine-tight to 25 switches at the **same** t_f and land on
 | **best certified — `lib/sundman_minfuel_basin24_f1150.mat`** | **0.850087** | **24** | **3.3449 km/s** | **2.2487 kg** |
 | `run_certified_minfuel` (published flagship) | 0.849066 | 25 | 3.3696 km/s | 2.2640 kg |
 | energy backbone → `minfuel_at_tf` | 0.847086 | 25 | 3.4176 km/s | 2.2937 kg |
+| basin-24 winner, **τ_f released** (`results/minfuel_freetauf/minfuel_f1150_free_basin24.mat`, 2026-09-07) | 0.850333 | 24 | 3.3388 km/s | 2.2450 kg |
+| published flagship, **τ_f released** (`..._free_flagship.mat`) | 0.849272 | 23 | 3.3645 km/s | 2.2609 kg |
+
+(The two released rows are the same basins with the isoperimetric restriction
+removed, +2.5e-4 / +2.1e-4 in m_f; at 1.150× the restriction is smallest — see
+the root README.)
 
 The winner is certified at parity with the flagship (`run_foc_tulip`, all
 gates). The seed route — and the continuation path — decide the basin. Stage 2

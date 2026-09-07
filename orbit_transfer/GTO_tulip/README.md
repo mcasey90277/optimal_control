@@ -144,11 +144,26 @@ is that every stored row carries the 1.150× seed's τ_f0 = 151.68 (the neighbou
 seed rescales the time state but not τ_f0), so the fixed-τ_f constraint bit
 harder the further t_f was from 1.150×. **The free-τ_f numbers are the ones to
 quote**: front minimum 1.700× at **ΔV 2.3741 km/s, 1.633 kg** (fixed-τ_f best
-was 1.650× at 2.4339 km/s). The free rows are converged with raw-dual primer
-alignment ≤ 0.12° but not yet `foc_check`-gated (9-state layout) and not yet a
-results set for `aggregate_front` — open items in `TODO.md`. Probe and
-artifacts: `direct/certify/probe_e1_free_tauf.m`, `direct/results/e1_freetauf/`
-(full table in `../OPTIMALITY_CERTIFICATION.md` LEAD-5 FRONT RESULT).
+was 1.650× at 2.4339 km/s). Probe and artifacts:
+`direct/certify/probe_e1_free_tauf.m`, `direct/results/e1_freetauf/` (full
+table in `../OPTIMALITY_CERTIFICATION.md` LEAD-5 FRONT RESULT).
+
+**Fixed at the source (2026-09-07).** The cScale slack state is now ported into
+`casadi_minfuel_sundman` (`opts.freeTauf`; off = byte-identical to the engine
+every stored artifact was built with; validated: reproduces the free-time
+solver's flagship answer to 6e-13 from the fixed seed, and the fixed engine
+sits still at the effective length cScale·τ_f0 to 5e-13). `minfuel_at_tf` runs
+free-τ_f **by default**, stores the effective length as the row's `tauf0` so a
+neighbour seed never inherits a length its solution did not have, and writes
+free rows to `direct/results/minfuel_freetauf/` (`'freeTauf', false` reproduces
+the old behaviour with a warning naming the inherited τ_f0). The free front
+rows were re-solved in the ported engine, gated by the generic first-order
+check on the 9-state manifest `tulip_free`, and exported as a results set in
+the same folder by `direct/certify/gate_free_tauf.m`; `aggregate_front` reads
+that folder beside `results/minfuel/` and marks the free rows. Still fixed-τ_f
+downstream: the PSR refinement loop (`refine_loop`) and `prep_refine_seed`,
+which re-solve at the stored (now effective) length — correct for a free row's
+own length, but the refined solution is not re-released.
 
 The lower-level entries remain available:
 

@@ -92,6 +92,21 @@ end
 fprintf(' Bang-bang sign law (S<0 <=> burn)  : %9.2f %%                %s\n', ...
     rep.signPct, s_sign);
 
+% --- Signed minimum condition on the thrust direction (review E2) ----------
+% beta = -q/|q| with q the Lagrangian's beta-gradient sans the unit-norm dual:
+% a genuinely independent sign test (the tangential residual above is
+% sign-blind). Gated on the fraction of burn nodes, like the sign law; the max
+% is shown because a single burn-edge node can read 2.000 (foc_check.m).
+if isfield(rep, 'dirSignedPct')
+    if isnan(rep.dirSignedPct)
+        s_sgn = '--';
+    else
+        s_sgn = make_status_str(rep.dirSignedPct, tolSign, '>=');
+    end
+    fprintf(' Min condition, direction SIGNED    : %9.2f %% of burn (max %.3f) %s\n', ...
+        rep.dirSignedPct, rep.dirSignedMax, s_sgn);
+end
+
 % --- INFORMATIONAL (reported, never gated) ---------------------------------
 if isnan(rep.lamTimeCoV)
     fprintf(' Time-costate CoV (H-const dual)    :         --   end %+.3e\n', ...

@@ -23,7 +23,8 @@ function cfg = minfuel_config(over)
 %     .schedNeighbor- light re-sharpen schedule for continuing a bang-bang
 %                     solution from a NEIGHBORING t_f [1xK]
 %     .maxIter      - default IPOPT iteration cap [scalar]
-%     .dirs         - result directories (.energy .minfuel .fronts .plots .logs)
+%     .dirs         - result directories (.energy .minfuel .minfuelFree .fronts
+%                     .plots .logs)
 %     .fname        - @(kind,factor) canonical result filename, e.g.
 %                     fname('minfuel',1.20) -> 'minfuel_f1200.mat' (collision-
 %                     free at 0.001 factor granularity, unlike the old %.2f)
@@ -68,7 +69,12 @@ cfg.maxIter = 1500;
 r = fullfile(here, '..', 'GTO_tulip', 'direct', 'results');
 cfg.dirs = struct('root',r, 'energy',fullfile(r,'energy'), ...
                   'minfuel',fullfile(r,'minfuel'), 'fronts',fullfile(r,'fronts'), ...
-                  'plots',fullfile(r,'plots'), 'logs',fullfile(r,'logs'));
+                  'plots',fullfile(r,'plots'), 'logs',fullfile(r,'logs'), ...
+                  'minfuelFree',fullfile(r,'minfuel_freetauf'));
+% minfuelFree: the FREE-tau_f results set (certify/gate_free_tauf.m, 2026-09-07)
+% -- the same minfuel_at_tf row layout, tau_f released through the engine's
+% cScale slack at the same pinned t_f. These are the numbers to quote; the
+% rows in dirs.minfuel are the fixed-tau_f (restricted-problem) originals.
 
 % --- canonical filenames ----------------------------------------------------
 % factor encoded as milli-units: 1.20x -> f1200 (no %.2f collisions).

@@ -21,6 +21,10 @@ function [rep, cert, info] = run_foc_tulip(matPath)
 %             published 25-switch 1.15x flagship; the best certified row at
 %             that t_f is ../lib/sundman_minfuel_basin24_f1150.mat]. Expected fields: out.X [8xnN], out.U [4xnN], sigma
 %             [nNx1], tauf0, pSund, rv0, rvf (sundman_homotopy.m save list).
+%             FREE-tau_f rows (results/minfuel_freetauf/, out.meta.freeTauf or
+%             out.cScale present; 2026-09-07) are re-solved in the engine's
+%             freeTauf mode from their stored EFFECTIVE tauf0 (cScale should
+%             then return ~1) and gated on the 9-state manifest 'tulip_free'.
 %
 % OUTPUTS:
 %   rep  - foc_check report struct, with .ipopt (2nd-order verdict) and
@@ -61,12 +65,25 @@ p = cr3bp_lt_params(0.025, 15, 2100);   % matches the certified campaign (README
 pSund = 1.5;   if isfield(S,'pSund') && ~isempty(S.pSund), pSund = S.pSund; end
 tauf0 = S.tauf0;
 tf    = S.out.X(8,end);
+freeRow = isfield(S.out, 'cScale') || (isfield(S.out, 'meta') && isfield(S.out.meta, 'freeTauf') && S.out.meta.freeTauf);
 
 % --- warm re-solve AT the saved primal, with the FOC-gate model attached ----
 maxIter = 800;
-sopts = struct('returnModel', true);
+sopts = struct('returnModel', true, 'freeTauf', freeRow);
+% dual warm start from the row's own multipliers when it carries them (rows
+% written by minfuel_at_tf / gate_free_tauf do; the 2026-07 flagship artifact
+% does not): the engine ignores a length mismatch with a warning.
+if freeRow && isfield(S.out, 'lamAll') && ~isempty(S.out.lamAll)
+    sopts.lamG0 = S.out.lamAll;           % free rows store the 9-state duals
+elseif ~freeRow && isfield(S.out, 'lamAll') && ~isempty(S.out.lamAll)
+    sopts.lamG0 = S.out.lamAll;
+end
 out = casadi_minfuel_sundman(S.sigma, tf, S.rv0, S.rvf, p.Tmax, p.c, p.muStar, ...
-    S.out.X, S.out.U, tauf0, pSund, maxIter, 0, true, sopts);
+    S.out.X(1:8,:), S.out.U, tauf0, pSund, maxIter, 0, true, sopts);
+if freeRow
+    fprintf('run_foc_tulip: FREE-tau_f row -- re-solved with freeTauf from effective tauf0 %.6f; cScale returned %.8f (expect ~1)\n', ...
+            tauf0, out.cScale);
+end
 
 % --- certified-quantity guard (shared: verify_common/certified_guard.m) ------
 % Success class + machine-tight defect + a ONE-SIDED final-mass check. Was ~25
@@ -85,15 +102,21 @@ info.mfSaved    = mfSaved;
 info.mfResolved = out.mf;
 
 % --- generic AD-based FOC/KKT gate (raw-dual costate source) ----------------
-man = foc_manifest('tulip');
-rep = foc_check(out, S.sigma, man, struct());
+if freeRow
+    man = foc_manifest('tulip_free');  outG = out;  outG.X = out.X9;   % 9-state model
+else
+    man = foc_manifest('tulip');       outG = out;
+end
+rep = foc_check(outG, S.sigma, man, struct('eps', 0));
 rep.ipopt = foc_ipopt_inertia(getfield_default(out, 'regHistory', []));
 
 % --- independent cross-check: LS-reconstructed continuous costate ----------
 % Same re-solved row (out), same NLP solution -- an independent recovery
 % pipeline (block-bidiagonal adjoint recursion + primer-direction LS, NOT the
 % NLP's own KKT duals) rather than a duplicate of foc_check's raw-dual source.
-solStruct = struct('out', out, 'sigma', S.sigma, 'tauf0', tauf0, 'pSund', pSund, ...
+% (free rows: out.X is the 8-row contract and out.tauf the effective length,
+% so the LS certifier's dt/dtau = kappa assumption holds exactly)
+solStruct = struct('out', out, 'sigma', S.sigma, 'tauf0', out.tauf, 'pSund', pSund, ...
                     'eps', 0, 'rv0', S.rv0, 'rvf', S.rvf);
 cert = certify_minfuel_pmp(solStruct, false);
 

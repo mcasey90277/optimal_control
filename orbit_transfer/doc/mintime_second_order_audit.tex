@@ -1,0 +1,339 @@
+\documentclass[11pt]{article}
+\usepackage[margin=1in]{geometry}
+\usepackage{amsmath,amssymb,amsthm,bm}
+\usepackage{booktabs}
+\usepackage{hyperref}
+\usepackage{xcolor}
+\newtheorem{lemma}{Lemma}
+\newtheorem{proposition}{Proposition}
+\newtheorem{remark}{Remark}
+\theoremstyle{definition}
+\newtheorem{definition}{Definition}
+\newcommand{\R}{\mathbb{R}}
+\newcommand{\lv}{\lambda_v}
+\newcommand{\lr}{\lambda_r}
+\newcommand{\lm}{\lambda_m}
+\newcommand{\lrv}{\lambda_{rv}}
+\newcommand{\Phixl}{\Phi_{x\lambda}}
+\newcommand{\tf}{t_f}
+\newcommand{\gap}[1]{\textcolor{red!70!black}{\textbf{[#1]}}}
+
+\title{Second-order audit of the min-time catalog test:\\
+what the free-time quotiented Jacobi determinant actually tests,\\
+and what remains between it and a sufficient certificate}
+\author{M.~Casey (host), prompted by GPT-6 Astra review \#2}
+\date{2026-09-06}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+The costate catalogs (18,360 min-time entries) carry a conjugate-point verdict
+from \texttt{ms\_conjugate\_test} in its free-final-time form: the sign of
+$\det[\Phixl(t,0)P,\; f(x(t))]$ sampled at the multiple-shooting junctions,
+where $P$ spans the orthogonal complement of the converged initial costate
+within the $(\lr,\lv)$ block. This note (i) states the problem with its actual
+endpoint conditions (mass free at $\tf$, $\tf$ free), (ii) proves that the
+instrument's quotient is equivalent to the Bonnard--Caillau--Tr\'elat (BCT)
+free-time exponential-map construction on the $H=0$ slice, (iii) shows that the
+free terminal mass adds no competitors in the all-burn problem, so the
+point-target theorem applies after a mass reduction, and (iv) lists, without
+euphemism, the hypotheses a per-entry \emph{sufficient} certificate would still
+need and which of them are gates we can add. The honest description of a
+current PASS is given in \S\ref{sec:meaning}.
+\end{abstract}
+
+\section{The problem as solved}\label{sec:problem}
+
+State $x=(r,v,m)\in\R^7$ in the Earth--Moon rotating frame (ND units), control
+$u=(\alpha,s)$ with $\alpha\in S^2$ and $s\in[0,1]$:
+\begin{equation}\label{eq:dyn}
+\dot r=v,\qquad \dot v=g(r)+h(v)+\frac{sT}{m}\alpha,\qquad \dot m=-\frac{sT}{c},
+\end{equation}
+with $g$ the gravity-plus-centrifugal field and $h(v)=(2v_y,-2v_x,0)$ the
+Coriolis term. Minimize $\tf$ subject to $r(0),v(0),m(0)=m_0$ fixed and
+$r(\tf)=r_f$, $v(\tf)=v_f$; \emph{$m(\tf)$ free, $\tf$ free}.
+
+\paragraph{Normalized PMP.} With $\lambda_0=1$ and $\lambda=(\lr,\lv,\lm)$,
+\begin{equation}\label{eq:H}
+H(x,\lambda,u)=1+\lr\!\cdot v+\lv\!\cdot\big(g+h\big)+sT\Big(\frac{\lv\!\cdot\alpha}{m}-\frac{\lm}{c}\Big).
+\end{equation}
+Minimization over $\alpha$ gives $\alpha^*=-\lv/|\lv|$ (requires $|\lv|\neq0$);
+then the coefficient of $s$ is $-T\,Q_{mt}$ with
+\begin{equation}\label{eq:Qmt}
+Q_{mt}:=\frac{|\lv|}{m}+\frac{\lm}{c},
+\end{equation}
+so $s^*=1$ wherever $Q_{mt}>0$. The catalog pipeline (pumpkyn \texttt{tfMin},
+\texttt{ms\_tfmin}) \emph{assumes} $s\equiv1$ (``continuous burn is a
+theorem'', \texttt{costate\_library\_methodology}); the sign condition
+\eqref{eq:Qmt} is what that theorem asserts along an extremal, and it is
+checkable from the junction states. Terminal conditions:
+$r(\tf)=r_f$, $v(\tf)=v_f$, transversality $\lm(\tf)=0$ (free mass), and
+$H(\tf)=0$ (free time; $H\equiv0$ since the system is autonomous).
+Costate equations, with $s=1$:
+\begin{equation}\label{eq:costate}
+\dot\lr=-\big(\partial_r g\big)^{\!\top}\lv,\qquad
+\dot\lv=-\lr-\big(\partial_v h\big)^{\!\top}\lv,\qquad
+\dot\lm=\frac{T|\lv|}{m^2}.
+\end{equation}
+
+\section{Two exact reductions}\label{sec:reductions}
+
+\subsection{Mass is not a free terminal coordinate in the all-burn problem}
+For every admissible all-burn trajectory, $m(t)=m_0-Tt/c$ regardless of
+$\alpha(\cdot)$. Hence the set of competitors ``reaching $(r_f,v_f)$ at some
+$\tf$ with $m(\tf)$ free'' is \emph{identical} to the set of 6-state trajectories
+of
+\begin{equation}\label{eq:dyn6}
+\dot r=v,\qquad \dot v=g(r)+h(v)+\frac{T}{m_0-Tt/c}\,\alpha,
+\end{equation}
+reaching the \emph{point} $(r_f,v_f)$. The target manifold
+$M_f=\{(r_f,v_f)\}\times\R_{>0}$ of the 7-state problem is a line whose free
+direction is never exercised by an admissible variation
+($\delta m(\tf)=-(T/c)\,\delta\tf$ is determined by $\delta\tf$). Consequently
+\emph{the point-target, free-time second-order theory applies to
+\eqref{eq:dyn6}}; no focal-point (manifold) construction is needed for the
+min-time catalogs. (This is the opposite of the fixed-$\tf$ min-fuel line, where
+the throttle varies and $m(\tf)$ is genuinely free; see \S\ref{sec:fixedtf}.)
+
+The reduced system \eqref{eq:dyn6} is non-autonomous through $m(t)$. The
+7-state autonomous form is its standard autonomization; the two Hamiltonians
+agree, $\lm$ playing the role of the time costate for the mass clock. In the
+7-state form $H\equiv0$ is a first integral; in the 6-state form it is not.
+Nothing below depends on which form is used, but the instrument's row and column
+choices are the 6-state ones, and \S\ref{sec:equiv} shows why that is right.
+
+\subsection{Two exact invariances of the trajectory map}
+Let $\mathcal T:\lambda(0)\mapsto x(\cdot;\lambda(0))$ be the map from initial
+costate to the state trajectory of the PMP flow with $s\equiv1$,
+$\alpha^*=-\lv/|\lv|$.
+\begin{enumerate}
+\item \textbf{Scale.} $\alpha^*$ depends on $\lv$ only through its direction,
+and \eqref{eq:costate} is linear in $\lambda$; so for $a>0$,
+$\mathcal T(a\lambda(0))=\mathcal T(\lambda(0))$. Differentiating,
+\begin{equation}\label{eq:scale}
+\Phixl(t,0)\,\lambda(0)=0\qquad\text{for all }t,
+\end{equation}
+where $\Phixl=\partial x(t)/\partial\lambda(0)$ (rows $r,v,m$; columns
+$\lr,\lv,\lm$).
+\item \textbf{Mass costate.} $\lm$ enters neither $\alpha^*$ nor the $(\lr,\lv)$
+equations; so $\partial x(t)/\partial\lm(0)=0$: the $\lm$ column of $\Phixl$ is
+identically zero, and $\partial m(t)/\partial\lambda(0)=0$ for every column.
+\end{enumerate}
+Both are exact, not approximate; they are why the na\"ive $7\times7$ or $6\times6$
+determinant is identically singular (measured as $10^{-37}$--$10^{-13}$ noise
+with spurious sign flips before the quotient was introduced, 2026-08-08).
+
+\section{The BCT construction and the instrument's determinant}\label{sec:equiv}
+
+\subsection{BCT free-time conjugate times}
+For a normal extremal of a smooth control-affine system with a point target and
+free final time, BCT (2007, \S3; also Agrachev--Sachkov Ch.~20--21) define the
+exponential map
+\[
+\exp_{x_0}(t,\lambda)=\pi\circ e^{t\vec H}(x_0,\lambda),\qquad
+\lambda\in\mathcal L:=\{\lambda:\ H(x_0,\lambda,u^*(\lambda))=0\},
+\]
+and call $t_c>0$ a \emph{conjugate time} if $(t,\lambda)\mapsto\exp_{x_0}(t,\lambda)$,
+restricted to $\R\times\mathcal L$, is not an immersion at $(t_c,\lambda(0))$.
+Its differential at $(t,\lambda(0))$ applied to $(\delta t,\delta\lambda)$ with
+$\delta\lambda\in T_{\lambda(0)}\mathcal L$ is
+\begin{equation}\label{eq:dexp}
+d\exp\,(\delta t,\delta\lambda)=f(x(t))\,\delta t+\Phixl(t,0)\,\delta\lambda .
+\end{equation}
+Non-immersion means $\operatorname{rank}[\,\Phixl(t,0)|_{T\mathcal L},\ f(x(t))\,]<n$
+with $n$ the state dimension.
+
+\subsection{The tangent space of the $H=0$ slice}
+At the minimizing control, $\partial H/\partial u=0$ tangentially on $S^2$ and
+$s$ sits at its bound with $Q_{mt}>0$, so by the envelope argument
+$\partial_\lambda\big[H(x_0,\lambda,u^*(\lambda))\big]=f(x_0,u^*)=:f_0$. Hence
+\begin{equation}\label{eq:TL}
+T_{\lambda(0)}\mathcal L=\{\delta\lambda\in\R^7:\ \delta\lambda\cdot f_0=0\},
+\end{equation}
+a 6-dimensional subspace. Note that pure $\lm$ shifts are \emph{not} tangent
+($\delta\lambda\cdot f_0=\delta\lm\,\dot m_0$, $\dot m_0=-T/c\neq0$), and the
+scaling direction $\lambda(0)$ itself is not tangent either
+($\lambda(0)\cdot f_0=-1$ from $H=0$). So the $H=0$ slice is \emph{not} the
+quotient by scaling; it is a transversal to it, which is the point of the
+following lemma.
+
+\subsection{Equivalence lemma}
+Let $\lrv(0)\in\R^6$ denote the $(\lr,\lv)$ part of $\lambda(0)$, let $P\in\R^{6\times5}$
+have orthonormal columns spanning $\lrv(0)^\perp$ (the instrument's
+\texttt{null(qDir')}), and write $\Phi_{rv}$ for the $6\times6$ block of $\Phixl$
+with rows $(r,v)$ and columns $(\lr,\lv)$.
+
+\begin{lemma}\label{lem:image}
+$\operatorname{Im}\big(\Phixl(t,0)|_{T\mathcal L}\big)\big|_{rv}
+=\operatorname{Im}\big(\Phi_{rv}(t,0)\,P\big)$ for every $t$.
+\end{lemma}
+\begin{proof}
+($\subseteq$) Take $\delta\lambda=(\delta\lrv,\delta\lm)\in T\mathcal L$. By the
+$\lm$ invariance, $\Phixl\delta\lambda|_{rv}=\Phi_{rv}\delta\lrv$. Decompose
+$\delta\lrv=a\,\lrv(0)+Pw$; by \eqref{eq:scale} restricted to the $rv$ rows
+(the $\lm$ column being zero, \eqref{eq:scale} reads $\Phi_{rv}\lrv(0)=0$),
+$\Phi_{rv}\delta\lrv=\Phi_{rv}Pw$.
+($\supseteq$) Given $w\in\R^5$, set $\delta\lrv=Pw$ and choose
+$\delta\lm=-\big(Pw\cdot f_{0,rv}\big)/\dot m_0$, which is possible because
+$\dot m_0=-T/c\neq0$. Then $\delta\lambda\cdot f_0=0$, so
+$\delta\lambda\in T\mathcal L$, and $\Phixl\delta\lambda|_{rv}=\Phi_{rv}Pw$.
+\end{proof}
+
+\begin{proposition}\label{prop:equiv}
+For the reduced 6-state problem \eqref{eq:dyn6},
+\[
+\operatorname{rank}\big[\Phixl(t,0)|_{T\mathcal L},\ f(x(t))\big]_{rv}
+=\operatorname{rank}\big[\Phi_{rv}(t,0)P,\ f_{rv}(x(t))\big],
+\]
+so $t$ is a BCT conjugate time iff the instrument's $6\times6$ determinant
+$\det[\Phi_{rv}P,\,f_{rv}]$ vanishes. In particular the instrument's
+\emph{free-time spec} (\texttt{stateRows=1:6, costateCols=8:13,
+quotientDir=$\lambda(0)_{rv}$, freeTime=true}) is exactly the BCT immersion
+test, not an ad hoc surrogate.
+\end{proposition}
+\begin{proof}
+The flow column is common to both matrices; Lemma~\ref{lem:image} identifies
+the column spaces of the other blocks; ranks of $[A,f]$ and $[B,f]$ agree when
+$\operatorname{Im}A=\operatorname{Im}B$.
+\end{proof}
+
+\begin{remark}[Why rows $1{:}6$ and not $1{:}7$]
+In the 7-state form the mass row of $\Phixl$ is identically zero
+(\S\ref{sec:reductions}), so a $7\times7$ block would be structurally singular
+for a reason that has nothing to do with conjugacy. The reduction of
+\S2.1 makes the 6-state block the correct object. This is the min-time
+counterpart of the 2026-09-05 fixed-$\tf$ correction (rows $[1{:}6\ 14]\to1{:}7$),
+and it goes the \emph{other} way: there the mass row carries information
+(throttle varies), here it carries none.
+\end{remark}
+
+\begin{remark}[The quotient is not a symmetry of the BVP]
+Astra's objection stands and is answered by the lemma rather than dismissed:
+with $\lambda_0=1$ and $H(0)=0$, scaling $\lambda\mapsto a\lambda$ is not a
+symmetry of the boundary-value problem (it violates $H=0$), so ``quotient by
+scaling'' is not literally BCT's construction. What the lemma shows is that the
+\emph{image} of the tangent space of the correct construction ($H=0$ slice)
+coincides with the image of the scaling quotient, because the two differ only
+by directions ($\lambda(0)$ itself, and $\lm$) that the trajectory map kills
+exactly. The determinant is therefore the same function of $t$ up to a nonzero
+factor, and its sign changes are the same events.
+\end{remark}
+
+\section{What a sufficient certificate needs}\label{sec:hyp}
+
+The BCT sufficiency theorem for a normal extremal with a point target and free
+final time (BCT 2007 Thm.~3.x in their numbering; the statement in Agrachev--Sachkov
+\S21.3 is equivalent) reads: \emph{if the strong Legendre condition holds along
+$[0,\tf]$ and there is no conjugate time in $(0,\tf]$, then the extremal
+trajectory is a strict strong (i.e.\ $C^0$-topology) local minimizer among
+trajectories with the same endpoints.} Applied to \eqref{eq:dyn6} via
+\S\ref{sec:reductions}, each hypothesis becomes a per-entry statement:
+
+\begin{center}\small
+\begin{tabular}{@{}p{0.30\textwidth}p{0.36\textwidth}p{0.28\textwidth}@{}}
+\toprule
+hypothesis & what it means here & status / gate \\
+\midrule
+H1 normal extremal & a lift with $\lambda_0=1$ exists & \textbf{have} (the BVP is solved with $\lambda_0=1$ to $10^{-10}$; pumpkyn agrees to $|\Delta z|\sim10^{-9}$). \gap{Does not exclude an abnormal lift of the same trajectory; see \S\ref{sec:abnormal}} \\
+H2 strong Legendre & $H_{\alpha\alpha}|_{TS^2}=\tfrac{T}{m}|\lv|\,I\succ0$, i.e.\ $|\lv(t)|>0$ on $[0,\tf]$ & \textbf{gate to add}: $\min_t|\lv|$ from the flown arc (junction states give a lower bound only at $K$ points) \\
+H3 all-burn is the PMP control & $Q_{mt}(t)>0$ on $[0,\tf]$, eq.~\eqref{eq:Qmt} & \textbf{gate to add}; without it the catalog's problem is the all-burn problem, not the throttle-bounded one \\
+H4 smoothness / no collision & $m>0$, $r$ away from the primaries & \textbf{have} (\texttt{true\_min\_altitude} screen) \\
+H5 no conjugate time on $(0,\tf]$ & $\det[\Phi_{rv}P,f_{rv}]\neq0$ on $(0,\tf]$ & \textbf{assessed}, not proved: sign changes at $K$ junctions (now including $\tf$); even-multiplicity zeros and pairs within one segment are invisible \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\subsection{On normality}\label{sec:abnormal}
+An abnormal extremal is a solution of the same BVP with $\lambda_0=0$, i.e.\ with
+the ``$1$'' removed from \eqref{eq:H} and $H\equiv0$ still imposed. Our accepted
+lift has $\lambda_0=1$ and finite $\lambda$, which proves the trajectory
+\emph{admits} a normal lift. BCT's theorem is stated for normal extremals in
+this sense (existence of a normal lift under the strong Legendre condition, the
+minimizing control being uniquely determined). What it does not address is
+whether the same trajectory also admits an abnormal lift; for control-affine
+systems with $\alpha\in S^2$ that would require $\lv\equiv0$ along an arc of the
+abnormal lift, which is incompatible with the unique direction law unless the
+trajectory is a coasting geodesic of the drift --- not the case for any
+all-burn catalog entry. This is an argument, not a computation; the computation
+would be: form the abnormal shooting function (drop the constant, keep
+$H\equiv0$ and the endpoint conditions) and check that the accepted
+$(\lr,\lv)$ direction is not a root of it. Cheap; not done. \gap{open}
+
+\subsection{On the sampled determinant}\label{sec:sampling}
+Even with H1--H4 established, H5 is checked by sign changes at $K$ points.
+Three failure modes remain: (a) two conjugate times inside one segment;
+(b) a double root (even multiplicity, no sign change) --- for two decoupled
+copies of a problem with a simple conjugate time this is generic, so it is not
+exotic; (c) the endpoint case $\det(\tf)=0$, which the instrument now reports as
+\texttt{ENDPOINT} rather than a refutation. Mitigations, in order of cost:
+sample the determinant along each segment's variational integration (the STM
+is already integrated densely; only the determinant is discarded);
+monitor $\sigma_{\min}$ of the equilibrated block as a continuous quantity, so
+an even-multiplicity zero shows as a dip to the noise floor; and, if a
+\emph{rigorous} statement is wanted, validated integration of the variational
+equations with a sign-definite enclosure of the determinant --- out of scope
+for this program.
+
+\section{What a PASS means today}\label{sec:meaning}
+For a catalog entry with \texttt{conj\_pass = 1} the defensible statement is:
+\begin{quote}
+\emph{The entry is a normal PMP extremal of the all-burn min-time problem
+(residual $10^{-10}$, independently reproduced by pumpkyn \texttt{tfMin}
+to $|\Delta z|\lesssim10^{-9}$), and the Bonnard--Caillau--Tr\'elat free-time
+conjugate determinant, in the exactly equivalent quotiented form of
+Proposition~\ref{prop:equiv}, shows no sign change at the $K$ junction samples
+on $(0,\tf]$ (an initial arc where the state block is structurally rank-deficient
+having been skipped).}
+\end{quote}
+It is \emph{not} yet ``a strict strong local minimizer'', because H2 and H3 are
+not gated, the abnormal-lift computation of \S\ref{sec:abnormal} has not been
+done, and H5 is sampled. Adding the two gates and dense sampling upgrades this
+to ``satisfies the hypotheses of the BCT sufficiency theorem to the extent they
+are numerically checkable''; that is the sentence a methods paper can carry,
+with the sampling caveat stated.
+
+\section{The fixed-$\tf$ line, for contrast}\label{sec:fixedtf}
+In the smoothed-fuel problems the throttle varies, so $m(\tf)$ is genuinely free
+and $M_f=\{(r_f,v_f)\}\times\R_{>0}$ is a real target manifold. The interior test
+with rows $1{:}7$ (2026-09-05) is the fixed-endpoint Jacobi \emph{necessary}
+condition: a conjugate point of the point-target accessory problem yields an
+admissible zero-second-variation direction for the manifold problem too (a
+subset of its competitors). Sufficiency for the manifold problem needs the focal
+construction --- the Lagrangian subspace $\{\delta r=\delta v=0,\ \delta\lm=0\}$
+at $\tf$ propagated \emph{backward} and tested for intersection with the vertical
+--- i.e.\ the backward Riccati sweep of the certification survey, item~3.2.
+Astra review \#2 also established that for the continuous clipped laws
+(\texttt{eps}, \texttt{huberc}) the branchwise-AD STM is the true derivative of
+the flow at transversal band crossings ($F^+=F^-$ there), so the instrument's
+input is right; what is missing is the terminal-manifold construction, not the
+STM.
+
+\section{Recommended additions to the instrument (min-time)}
+\begin{enumerate}
+\item Gate $\min_{t}|\lv(t)|$ and $\min_t Q_{mt}(t)$ along the flown arc
+(\texttt{seed\_from\_z8} already flies it); store both per entry. Cost: one
+propagation per entry, already performed by \texttt{conj\_catalog\_pass}.
+\item Dense determinant sampling: in \texttt{collectSTMs}, keep the variational
+ODE's dense output for each segment and evaluate the quotiented determinant at
+every integrator step; report the finest bracket of each sign change and the
+minimum of $\sigma_{\min}$.
+\item The abnormal-lift probe of \S\ref{sec:abnormal} on the golden cells first,
+then at catalog scale if cheap.
+\item Rename the catalog field's documentation from ``conjugate-certified'' to
+the statement of \S\ref{sec:meaning}.
+\end{enumerate}
+
+\section*{References}
+\begin{itemize}
+\item B.~Bonnard, J.-B.~Caillau, E.~Tr\'elat, ``Second order optimality
+conditions in the smooth case and applications in optimal control,''
+\emph{ESAIM: COCV} 13 (2007) 207--236.
+\item A.~Agrachev, Y.~Sachkov, \emph{Control Theory from the Geometric
+Viewpoint}, Springer 2004, Ch.~20--21.
+\item R.~Vinter, \emph{Optimal Control}, Birkh\"auser 2000 (endpoint
+constraints, strong local optimality).
+\item \texttt{costate\_common/ms\_conjugate\_test.m}; \texttt{DRO\_tulip/reviews/huber\_review\_adjudicated\_2026-09-06.md};
+\texttt{doc/extremal\_and\_local\_min\_survey.md}.
+\end{itemize}
+\end{document}

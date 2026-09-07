@@ -40,6 +40,9 @@ P.maxGaps  = 2;                  % abandoned gaps before the arm retires
 P.HdriftTol = 1e-6;              % absolute first-integral gate (pilot rule)
 P.outMat   = '';                 % '' = direct/results/minfuel_race.mat
 P.logFile  = '';
+P.pilotMat = '';                 % '' = direct/results/minenergy_pilot.mat; any file
+                                 % holding records R in the pilot format (e.g. the
+                                 % gamma-walk's minenergy_highgamma.mat)
 P.rungTolR  = [];                % LOOSE-RUNG gate (MfMax review 2026-09-06,
                                  % idea 1.1): [] = a rung must CONVERGE to
                                  % ms tolR (the 09-02 protocol); a number
@@ -79,7 +82,9 @@ outMat = P.outMat;
 if isempty(outMat)
     outMat = fullfile(here, 'direct', 'results', 'minfuel_race.mat');
 end
-L = load(fullfile(here, 'direct', 'results', 'minenergy_pilot.mat'));
+pilotMat = P.pilotMat;
+if isempty(pilotMat), pilotMat = fullfile(here, 'direct', 'results', 'minenergy_pilot.mat'); end
+L = load(pilotMat);
 ki = find(arrayfun(@(r) isequal([r.iD r.iA], P.cell) && ...
                         abs(r.gam - P.gamma) < 1e-9, L.R), 1);
 assert(~isempty(ki), 'no minenergy_pilot record for cell (%d,%d) gamma %.2f', ...

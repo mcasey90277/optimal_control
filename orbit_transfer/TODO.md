@@ -157,9 +157,9 @@ exists.
     wall on the smooth problem — plan B is the target-orbit IC homotopy or
     a larger K); (1,2) walking. Then `run_highgamma_race` (huberc fixed-δ /
     ε / huber) on every reached record → FINDINGS §28.
-  - [ ] **Huber follow-ups (from §25/§26):** (a) `ms_bvp` tolR 1e-10 sits ON
-    the 30-d residual floor — spurious fails at 1.0–2.0e-10 cost (1,2) an
-    abandoned gap; set 3e-10 or floor-aware (one line, measurable);
+  - [ ] **Huber follow-ups (from §25/§26):** (a) ~~tolR~~ **DONE 2026-09-07:
+    `run_minfuel_race` P.tolR = 3e-10** (the 1e-10 floor cost (1,2)@1.25
+    an entire ε arm in the high-γ race, `p=1 FAIL normR=1.0e-10`);
     (b) **family schedule in `run_minfuel_race`**: Huber (fast) → huberc
     fixed-δ when `huber_switch_diag` predicts a graze → ε fallback;
     (c) Huber/huberc on the cells ε cannot enter (high-γ band via MfMax

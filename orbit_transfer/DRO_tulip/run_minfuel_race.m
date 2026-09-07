@@ -35,6 +35,11 @@ P.sched    = [1 0.7 0.5 0.35 0.25 0.18 0.12 0.08 0.05 0.03 ...
               0.02 0.012 0.008 0.005 0.003 0.002 0.001];
 P.families = {'eps', 'huber'};
 P.wallSec  = 300;                % ms budget per solve (hard-capped +90 s)
+P.tolR     = 3e-10;              % ms residual tolerance. 1e-10 sits ON the
+                                 % residual floor of 30-day arcs: measured
+                                 % "failures" at normR 1.0-2.0e-10 cost (1,2)
+                                 % an abandoned gap (FINDINGS 26) and a whole
+                                 % eps arm at gamma 1.25 (FINDINGS 28).
 P.maxBisect = 3;                 % midpoint inserts per failed gap
 P.maxGaps  = 2;                  % abandoned gaps before the arm retires
 P.HdriftTol = 1e-6;              % absolute first-integral gate (pilot rule)
@@ -152,7 +157,7 @@ for kf = 1:numel(P.families)
         t0 = tic;
         [okRun, z, it] = run_capped(pool, @ms_minfuel, 2, P.wallSec + 90, ...
             rv0, rvf, tf, seed, Tmax, c, muStar, sm, ...
-            struct('wallSec', P.wallSec));
+            struct('wallSec', P.wallSec, 'tolR', P.tolR));
         tight = okRun && it.converged && it.Hdrift < P.HdriftTol;
         loose = okRun && ~isempty(P.rungTolR) && ~tight && ...
                 it.normR < P.rungTolR && it.Hdrift < dflt(P.rungHdriftTol, P.HdriftTol);
@@ -232,7 +237,7 @@ for kf = 1:numel(P.families)
         try
             seedR = seedFrom(A.Y{end}, seed.tGrid, tf, Tmax, c, muStar, sm);
             [okR, zR, itR] = run_capped(pool, @ms_minfuel, 2, P.wallSec + 90, ...
-                rv0, rvf, tf, seedR, Tmax, c, muStar, sm, struct('wallSec', P.wallSec));
+                rv0, rvf, tf, seedR, Tmax, c, muStar, sm, struct('wallSec', P.wallSec, 'tolR', P.tolR));
         catch
             okR = false;  zR = [];  itR = struct();
         end
@@ -279,7 +284,7 @@ for kf = 1:numel(P.families)
         sm = smOf(fam, A.p(end), A.delta(end));
         [okA, ~, itA] = run_capped(pool, @ms_minfuel, 2, 2*P.wallSec, ...
             rv0, rvf, tf, seed, Tmax, c, muStar, sm, ...
-            struct('wallSec', P.wallSec, 'accept', true));
+            struct('wallSec', P.wallSec, 'tolR', P.tolR, 'accept', true));
         if okA && isfield(itA, 'accept')
             A.acceptDz = itA.accept.dz;  A.acceptOk = itA.accept.accepted;
         else

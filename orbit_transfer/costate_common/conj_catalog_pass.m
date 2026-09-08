@@ -28,6 +28,8 @@ function S = conj_catalog_pass(catMat, opts)
 %            .tolDz      [1e-6] |z - z8| gate for a valid re-solve
 %            .wallSec    [60] per-entry ms_tfmin wall budget (advisory)
 %            .sideMat    [<catMat minus .mat>_conjprog.mat] sidecar path
+%            .allowUndecided [0] permit writeback with at most this many
+%                        entries still undecided (recorded in .conj_test)
 %            .writeback  [false] after a COMPLETE census, write conj_pass /
 %                        conj_ncross / conj_atfinal grids + .conj_test meta
 %                        into the catalog .mat (backs up to .bak_conj first)
@@ -179,7 +181,15 @@ lg('[census] pass %d / fail %d / notrun %d / todo %d  (done=%d)', ...
 
 %% Writeback (explicit, only on a complete census):
 if writeback
-    assert(S.done, 'census incomplete (%d todo) -- not writing back', S.nTodo);
+    % A complete census is the default requirement. `allowUndecided` is the
+    % ONLY way past it and you must state the number you expect: an entry
+    % whose re-solve lands just outside tolDz is legitimately undecided
+    % (conj_pass = -1 already means exactly that), but a silent partial
+    % writeback would misreport coverage. The count is recorded below.
+    nAllow = fieldd(opts, 'allowUndecided', 0);
+    assert(S.done || S.nTodo <= nAllow, ...
+           'census incomplete (%d todo, allowUndecided = %d) -- not writing back', ...
+           S.nTodo, nAllow);
     bak = [catMat '.bak_conj'];
     if ~exist(bak, 'file'), copyfile(catMat, bak); end
     for ks = 1:nS
@@ -190,10 +200,11 @@ if writeback
     cat_.conj_test = struct('date', datestr(now, 'yyyy-mm-dd'), ...
         'instrument', 'costate_common/ms_conjugate_test (free-time quotiented Jacobi)', ...
         'K', K, 'tolDz', tolDz, 'nPass', S.nPass, 'nFail', S.nFail, ...
-        'nNotrun', S.nNotrun, 'meaning', ['conj_pass: 1 = no conjugate point in ' ...
+        'nNotrun', S.nNotrun, 'nUndecided', S.nTodo, ...
+        'meaning', ['conj_pass: 1 = no conjugate point in ' ...
         '(0, tf) sampled at K-1 junctions (necessary condition PASSES); ' ...
         '0 = sign change strictly inside (CONJUGATE POINT: not a local min); ' ...
-        '-1 = not run / re-solve did not reproduce the entry']);
+        '-1 = not run / re-solve did not reproduce the entry within tolDz']);
     Lout = struct(fn{1}, cat_);
     save(catMat, '-struct', 'Lout');
     lg('[writeback] verdicts stored in %s (backup: %s)', catMat, bak);

@@ -40,7 +40,8 @@ function V = regime_verdicts(F, cfg)
 %                                                   .nSwitchSolved
 %                                                   .nSwitchFailed
 %                                                   .structureChange .mfBest
-%                                                   .allTight
+%                                                   .allTight .winnerAtFloor
+%                                                   .pWinner
 %
 %% Revision History:
 %  M. Casey                                                   (c) 09/07/2026
@@ -50,6 +51,7 @@ function V = regime_verdicts(F, cfg)
 if nargin < 2, cfg = struct(); end
 tolSolve = 1e-3;  if isfield(cfg, 'tolSolve'), tolSolve = cfg.tolSolve; end
 tolTight = 1e-5;  if isfield(cfg, 'tolTight'), tolTight = cfg.tolTight; end
+pFloor   = 1.5e-3; if isfield(cfg, 'pFloor'),   pFloor   = cfg.pFloor;   end
 
 key = arrayfun(@(f) sprintf('%d%d_%.4f', f.cellIdx(1), f.cellIdx(2), f.gamma), ...
                F, 'UniformOutput', false);
@@ -64,10 +66,15 @@ for k = 1:numel(u)
         'families', {{g.family}}, 'dMf', dMf, 'mfBest', mfBest, ...
         'solved', {{g(isSolved).family}}, 'failed', {{g(~isSolved).family}}, ...
         'nSwitchSolved', NaN, 'nSwitchFailed', [], 'structureChange', false, ...
+        'winnerAtFloor', false, 'pWinner', NaN, ...
         'allTight', all(dMf <= tolTight), 'nArms', numel(g), 'verdict', '');
     % the switch structure of the BEST arm, and of the ones that failed
     [~, ib] = min(dMf);
     v.nSwitchSolved = g(ib).nCross;
+    % dm_f is relative to the best arm, so that arm solves by construction:
+    % record whether it actually reached the bang-bang limit.
+    v.pWinner = g(ib).pFloor;
+    v.winnerAtFloor = g(ib).pFloor <= pFloor;
     v.nSwitchFailed = [g(~isSolved).nCross];
     if ~isempty(v.nSwitchFailed) && ~isnan(v.nSwitchSolved)
         v.structureChange = any(v.nSwitchFailed ~= v.nSwitchSolved);
@@ -77,7 +84,9 @@ for k = 1:numel(u)
     elseif numel(v.solved) == 3
         v.verdict = 'all three';
     elseif numel(v.solved) == 1
-        v.verdict = sprintf('%s ONLY', v.solved{1});
+        if v.winnerAtFloor, v.verdict = sprintf('%s ONLY', v.solved{1});
+        else, v.verdict = sprintf('%s furthest (p=%.3g)', v.solved{1}, v.pWinner);
+        end
     elseif numel(v.solved) == 2
         v.verdict = sprintf('%s + %s', v.solved{1}, v.solved{2});
     else

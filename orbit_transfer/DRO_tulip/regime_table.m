@@ -100,10 +100,13 @@ for k = 1:numel(V)
     fprintf('(%d,%d)@%-8.4g %-22s %-26s %10d %s\n', v.cellIdx(1), v.cellIdx(2), v.gamma, ...
         v.verdict, fl, v.nSwitchSolved, mat2str(v.nSwitchFailed));
 end
-n1 = sum(arrayfun(@(v) numel(v.solved) == 1 && v.nArms == 3, V));
+n1 = sum(arrayfun(@(v) numel(v.solved) == 1 && v.nArms == 3 && v.winnerAtFloor, V));
+nf = sum(arrayfun(@(v) numel(v.solved) == 1 && v.nArms == 3 && ~v.winnerAtFloor, V));
 nsc = sum(arrayfun(@(v) v.structureChange, V));
-fprintf('\n%d of %d complete cases are ONE-FAMILY-ONLY; %d show a switch-structure change at the failure.\n', ...
-        n1, sum([V.nArms] == 3), nsc);
+fprintf(['\n%d of %d complete cases are ONE-FAMILY-ONLY (winner AT the bang-bang limit); ' ...
+         '%d more have a single best arm that never reached the limit (one family merely got ' ...
+         'furthest). %d cases show a switch-structure change at the failure.\n'], ...
+        n1, sum([V.nArms] == 3), nf, nsc);
 end
 
 function printOnlyOne(F)

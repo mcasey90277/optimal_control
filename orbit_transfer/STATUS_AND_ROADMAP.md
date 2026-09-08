@@ -311,12 +311,16 @@ initial-condition homotopy; PMP-converged costates as seeds. See
    L2-norm). Literature pass: `papers/plq_smoothing_lit/`; design in
    `TODO.md`. Finding so far: complementarity, not dominance (the γ = 2
    record needed huberc, the (1,2)@1.22 record needed eps).
-5. **Family regime map (goal set 2026-09-07):** when and why each of eps /
-   huber / huberc walks or walls, and transfers on which only one arrives
-   (no huber-only case exists yet — first search target). Hypotheses H1–H3
-   and the plan (feature table over the 12×12 torus at three γ, all three
-   arms, identical budgets, loser retries before any "structural" claim) are
-   in `TODO.md`. Output: the "when to use which" table + reasons.
+5. **Family regime map — chunks 1-3 DONE 2026-09-07 (FINDINGS §31).** 63 arms,
+   21 cases, one identical budget. No family dominates: eps fails 1/21,
+   huberc 3/21, huber 5/21, and **huber uniquely solves none** while walking
+   5× faster with zero failed rungs. Two genuine one-family cases
+   ((1,2)@1.223 eps-only, (2,5)@2.0 huberc-only) and two where no family
+   reached the limit. **Every failure is a switch-structure failure**: the
+   arm stops below the winner's switch count, and 7 of 8 stop at a
+   grazing-risk extremum — §24's huber signature generalized to all three
+   families. Open: widen the cell sample (chunk 4, the huber-only hunt),
+   one unexplained huberc failure, doubled-budget loser retries.
 
 ### G. More orbit pairs
 

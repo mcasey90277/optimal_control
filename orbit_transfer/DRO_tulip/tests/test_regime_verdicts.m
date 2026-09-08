@@ -53,6 +53,19 @@ F3 = [mk('eps', [6 8], 1.1, 0.001242, 0.928082, 7), ...
 V3 = regime_verdicts(F3);
 ok = chk(ok, ~V3.structureChange, 'all-agree case carries no structure-change flag');
 
+% the winner itself may never have reached the limit: dm_f is measured
+% against the BEST arm, so that arm "solves" by construction. A case whose
+% winner stopped at p = 0.067 (real: eps on (1,2)@1.247) is "one family got
+% furthest", NOT "one family found the optimum" -- it must be flagged.
+F5 = [mk('eps', [1 2], 1.247, 0.06707, 0.939797, 7), ...
+      mk('huber', [1 2], 1.247, 0.846, 0.930500, 2), ...
+      mk('huberc', [1 2], 1.247, 0.846, 0.930500, 2)];
+V5 = regime_verdicts(F5);
+ok = chk(ok, ~V5.winnerAtFloor, sprintf('winner short of the floor (p = %.4g) is flagged', 0.06707));
+ok = chk(ok, contains(V5.verdict, 'furthest'), ...
+         sprintf('verdict = %s (must not read as solved)', V5.verdict));
+ok = chk(ok, V2.winnerAtFloor, 'a winner that DID reach the floor is not flagged');
+
 % incomplete case -> reported, never scored
 V4 = regime_verdicts(F2(1:2));
 ok = chk(ok, strcmp(V4.verdict, 'INCOMPLETE (2/3)'), sprintf('verdict = %s', V4.verdict));

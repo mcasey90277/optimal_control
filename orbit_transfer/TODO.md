@@ -200,7 +200,29 @@ exists.
     reading; (e) cells: the 7 grid cells + the 12 high-γ records first,
     then a HALO→tulip and one GTO (Earth-centred) case for breadth.
     Deliverable: FINDINGS section + a table for the min-fuel paper.
-  - [ ] **GOAL (Mike, 2026-09-07): REGIME MAP — when does each family work?**
+  - [x] **REGIME MAP chunks 1-3 DONE 2026-09-07 (FINDINGS §31):** 63 arms =
+    21 (cell,γ) cases × 3 families under ONE identical budget
+    (`run_regime_map`, `regime_features`, `regime_verdicts`, `regime_table`,
+    29 tests). Scored on MASS agreement, not on reaching p=0.001 (those
+    differ). Results: eps fails 1/21, huberc 3/21, huber 5/21; **huber
+    uniquely solves NOTHING** but walks 5× faster with 0 failed rungs;
+    genuine one-family cases (1,2)@1.223 EPS ONLY and (2,5)@2.0 HUBERC ONLY;
+    two more where NO family reached the limit. **Every failure is a
+    switch-structure failure** — 7 of 8 failed arms stop at a grazing-risk
+    extremum (gap 0.003–0.026), generalizing §24 from huber to all three.
+    H1 supported (1 unexplained exception), **H2 refuted**, H3 partly
+    explained. Correction: huber solves 6/7 grid records, not §23's 4/7 —
+    that figure measured the seed and budget.
+  - [ ] **REGIME MAP chunk 4 — widen the cell sample (NEXT):** the huber-only
+    hunt is still open (0 of 21). Needs NEW min-energy seeds on fresh torus
+    cells (`run_minenergy_pilot` with new `P.cells`), then 3-arm races via
+    `run_regime_map`. Target the regime H1 predicts huber should win: cells
+    whose bang-bang structure is ALREADY present in the energy seed (little
+    or no switch birth) and whose crossings are strongly transversal.
+    Also open from §31: the one unexplained failure (huberc on (1,2)@1.223,
+    4 switches, no graze), and retrying the losers at doubled budget/K
+    before any "structural" claim reaches the paper.
+  - [ ] (superseded design notes) **GOAL (Mike, 2026-09-07): REGIME MAP — when does each family work?**
     Understand WHEN and WHY the eps walk (Bertrand–Epenoy quadratic), the
     huber walk and the huberc walk succeed or wall, and find transfers on
     which only ONE of them arrives. Evidence so far (FINDINGS §23–28):

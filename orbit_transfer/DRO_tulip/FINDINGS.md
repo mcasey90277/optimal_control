@@ -1644,3 +1644,116 @@ ever reports a near-root.
 
 Reproduce: `gates_catalog_pass(catMat)` (resumes from the sidecar);
 `test_lift_space_dim`, `test_mintime_gates`.
+
+## 31. The REGIME MAP: 63 arms under one identical budget -- no family dominates, and every failure is a switch-structure failure (2026-09-07)
+
+Goal (Mike, 2026-09-07): understand WHEN the eps, huber and huberc walks
+work, and find transfers only one of them solves. Sections 23-28 could not
+answer it: those arms came from three differently-tuned campaigns, so a
+"wall" could always have been a budget or a seed. `run_regime_map` fixes
+every knob -- same p schedule (17 rungs 1 -> 0.001), tolR 3e-10, wallSec
+300, maxBisect 3, maxGaps 2, Hdrift gate -- and varies only what must vary
+by construction: each family's correct warm seed (lambda/2 for huber and
+huberc, whose p = 1 minimiser is s* = Q, not Q/2) and huberc's fixed-delta
+p-walk plus delta sharpening (section 26). **63 arms = 21 (cell, gamma)
+cases x 3 families**, cells (1,2) (6,8) (2,5), gamma 1.1 -> 2.0.
+
+**Scoring: "reached p = 0.001" is NOT "found the optimum".** Measured here:
+eps stops at p = 0.0016 on (2,5)@1.1 yet its m_f agrees with the two arms
+that reached 0.001 to 2.4e-6 -- its remaining rungs were unnecessary, and
+scoring that as a wall would invent a family difference. A family SOLVES a
+case when its m_f agrees with the case's best arm to 1e-3 (0.15 kg of 150).
+`regime_verdicts` also flags the trap in a relative criterion: the best arm
+solves by construction, so a case whose winner never reached the limit
+reads "furthest", never "only".
+
+### The map
+
+| | eps | huber | huberc |
+|---|---|---|---|
+| fails | **1 / 21** | 5 / 21 | 3 / 21 |
+| uniquely solves | 3 (2 at the limit) | **0** | 1 |
+| median wall where it solves | 8.0 min | **1.6 min** | 8.5 min |
+| median failed rungs | 9 | **0** | 8 |
+
+**Huber is the fast family, never the capable one: 0 of 21 cases are
+huber-only, and where it works it walks with ZERO failed rungs in a fifth
+of the time.** eps is the most robust; huberc sits between and is the only
+family that reaches the bang-bang limit at gamma = 2 on (2,5).
+
+**Genuine one-family-only cases (winner AT the limit):**
+
+| case | verdict | losers, m_f deficit | switches: solved vs failed |
+|---|---|---|---|
+| (1,2) @ 1.223 | **eps ONLY** | huber 9.5e-3, huberc 9.3e-3 | 9 vs 2, 4 |
+| (2,5) @ 2.00 | **huberc ONLY** | eps 8.5e-3, huber 6.3e-3 | 9 vs 5, 5 |
+
+Two more cases have a single best arm that never reached the limit --
+(1,2)@1.247 (eps furthest at p = 0.067) and (6,8)@2.0 (eps furthest at
+p = 0.23): there NO family solved the problem. Plus one two-family case,
+(1,2)@1.2 = eps + huberc, huber 9.1e-3 light. The remaining 16 cases are
+solved by all three, agreeing to 8e-7 .. 2e-4.
+
+**Different cells at the SAME gamma favour DIFFERENT families**: at
+gamma = 2.0, (2,5) is huberc-only and (6,8) is eps-furthest with huberc
+failing. The winner is not predictable from gamma, or from tf, or from
+switch count -- which is the case for a family SCHEDULE rather than a
+family choice.
+
+### The mechanism: failures are switch-structure failures
+
+Every failed arm stopped at a solution with FEWER switches than the case's
+winner (2, 4 or 5 against 7-11), and **7 of the 8 failed arms stop at a
+grazing-risk extremum of Q -- a local extremum sitting 0.3% to 2.6% short
+of the threshold, i.e. a switch about to be born**:
+
+| case | family | status | p_stop | switches | min\|dQ/dt\| | graze gap |
+|---|---|---|---|---|---|---|
+| (1,2)@1.2 | huber | failed | 0.774 | 2 | 2.48 | **0.0093** |
+| (1,2)@1.223 | huber | failed | 0.818 | 2 | 2.21 | **0.0067** |
+| (1,2)@1.223 | huberc | failed | 0.809 | 4 | 0.49 | none |
+| (1,2)@1.247 | huber | failed | 0.846 | 2 | 1.88 | **0.0080** |
+| (1,2)@1.247 | huberc | failed | 0.846 | 2 | 1.88 | **0.0081** |
+| (2,5)@2 | eps | failed | 0.657 | 5 | 1.37 | **0.0260** |
+| (2,5)@2 | huber | failed | 0.315 | 5 | 1.60 | **0.0073** |
+| (6,8)@2 | huber, huberc | failed | 0.664 | 5 | 3.13 | **0.0030** |
+
+The arms that SOLVED those same cases end with no grazing-risk extremum at
+all, except eps on (1,2)@1.223 whose gap is 0.082 -- an order of magnitude
+wider. So the wall is not a fold, not a tolerance and not the seed: **the
+walk stops where the switch structure has to change and the family's law
+cannot carry it through.** This generalises section 24, which had the
+signature only for huber; eps and huberc wall the same way.
+
+### Hypotheses, adjudicated
+
+* **H1 (huber walls at grazing-risk structure changes): SUPPORTED, and it
+  is not specific to huber.** 7 of 8 failures carry the signature. The one
+  exception, huberc on (1,2)@1.223 (4 switches, no near-tangency,
+  min|dQ/dt| = 0.49), is unexplained and is the open item.
+* **H2 (eps fails at the floor on MANY-switch cells): REFUTED.** eps solved
+  cases with 6 to 11 switches (median 8.5) and its single failure is a
+  5-switch case; it solved at tf = 32.6 d and failed at 31.8 d. Neither
+  switch count nor flight time explains it.
+* **H3 (huberc's early walls unexplained): PARTLY EXPLAINED.** 2 of its 3
+  failures carry the graze signature; (1,2)@1.223 does not.
+
+### A correction to section 23
+
+The 09-02 grid recorded huber reaching the floor on **4 of 7** records.
+Under the identical budget with the lambda/2 warm seed (the Astra correction
+of 09-05) and the mass criterion, huber solves **6 of 7** -- it fails only
+(1,2)@1.2. The 4/7 figure measured the seed and the budget, not the family.
+
+### Scope and what is NOT claimed
+
+Three departure/arrival cells of one orbit pair (DRO -> tulip), one thrust
+level, one K. "Fails" means under THIS budget: a bigger bisection budget or
+a larger K may carry an arm further, and the two "furthest" cases show the
+sample already contains problems no family solves. The huber-only hunt is
+open -- 0 of 21 cases here, and it is the point of widening the cell sample
+(regime map chunk 4).
+
+Reproduce: `run_regime_map` (63 jobs, resumable, partitionable),
+`regime_table`, `regime_verdicts`; tests `test_regime_features` (17),
+`test_regime_verdicts` (12).

@@ -301,7 +301,16 @@ initial-condition homotopy; PMP-converged costates as seeds. See
    different γ are not nested and basin discipline applies.
 2. A γ / t_f axis in `catalog_schema`.
 3. Then the **energy→fuel ε-homotopy on the same seeds** — the route to
-   min-fuel catalog entries, reusing the campaigns' machinery.
+   min-fuel catalog entries, reusing the campaigns' machinery. (DONE
+   2026-09-02/07: 18-entry min-fuel catalog, three families eps/huber/huberc.)
+4. **Smoothing-family benchmark (goal set 2026-09-07):** huber and huberc
+   head-to-head against hyperbolic-tangent (Taheri–Junkins) and normalized
+   L2-norm (Wang et al. 2023) smoothing on the same cells, seeds and
+   harness, on a common sharpness axis — the measurement any novelty claim
+   for the PLQ line has to rest on (the field's own comparisons are tanh vs
+   L2-norm). Literature pass: `papers/plq_smoothing_lit/`; design in
+   `TODO.md`. Finding so far: complementarity, not dominance (the γ = 2
+   record needed huberc, the (1,2)@1.22 record needed eps).
 
 ### G. More orbit pairs
 

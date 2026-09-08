@@ -179,6 +179,27 @@ exists.
     conventions). Mike's review pending; feed corrections back into
     FINDINGS/manual. Queued from the review: refine ENDPOINT brackets
     (2 catalog entries), min-time conj re-sweep on the corrected instrument.
+  - [ ] **GOAL (Mike, 2026-09-07): smoothing-family BENCHMARK — huber and
+    huberc head-to-head against hyperbolic-tangent (Taheri–Junkins 2018) and
+    normalized-L2-norm (Wang et al. 2023) smoothing on the SAME problems.**
+    Motivation: the literature check (`papers/plq_smoothing_lit/`) found no
+    PLQ/Huber family in the indirect low-thrust literature, but the 2023
+    JAS and 2024 AAS comparisons benchmark tanh vs L2-norm — a paper claim
+    needs our families measured against those two, not only against eps.
+    Design points: (a) add `'tanh'` and `'l2n'` to `cr3bp_minfuel_pmp` as
+    CONTROL-level smoothings of the switch quantity (s = ½(1+tanh((Q−1)/ρ)),
+    s = ½(1+(Q−1)/√((Q−1)²+ρ²))), exactly as published, AND as COST-level
+    (Sandia recipe: L̃ = ∫ξ ũ'(ξ)dξ so the law is an exact argmin and H is
+    conserved) — the H-drift gate only applies to the cost-level forms;
+    (b) same cells, same seeds (energy record), same tolR/K/bisection budget,
+    same `run_minfuel_race` harness with a family per arm; (c) common
+    sharpness axis = effective ramp width in Q (eps 2p, huberc δ, tanh ≈4ρ,
+    l2n ≈2ρ) so "reached the floor" means the same thing; (d) metrics:
+    fails/bisections, wall time, floor reached, m_f agreement (≤1e-5
+    expected), fixed-tf conj verdict, wall location + `huber_switch_diag`
+    reading; (e) cells: the 7 grid cells + the 12 high-γ records first,
+    then a HALO→tulip and one GTO (Earth-centred) case for breadth.
+    Deliverable: FINDINGS section + a table for the min-fuel paper.
   - [ ] **The two SMOOTH walls (γ≈1.43 on (6,8), ≈1.27 on (1,2)):** cond(J)
     grows 1–2 orders on approach — fold signature, unlike the Huber walls.
     First real candidate for pseudo-arclength continuation in `ms_bvp`

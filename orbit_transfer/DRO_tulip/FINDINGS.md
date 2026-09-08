@@ -1863,3 +1863,84 @@ feasibility). The decisive experiment, recommended by Astra and not yet
 run, is **scaled pseudo-arclength continuation in (z8, T)** on the
 multiple-shooting unknowns: a fold shows tangent thrust-component -> 0 and
 a sign change, with R_X losing one rank while [R_X R_T] stays full rank.
+
+## 33. The fast family has a MINIMUM-THRUST FOLD at 71.99 mN / 18.12 d -- the abstract's 70 mN is below the family's limit (2026-09-08)
+
+Section 32 left the decisive question open: does the fast DRO -> tulip family
+fold near 75 mN (making the 26.44 d solution the answer at 70 mN), or does it
+continue with a ~16 d transfer we failed to find? Those give OPPOSITE verdicts
+on the cislunar abstract. **Pseudo-arclength continuation settles it.**
+
+### The instrument
+
+`arclength_thrust` (new) follows the solution CURVE in (X, T) instead of
+stepping in thrust, so it can pass a turning point. Unknowns are the
+multiple-shooting vector X = [lam_0; Y_2..Y_K; t_f], parameter is thrust;
+everything runs in scaled coordinates (the blocks span costates O(10-50),
+junction states O(1) and t_f O(3), so an unscaled arclength would be
+meaningless and would change with K). R_T is a central difference at fixed
+unknowns. The residual and its Jacobian are the PRODUCTION ones, reached
+through a new `ms_bvp` **`assembleOnly`** mode -- continuation needs R and
+R_X at points that are not roots, for a family of problems.
+
+### The result: a fold, exactly as specified
+
+Started from the converged 75.495 mN root and walked STRAIGHT THROUGH the
+75.0 mN "wall" of section 32 -- residuals stayed at 1e-12. The wall was a
+thrust-stepping artefact, not a boundary. The arc then converges on a limit
+point:
+
+| step | T (mN) | t_f (d) | sigma_min(R_X) | sigma_min([R_X R_T]) |
+|---|---|---|---|---|
+| 0 | 72.881 | 16.306 | 3.33e-06 | 7.02e-06 |
+| 100 | 72.007 | 17.924 | 1.47e-08 | 7.96e-07 |
+| 200 | 71.995 | 18.051 | 1.48e-09 | 4.04e-07 |
+| 300 | 71.993 | 18.089 | 4.06e-10 | 2.64e-07 |
+| 400 | 71.992 | 18.107 | 1.65e-10 | 1.95e-07 |
+| 524 | 71.992 | 18.120 | 7.13e-11 | 1.48e-07 |
+
+**R_X loses rank by five orders while the augmented [R_X R_T] falls by only
+two and stays regular -- a rank-one deficiency with the augmented matrix
+full rank. The tangent's thrust component goes to zero and thrust
+asymptotes while t_f keeps growing.** That is the textbook simple fold, and
+it is the criterion stated in advance (Astra, `reviews/mintime_wall_astra_2026-09-08.md`).
+
+### What it means
+
+**The fast family's minimum thrust is T* = 71.99 mN, at t_f* = 18.12 days.**
+Below 72 mN this family DOES NOT EXIST. Everything else now follows:
+
+* plain thrust stepping died at 75.0 mN -- 4% above the true limit, because
+  a Newton corrector at fixed T cannot approach a fold;
+* |lam_0| 5.4 -> 45.9 and cond(J) 3e6 -> 2e12 into the wall were the fold
+  approaching, not a winding change (the winding never moved: 0.75 -> 0.77);
+* the direct solve at 70 mN jumped to 26.44 d because at 70 mN the fast
+  family is gone -- 26.44 d is on a DIFFERENT branch, and section 32's
+  certified solution stands as the answer at that thrust.
+
+### Consequence for the cislunar abstract
+
+The abstract asks for **70 mN in ~18 days**. Those are not compatible on
+this family: 18.1 days is exactly the family's limit, but at **72 mN**, and
+70 mN is 2.8% below the fold. The honest options are
+
+1. **72 mN, 18.1 days** -- the family's minimum-thrust point, which very
+   nearly matches the abstract's flight time and needs only the thruster
+   figure changed; or
+2. **70 mN, 26.44 days** -- the certified section-32 solution on the long
+   branch, keeping the thruster and changing the schedule.
+
+Option 1 preserves the abstract's headline and is the smaller edit. Neither
+supports "70 mN in 18 days".
+
+Reproduce: `arclength_thrust` from the 75.5 mN root
+(`results/mintime_arclength_fold.mat`, logs `arclength{,2}.log`).
+
+### Open
+
+The arc CRAWLS at the fold (step length collapses as sigma_min(R_X) -> 0) and
+never turned the corner, so the returning branch -- higher t_f at rising
+thrust -- is unmapped. Turning it needs either a bordered/deflated corrector
+at the limit point or a switch to t_f as the continuation parameter there.
+The fold LOCATION is nonetheless established to 71.99 mN by five orders of
+rank collapse.

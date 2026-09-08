@@ -67,7 +67,12 @@ function [p, info] = ms_bvp(prob, seed, opts)
 %                                                   .fixedTf [false] (drop
 %                                                   the tf unknown; tf =
 %                                                   seed.tf), .polishMax
-%                                                   [5] Newton polish steps
+%                                                   [5] Newton polish steps,
+%                                                   .assembleOnly [false]
+%                                                   return [R, J] and a
+%                                                   handle to the residual
+%                                                   at the seed WITHOUT
+%                                                   solving (for continuation)
 %                                                   after an early fsolve
 %                                                   exit
 %
@@ -152,6 +157,20 @@ n = numel(p);                                  % = nf + ny(K-1) (+1 free tf)
 % Trust-region-dogleg on the multiple-shooting system with the analytic
 % block Jacobian. A plain Newton + backtracking loop stalls on rough seeds
 % (measured: first step rejected on 2 of 3 pilot cells).
+% ASSEMBLE-ONLY: hand back the residual/Jacobian and a handle to them,
+% without solving. This is what a continuation method needs -- pseudo-arclength
+% must evaluate R and R_p at points that are NOT roots, and must do so for a
+% family of problems (one per parameter value). Nothing else in the engine
+% changes; the handle closes over this call's problem closures.
+if d('assembleOnly', false)
+    [R0, J0] = residual(p);
+    info = struct('R', R0, 'J', J0, 'p', p, 'residual', @residual, ...
+                  'K', K, 'ny', ny, 'nFree', numel(fi0), ...
+                  'freeIdx0', fi0, 'fixedTf', fixedTf, ...
+                  'tGrid', seed.tGrid, 'assembleOnly', true);
+    return
+end
+
 tStart = tic;
 fopts = optimoptions('fsolve', 'Display', dispmode(verbose), ...
     'Algorithm','trust-region-dogleg', ...

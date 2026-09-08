@@ -221,12 +221,22 @@ exists.
     at the target thrust seeded with the FULL nearest converged trajectory
     (states + controls + consistent mass, exact endpoints, returnModel true
     for the duals), then harvest_ms_seed -> ms_tfmin -> tfMin acceptance.
-  - [ ] **Is 26.436 d the MINIMUM at 70 mN?** Pseudo-arclength continuation
-    in (z8, T) on the ms unknowns, scaled, per Astra's spec in
-    `reviews/mintime_wall_astra_2026-09-08.md`: a fold shows tangent
-    thrust-component -> 0 then sign change, R_X losing one rank while
-    [R_X R_T] stays full rank. Decides whether the short (15 d) family folds
-    near 75 mN or continues to 70 mN unfound.
+  - [x] **ANSWERED 2026-09-08 (FINDINGS §33): the fast family FOLDS at
+    T* = 71.99 mN, t_f* = 18.12 d.** `arclength_thrust` (new, on ms_bvp's new
+    `assembleOnly` mode) walked straight through the 75.0 mN "wall" — a
+    thrust-stepping artefact — and converged on a limit point with σ_min(R_X)
+    collapsing five orders (3.3e-6 → 7.1e-11) while σ_min([R_X R_T]) fell only
+    two and stayed regular: a simple fold, the criterion stated in advance.
+    So at 70 mN the fast family does not exist and §32's certified 26.44 d
+    solution is on a different branch. **The abstract's "70 mN in 18 days" is
+    not achievable**: 18.1 d is the limit but at 72 mN.
+  - [ ] **Cislunar abstract/poster decision (Mike):** quote 72 mN / 18.1 d
+    (family limit, keeps the flight time, changes the thruster) or 70 mN /
+    26.44 d (certified, keeps the thruster, changes the schedule).
+  - [ ] **Turn the fold.** The arc crawls as σ_min(R_X) → 0 and never rounds
+    the corner, so the returning branch is unmapped. Needs a bordered/deflated
+    corrector at the limit point, or switching the continuation parameter to
+    t_f there.
   - [ ] **REGIME MAP chunk 4 — widen the cell sample (NEXT):** the huber-only
     hunt is still open (0 of 21). Needs NEW min-energy seeds on fresh torus
     cells (`run_minenergy_pilot` with new `P.cells`), then 3-arm races via

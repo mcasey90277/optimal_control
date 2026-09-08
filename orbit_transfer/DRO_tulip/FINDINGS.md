@@ -1830,6 +1830,27 @@ the continuation had been failing.
   "continuation cannot grow winding" reading is not supported here; whatever
   ends the short family, it is not a winding change.
 
+### Method lesson: fill deep rungs by DIRECT solve, not by continuation
+
+A four-cell cold walk from 0.5 N down a 0.88-ratio ladder (17 rungs, t_f
+guess sweep, K = 48) did far WORSE than the banked-seed chain on the very
+same cell:
+
+| cell | deepest closed, cold walk from 0.5 N | banked-seed chain |
+|---|---|---|
+| (1,11) | 143 mN | **75.5 mN** |
+| (3,1) | 158 mN | -- |
+| (1,9) | 480 mN | -- |
+| (3,10) | 416 mN | -- |
+
+So the wall a cell reports is a property of the SEED CHAIN as much as of the
+cell: the same cell walls at 143 mN cold and 75.5 mN warm, and the direct
+solve then reaches 70 mN outright. **Do not fill the catalog's low-thrust
+coverage holes by extending the continuation ladder.** Solve the target rung
+directly (Hermite-Simpson NLP seeded with the nearest converged full
+trajectory), harvest, then polish -- which is what the pipeline was designed
+to do and what closed 70 mN here.
+
 ### Open
 
 **Whether 26.436 d is the MINIMUM time at 70 mN is not established.** It is

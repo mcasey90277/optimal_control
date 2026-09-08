@@ -213,6 +213,20 @@ exists.
     H1 supported (1 unexplained exception), **H2 refuted**, H3 partly
     explained. Correction: huber solves 6/7 grid records, not §23's 4/7 —
     that figure measured the seed and budget.
+  - [ ] **Low-thrust coverage (item 3) — DO IT BY DIRECT SOLVE (FINDINGS §32).**
+    The 0.5/0.75/1 N holes (40-49% coverage) must NOT be filled by extending
+    the thrust-continuation ladder: measured 2026-09-08, a cold walk from
+    0.5 N walls at 143-480 mN on cells whose warm chain reaches 75.5 mN and
+    whose direct solve reaches 70 mN. Recipe that works: Hermite-Simpson NLP
+    at the target thrust seeded with the FULL nearest converged trajectory
+    (states + controls + consistent mass, exact endpoints, returnModel true
+    for the duals), then harvest_ms_seed -> ms_tfmin -> tfMin acceptance.
+  - [ ] **Is 26.436 d the MINIMUM at 70 mN?** Pseudo-arclength continuation
+    in (z8, T) on the ms unknowns, scaled, per Astra's spec in
+    `reviews/mintime_wall_astra_2026-09-08.md`: a fold shows tangent
+    thrust-component -> 0 then sign change, R_X losing one rank while
+    [R_X R_T] stays full rank. Decides whether the short (15 d) family folds
+    near 75 mN or continues to 70 mN unfound.
   - [ ] **REGIME MAP chunk 4 — widen the cell sample (NEXT):** the huber-only
     hunt is still open (0 of 21). Needs NEW min-energy seeds on fresh torus
     cells (`run_minenergy_pilot` with new `P.cells`), then 3-arm races via

@@ -200,6 +200,34 @@ exists.
     reading; (e) cells: the 7 grid cells + the 12 high-γ records first,
     then a HALO→tulip and one GTO (Earth-centred) case for breadth.
     Deliverable: FINDINGS section + a table for the min-fuel paper.
+  - [ ] **GOAL (Mike, 2026-09-07): REGIME MAP — when does each family work?**
+    Understand WHEN and WHY the eps walk (Bertrand–Epenoy quadratic), the
+    huber walk and the huberc walk succeed or wall, and find transfers on
+    which only ONE of them arrives. Evidence so far (FINDINGS §23–28):
+    (2,5)@γ=2.0 = huberc-only (eps walled 0.66, huber 0.32);
+    (1,2)@γ=1.22 = eps-only (huber 0.82, huberc 0.81); NO huber-only case
+    yet — that is the first search target. Known mechanisms to test as
+    hypotheses: (H1) huber walls when a switch is born/annihilated during
+    the walk (grazing-risk: min|Q̇| at crossings falling, Q-extremum → 1;
+    `huber_switch_diag`); (H2) eps fails at the floor when its ramp slope
+    1/2p must be steep across MANY switches (many-switch / long-tf cells,
+    fails cluster below p≈0.01); (H3) huberc's early walls ((1,2)@1.22 at
+    p≈0.8) are unexplained — candidates: a long near-Q=1 plateau that the
+    δ-ramp spreads over an arc, or the λ/2 seed on a coast-dominated cell.
+    Plan: (a) feature table per (cell, γ, family, outcome): n_switch at the
+    floor, coast fraction, revs, tf, min|Q̇| at crossings, #Q-extrema
+    within ±δ of 1, cond(J) trend, p at wall; (b) run all three families
+    with identical budgets over the 12×12 torus at γ∈{1.1,1.2,1.4} on DRO→tulip
+    (~430 cells × 3 arms; parfor + run_capped) and over the high-γ records;
+    (c) classify outcomes and test H1–H3 (a decision rule = "family
+    schedule" with a stated reason per branch); (d) hunt deliberately for
+    huber-only cells: cells where the fixed-δ huberc stage-2 sharpening
+    stalls but huber's exact jump walks (predicted where the switch
+    structure is stable and crossings are strongly transversal); (e) verify
+    every claimed 'only-one-family' case by retrying the losers with a
+    doubled budget/K before calling it structural. Deliverable: FINDINGS
+    section + the "when to use which" table for the paper; feeds the
+    benchmark goal above.
   - [ ] **The two SMOOTH walls (γ≈1.43 on (6,8), ≈1.27 on (1,2)):** cond(J)
     grows 1–2 orders on approach — fold signature, unlike the Huber walls.
     First real candidate for pseudo-arclength continuation in `ms_bvp`

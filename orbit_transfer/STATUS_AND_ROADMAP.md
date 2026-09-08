@@ -311,6 +311,12 @@ initial-condition homotopy; PMP-converged costates as seeds. See
    L2-norm). Literature pass: `papers/plq_smoothing_lit/`; design in
    `TODO.md`. Finding so far: complementarity, not dominance (the γ = 2
    record needed huberc, the (1,2)@1.22 record needed eps).
+5. **Family regime map (goal set 2026-09-07):** when and why each of eps /
+   huber / huberc walks or walls, and transfers on which only one arrives
+   (no huber-only case exists yet — first search target). Hypotheses H1–H3
+   and the plan (feature table over the 12×12 torus at three γ, all three
+   arms, identical budgets, loser retries before any "structural" claim) are
+   in `TODO.md`. Output: the "when to use which" table + reasons.
 
 ### G. More orbit pairs
 

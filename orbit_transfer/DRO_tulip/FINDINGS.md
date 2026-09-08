@@ -1757,3 +1757,88 @@ open -- 0 of 21 cases here, and it is the point of widening the cell sample
 Reproduce: `run_regime_map` (63 jobs, resumable, partitionable),
 `regime_table`, `regime_verdicts`; tests `test_regime_features` (17),
 `test_regime_verdicts` (12).
+
+## 32. The 70 mN abstract case is SOLVED and certified -- and the abstract's numbers are optimistic by ~50% (2026-09-08)
+
+The cislunar abstract ("MinTime Tulip Transfer", poster content approved for
+public release) states a 150 kg spacecraft with a **70 mN** thruster at
+**Isp 900 s** reaching a 7-petal tulip from a DRO in **~18 days for ~0.75
+km/s and 12.2 kg**. That operating point was NOT in the catalog, which
+floors at 0.5 N and runs Isp 1710 s: 70 mN is seven times below the lowest
+catalogued rung. The abstract's figures follow from the all-burn identity
+dV = (T/m0)*tf, not from a converged transfer.
+
+### The certified solution
+
+| quantity | value |
+|---|---|
+| thrust / Isp / m0 | 70 mN / 900 s / 150 kg |
+| **t_f** | **5.96394 ND = 26.436 days** |
+| **dV** | **1.1360 km/s** |
+| **propellant** | **18.12 kg (12.1% of wet mass)** |
+| ms residual | 2.45e-12 |
+| flown arrival | 0.069 km |
+| **pumpkyn tfMin** | **accepts, |dz| = 2.1e-10** |
+| conjugate test | PASS |
+| gates | min|lam_v| 0.599, min Q_mt 1.174, dim S = 1 |
+
+Mesh independent: K = 24, 48 and 96 all converge to t_f = 5.96394 ND.
+Cell (1,11) of the tau=1 / Np=7 fine sheet -- the abstract's own geometry.
+Stored: `indirect/results/mintime_70mN_{certified,direct}.mat`.
+
+**Against the abstract: t_f +47%, dV +51%, propellant +48%.** The abstract
+understates the transfer in the OPTIMISTIC direction. The poster needs
+26.4 days, 1.14 km/s and 18.1 kg, or a different operating point.
+
+### How it was reached, and what failed first
+
+Indirect thrust continuation from the banked 0.09 N solution walks to
+**75.5 mN (15.15 d)** and then walls at 75.0 mN. The wall is real: it moved
+82.5 -> 80 -> 75.5 mN as the machinery improved (t_f guess sweep, K 24->48)
+and then K 48->96 did not move it at all. Approaching it,
+
+| T (mN) | 90 | 85 | 80 | 78 | 76 | 75.5 |
+|---|---|---|---|---|---|---|
+| t_f (d) | 13.21 | 13.67 | 14.28 | 14.60 | 15.02 | 15.15 |
+| \|lam_0\| | 5.4 | 5.7 | 12.9 | 21.3 | 38.6 | 45.9 |
+| cond(J) | 3e6 | 7e6 | 2e11 | 1e8 | 3e12 | 2e12 |
+
+-- costates diverging and the shooting Jacobian going singular, while the
+conjugate test still PASSES and dim S stays 1 everywhere. So the short
+family is not losing local optimality and is not acquiring an abnormal
+lift; it is running into a singular Jacobian.
+
+**What finally worked was DIRECT collocation at 70 mN seeded with the FULL
+75.5 mN state/control history** (Hermite-Simpson, N = 800, consistent mass
+profile, exact endpoints), then the standard covector harvest and
+multiple-shooting polish. This is the catalog pipeline's own route; only
+the continuation had been failing.
+
+### Corrections to our own framing (GPT-6 Astra consultation, `reviews/mintime_wall_astra_2026-09-08.md`)
+
+* **Loss of all-burn is EXCLUDED analytically, not just empirically.** With
+  lam_m(t_f) = 0 and lam_m' = -(T/m^2)|lam_v|, lam_m(t) = int_t^tf
+  (T/m^2)|lam_v| ds >= 0, so Q_mt = |lam_v|/m + lam_m/c >= 0 always. A
+  coast arc cannot be the missing branch. Measured min Q_mt indeed GROWS
+  (1.26 -> 4.22) into the wall.
+* **"Stalls at ||R|| ~ O(1) but is not ill-conditioned" was
+  self-contradictory** -- a well-conditioned square system has no interior
+  nonzero-residual stationary point. Measuring cond(J) settled it: 1e12.
+* **Our winding evidence was never valid.** Swept revolutions move only
+  0.75 -> 0.77 across the whole family, and the 26.4 d solution has the
+  SAME winding (0.76, net -0.22 rev) as the 15.15 d one. The 2026-09-01
+  "continuation cannot grow winding" reading is not supported here; whatever
+  ends the short family, it is not a winding change.
+
+### Open
+
+**Whether 26.436 d is the MINIMUM time at 70 mN is not established.** It is
+a certified extremal (PMP root, conjugate-passing, foreign-witness
+accepted), but the jump from 15.15 d at 75.5 mN to 26.44 d at 70 mN is
+large for a 7% thrust change, and the short family's fate at 75-70 mN is
+unresolved. Fixed-t_f feasibility probes were unreliable (they failed even
+1.7% below a converged solution, measuring the seed rather than
+feasibility). The decisive experiment, recommended by Astra and not yet
+run, is **scaled pseudo-arclength continuation in (z8, T)** on the
+multiple-shooting unknowns: a fold shows tangent thrust-component -> 0 and
+a sign change, with R_X losing one rank while [R_X R_T] stays full rank.

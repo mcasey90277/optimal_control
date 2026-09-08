@@ -77,12 +77,35 @@ if doPrint
             f.pFloor, f.rampWidth, f.mf, f.nFail, f.nBisect, f.wallMin, ...
             f.nCross, f.revs, f.minAbsDQdt);
     end
-    printOnlyOne(F);
+    printVerdicts(F);
 end
 if ~isempty(getf(cfg, 'outMat', '')), save(cfg.outMat, 'T', 'F'); end
 end
 
 % ------------------------------------------------------------------------
+function printVerdicts(F)
+% PRINTVERDICTS  The who-solved-it matrix on the PHYSICAL criterion (mass
+% agreement), with the procedural p-floor shown beside it.
+% INPUTS: F (feature struct array).  OUTPUTS: none (prints).
+V = regime_verdicts(F);
+fprintf('\n--- who SOLVED it (dm_f <= 1e-3 vs the best arm of the case) ---\n');
+fprintf('%-14s %-22s %-26s %10s %s\n', 'case', 'verdict', 'failed (dm_f)', 'nX solved', 'nX failed');
+for k = 1:numel(V)
+    v = V(k);
+    fl = '';
+    for m = 1:numel(v.failed)
+        d = v.dMf(strcmp(v.families, v.failed{m}));
+        fl = [fl sprintf('%s %.1e  ', v.failed{m}, d)]; %#ok<AGROW>
+    end
+    fprintf('(%d,%d)@%-8.4g %-22s %-26s %10d %s\n', v.cellIdx(1), v.cellIdx(2), v.gamma, ...
+        v.verdict, fl, v.nSwitchSolved, mat2str(v.nSwitchFailed));
+end
+n1 = sum(arrayfun(@(v) numel(v.solved) == 1 && v.nArms == 3, V));
+nsc = sum(arrayfun(@(v) v.structureChange, V));
+fprintf('\n%d of %d complete cases are ONE-FAMILY-ONLY; %d show a switch-structure change at the failure.\n', ...
+        n1, sum([V.nArms] == 3), nsc);
+end
+
 function printOnlyOne(F)
 % PRINTONLYONE  List (cell, gamma) cases where exactly one family arrived.
 % INPUTS: F (feature struct array).  OUTPUTS: none (prints).

@@ -42,6 +42,9 @@ ok = chk(ok, F.nCross >= 1, sprintf('huberc switches at the floor: nCross = %d',
 ok = chk(ok, F.revs > 0.5 && F.revs < 12, sprintf('huberc revs about the Moon = %.2f', F.revs));
 ok = chk(ok, isfinite(F.minAbsDQdt) && F.minAbsDQdt > 0, ...
          sprintf('huberc min|dQ/dt| at crossings = %.3f', F.minAbsDQdt));
+ok = chk(ok, isfinite(F.nCrossStart) && F.dSwitch == F.nCross - F.nCrossStart, ...
+         sprintf('structural work: seed had %d switches, floor %d (created %d)', ...
+                 F.nCrossStart, F.nCross, F.dSwitch));
 
 % (2) the WALLED arms, same cell and gamma --------------------------------
 Fe = regime_features(armOf(fullfile(resDir, 'minfuel_hg_c25_g200_eps.mat')), rec, 'eps');

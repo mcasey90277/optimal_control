@@ -47,7 +47,9 @@ function F = regime_features(A, rec, fam)
 %                                                   .minAbsDQdt .nGraze
 %                                                   .grazeGap .plateauFrac
 %                                                   (|Q-1| <= 0.05 fraction)
-%                                                   .revs
+%                                                   .revs .nCrossStart
+%                                                   .dSwitch (switches the
+%                                                   walk had to create)
 %
 %% Revision History:
 %  M. Casey                                                   (c) 09/07/2026
@@ -67,7 +69,8 @@ F = struct('family', fam, 'cellIdx', [rec.iD rec.iA], 'gamma', rec.gam, ...
     'rampWidth', NaN, 'mf', NaN, 'coastFrac', NaN, 'nRung', 0, ...
     'nFail', A.nFail, 'nBisect', A.nBisect, 'wallMin', NaN, ...
     'condJFloor', NaN, 'condJRatio', NaN, 'nCross', NaN, 'minAbsDQdt', NaN, ...
-    'nGraze', NaN, 'grazeGap', NaN, 'plateauFrac', NaN, 'revs', NaN);
+    'nGraze', NaN, 'grazeGap', NaN, 'plateauFrac', NaN, 'revs', NaN, ...
+    'nCrossStart', NaN, 'dSwitch', NaN);
 if isfield(A, 'wallTotal'), F.wallMin = A.wallTotal/60; end
 if isempty(A.p), return, end
 
@@ -112,6 +115,19 @@ catch
     % a stalled arm can carry a state the propagator refuses; features stay NaN
 end
 F.revs = moonRevs(Y1, rec, sm);
+
+% --- how many switches did the walk have to CREATE? ----------------------
+% The energy seed (first accepted rung, p ~ 1) has its own switch structure;
+% the bang-bang limit has another. The difference is the structural work the
+% continuation must do, and it is the quantity the wall hypotheses turn on.
+sm0 = struct('family', fam, 'p', A.p(1));
+if strcmp(fam, 'huberc') && ~isnan(A.delta(1)), sm0.delta = A.delta(1); end
+try
+    D0 = huber_switch_diag(A.Y{1}(:,1), rec.tf, rec.Tmax, rec.c, rec.muStar, sm0);
+    F.nCrossStart = D0.nCross;
+    F.dSwitch = F.nCross - F.nCrossStart;
+catch
+end
 end
 
 % ------------------------------------------------------------------------

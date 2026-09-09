@@ -66,8 +66,8 @@ if ~isfield(seed, 'extra') || isempty(seed.extra)
 end
 
 prob = struct('ny', 14, 'freeIdx0', 8:14, 'nExtra', 1, ...
-    'prop',     @(dt, y0, needSTM) propSeg(dt, y0, needSTM, Tmax, c, muStar), ...
-    'rhs',      @(y) rhsPoint(y, Tmax, c, muStar), ...
+    'prop',     @(dt, y0, needSTM) mintime_prop_seg(dt, y0, needSTM, Tmax, c, muStar), ...
+    'rhs',      @(y) mintime_rhs_point(y, Tmax, c, muStar), ...
     'terminal', @(y, needJ, x) terminalHom(y, rvf, Tmax, c, muStar, x), ...
     'extraEq',  @(p1, x) sphereEq(p1, x));
 
@@ -99,23 +99,4 @@ function [e, dedp1, dedx] = sphereEq(p1, x)
 e = x^2 + p1(:)'*p1(:) - 1;
 dedp1 = 2*p1(:)';
 dedx  = 2*x;
-end
-
-function [yh, PHI] = propSeg(dt, y0, needSTM, Tmax, c, muStar)
-% PROPSEG  One-segment propagation via pumpkyn tfMinProp, with STM.
-% INPUTS: dt; y0 [14x1]; needSTM; Tmax; c; muStar.  OUTPUTS: yh; PHI.
-if needSTM
-    [~, Y] = pumpkyn.cr3bp.tfMinProp(dt, [y0; reshape(eye(14), [], 1)], Tmax, c, muStar);
-    yh = Y(end, 1:14)';  PHI = reshape(Y(end, 15:end), 14, 14);
-else
-    [~, Y] = pumpkyn.cr3bp.tfMinProp(dt, y0, Tmax, c, muStar);
-    yh = Y(end, 1:14)';  PHI = [];
-end
-end
-
-function F = rhsPoint(y, Tmax, c, muStar)
-% RHSPOINT  The 14-state PMP field at a point.  INPUTS: y; Tmax; c; muStar.
-% OUTPUTS: F [14x1].
-F = pumpkyn.cr3bp.tfMinEoM(0, y, Tmax, c, muStar);
-F = F(1:14);
 end

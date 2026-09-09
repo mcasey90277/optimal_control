@@ -2068,8 +2068,13 @@ Upward, the branch snakes through eight folds and reaches 59.4 mN at 44 d.
 | 67.59 mN fold | 67.59 | 40.17 | 0.0165 | FAIL | 2 |
 
 The fold point fails while the certified point 0.5% away passes: local
-minimality is EXCHANGED across the fold, as it should be. Every other
-extremal found at or below 70 mN is both longer and a saddle.
+minimality is EXCHANGED across the fold, as it should be. Walked step by
+step down the branch, the exchange is located: PASS at every root from
+70.000 down to **69.580 mN**, FAIL from **69.569 mN** (the fold itself,
+where the thrust tangent changes sign) onward. So the minimizing segment
+of this branch is the piece ABOVE its fold, and the 70 mN certified point
+lies 0.6% inside it. Every other extremal found at or below 70 mN is both
+longer and a saddle.
 
 ### What this establishes, and what it does not
 

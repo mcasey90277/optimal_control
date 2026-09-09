@@ -59,8 +59,8 @@ end
 rv0 = rv0(:);  rvf = rvf(:);
 
 prob = struct('ny', 14, 'freeIdx0', 8:14, ...
-    'prop',     @(dt, y0, needSTM) propSeg(dt, y0, needSTM, Tmax, c, muStar), ...
-    'rhs',      @(y) rhsPoint(y, Tmax, c, muStar), ...
+    'prop',     @(dt, y0, needSTM) mintime_prop_seg(dt, y0, needSTM, Tmax, c, muStar), ...
+    'rhs',      @(y) mintime_rhs_point(y, Tmax, c, muStar), ...
     'terminal', @(y, needJ) terminalMinTime(y, rvf, Tmax, c, muStar));
 
 conjTest = isfield(opts, 'conjTest') && opts.conjTest;
@@ -80,30 +80,14 @@ if conjTest
 end
 end
 
-% ------------------------------------------------------------------------
-function [yh, PHI] = propSeg(dt, y0, needSTM, Tmax, c, muStar)
-% PROPSEG  One-segment propagation via pumpkyn tfMinProp, with STM.
-% INPUTS: dt; y0 [14x1]; needSTM logical; Tmax; c; muStar.
-% OUTPUTS: yh [14x1]; PHI [14x14] or [].
-if needSTM, y0 = [y0; reshape(eye(14), [], 1)]; end
-[~, Yout] = pumpkyn.cr3bp.tfMinProp(dt, y0, Tmax, c, muStar);
-yh = Yout(end, 1:14)';
-if needSTM, PHI = reshape(Yout(end, 15:210), 14, 14); else, PHI = []; end
-end
 
 % ------------------------------------------------------------------------
-function F = rhsPoint(y, Tmax, c, muStar)
-% RHSPOINT  Min-time dynamics at a point via pumpkyn tfMinEoM.
-% INPUTS: y [14x1]; Tmax; c; muStar.  OUTPUTS: F [14x1].
-F = pumpkyn.cr3bp.tfMinEoM(0, [y; reshape(eye(14), [], 1)], Tmax, c, muStar);
-F = F(1:14);
-end
 
 % ------------------------------------------------------------------------
 function f = flow6(y, Tmax, c, muStar)
 % FLOW6  Position/velocity rows of the min-time dynamics at a point.
 % INPUTS: y [14x1]; Tmax; c; muStar.  OUTPUTS: f [6x1].
-F = rhsPoint(y, Tmax, c, muStar);
+F = mintime_rhs_point(y, Tmax, c, muStar);
 f = F(1:6);
 end
 

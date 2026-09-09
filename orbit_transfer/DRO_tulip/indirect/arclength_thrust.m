@@ -50,7 +50,10 @@ function A = arclength_thrust(rv0, rvf, seed0, TN0, cnd, muStar, opts)
 %                                                   iterations the step
 %                                                   controller aims for,
 %                                                   .Tstop [0.05] N,
-%                                                   .m0kg [150], .logFile ''
+%                                                   .m0kg [150], .logFile '',
+%                                                   .binding [@ms_tfmin]
+%                                                   or @ms_tfmin_hom (rho
+%                                                   free on the sphere)
 %
 %% Outputs:
 %
@@ -87,14 +90,21 @@ addpath(fullfile(fileparts(here), '..', 'costate_common'));
 lStar = 389703.264829278;  tStar = 382981.289129055;
 ndT = @(TN) (TN/m0kg)*tStar^2/(lStar*1000);
 
-%% Pack the starting unknown vector, exactly as ms_bvp orders it ----------
+%% The binding: normal chart (ms_tfmin, rho = 1) or the homogeneous one
+%  (ms_tfmin_hom, rho free on the sphere). The unknown vector is packed by
+%  the ENGINE and read back from its assembleOnly info, so this driver never
+%  assumes where t_f or the extras sit.
+binding = d('binding', @ms_tfmin);
 K  = numel(seed0.tGrid) - 1;
 ny = 14;
-p0 = [seed0.Y(8:14,1); reshape(seed0.Y(:,2:K), [], 1); seed0.tf];
-n  = numel(p0);
+[~, inf0] = resHandle(binding, rv0, rvf, seed0, ndT(TN0), cnd, muStar);
+p0  = inf0.p;  n = numel(p0);
+ctf = inf0.ctf;                                % index of t_f in p
+nX  = inf0.nExtra;                             % extras (rho) after t_f
+lamIdx = [1:7, reshape(bsxfun(@plus,(8:14)',(0:(K-2))*ny),1,[]) + 7];
 
 % residual factory: one call per thrust value
-mkRes = @(TN) resHandle(rv0, rvf, seed0, ndT(TN), cnd, muStar);
+mkRes = @(TN) resHandle(binding, rv0, rvf, seed0, ndT(TN), cnd, muStar);
 
 %% Scaling ----------------------------------------------------------------
 Dx = max(abs(p0), 1e-2);                 % per-unknown scale, floored
@@ -110,7 +120,7 @@ assert(norm(R, inf) < 1e-6, 'start point is not a root (||R|| = %.2e)', norm(R,i
 A = struct('T_N', [], 'tf_nd', [], 'tf_days', [], 'tauT', [], ...
            'sminX', [], 'sminAug', [], 'normR', [], 'dsUsed', [], ...
            'dsNext', [], 'nNewton', [], 'tanResid', [], 'lam0', [], ...
-           'pMaxAbs', [], 'fracCostate', [], 'p', {{}}, 'fold', [], 'Tmin', NaN);
+           'pMaxAbs', [], 'fracCostate', [], 'rho', [], 'p', {{}}, 'fold', [], 'Tmin', NaN);
 
 tau = [];  dsUsed = 0;  nNewtonLast = 0;                                 % previous tangent, for orientation
 for step = 0:nStep
@@ -141,7 +151,8 @@ for step = 0:nStep
 
     pNow = pOf(x);
     A.T_N(end+1)   = TN;
-    A.tf_nd(end+1) = x(end)*Dx(end);          % t_f is the LAST unknown
+    A.tf_nd(end+1) = pNow(ctf);               % t_f, wherever the engine put it
+    if nX > 0, A.rho(end+1) = pNow(end); else, A.rho(end+1) = NaN; end
     A.tf_days(end+1) = A.tf_nd(end)*tStar/86400;
     A.tauT(end+1) = tau(end);  A.sminX(end+1) = sminX;
     A.sminAug(end+1) = sminAug;  A.normR(end+1) = norm(R,inf);
@@ -154,19 +165,21 @@ for step = 0:nStep
     % how much of the last step was costates vs state/time? If the arclength
     % is being eaten by multiplier growth, the fold reading is wrong.
     if numel(A.p) >= 1
-        dp = pNow - A.p{end};
-        iL = [1:7, reshape(bsxfun(@plus,(8:14)',(0:(K-2))*ny),1,[]) + 7];
-        iL = iL(iL <= numel(dp)-1);
-        A.fracCostate(end+1) = norm(dp(iL))/max(norm(dp(1:end-1)), realmin);
+        % in SCALED coordinates -- the metric the arclength actually uses.
+        % Unscaled, O(50) costates dominate O(1) states by magnitude alone
+        % and the fraction reads 1.000 whatever the geometry is doing.
+        dx = (pNow - A.p{end}) ./ Dx;
+        iL = lamIdx(lamIdx < ctf);
+        A.fracCostate(end+1) = norm(dx(iL))/max(norm(dx(1:ctf-1)), realmin);
     else
         A.fracCostate(end+1) = NaN;
     end
     A.p{end+1} = pNow;
     lg(['  step %3d: T = %10.6f mN  tf = %10.6f d  tau_T = %+.4e  ' ...
         'sminX = %.2e  sminAug = %.2e  |R| = %.1e  dsUsed = %.2e  ' ...
-        'nNw = %2d  |lam0| = %9.3f  fracCostate = %.3f  tanRes = %.1e'], ...
+        'nNw = %2d  |lam0| = %9.3f  fracCostate = %.3f  tanRes = %.1e  rho = %.6f'], ...
         step, TN*1000, A.tf_days(end), tau(end), sminX, sminAug, norm(R,inf), ...
-        dsUsed, nNewtonLast, A.lam0(end), A.fracCostate(end), tanResid);
+        dsUsed, nNewtonLast, A.lam0(end), A.fracCostate(end), tanResid, A.rho(end));
 
     if numel(A.tauT) > 1 && sign(A.tauT(end)) ~= sign(A.tauT(end-1))
         A.fold(end+1) = numel(A.tauT);
@@ -228,11 +241,12 @@ lg('arclength done: %d points, thrust %.3f -> %.3f mN, %d fold(s)', ...
 end
 
 % ------------------------------------------------------------------------
-function h = resHandle(rv0, rvf, seed0, Tnd, cnd, muStar)
-% RESHANDLE  The production ms residual for one thrust value.
-% INPUTS: rv0; rvf; seed0; Tnd; cnd; muStar.  OUTPUTS: h (fhandle p -> [R,J]).
+function [h, inf_] = resHandle(binding, rv0, rvf, seed0, Tnd, cnd, muStar)
+% RESHANDLE  The production ms residual for one thrust value, through the
+% chosen binding.  INPUTS: binding (fhandle); rv0; rvf; seed0; Tnd; cnd;
+% muStar.  OUTPUTS: h (fhandle p -> [R,J]); inf_ (assembleOnly info).
 sd = seed0;  sd.Y(1:7,1) = [rv0(:); 1];
-[~, inf_] = ms_tfmin(rv0(:), rvf(:), sd, Tnd, cnd, muStar, ...
+[~, inf_] = binding(rv0(:), rvf(:), sd, Tnd, cnd, muStar, ...
     struct('assembleOnly', true, 'handleOnly', true, 'tfLo', 0.05, 'tfHi', 20, 'pMax', 1e7));
 h = inf_.residual;
 end

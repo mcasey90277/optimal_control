@@ -47,7 +47,18 @@ function [p, info] = ms_bvp(prob, seed, opts)
 %   .terminal               fhandle                 [g, dgdy] = terminal(y,
 %                                                   needJ): terminal
 %                                                   residual [nT x 1] and
-%                                                   its Jacobian [nT x ny]
+%                                                   its Jacobian [nT x ny].
+%                                                   With nExtra > 0:
+%                                                   [g, dgdy, dgdx] =
+%                                                   terminal(y, needJ, x),
+%                                                   dgdx [nT x nExtra]
+%   .nExtra                 int (optional)          extra scalar unknowns
+%                                                   appended AFTER t_f [0]
+%   .extraEq                fhandle (if nExtra)     [e, dedp1, dedx] =
+%                                                   extraEq(p1free, x):
+%                                                   nExtra equations, with
+%                                                   d/d(y1 free part) and
+%                                                   d/dx
 %
 %  seed                     struct
 %   .tf                     double                  Time-of-flight guess
@@ -56,6 +67,7 @@ function [p, info] = ms_bvp(prob, seed, opts)
 %   .Y                      [ny x K+1]              States at the boundary
 %                                                   times (col 1: fixed
 %                                                   part used as-is)
+%   .extra                  [nExtra x 1] (optional) seed for the extras
 %
 %  opts                     struct (optional)       .maxIter [100], .tolR
 %                                                   [1e-10], .wallSec [300],
@@ -150,9 +162,22 @@ y1fix = seed.Y(:,1);                           % fixed part of column 1
 
 % unknown vector p = [y1(freeIdx0); Y_2..Y_K (ny each); tf]
 % (fixedTf: the trailing tf is absent and tf = seed.tf throughout)
+% EXTRA SCALAR UNKNOWNS (prob.nExtra, default 0): unknowns that are not
+% junction states, appended AFTER t_f. They enter the terminal condition
+% (third output of prob.terminal) and carry their own equations
+% (prob.extraEq). First use: the objective multiplier rho of the homogeneous
+% PMP normalisation, which appears only in H(t_f) = rho + lam'f = 0 and in
+% rho^2 + |lam_0|^2 = 1 (ms_tfmin_hom).
+nX = 0;  if isfield(prob, 'nExtra'), nX = prob.nExtra; end
+xSeed = zeros(nX, 1);
+if nX > 0 && isfield(seed, 'extra'), xSeed = seed.extra(:); end
+assert(numel(xSeed) == nX, 'seed.extra must have nExtra = %d entries', nX);
 p = [seed.Y(fi0,1); reshape(seed.Y(:,2:K), ny*(K-1), 1)];
 if ~fixedTf, p(end+1) = seed.tf; end
-n = numel(p);                                  % = nf + ny(K-1) (+1 free tf)
+p = [p; xSeed];
+n = numel(p);                                  % = nf + ny(K-1) (+1 free tf) + nExtra
+ctf = n - nX;                                  % column of the t_f unknown
+cX  = n - nX + (1:nX);                         % columns of the extras
 
 % Trust-region-dogleg on the multiple-shooting system with the analytic
 % block Jacobian. A plain Newton + backtracking loop stalls on rough seeds
@@ -173,7 +198,8 @@ if d('assembleOnly', false)
     info = struct('R', R0, 'J', J0, 'p', p, 'residual', @residual, ...
                   'K', K, 'ny', ny, 'nFree', numel(fi0), ...
                   'freeIdx0', fi0, 'fixedTf', fixedTf, ...
-                  'tGrid', seed.tGrid, 'assembleOnly', true);
+                  'tGrid', seed.tGrid, 'assembleOnly', true, ...
+                  'nExtra', nX, 'ctf', ctf);
     return
 end
 
@@ -225,7 +251,13 @@ end
     function tf = tfOf(p)
     % TFOF  Final time of an iterate: the trailing unknown, or the fixed
     % seed value.  INPUTS: p [n x 1].  OUTPUTS: tf double.
-    if fixedTf, tf = seed.tf; else, tf = p(end); end
+    if fixedTf, tf = seed.tf; else, tf = p(ctf); end
+    end
+
+    function x = xtraOf(p)
+    % XTRAOF  The extra scalar unknowns (last nExtra entries).
+    % INPUTS: p [n x 1].  OUTPUTS: x [nExtra x 1].
+    x = p(cX);
     end
 
     function Yj = junctions(p)
@@ -283,15 +315,29 @@ end
             if needJ
                 J(rows, colsK)       = segsel(PHIk, k);
                 J(rows, colidx(k+1)) = -eye(ny);
-                if ~fixedTf, J(rows, n) = J(rows, n) + Fh*dsg(k); end
+                if ~fixedTf, J(rows, ctf) = J(rows, ctf) + Fh*dsg(k); end
             end
         else
-            [g, dgdy] = prob.terminal(yh, needJ);
+            if nX > 0
+                [g, dgdy, dgdx] = prob.terminal(yh, needJ, xtraOf(p));
+            else
+                [g, dgdy] = prob.terminal(yh, needJ);  dgdx = [];
+            end
             rows = (K-1)*ny + (1:numel(g));
             R(rows) = g;
             if needJ
                 J(rows, colsK) = segsel(dgdy*PHIk, k);
-                if ~fixedTf, J(rows, n) = J(rows, n) + dgdy*Fh*dsg(k); end
+                if ~fixedTf, J(rows, ctf) = J(rows, ctf) + dgdy*Fh*dsg(k); end
+                if nX > 0, J(rows, cX) = dgdx; end
+            end
+            if nX > 0
+                [e, dedp1, dedx] = prob.extraEq(p(1:nf), xtraOf(p));
+                rowsE = rows(end) + (1:nX);
+                R(rowsE) = e;
+                if needJ
+                    J(rowsE, 1:nf) = dedp1;
+                    J(rowsE, cX)   = dedx;
+                end
             end
         end
     end

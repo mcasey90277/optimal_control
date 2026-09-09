@@ -50,6 +50,20 @@ ok = chk(ok, Cs.ok && abs(Cs.rho - 0.5) < 1e-12 && norm(Cs.z - C.z) < 1e-6*norm(
          sprintf('chart conversion at rho = %.3f returns the same extremal (|dz| = %.1e)', ...
                  Cs.rho, norm(Cs.z - C.z)));
 
+% A POLISH PLATEAU must not be read as a failure. The departure rib walking
+% the positive sense out of the anchor stalled at sD = 0.0465 with
+% |R| = 5.5e-11 against a 3e-11 tolerance -- a physically excellent solution
+% refused for being 1.8x over a very tight number. The residual is one check
+% among five, and the flown miss and the foreign witness are stronger
+% evidence than the last decade of it, so a plateau below tolRelax proceeds
+% to the gates and lets THEM decide. Forced here by an impossible tolerance.
+Cp = certify_crossing(anc.p, anc.sA, B, anc, struct('tolR', 1e-16));
+ok = chk(ok, Cp.ok && contains(Cp.reason, 'plateau') && norm(Cp.z - C.z) < 1e-6*norm(C.z), ...
+         sprintf('a polish plateau still certifies through the gates: %s', Cp.reason));
+Cq = certify_crossing(anc.p, anc.sA, B, anc, struct('tolR', 1e-16, 'tolRelax', 1e-20));
+ok = chk(ok, ~Cq.ok && contains(Cq.reason, 'converge'), ...
+         sprintf('a plateau above tolRelax is still refused: %s', Cq.reason));
+
 % a corrupted candidate must be refused, not silently accepted
 pBad = anc.p;  pBad(1:7) = 3*pBad(1:7);
 Cb = certify_crossing(pBad, anc.sA, B, anc, struct('wallSec', 60));

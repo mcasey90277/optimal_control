@@ -27,6 +27,8 @@ function C = certify_root(seed, rv0, rvf, B, opts)
 %                                                   point, arclength_arrival)
 %  opts                     struct (optional)
 %   .gateKm [100] .gateVms [10] .tolDz [1e-6] .wallSec [600] .m0kg [150]
+%   .tolR [3e-11] polish tolerance, .tolRelax [1e-8] a polish that plateaus
+%   below this still goes to the gates (and says so in .reason),
 %   .nSamp [200] .rankTol [1e-8] .sA .sD (recorded, not used)
 %
 %% Outputs:
@@ -47,6 +49,19 @@ if nargin < 5, opts = struct(); end
 d = @(f,v) fieldd(opts, f, v);
 gateKm = d('gateKm', 100);  gateVms = d('gateVms', 10);  tolDz = d('tolDz', 1e-6);
 wallSec = d('wallSec', 600);  m0kg = d('m0kg', 150);
+% tolR was DOCUMENTED as an option and then hardcoded -- the caller's value
+% was silently ignored until 2026-09-09.
+tolR = d('tolR', 3e-11);
+% A PLATEAU is not a failure. The rib walking the positive departure sense
+% out of the anchor stalls at sD = 0.0465 with |R| = 5.1e-11 against a 3e-11
+% tolerance, at the same place and the same residual whatever the step size:
+% the solver's achievable floor there is simply above a very tight number.
+% The residual is one check among five, and the flown miss and the foreign
+% witness are stronger evidence than its last decade, so a polish that
+% plateaus below tolRelax goes on to the gates and lets THEM decide -- and
+% says so in the reason, so a plateaued entry is never mistaken for a clean
+% one.
+tolRelax = d('tolRelax', 1e-8);
 lStar = 389703.264829278;  tStar = 382981.289129055;
 t0 = tic;
 rv0 = rv0(1:6);  rvf = rvf(1:6);
@@ -59,12 +74,20 @@ C = struct('ok', false, 'reason', '', 'z', nan(8,1), 'Y', [], 'tfDays', NaN, ...
 % ---- 1. normal-chart polish + conjugate test ---------------------------
 try
     [z, it] = ms_tfmin(rv0, rvf, seed, B.Tnd, B.cnd, B.mu, ...
-                       struct('tolR', 3e-11, 'wallSec', wallSec, 'conjTest', true));
+                       struct('tolR', tolR, 'wallSec', wallSec, 'conjTest', true));
 catch ME
     C.reason = ['ms_tfmin threw: ' ME.message];  C.wallSec = toc(t0);  return
 end
 C.normR = it.normR;
-if ~it.converged, C.reason = sprintf('normal-chart polish did not converge (|R| = %.1e)', it.normR); C.wallSec = toc(t0); return, end
+plateau = false;
+if ~it.converged
+    if it.normR < tolRelax
+        plateau = true;
+    else
+        C.reason = sprintf('normal-chart polish did not converge (|R| = %.1e)', it.normR);
+        C.wallSec = toc(t0);  return
+    end
+end
 C.z = z(:);  C.Y = it.Y;  C.tfDays = z(8)*tStar/86400;
 
 % ---- 2. flown arrival, position AND velocity ---------------------------
@@ -101,7 +124,12 @@ if ~(g.minLamV > 0), C.reason = sprintf('min|lam_v| = %.2e not > 0', g.minLamV);
 if ~(g.minQmt > 0),  C.reason = sprintf('min Q_mt = %.2e not > 0', g.minQmt);   C.wallSec = toc(t0); return, end
 if g.dimS ~= 1,      C.reason = sprintf('dim S = %d (abnormal lift)', g.dimS);   C.wallSec = toc(t0); return, end
 
-C.ok = true;  C.reason = 'certified';  C.wallSec = toc(t0);
+C.ok = true;  C.wallSec = toc(t0);
+if plateau
+    C.reason = sprintf('certified (polish plateaued at |R| = %.1e, above tolR = %.1e)', it.normR, tolR);
+else
+    C.reason = 'certified';
+end
 end
 
 

@@ -34,21 +34,36 @@ arc3.crossings = mk(sA0 + 4/12, 0, 0);  arc3.crossings(1).converged = false;
 arc4.crossings = [mk(sA0 + 5/12, 21.0, 1), mk(sA0 + 5/12, 21.0, 2)];
 
 certFn = @(p, sA) stubCert(p, sA);
-S = sheet_from_arcs({arc1, arc2, arc3, arc4}, struct('sA0', sA0, 'nA', nA, 'certFn', certFn));
+% a pre-certified seed at a phase NO arc crosses, and one at a phase an arc
+% does cross with a slower time -- the seed must win the minimum there
+sd1 = stubCert([14.0; 1], S0sA(sA0, nA, 8));  sd1.sA = S0sA(sA0, nA, 8);  sd1.reason = 'certified';
+sd2 = stubCert([15.0; 1], S0sA(sA0, nA, 3));  sd2.sA = S0sA(sA0, nA, 3);  sd2.reason = 'certified';
+S = sheet_from_arcs({arc1, arc2, arc3, arc4}, struct('sA0', sA0, 'nA', nA, ...
+    'certFn', certFn, 'seeds', [sd1, sd2]));
 
 ok = chk(ok, numel(S.sA) == nA && abs(S.sA(2) - (sA0 + 1/12)) < 1e-12, 'grid built from sA0 and nA');
 ok = chk(ok, numel(S.cand{2}) == 1, sprintf('duplicate root across arcs merged: %d candidate at j = 2', numel(S.cand{2})));
-ok = chk(ok, numel(S.cand{3}) == 2 && abs(S.TF(3) - 16.5) < 1e-12, ...
-         sprintf('refused candidate kept but not chosen: TF(3) = %.2f from %d candidates', S.TF(3), numel(S.cand{3})));
+ok = chk(ok, numel(S.cand{3}) == 3 && nnz(~[S.cand{3}.ok]) == 1, ...
+         sprintf('a refused candidate is kept, not chosen: %d candidates at j = 3, %d refused', ...
+                 numel(S.cand{3}), nnz(~[S.cand{3}.ok])));
 ok = chk(ok, abs(S.TF(4) - 19.0) < 1e-12, sprintf('minimum over certified candidates: TF(4) = %.1f', S.TF(4)));
 ok = chk(ok, isnan(S.TF(5)) && numel(S.cand{5}) == 1 && ~S.cand{5}(1).ok && contains(S.cand{5}(1).reason, 'not converged'), ...
          'unconverged crossing recorded with a reason, TF = NaN');
-ok = chk(ok, all(isnan(S.TF([1 7:12]))), 'grid points with no crossing stay NaN');
+ok = chk(ok, all(isnan(S.TF([1 7 9:12]))), 'grid points with neither crossing nor seed stay NaN');
+ok = chk(ok, abs(S.TF(8) - 14.0) < 1e-12 && numel(S.cand{8}) == 1, ...
+         sprintf('a seed fills a phase no arc crossed: TF(8) = %.2f', S.TF(8)));
+ok = chk(ok, abs(S.TF(3) - 15.0) < 1e-12 && numel(S.cand{3}) == 3, ...
+         sprintf('a faster seed wins over the crossings: TF(3) = %.2f from %d candidates', S.TF(3), numel(S.cand{3})));
 ok = chk(ok, numel(S.cand{6}) == 2, ...
          sprintf('same t_f, different costates: %d candidates kept at j = 6 (want 2)', numel(S.cand{6})));
-ok = chk(ok, S.nCand == 8 && S.nCert == 6, sprintf('counts: %d candidates, %d certified', S.nCand, S.nCert));
+ok = chk(ok, S.nCand == 10 && S.nCert == 8, sprintf('counts: %d candidates, %d certified', S.nCand, S.nCert));
 
 if ok, fprintf('TEST_SHEET_FROM_ARCS: ALL PASS\n'); else, fprintf('TEST_SHEET_FROM_ARCS: FAIL\n'); end
+end
+
+function s = S0sA(sA0, nA, j)
+% S0SA  Grid phase j.  INPUTS: sA0; nA; j.  OUTPUTS: s.
+s = mod(sA0 + (j-1)/nA, 1);
 end
 
 function C = stubCert(p, sA)

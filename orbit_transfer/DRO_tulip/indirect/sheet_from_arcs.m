@@ -16,6 +16,9 @@ function S = sheet_from_arcs(arcs, opts)
 %  arcs                     cell of struct          arclength_ms outputs (or
 %                                                   anything with .crossings)
 %  opts                     struct (optional)
+%   .seeds struct array of already-certified candidates (certify_root
+%   outputs with .sA) entered before the crossings -- the arcs' own start
+%   points, which are not crossings of their own arc;
 %   .sA0 [0.0754] .nA [12] grid;  .tolDup [1e-6] (days) and .tolZ [1e-6]
 %   (relative, on z8) -- a duplicate must match in BOTH;
 %   .certFn [@(p,sA) certify_crossing(p,sA,B,anc,copts)] -- default needs
@@ -54,11 +57,31 @@ end
 S = struct('sA', mod(sA0 + (0:nA-1)/nA, 1), 'TF', nan(1, nA), 'Z8', nan(8, nA), ...
            'cand', {cell(1, nA)}, 'nCand', 0, 'nCert', 0, 'sA0', sA0, 'nA', nA);
 
+% ---- pre-certified SEED points -----------------------------------------
+% The arcs' own starting solutions are never crossings of their own arc, so
+% a sheet built from crossings alone reports NaN at the very phases whose
+% solutions launched it (measured: grid point 1 read "no certified
+% candidate" while the 17.798 d anchor sat certified on disk). Seeds enter
+% first, through the same merge and the same minimum.
+seeds = d('seeds', struct([]));
+for k = 1:numel(seeds)
+    C = seeds(k);
+    j = gridIndex(C.sA, sA0, nA);
+    C.level = C.sA;  C.arc = 0;
+    S.nCand = S.nCand + 1;
+    if isempty(S.cand{j}), S.cand{j} = C; else, S.cand{j} = mergeStruct(S.cand{j}, C); end
+    lg('  seed at j = %2d (sA %.4f): t_f %.6f d  %s', j, S.sA(j), C.tfDays, C.reason);
+    if C.ok
+        S.nCert = S.nCert + 1;
+        if isnan(S.TF(j)) || C.tfDays < S.TF(j), S.TF(j) = C.tfDays;  S.Z8(:, j) = C.z(:); end
+    end
+end
+
 for ia = 1:numel(arcs)
     cr = arcs{ia}.crossings;
     for ic = 1:numel(cr)
         c = cr(ic);
-        j = mod(round((c.level - sA0)*nA), nA) + 1;         % grid index
+        j = gridIndex(c.level, sA0, nA);
         assert(abs(mod(c.level - sA0, 1)*nA - round(mod(c.level - sA0, 1)*nA)) < 1e-6 || ...
                abs(mod(c.level - sA0, 1)*nA - nA) < 1e-6, 'crossing level %.6f is not on the grid', c.level);
         sA = S.sA(j);
@@ -97,6 +120,15 @@ for ia = 1:numel(arcs)
 end
 lg('sheet_from_arcs: %d candidates, %d certified, %d/%d grid points filled', ...
    S.nCand, S.nCert, nnz(isfinite(S.TF)), nA);
+end
+
+function j = gridIndex(level, sA0, nA)
+% GRIDINDEX  Grid column of a (possibly unwrapped) phase level.
+% INPUTS: level; sA0; nA.  OUTPUTS: j.
+f = mod(level - sA0, 1)*nA;
+assert(abs(f - round(f)) < 1e-6 || abs(f - nA) < 1e-6, ...
+       'phase %.6f is not on the grid', level);
+j = mod(round(f), nA) + 1;
 end
 
 function A = mergeStruct(A, C)

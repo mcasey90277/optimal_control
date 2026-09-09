@@ -45,7 +45,30 @@ for k = 1:numel(files)
         k, files(k).name, numel(L.A.q), L.A.q(1), L.A.q(end), numel(L.A.folds), numel(L.A.crossings), L.A.stop);
 end
 
-S = sheet_from_arcs(arcs, struct('sA0', d('sA0', 0.0754), 'nA', d('nA', 12), ...
+% SEED the sheet with the certified library solutions at this departure
+% phase: they are the arcs' start points, so they are not crossings of any
+% arc and a crossings-only sheet reports NaN at exactly the phases whose
+% solutions launched it.
+sD0 = anc.sD;  nA = d('nA', 12);  sA0 = d('sA0', 0.0754);
+lib = dro_tulip_library(here);
+lib = lib(abs(mod([lib.sD] - sD0 + 0.5, 1) - 0.5) < 1e-8);
+seeds = struct([]);
+for k = 1:numel(lib)
+    g = mod(lib(k).sA - sA0, 1)*nA;
+    if abs(g - round(g)) > 1e-6 && abs(g - nA) > 1e-6, continue, end   % off-grid
+    K = size(lib(k).Y, 2);
+    seed = struct('tf', lib(k).z(8), 'tGrid', linspace(0, lib(k).z(8), K+1), ...
+                  'Y', [lib(k).Y, lib(k).Y(:,end)]);
+    rv0 = B.stateD(sD0);
+    seed.Y(1:7,1) = [rv0(1:6); 1];  seed.Y(8:14,1) = lib(k).z(1:7);
+    C = certify_root(seed, rv0, B.stateA(lib(k).sA), B, ...
+                     struct('sA', lib(k).sA, 'sD', sD0, 'wallSec', 600));
+    fprintf('library seed (%.4f, %.4f) [%s]: %s
+', sD0, lib(k).sA, lib(k).src, C.reason);
+    if isempty(seeds), seeds = C; else, seeds(end+1) = C; end %#ok<AGROW>
+end
+
+S = sheet_from_arcs(arcs, struct('sA0', sA0, 'nA', nA, 'seeds', seeds, ...
                                  'B', B, 'anc', anc, 'copts', d('copts', struct())));
 S.arcs = {files.name};  S.B = B;  S.anc = anc;  S.opts = opts;  S.built = datestr(now);
 S.B = rmfield(S.B, {'res', 'dRdq', 'stateA', 'stateD'});

@@ -2271,14 +2271,32 @@ is exactly singular AT a fold, which is the one place the tangent matters.
 The right null vector of the FULL SVD of `[R_x R_q]` is not. (Economy SVD
 drops the extra right-null column of a wide matrix -- use the full form.)
 
-**2. The arclength metric must be MESH-INDEPENDENT.** With unit weights the
-trajectory block's `K x 14 = 336` coordinates swamp the single phase
+**2. The arclength metric must not scale with the MESH.** With unit weights
+the trajectory block's `K x 14 = 336` coordinates swamp the single phase
 coordinate: an arclength step of 0.002 moved the arrival phase by 5e-5, and
 60 steps advanced 0.0015 of a period. Weighting every junction coordinate
 by `sqrt(K)` makes the block's contribution quadrature-like -- one
-junction's worth, independent of the mesh -- and the same 60 steps then
-cover 0.015. This is not a tuning constant; it is what makes the step size
-mean the same thing on a K = 24 and a K = 48 mesh.
+junction's worth rather than K junctions' worth -- and the same 60 steps
+then cover 0.015.
+
+**Measured, because the first version of this paragraph claimed more than
+was checked.** The same 40-step arc at K = 24 and K = 48:
+
+| | K = 24 | K = 48 |
+|---|---|---|
+| phase advance per unit arclength | 0.003413 | 0.002961 |
+| arrival phase reached | 0.092202 | 0.088455 |
+| `t_f` at the common phase 0.088455 | 17.455539 d | 17.455534 d |
+
+So the SOLUTION CURVE is mesh-independent to 5e-6 days, as it must be --
+both meshes discretize the same boundary-value problem. The
+PARAMETERIZATION is not: the step advances 13% less phase on the finer
+mesh, and step for step the difference reaches 2.96e-4 against a mean step
+of 4.20e-4. What the weighting removes is the LEADING mesh dependence --
+unweighted, doubling K would cut the phase advance by `sqrt(2)`, 41% --
+leaving a 13% residual, plausibly from the junction states sampling the
+same trajectory differently plus the fixed weights on `t_f` and `rho`.
+"Comparable across meshes", not "identical".
 
 **3. A fold is a rank statement, not a sign.** A sign change of the
 tangent's q-component is only a CANDIDATE. It is called a fold when `R_x`

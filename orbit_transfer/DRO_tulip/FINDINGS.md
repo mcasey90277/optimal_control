@@ -1758,7 +1758,18 @@ Reproduce: `run_regime_map` (63 jobs, resumable, partitionable),
 `regime_table`, `regime_verdicts`; tests `test_regime_features` (17),
 `test_regime_verdicts` (12).
 
-## 32. The 70 mN abstract case is SOLVED and certified -- and the abstract's numbers are optimistic by ~50% (2026-09-08)
+## 32. The 70 mN abstract case is SOLVED and certified (2026-09-08) -- but the "abstract is optimistic by 50%" verdict was WRONG: see the correction in section 35
+
+> **CORRECTION (same day, section 35).** This section, and sections 33-34
+> after it, compared the abstract against cell (1,11) of the 12x12 fine
+> sheet -- arrival phase sA = 0.9087. **The abstract's case is a DIFFERENT
+> arrival phase, sA = 0.0754**, and at that phase 70 mN reaches the tulip in
+> **17.80 d for 0.7485 km/s and 12.20 kg (8.1% of wet mass)** -- the
+> abstract's figures, exactly, and certified. Everything below about the
+> abstract being optimistic is WITHDRAWN. The transfer physics in this
+> section stands; it is a statement about sA = 0.9087 only.
+
+
 
 The cislunar abstract ("MinTime Tulip Transfer", poster content approved for
 public release) states a 150 kg spacecraft with a **70 mN** thruster at
@@ -1864,7 +1875,7 @@ run, is **scaled pseudo-arclength continuation in (z8, T)** on the
 multiple-shooting unknowns: a fold shows tangent thrust-component -> 0 and
 a sign change, with R_X losing one rank while [R_X R_T] stays full rank.
 
-## 33. The 71.99 mN limit point -- NOT established as a fold, and the "minimum thrust" reading is REFUTED (2026-09-08; corrected same day after review)
+## 33. (arrival phase sA = 0.9087 ONLY -- see section 35) The 71.99 mN limit point -- NOT established as a fold, and the "minimum thrust" reading is REFUTED (2026-09-08; corrected same day after review)
 
 > **CORRECTION.** This section first claimed a simple fold at 71.99 mN and
 > concluded that the abstract's 70 mN is "below the family's limit". **Both
@@ -1991,7 +2002,7 @@ at the limit point or a switch to t_f as the continuation parameter there.
 The fold LOCATION is nonetheless established to 71.99 mN by five orders of
 rank collapse.
 
-## 34. The branch map: the fast family ends at 72.0 mN by LOSING NORMALITY, and 26.44 d is the only locally minimizing extremal found at 70 mN (2026-09-08)
+## 34. (arrival phase sA = 0.9087 ONLY -- see section 35) The branch map: the fast family ends at 72.0 mN by LOSING NORMALITY, and 26.44 d is the only locally minimizing extremal found at 70 mN (2026-09-08)
 
 Section 33's "fold at 71.99 mN" was retracted after review. What the
 corrected instrument and the homogeneous chart then found is a fuller and
@@ -2097,3 +2108,67 @@ The defensible statement: at 70 mN the minimum-time transfer found is
 26.4 days (1.14 km/s, 18.1 kg), certified as a local minimum by an
 independent solver and the second-order test; the 18-day family requires
 at least 72 mN and terminates there. Both numbers are on the map.
+
+
+## 35. CORRECTION: the abstract's 18 days is RIGHT -- t_f at 70 mN varies ~50% with ARRIVAL PHASE (2026-09-08)
+
+Sections 32-34 judged the cislunar abstract against cell (1,11) of the
+12x12 fine sheet and concluded its 18 d / 0.75 km/s / 12.2 kg was
+"optimistic by ~50%" and that "18 d needs >= 72 mN". **Both are withdrawn.**
+They were statements about ONE arrival phase.
+
+### What the abstract's case actually is
+
+`sweep_phasing`'s defaults have always been the abstract's engine -- 70 mN,
+Isp 900 s, 150 kg -- and its ANCHOR is Darin's demo phasing pair. Polished
+through our own machinery:
+
+| | anchor (sD 0, **sA 0.0754**) | cell (1,11) (sD 0, **sA 0.9087**) |
+|---|---|---|
+| t_f | **17.798 d** | 26.436 d |
+| dV | **0.7485 km/s** | 1.1360 km/s |
+| propellant | **12.20 kg (8.1%)** | 18.12 kg (12.1%) |
+| ms residual | 5.2e-12 | 2.4e-12 |
+| flown arrival | **0.0000 km** | 0.069 km |
+| tfMin acceptance | **\|dz\| = 0 exactly** | 2.1e-10 |
+| conjugate | PASS (0 interior) | PASS (0 interior) |
+| gates | min\|lam_v\| 3.24, min Q_mt 3.83, dim S 1 | 0.599, 1.174, 1 |
+
+The abstract quotes "approximately 18 days, about 0.75 km/s, 12.2 kg,
+roughly eight percent of the wet mass". The anchor gives 17.80 d, 0.7485
+km/s, 12.20 kg, 8.1%. **The abstract is accurate to every digit it states**,
+and it is a certified local minimum. Stored:
+`indirect/results/mintime_70mN_anchor.mat`.
+
+### The real finding: arrival phase is the dominant variable
+
+Same orbits, same engine, same departure phase; only the arrival phase
+differs -- and t_f moves 17.80 -> 26.44 d (+48%), dV 0.75 -> 1.14 km/s
+(+52%), propellant 12.2 -> 18.1 kg. **Arrival phase, not thrust, is what
+sets the cost of this transfer at 70 mN.** For a constellation deployed by
+staggered release into distinct phase slots, that spread IS the deployment
+envelope, and it is the quantity a poster should show.
+
+### How the error happened (and the warning that was already on file)
+
+Cell (1,11) was chosen in section 32 because it was the FASTEST 0.5 N entry
+of the fine sheet -- the best-conditioned start for a deep thrust walk. Its
+orbits match the abstract (tau = 1 DRO, 7-petal tulip, 150 kg), which is
+what was checked; its PHASES were never compared with the abstract's.
+Astra's review had already said it plainly -- "changing arrival phase
+changes the problem and can move, remove, or introduce branch folds" -- and
+that sentence was recorded in section 34's own "open" list without being
+applied to the abstract comparison.
+
+**Standing rule: an operating point is (orbits, engine, DEPARTURE PHASE,
+ARRIVAL PHASE). Matching the first two is not matching the case.**
+
+### What sections 33-34 still establish
+
+Everything measured there is correct AS A STATEMENT ABOUT sA = 0.9087: the
+fast family at that phase ends at 72.0 mN by losing normality, the
+homogeneous chart maps the snake, 26.44 d is the only locally minimizing
+extremal at 70 mN there, and minimality is exchanged at the 69.57 mN fold.
+That is a real and unusual piece of solution structure. It is not a
+statement about the transfer in general, and the 6x6 sweep below shows why
+that distinction matters.

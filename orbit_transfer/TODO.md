@@ -256,10 +256,17 @@ exists.
     So at 70 mN the fast family does not exist and §32's certified 26.44 d
     solution is on a different branch. **The abstract's "70 mN in 18 days" is
     not achievable**: 18.1 d is the limit but at 72 mN.
-  - [ ] **Cislunar abstract/poster decision (Mike):** with the branch map
-    (§34) the statement is now firm: at 70 mN the minimum-time transfer
-    found is 26.4 d (1.14 km/s, 18.1 kg), locally certified; the 18-day
-    family needs >= 72 mN and terminates there. No hurry (Mike 2026-09-08).
+  - [x] **Cislunar abstract: NO CHANGE NEEDED (FINDINGS §35, 2026-09-08).**
+    The abstract's 18 d / 0.75 km/s / 12.2 kg / 8% is the DEMO ANCHOR phase
+    pair (sD 0, sA 0.0754) and it is exactly right: 17.798 d, 0.7485 km/s,
+    12.20 kg, 8.1%, certified (flown arrival 0.0000 km, tfMin |dz| = 0,
+    conj PASS, gates pass). §32-34's "optimistic by 50%" verdict compared it
+    against a DIFFERENT arrival phase (sA 0.9087) and is withdrawn.
+  - [ ] **70 mN PHASE SHEET (the real deliverable):** t_f varies 17.8 -> 26.4 d
+    (+48%) with arrival phase alone. Sweep the torus at 70 mN from the
+    anchor (`sweep_phasing`, whose defaults ARE this operating point; the
+    stored 6x6 has only 1 of 36 solved). That map is the constellation's
+    deployment envelope and the poster figure.
   - [ ] **Branch-map follow-ups:** (a) conjugate + gates along the WHOLE
     26.44 d branch to locate the minimality-exchange point exactly (between
     69.57 and 70.0 mN); (b) Astra Track 2 — direct multistart at 70 mN with

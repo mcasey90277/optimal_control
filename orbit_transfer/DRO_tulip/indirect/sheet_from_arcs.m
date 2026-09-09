@@ -16,7 +16,8 @@ function S = sheet_from_arcs(arcs, opts)
 %  arcs                     cell of struct          arclength_ms outputs (or
 %                                                   anything with .crossings)
 %  opts                     struct (optional)
-%   .sA0 [0.0754] .nA [12] grid;  .tolDup [1e-6] (days) duplicate merge;
+%   .sA0 [0.0754] .nA [12] grid;  .tolDup [1e-6] (days) and .tolZ [1e-6]
+%   (relative, on z8) -- a duplicate must match in BOTH;
 %   .certFn [@(p,sA) certify_crossing(p,sA,B,anc,copts)] -- default needs
 %   .B, .anc (from arclength_arrival setup) and optional .copts;
 %   .logFile ''
@@ -39,6 +40,7 @@ function S = sheet_from_arcs(arcs, opts)
 if nargin < 2, opts = struct(); end
 d = @(f,v) fieldd(opts, f, v);
 sA0 = d('sA0', 0.0754);  nA = d('nA', 12);  tolDup = d('tolDup', 1e-6);
+tolZ = d('tolZ', 1e-6);
 logFile = d('logFile', '');
 lg = @(varargin) logmsg(logFile, sprintf(varargin{:}));
 if isfield(opts, 'certFn') && ~isempty(opts.certFn)
@@ -67,13 +69,21 @@ for ia = 1:numel(arcs)
             C = certFn(c.p, sA);
         end
         C.level = c.level;  C.arc = ia;
-        % merge with an existing candidate at this grid point (same root)
+        % Merge with an existing candidate at this grid point only if it is
+        % the SAME ROOT. Keying on final time alone would silently discard
+        % a genuinely distinct extremal that happens to share a t_f -- the
+        % grid point would lose a candidate and nothing would say so. The
+        % costates settle it: same t_f AND same z8.
         dup = false;
         for k = 1:numel(S.cand{j})
-            if isfinite(C.tfDays) && abs(S.cand{j}(k).tfDays - C.tfDays) < tolDup, dup = true; break, end
+            e = S.cand{j}(k);
+            if ~isfinite(C.tfDays) || abs(e.tfDays - C.tfDays) >= tolDup, continue, end
+            if numel(e.z) == numel(C.z) && norm(e.z(:) - C.z(:)) <= tolZ*max(norm(C.z(:)), 1)
+                dup = true;  break
+            end
         end
         if dup
-            lg('  arc %d crossing %d at j = %2d (sA %.4f): duplicate of an existing candidate (t_f %.6f d)', ia, ic, j, sA, C.tfDays);
+            lg('  arc %d crossing %d at j = %2d (sA %.4f): duplicate of an existing candidate (t_f %.6f d, same z8)', ia, ic, j, sA, C.tfDays);
             continue
         end
         S.nCand = S.nCand + 1;

@@ -59,7 +59,14 @@ cat_.name = spec.name;
 cat_.description = spec.description;
 cat_.created = datestr(now, 'yyyy-mm-dd');
 cat_.provenance = spec.provenance;
-cat_.schema = catalog_schema('version');       % versioned since v2
+% MIN-TIME catalogs are schema 2 -- the version that describes them (thrust
+% ladder + dep/arr recipes). Stamping catalog_schema('version') was right
+% only while the current version WAS 2; when v3 (the objective/gamma axis
+% of the fixed-final-time min-fuel catalogs) landed on 2026-09-02 this line
+% started stamping 3 on a v2-shaped catalog, and the validate assert below
+% then rejected the packager's own output -- every min-time family catalog
+% became unrebuildable. Caught 2026-09-09 by test_sheet_to_catalog_file.
+cat_.schema = 2;
 
 nTot = 0;
 sheets = struct([]);

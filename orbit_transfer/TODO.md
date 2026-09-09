@@ -29,9 +29,18 @@ conjugate-test result in FINDINGS 38, case row in `STATUS_AND_ROADMAP.md` 2.1b.
 - [ ] **The 5th review risk is still open**: the fold and step heuristics
   (rank ratio 1e-2, corrector cap 2 step lengths, Newton target 4) were chosen,
   not derived. The other four risks were closed by test on 2026-09-09.
-- [ ] Departure direction is NOT symmetric out of the anchor: the negative
-  sense walks, the positive sense fails. Understand why before trusting a
-  rib in an untested direction.
+- [x] **Departure asymmetry EXPLAINED 2026-09-09 (FINDINGS 39): a CONJUGATE
+  POINT at sD = 0.04665 +- 0.00005.** cond(J) climbs eight orders of magnitude
+  over 0.047 of a departure period, the conjugate verdict flips between 0.0466
+  and 0.0467, and Newton stops converging three thousandths later. The
+  original "solver failed to converge" was that singularity seen a few
+  thousandths early. At arrival phase 0.0754 the anchor's branch is minimizing
+  over ~63% of departure phases. Open follow-on: does a DIFFERENT certified
+  extremal cover the other ~37%? That is what the rest of the sheet answers.
+- [ ] **Use cond(J) as a leading indicator** (FINDINGS 39): it rises four
+  orders of magnitude before the conjugate test fires, and it is available at
+  every continuation step for free. A walker that watches it can stop, or
+  branch-switch, before it wastes solves past a conjugate point.
 - [ ] Re-certify the 7 pre-2026-09-09 sweep points through the enforcing gate
   stack (their stored diagnostics pass, but they were recorded when the gates
   were computed and not enforced).

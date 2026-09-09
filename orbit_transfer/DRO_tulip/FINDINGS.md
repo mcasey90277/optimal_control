@@ -2410,3 +2410,76 @@ solution, and the arc returning through the phase brings back its partner.
 The practical consequence for the sheet: `S.TF` must be the minimum over
 CERTIFIED candidates, never over converged ones, and every candidate is
 kept with its verdict so this table can be read at all.
+
+## 39. The departure-phase barrier is a CONJUGATE POINT, and the solver's "failure to converge" was that conjugate point announcing itself (2026-09-09)
+
+The departure rib walks one way out of the anchor and not the other. On
+2026-09-08 the positive sense was recorded as a solver failure -- the
+2026-09-09 sweep log has `(2,1) sD = 0.0833: FAILED from (1,1)` -- and the
+first rib test asserted the certified ring's numbers in that direction and
+had to be corrected. Three probes turned that "failure" into a result.
+
+### Probe 1: the stall is reproducible and step-independent
+
+Walking the positive sense with a deep bisection budget stalls at
+**sD = 0.0465** with `|R| = 5.5e-11` against a `tolR` of 3e-11; walking it in
+steps of 1/96 instead of 1/12 stalls at **sD = 0.0467** with `|R| = 5.1e-11`.
+Same place, same residual, whatever the step. That is not a step-size
+problem: it is the solver's achievable floor at that phase sitting just above
+a very tight number.
+
+### Probe 2: with the plateau allowed through, the verdict changes
+
+`certify_root` now sends a polish that plateaus below `tolRelax` on to the
+gates (and says so in its reason -- FINDINGS: this also exposed `tolR` being
+documented as an option and hardcoded in the call). The walk then gets past
+the residual and stalls at **sD = 0.0466 with `conjugate test verdict 0`.**
+The barrier is second-order, not numerical.
+
+### Probe 3: the two are ONE phenomenon, measured
+
+A conjugate point is a non-trivial solution of the linearised BVP, so the
+multiple-shooting Jacobian must go singular as one is approached. It does:
+
+| sD | t_f [d] | \|R\| | cond(J) | conj |
+|---|---|---|---|---|
+| 0.0000 | 17.7976 | 2.1e-11 | 4.40e9 | PASS |
+| 0.0300 | 17.8963 | 6.4e-12 | 9.20e9 | PASS |
+| 0.0380 | 17.9985 | 2.9e-11 | 2.79e10 | PASS |
+| 0.0420 | 18.0992 | 7.1e-12 | 8.60e10 | PASS |
+| 0.0440 | 18.1820 | 1.8e-11 | 2.35e11 | PASS |
+| 0.0450 | 18.2416 | 2.6e-11 | 5.27e11 | PASS |
+| 0.0460 | 18.3286 | 6.8e-12 | 2.14e12 | PASS |
+| 0.0465 | 18.3973 | 2.3e-11 | 9.05e12 | PASS |
+| 0.0466 | 18.4160 | 2.5e-11 | 1.46e13 | PASS |
+| **0.0467** | 18.4379 | 1.4e-11 | **2.73e13** | **FAIL** |
+| 0.0470 | -- | 1.2e+00 | 1.18e17 | (no convergence) |
+| 0.0480 | -- | 2.9e+01 | 3.13e17 | (no convergence) |
+
+`cond(J)` climbs **eight orders of magnitude over 0.047 of a departure
+period**, the conjugate verdict flips between 0.0466 and 0.0467, and Newton
+stops converging at all three thousandths of a period later. **The conjugate
+point sits at sD = 0.04665 +- 0.00005.** The residual plateau of probe 1 was
+this singularity, seen a few thousandths early and misread as a solver
+limitation.
+
+### What it means for the sheet
+
+At 70 mN and arrival phase 0.0754, the branch continued from the anchor is
+minimizing over roughly **63% of departure phases**: from the conjugate point
+at sD = 0.0467 backwards through 0 and round to about 0.4167, where the
+2026-09-08 sweep also stopped (`(7,1) sD = 0.5000: FAILED from (8,1)`). The
+remaining ~37% is not "unsolvable" -- it is **not minimizing ON THIS BRANCH**,
+and whether a different certified extremal covers those phases is exactly
+what the rest of the sheet is for.
+
+Two lessons that generalise beyond this row.
+
+1. **A residual that will not go below a floor, at a fixed place, independent
+   of step size, is evidence about the PROBLEM, not the solver.** Loosening
+   the tolerance was right, but for the opposite of the obvious reason: it did
+   not rescue the walk, it let the walk report its real verdict.
+2. **`cond(J)` is a leading indicator of the conjugate test.** It rises four
+   orders of magnitude before the verdict flips. A continuation that watches
+   it knows it is approaching a loss of minimality well before the test fires
+   -- cheaper than the test, and available at every step.

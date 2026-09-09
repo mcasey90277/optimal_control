@@ -2367,6 +2367,27 @@ walk (17.42 d at 0.0899). `rho` stays in 0.053 .. 0.068 throughout -- the
 arrival direction does NOT lose normality, unlike the thrust direction of
 section 33.
 
+### The continuation's heuristics are guards and pace, not answers (added 2026-09-09)
+
+`foldRatio`, `maxCorrFrac` and `newtonTarget` were CHOSEN, not derived. That
+was the one risk of the five listed for outside review that no test covered,
+so it was swept: 3 x 3 x 3 settings over two to three decades, on the cubic
+whose fold positions are known exactly.
+
+| knob | range swept | effect |
+|---|---|---|
+| `foldRatio` | 1e-3 .. 1e-1 (three decades) | **none at all** -- identical roots and identical verdicts in all nine (`maxCorrFrac`, `newtonTarget`) groups |
+| `maxCorrFrac` | 1.5, 2, 4 | none measurable |
+| `newtonTarget` | 2, 4, 8 | the only one that acts, and it acts as intended: it sets how large a step the corrector is asked to afford, hence how far a fixed step budget reaches (nt = 2 takes 61 small steps where nt = 4 takes 41, and stops on `nStep` rather than failing) |
+
+Across all 27 settings a fold is reported exactly when the arc passed it, and
+where both were found they sit at -2 and +2 to **7.4e-10**. So none of the
+three moves a fold or changes which curve is traced. The reason `foldRatio`
+is inert is that the rank collapse at a fold is orders of magnitude sharper
+than anything in the range -- on the circle, sigma_min(R_x)/sigma_min([R_x R_q])
+is 1.2e-3 at the fold against 8.7e-1 at a regular point.
+
+
 ## 38. The conjugate test is what separates the sheet: at every arrival phase the minimizer is the fastest extremal, and the slower ones are refuted (2026-09-09)
 
 The first sheet assembled from four arrival-phase arcs produced 14

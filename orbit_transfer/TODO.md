@@ -221,8 +221,23 @@ exists.
     at the target thrust seeded with the FULL nearest converged trajectory
     (states + controls + consistent mass, exact endpoints, returnModel true
     for the duals), then harvest_ms_seed -> ms_tfmin -> tfMin acceptance.
-  - [x] **ANSWERED 2026-09-08 (FINDINGS §33): the fast family FOLDS at
-    T* = 71.99 mN, t_f* = 18.12 d.** `arclength_thrust` (new, on ms_bvp's new
+  - [ ] **NOT ANSWERED — the fold claim was RETRACTED 2026-09-08 (FINDINGS §33
+    correction).** "Minimum thrust 72 mN" is refuted by our own certified
+    70 mN solution at the same endpoints; a branch turning point is not a
+    feasibility threshold. The limit point is not established as a fold (we
+    never rounded it) and may be normal-costate divergence instead.
+    **Fixes before the re-run** (Astra xhigh review): full-SVD right null
+    vector for the tangent; log |lam_0|, max|lam(t)|, the ACCEPTED step
+    length and the state-vs-costate split; analytic R_T by segment
+    sensitivity (Sdot = f_Y S + f_T) instead of a finite difference whose
+    noise exceeds sigma_min([R_x R_T]); Newton-count-based step control;
+    test convergence after the final Newton update; reject nonfinite
+    Jacobians; stop re-propagating the seed in every mkRes call. Then apply
+    the discriminator dt_f/ds = (int H_T) dT/ds — at a finite normal fold
+    dt_f/ds vanishes WITH the thrust tangent. If costates diverge, switch to
+    the homogeneous normalization rho^2 + |lam_0|^2 = 1 and watch rho -> 0.
+  - [ ] (superseded claim, kept for the record) the fast family FOLDS at
+    T* = 71.99 mN, t_f* = 18.12 d. `arclength_thrust` (new, on ms_bvp's new
     `assembleOnly` mode) walked straight through the 75.0 mN "wall" — a
     thrust-stepping artefact — and converged on a limit point with σ_min(R_X)
     collapsing five orders (3.3e-6 → 7.1e-11) while σ_min([R_X R_T]) fell only
@@ -230,9 +245,10 @@ exists.
     So at 70 mN the fast family does not exist and §32's certified 26.44 d
     solution is on a different branch. **The abstract's "70 mN in 18 days" is
     not achievable**: 18.1 d is the limit but at 72 mN.
-  - [ ] **Cislunar abstract/poster decision (Mike):** quote 72 mN / 18.1 d
-    (family limit, keeps the flight time, changes the thruster) or 70 mN /
-    26.44 d (certified, keeps the thruster, changes the schedule).
+  - [ ] **Cislunar abstract/poster decision (Mike):** the DEFENSIBLE number
+    today is 70 mN / 26.44 d (certified, §32). The 72 mN / 18.1 d option is
+    WITHDRAWN — 72 mN is a branch turning point, not a minimum thrust, and
+    our own 70 mN solution disproves it as a threshold.
   - [ ] **Turn the fold.** The arc crawls as σ_min(R_X) → 0 and never rounds
     the corner, so the returning branch is unmapped. Needs a bordered/deflated
     corrector at the limit point, or switching the continuation parameter to

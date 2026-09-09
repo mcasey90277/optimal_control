@@ -1864,7 +1864,53 @@ run, is **scaled pseudo-arclength continuation in (z8, T)** on the
 multiple-shooting unknowns: a fold shows tangent thrust-component -> 0 and
 a sign change, with R_X losing one rank while [R_X R_T] stays full rank.
 
-## 33. The fast family has a MINIMUM-THRUST FOLD at 71.99 mN / 18.12 d -- the abstract's 70 mN is below the family's limit (2026-09-08)
+## 33. The 71.99 mN limit point -- NOT established as a fold, and the "minimum thrust" reading is REFUTED (2026-09-08; corrected same day after review)
+
+> **CORRECTION.** This section first claimed a simple fold at 71.99 mN and
+> concluded that the abstract's 70 mN is "below the family's limit". **Both
+> claims were wrong.** The GPT-6 Astra code review
+> (`reviews/arclength_code_review_astra_2026-09-08.md`, xhigh reasoning)
+> refuted them, one on our own evidence:
+>
+> 1. **"Minimum thrust for this geometry is 72 mN" is contradicted by our own
+>    certified 70 mN solution at the SAME endpoints (section 32).** A thrust
+>    turning point on ONE extremal branch is not a feasibility threshold for
+>    the problem. Conflating them was a straight logical error.
+> 2. **A simple fold is not an endpoint of the solution curve** -- you round
+>    it. We never rounded it; the arc approached asymptotically and stalled.
+>    That is equally consistent with the normal-costate chart degenerating
+>    (multipliers -> infinity as an abnormal configuration is approached), in
+>    which there is NO finite corner in these coordinates.
+> 3. **18.120 d is the last computed time, not a fold time.**
+> 4. Our tangent (solve R_x v = -R_t, normalize [v;1]) is exactly the wrong
+>    one near a fold: R_x is singular there. It should be the right null
+>    vector of a FULL svd of [R_x R_T].
+> 5. The R_T central difference uses h_theta ~ 1e-6 against residual noise
+>    ~1e-12, giving derivative noise ~1e-6 in scaled coordinates -- LARGER
+>    than the smallest augmented singular value (1.5e-7) we quoted as
+>    evidence of regularity. That number may be noise.
+> 6. Our step control inflates ds by 1.3x after every success regardless of
+>    difficulty, and `A.ds` stores the NEXT proposal rather than the accepted
+>    step -- so the recorded history cannot distinguish "arclength steps
+>    collapsed" from "steps were fine but went entirely into costates".
+>
+> What SURVIVES: the 75.0 mN wall was a thrust-stepping artefact (arclength
+> passed it with residuals at 1e-12), the roots found along the arc are
+> accurate, and section 32's certified 70 mN solution is unaffected.
+>
+> The decisive test, from the review: along a regular normal branch with
+> bounded multipliers, dt_f/ds = (integral of H_T) dT/ds with
+> H_T = -(|lam_v|/m + lam_m/c) < 0, so **at a finite normal fold dt_f/ds must
+> vanish together with the thrust tangent.** Our log's printed precision
+> quantizes both increments to zero, so it cannot decide; a re-run logging
+> |lam_0|, max|lam(t)|, the ACCEPTED step length, and the state-vs-costate
+> split of each step will. If the arclength is being consumed by growing
+> costates, the cure is not a better corrector but a homogeneous PMP
+> normalization (rho^2 + |lam_0|^2 = 1, watching whether rho -> 0).
+>
+> The original text follows for the record.
+
+### (superseded) The fast family has a MINIMUM-THRUST FOLD at 71.99 mN / 18.12 d
 
 Section 32 left the decisive question open: does the fast DRO -> tulip family
 fold near 75 mN (making the 26.44 d solution the answer at 70 mN), or does it
@@ -1918,7 +1964,7 @@ Below 72 mN this family DOES NOT EXIST. Everything else now follows:
   family is gone -- 26.44 d is on a DIFFERENT branch, and section 32's
   certified solution stands as the answer at that thrust.
 
-### Consequence for the cislunar abstract
+### Consequence for the cislunar abstract (SUPERSEDED -- see the correction above)
 
 The abstract asks for **70 mN in ~18 days**. Those are not compatible on
 this family: 18.1 days is exactly the family's limit, but at **72 mN**, and

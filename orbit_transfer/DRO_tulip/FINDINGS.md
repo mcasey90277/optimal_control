@@ -2366,3 +2366,47 @@ Four arcs, two seeds x two directions, at 70 mN / Isp 900 s / sD = 0:
 walk (17.42 d at 0.0899). `rho` stays in 0.053 .. 0.068 throughout -- the
 arrival direction does NOT lose normality, unlike the thrust direction of
 section 33.
+
+## 38. The conjugate test is what separates the sheet: at every arrival phase the minimizer is the fastest extremal, and the slower ones are refuted (2026-09-09)
+
+The first sheet assembled from four arrival-phase arcs produced 14
+candidates at 70 mN and certified 2. That ratio is not a solver failure --
+every one of the 14 converged, and 12 of them were thrown out by the
+CONJUGATE TEST alone, after passing the multiple-shooting residual, the
+flown arrival and the pumpkyn `tfMin` witness.
+
+| arrival phase | certified t_f | refuted t_f (conjugate verdict 0) |
+|---|---|---|
+| 0.0754 | 17.7976 (the anchor, seeded) | 22.05, 28.81, 34.20 |
+| 0.1587 | 16.2256 | 18.92, 30.24, 35.67 |
+| 0.2421 | 16.8742 | 31.51, 36.93 |
+| 0.3254 | -- | 38.24 |
+| 0.9087 | 26.4361 (seeded) | **26.4537** |
+| 0.9921 | -- | 27.47, 32.76 |
+
+Three things this says.
+
+**1. Every refuted candidate is SLOWER than the certified one at its phase.**
+The pattern is a ladder: one fast branch and a stack of slow extremals
+above it, exactly the structure the thrust-direction study found in section
+34, where the slow branches were conjugate FAILs and the fast one was not.
+The minimum-time minimizer is the fastest extremal, and the arcs walk
+through the others on the way.
+
+**2. The refutations are not sloppy solutions.** They fly to the target to
+between 0.00 and 2.5 km with witness agreement `|dz|` of 1e-10 to 3.5e-8.
+By every first-order measure they are extremals; the second-order test is
+the only thing that separates them. Any pipeline that gates on "converged
+and it flies there" -- which is what the old harness effectively did, see
+section 36 -- would have shipped all 14.
+
+**3. At the fold nose the test resolves 26 MINUTES.** At arrival phase
+0.9087 the certified solution is 26.4361 d and a second root at 26.4537 d
+is refuted: two extremals 0.0176 d apart, one minimizing and one not,
+separated by the conjugate test alone. That is the nose of section 37 seen
+from the other side -- the folds at 0.9084 and 0.9103 bracket the certified
+solution, and the arc returning through the phase brings back its partner.
+
+The practical consequence for the sheet: `S.TF` must be the minimum over
+CERTIFIED candidates, never over converged ones, and every candidate is
+kept with its verdict so this table can be read at all.

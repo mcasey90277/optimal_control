@@ -63,8 +63,7 @@ for k = 1:numel(lib)
     seed.Y(1:7,1) = [rv0(1:6); 1];  seed.Y(8:14,1) = lib(k).z(1:7);
     C = certify_root(seed, rv0, B.stateA(lib(k).sA), B, ...
                      struct('sA', lib(k).sA, 'sD', sD0, 'wallSec', 600));
-    fprintf('library seed (%.4f, %.4f) [%s]: %s
-', sD0, lib(k).sA, lib(k).src, C.reason);
+    fprintf('library seed (%.4f, %.4f) [%s]: %s\n', sD0, lib(k).sA, lib(k).src, C.reason);
     if isempty(seeds), seeds = C; else, seeds(end+1) = C; end %#ok<AGROW>
 end
 

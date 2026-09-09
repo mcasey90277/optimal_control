@@ -2466,12 +2466,23 @@ limitation.
 ### What it means for the sheet
 
 At 70 mN and arrival phase 0.0754, the branch continued from the anchor is
-minimizing over roughly **63% of departure phases**: from the conjugate point
-at sD = 0.0467 backwards through 0 and round to about 0.4167, where the
-2026-09-08 sweep also stopped (`(7,1) sD = 0.5000: FAILED from (8,1)`). The
-remaining ~37% is not "unsolvable" -- it is **not minimizing ON THIS BRANCH**,
-and whether a different certified extremal covers those phases is exactly
-what the rest of the sheet is for.
+minimizing from the conjugate point at sD = 0.0467 backwards through 0 and
+round through the negative sense.
+
+> **Coverage figure corrected within the hour.** This section first said
+> "roughly 63%", stopping at sD = 0.4167 because the 2026-09-08 sweep stopped
+> there (`(7,1) sD = 0.5000: FAILED from (8,1)`). **That was the old walker's
+> limit, not the problem's.** The rebuilt rib -- step recovery after two clean
+> sub-steps, deeper bisection, and a polish plateau no longer read as failure
+> -- walked straight through it and certified sD = 0.5000 (18.6369 d),
+> 0.4167 (18.7501), 0.3333 (18.9106) and 0.2500 (19.0529). Coverage is at
+> least **~80%** and the final figure follows the rib's own stop. Taking a
+> previous run's stopping point as a property of the problem is exactly the
+> mistake this section is about, and it was made twice in one page.
+
+Whatever the final figure, the uncovered phases are not "unsolvable" -- they
+are **not minimizing ON THIS BRANCH**, and whether a different certified
+extremal covers them is exactly what the rest of the sheet is for.
 
 Two lessons that generalise beyond this row.
 

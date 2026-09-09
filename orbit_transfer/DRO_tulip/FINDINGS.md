@@ -2172,3 +2172,77 @@ extremal at 70 mN there, and minimality is exchanged at the 69.57 mN fold.
 That is a real and unusual piece of solution structure. It is not a
 statement about the transfer in general, and the 6x6 sweep below shows why
 that distinction matters.
+
+## 36. The phase-sheet harness: six defects found by review, and the traversal method is wrong (2026-09-09)
+
+`sweep_phase_mintime` (new 2026-09-08) maps the (departure phase x arrival
+phase) sheet at 70 mN. It cost FIVE failed runs from our own bugs before a
+GPT-6 Astra review at xhigh reasoning
+(`reviews/sheet_harness_review_astra_2026-09-09.md`, 16k reasoning tokens)
+found six more and judged the traversal method itself wrong.
+
+### The defects (all fixed)
+
+1. **The certification gates were computed and then IGNORED.** `tolDz` was
+   never referenced; a `tfMin` exception left `dz = NaN` and the point was
+   still accepted; a failed or missing conjugate verdict was accepted. The
+   effective rule was "ms converged AND flown position < 100 km". Every
+   stored point happens to carry dz = 0 and conj = 1, so **the table was
+   true -- the harness's promise was not.** Now enforced.
+2. **The anchor was recorded with FABRICATED diagnostics** (fly = 0, dz = 0,
+   cj = 1) without checking that the stored certificate matched the
+   requested operating point. Calling the sweep at another thrust would have
+   labelled the old solution as an accepted anchor. Now the anchor is
+   re-solved through the same gates and the operating point is asserted.
+3. **The multiple-shooting warm start was destroyed at every sub-step**:
+   `seed_from_z8` re-flew the whole trajectory from the predicted initial
+   costates, reintroducing exactly the long-horizon sensitivity multiple
+   shooting exists to remove. An MS seed does not need to satisfy the
+   continuity defects -- removing them is the solver's job. Now the
+   neighbour's junctions are kept.
+4. **A failed retry replayed the entire edge** from the original point
+   instead of resuming from the last accepted sub-step.
+5. **Exact-budget rejection**: a point whose final sub-solve succeeded on
+   call `maxSolve` was thrown away. The completion test now precedes the
+   budget test.
+6. **The reported sub-solve count was the final subdivision count**, not the
+   total corrector calls -- so "368 sub-solves" understated the true cost.
+   Both are now stored (`NSUB`, `NCALL`).
+
+Also in the continuation tools: `ms_tfmin_hom` converted rho < 0 to the
+normal chart via `abs(rho) > 0`. Dividing by a NEGATIVE rho is a negative
+multiplier scaling and does not preserve the minimising direction; those are
+not min-time candidates. Now gated on `rho > 1e-6` with `info.normalValid`.
+
+### The strategic verdict
+
+Astra's recommendation, which we accept: **replace the traversal, not the
+engine.** Breadth-first / spine-and-ribs stepping cannot pass a branch
+termination and cannot represent more than one candidate per grid point. The
+right tool is **pseudo-arclength continuation in ARRIVAL PHASE over the full
+multiple-shooting unknowns**, seeded from BOTH known families (the 17.8 d
+fast anchor and the 26.4 d slow solution), tracing each curve in both
+directions and recording every intersection with the requested grid levels,
+with the cheap departure ribs hung off those intersections.
+
+Arrival phase is an unusually cheap continuation parameter here: it enters
+ONLY the terminal state-matching rows, so
+`R_sA = [0; -x_A'(s_A); 0; 0]` with `x_A'(s_A) = P_A f(x_A(s_A))` for an
+exact periodic orbit -- no finite differencing of the whole residual needed,
+unlike the thrust driver.
+
+### What is NOT settled
+
+`cond(J)` reaching 5e10 while |lam_0| FALLS and the conjugate test passes is
+not diagnosed. It is definitely NOT the normality loss found in thrust: on
+the sphere that segment moves AWAY from rho = 0 (rho 0.0567 -> 0.0679).
+Whether it is a fold in arrival phase, a mesh artefact at fixed K = 24, or
+the shooting problem stiffening as the target moves around a large orbit
+needs the separated conditioning diagnostics Astra lists.
+
+### Standing caution
+
+Missing sheet entries mean "this traversal did not reach them under its
+rules" -- not infeasibility, not branch non-existence. Failure categories
+(budget exhausted / Newton stalled / normality boundary / local test failed)
+must be stored separately, and are not yet.

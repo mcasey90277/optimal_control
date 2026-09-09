@@ -262,7 +262,20 @@ exists.
     12.20 kg, 8.1%, certified (flown arrival 0.0000 km, tfMin |dz| = 0,
     conj PASS, gates pass). §32-34's "optimistic by 50%" verdict compared it
     against a DIFFERENT arrival phase (sA 0.9087) and is withdrawn.
-  - [ ] **70 mN PHASE SHEET (the real deliverable):** t_f varies 17.8 -> 26.4 d
+  - [ ] **70 mN PHASE SHEET — REBUILD THE TRAVERSAL (FINDINGS §36).** The
+    spine-and-ribs harness is fixed (6 defects, Astra 2026-09-09) but the
+    METHOD is wrong: stepping cannot pass a branch termination and holds one
+    candidate per grid point. Implement arrival-phase pseudo-arclength over
+    the FULL ms unknowns, seeded from BOTH families (17.8 d fast anchor and
+    26.4 d slow), traced both directions, recording every crossing of the
+    grid levels; hang the cheap departure ribs off those crossings. Arrival
+    phase enters ONLY the terminal rows, so R_sA = [0; -x_A'(s_A); 0; 0]
+    with x_A' = P_A f(x_A) — analytic, no finite differencing.
+  - [ ] **Diagnose cond(J) ~ 5e10 in the arrival direction** (NOT normality
+    loss: rho moves 0.0567 → 0.0679, away from zero). Separate the
+    conditioning of the MS Jacobian, the terminal block and the mesh; test
+    K sensitivity.
+  - [ ] (superseded) **70 mN PHASE SHEET (the real deliverable):** t_f varies 17.8 -> 26.4 d
     (+48%) with arrival phase alone. Sweep the torus at 70 mN from the
     anchor (`sweep_phasing`, whose defaults ARE this operating point; the
     stored 6x6 has only 1 of 36 solved). That map is the constellation's

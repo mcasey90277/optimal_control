@@ -46,9 +46,10 @@ function [z, info] = ms_tfmin_hom(rv0, rvf, seed, Tmax, c, muStar, opts)
 %                                                   t_f]
 %
 %  info                     struct                  ms_bvp info plus .rho,
+%                                                   .normalValid (rho > 1e-6),
 %                                                   .zNormal = [lam_0/rho;
-%                                                   t_f] (the rho = 1 chart,
-%                                                   valid while rho > 0)
+%                                                   t_f] when valid, NaN
+%                                                   otherwise
 %
 %% Revision History:
 %  M. Casey                                                   (c) 09/08/2026
@@ -76,7 +77,17 @@ seed.Y(1:7, 1) = [rv0(:); 1];
 
 z = [p(1:7); p(end-1)];
 info.rho = p(end);
-if abs(info.rho) > 0, info.zNormal = [p(1:7)/info.rho; p(end-1)]; else, info.zNormal = nan(8,1); end
+% rho > 0 ONLY. Dividing by a NEGATIVE rho is a negative multiplier scaling:
+% it does not preserve the minimising thrust direction, so the result is not
+% a min-time candidate in the normal chart. The old test abs(rho) > 0 would
+% happily export one. At very small positive rho the normal-chart costates
+% are enormous and numerically useless, so flag validity rather than just
+% dividing. (Astra review 2026-09-09, defect 9.)
+rhoTol = 1e-6;
+info.normalValid = info.rho > rhoTol;
+if info.normalValid, info.zNormal = [p(1:7)/info.rho; p(end-1)];
+else,                info.zNormal = nan(8,1);
+end
 end
 
 % ------------------------------------------------------------------------

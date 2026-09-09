@@ -1,0 +1,72 @@
+function S = build_arrival_sheet(opts)
+%% Purpose:
+%
+%   Front door for the ARRIVAL-PHASE sheet at one operating point: gather
+%   every arclength arc saved in results/ (arrival_arc_*.mat), certify all
+%   grid crossings with certify_crossing, assemble the sheet with
+%   sheet_from_arcs, save it, and print the table (grid phase, minimum
+%   certified t_f, dV, fuel, number of candidates / certified, first
+%   failure reason when nothing certified).
+%
+%% Inputs:
+%
+%  opts                     struct (optional)
+%   .pattern ['arrival_arc_*.mat'] .out ['results/arrival_sheet_70mN.mat']
+%   .sA0 [0.0754] .nA [12] .copts (certify_crossing options)
+%   plus arclength_arrival setup options (.thrustN .ispS .sD ...)
+%
+%% Outputs:
+%
+%  S                        struct                  sheet_from_arcs output +
+%                                                   .arcs (file list) .B
+%                                                   .anc .opts .built
+%
+%% Revision History:
+%  M. Casey                                                   (c) 09/09/2026
+%  Copyright Coorbital Inc.
+%% ------------------------ Begin Code Sequence ---------------------------
+
+if nargin < 1, opts = struct(); end
+d = @(f,v) fieldd(opts, f, v);
+here = fileparts(mfilename('fullpath'));
+addpath(fullfile(fileparts(here), '..', 'costate_common'));
+pat = d('pattern', 'arrival_arc_*.mat');
+out = d('out', fullfile(here, 'results', 'arrival_sheet_70mN.mat'));
+lStar = 389703.264829278;  tStar = 382981.289129055;
+
+[B, anc] = arclength_arrival('setup', opts);
+files = dir(fullfile(here, 'results', pat));
+assert(~isempty(files), 'no arcs match %s', pat);
+arcs = cell(1, numel(files));
+for k = 1:numel(files)
+    L = load(fullfile(files(k).folder, files(k).name));
+    arcs{k} = L.A;
+    fprintf('arc %d: %-32s %4d roots, sA %.4f -> %.4f, %d folds, %d crossings, stop = %s\n', ...
+        k, files(k).name, numel(L.A.q), L.A.q(1), L.A.q(end), numel(L.A.folds), numel(L.A.crossings), L.A.stop);
+end
+
+S = sheet_from_arcs(arcs, struct('sA0', d('sA0', 0.0754), 'nA', d('nA', 12), ...
+                                 'B', B, 'anc', anc, 'copts', d('copts', struct())));
+S.arcs = {files.name};  S.B = B;  S.anc = anc;  S.opts = opts;  S.built = datestr(now);
+S.B = rmfield(S.B, {'res', 'dRdq', 'stateA', 'stateD'});
+save(out, 'S');
+
+fprintf('\n  j    sA      t_f [d]   dV [km/s]  fuel [kg]  cand  cert   note\n');
+for j = 1:numel(S.sA)
+    c = S.cand{j};  nc = numel(c);  ncert = 0;  note = '';
+    if nc > 0, ncert = nnz([c.ok]); end
+    if isfinite(S.TF(j))
+        k = find([c.ok] & abs([c.tfDays] - S.TF(j)) < 1e-9, 1);
+        fprintf(' %2d  %.4f  %9.4f  %9.4f  %9.2f   %2d    %2d\n', j, S.sA(j), S.TF(j), c(k).dvKms, c(k).mfKg, nc, ncert);
+    else
+        if nc > 0, note = c(1).reason; else, note = 'no crossing'; end
+        fprintf(' %2d  %.4f        ---        ---        ---   %2d    %2d   %s\n', j, S.sA(j), nc, ncert, note);
+    end
+end
+fprintf('saved %s\n', out);
+end
+
+function v = fieldd(s, f, d_)
+% FIELDD  Field with default.  INPUTS: s; f; d_.  OUTPUTS: v.
+if isfield(s, f) && ~isempty(s.(f)), v = s.(f); else, v = d_; end
+end

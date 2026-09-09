@@ -120,6 +120,54 @@ ok = chk(ok, numel(A3.folds) == 2 && all([A3.folds.classified]) && ...
              abs(qf(1) + 2) < 1e-7 && abs(qf(2) - 2) < 1e-7, ...
          sprintf('both folds localized to solver accuracy: q = %s (exact -2, +2)', mat2str(qf, 10)));
 
+% ---- are the heuristics load-bearing? ------------------------------------
+% foldRatio, maxCorrFrac and newtonTarget were CHOSEN, not derived, and that
+% was the one risk of the five listed for external review that no test
+% covered. Swept over the cubic, whose fold positions are known exactly:
+% 3 x 3 x 3 settings across two to three decades. The measured answer is that
+% they are GUARDS AND PACE, not answers -- foldRatio and maxCorrFrac change
+% nothing at all over these ranges, and newtonTarget changes only how large a
+% step the corrector is asked to afford, hence how far a fixed step budget
+% reaches (nt = 2 is simply conservative: 61 small steps instead of 41).
+% Nothing moves a fold or changes which curve is traced.
+frs = [1e-3 1e-2 1e-1];  mcs = [1.5 2 4];  nts = [2 4 8];
+nS = numel(frs)*numel(mcs)*numel(nts);
+qf = nan(nS, 2);  nf = nan(1, nS);  xEnd = nan(1, nS);  key = cell(1, nS);
+g = 0;
+for fr = frs
+    for mc = mcs
+        for nt = nts
+            g = g + 1;
+            Ag = arclength_ms(@(q) @(x) cubicRes(x, q), @(x, q) -1, -2, -2, struct( ...
+                'direction', +1, 'ds', 0.4, 'dsMax', 0.8, 'nStep', 60, 'Dx', 1, 'sq', 1, ...
+                'qStop', [-9 9], 'newtonTol', 1e-12, 'foldRatio', fr, ...
+                'maxCorrFrac', mc, 'newtonTarget', nt));
+            nf(g) = nnz([Ag.folds.classified]);
+            qs = sort([Ag.folds.q]);  qf(g, 1:numel(qs)) = qs;
+            xg = cellfun(@(v) v(1), Ag.p);  xEnd(g) = xg(end);
+            key{g} = sprintf('%g_%g', mc, nt);      % everything but foldRatio
+        end
+    end
+end
+
+% (a) a fold is reported exactly when the arc passed it: folds at x = -+1
+expect = 1 + (xEnd > 1);
+ok = chk(ok, isequal(nf, expect), ...
+         sprintf('folds classified = folds actually passed in all %d settings', nS));
+% (b) where two were found they are at the exact positions, whatever the knobs
+two = nf == 2;
+ok = chk(ok, max(abs(qf(two,1) + 2)) < 1e-6 && max(abs(qf(two,2) - 2)) < 1e-6, ...
+         sprintf('fold positions independent of the heuristics: worst error %.1e over %d settings', ...
+                 max([abs(qf(two,1) + 2); abs(qf(two,2) - 2)]), nnz(two)));
+% (c) foldRatio changes NOTHING over three decades: identical per (mc, nt)
+[uk, ~, ik] = unique(key);
+sameFR = true;
+for u = 1:numel(uk)
+    idx = find(ik == u);
+    sameFR = sameFR && all(abs(xEnd(idx) - xEnd(idx(1))) < 1e-12) && all(nf(idx) == nf(idx(1)));
+end
+ok = chk(ok, sameFR, sprintf('foldRatio over three decades changes nothing (%d (maxCorrFrac, newtonTarget) groups)', numel(uk)));
+
 if ok, fprintf('TEST_ARCLENGTH_MS: ALL PASS\n');
 else,  fprintf('TEST_ARCLENGTH_MS: FAILURE (see lines above)\n');
 end

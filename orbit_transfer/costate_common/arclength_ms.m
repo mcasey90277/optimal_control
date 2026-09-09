@@ -162,11 +162,42 @@ for step = 0:nStep
     % arclength away, sigma_min(R_x) is still O(ds) and the test is blind
     % (measured on the unit circle: ratio 0.11 at the root, 1e-8 at the fold).
     if k > 1 && sign(A.tauQ(k)) ~= sign(A.tauQ(k-1)) && A.tauQ(k-1) ~= 0
-        f = A.tauQ(k-1) / (A.tauQ(k-1) - A.tauQ(k));
+        % SECANT on tau_q along the segment, not one linear interpolation.
+        % A single interpolation is only O(ds^2) accurate because the curve
+        % is quadratic in arclength at a fold: on the cubic fixture with
+        % ds = 0.4-0.8 it placed the fold at q = 1.99012 instead of 2. The
+        % turning point is not cosmetic -- the crossing search splits the
+        % step THERE, so a misplaced one mis-brackets levels near the fold.
         wa = [A.p{k-1} ./ Dx; A.q(k-1)/sq];  wb = [A.p{k} ./ Dx; A.q(k)/sq];
-        wf = wa + f*(wb - wa);
-        [wf, cvF, nc] = correctInPlane(resFactory, dRdq, wf, tau, Dx, sq, nTol, nMax, admissible);
-        nCalls = nCalls + nc;
+        fa = 0;  fb = 1;  ta = A.tauQ(k-1);  tb = A.tauQ(k);
+        wf = [];  cvF = false;
+        for itF = 1:8
+            f = fa + (fb - fa)*ta/(ta - tb);                 % false position
+            if ~isfinite(f) || f <= 0 || f >= 1, f = 0.5*(fa + fb); end
+            wTry = wa + f*(wb - wa);
+            [wTry, cvT, nc] = correctInPlane(resFactory, dRdq, wTry, tau, Dx, sq, nTol, nMax, admissible);
+            nCalls = nCalls + nc;
+            if ~cvT, break, end
+            wf = wTry;  cvF = true;
+            qT = qOf(wf(end));  pT = pOf(wf(1:end-1));
+            [~, JT_] = evalRJ(resFactory, qT, pT);  nCalls = nCalls + 1;
+            [~, ~, VT] = svd([JT_ .* Dx(:)', dRdq(pT, qT)*sq]);
+            % ORIENT the null vector before reading its sign: svd returns
+            % +-v arbitrarily, so an unoriented sign test makes the secant
+            % wander (measured: it placed the cubic's fold at 1.914 instead
+            % of 2, WORSE than the single interpolation it replaced).
+            vT = VT(:, end);
+            if vT'*tau < 0, vT = -vT; end
+            tq = vT(end);                                    % tangent's q-component
+            if abs(tq) < 1e-10, break, end
+            if sign(tq) == sign(ta), fa = f;  ta = tq;  else, fb = f;  tb = tq; end
+            if fb - fa < 1e-12, break, end
+        end
+        if isempty(wf)
+            wf = wa + (ta/(ta - tb))*(wb - wa);
+            [wf, cvF, nc] = correctInPlane(resFactory, dRdq, wf, tau, Dx, sq, nTol, nMax, admissible);
+            nCalls = nCalls + nc;
+        end
         qF = qOf(wf(end));  pF = pOf(wf(1:end-1));
         [~, JF_] = evalRJ(resFactory, qF, pF);  nCalls = nCalls + 1;
         sXf = svd(JF_ .* Dx(:)');  sAf = svd([JF_ .* Dx(:)', dRdq(pF, qF)*sq]);

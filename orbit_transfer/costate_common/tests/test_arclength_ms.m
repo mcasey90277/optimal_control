@@ -96,6 +96,30 @@ if numel(c2) == 2
              sprintf('both roots of the double crossing recovered: x1 = %+.6f, %+.6f', x1s(1), x1s(2)));
 end
 
+% ---- TWO folds, and no branch jumping between the sheets ----------------
+% q = x^3 - 3x is ONE curve with folds at (x,q) = (-1,+2) and (+1,-2), and
+% three points on it share every q in (-2,2). A corrector that wanders onto
+% another sheet lands on a legitimate root, so the residual will not catch
+% it -- but x, which parameterises the whole curve monotonically, will. So
+% this fixture tests orientation through TWO folds and branch jumping at
+% once, with a step deliberately larger than the distance between sheets.
+A3 = arclength_ms(@(q) @(x) cubicRes(x, q), @(x, q) -1, -2, -2, struct( ...
+    'direction', +1, 'ds', 0.4, 'dsMax', 0.8, 'nStep', 60, 'Dx', 1, 'sq', 1, ...
+    'qStop', [-9 9], 'newtonTol', 1e-12));
+xs = cellfun(@(v) v(1), A3.p);
+res3 = arrayfun(@(k) abs(cubicRes(xs(k), A3.q(k))), 1:numel(xs));
+ok = chk(ok, max(res3) < 1e-10, sprintf('cubic: all %d points are roots (max |R| = %.1e)', numel(xs), max(res3)));
+ok = chk(ok, all(diff(xs) > 0), ...
+         sprintf('no branch jump: x is strictly monotone along the arc (%.4f -> %.4f)', xs(1), xs(end)));
+ok = chk(ok, xs(1) < -1 && xs(end) > 1, ...
+         sprintf('the arc rounds BOTH folds (x passes -1 and +1): x %.4f -> %.4f', xs(1), xs(end)));
+qf = sort([A3.folds.q]);
+% the secant refinement must place both folds to solver accuracy, not to
+% O(ds^2): a single linear interpolation gave 1.99012 here
+ok = chk(ok, numel(A3.folds) == 2 && all([A3.folds.classified]) && ...
+             abs(qf(1) + 2) < 1e-7 && abs(qf(2) - 2) < 1e-7, ...
+         sprintf('both folds localized to solver accuracy: q = %s (exact -2, +2)', mat2str(qf, 10)));
+
 if ok, fprintf('TEST_ARCLENGTH_MS: ALL PASS\n');
 else,  fprintf('TEST_ARCLENGTH_MS: FAILURE (see lines above)\n');
 end
@@ -106,6 +130,13 @@ function [R, J] = circleRes(x, q)
 % OUTPUTS: R [2x1]; J [2x2].
 R = [x(1)^2 + x(2)^2 - 1; x(2) - q];
 J = [2*x(1), 2*x(2); 0, 1];
+end
+
+function [R, J] = cubicRes(x, q)
+% CUBICRES  The cubic fold curve x^3 - 3x - q = 0.  INPUTS: x; q.
+% OUTPUTS: R; J.
+R = x(1)^3 - 3*x(1) - q;
+J = 3*x(1)^2 - 3;
 end
 
 function ok = chk(ok, cond, label)

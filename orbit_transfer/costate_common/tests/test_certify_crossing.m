@@ -32,6 +32,24 @@ ok = chk(ok, C.dz < 1e-6, sprintf('tfMin witness |dz| = %.1e', C.dz));
 ok = chk(ok, C.conj == 1 && C.g.dimS == 1 && C.g.minLamV > 0 && C.g.minQmt > 0, ...
          sprintf('conj %d, dim S %d, min|lam_v| %.2e, min Q %.2e', C.conj, C.g.dimS, C.g.minLamV, C.g.minQmt));
 
+% the homogeneous -> normal chart conversion at a rho far from the anchor's.
+% Scaling every multiplier (lam_0, the junction costates, rho) by a common
+% factor gives the SAME extremal in a different place on the sphere, so the
+% conversion must return the same z8. This exercises the division at
+% rho = 0.5 rather than only at the anchor's 0.053, and it is where a wrong
+% row range would show: the state rows must NOT be scaled.
+s = 0.5/C.rho;
+pS = anc.p;  K = anc.K;
+pS(1:7) = s*pS(1:7);
+Yj = reshape(pS(8:8+14*(K-1)-1), 14, K-1);
+Yj(8:14,:) = s*Yj(8:14,:);
+pS(8:8+14*(K-1)-1) = Yj(:);
+pS(end) = s*pS(end);
+Cs = certify_crossing(pS, anc.sA, B, anc);
+ok = chk(ok, Cs.ok && abs(Cs.rho - 0.5) < 1e-12 && norm(Cs.z - C.z) < 1e-6*norm(C.z), ...
+         sprintf('chart conversion at rho = %.3f returns the same extremal (|dz| = %.1e)', ...
+                 Cs.rho, norm(Cs.z - C.z)));
+
 % a corrupted candidate must be refused, not silently accepted
 pBad = anc.p;  pBad(1:7) = 3*pBad(1:7);
 Cb = certify_crossing(pBad, anc.sA, B, anc, struct('wallSec', 60));

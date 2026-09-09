@@ -7,6 +7,36 @@ exists.
 
 ## Costate-catalog program (Darin roadmap)
 
+### 70 mN phase sheet (2026-09-09, IN FLIGHT)
+
+The cislunar-poster engine (**70 mN, Isp 900 s, 150 kg**) is a second
+propulsion regime: its own catalog, no new schema. Front door for a single
+transfer: **`run_dro_tulip(sD, sA)`**. Machinery in FINDINGS 37, the
+conjugate-test result in FINDINGS 38, case row in `STATUS_AND_ROADMAP.md` 2.1b.
+
+- [x] Replace the stalled fixed-step sweep with PSEUDO-ARCLENGTH continuation
+  (the method was judged wrong under review, FINDINGS 36). Generic engine
+  `costate_common/arclength_ms` + `arclength_arrival`; regression proves it
+  reproduces the archived thrust arc root for root.
+- [x] Gate stack `certify_root` / `certify_crossing`; sheet assembler
+  `sheet_from_arcs` / `build_arrival_sheet` (seeded from `dro_tulip_library`);
+  departure ribs `rib_from_crossing` / `build_ribs`; packaging
+  `sheet_to_catalog_file` -> `build_costate_catalog_family`.
+- [ ] **Finish the sheet**: arrival arcs from both seeds in both directions,
+  ribs off every certified phase, then assemble and package as
+  `costate_catalog_dro_tulip_70mN`. 12 x 12 grid; 10 pairs certified when the
+  arcs launched.
+- [ ] **The 5th review risk is still open**: the fold and step heuristics
+  (rank ratio 1e-2, corrector cap 2 step lengths, Newton target 4) were chosen,
+  not derived. The other four risks were closed by test on 2026-09-09.
+- [ ] Departure direction is NOT symmetric out of the anchor: the negative
+  sense walks, the positive sense fails. Understand why before trusting a
+  rib in an untested direction.
+- [ ] Re-certify the 7 pre-2026-09-09 sweep points through the enforcing gate
+  stack (their stored diagnostics pass, but they were recorded when the gates
+  were computed and not enforced).
+
+
 - [ ] **Densify the red cells** of all three tulip catalogs (halo 46 pairs,
   DPO 65 pairs, DRO s_A=0.075 row + 6 stragglers — tasks #14/#15). The
   engines revisit any no-OK cell automatically; run `densify_ladder`-style

@@ -56,3 +56,43 @@ determinism demonstrated (bitwise-identical rerun). Coarse catalog:
 Seed-quality measurement that forced multiple shooting: collocation-dual
 seeds miss 36,000–560,000 km when single-shot; ms residual ~1e-13.
 Cheapest entry 0.984 km/s. Cross-method tf agreement median 2e-8.
+
+## The 70 mN phase sheet (2026-09-09)
+
+A second propulsion regime beside the shipped catalog: **70 mN, Isp 900 s,
+150 kg** — the cislunar-poster engine. It needs its own catalog because a
+catalog carries one thruster (the shipped DRO → tulip catalog is Isp 1710 s),
+but no schema work: the min-time schema already keys sheets by
+`sD_frac x sA_frac`.
+
+**One transfer, one call:**
+
+```matlab
+T = run_dro_tulip;                    % the anchor: 17.7976 d, 0.7485 km/s
+T = run_dro_tulip(0, 0.1587);         % another arrival phase: 16.2256 d
+T = run_dro_tulip(0.75, 0.0754, struct('movie', true));
+```
+
+It serves the pair from `dro_tulip_library` when it is already solved, and
+otherwise walks there by continuation. Either route ends in the same gate
+stack, so the printed time, ΔV and fuel always come with the flown miss, the
+pumpkyn `tfMin` witness, the conjugate verdict and the three hypothesis gates.
+A walk that runs out of budget says so rather than returning a number.
+
+**The sheet:**
+
+| step | unit |
+|---|---|
+| arrival axis (where the folds are) | `arclength_arrival` on `costate_common/arclength_ms` |
+| departure axis (where steps are cheap) | `rib_from_crossing`, driven by `build_ribs` |
+| certify one candidate | `certify_root` (`certify_crossing` converts the homogeneous chart first) |
+| assemble | `sheet_from_arcs`, driven by `build_arrival_sheet` |
+| package | `sheet_to_catalog_file` → `costate_common/build_costate_catalog_family` |
+| picture | `plot_arrival_arcs` |
+
+**What it found.** The conjugate test is the discriminator, not a formality:
+the first assembled sheet held 14 candidates and certified 2, with the other
+12 refuted by the conjugate test alone after passing the residual, the flown
+arrival and the `tfMin` witness. Every refutation is slower than the certified
+solution at its phase, and at a fold nose the test separates two roots 26
+minutes apart. FINDINGS §37 (machinery), §38 (the result).

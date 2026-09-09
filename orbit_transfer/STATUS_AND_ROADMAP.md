@@ -75,6 +75,24 @@ hard corner everywhere is shortest-departure × longest-arrival; L1→L2 and
 L2→L1 are **measurably asymmetric** (90% vs 96% solved), so direction is a
 real axis, not a symmetry.
 
+### 2.1b The 70 mN PHASE SHEET — a second propulsion regime, in progress (2026-09-09)
+
+The six catalogs above all sit at **Isp 1710 s / 150 kg**. The cislunar-poster
+case is a different engine — **70 mN, Isp 900 s, 150 kg** — so it needs its own
+catalog (a catalog carries one thruster). The min-time schema already keys
+sheets by `sD_frac x sA_frac`, so this is a new catalog, not a new format.
+
+| | |
+|---|---|
+| **grid** | DRO tau=1 -> tulip Np=7, 12 departure x 12 arrival phases, one rung (0.070 N) |
+| **certified now** | 10 transfers from the earlier sweeps + the arcs' new points; t_f spans **16.23 d (arrival phase 0.1587) to 26.44 d (0.9087)** -- arrival phase moves the transfer by ~60%, departure phase by ~1 day |
+| **method** | arrival axis by PSEUDO-ARCLENGTH continuation (`arclength_ms` + `arclength_arrival`), departure axis by a bisecting walker (`rib_from_crossing`); both axes end in the same gate stack (`certify_root`) |
+| **front door** | **`run_dro_tulip(sD, sA)`** -- one call, one certified transfer, library route or continuation walk |
+| **why continuation** | the fixed-step sweep of 2026-09-08 stalled and was judged the wrong method under review (FINDINGS 36); the arcs walk through folds instead of stepping over them |
+| **the discriminator** | **the CONJUGATE TEST does the separating** -- first assembled sheet: 14 candidates, 2 certified, 12 refuted by the conjugate test ALONE after passing residual, flown arrival and `tfMin` witness (FINDINGS 38). See 4.4. |
+| **status** | arcs and ribs in flight; packaging path built and tested (`sheet_to_catalog_file` -> `build_costate_catalog_family`) |
+| **record** | FINDINGS 37 (the machinery), 38 (the conjugate result) |
+
 ### 2.2 Beyond min-time (the catalog line)
 
 | case | objective | status |
@@ -220,6 +238,19 @@ buy the Earth campaigns.
   free-final-time Jacobi form, handling the two exact degeneracies (costate
   scaling, time reparametrization). It is the pipeline's first genuine
   second-order instrument.
+- **And on 2026-09-09 it stopped being a formality.** Across the shipped
+  catalogs the test passes almost everywhere (15,895/15,896), which made it
+  easy to read as a rubber stamp. On the 70 mN phase sheet it is the
+  *discriminator*: **14 candidates, 2 certified, 12 refuted by the conjugate
+  test alone** — every one of them having already passed the
+  multiple-shooting residual, the flown arrival (0.00–2.5 km) and the
+  `tfMin` witness (|Δz| 1e-10…3.5e-8). Every refutation is SLOWER than the
+  certified solution at its phase (one fast branch under a ladder of slow
+  extremals), and at a fold nose the test separates two roots **26 minutes
+  apart** (26.4361 d certified vs 26.4537 d refuted). The reason the catalogs
+  pass at 99.99% is that their pipeline reaches the fast branch directly;
+  a continuation that walks the whole curve meets the others, and only the
+  second-order test can tell them apart. FINDINGS 38.
 
 > **Two staleness findings from writing this document.**
 > 1. ~~`OPTIMALITY_CERTIFICATION.md` Part B §1 still lists the conjugate-point

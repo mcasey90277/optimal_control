@@ -46,6 +46,9 @@ function A = arclength_thrust(rv0, rvf, seed0, TN0, cnd, muStar, opts)
 %                                                   .dsMax [0.4], .nStep [120],
 %                                                   .newtonTol [1e-9],
 %                                                   .newtonMax [12],
+%                                                   .newtonTarget [4] Newton
+%                                                   iterations the step
+%                                                   controller aims for,
 %                                                   .Tstop [0.05] N,
 %                                                   .m0kg [150], .logFile ''
 %
@@ -73,6 +76,7 @@ dsMax   = d('dsMax', 0.4);
 nStep   = d('nStep', 120);
 nTol    = d('newtonTol', 1e-9);
 nMax    = d('newtonMax', 12);
+nTarget = d('newtonTarget', 4);
 Tstop   = d('Tstop', 0.05);
 m0kg    = d('m0kg', 150);
 logFile = d('logFile', '');
@@ -104,10 +108,11 @@ lg('arclength start: T = %.2f mN, tf = %.4f ND (%.3f d), ||R|| = %.2e, n = %d', 
 assert(norm(R, inf) < 1e-6, 'start point is not a root (||R|| = %.2e)', norm(R,inf));
 
 A = struct('T_N', [], 'tf_nd', [], 'tf_days', [], 'tauT', [], ...
-           'sminX', [], 'sminAug', [], 'normR', [], 'ds', [], ...
-           'p', {{}}, 'fold', [], 'Tmin', NaN);
+           'sminX', [], 'sminAug', [], 'normR', [], 'dsUsed', [], ...
+           'dsNext', [], 'nNewton', [], 'tanResid', [], 'lam0', [], ...
+           'pMaxAbs', [], 'fracCostate', [], 'p', {{}}, 'fold', [], 'Tmin', NaN);
 
-tau = [];                                 % previous tangent, for orientation
+tau = [];  dsUsed = 0;  nNewtonLast = 0;                                 % previous tangent, for orientation
 for step = 0:nStep
     TN = tpar*sT;
     Rf = mkRes(TN);
@@ -119,9 +124,14 @@ for step = 0:nStep
     sX = svd(Jx);      sminX  = sX(end);
     sA = svd([Jx Rt]); sminAug = sA(end);
 
-    % --- tangent: [Jx Rt] tau = 0, ||tau|| = 1 ----------------------------
-    v = -(Jx \ Rt);
-    tauNew = [v; 1];  tauNew = tauNew/norm(tauNew);
+    % --- tangent: right null vector of the FULL augmented matrix ---------
+    % NOT v = -Jx\Rt: that chart is exactly singular AT a fold, which is the
+    % one place the tangent matters (Astra review 2026-09-08). The full SVD
+    % (not 'econ' -- a wide matrix's extra right-null column is dropped by
+    % the economy form) gives the structural null vector directly.
+    [~, ~, VA] = svd([Jx Rt]);
+    tauNew = VA(:, end);
+    tanResid = norm([Jx Rt]*tauNew) / max(norm([Jx Rt], 'fro'), realmin);
     if isempty(tau)
         if tauNew(end) > 0, tauNew = -tauNew; end     % head toward LOWER thrust
     elseif tauNew'*tau < 0
@@ -129,15 +139,34 @@ for step = 0:nStep
     end
     tau = tauNew;
 
+    pNow = pOf(x);
     A.T_N(end+1)   = TN;
     A.tf_nd(end+1) = x(end)*Dx(end);          % t_f is the LAST unknown
     A.tf_days(end+1) = A.tf_nd(end)*tStar/86400;
     A.tauT(end+1) = tau(end);  A.sminX(end+1) = sminX;
     A.sminAug(end+1) = sminAug;  A.normR(end+1) = norm(R,inf);
-    A.ds(end+1) = ds;  A.p{end+1} = pOf(x);
-    lg(['  step %3d: T = %7.3f mN  tf = %7.3f d  tau_T = %+.4f  ' ...
-        'smin(R_x) = %.2e  smin([R_x R_T]) = %.2e  ||R|| = %.1e'], ...
-        step, TN*1000, A.tf_days(end), tau(end), sminX, sminAug, norm(R,inf));
+    A.dsUsed(end+1) = dsUsed;                 % the step that was ACCEPTED,
+    A.dsNext(end+1) = ds;                     % not the next proposal
+    A.nNewton(end+1) = nNewtonLast;
+    A.tanResid(end+1) = tanResid;
+    A.lam0(end+1) = norm(pNow(1:7));          % is the chart running away?
+    A.pMaxAbs(end+1) = max(abs(pNow));
+    % how much of the last step was costates vs state/time? If the arclength
+    % is being eaten by multiplier growth, the fold reading is wrong.
+    if numel(A.p) >= 1
+        dp = pNow - A.p{end};
+        iL = [1:7, reshape(bsxfun(@plus,(8:14)',(0:(K-2))*ny),1,[]) + 7];
+        iL = iL(iL <= numel(dp)-1);
+        A.fracCostate(end+1) = norm(dp(iL))/max(norm(dp(1:end-1)), realmin);
+    else
+        A.fracCostate(end+1) = NaN;
+    end
+    A.p{end+1} = pNow;
+    lg(['  step %3d: T = %10.6f mN  tf = %10.6f d  tau_T = %+.4e  ' ...
+        'sminX = %.2e  sminAug = %.2e  |R| = %.1e  dsUsed = %.2e  ' ...
+        'nNw = %2d  |lam0| = %9.3f  fracCostate = %.3f  tanRes = %.1e'], ...
+        step, TN*1000, A.tf_days(end), tau(end), sminX, sminAug, norm(R,inf), ...
+        dsUsed, nNewtonLast, A.lam0(end), A.fracCostate(end), tanResid);
 
     if numel(A.tauT) > 1 && sign(A.tauT(end)) ~= sign(A.tauT(end-1))
         A.fold(end+1) = numel(A.tauT);
@@ -157,16 +186,35 @@ for step = 0:nStep
             if ~all(isfinite(Ri)) || norm(Ri,inf) > 1e6, break, end
             Jxi = Jpi .* Dx(:)';
             Rti = fdRT(mkRes, pOf(w(1:end-1)), Ti, sT);
+            if ~all(isfinite(Jxi(:))) || ~all(isfinite(Rti)), break, end
             F  = [Ri; tau'*(w - wp)];
-            if norm(F, inf) < nTol, ok = true; break, end
+            if norm(F, inf) < nTol, ok = true; nNewtonLast = it - 1; break, end
             JF = [Jxi Rti; tau'];
             dw = -(JF \ F);
             if ~all(isfinite(dw)), break, end
             w = w + dw;
+            if it == nMax
+                % test convergence AFTER the final update: a point that
+                % converges on the last iterate was being reported as a
+                % failure and forcing a needless halving.
+                Tl = w(end)*sT;
+                if Tl > 0
+                    Rl = feval(mkRes(Tl), pOf(w(1:end-1)));
+                    if all(isfinite(Rl)) && ...
+                       norm([Rl; tau'*(w - wp)], inf) < nTol
+                        ok = true;  nNewtonLast = nMax;
+                    end
+                end
+            end
         end
         if ok
             x = w(1:end-1);  tpar = w(end);
-            ds = min(dsMax, ds*1.3);
+            dsUsed = ds;
+            % scale by the effort actually spent, not by mere success: a
+            % fixed 1.3x inflation after every step produces overshoot/halve
+            % cycles that look like an arclength collapse.
+            fac = sqrt(nTarget/max(nNewtonLast, 1));
+            ds  = min(dsMax, ds*min(max(fac, 0.5), 2.0));
         else
             ds = ds/2;
             if ds < dsMin, lg('  arclength stalled: ds < dsMin at T = %.3f mN', TN*1000); end
@@ -185,7 +233,7 @@ function h = resHandle(rv0, rvf, seed0, Tnd, cnd, muStar)
 % INPUTS: rv0; rvf; seed0; Tnd; cnd; muStar.  OUTPUTS: h (fhandle p -> [R,J]).
 sd = seed0;  sd.Y(1:7,1) = [rv0(:); 1];
 [~, inf_] = ms_tfmin(rv0(:), rvf(:), sd, Tnd, cnd, muStar, ...
-    struct('assembleOnly', true, 'tfLo', 0.05, 'tfHi', 20, 'pMax', 1e7));
+    struct('assembleOnly', true, 'handleOnly', true, 'tfLo', 0.05, 'tfHi', 20, 'pMax', 1e7));
 h = inf_.residual;
 end
 
@@ -193,7 +241,12 @@ function Rt = fdRT(mkRes, p, TN, sT)
 % FDRT  Central difference of the residual in the thrust parameter, at
 % FIXED unknowns, returned in the SCALED parameter (R_T * sT).
 % INPUTS: mkRes; p; TN; sT.  OUTPUTS: Rt [n x 1].
-h = 1e-6*max(TN, 1e-3);
+% Step-size study 2026-09-08 (rt_study): the derivative is on a flat
+% plateau for h_rel in [1e-2, 1e-4] (successive changes ~1e-10 relative),
+% and drifts to ~1e-7 by h_rel = 1e-6 -- the OLD choice sat at the noisy
+% end. sigma_min([R_x R_T]) was identical to 4 digits across the whole
+% range, so the augmented-regularity evidence stands.
+h = 1e-3*max(TN, 1e-3);
 Rp = feval(mkRes(TN + h), p);
 Rm = feval(mkRes(TN - h), p);
 Rt = (Rp - Rm)/(2*h) * sT;

@@ -163,7 +163,13 @@ n = numel(p);                                  % = nf + ny(K-1) (+1 free tf)
 % family of problems (one per parameter value). Nothing else in the engine
 % changes; the handle closes over this call's problem closures.
 if d('assembleOnly', false)
-    [R0, J0] = residual(p);
+    % handleOnly: skip the evaluation at the seed. A continuation driver
+    % builds one factory per parameter value and evaluates at ITS OWN
+    % iterate; propagating the seed with STMs here just to return a handle
+    % doubled every derivative and Newton evaluation (Astra review).
+    if d('handleOnly', false), R0 = []; J0 = [];
+    else, [R0, J0] = residual(p);
+    end
     info = struct('R', R0, 'J', J0, 'p', p, 'residual', @residual, ...
                   'K', K, 'ny', ny, 'nFree', numel(fi0), ...
                   'freeIdx0', fi0, 'fixedTf', fixedTf, ...

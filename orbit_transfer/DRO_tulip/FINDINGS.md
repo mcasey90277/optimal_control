@@ -2246,3 +2246,105 @@ Missing sheet entries mean "this traversal did not reach them under its
 rules" -- not infeasibility, not branch non-existence. Failure categories
 (budget exhausted / Newton stalled / normality boundary / local test failed)
 must be stored separately, and are not yet.
+
+## 37. The arrival-phase sheet, rebuilt as pseudo-arclength continuation: the engine, the gate stack, and the first branch structure (2026-09-09)
+
+Section 36 ended with the traversal method judged wrong. This is its
+replacement, built to the Astra prescription and to TDD throughout: five
+new units, five test suites, every one of them RED before it was GREEN.
+
+### The pieces
+
+| unit | what it owns | test |
+|---|---|---|
+| `costate_common/arclength_ms` | GENERIC pseudo-arclength continuation of `R(p,q) = 0` in any parameter, for any residual with a Jacobian | `test_arclength_ms` 9/9 (unit-circle fold fixture) + `test_arclength_ms_thrust` 5/5 (production regression) |
+| `costate_common/cr3bp_field` | the ballistic CR3BP field, so the arrival-phase derivative is ANALYTIC | inside the arrival suite |
+| `DRO_tulip/indirect/arclength_arrival` | the min-time DRO -> tulip problem bound to arrival phase in the homogeneous chart | `test_arclength_arrival` 8/8 |
+| `DRO_tulip/indirect/certify_root` + `certify_crossing` | the gate stack for one candidate | `test_certify_crossing` 7/7 |
+| `DRO_tulip/indirect/sheet_from_arcs` + `build_arrival_sheet` | crossings -> certified sheet | `test_sheet_from_arcs` 7/7 |
+| `DRO_tulip/indirect/rib_from_crossing` | the departure-phase rib off a certified crossing | `test_rib_from_crossing` 7/7 |
+
+### Four design decisions that were forced by measurement, not taste
+
+**1. The tangent is a null vector, not a linear solve.** `v = -R_x \ R_q`
+is exactly singular AT a fold, which is the one place the tangent matters.
+The right null vector of the FULL SVD of `[R_x R_q]` is not. (Economy SVD
+drops the extra right-null column of a wide matrix -- use the full form.)
+
+**2. The arclength metric must be MESH-INDEPENDENT.** With unit weights the
+trajectory block's `K x 14 = 336` coordinates swamp the single phase
+coordinate: an arclength step of 0.002 moved the arrival phase by 5e-5, and
+60 steps advanced 0.0015 of a period. Weighting every junction coordinate
+by `sqrt(K)` makes the block's contribution quadrature-like -- one
+junction's worth, independent of the mesh -- and the same 60 steps then
+cover 0.015. This is not a tuning constant; it is what makes the step size
+mean the same thing on a K = 24 and a K = 48 mesh.
+
+**3. A fold is a rank statement, not a sign.** A sign change of the
+tangent's q-component is only a CANDIDATE. It is called a fold when `R_x`
+loses rank there (small `sigma_min`) while the augmented `[R_x R_q]` stays
+regular -- and it is localized by an in-plane correction, not read off the
+nearest accepted root.
+
+**4. Every crossing of a grid level is kept.** After a fold an arc can
+cross the same phase again, at a different `t_f`. Both are candidates; the
+sheet stores all of them with their verdicts and takes the minimum over the
+CERTIFIED ones. A grid point holding two local minima is a fact about the
+problem, not a bug in the walker.
+
+### The gate stack (certify_root)
+
+A candidate is certified only if ALL of: the normal-chart polish converges
+(tolR 3e-11); the flight from `z8` alone lands within 100 km AND 10 m/s of
+the target -- **position and velocity**, the old harness gated position
+only; pumpkyn `tfMin` returns within 1e-6 of the polished `z8` (a thrown
+exception is a FAIL, not a pass); the free-time conjugate test returns PASS
+(ENDPOINT = inconclusive = FAIL); and the min-time hypothesis gates hold
+(`min|lam_v| > 0`, `min Q_mt > 0`, `dim S = 1`). Numbers are kept whether or
+not a candidate passes, and the FIRST failed gate is named.
+
+Regression: the anchor certifies at **17.7976 d / 0.7485 km/s / 12.20 kg**,
+flown miss 0.000 km and 0.000 m/s, witness `|dz| = 0`, conj PASS, dim S = 1,
+`min|lam_v| = 3.24`, `min Q_mt = 3.82`. Costates scaled by 3 are refused.
+
+### The thrust regression: the generic engine IS the old instrument
+
+Fed the production thrust residual with the scaling `arclength_thrust`
+used, `arclength_ms` reproduces the archived 2026-09-08 diagnostic arc
+**root for root**: max relative `t_f` error 0.0e+00 over the reference
+roots in the first millinewton, `|lam0| = 73.8855` against the archived
+73.8855. The generic engine is not a rewrite that happens to agree; on this
+problem it is the same instrument.
+
+### The rib is not symmetric in departure phase
+
+`rib_from_crossing` walking the NEGATIVE departure direction out of the
+anchor reproduces the 2026-09-09 certified ring exactly: **17.8775 d at
+sD = 11/12** (ring 17.877) and **18.0688 d at 10/12** (ring 18.069). The
+POSITIVE direction fails out of the anchor -- as it did in that sweep,
+which recorded `(2,1) sD = 0.0833: FAILED from (1,1)`. Two lessons: a
+reference number is only meaningful with its direction attached (the first
+version of this test asserted the ring values in the +1 direction and the
+walker was right to refuse), and a walker that only ever halves crawls at
+the depth of its worst patch -- step RECOVERY after two clean sub-steps is
+what makes the 1/1728-of-a-period patch affordable.
+
+### First branch structure in arrival phase (arcs in flight)
+
+Four arcs, two seeds x two directions, at 70 mN / Isp 900 s / sD = 0:
+
+- from the **anchor** (sA 0.0754, 17.798 d): walking UP is smooth -- no fold
+  in 0.0754 -> 0.24. Walking DOWN folds at **sA 0.0342**, then again at
+  0.0706 and 0.0699 on the way back up, so the down direction returns
+  through the anchor's own phase on a SECOND branch.
+- from the **26.44 d solution** (sA 0.9087): folds at **0.9084 and 0.9103**,
+  i.e. that solution sits on a narrow nose barely 0.002 of a period wide,
+  with further folds near 0.9293. Both directions have since crossed the
+  anchor's phase (0.0754 + 1), so the two seeds' branches will be compared
+  at the same grid point.
+
+`t_f` falls with increasing arrival phase out of the anchor: 17.7976 d at
+0.0754 to 17.4018 d at 0.0907, agreeing with the independent fixed-step
+walk (17.42 d at 0.0899). `rho` stays in 0.053 .. 0.068 throughout -- the
+arrival direction does NOT lose normality, unlike the thrust direction of
+section 33.

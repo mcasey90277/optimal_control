@@ -154,6 +154,7 @@ for step = 0:nStep
     lg('  step %3d: q = %+.6f  tau_q = %+.3e  sminX = %.2e  sminAug = %.2e  |R| = %.1e  ds = %.2e  nNw = %d', ...
        step, q, tau(end), sminX, sminAug, norm(R, inf), dsUsed, nNw);
 
+    haveTurn = false;  qTurn = NaN;  pTurn = [];
     % fold candidate: sign change of the tangent's q-component. LOCALIZE it
     % before classifying: interpolate along the arc to tau_q = 0, correct
     % back onto the curve in the hyperplane through that point, and test
@@ -172,22 +173,44 @@ for step = 0:nStep
         isFold = cvF && sXf(end) < foldRatio*sAf(end);
         A.folds(end+1) = struct('index', k, 'q', qF, 'sminX', sXf(end), ...
                                 'sminAug', sAf(end), 'classified', isFold);
+        % the sign change is a TURNING POINT in q whether or not the rank
+        % test calls it a fold; the crossing search below needs it to split
+        % this step into two monotone halves
+        haveTurn = cvF;  qTurn = qF;  pTurn = pF;
         lg('  *** tangent q-component changed sign; localized at q = %.6f: %s (sminX %.1e / sminAug %.1e, corrector conv %d)', ...
            qF, tern(isFold, 'FOLD', 'sign change, NOT classified as a fold'), sXf(end), sAf(end), cvF);
     end
 
-    % level crossings between the previous root and this one
+    % Level crossings between the previous root and this one. A step that
+    % passes a TURNING POINT in q is not monotone, so bracketing on the two
+    % endpoints alone is blind to a level the arc crossed twice INSIDE the
+    % step -- and that is precisely what happens at a fold, which is where a
+    % grid point earns its second candidate. (Measured on the unit circle: a
+    % fixed 0.25 step across the fold missed BOTH crossings of level 0.999.)
+    % So the step is split at the localized turning point and each monotone
+    % half is bracketed on its own.
     if k > 1 && ~isempty(levels)
-        qa = A.q(k-1);  qb = A.q(k);
-        for L = levels(:)'
-            if (L - qa)*(L - qb) < 0 || L == qb
-                f = (L - qa)/(qb - qa);
-                pL = A.p{k-1} + f*(A.p{k} - A.p{k-1});
-                [pL, cv, nr, nc] = newtonFixedQ(resFactory, L, pL, Dx, nTol, nMax);
-                nCalls = nCalls + nc;
-                A.crossings(end+1) = struct('level', L, 'q', L, 'p', pL, 'converged', cv, ...
-                                            'normR', nr, 'afterIndex', k-1);
-                lg('    level %.6f crossed: re-solved at fixed q -> converged = %d, |R| = %.1e', L, cv, nr);
+        segs = {A.q(k-1), A.p{k-1}, A.q(k), A.p{k}};
+        if haveTurn
+            segs = {A.q(k-1), A.p{k-1}, qTurn,  pTurn; ...
+                    qTurn,    pTurn,    A.q(k), A.p{k}};
+        end
+        for is = 1:size(segs, 1)
+            qa = segs{is,1};  pa = segs{is,2};  qb = segs{is,3};  pb = segs{is,4};
+            if qb == qa, continue, end
+            isLast = (is == size(segs, 1));
+            for L = levels(:)'
+                % the endpoint case is tested only on the LAST half, so a
+                % root sitting exactly on a level is recorded once
+                if (L - qa)*(L - qb) < 0 || (isLast && L == qb)
+                    f = (L - qa)/(qb - qa);
+                    pL = pa + f*(pb - pa);
+                    [pL, cv, nr, nc] = newtonFixedQ(resFactory, L, pL, Dx, nTol, nMax);
+                    nCalls = nCalls + nc;
+                    A.crossings(end+1) = struct('level', L, 'q', L, 'p', pL, 'converged', cv, ...
+                                                'normR', nr, 'afterIndex', k-1);
+                    lg('    level %.6f crossed: re-solved at fixed q -> converged = %d, |R| = %.1e', L, cv, nr);
+                end
             end
         end
     end

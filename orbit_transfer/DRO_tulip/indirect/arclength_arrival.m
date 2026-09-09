@@ -77,6 +77,13 @@ if ischar(arg) && strcmp(arg, 'setup')
     % certified sheet cells (best.z, best.it.Y, no engine constants)
     if isfield(Aanc, 'best'), root = Aanc.best; else, root = Aanc; end
     z = root.z(:);  Y = root.it.Y;  K = d('K', size(Y, 2));
+    if K ~= size(Y, 2)
+        % A DIFFERENT MESH than the stored root's: re-cut the same flight
+        % into K junctions (seed_from_z8) rather than pad or drop columns.
+        % Used by the mesh-independence check on the arclength metric.
+        sd0 = seed_from_z8(z, B.rv0(1:6), K, Tnd, cnd, mu);
+        Y = sd0.Y(:, 1:K);
+    end
     if isfield(Aanc, 'Tnd') && isfield(Aanc, 'cnd')
         assert(abs(Aanc.Tnd - Tnd)/Tnd < 1e-10 && abs(Aanc.cnd - cnd)/cnd < 1e-10, ...
                'anchor certified at a different operating point');

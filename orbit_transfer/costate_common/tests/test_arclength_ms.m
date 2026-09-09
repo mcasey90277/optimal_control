@@ -76,6 +76,26 @@ end
 % budget/stop reasons are reported, not silent
 ok = chk(ok, ischar(A.stop) && ~isempty(A.stop), sprintf('stop reason recorded: "%s"', A.stop));
 
+% ---- a level crossed TWICE INSIDE ONE STEP ------------------------------
+% Bracketing a level only between consecutive accepted roots misses a level
+% the arc steps over and back within a single step -- which is exactly what
+% happens near a fold, the place a sheet gains its second candidate. Fixed
+% step 0.25 from angle 1.4 rad: the arc runs q = 0.9855 -> 1 (the fold) ->
+% 0.9969, so level 0.999 is crossed twice with BOTH step endpoints below it.
+a0 = 1.4;
+A2 = arclength_ms(resFactory, dRdq, [cos(a0); sin(a0)], sin(a0), struct( ...
+    'direction', +1, 'ds', 0.25, 'dsMin', 0.25, 'dsMax', 0.25, 'nStep', 3, ...
+    'Dx', [1; 1], 'qStop', [-0.3 2], 'levels', 0.999, 'newtonTol', 1e-12));
+c2 = A2.crossings;
+qq = A2.q;
+ok = chk(ok, all(qq < 0.999), sprintf('fixture: every accepted root stays below the level (max q = %.6f)', max(qq)));
+ok = chk(ok, numel(c2) == 2, sprintf('level crossed twice inside one step: %d crossing(s) found (want 2)', numel(c2)));
+if numel(c2) == 2
+    x1s = sort(cellfun(@(v) v(1), {c2.p}));
+    ok = chk(ok, all([c2.converged]) && abs(x1s(1) + x1s(2)) < 1e-8 && abs(abs(x1s(1)) - sqrt(1 - 0.999^2)) < 1e-8, ...
+             sprintf('both roots of the double crossing recovered: x1 = %+.6f, %+.6f', x1s(1), x1s(2)));
+end
+
 if ok, fprintf('TEST_ARCLENGTH_MS: ALL PASS\n');
 else,  fprintf('TEST_ARCLENGTH_MS: FAILURE (see lines above)\n');
 end

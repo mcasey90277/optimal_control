@@ -30,7 +30,8 @@ function varargout = arclength_arrival(arg, opts)
 %  opts                     struct (optional)
 %   setup:  .thrustN [0.070] .ispS [900] .m0kg [150] .tauDRO [1] .NpTulip [7]
 %           .sD [0] departure phase, .anchorMat [results/mintime_70mN_anchor.mat]
-%           .K [from the anchor]
+%           (root as z + it.Y, or best.z + best.it.Y), .sA0 [0.0754] the
+%           anchor's arrival phase, .K [from the anchor]
 %   arc:    .direction [+1] .sAStop [inf] (stop beyond) .ds [0.002]
 %           .dsMin [1e-5] .dsMax [0.02] .nStep [400] .levels []
 %           .deadlineSec [inf] .logFile ''
@@ -72,10 +73,15 @@ if ischar(arg) && strcmp(arg, 'setup')
     % the anchor: a certified rho = 1 root, re-normalised onto the sphere
     anchorMat = d('anchorMat', fullfile(here, 'results', 'mintime_70mN_anchor.mat'));
     Aanc = load(anchorMat);
-    assert(abs(Aanc.Tnd - Tnd)/Tnd < 1e-10 && abs(Aanc.cnd - cnd)/cnd < 1e-10, ...
-           'anchor certified at a different operating point');
-    z = Aanc.z(:);  Y = Aanc.it.Y;  K = d('K', size(Y, 2));
-    sA0 = 0.0754;
+    % two storage layouts: the demo anchor (z, it.Y, Tnd, cnd) and the
+    % certified sheet cells (best.z, best.it.Y, no engine constants)
+    if isfield(Aanc, 'best'), root = Aanc.best; else, root = Aanc; end
+    z = root.z(:);  Y = root.it.Y;  K = d('K', size(Y, 2));
+    if isfield(Aanc, 'Tnd') && isfield(Aanc, 'cnd')
+        assert(abs(Aanc.Tnd - Tnd)/Tnd < 1e-10 && abs(Aanc.cnd - cnd)/cnd < 1e-10, ...
+               'anchor certified at a different operating point');
+    end
+    sA0 = d('sA0', 0.0754);          % the anchor's grid phase (caller's claim)
     seed = struct('tf', z(8), 'tGrid', linspace(0, z(8), K+1), 'Y', [Y, Y(:,end)]);
     seed.Y(1:7, 1) = [B.rv0(1:6); 1];
     % RE-SOLVE the anchor at THIS grid's exact arrival state rather than
@@ -86,6 +92,12 @@ if ischar(arg) && strcmp(arg, 'setup')
     [zh, ih] = ms_tfmin_hom(B.rv0(1:6), B.stateA(sA0), seed, Tnd, cnd, mu, ...
                             struct('tolR', 1e-11, 'wallSec', 120));
     assert(ih.converged, 'anchor did not re-converge at the grid phase (|R| = %.1e)', ih.normR);
+    % the re-solve may only absorb phase rounding (~1e-4 in t_f). A larger
+    % move means the stored root belongs to another operating point or
+    % phase -- the guard that replaces the Tnd/cnd assert when the .mat
+    % carries no engine constants.
+    assert(abs(zh(8) - z(8))/z(8) < 1e-3, ...
+           'anchor moved %.2e in t_f on re-solve: wrong phase or operating point', abs(zh(8) - z(8))/z(8));
     seed.Y = [ih.Y, ih.Y(:,end)];  seed.tf = zh(8);  seed.extra = ih.rho;
     seed.tGrid = linspace(0, zh(8), K+1);
     [~, info] = ms_tfmin_hom(B.rv0(1:6), B.stateA(sA0), seed, Tnd, cnd, mu, ...

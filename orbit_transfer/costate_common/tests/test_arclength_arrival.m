@@ -28,6 +28,20 @@ tStar = 382981.289129055;
 
 [B, anc] = arclength_arrival('setup');           % problem closures + anchor
 
+% (4) a SECOND seed at another grid phase: the certified 26.44 d root at
+%     cell (1,11), sA = 0.0754 + 10/12. Its .mat stores the root as
+%     best.z / best.it.Y and carries no Tnd/cnd, so setup must take the
+%     phase from opts and guard the operating point by the re-solve.
+mat2 = fullfile(fileparts(here), 'DRO_tulip', 'indirect', 'results', 'mintime_70mN_certified.mat');
+try
+    [~, anc2] = arclength_arrival('setup', struct('sA0', 0.0754 + 10/12, 'anchorMat', mat2));
+    ok2 = abs(anc2.p(anc2.ctf) - 5.963936) < 5e-3 && abs(anc2.sA - (0.0754 + 10/12)) < 1e-12;
+    msg2 = sprintf('second seed set up at sA = %.4f: t_f = %.4f ND (stored 5.9639)', anc2.sA, anc2.p(anc2.ctf));
+catch ME
+    ok2 = false;  msg2 = ['second seed setup threw: ' ME.message];
+end
+ok = chk(ok, ok2, msg2);
+
 % (2) ballistic field vs the propagated periodic orbit
 s = 0.3137;
 xA = B.stateA(s);

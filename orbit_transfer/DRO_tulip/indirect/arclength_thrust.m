@@ -51,6 +51,8 @@ function A = arclength_thrust(rv0, rvf, seed0, TN0, cnd, muStar, opts)
 %                                                   controller aims for,
 %                                                   .Tstop [0.05] N,
 %                                                   .m0kg [150], .logFile '',
+%                                                   .direction [-1] initial
+%                                                   thrust sense (+1 = up),
 %                                                   .binding [@ms_tfmin]
 %                                                   or @ms_tfmin_hom (rho
 %                                                   free on the sphere)
@@ -80,7 +82,9 @@ nStep   = d('nStep', 120);
 nTol    = d('newtonTol', 1e-9);
 nMax    = d('newtonMax', 12);
 nTarget = d('newtonTarget', 4);
+direction = d('direction', -1);
 Tstop   = d('Tstop', 0.05);
+Tmax_   = d('Tmax', 1.0);
 m0kg    = d('m0kg', 150);
 logFile = d('logFile', '');
 lg = @(varargin) logmsg(logFile, sprintf(varargin{:}));
@@ -143,7 +147,10 @@ for step = 0:nStep
     tauNew = VA(:, end);
     tanResid = norm([Jx Rt]*tauNew) / max(norm([Jx Rt], 'fro'), realmin);
     if isempty(tau)
-        if tauNew(end) > 0, tauNew = -tauNew; end     % head toward LOWER thrust
+        % initial orientation: opts.direction = -1 (default) heads toward
+        % LOWER thrust, +1 toward higher -- both ends of a branch are needed
+        % to map it (Astra: two ends beat 500 one-sided steps)
+        if sign(tauNew(end)) ~= direction, tauNew = -tauNew; end
     elseif tauNew'*tau < 0
         tauNew = -tauNew;                              % keep the arc oriented
     end
@@ -186,6 +193,7 @@ for step = 0:nStep
         lg('  *** TANGENT THRUST COMPONENT CHANGED SIGN -> FOLD at T = %.3f mN ***', TN*1000);
     end
     if TN < Tstop, lg('  reached Tstop = %.1f mN', Tstop*1000); break, end
+    if TN > Tmax_,  lg('  reached Tmax = %.1f mN',  Tmax_*1000); break, end
     if step == nStep, break, end
 
     % --- predictor / corrector -------------------------------------------

@@ -221,7 +221,18 @@ exists.
     at the target thrust seeded with the FULL nearest converged trajectory
     (states + controls + consistent mass, exact endpoints, returnModel true
     for the duals), then harvest_ms_seed -> ms_tfmin -> tfMin acceptance.
-  - [ ] **NOT ANSWERED — the fold claim was RETRACTED 2026-09-08 (FINDINGS §33
+  - [x] **ANSWERED 2026-09-08 (FINDINGS §34, the branch map):** the fast
+    family ends at 72.0 mN by LOSING NORMALITY (rho -> 0; discriminator
+    identity holds to 4 decimals, |lam_0| x74, slope -> -inf), not by a fold.
+    The homogeneous chart (`ms_tfmin_hom`, rho on the sphere) walks through
+    it and maps a snaking curve: an abnormal connector, a slow family
+    bottoming at 70.68 mN / 43 d, and the certified 26.44 d branch with its
+    own genuine fold at 69.57 mN and a reach down to 59.4 mN at 44 d. Every
+    slow-branch point tested FAILS the conjugate test; the certified 70 mN
+    point PASSES and its fold point 0.5% away FAILS (minimality exchanged
+    across the fold). **26.44 d is the only locally minimizing extremal
+    found at 70 mN; 18 d needs >= 72 mN.** Not a global certificate.
+  - [ ] (superseded) **NOT ANSWERED — the fold claim was RETRACTED 2026-09-08 (FINDINGS §33
     correction).** "Minimum thrust 72 mN" is refuted by our own certified
     70 mN solution at the same endpoints; a branch turning point is not a
     feasibility threshold. The limit point is not established as a fold (we
@@ -245,10 +256,17 @@ exists.
     So at 70 mN the fast family does not exist and §32's certified 26.44 d
     solution is on a different branch. **The abstract's "70 mN in 18 days" is
     not achievable**: 18.1 d is the limit but at 72 mN.
-  - [ ] **Cislunar abstract/poster decision (Mike):** the DEFENSIBLE number
-    today is 70 mN / 26.44 d (certified, §32). The 72 mN / 18.1 d option is
-    WITHDRAWN — 72 mN is a branch turning point, not a minimum thrust, and
-    our own 70 mN solution disproves it as a threshold.
+  - [ ] **Cislunar abstract/poster decision (Mike):** with the branch map
+    (§34) the statement is now firm: at 70 mN the minimum-time transfer
+    found is 26.4 d (1.14 km/s, 18.1 kg), locally certified; the 18-day
+    family needs >= 72 mN and terminates there. No hurry (Mike 2026-09-08).
+  - [ ] **Branch-map follow-ups:** (a) conjugate + gates along the WHOLE
+    26.44 d branch to locate the minimality-exchange point exactly (between
+    69.57 and 70.0 mN); (b) Astra Track 2 — direct multistart at 70 mN with
+    perturbed/retimed full-trajectory seeds, to hunt a DISCONNECTED faster
+    branch; (c) arrival-phase as a second parameter — follow the locus of
+    the rho = 0 point to see how the 72 mN limit moves with phase; (d) the
+    same map for a second cell.
   - [ ] **Turn the fold.** The arc crawls as σ_min(R_X) → 0 and never rounds
     the corner, so the returning branch is unmapped. Needs a bordered/deflated
     corrector at the limit point, or switching the continuation parameter to

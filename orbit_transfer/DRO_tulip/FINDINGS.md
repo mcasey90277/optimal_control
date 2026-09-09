@@ -1990,3 +1990,105 @@ thrust -- is unmapped. Turning it needs either a bordered/deflated corrector
 at the limit point or a switch to t_f as the continuation parameter there.
 The fold LOCATION is nonetheless established to 71.99 mN by five orders of
 rank collapse.
+
+## 34. The branch map: the fast family ends at 72.0 mN by LOSING NORMALITY, and 26.44 d is the only locally minimizing extremal found at 70 mN (2026-09-08)
+
+Section 33's "fold at 71.99 mN" was retracted after review. What the
+corrected instrument and the homogeneous chart then found is a fuller and
+more useful picture than a single turning point. Figure:
+`indirect/results/mintime_branch_map.png`; data `mintime_arclength_{diag,hom,70mN_dn,70mN_up}.mat`.
+
+### Instrument (what changed since section 33)
+
+* `arclength_thrust`: tangent from the FULL-SVD right null vector of
+  [R_X R_T] (the old R_X \ R_T chart is singular exactly at a fold); honest
+  logging of the ACCEPTED step, Newton count, |lam_0| and the costate
+  fraction of each step in scaled coordinates; Newton-count step control;
+  convergence tested after the last iterate; FD step for R_T moved onto its
+  measured plateau (h_rel 1e-3: derivative stable to 1e-10 across three
+  decades, sigma_min([R_X R_T]) identical to 4 digits -- the augmented
+  regularity evidence was real, not noise); `opts.binding`, `opts.direction`.
+* `ms_bvp` gains extra scalar unknowns (`prob.nExtra`, `prob.extraEq`);
+  `ms_tfmin_hom` is the HOMOGENEOUS min-time binding: rho free,
+  H(t_f) = rho + lam'f = 0, rho^2 + |lam_0|^2 = 1. Tests 7/7 and 6/6,
+  fixed-tf 10/10 and golden 20/20 unchanged.
+
+### 1. The discriminator settles the fast family: not a fold, a loss of normality
+
+Re-run in the normal chart with the fixed instrument (401 roots, 75.5 ->
+72.0 mN): the identity dt_f/dT = int_0^tf H_T dt holds to FOUR DECIMALS
+along the whole arc (ratio 0.9999-1.0000 at every sampled point), so every
+root is a regular normal extremal and the derivatives are exact. Along it
+|lam_0| grows 46 -> 3409 (x74) with every accepted step at the maximum
+length and 100% costate in scaled coordinates, and the slope dt_f/dT
+diverges -25 -> -921 in lockstep with |lam_0| (H_T is homogeneous of degree
+1 in lam), while T -> 72.00 mN and t_f -> 18.0 d stay finite. A vertical
+tangent in (T, t_f) with UNBOUNDED multipliers: not a simple fold, which
+has bounded multipliers. The branch reaches an abnormal configuration at
+its turning point.
+
+### 2. The homogeneous chart walks through it and maps the snake
+
+On the sphere the multipliers cannot run away, and the arc from the 75.5 mN
+root passes the point the normal chart could only approach:
+
+| what | T (mN) | t_f (d) | rho |
+|---|---|---|---|
+| fast family, start | 75.495 | 15.15 | +0.0218 |
+| **fast family ends: rho crosses 0** | **72.02** | **18.45** | 0 |
+| abnormal connector (rho < 0, NOT min-time candidates) | 72.0 -> 74.1 | 18.5 -> 25.1 | < 0 |
+| slow family, rho > 0 again, descends to its bottom | 70.68 | 43.0 | +0.0007 |
+| further folds | 109.3, 83.0 | 26.8, 36.8 | +0.14, +0.011 |
+
+The fast family's termination coincides EXACTLY with rho = 0: the turning
+point is the abnormal point. Below 72.0 mN there is no fast solution.
+
+### 3. The certified 26.44 d solution sits on its own branch, near its own fold
+
+Continuing the certified 70 mN root in both directions:
+
+| direction | folds (T mN / t_f d / rho) | lowest thrust |
+|---|---|---|
+| down | **69.57 / 26.63 / +0.0141** then up to 120 mN at 20.6 d | 69.57 mN |
+| up | 71.49/25.8, then rho < 0 patch 70.4 -> 74.2, then 76.6, **59.36/44.4/+0.006**, 83.4, 67.6 | 59.36 mN |
+
+So the 26.44 d point lies 0.5% above its branch's own thrust minimum -- a
+GENUINE simple fold this time (rho bounded at 0.014) -- which is why a
+direct solve seeded from the fast family landed on it: it was born there.
+Upward, the branch snakes through eight folds and reaches 59.4 mN at 44 d.
+
+### 4. Conjugate verdicts on the snake: the slow branches are NOT minima
+
+| point | T (mN) | t_f (d) | rho | conjugate | interior crossings |
+|---|---|---|---|---|---|
+| certified 70 mN (section 32) | 70.00 | 26.44 | 0.0155 | **PASS** | 0 |
+| its branch's fold | 69.57 | 26.63 | 0.0141 | FAIL | 1 |
+| lowest thrust found | 59.36 | 44.43 | 0.0063 | FAIL | 2 |
+| slow family bottom | 70.68 | 43.04 | 0.0007 | FAIL | 1 |
+| 67.59 mN fold | 67.59 | 40.17 | 0.0165 | FAIL | 2 |
+
+The fold point fails while the certified point 0.5% away passes: local
+minimality is EXCHANGED across the fold, as it should be. Every other
+extremal found at or below 70 mN is both longer and a saddle.
+
+### What this establishes, and what it does not
+
+* **At 70 mN, 26.436 d is the only locally minimizing extremal in the
+  mapped structure**, and the map says WHY nothing faster exists there: the
+  fast family cannot reach 70 mN (it loses normality at 72.0), and the
+  other branches that do reach it are saddles.
+* **"70 mN in 18 days" is not available**: 18 d needs >= 72 mN.
+* NOT a global certificate: a disconnected minimizing branch could exist.
+  What the map adds over section 32 is that every branch REACHABLE by
+  continuation from either known solution has been walked, and none beats
+  26.44 d at 70 mN.
+* rho on the slow branches is 0.0006-0.02: those extremals are nearly
+  abnormal, the objective barely enters their Hamiltonian, which is
+  consistent with their being saddles.
+
+### For the poster
+
+The defensible statement: at 70 mN the minimum-time transfer found is
+26.4 days (1.14 km/s, 18.1 kg), certified as a local minimum by an
+independent solver and the second-order test; the 18-day family requires
+at least 72 mN and terminates there. Both numbers are on the map.

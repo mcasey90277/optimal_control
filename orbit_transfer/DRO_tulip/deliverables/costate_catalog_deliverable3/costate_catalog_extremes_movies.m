@@ -27,7 +27,9 @@ function outStem = costate_catalog_extremes_movies(cat_, filt, metric, outStem)
 %
 %% Inputs:
 %
-%  cat_                     struct                  costate_catalog_dro_tulip
+%  cat_                     struct                  A compact costate catalog
+%                                                   (any family: dro_tulip,
+%                                                   halo_tulip, ...)
 %
 %  filt                     struct                  Same filter as
 %                                                   costate_catalog_extremes
@@ -54,11 +56,22 @@ function outStem = costate_catalog_extremes_movies(cat_, filt, metric, outStem)
 %% ------------------------ Begin Code Sequence ---------------------------
 
 if nargin == 0
-   %Demo: phasing extremes on one sheet at 5 N:
-       L = load('costate_catalog_dro_tulip.mat');
-    cat_ = L.costate_catalog_dro_tulip;
- outStem = costate_catalog_extremes_movies(cat_, ...
-               struct('tauDRO',2.0,'Np',7,'thrustN',5));
+   %Demo: phasing extremes on the mid sheet at 5 N. Runs on whichever
+   %compact catalog sits in the current folder:
+     F = dir('costate_catalog_*.mat');
+     assert(~isempty(F), ...
+            'demo: no costate_catalog_*.mat in the current folder');
+       L = load(F(1).name);
+      fn = fieldnames(L);
+    cat_ = L.(fn{1});
+   fprintf('demo catalog: %s\n', F(1).name);
+      sh = cat_.sheets(ceil(numel(cat_.sheets)/2));
+   if isnan(sh.Np)
+       fl = struct('tauDRO',sh.tauDRO,'tauArr',sh.tau_arr,'thrustN',5);
+   else
+       fl = struct('tauDRO',sh.tauDRO,'Np',sh.Np,'thrustN',5);
+   end
+ outStem = costate_catalog_extremes_movies(cat_, fl);
      return;
 end
 if ~exist('filt','var'),    filt = struct(); end
@@ -87,13 +100,8 @@ else,                      lab = {'MIN \DeltaV','MAX \DeltaV'}; end
 E = {eMin, eMax};
 for k = 1:2
     e = E{k};
-    [~, rvD0] = pumpkynPie.cr3bp.getDRO(e.tauDRO);
-    rvD0 = pumpkyn.cr3bp.cont_np(rvD0, e.tauDRO, mu, 1e-12);
-    [tauD, rvD] = pumpkyn.cr3bp.prop(e.tauDRO, rvD0, mu);
-    tT0 = 2*pi*(e.Np-2)/(e.Np-1);
-    [~, rvT0] = pumpkyn.cr3bp.getTulip(tT0, e.Np, -1);
-    rvT0 = pumpkyn.cr3bp.cont_np(rvT0, tT0, mu, 1e-12);
-    [tauT, rvT] = pumpkyn.cr3bp.prop(tT0, rvT0, mu);
+    [tauD, rvD] = get_family_orbit(e.dep_family, e.dep_params);
+    [tauT, rvT] = get_family_orbit(e.arr_family, e.arr_params);
     rv0 = interp1(tauD/tauD(end), rvD, e.dep_frac, 'spline');
     [tj, yj] = pumpkyn.cr3bp.tfMinProp(e.z8(8), [rv0(1:6)'; 1; e.z8(1:7)], ...
                    ndT(e.thrustN), cnd, mu);
@@ -116,17 +124,17 @@ for k = 1:2
         'CameraUpVector',     [0 0 1], ...
         'View',               [-35 22]);
     S(k).anim.addOrbit(epoch + tauD*tStar/86400, rvD, ...
-        'Name','Departure DRO', 'Color',[0.25 0.60 0.35], 'LineWidth',0.9);
+        'Name','Departure orbit', 'Color',[0.25 0.60 0.35], 'LineWidth',0.9);
     S(k).anim.addOrbit(epoch + tauT*tStar/86400, rvT, ...
-        'Name','Arrival tulip', 'Color',[0.75 0.28 0.28], 'LineWidth',0.9);
+        'Name','Arrival orbit', 'Color',[0.75 0.28 0.28], 'LineWidth',0.9);
     S(k).anim.addSatellite(epoch + tu*tStar/86400, yj(iu,1:6), ...
         'Name', sprintf('%s transfer', lab{k}), ...
         'MarkerColor',[1.00 0.92 0.55], 'TrailColor',[0.35 0.72 1.00]);
     S(k).anim.initialize();
     camzoom(1.4);
     annotation(S(k).fig, 'textbox', [0.02 0.90 0.96 0.09], 'String', ...
-        {sprintf('%s:  DRO \\tau=%.2f, N_p=%d, %.2f N', ...
-                 lab{k}, e.tauDRO, e.Np, e.thrustN), ...
+        {sprintf('%s:  %s \\tau=%.2f, %s, %.2f N', ...
+                 lab{k}, upper(e.dep_family), e.tauDRO, e.arrLab, e.thrustN), ...
          sprintf('\\DeltaV %.3f km/s,  t_f %.3f d', e.deltaV_kms, e.tf_days)}, ...
         'Color','w', 'EdgeColor','none', 'FontSize',11, ...
         'HorizontalAlignment','center');
@@ -144,7 +152,7 @@ tEnd = max(S(1).tf, S(2).tf);            % the shared clock's last tick
  divider = uint8(90*ones(720, 1280-2*pw, 3));
 vw = VideoWriter([outStem '.mp4'], 'MPEG-4');
 vw.FrameRate = fps;  vw.Quality = 95;  open(vw);
-cleanupVW = onCleanup(@() close(vw));
+cleanupVW = onCleanup(@() close(vw)); %#ok<NASGU>
 gifFile = [outStem '.gif'];
 for kf = 1:nFrames
     tNow = tEnd*(kf-1)/(nFrames-1);

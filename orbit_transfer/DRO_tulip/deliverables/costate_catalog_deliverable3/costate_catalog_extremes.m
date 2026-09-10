@@ -19,7 +19,9 @@ function [eMin, eMax] = costate_catalog_extremes(cat_, filt, doPlot, metric)
 %
 %% Inputs:
 %
-%  cat_                     struct                  costate_catalog_dro_tulip
+%  cat_                     struct                  A compact costate catalog
+%                                                   (any family: dro_tulip,
+%                                                   halo_tulip, ...)
 %
 %  filt                     struct                  Optional restrictions,
 %                                                   any subset of:
@@ -53,16 +55,29 @@ function [eMin, eMax] = costate_catalog_extremes(cat_, filt, doPlot, metric)
 %% ------------------------ Begin Code Sequence ---------------------------
 
 if nargin == 0
-   %Demo: pure phasing effect -- one sheet, one thrust, with the plot:
-       L = load('costate_catalog_dro_tulip.mat');
-    cat_ = L.costate_catalog_dro_tulip;
-[eMin,eMax] = costate_catalog_extremes(cat_, ...
-                  struct('tauDRO',2.0,'Np',7,'thrustN',5), true);
+   %Demo: pure phasing effect -- the mid sheet, one thrust, with the plot.
+   %Runs on whichever compact catalog sits in the current folder:
+     F = dir('costate_catalog_*.mat');
+     assert(~isempty(F), ...
+            'demo: no costate_catalog_*.mat in the current folder');
+       L = load(F(1).name);
+      fn = fieldnames(L);
+    cat_ = L.(fn{1});
+   fprintf('demo catalog: %s\n', F(1).name);
+      sh = cat_.sheets(ceil(numel(cat_.sheets)/2));
+   if isnan(sh.Np)
+       fl = struct('tauDRO',sh.tauDRO,'tauArr',sh.tau_arr,'thrustN',5);
+   else
+       fl = struct('tauDRO',sh.tauDRO,'Np',sh.Np,'thrustN',5);
+   end
+[eMin,eMax] = costate_catalog_extremes(cat_, fl, true);
      return;
 end
 if ~exist('filt','var') || isempty(filt), filt = struct(); end
 if ~exist('doPlot','var'), doPlot = false; end
 if ~exist('metric','var'), metric = 'deltaV'; end
+assert(any(strncmpi(metric, {'deltaV','time'}, 1)), ...
+       'metric must be ''deltaV'' or ''time'', got ''%s''', metric);
 
    tStar = cat_.constants.tStar_s;
    lStar = cat_.constants.lStar_km;
@@ -77,7 +92,13 @@ if ~exist('metric','var'), metric = 'deltaV'; end
 for ks = 1:numel(cat_.sheets)
     sh = cat_.sheets(ks);
     if isfield(filt,'tauDRO') && abs(sh.tauDRO - filt.tauDRO) > 1e-9, continue, end
-    if isfield(filt,'Np')     && sh.Np ~= filt.Np,                    continue, end
+    if isfield(filt,'Np')
+        assert(~isnan(sh.Np), 'costate_catalog_extremes:NpFilter', ...
+            'this catalog''s arrival family is not tulip: filter by .tauArr, not .Np');
+        if sh.Np ~= filt.Np, continue, end
+    end
+    if isfield(filt,'tauArr') && isfield(sh,'tau_arr') && ...
+       abs(sh.tau_arr - filt.tauArr) > 1e-9,                          continue, end
     for kr = 1:numel(cat_.rungs_N)
         TN = cat_.rungs_N(kr);
         if isfield(filt,'thrustN') && abs(TN - filt.thrustN) > 1e-9, continue, end
@@ -86,6 +107,7 @@ for ks = 1:numel(cat_.sheets)
                 if ~sh.has_solution(iD,iA,kr), continue, end
                 tf = sh.tf_nd(iD,iA,kr);
                 mf = 1 - ndT(TN)*tf/cnd;
+                if ~(mf > 0 && mf <= 1), continue, end   % corrupt entry
                 dV = cnd*log(1/mf)*lStar/tStar;
                 if strncmpi(metric,'t',1), v = tf; else, v = dV; end
                 if v < vBest
@@ -117,13 +139,8 @@ figure('Color','w','Position',[60 60 1200 560]);
 ttl = {sprintf('MINIMUM %s', mName), sprintf('MAXIMUM %s', mName)};
 for kp = 1:2
     if kp == 1, e = eMin; else, e = eMax; end
-    [~, rvD0] = pumpkynPie.cr3bp.getDRO(e.tauDRO);
-    rvD0 = pumpkyn.cr3bp.cont_np(rvD0, e.tauDRO, mu, 1e-12);
-    [tD, rvD] = pumpkyn.cr3bp.prop(e.tauDRO, rvD0, mu);
-    tauT = 2*pi*(e.Np-2)/(e.Np-1);
-    [~, rvT0] = pumpkyn.cr3bp.getTulip(tauT, e.Np, -1);
-    rvT0 = pumpkyn.cr3bp.cont_np(rvT0, tauT, mu, 1e-12);
-    [tT, rvT] = pumpkyn.cr3bp.prop(tauT, rvT0, mu);
+    [tD, rvD] = get_family_orbit(e.dep_family, e.dep_params);
+    [tT, rvT] = get_family_orbit(e.arr_family, e.arr_params);
     rv0 = interp1(tD, rvD, e.dep_frac*tD(end), 'spline');
     rvf = interp1(tT, rvT, e.arr_frac*tT(end), 'spline');
     [~, y] = pumpkyn.cr3bp.tfMinProp(e.z8(8), [rv0(1:6)'; 1; e.z8(1:7)], ...
@@ -137,12 +154,13 @@ for kp = 1:2
     axis equal; grid on; view(-35, 25);
     xlabel('x [ND]'); ylabel('y [ND]'); zlabel('z [ND]');
     title({ttl{kp}, ...
-        sprintf('DRO \\tau=%.2f, N_p=%d, %.2f N', e.tauDRO, e.Np, e.thrustN), ...
+        sprintf('%s \\tau=%.2f, %s, %.2f N', upper(e.dep_family), ...
+                e.tauDRO, e.arrLab, e.thrustN), ...
         sprintf('\\DeltaV %.4f km/s,  t_f %.3f d,  %.2f kg prop', ...
                 e.deltaV_kms, e.tf_days, e.propellant_kg), ...
         sprintf('depart %.3f d, arrive %.3f d', e.dep_days, e.arr_days)});
     if kp == 1
-        legend('transfer','DRO','tulip','depart','arrive','Location','best');
+        legend('transfer','departure','tulip','depart','arrive','Location','best');
     end
 end
 rotate3d on
@@ -154,7 +172,27 @@ function e = pack(sh, iD, iA, TN, tf, dV, mf, m0kg, d2day, z8)
 % INPUTS: sheet struct; indices; thrust; tf (ND); dV (km/s); final mass
 %         fraction; m0 (kg); ND->days factor; z8.  OUTPUTS: e struct.
 Pd = sh.tauDRO;  Pa = sh.period_tulip_nd;
-e = struct('tauDRO',sh.tauDRO, 'Np',sh.Np, 'thrustN',TN, ...
+% Departure reconstruction recipe: multi-family catalogs carry it per sheet;
+% the original DRO catalog predates the fields, so fall back to its rule
+if isfield(sh, 'dep_family')
+    df = sh.dep_family;  dp = sh.dep_params;
+else
+    df = 'dro';  dp = struct('tau', sh.tauDRO);
+end
+% Arrival recipe: v2 catalogs carry it; v1 catalogs are tulip-arrival
+if isfield(sh, 'arr_family')
+    af = sh.arr_family;  ap = sh.arr_params;
+else
+    af = 'tulip';  ap = struct('Np', sh.Np, 'pm', -1);
+end
+if strcmpi(af, 'tulip')
+    aLab = sprintf('Np=%d', sh.Np);
+else
+    aLab = sprintf('arr \\tau=%.2f', ap.tau);
+end
+e = struct('tauDRO',sh.tauDRO, 'dep_family',df, 'dep_params',dp, ...
+    'arr_family',af, 'arr_params',ap, 'arrLab',aLab, ...
+    'Np',sh.Np, 'thrustN',TN, ...
     'dep_frac',sh.sD_frac(iD), 'dep_nd',sh.sD_frac(iD)*Pd, ...
     'dep_days',sh.sD_frac(iD)*Pd*d2day, ...
     'arr_frac',sh.sA_frac(iA), 'arr_nd',sh.sA_frac(iA)*Pa, ...
@@ -167,8 +205,9 @@ end
 function report(tag, e)
 % REPORT  Print one extreme in both unit systems.
 % INPUTS: tag [char]; e extreme struct.  OUTPUTS: none.
-fprintf('  %s  dV = %.4f km/s,  t_f = %.5f ND = %.3f d   [DRO tau=%.2f, Np=%d, %.2f N, %.2f kg]\n', ...
-        tag, e.deltaV_kms, e.tf_nd, e.tf_days, e.tauDRO, e.Np, e.thrustN, ...
+fprintf('  %s  dV = %.4f km/s,  t_f = %.5f ND = %.3f d   [%s tau=%.2f, %s, %.2f N, %.2f kg]\n', ...
+        tag, e.deltaV_kms, e.tf_nd, e.tf_days, upper(e.dep_family), ...
+        e.tauDRO, strrep(e.arrLab,'\tau','tau'), e.thrustN, ...
         e.propellant_kg);
 fprintf('      departure phase: %.6f ND = %.4f days  (fraction %.4f)\n', ...
         e.dep_nd, e.dep_days, e.dep_frac);
@@ -182,6 +221,7 @@ function s = filtstr(filt)
 s = '';
 if isfield(filt,'tauDRO'), s = [s sprintf(' tau=%.2f', filt.tauDRO)]; end
 if isfield(filt,'Np'),     s = [s sprintf(' Np=%d', filt.Np)]; end
+if isfield(filt,'tauArr'), s = [s sprintf(' arr tau=%.2f', filt.tauArr)]; end
 if isfield(filt,'thrustN'),s = [s sprintf(' %.2g N', filt.thrustN)]; end
 if isempty(s), s = ' over the WHOLE catalog';
 else, s = [' (restricted to' s ')'];

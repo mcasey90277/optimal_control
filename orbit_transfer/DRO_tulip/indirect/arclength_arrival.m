@@ -32,7 +32,8 @@ function varargout = arclength_arrival(arg, opts)
 %           .sD [0] departure phase, .anchorMat [results/mintime_70mN_anchor.mat]
 %           (root as z + it.Y, or best.z + best.it.Y), .sA0 [0.0754] the
 %           anchor's arrival phase, .K [from the anchor]
-%   arc:    .direction [+1] .sAStop [inf] (stop beyond) .ds [0.002]
+%   arc:    .direction [+1] .sAStop [+inf forward / -inf reverse] (stop
+%           beyond, on the direction's own side) .ds [0.002]
 %           .dsMin [1e-5] .dsMax [0.02] .nStep [400] .levels []
 %           .deadlineSec [inf] .logFile ''
 %
@@ -91,10 +92,19 @@ if ischar(arg) && strcmp(arg, 'setup')
 
     % the anchor: a certified rho = 1 root, re-normalised onto the sphere
     anchorMat = d('anchorMat', fullfile(here, 'results', 'mintime_70mN_anchor.mat'));
-    Aanc = load(anchorMat);
-    % two storage layouts: the demo anchor (z, it.Y, Tnd, cnd) and the
-    % certified sheet cells (best.z, best.it.Y, no engine constants)
-    if isfield(Aanc, 'best'), root = Aanc.best; else, root = Aanc; end
+    % An explicit root beats guessing a file layout: dro_tulip_library
+    % already holds z and Y for every certified solution, including ones in
+    % sweep files whose layout this loader does not read. (Astra 2026-09-10.)
+    if isfield(opts, 'root') && ~isempty(opts.root)
+        root = opts.root;  Aanc = struct();
+    else
+        Aanc = load(anchorMat);
+        % two storage layouts: the demo anchor (z, it.Y, Tnd, cnd) and the
+        % certified sheet cells (best.z, best.it.Y, no engine constants)
+        if isfield(Aanc, 'best'), root = Aanc.best; else, root = Aanc; end
+    end
+    assert(isfield(root, 'z') && isfield(root, 'it') && isfield(root.it, 'Y'), ...
+           'anchor root must carry .z and .it.Y');
     z = root.z(:);  Y = root.it.Y;  K = d('K', size(Y, 2));
     if K ~= size(Y, 2)
         % A DIFFERENT MESH than the stored root's: re-cut the same flight
@@ -156,9 +166,16 @@ end
 anc = arg;
 [B, ~] = arclength_arrival('setup', opts);
 lvl = d('levels', []);
-sAStop = d('sAStop', inf);
 dirn = d('direction', +1);
-if dirn > 0, qStop = [-inf sAStop]; else, qStop = [sAStop inf]; end
+% The stop must default to the OPEN side of the direction of travel. With
+% direction = -1 and sAStop left at its +inf default, qStop became [inf inf]
+% and the arc stopped at step 0 -- a reverse arc silently did nothing.
+% (Astra chain review 2026-09-10.)
+if dirn > 0
+    qStop = [-inf, d('sAStop', +inf)];
+else
+    qStop = [d('sAStop', -inf), +inf];
+end
 adm = @(p, q) p(anc.ctf) > 0 && all(isfinite(p));
 A = arclength_ms(B.res, B.dRdq, anc.p, anc.sA, struct( ...
     'direction', dirn, 'Dx', B.Dx, 'sq', 1, ...

@@ -84,7 +84,7 @@ else
     % ---- 2. walk: arrival phase first (folds live there), then departure
     near = nearest_point(lib, sD, sA);
     say('  not in the library; walking from (%.4f, %.4f) [%s]', near.sD, near.sA, near.src);
-    T = walk_to(near, sD, sA, B, anc, opts, say, tolPhase, wallSec);
+    T = walk_to(near, sD, sA, B, anc, opts, say, tolPhase, wallSec, pool);
 end
 
 % IDENTITY COMES FROM THE CERTIFICATE. Overwriting it with the request is
@@ -118,7 +118,7 @@ end
 end
 
 % ------------------------------------------------------------------------
-function T = walk_to(near, sD, sA, B, anc, opts, say, tolPhase, wallSec)
+function T = walk_to(near, sD, sA, B, anc, opts, say, tolPhase, wallSec, pool)
 % WALK_TO  Continuation from a library point to (sD, sA).  INPUTS: see
 % caller.  OUTPUTS: T (certify_root output + .source).
 T = struct('ok', false, 'reason', 'walk not attempted', 'source', 'walk', ...
@@ -126,6 +126,7 @@ T = struct('ok', false, 'reason', 'walk not attempted', 'source', 'walk', ...
            'flyKm', NaN, 'flyVms', NaN, 'dz', NaN, 'conj', -1, 'g', [], 'rho', NaN, ...
            'normR', NaN, 'wallSec', NaN);
 so = opts;  so.sD = near.sD;  so.sA0 = near.sA;  so.anchorMat = near.file;
+so.root = struct('z', near.z, 'it', struct('Y', near.Y));   % layout-independent
 if isfield(near, 'K') && ~isempty(near.K), so.K = near.K; end
 [Bn, ancN] = arclength_arrival('setup', so);
 
@@ -136,13 +137,23 @@ if abs(wrapDiff(near.sA, sA)) > tolPhase
     ao = so;  ao.direction = dirn;  ao.levels = lvl;  ao.nStep = 2000;
     ao.sAStop = lvl + dirn*0.01;  ao.deadlineSec = wallSec;
     A = arclength_arrival(ancN, ao);
-    hit = find([A.crossings.converged], 1, 'last');
-    if isempty(hit)
+    hits = find([A.crossings.converged]);
+    if isempty(hits)
         T.reason = sprintf('arrival walk reached %.4f but never crossed %.4f (%s)', A.q(end), lvl, A.stop);
         T.source = 'walk-arrival';  return
     end
-    T = certify_crossing(A.crossings(hit).p, sA, Bn, ancN, struct('wallSec', wallSec));
+    % TRY EVERY converged crossing, fastest first. The last one is not
+    % necessarily the usable one: it can fail certification while an earlier
+    % crossing at the same phase certifies. (Astra chain review 2026-09-10.)
+    tfs = arrayfun(@(c) c.p(ancN.ctf), A.crossings(hits));
+    [~, ord] = sort(tfs);
     T.source = 'walk-arrival';
+    for kk = ord(:)'
+        Tk = certify_crossing(A.crossings(hits(kk)).p, sA, Bn, ancN, ...
+                              struct('wallSec', wallSec, 'pool', pool));
+        if Tk.ok, T = Tk;  T.source = 'walk-arrival';  break, end
+        T.reason = Tk.reason;  T.tfDays = Tk.tfDays;
+    end
     if ~T.ok, return, end
 else
     seedN = seed_of(near, Bn, near.sD);

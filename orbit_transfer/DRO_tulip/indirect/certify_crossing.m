@@ -54,6 +54,11 @@ if nargin < 5, opts = struct(); end
 
 % ---- unpack the homogeneous chart into a normal-chart seed ---------------
 K = anc.K;  ctf = anc.ctf;
+% the chart layout is CHECKED, not assumed: p = [lam0(7); Y_2..Y_K; t_f; rho]
+nExpect = 7 + 14*(K-1) + 1 + 1;
+assert(isnumeric(p) && numel(p) == nExpect && all(isfinite(p)), ...
+       'candidate vector is %d long; this chart needs %d (K = %d)', numel(p), nExpect, K);
+assert(ctf == nExpect - 1, 'anchor says t_f is at index %d; the chart puts it at %d', ctf, nExpect-1);
 rho = p(end);
 if ~(rho > 1e-6)
     C = struct('ok', false, 'reason', sprintf('rho = %.1e: abnormal, no normal chart', rho), ...

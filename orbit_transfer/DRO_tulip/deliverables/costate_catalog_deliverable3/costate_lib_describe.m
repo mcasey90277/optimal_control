@@ -38,8 +38,11 @@ function D = costate_lib_describe(libIn)
 %% ------------------------ Begin Code Sequence ---------------------------
 
 if nargin == 0
-   %Demo: describe the catalog sitting beside this function's caller:
-       D = costate_lib_describe('costate_catalog_dro_tulip.mat');
+   %Demo: describe whichever compact catalog sits in the current folder:
+     F = dir('costate_catalog_*.mat');
+     assert(~isempty(F), ...
+            'demo: no costate_catalog_*.mat in the current folder');
+       D = costate_lib_describe(F(1).name);
      return;
 end
 

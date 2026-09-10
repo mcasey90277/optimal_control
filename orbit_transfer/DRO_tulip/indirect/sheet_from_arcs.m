@@ -100,7 +100,11 @@ for ia = 1:numel(arcs)
         dup = false;
         for k = 1:numel(S.cand{j})
             e = S.cand{j}(k);
+            % A REFUSED candidate must never suppress a later SUCCESSFUL one:
+            % one that failed a late gate still carries a finite t_f, so an
+            % ok-blind merge could drop the certificate that fills the cell.
             if ~isfinite(C.tfDays) || abs(e.tfDays - C.tfDays) >= tolDup, continue, end
+            if ~isequal(logical(e.ok), logical(C.ok)), continue, end
             if numel(e.z) == numel(C.z) && norm(e.z(:) - C.z(:)) <= tolZ*max(norm(C.z(:)), 1)
                 dup = true;  break
             end

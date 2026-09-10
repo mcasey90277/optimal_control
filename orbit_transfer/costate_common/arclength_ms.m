@@ -97,9 +97,15 @@ p0 = p0(:);  n = numel(p0);
 % crawled to q = 0.6 in 200 steps with x2(0) = 0 scaled by 1e-2). Pass
 % per-BLOCK scales (states, costates, time, extras) for anything real.
 Dx = d('Dx', max(abs(p0), 0.1*max(abs(p0))));  Dx = Dx(:);
+% contracts CHECKED, not assumed: an all-zero p0 makes the default Dx
+% identically zero, and a non-positive step is meaningless
+assert(numel(Dx) == n && all(isfinite(Dx)) && all(Dx > 0), ...
+       'Dx must be %d positive finite scales (an all-zero p0 defeats the default)', n);
 sq = d('sq', max(abs(q0), 1));
 ds = d('ds', 0.05);  dsMin = d('dsMin', 1e-4);  dsMax = d('dsMax', 0.5);
 nStep = d('nStep', 200);
+assert(isfinite(ds) && ds > 0 && isfinite(dsMin) && dsMin > 0 && dsMax >= dsMin, ...
+       'ds, dsMin, dsMax must be positive and ordered (got %g, %g, %g)', ds, dsMin, dsMax);
 qStop = d('qStop', [-inf inf]);
 levels = d('levels', []);
 nTol = d('newtonTol', 1e-9);  nMax = d('newtonMax', 12);  nTarget = d('newtonTarget', 4);

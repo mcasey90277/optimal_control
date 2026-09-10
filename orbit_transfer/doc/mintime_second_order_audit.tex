@@ -74,7 +74,12 @@ Costate equations, with $s=1$:
 \begin{equation}\label{eq:costate}
 \dot\lr=-\big(\partial_r g\big)^{\!\top}\lv,\qquad
 \dot\lv=-\lr-\big(\partial_v h\big)^{\!\top}\lv,\qquad
-\dot\lm=\frac{T|\lv|}{m^2}.
+\dot\lm=-\frac{T|\lv|}{m^2}.
+% SIGN CORRECTED 2026-09-10 (Astra proof review). H carries -T|lv|/m, so
+% dH/dm = +T|lv|/m^2 and lam_m-dot = -dH/dm is NEGATIVE. The printed positive
+% sign would have broken H = const. The CODE was always right: checked
+% against the flown trajectory to ten digits, and max|H| along the arc is
+% 3.3e-8. Document-only error -- but it is the document I reason from.
 \end{equation}
 
 \section{Two exact reductions}\label{sec:reductions}

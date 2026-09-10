@@ -53,14 +53,27 @@ fdx = (Yp(end,1:6)' - Ym(end,1:6)') / (2*h);
 ok = chk(ok, norm(fdx - cr3bp_field(xA, B.mu)) < 1e-6*norm(fdx), ...
          sprintf('cr3bp_field matches the propagated orbit: rel err %.1e', norm(fdx - cr3bp_field(xA, B.mu))/norm(fdx)));
 
+% THE DERIVATIVE MUST DIFFERENTIATE THE SAME FUNCTION THE RESIDUAL USES.
+% The residual's target is an INTERPOLANT of the orbit, not the orbit; the
+% CR3BP field evaluated at the interpolant's state is a different function,
+% and the two agreed only to ~7e-6. (Astra chain review 2026-09-10.)
+h = 1e-6;
+fdA = (B.stateA(s + h) - B.stateA(s - h))/(2*h);
+ok = chk(ok, norm(fdA(1:6) - B.dstateA(s)) < 1e-8*max(norm(fdA(1:6)), 1), ...
+         sprintf('dstateA is the derivative OF THE INTERPOLANT: rel err %.1e', ...
+                 norm(fdA(1:6) - B.dstateA(s))/norm(fdA(1:6))));
+
 % (1) analytic R_sA vs central FD of the full residual
 p0 = anc.p;  sA0 = anc.sA;
 Ran = B.dRdq(p0, sA0);
-h = 1e-6;
-Rp = B.res(sA0 + h);  Rp = Rp(p0);
-Rm = B.res(sA0 - h);  Rm = Rm(p0);
-Rfd = (Rp - Rm)/(2*h);
-ok = chk(ok, norm(Ran - Rfd) < 1e-5*norm(Rfd), ...
+% RICHARDSON, so the comparison measures the DERIVATIVE and not the finite
+% difference's own truncation. A plain central difference at h = 1e-6 carries
+% an O(h^2 R''') error of ~4e-8 here, which is what the first version of this
+% check was actually reporting.
+fd = @(h) (feval(B.res(sA0 + h), p0) - feval(B.res(sA0 - h), p0))/(2*h);
+h = 1e-5;
+Rfd = (4*fd(h/2) - fd(h))/3;
+ok = chk(ok, norm(Ran - Rfd) < 1e-8*norm(Rfd), ...
          sprintf('analytic R_sA vs FD: rel err %.1e (|R_sA| = %.3g)', norm(Ran - Rfd)/norm(Rfd), norm(Rfd)));
 nz = find(abs(Ran) > 0);
 ok = chk(ok, numel(nz) == 6 && all(nz == anc.termRows(1:6)'), ...

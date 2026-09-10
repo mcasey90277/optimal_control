@@ -73,8 +73,18 @@ if ischar(arg) && strcmp(arg, 'setup')
         'tauDRO', ob.tauDRO, 'NpTulip', ob.NpTulip, 'pmTulip', ob.pmTulip, ...
         'muStar', mu, 'lStar', lStar, 'tStar', tStar, 'Tnd', Tnd, 'cnd', cnd, ...
         'periodTulip', ob.tauTulip, 'sD', NaN);
-    B.stateD = @(s) interp1(tD, rvD, mod(s,1)*tD(end), 'spline')';
-    B.stateA = @(s) interp1(tT, rvT, mod(s,1)*tT(end), 'spline')';
+    % THE TARGET IS THE INTERPOLANT, so the derivative must differentiate
+    % THE INTERPOLANT. Differentiating the CR3BP field at the interpolant's
+    % state is a different function -- the two agreed only to ~7e-6, which
+    % is a real inconsistency between R and dR/dsA, not round-off. Build the
+    % piecewise polynomial once and differentiate its coefficients, so the
+    % residual and its derivative are the same object by construction.
+    % (Astra chain review 2026-09-10.)
+    ppA = makePP(tT, rvT);   dppA = ppDer(ppA);
+    ppD = makePP(tD, rvD);
+    B.stateD  = @(s) ppval(ppD, mod(s,1)*tD(end));
+    B.stateA  = @(s) ppval(ppA, mod(s,1)*tT(end));
+    B.dstateA = @(s) tT(end)*ppval(dppA, mod(s,1)*tT(end));
     sD = d('sD', 0);
     B.problem.sD = sD;
     B.rv0 = B.stateD(sD);
@@ -171,12 +181,40 @@ h = inf_.residual;
 end
 
 function col = dRdsA(sA, B, n, termRows)
-% DRDSA  Analytic d R / d sA: the six terminal state rows carry
-% -x_A'(sA) = -T_A f(x_A(sA)); everything else is zero.
+% DRDSA  Analytic d R / d sA: the six terminal state rows carry -x_A'(sA),
+% differentiated FROM THE INTERPOLANT the residual uses (not from the CR3BP
+% field, which is a different function of sA); everything else is zero.
 % INPUTS: sA; B; n; termRows.  OUTPUTS: col [n x 1].
 col = zeros(n, 1);
-xA = B.stateA(sA);
-col(termRows(1:6)) = -B.tauA * cr3bp_field(xA, B.mu);
+col(termRows(1:6)) = -B.dstateA(sA);
+end
+
+function pp = makePP(tt, yy)
+% MAKEPP  Piecewise-polynomial interpolant of an orbit, PERIODIC when the
+% Curve Fitting Toolbox is available (an ordinary spline is not C1 across
+% the seam at s = 0, so dR/dsA would be wrong exactly there).
+% INPUTS: tt [1 x m]; yy [m x 6].  OUTPUTS: pp.
+tt = tt(:).';  Y = yy.';                       % 6 x m
+if exist('csape', 'file') == 2
+    try
+        pp = csape(tt, Y, 'periodic');  return
+    catch
+        % fall through to the ordinary spline
+    end
+end
+pp = spline(tt, Y);
+end
+
+function dpp = ppDer(pp)
+% PPDER  Derivative of a piecewise polynomial, by differentiating its own
+% coefficients -- so it is exactly the derivative of what ppval evaluates.
+% INPUTS: pp.  OUTPUTS: dpp.
+[br, co, np, or, dm] = unmkpp(pp);
+if or == 1
+    dpp = mkpp(br, zeros(size(co, 1), 1), dm);  return
+end
+w = (or-1):-1:1;                               % powers of the derivative
+dpp = mkpp(br, co(:, 1:or-1) .* w, dm);
 end
 
 function v = fieldd(s, f, d_)

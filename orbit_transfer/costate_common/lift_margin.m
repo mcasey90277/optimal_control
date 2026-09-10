@@ -1,0 +1,95 @@
+function M = lift_margin(C1, C2, lam, opts)
+%% Purpose:
+%
+%   The rank statement behind dim S, as a MEASURED MARGIN rather than a
+%   threshold verdict.
+%
+%   dim S >= 1 is CONSTRUCTIVE: a lift is exhibited, and its residual is
+%   reported. dim S <= 1 is a theorem plus a measurement -- by Eckart-Young
+%   the distance from C to the nearest rank-deficient matrix is sigma_6, so
+%
+%       sigma_6 > ||dC||   ==>   rank(C) = 6 exactly   ==>   dim S = 1,
+%
+%   where ||dC|| bounds the numerical error in C. That error is MEASURED by
+%   rebuilding C at a second numerical setting (a looser integration
+%   tolerance, a different sample count) and taking the difference. The
+%   output is the margin sigma_6/||dC||: how many times larger the smallest
+%   retained singular value is than the uncertainty in the matrix itself.
+%
+%   This replaces a rule whose own header claimed a safety guarantee it did
+%   not provide -- capping a tolerance at 1e-3*sigma_1 does not stop a noisy
+%   lift from reporting a spurious nullity (Astra review, 2026-09-10).
+%
+%   NOTE ON RIGOUR. A two-setting difference is an error ESTIMATE, not a
+%   bound. Turning this into a proof needs validated integration of the
+%   adjoint; the margin is what makes that gap visible and quantitative
+%   instead of hidden in a constant.
+%
+%% Inputs:
+%
+%  C1                       [m x 7]                 constraint matrix at the
+%                                                   TIGHTER setting
+%  C2                       [m x 7]                 the same at a looser one
+%  lam                      [7 x 1]                 the exhibited lift
+%  opts                     struct (optional)
+%   .marginMin [10] margin needed to certify, .liftTol [1e-4] relative
+%   residual for `lam` to count as a lift at all
+%
+%% Outputs:
+%
+%  M                        struct                  .sigma6 .errEst .margin
+%                                                   .dimS .certified .reason
+%                                                   .nullResid .sv
+%
+%% Revision History:
+%  M. Casey                                                   (c) 09/10/2026
+%  Copyright Coorbital Inc.
+%% ------------------------ Begin Code Sequence ---------------------------
+
+if nargin < 4, opts = struct(); end
+d = @(f,v) fieldd(opts, f, v);
+marginMin = d('marginMin', 10);  liftTol = d('liftTol', 1e-4);
+assert(isequal(size(C1), size(C2)), 'the two builds must have the same shape');
+lam = lam(:);
+
+M = struct('sigma6', NaN, 'errEst', NaN, 'margin', NaN, 'dimS', NaN, ...
+           'certified', false, 'reason', '', 'nullResid', NaN, 'sv', []);
+
+sv = svd(C1);  M.sv = sv;
+M.sigma6 = sv(6);
+M.errEst = norm(C1 - C2);
+M.nullResid = norm(C1*lam)/max(norm(lam), realmin);
+
+% the CONSTRUCTIVE half: is the supplied vector actually a lift?
+if ~(M.nullResid <= liftTol*max(sv(1), realmin))
+    M.reason = sprintf(['the supplied vector is not a lift (residual %.2e vs ' ...
+                        '%.0e x sigma_1): dim S >= 1 is not established'], ...
+                       M.nullResid, liftTol);
+    M.dimS = nnz(sv <= max(M.errEst, eps*sv(1)));
+    return
+end
+
+% the rank half, by Eckart-Young against the MEASURED error
+floor_ = max(M.errEst, eps*sv(1));
+M.dimS = nnz(sv <= floor_);
+M.margin = M.sigma6/max(floor_, realmin);
+if M.dimS ~= 1
+    M.reason = sprintf(['dim S = %d at the measured error floor %.2e ' ...
+                        '(sigma_6 = %.2e, sigma_7 = %.2e)'], M.dimS, floor_, sv(6), sv(7));
+    return
+end
+if M.margin < marginMin
+    M.reason = sprintf(['dim S = 1 but only by a margin of %.1f (sigma_6 = %.2e, ' ...
+                        'error %.2e): not certified'], M.margin, M.sigma6, M.errEst);
+    return
+end
+M.certified = true;
+M.reason = sprintf(['dim S = 1 CERTIFIED: sigma_6 = %.2e exceeds the measured error ' ...
+                    '%.2e by %.0fx (Eckart-Young), and a lift is exhibited at %.1e'], ...
+                   M.sigma6, M.errEst, M.margin, M.nullResid);
+end
+
+function v = fieldd(s, f, d_)
+% FIELDD  Field with default.  INPUTS: s; f; d_.  OUTPUTS: v.
+if isfield(s, f) && ~isempty(s.(f)), v = s.(f); else, v = d_; end
+end

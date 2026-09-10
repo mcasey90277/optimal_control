@@ -2515,3 +2515,79 @@ Two lessons that generalise beyond this row.
    orders of magnitude before the verdict flips. A continuation that watches
    it knows it is approaching a loss of minimality well before the test fires
    -- cheaper than the test, and available at every step.
+
+## 40. Two outside reviews in one day: 84 findings, and in every confirmed case the instrument was right while the argument for it was wrong (2026-09-10)
+
+The 70 mN catalog was built, packaged and shipped-ready before either review.
+Both were commissioned deliberately: the first on the CODE CHAIN, the second
+on the MATHEMATICS. Between them they found 84 things. **No catalog number
+changed.** What changed is what we are entitled to say.
+
+### Review 1 — the code chain (41 findings, 26 fixed)
+
+Verdict: *"I would not release this with an unqualified CERTIFIED claim yet."*
+It named three classes and all three were real: wrong-phase labelling, export
+paths that trusted summaries instead of certificates, and an unenforced
+foreign-solver convergence requirement. Adjudication:
+`reviews/chain_review_adjudication_2026-09-10.md`.
+
+The one I would keep in mind: **`dR/dsA` differentiated the CR3BP field while
+the residual's target is a spline INTERPOLANT.** Different functions.
+Correcting it moved the agreement from 7.4e-6 to 9.0e-13. My own test had
+printed that 7.4e-6 and I recorded it without asking why it was not machine
+precision.
+
+### Review 2 — the mathematics (43 findings: 4 WRONG, 4 GAP, 3 FINE)
+
+All four WRONG are now repaired, and two of the repairs left the document
+**stronger** than before.
+
+| finding | resolution |
+|---|---|
+| mass-adjoint sign | **DOCUMENT ONLY** -- code checked against the flight to ten digits, `max\|H\|` 3.3e-8. Corrected. |
+| Proposition 1's "so" | **Rederived.** The construction has a PERMANENT kernel `w = lambda(0) + (1/b) e_m`, proved by our own two lemmas, so it is non-immersive at EVERY time. Rebuilt from the kernel, the same `[Phi_rv P, f_rv]` falls out. |
+| scope: all-burn is not all competitors | **Re-founded on H3.** `H` is affine in throttle with slope `-T Q_mt`, so `Q_mt > 0` makes full throttle the unique minimiser with a margin, and a strictly bang component can be eliminated. H3 was carrying the reduction all along. |
+| normality "iff" | **Downgraded to a sufficient exclusion**, which is the direction we use. The claim that abnormality needs `lam_v = 0` is simply false and is withdrawn. |
+
+### H6, a new gate that came out of the fourth objection
+
+In the reduction the reduced Hamiltonian is not conserved and `p'J = 0`, so
+`det = 0` can mean `h(t) = 0` rather than a rank drop -- a spurious zero none
+of H1-H4 excluded. In closed form
+`lambda_rv . f_rv = -1 + (T/c) lambda_m`, zero exactly at `lambda_m = c/T`,
+and `lambda_m` decreases monotonically to zero. So
+
+> **H6: the spurious mechanism cannot fire iff `lambda_m(0) < c/T`.**
+
+Measured over the shipped catalog: `c/T` = 49.38, `lambda_m(0)` in
+[2.11, 10.88] across all 53 entries, **4.5x headroom, none can fire it.**
+
+### Two exact identities
+
+`d/dt(lam_m m) = -T Q_mt` with `lam_m(tf) = 0` and `m(0) = 1` gives
+
+> **`integral of T Q_mt dt = lambda_m(0)`** -- verified 5.5004 vs 5.500404.
+
+The total strict-bang margin IS the initial mass costate, so H6 also reads
+"that margin must stay below `c/T`". One scalar ties H3, transversality and
+the mass costate together.
+
+### Two new instruments
+
+- **`conj_spectrum`** -- dense singular-SPECTRUM scan on the instrument's own
+  variational integration. Closes both blind spots of the sign test (two
+  crossings in one segment; even multiplicity, where several values collapse
+  and no sign changes). Its test runs a certified and a refuted entry
+  together: 0 interior crossings against 1 at t/tf = 0.9219.
+- **`lift_margin`** -- the dim S rank statement as an Eckart-Young MARGIN
+  against a measured error, replacing a threshold whose claimed safety
+  property it did not have.
+
+### The lesson
+
+When review 1 said the equivalence was "asserted, not established", I answered
+that it was proved in a document the reviewer had not been given. **Both were
+true.** The document existed and its central step did not follow, and I had
+been citing it for weeks. *Having a proof written down is not the same as
+having checked it.* The five rules in `doc/CERTIFICATION_DISCIPLINE.md` now
+carry this one.

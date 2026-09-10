@@ -47,12 +47,10 @@ lamv = Y(:, 11:13);
 alpha = -lamv ./ max(vecnorm(lamv, 2, 2), realmin);   % PMP thrust direction
 
 % ---- the two periodic orbits, as the residual sees them ------------------
+% vectorised: the closures are ppval-based, which takes a whole query vector
 ss = linspace(0, 1, 600);
-D = zeros(600, 3);  A = zeros(600, 3);
-for k = 1:600
-    xd = B.stateD(ss(k));  D(k, :) = xd(1:3)';
-    xa = B.stateA(ss(k));  A(k, :) = xa(1:3)';
-end
+Dall = B.stateD(ss);   Aall = B.stateA(ss);
+D = Dall(1:3, :).';    A = Aall(1:3, :).';
 
 fig = figure('Color', pick(dark, 'k', 'w'), 'Position', [80 80 1100 800], ...
              'Visible', pick(d('visible', true), 'on', 'off'), 'InvertHardcopy', 'off');
@@ -100,11 +98,17 @@ lg = legend(ax, 'Location', 'northeast');
 lg.TextColor = pick(dark, 'w', 'k');  lg.Color = pick(dark, [0.1 0.1 0.1], 'w');
 lg.EdgeColor = pick(dark, [0.3 0.3 0.3], [0.7 0.7 0.7]);
 
-P.tfDays = T.tfDays;  P.dvKms = T.dvKms;
+% RECOMPUTED from the flight, not copied from the certificate. The header
+% claims this figure is the source of truth; copying the annotations would
+% have made that claim false the moment the two disagreed. (Astra script
+% review 2026-09-10.)
+P.tfDays = tu(end)*tStar/86400;
+P.dvKms  = B.cnd*log(1/Y(end,7))*lStar/tStar;
+P.mfKg   = pr.m0kg*(1 - Y(end,7));
 title(ax, {sprintf(['Minimum-time DRO \\rightarrow %d-petal tulip   |   ' ...
                     '%.0f mN, I_{sp} %g s, %g kg'], pr.NpTulip, pr.thrustN*1000, pr.ispS, pr.m0kg), ...
            sprintf(['s_D = %.4f, s_A = %.4f   |   t_f = %.4f d, \\DeltaV = %.4f km/s, ' ...
-                    'propellant %.2f kg'], T.sD, T.sA, T.tfDays, T.dvKms, T.mfKg)}, ...
+                    'propellant %.2f kg'], T.sD, T.sA, P.tfDays, P.dvKms, P.mfKg)}, ...
       'Color', pick(dark, 'w', 'k'), 'FontWeight', 'normal');
 
 P.fig = fig;  P.ax = ax;

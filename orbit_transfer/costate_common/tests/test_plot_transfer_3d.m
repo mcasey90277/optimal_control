@@ -38,8 +38,11 @@ v = get(P.ax, 'View');
 ok = chk(ok, abs(v(2)) > 1 && abs(v(2)) < 89, sprintf('a genuine 3D view, elevation %.0f deg', v(2)));
 ok = chk(ok, strcmp(P.ax.DataAspectRatioMode, 'manual') || isequal(P.ax.DataAspectRatio, [1 1 1]), ...
          'equal data aspect, so the geometry is not distorted');
-ok = chk(ok, abs(P.tfDays - T.tfDays) < 1e-9 && abs(P.dvKms - T.dvKms) < 1e-9, ...
-         sprintf('numbers taken from the certificate: %.4f d, %.4f km/s', P.tfDays, P.dvKms));
+% RECOMPUTED from the flight rather than copied: the figure claims to be the
+% source of truth, so its annotations must be derived from what it draws.
+% They must still AGREE with the certificate to solver tolerance.
+ok = chk(ok, abs(P.tfDays - T.tfDays) < 1e-6 && abs(P.dvKms - T.dvKms) < 1e-6, ...
+         sprintf('recomputed numbers agree with the certificate: %.4f d, %.4f km/s', P.tfDays, P.dvKms));
 ok = chk(ok, P.nThrust > 0, sprintf('thrust direction shown at %d points', P.nThrust));
 close(P.fig);
 

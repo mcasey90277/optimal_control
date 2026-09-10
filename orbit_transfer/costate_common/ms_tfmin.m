@@ -49,11 +49,14 @@ function [z, info] = ms_tfmin(rv0, rvf, seed, Tmax, c, muStar, opts)
 
 if nargin < 7, opts = struct(); end
 
-% Self-resolve the shared-library dependency: many existing callers add
-% only indirect/ to the path (review finding, GPT 2026-08-08).
+% Self-resolve the shared-library dependency: many existing callers add only
+% indirect/ to the path (review finding, GPT 2026-08-08). The three-level
+% climb below was written when this file lived in DRO_tulip/indirect; after
+% the 2026-08-26 move into costate_common it pointed ABOVE the repository and
+% silently added nothing. ms_bvp is this file's own neighbour now.
+% (Astra script review 2026-09-10.)
 if isempty(which('ms_bvp'))
-    addpath(fullfile(fileparts(fileparts(fileparts( ...
-        mfilename('fullpath')))), 'costate_common'));
+    addpath(fileparts(mfilename('fullpath')));
 end
 
 rv0 = rv0(:);  rvf = rvf(:);

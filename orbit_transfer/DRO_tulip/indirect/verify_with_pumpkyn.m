@@ -31,7 +31,10 @@ function V = verify_with_pumpkyn(T, B, opts)
 %
 %  V                        struct                  .z8 .z8Pumpkyn
 %                                                   .dComponent [8x1] .dz
-%                                                   .moved .converged
+%                                                   .moved .returnedUsable
+%                                                   (NOT "converged" -- the
+%                                                   foreign solver reports no
+%                                                   convergence flag)
 %                                                   .flyKm .note
 %
 %% Revision History:
@@ -42,13 +45,23 @@ function V = verify_with_pumpkyn(T, B, opts)
 if nargin < 3, opts = struct(); end
 d = @(f,v) fieldd(opts, f, v);
 tolDz = d('tolDz', 1e-6);  gateKm = d('gateKm', 100);  capSec = d('capSec', 300);
-pool = d('pool', gcp('nocreate'));
+% NOT d('pool', gcp('nocreate')): MATLAB evaluates arguments eagerly, so that
+% form starts a pool query even when the caller supplied one.
+if isfield(opts, 'pool'), pool = opts.pool; else, pool = gcp('nocreate'); end
+if isempty(pool)
+    warning('verify_with_pumpkyn:unfenced', ...
+        'no parallel pool: the foreign solver runs UNFENCED and can hang indefinitely');
+end
 lStar = B.problem.lStar;
 
 rv0 = B.stateD(T.sD);  rvf = B.stateA(T.sA);
 z8 = T.z(:);
+% `returnedUsable`, NOT `converged`: pumpkyn.cr3bp.tfMin gives us no
+% convergence flag, so the strongest honest statement is that it came back
+% with eight finite numbers. Whether it SOLVED anything is established by
+% flying its answer, below. (Astra script review 2026-09-10.)
 V = struct('z8', z8, 'z8Pumpkyn', nan(8,1), 'dComponent', nan(8,1), 'dz', NaN, ...
-           'moved', true, 'converged', false, 'flyKm', NaN, 'note', '');
+           'moved', true, 'returnedUsable', false, 'flyKm', NaN, 'note', '');
 
 % the foreign solver prints its own fsolve banner; capture it so this
 % section reads as one comparison rather than a solver log
@@ -59,8 +72,9 @@ if ~okW
 elseif ~(isnumeric(za) && numel(za) == 8 && all(isfinite(za(:))))
     V.note = 'pumpkyn.cr3bp.tfMin returned an unusable vector';
 else
-    V.converged = true;
-    V.z8Pumpkyn = za(:);
+    za = za(:);                       % it may answer 1x8; everything below is 8x1
+    V.returnedUsable = true;
+    V.z8Pumpkyn = za;
     V.dComponent = za(:) - z8;
     V.dz = norm(V.dComponent);
     V.moved = ~(V.dz <= tolDz);
@@ -100,6 +114,8 @@ function varargout = fenced(pool, capSec, fh, nout, varargin)
 % INPUTS: pool; capSec; fh; nout; varargin.  OUTPUTS: ok, then nout outputs.
 varargout = cell(1, nout + 1);
 if isempty(pool)
+    % UNFENCED: no cap is possible without a worker to cancel. An exception
+    % is reported as failure, but a hang cannot be.
     try
         [varargout{2:nout+1}] = feval(fh, varargin{:});  varargout{1} = true;
     catch

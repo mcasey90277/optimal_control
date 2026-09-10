@@ -1,7 +1,11 @@
-%% TRANSFER_STUDY  One minimum-time low-thrust transfer, with the scaffolding showing.
+%% TRANSFER_STUDY  One minimum-time low-thrust transfer: DRO-to-Tulip
 %
-%   Edit the parameter blocks, press Run. Every step is done HERE rather than
-%   behind a front door, so the machinery is visible:
+%   Edit the parameter blocks, press Run. The STEPS are done here rather than
+%   behind a front door, so the machinery is visible. Two computations stay in
+%   the library because reimplementing them here would create a second,
+%   unverified copy: the lift-space rank (S3) and the Jacobi determinant (S4).
+%   Section 7 asserts its inline numbers against that library for the same
+%   reason.
 %
 %     1  generate the DEPARTURE orbit      (family + parameters -> a real orbit)
 %     2  generate the TARGET orbit         (same)
@@ -84,15 +88,23 @@ g0  = 9.80665*tStar^2/(1000*lStar);           % ND gravity at sea level
 cnd = (ispS/tStar)*g0;                        % ND exhaust speed
 Tnd = (thrustN/m0kg)*tStar^2/(lStar*1000);    % ND thrust acceleration at m = 1
 
-ppD = spline(tD(:).', rvD.');   ppA = spline(tT(:).', rvT.');
+% PERIODIC interpolant. `spline` builds a not-a-knot cubic; wrapping the
+% argument in mod() does not make it periodic, so its derivative jumps across
+% the seam at s = 0 -- exactly where a phase near zero is evaluated.
+[ppD, kindD] = periodicPP(tD, rvD);
+[ppA, kindA] = periodicPP(tT, rvT);
 stateD = @(s) ppval(ppD, mod(s,1)*tD(end));
 stateA = @(s) ppval(ppA, mod(s,1)*tT(end));
 rv0 = stateD(sD);   rvf = stateA(sA);
+seamD = norm(ppval(ppD, 0) - ppval(ppD, tD(end)));
+seamA = norm(ppval(ppA, 0) - ppval(ppA, tT(end)));
 
 fprintf('\n3. ENGINE %.0f mN, Isp %g s, m0 %g kg  ->  T_nd = %.6e, c_nd = %.4f\n', ...
         thrustN*1000, ispS, m0kg, Tnd, cnd);
 fprintf('   departure phase %.4f -> r = [%+.5f %+.5f %+.5f]\n', sD, rv0(1:3));
 fprintf('   arrival   phase %.4f -> r = [%+.5f %+.5f %+.5f]\n', sA, rvf(1:3));
+fprintf('   interpolant: %s (departure), %s (target); seam mismatch %.1e / %.1e\n', ...
+        kindD, kindA, seamD, seamA);
 
 %% ========================================================================
 %  4. SOLVE -- seed, then multiple shooting on the PMP boundary-value problem
@@ -100,12 +112,19 @@ fprintf('   arrival   phase %.4f -> r = [%+.5f %+.5f %+.5f]\n', sA, rvf(1:3));
 %     from the certified library when this operating point is in it; a new
 %     orbit pair needs a continuation from a solved one (run_dro_tulip).
 %% ========================================================================
+% The seed library was built at ONE operating point. Check the WHOLE of it --
+% period, petal count, branch, thrust, Isp and mass -- not just two of the six,
+% or a seed from a different engine would silently start the solve.
 lib = dro_tulip_library();
 match = find(abs([lib.sD] - mod(sD,1)) < 1e-6 & abs([lib.sA] - mod(sA,1)) < 1e-6, 1);
-assert(~isempty(match) && abs(dep.tau - 1) < 1e-12 && arr.Np == 7, ...
+libOp = struct('tau', 1.0, 'Np', 7, 'pm', -1, 'thrustN', 0.070, 'ispS', 900, 'm0kg', 150);
+sameOp = abs(dep.tau - libOp.tau) < 1e-12 && arr.Np == libOp.Np && arr.pm == libOp.pm && ...
+         abs(thrustN - libOp.thrustN) < 1e-12 && abs(ispS - libOp.ispS) < 1e-9 && ...
+         abs(m0kg - libOp.m0kg) < 1e-9;
+assert(~isempty(match) && sameOp, ...
     ['no seed for this operating point. The library covers the tau = 1 DRO to the\n' ...
-     '7-petal tulip at 70 mN. For another orbit pair, walk to it with\n' ...
-     '  T = run_dro_tulip(sD, sA, opts)   and then study T here.']);
+     '7-petal tulip (pm = -1) at 70 mN, Isp 900 s, 150 kg. For any other case,\n' ...
+     'walk to it with   T = run_dro_tulip(sD, sA, opts)   and study T here.']);
 
 K = size(lib(match).Y, 2);
 seed = struct('tf', lib(match).z(8), 'tGrid', linspace(0, lib(match).z(8), K+1), ...
@@ -115,7 +134,19 @@ seed.Y(1:7,1) = [rv0(1:6); 1];   seed.Y(8:14,1) = lib(match).z(1:7);
 [z8, it] = ms_tfmin(rv0(1:6), rvf(1:6), seed, Tnd, cnd, muStar, ...
                     struct('tolR', 3e-11, 'wallSec', 600, 'conjTest', true));
 
+% ENFORCE convergence before anything downstream. A best-iterate from an
+% unsuccessful solve would otherwise be verified, plotted and described in
+% the language of optimality.
+assert(it.converged && isfinite(it.normR) && it.normR < 1e-8, ...
+       'the shooting solve did not converge (|R| = %.2e): nothing below is meaningful', it.normR);
+
 [tu, Y] = pumpkyn.cr3bp.tfMinProp(z8(8), [rv0(1:6); 1; z8(1:7)], Tnd, cnd, muStar);
+% ADMISSIBILITY, before any quantity that assumes it: positive finite mass
+% (log(1/mf) and every division by m), and no approach to a primary.
+assert(all(isfinite(Y(:))), 'the flight returned non-finite states');
+assert(min(Y(:,7)) > 0, 'mass reached %.3g: the arc leaves the model''s domain', min(Y(:,7)));
+altMoon = min(vecnorm(Y(:,1:3) - [1-muStar 0 0], 2, 2))*lStar - 1737;
+altEarth = min(vecnorm(Y(:,1:3) - [-muStar 0 0], 2, 2))*lStar - 6378;
 mf   = Y(end,7);
 dV   = cnd*log(1/mf)*lStar/tStar;
 fprintf('\n4. SOLVED: %d Newton iterations, |R| = %.2e, converged = %d\n', ...
@@ -123,6 +154,8 @@ fprintf('\n4. SOLVED: %d Newton iterations, |R| = %.2e, converged = %d\n', ...
 fprintf('   t_f = %.6f ND (%.4f d)   Delta-V = %.4f km/s   propellant %.2f kg\n', ...
         z8(8), day(z8(8)), dV, m0kg*(1-mf));
 fprintf('   lambda_0 = [%s]\n', strjoin(compose('%+.6g', z8(1:7)'), ' '));
+fprintf('   admissible: min mass %.4f, closest approach %.0f km (Moon) / %.0f km (Earth)\n', ...
+        min(Y(:,7)), altMoon, altEarth);
 
 %% ========================================================================
 %  5. INDEPENDENT VERIFICATION -- a second solver must not move the costates
@@ -136,48 +169,94 @@ V = verify_with_pumpkyn(struct('z', z8, 'sD', sD, 'sA', sA), B);
 %% ========================================================================
 %  6. NECESSARY CONDITIONS (Pontryagin, first order) -- one at a time
 %% ========================================================================
-fprintf('\n6. NECESSARY CONDITIONS\n');
+% THRESHOLDS ONCE, used by both the printed lines and the verdict. Written
+% twice they drift, and the report then disagrees with its own conclusion.
+tol = struct('R', 1e-8, ...       % BVP residual, inf-norm
+             'H', 1e-6, ...       % |H| along the arc (exactly 0 in theory)
+             'km', 100, ...       % flown arrival, position
+             'ms', 10, ...        % flown arrival, velocity
+             'lamm', 1e-6, ...    % transversality lam_m(t_f) = 0
+             'adj', 1e-7, ...     % adjoint equations, relative
+             'min', 1e-12, ...    % H minimality slack over the sphere
+             'dz', 1e-6);         % cross-check, second solver
+fprintf('\n6. NECESSARY CONDITIONS      (value / threshold)\n');
 
 % N1  the boundary-value residual: costate equations, terminal matching,
 %     transversality. This IS the statement that the first variation vanishes.
 [~, chk] = ms_tfmin(rv0(1:6), rvf(1:6), seed, Tnd, cnd, muStar, struct('assembleOnly', true));
 R1 = chk.residual([z8(1:7); reshape(it.Y(:,2:end), [], 1); z8(8)]);
-fprintf('   N1 BVP residual  |R|_inf = %.2e                       %s\n', ...
-        norm(R1, inf), pass(norm(R1, inf) < 1e-8));
+resid = norm(R1, inf);
+fprintf('   N1 BVP residual   |R|_inf   %9.2e / %-9.0e  %s\n', resid, tol.R, pass(resid < tol.R));
 
 % N2  the Hamiltonian. Autonomous problem, free final time  =>  H == 0.
 %     H = 1 + lam_r.v + lam_v.(g + (T/m) alpha) - lam_m T/c,  alpha = -lam_v/|lam_v|
-lamr = Y(:, 8:10);   lamv = Y(:, 11:13);   lamm = Y(:, 14);   mm = Y(:, 7);
-nlv  = vecnorm(lamv, 2, 2);
+lamR = Y(:, 8:10);   lamV = Y(:, 11:13);   lamM = Y(:, 14);   mass = Y(:, 7);
+lamVmag = vecnorm(lamV, 2, 2);      % |lambda_v|, the Legendre quantity
 Hval = zeros(size(tu));
 for k = 1:numel(tu)
     F = mintime_rhs_point(Y(k,:).', Tnd, cnd, muStar);     % [xdot; lamdot]
     Hval(k) = 1 + Y(k,8:14)*F(1:7);
 end
-fprintf('   N2 Hamiltonian   max|H| along the arc = %.2e         %s\n', ...
-        max(abs(Hval)), pass(max(abs(Hval)) < 1e-6));
+Hmax = max(abs(Hval));
+fprintf('   N2 Hamiltonian    max|H|    %9.2e / %-9.0e  %s\n', Hmax, tol.H, pass(Hmax < tol.H));
 
 % N3  the flight actually reaches the target, in position AND velocity
 missKm  = norm(Y(end,1:3) - rvf(1:3)')*lStar;
 missVms = norm(Y(end,4:6) - rvf(4:6)')*lStar/tStar*1000;
-fprintf('   N3 arrival       %.4f km, %.4f m/s                   %s\n', ...
-        missKm, missVms, pass(missKm < 100 && missVms < 10));
+fprintf('   N3 arrival        %.4f km / %-4.0f km, %.4f m/s / %-3.0f m/s  %s\n', ...
+        missKm, tol.km, missVms, tol.ms, pass(missKm < tol.km && missVms < tol.ms));
 
 % N4  transversality on the free mass: lam_m(t_f) = 0
-fprintf('   N4 transversality lam_m(t_f) = %+.3e                  %s\n', ...
-        Y(end,14), pass(abs(Y(end,14)) < 1e-6));
+fprintf('   N4 transversality |lam_m(t_f)| %6.2e / %-9.0e  %s\n', ...
+        abs(Y(end,14)), tol.lamm, pass(abs(Y(end,14)) < tol.lamm));
 
-% N5  the control obeys the minimum principle: alpha = -lam_v/|lam_v|, |alpha| = 1
-alpha = -lamv ./ max(nlv, realmin);
-fprintf('   N5 control law   max||alpha| - 1| = %.2e               %s\n', ...
-        max(abs(vecnorm(alpha,2,2) - 1)), pass(max(abs(vecnorm(alpha,2,2)-1)) < 1e-12));
+% N5  the ADJOINT equations themselves: lambda-dot = -dH/dx. A small shooting
+%     residual says the pieces MATCH each other; it does not say the costate
+%     equations are the right ones. This tests them directly.
+%     Done by differentiating H in the STATE at fixed costate and comparing
+%     with the costate rate the propagator uses. Differencing the propagator's
+%     OUTPUT instead would measure its sample spacing: on this arc that gave
+%     5e-4, all of it truncation near the 4,674 km lunar passage.
+kk = round(linspace(2, numel(tu)-1, 120));
+hFD = 1e-6;  adjErr = 0;
+for k = kk
+    yk = Y(k,:).';
+    F  = mintime_rhs_point(yk, Tnd, cnd, muStar);
+    dHdx = zeros(7,1);
+    for jj = 1:7
+        yp = yk;  yp(jj) = yp(jj) + hFD;
+        ym = yk;  ym(jj) = ym(jj) - hFD;
+        Fp = mintime_rhs_point(yp, Tnd, cnd, muStar);
+        Fm = mintime_rhs_point(ym, Tnd, cnd, muStar);
+        dHdx(jj) = (yk(8:14).'*Fp(1:7) - yk(8:14).'*Fm(1:7))/(2*hFD);
+    end
+    adjErr = max(adjErr, norm(F(8:14) + dHdx)/max(norm(dHdx), 1));
+end
+fprintf('   N5 adjoint eqns   rel err   %9.2e / %-9.0e  %s\n', adjErr, tol.adj, pass(adjErr < tol.adj));
 
-% N6  the second solver agreed (section 5), which is not a theory condition
-fprintf('   N6 independent   |dz| = %.2e                          %s\n', ...
-        V.dz, pass(~V.moved));
+% N6  the MINIMUM principle itself: H must be MINIMISED over the admissible
+%     control set, not merely stationary. H is affine in the direction, so
+%     compare the flown alpha against a dense sample of the unit sphere.
+alpha = -lamV ./ max(lamVmag, realmin);
+nS = 400;  rng(0);
+Asamp = randn(nS, 3);  Asamp = Asamp ./ vecnorm(Asamp, 2, 2);
+worst = 0;
+for k = kk
+    hStar  = (Tnd/mass(k)) * (lamV(k,:) * alpha(k,:).');        % the flown term
+    hOther = (Tnd/mass(k)) * (Asamp * lamV(k,:).');             % every sampled one
+    worst  = max(worst, hStar - min(hOther));                  % must be <= 0
+end
+fprintf('   N6 H minimised    slack     %9.2e / %-9.0e  %s\n', worst, tol.min, pass(worst <= tol.min));
 
-necessary = norm(R1,inf) < 1e-8 && max(abs(Hval)) < 1e-6 && missKm < 100 && ...
-            missVms < 10 && abs(Y(end,14)) < 1e-6 && ~V.moved;
+necessary = resid < tol.R && Hmax < tol.H && missKm < tol.km && missVms < tol.ms && ...
+            abs(Y(end,14)) < tol.lamm && adjErr < tol.adj && worst <= tol.min;
+
+% The independent solve is NOT one of the above. It is a cross-check on our
+% implementation, not a condition of the theory, so it is reported apart and
+% excluded from `necessary`. (Astra script review 2026-09-10: the header
+% already said this and the code counted it anyway.)
+fprintf('   -- cross-check (NOT a PMP condition): second solver |dz| %6.2e / %-9.0e  %s\n', ...
+        V.dz, tol.dz, pass(~V.moved));
 
 %% ========================================================================
 %  7. SUFFICIENCY HYPOTHESES (Bonnard-Caillau-Trelat) -- one at a time
@@ -189,12 +268,12 @@ fprintf('\n7. SUFFICIENCY HYPOTHESES\n');
 % S1  strengthened Legendre. For a direction on the unit sphere the second
 %     derivative of H in the control, restricted to that sphere, is
 %     (T/m)|lam_v| I -- positive definite exactly when |lam_v| > 0.
-[minLamV, iLV] = min(nlv);
+[minLamV, iMin] = min(lamVmag);
 fprintf('   S1 Legendre      min|lam_v| = %.4e at t/t_f = %.3f   %s\n', ...
-        minLamV, tu(iLV)/tu(end), pass(minLamV > 0));
+        minLamV, tu(iMin)/tu(end), pass(minLamV > 0));
 
 % S2  all-burn really is the PMP control: the switching function stays positive
-Qmt = nlv./mm + lamm/cnd;
+Qmt = lamVmag./mass + lamM/cnd;
 fprintf('   S2 switching     min Q = %.4e                        %s\n', ...
         min(Qmt), pass(min(Qmt) > 0));
 
@@ -202,6 +281,10 @@ fprintf('   S2 switching     min Q = %.4e                        %s\n', ...
 gates = mintime_hypothesis_gates(z8, rv0(1:6), Tnd, cnd, muStar, struct());
 fprintf('   S3 normality     dim S = %d (1 = no abnormal lift)        %s\n', ...
         gates.dimS, pass(gates.dimS == 1));
+% the dim S number is only as good as the lift it was measured around, so
+% show the two self-consistency residuals it rests on rather than hiding them
+fprintf('      lift residual %.1e, |lambda.f + 1| %.1e, sv gap %.1e\n', ...
+        gates.nullResid, gates.Hresid, gates.svRatio);
 
 % S4  no conjugate time in (0, t_f], by the free-time quotiented Jacobi test
 cj = it.conj;
@@ -212,8 +295,19 @@ sufficient = minLamV > 0 && min(Qmt) > 0 && gates.dimS == 1 && cj.pass == 1;
 
 fprintf('\n   VERDICT: ');
 if necessary && sufficient
-    fprintf(['strict strong local minimizer among trajectories with the same\n' ...
-             '            endpoints -- numerically certified at the sampled times.\n']);
+    % Deliberately NOT "certified at the sampled times": strong local
+    % minimality is a property of the whole trajectory, so attaching the
+    % sampling to the CLAIM is ill-posed. The sampling qualifies the
+    % EVIDENCE, which is what the second line says. (Astra 2026-09-10.)
+    fprintf(['every hypothesis of the BCT sufficiency theorem was checked and holds.\n' ...
+             '            If they hold exactly, this arc is a strict strong local minimizer\n' ...
+             '            among trajectories with the same endpoints and phases.\n']);
+    fprintf(['            EVIDENCE IS NUMERICAL AND SAMPLED: positivity is tested at the\n' ...
+             '            sampled times, dim S is a numerical rank, and the conjugate test\n' ...
+             '            is a sign test at %d junctions -- an even-order zero, or two zeros\n' ...
+             '            inside one segment, would not be seen. This is a strong numerical\n' ...
+             '            audit, not a proof. See doc/mintime_second_order_audit.tex.\n'], ...
+             size(it.Y, 2));
 elseif ~necessary
     fprintf(['NOT an extremal to tolerance. The second-order test is meaningless\n' ...
              '            off an extremal, so no minimality is claimed.\n']);
@@ -236,6 +330,22 @@ P = plot_transfer_3d(T, B);
 fprintf('\n8. Figure %d is rotatable.\n', P.fig.Number);
 
 %% ------------------------------------------------------------------------
+function [pp, kind] = periodicPP(tt, yy)
+% PERIODICPP  Piecewise-polynomial interpolant of one period of an orbit,
+% PERIODIC where the Curve Fitting Toolbox allows. An ordinary not-a-knot
+% spline is not C1 across the seam at s = 0, and a phase near zero is
+% evaluated exactly there.  INPUTS: tt [N x 1]; yy [N x 6].
+% OUTPUTS: pp; kind (which one was built).
+tt = tt(:).';  Y = yy.';
+if exist('csape', 'file') == 2
+    try
+        pp = csape(tt, Y, 'periodic');  kind = 'periodic cubic';  return
+    catch
+    end
+end
+pp = spline(tt, Y);  kind = 'not-a-knot cubic (NOT periodic)';
+end
+
 function s = pass(c)
 % PASS  Verdict text.  INPUTS: c.  OUTPUTS: s.
 if c, s = 'PASS'; else, s = 'FAIL'; end

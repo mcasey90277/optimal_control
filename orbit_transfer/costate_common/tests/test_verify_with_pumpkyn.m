@@ -28,7 +28,7 @@ T = certify_crossing(anc.p, anc.sA, B, anc);
 assert(T.ok, 'fixture: the anchor must certify (%s)', T.reason);
 
 V = verify_with_pumpkyn(T, B, struct('quiet', true));
-ok = chk(ok, V.converged, sprintf('the independent solve ran (%s)', V.note));
+ok = chk(ok, V.returnedUsable, sprintf('the independent solve returned usable numbers (%s)', V.note));
 ok = chk(ok, abs(V.dz - T.dz) < 1e-12, ...
          sprintf('reproduces the certifier''s agreement: %.2e vs %.2e', V.dz, T.dz));
 ok = chk(ok, numel(V.z8) == 8 && numel(V.z8Pumpkyn) == 8 && numel(V.dComponent) == 8, ...

@@ -3,9 +3,10 @@
 %   Edit the PARAMETERS block, press Run. Five sections:
 %     1  parameters                 everything you choose, in one place
 %     2  solve                      costates, trajectory, mass, Delta-V
-%     3  NECESSARY conditions       Pontryagin, first order
-%     4  SUFFICIENCY hypotheses     Bonnard-Caillau-Trelat
-%     5  interactive 3D plot        rotate it with the mouse
+%     3  independent verification   pumpkyn's own solver, costate by costate
+%     4  NECESSARY conditions       Pontryagin, first order
+%     5  SUFFICIENCY hypotheses     Bonnard-Caillau-Trelat
+%     6  interactive 3D plot        rotate it with the mouse
 %
 %   Sections 3 and 4 are separate on purpose. The first-order conditions are
 %   HYPOTHESES of the sufficiency theorem, not consequences of it, and the
@@ -64,12 +65,21 @@ fprintf('  lambda_0     [%s]\n', strjoin(compose('%+.6g', z8(1:7)'), ' '));
 fprintf('  trajectory   %d propagator samples, %d junctions\n', numel(tu), size(Yj, 2));
 
 %% ------------------------------------------------------------------------
-%  3-4. NECESSARY, then SUFFICIENCY
+%  3. INDEPENDENT VERIFICATION -- hand the costates to pumpkyn's own solver
+%     and watch whether it changes them. This is not an optimality
+%     condition: it is the guard against OUR solver. A bug in our shooting
+%     could produce a self-consistent answer to the wrong problem, and only
+%     a second implementation catches that.
+%% ------------------------------------------------------------------------
+V = verify_with_pumpkyn(T, B);
+
+%% ------------------------------------------------------------------------
+%  4-5. NECESSARY, then SUFFICIENCY
 %% ------------------------------------------------------------------------
 R = report_optimality(T);
 
 %% ------------------------------------------------------------------------
-%  5. INTERACTIVE 3D PLOT  (drag to rotate)
+%  6. INTERACTIVE 3D PLOT  (drag to rotate)
 %% ------------------------------------------------------------------------
 P = plot_transfer_3d(T, B, struct('outPng', outPng));
 fprintf('Figure %d is rotatable: drag to spin, scroll to zoom.\n', P.fig.Number);

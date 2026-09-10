@@ -4,7 +4,7 @@ function P = plot_transfer_3d(T, B, opts)
 %   The interactive 3D view of one transfer: the movie's last frame, as a
 %   figure you can rotate. Departure orbit, target orbit, the transfer arc
 %   coloured by elapsed time, the thrust direction along the way, and the
-%   two primaries, in the rotating Earth-Moon frame.
+%   the Moon, in the rotating Earth-Moon frame.
 %
 %   Everything drawn is FLOWN from the certificate's own costates, not
 %   passed in: if the picture and the numbers ever disagreed, the picture
@@ -85,10 +85,11 @@ plot3(ax, r(1,1), r(1,2), r(1,3), 'o', 'MarkerSize', 9, 'LineWidth', 1.6, ...
       'MarkerEdgeColor', [0.35 1 0.55], 'DisplayName', 'departure');
 plot3(ax, r(end,1), r(end,2), r(end,3), 'p', 'MarkerSize', 14, 'LineWidth', 1.4, ...
       'MarkerFaceColor', [1 0.85 0.3], 'MarkerEdgeColor', 'k', 'DisplayName', 'arrival');
+% The Moon only. Both orbits and the whole transfer sit around the Moon, so
+% the Earth marker at x = -mu just stretches the equal-aspect box and shrinks
+% everything worth looking at.
 plot3(ax, 1-mu, 0, 0, 'o', 'MarkerSize', 7, 'MarkerFaceColor', [0.7 0.7 0.72], ...
       'MarkerEdgeColor', 'none', 'DisplayName', 'Moon');
-plot3(ax, -mu, 0, 0, 'o', 'MarkerSize', 11, 'MarkerFaceColor', [0.25 0.45 0.85], ...
-      'MarkerEdgeColor', 'none', 'DisplayName', 'Earth');
 
 grid(ax, 'on');  box(ax, 'off');
 axis(ax, 'equal');  ax.DataAspectRatio = [1 1 1];

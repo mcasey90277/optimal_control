@@ -120,6 +120,21 @@ ok = chk(ok, numel(A3.folds) == 2 && all([A3.folds.classified]) && ...
              abs(qf(1) + 2) < 1e-7 && abs(qf(2) - 2) < 1e-7, ...
          sprintf('both folds localized to solver accuracy: q = %s (exact -2, +2)', mat2str(qf, 10)));
 
+% ---- a level that sits EXACTLY on the turning point ----------------------
+% The split at the turning point gave that one level to neither half: the
+% first half excluded L == qb because it is not the last half, and the second
+% excluded L == qa by the strict sign test, so the fold-level root was
+% recorded ZERO times instead of once. (Astra chain review 2026-09-10.)
+A4 = arclength_ms(resFactory, dRdq, [1; 0], 0, struct( ...
+    'direction', +1, 'ds', 0.1, 'dsMax', 0.3, 'nStep', 200, 'Dx', [1; 1], ...
+    'qStop', [-0.3 2], 'levels', 1.0, 'newtonTol', 1e-12));
+c4 = A4.crossings;
+ok = chk(ok, numel(c4) == 1, sprintf('a level on the fold is recorded exactly once (%d)', numel(c4)));
+if numel(c4) == 1
+    ok = chk(ok, c4(1).converged && abs(c4(1).p(1)) < 1e-6 && abs(c4(1).p(2) - 1) < 1e-9, ...
+             sprintf('and it is the fold root x = (%.2e, %.9f)', c4(1).p(1), c4(1).p(2)));
+end
+
 % ---- are the heuristics load-bearing? ------------------------------------
 % foldRatio, maxCorrFrac and newtonTarget were CHOSEN, not derived, and that
 % was the one risk of the five listed for external review that no test

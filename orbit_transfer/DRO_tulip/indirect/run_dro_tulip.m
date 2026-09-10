@@ -87,7 +87,16 @@ else
     T = walk_to(near, sD, sA, B, anc, opts, say, tolPhase, wallSec);
 end
 
-T.sD = sD;  T.sA = sA;  T.walkSec = toc(t0);
+% IDENTITY COMES FROM THE CERTIFICATE. Overwriting it with the request is
+% how one phase gets certified and another reported. Assert instead.
+T.walkSec = toc(t0);
+if T.ok
+    assert(abs(wrapDiff(T.sD, sD)) < 10*tolPhase && abs(wrapDiff(T.sA, sA)) < 10*tolPhase, ...
+        ['certified (%.6f, %.6f) but (%.6f, %.6f) was requested -- refusing to ' ...
+         'relabel'], T.sD, T.sA, sD, sA);
+else
+    T.sD = sD;  T.sA = sA;          % a refusal may name what was asked for
+end
 say('  %s', T.reason);
 if T.ok
     say('  t_f = %.4f d   dV = %.4f km/s   fuel = %.2f kg', T.tfDays, T.dvKms, T.mfKg);
@@ -144,11 +153,12 @@ else
 end
 
 if abs(wrapDiff(near.sD, sD)) > tolPhase
-    nD = round(1/abs(wrapDiff(near.sD, sD)));
-    say('  departure walk %.4f -> %.4f (1/%d steps)', near.sD, sD, nD);
+    % walk to the EXACT requested phase; never infer a step count by
+    % rounding and then label the result with what was asked for
+    say('  departure walk %.4f -> %.4f', near.sD, sD);
     C0 = T;  C0.sA = sA;
-    R = rib_from_crossing(C0, Bn, ancN, struct('nD', nD, 'direction', sign(wrapDiff(near.sD, sD)), ...
-        'nPts', 1, 'wallSec', wallSec, 'logFile', ''));
+    R = rib_from_crossing(C0, Bn, ancN, struct('targets', wrapDiff(near.sD, sD), ...
+        'nD', 24, 'wallSec', wallSec, 'logFile', ''));
     if isempty(R.pts)
         T.ok = false;  T.reason = ['departure walk: ' R.stop];  T.source = 'walk-both';  return
     end

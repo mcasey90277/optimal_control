@@ -105,6 +105,9 @@ levels = d('levels', []);
 nTol = d('newtonTol', 1e-9);  nMax = d('newtonMax', 12);  nTarget = d('newtonTarget', 4);
 maxCorrFrac = d('maxCorrFrac', 2);
 foldRatio = d('foldRatio', 1e-2);
+tauQTol = d('tauQTol', 1e-6);      % event tolerance floor (scaled up by the
+                                   % rank resolution -- see the fold block)
+augGap  = d('augGap', 1e-10);      % [R_x R_q] regular relative to its own scale
 admissible = d('admissible', []);
 deadline = d('deadlineSec', inf);
 logFile = d('logFile', '');
@@ -116,7 +119,8 @@ x = p0 ./ Dx;  t = q0/sq;
 
 A = struct('q', [], 'p', {{}}, 'tauQ', [], 'sminX', [], 'sminAug', [], ...
            'normR', [], 'dsUsed', [], 'nNewton', [], 'tanResid', [], ...
-           'folds', struct('index', {}, 'q', {}, 'sminX', {}, 'sminAug', {}, 'classified', {}), ...
+           'folds', struct('index', {}, 'q', {}, 'sminX', {}, 'sminAug', {}, 'classified', {}, ...
+                           'tauQ', {}, 'resolved', {}, 'augRegular', {}), ...
            'crossings', struct('level', {}, 'q', {}, 'p', {}, 'converged', {}, 'normR', {}, 'afterIndex', {}), ...
            'stop', '', 'nCalls', 0);
 
@@ -170,7 +174,7 @@ for step = 0:nStep
         % step THERE, so a misplaced one mis-brackets levels near the fold.
         wa = [A.p{k-1} ./ Dx; A.q(k-1)/sq];  wb = [A.p{k} ./ Dx; A.q(k)/sq];
         fa = 0;  fb = 1;  ta = A.tauQ(k-1);  tb = A.tauQ(k);
-        wf = [];  cvF = false;
+        wf = [];  cvF = false;  tqLast = NaN;
         for itF = 1:8
             f = fa + (fb - fa)*ta/(ta - tb);                 % false position
             if ~isfinite(f) || f <= 0 || f >= 1, f = 0.5*(fa + fb); end
@@ -190,6 +194,7 @@ for step = 0:nStep
             if vT'*tau < 0, vT = -vT; end
             tq = vT(end);                                    % tangent's q-component
             if abs(tq) < 1e-10, break, end
+            tqLast = tq;
             if sign(tq) == sign(ta), fa = f;  ta = tq;  else, fb = f;  tb = tq; end
             if fb - fa < 1e-12, break, end
         end
@@ -201,13 +206,39 @@ for step = 0:nStep
         qF = qOf(wf(end));  pF = pOf(wf(1:end-1));
         [~, JF_] = evalRJ(resFactory, qF, pF);  nCalls = nCalls + 1;
         sXf = svd(JF_ .* Dx(:)');  sAf = svd([JF_ .* Dx(:)', dRdq(pF, qF)*sq]);
-        isFold = cvF && sXf(end) < foldRatio*sAf(end);
+        % "LOCALIZED" MUST MEAN THE EVENT WAS RESOLVED, not merely that some
+        % corrected point lies on the root curve. cvF turned true after any
+        % successful in-plane correction and stayed true when the secant
+        % exhausted its iterations, and that point was then used as the
+        % segment extremum -- which mis-brackets exactly the near-fold levels
+        % the split exists to recover. (Astra chain review 2026-09-10.)
+        % The event tolerance must be SCALE-AWARE. tau is a unit vector, so
+        % |tau_q| is how nearly the tangent is orthogonal to q -- but it
+        % cannot be resolved below the rank resolution of the matrix that
+        % produced it. Measured on the cubic: at one fold |tau_q| bottoms out
+        % at 4.1e-6, exactly sigma_min(R_x), while the fold POSITION is exact
+        % to 1e-9. An absolute 1e-6 therefore rejected a genuine, correctly
+        % located fold. The floor is max(tauQTol, 10 sigma_min(R_x)/sigma_min([R_x R_q])).
+        tqFloor = max(tauQTol, 10*sXf(end)/max(sAf(end), realmin));
+        resolved = cvF && isfinite(tqLast) && abs(tqLast) <= tqFloor;
+        % A fold is a rank statement AND a regularity statement: R_x must
+        % lose rank while [R_x R_q] stays numerically regular with a real
+        % gap, not merely a smaller sigma_min.
+        augRegular = sAf(end) > augGap*sAf(1);
+        isFold = resolved && augRegular && sXf(end) < foldRatio*sAf(end);
         A.folds(end+1) = struct('index', k, 'q', qF, 'sminX', sXf(end), ...
-                                'sminAug', sAf(end), 'classified', isFold);
+                                'sminAug', sAf(end), 'classified', isFold, ...
+                                'tauQ', tqLast, 'resolved', resolved, ...
+                                'augRegular', augRegular);
         % the sign change is a TURNING POINT in q whether or not the rank
         % test calls it a fold; the crossing search below needs it to split
         % this step into two monotone halves
-        haveTurn = cvF;  qTurn = qF;  pTurn = pF;
+        % only a RESOLVED extremum may split the step; an unresolved one
+        % would move the split point and mis-bracket the levels beside it
+        haveTurn = resolved;  qTurn = qF;  pTurn = pF;
+        if cvF && ~resolved
+            lg('      (turning point NOT resolved: |tau_q| = %.1e > %.1e -- step not split)', abs(tqLast), tqFloor);
+        end
         lg('  *** tangent q-component changed sign; localized at q = %.6f: %s (sminX %.1e / sminAug %.1e, corrector conv %d)', ...
            qF, tern(isFold, 'FOLD', 'sign change, NOT classified as a fold'), sXf(end), sAf(end), cvF);
     end
@@ -230,14 +261,33 @@ for step = 0:nStep
             qa = segs{is,1};  pa = segs{is,2};  qb = segs{is,3};  pb = segs{is,4};
             if qb == qa, continue, end
             isLast = (is == size(segs, 1));
+            isFirst = (is == 1);
             for L = levels(:)'
-                % the endpoint case is tested only on the LAST half, so a
-                % root sitting exactly on a level is recorded once
-                if (L - qa)*(L - qb) < 0 || (isLast && L == qb)
+                % EXPLICIT ENDPOINT OWNERSHIP. Each endpoint belongs to
+                % exactly one half: the arc's own end to the last half, and
+                % the internal turning point to the FIRST half. Without the
+                % second rule a level sitting exactly on the turning point
+                % was excluded from both -- from the first because it is not
+                % the last half, from the second by the strict sign test --
+                % and the fold-level root was recorded zero times.
+                onTurn = isFirst && ~isLast && abs(L - qb) <= 1e-6*max(abs(qb), 1);
+                if (L - qa)*(L - qb) < 0 || (isLast && L == qb) || onTurn
                     f = (L - qa)/(qb - qa);
                     pL = pa + f*(pb - pa);
+                    pPred = pL;
                     [pL, cv, nr, nc] = newtonFixedQ(resFactory, L, pL, Dx, nTol, nMax);
                     nCalls = nCalls + nc;
+                    % LOCALITY: an unrestricted fixed-q Newton can land on
+                    % another branch, and both halves would then return the
+                    % same root and lose the second crossing. Reject a
+                    % correction that travelled much further than the
+                    % bracket it came from. (Astra chain review 2026-09-10.)
+                    span = max(norm((pb - pa)./Dx), realmin);
+                    if cv && norm((pL - pPred)./Dx) > maxCorrFrac*span
+                        lg('    level %.6f: correction left its bracket (%.2f x span) -- discarded', ...
+                           L, norm((pL - pPred)./Dx)/span);
+                        cv = false;
+                    end
                     A.crossings(end+1) = struct('level', L, 'q', L, 'p', pL, 'converged', cv, ...
                                                 'normR', nr, 'afterIndex', k-1);
                     lg('    level %.6f crossed: re-solved at fixed q -> converged = %d, |R| = %.1e', L, cv, nr);

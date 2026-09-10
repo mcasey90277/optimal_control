@@ -22,6 +22,8 @@ function R = rib_from_crossing(C0, B, anc, opts)
 %                                                   .z .Y .sA)
 %  B, anc                   struct                  arclength_arrival('setup')
 %  opts                     struct (optional)
+%   .targets [] EXPLICIT unwrapped departure offsets from anc.sD to walk to,
+%   in order -- use these when the caller needs exact phases; otherwise
 %   .nD [12] grid size, .direction [+1], .nPts [nD-1] points to walk,
 %   .maxBisect [8] halvings allowed per grid step (the 2026-09-09 sweep
 %   needed ~1/1728 of a period on the hardest step), .wallSec [600],
@@ -43,6 +45,17 @@ function R = rib_from_crossing(C0, B, anc, opts)
 if nargin < 4, opts = struct(); end
 d = @(f,v) fieldd(opts, f, v);
 nD = d('nD', 12);  dirn = d('direction', +1);  nPts = d('nPts', nD - 1);
+% EXPLICIT TARGETS beat a derived step count. `round(1/|delta|)` does not
+% reproduce an arbitrary phase -- 5/12 becomes round(2.4) = 2 and walks a
+% half period -- and a caller that then labels the answer with what it asked
+% for has certified one phase and reported another. (Astra 2026-09-10.)
+targets = d('targets', []);
+if ~isempty(targets)
+    targets = targets(:).';
+    nPts = numel(targets);
+else
+    targets = dirn*(1:nPts)/nD;
+end
 maxBisect = d('maxBisect', 8);  wallSec = d('wallSec', 600);
 copts = d('copts', struct());  copts.wallSec = wallSec;  copts.sA = C0.sA;
 logFile = d('logFile', '');
@@ -53,7 +66,7 @@ rvf = B.stateA(C0.sA);
 sD = anc.sD;  z = C0.z;  Y = C0.Y;  K = size(Y, 2);
 
 for k = 1:nPts
-    target = sD + dirn/nD;
+    target = anc.sD + targets(k);          % unwrapped, absolute
     step = dirn/nD;  nb = 0;  cur = sD;  zc = z;  Yc = Y;  Ck = [];  nGood = 0;
     while abs(wrapDiff(cur, target)) > 1e-12
         % never overshoot the grid point, and RESTORE the step after two

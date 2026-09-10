@@ -38,6 +38,16 @@ ok = chk(ok, abs(R.pts(2).tfDays - 18.069) < 5e-3, sprintf('sD = 10/12: t_f = %.
 ok = chk(ok, abs(R.pts(1).sD - 11/12) < 1e-9 && abs(R.pts(2).sD - 10/12) < 1e-9, 'departure phases land on the grid');
 ok = chk(ok, all([R.pts.sA] == anc.sA), 'arrival phase held fixed along the rib');
 
+% EXPLICIT TARGETS. Deriving a step count by rounding 1/|delta| does not
+% reproduce an arbitrary requested phase -- asking for 5/12 gives round(2.4)
+% = 2 and walks a HALF period instead. A caller that needs an exact phase
+% passes it. (Astra chain review 2026-09-10.)
+Rt = rib_from_crossing(C0, B, anc, struct('targets', -1/24, 'maxBisect', 8));
+ok = chk(ok, numel(Rt.pts) == 1 && abs(Rt.pts(1).sD - (1 - 1/24)) < 1e-12, ...
+         sprintf('walks to an explicit off-grid target: sD = %.6f (want %.6f)', ...
+                 Rt.pts(1).sD, 1 - 1/24));
+ok = chk(ok, Rt.pts(1).ok, sprintf('and it is certified there (%s)', Rt.pts(1).reason));
+
 % a rib that cannot advance must report the failure, not return a short
 % success: one point, zero bisections allowed, a full HALF period per step
 R2 = rib_from_crossing(C0, B, anc, struct('nD', 2, 'direction', -1, 'nPts', 1, 'maxBisect', 0, 'wallSec', 60));

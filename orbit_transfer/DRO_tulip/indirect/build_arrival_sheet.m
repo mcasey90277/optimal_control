@@ -34,6 +34,9 @@ pat = d('pattern', 'arrival_arc_*.mat');
 out = d('out', fullfile(here, 'results', 'arrival_sheet_70mN.mat'));
 lStar = 389703.264829278;  tStar = 382981.289129055;
 
+% the fence's pool, created AFTER startup has set the path (workers inherit
+% the client path at pool creation)
+pool = capped_pool();
 [B, anc] = arclength_arrival('setup', opts);
 files = dir(fullfile(here, 'results', pat));
 assert(~isempty(files), 'no arcs match %s', pat);
@@ -62,13 +65,13 @@ for k = 1:numel(lib)
     rv0 = B.stateD(sD0);
     seed.Y(1:7,1) = [rv0(1:6); 1];  seed.Y(8:14,1) = lib(k).z(1:7);
     C = certify_root(seed, rv0, B.stateA(lib(k).sA), B, ...
-                     struct('sA', lib(k).sA, 'sD', sD0, 'wallSec', 600));
+                     struct('sA', lib(k).sA, 'sD', sD0, 'wallSec', 600, 'pool', pool));
     fprintf('library seed (%.4f, %.4f) [%s]: %s\n', sD0, lib(k).sA, lib(k).src, C.reason);
     if isempty(seeds), seeds = C; else, seeds(end+1) = C; end %#ok<AGROW>
 end
 
 S = sheet_from_arcs(arcs, struct('sA0', sA0, 'nA', nA, 'seeds', seeds, ...
-                                 'B', B, 'anc', anc, 'copts', d('copts', struct())));
+                                 'B', B, 'anc', anc, 'copts', withPool(d('copts', struct()), pool)));
 S.arcs = {files.name};  S.B = B;  S.anc = anc;  S.opts = opts;  S.built = datestr(now);
 S.B = rmfield(S.B, {'res', 'dRdq', 'stateA', 'stateD'});
 save(out, 'S');
@@ -86,6 +89,12 @@ for j = 1:numel(S.sA)
     end
 end
 fprintf('saved %s\n', out);
+end
+
+function c = withPool(c, pool)
+% WITHPOOL  Attach the fence's pool to a certify options struct.
+% INPUTS: c; pool.  OUTPUTS: c.
+c.pool = pool;
 end
 
 function v = fieldd(s, f, d_)

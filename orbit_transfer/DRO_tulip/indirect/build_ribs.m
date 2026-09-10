@@ -37,6 +37,7 @@ addpath(fullfile(fileparts(here), '..', 'costate_common'));
 L = load(sheetMat);  S = L.S;
 nD = d('nD', 12);  nPts = d('nPts', nD - 1);  dirn = d('direction', -1);
 out = d('out', fullfile(here, 'results', 'arrival_ribs.mat'));
+pool = capped_pool();
 [B, anc] = arclength_arrival('setup', d('setupOpts', struct()));
 
 cols = d('only', find(isfinite(S.TF)));
@@ -49,7 +50,7 @@ for j = cols(:)'
         j, S.sA(j), S.TF(j), nPts, dirn);
     t0 = tic;
     Rj = rib_from_crossing(c(k), B, anc, struct('nD', nD, 'direction', dirn, ...
-        'nPts', nPts, 'wallSec', d('wallSec', 900)));
+        'nPts', nPts, 'wallSec', d('wallSec', 900), 'copts', struct('pool', pool)));
     R(end+1) = struct('j', j, 'sA', S.sA(j), 'pts', Rj.pts, 'stop', Rj.stop, ...
                       'nSolve', Rj.nSolve); %#ok<AGROW>
     fprintf('  -> %d certified points, %d solves, %.0f s, %s\n', ...

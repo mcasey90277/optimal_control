@@ -67,6 +67,7 @@ say('DRO -> tulip min-time: departure phase %.4f, arrival phase %.4f, %.1f mN, I
 % that root does not exist and the setup's own guard rejects it. B is used
 % here only for the closures (stateD, stateA, Tnd, cnd, mu); the target
 % states are taken from those closures explicitly.
+pool = capped_pool();          % the hard-timeout fence for external calls
 setupOpts = opts;  setupOpts.sD = 0;  setupOpts.sA0 = 0.0754;
 [B, anc] = arclength_arrival('setup', setupOpts);
 lib = dro_tulip_library();
@@ -77,7 +78,7 @@ if ~isempty(hit)
     say('  found in the certified library (%s); re-certifying', lib(hit).src);
     seed = seed_of(lib(hit), B, sD);
     T = certify_root(seed, B.stateD(sD), B.stateA(sA), B, ...
-                     struct('sA', sA, 'sD', sD, 'wallSec', wallSec));
+                     struct('sA', sA, 'sD', sD, 'wallSec', wallSec, 'pool', pool));
     T.source = 'library';
 else
     % ---- 2. walk: arrival phase first (folds live there), then departure

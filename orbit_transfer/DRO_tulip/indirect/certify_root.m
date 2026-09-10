@@ -93,7 +93,7 @@ rv0 = rv0(1:6);  rvf = rvf(1:6);
 C = struct('ok', false, 'reason', '', 'z', nan(8,1), 'Y', [], 'tfDays', NaN, ...
            'dvKms', NaN, 'mfKg', NaN, 'flyKm', NaN, 'flyVms', NaN, 'dz', NaN, ...
            'conj', -1, 'g', [], 'sA', d('sA', NaN), 'sD', d('sD', NaN), ...
-           'rho', NaN, 'normR', NaN, 'wallSec', NaN);
+           'rho', NaN, 'normR', NaN, 'wallSec', NaN, 'flyKmWitness', NaN);
 
 % ---- 1. normal-chart polish + conjugate test ---------------------------
 try
@@ -106,22 +106,49 @@ if ~okC
     C.reason = sprintf('polish exceeded its %g s cap (or the worker errored)', capPolish);
     C.wallSec = toc(t0);  return
 end
-C.normR = it.normR;
+% READ the residual before trusting the flag. `it.converged` is the
+% solver's own opinion; if it is true while normR is NaN or large, the
+% candidate must still fail. Astra chain review 2026-09-10.
+[okR, nr] = scalar_verdict(it.normR);
+if ~okR
+    C.reason = 'polish returned no usable residual';  C.wallSec = toc(t0);  return
+end
+C.normR = nr;
+[okCv, cvFlag] = scalar_verdict(it.converged);
 plateau = false;
-if ~it.converged
-    if it.normR < tolRelax
+if ~(okCv && cvFlag == 1 && nr <= tolR)
+    if nr < tolRelax
         plateau = true;
     else
-        C.reason = sprintf('normal-chart polish did not converge (|R| = %.1e)', it.normR);
+        C.reason = sprintf('normal-chart polish did not converge (|R| = %.1e)', nr);
         C.wallSec = toc(t0);  return
     end
 end
 C.z = z(:);  C.Y = it.Y;  C.tfDays = z(8)*tStar/86400;
 
 % ---- 2. flown arrival, position AND velocity ---------------------------
-[okF, ~, Yf] = fenced(pool, capFly, @pumpkyn.cr3bp.tfMinProp, 2, z(8), [rv0; 1; z(1:7)], B.Tnd, B.cnd, B.mu);
+[okF, tF, Yf] = fenced(pool, capFly, @pumpkyn.cr3bp.tfMinProp, 2, z(8), [rv0; 1; z(1:7)], B.Tnd, B.cnd, B.mu);
 if ~okF
     C.reason = sprintf('the flight exceeded its %g s cap', capFly);  C.wallSec = toc(t0);  return
+end
+% A RETURNED ARRAY IS NOT A COMPLETED FLIGHT. An integrator that stops
+% early without throwing hands back a short, perfectly finite trajectory,
+% and every metric computed from its last row then describes a flight that
+% never happened. Require: positive final time, the flight actually reached
+% it, finite states, and the all-burn mass law m(t) = 1 - (T/c) t with a
+% positive final mass. (Astra chain review 2026-09-10.)
+[okT, tEnd] = scalar_verdict(tF(end));
+if ~okT || z(8) <= 0 || abs(tEnd - z(8)) > 1e-8*max(z(8), 1)
+    C.reason = sprintf('flight did not reach t_f (t_end = %.6g vs t_f = %.6g)', tEnd, z(8));
+    C.wallSec = toc(t0);  return
+end
+if ~all(isfinite(Yf(end, 1:7)))
+    C.reason = 'flight returned non-finite final state';  C.wallSec = toc(t0);  return
+end
+mExpect = 1 - (B.Tnd/B.cnd)*z(8);
+if ~(Yf(end,7) > 0) || abs(Yf(end,7) - mExpect) > 1e-6*max(mExpect, 1)
+    C.reason = sprintf('mass law violated: m(t_f) = %.9g, all-burn expects %.9g', Yf(end,7), mExpect);
+    C.wallSec = toc(t0);  return
 end
 C.flyKm  = norm(Yf(end,1:3) - rvf(1:3)')*lStar;
 C.flyVms = norm(Yf(end,4:6) - rvf(4:6)')*lStar/tStar*1000;
@@ -139,12 +166,36 @@ end
 if ~okW
     C.reason = sprintf('tfMin witness exceeded its %g s cap', capWitness);  C.wallSec = toc(t0);  return
 end
+if ~(isnumeric(za) && numel(za) == 8 && all(isfinite(za(:))))
+    C.reason = 'tfMin witness returned an unusable vector';  C.wallSec = toc(t0);  return
+end
 C.dz = norm(za(:) - z(:));
+% AGREEMENT IS NOT CONVERGENCE. A solver that returned its own input on
+% stagnation would give dz = 0 and pass. Measured 2026-09-10: this one does
+% NOT -- perturbing lam0 by 1.5x, 3x and 10x moved its answer by 9.3, 37 and
+% 4612, and an impossible target moved it by 5.6, so dz = 0 here is genuine
+% agreement. The general hole is closed anyway by flying the WITNESS's own
+% solution: two independent solutions that both reach the target is a much
+% stronger statement than two vectors that match. (Astra chain review.)
+[okWF, ~, Ya] = fenced(pool, capFly, @pumpkyn.cr3bp.tfMinProp, 2, za(8), [rv0; 1; za(1:7)], B.Tnd, B.cnd, B.mu);
+if ~okWF
+    C.reason = sprintf('the witness flight exceeded its %g s cap', capFly);  C.wallSec = toc(t0);  return
+end
+C.flyKmWitness = norm(Ya(end,1:3) - rvf(1:3)')*lStar;
+if ~(C.flyKmWitness < gateKm)
+    C.reason = sprintf('witness solution does not fly to the target (%.1f km)', C.flyKmWitness);
+    C.wallSec = toc(t0);  return
+end
 if ~(isfinite(C.dz) && C.dz <= tolDz), C.reason = sprintf('tfMin witness |dz| = %.2e > %g', C.dz, tolDz); C.wallSec = toc(t0); return, end
 
 % ---- 4. conjugate test ----------------------------------------------------
-if isfield(it, 'conj') && isfield(it.conj, 'pass'), C.conj = double(it.conj.pass); end
-if C.conj ~= 1, C.reason = sprintf('conjugate test verdict %d', C.conj); C.wallSec = toc(t0); return, end
+if isfield(it, 'conj') && isfield(it.conj, 'pass')
+    [okJ, jv] = scalar_verdict(it.conj.pass);
+    if okJ, C.conj = jv; else, C.conj = -1; end
+end
+if ~(C.conj == 1)
+    C.reason = sprintf('conjugate test verdict %g', C.conj);  C.wallSec = toc(t0);  return
+end
 
 % ---- 5. hypothesis gates --------------------------------------------------
 try
@@ -157,9 +208,21 @@ if ~okG
     C.reason = sprintf('hypothesis gates exceeded their %g s cap', capGates);  C.wallSec = toc(t0);  return
 end
 C.g = g;
-if ~(g.minLamV > 0), C.reason = sprintf('min|lam_v| = %.2e not > 0', g.minLamV); C.wallSec = toc(t0); return, end
-if ~(g.minQmt > 0),  C.reason = sprintf('min Q_mt = %.2e not > 0', g.minQmt);   C.wallSec = toc(t0); return, end
-if g.dimS ~= 1,      C.reason = sprintf('dim S = %d (abnormal lift)', g.dimS);   C.wallSec = toc(t0); return, end
+% every gate read as a real finite scalar, so Inf cannot read as "positive"
+% and an empty field cannot read as "satisfied"
+need = {'minLamV', 'minQmt', 'dimS'};
+gv = nan(1, 3);
+for kg = 1:3
+    if ~isfield(g, need{kg}), C.reason = ['gates omitted ' need{kg}]; C.wallSec = toc(t0); return, end
+    [okg, gv(kg)] = scalar_verdict(g.(need{kg}));
+    if ~okg
+        C.reason = sprintf('gate %s is not a real finite scalar', need{kg});
+        C.wallSec = toc(t0);  return
+    end
+end
+if ~(gv(1) > 0), C.reason = sprintf('min|lam_v| = %.2e not > 0', gv(1)); C.wallSec = toc(t0); return, end
+if ~(gv(2) > 0), C.reason = sprintf('min Q_mt = %.2e not > 0', gv(2));   C.wallSec = toc(t0); return, end
+if gv(3) ~= 1,   C.reason = sprintf('dim S = %g (abnormal lift)', gv(3)); C.wallSec = toc(t0); return, end
 
 C.ok = true;  C.wallSec = toc(t0);
 if plateau

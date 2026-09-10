@@ -96,3 +96,28 @@ the first assembled sheet held 14 candidates and certified 2, with the other
 arrival and the `tfMin` witness. Every refutation is slower than the certified
 solution at its phase, and at a fold nose the test separates two roots 26
 minutes apart. FINDINGS §37 (machinery), §38 (the result).
+
+## Studying ONE transfer, and checking it
+
+`transfer_study.m` is the front door for understanding rather than throughput:
+a script with the scaffolding exposed. Eight sections -- generate the DRO from
+its period, generate the tulip from its petal count, spell out the
+nondimensionalisation, solve, verify independently, then check the NECESSARY
+conditions and the SUFFICIENCY hypotheses **one at a time, computed in the
+script**, and finally open a rotatable 3D figure.
+
+| unit | what it does |
+|---|---|
+| `transfer_study.m` | the script; edit the parameter blocks and run |
+| `verify_with_pumpkyn.m` | hands our costates to pumpkyn's own solver and shows, component by component, that it does not move them -- with a CONTROL EXPERIMENT in its test proving the check can fail |
+| `report_optimality.m` | the two-section report; an unchecked line reads NOT CHECKED and BLOCKS its section, because "every check that ran passed" is vacuously true when none did |
+| `plot_transfer_3d.m` | the rotatable figure; everything drawn AND every number annotated is recomputed from the flight |
+| `certify_root.m` / `certify_crossing.m` | the gate stack itself, fenced by hard timeouts |
+| `audit_phase_catalog.m` | audits a SHIPPED catalog the way a recipient would: re-derives every entry from the catalog's own keys and flies it |
+| `package_phase_catalog.m` | sheet + ribs -> a shareable catalog |
+| `build_ribs.m` | departure ribs off every certified point of a sheet |
+
+**A deliverable does not ship until its audit is clean** --
+`build_dro_deliverable` enforces that rather than trusting a checklist. See
+`../doc/CERTIFICATION_DISCIPLINE.md` for why, and FINDINGS 40 for the reviews
+that produced the rule.

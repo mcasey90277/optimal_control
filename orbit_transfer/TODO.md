@@ -22,13 +22,26 @@ conjugate-test result in FINDINGS 38, case row in `STATUS_AND_ROADMAP.md` 2.1b.
   `sheet_from_arcs` / `build_arrival_sheet` (seeded from `dro_tulip_library`);
   departure ribs `rib_from_crossing` / `build_ribs`; packaging
   `sheet_to_catalog_file` -> `build_costate_catalog_family`.
-- [ ] **Finish the sheet**: arrival arcs from both seeds in both directions,
-  ribs off every certified phase, then assemble and package as
-  `costate_catalog_dro_tulip_70mN`. 12 x 12 grid; 10 pairs certified when the
-  arcs launched.
-- [ ] **The 5th review risk is still open**: the fold and step heuristics
-  (rank ratio 1e-2, corrector cap 2 step lengths, Newton target 4) were chosen,
-  not derived. The other four risks were closed by test on 2026-09-09.
+- [x] **Sheet assembled and PACKAGED 2026-09-10**: `costate_catalog_dro_tulip_70mN`,
+  53 entries, audited 53/53 by `audit_phase_catalog` (which re-derives each
+  entry from the catalog's own keys), verdicts carried per entry.
+- [ ] **Finish the coverage**: 53 of 144 cells. Ribs are running on the seven
+  bare arrival phases; 0.9921 has no certified spine point (both candidates
+  conjugate-refuted) and needs a different seed.
+- [x] All five self-listed review risks closed (2026-09-09), the last by a
+  27-setting sweep showing the heuristics are guards and pace, not answers.
+- [ ] **WIRE H6 into `mintime_hypothesis_gates`** -- `lambda_m(0) < c/T`, one
+  subtraction. It excludes the reduced problem's spurious-zero mechanism
+  (FINDINGS 40); the catalog clears it by 4.5x but nothing computes it yet.
+- [ ] **Wire `conj_spectrum` and `lift_margin` into the gate stack** and
+  re-sweep, converting the sampling caveat and the rank threshold from
+  "unknown" to "measured".
+- [ ] **Write the BCT theorem out as a usable hypothesis dictionary.** Astra:
+  the current statement is not complete enough to map onto this problem. This
+  is the last open item from the proof review.
+- [ ] **Morse-index cross-check** (`doc/conjugate_research_memo_2026-09-10.md`,
+  proposal B): count negative eigenvalues of the discretized second variation.
+  An INDEPENDENT instrument, not a finer sampling of the same one.
 - [x] **Departure asymmetry EXPLAINED 2026-09-09 (FINDINGS 39): a CONJUGATE
   POINT at sD = 0.04665 +- 0.00005.** cond(J) climbs eight orders of magnitude
   over 0.047 of a departure period, the conjugate verdict flips between 0.0466
@@ -41,9 +54,8 @@ conjugate-test result in FINDINGS 38, case row in `STATUS_AND_ROADMAP.md` 2.1b.
   orders of magnitude before the conjugate test fires, and it is available at
   every continuation step for free. A walker that watches it can stop, or
   branch-switch, before it wastes solves past a conjugate point.
-- [ ] Re-certify the 7 pre-2026-09-09 sweep points through the enforcing gate
-  stack (their stored diagnostics pass, but they were recorded when the gates
-  were computed and not enforced).
+- [x] The pre-enforcement sweep points were re-certified when the sheet was
+  rebuilt through the hardened chain on 2026-09-10.
 
 
 - [ ] **Densify the red cells** of all three tulip catalogs (halo 46 pairs,

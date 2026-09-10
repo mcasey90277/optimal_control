@@ -90,8 +90,10 @@ sheets by `sD_frac x sA_frac`, so this is a new catalog, not a new format.
 | **front door** | **`run_dro_tulip(sD, sA)`** -- one call, one certified transfer, library route or continuation walk |
 | **why continuation** | the fixed-step sweep of 2026-09-08 stalled and was judged the wrong method under review (FINDINGS 36); the arcs walk through folds instead of stepping over them |
 | **the discriminator** | **the CONJUGATE TEST does the separating** -- first assembled sheet: 14 candidates, 2 certified, 12 refuted by the conjugate test ALONE after passing residual, flown arrival and `tfMin` witness (FINDINGS 38). See 4.4. |
-| **status** | arcs and ribs in flight; packaging path built and tested (`sheet_to_catalog_file` -> `build_costate_catalog_family`) |
-| **record** | FINDINGS 37 (the machinery), 38 (the conjugate result) |
+| **status (2026-09-10)** | **53 entries PACKAGED and AUDITED 53/53 clean**, schema valid, verdicts carried per entry (conj 53/53, dim S = 1 on all 53). Coverage 53 of 144 cells: 11 of 12 arrival phases, 4 departure rows complete or nearly so, ribs running on the remaining 7 |
+| **audit** | `audit_phase_catalog` re-derives every entry from the catalog's OWN KEYS and flies it -- worst arrival 0.29 km / 0.006 m/s, worst witness disagreement 6.0e-08, stored t_f vs z8(8) 8.9e-16 |
+| **the ship rule** | a deliverable does not ship until its audit is clean; `build_dro_deliverable` ENFORCES it (`doc/CERTIFICATION_DISCIPLINE.md`) |
+| **record** | FINDINGS 37 (machinery), 38 (the conjugate result), 39 (the departure conjugate point), **40 (the two outside reviews, the four proof repairs, H6)** |
 
 ### 2.2 Beyond min-time (the catalog line)
 
@@ -238,6 +240,18 @@ buy the Earth campaigns.
   free-final-time Jacobi form, handling the two exact degeneracies (costate
   scaling, time reparametrization). It is the pipeline's first genuine
   second-order instrument.
+- **2026-09-10: the instrument survived an adversarial review of its
+  MATHEMATICS, but its justification did not.** Four errors, all repaired
+  (FINDINGS 40): Proposition 1's conclusion did not follow from its premise --
+  the construction has a PERMANENT kernel and is non-immersive at every time --
+  and was rederived from that kernel, yielding the same determinant; the
+  all-burn reduction was re-founded on H3 (H is affine in throttle, so
+  `Q_mt > 0` makes full throttle uniquely optimal with a margin) instead of on
+  a false claim about equal competitor sets; the normality "iff" was downgraded
+  to the sufficient exclusion we actually use; and a **new gate H6** was added,
+  `lambda_m(0) < c/T`, which excludes a spurious-zero mechanism of the reduced
+  problem that none of H1-H4 covered. The catalog clears H6 by 4.5x.
+  **In every case the instrument was right and the argument for it was wrong.**
 - **And on 2026-09-09 it stopped being a formality.** Across the shipped
   catalogs the test passes almost everywhere (15,895/15,896), which made it
   easy to read as a rubber stamp. On the 70 mN phase sheet it is the

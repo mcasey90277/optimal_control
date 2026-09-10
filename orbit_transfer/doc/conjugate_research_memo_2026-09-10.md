@@ -63,8 +63,43 @@ The 24 junctions are spaced about 4% apart, so this structure falls between the
 last two samples. **The instrument reports PASS with `min|det|` = 2.4e-4; the
 dense scan says the matrix comes within 6e-8 of singular before `tf`.**
 
-**This is not yet a refutation, and I will not present it as one.** There are
-two candidate explanations and they need separating:
+> ## ADJUDICATED, same day: it is NOT a conjugate time, and no shipped claim
+> ## is affected.
+>
+> The discriminator was a POSITIVE CONTROL -- run the same endpoint spectrum on
+> entries the conjugate test REFUTED and see whether it separates them from a
+> certified one. It does not:
+>
+> | entry | verdict | sigma_min at t_f | last gap / median gap |
+> |---|---|---|---|
+> | anchor, 17.80 d | **certified** | 1.37e-07 | 3.76 |
+> | 22.05 d, sA 0.0754 | refuted | 1.70e-08 | 34.9 |
+> | 18.92 d, sA 0.1587 | refuted | **2.17e-04** | 0.91 |
+> | 31.51 d, sA 0.2421 | refuted | 1.39e-07 | 0.88 |
+>
+> Two facts settle it. A refuted entry (31.51 d) has the SAME endpoint
+> sigma_min as the certified one, 1.39e-7 against 1.37e-7 -- so the endpoint
+> value carries no information about the verdict. And a refuted entry
+> (18.92 d) has a perfectly healthy endpoint spectrum, sigma_min 2.2e-4 with
+> no anomalous gap -- so its conjugate point is INTERIOR, where the instrument
+> does look and did find it.
+>
+> The endpoint smallness is therefore a property of the transition matrix at
+> t_f shared by certified and refuted arcs alike: the geometric grading of a
+> hyperbolic flow's STM (sigma = 2.45, 5.6e-2, 1.3e-2, 3.9e-4, 1.8e-5, 1.4e-7
+> -- each roughly 30x the next, no single collapsed direction). It is the same
+> phenomenon as the 4.4e9 shooting conditioning, and it is exactly why the
+> instrument treats an endpoint zero as INCONCLUSIVE rather than a refutation.
+>
+> Two method notes worth keeping. The finite-difference construction that
+> raised the alarm is accurate to only ~2e-6 relative at h = 1e-6 (verified by
+> convergence against the integrated STM at four step sizes, clean h^2), which
+> on some entries is ABOVE the sigma_min being measured -- the original scan
+> was reading its own noise on those. And the determinant near t_f is the
+> product of six graded singular values, about 1e-16 here, so its SIGN is
+> meaningless there whatever the geometry does.
+
+**The original two candidate explanations, retained for the record:**
 
 1. **A conjugate time at or just before `tf`**, which would violate the BCT
    hypothesis and invalidate the minimality claim for this entry.
@@ -136,10 +171,12 @@ comfortable -- which is the point.
 
 ## What I would do next, in order
 
-1. **Adjudicate the endpoint collapse** (result 2). It is the only finding here
-   that could touch a shipped claim. Discriminator: relate `sigma_min(tf)` to
-   the shooting Jacobian's own smallest singular value across several catalog
-   entries and see whether they track. If they do, it is conditioning.
+1. ~~**Adjudicate the endpoint collapse.**~~ **DONE, same day** -- see the box
+   above. It is conditioning, not conjugacy, established by a positive control
+   rather than by the argument originally proposed: a REFUTED entry has the
+   same endpoint sigma_min as the certified one (1.39e-7 vs 1.37e-7), and
+   another refuted entry has a healthy endpoint spectrum with an interior
+   conjugate point. No shipped claim is affected.
 2. **Implement A**, dense spectrum monitoring, and re-sweep. Cheap, and it
    converts the sampling caveat from "unknown" to "measured".
 3. **Implement B**, the Morse-index cross-check, on the golden cells.

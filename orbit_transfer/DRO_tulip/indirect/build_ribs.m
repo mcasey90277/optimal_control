@@ -38,7 +38,22 @@ L = load(sheetMat);  S = L.S;
 nD = d('nD', 12);  nPts = d('nPts', nD - 1);  dirn = d('direction', -1);
 out = d('out', fullfile(here, 'results', 'arrival_ribs.mat'));
 pool = capped_pool();
-[B, anc] = arclength_arrival('setup', d('setupOpts', struct()));
+% RECONSTRUCT FROM THE SHEET, not from defaults. The builder used to rebuild
+% the default setup, so a sheet certified at a non-default operating point
+% could acquire ribs generated at a different one -- valid trajectories, but
+% not valid additions to that sheet. (Astra chain review 2026-09-10.)
+so = d('setupOpts', struct());
+if isfield(S, 'problem')
+    P = S.problem;
+    so.thrustN = P.thrustN;  so.ispS = P.ispS;  so.m0kg = P.m0kg;
+    so.tauDRO = P.tauDRO;    so.NpTulip = P.NpTulip;  so.sD = P.sD;
+end
+[B, anc] = arclength_arrival('setup', so);
+if isfield(S, 'problem')
+    assert(abs(B.problem.sD - S.problem.sD) < 1e-12 && ...
+           abs(B.problem.thrustN - S.problem.thrustN) < 1e-12, ...
+           'rib setup does not reproduce the sheet''s problem identity');
+end
 
 cols = d('only', find(isfinite(S.TF)));
 R = struct('j', {}, 'sA', {}, 'pts', {}, 'stop', {}, 'nSolve', {});
@@ -55,7 +70,8 @@ for j = cols(:)'
                       'nSolve', Rj.nSolve); %#ok<AGROW>
     fprintf('  -> %d certified points, %d solves, %.0f s, %s\n', ...
         numel(Rj.pts), Rj.nSolve, toc(t0), Rj.stop);
-    save(out, 'R');                       % after every rib, not at the end
+    if isfield(S, 'problem'), problem = S.problem; else, problem = struct(); end %#ok<NASGU>
+    save(out, 'R', 'problem');            % after every rib, not at the end
 end
 fprintf('build_ribs: %d ribs, %d certified points -> %s\n', ...
     numel(R), sum(arrayfun(@(r) numel(r.pts), R)), out);

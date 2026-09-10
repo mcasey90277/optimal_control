@@ -47,6 +47,12 @@ ribs = {};
 for k = 1:numel(ribMats)
     if ~isfile(ribMats{k}), fprintf('  (missing rib file %s -- skipped)\n', ribMats{k}); continue, end
     Rk = load(ribMats{k});
+    % a rib must belong to the SHEET'S problem, not merely exist
+    if isfield(Rk, 'problem') && isfield(S, 'problem')
+        assertSameProblem(Rk.problem, S.problem, ribMats{k});
+    else
+        fprintf('  (rib %s carries no problem identity -- accepted on trust, rebuild it)\n', ribMats{k});
+    end
     for m = 1:numel(Rk.R), ribs{end+1} = Rk.R(m); end %#ok<AGROW>
 end
 fprintf('packaging: %d arrival phases certified, %d ribs, %d rib points\n', ...
@@ -54,8 +60,12 @@ fprintf('packaging: %d arrival phases certified, %d ribs, %d rib points\n', ...
 
 % one sheet FILE in the packager's layout, in its own folder (the packager
 % globs a directory)
+% A FRESH staging directory. The packager globs this folder, so a stale
+% sheet left from an earlier run would be consumed alongside the new one and
+% shipped unaudited. (Astra chain review 2026-09-10.)
 sheetDir = fullfile(outDir, ['phase_sheet_' tag]);
-if ~isfolder(sheetDir), mkdir(sheetDir); end
+if isfolder(sheetDir), rmdir(sheetDir, 's'); end
+mkdir(sheetDir);
 sheetFile = fullfile(sheetDir, sprintf('dro_tulip_%s_tau1_Np7.mat', tag));
 Q = sheet_to_catalog_file(S, ribs, sheetFile, opts);
 fprintf('  sheet file: %d of %d grid points certified\n', nnz(Q.OK), numel(Q.OK));
@@ -74,6 +84,23 @@ cat_ = build_costate_catalog_family(sheetDir, fullfile(outDir, [name '.mat']), s
         'assembled by sheet_from_arcs with the certified library as seeds; ' ...
         'FINDINGS 37-38, 2026-09-09.'], ...
     'depReconstruction', 'DRO of period tau_dep, pumpkyn get_family_orbit(''dro'', tau)'));
+end
+
+function assertSameProblem(a, b, src)
+% ASSERTSAMEPROBLEM  A rib may only join a sheet certified at the same
+% operating point.  INPUTS: a; b; src.
+f = {'thrustN', 'ispS', 'm0kg', 'tauDRO', 'NpTulip', 'pmTulip', 'sD'};
+for k = 1:numel(f)
+    assert(isfield(a, f{k}) && isfield(b, f{k}) && ...
+           abs(a.(f{k}) - b.(f{k})) <= 1e-12*max(abs(b.(f{k})), 1), ...
+           'rib %s was certified at a different %s (%g vs %g)', src, f{k}, ...
+           getfielddef(a, f{k}), getfielddef(b, f{k}));
+end
+end
+
+function v = getfielddef(s, f)
+% GETFIELDDEF  Field or NaN.  INPUTS: s; f.  OUTPUTS: v.
+if isfield(s, f), v = s.(f); else, v = NaN; end
 end
 
 function v = fieldd(s, f, d_)

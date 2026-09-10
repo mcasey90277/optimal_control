@@ -65,9 +65,18 @@ if ischar(arg) && strcmp(arg, 'setup')
     [tD, rvD, tT, rvT] = ladder_endpoints(ob);
     B = struct();
     B.mu = mu;  B.Tnd = Tnd;  B.cnd = cnd;  B.tauA = tT(end);  B.tauD = tD(end);
+    % THE PROBLEM IDENTITY. Everything downstream -- packaging, ribs, the
+    % catalog's metadata -- must describe the problem that was CERTIFIED,
+    % not re-derive it from whatever defaults are in scope at the time.
+    % (Astra chain review 2026-09-10.)
+    B.problem = struct('version', 1, 'thrustN', thrustN, 'ispS', ispS, 'm0kg', m0kg, ...
+        'tauDRO', ob.tauDRO, 'NpTulip', ob.NpTulip, 'pmTulip', ob.pmTulip, ...
+        'muStar', mu, 'lStar', lStar, 'tStar', tStar, 'Tnd', Tnd, 'cnd', cnd, ...
+        'periodTulip', ob.tauTulip, 'sD', NaN);
     B.stateD = @(s) interp1(tD, rvD, mod(s,1)*tD(end), 'spline')';
     B.stateA = @(s) interp1(tT, rvT, mod(s,1)*tT(end), 'spline')';
     sD = d('sD', 0);
+    B.problem.sD = sD;
     B.rv0 = B.stateD(sD);
 
     % the anchor: a certified rho = 1 root, re-normalised onto the sphere

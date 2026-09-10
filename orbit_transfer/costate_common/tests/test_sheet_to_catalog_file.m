@@ -41,8 +41,17 @@ for j = [1 3]                                   % two certified spine points
 end
 ribs = {struct('sA', S.sA(1), 'pts', [mkC(11/12, S.sA(1), 4.5), mkC(10/12, S.sA(1), 4.6)])};
 
+% THE PROBLEM IDENTITY travels with the sheet. Packaging must take the
+% engine, the orbits and the departure phase from what was CERTIFIED, not
+% from fresh option defaults -- otherwise a catalog can confidently mislabel
+% the physics of a real trajectory. (Astra chain review 2026-09-10.)
+S.problem = struct('version', 1, 'thrustN', 0.070, 'ispS', 900, 'm0kg', 150, ...
+                   'tauDRO', 1, 'NpTulip', 7, 'pmTulip', -1, 'sD', sD0, ...
+                   'muStar', 0.012150585609624, 'lStar', 389703.264829278, ...
+                   'tStar', 382981.289129055, 'Tnd', 1.234e-4, 'cnd', 6.789);
+
 out = fullfile(tempdir, 'test_sheet_file.mat');
-Q = sheet_to_catalog_file(S, ribs, out, struct('nD', nD, 'sD0', sD0));
+Q = sheet_to_catalog_file(S, ribs, out, struct('nD', nD));
 
 % MATLAB drops a trailing singleton, so the one-rung grid is [nD nA] with
 % size(.,3) = 1 -- which is what the packager's [nD,nA,nR] = size(OK) reads
@@ -65,6 +74,28 @@ miss = need(~isfield(Q.meta, need));
 ok = chk(ok, isempty(miss), sprintf('meta complete for the packager (missing: %s)', strjoin(miss, ',')));
 ok = chk(ok, Q.meta.ispS == 900 && abs(Q.meta.tauDRO - 1) < 1e-12 && Q.meta.NpTulip == 7, ...
          sprintf('operating point recorded: Isp %g s, tau_dep %g, Np %d', Q.meta.ispS, Q.meta.tauDRO, Q.meta.NpTulip));
+
+% (a) the spine goes on the CERTIFIED departure row, not row 1 by default
+S2 = S;  S2.problem.sD = 1/12;
+Q2 = sheet_to_catalog_file(S2, {}, '', struct('nD', nD));
+ok = chk(ok, Q2.OK(2,1) && ~Q2.OK(1,1), 'a sheet certified at sD = 1/12 lands on row 2, not row 1');
+
+% (b) options may ASSERT the identity, never replace it
+threw = false;
+try, sheet_to_catalog_file(S, {}, '', struct('nD', nD, 'ispS', 1710)); catch, threw = true; end
+ok = chk(ok, threw, 'a conflicting engine in opts is refused, not silently applied');
+
+% (c) an entry needs a located CERTIFICATE, not just a finite time
+S3 = S;  S3.cand{1} = struct([]);          % summary says solved, no certificate
+Q3 = sheet_to_catalog_file(S3, {}, '', struct('nD', nD));
+ok = chk(ok, ~Q3.OK(1,1), 'a finite S.TF with no certificate does not export');
+
+% (d) a rib point carrying ok = true but unusable numbers is refused, and
+%     must not displace a good entry
+badRib = {struct('sA', S.sA(1), 'pts', struct('ok', true, 'z', [(1:7)'; NaN], ...
+                 'tfDays', NaN, 'sD', 11/12, 'sA', S.sA(1), 'conj', 1, 'g', []))};
+Q4 = sheet_to_catalog_file(S, badRib, '', struct('nD', nD));
+ok = chk(ok, ~Q4.OK(12,1), 'a rib point with a NaN final time is refused');
 
 % the packager must accept it and the schema must validate the catalog
 d_ = fullfile(tempdir, 'test_sheet_dir');  if ~isfolder(d_), mkdir(d_); end

@@ -46,13 +46,32 @@ function Q = sheet_to_catalog_file(S, ribs, outMat, opts)
 
 if nargin < 4, opts = struct(); end
 d = @(f,v) fieldd(opts, f, v);
-nD = d('nD', 12);  sD0 = d('sD0', 0);  nA = numel(S.sA);
-tStar = 382981.289129055;  lStar = 389703.264829278;
+nA = numel(S.sA);
+
+% THE PROBLEM IDENTITY IS AUTHORITATIVE. Engine, orbits and the departure
+% phase come from what was CERTIFIED, never from fresh option defaults --
+% otherwise packaging can label a real trajectory with the wrong physics,
+% and a sheet certified at one departure phase lands on another's row.
+% Options may ASSERT a value; disagreement is an error, not an override.
+% (Astra chain review 2026-09-10.)
+assert(isfield(S, 'problem') && isstruct(S.problem), ...
+       ['sheet carries no problem identity: rebuild it with build_arrival_sheet, ' ...
+        'which stamps S.problem from the certified setup']);
+P = S.problem;
+tStar = P.tStar;  lStar = P.lStar;
+nD = d('nD', 12);
+assertMatch(opts, P, {'thrustN', 'ispS', 'm0kg', 'tauDRO', 'NpTulip', 'pmTulip'});
+if isfield(opts, 'sD0'), assertNear(opts.sD0, P.sD, 'sD0'); end
+sD0 = P.sD;                                   % the CERTIFIED departure phase
 
 Q = struct();
-Q.sD = mod(sD0 + (0:nD-1)/nD, 1);
+% THE GRID ORIGIN IS NOT THE CERTIFIED PHASE. Building the departure grid
+% from sD0 made idxOf(Q.sD, sD0) select row 1 by construction, so a sheet
+% certified at any departure phase was placed at departure zero. The grid is
+% the canonical k/nD one; the certified phase must LAND on it.
+Q.sD = mod(d('sDorigin', 0) + (0:nD-1)/nD, 1);
 Q.sA = S.sA(:)';
-Q.rungs = d('thrustN', 0.070);
+Q.rungs = P.thrustN;
 Q.OK = false(nD, nA, 1);
 Q.TF = nan(nD, nA, 1);
 Q.Z8 = nan(8, nD, nA, 1);
@@ -69,14 +88,22 @@ Q.DIMS  = nan(nD, nA, 1);
 
 % ---- the spine: the certified minimum at each arrival phase, at sD0 -----
 iD0 = idxOf(Q.sD, sD0);
+assert(~isempty(iD0), 'the certified departure phase %.6f is not on the %d-point grid', sD0, nD);
 for j = 1:nA
     if ~isfinite(S.TF(j)), continue, end
-    Q.OK(iD0, j, 1) = true;
-    Q.TF(iD0, j, 1) = S.TF(j)*86400/tStar;          % days -> ND
-    Q.Z8(:, iD0, j, 1) = S.Z8(:, j);
+    % EXPORT FROM THE CERTIFICATE, not from the summary. A finite S.TF is a
+    % summary claim; without the certificate behind it there is nothing to
+    % ship, and t_f is taken from the certificate's own z(8) so the two
+    % representations cannot disagree.
     c = S.cand{j};
+    if isempty(c), continue, end
     k = find([c.ok] & abs([c.tfDays] - S.TF(j)) < 1e-9, 1);
-    if ~isempty(k), Q = putVerdicts(Q, iD0, j, c(k)); end
+    if isempty(k), continue, end
+    if ~usableEntry(c(k)), continue, end
+    Q.OK(iD0, j, 1) = true;
+    Q.TF(iD0, j, 1) = c(k).z(8);
+    Q.Z8(:, iD0, j, 1) = c(k).z(:);
+    Q = putVerdicts(Q, iD0, j, c(k));
 end
 
 % ---- the ribs: certified departure points off the spine ----------------
@@ -86,28 +113,63 @@ if nargin >= 2 && ~isempty(ribs)
         R = ribs{k};
         if ~isfield(R, 'pts') || isempty(R.pts), continue, end
         for m = 1:numel(R.pts)
-            P = R.pts(m);
-            if ~P.ok, continue, end
-            iD = idxOf(Q.sD, P.sD);  iA = idxOf(Q.sA, P.sA);
-            assert(~isempty(iD) && ~isempty(iA), 'rib point (%.4f, %.4f) is off the grid', P.sD, P.sA);
-            if Q.OK(iD, iA, 1) && Q.TF(iD, iA, 1) <= P.z(8), continue, end   % keep the faster
+            Pt = R.pts(m);
+            if ~usableEntry(Pt), continue, end
+            iD = idxOf(Q.sD, Pt.sD);  iA = idxOf(Q.sA, Pt.sA);
+            assert(~isempty(iD) && ~isempty(iA), 'rib point (%.4f, %.4f) is off the grid', Pt.sD, Pt.sA);
+            % keep the faster. Compared only AFTER usableEntry, because
+            % `existingTF <= NaN` is false and an unusable point would
+            % otherwise displace a good one.
+            if Q.OK(iD, iA, 1) && Q.TF(iD, iA, 1) <= Pt.z(8), continue, end
             Q.OK(iD, iA, 1) = true;
-            Q.TF(iD, iA, 1) = P.z(8);
-            Q.Z8(:, iD, iA, 1) = P.z(:);
-            Q = putVerdicts(Q, iD, iA, P);
+            Q.TF(iD, iA, 1) = Pt.z(8);
+            Q.Z8(:, iD, iA, 1) = Pt.z(:);
+            Q = putVerdicts(Q, iD, iA, Pt);
         end
     end
 end
 
 % ---- meta: what the packager reads -------------------------------------
-tauDRO = d('tauDRO', 1.0);  Np = d('NpTulip', 7);  pm = d('pmTulip', -1);
-Q.meta = struct('muStar', 0.012150585609624, 'lStar', lStar, 'tStar', tStar, ...
-    'ispS', d('ispS', 900), 'm0kg', d('m0kg', 150), 'tauDRO', tauDRO, ...
-    'depFamily', 'dro', 'depParams', struct('tau', tauDRO), ...
-    'arrFamily', 'tulip', 'arrParams', struct('Np', Np, 'pm', pm, 'tau', 5*2*pi/6), ...
-    'NpTulip', Np, 'pmTulip', pm, 'periodTulip', 5*2*pi/6);
+Q.meta = struct('muStar', P.muStar, 'lStar', lStar, 'tStar', tStar, ...
+    'ispS', P.ispS, 'm0kg', P.m0kg, 'tauDRO', P.tauDRO, ...
+    'depFamily', 'dro', 'depParams', struct('tau', P.tauDRO), ...
+    'arrFamily', 'tulip', 'arrParams', struct('Np', P.NpTulip, 'pm', P.pmTulip, 'tau', 5*2*pi/6), ...
+    'NpTulip', P.NpTulip, 'pmTulip', P.pmTulip, 'periodTulip', 5*2*pi/6);
+Q.problem = P;                                 % identity ships with the sheet
 
 if ~isempty(outMat), save(outMat, '-struct', 'Q'); end
+end
+
+function ok = usableEntry(C)
+% USABLEENTRY  A certificate is exportable only if it says ok AND carries
+% numbers worth shipping: a real finite 8-vector with a positive final time.
+% `P.ok = true` with `z(8) = NaN` used to pass, and could displace a good
+% entry because `existingTF <= NaN` is false.  INPUTS: C.  OUTPUTS: ok.
+ok = false;
+if ~isstruct(C) || ~isscalar(C) || ~isfield(C, 'ok') || ~isfield(C, 'z'), return, end
+[okf, f] = scalar_verdict(C.ok);
+if ~okf || f ~= 1, return, end
+z = C.z;
+if ~isnumeric(z) || numel(z) ~= 8 || ~all(isfinite(z(:))) || ~isreal(z), return, end
+if ~(z(8) > 0), return, end
+ok = true;
+end
+
+function assertMatch(opts, P, names)
+% ASSERTMATCH  Options may assert an identity value, never replace it.
+% INPUTS: opts; P; names.
+for k = 1:numel(names)
+    if isfield(opts, names{k}) && ~isempty(opts.(names{k}))
+        assertNear(opts.(names{k}), P.(names{k}), names{k});
+    end
+end
+end
+
+function assertNear(a, b, name)
+% ASSERTNEAR  INPUTS: a; b; name.
+assert(abs(a - b) <= 1e-12*max(abs(b), 1), ...
+    ['opts.%s = %g contradicts the CERTIFIED problem identity (%g). ' ...
+     'Packaging may assert the identity, not change it.'], name, a, b);
 end
 
 function Q = putVerdicts(Q, iD, iA, C)

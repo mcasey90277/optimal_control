@@ -53,6 +53,9 @@ end
 % arc and a crossings-only sheet reports NaN at exactly the phases whose
 % solutions launched it.
 sD0 = anc.sD;  nA = d('nA', 12);  sA0 = d('sA0', 0.0754);
+policy = d('copts', struct());
+policy.pool = pool;
+if ~isfield(policy, 'wallSec'), policy.wallSec = 600; end
 lib = dro_tulip_library(here);
 lib = lib(abs(mod([lib.sD] - sD0 + 0.5, 1) - 0.5) < 1e-8);
 seeds = struct([]);
@@ -64,15 +67,21 @@ for k = 1:numel(lib)
                   'Y', [lib(k).Y, lib(k).Y(:,end)]);
     rv0 = B.stateD(sD0);
     seed.Y(1:7,1) = [rv0(1:6); 1];  seed.Y(8:14,1) = lib(k).z(1:7);
+    % ONE certification policy for both routes. Seeds used to be certified
+    % with a fresh hardcoded struct while opts.copts applied only to
+    % crossings, so a stricter requested gate silently did not reach the
+    % seeds that populate the same sheet. (Astra chain review 2026-09-10.)
     C = certify_root(seed, rv0, B.stateA(lib(k).sA), B, ...
-                     struct('sA', lib(k).sA, 'sD', sD0, 'wallSec', 600, 'pool', pool));
+                     setfield(setfield(policy, 'sA', lib(k).sA), 'sD', sD0)); %#ok<SFLD>
     fprintf('library seed (%.4f, %.4f) [%s]: %s\n', sD0, lib(k).sA, lib(k).src, C.reason);
     if isempty(seeds), seeds = C; else, seeds(end+1) = C; end %#ok<AGROW>
 end
 
 S = sheet_from_arcs(arcs, struct('sA0', sA0, 'nA', nA, 'seeds', seeds, ...
-                                 'B', B, 'anc', anc, 'copts', withPool(d('copts', struct()), pool)));
+                                 'B', B, 'anc', anc, 'copts', policy));
 S.arcs = {files.name};  S.B = B;  S.anc = anc;  S.opts = opts;  S.built = datestr(now);
+S.problem = B.problem;          % the identity packaging must use
+S.policy = rmfield(policy, 'pool');
 S.B = rmfield(S.B, {'res', 'dRdq', 'stateA', 'stateD'});
 save(out, 'S');
 
@@ -89,12 +98,6 @@ for j = 1:numel(S.sA)
     end
 end
 fprintf('saved %s\n', out);
-end
-
-function c = withPool(c, pool)
-% WITHPOOL  Attach the fence's pool to a certify options struct.
-% INPUTS: c; pool.  OUTPUTS: c.
-c.pool = pool;
 end
 
 function v = fieldd(s, f, d_)

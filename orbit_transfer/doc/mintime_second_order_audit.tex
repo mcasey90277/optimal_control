@@ -101,6 +101,39 @@ direction is never exercised by an admissible variation
 min-time catalogs. (This is the opposite of the fixed-$\tf$ min-fuel line, where
 the throttle varies and $m(\tf)$ is genuinely free; see \S\ref{sec:fixedtf}.)
 
+\paragraph{What actually justifies the reduction (corrected 2026-09-10).}
+The paragraph above argues from equality of \emph{competitor sets}, and that
+argument is wrong: the stated problem admits a throttle $s\in[0,1]$, so the
+all-burn trajectories are a strict subset and a first-order variation really
+does produce extra mass freedom,
+$\delta m_f=-k\,\delta\tf-k\!\int_0^{\tf}\!\delta s$ (Astra review,
+2026-09-10). The reduction is nevertheless sound, and what carries it is
+\textbf{H3, which we already gate on}.
+
+With the throttle explicit the Hamiltonian is \emph{affine} in $s$:
+\[
+  H(s)\;=\;1+\lr\!\cdot\!v+\lv\!\cdot\!(g+h)\;-\;s\,T\Big(\frac{|\lv|}{m}+\frac{\lm}{c}\Big)
+       \;=\;H(0)-s\,T\,Q_{mt},
+\]
+so $Q_{mt}>0$ \emph{strictly} makes $s^{*}=1$ the unique minimiser with a
+strict margin at every time: the throttle is \textbf{strictly bang}, and a
+strictly bang component can be eliminated, leaving a smooth problem in the
+direction alone --- which is the problem BCT addresses. Measured on the anchor:
+$Q_{mt}\in[3.82,\,16.75]$, $dH/ds\le-0.672$ everywhere, and $H$ is affine in
+$s$ to six digits ($H(0)=0.8922$, $H(\tfrac12)=0.4461$, $H(1)=0$).
+
+\paragraph{An exact identity, and a free gate.} Since
+$\frac{d}{dt}(\lm m)=\dot\lm m+\lm\dot m=-\frac{T|\lv|}{m}-\frac{T\lm}{c}=-T\,Q_{mt}$,
+integrating and using $\lm(\tf)=0$, $m(0)=1$ gives
+\[
+  \boxed{\;\int_0^{\tf} T\,Q_{mt}\,dt \;=\; \lm(0)\;}
+\]
+--- the total strict-bang margin equals the initial mass costate. Verified on
+the anchor: $5.5004$ against $\lm(0)=5.500404$. This is a cheap, exact
+consistency check linking H3, the transversality condition and the mass
+costate, and it is worth adding to the gate set: it uses only quantities the
+flight already produces and it fails if any of the three is wrong.
+
 The reduced system \eqref{eq:dyn6} is non-autonomous through $m(t)$. The
 7-state autonomous form is its standard autonomization; the two Hamiltonians
 agree, $\lm$ playing the role of the time costate for the mass clock. In the

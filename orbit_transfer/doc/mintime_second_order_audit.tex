@@ -203,6 +203,66 @@ the column spaces of the other blocks; ranks of $[A,f]$ and $[B,f]$ agree when
 $\operatorname{Im}A=\operatorname{Im}B$.
 \end{proof}
 
+\subsection*{The derivation this rests on, rebuilt (2026-09-10)}
+\emph{The rank identity above is correct, but on its own it does not give the
+proposition's ``so''. The construction as originally stated has a
+\textbf{permanent kernel}, so it is non-immersive at every time, not merely at
+conjugate times, and a rank drop cannot be read off it. This was found by an
+adversarial review of this document (Astra, 2026-09-10) and is proved by our
+own two lemmas. The derivation below replaces the earlier one.}
+
+\paragraph{The permanent kernel.} Write $b=\dot m=-T/c\neq0$ and let $e_m$ be
+the $\lm$ coordinate direction. Put
+\[
+  w \;=\; \lambda(0)+\tfrac1b\,e_m .
+\]
+Then $w$ is tangent to $\{H=0\}$, since
+$dH_0(w)=f\!\cdot\!\lambda(0)+\tfrac1b f_m=-1+1=0$ (using $H=0\Rightarrow
+\lambda\!\cdot\!f=-1$), and $w$ lies in the kernel of $\Phixl(t,0)$ for every
+$t$, by \eqref{eq:scale} together with the vanishing $\lm$ column. Hence the
+map on $\{H=0\}\times\R_t$ (tangent dimension $6+1=7$) has a one-dimensional
+kernel at \emph{all} times. \emph{Verified numerically:}
+$\|\Phixl(t,0)w\|/\|\Phixl\|\le5.5\times10^{-15}$ along the anchor arc.
+
+\paragraph{The effective domain is six-dimensional.} Two facts make the
+quotient concrete.
+\begin{enumerate}
+\item[(K1)] $T\{H=0\}$ projects \emph{isomorphically} onto the
+  $(\lr,\lv)$ coordinates: $\delta\lambda\in T\{H=0\}$ means
+  $\delta\lambda_{rv}\!\cdot\!f_{rv}+b\,\delta\lm=0$, so $\delta\lm$ is
+  \emph{determined} by $\delta\lambda_{rv}$, which ranges over all of $\R^6$.
+  Since the $\lm$ column of $\Phixl$ vanishes, the map factors through
+  $\delta\lambda_{rv}$ alone.
+\item[(K2)] $\Phi_{rv}(t)\,\lambda(0)_{rv}=0$ for every $t$ --- \eqref{eq:scale}
+  with the vanishing $\lm$ column. \emph{Verified:}
+  $\|\Phi_{rv}\lambda(0)_{rv}\|/\|\Phi_{rv}\|\le5.5\times10^{-15}$.
+\end{enumerate}
+So in the $\delta\lambda_{rv}$ coordinates the kernel $w$ becomes
+$\lambda(0)_{rv}$, the effective domain is
+$\R^6/\langle\lambda(0)_{rv}\rangle\oplus\R\,\partial_t$ of dimension
+$5+1=6$, and the target $(r,v)(t)$ is six-dimensional. A conjugate time is
+exactly a rank drop of this square induced map, whose matrix is
+\[
+  \big[\,\Phi_{rv}(t)\,P,\ f_{rv}(t)\,\big],
+\]
+with $P$ \emph{any} $6\times5$ basis of a complement of
+$\langle\lambda(0)_{rv}\rangle$. That is the instrument's matrix.
+
+\paragraph{The choice of complement does not matter.} Two complements differ
+by a change of basis on the domain, so the determinants differ by a nonzero
+constant, the same at every $t$; the vanishing set is therefore identical.
+\emph{Verified} against a genuinely different (non-orthogonal) complement: the
+ratio is constant to $6.9\times10^{-11}$ over the arc at $0.393694$, which is
+precisely the reciprocal of the basis-change determinant $2.540047$, and both
+choices report the same sign changes.
+
+\begin{remark}[What this repair does and does not fix]
+It establishes the \emph{instrument}: the $6\times6$ determinant is the rank
+test of the correct six-dimensional induced map, derived rather than asserted.
+It does \emph{not} by itself transfer the BCT sufficiency theorem --- see the
+scope caveat on all-burn competitors in \S\ref{sec:hyp}.
+\end{remark}
+
 \begin{remark}[Why rows $1{:}6$ and not $1{:}7$]
 In the 7-state form the mass row of $\Phixl$ is identically zero
 (\S\ref{sec:reductions}), so a $7\times7$ block would be structurally singular

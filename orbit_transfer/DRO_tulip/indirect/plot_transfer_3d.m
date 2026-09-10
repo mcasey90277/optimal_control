@@ -3,7 +3,7 @@ function P = plot_transfer_3d(T, B, opts)
 %
 %   The interactive 3D view of one transfer: the movie's last frame, as a
 %   figure you can rotate. Departure orbit, target orbit, the transfer arc
-%   coloured by elapsed time, the thrust direction along the way, and the
+%   coloured by elapsed time, the thrust direction along the way, and
 %   the Moon, in the rotating Earth-Moon frame.
 %
 %   Everything drawn is FLOWN from the certificate's own costates, not

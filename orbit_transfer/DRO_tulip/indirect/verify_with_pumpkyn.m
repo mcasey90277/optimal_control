@@ -50,7 +50,9 @@ z8 = T.z(:);
 V = struct('z8', z8, 'z8Pumpkyn', nan(8,1), 'dComponent', nan(8,1), 'dz', NaN, ...
            'moved', true, 'converged', false, 'flyKm', NaN, 'note', '');
 
-[okW, za] = fenced(pool, capSec, @pumpkyn.cr3bp.tfMin, 1, rv0(1:6)', rvf(1:6)', z8, ...
+% the foreign solver prints its own fsolve banner; capture it so this
+% section reads as one comparison rather than a solver log
+[okW, za] = fenced(pool, capSec, @quietTfMin, 1, rv0(1:6)', rvf(1:6)', z8, ...
                    B.Tnd, B.cnd, B.mu);
 if ~okW
     V.note = sprintf('pumpkyn.cr3bp.tfMin exceeded its %g s cap', capSec);
@@ -85,6 +87,12 @@ if ~d('quiet', false)
     end
     fprintf('------------------------------------------------------\n');
 end
+end
+
+function za = quietTfMin(rv0r, rvfr, z8, Tnd, cnd, mu)
+% QUIETTFMIN  pumpkyn.cr3bp.tfMin with its console output captured.
+% INPUTS: rv0r; rvfr; z8; Tnd; cnd; mu.  OUTPUTS: za [8x1].
+evalc('za = pumpkyn.cr3bp.tfMin(rv0r, rvfr, z8, Tnd, cnd, mu);');
 end
 
 function varargout = fenced(pool, capSec, fh, nout, varargin)

@@ -143,6 +143,7 @@ for kf = 1:numel(files)
     if isfield(Q, 'MINLV'), sheets(nS,1).gate_min_lamv = Q.MINLV;  end
     if isfield(Q, 'MINQ'),  sheets(nS,1).gate_min_qmt  = Q.MINQ;   end
     if isfield(Q, 'DIMS'),  sheets(nS,1).gate_dimS     = Q.DIMS;   end
+    if isfield(Q, 'KJ'),    sheets(nS,1).conj_K        = Q.KJ;     end
     nTot = nTot + n;
 end
 % One catalog = ONE arrival family (the picker reads the keying mode off
@@ -177,9 +178,17 @@ if isfield(sheets, 'conj_pass')
         nP = nP + nnz(sheets(ks).conj_pass == 1);
         nF = nF + nnz(sheets(ks).conj_pass == 0);
     end
+    % the sampling K is part of the verdict's meaning; a mixed-K catalog
+    % records NaN rather than a number that would be true of only some rows
+    KK = [];
+    for ks = 1:numel(sheets)
+        if isfield(sheets(ks), 'conj_K'), KK = [KK; sheets(ks).conj_K(:)]; end %#ok<AGROW>
+    end
+    KK = unique(KK(isfinite(KK)));
+    if isscalar(KK), Kuse = KK; else, Kuse = NaN; end
     cat_.conj_test = struct('date', datestr(now, 'yyyy-mm-dd'), ...
         'instrument', 'costate_common/ms_conjugate_test (free-time quotiented Jacobi)', ...
-        'nPass', nP, 'nFail', nF, 'nNotrun', 0, 'nUndecided', 0, ...
+        'K', Kuse, 'nPass', nP, 'nFail', nF, 'nNotrun', 0, 'nUndecided', 0, ...
         'meaning', ['conj_pass: 1 = no conjugate point in (0, tf) at the sampled times; ' ...
                     '-1 = no entry in this cell. Established AT CERTIFICATION -- an entry ' ...
                     'that failed the test was never admitted, so every stored entry reads 1.']);

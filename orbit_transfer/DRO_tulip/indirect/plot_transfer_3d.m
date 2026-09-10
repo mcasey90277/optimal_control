@@ -1,0 +1,123 @@
+function P = plot_transfer_3d(T, B, opts)
+%% Purpose:
+%
+%   The interactive 3D view of one transfer: the movie's last frame, as a
+%   figure you can rotate. Departure orbit, target orbit, the transfer arc
+%   coloured by elapsed time, the thrust direction along the way, and the
+%   two primaries, in the rotating Earth-Moon frame.
+%
+%   Everything drawn is FLOWN from the certificate's own costates, not
+%   passed in: if the picture and the numbers ever disagreed, the picture
+%   would be the one telling the truth.
+%
+%% Inputs:
+%
+%  T                        struct                  a certify_root output
+%                                                   (needs .z, and .sD/.sA)
+%  B                        struct                  arclength_arrival setup
+%                                                   (.Tnd .cnd .mu .stateD
+%                                                   .stateA .problem)
+%  opts                     struct (optional)
+%   .visible [true] .nThrust [40] arrows .outPng '' .view [-35 22]
+%   .dark [true]
+%
+%% Outputs:
+%
+%  P                        struct                  .fig .ax .hDep .hArr
+%                                                   .hTx .startMissKm
+%                                                   .endMissKm .tfDays
+%                                                   .dvKms .nThrust
+%
+%% Revision History:
+%  M. Casey                                                   (c) 09/10/2026
+%  Copyright Coorbital Inc.
+%% ------------------------ Begin Code Sequence ---------------------------
+
+if nargin < 3, opts = struct(); end
+d = @(f,v) fieldd(opts, f, v);
+dark = d('dark', true);
+pr = B.problem;  lStar = pr.lStar;  tStar = pr.tStar;  mu = pr.muStar;
+
+% ---- fly the certificate -------------------------------------------------
+rv0 = B.stateD(T.sD);  rvf = B.stateA(T.sA);
+z = T.z(:);
+[tu, Y] = pumpkyn.cr3bp.tfMinProp(z(8), [rv0(1:6); 1; z(1:7)], B.Tnd, B.cnd, mu);
+r = Y(:, 1:3);
+lamv = Y(:, 11:13);
+alpha = -lamv ./ max(vecnorm(lamv, 2, 2), realmin);   % PMP thrust direction
+
+% ---- the two periodic orbits, as the residual sees them ------------------
+ss = linspace(0, 1, 600);
+D = zeros(600, 3);  A = zeros(600, 3);
+for k = 1:600
+    xd = B.stateD(ss(k));  D(k, :) = xd(1:3)';
+    xa = B.stateA(ss(k));  A(k, :) = xa(1:3)';
+end
+
+fig = figure('Color', pick(dark, 'k', 'w'), 'Position', [80 80 1100 800], ...
+             'Visible', pick(d('visible', true), 'on', 'off'), 'InvertHardcopy', 'off');
+ax = axes(fig);  hold(ax, 'on');
+set(ax, 'Color', pick(dark, 'k', 'w'), 'XColor', pick(dark, 'w', 'k'), ...
+        'YColor', pick(dark, 'w', 'k'), 'ZColor', pick(dark, 'w', 'k'), 'GridAlpha', 0.25);
+
+P.hDep = plot3(ax, D(:,1), D(:,2), D(:,3), '-', 'Color', [0.25 0.60 0.35], ...
+               'LineWidth', 1.4, 'DisplayName', sprintf('DRO (\\tau = %.2f)', pr.tauDRO));
+P.hArr = plot3(ax, A(:,1), A(:,2), A(:,3), '-', 'Color', [0.75 0.28 0.28], ...
+               'LineWidth', 1.4, 'DisplayName', sprintf('%d-petal tulip', pr.NpTulip));
+% the arc, coloured by elapsed time
+P.hTx = patch(ax, 'XData', [r(:,1); nan], 'YData', [r(:,2); nan], 'ZData', [r(:,3); nan], ...
+    'FaceColor', 'none', 'EdgeColor', 'interp', 'LineWidth', 2.0, ...
+    'FaceVertexCData', [tu(:); tu(end)]*tStar/86400, 'DisplayName', 'minimum-time transfer');
+colormap(ax, parula);
+cb = colorbar(ax);  cb.Label.String = 'elapsed time [days]';
+cb.Color = pick(dark, 'w', 'k');  cb.Label.Color = pick(dark, 'w', 'k');
+
+% thrust direction, on a subsample
+nT = min(d('nThrust', 40), size(r, 1));
+ix = round(linspace(1, size(r, 1), nT));
+sc = 0.06*max(range(r(:,1)), range(r(:,2)));
+quiver3(ax, r(ix,1), r(ix,2), r(ix,3), sc*alpha(ix,1), sc*alpha(ix,2), sc*alpha(ix,3), 0, ...
+    'Color', [1.00 0.92 0.55], 'LineWidth', 0.9, 'MaxHeadSize', 0.5, ...
+    'DisplayName', 'thrust direction');
+P.nThrust = nT;
+
+plot3(ax, r(1,1), r(1,2), r(1,3), 'o', 'MarkerSize', 9, 'LineWidth', 1.6, ...
+      'MarkerEdgeColor', [0.35 1 0.55], 'DisplayName', 'departure');
+plot3(ax, r(end,1), r(end,2), r(end,3), 'p', 'MarkerSize', 14, 'LineWidth', 1.4, ...
+      'MarkerFaceColor', [1 0.85 0.3], 'MarkerEdgeColor', 'k', 'DisplayName', 'arrival');
+plot3(ax, 1-mu, 0, 0, 'o', 'MarkerSize', 7, 'MarkerFaceColor', [0.7 0.7 0.72], ...
+      'MarkerEdgeColor', 'none', 'DisplayName', 'Moon');
+plot3(ax, -mu, 0, 0, 'o', 'MarkerSize', 11, 'MarkerFaceColor', [0.25 0.45 0.85], ...
+      'MarkerEdgeColor', 'none', 'DisplayName', 'Earth');
+
+grid(ax, 'on');  box(ax, 'off');
+axis(ax, 'equal');  ax.DataAspectRatio = [1 1 1];
+view(ax, d('view', [-35 22]));
+rotate3d(fig, 'on');                      % the point of this figure
+xlabel(ax, 'x [ND, rotating frame]');  ylabel(ax, 'y [ND]');  zlabel(ax, 'z [ND]');
+lg = legend(ax, 'Location', 'northeast');
+lg.TextColor = pick(dark, 'w', 'k');  lg.Color = pick(dark, [0.1 0.1 0.1], 'w');
+lg.EdgeColor = pick(dark, [0.3 0.3 0.3], [0.7 0.7 0.7]);
+
+P.tfDays = T.tfDays;  P.dvKms = T.dvKms;
+title(ax, {sprintf(['Minimum-time DRO \\rightarrow %d-petal tulip   |   ' ...
+                    '%.0f mN, I_{sp} %g s, %g kg'], pr.NpTulip, pr.thrustN*1000, pr.ispS, pr.m0kg), ...
+           sprintf(['s_D = %.4f, s_A = %.4f   |   t_f = %.4f d, \\DeltaV = %.4f km/s, ' ...
+                    'propellant %.2f kg'], T.sD, T.sA, T.tfDays, T.dvKms, T.mfKg)}, ...
+      'Color', pick(dark, 'w', 'k'), 'FontWeight', 'normal');
+
+P.fig = fig;  P.ax = ax;
+P.startMissKm = norm(r(1,:) - rv0(1:3)')*lStar;
+P.endMissKm   = norm(r(end,:) - rvf(1:3)')*lStar;
+if ~isempty(d('outPng', '')), exportgraphics(fig, d('outPng', ''), 'Resolution', 150); end
+end
+
+function v = pick(c, a, b)
+% PICK  Inline conditional.  INPUTS: c; a; b.  OUTPUTS: v.
+if c, v = a; else, v = b; end
+end
+
+function v = fieldd(s, f, d_)
+% FIELDD  Field with default.  INPUTS: s; f; d_.  OUTPUTS: v.
+if isfield(s, f) && ~isempty(s.(f)), v = s.(f); else, v = d_; end
+end

@@ -85,6 +85,10 @@ Q.CONJ  = -ones(nD, nA, 1, 'int8');
 Q.MINLV = nan(nD, nA, 1);
 Q.MINQ  = nan(nD, nA, 1);
 Q.DIMS  = nan(nD, nA, 1);
+% the junction count the conjugate test SAMPLED AT is part of what the
+% verdict means (it is a sign test at K-1 interior junctions), so it travels
+% with the verdict rather than being reconstructed later
+Q.KJ    = nan(nD, nA, 1);
 
 % ---- the spine: the certified minimum at each arrival phase, at sD0 -----
 iD0 = idxOf(Q.sD, sD0);
@@ -176,6 +180,7 @@ function Q = putVerdicts(Q, iD, iA, C)
 % PUTVERDICTS  Store one entry's conjugate verdict and hypothesis gates.
 % INPUTS: Q; iD; iA; C (a certify_root output).  OUTPUTS: Q.
 if isfield(C, 'conj') && ~isempty(C.conj), Q.CONJ(iD, iA, 1) = int8(C.conj); end
+if isfield(C, 'Y') && ~isempty(C.Y), Q.KJ(iD, iA, 1) = size(C.Y, 2); end
 if isfield(C, 'g') && isstruct(C.g) && ~isempty(C.g)
     Q.MINLV(iD, iA, 1) = C.g.minLamV;
     Q.MINQ(iD, iA, 1)  = C.g.minQmt;

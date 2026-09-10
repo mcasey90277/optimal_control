@@ -48,6 +48,32 @@ L = load(catMat);  fn = fieldnames(L);
 assert(numel(fn) == 1, 'expected one variable in %s', catMat);
 c = L.(fn{1});
 
+%% THE AUDIT GATE -------------------------------------------------------------
+% A catalog does not ship until an audit that re-derived it FROM ITS OWN KEYS
+% comes back clean. Fixing a builder says nothing about a file already
+% written, which is exactly how the 2026-09-10 review left us: a shipped
+% catalog and no way to know it was sound short of auditing it. Enforced here
+% rather than left to a checklist, because a checklist is what failed.
+% Waivable only by naming a reason in cfg.skipAuditBecause.
+why = getf(cfg, 'skipAuditBecause', '');
+if isempty(why)
+    auditMat = getf(cfg, 'auditMat', [strrep(catMat, '.mat', '') '_audit.mat']);
+    assert(exist(auditMat, 'file') == 2, ...
+        ['no audit for %s.\n' ...
+         'Run audit_phase_catalog(catMat) and pass cfg.auditMat, or state a ' ...
+         'reason in cfg.skipAuditBecause.'], catMat);
+    Aud = load(auditMat);
+    assert(isfield(Aud, 'A') && isfield(Aud.A, 'nBad') && isfield(Aud.A, 'catMat'), ...
+        'audit %s is not an audit_phase_catalog result', auditMat);
+    [~, an, ae] = fileparts(Aud.A.catMat);  [~, cn, ce] = fileparts(catMat);
+    assert(strcmp([an ae], [cn ce]), ...
+        'audit %s is for %s, not for %s', auditMat, Aud.A.catMat, catMat);
+    assert(Aud.A.nBad == 0, 'audit %s reports %d findings -- not shipping', auditMat, Aud.A.nBad);
+    fprintf('audit gate: %s clean (%d entries)\n', auditMat, Aud.A.nOk);
+else
+    fprintf('audit gate WAIVED: %s\n', why);
+end
+
 %% Facts, computed -- never typed --------------------------------------------
 f = struct();
 f.name      = c.name;
@@ -80,7 +106,10 @@ f.covMin     = min(covSheet);  f.covMax = max(covSheet);
 f.conjPass   = cp(1);  f.conjFail = cp(2);  f.conjNotrun = cp(3);
 f.hasConj    = isfield(c, 'conj_test');
 f.hasGates   = isfield(c, 'hyp_gates');
-if f.hasConj,  f.conjDate  = c.conj_test.date;  f.conjK = c.conj_test.K; end
+if f.hasConj
+    f.conjDate = c.conj_test.date;
+    if isfield(c.conj_test, 'K'), f.conjK = c.conj_test.K; else, f.conjK = NaN; end
+end
 if f.hasGates, f.gatesDate = c.hyp_gates.date; end
 f.tStar = c.constants.tStar_s;
 f.dayMin = f.tfMin*f.tStar/86400;  f.dayMax = f.tfMax*f.tStar/86400;

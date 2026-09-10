@@ -349,12 +349,14 @@ lift has $\lambda_0=1$ and finite $\lambda$, which proves the trajectory
 \emph{admits} a normal lift. BCT's theorem is stated for normal extremals in
 this sense (existence of a normal lift under the strong Legendre condition, the
 minimizing control being uniquely determined). What it does not address is
-whether the same trajectory also admits an abnormal lift; for control-affine
-systems with $\alpha\in S^2$ that would require $\lv\equiv0$ along an arc of the
-abnormal lift, which is incompatible with the unique direction law unless the
-trajectory is a coasting geodesic of the drift --- not the case for any
-all-burn catalog entry. That is an argument; the computation is cleaner than
-a second shooting problem. The lifts of a \emph{fixed} trajectory form a
+whether the same trajectory also admits an abnormal lift.
+
+\emph{Corrected 2026-09-10 (Astra proof review).} The sentence that stood here
+claimed an abnormal lift ``would require $\lv\equiv0$''. That is false:
+abnormality means the \emph{cost} multiplier $\lambda_0$ vanishes, and an
+abnormal extremal may perfectly well have $|\lv|>0$ and obey the same unique
+direction law. The informal argument built on it is withdrawn; the computation
+below stands on its own and is what we actually use. The lifts of a \emph{fixed} trajectory form a
 linear space
 \[
 S=\{\lambda(\cdot):\ \dot\lambda=-A(t)^{\!\top}\lambda,\ \ \lv(t)\parallel\alpha(t)\ \forall t,\ \ \lm(\tf)=0\},
@@ -363,8 +365,8 @@ with $A(t)=\partial f/\partial x$ at the \emph{frozen} flown control. Along any
 $\lambda\in S$ the quantity $\lambda\cdot f$ is conserved (it is $H-1$ for the
 normal lift, and $d(\lambda\cdot f)/dt=\lambda\cdot\partial_u f\,\dot u=0$ at a
 stationary control), so $\lambda\mapsto\lambda\cdot f$ is a linear functional on
-$S$ whose kernel is exactly the abnormal lifts. Our normal lift has
-$\lambda\cdot f=-1\neq0$. Therefore \emph{no abnormal lift exists iff $\dim S=1$}
+$S$ whose kernel contains the abnormal lifts. Our normal lift has
+$\lambda\cdot f=-1\neq0$. Therefore \emph{$\dim S=1$ EXCLUDES an abnormal lift}
 (if $\dim S\ge2$ the kernel is nontrivial). $\dim S=7-\operatorname{rank}C$ with
 $C=\big[\,[\alpha_k]_\times\Psi_v(t_k)\ ;\ e_m^{\!\top}\Psi(\tf)\,\big]$ stacked over
 samples $t_k$, $\Psi$ the fundamental matrix of the fixed-control adjoint.
@@ -374,6 +376,18 @@ $4.3\times10^{-8}$, $5.4\times10^{-8}$; the accepted $\lambda(0)$ lies in $S$
 to $10^{-7}$ (integration tolerance) and $\lambda\cdot f=-1$ to $10^{-10}$ along
 each arc. (The positivity of the multiplier $\rho$ in $\lv=-\rho\alpha$ is
 automatic for elements of a one-dimensional $S$ containing the normal lift.)
+
+\begin{remark}[Which direction we may claim]
+$S$ imposes the linear adjoint and stationarity conditions and
+$\lv\parallel\alpha$, but \emph{not} the PMP inequalities ($\lv=-\rho\alpha$
+with $\rho\ge0$, and $Q_{mt}\ge0$). A nonzero kernel element therefore need not
+be a genuine minimising multiplier. Consequently $\dim S=1$ together with a
+normal element of nonzero functional value is a \textbf{sufficient algebraic
+exclusion} of abnormal lifts --- which is the direction the gate is used in ---
+and the converse is \emph{not} established. The earlier ``iff'' is withdrawn.
+Making the converse available would mean testing the kernel against the PMP
+cone, not merely counting its dimension.
+\end{remark}
 
 \subsection{On the sampled determinant}\label{sec:sampling}
 Even with H1--H4 established, H5 is checked by sign changes at $K$ points.

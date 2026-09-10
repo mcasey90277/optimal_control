@@ -404,6 +404,39 @@ an even-multiplicity zero shows as a dip to the noise floor; and, if a
 equations with a sign-definite enclosure of the determinant --- out of scope
 for this program.
 
+\subsection*{H6: excluding the reduced problem's spurious zeros (new, 2026-09-10)}
+The reduction to \eqref{eq:dyn6} carries a hazard the autonomous form does not.
+Writing $h(t)=p(t)\!\cdot\!F(t,y,u^{*})$ for the \emph{reduced} Hamiltonian and
+$J(t)=D_{p_0}y(t)$, differentiating along the variational equations gives
+$p(t)^{\top}J(t)=0$, so whenever $\operatorname{rank}J=5$,
+\[
+  \det[\,J P,\ F\,]=0 \iff h(t)=0 .
+\]
+In the autonomous normal point-target problem $h\equiv-1$ kills this mechanism.
+In the reduction it does not, and H1--H4 do not exclude it: the determinant
+could vanish for a reason that is \emph{not} a loss of optimality (Astra proof
+review, 2026-09-10). Left there, this would undercut the instrument.
+
+It is, however, computable in closed form here. From $H=1+\lambda\!\cdot\!f=0$,
+\[
+  \lambda_{rv}\!\cdot\!f_{rv}
+  \;=\;-1-\lm\Big(-\frac{T}{c}\Big)\;=\;-1+\frac{T}{c}\,\lm ,
+\]
+which vanishes exactly at $\lm=c/T$. And $\lm$ is \emph{monotonically
+decreasing} ($\dot\lm=-T|\lv|/m^{2}<0$) from $\lm(0)$ to $\lm(\tf)=0$. Hence
+
+\begin{center}\fbox{\textbf{H6:} the spurious mechanism cannot fire iff
+$\lm(0)<c/T$.}\end{center}
+
+\noindent This is exact, costs nothing, and by the identity above is equivalent
+to $\int_0^{\tf}T\,Q_{mt}\,dt<c/T$ --- the total strict-bang margin must stay
+below $c/T$. \emph{Measured over the shipped 70\,mN catalog}: $c/T=49.38$,
+$\lm(0)\in[2.11,\,10.88]$ across all 53 entries, so the margin is $38.50$ and
+the headroom a factor of $4.5$; $|\lambda_{rv}\!\cdot\!f_{rv}|\ge0.78$
+everywhere, and along the anchor arc it stays in $[-1.0000,-0.8886]$. \textbf{No
+catalog entry can fire it.} \emph{Wiring note:} H6 is not yet computed by
+\texttt{mintime\_hypothesis\_gates}; it should be, since it is one subtraction.
+
 \section{What a PASS means today}\label{sec:meaning}
 For a catalog entry with \texttt{conj\_pass = 1} the defensible statement is:
 \begin{quote}

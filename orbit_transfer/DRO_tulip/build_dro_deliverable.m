@@ -100,8 +100,12 @@ helpers = {'costate_catalog_pick.m', 'costate_lib_describe.m', ...
            'costate_catalog_extremes.m', 'costate_catalog_example.m', ...
            'costate_catalog_extremes_movies.m'};
 files = {};
-copyfile(catMat, fullfile(outDir, 'costate_catalog_dro_tulip.mat'));
-files{end+1} = 'costate_catalog_dro_tulip.mat';
+% NAME THE COPY FROM THE CATALOG, not from this campaign: the same builder
+% now packages the 70 mN phase catalog, whose variable (and therefore whose
+% file) is costate_catalog_dro_tulip_70mN.
+catFile = [f.name '.mat'];
+copyfile(catMat, fullfile(outDir, catFile));
+files{end+1} = catFile;
 for k = 1:numel(helpers)
     src = fullfile(srcDir, helpers{k});
     assert(exist(src, 'file') == 2, 'missing maintained helper %s', src);
@@ -113,7 +117,7 @@ files{end+1} = 'README.md';
 
 if doMov
     addpath(srcDir);
-    costate_catalog_extremes_movies(fullfile(outDir, 'costate_catalog_dro_tulip.mat'), ...
+    costate_catalog_extremes_movies(fullfile(outDir, catFile), ...
         struct('outDir', outDir));
 end
 
@@ -214,10 +218,10 @@ p('```\n\n');
 
 p('## Quick start\n\n');
 p('```matlab\n');
-p('L = load(''costate_catalog_dro_tulip.mat'');\n');
+p('L = load(''%s.mat'');\n', f.name);
 p('cat = L.%s;\n', f.name);
 p('[tf_nd, z8, info] = costate_catalog_pick(cat, %g, %g, 3.0, 11.6, %g);\n', ...
-  f.tau(min(3,end)), f.Np(2), f.rungs(min(5,end)));
+  f.tau(min(3,end)), f.Np(min(2,end)), f.rungs(min(5,end)));
 p('%%                                        tau  Np  dep  arr  thrust(N)\n');
 p('%% z8 -> pumpkyn.cr3bp.tfMin as-is;  info.delivered = what you actually got\n');
 p('```\n\n');

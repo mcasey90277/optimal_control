@@ -34,6 +34,9 @@ function Q = sheet_to_catalog_file(S, ribs, outMat, opts)
 %  Q                        struct                  .OK [nD x nA x 1]
 %                                                   .Z8 [8 x nD x nA x 1]
 %                                                   .TF [nD x nA x 1] ND
+%                                                   .CONJ (int8, -1 = no
+%                                                   entry) .MINLV .MINQ
+%                                                   .DIMS the verdicts
 %                                                   .sD .sA .rungs .meta
 %
 %% Revision History:
@@ -53,6 +56,16 @@ Q.rungs = d('thrustN', 0.070);
 Q.OK = false(nD, nA, 1);
 Q.TF = nan(nD, nA, 1);
 Q.Z8 = nan(8, nD, nA, 1);
+% THE VERDICTS TRAVEL WITH THE ENTRY. Certification already establishes the
+% conjugate test and the three sufficiency-hypothesis gates for every point
+% here; discarding them at packaging made the catalog report a conjugate
+% census of 0/0/0 on entries that were all conjugate-certified, so a
+% recipient reading conj_pass would have seen nothing. -1 = no entry (the
+% same convention conj_catalog_pass uses).
+Q.CONJ  = -ones(nD, nA, 1, 'int8');
+Q.MINLV = nan(nD, nA, 1);
+Q.MINQ  = nan(nD, nA, 1);
+Q.DIMS  = nan(nD, nA, 1);
 
 % ---- the spine: the certified minimum at each arrival phase, at sD0 -----
 iD0 = idxOf(Q.sD, sD0);
@@ -61,6 +74,9 @@ for j = 1:nA
     Q.OK(iD0, j, 1) = true;
     Q.TF(iD0, j, 1) = S.TF(j)*86400/tStar;          % days -> ND
     Q.Z8(:, iD0, j, 1) = S.Z8(:, j);
+    c = S.cand{j};
+    k = find([c.ok] & abs([c.tfDays] - S.TF(j)) < 1e-9, 1);
+    if ~isempty(k), Q = putVerdicts(Q, iD0, j, c(k)); end
 end
 
 % ---- the ribs: certified departure points off the spine ----------------
@@ -78,6 +94,7 @@ if nargin >= 2 && ~isempty(ribs)
             Q.OK(iD, iA, 1) = true;
             Q.TF(iD, iA, 1) = P.z(8);
             Q.Z8(:, iD, iA, 1) = P.z(:);
+            Q = putVerdicts(Q, iD, iA, P);
         end
     end
 end
@@ -91,6 +108,17 @@ Q.meta = struct('muStar', 0.012150585609624, 'lStar', lStar, 'tStar', tStar, ...
     'NpTulip', Np, 'pmTulip', pm, 'periodTulip', 5*2*pi/6);
 
 if ~isempty(outMat), save(outMat, '-struct', 'Q'); end
+end
+
+function Q = putVerdicts(Q, iD, iA, C)
+% PUTVERDICTS  Store one entry's conjugate verdict and hypothesis gates.
+% INPUTS: Q; iD; iA; C (a certify_root output).  OUTPUTS: Q.
+if isfield(C, 'conj') && ~isempty(C.conj), Q.CONJ(iD, iA, 1) = int8(C.conj); end
+if isfield(C, 'g') && isstruct(C.g) && ~isempty(C.g)
+    Q.MINLV(iD, iA, 1) = C.g.minLamV;
+    Q.MINQ(iD, iA, 1)  = C.g.minQmt;
+    Q.DIMS(iD, iA, 1)  = C.g.dimS;
+end
 end
 
 function k = idxOf(grid, v)

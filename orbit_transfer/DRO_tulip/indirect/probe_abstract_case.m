@@ -1,4 +1,11 @@
 function R = probe_abstract_case(opts)
+%% PROBE (not production) -- the search that FOUND the 70 mN case.
+%
+%   An Isp ladder followed by a thrust walk, used once to locate the
+%   abstract's operating point. Kept as the record of that search. To obtain
+%   a 70 mN transfer now, use run_dro_tulip(sD, sA), which is tested and
+%   puts every answer through the gate stack.
+%
 %% Purpose:
 %
 %   Solve the CISLUNAR ABSTRACT's operating point: minimum-time DRO -> 7-petal

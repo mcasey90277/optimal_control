@@ -1,4 +1,18 @@
 function S = sweep_phase_mintime(opts)
+%% DEPRECATED (2026-09-09) -- superseded, kept for provenance only.
+%
+%   The fixed-step nearest-neighbour traversal in this file was judged the
+%   WRONG METHOD for the phase sheet (FINDINGS 36): it steps OVER folds
+%   instead of walking through them, so it stalls where the solution curve
+%   turns, and six defects had to be fixed in it before it produced anything
+%   trustworthy. It is superseded by the continuation route --
+%   arclength_arrival on costate_common/arclength_ms for the arrival axis,
+%   rib_from_crossing for the departure axis, both through certify_root.
+%
+%   It is kept because `results/sweep_phase_mintime.mat` is still a seed
+%   source for dro_tulip_library, and this file is the record of how those
+%   points were produced. DO NOT extend it; extend the continuation route.
+%
 %% Purpose:
 %
 %   The (departure phase x arrival phase) SHEET of the minimum-time

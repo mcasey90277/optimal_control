@@ -26,8 +26,13 @@ here = fileparts(fileparts(mfilename('fullpath')));
 addpath(here, fullfile(fileparts(here), 'DRO_tulip', 'indirect'));
 nD = 12;  nA = 12;  sA0 = 0.0754;  sD0 = 0;
 
+% every certified candidate carries its VERDICTS: the conjugate test and the
+% three sufficiency-hypothesis gates. Packaging used to discard them, so the
+% catalog reported a conjugate census of 0/0/0 on entries that were all
+% conjugate-certified.
 mkC = @(sD, sA, tf) struct('ok', true, 'reason', 'certified', 'z', [(1:7)'*tf; tf], ...
-                           'tfDays', tf*4.4335, 'sD', sD, 'sA', sA);
+                           'tfDays', tf*4.4335, 'sD', sD, 'sA', sA, 'conj', 1, ...
+                           'g', struct('minLamV', 3.2 + tf, 'minQmt', 3.8 + tf, 'dimS', 1));
 S = struct('sA', mod(sA0 + (0:nA-1)/nA, 1), 'TF', nan(1, nA), 'Z8', nan(8, nA), ...
            'cand', {cell(1, nA)}, 'sA0', sA0, 'nA', nA);
 for j = [1 3]                                   % two certified spine points
@@ -50,6 +55,10 @@ ok = chk(ok, Q.OK(12,1) && Q.OK(11,1) && abs(Q.TF(12,1) - 4.5) < 1e-12, ...
 ok = chk(ok, all(isnan(Q.TF(~Q.OK))), 'uncertified grid points carry NaN t_f');
 ok = chk(ok, abs(Q.Z8(8,1,3,1) - 4.3) < 1e-12, sprintf('z8 placed by (iD,iA): tf = %.3f ND', Q.Z8(8,1,3,1)));
 ok = chk(ok, isscalar(Q.rungs) && abs(Q.rungs - 0.070) < 1e-12, 'single 70 mN rung');
+ok = chk(ok, isequal(size(Q.CONJ, 1, 2, 3), [nD nA 1]) && all(Q.CONJ(Q.OK) == 1) && all(Q.CONJ(~Q.OK) == -1), ...
+         'conjugate verdicts carried, -1 where there is no entry');
+ok = chk(ok, abs(Q.MINLV(1,3,1) - (3.2 + 4.3)) < 1e-12 && Q.DIMS(1,3,1) == 1 && ...
+             all(isnan(Q.MINQ(~Q.OK))), 'hypothesis gates carried per cell, NaN where empty');
 need = {'muStar','lStar','tStar','ispS','m0kg','tauDRO','depFamily','depParams', ...
         'arrFamily','arrParams','NpTulip','pmTulip','periodTulip'};
 miss = need(~isfield(Q.meta, need));
@@ -67,6 +76,13 @@ probs = catalog_schema('validate', cat_);
 ok = chk(ok, isempty(probs), sprintf('packaged catalog validates (%s)', strjoin(probs, '; ')));
 ok = chk(ok, cat_.n_entries == 4 && abs(cat_.thruster.isp_s - 900) < 1e-12, ...
          sprintf('catalog: %d entries, Isp %g s', cat_.n_entries, cat_.thruster.isp_s));
+s1 = cat_.sheets(1);
+ok = chk(ok, isfield(s1, 'conj_pass') && isequal(size(s1.conj_pass), size(s1.has_solution)) && ...
+             nnz(s1.conj_pass == 1) == 4, ...
+         sprintf('catalog sheet carries conj_pass (%d passes)', nnz(s1.conj_pass == 1)));
+ok = chk(ok, isfield(s1, 'gate_dimS') && all(s1.gate_dimS(s1.has_solution) == 1) && ...
+             isfield(cat_, 'conj_test') && isfield(cat_, 'hyp_gates'), ...
+         'catalog carries the gate grids AND the provenance the schema demands');
 
 if ok, fprintf('TEST_SHEET_TO_CATALOG_FILE: ALL PASS\n'); else, fprintf('TEST_SHEET_TO_CATALOG_FILE: FAIL\n'); end
 end

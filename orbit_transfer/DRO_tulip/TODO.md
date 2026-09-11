@@ -5,7 +5,9 @@
   sign changes are candidates, interior ones refined 4x (zero vs near-miss),
   lift pair tightened to [1e-12 1e-9] after seven false "uncertified"
   verdicts, H6 clearance vs Hamiltonian residual, hMax rename, lift input
-  checks. Corrected re-sweep running; confirm census + writeback + torus.
+  checks. Corrected re-sweep DONE 2026-09-11: 115/115, 44 interior
+  candidates all near-miss (the ridge, FINDINGS 42), 0 zero, every lift
+  certified (worst 28x), torus redrawn.
 - [ ] **`build_70mN_library.m` full-chain rerun** — dry-run verified on the
   reuse path only; run with `run.sheet`/`run.package`/`run.audit` on to prove
   the live path reproduces 115 entries before the next ship.

@@ -2803,3 +2803,10 @@ refines TWICE (4x, then 16x) and calls a candidate a zero only when both
 levels fall, or a sign change is present, or the minimum reaches 1e-8 of
 the median. The 42 entries were re-measured under that rule; the
 writeback below is the final one.
+
+**Final writeback (2026-09-11):** the 42 entries re-measured under the
+two-level rule -- **44 interior candidates, 44 near-miss, 0 zero**; worst
+lift 28x, worst H6 4.54x, 0 interior sign changes. The catalog's
+second-order fields (`conj_interior`, `conj_interior_cand`,
+`conj_near_miss`, `conj_zero`, `h6_margin`, `lift_margin`) are the ones a
+recipient should read; `phase_torus_findings.png` is redrawn from them.

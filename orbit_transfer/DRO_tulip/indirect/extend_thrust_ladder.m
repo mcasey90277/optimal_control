@@ -200,8 +200,6 @@ for kc = 1:min(size(todo,1), maxCells)
                 [rv0(1:6)'; 1; zPrev(1:7)], ndT(Tprev), cnd, muStar);
             lg('    prev-rung propagation (%.1f N, tf=%.4f): %.0fs', ...
                Tprev, zPrev(8), toc(t0));
-            [tu, iu] = unique(tj);
-            sGrid = linspace(0, 1, K+1);
             for tfExp = tfExpList
                 % cumulative per-(cell,rung) budget -- a grinding cell must
                 % not stall the fleet (measured 2026-08-31: >30 min on one
@@ -221,13 +219,14 @@ for kc = 1:min(size(todo,1), maxCells)
                        tfExp, tfGuess, cnd/ndT(TN));
                     continue
                 end
-                Yg = interp1(tu/tu(end), yj(iu,1:14), sGrid, 'pchip')';
-                % mass: DERIVED from the all-burn identity m(t) = 1 - T t/c
-                % rather than rescaled from the old trajectory. A derivation
-                % from the invariant cannot carry a scaling mistake; the
-                % previous rescale-based construction did (review finding).
-                Yg(7,:) = 1 - ndT(TN)*(sGrid*tfGuess)/cnd;
-                seed = struct('tf', tfGuess, 'tGrid', sGrid*tfGuess, 'Y', Yg);
+                % THE shared cut, with the mass row DERIVED from the
+                % all-burn identity m(t) = 1 - T t/c rather than rescaled
+                % from the old trajectory -- a derivation from the invariant
+                % cannot carry a scaling mistake; the previous rescale-based
+                % construction did (review finding).
+                [Yg, tGs] = flight_to_junctions(tj, yj, K, struct('tf', tfGuess, ...
+                                'massLaw', struct('Tnd', ndT(TN), 'cnd', cnd)));
+                seed = struct('tf', tfGuess, 'tGrid', tGs, 'Y', Yg);
                 tG = tic;
                 if hardCap
                     [okRun, zt, it] = run_capped(pool, @ms_tfmin, 2, ...

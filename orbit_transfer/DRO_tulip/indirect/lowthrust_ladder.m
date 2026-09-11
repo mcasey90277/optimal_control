@@ -251,11 +251,10 @@ z = z0;  res = NaN;  fly = inf;  dz = NaN;  ok = false;
 try
     [tj, yj] = pumpkyn.cr3bp.tfMinProp(z0(8), [rv0(1:6)'; 1; z0(1:7)], ...
                                        Tnd, cOld, muStar);
-    [tu, iu] = unique(tj);
     K = 24;
-    sGrid = linspace(0, 1, K+1);
-    Yg = interp1(tu/tu(end), yj(iu,1:14), sGrid, 'pchip')';
-    seed = struct('tf', z0(8), 'tGrid', sGrid*z0(8), 'Y', Yg);
+    % THE shared cut (costate_common/flight_to_junctions)
+    [Yg, tGs] = flight_to_junctions(tj, yj, K, struct('tf', z0(8)));
+    seed = struct('tf', z0(8), 'tGrid', tGs, 'Y', Yg);
     [z, info] = ms_tfmin(rv0(1:6), rvf(1:6), seed, Tnd, cNew, muStar, ...
                          struct('wallSec', wallSec));
     res = info.normR;
@@ -285,9 +284,7 @@ try
     % states from the propagated trajectory, control from the PMP law
     [tj, yj] = pumpkyn.cr3bp.tfMinProp(zPrev(8), ...
         [rv0(1:6)'; 1; zPrev(1:7)], ndT(Tprev), cnd, muStar);
-    [tu, iu] = unique(tj);
-    sN = linspace(0, 1, N+1);
-    Yn = interp1(tu/tu(end), yj(iu,1:14), sN, 'pchip')';
+    Yn = flight_to_junctions(tj, yj, N);        % THE shared cut
     X0 = Yn(1:7,:);
     lv = Yn(11:13,:);
     U0 = [-lv ./ max(vecnorm(lv,2,1), eps); ones(1, N+1)];

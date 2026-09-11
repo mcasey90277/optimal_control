@@ -111,9 +111,7 @@ if ~isempty(cellSel)
     [tj, yj] = pumpkyn.cr3bp.tfMinProp(z0(8), ...
         [depAt(Q.sD(iDs)); 1; z0(1:7)], ...
         ndT(Q.rungs(kr0)), cOf(ob.ispS), muStar);
-    [tu, iu] = unique(tj);
-    sg0 = linspace(0, 1, K+1);
-    Y0 = interp1(tu/tu(end), yj(iu,1:14), sg0, 'pchip')';
+    Y0 = flight_to_junctions(tj, yj, K);        % THE shared cut
     P = struct('R', struct('closed', true, 'rungs', Q.rungs(kr0), ...
                            'cell', [iDs iAs], 'tf_nd', z0(8), 'Y', {{Y0}}));
 elseif ~isempty(resumeMat)

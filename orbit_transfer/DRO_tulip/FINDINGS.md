@@ -2984,3 +2984,65 @@ recipe strings inside the packagers. A shipped catalog's helpers carry no
 dependency on `costate_common` (GTO catalog README: "inlined, per
 deliverable-picker convention"), and the measured cost of the ordinary
 spline there is millimetres, only beside the seam.
+
+## 45. Two more duplications become library functions: the propulsion conversion and the seed cut (2026-09-11)
+
+Mike, on the FINDINGS 44 leftovers: "if it makes sense to fix those two then
+let's genericize and use library calls." Both made sense, and both were
+bigger than the first estimate.
+
+### The ND propulsion conversion (`nd_propulsion`, 28 files)
+
+Three expressions -- ND gravity, ND exhaust speed, ND thrust acceleration at
+unit mass fraction -- written out by hand in about twenty files, one of
+which already commented that it used "the same ND thrust/exhaust conversion
+`thrust_ladder_library` uses". Because every copy was textually IDENTICAL,
+the library can hold the expressions character for character and every
+migrated site keeps its value BITWISE. That is the whole equivalence
+argument, and it is stronger than any tolerance.
+
+Two closures came out of the call sites rather than from design:
+`ndT` (thrust to T_nd) for the rung ladders, and `ndC` (Isp to c_nd) because
+`probe_abstract_case` continues over Isp. Either input may be omitted:
+`arclength_thrust` receives c as an argument and needs only the thrust
+closure.
+
+**Not migrated, and why:** `cr3bp_common/cr3bp_lt_params` and the GTO
+`direct/` and `indirect/` campaigns do not have `costate_common` on their
+path (only `GTO_tulip/catalog` does). Routing them here would make one
+shared library depend on another -- an architecture call, not a refactor --
+and those campaigns are already deduplicated LOCALLY through
+`cr3bp_lt_params`. The inverse conversions (c_nd to Isp, in `catalog_schema`
+and `build_minfuel_catalog`) are a different rule.
+
+### The seed cut (`flight_to_junctions`, 7 files)
+
+Cutting a flown trajectory into K+1 junction states, with the mass row
+DERIVED from the all-burn identity when the seed is for a different thrust
+or t_f. Six engines held it inline; `seed_from_z8` held a seventh copy.
+
+**The one thing that was not bitwise, measured rather than assumed.** Six
+sites queried the interpolant in NORMALIZED time; `seed_from_z8` queried in
+ABSOLUTE time. On a real 70 mN flight the two differ by **3e-13 absolute /
+5.5e-14 relative, all of it in the costate rows**. There is no formulation
+that reproduces both, so the majority form was adopted and the difference
+was carried into `golden_cells`, where it shows as the shooting residual
+moving 5.6e-14 to 1.2e-13 against a 1e-10 bar with iteration counts
+unchanged. A seed perturbation is not a solution change: the root is set by
+the boundary-value problem, not by the guess.
+
+### Two habits that earned their keep
+
+**The orphan sweep.** After each migration, grep the edited files for the
+variables whose definitions were removed. It found a packager still using
+`g0` two lines below its deleted definition -- the kind of thing that runs
+fine until the one branch that touches it.
+
+**Code Analyzer message-for-message against the committed version**, rather
+than "is it clean now". It caught the dead `unique` calls and grid vectors
+the migration left behind in five engines (deleted), and it distinguished a
+genuinely new message from the same message with a shifted line number.
+
+Both of my first test thresholds were wrong, again, and their own failures
+caught them: an absolute bar where rescaling costs one ulp, and a 1e-7
+interpolation bar where a cubic on 60 intervals gives 3e-7.

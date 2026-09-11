@@ -43,6 +43,11 @@
   (the library holds the same expressions character for character).
   Verified: golden_cells 20/20, gates/conjugate/audit recomputed equal on
   measured cells, Code Analyzer message-for-message across all 28.
+- [x] **The seed-from-flight cut is one function** — DONE 2026-09-11
+  (`flight_to_junctions`): six engines plus `seed_from_z8`. The mass law
+  (all-burn identity) is an option there, so the DERIVED-not-rescaled rule
+  has one home. Gate: bitwise equal to the engines' inline form on a real
+  flight; `golden_cells` covers `seed_from_z8`'s 3e-13 query-form shift.
 - [ ] **Propulsion conversion: the sites NOT migrated, and why.**
   `cr3bp_common/cr3bp_lt_params` and the GTO `direct/` and `indirect/`
   campaign scripts still hold their own copies, because those modules do

@@ -47,9 +47,12 @@ function seed = seed_from_z8(z8, rv0, K, Tmax, c, muStar)
 %  Copyright Coorbital Inc.
 %% ------------------------ Begin Code Sequence ---------------------------
 
-tG = linspace(0, z8(8), K+1);
 [tj, yj] = pumpkyn.cr3bp.tfMinProp(z8(8), [rv0(:); 1; z8(1:7)], Tmax, c, muStar);
-[tu, iu] = unique(tj);
-Y = interp1(tu, yj(iu, 1:14), tG, 'pchip')';
+% THE shared cut (costate_common/flight_to_junctions). It queries in
+% NORMALIZED time where this file queried in absolute time: measured 3e-13
+% absolute / 5.5e-14 relative on a real 70 mN flight, all of it in the
+% costate rows -- a SEED perturbation, not a solution change, and
+% golden_cells gates it (iteration counts and residuals included).
+[Y, tG] = flight_to_junctions(tj, yj, K);
 seed = struct('tf', z8(8), 'tGrid', tG, 'Y', Y);
 end

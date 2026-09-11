@@ -116,8 +116,6 @@ for kr = 1:nR
     best = [];
     [tj, yj] = pumpkyn.cr3bp.tfMinProp(zPrev(8), ...
         [rv0(1:6)'; 1; zPrev(1:7)], ndT(Tprev), cnd, muStar);
-    [tu, iu] = unique(tj);
-    sGrid = linspace(0, 1, K+1);
     for tfExp = tfExpList
         if toc(t0) > attemptSec
             lg('  T=%.4f: [attemptSec %.0fs reached]', TN, attemptSec); break
@@ -127,9 +125,10 @@ for kr = 1:nR
             lg('  T=%.4f guess tfExp=%.2f skipped (depletion margin)', TN, tfExp);
             continue
         end
-        Yg = interp1(tu/tu(end), yj(iu,1:14), sGrid, 'pchip')';
-        Yg(7,:) = 1 - ndT(TN)*(sGrid*tfGuess)/cnd;
-        seed = struct('tf', tfGuess, 'tGrid', sGrid*tfGuess, 'Y', Yg);
+        % THE shared cut + the DERIVED all-burn mass row
+        [Yg, tGs] = flight_to_junctions(tj, yj, K, struct('tf', tfGuess, ...
+                        'massLaw', struct('Tnd', ndT(TN), 'cnd', cnd)));
+        seed = struct('tf', tfGuess, 'tGrid', tGs, 'Y', Yg);
         tG = tic;
         [okRun, zt, it] = run_capped(pool, @ms_tfmin, 2, wallSec + 90, ...
             rv0(1:6), rvf(1:6), seed, ndT(TN), cnd, muStar, ...

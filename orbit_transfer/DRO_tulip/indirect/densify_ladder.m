@@ -224,15 +224,14 @@ z = zSrc;  res = NaN;  fly = inf;  dz = NaN;  ok = false;
 try
     [tj, yj] = pumpkyn.cr3bp.tfMinProp(zSrc(8), ...
         [rvSrc0(1:6)'; 1; zSrc(1:7)], ndT(Tsrc), cnd, muStar);
-    [tu, iu] = unique(tj);
-    sG = linspace(0, 1, K+1);
     for p = tfExpList
         tfG = zSrc(8) * (Tsrc/TN)^p;
-        Yg = interp1(tu/tu(end), yj(iu,1:14), sG, 'pchip')';
-        % mass DERIVED from the all-burn identity m(t) = 1 - T t/c: a
-        % construction from the invariant cannot carry a scaling mistake
-        Yg(7,:) = 1 - ndT(TN)*(sG*tfG)/cnd;
-        seed = struct('tf', tfG, 'tGrid', sG*tfG, 'Y', Yg);
+        % THE shared cut, with the mass row DERIVED from the all-burn
+        % identity m(t) = 1 - T t/c: a construction from the invariant
+        % cannot carry a scaling mistake
+        [Yg, tGs] = flight_to_junctions(tj, yj, K, struct('tf', tfG, ...
+                        'massLaw', struct('Tnd', ndT(TN), 'cnd', cnd)));
+        seed = struct('tf', tfG, 'tGrid', tGs, 'Y', Yg);
         [zt, it] = ms_tfmin(rv0(1:6), rvf(1:6), seed, ndT(TN), cnd, ...
                             muStar, struct('wallSec', msWallS));
         [~, rvFly] = pumpkyn.cr3bp.tfMinProp(zt(8), ...

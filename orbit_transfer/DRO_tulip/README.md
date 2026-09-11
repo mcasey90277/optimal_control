@@ -119,7 +119,7 @@ blocks; the front-door functions underneath stay the engine.
 | `plot_transfer_3d.m` | the rotatable figure; drawn from the SAME flight the script measured (`opts.flight`), every annotation recomputed from it |
 | `../../costate_common/validate_flight.m` | the ONE admissibility check every flight passes: reached t_f, finite, all-burn mass law, clear of both primaries |
 | `../../costate_common/pmp_pointwise_checks.m` | Pontryagin on the flight: H = 0, transversality, the adjoint equations, and the EXACT minimum-principle gap of the control the propagator applied (its test injects a wrong-sign field and watches the gap open) |
-| `../../costate_common/conj_spectrum.m` | dense singular-spectrum scan: every sigma_6 dip or determinant sign change is a LOCATED candidate (start / endpoint / interior), interior ones refined 4x and read as zero or near-miss (FINDINGS 42) |
+| `../../costate_common/conj_spectrum.m` | dense singular-spectrum scan: every sigma_6 dip or determinant sign change is a LOCATED candidate (start / endpoint / interior), interior ones refined twice (4x, 16x) and read as zero or near-miss (FINDINGS 42) |
 | `../../costate_common/lift_margin.m` / `h6_margin.m` | the rank margin (Eckart-Young against a measured error, tight setting pair) and the H6 clearance judged against the arc's Hamiltonian residual |
 | `build_70mN_library.m` | the whole library chain as a script in the same style: anchors -> arcs -> sheet -> ribs -> package -> audit -> sweep -> pictures -> deliverable, each stage a switch, each stage's file reused when off |
 | `certify_root.m` / `certify_crossing.m` | the gate stack itself, fenced by hard timeouts |
@@ -129,7 +129,16 @@ blocks; the front-door functions underneath stay the engine.
 
 **A deliverable does not ship until its audit is clean** --
 `build_dro_deliverable` enforces that rather than trusting a checklist. See
-`../doc/CERTIFICATION_DISCIPLINE.md` for why, and FINDINGS 40-41 for the
+`../doc/CERTIFICATION_DISCIPLINE.md` for why, and FINDINGS 40-42 for the
 reviews that produced the rules -- including the second script review, which
 found the sampled minimum-principle check to be a tautology and H6 to be a
 gate that was computed but never enforced.
+
+**Second-order state of the 70 mN catalog (2026-09-11, FINDINGS 42):** every
+one of the 115 entries measured by the dense spectrum scan, the H6 margin and
+the lift margin, written into the catalog. 0 interior sign changes; 44
+interior near-degeneracies forming a RIDGE across arrival columns 4-7 (the
+certified sheet running close to where a conjugate point crosses), every one
+a near-miss under two-level refinement, 0 zeros; every lift certified (worst
+28x); worst H6 4.5x. `results/phase_torus_findings.png` shows all six margins
+per cell.

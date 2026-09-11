@@ -36,6 +36,7 @@ residual, flown arrival (<100 km), and **acceptance UNCHANGED by tfMin**
 | folder | catalog | entries | shipped as |
 |---|---|---|---|
 | `DRO_tulip/` | DRO → tulip (τ×Np coarse sweep + 12×12 flagship torus) | 3,936 | deliverables 1–3 |
+| `DRO_tulip/indirect/` | **70 mN phase library** (Isp 900 s, 150 kg; 12×12 departure × arrival phases, pseudo-arclength + ribs, full gate stack incl. conjugate test, H6, pointwise PMP; second-order sweep written in) | 115 of 144 cells, audited 115/115 | not yet shipped (Mike's call) |
 | `HALO_tulip/` | L2-southern halo → tulip (τ ∈ 1.75–3.4 × Np ∈ 5–12) | 3,980 (92% pairs) | deliverable 4 |
 | `DPO_tulip/` | DPO → tulip (τ ∈ 1–4 × Np ∈ 5–12) | 3,932 (89% pairs) | deliverable 5 |
 | `HALO_HALO/` | L1 ↔ L2 halo-to-halo, BOTH directions (schema v2, arrival-period axis; directions measurably asymmetric) | 4,048 (A: 1,952 @ 90%; B: 2,096 @ 96%) | deliverable 6 |

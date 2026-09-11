@@ -252,6 +252,17 @@ buy the Earth campaigns.
   `lambda_m(0) < c/T`, which excludes a spurious-zero mechanism of the reduced
   problem that none of H1-H4 covered. The catalog clears H6 by 4.5x.
   **In every case the instrument was right and the argument for it was wrong.**
+- **2026-09-11: the second-order instruments ran over the whole 70 mN
+  catalog and were corrected by what they found** (FINDINGS 41-42). The
+  dense spectrum scan (`conj_spectrum`), the H6 margin and the Eckart-Young
+  lift margin are written into every entry. Two instrument defects surfaced:
+  the lift's "measured error" with a 1e-7 second build was that build's own
+  error (seven false "uncertified" at sigma_6 = 0.99; 43x with a tight pair),
+  and a candidate scan that COUNTS mixes start-up, endpoint and interior
+  dips -- it now LOCATES, classifies and refines twice. Result: 0 interior
+  sign changes, 44 interior near-misses forming a ridge across arrival
+  columns 4-7, 0 zeros, every lift certified. The catalog's certifications
+  stand with the second order read consistently.
 - **And on 2026-09-09 it stopped being a formality.** Across the shipped
   catalogs the test passes almost everywhere (15,895/15,896), which made it
   easy to read as a rubber stamp. On the 70 mN phase sheet it is the

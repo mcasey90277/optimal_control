@@ -1,22 +1,11 @@
 # DRO_tulip — TODO
 
-- [ ] **`conj_spectrum` must locate its candidates (FINDINGS 41 addendum)**
-  -- after the sweep releases the file: per candidate dip, record t/t_f,
-  sigma_6/sigma_5 and the refinement behaviour (sampled minimum at 4x finer
-  spacing: falls = zero, plateaus = near-miss), separate start-up (Phi_rv
-  -> 0 at t = 0), graded-endpoint and interior candidates, and re-sweep so
-  the catalog's `multiplicity` field carries locations, not a count. Five
-  of 88 entries are flagged today; four are the endpoint collapse and (2,4)
-  at t/t_f = 0.573 is a plateaued near-miss (5.1e-4 relative).
-- [ ] **Review-2 items on sweep-held files (FINDINGS 41)** — apply once
-  `second_order_pass` finishes (flag `SWEEP2ND_DONE`): `conj_spectrum` drop
-  the "det sign meaningless" claim, report the uncovered final interval,
-  rename to a "candidate-detection scan", fix the `multTol` doc inequality;
-  `lift_margin` say "rank >= 6 / numerically supported nullity one", reject
-  zero or non-finite `lam`; `h6_margin` numerical clearance against the
-  Hamiltonian residual; `mintime_hypothesis_gates` rename `h6Hmin` (it is
-  the max). Re-run `test_conj_spectrum`, `test_lift_margin`,
-  `test_h6_margin`, `test_mintime_hypothesis_gates` after.
+- [x] **`conj_spectrum` locates, classifies and refines its candidates;
+  review-2 items on the sweep-held files applied** (FINDINGS 42, 2026-09-10):
+  sign changes are candidates, interior ones refined 4x (zero vs near-miss),
+  lift pair tightened to [1e-12 1e-9] after seven false "uncertified"
+  verdicts, H6 clearance vs Hamiltonian residual, hMax rename, lift input
+  checks. Corrected re-sweep running; confirm census + writeback + torus.
 - [ ] **`build_70mN_library.m` full-chain rerun** — dry-run verified on the
   reuse path only; run with `run.sheet`/`run.package`/`run.audit` on to prove
   the live path reproduces 115 entries before the next ship.

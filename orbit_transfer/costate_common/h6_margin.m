@@ -35,16 +35,20 @@ function H = h6_margin(z8, Tmax, c, opts)
 %                                                   and exhaust speed
 %  opts                     struct (optional)
 %   .marginMin [1] required lambda_m(0) < c/T ratio (1 = the bare condition;
-%   raise it to demand headroom)
+%   raise it to demand headroom), .Hresid [0] the numerical Hamiltonian
+%   residual |lambda.f + 1| on the arc: the reduced Hamiltonian is known only
+%   to that accuracy, so h_max must clear zero by MORE than it
 %
 %% Outputs:
 %
 %  H                        struct                  .lamM0 .threshold (c/T)
 %                                                   .margin (threshold/lamM0)
-%                                                   .hMin (the worst
+%                                                   .hMax (the largest
 %                                                   lambda_rv.f_rv on the arc,
-%                                                   attained at t = 0) .ok
-%                                                   .reason
+%                                                   attained at t = 0; the
+%                                                   mechanism fires iff it
+%                                                   reaches 0) .clearance
+%                                                   (-hMax) .ok .reason
 %
 %% Revision History:
 %  M. Casey                                                   (c) 09/10/2026
@@ -52,11 +56,12 @@ function H = h6_margin(z8, Tmax, c, opts)
 %% ------------------------ Begin Code Sequence ---------------------------
 
 if nargin < 4, opts = struct(); end
-marginMin = fieldd(opts, 'marginMin', 1);
+marginMin = fieldd(opts, 'marginMin', 1);  Hresid = fieldd(opts, 'Hresid', 0);
 lamM0 = z8(7);
 thresh = c/Tmax;
+hMax = -1 + (Tmax/c)*lamM0;
 H = struct('lamM0', lamM0, 'threshold', thresh, 'margin', thresh/max(lamM0, realmin), ...
-           'hMin', -1 + (Tmax/c)*lamM0, 'ok', false, 'reason', '');
+           'hMax', hMax, 'clearance', -hMax, 'ok', false, 'reason', '');
 
 if ~(isfinite(lamM0) && isreal(lamM0))
     H.reason = 'lambda_m(0) is not a real finite number';  return
@@ -73,10 +78,16 @@ if ~(H.margin > marginMin)
                         'zero need not be a conjugate point.'], lamM0, thresh, H.margin);
     return
 end
+if ~(H.clearance > Hresid)
+    H.reason = sprintf(['H6 NOT ESTABLISHED: h_max = %.3e clears zero by %.3e, but the ' ...
+                        'Hamiltonian is only known to %.1e -- the clearance is inside the ' ...
+                        'numerical error'], hMax, H.clearance, Hresid);
+    return
+end
 H.ok = true;
 H.reason = sprintf(['H6 holds: lambda_m(0) = %.4f is %.1fx below c/T = %.4f, so ' ...
-                    'lambda_rv.f_rv stays at or below %.4f and never vanishes'], ...
-                   lamM0, H.margin, thresh, H.hMin);
+                    'lambda_rv.f_rv stays at or below %.4f (clearance %.3f > residual %.1e)'], ...
+                   lamM0, H.margin, thresh, hMax, H.clearance, Hresid);
 end
 
 function v = fieldd(s, f, d_)

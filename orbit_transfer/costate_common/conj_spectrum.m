@@ -15,14 +15,28 @@ function out = conj_spectrum(z8, rv0, Tmax, c, muStar, opts)
 %   tried first on 2026-09-10 and is accurate to only ~2e-6 relative, which
 %   on some entries is ABOVE the quantity being measured.
 %
-%   WHAT IT DOES NOT DO. It does not judge by the smallest singular value at
-%   t_f. That value does not discriminate: a certified entry and a refuted
-%   one were measured at 1.37e-7 and 1.39e-7 -- the same number. Near t_f the
-%   whole spectrum is geometrically graded by the hyperbolic flow (2.4e0
-%   down to 1.4e-7, each ~30x the next) and the determinant is their product,
-%   ~1e-16, so its SIGN is meaningless there. The verdict here comes from
-%   INTERIOR structure only, and the endpoint spectrum is reported for
-%   information. (doc/conjugate_research_memo_2026-09-10.md.)
+%   This is a CANDIDATE-DETECTION scan. A dip of sigma_6 below tolCollapse
+%   of its median, or a determinant sign change between two samples, is a
+%   candidate, and every candidate is LOCATED and CLASSIFIED rather than
+%   counted:
+%
+%     start     -- within the first segment, where Phi_rv -> 0 at t = 0 and
+%                  the whole matrix is still growing from zero;
+%     endpoint  -- within the last segment, where the hyperbolic flow grades
+%                  the whole spectrum down together (a certified and a
+%                  refuted entry measured sigma_min 1.37e-7 and 1.39e-7 at
+%                  t_f: the endpoint value does not discriminate);
+%     interior  -- the only class that can be a conjugate point. Each one is
+%                  REFINED: the window around it is re-integrated at 4x the
+%                  sampling and the sampled minimum compared. A zero keeps
+%                  falling with the spacing (or carries a determinant sign
+%                  change); a near-miss plateaus. FINDINGS 41: entry (2,4)
+%                  at t/t_f = 0.573 plateaued at 6.7e-7 under 16x
+%                  refinement -- a near-miss, not an even-order crossing.
+%
+%   The determinant's last sample (t_f) is not used for the sign count
+%   because that sample is the graded product above; the sign changes are
+%   counted strictly inside. (doc/conjugate_research_memo_2026-09-10.md.)
 %
 %% Inputs:
 %
@@ -31,8 +45,11 @@ function out = conj_spectrum(z8, rv0, Tmax, c, muStar, opts)
 %  Tmax, c, muStar          double                  as tfMinProp
 %  opts                     struct (optional)
 %   .K [24] segments, .nSub [8] samples per segment, .tolCollapse [1e-3]
-%   relative dip in sigma_min that counts as a candidate, .multTol [0.1]
-%   sigma_5/sigma_6 below this at a candidate means MULTIPLICITY
+%   relative dip in sigma_6 that counts as a candidate, .multTol [0.1]
+%   sigma_6/sigma_5 ABOVE this at a candidate means two values collapsed
+%   together (MULTIPLICITY), .refine [4] sub-sampling factor for interior
+%   candidates, .zeroRatio [0.5] refined/coarse minimum below which an
+%   interior candidate is a ZERO
 %
 %% Outputs:
 %
@@ -40,9 +57,15 @@ function out = conj_spectrum(z8, rv0, Tmax, c, muStar, opts)
 %                                                   .det [1 x N] .nInterior
 %                                                   (sign changes strictly
 %                                                   inside) .tFirst .tf
-%                                                   .multiplicity (count of
-%                                                   candidates where two or
-%                                                   more values collapse)
+%                                                   .candidates (struct
+%                                                   array: .tOverTf .rel
+%                                                   .ratio sigma_6/sigma_5
+%                                                   .class .kind
+%                                                   .refineRatio .signChange)
+%                                                   .nInteriorCand .nNearMiss
+%                                                   .nZero .multiplicity
+%                                                   (INTERIOR candidates with
+%                                                   two values collapsed)
 %                                                   .svEnd [6 x 1] .minRel
 %
 %% Revision History:
@@ -54,6 +77,7 @@ if nargin < 6, opts = struct(); end
 d = @(f,v) fieldd(opts, f, v);
 K = d('K', 24);  nSub = max(2, d('nSub', 8));
 tolCollapse = d('tolCollapse', 1e-3);  multTol = d('multTol', 0.1);
+refine = d('refine', 4);  zeroRatio = d('zeroRatio', 0.5);
 z8 = z8(:);  rv0 = rv0(:);
 tf = z8(8);  lam0 = z8(1:7);
 
@@ -65,16 +89,13 @@ y = [rv0; 1; lam0];
 Phi = eye(14);
 N = K*nSub;
 out.t = zeros(1, N);  out.sv = zeros(6, N);  out.det = zeros(1, N);
+yS = zeros(14, N);  PhiS = zeros(14, 14, N);   % kept for the local refinement
 for k = 1:N
     [y, P] = mintime_prop_seg(dt, y, true, Tmax, c, muStar);
     Phi = P*Phi;
-    F = mintime_rhs_point(y, Tmax, c, muStar);
-    M = [Phi(1:6, 8:13)*Pq, F(1:6)];
-    nrm = max(vecnorm(M, 2, 1), realmin);
-    M = M ./ nrm;                              % equilibrate: conjugacy is
-    out.t(k) = k*dt;                           % dependence, not smallness
-    out.sv(:, k) = svd(M);
-    out.det(k) = det(M);
+    yS(:, k) = y;  PhiS(:, :, k) = Phi;
+    out.t(k) = k*dt;
+    [out.sv(:, k), out.det(k)] = specAt(y, Phi, Pq, Tmax, c, muStar);
 end
 out.tf = tf;
 out.svEnd = out.sv(:, end);
@@ -87,17 +108,79 @@ out.nInterior = nnz(diff(sg) ~= 0);
 ix = find(diff(sg) ~= 0, 1);
 if isempty(ix), out.tFirst = NaN; else, out.tFirst = out.t(ix); end
 
-% MULTIPLICITY: at a dip, does more than one singular value collapse?
-% sigma_5/sigma_6 near 1 means two directions went together.
-rel = out.sv(6, inner) ./ max(median(out.sv(6, inner)), realmin);
+% CANDIDATES: dips of sigma_6 below tolCollapse of its median, clustered
+% into events, each located, classified and (if interior) refined.
+med = max(median(out.sv(6, inner)), realmin);
+rel = out.sv(6, inner) ./ med;
 out.minRel = min(rel);
-cand = find(rel < tolCollapse);
-out.multiplicity = 0;
-for k = cand
-    if out.sv(6,k)/max(out.sv(5,k), realmin) > multTol
-        out.multiplicity = out.multiplicity + 1;
-    end
+isCand = rel < tolCollapse;
+% a determinant SIGN CHANGE between two inner samples is a candidate by
+% definition, whether or not sigma_6 dipped below the depth threshold at
+% either sample: a simple zero straddled by two samples need not
+sg0 = sign(out.det(inner));
+for ix = find(diff(sg0) ~= 0)
+    isCand(ix:ix+1) = true;
 end
+edges = diff([false, isCand, false]);
+starts = find(edges == 1);  ends = find(edges == -1) - 1;
+cands = struct('tOverTf', {}, 'rel', {}, 'ratio', {}, 'class', {}, 'kind', {}, ...
+               'refineRatio', {}, 'signChange', {}, 'kMin', {});
+sg = sign(out.det(inner));
+for e = 1:numel(starts)
+    a = starts(e);  b = ends(e);
+    [~, im] = min(rel(a:b));  km = a + im - 1;
+    cd = struct('tOverTf', out.t(km)/tf, 'rel', rel(km), ...
+                'ratio', out.sv(6,km)/max(out.sv(5,km), realmin), ...
+                'class', 'interior', 'kind', 'n/a', 'refineRatio', NaN, ...
+                'signChange', false, 'kMin', km);
+    if a <= nSub,              cd.class = 'start';
+    elseif b >= (N-1) - nSub,  cd.class = 'endpoint';
+    end
+    if strcmp(cd.class, 'interior')
+        % a determinant sign change inside the window is a zero outright
+        lo = max(1, a-1);  hi = min(numel(inner), b+1);
+        cd.signChange = any(diff(sg(lo:hi)) ~= 0);
+        % re-integrate the window at `refine`x the sampling from the sample
+        % before it (state and STM were kept), compare the sampled minimum
+        k0 = max(1, a-2);
+        if k0 == 1, yw = [rv0; 1; lam0];  Pw = eye(14);  kStart = 0;
+        else,       yw = yS(:, k0-1);     Pw = PhiS(:, :, k0-1);  kStart = k0-1;
+        end
+        kEnd = min(N-1, b+2);
+        nFine = (kEnd - kStart)*refine;  s6f = zeros(1, nFine);
+        for q = 1:nFine
+            [yw, P] = mintime_prop_seg(dt/refine, yw, true, Tmax, c, muStar);
+            Pw = P*Pw;
+            svq = specAt(yw, Pw, Pq, Tmax, c, muStar);
+            s6f(q) = svq(6);
+        end
+        cd.refineRatio = min(s6f)/max(out.sv(6, km), realmin);
+        if cd.signChange || cd.refineRatio < zeroRatio || min(s6f)/med < 1e-8
+            cd.kind = 'zero';
+        else
+            cd.kind = 'near-miss';
+        end
+    end
+    cands(end+1) = cd; %#ok<AGROW>
+end
+out.candidates = cands;
+isInt = strcmp({cands.class}, 'interior');
+out.nInteriorCand = nnz(isInt);
+out.nNearMiss = nnz(isInt & strcmp({cands.kind}, 'near-miss'));
+out.nZero     = nnz(isInt & strcmp({cands.kind}, 'zero'));
+% MULTIPLICITY: an INTERIOR candidate where sigma_5 collapsed with sigma_6
+out.multiplicity = nnz(isInt & [cands.ratio] > multTol);
+end
+
+function [sv, dt_] = specAt(y, Phi, Pq, Tmax, c, muStar)
+% SPECAT  Equilibrated spectrum and determinant of the quotiented conjugate
+% matrix at one sample.  INPUTS: y; Phi; Pq; Tmax; c; muStar.
+% OUTPUTS: sv [6x1]; dt_.
+F = mintime_rhs_point(y, Tmax, c, muStar);
+M = [Phi(1:6, 8:13)*Pq, F(1:6)];
+nrm = max(vecnorm(M, 2, 1), realmin);
+M = M ./ nrm;                                  % equilibrate: conjugacy is
+sv = svd(M);  dt_ = det(M);                    % dependence, not smallness
 end
 
 function v = fieldd(s, f, d_)

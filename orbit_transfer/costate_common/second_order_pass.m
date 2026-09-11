@@ -30,6 +30,11 @@ function S = second_order_pass(catMat, opts)
 %  opts                     struct (optional)
 %   .logFile [''] .sideMat [<catMat>_2ndprog.mat] .batchSec [inf]
 %   .maxEntries [inf] .K [24] .nSub [8] .writeback [false]
+%   .relTolPair [1e-12 1e-9] the two integration settings whose difference
+%   is the lift matrix's MEASURED error. The first sweep used [1e-10 1e-7]
+%   and read 4-9x on seven 26-day entries whose sigma_6 is 0.99: the loose
+%   setting's own error was the whole estimate (43x at this pair, 718x at
+%   [1e-12 1e-10] on entry (1,10), FINDINGS 42)
 %
 %% Outputs:
 %
@@ -75,11 +80,13 @@ if isfile(sideMat)
     lg('resuming from %s (%d of %d already measured)', sideMat, nnz([R.done]), n);
 else
     R = struct('done', num2cell(false(1,n)), 'nInterior', [], 'multiplicity', [], ...
-               'minRelSigma', [], 'h6margin', [], 'h6ok', [], 'liftMargin', [], ...
-               'liftCertified', []);
+               'minRelSigma', [], 'nInteriorCand', [], 'nNearMiss', [], 'nZero', [], ...
+               'candidates', [], 'h6margin', [], 'h6ok', [], 'h6clearance', [], ...
+               'liftMargin', [], 'liftCertified', [], 'relTolPair', []);
     R = R(:).';
 end
 
+relPair = d('relTolPair', [1e-12 1e-9]);
 nThis = 0;
 for q = 1:n
     if R(q).done, continue, end
@@ -89,25 +96,37 @@ for q = 1:n
     rv0 = stD(s.sD_frac(iD(q)));
     try
         Sp = conj_spectrum(z8, rv0(1:6), Tnd, cnd, mu, struct('K', K, 'nSub', nSub));
-        H6 = h6_margin(z8, Tnd, cnd);
         R(q).nInterior   = Sp.nInterior;
         R(q).multiplicity = Sp.multiplicity;
         R(q).minRelSigma = Sp.minRel;
-        R(q).h6margin    = H6.margin;
-        R(q).h6ok        = H6.ok;
+        R(q).nInteriorCand = Sp.nInteriorCand;
+        R(q).nNearMiss   = Sp.nNearMiss;
+        R(q).nZero       = Sp.nZero;
+        R(q).candidates  = Sp.candidates;
         % the rank statement as a MEASURED margin: build C twice and let
-        % Eckart-Young decide, instead of counting against a threshold
+        % Eckart-Young decide, instead of counting against a threshold.
+        % H6 comes from the gates so its clearance is judged against this
+        % arc's own Hamiltonian residual.
         gA = mintime_hypothesis_gates(z8, rv0(1:6), Tnd, cnd, mu, ...
-                                      struct('keepC', true));
+                                      struct('keepC', true, 'relTol', relPair(1)));
         gB = mintime_hypothesis_gates(z8, rv0(1:6), Tnd, cnd, mu, ...
-                                      struct('keepC', true, 'relTol', 1e-7));
+                                      struct('keepC', true, 'relTol', relPair(2)));
         Mg = lift_margin(gA.C, gB.C, z8(1:7), struct());
+        R(q).h6margin    = gA.h6Margin;
+        R(q).h6ok        = gA.h6Ok;
+        R(q).h6clearance = gA.h6Clearance;
         R(q).liftMargin  = Mg.margin;
         R(q).liftCertified = Mg.certified;
+        R(q).relTolPair  = relPair;
         R(q).done = true;
-        lg('  (%2d,%2d) interior %d, mult %d, minRel %.2e, H6 %.1fx %s, lift %.0fx %s', ...
-           iD(q), iA(q), Sp.nInterior, Sp.multiplicity, Sp.minRel, H6.margin, ...
-           tern(H6.ok, 'PASS', 'FAIL'), Mg.margin, tern(Mg.certified, 'CERT', 'uncert'));
+        intStr = '';
+        for ci = find(strcmp({Sp.candidates.class}, 'interior'))
+            intStr = [intStr sprintf(' [%s at t/tf %.3f, refine %.2g]', ...
+                      Sp.candidates(ci).kind, Sp.candidates(ci).tOverTf, Sp.candidates(ci).refineRatio)]; %#ok<AGROW>
+        end
+        lg('  (%2d,%2d) interior %d, cand %d/%d/%d (int/near-miss/zero)%s, minRel %.2e, H6 %.1fx %s, lift %.0fx %s', ...
+           iD(q), iA(q), Sp.nInterior, Sp.nInteriorCand, Sp.nNearMiss, Sp.nZero, intStr, Sp.minRel, ...
+           gA.h6Margin, tern(gA.h6Ok, 'PASS', 'FAIL'), Mg.margin, tern(Mg.certified, 'CERT', 'uncert'));
     catch ME
         lg('  (%2d,%2d) THREW: %s', iD(q), iA(q), ME.message);
     end
@@ -126,25 +145,34 @@ if d('writeback', false)
     assert(S.done, 'census incomplete (%d todo) -- not writing back', S.nTodo);
     bak = [catMat '.bak_2nd'];
     if ~isfile(bak), copyfile(catMat, bak); end
-    G = nan(size(s.has_solution));  M = G;  Hm = G;
+    G = nan(size(s.has_solution));  M = G;  Hm = G;  Ci = G;  Cn = G;  Cz = G;
     for q = 1:n
         G(iD(q), iA(q), iR(q))  = R(q).nInterior;
         M(iD(q), iA(q), iR(q))  = R(q).multiplicity;
         Hm(iD(q), iA(q), iR(q)) = R(q).h6margin;
+        Ci(iD(q), iA(q), iR(q)) = R(q).nInteriorCand;
+        Cn(iD(q), iA(q), iR(q)) = R(q).nNearMiss;
+        Cz(iD(q), iA(q), iR(q)) = R(q).nZero;
     end
     cat_.sheets(1).conj_interior = G;
     cat_.sheets(1).conj_multiplicity = M;
+    cat_.sheets(1).conj_interior_cand = Ci;
+    cat_.sheets(1).conj_near_miss = Cn;
+    cat_.sheets(1).conj_zero = Cz;
     cat_.sheets(1).h6_margin = Hm;
     Lm = nan(size(s.has_solution));
     for q = 1:n, Lm(iD(q), iA(q), iR(q)) = R(q).liftMargin; end
     cat_.sheets(1).lift_margin = Lm;
     cat_.second_order = struct('date', datestr(now, 'yyyy-mm-dd'), ...
         'instruments', 'costate_common/{conj_spectrum,h6_margin,lift_margin}', ...
-        'nSub', nSub, 'K', K, ...
+        'nSub', nSub, 'K', K, 'relTolPair', relPair, ...
         'meaning', ['conj_interior: interior sign changes of the quotiented determinant ' ...
                     'on a dense scan (K*nSub samples), 0 = none found; conj_multiplicity: ' ...
-                    'candidates where two or more singular values collapsed together, which ' ...
-                    'a determinant cannot see; h6_margin: (c/T)/lambda_m(0), > 1 excludes ' ...
+                    'INTERIOR candidates where two or more singular values collapsed together; ' ...
+                    'conj_interior_cand / conj_near_miss / conj_zero: interior sigma_6 dips ' ...
+                    '(start-up and graded-endpoint dips excluded) and, under 4x refinement, ' ...
+                    'whether the minimum plateaued (near-miss) or kept falling (zero); ' ...
+                    'h6_margin: (c/T)/lambda_m(0), > 1 excludes ' ...
                     'the reduced problem''s spurious-zero mechanism; lift_margin: ' ...
                     'sigma_6 over the MEASURED error in the lift-space constraint matrix ' ...
                     '(Eckart-Young), > 1 certifies dim S = 1 rather than asserting it.']);

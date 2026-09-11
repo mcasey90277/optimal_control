@@ -58,7 +58,15 @@ M = struct('sigma6', NaN, 'errEst', NaN, 'margin', NaN, 'dimS', NaN, ...
 sv = svd(C1);  M.sv = sv;
 M.sigma6 = sv(6);
 M.errEst = norm(C1 - C2);
-M.nullResid = norm(C1*lam)/max(norm(lam), realmin);
+% a lift must be a real, finite, NONZERO vector before its residual means
+% anything: the zero vector has residual zero and proves nothing
+if ~(isreal(lam) && all(isfinite(lam)))
+    M.reason = 'the supplied lift is not real and finite';  return
+end
+if norm(lam) == 0
+    M.reason = 'the supplied lift is the zero vector: no lift is exhibited';  return
+end
+M.nullResid = norm(C1*lam)/norm(lam);
 
 % the CONSTRUCTIVE half: is the supplied vector actually a lift?
 if ~(M.nullResid <= liftTol*max(sv(1), realmin))
@@ -84,8 +92,9 @@ if M.margin < marginMin
     return
 end
 M.certified = true;
-M.reason = sprintf(['dim S = 1 CERTIFIED: sigma_6 = %.2e exceeds the measured error ' ...
-                    '%.2e by %.0fx (Eckart-Young), and a lift is exhibited at %.1e'], ...
+M.reason = sprintf(['nullity one NUMERICALLY SUPPORTED (rank >= 6, dim S = 1): sigma_6 = %.2e ' ...
+                    'exceeds the measured error %.2e by %.0fx (Eckart-Young), and a lift is ' ...
+                    'exhibited at %.1e'], ...
                    M.sigma6, M.errEst, M.margin, M.nullResid);
 end
 

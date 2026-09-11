@@ -51,6 +51,11 @@ ok = chk(ok, ~M2.certified && M2.margin < 10, ...
 
 % (3) the constructive half must be reported separately and honestly
 ok = chk(ok, M.nullResid < 1e-12, sprintf('exhibited lift residual %.1e', M.nullResid));
+Mz = lift_margin(C, C + 1e-14*randn(20,7), zeros(7,1), struct());
+ok = chk(ok, ~Mz.certified && contains(lower(Mz.reason), 'zero'), ...
+         sprintf('a zero vector is not a lift: %s', Mz.reason));
+Mn = lift_margin(C, C + 1e-14*randn(20,7), [1; NaN; zeros(5,1)], struct());
+ok = chk(ok, ~Mn.certified && contains(lower(Mn.reason), 'finite'), 'a non-finite lift is refused');
 Mb = lift_margin(C, C, randn(7,1), struct());
 ok = chk(ok, ~Mb.certified && contains(lower(Mb.reason), 'lift'), ...
          sprintf('a vector that is NOT a lift is refused: %s', Mb.reason));

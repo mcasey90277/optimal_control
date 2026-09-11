@@ -2706,3 +2706,65 @@ count: as it stands the writeback will stamp `multiplicity 1` on five
 entries whose flags mean two different things. That fix waits for the sweep
 to release the file (TODO, top item); the count field should be read as
 "candidates, see FINDINGS 41" until then.
+
+## 42. The sweep read out, and the two instruments it corrected: the lift's "measured error" was the loose setting's own error, and a candidate scan must locate what it finds (2026-09-10)
+
+The first second-order sweep completed 115/115 and wrote back: 0 interior
+sign changes on every entry, worst H6 margin 4.5x, and **seven entries
+uncertified on the lift margin** (4-9x against the 10x bar): (1,10) and six
+of the seven entries in the 26-day column sA = 0.9087.
+
+### The lift margin was measuring the wrong thing
+
+`lift_margin` certifies dim S = 1 by Eckart-Young: sigma_6 must exceed the
+MEASURED error in the constraint matrix, and that error was measured as the
+difference between builds at integration tolerances 1e-10 and 1e-7. On
+(1,10):
+
+| setting pair | sigma_6 | sigma_7 | error estimate | margin |
+|---|---|---|---|---|
+| 1e-10 / 1e-7 | 0.988 | 1.6e-6 | 2.7e-1 | 3.7x, uncertified |
+| 1e-12 / 1e-9 | 0.988 | 1.5e-6 | 2.3e-2 | 43x, certified |
+| 1e-12 / 1e-10 | 0.988 | 1.5e-6 | 1.4e-3 | 718x, certified |
+
+sigma_6 is 0.99 -- the rank statement could hardly be safer -- and the
+"error" falls a decade per decade of the LOOSE setting. The two-build
+difference is dominated by the looser build's own error, so with a 1e-7
+second setting on a 26-day arc it was not an error estimate for the matrix
+in use; it was a measurement of how bad 1e-7 is. The sweep now uses the
+pair [1e-12, 1e-9] (`opts.relTolPair`), which is still conservative for the
+1e-12 build it certifies. The seven "uncertified" verdicts were the
+instrument, not the entries.
+
+### The candidate scan now locates, classifies and refines
+
+`conj_spectrum` returned a COUNT of "multiplicity" candidates; FINDINGS 41's
+addendum found that count mixing the start-up transient, the graded endpoint
+collapse and one interior near-miss. It now returns `candidates` -- each
+with t/t_f, sigma_6/sigma_5 and a class (start / endpoint / interior) -- and
+refines every interior one by re-integrating its window at 4x the sampling
+from the stored state and STM. Discrimination, measured:
+
+| entry | candidate at t/t_f | refined / coarse minimum | kind |
+|---|---|---|---|
+| refuted candidate at sA 0.0754 (22.05 d) | 0.92, with a sign change | 0.06 | ZERO |
+| certified (2,4) | 0.573 | 1.00 (6.68e-7 at 32x and 128x alike) | near-miss |
+
+A second gap surfaced while testing: the refuted entry's crossing was not a
+candidate at all, because a simple zero straddled by two samples need not
+dip below the depth threshold at either. A determinant sign change between
+inner samples is now a candidate by definition. Multiplicity is counted on
+INTERIOR candidates only, and the catalog writeback carries
+`conj_interior_cand`, `conj_near_miss`, `conj_zero` beside it.
+
+### The rest of the deferred review items
+
+H6's clearance is judged against the arc's own Hamiltonian residual
+(`h6_margin` `opts.Hresid`, wired from `mintime_hypothesis_gates`), `hMin`
+is `hMax` (it is the largest value of the reduced Hamiltonian, attained at
+t = 0), `lift_margin` refuses a zero or non-finite lift, and its certified
+reason reads "nullity one numerically supported (rank >= 6)". Tests: five
+instrument suites green plus a new one-entry `test_second_order_pass`.
+
+The corrected re-sweep is running from a fresh sidecar; its census and the
+redrawn torus follow.

@@ -37,6 +37,19 @@ ok = chk(ok, numel(S.t) > 150, sprintf('dense scan: %d samples over %d segments'
 ok = chk(ok, isequal(size(S.sv), [6 numel(S.t)]), 'the full 6-value spectrum is returned, not a determinant');
 ok = chk(ok, S.nInterior == 0, sprintf('certified entry: %d interior crossing(s)', S.nInterior));
 ok = chk(ok, S.multiplicity == 0, sprintf('and no multiplicity event (%d)', S.multiplicity));
+% Candidates are LOCATED and CLASSIFIED, not counted. A dip in the first
+% samples is the start-up transient (Phi_rv -> 0 at t = 0); a dip in the
+% last samples is the graded endpoint collapse; only an INTERIOR dip is a
+% candidate conjugate point, and for those the scan says whether the sampled
+% minimum FALLS under 4x refinement (a zero) or PLATEAUS (a near-miss).
+ok = chk(ok, isfield(S, 'candidates') && isstruct(S.candidates), 'candidates are returned as a struct array');
+cl = {S.candidates.class};
+ok = chk(ok, all(ismember(cl, {'start', 'endpoint', 'interior'})), ...
+         sprintf('every candidate is classified: %s', strjoin(cl, ' ')));
+ok = chk(ok, ~any(strcmp(cl, 'interior')), 'the certified anchor has NO interior candidate');
+ok = chk(ok, all(cellfun(@isscalar, {S.candidates.tOverTf})), 'each candidate carries its t/t_f');
+ok = chk(ok, isfield(S, 'nInteriorCand') && S.nInteriorCand == 0 && isfield(S, 'nNearMiss') && isfield(S, 'nZero'), ...
+         'interior candidates are summarised as near-miss / zero counts');
 
 % ---- a REFUTED entry: the scan must find what the test found ------------
 Sh = load(fullfile(fileparts(here), 'DRO_tulip', 'indirect', 'results', ...
@@ -61,6 +74,15 @@ else
                      bad.tfDays, badSA, Sb.nInterior));
     ok = chk(ok, Sb.tFirst > 0 && Sb.tFirst < Sb.tf, ...
              sprintf('and it is INTERIOR, at t/t_f = %.4f', Sb.tFirst/Sb.tf));
+    % the crossing must also appear as an INTERIOR candidate whose sampled
+    % minimum FALLS under refinement -- a zero, not a near-miss
+    ic = Sb.candidates(strcmp({Sb.candidates.class}, 'interior'));
+    ok = chk(ok, ~isempty(ic), sprintf('%d interior candidate(s) located', numel(ic)));
+    if ~isempty(ic)
+        ok = chk(ok, any(strcmp({ic.kind}, 'zero')), ...
+                 sprintf('refined: kinds = %s (min fell by %s)', strjoin({ic.kind}, ' '), ...
+                         strjoin(compose('%.2g', [ic.refineRatio]), ' ')));
+    end
 end
 
 % ---- the endpoint value must NOT be used as the verdict -----------------

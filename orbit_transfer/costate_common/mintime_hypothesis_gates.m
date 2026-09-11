@@ -54,7 +54,7 @@ function g = mintime_hypothesis_gates(z8, rv0, Tmax, c, muStar, opts)
 %
 %  g                        struct                  .h6Margin .h6Ok
 %                                                   .h6LamM0 .h6Threshold
-%                                                   .h6Hmin (H6, the reduced
+%                                                   .h6Hmax .h6Clearance (H6, the reduced
 %                                                   problem's spurious-zero
 %                                                   exclusion), .C when
 %                                                   opts.keepC,
@@ -127,9 +127,11 @@ g.nullResid = norm(C * z8(1:7)) / norm(z8(1:7));
 % lam_m = c/T, and lam_m decreases monotonically to lam_m(tf) = 0. Hence the
 % mechanism cannot fire iff lam_m(0) < c/T. One subtraction, so every
 % certified entry carries it. (Astra proof review, 2026-09-10; FINDINGS 40.)
-H6 = h6_margin(z8, Tmax, c);
+% The clearance is judged against THIS arc's Hamiltonian residual: the
+% reduced Hamiltonian is known no better than that.
+H6 = h6_margin(z8, Tmax, c, struct('Hresid', g.Hresid));
 g.h6Margin = H6.margin;  g.h6Ok = H6.ok;  g.h6LamM0 = H6.lamM0;
-g.h6Threshold = H6.threshold;  g.h6Hmin = H6.hMin;
+g.h6Threshold = H6.threshold;  g.h6Hmax = H6.hMax;  g.h6Clearance = H6.clearance;
 end
 
 % ------------------------------------------------------------------------

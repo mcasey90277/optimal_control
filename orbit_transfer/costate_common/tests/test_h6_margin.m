@@ -38,10 +38,16 @@ H = h6_margin([zeros(6,1); 5.500404; 4.0151], Tnd, cnd);
 ok = chk(ok, abs(H.threshold - thresh) < 1e-9, sprintf('threshold c/T = %.4f', H.threshold));
 ok = chk(ok, H.ok, sprintf('the anchor passes (%s)', H.reason));
 ok = chk(ok, abs(H.margin - thresh/5.500404) < 1e-9, sprintf('margin %.2fx', H.margin));
-ok = chk(ok, abs(H.hMin - (-1 + (Tnd/cnd)*5.500404)) < 1e-12, ...
-         sprintf('the worst |lambda_rv.f_rv| is reported: %.4f', H.hMin));
+ok = chk(ok, abs(H.hMax - (-1 + (Tnd/cnd)*5.500404)) < 1e-12, ...
+         sprintf('the largest lambda_rv.f_rv on the arc is reported: %.4f', H.hMax));
 
 % (2) exactly at the threshold: must FAIL, not round in our favour
+% NUMERICAL CLEARANCE: the reduced Hamiltonian is only known to the
+% Hamiltonian residual, so h_max must clear zero by MORE than that residual
+Hc = h6_margin([zeros(6,1); 5.500404; 4.0151], Tnd, cnd, struct('Hresid', 3e-8));
+ok = chk(ok, Hc.ok && Hc.clearance > 3e-8, sprintf('anchor clears zero by %.3f against a 3e-8 residual', Hc.clearance));
+Hd = h6_margin([zeros(6,1); 5.500404; 4.0151], Tnd, cnd, struct('Hresid', 2));
+ok = chk(ok, ~Hd.ok && contains(lower(Hd.reason), 'clearance'), 'a residual larger than the clearance refuses H6');
 H2 = h6_margin([zeros(6,1); thresh; 4.0], Tnd, cnd);
 ok = chk(ok, ~H2.ok && abs(H2.margin - 1) < 1e-9, ...
          sprintf('lambda_m(0) = c/T exactly is refused (margin %.4f)', H2.margin));

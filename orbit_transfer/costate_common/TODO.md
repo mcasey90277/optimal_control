@@ -1,5 +1,13 @@
 # costate_common — TODO
 
+- [ ] **Migrate the `interp1(..., 'spline')` endpoint sites onto `phase_state`**
+  (2026-09-11, FINDINGS 44). About a dozen: `second_order_pass`,
+  `conj_catalog_pass`, `gates_catalog_pass`, `DRO_tulip/direct/sweep_phasing_direct`,
+  and the per-campaign `costate_catalog_extremes` / `*_example` helpers. One at a
+  time, each with its own before/after check. NOT the shipped deliverable copies:
+  those must stay self-contained, and the measured cost there is metres, only
+  beside the seam.
+
 - [~] **Package promotion** — IN PROGRESS as the top-level cross-folder
   `../../oclib/+oc` (2026-08-09): `duals_to_costates` and the
   flown-control engine live there now (delegates here); `ms_bvp` +

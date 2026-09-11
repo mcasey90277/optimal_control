@@ -139,13 +139,15 @@ g0  = 9.80665*tStar^2/(1000*lStar);           % ND gravity at sea level
 cnd = (ispS/tStar)*g0;                        % ND exhaust speed
 Tnd = (thrustN/m0kg)*tStar^2/(lStar*1000);    % ND thrust acceleration at m = 1
 
-% PERIODIC interpolant. An ordinary not-a-knot spline is not C1 across the
-% seam at s = 0 -- exactly where a phase near zero is evaluated -- so a
-% periodic cubic is REQUIRED, not preferred: periodicPP errors without it.
-[ppD, seamD] = periodicPP(tD, rvD);
-[ppA, seamA] = periodicPP(tT, rvT);
-stateD = @(s) ppval(ppD, mod(s,1)*tD(end));
-stateA = @(s) ppval(ppA, mod(s,1)*tT(end));
+% PERIODIC interpolant, from the shared endpoint rule
+% (costate_common/phase_state): an ordinary not-a-knot spline is not C1
+% across the seam at s = 0 -- exactly where a phase near zero is evaluated
+% -- so a periodic cubic is REQUIRED, not preferred, and phase_state
+% refuses to build anything else unless asked. seam.value is the ORBIT's
+% own closure (no interpolant can improve it); seam.deriv is the
+% interpolant's derivative mismatch across the seam.
+[stateD, seamD] = phase_state(tD, rvD);
+[stateA, seamA] = phase_state(tT, rvT);
 departure.stateAtPhase = stateD;   arrival.stateAtPhase = stateA;
 rv0 = stateD(sD);   rvf = stateA(sA);
 departure.endpointND = rv0;        arrival.endpointND = rvf;
@@ -455,24 +457,6 @@ P = plot_transfer_3d(T, B, struct('flight', flight));
 fprintf('\n8. Figure %d is rotatable (flight supplied: %d).\n', P.fig.Number, P.flightSupplied);
 
 %% ------------------------------------------------------------------------
-function [pp, seam] = periodicPP(tt, yy)
-% PERIODICPP  PERIODIC cubic interpolant of one period of an orbit (csape,
-% Curve Fitting Toolbox), with its seam mismatch in value and derivative.
-% It ERRORS without csape: an ordinary spline is not C1 across s = 0 and a
-% silent fallback would put a derivative jump exactly where a phase near
-% zero is evaluated.  INPUTS: tt [N x 1]; yy [N x 6].
-% OUTPUTS: pp; seam (.value, .deriv).
-tt = tt(:).';  Y = yy.';
-if exist('csape', 'file') ~= 2
-    error('transfer_study:noPeriodicSpline', ...
-          'csape (Curve Fitting Toolbox) is required for a periodic endpoint interpolant');
-end
-pp  = csape(tt, Y, 'periodic');
-ppd = fnder(pp);
-seam.value = norm(ppval(pp,  0) - ppval(pp,  tt(end)));
-seam.deriv = norm(ppval(ppd, 0) - ppval(ppd, tt(end)));
-end
-
 function s = pass(c)
 % PASS  Verdict text.  INPUTS: c.  OUTPUTS: s.
 if c, s = 'PASS'; else, s = 'FAIL'; end

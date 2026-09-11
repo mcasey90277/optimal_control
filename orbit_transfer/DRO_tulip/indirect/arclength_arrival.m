@@ -81,11 +81,16 @@ if ischar(arg) && strcmp(arg, 'setup')
     % piecewise polynomial once and differentiate its coefficients, so the
     % residual and its derivative are the same object by construction.
     % (Astra chain review 2026-09-10.)
-    ppA = makePP(tT, rvT);   dppA = ppDer(ppA);
-    ppD = makePP(tD, rvD);
-    B.stateD  = @(s) ppval(ppD, mod(s,1)*tD(end));
-    B.stateA  = @(s) ppval(ppA, mod(s,1)*tT(end));
-    B.dstateA = @(s) tT(end)*ppval(dppA, mod(s,1)*tT(end));
+    % THE shared endpoint rule (costate_common/phase_state): a C1-periodic
+    % interpolant and the phase derivative dR/dsA differentiates. onMissing
+    % 'notaknot' keeps this engine's old behaviour -- degrade rather than
+    % refuse when the Curve Fitting Toolbox is absent -- but it now WARNS
+    % instead of falling back in silence. Bitwise-equal to the private
+    % makePP/ppDer it replaced (tests/test_phase_state).
+    ppo = struct('onMissing', 'notaknot');
+    [B.stateD, seamD]            = phase_state(tD, rvD, ppo);
+    [B.stateA, seamA, B.dstateA] = phase_state(tT, rvT, ppo);
+    B.seam = struct('dep', seamD, 'arr', seamA);
     sD = d('sD', 0);
     B.problem.sD = sD;
     B.rv0 = B.stateD(sD);
@@ -204,34 +209,6 @@ function col = dRdsA(sA, B, n, termRows)
 % INPUTS: sA; B; n; termRows.  OUTPUTS: col [n x 1].
 col = zeros(n, 1);
 col(termRows(1:6)) = -B.dstateA(sA);
-end
-
-function pp = makePP(tt, yy)
-% MAKEPP  Piecewise-polynomial interpolant of an orbit, PERIODIC when the
-% Curve Fitting Toolbox is available (an ordinary spline is not C1 across
-% the seam at s = 0, so dR/dsA would be wrong exactly there).
-% INPUTS: tt [1 x m]; yy [m x 6].  OUTPUTS: pp.
-tt = tt(:).';  Y = yy.';                       % 6 x m
-if exist('csape', 'file') == 2
-    try
-        pp = csape(tt, Y, 'periodic');  return
-    catch
-        % fall through to the ordinary spline
-    end
-end
-pp = spline(tt, Y);
-end
-
-function dpp = ppDer(pp)
-% PPDER  Derivative of a piecewise polynomial, by differentiating its own
-% coefficients -- so it is exactly the derivative of what ppval evaluates.
-% INPUTS: pp.  OUTPUTS: dpp.
-[br, co, np, or, dm] = unmkpp(pp);
-if or == 1
-    dpp = mkpp(br, zeros(size(co, 1), 1), dm);  return
-end
-w = (or-1):-1:1;                               % powers of the derivative
-dpp = mkpp(br, co(:, 1:or-1) .* w, dm);
 end
 
 function v = fieldd(s, f, d_)

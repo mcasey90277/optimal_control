@@ -2887,3 +2887,63 @@ for them the match proves the package and audit stages, not a re-walk of the
 departure axis. Re-walking the ribs is the one piece of the live path still
 unexercised.
 
+
+## 44. The endpoint interpolant becomes a library function, and the two private copies disagreed (2026-09-11)
+
+Mike's read of `transfer_study.m`: the private `periodicPP` should be its own
+file, and probably a library function; and the four lines that build the two
+phase-to-state closures should be a function too. Both were right, and the
+evidence was stronger than the suggestion.
+
+**There were already two copies, with different policies.** `transfer_study`'s
+`periodicPP` REFUSED to run without the Curve Fitting Toolbox;
+`arclength_arrival`'s `makePP` fell back to an ordinary spline IN SILENCE,
+with a companion `ppDer`. Same rule, two files, opposite failure modes -- the
+pattern `oclib/README.md` was written about.
+
+**What the ordinary spline actually costs** (measured, tau = 1 DRO and
+7-petal tulip, position):
+
+| phase | DRO | tulip |
+|---|---|---|
+| 0 .. 0.9 | below a millimetre | below a millimetre |
+| 0.999 | 3.2 m | 0.21 m |
+
+So in VALUE the not-a-knot spline is harmless except beside the seam. The
+difference that matters is the DERIVATIVE, which jumps by ~1e-2 there -- and
+that is exactly what `dR/dsA` differentiates in the continuation.
+
+**The two new units** (in `costate_common`, not `oclib`: both consumers are
+inside `orbit_transfer`, and `oclib`'s admission rule wants a second
+TOP-LEVEL consumer):
+
+- `periodic_pp(t, y, opts)` -- the C1-periodic cubic, its derivative from its
+  own coefficients, and two DIFFERENT seams: `seam.value` is the orbit
+  table's own closure (no interpolant can improve it), `seam.deriv` the
+  interpolant's derivative mismatch. The toolbox policy is now
+  `opts.onMissing`, and the fallback warns.
+- `phase_state(t, y, opts)` -- one orbit in, two closures out: the state at a
+  phase FRACTION and `dx/ds`, which carries the period. This is the unit the
+  four lines wanted to be, and the unit a dozen `interp1(..., 'spline')`
+  sites across the catalogs should migrate to, one at a time.
+
+**Equivalence, bitwise.** Four vectors captured from the pre-move closures --
+arrival state at 0.0754 and at 0.9991 (next to the seam), the arrival phase
+derivative at 0.3137, departure state at 0.9991 -- are reproduced with max
+difference **0**, and are now the gate in `tests/test_phase_state`. The
+production regression `test_arclength_ms_thrust` reproduces its archived arc
+root for root (max rel err 0.0e+00, |lam0| 73.8855) and
+`test_arclength_arrival` still measures `dstateA` against the interpolant
+(2.6e-10) and the analytic `R_sA` against a finite difference (9.0e-13).
+`transfer_study` reaches the same verdicts at the same t_f (18.6039 d
+catalog pair, 17.7976 d anchor).
+
+**A test threshold that was wrong, caught by its own failure.** The first
+interpolation check asserted an error below 1e-7 at 60 intervals, where a
+cubic's own error is ~3e-7. It now checks the ORDER instead -- halving h cuts
+the error by 15.1, against the 16 a fourth-order method gives -- which is a
+statement about the method rather than a magic number.
+
+Three mutations (the periodic scheme, the derivative coefficient rule, the
+per-phase scaling) each caught by the right test; files restored
+md5-identical.

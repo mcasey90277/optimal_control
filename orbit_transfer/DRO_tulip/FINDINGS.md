@@ -2768,3 +2768,38 @@ instrument suites green plus a new one-entry `test_second_order_pass`.
 
 The corrected re-sweep is running from a fresh sidecar; its census and the
 redrawn torus follow.
+
+### Addendum: the corrected re-sweep, and the near-miss RIDGE across the torus (2026-09-11)
+
+Census 115/115, written back: 0 interior sign changes everywhere, every
+lift certified with the tight pair (worst 28x -- the seven "uncertified"
+verdicts are gone), worst H6 4.5x. **42 entries carry an interior
+candidate**, and they are not scattered: they form a RIDGE. In arrival
+columns 4-7 (sA 0.3254-0.5754) nearly every certified row shows one
+near-degeneracy of the conjugate matrix, and its location walks smoothly
+with the phases -- along a column it moves earlier as the departure phase
+advances (column 4: t/t_f 0.573 at row 2 down to 0.510 at row 11; column
+7: 0.458 down to 0.401), and across columns it moves earlier as the
+arrival phase advances (row 3: 0.568 / 0.526 / 0.495 / 0.458 in columns
+4-7). Column 9 carries a second, late one at t/t_f = 0.917 on rows 5-7.
+Column 4 is the column whose first sheet candidate the conjugate test
+REFUTED (FINDINGS 38), so the ridge is the certified sheet running close to
+the surface in phase space where a conjugate point crosses the arc.
+
+Every one of the 42 is a near-miss by hand refinement, and the four the
+sweep labelled "zero" -- (6,5), (9,6), (10,7) at ratio 0.49 against a 0.5
+threshold, and (3,7) at 0.29 -- all PLATEAU at the second level:
+
+| entry | 8 / 32 / 128 samples per segment | second-level ratio |
+|---|---|---|
+| (6,5) | 4.71e-7 / 2.32e-7 / 2.32e-7 | 1.00 |
+| (9,6) | 1.58e-6 / 7.69e-7 / 7.69e-7 | 1.00 |
+| (3,7) | 6.33e-7 / 1.86e-7 / 1.49e-7 | 0.80 (a simple zero gives ~0.25) |
+| refuted control | sign change | 0.06 at the first level |
+
+So a single refinement level cannot separate a shallow near-miss from a
+zero when the first step happens to land at 0.49. `conj_spectrum` now
+refines TWICE (4x, then 16x) and calls a candidate a zero only when both
+levels fall, or a sign change is present, or the minimum reaches 1e-8 of
+the median. The 42 entries were re-measured under that rule; the
+writeback below is the final one.

@@ -27,12 +27,14 @@ function out = conj_spectrum(z8, rv0, Tmax, c, muStar, opts)
 %                  refuted entry measured sigma_min 1.37e-7 and 1.39e-7 at
 %                  t_f: the endpoint value does not discriminate);
 %     interior  -- the only class that can be a conjugate point. Each one is
-%                  REFINED: the window around it is re-integrated at 4x the
-%                  sampling and the sampled minimum compared. A zero keeps
-%                  falling with the spacing (or carries a determinant sign
-%                  change); a near-miss plateaus. FINDINGS 41: entry (2,4)
-%                  at t/t_f = 0.573 plateaued at 6.7e-7 under 16x
-%                  refinement -- a near-miss, not an even-order crossing.
+%                  REFINED TWICE: the window around it is re-integrated at
+%                  4x and then 16x the sampling and the sampled minima
+%                  compared level by level. A zero keeps falling at BOTH
+%                  levels (or carries a determinant sign change); a
+%                  near-miss plateaus. One level is not enough: on the 70 mN
+%                  sweep four entries read 0.49 at the first level against
+%                  a 0.5 threshold and 0.8-1.0 at the second (FINDINGS 42),
+%                  while the refuted entry's true crossing reads 0.06.
 %
 %   The determinant's last sample (t_f) is not used for the sign count
 %   because that sample is the graded product above; the sign changes are
@@ -48,8 +50,9 @@ function out = conj_spectrum(z8, rv0, Tmax, c, muStar, opts)
 %   relative dip in sigma_6 that counts as a candidate, .multTol [0.1]
 %   sigma_6/sigma_5 ABOVE this at a candidate means two values collapsed
 %   together (MULTIPLICITY), .refine [4] sub-sampling factor for interior
-%   candidates, .zeroRatio [0.5] refined/coarse minimum below which an
-%   interior candidate is a ZERO
+%   candidates (applied twice: 4x then 16x), .zeroRatio [0.5] level-to-
+%   level minimum ratio; an interior candidate is a ZERO only if BOTH
+%   levels fall below it
 %
 %% Outputs:
 %
@@ -61,7 +64,9 @@ function out = conj_spectrum(z8, rv0, Tmax, c, muStar, opts)
 %                                                   array: .tOverTf .rel
 %                                                   .ratio sigma_6/sigma_5
 %                                                   .class .kind
-%                                                   .refineRatio .signChange)
+%                                                   .refineRatio (4x / 1x)
+%                                                   .refineRatio2 (16x / 4x)
+%                                                   .signChange)
 %                                                   .nInteriorCand .nNearMiss
 %                                                   .nZero .multiplicity
 %                                                   (INTERIOR candidates with
@@ -124,7 +129,7 @@ end
 edges = diff([false, isCand, false]);
 starts = find(edges == 1);  ends = find(edges == -1) - 1;
 cands = struct('tOverTf', {}, 'rel', {}, 'ratio', {}, 'class', {}, 'kind', {}, ...
-               'refineRatio', {}, 'signChange', {}, 'kMin', {});
+               'refineRatio', {}, 'refineRatio2', {}, 'signChange', {}, 'kMin', {});
 sg = sign(out.det(inner));
 for e = 1:numel(starts)
     a = starts(e);  b = ends(e);
@@ -132,7 +137,7 @@ for e = 1:numel(starts)
     cd = struct('tOverTf', out.t(km)/tf, 'rel', rel(km), ...
                 'ratio', out.sv(6,km)/max(out.sv(5,km), realmin), ...
                 'class', 'interior', 'kind', 'n/a', 'refineRatio', NaN, ...
-                'signChange', false, 'kMin', km);
+                'refineRatio2', NaN, 'signChange', false, 'kMin', km);
     if a <= nSub,              cd.class = 'start';
     elseif b >= (N-1) - nSub,  cd.class = 'endpoint';
     end
@@ -147,15 +152,12 @@ for e = 1:numel(starts)
         else,       yw = yS(:, k0-1);     Pw = PhiS(:, :, k0-1);  kStart = k0-1;
         end
         kEnd = min(N-1, b+2);
-        nFine = (kEnd - kStart)*refine;  s6f = zeros(1, nFine);
-        for q = 1:nFine
-            [yw, P] = mintime_prop_seg(dt/refine, yw, true, Tmax, c, muStar);
-            Pw = P*Pw;
-            svq = specAt(yw, Pw, Pq, Tmax, c, muStar);
-            s6f(q) = svq(6);
-        end
-        cd.refineRatio = min(s6f)/max(out.sv(6, km), realmin);
-        if cd.signChange || cd.refineRatio < zeroRatio || min(s6f)/med < 1e-8
+        m1 = windowMin(yw, Pw, kEnd - kStart, dt, refine,   Pq, Tmax, c, muStar);
+        m2 = windowMin(yw, Pw, kEnd - kStart, dt, refine^2, Pq, Tmax, c, muStar);
+        cd.refineRatio  = m1/max(out.sv(6, km), realmin);
+        cd.refineRatio2 = m2/max(m1, realmin);
+        if cd.signChange || (cd.refineRatio < zeroRatio && cd.refineRatio2 < zeroRatio) ...
+                         || m2/med < 1e-8
             cd.kind = 'zero';
         else
             cd.kind = 'near-miss';
@@ -170,6 +172,19 @@ out.nNearMiss = nnz(isInt & strcmp({cands.kind}, 'near-miss'));
 out.nZero     = nnz(isInt & strcmp({cands.kind}, 'zero'));
 % MULTIPLICITY: an INTERIOR candidate where sigma_5 collapsed with sigma_6
 out.multiplicity = nnz(isInt & [cands.ratio] > multTol);
+end
+
+function m = windowMin(yw, Pw, nCoarse, dt, sub, Pq, Tmax, c, muStar)
+% WINDOWMIN  Smallest sigma_6 over nCoarse coarse steps re-integrated at
+% `sub` sub-steps each, from state yw / STM Pw.  INPUTS: yw; Pw; nCoarse;
+% dt; sub; Pq; Tmax; c; muStar.  OUTPUTS: m.
+m = inf;
+for q = 1:nCoarse*sub
+    [yw, P] = mintime_prop_seg(dt/sub, yw, true, Tmax, c, muStar);
+    Pw = P*Pw;
+    svq = specAt(yw, Pw, Pq, Tmax, c, muStar);
+    m = min(m, svq(6));
+end
 end
 
 function [sv, dt_] = specAt(y, Phi, Pq, Tmax, c, muStar)

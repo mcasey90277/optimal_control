@@ -1,5 +1,33 @@
 # costate_common — TODO
 
+- [ ] **DEFERRED, with the measurement: a Hermite scheme for `periodic_pp`**
+  (asked 2026-09-11 — is a choice of interpolant TYPE worth an option?).
+  Measured first, on the tau = 1 DRO (105 samples) and the 7-petal tulip
+  (1328): the periodic cubic's true error against propagation is **2.9 m
+  median / 4.9 m max (DRO)** and **0.23 m / 1.07 m (tulip)** at interval
+  midpoints, and `d/dt` of the interpolated position disagrees with the
+  interpolated velocity by **1.5 mm/s** (DRO) / **0.23 mm/s** (tulip)
+  against a ~500 m/s velocity scale. The certification gates are 100 km and
+  10 m/s, and the worst audited miss is 0.29 km: interpolation is ~4 orders
+  from binding, so NOT built.
+  - The variant worth building when it IS needed is **Hermite**, not a
+    higher-order spline for its own sake: the table already carries the
+    derivative of its position rows (the velocity rows), and the
+    acceleration is available from `cr3bp_field`. A spline discards both.
+    Hermite would enforce them, cutting the error and making the
+    interpolant self-consistent by construction. `opts.scheme` is already
+    the hook, so deferring costs one switch case.
+  - Ruled OUT on measurement, not taste: **trigonometric/FFT** (the natural
+    periodic basis) needs uniform samples, and these tables come off the
+    propagator with spacing ratios of **16384:1** (DRO) and 6221:1 (tulip);
+    resampling would bake in the cubic's own error. **pchip / makima** are
+    C1 only — worse for the seam derivative this function exists for.
+  - TRIGGERS to revisit: an endpoint tolerance within ~1 km of the
+    interpolation error; a continuation needing physically accurate
+    derivatives better than ~1e-5 relative (today's 9e-13 is
+    self-consistency against the same interpolant, not accuracy); or a much
+    sparser orbit table (error scales as h^4).
+
 - [ ] **Migrate the `interp1(..., 'spline')` endpoint sites onto `phase_state`**
   (2026-09-11, FINDINGS 44). About a dozen: `second_order_pass`,
   `conj_catalog_pass`, `gates_catalog_pass`, `DRO_tulip/direct/sweep_phasing_direct`,

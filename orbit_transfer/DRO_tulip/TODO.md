@@ -8,7 +8,7 @@
   checks. Corrected re-sweep DONE 2026-09-11: 115/115, 44 interior
   candidates all near-miss (the ridge, FINDINGS 42), 0 zero, every lift
   certified (worst 28x), torus redrawn.
-- [ ] **`build_70mN_library.m` full-chain rerun** — dry-run verified on the
+- [x] **`build_70mN_library.m` full-chain rerun** — DONE 2026-09-11: live sheet/package/audit into `results_rerun/`, bitwise-identical to the shipped catalog on all 115 entries, audit 115/0 (FINDINGS 43). Still unexercised: re-walking the departure ribs (`run.ribs`, hours). Original note: dry-run verified on the
   reuse path only; run with `run.sheet`/`run.package`/`run.audit` on to prove
   the live path reproduces 115 entries before the next ship.
   Prerequisites fixed 2026-09-11: packaging refuses to strip the catalog's

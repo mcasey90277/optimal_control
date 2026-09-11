@@ -2857,5 +2857,28 @@ files restored md5-identical; `test_run_dro_tulip` still passes (173 s).
 `transfer_study.m` still uses the default list -- it carries uncommitted
 edits of Mike's and was left alone.
 
-The rerun itself (sheet, package, audit into `results_rerun/`) is running;
-its comparison with the shipped catalog follows here.
+### The live rerun reproduces the shipped catalog exactly
+
+`build_70mN_library.m` on its LIVE path -- sheet, package and audit on,
+outputs to `results_rerun/` via `chainOverrides`, the shipped files untouched
+-- ran 46 min in a clean `-batch` session (R2026a) under an OS watchdog and
+ended `CHAIN DONE`. Against the shipped catalog:
+
+| check | shipped | rebuilt |
+|---|---|---|
+| entries | 115 | 115 |
+| cells present in only one | -- | 0 |
+| max \|dz8\| over all 115 | -- | **0** (bitwise) |
+| conjugate PASS | 115 | 115 |
+| audit | 115 ok / 0 bad | 115 ok / 0 bad |
+| certified arrival columns / candidates / certified | 11 / 32 / 11 | 11 / 32 / 11 |
+
+**What this proves, and what it does not.** The 11 arrival-spine entries
+were RE-CERTIFIED from the arcs by the gate stack and came back bitwise
+identical, so the sheet stage is deterministic and the gate stack's current
+code certifies exactly what shipped. The other 104 entries came from the
+saved departure-rib files (`run.ribs` stays off -- the ribs take hours), so
+for them the match proves the package and audit stages, not a re-walk of the
+departure axis. Re-walking the ribs is the one piece of the live path still
+unexercised.
+

@@ -52,7 +52,13 @@ function g = mintime_hypothesis_gates(z8, rv0, Tmax, c, muStar, opts)
 %
 %% Outputs:
 %
-%  g                        struct                  .minLamV .tMinLamV
+%  g                        struct                  .h6Margin .h6Ok
+%                                                   .h6LamM0 .h6Threshold
+%                                                   .h6Hmin (H6, the reduced
+%                                                   problem's spurious-zero
+%                                                   exclusion), .C when
+%                                                   opts.keepC,
+%                                                   .minLamV .tMinLamV
 %                                                   .minQmt .tMinQmt .dimS
 %                                                   .sv [7x1] .svRatio
 %                                                   .rankTolUsed
@@ -94,7 +100,12 @@ xOf  = @(t) interp1(tau, Y(:, 1:7),   t, 'pchip')';
 aOf  = @(t) -interp1(tau, lamV, t, 'pchip')';
 psiRhs = @(t, psi) reshape(-full(Afun(xOf(t), unitv(aOf(t)), Tmax, c, muStar))' * reshape(psi, 7, 7), [], 1);
 ts = linspace(0, tf, nSamp);
-[~, PSI] = ode113(psiRhs, ts, reshape(eye(7), [], 1), odeset('RelTol', 1e-10, 'AbsTol', 1e-12));
+% the integration tolerance is an OPTION so the caller can build C twice and
+% MEASURE the error in it -- that is what turns the dim S rank threshold into
+% an Eckart-Young margin (lift_margin). Astra review, 2026-09-10.
+relTol = 1e-10;  if isfield(opts, 'relTol'), relTol = opts.relTol; end
+[~, PSI] = ode113(psiRhs, ts, reshape(eye(7), [], 1), ...
+                  odeset('RelTol', relTol, 'AbsTol', 1e-2*relTol));
 C = zeros(3*nSamp + 1, 7);
 for k = 1:nSamp
     Psi = reshape(PSI(k, :), 7, 7);
@@ -105,8 +116,20 @@ PsiT = reshape(PSI(end, :), 7, 7);
 C(end, :) = PsiT(7, :);                              % lam_m(tf) = 0
 sv = svd(C);
 g.sv = sv;
+if isfield(opts, 'keepC') && opts.keepC, g.C = C; end
 g.nullResid = norm(C * z8(1:7)) / norm(z8(1:7));
 [g.dimS, g.rankTolUsed, g.svRatio] = lift_space_dim(sv, g.nullResid, rankTol);
+
+% --- H6: exclude the REDUCED problem's spurious-zero mechanism --------------
+% In the 6-state reduction the reduced Hamiltonian is not conserved, so the
+% conjugate determinant can vanish because h(t) = 0 rather than because the
+% rank drops. Closed form: lam_rv . f_rv = -1 + (T/c) lam_m, zero exactly at
+% lam_m = c/T, and lam_m decreases monotonically to lam_m(tf) = 0. Hence the
+% mechanism cannot fire iff lam_m(0) < c/T. One subtraction, so every
+% certified entry carries it. (Astra proof review, 2026-09-10; FINDINGS 40.)
+H6 = h6_margin(z8, Tmax, c);
+g.h6Margin = H6.margin;  g.h6Ok = H6.ok;  g.h6LamM0 = H6.lamM0;
+g.h6Threshold = H6.threshold;  g.h6Hmin = H6.hMin;
 end
 
 % ------------------------------------------------------------------------

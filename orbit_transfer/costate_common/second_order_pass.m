@@ -9,7 +9,9 @@ function S = second_order_pass(catMat, opts)
 %                    multiplicity, closing the sampled sign test's two blind
 %                    spots (two crossings in one segment; an even-order zero)
 %     lift_margin    the dim S rank statement as an Eckart-Young margin
-%                    against a MEASURED error, not a threshold
+%                    against a MEASURED error, not a threshold -- C is built
+%                    at two integration tolerances and their difference IS
+%                    the error
 %     h6_margin      lambda_m(0) < c/T, excluding the reduced problem's
 %                    spurious-zero mechanism
 %
@@ -93,12 +95,19 @@ for q = 1:n
         R(q).minRelSigma = Sp.minRel;
         R(q).h6margin    = H6.margin;
         R(q).h6ok        = H6.ok;
-        R(q).liftMargin  = NaN;        % needs C at two settings -- see the note
-        R(q).liftCertified = false;
+        % the rank statement as a MEASURED margin: build C twice and let
+        % Eckart-Young decide, instead of counting against a threshold
+        gA = mintime_hypothesis_gates(z8, rv0(1:6), Tnd, cnd, mu, ...
+                                      struct('keepC', true));
+        gB = mintime_hypothesis_gates(z8, rv0(1:6), Tnd, cnd, mu, ...
+                                      struct('keepC', true, 'relTol', 1e-7));
+        Mg = lift_margin(gA.C, gB.C, z8(1:7), struct());
+        R(q).liftMargin  = Mg.margin;
+        R(q).liftCertified = Mg.certified;
         R(q).done = true;
-        lg('  (%2d,%2d) interior %d, mult %d, minRel %.2e, H6 %.1fx %s', ...
+        lg('  (%2d,%2d) interior %d, mult %d, minRel %.2e, H6 %.1fx %s, lift %.0fx %s', ...
            iD(q), iA(q), Sp.nInterior, Sp.multiplicity, Sp.minRel, H6.margin, ...
-           tern(H6.ok, 'PASS', 'FAIL'));
+           tern(H6.ok, 'PASS', 'FAIL'), Mg.margin, tern(Mg.certified, 'CERT', 'uncert'));
     catch ME
         lg('  (%2d,%2d) THREW: %s', iD(q), iA(q), ME.message);
     end
@@ -126,6 +135,9 @@ if d('writeback', false)
     cat_.sheets(1).conj_interior = G;
     cat_.sheets(1).conj_multiplicity = M;
     cat_.sheets(1).h6_margin = Hm;
+    Lm = nan(size(s.has_solution));
+    for q = 1:n, Lm(iD(q), iA(q), iR(q)) = R(q).liftMargin; end
+    cat_.sheets(1).lift_margin = Lm;
     cat_.second_order = struct('date', datestr(now, 'yyyy-mm-dd'), ...
         'instruments', 'costate_common/{conj_spectrum,h6_margin,lift_margin}', ...
         'nSub', nSub, 'K', K, ...
@@ -133,7 +145,9 @@ if d('writeback', false)
                     'on a dense scan (K*nSub samples), 0 = none found; conj_multiplicity: ' ...
                     'candidates where two or more singular values collapsed together, which ' ...
                     'a determinant cannot see; h6_margin: (c/T)/lambda_m(0), > 1 excludes ' ...
-                    'the reduced problem''s spurious-zero mechanism.']);
+                    'the reduced problem''s spurious-zero mechanism; lift_margin: ' ...
+                    'sigma_6 over the MEASURED error in the lift-space constraint matrix ' ...
+                    '(Eckart-Young), > 1 certifies dim S = 1 rather than asserting it.']);
     Lout = struct(fn{1}, cat_);  save(catMat, '-struct', 'Lout');
     lg('[writeback] second-order measurements stored in %s (backup %s)', catMat, bak);
 end

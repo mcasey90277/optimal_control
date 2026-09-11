@@ -23,8 +23,8 @@ addpath(here, fullfile(fileparts(here), 'DRO_tulip', 'indirect'));
 T = run_dro_tulip(0, 0.0754, struct('quiet', true));
 ok = chk(ok, T.ok, sprintf('the anchor pair solves and certifies (%s)', T.reason));
 ok = chk(ok, abs(T.tfDays - 17.7976) < 2e-3, sprintf('t_f = %.4f d (library 17.7976)', T.tfDays));
-ok = chk(ok, abs(T.dvKms - 0.7485) < 1e-3 && abs(T.mfKg - 12.20) < 0.02, ...
-         sprintf('dV = %.4f km/s, fuel = %.2f kg', T.dvKms, T.mfKg));
+ok = chk(ok, abs(T.dvKms - 0.7485) < 1e-3 && abs(T.propellantKg - 12.20) < 0.02, ...
+         sprintf('dV = %.4f km/s, fuel = %.2f kg', T.dvKms, T.propellantKg));
 ok = chk(ok, T.conj == 1 && T.g.dimS == 1 && T.dz <= 1e-6 && T.flyKm < 1, ...
          sprintf('gates: conj %d, dim S %d, |dz| %.1e, flown %.3f km', T.conj, T.g.dimS, T.dz, T.flyKm));
 ok = chk(ok, strcmp(T.source, 'library'), sprintf('a library pair is served from the library (source: %s)', T.source));

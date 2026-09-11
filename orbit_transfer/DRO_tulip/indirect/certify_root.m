@@ -39,7 +39,8 @@ function C = certify_root(seed, rv0, rvf, B, opts)
 %
 %  C                        struct                  .ok .reason .z [8x1]
 %                                                   .Y [14 x K] .tfDays
-%                                                   .dvKms .mfKg .flyKm
+%                                                   .dvKms .propellantKg
+%                                                   .finalMassKg .flyKm
 %                                                   .flyVms .dz .conj .g
 %                                                   .sA .sD .rho .normR
 %                                                   .wallSec
@@ -91,7 +92,8 @@ t0 = tic;
 rv0 = rv0(1:6);  rvf = rvf(1:6);
 
 C = struct('ok', false, 'reason', '', 'z', nan(8,1), 'Y', [], 'tfDays', NaN, ...
-           'dvKms', NaN, 'mfKg', NaN, 'flyKm', NaN, 'flyVms', NaN, 'dz', NaN, ...
+           'dvKms', NaN, 'propellantKg', NaN, 'finalMassKg', NaN, ...
+           'flyKm', NaN, 'flyVms', NaN, 'dz', NaN, ...
            'conj', -1, 'g', [], 'sA', d('sA', NaN), 'sD', d('sD', NaN), ...
            'rho', NaN, 'normR', NaN, 'wallSec', NaN, 'flyKmWitness', NaN);
 
@@ -153,7 +155,12 @@ end
 C.flyKm  = norm(Yf(end,1:3) - rvf(1:3)')*lStar;
 C.flyVms = norm(Yf(end,4:6) - rvf(4:6)')*lStar/tStar*1000;
 mf = Yf(end,7);
-C.mfKg = (1 - mf)*m0kg;  C.dvKms = B.cnd*log(1/mf)*lStar/tStar;
+% BOTH, named for what they are. `mfKg` held propellant USED here while
+% verify_common/pmp/pmp_objective_error uses the same name for FINAL MASS --
+% one name, two meanings, in one repository. (Astra script review 2026-09-10.)
+C.propellantKg = (1 - mf)*m0kg;
+C.finalMassKg  = mf*m0kg;
+C.dvKms = B.cnd*log(1/mf)*lStar/tStar;
 if ~(C.flyKm < gateKm),   C.reason = sprintf('flown position miss %.1f km > %g', C.flyKm, gateKm);  C.wallSec = toc(t0); return, end
 if ~(C.flyVms < gateVms), C.reason = sprintf('flown velocity miss %.2f m/s > %g', C.flyVms, gateVms); C.wallSec = toc(t0); return, end
 

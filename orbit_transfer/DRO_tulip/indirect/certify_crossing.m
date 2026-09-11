@@ -39,7 +39,8 @@ function C = certify_crossing(p, sA, B, anc, opts)
 %
 %  C                        struct                  .ok .reason .z [8x1]
 %                                                   .Y [14 x K] junctions
-%                                                   .tfDays .dvKms .mfKg
+%                                                   .tfDays .dvKms
+%                                                   .propellantKg .finalMassKg
 %                                                   .flyKm .flyVms .dz
 %                                                   .conj (1/0/-1) .g (gates
 %                                                   struct or []) .sA .sD
@@ -62,7 +63,8 @@ assert(ctf == nExpect - 1, 'anchor says t_f is at index %d; the chart puts it at
 rho = p(end);
 if ~(rho > 1e-6)
     C = struct('ok', false, 'reason', sprintf('rho = %.1e: abnormal, no normal chart', rho), ...
-               'z', nan(8,1), 'Y', [], 'tfDays', NaN, 'dvKms', NaN, 'mfKg', NaN, ...
+               'z', nan(8,1), 'Y', [], 'tfDays', NaN, 'dvKms', NaN, ...
+               'propellantKg', NaN, 'finalMassKg', NaN, ...
                'flyKm', NaN, 'flyVms', NaN, 'dz', NaN, 'conj', -1, 'g', [], ...
                'sA', sA, 'sD', anc.sD, 'rho', rho, 'normR', NaN, 'wallSec', 0);
     return

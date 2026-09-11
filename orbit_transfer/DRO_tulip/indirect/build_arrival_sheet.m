@@ -91,7 +91,7 @@ for j = 1:numel(S.sA)
     if nc > 0, ncert = nnz([c.ok]); end
     if isfinite(S.TF(j))
         k = find([c.ok] & abs([c.tfDays] - S.TF(j)) < 1e-9, 1);
-        fprintf(' %2d  %.4f  %9.4f  %9.4f  %9.2f   %2d    %2d\n', j, S.sA(j), S.TF(j), c(k).dvKms, c(k).mfKg, nc, ncert);
+        fprintf(' %2d  %.4f  %9.4f  %9.4f  %9.2f   %2d    %2d\n', j, S.sA(j), S.TF(j), c(k).dvKms, c(k).propellantKg, nc, ncert);
     else
         if nc > 0, note = c(1).reason; else, note = 'no crossing'; end
         fprintf(' %2d  %.4f        ---        ---        ---   %2d    %2d   %s\n', j, S.sA(j), nc, ncert, note);

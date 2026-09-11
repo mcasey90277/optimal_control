@@ -46,7 +46,9 @@ dep.family = 'dro';
 dep.tau    = 1.0;                            % <-- change the departure orbit here
 
 [tD, rvD, infoD] = get_family_orbit(dep.family, struct('tau', dep.tau, 'muStar', muStar));
-closureD = norm(rvD(end,:) - rvD(1,:));
+departure = struct('params', dep, 'timeND', tD, 'stateND', rvD, ...
+                   'periodND', infoD.periodND, 'closure', norm(rvD(end,:) - rvD(1,:)));
+closureD = departure.closure;
 fprintf('1. DEPARTURE %s: period %.4f ND (%.3f d), %d samples\n', ...
         upper(dep.family), infoD.periodND, day(infoD.periodND), numel(tD));
 fprintf('   max radius from the barycentre %.4f ND (%.0f km)\n', ...
@@ -65,7 +67,9 @@ arr.Np     = 7;                              % <-- change the target orbit here
 arr.pm     = -1;                             %     branch: -1 or +1
 
 [tT, rvT, infoT] = get_family_orbit(arr.family, struct('Np', arr.Np, 'pm', arr.pm, 'muStar', muStar));
-closureT = norm(rvT(end,:) - rvT(1,:));
+arrival = struct('params', arr, 'timeND', tT, 'stateND', rvT, ...
+                 'periodND', infoT.periodND, 'closure', norm(rvT(end,:) - rvT(1,:)));
+closureT = arrival.closure;
 fprintf('\n2. TARGET %s: %d petals, branch %+d, period %.4f ND (%.3f d) LOCKED by Np\n', ...
         upper(arr.family), arr.Np, arr.pm, infoT.periodND, day(infoT.periodND));
 fprintf('   out-of-plane extent max|z| = %.4f ND (%.0f km)\n', ...
@@ -95,7 +99,9 @@ Tnd = (thrustN/m0kg)*tStar^2/(lStar*1000);    % ND thrust acceleration at m = 1
 [ppA, kindA] = periodicPP(tT, rvT);
 stateD = @(s) ppval(ppD, mod(s,1)*tD(end));
 stateA = @(s) ppval(ppA, mod(s,1)*tT(end));
+departure.stateAtPhase = stateD;   arrival.stateAtPhase = stateA;
 rv0 = stateD(sD);   rvf = stateA(sA);
+departure.endpointND = rv0;        arrival.endpointND = rvf;
 seamD = norm(ppval(ppD, 0) - ppval(ppD, tD(end)));
 seamA = norm(ppval(ppA, 0) - ppval(ppA, tT(end)));
 
@@ -140,7 +146,14 @@ seed.Y(1:7,1) = [rv0(1:6); 1];   seed.Y(8:14,1) = lib(match).z(1:7);
 assert(it.converged && isfinite(it.normR) && it.normR < 1e-8, ...
        'the shooting solve did not converge (|R| = %.2e): nothing below is meaningful', it.normR);
 
+% ONE FLIGHT. Every number in sections 6-8 comes from this object. Flying
+% again elsewhere with the same routine is repetition, not independence, and
+% it leaves the reader asking which trajectory owns the reported numbers.
+% (Astra script review 2026-09-10.)
 [tu, Y] = pumpkyn.cr3bp.tfMinProp(z8(8), [rv0(1:6); 1; z8(1:7)], Tnd, cnd, muStar);
+flight = struct('t', tu, 'Y', Y, 'z8', z8, 'rv0', rv0(1:6), 'rvf', rvf(1:6), ...
+                'Tnd', Tnd, 'cnd', cnd, 'muStar', muStar, 'tStar', tStar, ...
+                'lStar', lStar, 'm0kg', m0kg, 'nSamples', numel(tu));
 % ADMISSIBILITY, before any quantity that assumes it: positive finite mass
 % (log(1/mf) and every division by m), and no approach to a primary.
 assert(all(isfinite(Y(:))), 'the flight returned non-finite states');
@@ -286,12 +299,43 @@ fprintf('   S3 normality     dim S = %d (1 = no abnormal lift)        %s\n', ...
 fprintf('      lift residual %.1e, |lambda.f + 1| %.1e, sv gap %.1e\n', ...
         gates.nullResid, gates.Hresid, gates.svRatio);
 
-% S4  no conjugate time in (0, t_f], by the free-time quotiented Jacobi test
-cj = it.conj;
-fprintf('   S4 conjugate     %s, %d crossing(s), min|det| = %.2e       %s\n', ...
-        cj.verdict, gv(cj, 'nCrossings'), min(abs(cj.detScaled)), pass(cj.pass == 1));
 
-sufficient = minLamV > 0 && min(Qmt) > 0 && gates.dimS == 1 && cj.pass == 1;
+% S4  no conjugate time in (0, t_f], by the free-time quotiented Jacobi test.
+%     PASS/FAIL is not the whole vocabulary: the instrument can also return
+%     ENDPOINT, which is UNRESOLVED rather than either. And a verdict is only
+%     interpretable beside its COVERAGE -- how many samples, over what span.
+cj = it.conj;
+s4Status = 'FAIL';
+if cj.pass == 1
+    s4Status = 'PASS';
+elseif strcmpi(cj.verdict, 'ENDPOINT')
+    s4Status = 'UNRESOLVED';
+end
+fprintf('   S4 conjugate     %s, %d crossing(s), min|det| %.2e       %s\n', ...
+        cj.verdict, gv(cj, 'nCrossings'), min(abs(cj.detScaled)), s4Status);
+fprintf('      coverage: %d samples on (0, t_f], first full-rank at %d; a sign\n', ...
+        numel(cj.detScaled), gv(cj, 'firstFullRank'));
+fprintf('      test cannot see an even-order zero or two zeros in one segment\n');
+
+% S5  H6: exclude the REDUCED problem's spurious-zero mechanism. Not a
+%     hypothesis of the theorem -- a hazard of OUR reduction (FINDINGS 40).
+if isfield(gates, 'h6Margin')
+    fprintf('   S5 H6 spurious   lambda_m(0) %.3f vs c/T %.3f, margin %5.1fx  %s\n', ...
+            gates.h6LamM0, gates.h6Threshold, gates.h6Margin, pass(gates.h6Ok));
+end
+
+h6ok = ~isfield(gates, 'h6Ok') || gates.h6Ok;
+sufficient = minLamV > 0 && min(Qmt) > 0 && gates.dimS == 1 && ...
+             strcmp(s4Status, 'PASS') && h6ok;
+
+% CONSISTENCY FIRST, verdict second. Exposing the scaffolding risks growing a
+% second, unverified implementation of the tests; this binds the inline
+% numbers to the shared instrument -- and it has to run BEFORE any verdict is
+% printed, or a mismatch is announced too late to matter.
+assert(abs(minLamV - gates.minLamV) < 1e-6*max(gates.minLamV,1) && ...
+       abs(min(Qmt) - gates.minQmt) < 1e-6*max(gates.minQmt,1), ...
+       'the inline gates disagree with mintime_hypothesis_gates');
+fprintf('   (inline gates agree with mintime_hypothesis_gates)\n');
 
 fprintf('\n   VERDICT: ');
 if necessary && sufficient
@@ -315,17 +359,12 @@ else
     fprintf('an extremal, but a sufficiency hypothesis fails: no minimality claimed.\n');
 end
 
-% cross-check the explicit numbers against the shared instrument, so this
-% script cannot quietly become a second, unverified implementation
-assert(abs(minLamV - gates.minLamV) < 1e-6*max(gates.minLamV,1) && ...
-       abs(min(Qmt) - gates.minQmt) < 1e-6*max(gates.minQmt,1), ...
-       'the inline gates disagree with mintime_hypothesis_gates');
 
 %% ========================================================================
 %  8. INTERACTIVE 3D PLOT  (drag to rotate, scroll to zoom)
 %% ========================================================================
 T = struct('z', z8, 'sD', sD, 'sA', sA, 'tfDays', day(z8(8)), 'dvKms', dV, ...
-           'mfKg', m0kg*(1-mf));
+           'propellantKg', m0kg*(1-mf), 'finalMassKg', m0kg*mf);
 P = plot_transfer_3d(T, B);
 fprintf('\n8. Figure %d is rotatable.\n', P.fig.Number);
 

@@ -25,8 +25,8 @@ addpath(here, fullfile(fileparts(here), 'DRO_tulip', 'indirect'));
 C = certify_crossing(anc.p, anc.sA, B, anc);
 ok = chk(ok, C.ok, sprintf('anchor certifies (reason: %s)', C.reason));
 ok = chk(ok, abs(C.tfDays - 17.798) < 2e-3, sprintf('t_f = %.4f d (17.798)', C.tfDays));
-ok = chk(ok, abs(C.dvKms - 0.7485) < 1e-3 && abs(C.mfKg - 12.20) < 0.02, ...
-         sprintf('dV = %.4f km/s, fuel = %.2f kg (0.7485, 12.20)', C.dvKms, C.mfKg));
+ok = chk(ok, abs(C.dvKms - 0.7485) < 1e-3 && abs(C.propellantKg - 12.20) < 0.02, ...
+         sprintf('dV = %.4f km/s, fuel = %.2f kg (0.7485, 12.20)', C.dvKms, C.propellantKg));
 ok = chk(ok, C.flyKm < 1 && C.flyVms < 1, sprintf('flown miss %.3f km, %.3f m/s', C.flyKm, C.flyVms));
 ok = chk(ok, C.dz < 1e-6, sprintf('tfMin witness |dz| = %.1e', C.dz));
 ok = chk(ok, C.conj == 1 && C.g.dimS == 1 && C.g.minLamV > 0 && C.g.minQmt > 0, ...

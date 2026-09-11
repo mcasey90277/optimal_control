@@ -132,7 +132,7 @@ if ~d('quiet', false)
     end
     if isfield(T, 'tfDays')
         fprintf('  t_f = %.4f d   dV = %.4f km/s   propellant %.2f kg\n\n', ...
-                T.tfDays, gv(T,'dvKms'), gv(T,'mfKg'));
+                T.tfDays, gv(T,'dvKms'), gv(T,'propellantKg'));
     end
     fprintf('%s\n', lines{:});
     fprintf('=========================================\n\n');

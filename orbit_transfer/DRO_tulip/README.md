@@ -33,8 +33,8 @@ thrust 1–15 N), every entry accepted UNCHANGED by `pumpkyn.cr3bp.tfMin`.
   (`casadi_mintime_dro` `objective='energy'`, `tfFix`) → harvest →
   `indirect/ms_minenergy` (fixed-tf `ms_bvp`) → gates incl. the generic
   single-shooting acceptance. Records in `direct/results/minenergy_pilot.mat`.
-- **`indirect/`** — `ms_tfmin.m` (multiple shooting; thin binding of
-  `costate_common/ms_bvp` since migration #3), **`ms_minenergy.m`** (its
+- **`indirect/`** — `ms_tfmin.m` lived here until 2026-08-26 (now
+  `costate_common/ms_tfmin`, the min-time binding of `ms_bvp`), **`ms_minenergy.m`** (its
   fixed-t_f min-energy sibling, 2026-08-14; `tests/test_ms_minenergy.m`
   = synthetic known-answer BVP), `thrust_ladder_library.m`
   (THE ladder engine, family-agnostic endpoints — halo/DPO campaigns call
@@ -121,7 +121,7 @@ blocks; the front-door functions underneath stay the engine.
 | `../../costate_common/pmp_pointwise_checks.m` | Pontryagin on the flight: H = 0, transversality, the adjoint equations, and the EXACT minimum-principle gap of the control the propagator applied (its test injects a wrong-sign field and watches the gap open) |
 | `../../costate_common/conj_spectrum.m` | dense singular-spectrum scan: every sigma_6 dip or determinant sign change is a LOCATED candidate (start / endpoint / interior), interior ones refined twice (4x, 16x) and read as zero or near-miss (FINDINGS 42) |
 | `../../costate_common/lift_margin.m` / `h6_margin.m` | the rank margin (Eckart-Young against a measured error, tight setting pair) and the H6 clearance judged against the arc's Hamiltonian residual |
-| `build_70mN_library.m` | the whole library chain as a script in the same style: anchors -> arcs -> sheet -> ribs -> package -> audit -> sweep -> pictures -> deliverable, each stage a switch, each stage's file reused when off |
+| `build_70mN_library.m` | the whole library chain as a script in the same style: anchors -> arcs -> sheet -> ribs -> package -> audit -> sweep -> pictures -> deliverable, each stage a switch, each stage's file reused when off. Inputs (anchors, arcs, ribs) always come from `results/`; outputs go to `outDir`, which a batch driver sets with `chainOverrides.outDir` to rebuild BESIDE the shipped files. The package stage refuses to overwrite a catalog carrying the second-order writeback unless the sweep stage is on (`guard_catalog_overwrite`, FINDINGS 43) |
 | `certify_root.m` / `certify_crossing.m` | the gate stack itself, fenced by hard timeouts |
 | `audit_phase_catalog.m` | audits a SHIPPED catalog the way a recipient would: re-derives every entry from the catalog's own keys and flies it |
 | `package_phase_catalog.m` | sheet + ribs -> a shareable catalog |

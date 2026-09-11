@@ -2810,3 +2810,33 @@ lift 28x, worst H6 4.54x, 0 interior sign changes. The catalog's
 second-order fields (`conj_interior`, `conj_interior_cand`,
 `conj_near_miss`, `conj_zero`, `h6_margin`, `lift_margin`) are the ones a
 recipient should read; `phase_torus_findings.png` is redrawn from them.
+
+## 43. The chain was not safe to rerun: three defects fixed before the live rerun (2026-09-11)
+
+The TODO's top item is the live rerun of `build_70mN_library.m` (stages on,
+not the reuse path). Reading the chain before running it found three ways it
+would have damaged or misread the shipped 70 mN catalog. None changed a
+catalog number; all three would have on the next run.
+
+| defect | what would have happened | fix |
+|---|---|---|
+| packaging overwrites the catalog, and the shipped switches were package ON / sweep OFF | the second-order writeback (conj_interior, near-miss, zero, H6, lift) erased: catalogs are gitignored and `.bak_2nd` predates the writeback | `guard_catalog_overwrite` refuses by name unless the sweep stage is on, and backs up whatever it overwrites |
+| the chain's sidecar pointer was `second_order_progress.mat` | that is the FIRST sweep's file: lift margins differ from the catalog's by up to 1.35e4, and it lacks the candidate fields. The v2 file matches the catalog on all six written-back fields, 115/115, to 0 | pointer is `second_order_progress_v2.mat` |
+| the sidecar was POSITIONAL | a re-packaged catalog with a different entry set would inherit other entries' measurements on resume, silently | every record carries its cell key and z8; a resumed record must match (`second_order_pass:staleSidecar`); a pre-key sidecar is adopted only with `adoptLegacy` and only if every written-back value matches |
+
+Also: `chainOverrides.outDir` / `.run` let a batch driver rebuild BESIDE the
+shipped files, so a rerun is compared rather than trusted, and the catalog's
+`second_order.meaning` now says two-level refinement (4x, then 16x), which is
+what `conj_spectrum` does since FINDINGS 42.
+
+Tests `test_second_order_sidecar_identity` (5) and
+`test_guard_catalog_overwrite` (5), RED before GREEN; four mutations of the
+new refusals all caught, files restored md5-identical. Commit `5df657c`.
+
+The pattern is FINDINGS 40's and CERTIFICATION_DISCIPLINE rule 5 again, one
+level up: the builder was fixed and audited, but the SCRIPT that drives the
+builder had never been run on its live path, and its defaults were the
+dangerous ones.
+
+The rerun itself (sheet, package, audit into `results_rerun/`) is running;
+its comparison with the shipped catalog follows here.

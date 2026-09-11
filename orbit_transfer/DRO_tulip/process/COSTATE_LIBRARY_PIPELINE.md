@@ -40,7 +40,7 @@ shooting amplifies that ~1e3× over a 4-ND spiral. `pumpkyn.cr3bp.tfMin` from
 such seeds grinds for hours. Always run this cheap seed-residual probe (one
 `tfMinProp` flight per cell) *before* spending solver time.
 
-`indirect/ms_tfmin.m` splits the arc into K segments whose junction states are
+`ms_tfmin.m` (in `indirect/` when this was written; `costate_common/` since 2026-08-26) splits the arc into K segments whose junction states are
 unknowns (kills the amplification), seeds every junction from the cell's saved
 state+costate trajectory, and solves the full system with trust-region-dogleg
 and an **analytic block Jacobian assembled entirely from pumpkyn calls**

@@ -85,7 +85,7 @@ sheets by `sD_frac x sA_frac`, so this is a new catalog, not a new format.
 | | |
 |---|---|
 | **grid** | DRO tau=1 -> tulip Np=7, 12 departure x 12 arrival phases, one rung (0.070 N) |
-| **certified now** | 10 transfers from the earlier sweeps + the arcs' new points; t_f spans **16.23 d (arrival phase 0.1587) to 26.44 d (0.9087)** -- arrival phase moves the transfer by ~60%, departure phase by ~1 day |
+| **certified now** | see **status** below: 115 entries packaged and audited (the "10 transfers" this row first quoted predates the arcs and ribs); on the arrival spine t_f spans **16.23 d (arrival phase 0.1587) to 26.44 d (0.9087)** -- arrival phase moves the transfer by ~60%, departure phase by ~1 day |
 | **method** | arrival axis by PSEUDO-ARCLENGTH continuation (`arclength_ms` + `arclength_arrival`), departure axis by a bisecting walker (`rib_from_crossing`); both axes end in the same gate stack (`certify_root`) |
 | **front doors** | **`run_dro_tulip(sD, sA)`** -- one call, one certified transfer, library route or continuation walk; **`build_70mN_library.m`** -- the WHOLE chain (anchors, arcs, sheet, ribs, package, audit, sweep, pictures, deliverable) as one script with stage switches; **`transfer_study.m`** -- one transfer with the scaffolding exposed, necessary + sufficiency checks one at a time. The two scripts are now the STANDARD for every costate library (principle 8, 2026-09-10) |
 | **why continuation** | the fixed-step sweep of 2026-09-08 stalled and was judged the wrong method under review (FINDINGS 36); the arcs walk through folds instead of stepping over them |
@@ -134,7 +134,9 @@ Two disjoint regimes, with nothing in between:
    NO catalog                      only
 ```
 
-- The catalogs bottom out at **1 N** (one fine sheet reaches 0.5 N).
+- The catalogs bottomed out at **1 N** when this was written (one fine sheet
+  reached 0.5 N). Since 2026-09-01 all four reach **0.5 N** (§5A), and the
+  70 mN phase library (§2.1) now sits inside the gap.
 - The GTO campaigns live at **25 mN** — a factor of 40 below the catalog floor
   — and have **no catalog at all**.
 - Sub-0.5 N rungs were deferred by Darin "until customers need it," but that
@@ -152,12 +154,12 @@ it walks into the regime where the GTO campaigns already stall.
 |---|---|---|
 | min-time | 6 of 6 shipped | anchors everywhere |
 | min-energy | 1 pilot, 3 cells, 1 pair | GTO_tulip, GTO_ELFO (as homotopy roots) |
-| min-fuel | **none** | 4 campaigns certified |
+| min-fuel | **1** -- DRO → tulip, 18 entries, schema v3.1 (§2.2; none when this table was written) | 4 campaigns certified |
 
 The two product lines are almost complementary — the catalogs are min-time and
 the campaigns are min-fuel — and the bridge between them is the energy→fuel
-homotopy, which exists in the campaigns and has never been run on a catalog
-seed.
+homotopy, which exists in the campaigns and was first run on catalog seeds on
+2026-09-02 (§2.2).
 
 ### 3.3 Method coverage is asymmetric
 
@@ -344,11 +346,11 @@ initial-condition homotopy; PMP-converged costates as seeds. See
 
 | | |
 |---|---|
-| **now** | weak local min on four campaigns; strict nowhere; a conjugate-point test built but unapplied at scale |
+| **now** | weak local min on four campaigns; strict nowhere; the conjugate-point test has run at catalog scale since 2026-08-23 (§4.4, §6 step 1) |
 | **do (cheap, high value)** | **run `ms_conjugate_test` across the shipped catalogs and store the verdict in the schema.** The instrument exists, the STMs come free from the `ms_bvp` Jacobian machinery, and it would upgrade 17,001 entries from "extremal" to "extremal with no conjugate point in (0, t_f)" — the necessary second-order condition |
 | **do (the real build)** | the **STM / multiple-shooting switching-time Hessian**, already specified in `switch_hessian.m`'s header: keep the collocation trajectory as the feasible base, get switch-time sensitivities from the STM, form the second variation with segment matching so nothing propagates across all revolutions. It is the only live path to strictness, it is campaign-agnostic, and it shares its variational core with the conjugate test |
 | **target statement** | positive-definite projected switching-time Hessian + Ṡ≠0 at every switch + primer/Legendre direction optimality = the Maurer–Osmolovskii sufficient condition for a bang-bang local minimum. Ingredients (ii) and (iii) already exist and are trustworthy; only (i) is missing |
-| **also open** | a **fixed-t_f** conjugate test — `ms_conjugate_test` is free-time-specific, so the min-energy entries have no second-order verdict at all |
+| **also open** | ~~a fixed-t_f conjugate test~~ -- BUILT 2026-09-02 and corrected 2026-09-05 (full-state block, initial-coast skip); every min-energy and min-fuel catalog entry carries a verdict (§2.2) |
 
 ### F. Objectives beyond min-time in the catalogs
 

@@ -1,0 +1,122 @@
+\documentclass[11pt]{article}
+\usepackage[margin=1in]{geometry}
+\usepackage{amsmath,amssymb,amsthm,booktabs}
+\newcommand{\lr}{\lambda_r}\newcommand{\lv}{\lambda_v}\newcommand{\lm}{\lambda_m}
+\newcommand{\tf}{t_f}\newcommand{\R}{\mathbb{R}}
+\title{The sufficiency theorem, written as a dictionary\\
+\large What Bonnard--Caillau--Tr\'elat requires, what it concludes,\\
+and what each hypothesis is in our problem}
+\author{M. Casey, Coorbital Inc.}
+\date{10 September 2026}
+\begin{document}\maketitle
+
+\begin{abstract}
+An adversarial review of \texttt{mintime\_second\_order\_audit.tex} (2026-09-10)
+found that our statement of the sufficiency theorem was ``not a complete,
+usable statement'': a citation, not a mapping. This document is the mapping.
+It states the theorem with its hypotheses and its conclusion in full, gives
+the dictionary from each hypothesis to a quantity we compute, and says
+plainly which hypotheses are \emph{proved}, which are \emph{measured at
+samples}, and which are \emph{assumed}. It is deliberately short, and it is
+the document a methods section should quote rather than the audit.
+\end{abstract}
+
+\section{The problem}
+Minimum time for the controlled CR3BP with depleting mass. State
+$x=(r,v,m)\in\R^7$, control a thrust direction $\alpha\in S^2$ and a throttle
+$s\in[0,1]$:
+\[
+  \dot r=v,\qquad \dot v=g(r)+h(v)+s\frac{T}{m}\alpha,\qquad \dot m=-s\frac{T}{c}.
+\]
+Endpoints: $x(0)=(r_0,v_0,1)$ fixed, $(r,v)(\tf)=(r_f,v_f)$ fixed, $m(\tf)$
+free, $\tf$ free. Cost $J=\tf$.
+
+\section{Reduction to the theorem's setting}
+The theorem addresses a \emph{smooth} control problem with a point target and
+free final time. Two reductions get us there, and the second is the one that
+was previously mis-attributed.
+
+\paragraph{R1 --- the throttle is eliminated by STRICT BANG, not by counting
+competitors.} The Hamiltonian is \emph{affine} in $s$,
+\[
+  H(s)=1+\lr\!\cdot\!v+\lv\!\cdot\!(g+h)-s\,T\,Q_{mt},
+  \qquad Q_{mt}=\frac{|\lv|}{m}+\frac{\lm}{c},
+\]
+so $Q_{mt}>0$ strictly makes $s^{*}=1$ the \emph{unique} minimiser with a
+margin at every time. A strictly bang component may then be eliminated,
+leaving a smooth problem in $\alpha$ alone. \emph{The earlier argument, that
+the all-burn competitor set equals the full one, is false and is withdrawn:
+it does not, and $\delta m_f$ really does acquire a throttle term.}
+
+\paragraph{R2 --- the mass is then a known function of time.} With $s\equiv1$,
+$m(t)=1-Tt/c$ identically, so the $(r,v)$ dynamics close on themselves as a
+\emph{non-autonomous} 6-state system, and the target is a point in $\R^6$.
+
+\section{The theorem}
+\begin{quote}
+\textbf{(Bonnard--Caillau--Tr\'elat 2007; Agrachev--Sachkov \S21.3.)}
+Let $(x(\cdot),\alpha(\cdot))$ be a \emph{normal} extremal of the smooth
+free-final-time problem with a point target, on $[0,\tf]$. Suppose
+\begin{itemize}
+\item[\textbf{(H-a)}] the strengthened Legendre condition holds along the arc:
+  $H_{\alpha\alpha}$ restricted to $T_\alpha S^2$ is positive definite;
+\item[\textbf{(H-b)}] there is no conjugate time in $(0,\tf]$.
+\end{itemize}
+Then the trajectory is a \emph{strict strong} local minimiser --- minimal in
+the $C^0$ topology, among trajectories with the same endpoints --- and the
+minimising control is uniquely determined.
+\end{quote}
+Note what the conclusion does \emph{not} say: nothing global, and nothing
+about varying the endpoints, hence nothing about varying the phases.
+
+\section{The dictionary}
+\begin{center}\small
+\begin{tabular}{@{}llll@{}}
+\toprule
+hypothesis & our quantity & where computed & status \\
+\midrule
+normal extremal & $\lambda_0=1$, BVP residual & \texttt{ms\_tfmin} & \textbf{proved} to $10^{-11}$; foreign witness \\
+no abnormal lift & $\dim S=1$ & \texttt{lift\_margin} & \textbf{certified} (Eckart--Young, measured error) \\
+(H-a) Legendre & $\min_t|\lv|>0$ & gates & \textbf{measured} on the dense flight \\
+R1 strict bang & $\min_t Q_{mt}>0$ & gates & \textbf{measured} on the dense flight \\
+R2 admissibility & $m>0$, no collision & \texttt{certify\_root} & \textbf{proved} (mass law is exact) \\
+(H-b) conjugate & sign changes of $\det[\Phi_{rv}P,f_{rv}]$ & \texttt{ms\_conjugate\_test} & \textbf{sampled} at $K$ junctions \\
+(H-b) refined & interior crossings, multiplicity & \texttt{conj\_spectrum} & \textbf{sampled} at $K\!\cdot\!n_{\rm sub}$ \\
+H6 (ours) & $\lm(0)<c/T$ & \texttt{h6\_margin} & \textbf{proved} (monotone $\lm$) \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\paragraph{H6 is not in the theorem; it is in our reduction.} The reduced
+Hamiltonian is not conserved, so $\det=0$ can mean $h(t)=0$ rather than a rank
+drop. Since $\lambda_{rv}\!\cdot\!f_{rv}=-1+(T/c)\lm$ vanishes only at
+$\lm=c/T$, and $\lm$ decreases monotonically to $\lm(\tf)=0$, the condition
+$\lm(0)<c/T$ excludes it outright.
+
+\section{What we may therefore claim}
+\begin{quote}
+\emph{Every hypothesis of the theorem has been checked and holds. If they hold
+exactly, the arc is a strict strong local minimiser among trajectories with
+the same endpoints and the same departure and arrival phases. The evidence for
+two of them --- (H-a) and (H-b) --- is numerical and sampled: positivity is
+tested at sampled times, and the conjugate condition is a sign test at
+finitely many points, so an even-order zero or two zeros inside one segment
+would not be seen.}
+\end{quote}
+Three words that do \emph{not} belong in that sentence: \emph{global}
+(nothing here is), \emph{proved} (two hypotheses are sampled), and
+\emph{optimal phases} (the phases are held fixed; a phase optimum would need
+its own transversality conditions, which continuation in a phase does not
+impose).
+
+\section{What would strengthen it}
+\begin{enumerate}
+\item Validated (interval) integration of the variational equations, giving a
+sign-definite enclosure of the determinant and a rigorous bound behind the
+rank margin. Only this turns ``sampled'' into ``proved''.
+\item An independent Morse-index count of the discretised second variation ---
+a different instrument, not a finer sampling of the same one.
+\item Transversality in the phases, if the phases are ever to be optimised
+rather than held.
+\end{enumerate}
+\end{document}

@@ -119,6 +119,11 @@ Lagrange quadratic control reconstruction through the node/midpoint/ node sample
 DELEGATE. The covector mapping -- defect-constraint KKT multipliers to continuous-costate samples, with the scheme-specific station association, sign vote, and lambda_t check -- was promoted to the cross-folder optimal-control library on 2026-08-09 and lives at
 *in: `spec`*
 
+### `flight_to_junctions.m`
+`[Y, tGrid] = flight_to_junctions(tj, yj, K, opts)`  
+A flown trajectory cut into the K+1 JUNCTION STATES a multiple-shooting seed needs: interpolate the flight onto a uniform grid in normalized time, and -- when the seed is for a DIFFERENT thrust or time of flight than the flight it came from -- replace the mass row by the all-burn identity rather than rescaling the old one.
+*in: `tj`, `yj`, `K`, `opts` · out: `Y`, `tGrid`*
+
 ### `flown_control_error.m`
 `[erNd, evNd] = flown_control_error(o, muStar, Tmax, c)`  
 THE flown-control verifier (migration #4): flies a direct solution's RECONSTRUCTED CONTROL once, end to end, and reports where the spacecraft actually arrives relative to the solution's own terminal state. This is the physically meaningful accuracy number -- 'if you flew this control, where would you arrive?' -- and it is the G1b gate of every campaign's certification. Extracted verbatim from certify_dro_mintime (the math is family-free: CR3BP + thrust + quadratic control reconstruction).
@@ -194,6 +199,11 @@ MS_TFMIN  Multiple-shooting solve of the CR3BP minimum-time PMP problem.
 HOMOGENEOUS minimum-time multiple shooting: the same problem as ms_tfmin with the objective multiplier rho FREE and the multipliers confined to the unit sphere,
 *in: `seed`, `opts` · out: `z`, `info`*
 
+### `nd_propulsion.m`
+`p = nd_propulsion(thrustN, ispS, m0kg, lStar, tStar)`  
+THE nondimensional propulsion conversion for the CR3BP campaigns: a thruster in engineering units (N, s, kg) becomes the two numbers every solver here actually takes -- the ND exhaust speed c and the ND thrust acceleration at unit mass fraction T.
+*in: `thrustN`, `ispS`, `m0kg`, `lStar`, `tStar` · out: `p`*
+
 ### `periodic_pp.m`
 `[pp, seam, dpp] = periodic_pp(t, y, opts)`  
 The C1-PERIODIC cubic interpolant through ONE PERIOD of a closed orbit, with its derivative and its seam mismatch.
@@ -254,7 +264,7 @@ Minimum lunar altitude of the PROPAGATED trajectory, not of the nodes. A colloca
 ONE admissibility check for a flown all-burn trajectory, shared by the certifier and the study script so that "the flight is admissible" means the same thing everywhere. A returned array is not a completed flight: an integrator that stops early without throwing hands back a short, perfectly finite trajectory, and every metric taken from its last row then describes a flight that never happened. This checks
 *in: `t`, `Y`, `tf`, `lStar`, `opts` · out: `V`*
 
-**tests/**: `test_arclength_arrival.m`, `test_arclength_ms.m`, `test_arclength_ms_thrust.m`, `test_catalog_schema_v3.m`, `test_certify_caps.m`, `test_certify_crossing.m`, `test_conj_fixedtf.m`, `test_conj_spectrum.m`, `test_conjugate_pole_predict.m`, `test_cr3bp_minenergy_pmp.m`, `test_deliverable_audit_gate.m`, `test_gates_h6_wiring.m`, `test_gto_family.m`, `test_guard_catalog_overwrite.m`, `test_h6_margin.m`, `test_huber_saltation.m`, `test_lift_margin.m`, `test_lift_space_dim.m`, `test_minfuel_pmp.m`, `test_mintime_gates.m`, `test_ms_bvp_extra.m`, `test_ms_bvp_fixedtf.m`, `test_ms_tfmin_hom.m`, `test_periodic_pp.m`, `test_phase_state.m`, `test_plot_phase_sheet.m`, `test_plot_transfer_3d.m`, `test_pmp_pointwise_checks.m`, `test_report_optimality.m`, `test_rib_from_crossing.m`, `test_run_dro_tulip.m`, `test_run_dro_tulip_catalog.m`, `test_scalar_verdict.m`, `test_second_order_pass.m`, `test_second_order_sidecar_identity.m`, `test_sheet_from_arcs.m`, `test_sheet_to_catalog_file.m`, `test_ss_bvp_accept.m`, `test_validate_flight.m`, `test_verify_with_pumpkyn.m`
+**tests/**: `test_arclength_arrival.m`, `test_arclength_ms.m`, `test_arclength_ms_thrust.m`, `test_catalog_schema_v3.m`, `test_certify_caps.m`, `test_certify_crossing.m`, `test_conj_fixedtf.m`, `test_conj_spectrum.m`, `test_conjugate_pole_predict.m`, `test_cr3bp_minenergy_pmp.m`, `test_deliverable_audit_gate.m`, `test_flight_to_junctions.m`, `test_gates_h6_wiring.m`, `test_gto_family.m`, `test_guard_catalog_overwrite.m`, `test_h6_margin.m`, `test_huber_saltation.m`, `test_lift_margin.m`, `test_lift_space_dim.m`, `test_minfuel_pmp.m`, `test_mintime_gates.m`, `test_ms_bvp_extra.m`, `test_ms_bvp_fixedtf.m`, `test_ms_tfmin_hom.m`, `test_nd_propulsion.m`, `test_periodic_pp.m`, `test_phase_state.m`, `test_plot_phase_sheet.m`, `test_plot_transfer_3d.m`, `test_pmp_pointwise_checks.m`, `test_report_optimality.m`, `test_rib_from_crossing.m`, `test_run_dro_tulip.m`, `test_run_dro_tulip_catalog.m`, `test_scalar_verdict.m`, `test_second_order_pass.m`, `test_second_order_sidecar_identity.m`, `test_sheet_from_arcs.m`, `test_sheet_to_catalog_file.m`, `test_ss_bvp_accept.m`, `test_validate_flight.m`, `test_verify_with_pumpkyn.m`
 
 ## verify_common
 

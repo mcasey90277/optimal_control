@@ -78,7 +78,7 @@ ob = struct('muStar', mu, 'lStar', lStar, 'tStar', tStar, 'tauDRO', s.tauDRO, ..
             'NpTulip', s.Np, 'tauTulip', s.period_tulip_nd, 'pmTulip', s.pm, ...
             'ispS', isp, 'm0kg', m0);
 [tD, rvD, ~, ~] = ladder_endpoints(ob);
-stD = @(x) interp1(tD, rvD, mod(x,1)*tD(end), 'spline')';
+stD = phase_state(tD, rvD);        % THE shared endpoint rule (FINDINGS 44)
 
 [iD, iA, iR] = ind2sub(size(s.has_solution), find(s.has_solution));
 n = numel(iD);

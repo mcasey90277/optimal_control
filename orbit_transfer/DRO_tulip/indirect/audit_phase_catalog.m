@@ -60,8 +60,8 @@ ob = struct('muStar', mu, 'lStar', lStar, 'tStar', tStar, 'tauDRO', s.tauDRO, ..
             'NpTulip', s.Np, 'tauTulip', s.period_tulip_nd, 'pmTulip', s.pm, ...
             'ispS', isp, 'm0kg', m0);
 [tD, rvD, tT, rvT] = ladder_endpoints(ob);
-stD = @(x) interp1(tD, rvD, mod(x,1)*tD(end), 'spline')';
-stA = @(x) interp1(tT, rvT, mod(x,1)*tT(end), 'spline')';
+% THE shared endpoint rule (costate_common/phase_state, FINDINGS 44)
+stD = phase_state(tD, rvD);   stA = phase_state(tT, rvT);
 
 [iD, iA, iR] = ind2sub(size(s.has_solution), find(s.has_solution));
 idx = d('idx', 1:numel(iD));

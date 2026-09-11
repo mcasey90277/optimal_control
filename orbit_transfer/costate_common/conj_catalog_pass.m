@@ -3,7 +3,7 @@ function S = conj_catalog_pass(catMat, opts)
 %   compact costate catalog and record the verdicts.
 %
 %   For each stored entry: rebuild the endpoint states from the sheet's
-%   family recipes (same get_family_orbit + spline construction the ladder
+%   family recipes (same get_family_orbit + phase_state construction the ladder
 %   engines used), fly the stored z8 to build a K-junction seed, re-solve
 %   with ms_tfmin(conjTest) seeded AT the converged solution (1 Newton
 %   iteration expected), and record the free-time quotiented Jacobi verdict
@@ -116,6 +116,11 @@ for ks = 1:nS
     end
     [tD, rvD] = get_family_orbit(depFam, depPar);
     [tA, rvA] = get_family_orbit(arrFam, arrPar);
+    % THE shared endpoint rule (costate_common/phase_state, FINDINGS 44):
+    % C1-periodic across the seam, where the ordinary spline this replaced
+    % is not. On the shipped grids the endpoint moves by at most 6.6 mm,
+    % and only at the two seam-adjacent phases (measured 2026-09-11).
+    stD = phase_state(tD, rvD);   stA = phase_state(tA, rvA);
     lg('[sheet %d/%d] %s(%g) -> %s: %d entries to test', ks, nS, ...
        depFam, sh.tauDRO, arrFam, nnz(todo));
 
@@ -140,8 +145,8 @@ for ks = 1:nS
         P.ATT{ks}(iD,iA,kr) = P.ATT{ks}(iD,iA,kr) + 1;
         save(sideMat, '-struct', 'P');
 
-        rv0 = interp1(tD, rvD, mod(sh.sD_frac(iD),1)*tD(end), 'spline');
-        rvf = interp1(tA, rvA, mod(sh.sA_frac(iA),1)*tA(end), 'spline');
+        rv0 = stD(sh.sD_frac(iD)).';        % row, as before
+        rvf = stA(sh.sA_frac(iA)).';
         Tnd = ndT(cat_.rungs_N(kr));
         try
             seed = seed_from_z8(z8, rv0(1:6), K, Tnd, cnd, mu);

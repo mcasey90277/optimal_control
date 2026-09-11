@@ -69,6 +69,8 @@ for ks = 1:nS
     if isfield(sh, 'dep_family'), depFam = sh.dep_family; depPar = sh.dep_params;
     else,                         depFam = 'dro';         depPar = struct('tau', sh.tauDRO); end
     [tD, rvD] = get_family_orbit(depFam, depPar);
+    % THE shared endpoint rule (costate_common/phase_state, FINDINGS 44)
+    stD = phase_state(tD, rvD);
     lg('[sheet %d/%d] %s(%g): %d entries to gate', ks, nS, depFam, sh.tauDRO, nnz(todo));
     [nD, nA, nR] = size(sh.has_solution);
     for iD = 1:nD
@@ -87,7 +89,7 @@ for ks = 1:nS
         end
         P.ATT{ks}(iD,iA,kr) = P.ATT{ks}(iD,iA,kr) + 1;
         save(sideMat, '-struct', 'P');
-        rv0 = interp1(tD, rvD, mod(sh.sD_frac(iD),1)*tD(end), 'spline');
+        rv0 = stD(sh.sD_frac(iD)).';        % row, as before
         Tnd = ndT(cat_.rungs_N(kr));
         try
             g = mintime_hypothesis_gates(z8, rv0(1:6), Tnd, cnd, mu, struct('nSamp', nSamp, 'rankTol', rankTol));

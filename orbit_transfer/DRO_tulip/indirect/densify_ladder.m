@@ -122,8 +122,11 @@ else
     rvT0 = pumpkyn.cr3bp.cont_np(rvT0, ob.tauTulip, muStar, 1e-12);
     [tT, rvT] = pumpkyn.cr3bp.prop(ob.tauTulip, rvT0, muStar);
 end
-dep = @(f) interp1(tD, rvD, mod(f,1)*tD(end), 'spline');
-arr = @(f) interp1(tT, rvT, mod(f,1)*tT(end), 'spline');
+% THE shared endpoint rule (costate_common/phase_state, FINDINGS 44); the
+% .' keeps the row orientation these closures have always returned
+depAt = phase_state(tD, rvD);   arrAt = phase_state(tT, rvT);
+dep = @(f) depAt(f).';
+arr = @(f) arrAt(f).';
 
 [nD, nA, nR] = size(Q.OK);
 if isempty(rungSel), rungSel = Q.rungs; end

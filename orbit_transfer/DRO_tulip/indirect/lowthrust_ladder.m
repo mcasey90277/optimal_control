@@ -124,6 +124,8 @@ rvD0 = pumpkyn.cr3bp.cont_np(rvD0, ob.tauDRO, muStar, 1e-12);
 [~, rvT0] = pumpkyn.cr3bp.getTulip(ob.tauTulip, ob.NpTulip, ob.pmTulip);
 rvT0 = pumpkyn.cr3bp.cont_np(rvT0, ob.tauTulip, muStar, 1e-12);
 [tT, rvT] = pumpkyn.cr3bp.prop(ob.tauTulip, rvT0, muStar);
+% THE shared endpoint rule (costate_common/phase_state, FINDINGS 44)
+depAt = phase_state(tD, rvD);   arrAt = phase_state(tT, rvT);
 
 [nD, nA] = size(V1.OKI);
 rungsAll = [T0, rungs(:)'];                      % rung 1 = the re-anchor
@@ -166,8 +168,8 @@ for kc = 1:min(size(todo,1), maxCells)
     iD = todo(kc,1);  iA = todo(kc,2);
     Q.ATT(iD,iA) = Q.ATT(iD,iA) + 1;             % record BEFORE solving
     save(outMat, '-struct', 'Q');
-    rv0 = interp1(tD, rvD, mod(Q.sD(iD),1)*tD(end), 'spline');
-    rvf = interp1(tT, rvT, mod(Q.sA(iA),1)*tT(end), 'spline');
+    rv0 = depAt(Q.sD(iD)).';        % row, as before
+    rvf = arrAt(Q.sA(iA)).';
 
     %% Resume point: the highest rung this cell has already converged
     kStart = find(Q.OK(iD,iA,:), 1, 'last');

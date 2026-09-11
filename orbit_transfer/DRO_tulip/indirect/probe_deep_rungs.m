@@ -82,6 +82,8 @@ g0  = 9.80665*tStar^2/(1000*lStar);
 cnd = (ob.ispS/tStar)*g0;
 ndT = @(TN) (TN/ob.m0kg)*tStar^2/(lStar*1000);
 [tD, rvD, tT, rvT] = ladder_endpoints(ob);
+% THE shared endpoint rule (costate_common/phase_state, FINDINGS 44)
+depAt = phase_state(tD, rvD);   arrAt = phase_state(tT, rvT);
 
 %% Start cell: the FASTEST converged entry at the sheet's deepest rung
 %  (shortest transfer = least accumulated sensitivity, the best-behaved
@@ -93,8 +95,8 @@ ndT = @(TN) (TN/ob.m0kg)*tStar^2/(lStar*1000);
 [iD, iA] = ind2sub(size(TFf), kb);
    zPrev = squeeze(Q.Z8(:,iD,iA,kr0));
    Tprev = Q.rungs(kr0);
-     rv0 = interp1(tD, rvD, mod(Q.sD(iD),1)*tD(end), 'spline');
-     rvf = interp1(tT, rvT, mod(Q.sA(iA),1)*tT(end), 'spline');
+     rv0 = depAt(Q.sD(iD)).';       % row, as before
+     rvf = arrAt(Q.sA(iA)).';
 lg('PROBE: cell (%d,%d), 0.5 N seed tf=%.5f ND (%.2f d); rungs [%s] N', ...
    iD, iA, zPrev(8), zPrev(8)*tStar/86400, num2str(rungs));
 

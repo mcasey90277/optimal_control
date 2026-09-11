@@ -140,6 +140,8 @@ ndT = @(TN) (TN/ob.m0kg)*tStar^2/(lStar*1000);
 % reproduce the original hardcoded construction bitwise
 % (tests/test_ladder_endpoints.m).
 [tD, rvD, tT, rvT] = ladder_endpoints(ob);
+% THE shared endpoint rule (costate_common/phase_state, FINDINGS 44)
+depAt = phase_state(tD, rvD);   arrAt = phase_state(tT, rvT);
 
 if hardCap
     pool = gcp;                    % warm once; workers inherit client path
@@ -179,8 +181,8 @@ for kc = 1:min(size(todo,1), maxCells)
     iD = todo(kc,1);  iA = todo(kc,2);
     Q.EXT(iD,iA) = Q.EXT(iD,iA) + 1;             % record BEFORE solving
     save(ladderMat, '-struct', 'Q');
-    rv0 = interp1(tD, rvD, mod(Q.sD(iD),1)*tD(end), 'spline');
-    rvf = interp1(tT, rvT, mod(Q.sA(iA),1)*tT(end), 'spline');
+    rv0 = depAt(Q.sD(iD)).';        % row, as before
+    rvf = arrAt(Q.sA(iA)).';
 
     % start from the LOWEST converged rung of this cell
     kPrev = find(Q.OK(iD,iA,1:nR0), 1, 'last');

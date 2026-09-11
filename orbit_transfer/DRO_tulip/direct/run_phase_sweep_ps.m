@@ -74,8 +74,11 @@ wave1Its = 1500;                       % iteration budget, wave 1 (warm starts)
         [tauND,rvND] = pumpkyn.cr3bp.prop(tauNDf,rvNDF,muStar);
 
 % a state anywhere on either orbit, by phase fraction f in [0,1):
-depState = @(f) interp1(tauNDv, rvNDv, mod(f,1)*tauNDv(end), 'spline');
-arrState = @(f) interp1(tauND,  rvND,  mod(f,1)*tauND(end),  'spline');
+% THE shared endpoint rule (costate_common/phase_state, FINDINGS 44); the
+% .' keeps the row orientation these closures have always returned
+depAt = phase_state(tauNDv, rvNDv);   arrAt = phase_state(tauND, rvND);
+depState = @(f) depAt(f).';
+arrState = @(f) arrAt(f).';
 
 %% Thruster:
  Tmax = 0.07;                                    % Max thrust (N)

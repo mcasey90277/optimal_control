@@ -52,6 +52,8 @@ rvD0 = pumpkyn.cr3bp.cont_np(rvD0, ob.tauDRO, muStar, 1e-12);
 [~, rvT0] = pumpkyn.cr3bp.getTulip(ob.tauTulip, ob.NpTulip, ob.pmTulip);
 rvT0 = pumpkyn.cr3bp.cont_np(rvT0, ob.tauTulip, muStar, 1e-12);
 [tT, rvT] = pumpkyn.cr3bp.prop(ob.tauTulip, rvT0, muStar);
+% THE shared endpoint rule (costate_common/phase_state, FINDINGS 44)
+depAt = phase_state(tD, rvD);   arrAt = phase_state(tT, rvT);
 
 [nD, nA] = size(S.PASS);
 todo = d('cells', []);
@@ -70,8 +72,8 @@ for kc = 1:size(todo,1)
     iD = todo(kc,1);  iA = todo(kc,2);
     cell_ = CELLS{iD,iA};
     if isempty(cell_) || ~S.PASS(iD,iA), continue, end
-    rv0 = interp1(tD, rvD, mod(S.sD(iD),1)*tD(end), 'spline');
-    rvf = interp1(tT, rvT, mod(S.sA(iA),1)*tT(end), 'spline');
+    rv0 = depAt(S.sD(iD)).';        % row, as before
+    rvf = arrAt(S.sA(iA)).';
 
     % seed trajectory per ladder rung: states at nodes, costates at defect
     % rows (node-k convention, validated at the anchor)

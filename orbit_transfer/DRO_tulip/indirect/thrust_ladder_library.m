@@ -116,6 +116,8 @@ ndT = @(TN) (TN/m0kg)*tStar^2/(lStar*1000);
 
 [tD, rvD] = get_family_orbit(depFamily, depParams);
 [tT, rvT] = get_family_orbit(arrFamily, arrParams);
+% THE shared endpoint rule (costate_common/phase_state, FINDINGS 44)
+depAt = phase_state(tD, rvD);   arrAt = phase_state(tT, rvT);
 
 sD = mod(sD0 + (0:nD-1)/nD, 1);  sA = mod(sA0 + (0:nA-1)/nA, 1);
 todo = d('cells', []);
@@ -172,8 +174,8 @@ for kc = 1:min(size(todo,1), maxCells)
         break
     end
     iD = todo(kc,1);  iA = todo(kc,2);
-    rv0 = interp1(tD, rvD, mod(sD(iD),1)*tD(end), 'spline');
-    rvf = interp1(tT, rvT, mod(sA(iA),1)*tT(end), 'spline');
+    rv0 = depAt(sD(iD)).';          % row, as before
+    rvf = arrAt(sA(iA)).';
     seedX = [];  seedU = [];  seedTf = tf0Top;  Tprev = [];
     ATT(iD,iA) = ATT(iD,iA) + 1;      % record BEFORE solving (hang-proof)
     save(outMat, 'TF','FLYKM','ACCDZ','RES','WALL','OK','Z8','ATT', ...

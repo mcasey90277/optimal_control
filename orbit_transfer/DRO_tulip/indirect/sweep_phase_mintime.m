@@ -100,8 +100,9 @@ g0 = 9.80665*tStar^2/(1000*lStar);
 cnd = (ispS/tStar)*g0;
 Tnd = (thrustN/m0kg)*tStar^2/(lStar*1000);
 [tD, rvD, tT, rvT] = ladder_endpoints(ob);
-stateD = @(s) interp1(tD, rvD, mod(s,1)*tD(end), 'spline')';
-stateA = @(s) interp1(tT, rvT, mod(s,1)*tT(end), 'spline')';
+% THE shared endpoint rule (costate_common/phase_state, FINDINGS 44)
+stateD = phase_state(tD, rvD);
+stateA = phase_state(tT, rvT);
 
 %% Anchor: the certified demo phasing pair -------------------------------
 Aanc = load(fullfile(here,'results','mintime_70mN_anchor.mat'));

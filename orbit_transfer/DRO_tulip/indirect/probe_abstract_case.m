@@ -90,6 +90,8 @@ g0  = 9.80665*tStar^2/(1000*lStar);
 cOf = @(isp) (isp/tStar)*g0;                      % ND exhaust speed
 ndT = @(TN) (TN/ob.m0kg)*tStar^2/(lStar*1000);
 [tD, rvD, tT, rvT] = ladder_endpoints(ob);
+% THE shared endpoint rule (costate_common/phase_state, FINDINGS 44)
+depAt = phase_state(tD, rvD);   arrAt = phase_state(tT, rvT);
 
 % RESUME: start from the last accepted step of a previous run instead of the
 % banked 0.09 N rung (so a deeper push can change K or the guess sweep
@@ -106,7 +108,7 @@ if ~isempty(cellSel)
     assert(Q.OK(iDs, iAs, kr0), 'cell (%d,%d) has no 0.5 N entry', iDs, iAs);
     z0 = squeeze(Q.Z8(:, iDs, iAs, kr0));
     [tj, yj] = pumpkyn.cr3bp.tfMinProp(z0(8), ...
-        [interp1(tD, rvD, mod(Q.sD(iDs),1)*tD(end), 'spline')'; 1; z0(1:7)], ...
+        [depAt(Q.sD(iDs)); 1; z0(1:7)], ...
         ndT(Q.rungs(kr0)), cOf(ob.ispS), muStar);
     [tu, iu] = unique(tj);
     sg0 = linspace(0, 1, K+1);
@@ -129,8 +131,8 @@ pr = P.R;
 ic = find(pr.closed, 1, 'last');
 assert(~isempty(ic), 'no closed rung to seed from');
 iD = pr.cell(1);  iA = pr.cell(2);
-rv0 = interp1(tD, rvD, mod(Q.sD(iD),1)*tD(end), 'spline');
-rvf = interp1(tT, rvT, mod(Q.sA(iA),1)*tT(end), 'spline');
+rv0 = depAt(Q.sD(iD)).';            % row, as before
+rvf = arrAt(Q.sA(iA)).';
 lg(['ABSTRACT CASE: DRO tau=%g -> tulip Np=%g, cell (%d,%d), m0=%g kg.\n' ...
     'Seed: banked %.3f N solution, tf=%.4f ND (%.2f d), Isp %g s.\n' ...
     'Target: %.3f N at Isp %g s.'], ob.tauDRO, ob.NpTulip, iD, iA, ob.m0kg, ...

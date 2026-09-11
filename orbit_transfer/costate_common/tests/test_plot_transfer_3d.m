@@ -27,7 +27,12 @@ addpath(here, fullfile(fileparts(here), 'DRO_tulip', 'indirect'));
 T = certify_crossing(anc.p, anc.sA, B, anc);
 assert(T.ok, 'fixture: the anchor must certify (%s)', T.reason);
 
-P = plot_transfer_3d(T, B, struct('visible', false));
+% a SUPPLIED flight is used rather than re-flown: the study script owns one
+% flight and every consumer should draw from it
+[tu0, Y0] = pumpkyn.cr3bp.tfMinProp(T.z(8), [B.rv0(1:6); 1; T.z(1:7)], B.Tnd, B.cnd, B.mu);
+fl = struct('t', tu0, 'Y', Y0);
+P = plot_transfer_3d(T, B, struct('visible', false, 'flight', fl));
+ok = chk(ok, isfield(P, 'flightSupplied') && P.flightSupplied, 'a supplied flight is consumed, not re-flown');
 
 ok = chk(ok, isgraphics(P.fig, 'figure'), 'a figure is produced');
 ok = chk(ok, numel(P.hDep) == 1 && numel(P.hArr) == 1 && numel(P.hTx) == 1, ...

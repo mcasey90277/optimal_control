@@ -64,6 +64,15 @@ Cq = certify_crossing(anc.p, anc.sA, B, anc, struct('tolR', 1e-16, 'tolRelax', 1
 ok = chk(ok, ~Cq.ok && contains(Cq.reason, 'converge'), ...
          sprintf('a plateau above tolRelax is still refused: %s', Cq.reason));
 
+% H6 must be ENFORCED, not merely computed: a gate that is calculated and
+% then ignored is the failure mode this whole stack exists to prevent. Force
+% it by demanding a margin no real entry has.
+Ch = certify_crossing(anc.p, anc.sA, B, anc, struct('h6MarginMin', 1e6));
+ok = chk(ok, ~Ch.ok && contains(Ch.reason, 'H6'), ...
+         sprintf('an H6 failure refuses the candidate: %s', Ch.reason));
+ok = chk(ok, isfield(C, 'h6Margin') && C.h6Margin > 1, ...
+         sprintf('and a certified entry carries its H6 margin (%.1fx)', C.h6Margin));
+
 % a corrupted candidate must be refused, not silently accepted
 pBad = anc.p;  pBad(1:7) = 3*pBad(1:7);
 Cb = certify_crossing(pBad, anc.sA, B, anc, struct('wallSec', 60));

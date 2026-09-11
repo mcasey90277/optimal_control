@@ -35,6 +35,10 @@ ok = chk(ok, numel(V.z8) == 8 && numel(V.z8Pumpkyn) == 8 && numel(V.dComponent) 
          'both costate vectors and their component differences are returned');
 ok = chk(ok, V.flyKm < 1, sprintf('and pumpkyn''s own solution flies to the target (%.4f km)', V.flyKm));
 ok = chk(ok, V.moved == false, 'verdict: the costates did NOT move');
+% the OVERALL status needs a usable, completed witness flight that reaches
+% the target in position AND velocity -- agreement alone is one metric
+ok = chk(ok, isfield(V, 'ok') && V.ok && V.flyVms < 1, ...
+         sprintf('overall status requires the witness flight, %.4f km / %.4f m/s', V.flyKm, V.flyVms));
 
 % THE CONTROL EXPERIMENT: perturb the costates and require the solver to move
 Tb = T;  Tb.z(1:7) = 1.5*Tb.z(1:7);

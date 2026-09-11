@@ -110,8 +110,11 @@ script**, and finally open a rotatable 3D figure.
 |---|---|
 | `transfer_study.m` | the script; edit the parameter blocks and run |
 | `verify_with_pumpkyn.m` | hands our costates to pumpkyn's own solver and shows, component by component, that it does not move them -- with a CONTROL EXPERIMENT in its test proving the check can fail |
-| `report_optimality.m` | the two-section report; an unchecked line reads NOT CHECKED and BLOCKS its section, because "every check that ran passed" is vacuously true when none did |
-| `plot_transfer_3d.m` | the rotatable figure; everything drawn AND every number annotated is recomputed from the flight |
+| `report_optimality.m` | the report in three groups (NECESSARY / SUFFICIENCY / CROSS-CHECKS) and four line states (PASS / FAIL / NOT CHECKED / UNRESOLVED); an unchecked line BLOCKS its group, because "every check that ran passed" is vacuously true when none did |
+| `plot_transfer_3d.m` | the rotatable figure; drawn from the SAME flight the script measured (`opts.flight`), every annotation recomputed from it |
+| `../../costate_common/validate_flight.m` | the ONE admissibility check every flight passes: reached t_f, finite, all-burn mass law, clear of both primaries |
+| `../../costate_common/pmp_pointwise_checks.m` | Pontryagin on the flight: H = 0, transversality, the adjoint equations, and the EXACT minimum-principle gap of the control the propagator applied (its test injects a wrong-sign field and watches the gap open) |
+| `build_70mN_library.m` | the whole library chain as a script in the same style: anchors -> arcs -> sheet -> ribs -> package -> audit -> sweep -> pictures -> deliverable, each stage a switch, each stage's file reused when off |
 | `certify_root.m` / `certify_crossing.m` | the gate stack itself, fenced by hard timeouts |
 | `audit_phase_catalog.m` | audits a SHIPPED catalog the way a recipient would: re-derives every entry from the catalog's own keys and flies it |
 | `package_phase_catalog.m` | sheet + ribs -> a shareable catalog |
@@ -119,5 +122,7 @@ script**, and finally open a rotatable 3D figure.
 
 **A deliverable does not ship until its audit is clean** --
 `build_dro_deliverable` enforces that rather than trusting a checklist. See
-`../doc/CERTIFICATION_DISCIPLINE.md` for why, and FINDINGS 40 for the reviews
-that produced the rule.
+`../doc/CERTIFICATION_DISCIPLINE.md` for why, and FINDINGS 40-41 for the
+reviews that produced the rules -- including the second script review, which
+found the sampled minimum-principle check to be a tautology and H6 to be a
+gate that was computed but never enforced.

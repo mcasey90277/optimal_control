@@ -29,10 +29,29 @@ good = struct('ok', true, 'reason', 'certified', 'normR', 2.1e-11, 'flyKm', 0.00
     'g', struct('minLamV', 3.24, 'minQmt', 3.82, 'dimS', 1, 'Hresid', 4e-12, ...
                 'nullResid', 1e-9, 'svRatio', 2e-7));
 
+good.h6Ok = true;  good.h6Margin = 9.0;  good.adjErr = 6e-9;  good.dirGap = 0;
+good.lamMf = 3e-12;  good.flyVmsWitness = 0.0002;
 R = report_optimality(good, struct('quiet', true));
+% cross-checks live OUTSIDE the PMP conjunction: their failure must not read
+% as "not an extremal"
+bad_x = good;  bad_x.dz = 1;  bad_x.flyKmWitness = 5e4;
+Rx = report_optimality(bad_x, struct('quiet', true));
+ok = chk(ok, Rx.necessary && ~Rx.crossChecks && ~Rx.claim, ...
+         sprintf('a failed cross-check leaves necessary intact but blocks the claim (%s)', Rx.verdict));
+% three-way status survives aggregation: an UNRESOLVED conjugate verdict is
+% not a failed hypothesis
+unr = good;  unr.conj = -1;  unr.conjVerdict = 'ENDPOINT';
+Ru = report_optimality(unr, struct('quiet', true));
+ok = chk(ok, ~Ru.claim && contains(lower(Ru.verdict), 'unresolved'), ...
+         sprintf('ENDPOINT propagates as UNRESOLVED, not as a failure (%s)', Ru.verdict));
+% H6 is an instrument-validity prerequisite; missing means NOT CHECKED
+noh = good;  noh = rmfield(noh, {'h6Ok', 'h6Margin'});
+Rh = report_optimality(noh, struct('quiet', true));
+ok = chk(ok, ~Rh.claim && any(contains(Rh.lines, 'H6')) && any(contains(Rh.lines, 'NOT CHECKED')), ...
+         'missing H6 reads NOT CHECKED and blocks the claim');
 ok = chk(ok, R.necessary && R.sufficient && R.claim, ...
          sprintf('a complete certificate passes both sections (%s)', R.verdict));
-ok = chk(ok, numel(R.lines) >= 8 && all(cellfun(@(s) ischar(s), R.lines)), ...
+ok = chk(ok, numel(R.lines) >= 12 && all(cellfun(@(s) ischar(s), R.lines)), ...
          sprintf('%d report lines produced', numel(R.lines)));
 
 % A MISSING diagnostic reads NOT CHECKED and blocks the section it is in --

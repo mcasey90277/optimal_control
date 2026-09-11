@@ -6,9 +6,11 @@ function P = plot_transfer_3d(T, B, opts)
 %   coloured by elapsed time, the thrust direction along the way, and
 %   the Moon, in the rotating Earth-Moon frame.
 %
-%   Everything drawn is FLOWN from the certificate's own costates, not
-%   passed in: if the picture and the numbers ever disagreed, the picture
-%   would be the one telling the truth.
+%   Everything drawn comes from ONE flight of the certificate's own costates.
+%   A caller that already owns that flight (the study script) passes it in
+%   as opts.flight, so the figure and the printed numbers describe the same
+%   trajectory; otherwise it is flown here. The annotations are recomputed
+%   from whichever flight is drawn, never copied from the certificate.
 %
 %% Inputs:
 %
@@ -19,7 +21,8 @@ function P = plot_transfer_3d(T, B, opts)
 %                                                   .stateA .problem)
 %  opts                     struct (optional)
 %   .visible [true] .nThrust [40] arrows .outPng '' .view [-35 22]
-%   .dark [true]
+%   .dark [true] .flight (struct .t [N x 1], .Y [N x 14]) a flight of T.z
+%   to draw instead of re-flying
 %
 %% Outputs:
 %
@@ -27,6 +30,7 @@ function P = plot_transfer_3d(T, B, opts)
 %                                                   .hTx .startMissKm
 %                                                   .endMissKm .tfDays
 %                                                   .dvKms .nThrust
+%                                                   .flightSupplied
 %
 %% Revision History:
 %  M. Casey                                                   (c) 09/10/2026
@@ -38,10 +42,17 @@ d = @(f,v) fieldd(opts, f, v);
 dark = d('dark', true);
 pr = B.problem;  lStar = pr.lStar;  tStar = pr.tStar;  mu = pr.muStar;
 
-% ---- fly the certificate -------------------------------------------------
+% ---- the flight: supplied, or flown here -------------------------------
 rv0 = B.stateD(T.sD);  rvf = B.stateA(T.sA);
 z = T.z(:);
-[tu, Y] = pumpkyn.cr3bp.tfMinProp(z(8), [rv0(1:6); 1; z(1:7)], B.Tnd, B.cnd, mu);
+fl = d('flight', []);
+P = struct('flightSupplied', ~isempty(fl));
+if P.flightSupplied
+    tu = fl.t(:);  Y = fl.Y;
+    assert(size(Y, 2) >= 14 && numel(tu) == size(Y, 1), 'opts.flight needs .t [N x 1] and .Y [N x 14]');
+else
+    [tu, Y] = pumpkyn.cr3bp.tfMinProp(z(8), [rv0(1:6); 1; z(1:7)], B.Tnd, B.cnd, mu);
+end
 r = Y(:, 1:3);
 lamv = Y(:, 11:13);
 alpha = -lamv ./ max(vecnorm(lamv, 2, 2), realmin);   % PMP thrust direction
@@ -98,10 +109,8 @@ lg = legend(ax, 'Location', 'northeast');
 lg.TextColor = pick(dark, 'w', 'k');  lg.Color = pick(dark, [0.1 0.1 0.1], 'w');
 lg.EdgeColor = pick(dark, [0.3 0.3 0.3], [0.7 0.7 0.7]);
 
-% RECOMPUTED from the flight, not copied from the certificate. The header
-% claims this figure is the source of truth; copying the annotations would
-% have made that claim false the moment the two disagreed. (Astra script
-% review 2026-09-10.)
+% RECOMPUTED from the flight that is drawn, not copied from the certificate,
+% so the title cannot disagree with the picture.
 P.tfDays = tu(end)*tStar/86400;
 P.dvKms  = B.cnd*log(1/Y(end,7))*lStar/tStar;
 P.propellantKg = pr.m0kg*(1 - Y(end,7));

@@ -25,17 +25,25 @@ function V = verify_with_pumpkyn(T, B, opts)
 %                                                   (.z, .sD, .sA)
 %  B                        struct                  arclength_arrival setup
 %  opts                     struct (optional)
-%   .quiet [false] .tolDz [1e-6] .gateKm [100] .capSec [300] .pool
+%   .quiet [false] .tolDz [1e-6] .gateKm [100] .gateVms [10] .capSec [300]
+%   .pool
 %
 %% Outputs:
 %
-%  V                        struct                  .z8 .z8Pumpkyn
+%  V                        struct                  .ok (the OVERALL status:
+%                                                   usable answer, costates
+%                                                   did not move, AND its
+%                                                   own flight is admissible
+%                                                   and reaches the target
+%                                                   in position and
+%                                                   velocity) .z8 .z8Pumpkyn
 %                                                   .dComponent [8x1] .dz
 %                                                   .moved .returnedUsable
 %                                                   (NOT "converged" -- the
 %                                                   foreign solver reports no
 %                                                   convergence flag)
-%                                                   .flyKm .note
+%                                                   .flyKm .flyVms
+%                                                   .flightReason .note
 %
 %% Revision History:
 %  M. Casey                                                   (c) 09/10/2026
@@ -44,7 +52,8 @@ function V = verify_with_pumpkyn(T, B, opts)
 
 if nargin < 3, opts = struct(); end
 d = @(f,v) fieldd(opts, f, v);
-tolDz = d('tolDz', 1e-6);  gateKm = d('gateKm', 100);  capSec = d('capSec', 300);
+tolDz = d('tolDz', 1e-6);  gateKm = d('gateKm', 100);  gateVms = d('gateVms', 10);
+capSec = d('capSec', 300);
 % NOT d('pool', gcp('nocreate')): MATLAB evaluates arguments eagerly, so that
 % form starts a pool query even when the caller supplied one.
 if isfield(opts, 'pool'), pool = opts.pool; else, pool = gcp('nocreate'); end
@@ -52,16 +61,17 @@ if isempty(pool)
     warning('verify_with_pumpkyn:unfenced', ...
         'no parallel pool: the foreign solver runs UNFENCED and can hang indefinitely');
 end
-lStar = B.problem.lStar;
+lStar = B.problem.lStar;  tStar = B.problem.tStar;
 
 rv0 = B.stateD(T.sD);  rvf = B.stateA(T.sA);
 z8 = T.z(:);
 % `returnedUsable`, NOT `converged`: pumpkyn.cr3bp.tfMin gives us no
 % convergence flag, so the strongest honest statement is that it came back
 % with eight finite numbers. Whether it SOLVED anything is established by
-% flying its answer, below. (Astra script review 2026-09-10.)
-V = struct('z8', z8, 'z8Pumpkyn', nan(8,1), 'dComponent', nan(8,1), 'dz', NaN, ...
-           'moved', true, 'returnedUsable', false, 'flyKm', NaN, 'note', '');
+% flying its answer, below.
+V = struct('ok', false, 'z8', z8, 'z8Pumpkyn', nan(8,1), 'dComponent', nan(8,1), 'dz', NaN, ...
+           'moved', true, 'returnedUsable', false, 'flyKm', NaN, 'flyVms', NaN, ...
+           'flightReason', 'not flown', 'note', '');
 
 % the foreign solver prints its own fsolve banner; capture it so this
 % section reads as one comparison rather than a solver log
@@ -78,11 +88,23 @@ else
     V.dComponent = za(:) - z8;
     V.dz = norm(V.dComponent);
     V.moved = ~(V.dz <= tolDz);
-    [okF, ~, Ya] = fenced(pool, capSec, @pumpkyn.cr3bp.tfMinProp, 2, za(8), ...
-                          [rv0(1:6); 1; za(1:7)], B.Tnd, B.cnd, B.mu);
-    if okF, V.flyKm = norm(Ya(end,1:3) - rvf(1:3)')*lStar; end
-    V.note = sprintf('|dz| = %.3e (tolerance %.0e); its own flight misses by %.4f km', ...
-                     V.dz, tolDz, V.flyKm);
+    [okF, ta, Ya] = fenced(pool, capSec, @pumpkyn.cr3bp.tfMinProp, 2, za(8), ...
+                           [rv0(1:6); 1; za(1:7)], B.Tnd, B.cnd, B.mu);
+    if okF
+        % the same admissibility the certifier applies: a short or
+        % penetrating flight must not be read at its last row
+        VF = validate_flight(ta, Ya, za(8), B.Tnd, B.cnd, B.mu, lStar);
+        V.flightReason = VF.reason;
+        if VF.ok
+            V.flyKm  = norm(Ya(end,1:3) - rvf(1:3)')*lStar;
+            V.flyVms = norm(Ya(end,4:6) - rvf(4:6)')*lStar/tStar*1000;
+        end
+    else
+        V.flightReason = sprintf('flight exceeded its %g s cap', capSec);
+    end
+    V.ok = ~V.moved && isfinite(V.flyKm) && V.flyKm < gateKm && V.flyVms < gateVms;
+    V.note = sprintf(['|dz| = %.3e (tolerance %.0e); its own flight: %s, misses by ' ...
+                      '%.4f km / %.4f m/s'], V.dz, tolDz, V.flightReason, V.flyKm, V.flyVms);
 end
 
 if ~d('quiet', false)
@@ -96,9 +118,12 @@ if ~d('quiet', false)
     end
     fprintf('\n  |dz| = %.3e     %s\n', V.dz, tern(~V.moved, 'COSTATES DID NOT MOVE', 'COSTATES MOVED'));
     if isfinite(V.flyKm)
-        fprintf('  pumpkyn''s own solution flies to the target within %.4f km  %s\n', ...
-                V.flyKm, tern(V.flyKm < gateKm, '(PASS)', '(FAIL)'));
+        fprintf('  pumpkyn''s own solution flies to the target within %.4f km, %.4f m/s  %s\n', ...
+                V.flyKm, V.flyVms, tern(V.flyKm < gateKm && V.flyVms < gateVms, '(PASS)', '(FAIL)'));
+    else
+        fprintf('  pumpkyn''s own solution could not be flown: %s\n', V.flightReason);
     end
+    fprintf('  OVERALL: %s\n', tern(V.ok, 'VERIFIED', 'NOT VERIFIED'));
     fprintf('------------------------------------------------------\n');
 end
 end

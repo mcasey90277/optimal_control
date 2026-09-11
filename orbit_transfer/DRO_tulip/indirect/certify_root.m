@@ -7,11 +7,24 @@ function C = certify_root(seed, rv0, rvf, B, opts)
 %     2. fly from z8 alone and gate the arrival in POSITION and VELOCITY (a
 %        harness that gated on position only accepted arrivals with the
 %        wrong velocity -- Astra review 2026-09-09);
+%     2b. the pointwise Pontryagin checks on that flight
+%        (pmp_pointwise_checks): H = 0, transversality, the adjoint
+%        equations, and the EXACT minimum-principle gap of the control the
+%        propagator applied -- the shooting residual cannot see a control
+%        law that minimises the wrong Hamiltonian;
 %     3. pumpkyn tfMin from the polished z8 must return within tolDz (a
 %        foreign-solver witness; an exception is a FAIL, not a pass);
 %     4. the conjugate verdict must be PASS (ENDPOINT = inconclusive = FAIL);
 %     5. the min-time hypothesis gates: min|lam_v| > 0, min Q_mt > 0 and
-%        dim S = 1 (no abnormal lift of the same trajectory).
+%        dim S = 1 (no abnormal lift of the same trajectory);
+%     6. H6, the reduced conjugate instrument's validity condition
+%        lambda_m(0) < c/T, with margin >= h6MarginMin. A gate that is
+%        computed and then ignored is the failure mode this stack exists to
+%        prevent: before 2026-09-10 an entry could certify with h6Ok false.
+%
+%   Every flight (ours and the witness's) passes validate_flight: reached
+%   t_f, finite, all-burn mass law, clear of both primaries. A returned
+%   array is not a completed flight.
 %
 %   Numbers are kept whether or not the seed certifies; C.reason names the
 %   FIRST gate that failed. Callers: certify_crossing (arrival-phase
@@ -33,6 +46,10 @@ function C = certify_root(seed, rv0, rvf, B, opts)
 %   external calls are unfenced and can hang for hours,
 %   .capPolishSec [900] .capFlySec [300] .capWitnessSec [300]
 %   .capGatesSec [900] hard caps; exceeding one is a NAMED FAILURE,
+%   .tolH [1e-6] .tolLamMf [1e-6] .tolAdj [1e-7] .tolGap [1e-12] the
+%   pointwise PMP tolerances,
+%   .h6MarginMin [1] required (c/T)/lambda_m(0) ratio, .moonKmMin [1900]
+%   .earthKmMin [6600] flight clearances (validate_flight),
 %   .nSamp [200] .rankTol [1e-8] .sA .sD (recorded, not used)
 %
 %% Outputs:
@@ -42,8 +59,12 @@ function C = certify_root(seed, rv0, rvf, B, opts)
 %                                                   .dvKms .propellantKg
 %                                                   .finalMassKg .flyKm
 %                                                   .flyVms .dz .conj .g
-%                                                   .sA .sD .rho .normR
-%                                                   .wallSec
+%                                                   .Hmax .lamMf .adjErr
+%                                                   .dirGap (pointwise PMP)
+%                                                   .h6Margin .sA .sD .rho
+%                                                   .normR .wallSec
+%                                                   .flyKmWitness
+%                                                   .flyVmsWitness
 %
 %% Revision History:
 %  M. Casey                                                   (c) 09/09/2026
@@ -83,6 +104,10 @@ capPolish  = d('capPolishSec',  900);
 capFly     = d('capFlySec',     300);
 capWitness = d('capWitnessSec', 300);
 capGates   = d('capGatesSec',   900);
+h6MarginMin = d('h6MarginMin', 1);
+tolH = d('tolH', 1e-6);  tolLamMf = d('tolLamMf', 1e-6);
+tolAdj = d('tolAdj', 1e-7);  tolGap = d('tolGap', 1e-12);
+flightOpts = struct('moonKmMin', d('moonKmMin', 1900), 'earthKmMin', d('earthKmMin', 6600));
 if isempty(pool)
     warning('certify_root:unfenced', ...
         'no parallel pool: external calls run UNFENCED and can hang indefinitely (see capped_pool)');
@@ -95,7 +120,9 @@ C = struct('ok', false, 'reason', '', 'z', nan(8,1), 'Y', [], 'tfDays', NaN, ...
            'dvKms', NaN, 'propellantKg', NaN, 'finalMassKg', NaN, ...
            'flyKm', NaN, 'flyVms', NaN, 'dz', NaN, ...
            'conj', -1, 'g', [], 'sA', d('sA', NaN), 'sD', d('sD', NaN), ...
-           'rho', NaN, 'normR', NaN, 'wallSec', NaN, 'flyKmWitness', NaN);
+           'rho', NaN, 'normR', NaN, 'wallSec', NaN, 'flyKmWitness', NaN, ...
+           'flyVmsWitness', NaN, 'h6Margin', NaN, ...
+           'Hmax', NaN, 'lamMf', NaN, 'adjErr', NaN, 'dirGap', NaN);
 
 % ---- 1. normal-chart polish + conjugate test ---------------------------
 try
@@ -133,25 +160,12 @@ C.z = z(:);  C.Y = it.Y;  C.tfDays = z(8)*tStar/86400;
 if ~okF
     C.reason = sprintf('the flight exceeded its %g s cap', capFly);  C.wallSec = toc(t0);  return
 end
-% A RETURNED ARRAY IS NOT A COMPLETED FLIGHT. An integrator that stops
-% early without throwing hands back a short, perfectly finite trajectory,
-% and every metric computed from its last row then describes a flight that
-% never happened. Require: positive final time, the flight actually reached
-% it, finite states, and the all-burn mass law m(t) = 1 - (T/c) t with a
-% positive final mass. (Astra chain review 2026-09-10.)
-[okT, tEnd] = scalar_verdict(tF(end));
-if ~okT || z(8) <= 0 || abs(tEnd - z(8)) > 1e-8*max(z(8), 1)
-    C.reason = sprintf('flight did not reach t_f (t_end = %.6g vs t_f = %.6g)', tEnd, z(8));
-    C.wallSec = toc(t0);  return
-end
-if ~all(isfinite(Yf(end, 1:7)))
-    C.reason = 'flight returned non-finite final state';  C.wallSec = toc(t0);  return
-end
-mExpect = 1 - (B.Tnd/B.cnd)*z(8);
-if ~(Yf(end,7) > 0) || abs(Yf(end,7) - mExpect) > 1e-6*max(mExpect, 1)
-    C.reason = sprintf('mass law violated: m(t_f) = %.9g, all-burn expects %.9g', Yf(end,7), mExpect);
-    C.wallSec = toc(t0);  return
-end
+% A RETURNED ARRAY IS NOT A COMPLETED FLIGHT: the shared validator checks
+% that it reached t_f, is finite, obeys the all-burn mass law and stays
+% clear of both primaries, so this file and the study script cannot drift
+% apart on what "admissible" means.
+VF = validate_flight(tF, Yf, z(8), B.Tnd, B.cnd, B.mu, lStar, flightOpts);
+if ~VF.ok, C.reason = ['flight inadmissible: ' VF.reason];  C.wallSec = toc(t0);  return, end
 C.flyKm  = norm(Yf(end,1:3) - rvf(1:3)')*lStar;
 C.flyVms = norm(Yf(end,4:6) - rvf(4:6)')*lStar/tStar*1000;
 mf = Yf(end,7);
@@ -163,6 +177,14 @@ C.finalMassKg  = mf*m0kg;
 C.dvKms = B.cnd*log(1/mf)*lStar/tStar;
 if ~(C.flyKm < gateKm),   C.reason = sprintf('flown position miss %.1f km > %g', C.flyKm, gateKm);  C.wallSec = toc(t0); return, end
 if ~(C.flyVms < gateVms), C.reason = sprintf('flown velocity miss %.2f m/s > %g', C.flyVms, gateVms); C.wallSec = toc(t0); return, end
+
+% ---- 2b. pointwise Pontryagin checks on the flight ----------------------
+PW = pmp_pointwise_checks(tF, Yf, B.Tnd, B.cnd, B.mu);
+C.Hmax = PW.Hmax;  C.lamMf = PW.lamMf;  C.adjErr = PW.adjErr;  C.dirGap = PW.dirGap;
+if ~(PW.Hmax <= tolH),       C.reason = sprintf('Hamiltonian max|H| = %.2e > %g', PW.Hmax, tolH);          C.wallSec = toc(t0); return, end
+if ~(PW.lamMf <= tolLamMf),  C.reason = sprintf('transversality |lambda_m(t_f)| = %.2e > %g', PW.lamMf, tolLamMf); C.wallSec = toc(t0); return, end
+if ~(PW.adjErr <= tolAdj),   C.reason = sprintf('adjoint equations, relative error %.2e > %g', PW.adjErr, tolAdj); C.wallSec = toc(t0); return, end
+if ~(PW.dirGap <= tolGap),   C.reason = sprintf('minimum-principle gap %.2e > %g (applied control is not the minimiser)', PW.dirGap, tolGap); C.wallSec = toc(t0); return, end
 
 % ---- 3. foreign witness ---------------------------------------------------
 try
@@ -184,13 +206,17 @@ C.dz = norm(za(:) - z(:));
 % agreement. The general hole is closed anyway by flying the WITNESS's own
 % solution: two independent solutions that both reach the target is a much
 % stronger statement than two vectors that match. (Astra chain review.)
-[okWF, ~, Ya] = fenced(pool, capFly, @pumpkyn.cr3bp.tfMinProp, 2, za(8), [rv0; 1; za(1:7)], B.Tnd, B.cnd, B.mu);
+[okWF, ta, Ya] = fenced(pool, capFly, @pumpkyn.cr3bp.tfMinProp, 2, za(8), [rv0; 1; za(1:7)], B.Tnd, B.cnd, B.mu);
 if ~okWF
     C.reason = sprintf('the witness flight exceeded its %g s cap', capFly);  C.wallSec = toc(t0);  return
 end
-C.flyKmWitness = norm(Ya(end,1:3) - rvf(1:3)')*lStar;
-if ~(C.flyKmWitness < gateKm)
-    C.reason = sprintf('witness solution does not fly to the target (%.1f km)', C.flyKmWitness);
+VW = validate_flight(ta, Ya, za(8), B.Tnd, B.cnd, B.mu, lStar, flightOpts);
+if ~VW.ok, C.reason = ['witness flight inadmissible: ' VW.reason];  C.wallSec = toc(t0);  return, end
+C.flyKmWitness  = norm(Ya(end,1:3) - rvf(1:3)')*lStar;
+C.flyVmsWitness = norm(Ya(end,4:6) - rvf(4:6)')*lStar/tStar*1000;
+if ~(C.flyKmWitness < gateKm && C.flyVmsWitness < gateVms)
+    C.reason = sprintf('witness solution does not fly to the target (%.1f km, %.2f m/s)', ...
+                       C.flyKmWitness, C.flyVmsWitness);
     C.wallSec = toc(t0);  return
 end
 if ~(isfinite(C.dz) && C.dz <= tolDz), C.reason = sprintf('tfMin witness |dz| = %.2e > %g', C.dz, tolDz); C.wallSec = toc(t0); return, end
@@ -230,6 +256,21 @@ end
 if ~(gv(1) > 0), C.reason = sprintf('min|lam_v| = %.2e not > 0', gv(1)); C.wallSec = toc(t0); return, end
 if ~(gv(2) > 0), C.reason = sprintf('min Q_mt = %.2e not > 0', gv(2));   C.wallSec = toc(t0); return, end
 if gv(3) ~= 1,   C.reason = sprintf('dim S = %g (abnormal lift)', gv(3)); C.wallSec = toc(t0); return, end
+
+% ---- 6. H6, enforced ----------------------------------------------------
+% The reduced instrument's determinant can vanish spuriously when
+% lambda_m(0) >= c/T (FINDINGS 40). Its verdict above is only meaningful
+% when that is excluded, so a missing or failed H6 is a failed gate, and
+% "excluded but with no headroom" is distinguished by h6MarginMin.
+if ~isfield(g, 'h6Margin'), C.reason = 'gates omitted H6 (h6Margin)'; C.wallSec = toc(t0); return, end
+[okH6, h6m] = scalar_verdict(g.h6Margin);
+if ~okH6, C.reason = 'H6 margin is not a real finite scalar'; C.wallSec = toc(t0); return, end
+C.h6Margin = h6m;
+if ~(h6m >= h6MarginMin)
+    C.reason = sprintf('H6 margin %.2fx < required %.2fx (lambda_m(0) too close to c/T)', ...
+                       h6m, h6MarginMin);
+    C.wallSec = toc(t0);  return
+end
 
 C.ok = true;  C.wallSec = toc(t0);
 if plateau

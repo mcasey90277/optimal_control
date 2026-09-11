@@ -2591,3 +2591,88 @@ true.** The document existed and its central step did not follow, and I had
 been citing it for weeks. *Having a proof written down is not the same as
 having checked it.* The five rules in `doc/CERTIFICATION_DISCIPLINE.md` now
 carry this one.
+
+## 41. Second script review (GPT-6 Astra, xhigh): the sampled minimum-principle check was a second tautology, and a computed gate was not an enforced gate (2026-09-10)
+
+The revised `transfer_study.m` and its ten callees went back to Astra with a
+sharpened brief (my own doubt stated: N6 looked like a sampled restatement of
+an analytic fact). Verdict: 11 CORRECTNESS, 6 READABILITY, 5 FINE, 3
+OVERCLAIM, 1 REDUNDANT; $1.13. Full text in
+`reviews/transfer_study_review2_astra_2026-09-10.md`. Everything actionable on
+files the running sweep does not hold is fixed; the rest is in TODO with the
+reason.
+
+### The two findings that mattered
+
+**N6 was a tautology, again.** The 400-point sphere sample compared the flown
+direction `-lam_v/|lam_v|` against `H` evaluated on random unit vectors. `H`
+is affine in the direction with coefficient `(T/m) lam_v`, so its minimiser
+over the sphere is `-lam_v/|lam_v|` *by construction*; the sample could only
+ever return zero. The replacement asks the question that CAN fail: is the
+control the propagator **applied** the minimiser of OUR Hamiltonian? The
+thrust acceleration is recovered as (powered field - coasting field), and the
+exact gap `H(applied) - min H = (T/m)(lam_v . alpha_applied + |lam_v|)` is
+evaluated directly: 7.5e-15 on the anchor, throttle 1 to 5.8e-15. The
+mutation test injects a vector field that thrusts against the primer, and the
+gap opens to 1e-2 while the shooting residual would happily converge to that
+wrong problem. This is `pmp_pointwise_checks` (with N2, N4, N5 beside it);
+the certifier now runs it on every flight and FAILS on it.
+
+**H6 was computed and then ignored.** `mintime_hypothesis_gates` returned
+`h6Ok`, `certify_root` stored the gates, and nothing read the flag: a library
+entry could certify with `h6Ok == false`. Now gate 6 of the stack, with a
+margin requirement (`h6MarginMin`, default 1x) so "excluded, but with no
+headroom" is distinguishable, and a missing margin is a named failure. The
+sweep so far reads 17-33x on every entry, so no shipped entry is affected --
+which is luck, not design.
+
+### Everything else that changed
+
+- `validate_flight` (new, `costate_common`): ONE admissibility check --
+  reached `t_f`, finite, all-burn mass law, clear of both primaries -- used
+  by the certifier, the witness flight, `verify_with_pumpkyn` and the script.
+  Before, the script and the certifier each had their own partial version.
+- `verify_with_pumpkyn` has an OVERALL status: usable answer AND costates
+  did not move AND its own flight is admissible and reaches the target in
+  position AND velocity. Agreement alone was one metric of three.
+- `report_optimality` has three groups (NECESSARY / SUFFICIENCY / CROSS-CHECKS)
+  and four line states (PASS / FAIL / NOT CHECKED / UNRESOLVED). A failed
+  cross-check no longer reads as "not an extremal"; an ENDPOINT conjugate
+  verdict propagates as UNRESOLVED rather than as a refutation; the claim
+  wording is one sentence shared with the script.
+- `transfer_study`: thresholds in one block before anything runs; the
+  periodic interpolant is REQUIRED (no silent `spline` fallback) and its seam
+  is checked in value and derivative -- derivative 4.5e-16 against the 1e-2
+  jump a not-a-knot spline has there; the value seam is the orbit's own
+  closure (4.6e-8 on the tulip), which the interpolant cannot improve; orbit
+  closure is asserted, not printed; N5 uses two coordinate-scaled step sizes
+  (agreement 4.6e-9); diagnostic IDs are stable and grouped (N1-N6 Pontryagin,
+  S1-S4 theorem, V1-V2 instrument validity, X1 cross-check); coverage is
+  reported as t/t_f; the one `flight` object feeds every section and the
+  figure (`plot_transfer_3d` accepts it and reports `flightSupplied`); review
+  history is out of the comments.
+- Tests: `test_validate_flight` (6), `test_pmp_pointwise_checks` (10, with
+  the wrong-sign mutation), and extensions to `test_certify_crossing` (H6
+  refusal), `test_report_optimality` (cross-check isolation, UNRESOLVED, H6
+  NOT CHECKED), `test_verify_with_pumpkyn` (overall status),
+  `test_plot_transfer_3d` (supplied flight). All green; the script re-run
+  reaches the same anchor to the digit.
+
+### Deferred, and why
+
+`conj_spectrum` (drop the "det sign is meaningless" claim, report the
+uncovered final interval, say "candidate-detection scan", fix the `multTol`
+inequality), `lift_margin` ("rank >= 6" wording, reject zero or non-finite
+`lam`), `h6_margin` (numerical clearance against the Hamiltonian residual) and
+the `hMin` rename in `mintime_hypothesis_gates` all live in files the
+second-order sweep is executing right now. Editing a function under a running
+MATLAB job changes what its later calls do. They go in when the sweep flag is
+set.
+
+### One more front door
+
+`build_70mN_library.m` runs the whole library chain -- anchors, four arcs,
+sheet, ribs, package, audit, sweep, pictures, deliverable -- as a script in the
+`transfer_study` style, each stage a switch so hours-long stages are reused
+from their files. Dry-run on the existing results reproduces 115 entries /
+115 of 144 cells / audit reused, end to end.

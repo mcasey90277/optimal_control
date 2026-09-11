@@ -61,3 +61,18 @@ trusting anyone to remember.
 found 41 findings including three release blockers, on code that already had
 nine green test suites. Green tests prove the code does what I thought;
 they cannot tell me what I failed to think of.
+
+## Two rules added 2026-09-10 (FINDINGS 41)
+
+6. **A gate that is computed is a gate that is enforced.** `h6Ok` was
+   returned by the gates, stored on every entry, and read by nothing; an
+   entry could certify with it false. If a quantity is worth computing in
+   the gate stack it is worth failing on, with a named reason and a margin --
+   and its absence is a failure, never a pass.
+
+7. **A check that cannot fail is not a check.** Twice now a numerical
+   "verification" evaluated a formula against the formula's own minimiser
+   (N5 with `|alpha| = 1`, N6 with the sphere sample). The test of a check is
+   its mutation: name the bug class it exists for, inject that bug, and watch
+   it fail. `pmp_pointwise_checks` ships with a wrong-sign vector field in its
+   test for exactly this reason.

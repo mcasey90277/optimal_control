@@ -106,6 +106,11 @@ nondimensionalisation, solve, verify independently, then check the NECESSARY
 conditions and the SUFFICIENCY hypotheses **one at a time, computed in the
 script**, and finally open a rotatable 3D figure.
 
+**Standing rule (Mike, 2026-09-10): every costate library ships these two
+scripts** -- `build_70mN_library.m` (the chain) and `transfer_study.m` (one
+transfer, exposed). A new campaign copies both and changes the parameter
+blocks; the front-door functions underneath stay the engine.
+
 | unit | what it does |
 |---|---|
 | `transfer_study.m` | the script; edit the parameter blocks and run |

@@ -77,3 +77,9 @@ Both externally reviewed (GPT-5.6-terra + Gemini 3.1, 2026-08-07/08).
   nothing is ever written into pumpkyn.
 - The five standing principles + principle 7 (defenses against silent
   quality degraders) govern all changes — see the SDD.
+- **Principle 8 (2026-09-10): two scripts per costate library** — a chain
+  script (`DRO_tulip/indirect/build_70mN_library.m` is the model: stages
+  named, switchable, file-to-file) and a study script
+  (`DRO_tulip/indirect/transfer_study.m`: one transfer, scaffolding exposed,
+  necessary and sufficient conditions one at a time). New campaigns copy
+  those two and change the parameter blocks.

@@ -76,3 +76,11 @@ they cannot tell me what I failed to think of.
    its mutation: name the bug class it exists for, inject that bug, and watch
    it fail. `pmp_pointwise_checks` ships with a wrong-sign vector field in its
    test for exactly this reason.
+
+8. **The build is a script, and so is the study.** A library whose stages
+   were launched from scratch files cannot be rebuilt by anyone, including
+   its author a week later. Every costate library ships a chain script
+   (model: `DRO_tulip/indirect/build_70mN_library.m`) whose stages are
+   named, switchable and file-to-file, and a study script (model:
+   `DRO_tulip/indirect/transfer_study.m`) that exposes, for one transfer,
+   every condition the library claims. Mike's rule, 2026-09-10.

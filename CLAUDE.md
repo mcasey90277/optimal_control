@@ -81,6 +81,12 @@ optimal_control/
 │   │                            #   gates_catalog_pass (18,360/18,360 pass 2026-09-07,
 │   │                            #   lift_space_dim rank rule). Record: FINDINGS.md
 │   │                            #   sections 17-30; reviews in DRO_tulip/reviews/.
+│   │                            #   70 mN PHASE LIBRARY (2026-09-09/10): 115 certified
+│   │                            #   entries, audited; TWO SCRIPTS ARE THE STANDARD for
+│   │                            #   every costate library (Mike 2026-09-10): the chain
+│   │                            #   script indirect/build_70mN_library.m and the study
+│   │                            #   script indirect/transfer_study.m -- copy both for a
+│   │                            #   new campaign, change the parameter blocks.
 │   │                            #   ALGORITHM DOC: doc/algorithms_orbit_transfer.tex
 │   │                            #   (OCP + both pipelines, ELI5/intuition/rigor).
 │   ├── min_fuel_paper/          # paper outline (co-author Koblick)

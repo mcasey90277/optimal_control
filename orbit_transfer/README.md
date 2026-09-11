@@ -84,6 +84,17 @@ corner everywhere is shortest-departure × longest-tulip; "blocky" tf maps
   campaign's `results/` (under `direct/`).
 - Cross-references between campaigns are deliberate and documented in each
   `setup_paths.m` header (e.g. GTO_ELFO reuses GTO_tulip's Sundman engine).
+- **Two scripts per costate library (Mike, 2026-09-10).** Every costate
+  library campaign ships (a) a CHAIN script in the style of
+  `DRO_tulip/indirect/build_70mN_library.m` -- parameter blocks first, every
+  stage named and switchable, each stage's output a file the next stage
+  reads, so the library can be rebuilt or resumed by running one script --
+  and (b) a STUDY script in the style of `DRO_tulip/indirect/transfer_study.m`
+  -- one transfer with the scaffolding exposed: generate both orbits from
+  their parameters, solve, verify independently, then the necessary
+  conditions and the sufficiency hypotheses one at a time with stable IDs
+  and one tolerance block. Front-door functions stay; the scripts are how
+  the campaign is driven and understood.
 - **Standard optimality report:** every production solve driver ends with
   `foc_report` — the fixed-format first-order block + `foc_<tag>.mat`
   sidecar; report-only burn-in, does not alter certified status. Core:

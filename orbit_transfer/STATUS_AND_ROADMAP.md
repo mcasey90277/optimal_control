@@ -87,13 +87,13 @@ sheets by `sD_frac x sA_frac`, so this is a new catalog, not a new format.
 | **grid** | DRO tau=1 -> tulip Np=7, 12 departure x 12 arrival phases, one rung (0.070 N) |
 | **certified now** | 10 transfers from the earlier sweeps + the arcs' new points; t_f spans **16.23 d (arrival phase 0.1587) to 26.44 d (0.9087)** -- arrival phase moves the transfer by ~60%, departure phase by ~1 day |
 | **method** | arrival axis by PSEUDO-ARCLENGTH continuation (`arclength_ms` + `arclength_arrival`), departure axis by a bisecting walker (`rib_from_crossing`); both axes end in the same gate stack (`certify_root`) |
-| **front door** | **`run_dro_tulip(sD, sA)`** -- one call, one certified transfer, library route or continuation walk |
+| **front doors** | **`run_dro_tulip(sD, sA)`** -- one call, one certified transfer, library route or continuation walk; **`build_70mN_library.m`** -- the WHOLE chain (anchors, arcs, sheet, ribs, package, audit, sweep, pictures, deliverable) as one script with stage switches; **`transfer_study.m`** -- one transfer with the scaffolding exposed, necessary + sufficiency checks one at a time. The two scripts are now the STANDARD for every costate library (principle 8, 2026-09-10) |
 | **why continuation** | the fixed-step sweep of 2026-09-08 stalled and was judged the wrong method under review (FINDINGS 36); the arcs walk through folds instead of stepping over them |
 | **the discriminator** | **the CONJUGATE TEST does the separating** -- first assembled sheet: 14 candidates, 2 certified, 12 refuted by the conjugate test ALONE after passing residual, flown arrival and `tfMin` witness (FINDINGS 38). See 4.4. |
-| **status (2026-09-10)** | **53 entries PACKAGED and AUDITED 53/53 clean**, schema valid, verdicts carried per entry (conj 53/53, dim S = 1 on all 53). Coverage 53 of 144 cells: 11 of 12 arrival phases, 4 departure rows complete or nearly so, ribs running on the remaining 7 |
+| **status (2026-09-10)** | **115 entries PACKAGED and AUDITED 115/115 clean** (115 of 144 cells, 11 of 12 arrival phases; column 0.9921 has no certified seed, 0.8254 stalls in departure). Second script review applied: H6 now ENFORCED in the gate stack, pointwise Pontryagin checks (exact minimum-principle gap of the APPLIED control) gate every flight, one shared flight validator. Second-order sweep (spectrum / H6 / lift) in progress; its multiplicity flags located -- four endpoint collapse, one interior near-miss on (2,4) that plateaus under refinement (FINDINGS 41) |
 | **audit** | `audit_phase_catalog` re-derives every entry from the catalog's OWN KEYS and flies it -- worst arrival 0.29 km / 0.006 m/s, worst witness disagreement 6.0e-08, stored t_f vs z8(8) 8.9e-16 |
 | **the ship rule** | a deliverable does not ship until its audit is clean; `build_dro_deliverable` ENFORCES it (`doc/CERTIFICATION_DISCIPLINE.md`) |
-| **record** | FINDINGS 37 (machinery), 38 (the conjugate result), 39 (the departure conjugate point), **40 (the two outside reviews, the four proof repairs, H6)** |
+| **record** | FINDINGS 37 (machinery), 38 (the conjugate result), 39 (the departure conjugate point), **40 (the two outside reviews, the four proof repairs, H6)**, 41 (second script review: N6 tautology, H6 enforcement, the sweep's multiplicity flags) |
 
 ### 2.2 Beyond min-time (the catalog line)
 

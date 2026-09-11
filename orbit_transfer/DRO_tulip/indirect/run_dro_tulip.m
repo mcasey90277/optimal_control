@@ -10,8 +10,10 @@ function T = run_dro_tulip(sD, sA, opts)
 %     >> T = run_dro_tulip(0.75, 0.0754, struct('movie', true));
 %
 %   Three routes, tried in order:
-%     LIBRARY   the pair is already certified on disk -> re-certify and
-%               report (seconds).
+%     LIBRARY   the pair is already certified on disk -- in the anchor and
+%               sweep files, or in the 70 mN CATALOG, whose junction
+%               states are rebuilt from z8 -> re-certify and report
+%               (seconds).
 %     WALK      the arrival phase differs -> pseudo-arclength continuation
 %               in arrival phase from the nearest library solution, then a
 %               departure walk. Minutes to hours; the arrival direction is
@@ -38,11 +40,14 @@ function T = run_dro_tulip(sD, sA, opts)
 %  T                        struct                  certify_root output plus
 %                                                   .source ('library' |
 %                                                   'walk-arrival' |
-%                                                   'walk-both') .sD .sA
+%                                                   'walk-both') .libSrc
+%                                                   (which list served a
+%                                                   library pair) .sD .sA
 %                                                   .walkSec .movieStem
 %
 %% Revision History:
 %  M. Casey                                                   (c) 09/09/2026
+%  09/11/2026  served by the 70 mN catalog too (115 entries, not 10)
 %  Copyright Coorbital Inc.
 %% ------------------------ Begin Code Sequence ---------------------------
 
@@ -70,7 +75,9 @@ say('DRO -> tulip min-time: departure phase %.4f, arrival phase %.4f, %.1f mN, I
 pool = capped_pool();          % the hard-timeout fence for external calls
 setupOpts = opts;  setupOpts.sD = 0;  setupOpts.sA0 = 0.0754;
 [B, anc] = arclength_arrival('setup', setupOpts);
-lib = dro_tulip_library();
+% the CATALOG too: without it the front door knew 10 of the 115 certified
+% entries and walked to the rest
+lib = dro_tulip_library([], struct('includeCatalog', true));
 
 % ---- 1. the pair itself in the library ---------------------------------
 hit = find(abs(wrapDiff([lib.sD], sD)) < tolPhase & abs(wrapDiff([lib.sA], sA)) < tolPhase, 1);
@@ -79,7 +86,7 @@ if ~isempty(hit)
     seed = seed_of(lib(hit), B, sD);
     T = certify_root(seed, B.stateD(sD), B.stateA(sA), B, ...
                      struct('sA', sA, 'sD', sD, 'wallSec', wallSec, 'pool', pool));
-    T.source = 'library';
+    T.source = 'library';  T.libSrc = lib(hit).src;
 else
     % ---- 2. walk: arrival phase first (folds live there), then departure
     near = nearest_point(lib, sD, sA);
@@ -126,6 +133,11 @@ T = struct('ok', false, 'reason', 'walk not attempted', 'source', 'walk', ...
            'propellantKg', NaN, 'finalMassKg', NaN, ...
            'flyKm', NaN, 'flyVms', NaN, 'dz', NaN, 'conj', -1, 'g', [], 'rho', NaN, ...
            'normR', NaN, 'wallSec', NaN);
+if isempty(near.Y)            % a catalog entry: junction states from its z8
+    rvN = B.stateD(near.sD);
+    sd = seed_from_z8(near.z, rvN(1:6), 24, B.Tnd, B.cnd, B.mu);
+    near.Y = sd.Y(:, 1:end-1);  near.K = size(near.Y, 2);
+end
 so = opts;  so.sD = near.sD;  so.sA0 = near.sA;  so.anchorMat = near.file;
 so.root = struct('z', near.z, 'it', struct('Y', near.Y));   % layout-independent
 if isfield(near, 'K') && ~isempty(near.K), so.K = near.K; end
@@ -179,7 +191,14 @@ end
 end
 
 function seed = seed_of(P, B, sD)
-% SEED_OF  ms seed from a library point.  INPUTS: P; B; sD.  OUTPUTS: seed.
+% SEED_OF  ms seed from a library point. A catalog entry carries z8 but no
+% junction states; its seed is rebuilt by flying z8 (seed_from_z8), which
+% puts the seed AT the root.  INPUTS: P; B; sD.  OUTPUTS: seed.
+if isempty(P.Y)
+    rv0 = B.stateD(sD);
+    seed = seed_from_z8(P.z, rv0(1:6), 24, B.Tnd, B.cnd, B.mu);
+    return
+end
 K = size(P.Y, 2);
 seed = struct('tf', P.z(8), 'tGrid', linspace(0, P.z(8), K+1), 'Y', [P.Y, P.Y(:,end)]);
 rv0 = B.stateD(sD);

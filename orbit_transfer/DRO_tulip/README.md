@@ -73,8 +73,11 @@ T = run_dro_tulip(0, 0.1587);         % another arrival phase: 16.2256 d
 T = run_dro_tulip(0.75, 0.0754, struct('movie', true));
 ```
 
-It serves the pair from `dro_tulip_library` when it is already solved, and
-otherwise walks there by continuation. Either route ends in the same gate
+It serves the pair from `dro_tulip_library` when it is already solved --
+the anchor and sweep files, and since 2026-09-11 the certified 70 mN catalog
+itself (all 115 entries, junction states rebuilt from z8 by `seed_from_z8`;
+before that it knew 10 and walked to the other 105) -- and otherwise walks
+there by continuation, starting from the nearest certified point. Either route ends in the same gate
 stack, so the printed time, ΔV and fuel always come with the flown miss, the
 pumpkyn `tfMin` witness, the conjugate verdict and the three hypothesis gates.
 A walk that runs out of budget says so rather than returning a number.

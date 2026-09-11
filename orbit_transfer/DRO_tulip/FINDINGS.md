@@ -2838,5 +2838,24 @@ level up: the builder was fixed and audited, but the SCRIPT that drives the
 builder had never been run on its live path, and its defaults were the
 dangerous ones.
 
+### The front door knew 10 of the 115 entries
+
+`run_dro_tulip` seeded itself from `dro_tulip_library`, which gathers
+solutions from the anchor and sweep FILES: 10 phase pairs. The other 105
+certified, audited catalog entries were invisible to it, so asking for one
+started a continuation walk -- minutes to hours -- to re-derive a transfer
+already on disk. `dro_tulip_library` now lists the catalog on request
+(`includeCatalog`; off by default, because `build_arrival_sheet` seeds from
+the default list and seeding a sheet with its own output would be circular),
+and the front door rebuilds the junction states it needs from z8 with
+`seed_from_z8`. A catalog-only pair, (sD, sA) = (1/12, 0.2421), is now served
+from the library and certifies in 32 s (pool start included) at the
+catalog's own t_f, 18.603887 d, to the printed digit.
+`test_run_dro_tulip_catalog` (6 checks) RED before GREEN; three mutations
+(the listing branch, the front door's request, the z8 seed) all caught,
+files restored md5-identical; `test_run_dro_tulip` still passes (173 s).
+`transfer_study.m` still uses the default list -- it carries uncommitted
+edits of Mike's and was left alone.
+
 The rerun itself (sheet, package, audit into `results_rerun/`) is running;
 its comparison with the shipped catalog follows here.

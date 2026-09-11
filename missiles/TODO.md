@@ -320,6 +320,17 @@ open — below.
 
 ---
 
+## Next campaign candidate: constrained computational guidance (Palmer & Rao 2026)
+
+Goal set by Mike 2026-09-11: code the CCG&C algorithm of arXiv:2609.10813,
+reproduce its Shuttle max-crossrange results (reference 34.0 deg, zero
+infeasible guidance cycles against the baseline's mean 35), then upgrade the
+HGV code with it if the comparison against simpler baselines supports it.
+Notes, spec defects found in the paper, and the ordered upgrade list:
+`docs/palmer_rao_2026_ccgc_notes.md`. Not started. Blocking spec decisions:
+where the OCP transcription lives (recommend `../oclib/+oc`), and how the
+paper's constants enter without breaking the `missileConst` rule.
+
 ## Structural, deferred deliberately
 
 ### Wire `HGV/run_target` to `coorbital.viz.saveFigure`

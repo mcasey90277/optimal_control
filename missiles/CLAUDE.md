@@ -145,6 +145,8 @@ guidance law.
 - `docs/software_design.tex` — 48 pp, architecture and data flow.
 - `docs/README.md` — the authority on delivered behaviour.
 - `docs/closed_loop_guidance.md` — the PEG/VOA brief.
+- `docs/palmer_rao_2026_ccgc_notes.md` — Palmer & Rao 2026 constrained computational
+  guidance (CCG&C): summary, reproduction spec, HGV upgrade path. Goal set 2026-09-11.
 - `docs/DESIGN.md` — chronological as-built record. Append dated sections; do
   not edit the existing ones.
 - `docs/LESSONS_LEARNED.md`, `docs/reviews/` — review archive.

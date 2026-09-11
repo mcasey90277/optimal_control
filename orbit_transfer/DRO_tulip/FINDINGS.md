@@ -2676,3 +2676,33 @@ sheet, ribs, package, audit, sweep, pictures, deliverable -- as a script in the
 `transfer_study` style, each stage a switch so hours-long stages are reused
 from their files. Dry-run on the existing results reproduces 115 entries /
 115 of 144 cells / audit reused, end to end.
+
+### Addendum: the sweep's multiplicity flags, read while it runs (88 of 115)
+
+Five entries so far carry `multiplicity 1` from `conj_spectrum`: (8,1),
+(9,1), (2,4), (3,8), (5,8), all with 0 interior sign changes. The sidecar
+stores no location, so the flags were re-derived:
+
+| entry | flagged sample t/t_f | sigma_6/sigma_5 there | reading |
+|---|---|---|---|
+| (8,1), (9,1), (5,8), (3,8) | 0.990-0.995 | 0.10-0.24 | the graded ENDPOINT collapse (FINDINGS 39-40): the last samples before t_f, where several singular values contract together |
+| (2,4) | 0.573 | 0.18 | INTERIOR -- the case the instrument was built for |
+
+The interior one was refined 16x (`nSub` 8 -> 32 -> 128). Its sampled
+minimum went 1.23e-6 -> 6.68e-7 -> 6.68e-7 (relative 5.1e-4 of the median),
+identical at the two finest resolutions, with no determinant sign change in
+[0.50, 0.65] at any resolution. A true zero's sampled minimum keeps falling
+with the spacing; this one PLATEAUS, so it is a finite near-miss of the
+smallest singular value, not an even-order conjugate point. (3,8)'s
+unflagged interior dip at 0.442 behaves the same way (8.97e-7 -> 8.59e-7).
+The control (1,1) has no dip in that window at all (relative 3.3).
+
+Two things follow. (2,4) sits at arrival phase 0.3254, the column whose
+first candidate the sheet REFUTED by the conjugate test: the certified
+entry is close, in the phase plane, to where the conjugate structure
+changes, and its 5e-4 near-degeneracy says so. And `conj_spectrum` must
+report the LOCATION and the refinement behaviour of every candidate, not a
+count: as it stands the writeback will stamp `multiplicity 1` on five
+entries whose flags mean two different things. That fix waits for the sweep
+to release the file (TODO, top item); the count field should be read as
+"candidates, see FINDINGS 41" until then.

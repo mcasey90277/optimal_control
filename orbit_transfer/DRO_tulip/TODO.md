@@ -1,5 +1,13 @@
 # DRO_tulip — TODO
 
+- [ ] **`conj_spectrum` must locate its candidates (FINDINGS 41 addendum)**
+  -- after the sweep releases the file: per candidate dip, record t/t_f,
+  sigma_6/sigma_5 and the refinement behaviour (sampled minimum at 4x finer
+  spacing: falls = zero, plateaus = near-miss), separate start-up (Phi_rv
+  -> 0 at t = 0), graded-endpoint and interior candidates, and re-sweep so
+  the catalog's `multiplicity` field carries locations, not a count. Five
+  of 88 entries are flagged today; four are the endpoint collapse and (2,4)
+  at t/t_f = 0.573 is a plateaued near-miss (5.1e-4 relative).
 - [ ] **Review-2 items on sweep-held files (FINDINGS 41)** — apply once
   `second_order_pass` finishes (flag `SWEEP2ND_DONE`): `conj_spectrum` drop
   the "det sign meaningless" claim, report the uncovered final interval,

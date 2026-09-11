@@ -133,9 +133,13 @@ is 1 m. Items marked CHECKED were computed here on 2026-09-11.
    `(1/beta) log( (1/(t_f-t_0)) integral exp(beta y) dt )` lies between the
    mean and the max. Test both.
 8. **The mesh truncation and remap step is out of scope in the paper.** It is
-   specified in Ref. 20 (Dennis, Hager, Rao 2019), and we do not have that
-   paper yet. Substitute: re-solve on a normalized-time grid over the
-   remaining horizon, warm-started by interpolating the previous solution.
+   specified in Ref. 20 (Dennis, Hager, Rao 2019). That paper is CLOSED
+   access (checked 2026-09-11: Unpaywall, Semantic Scholar, OpenAlex, arXiv,
+   NSF PAR, author pages). The same procedure (remap the mesh to the
+   remaining horizon, delete the expired portion) is restated in the open
+   Winkler & Rao 2026 arXiv paper, now in `papers/`. Fallback if that is too
+   thin: re-solve on a normalized-time grid over the remaining horizon,
+   warm-started by interpolating the previous solution.
 9. **"Remaining horizon too small to solve" is not defined.** When that
    happens the previous control is held. Pick and document a rule.
 
@@ -275,13 +279,22 @@ it against the simpler baselines in section 4 before adopting it.
 
 ## References worth fetching for the reproduction
 
-- Dennis, Hager, Rao, "Computational Method for Optimal Guidance and Control
-  Using Adaptive Gaussian Quadrature Collocation," JGCD 42(9), 2019 (the
-  CG&C baseline and the mesh truncation and remap).
+- M. E. Dennis, W. W. Hager, A. V. Rao, "Computational Method for Optimal
+  Guidance and Control Using Adaptive Gaussian Quadrature Collocation," JGCD
+  42(9), 2019, doi:10.2514/1.G003943 (the CG&C baseline and the mesh
+  truncation and remap). **Closed access; not in `papers/`.** Needs an AIAA
+  ARC subscription or an interlibrary request.
+- K. Winkler, A. Rao, "Computational Method for Desensitized Optimal Guidance
+  Using Direct Collocation," arXiv:2604.23028, 2026. **In `papers/`.** Same
+  shrinking-horizon LGR loop with the mesh remap and deletion stated in the
+  open; the best available substitute for Dennis 2019. Its
+  sensitivity-penalty idea is a second robustness mechanism worth comparing
+  with CCG&C's margin term.
 - Betts, *Practical Methods for Optimal Control and Estimation Using Nonlinear
   Programming*, 3rd ed., SIAM 2020 (the Shuttle max-crossrange problem).
 - Palmer & Rao, "Adaptive Path Constrained Optimal Guidance with Application
   to Reusable Launch Vehicle Entry," AAS/AIAA SFM 2025 (preliminary version).
-- Miller & Rao, JSR 59(3), 2022 (the phugoid penalty's source).
+- Miller & Rao, JSR 59(3), 2022 (the phugoid penalty's source). Preprint
+  arXiv:2104.12296 **in `papers/`**.
 - Blanchard, Higham, Higham, IMA J. Numer. Anal. 41(4), 2021 (stable
   log-sum-exp).

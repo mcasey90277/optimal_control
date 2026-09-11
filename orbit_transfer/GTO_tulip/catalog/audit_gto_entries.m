@@ -153,8 +153,11 @@ for kp = 1:3
     % parameters come from THIS sheet's own meta, never a shared default.
     [tD, rvD] = get_family_orbit(meta.depFamily, meta.depParams);
     [tA, rvA] = get_family_orbit(meta.arrFamily, meta.arrParams);
-    rv0 = interp1(tD, rvD, mod(Qz.sD(iD),1)*tD(end), 'spline');
-    rvf = interp1(tA, rvA, mod(Qz.sA(iA),1)*tA(end), 'spline');
+    % THE shared endpoint rule (costate_common/phase_state, FINDINGS 44);
+    % the .' keeps the row orientation these two have always had
+    depAt = phase_state(tD, rvD);   arrAt = phase_state(tA, rvA);
+    rv0 = depAt(Qz.sD(iD)).';
+    rvf = arrAt(Qz.sA(iA)).';
 
     % Same ND thrust/exhaust conversion thrust_ladder_library uses, from
     % THIS sheet's own thruster metadata:

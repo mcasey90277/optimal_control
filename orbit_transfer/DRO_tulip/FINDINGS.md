@@ -2947,3 +2947,40 @@ statement about the method rather than a magic number.
 Three mutations (the periodic scheme, the derivative coefficient rule, the
 per-phase scaling) each caught by the right test; files restored
 md5-identical.
+
+### Addendum: the backlog is closed, 18 files, three tiers (2026-09-11)
+
+Mike: "can we fix that and have those sites now call our new library
+functions." Done the same day, in tiers, each with its own check.
+
+| tier | files | check |
+|---|---|---|
+| live instruments | `second_order_pass`, `conj_catalog_pass`, `gates_catalog_pass`, `audit_phase_catalog` | audit 4/4 with the shipped values; gates recomputed on 3 measured cells differ by **0** in min\|lam_v\|, min Q and dim S; conjugate verdicts on 2 cells unchanged; `test_second_order_pass` green |
+| ladder engines + phase sweeps | `thrust_ladder_library` (the halo and DPO campaigns call it unmodified), `extend_thrust_ladder`, `densify_ladder`, `lowthrust_ladder`, `probe_deep_rungs`, `probe_abstract_case`, `sweep_phase_mintime`, `sweep_phasing`, `ms_refine_catalog`, both direct phase sweeps | Code Analyzer message-for-message against the committed versions (only difference: one alignment note whose line number shifted by the inserted lines); `golden_cells` 20/20 |
+| GTO campaign tools | `audit_gto_entries`, `gto_entry`, `viz/gto_pilot_movie` | same message-for-message check, 0 new |
+
+Three things worth keeping:
+
+**The interpolant is now built once, beside the orbit tables, instead of per
+entry inside the loop.** Several engines were re-fitting a spline through a
+1328-point table for every cell.
+
+**Orientation was preserved site by site, not normalized.** Some sites wanted
+a row and some a column; a `.'` at the call keeps each exactly as it was.
+Normalizing "while we are here" would have put a silent shape change into
+engines that cannot be cheaply re-run.
+
+**A first verification appeared to show verdicts moving** -- dim S off by 2,
+a conjugate verdict off by -2. The check was wrong, not the code: the sweeps
+walk the grid in their own order, so indexing by `find(has_solution)`
+compared measured cells against cells still holding their -1 initializer.
+Masking by the sweep's own attempt counter, every measured cell agrees
+exactly. A difference of exactly 2 against a -1 initializer is worth
+recognising on sight.
+
+**What is deliberately NOT migrated**, recorded so it is not rediscovered as
+a defect: the recipient-facing helpers that ship beside a catalog, and the
+recipe strings inside the packagers. A shipped catalog's helpers carry no
+dependency on `costate_common` (GTO catalog README: "inlined, per
+deliverable-picker convention"), and the measured cost of the ordinary
+spline there is millimetres, only beside the seam.

@@ -251,8 +251,10 @@ if entry.ok
     if conjTest
         [tD, rvD] = get_family_orbit('gto', struct('orientDeg', orientDeg));
         [tA, rvA] = get_family_orbit('tulip', struct('Np', Np, 'pm', tulipPm));
-        rv0 = interp1(tD, rvD, mod(depFrac,1)*tD(end), 'spline');
-        rvf = interp1(tA, rvA, mod(arrFrac,1)*tA(end), 'spline');
+        % THE shared endpoint rule (costate_common/phase_state, FINDINGS 44)
+        depAt = phase_state(tD, rvD);   arrAt = phase_state(tA, rvA);
+        rv0 = depAt(depFrac).';         % row, as before
+        rvf = arrAt(arrFrac).';
         z8  = entry.z8;
         K   = fdef(opts, 'K', 24);
         seed = seed_from_z8(z8, rv0(1:6), K, Tnd, cnd, muStar);

@@ -29,8 +29,10 @@ Tnd = (E.rungN/E.meta.m0kg)*tStar^2/(lStar*1000);
 % Endpoint orbits from the family recipes:
 [tD, rvD] = get_family_orbit('gto',   struct('orientDeg', E.meta.tauDRO));
 [tA, rvA] = get_family_orbit('tulip', struct('Np', E.meta.NpTulip, 'pm', E.meta.pmTulip));
-rv0 = interp1(tD, rvD, mod(E.sD,1)*tD(end), 'spline');
-rvf = interp1(tA, rvA, mod(E.sA,1)*tA(end), 'spline');
+% THE shared endpoint rule (costate_common/phase_state, FINDINGS 44)
+depAt = phase_state(tD, rvD);   arrAt = phase_state(tA, rvA);
+rv0 = depAt(E.sD).';            % row, as before
+rvf = arrAt(E.sA).';
 
 % Fly the entry:
 [tj, yj] = pumpkyn.cr3bp.tfMinProp(E.z8(8), [rv0(:); 1; E.z8(1:7)], Tnd, cnd, mu);

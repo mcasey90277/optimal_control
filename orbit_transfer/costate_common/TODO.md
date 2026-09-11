@@ -28,13 +28,26 @@
     self-consistency against the same interpolant, not accuracy); or a much
     sparser orbit table (error scales as h^4).
 
-- [ ] **Migrate the `interp1(..., 'spline')` endpoint sites onto `phase_state`**
-  (2026-09-11, FINDINGS 44). About a dozen: `second_order_pass`,
-  `conj_catalog_pass`, `gates_catalog_pass`, `DRO_tulip/direct/sweep_phasing_direct`,
-  and the per-campaign `costate_catalog_extremes` / `*_example` helpers. One at a
-  time, each with its own before/after check. NOT the shipped deliverable copies:
-  those must stay self-contained, and the measured cost there is metres, only
-  beside the seam.
+- [x] **Migrate the `interp1(..., 'spline')` endpoint sites onto `phase_state`**
+  — DONE 2026-09-11 (FINDINGS 44), 18 files in three tiers: the live
+  instruments (`second_order_pass`, `conj_catalog_pass`, `gates_catalog_pass`,
+  `audit_phase_catalog`), the ladder engines and phase sweeps (11 files incl.
+  `thrust_ladder_library`, which the halo and DPO campaigns call unmodified),
+  and the GTO campaign tools. Each site kept its previous ORIENTATION; the
+  interpolant is now built once beside the orbit tables instead of per entry.
+  Verified: gates/conjugate/audit recomputed equal on measured cells,
+  golden_cells 20/20, Code Analyzer message-for-message against the committed
+  versions.
+- [ ] **Deliberately NOT migrated** (record, so it is not "found" again): the
+  recipient-facing helpers that ship beside a catalog — `costate_lib_example`,
+  `costate_catalog_example`, `costate_catalog_extremes(_movies)`,
+  `costate_lib_extremes`, `costate_lib_v2_example`, the GTO
+  `costate_catalog_gto_example` / `costate_catalog_extremes`, and the recipe
+  STRINGS inside `build_costate_lib*` / `build_costate_catalog`. A shipped
+  catalog's helpers must have no dependency on this library (GTO catalog
+  README: "inlined, per deliverable-picker convention"), and the measured cost
+  of the ordinary spline there is millimetres, only beside the seam. Revisit
+  only if a deliverable is ever allowed to depend on `costate_common`.
 
 - [~] **Package promotion** — IN PROGRESS as the top-level cross-folder
   `../../oclib/+oc` (2026-08-09): `duals_to_costates` and the

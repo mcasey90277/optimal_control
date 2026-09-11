@@ -35,6 +35,9 @@ function S = second_order_pass(catMat, opts)
 %   and read 4-9x on seven 26-day entries whose sigma_6 is 0.99: the loose
 %   setting's own error was the whole estimate (43x at this pair, 718x at
 %   [1e-12 1e-10] on entry (1,10), FINDINGS 42)
+%   .adoptLegacy [false] accept a sidecar written before records carried
+%   their entry identity, ONLY if every written-back value in the catalog
+%   equals the sidecar's; its records are then keyed and saved
 %
 %% Outputs:
 %
@@ -44,6 +47,11 @@ function S = second_order_pass(catMat, opts)
 %
 %% Revision History:
 %  M. Casey                                                   (c) 09/10/2026
+%  09/11/2026  every sidecar record carries the IDENTITY of the entry it
+%              measured (cell key + z8) and a resumed record must match the
+%              catalog -- the sidecar was positional, and the chain script
+%              pointed at the first sweep's sidecar, whose lift margins
+%              differ from the catalog's by up to 1.35e4
 %  Copyright Coorbital Inc.
 %% ------------------------ Begin Code Sequence ---------------------------
 
@@ -74,16 +82,52 @@ stD = @(x) interp1(tD, rvD, mod(x,1)*tD(end), 'spline')';
 
 [iD, iA, iR] = ind2sub(size(s.has_solution), find(s.has_solution));
 n = numel(iD);
-% resume from the sidecar
+% Every record carries the IDENTITY of the entry it measured -- its cell
+% (iD, iA, iR) and its z8 -- and a resumed record must match the catalog it
+% is resumed against. A positional sidecar resumed against a re-packaged
+% catalog with a different entry set would hand one entry's measurements to
+% another without a sound.
+keys = [iD(:) iA(:) iR(:)];
+Z = zeros(8, n);
+for q = 1:n, Z(:, q) = s.z8(:, s.entry_index(iD(q), iA(q), iR(q))); end
 if isfile(sideMat)
     P = load(sideMat);  R = P.R;
-    lg('resuming from %s (%d of %d already measured)', sideMat, nnz([R.done]), n);
+    if numel(R) ~= n
+        error('second_order_pass:staleSidecar', ...
+              'sidecar %s holds %d records but the catalog has %d entries', sideMat, numel(R), n);
+    end
+    if ~isfield(R, 'key')
+        if ~d('adoptLegacy', false)
+            error('second_order_pass:unkeyedSidecar', ...
+                  ['sidecar %s carries no entry identity (written before 2026-09-11). Pass ' ...
+                   'adoptLegacy = true to adopt it if it matches the catalog''s written-back ' ...
+                   'values, or name a fresh sidecar'], sideMat);
+        end
+        legacyMatches(R, s, keys, sideMat);
+        for q = 1:n, R(q).key = keys(q,:);  R(q).z8 = Z(:,q); end
+        save(sideMat, 'R');
+        lg('adopted legacy sidecar %s: every written-back value matches the catalog; records keyed', sideMat);
+    end
+    for q = 1:n
+        if ~R(q).done
+            R(q).key = keys(q,:);  R(q).z8 = Z(:,q);       % not measured yet: bind to this build
+        elseif ~(isequal(R(q).key, keys(q,:)) && isequal(R(q).z8(:), Z(:,q)))
+            % sprintf first: error() refuses the non-scalar key arguments
+            msg = sprintf(['record %d of %s measured cell (%d,%d,%d), but position %d of this ' ...
+                           'catalog is cell (%d,%d,%d)%s: the sidecar belongs to a different ' ...
+                           'catalog build'], q, sideMat, R(q).key, q, keys(q,:), ...
+                          tern(isequal(R(q).key, keys(q,:)), ' with a different z8', ''));
+            error('second_order_pass:staleSidecar', '%s', msg);
+        end
+    end
+    lg('resuming from %s (%d of %d already measured, identities checked)', sideMat, nnz([R.done]), n);
 else
     R = struct('done', num2cell(false(1,n)), 'nInterior', [], 'multiplicity', [], ...
                'minRelSigma', [], 'nInteriorCand', [], 'nNearMiss', [], 'nZero', [], ...
                'candidates', [], 'h6margin', [], 'h6ok', [], 'h6clearance', [], ...
-               'liftMargin', [], 'liftCertified', [], 'relTolPair', []);
+               'liftMargin', [], 'liftCertified', [], 'relTolPair', [], 'key', [], 'z8', []);
     R = R(:).';
+    for q = 1:n, R(q).key = keys(q,:);  R(q).z8 = Z(:,q); end
 end
 
 relPair = d('relTolPair', [1e-12 1e-9]);
@@ -170,7 +214,7 @@ if d('writeback', false)
                     'on a dense scan (K*nSub samples), 0 = none found; conj_multiplicity: ' ...
                     'INTERIOR candidates where two or more singular values collapsed together; ' ...
                     'conj_interior_cand / conj_near_miss / conj_zero: interior sigma_6 dips ' ...
-                    '(start-up and graded-endpoint dips excluded) and, under 4x refinement, ' ...
+                    '(start-up and graded-endpoint dips excluded) and, under two-level refinement (4x, then 16x), ' ...
                     'whether the minimum plateaued (near-miss) or kept falling (zero); ' ...
                     'h6_margin: (c/T)/lambda_m(0), > 1 excludes ' ...
                     'the reduced problem''s spurious-zero mechanism; lift_margin: ' ...
@@ -178,6 +222,33 @@ if d('writeback', false)
                     '(Eckart-Young), > 1 certifies dim S = 1 rather than asserting it.']);
     Lout = struct(fn{1}, cat_);  save(catMat, '-struct', 'Lout');
     lg('[writeback] second-order measurements stored in %s (backup %s)', catMat, bak);
+end
+end
+
+function legacyMatches(R, s, keys, sideMat)
+% LEGACYMATCHES  Adopt an unkeyed sidecar only if it is provably the one
+% the catalog was written from: every done record, and every written-back
+% value equal. Errors second_order_pass:legacyMismatch otherwise.
+% INPUTS: R sidecar records; s catalog sheet; keys [n x 3]; sideMat char.
+pairs = {'h6_margin', 'h6margin'; 'lift_margin', 'liftMargin'; 'conj_interior', 'nInterior'; ...
+         'conj_interior_cand', 'nInteriorCand'; 'conj_near_miss', 'nNearMiss'; 'conj_zero', 'nZero'};
+if ~all([R.done])
+    error('second_order_pass:legacyMismatch', 'legacy sidecar %s is incomplete: nothing to match against', sideMat);
+end
+for k = 1:size(pairs, 1)
+    if ~isfield(s, pairs{k,1}) || ~isfield(R, pairs{k,2})
+        error('second_order_pass:legacyMismatch', ...
+              'legacy sidecar %s cannot be matched: %s is missing from the %s', sideMat, ...
+              tern(isfield(s, pairs{k,1}), pairs{k,2}, pairs{k,1}), tern(isfield(s, pairs{k,1}), 'sidecar', 'catalog'));
+    end
+    for q = 1:size(keys, 1)
+        a = s.(pairs{k,1})(keys(q,1), keys(q,2), keys(q,3));
+        b = R(q).(pairs{k,2});
+        if ~(isscalar(b) && isequaln(double(a), double(b)))
+            error('second_order_pass:legacyMismatch', ...
+                  'legacy sidecar %s disagrees with the catalog at record %d, %s', sideMat, q, pairs{k,1});
+        end
+    end
 end
 end
 

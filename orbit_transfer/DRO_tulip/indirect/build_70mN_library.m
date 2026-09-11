@@ -24,6 +24,17 @@
 %   resumed from any point. Every stage after 2 checks that its input file
 %   exists and names the stage that makes it.
 %
+%   OUTPUTS AND INPUTS ARE SEPARATE. Anchors, arcs and ribs are always read
+%   from results/; the sheet, catalog, audit, sidecar and pictures go to
+%   outDir, which defaults to results/ (rebuild in place). Point outDir
+%   elsewhere to rebuild BESIDE the shipped files and compare. A batch
+%   driver can set the struct `chainOverrides` (.outDir, .run) before
+%   calling this script instead of editing it.
+%
+%   The package stage will not overwrite a catalog that carries the
+%   second-order sweep's measurements unless the sweep stage is on
+%   (guard_catalog_overwrite), and backs up whatever it overwrites.
+%
 %   Every candidate on either axis goes through ONE gate stack (certify_root):
 %   polish, admissible flight, pointwise Pontryagin checks, foreign witness
 %   and its own flight, conjugate test, hypothesis gates, H6. The audit then
@@ -33,7 +44,7 @@
 %  M. Casey                                                   (c) 09/10/2026
 %  Copyright Coorbital Inc.
 
-clear; clc
+clearvars -except chainOverrides; clc
 here = fileparts(mfilename('fullpath'));
 addpath(here, fullfile(fileparts(fileparts(here)), 'costate_common'));
 cd(here)                                    % every path below is results/...
@@ -64,18 +75,34 @@ run = struct('arcs', false, ...       % hours; the four arcs are normally batch 
              'sheet', true, 'ribs', false, 'package', true, 'audit', true, ...
              'sweep', false, 'pictures', true, 'deliverable', false);
 
+% where the OUTPUTS go (inputs always come from resDir); see the header
+outDir = resDir;
+if exist('chainOverrides', 'var')
+    if isfield(chainOverrides, 'outDir'), outDir = chainOverrides.outDir; end
+    if isfield(chainOverrides, 'run')
+        for sw = fieldnames(chainOverrides.run)'
+            assert(isfield(run, sw{1}), 'unknown stage switch "%s"', sw{1});
+            run.(sw{1}) = chainOverrides.run.(sw{1});
+        end
+    end
+end
+if ~isfolder(outDir), mkdir(outDir); end
+
+% the sidecar is the SECOND sweep's: the first one's lift margins differ
+% from the catalog's by up to 1.35e4 (second_order_pass now checks identity)
 files = struct( ...
-    'sheet',   fullfile(resDir, sprintf('arrival_sheet_%s.mat', tag)), ...
-    'catalog', fullfile(resDir, sprintf('costate_catalog_dro_tulip_%s.mat', tag)), ...
-    'audit',   fullfile(resDir, sprintf('audit_%s.mat', tag)), ...
-    'sidecar', fullfile(resDir, 'second_order_progress.mat'), ...
-    'branch',  fullfile(resDir, 'arrival_branch_map.png'), ...
-    'torus',   fullfile(resDir, sprintf('phase_torus_%s.png', tag)), ...
-    'findings', fullfile(resDir, 'phase_torus_findings.png'));
+    'sheet',   fullfile(outDir, sprintf('arrival_sheet_%s.mat', tag)), ...
+    'catalog', fullfile(outDir, sprintf('costate_catalog_dro_tulip_%s.mat', tag)), ...
+    'audit',   fullfile(outDir, sprintf('audit_%s.mat', tag)), ...
+    'sidecar', fullfile(outDir, 'second_order_progress_v2.mat'), ...
+    'branch',  fullfile(outDir, 'arrival_branch_map.png'), ...
+    'torus',   fullfile(outDir, sprintf('phase_torus_%s.png', tag)), ...
+    'findings', fullfile(outDir, 'phase_torus_findings.png'));
 setupOpts = struct('thrustN', engine.thrustN, 'ispS', engine.ispS, 'm0kg', engine.m0kg, ...
                    'tauDRO', orbits.tauDRO, 'NpTulip', orbits.NpTulip, 'sD', grid.sD0);
 fprintf('0. LIBRARY %s: %.0f mN / Isp %g s / %g kg, DRO tau %g -> %d-petal tulip, %d x %d grid\n', ...
         tag, engine.thrustN*1000, engine.ispS, engine.m0kg, orbits.tauDRO, orbits.NpTulip, grid.nD, grid.nA);
+fprintf('   inputs from %s, outputs to %s\n', resDir, outDir);
 
 %% ========================================================================
 %  1. PREREQUISITES -- the anchors. An anchor is one CERTIFIED root (z + it.Y)
@@ -159,9 +186,11 @@ fprintf('4. ribs: %d rib files\n', numel(ribFiles));
 %     stamped from the sheet, never from defaults.
 %% ========================================================================
 if run.package
+    bakCat = guard_catalog_overwrite(files.catalog, run.sweep);
+    if ~isempty(bakCat), fprintf('5. previous catalog backed up to %s\n', bakCat); end
     cat_ = package_phase_catalog(files.sheet, ribFiles, struct('tag', tag, ...
         'thrustN', engine.thrustN, 'ispS', engine.ispS, 'm0kg', engine.m0kg, ...
-        'nD', grid.nD, 'sD0', grid.sD0, 'outDir', resDir));
+        'nD', grid.nD, 'sD0', grid.sD0, 'outDir', outDir));
 else
     assert(isfile(files.catalog), 'catalog missing: %s (stage 5 makes it)', files.catalog);
     L = load(files.catalog);  fn = fieldnames(L);  cat_ = L.(fn{1});   % one variable, the catalog
@@ -206,7 +235,7 @@ end
 %% ========================================================================
 if run.pictures
     set(0, 'DefaultFigureVisible', 'off');
-    Q = load(fullfile(resDir, sprintf('phase_sheet_%s', tag), ...
+    Q = load(fullfile(outDir, sprintf('phase_sheet_%s', tag), ...
                       sprintf('dro_tulip_%s_tau%g_Np%d.mat', tag, orbits.tauDRO, orbits.NpTulip)));
     plot_phase_sheet(Q, files.torus);
     I = plot_torus_findings(files.catalog, files.findings);

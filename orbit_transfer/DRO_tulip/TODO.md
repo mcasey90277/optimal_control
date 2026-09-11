@@ -11,6 +11,12 @@
 - [ ] **`build_70mN_library.m` full-chain rerun** — dry-run verified on the
   reuse path only; run with `run.sheet`/`run.package`/`run.audit` on to prove
   the live path reproduces 115 entries before the next ship.
+  Prerequisites fixed 2026-09-11: packaging refuses to strip the catalog's
+  second-order writeback unless the sweep stage is on, and backs up what it
+  overwrites (`guard_catalog_overwrite`); the chain's sidecar pointer is the
+  v2 file (the first sweep's disagrees with the catalog) and every sidecar
+  record is identity-checked on resume; `chainOverrides.outDir` rebuilds
+  beside the shipped files so the rerun can be compared, not trusted.
 
 - [ ] **Red-row campaign (task #14):** the 12 s_A = 0.075 cells of the
   12×12 torus are still red; engineered seeds / neighbor continuation.

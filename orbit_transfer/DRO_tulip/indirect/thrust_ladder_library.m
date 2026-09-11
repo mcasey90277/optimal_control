@@ -110,9 +110,9 @@ arrParams = d('arrParams', struct('Np', NpT, 'pm', pmT));
 msSeg  = d('msSeg', [12 24]);      % multiple-shooting segment ladder
 msWallS= d('msWallS', 120);        % ms_tfmin budget per attempt (s)
 accTol = d('accTol', 1e-6);        % tfMin acceptance tolerance
-g0  = 9.80665*tStar^2/(1000*lStar);
-cnd = (ispS/tStar)*g0;
-ndT = @(TN) (TN/m0kg)*tStar^2/(lStar*1000);
+% THE shared propulsion conversion (costate_common/nd_propulsion)
+ndp = nd_propulsion([], ispS, m0kg, lStar, tStar);
+cnd = ndp.cnd;   ndT = ndp.ndT;
 
 [tD, rvD] = get_family_orbit(depFamily, depParams);
 [tT, rvT] = get_family_orbit(arrFamily, arrParams);

@@ -241,9 +241,9 @@ gates = struct('msNormR', Q.RES(1,1,krEntry), 'flownKm', Q.FLYKM(1,1,krEntry), .
 if entry.ok
     %% Mass fraction + delta-V (all-burn min-time), formulas from
     %% costate_common/catalog_schema.m ('m_final' / 'deltav_kms'):
-    g0  = 9.80665*tStar^2/(1000*lStar);
-    cnd = (ispS/tStar)*g0;
-    Tnd = (thrustN/m0kg)*tStar^2/(lStar*1000);
+    % THE shared propulsion conversion (costate_common/nd_propulsion)
+    ndp = nd_propulsion(thrustN, ispS, m0kg, lStar, tStar);
+    cnd = ndp.cnd;   Tnd = ndp.Tnd;
     mfFrac = 1 - Tnd*entry.tf_nd/cnd;
     entry.mf_kg = m0kg*mfFrac;
     entry.dV_kms = cnd*log(1/mfFrac)*lStar/tStar;

@@ -129,9 +129,9 @@ if ~isfield(Q,'EXT'), Q.EXT = zeros(nD,nA); end   % extension attempts
 save(ladderMat, '-struct', 'Q');   % persist growth BEFORE any early return
 
 ob = Q.meta;  muStar = ob.muStar;  lStar = ob.lStar;  tStar = ob.tStar;
-g0  = 9.80665*tStar^2/(1000*lStar);
-cnd = (ob.ispS/tStar)*g0;
-ndT = @(TN) (TN/ob.m0kg)*tStar^2/(lStar*1000);
+% THE shared propulsion conversion (costate_common/nd_propulsion)
+ndp = nd_propulsion([], ob.ispS, ob.m0kg, lStar, tStar);
+cnd = ndp.cnd;   ndT = ndp.ndT;
 
 % Family-agnostic endpoints (2026-08-31, 0.5 N extension campaign): rebuilt
 % from the sheet's OWN meta recipe via ladder_endpoints -- sheets carrying

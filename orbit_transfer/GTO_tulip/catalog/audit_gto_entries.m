@@ -161,9 +161,9 @@ for kp = 1:3
 
     % Same ND thrust/exhaust conversion thrust_ladder_library uses, from
     % THIS sheet's own thruster metadata:
-    g0  = 9.80665*meta.tStar^2/(1000*meta.lStar);
-    cnd = (meta.ispS/meta.tStar)*g0;
-    Tnd = (rungN/meta.m0kg)*meta.tStar^2/(meta.lStar*1000);
+    % THE shared propulsion conversion (costate_common/nd_propulsion)
+    ndp = nd_propulsion(rungN, meta.ispS, meta.m0kg, meta.lStar, meta.tStar);
+    cnd = ndp.cnd;   Tnd = ndp.Tnd;
 
     % --- Gate 1: fly the stored z8, measure the arrival miss ------------
     [~, y] = pumpkyn.cr3bp.tfMinProp(z8(8), [rv0(1:6)'; 1; z8(1:7)], ...

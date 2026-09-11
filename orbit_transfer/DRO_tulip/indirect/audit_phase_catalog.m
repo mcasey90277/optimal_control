@@ -51,9 +51,9 @@ assert(numel(c.sheets) == 1, 'this audit handles a single-sheet phase catalog');
 s = c.sheets(1);
 lStar = c.constants.lStar_km;  tStar = c.constants.tStar_s;  mu = c.constants.muStar;
 m0 = c.thruster.m0_kg;  isp = c.thruster.isp_s;
-g0  = 9.80665*tStar^2/(1000*lStar);
-cnd = (isp/tStar)*g0;
-Tnd = (c.rungs_N(1)/m0)*tStar^2/(lStar*1000);
+% THE shared propulsion conversion (costate_common/nd_propulsion)
+ndp = nd_propulsion(c.rungs_N(1), isp, m0, lStar, tStar);
+cnd = ndp.cnd;   Tnd = ndp.Tnd;
 
 % endpoints rebuilt from the catalog's own keys, not from our build state
 ob = struct('muStar', mu, 'lStar', lStar, 'tStar', tStar, 'tauDRO', s.tauDRO, ...

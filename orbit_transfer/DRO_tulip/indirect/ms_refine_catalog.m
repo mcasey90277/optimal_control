@@ -41,9 +41,9 @@ M = load(sweepMat);   S = M.S;
 CC = load(cellsMat);  CELLS = CC.CELLS;
 ob = S.meta.orbit;
 muStar = ob.muStar;
-g0   = 9.80665*ob.tStar^2/(1000*ob.lStar);
-Tmax = (S.meta.thrustN/S.meta.m0kg)*ob.tStar^2/(ob.lStar*1000);
-c    = (S.meta.ispS/ob.tStar)*g0;
+% THE shared propulsion conversion (costate_common/nd_propulsion)
+ndp  = nd_propulsion(S.meta.thrustN, S.meta.ispS, S.meta.m0kg, ob.lStar, ob.tStar);
+Tmax = ndp.Tnd;   c = ndp.cnd;
 
 % endpoint states from the recorded orbit definition (never assumed)
 [~, rvD0] = pumpkynPie.cr3bp.getDRO(ob.tauDRO);

@@ -60,9 +60,9 @@ if ischar(arg) && strcmp(arg, 'setup')
                 'NpTulip', d('NpTulip', 7), 'tauTulip', 5*2*pi/6, 'pmTulip', -1, ...
                 'ispS', ispS, 'm0kg', m0kg);
     lStar = ob.lStar;  tStar = ob.tStar;  mu = ob.muStar;
-    g0  = 9.80665*tStar^2/(1000*lStar);
-    cnd = (ispS/tStar)*g0;
-    Tnd = (thrustN/m0kg)*tStar^2/(lStar*1000);
+    % THE shared propulsion conversion (costate_common/nd_propulsion)
+    ndp = nd_propulsion(thrustN, ispS, m0kg, lStar, tStar);
+    cnd = ndp.cnd;   Tnd = ndp.Tnd;
     [tD, rvD, tT, rvT] = ladder_endpoints(ob);
     B = struct();
     B.mu = mu;  B.Tnd = Tnd;  B.cnd = cnd;  B.tauA = tT(end);  B.tauD = tD(end);

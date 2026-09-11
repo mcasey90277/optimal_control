@@ -44,10 +44,9 @@ addpath(fullfile(getenv('HOME'),'casadi-3.7.0'));
 %% Thruster:
  Tmax = 0.07;                                    % Max thrust (N)
    m0 = 150;                                     % Initial mass (kg)
-   g0 = 9.80665 * tStar^2 / (1000 * lStar);      % Gravity in ND units
- Tmax = (Tmax / m0) * tStar^2 / (lStar * 1000);  % ND thrust accel
-  Isp = 900 / tStar;                             % ND specific impulse
-    c = Isp * g0;                                % ND exhaust velocity
+  ndp = nd_propulsion(Tmax, 900, m0, lStar, tStar);  % THE shared conversion
+ Tmax = ndp.Tnd;                                 % ND thrust accel
+    c = ndp.cnd;                                 % ND exhaust velocity
 
 %% Solve Minimum-Time Transfer (INDIRECT), for the reference:
 % The converged costates below are the demo's own 0.07 N solution.

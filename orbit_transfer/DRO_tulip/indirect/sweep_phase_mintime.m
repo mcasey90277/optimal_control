@@ -96,9 +96,9 @@ ob = struct('muStar',0.012150585609624,'lStar',389703.264829278, ...
             'tStar',382981.289129055,'tauDRO',tauDRO,'NpTulip',NpTulip, ...
             'tauTulip',5*2*pi/6,'pmTulip',-1,'ispS',ispS,'m0kg',m0kg);
 lStar = ob.lStar; tStar = ob.tStar; mu = ob.muStar;
-g0 = 9.80665*tStar^2/(1000*lStar);
-cnd = (ispS/tStar)*g0;
-Tnd = (thrustN/m0kg)*tStar^2/(lStar*1000);
+% THE shared propulsion conversion (costate_common/nd_propulsion)
+ndp = nd_propulsion(thrustN, ispS, m0kg, lStar, tStar);
+cnd = ndp.cnd;   Tnd = ndp.Tnd;
 [tD, rvD, tT, rvT] = ladder_endpoints(ob);
 % THE shared endpoint rule (costate_common/phase_state, FINDINGS 44)
 stateD = phase_state(tD, rvD);

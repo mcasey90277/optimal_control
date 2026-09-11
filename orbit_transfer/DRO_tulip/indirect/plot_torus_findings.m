@@ -46,9 +46,9 @@ nD = numel(s.sD_frac);  nA = numel(s.sA_frac);
 
 tf = nan(nD, nA);  tf(OK) = s.tf_nd(OK)*tStar/86400;
 dv = nan(nD, nA);
-g0 = 9.80665*tStar^2/(1000*lStar);
-cnd = (c.thruster.isp_s/tStar)*g0;
-Tnd = (c.rungs_N(1)/c.thruster.m0_kg)*tStar^2/(lStar*1000);
+% THE shared propulsion conversion (costate_common/nd_propulsion)
+ndp = nd_propulsion(c.rungs_N(1), c.thruster.isp_s, c.thruster.m0_kg, lStar, tStar);
+cnd = ndp.cnd;   Tnd = ndp.Tnd;
 mf = 1 - (Tnd/cnd)*s.tf_nd(:,:,1);
 dv(OK) = cnd*log(1./mf(OK))*lStar/tStar;
 

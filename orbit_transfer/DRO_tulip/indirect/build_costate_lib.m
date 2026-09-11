@@ -53,11 +53,12 @@ lib.provenance = ['Direct Hermite-Simpson collocation sweep (N=800, Sundman ', .
 lib.constants = struct('muStar', ob.muStar, 'lStar_km', ob.lStar, ...
     'tStar_s', ob.tStar, 'nd_time_to_days', ob.tStar/86400);
 
-g0 = 9.80665*ob.tStar^2/(1000*ob.lStar);
+% THE shared propulsion conversion (costate_common/nd_propulsion)
+ndp = nd_propulsion(S.meta.thrustN, S.meta.ispS, S.meta.m0kg, ob.lStar, ob.tStar);
 lib.thruster = struct('Tmax_N', S.meta.thrustN, 'Isp_s', S.meta.ispS, ...
     'm0_kg', S.meta.m0kg, ...
-    'Tmax_nd', (S.meta.thrustN/S.meta.m0kg)*ob.tStar^2/(ob.lStar*1000), ...
-    'c_nd', (S.meta.ispS/ob.tStar)*g0, ...
+    'Tmax_nd', ndp.Tnd, ...
+    'c_nd', ndp.cnd, ...
     'note', 'tfMin args: Tmax_nd, c_nd. Mass is normalized to m0 (m(0)=1).');
 
 lib.departure_orbit = 'DRO';
@@ -105,8 +106,7 @@ for iD = 1:numel(R.sD)
         entries(n,1).tf_days              = z(8)*ob.tStar/86400;
         % all-burn minimum time: m_f and Delta-V follow exactly from
         % thrust, exhaust velocity and t_f (see build_costate_lib_v2)
-        TndE = (S.meta.thrustN/S.meta.m0kg)*ob.tStar^2/(ob.lStar*1000);
-        cndE = (S.meta.ispS/ob.tStar)*(9.80665*ob.tStar^2/(1000*ob.lStar));
+        TndE = ndp.Tnd;   cndE = ndp.cnd;        % one home for the conversion
         mfE  = 1 - TndE*z(8)/cndE;
         entries(n,1).deltaV_kms           = cndE*log(1/mfE)*ob.lStar/ob.tStar;
         entries(n,1).m_final_kg           = mfE*S.meta.m0kg;

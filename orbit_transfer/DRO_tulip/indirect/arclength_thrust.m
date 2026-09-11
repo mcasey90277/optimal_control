@@ -92,7 +92,9 @@ lg = @(varargin) logmsg(logFile, sprintf(varargin{:}));
 here = fileparts(mfilename('fullpath'));
 addpath(fullfile(fileparts(here), '..', 'costate_common'));
 lStar = 389703.264829278;  tStar = 382981.289129055;
-ndT = @(TN) (TN/m0kg)*tStar^2/(lStar*1000);
+% THE shared propulsion conversion; c arrives as an argument here
+ndp = nd_propulsion([], [], m0kg, lStar, tStar);
+ndT = ndp.ndT;
 
 %% The binding: normal chart (ms_tfmin, rho = 1) or the homogeneous one
 %  (ms_tfmin_hom, rho free on the sphere). The unknown vector is packed by

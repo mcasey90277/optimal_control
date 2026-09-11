@@ -86,9 +86,10 @@ lg = @(varargin) logmsg(logFile, sprintf(varargin{:}));
 addpath(fullfile(fileparts(here), '..', 'costate_common'));
 Q  = load(fullfile(here, '..', 'direct', 'results', 'thrust_ladder_12x12.mat'));
 ob = Q.meta;  muStar = ob.muStar;  lStar = ob.lStar;  tStar = ob.tStar;
-g0  = 9.80665*tStar^2/(1000*lStar);
-cOf = @(isp) (isp/tStar)*g0;                      % ND exhaust speed
-ndT = @(TN) (TN/ob.m0kg)*tStar^2/(lStar*1000);
+% THE shared propulsion conversion (costate_common/nd_propulsion)
+ndp = nd_propulsion([], [], ob.m0kg, lStar, tStar);
+cOf = ndp.ndC;                                    % ND exhaust speed at any Isp
+ndT = ndp.ndT;
 [tD, rvD, tT, rvT] = ladder_endpoints(ob);
 % THE shared endpoint rule (costate_common/phase_state, FINDINGS 44)
 depAt = phase_state(tD, rvD);   arrAt = phase_state(tT, rvT);

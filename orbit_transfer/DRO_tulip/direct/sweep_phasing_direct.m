@@ -94,9 +94,9 @@ log_ = @(varargin) local_filelog(logF, verbose, varargin{:});
 
 muStar = 0.012150585609624;  lStar = 389703.264829278;  tStar = 382981.289129055;
 rMoonKm = 1737.4;
-g0   = 9.80665*tStar^2/(1000*lStar);
-Tmax = (thrustN/m0)*tStar^2/(lStar*1000);
-c    = (ispS/tStar)*g0;
+% THE shared propulsion conversion (costate_common/nd_propulsion)
+ndp  = nd_propulsion(thrustN, ispS, m0, lStar, tStar);
+Tmax = ndp.Tnd;   c = ndp.cnd;
 tW = tic;
 
 %% orbits and anchor (same construction as the marching harness)

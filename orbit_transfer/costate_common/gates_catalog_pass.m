@@ -58,7 +58,10 @@ end
 
 mu = cat_.constants.muStar;  lStar = cat_.constants.lStar_km;  tStar = cat_.constants.tStar_s;
 cnd = cat_.thruster.c_nd;    m0 = cat_.thruster.m0_kg;
-ndT = @(TN) (TN/m0)*tStar^2/(lStar*1000);
+% THE shared propulsion conversion; c comes from the CATALOG (identity
+% travels with the data), so only the thrust closure is built here
+ndp = nd_propulsion([], [], m0, lStar, tStar);
+ndT = ndp.ndT;
 
 tAll = tic;  nDone = 0;
 for ks = 1:nS

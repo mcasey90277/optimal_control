@@ -41,9 +41,9 @@ kr = find(P.rungs == rungN, 1);
 assert(~isempty(kr) && P.OK(1,1,kr), 'rung %.3g N not solved in the probe', rungN);
 
    mu = P.meta.muStar;  tStar = P.meta.tStar;  lStar = P.meta.lStar;
-   g0 = 9.80665*tStar^2/(1000*lStar);
-  cnd = (P.meta.ispS/tStar)*g0;
-  Tnd = (rungN/P.meta.m0kg)*tStar^2/(lStar*1000);
+  % THE shared propulsion conversion (costate_common/nd_propulsion)
+  ndp = nd_propulsion(rungN, P.meta.ispS, P.meta.m0kg, lStar, tStar);
+  cnd = ndp.cnd;   Tnd = ndp.Tnd;
    z8 = P.Z8(:,1,1,kr);
    tf = P.TF(1,1,kr);
 

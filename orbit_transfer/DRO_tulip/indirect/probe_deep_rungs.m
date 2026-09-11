@@ -78,9 +78,9 @@ lg = @(varargin) logmsg(logFile, sprintf(varargin{:}));
 
 Q  = load(sheetMat);
 ob = Q.meta;  muStar = ob.muStar;  lStar = ob.lStar;  tStar = ob.tStar;
-g0  = 9.80665*tStar^2/(1000*lStar);
-cnd = (ob.ispS/tStar)*g0;
-ndT = @(TN) (TN/ob.m0kg)*tStar^2/(lStar*1000);
+% THE shared propulsion conversion (costate_common/nd_propulsion)
+ndp = nd_propulsion([], ob.ispS, ob.m0kg, lStar, tStar);
+cnd = ndp.cnd;   ndT = ndp.ndT;
 [tD, rvD, tT, rvT] = ladder_endpoints(ob);
 % THE shared endpoint rule (costate_common/phase_state, FINDINGS 44)
 depAt = phase_state(tD, rvD);   arrAt = phase_state(tT, rvT);

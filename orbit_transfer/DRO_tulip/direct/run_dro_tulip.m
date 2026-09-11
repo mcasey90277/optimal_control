@@ -89,9 +89,9 @@ cd(cwd0);
 
 %% 1. endpoints
 [rv0, rvf, p] = dro_tulip_endpoints();
-g0   = 9.80665*p.tStar^2/(1000*p.lStar);
-Tmax = (TmaxN/m0)*p.tStar^2/(p.lStar*1000);
-c    = (IspS/p.tStar)*g0;
+% THE shared propulsion conversion (costate_common/nd_propulsion)
+ndp  = nd_propulsion(TmaxN, IspS, m0, p.lStar, p.tStar);
+Tmax = ndp.Tnd;   c = ndp.cnd;
 mu   = p.muStar;
 
 %% 2. the indirect reference, from the demo's converged costates

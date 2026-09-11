@@ -93,9 +93,9 @@ if ~isfile(bak), copyfile(ladderMat, bak); end
 if ~isfield(Q, 'ATTD'), Q.ATTD = zeros(size(Q.OK)); end
 
 ob = Q.meta;  muStar = ob.muStar;  lStar = ob.lStar;  tStar = ob.tStar;
-g0  = 9.80665*tStar^2/(1000*lStar);
-cnd = (ob.ispS/tStar)*g0;
-ndT = @(TN) (TN/ob.m0kg)*tStar^2/(lStar*1000);
+% THE shared propulsion conversion (costate_common/nd_propulsion)
+ndp = nd_propulsion([], ob.ispS, ob.m0kg, lStar, tStar);
+cnd = ndp.cnd;   ndT = ndp.ndT;
 
 % FAMILY-AGNOSTIC ENDPOINTS (diagnostic-A, 2026-08-26): route through the
 % shared costate_common/get_family_orbit provider using the sheet's OWN

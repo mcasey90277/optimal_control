@@ -70,9 +70,9 @@ assert(numel(cat_.sheets) == 1, 'this pass handles a single-sheet phase catalog'
 s = cat_.sheets(1);
 lStar = cat_.constants.lStar_km;  tStar = cat_.constants.tStar_s;  mu = cat_.constants.muStar;
 m0 = cat_.thruster.m0_kg;  isp = cat_.thruster.isp_s;
-g0 = 9.80665*tStar^2/(1000*lStar);
-cnd = (isp/tStar)*g0;
-Tnd = (cat_.rungs_N(1)/m0)*tStar^2/(lStar*1000);
+% THE shared propulsion conversion (costate_common/nd_propulsion)
+ndp = nd_propulsion(cat_.rungs_N(1), isp, m0, lStar, tStar);
+cnd = ndp.cnd;   Tnd = ndp.Tnd;
 
 ob = struct('muStar', mu, 'lStar', lStar, 'tStar', tStar, 'tauDRO', s.tauDRO, ...
             'NpTulip', s.Np, 'tauTulip', s.period_tulip_nd, 'pmTulip', s.pm, ...

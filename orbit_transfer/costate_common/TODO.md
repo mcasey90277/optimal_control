@@ -38,6 +38,22 @@
   Verified: gates/conjugate/audit recomputed equal on measured cells,
   golden_cells 20/20, Code Analyzer message-for-message against the committed
   versions.
+- [x] **The ND propulsion conversion is one function** — DONE 2026-09-11
+  (`nd_propulsion`): 28 files migrated, every value bitwise unchanged
+  (the library holds the same expressions character for character).
+  Verified: golden_cells 20/20, gates/conjugate/audit recomputed equal on
+  measured cells, Code Analyzer message-for-message across all 28.
+- [ ] **Propulsion conversion: the sites NOT migrated, and why.**
+  `cr3bp_common/cr3bp_lt_params` and the GTO `direct/` and `indirect/`
+  campaign scripts still hold their own copies, because those modules do
+  NOT have `costate_common` on their path (checked: only
+  `GTO_tulip/catalog/setup_paths` adds it). Routing them here means a
+  shared library depending on another shared library — an architecture
+  call for Mike, not a refactor. Note those campaigns are already
+  deduplicated LOCALLY through `cr3bp_lt_params`, so the duplication there
+  is one file, not many. Also out: `GTO_tulip/attic/*` (archive) and the
+  INVERSE conversions in `catalog_schema` / `build_minfuel_catalog`
+  (c_nd → Isp), which are a different rule and would be their own addition.
 - [ ] **Deliberately NOT migrated** (record, so it is not "found" again): the
   recipient-facing helpers that ship beside a catalog — `costate_lib_example`,
   `costate_catalog_example`, `costate_catalog_extremes(_movies)`,

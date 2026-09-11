@@ -110,10 +110,12 @@ assert(isfile(v1Mat), 'v1 catalog not found: %s', v1Mat);
 V1 = load(v1Mat);
 ob = V1.meta.orbit;
 muStar = ob.muStar;  lStar = ob.lStar;  tStar = ob.tStar;
-g0   = 9.80665*tStar^2/(1000*lStar);
-c900 = (V1.meta.ispS/tStar)*g0;                  % v1's exhaust velocity
-cnd  = (ispS/tStar)*g0;                          % target exhaust velocity
-ndT  = @(TN) (TN/m0kg)*tStar^2/(lStar*1000);
+% THE shared propulsion conversion (costate_common/nd_propulsion); ndC
+% gives v1's exhaust velocity at ITS Isp without repeating the formula
+ndp  = nd_propulsion([], ispS, m0kg, lStar, tStar);
+c900 = ndp.ndC(V1.meta.ispS);                    % v1's exhaust velocity
+cnd  = ndp.cnd;                                  % target exhaust velocity
+ndT  = ndp.ndT;
 T0   = V1.meta.thrustN;                          % 0.07 N, the anchor thrust
 haveA = isfile(sheetAMat);
 if haveA, SA = load(sheetAMat); end

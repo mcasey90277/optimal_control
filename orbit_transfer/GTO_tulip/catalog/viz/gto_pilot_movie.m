@@ -22,9 +22,9 @@ function gto_pilot_movie(entryMat, outStem)
 
 E = load(entryMat);
 mu = E.meta.muStar;  lStar = E.meta.lStar;  tStar = E.meta.tStar;
-g0 = 9.80665*tStar^2/(1000*lStar);
-cnd = (E.meta.ispS/tStar)*g0;
-Tnd = (E.rungN/E.meta.m0kg)*tStar^2/(lStar*1000);
+% THE shared propulsion conversion (costate_common/nd_propulsion)
+ndp = nd_propulsion(E.rungN, E.meta.ispS, E.meta.m0kg, lStar, tStar);
+cnd = ndp.cnd;   Tnd = ndp.Tnd;
 
 % Endpoint orbits from the family recipes:
 [tD, rvD] = get_family_orbit('gto',   struct('orientDeg', E.meta.tauDRO));

@@ -2854,8 +2854,13 @@ catalog's own t_f, 18.603887 d, to the printed digit.
 `test_run_dro_tulip_catalog` (6 checks) RED before GREEN; three mutations
 (the listing branch, the front door's request, the z8 seed) all caught,
 files restored md5-identical; `test_run_dro_tulip` still passes (173 s).
-`transfer_study.m` still uses the default list -- it carries uncommitted
-edits of Mike's and was left alone.
+`transfer_study.m` followed the same day at Mike's request: section 4 asks
+for the catalog and seeds from z8 when the entry has no junction states.
+Run at (1/12, 0.2421) it reaches the full verdict (all required numerical
+checks passed) at t_f 18.6039 d in 23 s; the anchor pair still takes the
+file-backed route (17.7976 d, 10 s); an off-grid pair still refuses, now
+under the identifier `transfer_study:noSeed` with its line breaks rendered
+(the old `assert` printed a literal `\n`).
 
 ### The live rerun reproduces the shipped catalog exactly
 

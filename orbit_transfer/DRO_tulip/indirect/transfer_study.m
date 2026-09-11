@@ -8,10 +8,12 @@
 %   library for the same reason.
 %
 %   PREREQUISITE. Section 4 needs a converged SEED. The seed library
-%   (dro_tulip_library) covers ONE operating point -- the tau = 1 DRO to the
-%   7-petal tulip (pm = -1) at 70 mN, Isp 900 s, 150 kg -- at its certified
-%   phase pairs. For any other case, walk to it first with run_dro_tulip and
-%   study its result here.
+%   (dro_tulip_library, with the certified 70 mN catalog included) covers ONE
+%   operating point -- the tau = 1 DRO to the 7-petal tulip (pm = -1) at
+%   70 mN, Isp 900 s, 150 kg -- at its 115 certified phase pairs: the grid
+%   sD = k/12, sA = 0.0754 + j/12, less the cells the catalog does not hold.
+%   For any other case, walk to it first with run_dro_tulip and study its
+%   result here.
 %
 %     0  tolerances                       (one source, set before anything runs)
 %     1  generate the DEPARTURE orbit      (family + parameters -> a real orbit)
@@ -45,9 +47,12 @@
 %  M. Casey                                                   (c) 09/10/2026
 %  Copyright Coorbital Inc.
 
+%% paths
 clear; clc
 here = fileparts(mfilename('fullpath'));
 addpath(here, fullfile(fileparts(fileparts(here)), 'costate_common'));
+
+%% CR3BP constants
 muStar = 0.012150585609624;                 % Earth-Moon mass ratio
 lStar  = 389703.264829278;                  % km
 tStar  = 382981.289129055;                  % s
@@ -81,9 +86,11 @@ tol = struct( ...
 dep.family = 'dro';
 dep.tau    = 1.0;                            % <-- change the departure orbit here
 
+% Generate DRO
 [tD, rvD, infoD] = get_family_orbit(dep.family, struct('tau', dep.tau, 'muStar', muStar));
 departure = struct('params', dep, 'timeND', tD, 'stateND', rvD, ...
                    'periodND', infoD.periodND, 'closure', norm(rvD(end,:) - rvD(1,:)));
+
 fprintf('1. DEPARTURE %s: period %.4f ND (%.3f d), %d samples\n', ...
         upper(dep.family), infoD.periodND, day(infoD.periodND), numel(tD));
 fprintf('   max radius from the barycentre %.4f ND (%.0f km)\n', ...
@@ -102,9 +109,11 @@ arr.family = 'tulip';
 arr.Np     = 7;                              % <-- change the target orbit here
 arr.pm     = -1;                             %     branch: -1 or +1
 
+% Generate tulip
 [tT, rvT, infoT] = get_family_orbit(arr.family, struct('Np', arr.Np, 'pm', arr.pm, 'muStar', muStar));
 arrival = struct('params', arr, 'timeND', tT, 'stateND', rvT, ...
                  'periodND', infoT.periodND, 'closure', norm(rvT(end,:) - rvT(1,:)));
+
 fprintf('\n2. TARGET %s: %d petals, branch %+d, period %.4f ND (%.3f d) LOCKED by Np\n', ...
         upper(arr.family), arr.Np, arr.pm, infoT.periodND, day(infoT.periodND));
 fprintf('   out-of-plane extent max|z| = %.4f ND (%.0f km)\n', ...
@@ -123,6 +132,8 @@ assert(arrival.closure < tol.closure, 'the target orbit is not periodic to toler
 thrustN = 0.070;      ispS = 900;      m0kg = 150;
 sD      = 0.0;                                % departure phase, fraction of tau_D
 sA      = 0.0754;                             % arrival phase,  fraction of tau_A
+                                              % certified pairs: sD = k/12,
+                                              %   sA = 0.0754 + j/12 (section 4)
 
 g0  = 9.80665*tStar^2/(1000*lStar);           % ND gravity at sea level
 cnd = (ispS/tStar)*g0;                        % ND exhaust speed
@@ -156,22 +167,34 @@ assert(max(seamD.value, seamA.value) < tol.closure && max(seamD.deriv, seamA.der
 % The seed library was built at ONE operating point. Check the WHOLE of it --
 % period, petal count, branch, thrust, Isp and mass -- not just two of the six,
 % or a seed from a different engine would silently start the solve.
-lib = dro_tulip_library();
+% The library includes the certified 70 mN CATALOG -- 115 phase pairs, not
+% only the ten solutions kept in the anchor and sweep files.
+lib = dro_tulip_library([], struct('includeCatalog', true));
 match = find(abs([lib.sD] - mod(sD,1)) < 1e-6 & abs([lib.sA] - mod(sA,1)) < 1e-6, 1);
 libOp = struct('tau', 1.0, 'Np', 7, 'pm', -1, 'thrustN', 0.070, 'ispS', 900, 'm0kg', 150);
 sameOp = abs(dep.tau - libOp.tau) < 1e-12 && arr.Np == libOp.Np && arr.pm == libOp.pm && ...
          abs(thrustN - libOp.thrustN) < 1e-12 && abs(ispS - libOp.ispS) < 1e-9 && ...
          abs(m0kg - libOp.m0kg) < 1e-9;
-assert(~isempty(match) && sameOp, ...
-    ['no seed for this operating point. The library covers the tau = 1 DRO to the\n' ...
-     '7-petal tulip (pm = -1) at 70 mN, Isp 900 s, 150 kg. For any other case,\n' ...
-     'walk to it with   T = run_dro_tulip(sD, sA, opts)   and study T here.']);
+assert(~isempty(match) && sameOp, 'transfer_study:noSeed', '%s', sprintf( ...
+    ['no seed for this operating point and phase pair. The library covers the\n' ...
+     'tau = 1 DRO to the 7-petal tulip (pm = -1) at 70 mN, Isp 900 s, 150 kg, at\n' ...
+     'its 115 certified phase pairs (sD = k/12, sA = 0.0754 + j/12). For any other\n' ...
+     'case, walk to it with   T = run_dro_tulip(sD, sA, opts)   and study T here.']));
 
-K = size(lib(match).Y, 2);
-seed = struct('tf', lib(match).z(8), 'tGrid', linspace(0, lib(match).z(8), K+1), ...
-              'Y', [lib(match).Y, lib(match).Y(:,end)]);
-seed.Y(1:7,1) = [rv0(1:6); 1];   seed.Y(8:14,1) = lib(match).z(1:7);
+if isempty(lib(match).Y)
+    % a CATALOG entry stores z8 but no junction states: fly z8 once and cut
+    % the flight into junctions (seed_from_z8), which puts the seed AT the root
+    seed = seed_from_z8(lib(match).z, rv0(1:6), 24, Tnd, cnd, muStar);
+else
+    K = size(lib(match).Y, 2);
+    seed = struct('tf', lib(match).z(8), 'tGrid', linspace(0, lib(match).z(8), K+1), ...
+                  'Y', [lib(match).Y, lib(match).Y(:,end)]);
+    seed.Y(1:7,1) = [rv0(1:6); 1];   seed.Y(8:14,1) = lib(match).z(1:7);
+end
+fprintf('\n4. SEED from the %s entry at phase pair (%.4f, %.4f), %d segments\n', ...
+        lib(match).src, lib(match).sD, lib(match).sA, size(seed.Y, 2) - 1);
 
+% Multiple-Shooting min-time solve
 [z8, it] = ms_tfmin(rv0(1:6), rvf(1:6), seed, Tnd, cnd, muStar, ...
                     struct('tolR', 3e-11, 'wallSec', 600, 'conjTest', true));
 

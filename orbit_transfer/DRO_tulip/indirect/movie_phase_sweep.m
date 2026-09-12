@@ -47,6 +47,14 @@ function out = movie_phase_sweep(opts)
 %   (default: sD = the first grid value, sA = 'all')
 %   .order [1]                1 = outer sD, inner sA; 2 = outer sA, inner sD
 %   .view  [-35 22]           [az el], held for every frame
+%   .slow [1]                 hold every frame this many times longer: 2 is
+%                             half speed, 0.5 is double speed. It scales BOTH
+%                             outputs together -- the video frame rate is
+%                             divided by it and the gif delay multiplied --
+%                             so the mp4 and the gif always run at the same
+%                             pace. Prefer this to .fps when all you want is
+%                             a slower movie: .fps is the base rate, .slow is
+%                             how long each frame is held at that rate.
 %   .fps [6] .gifDelay [1/fps] .outStem '' .catMat '' (default the shipped
 %   70 mN catalog) .dark [true] .nThrust [40] .pad [0.06] axis padding
 %   .snapTol [1e-6] how close a requested value must be to a grid value
@@ -62,7 +70,10 @@ function out = movie_phase_sweep(opts)
 %                                                   (the two title lines of
 %                                                   each frame -- returned so
 %                                                   the CONSTANT-WIDTH claim
-%                                                   is testable) .wallSec
+%                                                   is testable) .slow .fps
+%                                                   (effective) .gifDelay
+%                                                   .runSec (length of the
+%                                                   movie) .wallSec
 %
 %% Revision History:
 %  M. Casey                                                   (c) 09/12/2026
@@ -78,7 +89,12 @@ order = d('order', 1);
 assert(isscalar(order) && ismember(order, [1 2]), 'movie_phase_sweep:order', ...
        'opts.order must be 1 (outer sD, inner sA) or 2 (outer sA, inner sD)');
 viewAng = d('view', [-35 22]);
-fps = d('fps', 6);  gifDelay = d('gifDelay', 1/fps);
+fps = d('fps', 6);
+slow = d('slow', 1);
+assert(isscalar(slow) && isreal(slow) && isfinite(slow) && slow > 0, ...
+       'movie_phase_sweep:slow', 'opts.slow must be a positive finite scalar (2 = half speed)');
+gifDelay = d('gifDelay', 1/fps) * slow;     % both outputs scale together
+fpsEff = fps / slow;
 pad = d('pad', 0.06);  snapTol = d('snapTol', 1e-6);
 outStem = d('outStem', fullfile(here, 'results', 'phase_sweep_movie'));
 
@@ -106,6 +122,9 @@ end
 nF = size(pairIdx, 1);
 fprintf('PHASE SWEEP MOVIE: %d frame(s), outer %s, inner %s\n', nF, ...
         pick(order == 1, 'sD', 'sA'), pick(order == 1, 'sA', 'sD'));
+if slow ~= 1
+    fprintf('  slow x%.3g: %.3g fps, gif delay %.3f s per frame\n', slow, fpsEff, gifDelay);
+end
 
 %% PRE-PASS -- fly every certified pair once, so the axis box and the colour
 %  axis are known BEFORE the first frame is drawn. This is the whole reason
@@ -143,7 +162,7 @@ cleaner = onCleanup(restoreAero);
 t0 = tic;
 titles = cell(nF, 1);
 vw = VideoWriter([outStem '.mp4'], 'MPEG-4');
-vw.FrameRate = fps;  vw.Quality = 95;  open(vw);
+vw.FrameRate = fpsEff;  vw.Quality = 95;  open(vw);
 gifFile = [outStem '.gif'];
 for k = 1:nF
     i = pairIdx(k,1);  j = pairIdx(k,2);
@@ -182,8 +201,10 @@ close(vw);
 out = struct('mp4', [outStem '.mp4'], 'gif', gifFile, 'nFrames', nF, ...
              'nCertified', nCert, 'nGaps', nF - nCert, 'clim', clim_, ...
              'axLim', axLim, 'pairs', [gridD(pairIdx(:,1)).', gridA(pairIdx(:,2)).'], ...
-             'tfDays', tfDays, 'titles', {titles}, 'wallSec', toc(t0));
-fprintf('  -> %s.mp4 / .gif  (%d frames, 1280x720, %.0f s)\n', outStem, nF, out.wallSec);
+             'tfDays', tfDays, 'titles', {titles}, 'slow', slow, 'fps', fpsEff, ...
+             'gifDelay', gifDelay, 'runSec', nF/fpsEff, 'wallSec', toc(t0));
+fprintf('  -> %s.mp4 / .gif  (%d frames, 1280x720, %.3g fps = %.1f s of video, built in %.0f s)\n', ...
+        outStem, nF, fpsEff, out.runSec, out.wallSec);
 end
 
 % ------------------------------------------------------------------------

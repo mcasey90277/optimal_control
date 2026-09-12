@@ -15,7 +15,9 @@ function ok = test_movie_phase_sweep()
 %     5. the TITLE's second line is the SAME LENGTH in every frame,
 %        including a gap frame -- the constant-width requirement, tested
 %        rather than asserted (the titles are returned for this reason);
-%     6. a pair with no certified entry still produces a frame.
+%     6. a pair with no certified entry still produces a frame;
+%     7. .slow holds every frame longer in BOTH outputs, by the same factor,
+%        and a non-positive value is refused.
 %
 %   Rendering is real but small: 2 to 4 frames at about a second each.
 %
@@ -39,7 +41,8 @@ bad = {struct('sD', 0, 'sA', 0.123),        'movie_phase_sweep:offGrid',    'an 
        struct('sD', 0, 'sDIdx', 1),         'movie_phase_sweep:bothForms',  'values AND indices for one axis';
        struct('order', 3),                  'movie_phase_sweep:order',      'an order that is neither 1 nor 2';
        struct('sAIdx', 99),                 'movie_phase_sweep:badIndex',   'an index off the grid';
-       struct('sDIdx', 2, 'sAIdx', 10),     'movie_phase_sweep:empty',      'a selection with no certified pair'};
+       struct('sDIdx', 2, 'sAIdx', 10),     'movie_phase_sweep:empty',      'a selection with no certified pair';
+       struct('sDIdx', 1, 'sAIdx', 2, 'slow', 0), 'movie_phase_sweep:slow',  'a slow factor of zero'};
 for k = 1:size(bad, 1)
     o = bad{k,1};  o.outStem = stem;
     try
@@ -83,6 +86,21 @@ ok = chk(ok, numel(unique(L1)) == 1, ...
          sprintf('and every drawn frame''s title is too (%s chars, t_f %.3f .. %.3f d)', ...
                  mat2str(unique(L1)), min(o1.tfDays), max(o1.tfDays)));
 ok = chk(ok, contains(og.titles{2}{2}, '-----'), 'the gap title dashes the numbers rather than dropping the fields');
+
+% ---- 7. slow scales both outputs by the same factor ----------------------
+oN = movie_phase_sweep(struct('sDIdx', [1 3], 'sAIdx', 2, 'outStem', stem));
+oS = movie_phase_sweep(struct('sDIdx', [1 3], 'sAIdx', 2, 'slow', 2, 'outStem', stem));
+ok = chk(ok, abs(oS.fps - oN.fps/2) < 1e-12, ...
+         sprintf('slow = 2 halves the video rate: %.3g -> %.3g fps', oN.fps, oS.fps));
+ok = chk(ok, abs(oS.gifDelay - 2*oN.gifDelay) < 1e-12, ...
+         sprintf('and doubles the gif delay: %.4f -> %.4f s', oN.gifDelay, oS.gifDelay));
+ok = chk(ok, abs(oS.runSec - 2*oN.runSec) < 1e-12, ...
+         sprintf('so the movie runs twice as long: %.2f -> %.2f s for the same %d frames', ...
+                 oN.runSec, oS.runSec, oS.nFrames));
+ok = chk(ok, oS.nFrames == oN.nFrames, 'slowing holds frames longer, it does not add frames');
+vS = VideoReader(oS.mp4);
+ok = chk(ok, abs(vS.FrameRate - oS.fps) < 1e-6, ...
+         sprintf('the written mp4 carries the slowed rate (%.3g fps)', vS.FrameRate));
 
 % ---- the files exist and are the declared size ---------------------------
 v = VideoReader(og.mp4);

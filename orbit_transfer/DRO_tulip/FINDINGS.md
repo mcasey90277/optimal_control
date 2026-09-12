@@ -3087,3 +3087,35 @@ RED before GREEN; Code Analyzer message-for-message on all three edited
 files, 0 new; the script reaches the same verdicts at the same t_f
 (18.6039 d catalog pair, 17.7976 d anchor) and refuses (0, 0.1) with the new
 message.
+
+### Addendum: section 5 the same way (2026-09-11)
+
+Mike, in a comment left in the file: "NEW SECTION - BUT MAKE IT FEWER LINES
+OF CODE". Those 22 lines did four jobs -- gate the solve, fly once, validate,
+derive and report -- and three of the four were duplicated elsewhere.
+
+| unit | owns | consumers |
+|---|---|---|
+| `costate_common/fly_transfer` | fly the costates ONCE, validate through `validate_flight`, attach the flown miss, mass, propellant and Delta-V | the study script now; `certify_root`, `audit_phase_catalog` and the witness flight in `verify_with_pumpkyn` spell the same thing out |
+| `DRO_tulip/indirect/print_transfer_summary` | the three numbers both consumers print | the study script AND `run_dro_tulip`, which printed them in a different format (Mike: "should also serve the front door") |
+
+**Delta-V has two homes and they are now checked against each other.**
+`catalog_schema`'s `deltav_from_mf` derivation is the catalog's rocket
+equation; `fly_transfer` needs the same formula but takes physics, not a
+catalog, so routing it through the schema would mean faking a catalog
+struct. It writes the formula and the test asserts the two agree on the real
+catalog (0.7484813765 vs 0.7484813765 km/s).
+
+**What stayed in the script, deliberately:** both asserts. They are the
+SCRIPT's policy -- nothing below is meaningful from a best iterate or an
+inadmissible flight -- and a library that threw on admissibility could not
+serve a certifier that must return a named reason instead.
+
+Section 5: 36 lines to 21, of which the code is five statements; the rest is
+the banner and the comments that say why the gates are there.
+
+**A test that could not fail, caught by writing down what it was for.** The
+first "inadmissible flight" check scaled the costates by 3 -- but the
+min-time direction is invariant under a positive scaling, so the flight
+stayed admissible and the check passed for the wrong reason. Flying past
+mass depletion is the real refusal, and the validator names it.

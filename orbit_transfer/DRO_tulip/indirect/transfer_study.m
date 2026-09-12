@@ -175,7 +175,8 @@ assert(max(seamD.value, seamA.value) < tol.closure && max(seamD.deriv, seamA.der
 %% ========================================================================
 op = struct('tau', dep.tau, 'Np', arr.Np, 'pm', arr.pm, ...
             'thrustN', thrustN, 'ispS', ispS, 'm0kg', m0kg, ...
-            'rv0', rv0, 'Tnd', Tnd, 'cnd', cnd, 'muStar', muStar, 'K', 24);
+            'rv0', rv0, 'Tnd', Tnd, 'cnd', cnd, 'muStar', muStar, ...
+            'lStar', lStar, 'tStar', tStar, 'K', 24);
 [seed, seedInfo] = dro_tulip_seed(sD, sA, op);
 
 fprintf('\n4. SEED from the %s entry at (%.4f, %.4f): %d segments, its t_f %.4f d\n', ...
@@ -190,31 +191,24 @@ fprintf('   operating point checked in all six fields, %d certified pairs on fil
 [z8, it] = ms_tfmin(rv0(1:6), rvf(1:6), seed, Tnd, cnd, muStar, ...
                     struct('tolR', 3e-11, 'wallSec', 600, 'conjTest', true));
 
-% ENFORCE convergence before anything downstream. A best-iterate from an
-% unsuccessful solve would otherwise be verified, plotted and described in
-% the language of optimality.
+
+% TWO POLICY GATES, kept here because they are the SCRIPT's policy, not the
+% library's: nothing below is meaningful from a best-iterate of an
+% unsuccessful solve, or from a flight that is not admissible.
 assert(it.converged && isfinite(it.normR) && it.normR < tol.R, ...
        'the shooting solve did not converge (|R| = %.2e): nothing below is meaningful', it.normR);
 
-% ONE FLIGHT, then its admissibility through the SAME validator the
-% certifier uses: reached t_f, finite, all-burn mass law, clear of both
-% primaries. A returned array is not a completed flight.
-[tu, Y] = pumpkyn.cr3bp.tfMinProp(z8(8), [rv0(1:6); 1; z8(1:7)], Tnd, cnd, muStar);
-flight = struct('t', tu, 'Y', Y, 'z8', z8, 'rv0', rv0(1:6), 'rvf', rvf(1:6), ...
-                'Tnd', Tnd, 'cnd', cnd, 'muStar', muStar, 'tStar', tStar, ...
-                'lStar', lStar, 'm0kg', m0kg, 'nSamples', numel(tu));
-VF = validate_flight(flight.t, flight.Y, z8(8), Tnd, cnd, muStar, lStar);
-assert(VF.ok, 'the flight is inadmissible: %s', VF.reason);
-flight.admissibility = VF;
-mf = flight.Y(end,7);
-dV = cnd*log(1/mf)*lStar/tStar;
+% ONE FLIGHT (costate_common/fly_transfer): flown once, validated through
+% the SAME validator the certifier uses -- reached t_f, finite, all-burn
+% mass law, clear of both primaries -- with the mass and Delta-V that follow
+% from it. Every number in sections 7-9 and the figure come from this object.
+flight = fly_transfer(z8, rv0(1:6), rvf(1:6), op);
+assert(flight.admissibility.ok, 'the flight is inadmissible: %s', flight.admissibility.reason);
+
 fprintf('\n5. SOLVED: %d Newton iterations, |R| = %.2e, converged = %d\n', ...
         it.iters, it.normR, it.converged);
-fprintf('   t_f = %.6f ND (%.4f d)   Delta-V = %.4f km/s   propellant %.2f kg\n', ...
-        z8(8), day(z8(8)), dV, m0kg*(1-mf));
+print_transfer_summary(flight);
 fprintf('   lambda_0 = [%s]\n', strjoin(compose('%+.6g', z8(1:7)'), ' '));
-fprintf('   flight: %d samples, %s; closest approach %.0f km (Moon) / %.0f km (Earth)\n', ...
-        flight.nSamples, VF.reason, VF.moonKm, VF.earthKm);
 
 %% ========================================================================
 %  6. INDEPENDENT VERIFICATION -- a second solver must not move the costates,
@@ -441,8 +435,8 @@ end
 %  9. INTERACTIVE 3D PLOT  (drag to rotate, scroll to zoom) -- drawn from the
 %     SAME flight as every number above.
 %% ========================================================================
-T = struct('z', z8, 'sD', sD, 'sA', sA, 'tfDays', day(z8(8)), 'dvKms', dV, ...
-           'propellantKg', m0kg*(1-mf), 'finalMassKg', m0kg*mf);
+T = struct('z', z8, 'sD', sD, 'sA', sA, 'tfDays', flight.tfDays, 'dvKms', flight.dvKms, ...
+           'propellantKg', flight.propellantKg, 'finalMassKg', flight.finalMassKg);
 P = plot_transfer_3d(T, B, struct('flight', flight));
 fprintf('\n9. Figure %d is rotatable (flight supplied: %d).\n', P.fig.Number, P.flightSupplied);
 

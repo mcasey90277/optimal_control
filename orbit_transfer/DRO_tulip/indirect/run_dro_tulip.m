@@ -106,7 +106,7 @@ else
 end
 say('  %s', T.reason);
 if T.ok
-    say('  t_f = %.4f d   dV = %.4f km/s   fuel = %.2f kg', T.tfDays, T.dvKms, T.propellantKg);
+    print_transfer_summary(T, struct('prefix', '  ', 'quiet', quiet));   % the shared block
     say('  flown miss %.3f km / %.3f m/s | tfMin witness |dz| = %.1e | conjugate %s', ...
         T.flyKm, T.flyVms, T.dz, tern(T.conj == 1, 'PASS', 'FAIL'));
     say('  gates: min|lam_v| = %.3e, min Q = %.3e, dim S = %d', T.g.minLamV, T.g.minQmt, T.g.dimS);

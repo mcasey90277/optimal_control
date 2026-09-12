@@ -34,10 +34,18 @@ function g = mintime_hypothesis_gates(z8, rv0, Tmax, c, muStar, opts)
 %   which are compared ROW BY ROW against pumpkyn tfMinEoM along the arc:
 %     .fieldErr   max rel |f_pumpkyn(1:7) - f_ref|            (state rows)
 %     .adjErrRef  max rel |lam'_pumpkyn + A_ref(t)' lam|      (adjoint rows;
-%                 A_ref = df_ref/dx with the control frozen, which equals
-%                 dH/dx at the optimised control because H_x does not
-%                 depend on the control law -- the envelope argument)
-%   These are the seven-row statements; Hresid below is one projection.
+%                 A_ref = df_ref/dx with the control frozen at its applied
+%                 VALUE. That is dH/dx at the optimised control because the
+%                 envelope argument removes the DERIVATIVES of the optimising
+%                 control law from d/dx of the optimised Hamiltonian -- not
+%                 because H_x is independent of the control's value. On this
+%                 strict all-burn branch u* = 1 is locally constant and
+%                 alpha* = -lam_v/|lam_v| is state-independent, so the
+%                 frozen-control derivative is exact, mass row included:
+%                 d f_v/dm = -(T/m^2) alpha gives lam_m' = -(T/m^2)|lam_v|.)
+%   Both are vector-norm comparisons of the whole 7-row block, relative to
+%   max(1, |reference|) -- not seven separately scaled row errors. Hresid
+%   below is one projection of the same comparison.
 %
 %  ASSUMPTIONS / NOTES:
 %
@@ -60,7 +68,13 @@ function g = mintime_hypothesis_gates(z8, rv0, Tmax, c, muStar, opts)
 %  Tmax, c, muStar          double                  As tfMinProp
 %
 %  opts                     struct (optional)       .nSamp [200] constraint
-%                                                   samples, .rankTol [1e-8]
+%                                                   samples, .rankTol [1e-8],
+%                                                   .relTol [1e-10] adjoint
+%                                                   integration, .keepC,
+%                                                   .rhs [@mintime_rhs_point]
+%                                                   the field under test in
+%                                                   the X2 comparison (tests
+%                                                   inject a wrong one)
 %
 %% Outputs:
 %
@@ -76,7 +90,9 @@ function g = mintime_hypothesis_gates(z8, rv0, Tmax, c, muStar, opts)
 %                                                   .minQmt .tMinQmt .dimS
 %                                                   .sv [7x1] .svRatio
 %                                                   .rankTolUsed
-%                                                   .nullResid .Hresid
+%                                                   .nullResid (|C lam|/|lam|)
+%                                                   .nullResidRel (backward
+%                                                   error, / sigma_1) .Hresid
 %                                                   .nSwitchFlown (samples
 %                                                   with Q_mt <= 0)
 %
@@ -88,6 +104,7 @@ function g = mintime_hypothesis_gates(z8, rv0, Tmax, c, muStar, opts)
 if nargin < 6, opts = struct(); end
 nSamp   = 200;   if isfield(opts, 'nSamp'),   nSamp   = opts.nSamp;   end
 rankTol = 1e-8;  if isfield(opts, 'rankTol'), rankTol = opts.rankTol; end
+rhsUT = @mintime_rhs_point;  if isfield(opts, 'rhs') && ~isempty(opts.rhs), rhsUT = opts.rhs; end
 
 z8 = z8(:);  tf = z8(8);
 [tau, Y] = pumpkyn.cr3bp.tfMinProp(tf, [rv0(:); 1; z8(1:7)], Tmax, c, muStar);
@@ -113,7 +130,7 @@ Afun = fixedJacobian();                       % persistent CasADi Function
 g.fieldErr = 0;  g.adjErrRef = 0;
 for k = 1:size(Y, 1)
     yk = Y(k, :)';
-    Fp = mintime_rhs_point(yk, Tmax, c, muStar);
+    Fp = rhsUT(yk, Tmax, c, muStar);
     fr = F(k, :)';
     g.fieldErr = max(g.fieldErr, norm(Fp(1:7) - fr) / max(norm(fr), 1));
     A = full(Afun(yk(1:7), unitv(-yk(11:13)), Tmax, c, muStar));
@@ -144,6 +161,9 @@ sv = svd(C);
 g.sv = sv;
 if isfield(opts, 'keepC') && opts.keepC, g.C = C; end
 g.nullResid = norm(C * z8(1:7)) / norm(z8(1:7));
+% the BACKWARD error |C lam|/(|C||lam|): the one normalisation of the lift
+% residual that lift_margin also tests (Astra review #2, 2026-09-11)
+g.nullResidRel = g.nullResid / max(sv(1), realmin);
 [g.dimS, g.rankTolUsed, g.svRatio] = lift_space_dim(sv, g.nullResid, rankTol);
 
 % --- H6: exclude the REDUCED problem's spurious-zero mechanism --------------

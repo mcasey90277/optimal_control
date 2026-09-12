@@ -24,7 +24,11 @@ function P = pmp_pointwise_checks(t, Y, Tnd, cnd, mu, opts)
 %             = (T/m)(lambda_v . b + |b| |lambda_v|)      direction part
 %             + T (max(Q, 0) - |b| Q),                     throttle part
 %           Q = |lambda_v|/m + lambda_m/c,
-%         is evaluated directly and is zero exactly at the minimiser;
+%         is evaluated directly and is zero exactly at the minimiser. The
+%         FIELD's own gap differs from it by (T/c) lambda_m (|b| - u_mass)
+%         when the two rows disagree on the throttle; that is evaluated
+%         too (.fieldGap) so the number gated is the field's, not a
+%         reconstruction that assumes consistency (Astra review #2);
 %         both its MINIMUM and its MAXIMUM over the samples are kept, so
 %         an over-unit thrust along the minimiser (a negative gap) cannot
 %         hide behind a max that starts at zero. Sampling the unit sphere
@@ -50,7 +54,12 @@ function P = pmp_pointwise_checks(t, Y, Tnd, cnd, mu, opts)
 %                                                   .fdAgree
 %                                                   .dirGap (max |direction
 %                                                   part|) .fullGap (max
-%                                                   |full gap|) .gapMin
+%                                                   |full gap|, control as
+%                                                   recovered from the
+%                                                   acceleration rows)
+%                                                   .fieldGap (the field's
+%                                                   own gap, mass row
+%                                                   included) .gapMin
 %                                                   .gapMax (signed extremes
 %                                                   of the full gap)
 %                                                   .throttleErr (max of the
@@ -92,7 +101,7 @@ P.minQmt = min(P.Qmt);
 kk = unique(round(linspace(2, N - 1, nS)));
 P.tSample = t(kk);  P.nSample = numel(kk);
 adjErr = 0;  fdAgree = 0;
-dirGap = 0;  fullGap = 0;  gapMin = Inf;  gapMax = -Inf;
+dirGap = 0;  fullGap = 0;  fieldGap = 0;  gapMin = Inf;  gapMax = -Inf;
 throttleAccErr = 0;  throttleMassErr = 0;
 for k = kk
     yk = Y(k, :).';
@@ -117,12 +126,14 @@ for k = kk
     gDir = (Tnd/m)*(lv.'*b + u*rho);                       % direction part, 0 at -lv/rho
     gThr = Tnd*(max(Q, 0) - u*Q);                          % throttle part, 0 at u = 1 when Q >= 0
     gFull = gDir + gThr;
+    gField = gFull + (Tnd/cnd)*lamM*(u - uMass);           % what the FIELD actually pays
     dirGap  = max(dirGap,  abs(gDir));
     fullGap = max(fullGap, abs(gFull));
+    fieldGap = max(fieldGap, abs(gField));
     gapMin  = min(gapMin, gFull);  gapMax = max(gapMax, gFull);
 end
 P.adjErr = adjErr;  P.fdAgree = fdAgree;
-P.dirGap = dirGap;  P.fullGap = fullGap;  P.gapMin = gapMin;  P.gapMax = gapMax;
+P.dirGap = dirGap;  P.fullGap = fullGap;  P.fieldGap = fieldGap;  P.gapMin = gapMin;  P.gapMax = gapMax;
 P.throttleAccErr = throttleAccErr;  P.throttleMassErr = throttleMassErr;
 P.throttleErr = max(throttleAccErr, throttleMassErr);
 end

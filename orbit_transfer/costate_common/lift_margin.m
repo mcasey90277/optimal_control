@@ -5,12 +5,21 @@ function M = lift_margin(C1, C2, lam, opts)
 %   threshold verdict.
 %
 %   dim S >= 1 is CONSTRUCTIVE: a lift is exhibited, and its residual is
-%   reported. dim S <= 1 is a theorem plus a measurement -- by Eckart-Young
-%   the distance from C to the nearest rank-deficient matrix is sigma_6, so
+%   reported -- as a BACKWARD error |C lam|/(|C||lam|) against liftTol (a
+%   small residual constructs a nearby matrix with a null vector; it does
+%   not construct an exact null vector of the continuous problem).
+%   dim S <= 1 is a theorem plus a measurement. For an m x 7 matrix,
+%   Eckart-Young says sigma_6 is the distance to the nearest matrix of rank
+%   AT MOST FIVE (sigma_7 is the distance to the nearest rank-deficient
+%   one), so
 %
-%       sigma_6 > ||dC||   ==>   rank(C) = 6 exactly   ==>   dim S = 1,
+%       sigma_6(C_num) > ||C_exact - C_num||   ==>   rank(C_exact) >= 6,
 %
-%   where ||dC|| bounds the numerical error in C. That error is MEASURED by
+%   and rank EXACTLY six -- dim S = 1 -- follows only with the separate
+%   fact that an exact nonzero lift lies in the kernel, which the exhibited
+%   normal extremal supplies up to its own residual (Astra review #2,
+%   2026-09-11: the earlier header claimed "rank(C) = 6 exactly" from
+%   sigma_6 alone). ||dC|| is the numerical error in C. It is MEASURED by
 %   rebuilding C at a second numerical setting (a looser integration
 %   tolerance, a different sample count) and taking the difference. The
 %   output is the margin sigma_6/||dC||: how many times larger the smallest
@@ -20,10 +29,13 @@ function M = lift_margin(C1, C2, lam, opts)
 %   not provide -- capping a tolerance at 1e-3*sigma_1 does not stop a noisy
 %   lift from reporting a spurious nullity (Astra review, 2026-09-10).
 %
-%   NOTE ON RIGOUR. A two-setting difference is an error ESTIMATE, not a
-%   bound. Turning this into a proof needs validated integration of the
-%   adjoint; the margin is what makes that gap visible and quantitative
-%   instead of hidden in a constant.
+%   NOTE ON RIGOUR. A two-setting difference is a SENSITIVITY estimate of
+%   ONE error component (the frozen-control adjoint integration), not a
+%   total error bound: the flown trajectory, its pchip interpolants, the
+%   endpoint data and the matrix assembly are common to both builds and
+%   cancel in the difference. Turning this into a proof needs a total
+%   error enclosure; the margin is what makes that gap visible and
+%   quantitative instead of hidden in a constant.
 %
 %% Inputs:
 %
@@ -32,8 +44,9 @@ function M = lift_margin(C1, C2, lam, opts)
 %  C2                       [m x 7]                 the same at a looser one
 %  lam                      [7 x 1]                 the exhibited lift
 %  opts                     struct (optional)
-%   .marginMin [10] margin needed to certify, .liftTol [1e-4] relative
-%   residual for `lam` to count as a lift at all
+%   .marginMin [10] margin needed to certify, .liftTol [1e-6] BACKWARD
+%   error |C lam|/(sigma_1 |lam|) for `lam` to count as a lift at all (the
+%   same normalisation mintime_hypothesis_gates reports as nullResidRel)
 %
 %% Outputs:
 %
@@ -48,7 +61,7 @@ function M = lift_margin(C1, C2, lam, opts)
 
 if nargin < 4, opts = struct(); end
 d = @(f,v) fieldd(opts, f, v);
-marginMin = d('marginMin', 10);  liftTol = d('liftTol', 1e-4);
+marginMin = d('marginMin', 10);  liftTol = d('liftTol', 1e-6);
 assert(isequal(size(C1), size(C2)), 'the two builds must have the same shape');
 lam = lam(:);
 
@@ -70,9 +83,9 @@ M.nullResid = norm(C1*lam)/norm(lam);
 
 % the CONSTRUCTIVE half: is the supplied vector actually a lift?
 if ~(M.nullResid <= liftTol*max(sv(1), realmin))
-    M.reason = sprintf(['the supplied vector is not a lift (residual %.2e vs ' ...
-                        '%.0e x sigma_1): dim S >= 1 is not established'], ...
-                       M.nullResid, liftTol);
+    M.reason = sprintf(['the supplied vector is not a lift (backward error %.2e > ' ...
+                        '%.0e): dim S >= 1 is not established'], ...
+                       M.nullResid/max(sv(1), realmin), liftTol);
     M.dimS = nnz(sv <= max(M.errEst, eps*sv(1)));
     return
 end
@@ -92,10 +105,10 @@ if M.margin < marginMin
     return
 end
 M.certified = true;
-M.reason = sprintf(['nullity one NUMERICALLY SUPPORTED (rank >= 6, dim S = 1): sigma_6 = %.2e ' ...
-                    'exceeds the measured error %.2e by %.0fx (Eckart-Young), and a lift is ' ...
-                    'exhibited at %.1e'], ...
-                   M.sigma6, M.errEst, M.margin, M.nullResid);
+M.reason = sprintf(['nullity one NUMERICALLY SUPPORTED (rank >= 6 by Eckart-Young, dim S = 1 with the ' ...
+                    'exhibited lift): sigma_6 = %.2e exceeds the measured error %.2e by %.0fx, and ' ...
+                    'the lift''s backward error is %.1e'], ...
+                   M.sigma6, M.errEst, M.margin, M.nullResid/max(sv(1), realmin));
 end
 
 function v = fieldd(s, f, d_)

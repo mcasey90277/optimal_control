@@ -15,8 +15,9 @@ function R = report_optimality(T, opts)
 %   SUFFICIENCY HYPOTHESES (Bonnard-Caillau-Trelat): normality (no
 %   abnormal lift of the same trajectory), strengthened Legendre, the
 %   all-burn switching function, and no conjugate time. With the necessary
-%   lines these give a strict strong local minimizer among trajectories
-%   with the same endpoints. H6 (lambda_m(0) < c/T with margin) is listed
+%   lines these are the hypotheses of a strict strong local minimizer for
+%   fixed endpoint position/velocity, free terminal mass and time (phases
+%   fixed). H6 (lambda_m(0) < c/T with margin) is listed
 %   here as the VALIDITY condition of the reduced conjugate instrument: a
 %   conjugate verdict without it is not interpretable.
 %
@@ -156,9 +157,11 @@ R.sufficient  = R.sufficientComplete && all(o2 == 1);
 R.crossChecks = ~any(isnan(o3)) && all(o3 == 1);
 R.claim       = R.necessary && R.sufficient && R.crossChecks;
 if R.claim
-    R.verdict = ['All required numerical checks passed. If the stated hypotheses hold ' ...
-                 'exactly, this arc is a strict strong local minimizer among trajectories ' ...
-                 'with the same endpoints. The evidence is numerical and sampled.'];
+    R.verdict = ['All required numerical checks passed: the diagnostics are consistent with ' ...
+                 'a strict strong local minimizer for fixed departure and arrival position and ' ...
+                 'velocity, initial mass fraction one, free terminal mass and time (phases fixed). ' ...
+                 'The evidence is numerical and sampled, not a certificate; the theorem''s ' ...
+                 'subarc-normality and second-variation-reduction arguments are not established here.'];
 elseif ~R.necessaryComplete
     R.verdict = ['NOT CHECKED: a necessary condition was never evaluated, so nothing ' ...
                  'is claimed (an unchecked line is not a passed line)'];

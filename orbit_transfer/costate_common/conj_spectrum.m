@@ -2,7 +2,8 @@ function out = conj_spectrum(z8, rv0, Tmax, c, muStar, opts)
 %% Purpose:
 %
 %   DENSE singular-spectrum scan of the free-time quotiented conjugate
-%   matrix, closing the two blind spots of the sampled sign test:
+%   matrix, adding sensitivity to the two blind spots of the sampled sign
+%   test (it does not close them: no between-sample bound is proven):
 %
 %     * two conjugate times inside one segment -- invisible to a sign test
 %       at the junctions, visible to a scan that samples inside them;
@@ -18,27 +19,34 @@ function out = conj_spectrum(z8, rv0, Tmax, c, muStar, opts)
 %   This is a CANDIDATE-DETECTION scan. A dip of sigma_6 below tolCollapse
 %   of its median, or a determinant sign change between two samples, is a
 %   candidate, and every candidate is LOCATED and CLASSIFIED rather than
-%   counted:
+%   counted. Class is by CONTIGUITY (Astra review 2026-09-11):
 %
-%     start     -- within the first segment, where Phi_rv -> 0 at t = 0 and
-%                  the whole matrix is still growing from zero;
-%     endpoint  -- within the last segment, where the hyperbolic flow grades
-%                  the whole spectrum down together (a certified and a
-%                  refuted entry measured sigma_min 1.37e-7 and 1.39e-7 at
-%                  t_f: the endpoint value does not discriminate);
-%     interior  -- the only class that can be a conjugate point. Each one is
-%                  REFINED TWICE: the window around it is re-integrated at
-%                  4x and then 16x the sampling and the sampled minima
-%                  compared level by level. A zero keeps falling at BOTH
-%                  levels (or carries a determinant sign change); a
-%                  near-miss plateaus. One level is not enough: on the 70 mN
-%                  sweep four entries read 0.49 at the first level against
-%                  a 0.5 threshold and 0.8-1.0 at the second (FINDINGS 42),
-%                  while the refuted entry's true crossing reads 0.06.
+%     start     -- the cluster touches the first sample: the start-up
+%                  transient, Phi_rv -> 0 at t = 0. Not refined; the
+%                  interval it covers is reported as UNCOVERED (.nStart),
+%                  pending a short-time argument;
+%     endpoint  -- the cluster reaches the last inner sample. REFINED like
+%                  an interior one, through t_f;
+%     interior  -- anything else.
 %
-%   The determinant's last sample (t_f) is not used for the sign count
-%   because that sample is the graded product above; the sign changes are
-%   counted strictly inside. (doc/conjugate_research_memo_2026-09-10.md.)
+%   Every refined candidate is RESOLVED, not merely re-sampled: the window
+%   is re-integrated on SHIFTED grids at 4x and 16x (a nested grid keeps
+%   the same nearest node when the root lies within h/32 of it, so a true
+%   zero can plateau -- the old two-level ratio test was not a zero-
+%   exclusion test), then the minimum of sigma_6(t) is bracketed one fine
+%   step either side of the finest argmin and LOCATED by golden section.
+%   The located minimum, relative to the median, is judged against a
+%   numerical floor (.zeroFloor [1e-7], a POLICY value for the STM's
+%   accuracy, not a proven bound):
+%     zero        <= zeroFloor, or a determinant sign change in the window;
+%     near-miss   >= clearFactor [100] x zeroFloor: a positive minimum was
+%                    located and the candidate is cleared;
+%     unresolved  in between: blocks a PASS.
+%   Multiplicity is the number of singular values at the floor at a
+%   located zero (resolved rank loss), not a ratio of the two smallest.
+%   The determinant's last sample (t_f) is not used for the SIGN count
+%   (its sign is judged by ms_conjugate_test with a resolution rule); its
+%   spectrum IS scanned. (doc/conjugate_research_memo_2026-09-10.md.)
 %
 %% Inputs:
 %
@@ -47,12 +55,13 @@ function out = conj_spectrum(z8, rv0, Tmax, c, muStar, opts)
 %  Tmax, c, muStar          double                  as tfMinProp
 %  opts                     struct (optional)
 %   .K [24] segments, .nSub [8] samples per segment, .tolCollapse [1e-3]
-%   relative dip in sigma_6 that counts as a candidate, .multTol [0.1]
-%   sigma_6/sigma_5 ABOVE this at a candidate means two values collapsed
-%   together (MULTIPLICITY), .refine [4] sub-sampling factor for interior
-%   candidates (applied twice: 4x then 16x), .zeroRatio [0.5] level-to-
-%   level minimum ratio; an interior candidate is a ZERO only if BOTH
-%   levels fall below it
+%   relative dip in sigma_6 that counts as a candidate (sigma_6/sigma_5 at
+%   a candidate is reported as .ratio, diagnostic only), .refine [4]
+%   sub-sampling factor for refined
+%   candidates (applied twice: 4x then 16x, shifted grids), .zeroFloor
+%   [1e-7] located minimum / median at or below which a candidate is a
+%   zero, .clearFactor [100] multiple of zeroFloor above which it is
+%   cleared as a near-miss
 %
 %% Outputs:
 %
@@ -63,15 +72,20 @@ function out = conj_spectrum(z8, rv0, Tmax, c, muStar, opts)
 %                                                   .candidates (struct
 %                                                   array: .tOverTf .rel
 %                                                   .ratio sigma_6/sigma_5
-%                                                   .class .kind
-%                                                   .refineRatio (4x / 1x)
-%                                                   .refineRatio2 (16x / 4x)
-%                                                   .signChange)
-%                                                   .nInteriorCand .nNearMiss
-%                                                   .nZero .multiplicity
-%                                                   (INTERIOR candidates with
-%                                                   two values collapsed)
-%                                                   .svEnd [6 x 1] .minRel
+%                                                   .class .kind (zero |
+%                                                   near-miss | unresolved |
+%                                                   start) .refineRatio
+%                                                   .refineRatio2 .signChange
+%                                                   .tMinOverTf .sigMinRel
+%                                                   .nSmall .svAtMin)
+%                                                   .nInteriorCand .nEndCand
+%                                                   .nStart .nNearMiss .nZero
+%                                                   .nUnresolved .multiplicity
+%                                                   .clear (the gate: no
+%                                                   zero, nothing unresolved,
+%                                                   no multiplicity, no coarse
+%                                                   sign change) .zeroFloor
+%                                                   .clearFactor .svEnd .minRel
 %
 %% Revision History:
 %  M. Casey                                                   (c) 09/10/2026
@@ -81,8 +95,8 @@ function out = conj_spectrum(z8, rv0, Tmax, c, muStar, opts)
 if nargin < 6, opts = struct(); end
 d = @(f,v) fieldd(opts, f, v);
 K = d('K', 24);  nSub = max(2, d('nSub', 8));
-tolCollapse = d('tolCollapse', 1e-3);  multTol = d('multTol', 0.1);
-refine = d('refine', 4);  zeroRatio = d('zeroRatio', 0.5);
+tolCollapse = d('tolCollapse', 1e-3);
+refine = d('refine', 4);
 z8 = z8(:);  rv0 = rv0(:);
 tf = z8(8);  lam0 = z8(1:7);
 
@@ -114,7 +128,15 @@ ix = find(diff(sg) ~= 0, 1);
 if isempty(ix), out.tFirst = NaN; else, out.tFirst = out.t(ix); end
 
 % CANDIDATES: dips of sigma_6 below tolCollapse of its median, clustered
-% into events, each located, classified and (if interior) refined.
+% into events, each LOCATED, classified and -- unless it is the structural
+% start-up transient -- RESOLVED: the window is re-sampled on SHIFTED finer
+% grids (a nested grid keeps the same nearest node when the root lies within
+% h/32 of it, so the sampled minimum can plateau at a true zero -- Astra
+% review 2026-09-11) and the minimum of sigma_6(t) is then bracketed and
+% located by golden section. The located minimum is judged against a
+% numerical floor: at or below it the candidate is a ZERO; a clear factor
+% above it, a NEAR-MISS with a measured positive minimum; between, it is
+% UNRESOLVED and must block a PASS. A plateau is never taken as proof.
 med = max(median(out.sv(6, inner)), realmin);
 rel = out.sv(6, inner) ./ med;
 out.minRel = min(rel);
@@ -129,62 +151,127 @@ end
 edges = diff([false, isCand, false]);
 starts = find(edges == 1);  ends = find(edges == -1) - 1;
 cands = struct('tOverTf', {}, 'rel', {}, 'ratio', {}, 'class', {}, 'kind', {}, ...
-               'refineRatio', {}, 'refineRatio2', {}, 'signChange', {}, 'kMin', {});
+               'refineRatio', {}, 'refineRatio2', {}, 'signChange', {}, 'kMin', {}, ...
+               'tMinOverTf', {}, 'sigMinRel', {}, 'nSmall', {}, 'svAtMin', {});
 sg = sign(out.det(inner));
+zeroFloor = d('zeroFloor', 1e-7);  clearFactor = d('clearFactor', 100);
 for e = 1:numel(starts)
     a = starts(e);  b = ends(e);
     [~, im] = min(rel(a:b));  km = a + im - 1;
     cd = struct('tOverTf', out.t(km)/tf, 'rel', rel(km), ...
                 'ratio', out.sv(6,km)/max(out.sv(5,km), realmin), ...
                 'class', 'interior', 'kind', 'n/a', 'refineRatio', NaN, ...
-                'refineRatio2', NaN, 'signChange', false, 'kMin', km);
-    if a <= nSub,              cd.class = 'start';
-    elseif b >= (N-1) - nSub,  cd.class = 'endpoint';
+                'refineRatio2', NaN, 'signChange', false, 'kMin', km, ...
+                'tMinOverTf', NaN, 'sigMinRel', NaN, 'nSmall', NaN, 'svAtMin', nan(6,1));
+    % CLASS is by CONTIGUITY, not by band: a cluster that touches the first
+    % sample is the start-up transient (Phi_rv -> 0 at t = 0, structural,
+    % not refined -- the interval it covers is reported as uncovered); one
+    % that reaches the last inner sample is an ENDPOINT candidate and IS
+    % refined, through t_f; anything else is interior.
+    if a == 1,             cd.class = 'start';
+    elseif b == numel(inner), cd.class = 'endpoint';
     end
-    if strcmp(cd.class, 'interior')
-        % a determinant sign change inside the window is a zero outright
+    if ~strcmp(cd.class, 'start')
         lo = max(1, a-1);  hi = min(numel(inner), b+1);
         cd.signChange = any(diff(sg(lo:hi)) ~= 0);
-        % re-integrate the window at `refine`x the sampling from the sample
-        % before it (state and STM were kept), compare the sampled minimum
+        % window [k0, kEnd] in coarse samples, re-integrated from the stored
+        % state one sample before it (or from t = 0)
         k0 = max(1, a-2);
         if k0 == 1, yw = [rv0; 1; lam0];  Pw = eye(14);  kStart = 0;
         else,       yw = yS(:, k0-1);     Pw = PhiS(:, :, k0-1);  kStart = k0-1;
         end
-        kEnd = min(N-1, b+2);
-        m1 = windowMin(yw, Pw, kEnd - kStart, dt, refine,   Pq, Tmax, c, muStar);
-        m2 = windowMin(yw, Pw, kEnd - kStart, dt, refine^2, Pq, Tmax, c, muStar);
+        kEnd = min(N, b+2);                      % an endpoint window runs to t_f
+        nC = kEnd - kStart;
+        [m1, ~]  = windowMin(yw, Pw, nC, dt, refine,   0.5, Pq, Tmax, c, muStar);
+        [m2, t2] = windowMin(yw, Pw, nC, dt, refine^2, 0.5, Pq, Tmax, c, muStar);
         cd.refineRatio  = m1/max(out.sv(6, km), realmin);
         cd.refineRatio2 = m2/max(m1, realmin);
-        if cd.signChange || (cd.refineRatio < zeroRatio && cd.refineRatio2 < zeroRatio) ...
-                         || m2/med < 1e-8
+        % LOCATE the minimum: golden section on the bracket one fine step
+        % either side of the finest-grid argmin (sigma_6 is V-shaped at a
+        % simple zero and smooth at a near-miss: unimodal on that bracket)
+        hFine = dt/refine^2;
+        tA = max(0, t2 - hFine);  tB = min(nC*dt, t2 + hFine);
+        [cd.sigMinRel, tStar, cd.svAtMin] = locateMin(yw, Pw, kStart*dt, tA, tB, med, Pq, Tmax, c, muStar);
+        cd.tMinOverTf = tStar/tf;
+        cd.nSmall = nnz(cd.svAtMin/med <= zeroFloor);
+        if cd.signChange || cd.sigMinRel <= zeroFloor
             cd.kind = 'zero';
+        elseif cd.sigMinRel >= clearFactor*zeroFloor
+            cd.kind = 'near-miss';                % a POSITIVE minimum was located
         else
-            cd.kind = 'near-miss';
+            cd.kind = 'unresolved';               % inside the numerical floor band
         end
+    else
+        cd.kind = 'start';
     end
     cands(end+1) = cd; %#ok<AGROW>
 end
 out.candidates = cands;
-isInt = strcmp({cands.class}, 'interior');
+cls = {cands.class};  knd = {cands.kind};
+isInt = strcmp(cls, 'interior');  isEnd = strcmp(cls, 'endpoint');
+refined = isInt | isEnd;
 out.nInteriorCand = nnz(isInt);
-out.nNearMiss = nnz(isInt & strcmp({cands.kind}, 'near-miss'));
-out.nZero     = nnz(isInt & strcmp({cands.kind}, 'zero'));
-% MULTIPLICITY: an INTERIOR candidate where sigma_5 collapsed with sigma_6
-out.multiplicity = nnz(isInt & [cands.ratio] > multTol);
+out.nEndCand      = nnz(isEnd);
+out.nStart        = nnz(strcmp(cls, 'start'));
+out.nNearMiss     = nnz(refined & strcmp(knd, 'near-miss'));
+out.nZero         = nnz(refined & strcmp(knd, 'zero'));
+out.nUnresolved   = nnz(refined & strcmp(knd, 'unresolved'));
+% MULTIPLICITY: a located zero at which TWO OR MORE singular values sit at
+% the floor -- resolved rank loss, not a ratio between two small values
+out.multiplicity  = nnz(refined & strcmp(knd, 'zero') & [cands.nSmall] >= 2);
+out.zeroFloor = zeroFloor;  out.clearFactor = clearFactor;
+% the verdict the caller should gate on: no located zero, nothing
+% unresolved, no multiplicity; near-misses with a located positive minimum
+% are cleared, start transients are reported as uncovered, not cleared
+out.clear = out.nZero == 0 && out.nUnresolved == 0 && out.multiplicity == 0 && out.nInterior == 0;
 end
 
-function m = windowMin(yw, Pw, nCoarse, dt, sub, Pq, Tmax, c, muStar)
+function [m, tAt] = windowMin(yw, Pw, nCoarse, dt, sub, shift, Pq, Tmax, c, muStar)
 % WINDOWMIN  Smallest sigma_6 over nCoarse coarse steps re-integrated at
-% `sub` sub-steps each, from state yw / STM Pw.  INPUTS: yw; Pw; nCoarse;
-% dt; sub; Pq; Tmax; c; muStar.  OUTPUTS: m.
-m = inf;
-for q = 1:nCoarse*sub
-    [yw, P] = mintime_prop_seg(dt/sub, yw, true, Tmax, c, muStar);
-    Pw = P*Pw;
+% `sub` sub-steps each, on a grid SHIFTED by `shift` sub-steps so that no
+% coarse node is re-sampled.  INPUTS: yw; Pw; nCoarse; dt; sub; shift; Pq;
+% Tmax; c; muStar.  OUTPUTS: m; tAt (time of the minimum, from t = 0 of
+% the window's start state, i.e. absolute time = tWindowStart + tAt).
+m = inf;  tAt = NaN;  h = dt/sub;  tRun = 0;
+first = shift*h;
+if first > 0
+    [yw, P] = mintime_prop_seg(first, yw, true, Tmax, c, muStar);  Pw = P*Pw;  tRun = first;
     svq = specAt(yw, Pw, Pq, Tmax, c, muStar);
-    m = min(m, svq(6));
+    if svq(6) < m, m = svq(6);  tAt = tRun; end
 end
+for q = 1:nCoarse*sub - 1
+    [yw, P] = mintime_prop_seg(h, yw, true, Tmax, c, muStar);
+    Pw = P*Pw;  tRun = tRun + h;
+    svq = specAt(yw, Pw, Pq, Tmax, c, muStar);
+    if svq(6) < m, m = svq(6);  tAt = tRun; end
+end
+end
+
+function [sigRel, tStar, svStar] = locateMin(yw, Pw, tW, tA, tB, med, Pq, Tmax, c, muStar)
+% LOCATEMIN  Golden-section minimisation of sigma_6(t) on [tA, tB] (times
+% relative to the window start tW), each evaluation one propagation from
+% the window's stored state.  INPUTS: yw; Pw; tW; tA; tB; med; Pq; Tmax;
+% c; muStar.  OUTPUTS: sigRel (min sigma_6 / med); tStar (absolute time);
+% svStar [6x1].
+    function [s6, sv] = f(t)
+        if t <= 0, y = yw;  P = Pw;
+        else,      [y, Pp] = mintime_prop_seg(t, yw, true, Tmax, c, muStar);  P = Pp*Pw;
+        end
+        sv = specAt(y, P, Pq, Tmax, c, muStar);  s6 = sv(6);
+    end
+gr = (sqrt(5) - 1)/2;
+a = tA;  b = tB;
+x1 = b - gr*(b - a);  x2 = a + gr*(b - a);
+f1 = f(x1);  f2 = f(x2);
+for it = 1:40
+    if f1 < f2, b = x2;  x2 = x1;  f2 = f1;  x1 = b - gr*(b - a);  f1 = f(x1);
+    else,       a = x1;  x1 = x2;  f1 = f2;  x2 = a + gr*(b - a);  f2 = f(x2);
+    end
+    if (b - a) < 1e-9*max(tB, 1), break, end
+end
+if f1 < f2, tBest = x1; else, tBest = x2; end
+[s6, svStar] = f(tBest);
+sigRel = s6/med;  tStar = tW + tBest;
 end
 
 function [sv, dt_] = specAt(y, Phi, Pq, Tmax, c, muStar)

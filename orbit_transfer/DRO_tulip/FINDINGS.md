@@ -3293,3 +3293,100 @@ extremal; the explicit reduction of the free-mass second variation to the
 six-state nonautonomous problem; a short-time sign expansion to close the
 interval before the first junction; between-sample bounds for S1, S2 and
 the clearances. Listed in `costate_common/TODO.md`.
+
+## 48. Astra's second pass: the dense scan could clear a true conjugate point, and the certifier still enforced less than the study (2026-09-11)
+
+The corrected script and its sixteen source files went back to GPT-6 Astra
+at xhigh (461 s, $1.79; `reviews/transfer_study_math_astra2_2026-09-11.md`,
+adjudication in `reviews/transfer_study_math_astra2_adjudicated_2026-09-11.md`).
+It confirmed section 47's corrections -- the full-gap formula, the mass-row
+throttle, the frozen-control adjoint comparison including the mass row, and
+both kernel identities with the mass costate present -- and found three
+things still wrong. All three verified against the code; all fixed in the
+order Astra ranked them.
+
+**1. The dense conjugate scan was not a zero-exclusion test.** The S4 gate
+read coarse sign changes, zeros and multiplicity but never
+`nInteriorCand`, so a candidate classified "near-miss" passed; and the
+near-miss classification was a PLATEAU under nested 4x/16x refinement,
+which a true double root within h/32 of a coarse node reproduces exactly
+(the same node stays nearest at every level, both ratios read one).
+Endpoint clusters were never refined at all. `conj_spectrum` now refines on
+SHIFTED grids, brackets the finest-grid argmin one step either side and
+LOCATES the minimum of sigma_6(t) by golden section; the located minimum is
+judged against a numerical floor (1e-7 of the median, a policy value):
+at the floor or with a sign change it is a ZERO, a hundred times above it a
+NEAR-MISS with a measured positive minimum, and in between UNRESOLVED,
+which blocks. Class is by contiguity, not by band: only a cluster touching
+the first sample is the (uncovered) start transient; endpoint clusters are
+refined through t_f. Multiplicity is the number of singular values at the
+floor at a located zero. On the anchor the endpoint dip resolves to a
+positive minimum of 8.0e-5 of the median at t/t_f = 0.9994 and clears; the
+refuted sheet entry still reads ZERO. One second per scan.
+
+**And the junction sign test could PASS on an untrusted sign.** The
+resolved-last-bracket rule of section 47 acted only when a sign change was
+seen; a same-sign tiny final determinant passed. Any live sample whose
+sigma ratio is at or below `resolvedTol` now makes the verdict
+UNDETERMINED unless an interior root was already found.
+
+**2. `certify_root` gated `dirGap` and nothing else new.** The study
+required the full gap, both throttles, X2, the lift residuals, the
+Eckart-Young margin and the dense scan; the production certifier required
+none of them and returned "certified" -- the computed-not-enforced defect
+of sections 36, 41 and 47, one more time, in the file whose header says
+that is the failure mode it exists to prevent. (The library chain does run
+`second_order_pass` at the sweep stage, which Astra could not see, so the
+shipped sheet did carry the dense scan and the margin; per-entry
+certification did not.) Gates 2b, 5 and 7 now match the study, and
+`test_certify_enforcement` proves the caller reads them: five tolerance
+squeezes and four field injections each refuse by name (half mass flow
+refuses with throttle error 0.500 stored; a wrong field handed to X2 alone
+refuses on X2 at 3.7e-1; a clear factor of 1e12 turns the anchor's endpoint
+near-miss UNRESOLVED and blocks), and the anchor certifies untouched with
+every new number carried.
+
+**3. One option value, two normalisations.** The script tested the lift
+residual relative to |lam| and `lift_margin` tested it relative to
+sigma_1 |lam|, both against "1e-4". The BACKWARD error
+|C lam|/(|C||lam|) (`gates.nullResidRel`) is now the one normalisation in
+the script, the certifier and `lift_margin` (liftTol 1e-6); on the anchor
+it reads 5.3e-10 (sigma_1 = 4.1e3, |lam|-relative residual 2.2e-6). The endpoint
+check multiplied a six-state norm by lStar and called it kilometres; it now
+reports position and velocity separately -- and the number changed:
+section 47's "2.2e-8 ND = 8.6 m" was the six-state norm, velocity-
+dominated; the arrival POSITION error is 1.3e-10 ND (0.05 m) and the
+velocity error 2.2e-5 m/s -- wraps the phase as `phase_state` does, and is
+labelled an endpoint-consistency estimate against a numerical reference.
+The `fieldGap` is evaluated too -- the field's own gap differs from the
+reconstructed one by (T/c) lam_m (|b| - u_mass) -- and the gated number is
+the worse of the two (half mass flow: 5.6e-2 against 1.9e-14).
+
+**Corrected claims.** `lift_margin`'s header said sigma_6 > |dC| gives
+rank six EXACTLY; Eckart-Young gives rank >= 6 (sigma_6 is the distance to
+rank at most five), and exactly six needs the exhibited lift. The
+two-tolerance difference is a sensitivity estimate of one error component
+(the adjoint integration), not a total bound: flight, interpolants,
+endpoints and assembly cancel in it. `lift_space_dim`'s header said its cap
+made dim S "never > 1"; it does not. The envelope comment now says "no
+derivatives of the control law", not "does not depend on it".
+
+**The STM generator, checked independently** (`test_stm_variational`): all
+14 columns of one segment's STM against central differences to 8.6e-8
+(the lam_v columns, which carry d alpha*/d lam_v, to 5.2e-9), and
+PHI' J PHI = J to 1.9e-10. A lesson came with it: symplecticity does NOT
+discriminate the missing control-law derivative -- a frozen-control
+generator is the linearisation of a fixed-alpha Hamiltonian and is
+symplectic to the same 1e-11. The finite-difference columns are the
+discriminating check; the frozen STM differs from the true one in the
+lam_v columns by O(1).
+
+**Verdict wording** now names the structural conditions the diagnostics do
+not establish (subarc normality, the free-mass/free-time second-variation
+reduction, existence of an exact extremal near the numerical one), in the
+study and in `report_optimality`.
+
+**Consequence for the 70 mN library:** its second-order sheet was swept
+with the old plateau classification; the 44 near-miss cells are old-kind
+evidence and `conj_unresolved` is NaN for them. A RE-SWEEP with the
+resolved scan is required before the ship decision (TODO).

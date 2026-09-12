@@ -14,8 +14,13 @@ function [dimS, tol, gap] = lift_space_dim(sv, nullResid, rankTol)
 %   tolerance under-counts whenever nullResid > 1e-8 -- the 2026-09-07
 %   catalog pass flagged 512 entries "dim S = 0" for exactly that reason
 %   (sv(7)/sv(6) ~ 1e-7..2.5e-6, i.e. a clean one-dimensional null space).
-%   The 1e-3*sv(1) cap keeps a noisy lift from inflating the count: with
-%   the cap, a poor lift reports dim S = 0 (unresolved), never > 1.
+%   The 1e-3*sv(1) cap limits how far a noisy lift can raise the threshold;
+%   it is NOT a guarantee that a poor lift cannot report dim S > 1 (the
+%   earlier header claimed one -- Astra review #2, 2026-09-11). Note also
+%   that sigma_min <= nullResid by construction, so tol >= 10*nullResid
+%   always declares at least one singular value null: dim S >= 1 here is
+%   threshold-induced, and only dim S == 1 is a finding. The resolved
+%   statement is lift_margin's Eckart-Young separation.
 %
 %% Inputs:
 %

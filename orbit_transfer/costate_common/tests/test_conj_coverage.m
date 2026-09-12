@@ -11,8 +11,9 @@ function ok = test_conj_coverage()
 %        root strictly inside (t_K, t_f): a conjugate point, hence FAIL --
 %        when the sign at t_f is trustworthy. The old rule called every
 %        last-bracket crossing ENDPOINT. With the last determinant declared
-%        unresolvable (resolvedTol = Inf) the verdict must fall back to
-%        ENDPOINT.
+%        unresolvable (resolvedTol = Inf) the verdict must be UNDETERMINED
+%        -- and so must a same-sign run whose signs are untrusted: an
+%        unresolved sample is never a PASS (Astra review #2).
 %     3. THE TWO EXACT IDENTITIES of the quotiented form, J p(0) = 0 and
 %        p(t)' J(t) = 0, are measured and must hold to integration accuracy
 %        on a certified entry.
@@ -65,8 +66,11 @@ ok = chk(ok, sign(cj3.detScaled(end)) == -sign(cj.detScaled(end)) && ...
 ok = chk(ok, strcmp(cj3.verdict, 'FAIL') && cj3.nInterior == 1 && cj3.nEndResolved == 1 && ~cj3.atFinal, ...
          sprintf('a resolved last-bracket crossing is an INTERIOR root: %s (%s)', cj3.verdict, cj3.reason));
 cj4 = ms_conjugate_test(info3, struct('flow', @(y) flow6(y, B.Tnd, B.cnd, B.mu), 'resolvedTol', Inf));
-ok = chk(ok, strcmp(cj4.verdict, 'ENDPOINT') && cj4.atFinal && cj4.nInterior == 0, ...
-         sprintf('with the final sign declared untrustworthy it stays ENDPOINT: %s', cj4.verdict));
+ok = chk(ok, strcmp(cj4.verdict, 'UNDETERMINED') && cj4.atFinal && cj4.nInterior == 0 && cj4.nUnresolved > 0, ...
+         sprintf('with the signs declared untrustworthy it is UNDETERMINED, never PASS: %s (%s)', cj4.verdict, cj4.reason));
+cj5 = ms_conjugate_test(it, struct('flow', @(y) flow6(y, B.Tnd, B.cnd, B.mu), 'resolvedTol', Inf));
+ok = chk(ok, strcmp(cj5.verdict, 'UNDETERMINED') && ~cj5.pass, ...
+         sprintf('and a same-sign run with untrusted signs is UNDETERMINED too, not PASS: %s', cj5.verdict));
 ok = chk(ok, cj.sigRatio(end) > 1e-10, ...
          sprintf('the anchor''s final block IS resolved (sigma ratio %.1e > 1e-10)', cj.sigRatio(end)));
 

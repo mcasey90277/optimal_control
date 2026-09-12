@@ -102,12 +102,13 @@ tol = struct( ...
     'throttle',  1e-10, ...   % N6 applied throttle, acceleration AND mass rows
     'dz',        1e-6,  ...   % X1 second solver must agree to this
     'field',     1e-10, ...   % X2 pumpkyn field vs independent field, relative
-    'lift',      1e-4,  ...   % S3 accepted lift's own residual |C lam0|/|lam0|;
-    ...                       %   = lift_margin's liftTol (one value, handed to it).
-    ...                       %   The floor is the pchip interpolation of the flown
-    ...                       %   arc that the frozen-control adjoint is integrated
-    ...                       %   over: 2.2e-6 on the anchor at BOTH relTol 1e-12
-    ...                       %   and 1e-10, so it is not the integration tolerance
+    'lift',      1e-6,  ...   % S3 accepted lift's BACKWARD error |C lam0|/(|C||lam0|),
+    ...                       %   the one normalisation used here and in lift_margin
+    ...                       %   (handed to it as liftTol). The |lam0|-relative
+    ...                       %   residual floors at 2.2e-6 on the anchor at relTol
+    ...                       %   1e-12 and 1e-10 alike, so tightening the adjoint
+    ...                       %   integration does not move it; the floor is not
+    ...                       %   attributed to any one source
     'liftMargin', 10,   ...   % S3 Eckart-Young margin sigma_6 / |dC| (lift_margin)
     'h6Margin',  1.0,   ...   % V1 required (c/T)/lambda_m(0), STRICT
     'agree',     1e-6);       % V2 inline numbers vs the library instruments
@@ -201,11 +202,18 @@ assert(max(seamD.value, seamA.value) < tol.closure && max(seamD.deriv, seamA.der
 % (Astra review 2026-09-11). So propagate each orbit from its first sample
 % to the chosen phase and compare: that difference is the physical error of
 % the boundary condition the shooting then matches to 1e-11.
-interpErr = [phase_interp_error(stateD, rvD, sD, infoD.periodND, muStar), ...
-             phase_interp_error(stateA, rvT, sA, infoT.periodND, muStar)];
-fprintf('   interpolant vs propagation to the phase: %.1e / %.1e ND (%.4f / %.4f km) / %-6.0e %s\n', ...
-        interpErr, interpErr*lStar, tol.interp, pass(max(interpErr) < tol.interp));
-assert(max(interpErr) < tol.interp, 'the endpoint interpolant is off the orbit by more than tol.interp');
+% Position and velocity are reported SEPARATELY (a six-state norm times
+% lStar is not a distance -- Astra review #2), the phase is wrapped as
+% phase_state wraps it, and this is an endpoint-CONSISTENCY estimate against
+% a numerical reference propagation, not a certified periodic-orbit error.
+[eRD, eVD] = phase_interp_error(stateD, rvD, sD, infoD.periodND, muStar);
+[eRA, eVA] = phase_interp_error(stateA, rvT, sA, infoT.periodND, muStar);
+fprintf(['   interpolant vs propagation to the phase: departure %.1e ND (%.4f km, %.2e m/s),\n' ...
+         '      arrival %.1e ND (%.4f km, %.2e m/s) / %-6.0e ND on position   %s\n'], ...
+        eRD, eRD*lStar, eVD*lStar/tStar*1000, eRA, eRA*lStar, eVA*lStar/tStar*1000, ...
+        tol.interp, pass(max(eRD, eRA) < tol.interp && max(eVD, eVA) < tol.interp));
+assert(max(eRD, eRA) < tol.interp && max(eVD, eVA) < tol.interp, ...
+       'the endpoint interpolant is off the reference propagation by more than tol.interp');
 
 %% ========================================================================
 %  4. GET THE SEED -- which certified solution starts the solve, and is it
@@ -339,9 +347,10 @@ fprintf('   N5 adjoint eqns   rel err   %9.2e / %-9.0e  %s   (%d samples; FD ste
 %     MINIMUM is kept too, so an over-unit thrust along the minimiser (a
 %     negative gap) is not clipped away. u = 1 minimises H iff Q >= 0 (weak,
 %     necessary); S2 asks for Q > 0.
-n6 = PW.fullGap <= tol.gap && PW.throttleErr < tol.throttle && PW.minQmt >= 0;
+n6gap = max(PW.fullGap, PW.fieldGap);          % the field's own gap, mass row included
+n6 = n6gap <= tol.gap && PW.throttleErr < tol.throttle && PW.minQmt >= 0;
 fprintf('   N6 min principle  |gap|     %9.2e / %-9.0e  %s   (signed %+.1e..%+.1e; throttle 1 to %.1e acc / %.1e mass; min Q = %.3f >= 0 %s)\n', ...
-        PW.fullGap, tol.gap, pass(n6), PW.gapMin, PW.gapMax, ...
+        n6gap, tol.gap, pass(n6), PW.gapMin, PW.gapMax, ...
         PW.throttleAccErr, PW.throttleMassErr, PW.minQmt, pass(PW.minQmt >= 0));
 
 necessary = resid < tol.R && PW.Hmax < tol.H && flight.flyKm < tol.km && ...
@@ -410,12 +419,19 @@ fprintf('   S2 strict bang   min Q = %.4e at t/t_f = %.3f        %s\n', ...
 gatesLoose = mintime_hypothesis_gates(z8, rv0(1:6), Tnd, cnd, muStar, ...
                                       struct('keepC', true, 'relTol', 1e-9));
 LM = lift_margin(gates.C, gatesLoose.C, z8(1:7), struct('marginMin', tol.liftMargin, 'liftTol', tol.lift));
-s3 = gates.dimS == 1 && gates.nullResid < tol.lift && gates.Hresid < tol.H && LM.certified;
+% ONE normalisation for the lift residual, everywhere: the BACKWARD error
+% |C lam0| / (|C| |lam0|) = nullResid / sigma_1 (gates.nullResidRel), which
+% is what lift_margin tests too; the |lam0|-relative number is printed
+% beside it but not gated (Astra review #2: two callers, one option value,
+% two meanings).
+s3 = gates.dimS == 1 && gates.nullResidRel < tol.lift && gates.Hresid < tol.H && LM.certified;
 fprintf('   S3 normality     dim S = %d (1 = no abnormal lift)        %s\n', gates.dimS, pass(s3));
-fprintf('      lift residual %.1e / %.0e, |lambda.f + 1| %.1e / %.0e, sv gap %.1e\n', ...
-        gates.nullResid, tol.lift, gates.Hresid, tol.H, gates.svRatio);
-fprintf('      Eckart-Young: sigma_6 %.2e vs |dC| %.2e between two integrations, margin %.0fx / %gx  %s\n', ...
-        LM.sigma6, LM.errEst, LM.margin, tol.liftMargin, pass(LM.certified));
+fprintf('      lift backward error |C lam|/(|C||lam|) %.1e / %.0e (|C lam|/|lam| = %.1e, sigma_1 %.2e),\n', ...
+        gates.nullResidRel, tol.lift, gates.nullResid, gates.sv(1));
+fprintf('      |lambda.f + 1| %.1e / %.0e, sv gap sigma_7/sigma_6 %.1e\n', gates.Hresid, tol.H, gates.svRatio);
+fprintf(['      Eckart-Young: sigma_6 %.2e vs |dC| %.2e between adjoint integrations at relTol %.0e and %.0e\n' ...
+         '      (a SENSITIVITY estimate of one error component, not a total error bound), margin %.0fx / %gx  %s\n'], ...
+        LM.sigma6, LM.errEst, 1e-12, 1e-9, LM.margin, tol.liftMargin, pass(LM.certified));
 
 % S4  no conjugate time in (0, t_f], by the free-time quotiented Jacobi test
 %     at the junctions, AND the dense singular-spectrum scan that closes the
@@ -436,14 +452,21 @@ fprintf(['      coverage: %d junctions, first full-rank at t/t_f = %.3f (before 
          '      sampled through t/t_f = %.3f%s; identities J p(0) = 0 to %.1e, p(t)''J = 0 to %.1e\n'], ...
         numel(cj.detScaled), cj.tFirstFullRank/tf, cj.sampledThrough/tf, ...
         tern(cj.covered, '', ' (FINAL SEGMENT NOT COVERED)'), cj.kernelRight, cj.kernelLeft);
-% the dense scan: 8 samples per segment, interior candidates located and
-% refined twice (a zero keeps falling, a near-miss plateaus)
+% the dense scan: 8 samples per segment; every candidate outside the
+% start-up transient is LOCATED (shifted-grid refinement + golden section)
+% and judged against a numerical floor -- a zero refutes, a located positive
+% minimum clears, anything in between is UNRESOLVED and blocks the claim
 CS = conj_spectrum(z8, rv0(1:6), Tnd, cnd, muStar, struct('K', 24, 'nSub', 8));
-s4Dense = CS.nInterior == 0 && CS.nZero == 0 && CS.multiplicity == 0;
-fprintf(['      dense scan (%d samples): %d interior sign change(s), %d interior candidate(s):\n' ...
-         '      %d zero, %d near-miss, %d multiplicity                                %s\n'], ...
-        numel(CS.t), CS.nInterior, CS.nInteriorCand, CS.nZero, CS.nNearMiss, CS.multiplicity, pass(s4Dense));
-if strcmp(s4Status, 'PASS') && ~s4Dense, s4Status = 'FAIL'; end
+fprintf(['      dense scan (%d samples): %d coarse sign change(s); candidates %d interior + %d endpoint\n' ...
+         '      -> %d zero, %d near-miss (positive minimum located), %d UNRESOLVED, %d multiplicity;\n' ...
+         '      %d start transient(s) (uncovered); floor %.0e x median, clear at %gx      %s\n'], ...
+        numel(CS.t), CS.nInterior, CS.nInteriorCand, CS.nEndCand, CS.nZero, CS.nNearMiss, ...
+        CS.nUnresolved, CS.multiplicity, CS.nStart, CS.zeroFloor, CS.clearFactor, pass(CS.clear));
+if strcmp(s4Status, 'PASS')
+    if CS.nZero > 0 || CS.multiplicity > 0 || CS.nInterior > 0, s4Status = 'FAIL';
+    elseif CS.nUnresolved > 0,                                    s4Status = 'UNRESOLVED';
+    end
+end
 
 % V1  H6: the reduced conjugate instrument's determinant can vanish
 %     spuriously when lambda_m(0) >= c/T (FINDINGS 40). Not a hypothesis of
@@ -500,8 +523,12 @@ if necessary && sufficient && crossCheck
     fprintf(['            THIS IS NUMERICAL EVIDENCE, NOT A CERTIFICATE: positivity is tested\n' ...
              '            at sampled times with no between-sample bound, dim S is a numerical\n' ...
              '            rank with a measured (not proven) error, and the conjugate scan\n' ...
-             '            locates and refines candidates rather than enclosing roots. See\n' ...
-             '            doc/mintime_second_order_audit.tex.\n']);
+             '            locates candidates and clears them against a numerical floor rather\n' ...
+             '            than enclosing roots. Application of the theorem also remains\n' ...
+             '            conditional on the subarc-normality argument, on a valid free-mass,\n' ...
+             '            free-time second-variation reduction, and on the existence of an exact\n' ...
+             '            extremal near the numerical one; none of these is established by the\n' ...
+             '            diagnostics. See doc/mintime_second_order_audit.tex.\n']);
 elseif ~necessary
     fprintf(['NOT an extremal to tolerance. The second-order test is meaningless\n' ...
              '            off an extremal, so no minimality is claimed.\n']);
@@ -540,17 +567,19 @@ function s = tern(c, a, b)
 if c, s = a; else, s = b; end
 end
 
-function e = phase_interp_error(stateFun, rvTable, s, periodND, muStar)
-% PHASE_INTERP_ERROR  Distance between the periodic interpolant at phase s
-% and a CR3BP propagation of the orbit's first sample to the same phase.
-% INPUTS: stateFun (phase -> [6x1]); rvTable [N x 6]; s [scalar];
-% periodND; muStar.  OUTPUTS: e [scalar, ND, 6-vector norm].
+function [eR, eV] = phase_interp_error(stateFun, rvTable, s, periodND, muStar)
+% PHASE_INTERP_ERROR  Position and velocity distance between the periodic
+% interpolant at phase s and a CR3BP propagation of the orbit's first
+% sample to the same (wrapped) phase.  INPUTS: stateFun (phase -> [6x1]);
+% rvTable [N x 6]; s [scalar]; periodND; muStar.  OUTPUTS: eR, eV [ND].
+s = mod(s, 1);                                 % the same wrap phase_state applies
 if s <= 0
     rvProp = rvTable(1, 1:6).';
 else
-    [~, rvp] = pumpkyn.cr3bp.prop(s*periodND, rvTable(1, 1:6).', muStar);
+    [tp, rvp] = pumpkyn.cr3bp.prop(s*periodND, rvTable(1, 1:6).', muStar);
+    assert(abs(tp(end) - s*periodND) < 1e-9*max(periodND, 1), 'reference propagation stopped early');
     rvProp = rvp(end, 1:6).';
 end
 x = stateFun(s);
-e = norm(x(1:6) - rvProp);
+eR = norm(x(1:3) - rvProp(1:3));  eV = norm(x(4:6) - rvProp(4:6));
 end

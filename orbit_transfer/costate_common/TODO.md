@@ -164,3 +164,28 @@
   are sample minima and say so.
 - [ ] `report_optimality`'s claimed-verdict sentence still reads "same
   endpoints"; align with the study script's endpoint statement.
+
+## From the 2026-09-11 SECOND math review (Astra #2; FINDINGS 48)
+
+- [ ] **RE-SWEEP the 70 mN library's second-order sheet** with the resolved
+  `conj_spectrum` (located minima, shifted grids, UNRESOLVED class, endpoint
+  clusters refined). The shipped sheet's 44 "near-miss" cells are OLD
+  plateau verdicts; `conj_unresolved` is NaN for them. Clear the sidecar
+  (or add a version key) so `second_order_pass` does not resume over stale
+  records. Blocks the ship decision.
+- [ ] Sharpened theory items (supersede the four above where they overlap):
+  (a) subarc normality must carry the terminal condition lam_m(t_f) = 0 to
+  a MOVED subarc endpoint, with H6 supplying the nonvanishing
+  normalisation; (b) the six-state reduction must cover the COMPETITOR
+  class, including reduced-throttle directions, to keep the claim strong
+  rather than restricted/weak; (c) existence of an exact extremal near the
+  numerical one (validated shooting or a Newton-Kantorovich/Krawczyk
+  argument) -- a residual alone does not supply it; (d) between-sample
+  bounds must include the conjugate MATRIX (rank/determinant), not only
+  the scalar margins.
+- [ ] `conj_spectrum` zeroFloor (1e-7 x median) and clearFactor (100) are
+  POLICY values for the STM's accuracy; measure the STM error (two
+  integration settings, as lift_margin does) and set the floor from it.
+- [ ] The start transient (cluster touching sample 1) is reported as
+  uncovered; the short-time sign/positivity expansion is still the only
+  thing that would cover it.

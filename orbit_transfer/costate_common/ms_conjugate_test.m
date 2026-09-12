@@ -49,6 +49,11 @@ function out = ms_conjugate_test(info, spec)
 %   inconclusive). A zero run reaching the last sample, an unresolved last
 %   determinant, or a last sample short of t_f stays ENDPOINT: the root may
 %   sit at t_f itself, which junction resolution cannot decide.
+% • UNRESOLVED SAMPLES: a live sample whose block has sigma_min/sigma_max
+%   at or below spec.resolvedTol has an untrustworthy sign. If any such
+%   sample exists (including t_f) and no interior root was found, the
+%   verdict is UNDETERMINED, never PASS: a same-sign tiny final determinant
+%   is not evidence of no root (Astra review #2, 2026-09-11).
 % • COVERAGE: without info.Yend a free-time test cannot sample the flow at
 %   t_f and stops at t_K. That is reported as UNDETERMINED, never PASS
 %   (Astra + Gemini reviews 2026-09-11): the final segment is unmonitored.
@@ -138,6 +143,9 @@ function out = ms_conjugate_test(info, spec)
 %   .nEndResolved           double                  Last-bracket crossings
 %                                                   placed strictly inside
 %                                                   (counted in nInterior)
+%   .nUnresolved            double                  Live samples whose sign
+%                                                   is untrustworthy
+%                                                   (sigma ratio <= resolvedTol)
 %   .covered                logical                 Sampled through t_f
 %   .tFirstFullRank         double                  Time of the first full-
 %                                                   rank sample (NaN: never);
@@ -146,13 +154,15 @@ function out = ms_conjugate_test(info, spec)
 %   .kernelRight            double                  max |J p(0)| / (|J||p(0)|)
 %   .kernelLeft             double                  max |p(t)' J| / (|p||J|)
 %   .verdict                char                    'PASS' | 'FAIL' (interior
-%                                                   root) | 'ENDPOINT' (root
-%                                                   only on the last bracket
-%                                                   and not resolvable:
-%                                                   inconclusive, refine) |
+%                                                   root) | 'ENDPOINT' (an
+%                                                   exact-zero run reaching
+%                                                   the last sample: root at
+%                                                   or before t_f, refine) |
 %                                                   'UNDETERMINED' (nothing
-%                                                   testable, or the final
-%                                                   segment not covered)
+%                                                   testable, the final
+%                                                   segment not covered, or
+%                                                   a live sample whose sign
+%                                                   is not trustworthy)
 %   .reason                 char                    One line on the verdict
 %   .pass                   logical                 verdict == 'PASS'
 %   .stateRows/.costateCols/.freeTime               Spec echo (provenance)
@@ -313,6 +323,8 @@ if tested
     end
 end
 atFinal = nEnd > 0;
+nUnres = 0;
+if tested, nUnres = nnz(sigR(live) <= resolvedTol); end
 if ~tested
     verdict = 'UNDETERMINED';  reason = 'no full-rank finite sample to test';
 elseif nIn > 0
@@ -325,6 +337,9 @@ elseif ~covered
     verdict = 'UNDETERMINED';
     reason = sprintf('final segment (%.6g, %.6g] not covered: info.Yend missing', ...
                      info.tGrid(nS+1), info.tGrid(end));
+elseif nUnres > 0
+    verdict = 'UNDETERMINED';
+    reason = sprintf('%d live sample(s) with sigma ratio <= %.0e: sign not trustworthy', nUnres, resolvedTol);
 elseif atFinal
     verdict = 'ENDPOINT';  reason = 'root on the last bracket, not resolvable at junction resolution';
 else
@@ -336,7 +351,7 @@ out = struct('t', info.tGrid(2:nS+1), 'detScaled', dets, 'sigRatio', sigR, ...
              'firstFullRank', kFull, 'tFirstFullRank', tFirstFullRank, 'tested', tested, ...
              'sampledThrough', info.tGrid(nS+1), 'covered', covered, ...
              'nCrossings', nIn + nEnd, 'nInterior', nIn, 'nTouch', nTouch, ...
-             'nEndResolved', nEndResolved, 'atFinal', atFinal, ...
+             'nEndResolved', nEndResolved, 'nUnresolved', nUnres, 'atFinal', atFinal, ...
              'kernelRight', kMax(kernR(live)), 'kernelLeft', kMax(kernL(live)), ...
              'verdict', verdict, 'reason', reason, 'pass', strcmp(verdict, 'PASS'), ...
              'stateRows', rows, 'costateCols', cols, 'freeTime', freeT);

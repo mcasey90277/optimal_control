@@ -3046,3 +3046,44 @@ genuinely new message from the same message with a shifted line number.
 Both of my first test thresholds were wrong, again, and their own failures
 caught them: an absolute bar where rescaling costs one ulp, and a 1e-7
 interpolation bar where a cubic on 60 intervals gives 3e-7.
+
+## 46. The study script's seed lookup becomes two functions, and the third copy goes (2026-09-11)
+
+Mike, reading `transfer_study` section 4: those lines should be a function,
+"maybe just cosmetic, based on my human need for readability". It was not
+cosmetic. That exact construction existed THREE times -- inline in the
+script, as `run_dro_tulip`'s private `seed_of`, and inside
+`build_arrival_sheet`'s seeding loop.
+
+Two layers, because two different things were bundled in those 24 lines:
+
+| unit | owns |
+|---|---|
+| `costate_common/seed_from_entry` | the CONSTRUCTION: a file-backed entry brings its own junction states (reused, final column appended, column 1 pinned to the actual departure state and the entry's costates); a catalog entry carries z8 only and is flown (`seed_from_z8`) |
+| `DRO_tulip/indirect/dro_tulip_seed` | the LOOKUP: exact phase match, the operating point in all six fields, and the refusals |
+
+**The refusal got better by being moved.** The inline version asserted "no
+seed for this operating point and phase pair" for both failures at once, so
+it could not say which had happened. There are now two identifiers --
+`:noSeed` for the phase pair and `:operatingPoint` for the engine -- and the
+test perturbs each of the six fields ALONE to prove each one refuses.
+
+**Why the match stays exact, written into the function's header so it is not
+"fixed" later.** A neighbouring phase would usually converge. At one arrival
+phase this problem carries a ladder of extremals: a sheet column held 14
+candidates, of which the conjugate test refuted 12 (FINDINGS 38). A
+neighbour seed can land on a slower branch and pass every first-order check.
+Walking there properly is `run_dro_tulip`'s job.
+
+The script now reads `4. GET THE SEED` / `5. SOLVE`, and sections 5-8
+renumbered to 6-9 (the N1-N6 / S1-S4 diagnostic IDs are independent of
+section numbers and did not move). Section 4 went from 24 lines to 6, and
+the operating-point check stays VISIBLE in the printed seed line rather than
+disappearing into the function.
+
+Verified: both entry routes bitwise against the inline constructions they
+replace; `test_dro_tulip_seed` (6 checks) and `test_seed_from_entry` (6)
+RED before GREEN; Code Analyzer message-for-message on all three edited
+files, 0 new; the script reaches the same verdicts at the same t_f
+(18.6039 d catalog pair, 17.7976 d anchor) and refuses (0, 0.1) with the new
+message.

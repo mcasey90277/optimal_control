@@ -191,18 +191,13 @@ end
 end
 
 function seed = seed_of(P, B, sD)
-% SEED_OF  ms seed from a library point. A catalog entry carries z8 but no
-% junction states; its seed is rebuilt by flying z8 (seed_from_z8), which
-% puts the seed AT the root.  INPUTS: P; B; sD.  OUTPUTS: seed.
-if isempty(P.Y)
-    rv0 = B.stateD(sD);
-    seed = seed_from_z8(P.z, rv0(1:6), 24, B.Tnd, B.cnd, B.mu);
-    return
-end
-K = size(P.Y, 2);
-seed = struct('tf', P.z(8), 'tGrid', linspace(0, P.z(8), K+1), 'Y', [P.Y, P.Y(:,end)]);
+% SEED_OF  ms seed from a library point, through THE shared builder
+% (costate_common/seed_from_entry): a catalog entry carries z8 only and is
+% flown; a file-backed entry brings its own junction states.
+% INPUTS: P; B; sD.  OUTPUTS: seed.
 rv0 = B.stateD(sD);
-seed.Y(1:7, 1) = [rv0(1:6); 1];  seed.Y(8:14, 1) = P.z(1:7);
+seed = seed_from_entry(P, rv0(1:6), ...
+                       struct('Tnd', B.Tnd, 'cnd', B.cnd, 'muStar', B.mu, 'K', 24));
 end
 
 function P = nearest_point(lib, sD, sA)

@@ -116,7 +116,8 @@ blocks; the front-door functions underneath stay the engine.
 
 | unit | what it does |
 |---|---|
-| `transfer_study.m` | the script; edit the parameter blocks and run |
+| `transfer_study.m` | the script; edit the parameter blocks and run. Section 4 GETS THE SEED, section 5 SOLVES; sections renumbered 2026-09-11 when the seed lookup moved out |
+| `dro_tulip_seed.m` | which certified solution seeds a phase pair, and is it the right engine: an EXACT phase match (never nearest — a neighbour can seed a slower branch that passes every first-order check), the operating point in all six fields, and two distinguishable refusals (`:noSeed`, `:operatingPoint`). Shared by the study script and the front door |
 | `verify_with_pumpkyn.m` | hands our costates to pumpkyn's own solver and shows, component by component, that it does not move them -- with a CONTROL EXPERIMENT in its test proving the check can fail |
 | `report_optimality.m` | the report in three groups (NECESSARY / SUFFICIENCY / CROSS-CHECKS) and four line states (PASS / FAIL / NOT CHECKED / UNRESOLVED); an unchecked line BLOCKS its group, because "every check that ran passed" is vacuously true when none did |
 | `plot_transfer_3d.m` | the rotatable figure; drawn from the SAME flight the script measured (`opts.flight`), every annotation recomputed from it |

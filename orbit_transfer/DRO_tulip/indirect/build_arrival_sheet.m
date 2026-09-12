@@ -62,11 +62,10 @@ seeds = struct([]);
 for k = 1:numel(lib)
     g = mod(lib(k).sA - sA0, 1)*nA;
     if abs(g - round(g)) > 1e-6 && abs(g - nA) > 1e-6, continue, end   % off-grid
-    K = size(lib(k).Y, 2);
-    seed = struct('tf', lib(k).z(8), 'tGrid', linspace(0, lib(k).z(8), K+1), ...
-                  'Y', [lib(k).Y, lib(k).Y(:,end)]);
     rv0 = B.stateD(sD0);
-    seed.Y(1:7,1) = [rv0(1:6); 1];  seed.Y(8:14,1) = lib(k).z(1:7);
+    % THE shared builder (costate_common/seed_from_entry)
+    seed = seed_from_entry(lib(k), rv0(1:6), ...
+                           struct('Tnd', B.Tnd, 'cnd', B.cnd, 'muStar', B.mu, 'K', 24));
     % ONE certification policy for both routes. Seeds used to be certified
     % with a fresh hardcoded struct while opts.copts applied only to
     % crossings, so a stricter requested gate silently did not reach the

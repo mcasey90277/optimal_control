@@ -7,41 +7,44 @@
 %   the H6 margin (V1). Section 7 asserts the inline numbers against that
 %   library for the same reason.
 %
-%   PREREQUISITE. Section 4 needs a converged SEED. The seed library
-%   (dro_tulip_library, with the certified 70 mN catalog included) covers ONE
-%   operating point -- the tau = 1 DRO to the 7-petal tulip (pm = -1) at
-%   70 mN, Isp 900 s, 150 kg -- at its 115 certified phase pairs: the grid
-%   sD = k/12, sA = 0.0754 + j/12, less the cells the catalog does not hold.
-%   For any other case, walk to it first with run_dro_tulip and study its
-%   result here.
+%   PREREQUISITE. The solve needs a converged SEED, and section 4 finds it
+%   (dro_tulip_seed). The certified library covers ONE operating point --
+%   the tau = 1 DRO to the 7-petal tulip (pm = -1) at 70 mN, Isp 900 s,
+%   150 kg -- at its 115 certified phase pairs: the grid sD = k/12,
+%   sA = 0.0754 + j/12, less the cells the catalog does not hold. Anything
+%   else is refused by name, :noSeed for the phase pair and :operatingPoint
+%   for the engine. For any other case, walk to it first with run_dro_tulip
+%   and study its result here.
 %
 %     0  tolerances                       (one source, set before anything runs)
 %     1  generate the DEPARTURE orbit      (family + parameters -> a real orbit)
 %     2  generate the TARGET orbit         (same)
 %     3  engine, phases, endpoints         (nondimensionalisation spelled out)
-%     4  solve                             (seed -> multiple shooting -> costates)
-%     5  independent verification          (a second solver must not move them)
-%     6  NECESSARY conditions              (Pontryagin, one at a time)
-%     7  SUFFICIENCY hypotheses            (Bonnard-Caillau-Trelat, one at a time)
-%     8  interactive 3D plot               (drag to rotate)
+%     4  get the seed                      (which certified solution, and is
+%                                          it the right engine?)
+%     5  solve                             (multiple shooting -> costates)
+%     6  independent verification          (a second solver must not move them)
+%     7  NECESSARY conditions              (Pontryagin, one at a time)
+%     8  SUFFICIENCY hypotheses            (Bonnard-Caillau-Trelat, one at a time)
+%     9  interactive 3D plot               (drag to rotate)
 %
 %   Diagnostic IDs are stable and grouped. N1-N6 are Pontryagin's necessary
 %   conditions. S1-S4 are the hypotheses of the BCT sufficiency theorem. V1-V2
 %   are the validity of the instruments that evaluated them. X1 is a
 %   cross-check of OUR implementation, not a condition of the theory.
 %
-%   Sections 6 and 7 are separate because the theory separates them: the
+%   Sections 7 and 8 are separate because the theory separates them: the
 %   first-order conditions are HYPOTHESES of the sufficiency theorem, not
 %   consequences of it, and the conjugate test is computed ALONG the extremal
 %   -- off one, its determinant means nothing. On this problem 12 of 14
 %   candidates satisfied every first-order condition and were then refuted.
 %
-%   Section 5 is not an optimality condition at all. It guards against OUR
+%   Section 6 is not an optimality condition at all. It guards against OUR
 %   solver: a bug in our shooting could give a self-consistent answer to the
 %   wrong problem, and only a second implementation catches that.
 %
-%   ONE FLIGHT. Section 4 flies the converged costates once, into `flight`;
-%   every number in sections 6-8 and the figure come from that object, so the
+%   ONE FLIGHT. Section 5 flies the converged costates once, into `flight`;
+%   every number in sections 7-9 and the figure come from that object, so the
 %   reader never has to ask which trajectory owns a reported number.
 %
 %  M. Casey                                                   (c) 09/10/2026
@@ -163,40 +166,27 @@ assert(max(seamD.value, seamA.value) < tol.closure && max(seamD.deriv, seamA.der
        'the endpoint interpolant is not periodic across its seam');
 
 %% ========================================================================
-%  4. SOLVE -- seed, then multiple shooting on the PMP boundary-value problem
+%  4. GET THE SEED -- which certified solution starts the solve, and is it
+%     the right engine? Both questions belong together, so they are one
+%     call: dro_tulip_seed matches the phase pair EXACTLY (never nearest --
+%     a neighbouring phase can seed a slower branch that then passes every
+%     first-order check), checks the operating point in all six fields, and
+%     builds the seed through costate_common/seed_from_entry.
+%% ========================================================================
+op = struct('tau', dep.tau, 'Np', arr.Np, 'pm', arr.pm, ...
+            'thrustN', thrustN, 'ispS', ispS, 'm0kg', m0kg, ...
+            'rv0', rv0, 'Tnd', Tnd, 'cnd', cnd, 'muStar', muStar, 'K', 24);
+[seed, seedInfo] = dro_tulip_seed(sD, sA, op);
+
+fprintf('\n4. SEED from the %s entry at (%.4f, %.4f): %d segments, its t_f %.4f d\n', ...
+        seedInfo.src, seedInfo.sD, seedInfo.sA, size(seed.Y, 2) - 1, seedInfo.tfDays);
+fprintf('   operating point checked in all six fields, %d certified pairs on file\n', ...
+        seedInfo.nLibrary);
+
+%% ========================================================================
+%  5. SOLVE -- multiple shooting on the PMP boundary-value problem.
 %     Unknowns: the seven initial costates and the final time.
 %% ========================================================================
-% The seed library was built at ONE operating point. Check the WHOLE of it --
-% period, petal count, branch, thrust, Isp and mass -- not just two of the six,
-% or a seed from a different engine would silently start the solve.
-% The library includes the certified 70 mN CATALOG -- 115 phase pairs, not
-% only the ten solutions kept in the anchor and sweep files.
-lib = dro_tulip_library([], struct('includeCatalog', true));
-match = find(abs([lib.sD] - mod(sD,1)) < 1e-6 & abs([lib.sA] - mod(sA,1)) < 1e-6, 1);
-libOp = struct('tau', 1.0, 'Np', 7, 'pm', -1, 'thrustN', 0.070, 'ispS', 900, 'm0kg', 150);
-sameOp = abs(dep.tau - libOp.tau) < 1e-12 && arr.Np == libOp.Np && arr.pm == libOp.pm && ...
-         abs(thrustN - libOp.thrustN) < 1e-12 && abs(ispS - libOp.ispS) < 1e-9 && ...
-         abs(m0kg - libOp.m0kg) < 1e-9;
-assert(~isempty(match) && sameOp, 'transfer_study:noSeed', '%s', sprintf( ...
-    ['no seed for this operating point and phase pair. The library covers the\n' ...
-     'tau = 1 DRO to the 7-petal tulip (pm = -1) at 70 mN, Isp 900 s, 150 kg, at\n' ...
-     'its 115 certified phase pairs (sD = k/12, sA = 0.0754 + j/12). For any other\n' ...
-     'case, walk to it with   T = run_dro_tulip(sD, sA, opts)   and study T here.']));
-
-if isempty(lib(match).Y)
-    % a CATALOG entry stores z8 but no junction states: fly z8 once and cut
-    % the flight into junctions (seed_from_z8), which puts the seed AT the root
-    seed = seed_from_z8(lib(match).z, rv0(1:6), 24, Tnd, cnd, muStar);
-else
-    K = size(lib(match).Y, 2);
-    seed = struct('tf', lib(match).z(8), 'tGrid', linspace(0, lib(match).z(8), K+1), ...
-                  'Y', [lib(match).Y, lib(match).Y(:,end)]);
-    seed.Y(1:7,1) = [rv0(1:6); 1];   seed.Y(8:14,1) = lib(match).z(1:7);
-end
-fprintf('\n4. SEED from the %s entry at phase pair (%.4f, %.4f), %d segments\n', ...
-        lib(match).src, lib(match).sD, lib(match).sA, size(seed.Y, 2) - 1);
-
-% Multiple-Shooting min-time solve
 [z8, it] = ms_tfmin(rv0(1:6), rvf(1:6), seed, Tnd, cnd, muStar, ...
                     struct('tolR', 3e-11, 'wallSec', 600, 'conjTest', true));
 
@@ -218,7 +208,7 @@ assert(VF.ok, 'the flight is inadmissible: %s', VF.reason);
 flight.admissibility = VF;
 mf = flight.Y(end,7);
 dV = cnd*log(1/mf)*lStar/tStar;
-fprintf('\n4. SOLVED: %d Newton iterations, |R| = %.2e, converged = %d\n', ...
+fprintf('\n5. SOLVED: %d Newton iterations, |R| = %.2e, converged = %d\n', ...
         it.iters, it.normR, it.converged);
 fprintf('   t_f = %.6f ND (%.4f d)   Delta-V = %.4f km/s   propellant %.2f kg\n', ...
         z8(8), day(z8(8)), dV, m0kg*(1-mf));
@@ -227,7 +217,7 @@ fprintf('   flight: %d samples, %s; closest approach %.0f km (Moon) / %.0f km (E
         flight.nSamples, VF.reason, VF.moonKm, VF.earthKm);
 
 %% ========================================================================
-%  5. INDEPENDENT VERIFICATION -- a second solver must not move the costates,
+%  6. INDEPENDENT VERIFICATION -- a second solver must not move the costates,
 %     and its own answer must fly to the target too.
 %% ========================================================================
 B = struct('problem', struct('lStar', lStar, 'tStar', tStar, 'muStar', muStar, ...
@@ -238,9 +228,9 @@ V = verify_with_pumpkyn(struct('z', z8, 'sD', sD, 'sA', sA), B, ...
                         struct('tolDz', tol.dz, 'gateKm', tol.km, 'gateVms', tol.ms));
 
 %% ========================================================================
-%  6. NECESSARY CONDITIONS (Pontryagin, first order) -- one at a time
+%  7. NECESSARY CONDITIONS (Pontryagin, first order) -- one at a time
 %% ========================================================================
-fprintf('\n6. NECESSARY CONDITIONS      (value / threshold)\n');
+fprintf('\n7. NECESSARY CONDITIONS      (value / threshold)\n');
 tf = flight.t(end);
 Yf = flight.Y;   tfl = flight.t;
 lamV = Yf(:, 11:13);   lamM = Yf(:, 14);   mass = Yf(:, 7);
@@ -341,11 +331,11 @@ fprintf('   X1 cross-check    second solver |dz| %6.2e / %-7.0e, its flight %.4f
 crossCheck = V.ok;
 
 %% ========================================================================
-%  7. SUFFICIENCY HYPOTHESES (Bonnard-Caillau-Trelat) -- one at a time
+%  8. SUFFICIENCY HYPOTHESES (Bonnard-Caillau-Trelat) -- one at a time
 %     With section 6, these give a strict STRONG local minimizer among
 %     trajectories with the same endpoints.
 %% ========================================================================
-fprintf('\n7. SUFFICIENCY HYPOTHESES\n');
+fprintf('\n8. SUFFICIENCY HYPOTHESES\n');
 
 % S1  strengthened Legendre. For a direction on the unit sphere the second
 %     derivative of H in the control, restricted to that sphere, is
@@ -448,13 +438,13 @@ else
 end
 
 %% ========================================================================
-%  8. INTERACTIVE 3D PLOT  (drag to rotate, scroll to zoom) -- drawn from the
+%  9. INTERACTIVE 3D PLOT  (drag to rotate, scroll to zoom) -- drawn from the
 %     SAME flight as every number above.
 %% ========================================================================
 T = struct('z', z8, 'sD', sD, 'sA', sA, 'tfDays', day(z8(8)), 'dvKms', dV, ...
            'propellantKg', m0kg*(1-mf), 'finalMassKg', m0kg*mf);
 P = plot_transfer_3d(T, B, struct('flight', flight));
-fprintf('\n8. Figure %d is rotatable (flight supplied: %d).\n', P.fig.Number, P.flightSupplied);
+fprintf('\n9. Figure %d is rotatable (flight supplied: %d).\n', P.fig.Number, P.flightSupplied);
 
 %% ------------------------------------------------------------------------
 function s = pass(c)

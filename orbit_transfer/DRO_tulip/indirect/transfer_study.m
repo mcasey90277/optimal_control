@@ -225,10 +225,18 @@ V = verify_with_pumpkyn(struct('z', z8, 'sD', sD, 'sA', sA), B, ...
 %  7. NECESSARY CONDITIONS (Pontryagin, first order) -- one at a time
 %% ========================================================================
 fprintf('\n7. NECESSARY CONDITIONS      (value / threshold)\n');
+% THE production instrument -- the same call certify_root makes on every
+% certified entry: H along the arc, transversality, the adjoint equations
+% and the exact minimum-principle gap of the control the propagator applied.
+% The script used to recompute all four and compare (V2); that comparison
+% measured 0.0e+00, because a copy of the same arithmetic on the same
+% samples is not an independent implementation. Running the instrument the
+% catalogs are certified with is the stronger statement.
+PW = pmp_pointwise_checks(flight.t, flight.Y, Tnd, cnd, muStar);
+
 tf = flight.t(end);
 Yf = flight.Y;   tfl = flight.t;
-lamV = Yf(:, 11:13);   lamM = Yf(:, 14);   mass = Yf(:, 7);
-lamVmag = vecnorm(lamV, 2, 2);                % |lambda_v|, the Legendre quantity
+lamVmag = vecnorm(Yf(:, 11:13), 2, 2);        % |lambda_v|, the Legendre quantity (S1)
 
 % N1  the boundary-value residual: costate equations, terminal matching,
 %     transversality. This IS the statement that the first variation vanishes.
@@ -239,23 +247,17 @@ fprintf('   N1 BVP residual   |R|_inf   %9.2e / %-9.0e  %s\n', resid, tol.R, pas
 
 % N2  the Hamiltonian. Autonomous problem, free final time  =>  H == 0.
 %     H = 1 + lam_r.v + lam_v.(g + (T/m) alpha) - lam_m T/c,  alpha = -lam_v/|lam_v|
-Hval = zeros(size(tfl));
-for k = 1:numel(tfl)
-    F = mintime_rhs_point(Yf(k,:).', Tnd, cnd, muStar);     % [xdot; lamdot]
-    Hval(k) = 1 + Yf(k,8:14)*F(1:7);
-end
-Hmax = max(abs(Hval));
-fprintf('   N2 Hamiltonian    max|H|    %9.2e / %-9.0e  %s\n', Hmax, tol.H, pass(Hmax < tol.H));
+fprintf('   N2 Hamiltonian    max|H|    %9.2e / %-9.0e  %s\n', PW.Hmax, tol.H, pass(PW.Hmax < tol.H));
 
-% N3  the flight actually reaches the target, in position AND velocity
-missKm  = norm(Yf(end,1:3) - rvf(1:3)')*lStar;
-missVms = norm(Yf(end,4:6) - rvf(4:6)')*lStar/tStar*1000;
+% N3  the flight actually reaches the target, in position AND velocity.
+%     fly_transfer measured this in section 5 from the same flight; there is
+%     no second copy of the formula here.
 fprintf('   N3 arrival        %.4f km / %-4.0f km, %.4f m/s / %-3.0f m/s  %s\n', ...
-        missKm, tol.km, missVms, tol.ms, pass(missKm < tol.km && missVms < tol.ms));
+        flight.flyKm, tol.km, flight.flyVms, tol.ms, ...
+        pass(flight.flyKm < tol.km && flight.flyVms < tol.ms));
 
 % N4  transversality on the free mass: lam_m(t_f) = 0
-lamMf = abs(Yf(end,14));
-fprintf('   N4 transversality |lam_m(t_f)| %6.2e / %-9.0e  %s\n', lamMf, tol.lamm, pass(lamMf < tol.lamm));
+fprintf('   N4 transversality |lam_m(t_f)| %6.2e / %-9.0e  %s\n', PW.lamMf, tol.lamm, pass(PW.lamMf < tol.lamm));
 
 % N5  the ADJOINT equations themselves: lambda-dot = -dH/dx. A small shooting
 %     residual says the pieces MATCH each other; it does not say the costate
@@ -264,30 +266,8 @@ fprintf('   N4 transversality |lam_m(t_f)| %6.2e / %-9.0e  %s\n', lamMf, tol.lam
 %     (Richardson) and compare with the costate rate the field returns.
 %     Differencing the propagator's OUTPUT instead measures its sample
 %     spacing: on this arc that read 5e-4, all truncation at the lunar pass.
-kk = unique(round(linspace(2, numel(tfl)-1, 120)));
-hRel = 1e-6;  adjErr = 0;  fdAgree = 0;
-for k = kk
-    yk = Yf(k,:).';   lam = yk(8:14);
-    F  = mintime_rhs_point(yk, Tnd, cnd, muStar);
-    h1 = hRel*max(1, abs(yk(1:7)));
-    g1 = zeros(7,1);  g2 = zeros(7,1);
-    for jj = 1:7
-        for step = 1:2
-            h = h1(jj)/step;
-            yp = yk;  yp(jj) = yp(jj) + h;
-            ym = yk;  ym(jj) = ym(jj) - h;
-            Fp = mintime_rhs_point(yp, Tnd, cnd, muStar);
-            Fm = mintime_rhs_point(ym, Tnd, cnd, muStar);
-            gj = (lam.'*Fp(1:7) - lam.'*Fm(1:7))/(2*h);
-            if step == 1, g1(jj) = gj; else, g2(jj) = gj; end
-        end
-    end
-    gR = (4*g2 - g1)/3;
-    adjErr  = max(adjErr,  norm(F(8:14) + gR)/max(norm(gR), 1));
-    fdAgree = max(fdAgree, norm(g1 - g2)/max(norm(gR), 1));
-end
-fprintf('   N5 adjoint eqns   rel err   %9.2e / %-9.0e  %s   (FD steps agree to %.1e)\n', ...
-        adjErr, tol.adj, pass(adjErr < tol.adj), fdAgree);
+fprintf('   N5 adjoint eqns   rel err   %9.2e / %-9.0e  %s   (%d samples; FD steps agree to %.1e)\n', ...
+        PW.adjErr, tol.adj, pass(PW.adjErr < tol.adj), PW.nSample, PW.fdAgree);
 
 % N6  the MINIMUM principle, EXACTLY, for the control the propagator APPLIED.
 %     H is affine in the direction alpha with coefficient (T/m) lam_v, so its
@@ -299,22 +279,14 @@ fprintf('   N5 adjoint eqns   rel err   %9.2e / %-9.0e  %s   (FD steps agree to 
 %     which is zero exactly when the applied direction is the minimiser. The
 %     throttle enters H linearly with slope -T Q, Q = |lam_v|/m + lam_m/c, so
 %     u = 1 minimises H iff Q >= 0 (weak, necessary); S2 asks for Q > 0.
-dirGap = 0;  throttleErr = 0;
-for k = kk
-    yk = Yf(k,:).';   m = yk(7);   lv = yk(11:13);
-    F  = mintime_rhs_point(yk, Tnd, cnd, muStar);
-    F0 = mintime_rhs_point(yk, 0,   cnd, muStar);
-    alphaApplied = (F(4:6) - F0(4:6))*m/Tnd;               % u * alpha as flown
-    throttleErr  = max(throttleErr, abs(norm(alphaApplied) - 1));
-    dirGap = max(dirGap, (Tnd/m)*(lv.'*alphaApplied + norm(lv)));
-end
-Qmt = lamVmag./mass + lamM/cnd;
+Qmt = PW.Qmt;                                            % S2 reads it again
 fprintf('   N6 min principle  gap       %9.2e / %-9.0e  %s   (throttle 1 to %.1e; min Q = %.3f >= 0 %s)\n', ...
-        dirGap, tol.gap, pass(dirGap <= tol.gap && throttleErr < 1e-10), throttleErr, min(Qmt), pass(min(Qmt) >= 0));
+        PW.dirGap, tol.gap, pass(PW.dirGap <= tol.gap && PW.throttleErr < 1e-10), ...
+        PW.throttleErr, PW.minQmt, pass(PW.minQmt >= 0));
 
-necessary = resid < tol.R && Hmax < tol.H && missKm < tol.km && missVms < tol.ms && ...
-            lamMf < tol.lamm && adjErr < tol.adj && dirGap <= tol.gap && ...
-            throttleErr < 1e-10 && min(Qmt) >= 0;
+necessary = resid < tol.R && PW.Hmax < tol.H && flight.flyKm < tol.km && ...
+            flight.flyVms < tol.ms && PW.lamMf < tol.lamm && PW.adjErr < tol.adj && ...
+            PW.dirGap <= tol.gap && PW.throttleErr < 1e-10 && PW.minQmt >= 0;
 
 % X1  the independent solve is NOT one of the above: it is a cross-check on
 %     our implementation, reported apart and excluded from `necessary`, but
@@ -383,18 +355,23 @@ else
     fprintf('   V1 H6 validity   NOT CHECKED (the gates returned no margin): S4 is not interpretable\n');
 end
 
-% V2  CONSISTENCY of the inline numbers with the library instruments. Exposing
-%     the scaffolding risks growing a second, unverified implementation of the
-%     tests; this binds the two -- and runs BEFORE any verdict is printed.
-PW = pmp_pointwise_checks(flight.t, flight.Y, Tnd, cnd, muStar);
+% V2  CONSISTENCY of the two quantities this section still computes itself
+%     (S1's min|lam_v| and S2's min Q) with the gates that judge them. The
+%     rest of the checks ARE the library instruments now: N2/N4/N5/N6 are
+%     pmp_pointwise_checks, S3/V1 are mintime_hypothesis_gates, S4 is the
+%     conjugate test. The old V2 compared the script's own copy of those
+%     instruments with the originals and measured 0.0e+00 -- the same
+%     arithmetic on the same samples, which is a copy, not a second opinion.
+% A WIRING check, and worth calling it that. Both instruments fly the same
+% trajectory with the same settings, so this agrees to 0.0e+00 and cannot
+% detect an implementation divergence -- what it CAN catch is the script
+% handing one of them the wrong flight, thrust or exhaust speed, which is
+% the mistake that actually happens when a section is edited.
 agreeErr = max([abs(minLamV - gates.minLamV)/max(gates.minLamV, 1), ...
-                abs(min(Qmt) - gates.minQmt)/max(gates.minQmt, 1), ...
-                abs(Hmax - PW.Hmax)/max(PW.Hmax, 1e-9), ...
-                abs(adjErr - PW.adjErr)/max(PW.adjErr, 1e-9), ...
-                abs(dirGap - PW.dirGap)]);
+                abs(PW.minQmt - gates.minQmt)/max(gates.minQmt, 1)]);
 assert(agreeErr < tol.agree, ...
-       'the inline checks disagree with the library instruments (worst %.1e)', agreeErr);
-fprintf('   V2 consistency   inline S1/S2/N2/N5/N6 vs library instruments, worst %.1e / %.0e  %s\n', ...
+       'S1/S2 disagree with the gates that judge them (worst %.1e)', agreeErr);
+fprintf('   V2 consistency   S1/S2 vs the hypothesis gates, worst %.1e / %.0e  %s\n', ...
         agreeErr, tol.agree, pass(agreeErr < tol.agree));
 
 sufficient = minLamV > 0 && min(Qmt) > 0 && gates.dimS == 1 && strcmp(s4Status, 'PASS') && ...

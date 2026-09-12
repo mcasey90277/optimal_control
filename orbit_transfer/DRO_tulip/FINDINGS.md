@@ -3119,3 +3119,41 @@ first "inadmissible flight" check scaled the costates by 3 -- but the
 min-time direction is invariant under a positive scaling, so the flight
 stayed admissible and the check passed for the wrong reason. Flying past
 mass depletion is the real refusal, and the validator names it.
+
+### Addendum: section 7 runs the production instrument, and V2's "second opinion" was a copy (2026-09-11)
+
+Mike asked for the four necessary-condition blocks to become named
+functions, then asked the better question: "if we have
+`pmp_pointwise_checks` in the library, why are we not using it?"
+
+We were -- in `certify_root` on every certified entry, and in the script at
+V2. The script ALSO kept its own copy of the same four computations, and V2
+compared them. **V2 measured 0.0e+00.** Not "agrees to 1e-14": exactly zero,
+because a copy of the same arithmetic on the same samples is not an
+independent implementation. The duplication was buying readable math, not
+cross-validation.
+
+So section 7 now calls the instrument the catalogs are certified with, and
+prints its numbers. Every value is unchanged (N1 1.41e-09, N2 3.32e-08,
+N3 0.0000 km, N4 7.76e-10, N5 3.75e-10 over 120 samples, N6 7.47e-15), which
+is the point: the script did not lose a check, it stopped keeping a mirror.
+
+Three smaller things fell out:
+
+- **N3 needed no function at all.** `fly_transfer` measured the flown
+  arrival in section 5; the script now reads `flight.flyKm` instead of
+  recomputing the norm. One fewer copy of that formula.
+- **V2 is relabelled for what it is: a WIRING check.** Both instruments fly
+  the same trajectory with the same settings, so it agrees to 0.0e+00 and
+  cannot see an implementation divergence. What it can catch is the script
+  handing one of them the wrong flight or the wrong thrust, which is the
+  mistake that actually happens when a section is edited.
+- **The generic question, answered precisely.** `pmp_pointwise_checks` is
+  already generic across PROBLEMS (the field is injectable, and it runs on
+  every campaign). It is not generic across OBJECTIVES: min-time's running
+  cost of 1, the free-time H == 0, and the all-burn control recovery are
+  baked in, so the min-energy and min-fuel entries have no pointwise check
+  at all. Injecting the running cost and control law is recorded in
+  `costate_common/TODO.md` as new capability.
+
+The script is 63 lines shorter on this pass (429 total).

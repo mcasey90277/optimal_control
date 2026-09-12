@@ -48,6 +48,19 @@
   (all-burn identity) is an option there, so the DERIVED-not-rescaled rule
   has one home. Gate: bitwise equal to the engines' inline form on a real
   flight; `golden_cells` covers `seed_from_z8`'s 3e-13 query-form shift.
+- [ ] **Pointwise PMP checks for the FIXED-t_f objectives** (2026-09-11,
+  Mike's question "can these be library generic functions?"). `pmp_pointwise_checks`
+  already injects the vector field (`opts.rhs`), so it is generic across
+  PROBLEMS -- it runs on every certified entry in DRO/HALO/DPO/HALO_HALO/GTO.
+  It is NOT generic across OBJECTIVES: it hardcodes the min-time running cost
+  (H = 1 + lambda.f), the free-time consequence H == 0, and the all-burn
+  control recovery. So the min-energy and min-fuel catalog entries have NO
+  pointwise check at all -- they carry the conjugate verdict and the
+  hypothesis gates only. The fix is to inject the running cost and the
+  optimal-control law the way the field already is (H constant rather than
+  zero at fixed t_f; the smoothed argmin instead of bang). New capability,
+  not a refactor; gate it on the min-fuel catalog's 18 entries.
+
 - [ ] **Propulsion conversion: the sites NOT migrated, and why.**
   `cr3bp_common/cr3bp_lt_params` and the GTO `direct/` and `indirect/`
   campaign scripts still hold their own copies, because those modules do

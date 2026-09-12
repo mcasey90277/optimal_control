@@ -3558,3 +3558,87 @@ that rule is a change to every stored entry, however small it looks: this one
 was invisible in every direct measurement of the interpolant (the endpoint is
 within 0.4 m of the orbit by propagation) and only appeared after 26 days of
 amplification.
+
+## 51. The re-sweep, read out: no zeros anywhere, and eight entries the instrument declines to clear AT t_f (2026-09-12)
+
+The 70 mN library re-swept with the resolved classifier (FINDINGS 49), on the
+repaired ribs (FINDINGS 50). `CHAIN CLEAN`, 114 entries audited 114 OK,
+census complete, written back. Sweep wall time 3 h 40 m, about 2 minutes an
+entry against the old classifier's seconds -- the cost of locating every
+candidate instead of reading a plateau.
+
+### The census
+
+| measure | shipped (plateau rule) | rebuilt (resolved) |
+|---|---|---|
+| entries | 115 | 114 (column 10 lost both candidates, FINDINGS 50) |
+| interior sign changes | 0 | **0** |
+| located ZEROS | -- | **0** |
+| multiplicity | 0 | **0** |
+| cells with interior candidates | 42 (near-miss) | **109**, up to 7 each |
+| cells with a cleared near-miss | 42 | **111** |
+| cells UNRESOLVED | n/a | **8** |
+| junction conjugate test | 115/115 PASS | 114/114 PASS |
+| worst H6 / worst lift margin | 4.5x / 22x | 4.54x / 22x |
+
+**The scan now finds far more candidates and clears nearly all of them.** 109
+cells carry interior candidates against the old 42, because the coarse
+LOCAL-MINIMUM rule added in FINDINGS 49 catches V-shaped dips that the depth
+threshold alone missed -- the very blind spot the synthetic tests exposed.
+Every one of them resolves to a located positive minimum. No entry in the
+library produces a zero, an interior sign change, or a multiplicity event.
+
+### The eight
+
+All eight unresolved cells are the same phenomenon, and it is not scattered:
+
+| cell | located minimum / median | t/t_f |
+|---|---|---|
+| (3,11) | 9.3e-07 | 1.0000 |
+| (4,11) | 1.5e-06 | 1.0000 |
+| (5,11) | 2.6e-06 | 1.0000 |
+| (6,11) | 3.4e-06 | 1.0000 |
+| (7,11) | 4.5e-06 | 1.0000 |
+| (8,11) | 6.6e-06 | 1.0000 |
+| (9,11) | 6.4e-06 | 1.0000 |
+| (10,11) | 8.0e-06 | 1.0000 |
+
+Every one is in arrival column 11 (sA 0.9087), the longest arcs in the library
+at 26.4 to 27.7 days; every one is an ENDPOINT candidate whose minimum sits
+exactly at t_f; and every one lands inside the floor band -- above the
+zeroFloor of 1e-7, below the clear threshold of 100x that. The values rise
+monotonically with departure index, which is the signature of a systematic
+effect rather than eight independent near-conjugacies.
+
+**This is the graded-endpoint collapse the instrument has always known about.**
+`conj_spectrum`'s own header records the measurement: at t_f the hyperbolic
+flow grades the whole spectrum down together, and a certified entry and a
+refuted one measured sigma_min 1.37e-7 and 1.39e-7 there -- the endpoint value
+does not discriminate. The old code therefore classified endpoint clusters and
+never refined them. Astra's third review called that exclusion unsound (a real
+even-order zero is not harmless for lying in the last segment), so they are
+now refined -- and refinement lands them in the band where the floor cannot
+separate grading from a zero. UNRESOLVED is the honest verdict: **not a
+refutation, and not a pass.** The junction sign test still says PASS on all
+114, and no interior structure appears anywhere.
+
+### What this makes urgent
+
+Open item 8 of the Astra-3 list -- a floor derived from a MEASURED error in
+the scaled matrix rather than a policy value -- was a tidiness item this
+morning. It is now the difference between a library that certifies 114 of 114
+and one that certifies 106. The measurement to make is the error in the
+projected matrix at t_f, from re-propagating from t = 0 at a tighter setting
+or with a different integrator: if it is ~1e-5 of the median, these eight are
+unresolvable in principle at this precision and must be reported so; if it is
+~1e-9, a calibrated floor clears them and the library is uniform.
+
+A second, cheaper discriminator is worth testing alongside: a located minimum
+sitting exactly AT the interval endpoint with a monotone approach is what
+grading looks like, whereas a conjugate point has its minimum strictly inside.
+That distinction is suggestive, not decisive -- a conjugate point at t_f is
+possible, and is what the junction test's retired ENDPOINT verdict used to
+flag -- so it cannot be used to clear an entry on its own.
+
+Nothing ships until one of those closes. The catalog carries the verdicts;
+the deliverable stage was off.

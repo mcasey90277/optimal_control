@@ -82,10 +82,42 @@ o = base;  o.conjOpts = struct('clearFactor', 1e12);
 Cd = certify_root(seed, rv0(1:6), rvf(1:6), B, o);
 ok = chk(ok, ~Cd.ok && contains(Cd.reason, 'UNRESOLVED') && isstruct(Cd.conjDense) && Cd.conjDense.nUnresolved >= 1, ...
          sprintf('an unresolved scan candidate blocks: %s', Cd.reason));
-% (e) the dense scan switched off is honoured but visible
+% (e) the dense scan switched off is a DIAGNOSTIC result, not a certificate
 o = base;  o.conjSpectrum = false;
 Ce = certify_root(seed, rv0(1:6), rvf(1:6), B, o);
-ok = chk(ok, Ce.ok && isempty(Ce.conjDense), 'conjSpectrum = false: certifies, and conjDense is empty (not a silent pass)');
+ok = chk(ok, ~Ce.ok && Ce.okDiagnostic && ~Ce.fullStack && contains(Ce.reason, 'DIAGNOSTIC'), ...
+         sprintf('conjSpectrum = false: ok = %d, okDiagnostic = %d (%s)', Ce.ok, Ce.okDiagnostic, Ce.reason));
+ok = chk(ok, C0.fullStack && C0.okDiagnostic, 'and the full run reports fullStack = true');
+
+% ---- the TEST SEAM: each gate made the FIRST failing one, and malformed data --
+% (Astra review #3: an empty value skips `if ~(x <= tol)`, a vector with one
+% passing element skips it too, max() drops a NaN, -Inf passes an upper bound)
+warning('off', 'certify_root:override');
+seam = { ...
+    struct('PW', struct('fullGap', []))           , 'malformed',   'PW.fullGap = []';
+    struct('PW', struct('fieldGap', [0 Inf]))     , 'malformed',   'PW.fieldGap = [0 Inf]';
+    struct('PW', struct('adjErr', -Inf))          , 'malformed',   'PW.adjErr = -Inf';
+    struct('PW', struct('throttleMassErr', NaN))  , 'malformed',   'PW.throttleMassErr = NaN';
+    struct('PW', struct('nSample', 0))            , 'no interior', 'PW.nSample = 0';
+    struct('PW', struct('nonfinite', 3))          , 'non-finite',  'PW.nonfinite = 3';
+    struct('PW', struct('fieldGap', 1e-3))        , 'full gap',    'PW.fieldGap = 1e-3 (field gap alone)';
+    struct('PW', struct('throttleMassErr', 1e-3)) , 'throttle',    'PW.throttleMassErr = 1e-3 (mass row alone)';
+    struct('g',  struct('adjErrRef', 1e-3))       , 'adjoint rows','g.adjErrRef = 1e-3';
+    struct('g',  struct('Hresid', 1e-3))          , 'Hamiltonian residual', 'g.Hresid = 1e-3';
+    struct('g',  struct('nullResidRel', 1e-3))    , 'backward error', 'g.nullResidRel = 1e-3';
+    struct('g',  struct('fieldErr', NaN))         , 'malformed',   'g.fieldErr = NaN';
+    struct('g',  struct('Hresid', -1))            , 'malformed',   'g.Hresid = -1';
+    struct('LM', struct('certified', 'yes'))      , 'lift_margin', 'LM.certified = ''yes''';
+    struct('CS', struct('nZero', -1))             , 'malformed',   'CS.nZero = -1';
+    struct('CS', struct('clear', true, 'nUnresolved', 1)), 'inconsistent', 'CS.clear = true with nUnresolved = 1';
+    struct('CS', struct('clear', 1))              , 'malformed',   'CS.clear = 1 (double, not logical)'};
+for k = 1:size(seam, 1)
+    o = base;  o.override = seam{k,1};
+    Ck = certify_root(seed, rv0(1:6), rvf(1:6), B, o);
+    ok = chk(ok, ~Ck.ok && contains(lower(Ck.reason), lower(seam{k,2})), ...
+             sprintf('%-45s -> refused naming it: %s', seam{k,3}, Ck.reason));
+end
+warning('on', 'certify_root:override');
 
 if ok, fprintf('TEST_CERTIFY_ENFORCEMENT: ALL PASS\n'); else, fprintf('TEST_CERTIFY_ENFORCEMENT: FAIL\n'); end
 end

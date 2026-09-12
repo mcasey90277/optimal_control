@@ -40,20 +40,25 @@ function out = ms_conjugate_test(info, spec)
 %   structurally zero (sigma_min/sigma_max <= spec.rankTol [1e-13]);
 %   those samples are skipped, .firstFullRank reports where testing
 %   starts. (Review 2026-09-05: the old code counted them as focal points.)
-% • A sign change on the bracket ending at the last sample: if that sample
-%   is t_f AND its determinant is RESOLVED (sigma_min/sigma_max above
-%   spec.resolvedTol, so its sign is trustworthy), then opposite nonzero
-%   signs put the zero STRICTLY inside (t_K, t_f) -- a conjugate point, and
-%   the verdict is FAIL (Astra review 2026-09-11; the earlier rule called
-%   every last-bracket crossing ENDPOINT, which was unnecessarily
-%   inconclusive). A zero run reaching the last sample, an unresolved last
-%   determinant, or a last sample short of t_f stays ENDPOINT: the root may
-%   sit at t_f itself, which junction resolution cannot decide.
-% • UNRESOLVED SAMPLES: a live sample whose block has sigma_min/sigma_max
-%   at or below spec.resolvedTol has an untrustworthy sign. If any such
-%   sample exists (including t_f) and no interior root was found, the
-%   verdict is UNDETERMINED, never PASS: a same-sign tiny final determinant
-%   is not evidence of no root (Astra review #2, 2026-09-11).
+% • A sign change on the bracket ending at t_f between two TRUSTED signs
+%   puts the zero strictly inside (t_K, t_f): a conjugate point, FAIL
+%   (Astra review #2, 2026-09-11; the earlier rule called every last-
+%   bracket crossing ENDPOINT). An untrusted final sign is an unresolved
+%   sample: UNDETERMINED.
+% • TRUSTED SIGNS FIRST (Astra review #3, 2026-09-11): every live sample is
+%   classified trusted-positive, trusted-negative or UNRESOLVED (sigma ratio
+%   at or below spec.resolvedTol, or an exact/tolerance zero) BEFORE any
+%   root is counted. A root is a bracket of opposite TRUSTED signs, with any
+%   unresolved samples between them skipped; equal trusted signs around
+%   unresolved samples establish nothing (no "touch" is counted). An
+%   unresolved sample among the live ones makes the verdict UNDETERMINED
+%   unless a trusted bracket already refutes; a same-sign tiny final
+%   determinant is not evidence of no root.
+% • KERNEL IDENTITIES ARE GATES: when the scaling quotient is in use, the
+%   two identities J p(0) = 0 and p(t)'J = 0 must hold to spec.kernelTol
+%   [1e-8]; a violation means the block is inconsistent with the assumed
+%   invariance and its determinant is not interpretable -> UNDETERMINED,
+%   never a refutation. .kernelChecked says whether they were available.
 % • COVERAGE: without info.Yend a free-time test cannot sample the flow at
 %   t_f and stops at t_K. That is reported as UNDETERMINED, never PASS
 %   (Astra + Gemini reviews 2026-09-11): the final segment is unmonitored.
@@ -107,12 +112,13 @@ function out = ms_conjugate_test(info, spec)
 %   .zeroTol                double                  |detScaled| at or below
 %                                                   which a sample counts as
 %                                                   an exact zero [0]
-%   .resolvedTol            double                  sigma_min/sigma_max of
-%                                                   the LAST sample above
-%                                                   which its sign is
-%                                                   trusted, so a last-
-%                                                   bracket crossing is an
-%                                                   interior root [1e-10]
+%   .resolvedTol            double                  sigma_min/sigma_max
+%                                                   above which a sample's
+%                                                   determinant sign is
+%                                                   TRUSTED [1e-10]
+%   .kernelTol              double                  bound on the two
+%                                                   quotient identities
+%                                                   [1e-8]
 %
 %% Outputs:
 %
@@ -132,14 +138,11 @@ function out = ms_conjugate_test(info, spec)
 %                                                   (interior + endpoint)
 %   .nInterior              double                  Roots strictly before
 %                                                   the last bracket
-%   .nTouch                 double                  Isolated zero runs
-%                                                   (even-multiplicity
-%                                                   touches), included in
-%                                                   nInterior
-%   .atFinal                logical                 A root on the bracket
-%                                                   ending at the last sample
-%                                                   that could NOT be placed
-%                                                   strictly inside it
+%   .nTouch                 double                  Unresolved runs between
+%                                                   EQUAL trusted signs
+%                                                   (reported; not roots)
+%   .atFinal                logical                 The last sample (t_f)
+%                                                   has an untrusted sign
 %   .nEndResolved           double                  Last-bracket crossings
 %                                                   placed strictly inside
 %                                                   (counted in nInterior)
@@ -153,16 +156,16 @@ function out = ms_conjugate_test(info, spec)
 %                                                   uncovered
 %   .kernelRight            double                  max |J p(0)| / (|J||p(0)|)
 %   .kernelLeft             double                  max |p(t)' J| / (|p||J|)
-%   .verdict                char                    'PASS' | 'FAIL' (interior
-%                                                   root) | 'ENDPOINT' (an
-%                                                   exact-zero run reaching
-%                                                   the last sample: root at
-%                                                   or before t_f, refine) |
+%   .kernelChecked          logical                 Identities available
+%   .kernelOk               logical                 Both within kernelTol
+%   .verdict                char                    'PASS' | 'FAIL' (a root
+%                                                   between trusted signs) |
 %                                                   'UNDETERMINED' (nothing
-%                                                   testable, the final
-%                                                   segment not covered, or
-%                                                   a live sample whose sign
-%                                                   is not trustworthy)
+%                                                   testable, a quotient
+%                                                   identity violated, the
+%                                                   final segment not
+%                                                   covered, or an unresolved
+%                                                   live sample)
 %   .reason                 char                    One line on the verdict
 %   .pass                   logical                 verdict == 'PASS'
 %   .stateRows/.costateCols/.freeTime               Spec echo (provenance)
@@ -203,6 +206,7 @@ end
 
 rankTol = fieldd(spec, 'rankTol', 1e-13);
 resolvedTol = fieldd(spec, 'resolvedTol', 1e-10);
+kernelTol = fieldd(spec, 'kernelTol', 1e-8);
 
 % Chain ALL K segment STMs: samples at t_2 .. t_{K+1} = t_f (review
 % 2026-09-05: the old loop stopped at t_K and left the final segment
@@ -276,62 +280,49 @@ tested = ~isempty(live) && ~any(isnan(dets(live)));
 tFirstFullRank = NaN;
 if kFull <= nS, tFirstFullRank = info.tGrid(kFull + 1); end
 
-% ROOT COUNTING on the live samples (Astra review #2): classify each sample
-% as +, - or 0 (exact zero, or |detScaled| <= spec.zeroTol); merge runs of
-% zeros; a zero run between opposite signs is ONE root (the crossing), an
-% isolated zero run (same sign both sides, or at an end) is one touch/root.
-% A root whose bracket ends at the LAST sample (t = tf, or t_K when Yend is
-% absent) is an ENDPOINT root: flagged, never counted as interior AND never
-% a PASS. At junction resolution the root may sit at tf or strictly before
-% it, so the verdict is INCONCLUSIVE -- refine the bracket before classifying
-% (Astra doc review 2026-09-07; the earlier 'weak minimum' reading was
-% unjustified).
+% ROOT COUNTING on the live samples: trusted signs first, then brackets of
+% opposite trusted signs (see the header). ENDPOINT is no longer a verdict:
+% an untrusted final sample is UNDETERMINED (Astra review #3, 2026-09-11).
 zeroTol = fieldd(spec, 'zeroTol', 0);
-nIn = 0;  nEnd = 0;  nTouch = 0;  nEndResolved = 0;
-% the last sample's sign is trusted when it is t_f itself and its block is
-% resolved; then a sign change on the last bracket is strictly interior
-lastResolved = covered && tested && sigR(nS) > resolvedTol && abs(dets(nS)) > zeroTol;
+nIn = 0;  nEnd = 0;  nTouch = 0;  nEndResolved = 0;  nUnres = 0;  atFinal = false;
 if tested
-    dl = dets(live);
-    cls = sign(dl);  cls(abs(dl) <= zeroTol) = 0;
-    n = numel(cls);
-    k = 1;  lastSign = 0;  lastSignIdx = 0;
-    while k <= n
+    dl = dets(live);  sl = sigR(live);
+    % 1. classify: trusted sign, or 0 = unresolved (untrusted ratio, or a zero)
+    cls = sign(dl);
+    cls(sl <= resolvedTol | abs(dl) <= zeroTol) = 0;
+    nUnres = nnz(cls == 0);
+    atFinal = covered && cls(end) == 0;
+    % 2. count brackets of opposite TRUSTED signs, skipping unresolved
+    %    samples between them; an unresolved run between EQUAL trusted
+    %    signs is reported (nTouch) but establishes nothing
+    lastSign = 0;  lastIdx = 0;
+    for k = 1:numel(cls)
         if cls(k) ~= 0
-            if lastSign ~= 0 && cls(k) ~= lastSign        % sign change (zeros between merged)
-                if k == n && ~lastResolved
-                    nEnd = nEnd + 1;
-                elseif k == n
-                    nIn = nIn + 1;  nEndResolved = nEndResolved + 1;
-                else
+            if lastSign ~= 0
+                if cls(k) ~= lastSign
                     nIn = nIn + 1;
+                    if k == numel(cls) && covered, nEndResolved = nEndResolved + 1; end
+                elseif k > lastIdx + 1
+                    nTouch = nTouch + 1;
                 end
             end
-            lastSign = cls(k);  lastSignIdx = k;  k = k + 1;
-        else
-            k2 = k;  while k2 < n && cls(k2+1) == 0, k2 = k2 + 1; end   % zero run k..k2
-            nextSign = 0;  if k2 < n, nextSign = cls(k2+1); end
-            if lastSign ~= 0 && nextSign ~= 0 && nextSign ~= lastSign
-                % crossing THROUGH the zero run: counted when nextSign is read
-            elseif k2 == n
-                nEnd = nEnd + 1;                                   % zero run reaching the last sample
-            else
-                nTouch = nTouch + 1;  nIn = nIn + 1;               % isolated touch: a root
-            end
-            k = k2 + 1;
+            lastSign = cls(k);  lastIdx = k;
         end
     end
 end
-atFinal = nEnd > 0;
-nUnres = 0;
-if tested, nUnres = nnz(sigR(live) <= resolvedTol); end
+kernelChecked = ~isempty(qDir);
+kernOk = ~kernelChecked || (max([kernR(live), 0]) <= kernelTol && max([kernL(live), 0]) <= kernelTol);
 if ~tested
     verdict = 'UNDETERMINED';  reason = 'no full-rank finite sample to test';
+elseif ~kernOk
+    verdict = 'UNDETERMINED';
+    reason = sprintf('quotient identities violated (J p(0) %.1e, p''J %.1e > %.0e): block not interpretable', ...
+                     max(kernR(live)), max(kernL(live)), kernelTol);
 elseif nIn > 0
     verdict = 'FAIL';
-    reason = sprintf('%d interior root(s)', nIn);
+    reason = sprintf('%d root(s) bracketed by opposite trusted signs', nIn);
     if nEndResolved > 0
-        reason = sprintf('%s, %d placed strictly inside the last bracket (t_f resolved)', reason, nEndResolved);
+        reason = sprintf('%s, %d placed strictly inside the last bracket (t_f trusted)', reason, nEndResolved);
     end
 elseif ~covered
     verdict = 'UNDETERMINED';
@@ -339,11 +330,10 @@ elseif ~covered
                      info.tGrid(nS+1), info.tGrid(end));
 elseif nUnres > 0
     verdict = 'UNDETERMINED';
-    reason = sprintf('%d live sample(s) with sigma ratio <= %.0e: sign not trustworthy', nUnres, resolvedTol);
-elseif atFinal
-    verdict = 'ENDPOINT';  reason = 'root on the last bracket, not resolvable at junction resolution';
+    reason = sprintf('%d live sample(s) with an untrusted sign (sigma ratio <= %.0e or zero)%s', ...
+                     nUnres, resolvedTol, tern(atFinal, ', including t_f', ''));
 else
-    verdict = 'PASS';  reason = 'no sign change on the live samples';
+    verdict = 'PASS';  reason = 'no sign change among trusted samples, none unresolved';
 end
 kMax = @(x) max([x, 0]);
 
@@ -353,6 +343,7 @@ out = struct('t', info.tGrid(2:nS+1), 'detScaled', dets, 'sigRatio', sigR, ...
              'nCrossings', nIn + nEnd, 'nInterior', nIn, 'nTouch', nTouch, ...
              'nEndResolved', nEndResolved, 'nUnresolved', nUnres, 'atFinal', atFinal, ...
              'kernelRight', kMax(kernR(live)), 'kernelLeft', kMax(kernL(live)), ...
+             'kernelChecked', kernelChecked, 'kernelOk', kernOk, ...
              'verdict', verdict, 'reason', reason, 'pass', strcmp(verdict, 'PASS'), ...
              'stateRows', rows, 'costateCols', cols, 'freeTime', freeT);
 end
@@ -366,6 +357,12 @@ r = max(abs(M), [], 2);  r(r == 0) = 1;
 Me = M ./ r;
 c = max(abs(Me), [], 1);  c(c == 0) = 1;
 Me = Me ./ c;
+end
+
+% ------------------------------------------------------------------------
+function s = tern(c, a, b)
+% TERN  Inline conditional.  INPUTS: c; a; b.  OUTPUTS: s.
+if c, s = a; else, s = b; end
 end
 
 % ------------------------------------------------------------------------

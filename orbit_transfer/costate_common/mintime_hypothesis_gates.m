@@ -132,9 +132,12 @@ for k = 1:size(Y, 1)
     yk = Y(k, :)';
     Fp = rhsUT(yk, Tmax, c, muStar);
     fr = F(k, :)';
-    g.fieldErr = max(g.fieldErr, norm(Fp(1:7) - fr) / max(norm(fr), 1));
     A = full(Afun(yk(1:7), unitv(-yk(11:13)), Tmax, c, muStar));
     adjRef = -A' * yk(8:14);
+    if ~all(isfinite([Fp(:); fr; adjRef]))
+        g.fieldErr = NaN;  g.adjErrRef = NaN;  break     % never let max() drop a NaN
+    end
+    g.fieldErr = max(g.fieldErr, norm(Fp(1:7) - fr) / max(norm(fr), 1));
     g.adjErrRef = max(g.adjErrRef, norm(Fp(8:14) - adjRef) / max(norm(adjRef), 1));
 end
 

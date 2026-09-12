@@ -36,6 +36,15 @@ function C = certify_root(seed, rv0, rvf, B, opts)
 %   is computed and then ignored is the failure mode this stack exists to
 %   prevent: before 2026-09-10 an entry could certify with h6Ok false.
 %
+%   MALFORMED DATA. Every gated quantity is validated as a real finite
+%   scalar in its mathematical domain (non-negative for residuals and
+%   errors) BEFORE any comparison: in MATLAB `if ~(x <= tol)` is skipped by
+%   an empty x and by a vector with one passing element, and max() drops a
+%   NaN. Within a gate, validation of every field precedes the numerical
+%   comparisons, so a malformed later field is reported before an
+%   out-of-tolerance earlier one -- documented order, by design.
+%   `conjSpectrum = false` returns a DIAGNOSTIC result: C.ok is false and
+%   C.okDiagnostic says the gates that ran passed; it cannot ship.
 %   Every flight (ours and the witness's) passes validate_flight: reached
 %   t_f, finite, all-burn mass law, clear of both primaries. A returned
 %   array is not a completed flight.
@@ -74,6 +83,10 @@ function C = certify_root(seed, rv0, rvf, B, opts)
 %   .pwOpts [struct()] .gatesOpts [struct()] forwarded to
 %   pmp_pointwise_checks / mintime_hypothesis_gates (the mutation test
 %   injects a wrong field through these),
+%   .override [struct()] TEST SEAM: fields .PW .g .LM .CS whose members
+%   overwrite the corresponding instrument outputs after they are computed,
+%   so each gate can be made the first failing one and fed malformed data
+%   (Astra review #3). Warns loudly; never set it in production,
 %   .nSamp [200] .rankTol [1e-8] .sA .sD (recorded, not used)
 %
 %% Outputs:
@@ -141,6 +154,8 @@ tolField = d('tolField', 1e-10);  tolLift = d('tolLift', 1e-6);  liftMarginMin =
 relPair = d('relTolPair', [1e-12 1e-9]);
 doSpectrum = d('conjSpectrum', true);  conjNSub = d('conjNSub', 8);  conjOpts = d('conjOpts', struct());
 pwOpts = d('pwOpts', struct());  gatesOpts = d('gatesOpts', struct());
+ovr = d('override', struct());
+if ~isempty(fieldnames(ovr)), warning('certify_root:override', 'TEST SEAM ACTIVE: instrument outputs are being overridden'); end
 flightOpts = struct('moonKmMin', d('moonKmMin', 1900), 'earthKmMin', d('earthKmMin', 6600));
 if isempty(pool)
     warning('certify_root:unfenced', ...
@@ -158,7 +173,7 @@ C = struct('ok', false, 'reason', '', 'z', nan(8,1), 'Y', [], 'tfDays', NaN, ...
            'flyVmsWitness', NaN, 'h6Margin', NaN, ...
            'Hmax', NaN, 'lamMf', NaN, 'adjErr', NaN, 'dirGap', NaN, 'fullGap', NaN, ...
            'throttleErr', NaN, 'fieldErr', NaN, 'adjErrRef', NaN, 'nullResid', NaN, 'nullResidRel', NaN, ...
-           'Hresid', NaN, 'liftMargin', NaN, 'conjDense', []);
+           'Hresid', NaN, 'liftMargin', NaN, 'conjDense', [], 'okDiagnostic', false, 'fullStack', false);
 
 % ---- 1. normal-chart polish + conjugate test ---------------------------
 try
@@ -216,13 +231,23 @@ if ~(C.flyVms < gateVms), C.reason = sprintf('flown velocity miss %.2f m/s > %g'
 
 % ---- 2b. pointwise Pontryagin checks on the flight ----------------------
 PW = pmp_pointwise_checks(tF, Yf, B.Tnd, B.cnd, B.mu, pwOpts);
+PW = applyOverride(PW, ovr, 'PW');
+% VALIDATE every gated field first (real finite non-negative scalar), then
+% aggregate, then compare -- see MALFORMED DATA in the header
+pwNeed = {'Hmax', 'lamMf', 'adjErr', 'fullGap', 'fieldGap', 'throttleAccErr', 'throttleMassErr', 'nSample'};
+for f2 = pwNeed
+    [okv, ~] = nonneg_verdict(PW, f2{1});
+    if ~okv, C.reason = sprintf('pointwise checks: %s is not a real finite non-negative scalar (malformed)', f2{1}); C.wallSec = toc(t0); return, end
+end
+if ~(PW.nSample >= 1), C.reason = 'pointwise checks made no interior evaluation'; C.wallSec = toc(t0); return, end
+if isfield(PW, 'nonfinite') && PW.nonfinite > 0, C.reason = sprintf('pointwise checks: %d non-finite evaluation(s)', PW.nonfinite); C.wallSec = toc(t0); return, end
 C.Hmax = PW.Hmax;  C.lamMf = PW.lamMf;  C.adjErr = PW.adjErr;  C.dirGap = PW.dirGap;
-C.fullGap = max(PW.fullGap, PW.fieldGap);  C.throttleErr = PW.throttleErr;
+C.fullGap = max(PW.fullGap, PW.fieldGap);  C.throttleErr = max(PW.throttleAccErr, PW.throttleMassErr);
 if ~(PW.Hmax <= tolH),       C.reason = sprintf('Hamiltonian max|H| = %.2e > %g', PW.Hmax, tolH);          C.wallSec = toc(t0); return, end
 if ~(PW.lamMf <= tolLamMf),  C.reason = sprintf('transversality |lambda_m(t_f)| = %.2e > %g', PW.lamMf, tolLamMf); C.wallSec = toc(t0); return, end
 if ~(PW.adjErr <= tolAdj),   C.reason = sprintf('adjoint equations, relative error %.2e > %g', PW.adjErr, tolAdj); C.wallSec = toc(t0); return, end
 if ~(C.fullGap <= tolGap),   C.reason = sprintf('minimum-principle |full gap| %.2e > %g (applied control is not the minimiser; signed %+.1e..%+.1e, field''s own gap %.1e)', C.fullGap, tolGap, PW.gapMin, PW.gapMax, PW.fieldGap); C.wallSec = toc(t0); return, end
-if ~(PW.throttleErr <= tolThrottle)
+if ~(C.throttleErr <= tolThrottle)
     C.reason = sprintf('applied throttle is not 1: acceleration rows %.2e, mass row %.2e > %g', ...
                        PW.throttleAccErr, PW.throttleMassErr, tolThrottle);
     C.wallSec = toc(t0);  return
@@ -283,14 +308,16 @@ end
 if ~okG
     C.reason = sprintf('hypothesis gates exceeded their %g s cap', capGates);  C.wallSec = toc(t0);  return
 end
+g = applyOverride(g, ovr, 'g');
 C.g = g;
 % X2, the PHYSICS: pumpkyn's field against the independently written one,
 % row by row -- every other check propagates pumpkyn and would pass a
-% self-consistent wrong field
+% self-consistent wrong field. Validation of all five fields (real finite
+% NON-NEGATIVE scalars) precedes the comparisons, by design.
 for f2 = {'fieldErr', 'adjErrRef', 'nullResid', 'nullResidRel', 'Hresid'}
     if ~isfield(g, f2{1}), C.reason = ['gates omitted ' f2{1}]; C.wallSec = toc(t0); return, end
-    [okx, vx] = scalar_verdict(g.(f2{1}));
-    if ~okx, C.reason = sprintf('gate %s is not a real finite scalar', f2{1}); C.wallSec = toc(t0); return, end
+    [okx, vx] = nonneg_verdict(g, f2{1});
+    if ~okx, C.reason = sprintf('gate %s is not a real finite non-negative scalar (malformed)', f2{1}); C.wallSec = toc(t0); return, end
     C.(f2{1}) = vx;
 end
 if ~(C.fieldErr <= tolField),  C.reason = sprintf('X2: pumpkyn state rows differ from the independent field by %.2e > %g', C.fieldErr, tolField); C.wallSec = toc(t0); return, end
@@ -326,10 +353,17 @@ if ~okG2, C.reason = sprintf('second gates build exceeded the %g s cap', capGate
 if ~(isfield(g, 'C') && isfield(g2, 'C') && isequal(size(g.C), size(g2.C)))
     C.reason = 'lift_margin: the two constraint-matrix builds are not comparable';  C.wallSec = toc(t0);  return
 end
-LM = lift_margin(g.C, g2.C, z(1:7), struct('marginMin', liftMarginMin, 'liftTol', tolLift));
+try
+    LM = lift_margin(g.C, g2.C, z(1:7), struct('marginMin', liftMarginMin, 'liftTol', tolLift));
+catch ME
+    C.reason = ['lift_margin refused its inputs: ' ME.message];  C.wallSec = toc(t0);  return
+end
+LM = applyOverride(LM, ovr, 'LM');
 [okL, C.liftMargin] = scalar_verdict(LM.margin);
-if ~okL || ~LM.certified
-    C.reason = ['lift_margin: ' LM.reason];  C.wallSec = toc(t0);  return
+certL = isfield(LM, 'certified') && islogical(LM.certified) && isscalar(LM.certified) && LM.certified;
+if ~okL || ~certL
+    if isfield(LM, 'reason') && ischar(LM.reason), why = LM.reason; else, why = 'certified flag malformed or false'; end
+    C.reason = ['lift_margin: ' why];  C.wallSec = toc(t0);  return
 end
 
 % ---- 6. H6, enforced ----------------------------------------------------
@@ -368,20 +402,43 @@ if doSpectrum
         C.reason = ['conj_spectrum threw: ' ME.message];  C.wallSec = toc(t0);  return
     end
     if ~okS, C.reason = sprintf('conj_spectrum exceeded the %g s cap', capGates); C.wallSec = toc(t0); return, end
+    CS = applyOverride(CS, ovr, 'CS');
+    % counts must be finite non-negative integers, the flags scalar
+    % logicals, and .clear CONSISTENT with the counts
+    for f2 = {'nInterior', 'nZero', 'nUnresolved', 'multiplicity', 'nNearMiss', 'nInteriorCand', 'nEndCand', 'nStart'}
+        [okv, vv] = nonneg_verdict(CS, f2{1});
+        if ~okv || vv ~= round(vv), C.reason = sprintf('dense scan: %s is not a finite non-negative integer (malformed)', f2{1}); C.wallSec = toc(t0); return, end
+    end
+    for f2 = {'clear', 'testable'}
+        if ~(isfield(CS, f2{1}) && islogical(CS.(f2{1})) && isscalar(CS.(f2{1})))
+            C.reason = sprintf('dense scan: %s is not a scalar logical (malformed)', f2{1});  C.wallSec = toc(t0);  return
+        end
+    end
+    consistent = CS.clear == (CS.testable && CS.nZero == 0 && CS.nUnresolved == 0 && CS.nInterior == 0);
+    if ~consistent, C.reason = 'dense scan: .clear is inconsistent with its counts (malformed)'; C.wallSec = toc(t0); return, end
     C.conjDense = struct('nInterior', CS.nInterior, 'nInteriorCand', CS.nInteriorCand, ...
                          'nEndCand', CS.nEndCand, 'nStart', CS.nStart, 'nZero', CS.nZero, ...
                          'nNearMiss', CS.nNearMiss, 'nUnresolved', CS.nUnresolved, ...
-                         'multiplicity', CS.multiplicity, 'clear', CS.clear, 'minRel', CS.minRel);
-    [okc, cc] = scalar_verdict(CS.clear);
-    if ~okc || cc ~= 1
+                         'multiplicity', CS.multiplicity, 'clear', CS.clear, 'testable', CS.testable, ...
+                         'minRel', CS.minRel, 'tUncovered', CS.tUncovered);
+    if ~CS.clear
         C.reason = sprintf(['dense conjugate scan not clear: %d coarse sign change(s), %d zero, ' ...
-                            '%d UNRESOLVED, %d multiplicity (%d near-miss cleared)'], ...
-                           CS.nInterior, CS.nZero, CS.nUnresolved, CS.multiplicity, CS.nNearMiss);
+                            '%d UNRESOLVED, %d multiplicity (%d near-miss cleared)%s'], ...
+                           CS.nInterior, CS.nZero, CS.nUnresolved, CS.multiplicity, CS.nNearMiss, ...
+                           tern(CS.testable, '', '; NOT TESTABLE'));
         C.wallSec = toc(t0);  return
     end
+    C.fullStack = true;
+else
+    % DIAGNOSTIC contract: the gates that ran passed, but this is not a
+    % certification and must not be packaged as one
+    C.okDiagnostic = true;  C.wallSec = toc(t0);
+    C.reason = 'DIAGNOSTIC ONLY: every gate that ran passed, but the dense conjugate scan was switched off (conjSpectrum = false); not certified';
+    if plateau, C.reason = sprintf('%s (polish plateaued at |R| = %.1e)', C.reason, it.normR); end
+    return
 end
 
-C.ok = true;  C.wallSec = toc(t0);
+C.ok = true;  C.okDiagnostic = true;  C.wallSec = toc(t0);
 if plateau
     C.reason = sprintf('certified (polish plateaued at |R| = %.1e, above tolR = %.1e)', it.normR, tolR);
 else
@@ -402,6 +459,28 @@ if isempty(pool)
 end
 varargout = cell(1, nout + 1);
 [varargout{1}, varargout{2:nout+1}] = run_capped(pool, fh, nout, capSec, varargin{:});
+end
+
+function [ok, v] = nonneg_verdict(S, f)
+% NONNEG_VERDICT  Field f of S as a real finite NON-NEGATIVE scalar, or refuse.
+% INPUTS: S struct; f char.  OUTPUTS: ok logical; v double (NaN if not ok).
+ok = false;  v = NaN;
+if ~isfield(S, f), return, end
+[ok0, v0] = scalar_verdict(S.(f));
+if ok0 && v0 >= 0, ok = true;  v = v0; end
+end
+
+function S = applyOverride(S, ovr, name)
+% APPLYOVERRIDE  TEST SEAM: overwrite members of instrument output S with
+% ovr.(name)'s fields.  INPUTS: S; ovr; name.  OUTPUTS: S.
+if isfield(ovr, name) && isstruct(ovr.(name))
+    for f = fieldnames(ovr.(name))', S.(f{1}) = ovr.(name).(f{1}); end
+end
+end
+
+function s = tern(c, a, b)
+% TERN  Inline conditional.  INPUTS: c; a; b.  OUTPUTS: s.
+if c, s = a; else, s = b; end
 end
 
 function v = fieldd(s, f, d_)

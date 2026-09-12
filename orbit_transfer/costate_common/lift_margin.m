@@ -62,8 +62,14 @@ function M = lift_margin(C1, C2, lam, opts)
 if nargin < 4, opts = struct(); end
 d = @(f,v) fieldd(opts, f, v);
 marginMin = d('marginMin', 10);  liftTol = d('liftTol', 1e-6);
-assert(isequal(size(C1), size(C2)), 'the two builds must have the same shape');
+assert(isequal(size(C1), size(C2)), 'lift_margin:shape', 'the two builds must have the same shape');
+assert(isnumeric(C1) && isreal(C1) && all(isfinite(C1(:))) && isnumeric(C2) && isreal(C2) && all(isfinite(C2(:))), ...
+       'lift_margin:matrix', 'both constraint matrices must be real and finite');
+assert(size(C1, 2) == 7 && size(C1, 1) >= 7, 'lift_margin:matrix', 'constraint matrices must be [m x 7] with m >= 7');
+assert(isscalar(marginMin) && isfinite(marginMin) && marginMin > 0 && isscalar(liftTol) && isfinite(liftTol) && liftTol > 0, ...
+       'lift_margin:opts', 'marginMin and liftTol must be positive finite scalars');
 lam = lam(:);
+assert(numel(lam) == 7, 'lift_margin:lift', 'the lift must have 7 components');
 
 M = struct('sigma6', NaN, 'errEst', NaN, 'margin', NaN, 'dimS', NaN, ...
            'certified', false, 'reason', '', 'nullResid', NaN, 'sv', []);

@@ -3390,3 +3390,79 @@ study and in `report_optimality`.
 with the old plateau classification; the 44 near-miss cells are old-kind
 evidence and `conj_unresolved` is NaN for them. A RE-SWEEP with the
 resolved scan is required before the ship decision (TODO).
+
+## 49. Astra's third pass, on the new code only: a located minimum is not a cluster, and the synthetic tests found the blind spot the reviewer described (2026-09-11)
+
+Pass 3 (`reviews/transfer_study_math_astra3_2026-09-11.md`, adjudication
+`..._astra3_adjudicated_...`) was scoped to what pass 2 had introduced, and
+its bottom line was that the classifier was not yet fit to re-sweep the
+library with. Items 1-7 of the adjudication were applied in its order;
+item 8 -- a floor derived from a measured matrix error -- stays open.
+
+**The resolution is now a pure function, and the tests drive it with
+matrices whose rank loss is known.** `conj_resolve(Mfun, tGrid, opts)`
+takes any matrix-valued function of time; `conj_spectrum` hands it the
+propagated conjugate block. Everything it evaluates is KEPT: shifted grids
+at 4x and 16x, then EVERY local minimum of the assembled record bracketed
+and located by golden section with an a-posteriori unimodality check; a
+bracket of opposite TRUSTED signs anywhere in the record is an established
+root; the smallest value ever seen decides, and a later search returning a
+larger value cannot upgrade it. The start cluster is refined past its
+first local maximum -- the increasing prefix is the structural transient
+and is the reported uncovered interval -- so a zero merged into the
+transient shows as a dip after some growth. The last sample is a candidate
+source and is evaluated. A vanishing raw column norm is a candidate in its
+own right, because column normalisation hides that rank loss. A scan with
+no trusted sample outside every cluster is not testable and not clear.
+
+**The synthetic tests found a blind spot the review only gestured at.** A
+V-shaped zero between two coarse samples reads far above the 1e-3 dip
+threshold at both of them: with slope ~median/(0.1 t_f) the nearest sample
+sits at 0.03 of the median. Without a sign change -- a corank-two zero, a
+quadratic touch -- such a zero was INVISIBLE to candidate detection. The
+fixture at 2.5 + h/3 failed; the on-node case had passed only because the
+node happened to sit on the root. Local minima of the coarse spectrum
+below 0.2 of the median are now candidates at any depth. On the anchor this
+finds one more candidate, a shallow interior dip at t/t_f 0.776 (5e-3 of
+the median), resolved as a near-miss and cleared; the scan takes 0.8 s for
+511 evaluations. `test_conj_resolve`: 26 checks, every one asserting the
+GATE -- transverse zeros at six grid phases including on a node and h/32
+from one, corank-two zeros without a sign change on and off a node,
+quadratic touches, two wells around a zero and the same wells cleared, a
+zero at t_f and one fifth of a step before it, a zero merged into the
+start (caught; uncovered stops at 0.148 before it at 0.2), a vanishing
+column, a near-miss cleared at 1e-4, an unresolved minimum at 3e-6, and a
+scan that never becomes full rank.
+
+**The junction test classifies before it counts.** Every live sample is
+trusted-positive, trusted-negative or unresolved first; a root is a
+bracket of opposite trusted signs with unresolved samples between them
+skipped; equal trusted signs around an unresolved run establish nothing
+(the old "touch" is gone); an unresolved sample makes the verdict
+UNDETERMINED unless a trusted bracket already refutes. ENDPOINT is no
+longer a verdict. The two quotient identities are gates: a violation means
+the block is not interpretable -- UNDETERMINED, never a refutation.
+
+**The certifier validates the domain before it compares.** In MATLAB
+`if ~(x <= tol)` is skipped by an empty x and by a vector with one passing
+element, `-Inf` passes an upper bound, and `max` drops a NaN -- so a NaN
+adjoint evaluation upstream read as a perfect zero error. Every gated
+field is now a real finite NON-NEGATIVE scalar before any aggregation; the
+pointwise checks and the gates poison a residual to NaN on any non-finite
+evaluation and report the count; `lift_margin` validates its inputs before
+the SVD; the dense counts must be finite non-negative integers and `.clear`
+consistent with them; `mintime_prop_seg` asserts the propagation arrived.
+`conjSpectrum = false` is a DIAGNOSTIC result (`ok` false, `okDiagnostic`
+true), not a certificate. A TEST SEAM (`opts.override`, warns loudly) lets
+each gate be the first failing one: 17 seam mutations -- empty, vector,
+-Inf, NaN, negative, wrong type, inconsistent flags, and each new
+tolerance alone -- refuse by name.
+
+**Still open, recorded in TODO:** the floor as a measured matrix error
+(the form: safety factor x error in the scaled matrix at the candidate
+time, with the error measured by re-propagating from t = 0 at another
+setting -- both current refinements inherit the same stored prefix); the
+sign-trust threshold from the same measurement; the generator-block
+discriminator A(4:6,11:13) = -(T/(m rho))(I - alpha alpha'); blockwise lift
+residuals beside the global backward error, which at sigma_1 = 4e3 admits
+too loose a residual on its own.

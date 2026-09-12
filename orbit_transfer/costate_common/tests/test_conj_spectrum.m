@@ -46,10 +46,16 @@ ok = chk(ok, isfield(S, 'candidates') && isstruct(S.candidates), 'candidates are
 cl = {S.candidates.class};
 ok = chk(ok, all(ismember(cl, {'start', 'endpoint', 'interior'})), ...
          sprintf('every candidate is classified: %s', strjoin(cl, ' ')));
-ok = chk(ok, ~any(strcmp(cl, 'interior')), 'the certified anchor has NO interior candidate');
+ok = chk(ok, all(ismember({S.candidates.kind}, {'start', 'near-miss'})), ...
+         sprintf('every candidate on the certified anchor is the start transient or a cleared near-miss: %s', strjoin({S.candidates.kind}, ' ')));
 ok = chk(ok, all(cellfun(@isscalar, {S.candidates.tOverTf})), 'each candidate carries its t/t_f');
-ok = chk(ok, isfield(S, 'nInteriorCand') && S.nInteriorCand == 0 && isfield(S, 'nNearMiss') && isfield(S, 'nZero'), ...
-         'interior candidates are summarised as near-miss / zero counts');
+ok = chk(ok, isfield(S, 'nInteriorCand') && isfield(S, 'nNearMiss') && isfield(S, 'nZero') && S.nZero == 0, ...
+         sprintf('candidates are summarised: %d interior, %d near-miss, %d zero', S.nInteriorCand, S.nNearMiss, S.nZero));
+ok = chk(ok, S.testable && S.clear && S.nUnresolved == 0, ...
+         sprintf('the GATE: the certified anchor is CLEAR (%s)', S.reason));
+ok = chk(ok, S.nStart == 1 && S.tUncovered > 0 && S.tUncovered < 0.1*S.tf, ...
+         sprintf('its start transient is reported uncovered to t/t_f = %.4f', S.tUncovered/S.tf));
+ok = chk(ok, S.specConsistency < 1e-12, sprintf('resolver and coarse loop agree on the spectrum (%.1e)', S.specConsistency));
 
 % ---- a REFUTED entry: the scan must find what the test found ------------
 Sh = load(fullfile(fileparts(here), 'DRO_tulip', 'indirect', 'results', ...
@@ -65,13 +71,14 @@ for j = 1:numel(Sh.S.sA)
     if ~isempty(bad), break, end
 end
 if isempty(bad)
-    fprintf('  SKIP  no refuted candidate on disk to use as a positive control\n');
+    ok = chk(ok, false, 'POSITIVE CONTROL MISSING: no refuted candidate on disk (arrival_sheet_70mN_pass1.mat)');
 else
     rv0b = B.rv0(1:6);
     Sb = conj_spectrum(bad.z, rv0b, B.Tnd, B.cnd, B.mu, struct('K', 24, 'nSub', 8));
     ok = chk(ok, Sb.nInterior >= 1, ...
              sprintf('refuted entry (%.2f d, sA %.4f): %d interior crossing(s) found', ...
                      bad.tfDays, badSA, Sb.nInterior));
+    ok = chk(ok, ~Sb.clear && Sb.nZeroSign >= 1, sprintf('and the GATE refutes it by a trusted sign bracket (%s)', Sb.reason));
     ok = chk(ok, Sb.tFirst > 0 && Sb.tFirst < Sb.tf, ...
              sprintf('and it is INTERIOR, at t/t_f = %.4f', Sb.tFirst/Sb.tf));
     % the crossing must also appear as an INTERIOR candidate whose sampled

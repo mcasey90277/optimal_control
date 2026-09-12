@@ -189,3 +189,21 @@
 - [ ] The start transient (cluster touching sample 1) is reported as
   uncovered; the short-time sign/positivity expansion is still the only
   thing that would cover it.
+
+## From the 2026-09-11 THIRD math review (Astra #3; FINDINGS 49) -- still open
+
+- [ ] `conj_spectrum` floor from a MEASURED scaled-matrix error: safety
+  factor x (matrix error + SVD error + slope x location uncertainty) / median,
+  with the matrix error measured by re-propagating from t = 0 at a tighter
+  setting or another integrator and comparing the PROJECTED matrices at the
+  candidate times and t_f (both current refinements inherit the same stored
+  prefix). Until then zeroFloor 1e-7 / clearFactor 100 are policy values.
+- [ ] `ms_conjugate_test` resolvedTol from the same measurement: trust a
+  sign only when sigma_min exceeds matrix + LU + SVD error with margin.
+- [ ] STM discriminator: check the generator block A(4:6,11:13) =
+  -(T/(m rho))(I - alpha alpha') along the trajectory (tangential eigenvalues
+  -T/(m rho)); evaluate the actual variational RHS with an identity STM.
+- [ ] S3 lift residual: add blockwise / componentwise residuals (alignment
+  rows vs the terminal-mass row) and the angle bound |C lam|/(sigma_6 |lam|)
+  beside the global backward error; recompute lift_margin under any change
+  of row weights.

@@ -68,7 +68,10 @@ function P = pmp_pointwise_checks(t, Y, Tnd, cnd, mu, opts)
 %                                                   .throttleMassErr .minQmt
 %                                                   .tSample [n x 1]
 %                                                   .nSample .Hval [N x 1]
-%                                                   .Qmt [N x 1]
+%                                                   .Qmt [N x 1] .nonfinite
+%                                                   (non-finite evaluations;
+%                                                   the affected residuals
+%                                                   are NaN, never 0)
 %
 %% Revision History:
 %  M. Casey                                                   (c) 09/10/2026
@@ -80,6 +83,17 @@ d = @(f,v) fieldd(opts, f, v);
 nS = min(d('nSample', 120), max(numel(t) - 2, 1));  hRel = d('hRel', 1e-6);
 rhs = d('rhs', @mintime_rhs_point);
 t = t(:);  N = numel(t);
+% an unperformed check must never read as a passed one (Astra review #3):
+% the sample count and the FD step are validated, and any non-finite
+% evaluation poisons the affected residual to NaN instead of being dropped
+% by max()
+if ~(isscalar(nS) && isfinite(nS) && nS >= 1 && nS == round(nS)) || N < 3
+    error('pmp_pointwise_checks:samples', 'need >= 1 interior sample on >= 3 flight samples (nSample %g, N %d)', nS, N);
+end
+if ~(isscalar(hRel) && isfinite(hRel) && hRel > 0)
+    error('pmp_pointwise_checks:step', 'hRel must be a positive finite scalar');
+end
+P.nonfinite = 0;                                       % count of non-finite evaluations
 
 % N2 on every sample
 Hval = zeros(N, 1);
@@ -87,7 +101,8 @@ for k = 1:N
     F = rhs(Y(k,:).', Tnd, cnd, mu);
     Hval(k) = 1 + Y(k, 8:14)*F(1:7);
 end
-P.Hval = Hval;  P.Hmax = max(abs(Hval));
+P.Hval = Hval;
+if all(isfinite(Hval)), P.Hmax = max(abs(Hval)); else, P.Hmax = NaN;  P.nonfinite = P.nonfinite + nnz(~isfinite(Hval)); end
 
 % N4
 P.lamMf = abs(Y(end, 14));
@@ -112,6 +127,12 @@ for k = kk
     g1 = dHdx(rhs, yk, h1,   Tnd, cnd, mu);
     g2 = dHdx(rhs, yk, h1/2, Tnd, cnd, mu);
     gR = (4*g2 - g1)/3;
+    if ~all(isfinite([F; g1; g2; F0]))
+        P.nonfinite = P.nonfinite + 1;  adjErr = NaN;  fdAgree = NaN;
+        dirGap = NaN;  fullGap = NaN;  fieldGap = NaN;  gapMin = NaN;  gapMax = NaN;
+        throttleAccErr = NaN;  throttleMassErr = NaN;
+        continue
+    end
     adjErr  = max(adjErr,  norm(F(8:14) + gR)/max(norm(gR), 1));
     fdAgree = max(fdAgree, norm(g1 - g2)/max(norm(gR), 1));
     % minimum principle with the APPLIED control, recovered on both rows

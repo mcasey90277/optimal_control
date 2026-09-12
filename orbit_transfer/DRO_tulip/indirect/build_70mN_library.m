@@ -14,7 +14,8 @@
 %     4  departure RIBS                  (walk sD off every certified column)
 %     5  PACKAGE                         (sheet + ribs -> catalog .mat)
 %     6  AUDIT                           (re-derive every entry from its own keys)
-%     7  second-order SWEEP              (spectrum / H6 / lift margins, sidecar)
+%     7  second-order SWEEP              (spectrum / H6 / lift margins, sidecar;
+%                                         v3 since 2026-09-11 = resolved scan)
 %     8  pictures                        (branch map, phase sheet, findings torus)
 %     9  deliverable                     (refuses without a clean audit; ship
 %                                         decision is Mike's, so OFF by default)
@@ -88,13 +89,19 @@ if exist('chainOverrides', 'var')
 end
 if ~isfolder(outDir), mkdir(outDir); end
 
-% the sidecar is the SECOND sweep's: the first one's lift margins differ
-% from the catalog's by up to 1.35e4 (second_order_pass now checks identity)
+% the sidecar is the THIRD sweep's. v1: lift margins differed from the
+% catalog's by up to 1.35e4. v2 (2026-09-10/11): the plateau classifier --
+% its 42 "near-miss" cells were plateaus under nested refinement, not
+% located positive minima, and endpoint clusters were never refined
+% (FINDINGS 48). v3: conj_spectrum with located minima, shifted grids, the
+% UNRESOLVED class and endpoint refinement. A sidecar resumes by skipping
+% its done records, so pointing at v2 would re-write the OLD verdicts and
+% call it a sweep; the name change is what forces the re-measurement.
 files = struct( ...
     'sheet',   fullfile(outDir, sprintf('arrival_sheet_%s.mat', tag)), ...
     'catalog', fullfile(outDir, sprintf('costate_catalog_dro_tulip_%s.mat', tag)), ...
     'audit',   fullfile(outDir, sprintf('audit_%s.mat', tag)), ...
-    'sidecar', fullfile(outDir, 'second_order_progress_v2.mat'), ...
+    'sidecar', fullfile(outDir, 'second_order_progress_v3.mat'), ...
     'branch',  fullfile(outDir, 'arrival_branch_map.png'), ...
     'torus',   fullfile(outDir, sprintf('phase_torus_%s.png', tag)), ...
     'findings', fullfile(outDir, 'phase_torus_findings.png'));

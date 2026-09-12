@@ -52,3 +52,4 @@ missiles/results/
 
 # local rebuild-beside-the-shipped-files comparisons (build_70mN_library chainOverrides.outDir)
 orbit_transfer/DRO_tulip/indirect/results_rerun/
+orbit_transfer/DRO_tulip/indirect/results_resweep/

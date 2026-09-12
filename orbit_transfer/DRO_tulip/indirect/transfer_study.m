@@ -28,10 +28,21 @@
 %     8  SUFFICIENCY hypotheses            (Bonnard-Caillau-Trelat, one at a time)
 %     9  interactive 3D plot               (drag to rotate)
 %
-%   Diagnostic IDs are stable and grouped. N1-N6 are Pontryagin's necessary
-%   conditions. S1-S4 are the hypotheses of the BCT sufficiency theorem. V1-V2
-%   are the validity of the instruments that evaluated them. X1 is a
-%   cross-check of OUR implementation, not a condition of the theory.
+%   Diagnostic IDs are stable and grouped, and the letters mean:
+%     N  NECESSARY   -- N1-N6, Pontryagin's necessary conditions. Fail one
+%                      and this is not an extremal, so nothing below it
+%                      means anything.
+%     S  SUFFICIENCY -- S1-S4, the HYPOTHESES of the Bonnard-Caillau-Trelat
+%                      sufficiency theorem (its hypotheses, not its
+%                      conclusions: satisfying them, with N1-N6, is what
+%                      buys the strict strong local minimum).
+%     V  VALIDITY    -- V1-V2, whether a verdict above can be believed at
+%                      all: V1 is the conjugate instrument's own
+%                      precondition (H6), V2 is a wiring check that the
+%                      instruments were handed the same flight and physics.
+%     X  CROSS-CHECK -- X1, a second solver against OUR implementation. Not
+%                      a condition of the theory, but a failure still blocks
+%                      the claim.
 %
 %   Sections 7 and 8 are separate because the theory separates them: the
 %   first-order conditions are HYPOTHESES of the sufficiency theorem, not
@@ -234,9 +245,7 @@ fprintf('\n7. NECESSARY CONDITIONS      (value / threshold)\n');
 % catalogs are certified with is the stronger statement.
 PW = pmp_pointwise_checks(flight.t, flight.Y, Tnd, cnd, muStar);
 
-tf = flight.t(end);
-Yf = flight.Y;   tfl = flight.t;
-lamVmag = vecnorm(Yf(:, 11:13), 2, 2);        % |lambda_v|, the Legendre quantity (S1)
+tf = flight.t(end);                           % S4 reports its coverage against it
 
 % N1  the boundary-value residual: costate equations, terminal matching,
 %     transversality. This IS the statement that the first variation vanishes.
@@ -287,7 +296,6 @@ fprintf('   N5 adjoint eqns   rel err   %9.2e / %-9.0e  %s   (%d samples; FD ste
 %     which is zero exactly when the applied direction is the minimiser. The
 %     throttle enters H linearly with slope -T Q, Q = |lam_v|/m + lam_m/c, so
 %     u = 1 minimises H iff Q >= 0 (weak, necessary); S2 asks for Q > 0.
-Qmt = PW.Qmt;                                            % S2 reads it again
 fprintf('   N6 min principle  gap       %9.2e / %-9.0e  %s   (throttle 1 to %.1e; min Q = %.3f >= 0 %s)\n', ...
         PW.dirGap, tol.gap, pass(PW.dirGap <= tol.gap && PW.throttleErr < 1e-10), ...
         PW.throttleErr, PW.minQmt, pass(PW.minQmt >= 0));
@@ -311,21 +319,25 @@ crossCheck = V.ok;
 %% ========================================================================
 fprintf('\n8. SUFFICIENCY HYPOTHESES\n');
 
+% ONE call to the hypothesis gates -- the instrument that judges S1, S2, S3
+% and V1, and the same one gates_catalog_pass ran over all 18,360 catalog
+% entries. It flies its own dense trajectory from z8, so its numbers are not
+% a re-reading of the script's flight.
+gates = mintime_hypothesis_gates(z8, rv0(1:6), Tnd, cnd, muStar, struct());
+
 % S1  strengthened Legendre. For a direction on the unit sphere the second
 %     derivative of H in the control, restricted to that sphere, is
 %     (T/m)|lam_v| I -- positive definite exactly when |lam_v| > 0.
-[minLamV, iMin] = min(lamVmag);
 fprintf('   S1 Legendre      min|lam_v| = %.4e at t/t_f = %.3f   %s\n', ...
-        minLamV, tfl(iMin)/tf, pass(minLamV > 0));
+        gates.minLamV, gates.tMinLamV/z8(8), pass(gates.minLamV > 0));
 
 % S2  STRICT bang: the switching function stays strictly positive, so the
 %     throttle is determined (no singular arc) -- the strict form of N6's
 %     weak condition.
-fprintf('   S2 strict bang   min Q = %.4e                        %s\n', ...
-        min(Qmt), pass(min(Qmt) > 0));
+fprintf('   S2 strict bang   min Q = %.4e at t/t_f = %.3f        %s\n', ...
+        gates.minQmt, gates.tMinQmt/z8(8), pass(gates.minQmt > 0));
 
 % S3  normality: no abnormal lift of the SAME trajectory (dim S = 1)
-gates = mintime_hypothesis_gates(z8, rv0(1:6), Tnd, cnd, muStar, struct());
 fprintf('   S3 normality     dim S = %d (1 = no abnormal lift)        %s\n', ...
         gates.dimS, pass(gates.dimS == 1));
 % the dim S number is only as good as the lift it was measured around, so
@@ -338,11 +350,9 @@ fprintf('      lift residual %.1e, |lambda.f + 1| %.1e, sv gap %.1e\n', ...
 %     ENDPOINT, which is UNRESOLVED rather than either. A verdict is only
 %     interpretable beside its COVERAGE, reported here as t/t_f.
 cj = it.conj;
-s4Status = 'FAIL';
-if cj.pass == 1
-    s4Status = 'PASS';
-elseif strcmpi(cj.verdict, 'ENDPOINT')
-    s4Status = 'UNRESOLVED';
+s4Status = 'FAIL';                                       % three outcomes, not two
+if cj.pass == 1,                          s4Status = 'PASS';
+elseif strcmpi(cj.verdict, 'ENDPOINT'),   s4Status = 'UNRESOLVED';
 end
 fprintf('   S4 conjugate     %s, %d crossing(s), min|det| %.2e       %s\n', ...
         cj.verdict, gv(cj, 'nCrossings'), min(abs(cj.detScaled)), s4Status);
@@ -354,35 +364,29 @@ fprintf(['      coverage: %d junctions, first full-rank at t/t_f = %.3f, sampled
 % V1  H6: the reduced conjugate instrument's determinant can vanish
 %     spuriously when lambda_m(0) >= c/T (FINDINGS 40). Not a hypothesis of
 %     the theorem -- the VALIDITY condition of S4's instrument, with margin.
+v1Status = 'NOT CHECKED';                                % a missing margin BLOCKS S4
 if isfield(gates, 'h6Margin') && isfinite(gates.h6Margin)
     v1Status = pass(gates.h6Margin >= tol.h6Margin);
     fprintf('   V1 H6 validity   lambda_m(0) %.3f vs c/T %.3f, margin %5.1fx / %.1fx  %s\n', ...
             gates.h6LamM0, gates.h6Threshold, gates.h6Margin, tol.h6Margin, v1Status);
 else
-    v1Status = 'NOT CHECKED';
     fprintf('   V1 H6 validity   NOT CHECKED (the gates returned no margin): S4 is not interpretable\n');
 end
 
-% V2  CONSISTENCY of the two quantities this section still computes itself
-%     (S1's min|lam_v| and S2's min Q) with the gates that judge them. The
-%     rest of the checks ARE the library instruments now: N2/N4/N5/N6 are
-%     pmp_pointwise_checks, S3/V1 are mintime_hypothesis_gates, S4 is the
-%     conjugate test. The old V2 compared the script's own copy of those
-%     instruments with the originals and measured 0.0e+00 -- the same
-%     arithmetic on the same samples, which is a copy, not a second opinion.
-% A WIRING check, and worth calling it that. Both instruments fly the same
-% trajectory with the same settings, so this agrees to 0.0e+00 and cannot
-% detect an implementation divergence -- what it CAN catch is the script
-% handing one of them the wrong flight, thrust or exhaust speed, which is
-% the mistake that actually happens when a section is edited.
-agreeErr = max([abs(minLamV - gates.minLamV)/max(gates.minLamV, 1), ...
-                abs(PW.minQmt - gates.minQmt)/max(gates.minQmt, 1)]);
+% V2  the two INSTRUMENTS against each other on min Q: pmp_pointwise_checks
+%     reads the flight this script flew, mintime_hypothesis_gates flies its
+%     own from z8. A WIRING check, and worth calling it that -- both
+%     propagate the same z8 deterministically, so it agrees to 0.0e+00 and
+%     cannot detect an implementation divergence. What it CAN catch is the
+%     script handing one of them the wrong flight, thrust or exhaust speed,
+%     which is the mistake that actually happens when a section is edited.
+agreeErr = abs(PW.minQmt - gates.minQmt)/max(gates.minQmt, 1);
 assert(agreeErr < tol.agree, ...
-       'S1/S2 disagree with the gates that judge them (worst %.1e)', agreeErr);
-fprintf('   V2 consistency   S1/S2 vs the hypothesis gates, worst %.1e / %.0e  %s\n', ...
+       'the pointwise checks and the gates disagree on min Q (%.1e)', agreeErr);
+fprintf('   V2 wiring        min Q: pointwise vs gates, %.1e / %.0e       %s\n', ...
         agreeErr, tol.agree, pass(agreeErr < tol.agree));
 
-sufficient = minLamV > 0 && min(Qmt) > 0 && gates.dimS == 1 && strcmp(s4Status, 'PASS') && ...
+sufficient = gates.minLamV > 0 && gates.minQmt > 0 && gates.dimS == 1 && strcmp(s4Status, 'PASS') && ...
              strcmp(v1Status, 'PASS');
 unresolved = strcmp(s4Status, 'UNRESOLVED') || strcmp(v1Status, 'NOT CHECKED');
 

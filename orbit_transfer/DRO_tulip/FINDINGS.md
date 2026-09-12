@@ -3190,3 +3190,27 @@ check whether the gap widens on the longer arcs at deep thrust.
 N1 now reports `it.normR` -- the solve's own residual, at the point it
 returned -- which is one line instead of three and is the number the gates
 are actually set against.
+
+### Addendum: section 8 reads the gates, and the ID letters say what they mean (2026-09-11)
+
+Section 8 recomputed two of the four hypotheses it reports. `min|lam_v|`
+(S1) and `min Q` (S2) were taken from the script's own flight while
+`mintime_hypothesis_gates` -- the instrument that JUDGES them, and the one
+`gates_catalog_pass` ran over all 18,360 catalog entries -- returns both,
+with the times at which they occur. One call now serves S1, S2, S3 and V1.
+
+Values unchanged (min|lam_v| 3.2359 at t/t_f 0.117, min Q 3.8248, dim S 1,
+H6 margin 9.0x); S2 gained the location of its minimum, t/t_f 0.984, which
+the gates were already computing and the script was throwing away.
+
+**V2 is now a cross-check between two INSTRUMENTS rather than between a
+script and a library**: `pmp_pointwise_checks` reads the flight this script
+flew, `mintime_hypothesis_gates` flies its own from z8. It still agrees to
+0.0e+00, because both propagate the same z8 deterministically, so it is
+still labelled what it is -- a wiring check.
+
+**And the ID letters are now spelled out in the header**, because Mike had
+to ask what they stood for: N NECESSARY, S SUFFICIENCY (the theorem's
+HYPOTHESES, not its conclusions), V VALIDITY (V1 the conjugate
+instrument's own precondition, V2 the wiring), X CROSS-CHECK. A legend that
+lists IDs without expanding them is not a legend.

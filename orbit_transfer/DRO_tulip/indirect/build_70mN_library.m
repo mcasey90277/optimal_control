@@ -210,14 +210,28 @@ fprintf('5. catalog %s: %d entries, %d of %d cells, conj PASS on %d\n', files.ca
 %  6. AUDIT -- the recipient's view: rebuild every entry from the file's own
 %     keys, fly it, re-run the witness and the second-order verdicts.
 %% ========================================================================
+% A BAD ENTRY IS NOT A REASON TO STOP MEASURING. Until 2026-09-12 a single
+% bad audit row aborted the chain here, so the second-order sweep -- the
+% stage that produces the evidence a bad row needs interpreting WITH --
+% never ran. The audit is diagnostic; the SHIP gate (stage 9) is where
+% badness must block. Blockers are collected and reported at the end.
+blockers = {};
 if run.audit
     Aud = audit_phase_catalog(files.catalog, struct('out', files.audit, 'pool', pool));
     fprintf('6. audit: %d ok / %d bad\n', Aud.nOk, Aud.nBad);
-    if Aud.nBad > 0, fprintf('   %s\n', Aud.problems{:}); end
-    assert(Aud.nBad == 0, 'the catalog does not audit clean: nothing downstream ships');
+    if Aud.nBad > 0
+        fprintf('   %s\n', Aud.problems{:});
+        blockers{end+1} = sprintf('audit: %d of %d entries bad', Aud.nBad, Aud.nOk + Aud.nBad);
+        fprintf(['   the chain CONTINUES (the sweep still measures every entry); the\n' ...
+                 '   deliverable stage will refuse. See the blocker summary at the end.\n']);
+    end
 else
-    assert(isfile(files.audit), 'audit missing: %s (stage 6 makes it)', files.audit);
-    fprintf('6. audit reused: %s\n', files.audit);
+    if isfile(files.audit)
+        fprintf('6. audit reused: %s\n', files.audit);
+    else
+        fprintf('6. audit MISSING (%s) and stage 6 is off: nothing may ship\n', files.audit);
+        blockers{end+1} = 'audit never run';
+    end
 end
 
 %% ========================================================================
@@ -225,13 +239,23 @@ end
 %     for every entry; sidecar after each so it resumes for free; written
 %     into the catalog only after a COMPLETE census.
 %% ========================================================================
+% Each stage is fenced: a stage that throws records a blocker and the chain
+% goes on to the next one, so one failure never costs the measurements of
+% every stage behind it.
 if run.sweep
-    Sw = second_order_pass(files.catalog, struct('sideMat', files.sidecar));
-    fprintf('7. sweep census: %d done, %d to do\n', Sw.nDone, Sw.nTodo);
-    if Sw.done
-        Sw = second_order_pass(files.catalog, struct('sideMat', files.sidecar, 'writeback', true));
-        fprintf('7. written back: worst interior crossings %g, worst H6 %.2fx, worst lift %.0fx\n', ...
-                Sw.worstSpectrum, Sw.worstH6, Sw.worstLift);
+    try
+        Sw = second_order_pass(files.catalog, struct('sideMat', files.sidecar));
+        fprintf('7. sweep census: %d done, %d to do\n', Sw.nDone, Sw.nTodo);
+        if Sw.done
+            Sw = second_order_pass(files.catalog, struct('sideMat', files.sidecar, 'writeback', true));
+            fprintf('7. written back: worst interior crossings %g, worst H6 %.2fx, worst lift %.0fx\n', ...
+                    Sw.worstSpectrum, Sw.worstH6, Sw.worstLift);
+        else
+            blockers{end+1} = sprintf('sweep incomplete: %d entries still to measure', Sw.nTodo);
+        end
+    catch ME
+        fprintf('7. sweep THREW: %s\n', ME.message);
+        blockers{end+1} = ['sweep threw: ' ME.message];
     end
 else
     fprintf('7. sweep skipped (run.sweep is off)\n');
@@ -241,24 +265,50 @@ end
 %  8. PICTURES
 %% ========================================================================
 if run.pictures
-    set(0, 'DefaultFigureVisible', 'off');
-    Q = load(fullfile(outDir, sprintf('phase_sheet_%s', tag), ...
-                      sprintf('dro_tulip_%s_tau%g_Np%d.mat', tag, orbits.tauDRO, orbits.NpTulip)));
-    plot_phase_sheet(Q, files.torus);
-    I = plot_torus_findings(files.catalog, files.findings);
-    fprintf('8. pictures: %s, %s (%d of %d certified)\n', files.torus, files.findings, I.nCert, I.nCells);
-    close all
+    try
+        set(0, 'DefaultFigureVisible', 'off');
+        Q = load(fullfile(outDir, sprintf('phase_sheet_%s', tag), ...
+                          sprintf('dro_tulip_%s_tau%g_Np%d.mat', tag, orbits.tauDRO, orbits.NpTulip)));
+        plot_phase_sheet(Q, files.torus);
+        I = plot_torus_findings(files.catalog, files.findings);
+        fprintf('8. pictures: %s, %s (%d of %d certified)\n', files.torus, files.findings, I.nCert, I.nCells);
+        close all
+    catch ME
+        fprintf('8. pictures THREW: %s\n', ME.message);
+        blockers{end+1} = ['pictures threw: ' ME.message];   % never blocks the ship gate on its own
+    end
 end
 
 %% ========================================================================
 %  9. DELIVERABLE -- refuses without the audit; the ship decision is Mike's.
 %% ========================================================================
+shipBlockers = blockers(~contains(blockers, 'pictures threw'));
 if run.deliverable
-    out = build_dro_deliverable(struct('catMat', files.catalog, 'auditMat', files.audit));
-    fprintf('9. deliverable: %s\n', out.zip);
+    if ~isempty(shipBlockers)
+        fprintf('9. deliverable REFUSED -- %d blocker(s) stand:\n', numel(shipBlockers));
+        fprintf('     - %s\n', shipBlockers{:});
+    else
+        out = build_dro_deliverable(struct('catMat', files.catalog, 'auditMat', files.audit));
+        fprintf('9. deliverable: %s\n', out.zip);
+    end
 else
-    fprintf('9. deliverable not built (run.deliverable is off; it needs the clean audit above)\n');
+    fprintf('9. deliverable not built (run.deliverable is off; it needs a clean audit)\n');
 end
+
+%% ========================================================================
+%  BLOCKER SUMMARY -- what stands between this run and a shippable library.
+%  The chain having finished is NOT the same as the library being clean, so
+%  the two are printed separately and the caller can read either.
+%% ========================================================================
+fprintf('\n');
+if isempty(blockers)
+    fprintf('CHAIN CLEAN: every stage that ran, passed.\n');
+else
+    fprintf('CHAIN COMPLETE WITH %d BLOCKER(S):\n', numel(blockers));
+    fprintf('  - %s\n', blockers{:});
+    fprintf('Nothing ships until these clear; the measurements above are still valid.\n');
+end
+chainBlockers = blockers;      % the batch driver reads this
 
 %% ------------------------------------------------------------------------
 function v = pick(c, a, b)

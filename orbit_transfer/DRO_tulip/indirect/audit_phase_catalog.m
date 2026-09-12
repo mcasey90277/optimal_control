@@ -26,7 +26,8 @@ function A = audit_phase_catalog(catMat, opts)
 %
 %  catMat                   char                    catalog .mat
 %  opts                     struct (optional)
-%   .gateKm [100] .gateVms [10] .tolDz [1e-6] .idx [] entries to audit
+%   .gateKm [100] .gateVms [10] gross flight screens, .tolFlyKm [1] the
+%   ENDPOINT-REPRODUCTION gate (see below), .tolDz [1e-6] .idx [] entries to audit
 %   (default all), .out '' save path, .pool [capped_pool()]
 %
 %% Outputs:
@@ -44,6 +45,17 @@ d = @(f,v) fieldd(opts, f, v);
 here = fileparts(mfilename('fullpath'));
 addpath(fullfile(fileparts(here), '..', 'costate_common'));
 gateKm = d('gateKm', 100);  gateVms = d('gateVms', 10);  tolDz = d('tolDz', 1e-6);
+% ENDPOINT REPRODUCTION. A stored entry is keyed by its PHASES, so it is only
+% as reproducible as the rule that turns a phase into a state. When that rule
+% changes, the entry still solves its own problem but no longer solves the
+% one the current code poses, and the symptom is a flown miss that grows far
+% beyond propagation error. Measured 2026-09-12: replacing a silent ordinary
+% spline with the periodic cubic moved ONE departure endpoint by 0.75 mm and
+% the flown miss of its 26.4-day arc from 0.064 km to 2.125 km, which
+% surfaced downstream as an unexplained witness disagreement. This gate names
+% it at the point of occurrence. It sits well above honest propagation error
+% (the worst legitimate entry measures 0.29 km) and well below that failure.
+tolFlyKm = d('tolFlyKm', 1);
 pool = d('pool', capped_pool());
 
 L = load(catMat);  fn = fieldnames(L);  c = L.(fn{1});
@@ -99,6 +111,12 @@ for kk = idx(:)'
     bad = {};
     if abs(tF(end) - z8(8)) > 1e-8*max(z8(8),1), bad{end+1} = 'flight did not reach t_f'; end
     if ~(r.flyKm  < gateKm),  bad{end+1} = sprintf('arrival %.1f km', r.flyKm); end
+    if r.flyKm >= tolFlyKm && r.flyKm < gateKm
+        bad{end+1} = sprintf(['ENDPOINT REPRODUCTION: the stored costates fly %.3f km from the ' ...
+                              'endpoint the CURRENT phase rule gives (limit %g km) -- the entry ' ...
+                              'was certified against a different endpoint; re-polish it'], ...
+                             r.flyKm, tolFlyKm);
+    end
     if ~(r.flyVms < gateVms), bad{end+1} = sprintf('arrival %.2f m/s', r.flyVms); end
     if r.massErr > 1e-6,      bad{end+1} = sprintf('mass law %.1e', r.massErr); end
 

@@ -65,6 +65,37 @@ for k = 1:size(pairs, 1)
              sprintf('%s reproduced bitwise (max diff %.1e)', pairs{k,3}, d));
 end
 
+% ---- THE LIBRARY'S OWN GRID PHASES -------------------------------------
+% The four vectors above were captured at four phases, none of them a rib
+% DEPARTURE phase on the coarse 105-sample DRO table -- and that is exactly
+% where the superseded ordinary spline differed from the periodic cubic by
+% 0.75 mm, which an audit later read as a 2.1 km flown miss on a 26-day arc
+% (FINDINGS 50). A rule this sensitive needs its regression AT THE PHASES
+% THE LIBRARY USES, so a future change to it fails here rather than in a
+% catalog. The reference values are the periodic cubic's own, captured
+% 2026-09-12; a change that moves any of them by more than a micrometre in
+% nondimensional units (0.4 m) is a change to the library's endpoints.
+lStarKm = 389703.264829278;
+gridD = (0:11)/12;                      % departure phases: the rib columns
+gridA = 0.0754 + (0:11)/12;             % arrival phases: the sheet columns
+gridFile = fullfile(fileparts(mfilename('fullpath')), 'data', 'phase_state_grid.mat');
+haveGrid = isfile(gridFile);
+if haveGrid, G = load(gridFile); end
+worstD = 0;  worstA = 0;
+XD = zeros(6, numel(gridD));  XA = zeros(6, numel(gridA));
+for k = 1:numel(gridD), XD(:,k) = xD(gridD(k)); end
+for k = 1:numel(gridA), XA(:,k) = xA(gridA(k)); end
+if haveGrid
+    worstD = max(abs(XD(:) - G.XD(:)));  worstA = max(abs(XA(:) - G.XA(:)));
+    ok = chk(ok, worstD < 1e-9 && worstA < 1e-9, ...
+             sprintf('library grid phases reproduce: departure %.2e, arrival %.2e ND (%.3f / %.3f mm)', ...
+                     worstD, worstA, worstD*lStarKm*1e6, worstA*lStarKm*1e6));
+else
+    if ~isfolder(fileparts(gridFile)), mkdir(fileparts(gridFile)); end
+    save(gridFile, 'XD', 'XA', 'gridD', 'gridA');
+    fprintf('  NOTE  captured the library grid reference: %s\n', gridFile);
+end
+
 if ok, fprintf('TEST_PHASE_STATE: ALL PASS\n'); else, fprintf('TEST_PHASE_STATE: FAIL\n'); end
 end
 

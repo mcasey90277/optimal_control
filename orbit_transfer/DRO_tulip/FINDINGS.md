@@ -3466,3 +3466,95 @@ sign-trust threshold from the same measurement; the generator-block
 discriminator A(4:6,11:13) = -(T/(m rho))(I - alpha alpha'); blockwise lift
 residuals beside the global backward error, which at sigma_1 = 4e3 admits
 too loose a residual on its own.
+
+## 50. Seven hundred and fifty micrometres: a catalog is only as reproducible as its endpoint rule (2026-09-12)
+
+The first live re-sweep of the 70 mN library with the resolved conjugate
+classifier stopped at the audit, 56 minutes in, and never reached the sweep.
+One entry of 115 came back BAD and `build_70mN_library` asserted on it. Two
+separate problems, and both were worth the run.
+
+### The gate did its job, and it cost a column
+
+At arrival phase 0.8254 the sheet stage certified nothing. Its two candidates:
+
+| candidate | t_f | verdict |
+|---|---|---|
+| crossing 9 | 25.503 d | dense scan not clear: **1 UNRESOLVED** (7 near-miss cleared) |
+| crossing 10 | 25.507 d | flight inadmissible: Moon approach 1160 km < 1900 km |
+
+The second is a pre-existing admissibility rule. The first is the new
+resolver (FINDINGS 49) refusing to clear a candidate whose located minimum
+falls inside the numerical floor band. So the rebuilt catalog carries 114
+entries where the shipped one carries 115. **This is not a refutation**: an
+UNRESOLVED verdict says the instrument cannot tell at the current floor, and
+the floor is the policy value item 8 of the Astra-3 TODO is about.
+
+### The audit failure was 0.75 mm
+
+Entry (12,11) -- departure phase 11/12, arrival 0.9087, the longest arc in the
+library at 26.4 days -- failed on witness disagreement, `|dz|` 7.4e-6 against
+a 1e-6 tolerance. Its costates are **bitwise identical** to the shipped ones,
+and the witness is deterministic (three runs, 7.398718e-06 every time).
+
+The cause is the endpoint. `phase_state` (FINDINGS 44) replaced a privately
+copied, silently-falling-back ordinary spline with the periodic cubic. The
+two rules differ at exactly one grid phase:
+
+| departure phase | periodic vs ordinary |
+|---|---|
+| 0 .. 0.8333 (columns 1-11) | 0, to machine zero |
+| **0.9167 (column 12)** | **1.93e-12 ND = 0.75 mm** |
+
+0.9167 is the phase nearest the seam on the coarse 105-sample DRO table, which
+is where FINDINGS 44 predicted the ordinary spline would misbehave; the tulip
+table has 1328 samples and never differs. Flying the stored costates proves
+the mechanism exactly:
+
+| departure endpoint used | flown miss |
+|---|---|
+| ordinary spline (what the rib was certified against) | **0.064220 km** = the shipped audit |
+| periodic cubic (what the code gives today) | **2.124766 km** = the failed audit |
+
+**0.75 mm becomes 2.1 km over 26.4 days, an amplification of 2.8 million**,
+and the witness moves the costates by 7.4e-6 to absorb it. Four of the five
+entries whose flown miss moved at all are in that one column. The re-certified
+spine came back bitwise identical because sD = 0 is a KNOT of both
+interpolants.
+
+**The entries were never wrong.** Each still solves the problem it was
+certified for. They solve a problem 0.75 mm away from the one the current code
+poses. FINDINGS 44's bitwise-equivalence claim was true for the four phases it
+captured -- none of which was a rib departure phase on the DRO table.
+
+### What was done
+
+**The data.** `repolish_endpoints` flies every stored rib point from the
+CURRENT endpoints and re-polishes only those missing by more than a tolerance,
+from the entry's own junction states, then re-certifies through the full gate
+stack. Self-selecting, nothing hard-coded to a column: 104 points checked, 1
+re-polished, |dz| 1.276e-08, miss 2.1248 -> 0.0644 km, 21 seconds, rib file
+backed up before rewrite. A re-run on a clean library changes nothing.
+
+**The chain.** A bad audit row no longer aborts it. The audit is diagnostic;
+the SHIP gate is where badness belongs. Blockers are collected, the sweep and
+pictures stages are individually fenced, the deliverable refuses by naming the
+blockers, and the run ends `CHAIN CLEAN` or `CHAIN COMPLETE WITH n
+BLOCKER(S)`. The batch verdict distinguishes a blocked library from a failed
+chain. Losing an hour of sweep measurements to a diagnostic row is the defect
+this fixes.
+
+**Two guards.** `audit_phase_catalog` gains an ENDPOINT REPRODUCTION gate
+(`tolFlyKm`, 1 km, against a worst legitimate 0.29 km): an entry that no
+longer flies to its own endpoint is named as such, where it happens, instead
+of surfacing as an unexplained witness disagreement. And `test_phase_state`
+now pins the twelve departure and twelve arrival phases the library actually
+uses, captured and verified bitwise, so a future change to the endpoint rule
+fails in a test rather than in a catalog.
+
+**The standing lesson.** A catalog entry is keyed by its PHASES, so it is only
+as reproducible as the rule that turns a phase into a state. Any change to
+that rule is a change to every stored entry, however small it looks: this one
+was invisible in every direct measurement of the interpolant (the endpoint is
+within 0.4 m of the orbit by propagation) and only appeared after 26 days of
+amplification.

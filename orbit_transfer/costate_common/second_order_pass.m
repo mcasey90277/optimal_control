@@ -30,6 +30,13 @@ function S = second_order_pass(catMat, opts)
 %  opts                     struct (optional)
 %   .logFile [''] .sideMat [<catMat>_2ndprog.mat] .batchSec [inf]
 %   .maxEntries [inf] .K [24] .nSub [8] .writeback [false]
+%   .parallel [true when a pool exists] measure entries on the pool. The
+%   per-entry work is pure and independent, so this is a ~4x wall-clock win
+%   at pool size 4 and changes no number: the SAME measureOne runs on either
+%   path, and tests/test_second_order_parallel pins them bitwise equal.
+%   .chunk [2 x workers] entries per parallel batch. The sidecar is written
+%   after each CHUNK rather than each entry, so a kill costs at most one
+%   chunk instead of one entry -- the price of the speed-up.
 %   .relTolPair [1e-12 1e-9] the two integration settings whose difference
 %   is the lift matrix's MEASURED error. The first sweep used [1e-10 1e-7]
 %   and read 4-9x on seven 26-day entries whose sigma_6 is 0.99: the loose
@@ -133,54 +140,58 @@ end
 
 relPair = d('relTolPair', [1e-12 1e-9]);
 nThis = 0;
-for q = 1:n
-    if R(q).done, continue, end
+todo = find(~[R.done]);
+% USE a pool if the caller already made one (the chain does, via capped_pool);
+% never create one here -- a sweep started inside a fenced worker must not
+% spawn a nested pool.
+pool = gcp('nocreate');
+useParallel = ~isempty(pool) && isvalid(pool) && d('parallel', true);
+if useParallel
+    chunk = max(1, round(d('chunk', 2*pool.NumWorkers)));
+    lg('measuring %d entries on %d workers, %d per chunk', numel(todo), pool.NumWorkers, chunk);
+else
+    chunk = 1;
+    if ~isempty(todo), lg('measuring %d entries serially (no pool)', numel(todo)); end
+end
+
+while ~isempty(todo)
     if toc(t0) > batchSec, lg('batch budget reached, exiting cleanly'); break, end
     if nThis >= maxEnt, lg('maxEntries reached'); break, end
-    z8 = s.z8(:, s.entry_index(iD(q), iA(q), iR(q)));
-    rv0 = stD(s.sD_frac(iD(q)));
-    try
-        Sp = conj_spectrum(z8, rv0(1:6), Tnd, cnd, mu, struct('K', K, 'nSub', nSub));
-        R(q).nInterior   = Sp.nInterior;
-        R(q).multiplicity = Sp.multiplicity;
-        R(q).minRelSigma = Sp.minRel;
-        R(q).nInteriorCand = Sp.nInteriorCand;
-        R(q).nNearMiss   = Sp.nNearMiss;
-        R(q).nZero       = Sp.nZero;
-        R(q).nUnresolved = Sp.nUnresolved;     % located minimum inside the floor band
-        R(q).nEndCand    = Sp.nEndCand;        % endpoint clusters, now refined too
-        R(q).conjClear   = Sp.clear;
-        R(q).candidates  = Sp.candidates;
-        % the rank statement as a MEASURED margin: build C twice and let
-        % Eckart-Young decide, instead of counting against a threshold.
-        % H6 comes from the gates so its clearance is judged against this
-        % arc's own Hamiltonian residual.
-        gA = mintime_hypothesis_gates(z8, rv0(1:6), Tnd, cnd, mu, ...
-                                      struct('keepC', true, 'relTol', relPair(1)));
-        gB = mintime_hypothesis_gates(z8, rv0(1:6), Tnd, cnd, mu, ...
-                                      struct('keepC', true, 'relTol', relPair(2)));
-        Mg = lift_margin(gA.C, gB.C, z8(1:7), struct());
-        R(q).h6margin    = gA.h6Margin;
-        R(q).h6ok        = gA.h6Ok;
-        R(q).h6clearance = gA.h6Clearance;
-        R(q).liftMargin  = Mg.margin;
-        R(q).liftCertified = Mg.certified;
-        R(q).relTolPair  = relPair;
-        R(q).done = true;
-        intStr = '';
-        for ci = find(~strcmp({Sp.candidates.class}, 'start'))
-            intStr = [intStr sprintf(' [%s %s at t/tf %.4f, min %.1e x med]', ...
-                      Sp.candidates(ci).class, Sp.candidates(ci).kind, ...
-                      Sp.candidates(ci).tMinOverTf, Sp.candidates(ci).sigMinRel)]; %#ok<AGROW>
-        end
-        lg('  (%2d,%2d) interior %d, cand %d+%d (int+end): %d near-miss / %d zero / %d UNRESOLVED%s, minRel %.2e, H6 %.1fx %s, lift %.0fx %s', ...
-           iD(q), iA(q), Sp.nInterior, Sp.nInteriorCand, Sp.nEndCand, Sp.nNearMiss, Sp.nZero, Sp.nUnresolved, intStr, Sp.minRel, ...
-           gA.h6Margin, tern(gA.h6Ok, 'PASS', 'FAIL'), Mg.margin, tern(Mg.certified, 'CERT', 'uncert'));
-    catch ME
-        lg('  (%2d,%2d) THREW: %s', iD(q), iA(q), ME.message);
+    nTake = min([chunk, numel(todo), maxEnt - nThis]);
+    idx = todo(1:nTake);  todo(1:nTake) = [];
+
+    % the chunk's inputs, gathered in the CLIENT: slicing these keeps the
+    % catalog sheet off the workers entirely
+    Zc = zeros(8, nTake);  RV0c = zeros(6, nTake);
+    for t = 1:nTake
+        Zc(:, t) = s.z8(:, s.entry_index(iD(idx(t)), iA(idx(t)), iR(idx(t))));
+        rv = stD(s.sD_frac(iD(idx(t))));  RV0c(:, t) = rv(1:6);
     end
-    save(sideMat, 'R');                 % after EVERY entry, not at the end
-    nThis = nThis + 1;
+
+    resC = cell(1, nTake);
+    if useParallel
+        parfor t = 1:nTake
+            resC{t} = measureOne(Zc(:,t), RV0c(:,t), Tnd, cnd, mu, K, nSub, relPair);
+        end
+    else
+        for t = 1:nTake
+            resC{t} = measureOne(Zc(:,t), RV0c(:,t), Tnd, cnd, mu, K, nSub, relPair);
+        end
+    end
+
+    % merge and report IN ORDER, so a parallel log reads like a serial one
+    for t = 1:nTake
+        q = idx(t);  r = resC{t};
+        if r.ok
+            for f = fieldnames(r.rec)', R(q).(f{1}) = r.rec.(f{1}); end
+            R(q).done = true;
+            lg('  (%2d,%2d) %s', iD(q), iA(q), r.msg);
+        else
+            lg('  (%2d,%2d) THREW: %s', iD(q), iA(q), r.msg);
+        end
+        nThis = nThis + 1;
+    end
+    save(sideMat, 'R');                 % after each CHUNK (one entry when serial)
 end
 
 dn = [R.done];
@@ -234,6 +245,48 @@ if d('writeback', false)
                     '(Eckart-Young), > 1 certifies dim S = 1 rather than asserting it.']);
     Lout = struct(fn{1}, cat_);  save(catMat, '-struct', 'Lout');
     lg('[writeback] second-order measurements stored in %s (backup %s)', catMat, bak);
+end
+end
+
+function r = measureOne(z8, rv0, Tnd, cnd, mu, K, nSub, relPair)
+% MEASUREONE  Every second-order measurement for ONE entry: the dense
+% conjugate scan, the H6 margin, and the lift margin from two builds of the
+% constraint matrix. Pure -- no shared state, no file access -- which is what
+% lets the driver run it serially or on a pool with identical results.
+% INPUTS: z8 [8x1]; rv0 [6x1]; Tnd; cnd; mu; K; nSub; relPair [1x2].
+% OUTPUTS: r struct .ok .rec (the sidecar fields) .msg.
+r = struct('ok', false, 'rec', struct(), 'msg', '');
+try
+    Sp = conj_spectrum(z8, rv0(1:6), Tnd, cnd, mu, struct('K', K, 'nSub', nSub));
+    gA = mintime_hypothesis_gates(z8, rv0(1:6), Tnd, cnd, mu, ...
+                                  struct('keepC', true, 'relTol', relPair(1)));
+    gB = mintime_hypothesis_gates(z8, rv0(1:6), Tnd, cnd, mu, ...
+                                  struct('keepC', true, 'relTol', relPair(2)));
+    Mg = lift_margin(gA.C, gB.C, z8(1:7), struct());
+    r.rec = struct('nInterior', Sp.nInterior, 'multiplicity', Sp.multiplicity, ...
+                   'minRelSigma', Sp.minRel, 'nInteriorCand', Sp.nInteriorCand, ...
+                   'nNearMiss', Sp.nNearMiss, 'nZero', Sp.nZero, ...
+                   'nUnresolved', Sp.nUnresolved, 'nEndCand', Sp.nEndCand, ...
+                   'conjClear', Sp.clear, 'candidates', Sp.candidates, ...
+                   'h6margin', gA.h6Margin, 'h6ok', gA.h6Ok, 'h6clearance', gA.h6Clearance, ...
+                   'liftMargin', Mg.margin, 'liftCertified', Mg.certified, ...
+                   'relTolPair', relPair);
+    ci = find(~strcmp({Sp.candidates.class}, 'start'));
+    parts = cell(1, numel(ci));
+    for m = 1:numel(ci)
+        parts{m} = sprintf(' [%s %s at t/tf %.4f, min %.1e x med]', ...
+                           Sp.candidates(ci(m)).class, Sp.candidates(ci(m)).kind, ...
+                           Sp.candidates(ci(m)).tMinOverTf, Sp.candidates(ci(m)).sigMinRel);
+    end
+    intStr = strjoin(parts, '');
+    r.msg = sprintf(['interior %d, cand %d+%d (int+end): %d near-miss / %d zero / ' ...
+                     '%d UNRESOLVED%s, minRel %.2e, H6 %.1fx %s, lift %.0fx %s'], ...
+                    Sp.nInterior, Sp.nInteriorCand, Sp.nEndCand, Sp.nNearMiss, Sp.nZero, ...
+                    Sp.nUnresolved, intStr, Sp.minRel, gA.h6Margin, ...
+                    tern(gA.h6Ok, 'PASS', 'FAIL'), Mg.margin, tern(Mg.certified, 'CERT', 'uncert'));
+    r.ok = true;
+catch ME
+    r.msg = ME.message;
 end
 end
 

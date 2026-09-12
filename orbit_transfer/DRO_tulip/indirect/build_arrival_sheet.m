@@ -13,6 +13,14 @@ function S = build_arrival_sheet(opts)
 %  opts                     struct (optional)
 %   .pattern ['arrival_arc_*.mat'] .out ['results/arrival_sheet_70mN.mat']
 %   .sA0 [0.0754] .nA [12] .copts (certify_crossing options)
+%   .rescan [true] take the arcs' crossings from a RE-SCAN of their stored
+%   path at this sheet's levels, instead of the crossings each walk happened
+%   to record. An arc records crossings of the levels it was GIVEN, so
+%   refining the grid would otherwise mean walking the arcs again -- hours
+%   each -- when the path they already stored contains every crossing there
+%   is (crossings_from_arc). The re-scan reproduces the recorded crossings
+%   exactly and adds the arcs' own start points, which duplicate the library
+%   seeds below and are merged by sheet_from_arcs.
 %   plus arclength_arrival setup options (.thrustN .ispS .sD ...)
 %
 %% Outputs:
@@ -41,18 +49,29 @@ pool = capped_pool();
 files = dir(fullfile(here, 'results', pat));
 assert(~isempty(files), 'no arcs match %s', pat);
 arcs = cell(1, numel(files));
+nAwant = d('nA', 12);  sA0want = d('sA0', 0.0754);
+rescan = d('rescan', true);
+levels = sA0want + (0:nAwant-1)/nAwant;
 for k = 1:numel(files)
     L = load(fullfile(files(k).folder, files(k).name));
-    arcs{k} = L.A;
-    fprintf('arc %d: %-32s %4d roots, sA %.4f -> %.4f, %d folds, %d crossings, stop = %s\n', ...
-        k, files(k).name, numel(L.A.q), L.A.q(1), L.A.q(end), numel(L.A.folds), numel(L.A.crossings), L.A.stop);
+    A = L.A;
+    nRec = numel(A.crossings);
+    if rescan
+        A.crossings = crossings_from_arc(A, levels);
+        A.rescannedAt = levels;
+    end
+    arcs{k} = A;
+    fprintf('arc %d: %-32s %4d roots, sA %.4f -> %.4f, %d folds, %d crossings%s, stop = %s\n', ...
+        k, files(k).name, numel(A.q), A.q(1), A.q(end), numel(A.folds), numel(A.crossings), ...
+        pick(rescan, sprintf(' (re-scanned at %d levels; the walk recorded %d)', nAwant, nRec), ''), ...
+        A.stop);
 end
 
 % SEED the sheet with the certified library solutions at this departure
 % phase: they are the arcs' start points, so they are not crossings of any
 % arc and a crossings-only sheet reports NaN at exactly the phases whose
 % solutions launched it.
-sD0 = anc.sD;  nA = d('nA', 12);  sA0 = d('sA0', 0.0754);
+sD0 = anc.sD;  nA = nAwant;  sA0 = sA0want;
 policy = d('copts', struct());
 policy.pool = pool;
 if ~isfield(policy, 'wallSec'), policy.wallSec = 600; end
@@ -102,4 +121,10 @@ end
 function v = fieldd(s, f, d_)
 % FIELDD  Field with default.  INPUTS: s; f; d_.  OUTPUTS: v.
 if isfield(s, f) && ~isempty(s.(f)), v = s.(f); else, v = d_; end
+end
+
+% ------------------------------------------------------------------------
+function v = pick(c, a, b)
+% PICK  Inline conditional.  INPUTS: c; a; b.  OUTPUTS: v.
+if c, v = a; else, v = b; end
 end

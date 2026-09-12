@@ -3157,3 +3157,36 @@ Three smaller things fell out:
   `costate_common/TODO.md` as new capability.
 
 The script is 63 lines shorter on this pass (429 total).
+
+### Addendum: the residual depends on HOW the arc is propagated (2026-09-11)
+
+Mike, on the study script: "why are we calling ms_tfmin again when we call
+it on line 191? Can't we use the output?" We can, and chasing the difference
+turned up something that qualifies every residual this repository quotes.
+
+Section 7's N1 re-assembled the boundary-value residual and evaluated it at
+the returned point. That reported **1.41e-09** while the solve itself
+reported **7.84e-12** for the same solution. Not a different point, and not
+the segment grid (checked: identical to 0). The difference is the
+PROPAGATION MODE:
+
+| the SAME converged point, residual evaluated | \|R\|_inf |
+|---|---|
+| with its Jacobian requested (210-state propagation, finer steps) | 7.844e-12 |
+| with plain state propagation (14 states) | 1.414e-09 |
+
+`ms_bvp` iterates with the Jacobian, so `info.normR` -- and therefore every
+`tolR` gate in every campaign, including `certify_root`'s 3e-11 -- is the
+first number. A recipient who re-evaluates a stored solution the cheap way
+will see the second and find it 180x worse than advertised.
+
+Nothing here is wrong, and no verdict moves: 1.41e-09 still passes the
+script's 1e-8. But **"converged to 3e-11" means "in the Jacobian mode"**,
+and that qualification was nowhere on file. `costate_common/TODO.md` carries
+the follow-ups: say it in the methodology document, decide whether catalogs
+should also carry the state-only number a recipient will reproduce, and
+check whether the gap widens on the longer arcs at deep thrust.
+
+N1 now reports `it.normR` -- the solve's own residual, at the point it
+returned -- which is one line instead of three and is the number the gates
+are actually set against.

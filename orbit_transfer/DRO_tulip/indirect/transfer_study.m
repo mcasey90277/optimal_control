@@ -240,9 +240,17 @@ lamVmag = vecnorm(Yf(:, 11:13), 2, 2);        % |lambda_v|, the Legendre quantit
 
 % N1  the boundary-value residual: costate equations, terminal matching,
 %     transversality. This IS the statement that the first variation vanishes.
-[~, chk] = ms_tfmin(rv0(1:6), rvf(1:6), seed, Tnd, cnd, muStar, struct('assembleOnly', true));
-R1 = chk.residual([z8(1:7); reshape(it.Y(:,2:end), [], 1); z8(8)]);
-resid = norm(R1, inf);
+%     It is the solve's OWN residual, at the point it returned -- section 5
+%     already computed it, and re-solving to get it back would report a
+%     different number for a reason worth knowing: the residual depends on
+%     HOW the arc is propagated. Measured on this anchor, the same point
+%     gives 7.84e-12 when the Jacobian is requested (the integrator carries
+%     210 states and takes finer steps, which is the mode the solver ran in
+%     and the mode every campaign's tolR gate is evaluated in) and 1.41e-09
+%     under plain 14-state propagation. Quoting the second as "the BVP
+%     residual" would understate the solution by 180x in the wrong
+%     direction.
+resid = it.normR;
 fprintf('   N1 BVP residual   |R|_inf   %9.2e / %-9.0e  %s\n', resid, tol.R, pass(resid < tol.R));
 
 % N2  the Hamiltonian. Autonomous problem, free final time  =>  H == 0.

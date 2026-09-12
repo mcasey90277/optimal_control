@@ -48,6 +48,20 @@
   (all-burn identity) is an option there, so the DERIVED-not-rescaled rule
   has one home. Gate: bitwise equal to the engines' inline form on a real
   flight; `golden_cells` covers `seed_from_z8`'s 3e-13 query-form shift.
+- [ ] **The shooting residual is PROPAGATION-MODE dependent, and every
+  campaign quotes the tighter mode.** Measured 2026-09-11 on the 70 mN
+  anchor: the SAME converged point gives `|R| = 7.84e-12` when the residual
+  is asked for with its Jacobian (the integrator carries 210 states and
+  takes finer steps -- the mode `ms_bvp` iterates in, and the mode every
+  `tolR` gate is therefore evaluated in) and `1.41e-09` under plain 14-state
+  propagation. A factor of 180, far above the 3e-11 the solver reports
+  meeting. Nothing is wrong -- but "converged to 3e-11" means "in the
+  Jacobian mode", and a re-evaluation of a stored solution will not
+  reproduce it. Worth (a) saying so in the methodology doc, (b) deciding
+  whether the catalogs should ALSO carry the state-only number, which is
+  what a recipient re-evaluating an entry will see, and (c) checking whether
+  the gap grows at deeper thrust, where arcs are longer.
+
 - [ ] **Pointwise PMP checks for the FIXED-t_f objectives** (2026-09-11,
   Mike's question "can these be library generic functions?"). `pmp_pointwise_checks`
   already injects the vector field (`opts.rhs`), so it is generic across

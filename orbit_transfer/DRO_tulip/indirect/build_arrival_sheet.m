@@ -57,7 +57,7 @@ for k = 1:numel(files)
     A = L.A;
     nRec = numel(A.crossings);
     if rescan
-        A.crossings = crossings_from_arc(A, levels);
+        A.crossings = crossings_from_arc(A, levels, B);
         A.rescannedAt = levels;
     end
     arcs{k} = A;

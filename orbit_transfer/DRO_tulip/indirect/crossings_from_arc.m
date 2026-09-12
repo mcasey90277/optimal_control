@@ -1,4 +1,4 @@
-function X = crossings_from_arc(A, levels, opts)
+function X = crossings_from_arc(A, levels, B, opts)
 %% Purpose:
 %
 %   RE-SCAN a saved continuation arc for crossings of levels it was not
@@ -13,6 +13,16 @@ function X = crossings_from_arc(A, levels, opts)
 %   by interpolating between two adjacent steps. Adjacent steps differ by
 %   dq ~ 2e-4, far inside the Newton basin, so `certify_crossing` polishes
 %   the guess onto the level exactly as it would have during the walk.
+%
+%   A CROSSING IS A CONVERGED ROOT AT ITS LEVEL, not a bracket. The walk
+%   interpolates and then corrects with a fixed-phase Newton, and so does
+%   this -- through the same library corrector (newton_fixed_q), with the
+%   same locality guard that rejects a correction which has wandered out of
+%   the bracket it came from onto another branch. Without that step the
+%   records carry converged = false and `sheet_from_arcs` refuses every one
+%   of them, which is exactly what a first version of this did: 120 of 120
+%   crossings reported "not converged (|R| = NaN)" -- its own flags read
+%   back, not a solver failure.
 %
 %   The output is in the same shape `sheet_from_arcs` already consumes, so
 %   a refined sheet is the existing pipeline with a different level list.
@@ -37,10 +47,19 @@ function X = crossings_from_arc(A, levels, opts)
 %  levels                   [1 x L]                 arrival phases wanted
 %                                                   (fractions; matched on
 %                                                   the unwrapped q)
+%  B                        struct                  arclength_arrival setup:
+%                                                   needs .res (resFactory),
+%                                                   .Dx. Pass [] to skip the
+%                                                   correction and return
+%                                                   brackets only (for
+%                                                   inspection, not for a
+%                                                   sheet)
 %  opts                     struct (optional)
 %   .nWrap [3] how many periods either side to match a level at
 %   .dedupe [1e-9] two brackets whose interpolated q differ by less than
-%   this are the same crossing
+%   this are the same crossing, .newtonTol [1e-9] .newtonMax [12] the
+%   correction, .maxCorrFrac [2] reject a correction longer than this many
+%   bracket spans (it has left the branch)
 %
 %% Outputs:
 %
@@ -50,8 +69,8 @@ function X = crossings_from_arc(A, levels, opts)
 %                                                   .q (unwrapped, = the
 %                                                   matched level) .p
 %                                                   [n x 1] interpolated
-%                                                   .converged (false)
-%                                                   .normR (NaN)
+%                                                   .converged (of the
+%                                                   correction) .normR
 %                                                   .afterIndex (the step
 %                                                   before the bracket)
 %                                                   .frac (position in the
@@ -62,8 +81,16 @@ function X = crossings_from_arc(A, levels, opts)
 %  Copyright Coorbital Inc.
 %% ------------------------ Begin Code Sequence ---------------------------
 
-if nargin < 3, opts = struct(); end
+if nargin < 3, B = []; end
+if nargin < 4, opts = struct(); end
 nWrap = fieldd(opts, 'nWrap', 3);  dedupe = fieldd(opts, 'dedupe', 1e-9);
+nTol = fieldd(opts, 'newtonTol', 1e-9);  nMax = fieldd(opts, 'newtonMax', 12);
+maxCorrFrac = fieldd(opts, 'maxCorrFrac', 2);
+correct = ~isempty(B);
+if correct
+    assert(isfield(B, 'res') && isfield(B, 'Dx'), 'crossings_from_arc:setup', ...
+           'B must carry .res (resFactory) and .Dx; pass [] to return brackets only');
+end
 assert(isfield(A, 'q') && isfield(A, 'p') && iscell(A.p) && numel(A.p) == numel(A.q), ...
        'crossings_from_arc:arc', 'A needs .q [1 x N] and .p {1 x N} from the same walk');
 q = A.q(:).';  N = numel(q);
@@ -86,11 +113,20 @@ for L = levels
                 qc = q(i) + f*(q(i+1) - q(i));
                 if ~isempty(hit) && any(hit(:,1) == i & abs(hit(:,2) - qc) < dedupe), continue, end
                 hit(end+1, :) = [i, qc]; %#ok<AGROW>
-                % linear interpolation between adjacent continuation steps:
-                % they are ~2e-4 apart in q, well inside the Newton basin
-                p = (1 - f)*A.p{i} + f*A.p{i+1};
-                X(end+1) = struct('level', mod(L, 1), 'q', qc, 'p', p, ...
-                                  'converged', false, 'normR', NaN, ...
+                % linear interpolation between adjacent continuation steps
+                % (~2e-4 apart in q), then the SAME fixed-phase correction
+                % the walk applies, with the same locality guard
+                pPred = (1 - f)*A.p{i} + f*A.p{i+1};
+                pC = pPred;  cv = false;  nr = NaN;
+                if correct
+                    [pC, cv, nr] = newton_fixed_q(B.res, Lw, pPred, B.Dx, nTol, nMax);
+                    span = max(norm((A.p{i+1} - A.p{i})./B.Dx), realmin);
+                    if cv && norm((pC - pPred)./B.Dx) > maxCorrFrac*span
+                        cv = false;                 % left its bracket: another branch
+                    end
+                end
+                X(end+1) = struct('level', mod(L, 1), 'q', qc, 'p', pC, ...
+                                  'converged', cv, 'normR', nr, ...
                                   'afterIndex', i, 'frac', f); %#ok<AGROW>
             end
         end

@@ -376,22 +376,11 @@ h = resFactory(q);  R = h(p);
 end
 
 function [p, converged, normR, nCalls] = newtonFixedQ(resFactory, q, p, Dx, tol, nMax)
-% NEWTONFIXEDQ  Plain scaled Newton at a FIXED parameter value, used to land
-% exactly on a requested level.  INPUTS: resFactory; q; p (guess); Dx; tol;
+% NEWTONFIXEDQ  The library corrector (costate_common/newton_fixed_q),
+% extracted 2026-09-12 on its second consumer. Kept as a thin name here so
+% the call sites below read unchanged.  INPUTS: resFactory; q; p; Dx; tol;
 % nMax.  OUTPUTS: p; converged; normR; nCalls.
-converged = false;  nCalls = 0;  normR = inf;
-h = resFactory(q);
-for it = 1:nMax
-    [R, J] = h(p);  nCalls = nCalls + 1;
-    normR = norm(R, inf);
-    if ~all(isfinite(R)), return, end
-    if normR < tol, converged = true; return, end
-    dx = -((J .* Dx(:)') \ R);
-    if ~all(isfinite(dx)), return, end
-    p = p + dx .* Dx;
-end
-R = h(p);  nCalls = nCalls + 1;  normR = norm(R, inf);
-converged = all(isfinite(R)) && normR < tol;
+[p, converged, normR, nCalls] = newton_fixed_q(resFactory, q, p, Dx, tol, nMax);
 end
 
 function [w, converged, nCalls] = correctInPlane(resFactory, dRdq, wp, tau, Dx, sq, tol, nMax, admissible)

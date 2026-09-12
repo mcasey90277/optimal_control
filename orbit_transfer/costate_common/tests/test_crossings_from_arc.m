@@ -6,6 +6,9 @@ function ok = test_crossings_from_arc()
 %   its stored path instead of walking it again (hours each). This tests
 %   that claim rather than trusting it.
 %
+%     0. a re-scanned crossing is CONVERGED at its level -- the walk
+%        interpolates and then corrects with a fixed-phase Newton, and so
+%        must this, or sheet_from_arcs refuses every record;
 %     1. re-scanning at the levels the walk was GIVEN reproduces every
 %        crossing it recorded, to machine zero in arrival phase;
 %     2. the only extra is the arc's own START point -- a walk does not
@@ -42,9 +45,10 @@ arcFile = fullfile(ind, 'results', 'arrival_arc_cell11_dn_long.mat');
 if ~isfile(arcFile), fprintf('  SKIP  no saved arc (%s)\n', arcFile);  return, end
 L = load(arcFile);  A = L.A;
 sA0 = 0.0754;  coarse = sA0 + (0:11)/12;  fine = sA0 + (0:23)/24;
+[B, anc] = arclength_arrival('setup');
 
 % ---- 1, 2. the re-scan reproduces the walk, plus the start point --------
-X = crossings_from_arc(A, coarse);
+X = crossings_from_arc(A, coarse, B);
 rec = sort([A.crossings.q]);  got = sort([X.q]);
 dmin = arrayfun(@(r) min(abs(got - r)), rec);
 ok = chk(ok, max(dmin) < 1e-12, ...
@@ -66,14 +70,19 @@ ok = chk(ok, any(cnt > 1), ...
                  max(cnt), u(find(cnt == max(cnt), 1))));
 
 % ---- 5. doubling the grid ------------------------------------------------
-XF = crossings_from_arc(A, fine);
+XF = crossings_from_arc(A, fine, B);
 qc = round(sort([X.q]), 9);  qf = round(sort([XF.q]), 9);
 ok = chk(ok, all(ismember(qc, qf)), 'every coarse crossing survives at double resolution');
 ok = chk(ok, numel(XF) >= 1.5*numel(X), ...
          sprintf('and the count roughly doubles: %d -> %d', numel(X), numel(XF)));
 
-% ---- 3. THE claim: an interpolated seed certifies to the same root -------
-[B, anc] = arclength_arrival('setup');
+% ---- 3. THE claim: a re-scanned crossing polishes to the same root -------
+% FIRST: it must be a CONVERGED crossing at its level, which is the contract
+% sheet_from_arcs enforces. A bracket is not a crossing.
+cvAll = [X.converged];
+ok = chk(ok, mean(cvAll) > 0.8, ...
+         sprintf('the fixed-phase correction converges: %d of %d crossings (worst |R| %.1e)', ...
+                 nnz(cvAll), numel(cvAll), max([X(cvAll).normR])));
 pool = gcp('nocreate');
 copts = struct('pool', pool, 'wallSec', 600);
 nTry = min(3, numel(A.crossings));

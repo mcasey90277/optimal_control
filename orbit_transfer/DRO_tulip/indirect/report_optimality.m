@@ -124,8 +124,11 @@ if conjOk == 0 && isfield(T, 'conjVerdict') && strcmpi(T.conjVerdict, 'ENDPOINT'
 end
 push('S4', 'no conjugate time in (0, t_f]', gv(T, 'conj'), conjOk, 2, '%9.0f');
 h6 = firstOf(gv(T, 'h6Margin'), gg(g, 'h6Margin'));
-push('S5', 'H6 instrument validity: (c/T)/lambda_m(0) margin', h6, ...
-     tri(h6, @(x) x >= h6MarginMin), 2, '%9.2f');
+h6ok = tri(h6, @(x) x > h6MarginMin);            % strict, as h6_margin itself
+if h6ok == 1 && isfield(g, 'h6Ok') && ~isempty(g.h6Ok) && ~g.h6Ok
+    h6ok = 0;                                    % the helper's clearance verdict governs
+end
+push('S5', 'H6 instrument validity: (c/T)/lambda_m(0) margin', h6, h6ok, 2, '%9.2f');
 
 % ---- CROSS-CHECKS -----------------------------------------------------
 lines{end+1} = '';

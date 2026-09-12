@@ -8,12 +8,18 @@ function V = validate_flight(t, Y, tf, Tnd, cnd, mu, lStar, opts)
 %   perfectly finite trajectory, and every metric taken from its last row
 %   then describes a flight that never happened. This checks
 %
-%     1. the flight reached t_f (last sample within relTf of t_f);
-%     2. every state sample is finite;
-%     3. the all-burn mass law m(t) = 1 - (T/c) t holds at the end and the
-%        final mass is positive;
+%     1. the flight reached t_f (last sample within relTf of t_f), and the
+%        times are real, finite and increasing;
+%     2. every sample is finite -- states AND, when carried, costates;
+%     3. the all-burn mass law m(t) = 1 - (T/c) t holds at EVERY sample,
+%        the mass is positive at every sample, and the expected final mass
+%        1 - (T/c) t_f is itself strictly positive (near exhaustion an
+%        absolute tolerance on the last sample could otherwise admit a
+%        positive reported mass against a non-positive expected one --
+%        Astra review 2026-09-11);
 %     4. closest approach to the Moon and to the Earth exceeds the stated
 %        clearances (a trajectory through a primary is not a solution).
+%        These are SCREENING values on the samples, not path constraints.
 %
 %   V.reason names the FIRST failed check.
 %
@@ -32,9 +38,12 @@ function V = validate_flight(t, Y, tf, Tnd, cnd, mu, lStar, opts)
 %% Outputs:
 %
 %  V                        struct                  .ok .reason .tEnd
-%                                                   .mEnd .mExpect .moonKm
-%                                                   .earthKm (closest
-%                                                   approaches)
+%                                                   .mEnd .mExpect
+%                                                   .massLawErr (max
+%                                                   |m - (1 - T t/c)| over
+%                                                   the flight) .mMin
+%                                                   .moonKm .earthKm
+%                                                   (closest approaches)
 %
 %% Revision History:
 %  M. Casey                                                   (c) 09/10/2026
@@ -47,9 +56,13 @@ relTf = d('relTf', 1e-8);  relMass = d('relMass', 1e-6);
 moonKmMin = d('moonKmMin', 1900);  earthKmMin = d('earthKmMin', 6600);
 
 V = struct('ok', false, 'reason', '', 'tEnd', NaN, 'mEnd', NaN, ...
-           'mExpect', NaN, 'moonKm', NaN, 'earthKm', NaN);
-if isempty(t) || isempty(Y) || size(Y, 2) < 7
+           'mExpect', NaN, 'massLawErr', NaN, 'mMin', NaN, 'moonKm', NaN, 'earthKm', NaN);
+if isempty(t) || isempty(Y) || size(Y, 2) < 7 || numel(t) ~= size(Y, 1)
     V.reason = 'flight returned no usable samples';  return
+end
+t = t(:);
+if ~(isreal(t) && all(isfinite(t)) && all(diff(t) >= 0))
+    V.reason = 'flight times are not real, finite and non-decreasing';  return
 end
 [okT, tEnd] = scalar_verdict(t(end));
 V.tEnd = tEnd;
@@ -57,13 +70,25 @@ if ~okT || ~(tf > 0) || abs(tEnd - tf) > relTf*max(tf, 1)
     V.reason = sprintf('flight did not reach t_f (t_end = %.6g vs t_f = %.6g)', tEnd, tf);
     return
 end
-if ~all(isfinite(Y(:, 1:7)), 'all')
+if ~(isreal(Y) && all(isfinite(Y(:, 1:7)), 'all'))
     V.reason = 'flight returned non-finite states';  return
 end
-V.mEnd = Y(end, 7);  V.mExpect = 1 - (Tnd/cnd)*tf;
-if ~(V.mEnd > 0) || abs(V.mEnd - V.mExpect) > relMass*max(V.mExpect, 1)
-    V.reason = sprintf('mass law violated: m(t_f) = %.9g, all-burn expects %.9g', ...
-                       V.mEnd, V.mExpect);
+if size(Y, 2) >= 14 && ~all(isfinite(Y(:, 8:14)), 'all')
+    V.reason = 'flight returned non-finite costates';  return
+end
+V.mEnd = Y(end, 7);  V.mExpect = 1 - (Tnd/cnd)*tf;  V.mMin = min(Y(:, 7));
+mLaw = 1 - (Tnd/cnd)*t;
+V.massLawErr = max(abs(Y(:, 7) - mLaw));
+if ~(V.mExpect > 0)
+    V.reason = sprintf('all-burn to t_f = %.6g exhausts the mass (expects %.9g)', tf, V.mExpect);
+    return
+end
+if ~(V.mMin > 0)
+    V.reason = sprintf('mass is not positive at every sample (min %.9g)', V.mMin);  return
+end
+if V.massLawErr > relMass*max(V.mExpect, 1)
+    V.reason = sprintf('mass law violated: max |m(t) - (1 - T t/c)| = %.3e (m(t_f) = %.9g, all-burn expects %.9g)', ...
+                       V.massLawErr, V.mEnd, V.mExpect);
     return
 end
 % closest approaches on the SAMPLES: a coarse grid can miss a graze, so

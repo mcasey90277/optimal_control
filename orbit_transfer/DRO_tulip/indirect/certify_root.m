@@ -266,8 +266,16 @@ if ~isfield(g, 'h6Margin'), C.reason = 'gates omitted H6 (h6Margin)'; C.wallSec 
 [okH6, h6m] = scalar_verdict(g.h6Margin);
 if ~okH6, C.reason = 'H6 margin is not a real finite scalar'; C.wallSec = toc(t0); return, end
 C.h6Margin = h6m;
-if ~(h6m >= h6MarginMin)
-    C.reason = sprintf('H6 margin %.2fx < required %.2fx (lambda_m(0) too close to c/T)', ...
+% the helper's own verdict FIRST (strict margin > 1 AND clearance above the
+% Hamiltonian residual): the margin ratio alone let equality through and
+% ignored the clearance (Astra review 2026-09-11)
+if ~(isfield(g, 'h6Ok') && islogical(g.h6Ok) && isscalar(g.h6Ok) && g.h6Ok)
+    if isfield(g, 'h6Reason'), why = g.h6Reason; else, why = 'h6Ok is false or missing'; end
+    C.reason = sprintf('H6 not established: %s', why);
+    C.wallSec = toc(t0);  return
+end
+if ~(h6m > h6MarginMin)
+    C.reason = sprintf('H6 margin %.2fx not > required %.2fx (lambda_m(0) too close to c/T)', ...
                        h6m, h6MarginMin);
     C.wallSec = toc(t0);  return
 end

@@ -31,7 +31,13 @@ ok = chk(ok, P.Hmax < 1e-6, sprintf('Hamiltonian max|H| = %.2e', P.Hmax));
 ok = chk(ok, P.adjErr < 1e-7, sprintf('adjoint equations, relative error %.2e', P.adjErr));
 ok = chk(ok, P.fdAgree < 1e-5, sprintf('two FD step sizes agree to %.2e', P.fdAgree));
 ok = chk(ok, P.dirGap <= 1e-12, sprintf('exact minimum-principle gap of the APPLIED control %.2e', P.dirGap));
+ok = chk(ok, isfield(P, 'fullGap') && P.fullGap <= 1e-12, ...
+         sprintf('the FULL control gap (direction + throttle) %.2e', P.fullGap));
+ok = chk(ok, isfield(P, 'gapMin') && isfield(P, 'gapMax') && P.gapMin <= P.gapMax && abs(P.gapMin) <= 1e-12, ...
+         sprintf('signed extremes kept: %+.2e .. %+.2e', P.gapMin, P.gapMax));
 ok = chk(ok, P.throttleErr < 1e-10, sprintf('applied throttle is 1 to %.2e', P.throttleErr));
+ok = chk(ok, isfield(P, 'throttleMassErr') && P.throttleMassErr < 1e-10 && P.throttleAccErr < 1e-10, ...
+         sprintf('on BOTH rows: acceleration %.2e, mass %.2e', P.throttleAccErr, P.throttleMassErr));
 ok = chk(ok, P.minQmt >= 0, sprintf('weak throttle condition min Q_mt = %.3f >= 0', P.minQmt));
 ok = chk(ok, P.lamMf < 1e-6, sprintf('transversality |lambda_m(t_f)| = %.2e', P.lamMf));
 ok = chk(ok, numel(P.tSample) == P.nSample && P.tSample(end) <= t(end), ...
@@ -46,6 +52,24 @@ Pc = pmp_pointwise_checks(t, Y, B.Tnd, B.cnd, B.mu, struct('rhs', @wrongSignFiel
 ok = chk(ok, Pc.dirGap > 1e-2, sprintf('a wrong-sign thrust field opens the gap: %.2e', Pc.dirGap));
 ok = chk(ok, Pc.adjErr > 1e-3, sprintf('and breaks the adjoint check too: %.2e', Pc.adjErr));
 
+% MUTATION 2 (Astra review 2026-09-11): a field whose MASS row burns at half
+% throttle while the acceleration is correct. Invisible to the direction gap
+% and to the acceleration-side throttle; the mass-row throttle must see it.
+Pm = pmp_pointwise_checks(t, Y, B.Tnd, B.cnd, B.mu, struct('rhs', @halfMassFlowField));
+ok = chk(ok, Pm.dirGap <= 1e-12 && Pm.throttleAccErr < 1e-10, ...
+         sprintf('half mass flow: direction gap %.1e and acceleration throttle %.1e stay clean', ...
+                 Pm.dirGap, Pm.throttleAccErr));
+ok = chk(ok, Pm.throttleMassErr > 0.49 && Pm.throttleErr > 0.49, ...
+         sprintf('but the MASS-row throttle reads it: error %.3f', Pm.throttleMassErr));
+
+% MUTATION 3: an OVER-UNIT thrust along the minimiser. The old gap started
+% at zero and took a max, so the negative gap this produces was clipped to
+% a perfect zero; the signed minimum and |full gap| must both show it.
+Po = pmp_pointwise_checks(t, Y, B.Tnd, B.cnd, B.mu, struct('rhs', @overThrustField));
+ok = chk(ok, Po.gapMin < -1e-6, sprintf('over-unit thrust: signed minimum gap %.2e < 0 (was clipped)', Po.gapMin));
+ok = chk(ok, Po.fullGap > 1e-6 && Po.throttleAccErr > 1e-4, ...
+         sprintf('|full gap| %.2e and acceleration throttle error %.1e flag it', Po.fullGap, Po.throttleAccErr));
+
 if ok, fprintf('TEST_PMP_POINTWISE_CHECKS: ALL PASS\n'); else, fprintf('TEST_PMP_POINTWISE_CHECKS: FAIL\n'); end
 end
 
@@ -55,6 +79,21 @@ function F = wrongSignField(y, Tmax, c, mu)
 F  = mintime_rhs_point(y, Tmax, c, mu);
 F0 = mintime_rhs_point(y, 0, c, mu);
 F(4:6) = 2*F0(4:6) - F(4:6);
+end
+
+function F = halfMassFlowField(y, Tmax, c, mu)
+% HALFMASSFLOWFIELD  Correct acceleration, mass row at half throttle.
+% INPUTS: y; Tmax; c; mu.  OUTPUTS: F [14x1].
+F = mintime_rhs_point(y, Tmax, c, mu);
+F(7) = 0.5*F(7);
+end
+
+function F = overThrustField(y, Tmax, c, mu)
+% OVERTHRUSTFIELD  Thrust acceleration scaled by 1.001 along the minimiser.
+% INPUTS: y; Tmax; c; mu.  OUTPUTS: F [14x1].
+F  = mintime_rhs_point(y, Tmax, c, mu);
+F0 = mintime_rhs_point(y, 0, c, mu);
+F(4:6) = F0(4:6) + 1.001*(F(4:6) - F0(4:6));
 end
 
 function ok = chk(ok, cond, msg)

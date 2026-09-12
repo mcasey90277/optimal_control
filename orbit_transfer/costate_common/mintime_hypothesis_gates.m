@@ -27,6 +27,18 @@ function g = mintime_hypothesis_gates(z8, rv0, Tmax, c, muStar, opts)
 %   so the samples are the propagator's own; gate values are sample minima
 %   (junction resolution is NOT assumed -- the dense flight is used).
 %
+%   PHYSICS, independently: pumpkyn's field is what every solver and every
+%   check in this pipeline propagates, so a self-consistent wrong field
+%   would pass them all (Astra review 2026-09-11). This file carries a
+%   hand-written CR3BP + thrust field (fixedField) and its CasADi Jacobian,
+%   which are compared ROW BY ROW against pumpkyn tfMinEoM along the arc:
+%     .fieldErr   max rel |f_pumpkyn(1:7) - f_ref|            (state rows)
+%     .adjErrRef  max rel |lam'_pumpkyn + A_ref(t)' lam|      (adjoint rows;
+%                 A_ref = df_ref/dx with the control frozen, which equals
+%                 dH/dx at the optimised control because H_x does not
+%                 depend on the control law -- the envelope argument)
+%   These are the seven-row statements; Hresid below is one projection.
+%
 %  ASSUMPTIONS / NOTES:
 %
 % • The fixed-control Jacobian A(t) = df/dx|_{alpha(t), s = 1} is built by
@@ -52,7 +64,9 @@ function g = mintime_hypothesis_gates(z8, rv0, Tmax, c, muStar, opts)
 %
 %% Outputs:
 %
-%  g                        struct                  .h6Margin .h6Ok
+%  g                        struct                  .fieldErr .adjErrRef
+%                                                   (see PHYSICS above)
+%                                                   .h6Margin .h6Ok .h6Reason
 %                                                   .h6LamM0 .h6Threshold
 %                                                   .h6Hmax .h6Clearance (H6, the reduced
 %                                                   problem's spurious-zero
@@ -94,8 +108,20 @@ end
 lamF = sum(Y(:, 8:14) .* F, 2);
 g.Hresid = max(abs(lamF + 1));
 
-% --- H1': dimension of the lift space S -------------------------------------
+% --- PHYSICS: pumpkyn's field against the independent one, row by row -----
 Afun = fixedJacobian();                       % persistent CasADi Function
+g.fieldErr = 0;  g.adjErrRef = 0;
+for k = 1:size(Y, 1)
+    yk = Y(k, :)';
+    Fp = mintime_rhs_point(yk, Tmax, c, muStar);
+    fr = F(k, :)';
+    g.fieldErr = max(g.fieldErr, norm(Fp(1:7) - fr) / max(norm(fr), 1));
+    A = full(Afun(yk(1:7), unitv(-yk(11:13)), Tmax, c, muStar));
+    adjRef = -A' * yk(8:14);
+    g.adjErrRef = max(g.adjErrRef, norm(Fp(8:14) - adjRef) / max(norm(adjRef), 1));
+end
+
+% --- H1': dimension of the lift space S -------------------------------------
 xOf  = @(t) interp1(tau, Y(:, 1:7),   t, 'pchip')';
 aOf  = @(t) -interp1(tau, lamV, t, 'pchip')';
 psiRhs = @(t, psi) reshape(-full(Afun(xOf(t), unitv(aOf(t)), Tmax, c, muStar))' * reshape(psi, 7, 7), [], 1);
@@ -130,7 +156,7 @@ g.nullResid = norm(C * z8(1:7)) / norm(z8(1:7));
 % The clearance is judged against THIS arc's Hamiltonian residual: the
 % reduced Hamiltonian is known no better than that.
 H6 = h6_margin(z8, Tmax, c, struct('Hresid', g.Hresid));
-g.h6Margin = H6.margin;  g.h6Ok = H6.ok;  g.h6LamM0 = H6.lamM0;
+g.h6Margin = H6.margin;  g.h6Ok = H6.ok;  g.h6Reason = H6.reason;  g.h6LamM0 = H6.lamM0;
 g.h6Threshold = H6.threshold;  g.h6Hmax = H6.hMax;  g.h6Clearance = H6.clearance;
 end
 

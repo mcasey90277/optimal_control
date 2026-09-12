@@ -13,15 +13,24 @@ function P = pmp_pointwise_checks(t, Y, Tnd, cnd, mu, opts)
 %         Differencing the propagator's OUTPUT instead measures its sample
 %         spacing, not the equations.
 %     N6  the minimum principle, EXACTLY, for the control the propagator
-%         APPLIED: the thrust acceleration is recovered as the difference
-%         between the powered and the coasting vector field, and the gap
-%         H(applied) - min_alpha H = (T/m)(lambda_v . alpha + |lambda_v|)
-%         is evaluated directly. Sampling the unit sphere against the
-%         analytic minimiser tests nothing (the minimiser is constructed).
-%         Also the applied throttle (must be 1) and the WEAK throttle
-%         condition Q_mt = |lambda_v|/m + lambda_m/c >= 0, under which u = 1
-%         minimises H; the STRICT version min Q_mt > 0 is the sufficiency
-%         hypothesis S2.
+%         APPLIED. The applied control is recovered from the field itself,
+%         on BOTH rows it enters: the thrust acceleration as the difference
+%         between the powered and the coasting vector field, b = u*alpha,
+%         and the throttle again from the mass row, u_mass = -c F_m / T.
+%         (Astra review 2026-09-11: the acceleration norm establishes only
+%         the acceleration-side throttle; the field must consume mass at
+%         the SAME throttle.) The gap against the FULL control minimum,
+%           H(u, alpha) - min_{u', beta} H
+%             = (T/m)(lambda_v . b + |b| |lambda_v|)      direction part
+%             + T (max(Q, 0) - |b| Q),                     throttle part
+%           Q = |lambda_v|/m + lambda_m/c,
+%         is evaluated directly and is zero exactly at the minimiser;
+%         both its MINIMUM and its MAXIMUM over the samples are kept, so
+%         an over-unit thrust along the minimiser (a negative gap) cannot
+%         hide behind a max that starts at zero. Sampling the unit sphere
+%         against the analytic minimiser tests nothing (the minimiser is
+%         constructed). The WEAK throttle condition Q >= 0 is reported; the
+%         STRICT version min Q > 0 is the sufficiency hypothesis S2.
 %
 %% Inputs:
 %
@@ -38,8 +47,16 @@ function P = pmp_pointwise_checks(t, Y, Tnd, cnd, mu, opts)
 %% Outputs:
 %
 %  P                        struct                  .Hmax .lamMf .adjErr
-%                                                   .fdAgree .dirGap
-%                                                   .throttleErr .minQmt
+%                                                   .fdAgree
+%                                                   .dirGap (max |direction
+%                                                   part|) .fullGap (max
+%                                                   |full gap|) .gapMin
+%                                                   .gapMax (signed extremes
+%                                                   of the full gap)
+%                                                   .throttleErr (max of the
+%                                                   two below)
+%                                                   .throttleAccErr
+%                                                   .throttleMassErr .minQmt
 %                                                   .tSample [n x 1]
 %                                                   .nSample .Hval [N x 1]
 %                                                   .Qmt [N x 1]
@@ -74,7 +91,9 @@ P.minQmt = min(P.Qmt);
 % N5, N6 on interior samples
 kk = unique(round(linspace(2, N - 1, nS)));
 P.tSample = t(kk);  P.nSample = numel(kk);
-adjErr = 0;  fdAgree = 0;  dirGap = 0;  throttleErr = 0;
+adjErr = 0;  fdAgree = 0;
+dirGap = 0;  fullGap = 0;  gapMin = Inf;  gapMax = -Inf;
+throttleAccErr = 0;  throttleMassErr = 0;
 for k = kk
     yk = Y(k, :).';
     F  = rhs(yk, Tnd, cnd, mu);
@@ -86,15 +105,26 @@ for k = kk
     gR = (4*g2 - g1)/3;
     adjErr  = max(adjErr,  norm(F(8:14) + gR)/max(norm(gR), 1));
     fdAgree = max(fdAgree, norm(g1 - g2)/max(norm(gR), 1));
-    % minimum principle with the APPLIED control
-    m = yk(7);  lv = yk(11:13);
+    % minimum principle with the APPLIED control, recovered on both rows
+    m = yk(7);  lv = yk(11:13);  rho = norm(lv);  lamM = yk(14);
     aT = F(4:6) - F0(4:6);                                 % (T/m) u alpha
-    alphaApplied = aT*m/Tnd;                               % u alpha
-    throttleErr = max(throttleErr, abs(norm(alphaApplied) - 1));
-    gap = (Tnd/m)*(lv.'*alphaApplied + norm(lv));          % >= 0, 0 at the minimiser
-    dirGap = max(dirGap, gap);
+    b  = aT*m/Tnd;                                         % u alpha (not unit unless u = 1)
+    u  = norm(b);
+    uMass = -cnd*F(7)/Tnd;                                 % the throttle the MASS row burned at
+    throttleAccErr  = max(throttleAccErr,  abs(u - 1));
+    throttleMassErr = max(throttleMassErr, abs(uMass - 1));
+    Q = rho/m + lamM/cnd;
+    gDir = (Tnd/m)*(lv.'*b + u*rho);                       % direction part, 0 at -lv/rho
+    gThr = Tnd*(max(Q, 0) - u*Q);                          % throttle part, 0 at u = 1 when Q >= 0
+    gFull = gDir + gThr;
+    dirGap  = max(dirGap,  abs(gDir));
+    fullGap = max(fullGap, abs(gFull));
+    gapMin  = min(gapMin, gFull);  gapMax = max(gapMax, gFull);
 end
-P.adjErr = adjErr;  P.fdAgree = fdAgree;  P.dirGap = dirGap;  P.throttleErr = throttleErr;
+P.adjErr = adjErr;  P.fdAgree = fdAgree;
+P.dirGap = dirGap;  P.fullGap = fullGap;  P.gapMin = gapMin;  P.gapMax = gapMax;
+P.throttleAccErr = throttleAccErr;  P.throttleMassErr = throttleMassErr;
+P.throttleErr = max(throttleAccErr, throttleMassErr);
 end
 
 function g = dHdx(rhs, yk, h, Tnd, cnd, mu)

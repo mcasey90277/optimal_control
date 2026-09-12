@@ -3214,3 +3214,82 @@ to ask what they stood for: N NECESSARY, S SUFFICIENCY (the theorem's
 HYPOTHESES, not its conclusions), V VALIDITY (V1 the conjugate
 instrument's own precondition, V2 the wiring), X CROSS-CHECK. A legend that
 lists IDs without expanding them is not a legend.
+
+## 47. Two outside math reviews of transfer_study: the conditions were right, the gates around them were not (2026-09-11)
+
+GPT-6 Astra (xhigh) and Gemini 3.1 Pro reviewed the mathematics of the
+study script's N/S/V/X conditions
+(`reviews/transfer_study_math_{astra,gemini}_2026-09-11.md`; adjudication
+in `reviews/transfer_study_math_adjudicated_2026-09-11.md`). Astra confirmed
+every formula -- Hamiltonian, mass-costate sign, switching function,
+spherical Legendre, the H6 identity and the free-time quotient's rank
+interpretation -- and then found the script ENFORCING less than it printed.
+Gemini graded everything CORRECT and its one code finding (an "undefined"
+function that exists) was a bundle omission. Where they disagreed, Astra was
+right each time it could be checked.
+
+**Confirmed and fixed, in the shared instruments:**
+
+- **V1 accepted equality and ignored the clearance.** The script gated on
+  `h6Margin >= 1` and never read `h6Ok`; `certify_root` and
+  `report_optimality` had the same `>=`. All three now take the helper's own
+  verdict (strict margin AND clearance above the Hamiltonian residual). No
+  entry moves (margins 9-33x), which is luck, not design -- the same
+  "computed, not enforced" defect section 41 fixed in the certifier had
+  been reintroduced in the script.
+- **N6 checked the throttle on three of the four rows it enters.** The
+  applied control is now recovered on the acceleration rows AND the mass
+  row (`u_mass = -c F_m / T`), the gap is against the FULL control minimum
+  (direction + throttle), and its signed minimum is kept -- the old
+  accumulator started at zero and took a max, so an over-unit thrust along
+  the minimiser produced a perfect zero. Two mutation tests: half mass
+  flow (direction gap 6.7e-16 stays clean, mass-row throttle reads 0.500),
+  1.001x thrust (signed gap -2.9e-3, was clipped).
+- **S4 could PASS without covering the final segment**, and the script
+  printed the uncovered interval without gating on it. A free-time test
+  without y(t_f) is now UNDETERMINED with a reason; the script requires
+  `.covered`. A sign change on the last bracket between RESOLVED nonzero
+  samples is an interior root (FAIL), not ENDPOINT; ENDPOINT remains for an
+  unresolvable final sign. The two exact identities J p(0) = 0 and
+  p(t)'J(t) = 0 are measured: 3.8e-15 and 8.0e-14 on the anchor.
+- **N2 and N5 tested pumpkyn's field against itself.** The gates now
+  compare pumpkyn's state rows and adjoint rows, row by row along the arc,
+  against the hand-written CR3BP + thrust field and its CasADi Jacobian:
+  1.8e-16 and 9.3e-15. That is the independent physics check the X1
+  cross-check was credited with and does not provide (both solvers
+  propagate pumpkyn).
+- **S3 printed its self-consistency residuals and required none of them.**
+  The lift residual, the Hamiltonian residual and the Eckart-Young margin
+  (`lift_margin`, 2545x on the anchor) are now all required. The rank
+  threshold alone forces at least one small singular value
+  (sigma_min <= nullResid by construction); the margin is what makes
+  "exactly one" a measurement. The lift residual's floor is 2.2e-6 at both
+  relTol 1e-12 and 1e-10 -- it is the pchip interpolation of the flown arc,
+  not the integration tolerance -- so the tolerance is lift_margin's own
+  1e-4, handed through as one value.
+- **The dense spectrum scan is wired into S4** (192 samples, two-level
+  refinement, 0 candidates on the anchor), the endpoint interpolant is
+  compared against a propagation to the phase (2.2e-8 ND = 8.6 m on the
+  tulip), and `validate_flight` checks costates, pointwise mass law,
+  positive mass everywhere and a positive EXPECTED final mass.
+
+**Wording corrected:** N1 is "the shooting equations are satisfied", not
+"the first variation vanishes" (on a boundary control the first-order
+control condition is the minimum principle, N6); N2/N4 are re-evaluations,
+not independent evidence; S2 follows from N4 + N5 + S1 on an exact lift;
+X1 is a second shooting implementation on shared physics; the verdict names
+the endpoint conditions (fixed r, v at both ends, m(0) = 1, free terminal
+mass and time, phases fixed inputs) and calls itself numerical evidence,
+not a certificate.
+
+**Reproduction:** the script runs end to end with every line PASS and the
+same numbers as before the review (t_f 17.7976 d, 0.7485 km/s, min|lam_v|
+3.2359, min Q 3.8248, H6 9.0x). New test `test_conj_coverage`; ten
+existing tests re-run green.
+
+**Open (theory, for `doc/mintime_second_order_audit.tex`):** the subarc
+normality argument by analytic continuation of the strict all-burn
+extremal; the explicit reduction of the free-mass second variation to the
+six-state nonautonomous problem; a short-time sign expansion to close the
+interval before the first junction; between-sample bounds for S1, S2 and
+the clearances. Listed in `costate_common/TODO.md`.

@@ -1,11 +1,12 @@
 %% TRANSFER_STUDY  One minimum-time low-thrust transfer: DRO-to-Tulip
 %
 %   Edit the parameter blocks, press Run. The STEPS are done here rather than
-%   behind a front door, so the machinery is visible. Three computations stay
+%   behind a front door, so the machinery is visible. Five computations stay
 %   in the library because reimplementing them here would create a second,
-%   unverified copy: the lift-space rank (S3), the Jacobi determinant (S4) and
-%   the H6 margin (V1). Section 7 asserts the inline numbers against that
-%   library for the same reason.
+%   unverified copy: the lift-space rank and its Eckart-Young margin (S3),
+%   the Jacobi determinant and the dense spectrum scan (S4) and the H6
+%   margin (V1). Section 8 asserts the inline numbers against that library
+%   for the same reason.
 %
 %   PREREQUISITE. The solve needs a converged SEED, and section 4 finds it
 %   (dro_tulip_seed). The certified library covers ONE operating point --
@@ -40,9 +41,13 @@
 %                      all: V1 is the conjugate instrument's own
 %                      precondition (H6), V2 is a wiring check that the
 %                      instruments were handed the same flight and physics.
-%     X  CROSS-CHECK -- X1, a second solver against OUR implementation. Not
-%                      a condition of the theory, but a failure still blocks
-%                      the claim.
+%     X  CROSS-CHECK -- X1, a second SHOOTING implementation against ours
+%                      (both propagate pumpkyn's field, so it checks the
+%                      solver, not the physics); X2, pumpkyn's field against
+%                      an independently written CR3BP + thrust field, row by
+%                      row (that IS the physics check). Neither is a
+%                      condition of the theory; a failure still blocks the
+%                      claim.
 %
 %   Sections 7 and 8 are separate because the theory separates them: the
 %   first-order conditions are HYPOTHESES of the sufficiency theorem, not
@@ -52,7 +57,9 @@
 %
 %   Section 6 is not an optimality condition at all. It guards against OUR
 %   solver: a bug in our shooting could give a self-consistent answer to the
-%   wrong problem, and only a second implementation catches that.
+%   wrong problem, and only a second implementation catches that. It shares
+%   pumpkyn's equations with us, so a wrong FIELD would pass both; X2 in
+%   section 7 is the check against an independently written field.
 %
 %   ONE FLIGHT. Section 5 flies the converged costates once, into `flight`;
 %   every number in sections 7-9 and the figure come from that object, so the
@@ -83,13 +90,26 @@ tol = struct( ...
     'seamDeriv', 1e-6,  ...   % interpolant DERIVATIVE mismatch across s = 0
     'R',         1e-8,  ...   % N1 BVP residual, inf-norm (solve must reach it)
     'H',         1e-6,  ...   % N2 |H| along the arc (exactly 0 in theory)
-    'km',        100,   ...   % N3 flown arrival, position
-    'ms',        10,    ...   % N3 flown arrival, velocity
+    'interp',    1e-6,  ...   % endpoint interpolant vs a propagation to the
+    ...                       %   same phase (ND; 1e-6 = 0.39 km) -- this is
+    ...                       %   the physical error of the boundary condition
+    'km',        100,   ...   % N3 flown arrival, position (a SCREEN on the
+    'ms',        10,    ...   %   single-shot flight; the fixed-endpoint
+    ...                       %   statement is N1's residual)
     'lamm',      1e-6,  ...   % N4 transversality lambda_m(t_f) = 0
     'adj',       1e-7,  ...   % N5 adjoint equations, relative
-    'gap',       1e-12, ...   % N6 minimum-principle gap of the applied control
+    'gap',       1e-12, ...   % N6 |full minimum-principle gap| of the applied control
+    'throttle',  1e-10, ...   % N6 applied throttle, acceleration AND mass rows
     'dz',        1e-6,  ...   % X1 second solver must agree to this
-    'h6Margin',  1.0,   ...   % V1 required (c/T)/lambda_m(0)
+    'field',     1e-10, ...   % X2 pumpkyn field vs independent field, relative
+    'lift',      1e-4,  ...   % S3 accepted lift's own residual |C lam0|/|lam0|;
+    ...                       %   = lift_margin's liftTol (one value, handed to it).
+    ...                       %   The floor is the pchip interpolation of the flown
+    ...                       %   arc that the frozen-control adjoint is integrated
+    ...                       %   over: 2.2e-6 on the anchor at BOTH relTol 1e-12
+    ...                       %   and 1e-10, so it is not the integration tolerance
+    'liftMargin', 10,   ...   % S3 Eckart-Young margin sigma_6 / |dC| (lift_margin)
+    'h6Margin',  1.0,   ...   % V1 required (c/T)/lambda_m(0), STRICT
     'agree',     1e-6);       % V2 inline numbers vs the library instruments
 
 %% ========================================================================
@@ -176,6 +196,17 @@ fprintf('   periodic cubic seam: value %.1e / %.1e, derivative %.1e / %.1e   %s\
 assert(max(seamD.value, seamA.value) < tol.closure && max(seamD.deriv, seamA.deriv) < tol.seamDeriv, ...
        'the endpoint interpolant is not periodic across its seam');
 
+% The seam check is a property of the interpolant's CONSTRUCTION; it says
+% nothing about how far the interpolated endpoint sits from the orbit
+% (Astra review 2026-09-11). So propagate each orbit from its first sample
+% to the chosen phase and compare: that difference is the physical error of
+% the boundary condition the shooting then matches to 1e-11.
+interpErr = [phase_interp_error(stateD, rvD, sD, infoD.periodND, muStar), ...
+             phase_interp_error(stateA, rvT, sA, infoT.periodND, muStar)];
+fprintf('   interpolant vs propagation to the phase: %.1e / %.1e ND (%.4f / %.4f km) / %-6.0e %s\n', ...
+        interpErr, interpErr*lStar, tol.interp, pass(max(interpErr) < tol.interp));
+assert(max(interpErr) < tol.interp, 'the endpoint interpolant is off the orbit by more than tol.interp');
+
 %% ========================================================================
 %  4. GET THE SEED -- which certified solution starts the solve, and is it
 %     the right engine? Both questions belong together, so they are one
@@ -247,8 +278,11 @@ PW = pmp_pointwise_checks(flight.t, flight.Y, Tnd, cnd, muStar);
 
 tf = flight.t(end);                           % S4 reports its coverage against it
 
-% N1  the boundary-value residual: costate equations, terminal matching,
-%     transversality. This IS the statement that the first variation vanishes.
+% N1  the boundary-value residual: junction matching, terminal state,
+%     transversality and H(t_f) = 0 -- the PMP SHOOTING EQUATIONS, satisfied
+%     to tolerance. Not "the first variation vanishes": on a boundary
+%     control the first-order condition in the control is the minimum
+%     principle, an inequality, which is N6 (Astra review 2026-09-11).
 %     It is the solve's OWN residual, at the point it returned -- section 5
 %     already computed it, and re-solving to get it back would report a
 %     different number for a reason worth knowing: the residual depends on
@@ -264,11 +298,17 @@ fprintf('   N1 BVP residual   |R|_inf   %9.2e / %-9.0e  %s\n', resid, tol.R, pas
 
 % N2  the Hamiltonian. Autonomous problem, free final time  =>  H == 0.
 %     H = 1 + lam_r.v + lam_v.(g + (T/m) alpha) - lam_m T/c,  alpha = -lam_v/|lam_v|
+%     On an exact solution of N1 this follows from H(t_f) = 0 plus canonical
+%     propagation, and N4 is one of N1's equations: they are RE-EVALUATIONS
+%     on an independent flight, which exposes propagation defects, not
+%     additional restrictions on the extremal.
 fprintf('   N2 Hamiltonian    max|H|    %9.2e / %-9.0e  %s\n', PW.Hmax, tol.H, pass(PW.Hmax < tol.H));
 
 % N3  the flight actually reaches the target, in position AND velocity.
 %     fly_transfer measured this in section 5 from the same flight; there is
-%     no second copy of the formula here.
+%     no second copy of the formula here. The tolerances are a SCREEN on the
+%     single-shot flight (the propagated miss grows with the arc); the
+%     fixed-endpoint statement itself is N1's residual.
 fprintf('   N3 arrival        %.4f km / %-4.0f km, %.4f m/s / %-3.0f m/s  %s\n', ...
         flight.flyKm, tol.km, flight.flyVms, tol.ms, ...
         pass(flight.flyKm < tol.km && flight.flyVms < tol.ms));
@@ -290,40 +330,56 @@ fprintf('   N5 adjoint eqns   rel err   %9.2e / %-9.0e  %s   (%d samples; FD ste
 %     H is affine in the direction alpha with coefficient (T/m) lam_v, so its
 %     minimiser over the unit sphere is -lam_v/|lam_v| ANALYTICALLY: sampling
 %     the sphere against that formula tests nothing. What CAN be wrong is the
-%     propagator's control law. Recover the thrust acceleration it applied as
-%     (powered field - coasting field) and evaluate the gap
-%        H(applied) - min_alpha H = (T/m)(lam_v . alpha_applied + |lam_v|) >= 0
-%     which is zero exactly when the applied direction is the minimiser. The
-%     throttle enters H linearly with slope -T Q, Q = |lam_v|/m + lam_m/c, so
-%     u = 1 minimises H iff Q >= 0 (weak, necessary); S2 asks for Q > 0.
-fprintf('   N6 min principle  gap       %9.2e / %-9.0e  %s   (throttle 1 to %.1e; min Q = %.3f >= 0 %s)\n', ...
-        PW.dirGap, tol.gap, pass(PW.dirGap <= tol.gap && PW.throttleErr < 1e-10), ...
-        PW.throttleErr, PW.minQmt, pass(PW.minQmt >= 0));
+%     propagator's control law. Recover the control it applied from the field
+%     itself, on BOTH rows it enters -- b = u alpha from (powered - coasting)
+%     acceleration, and u again from the mass row, -c F_m / T -- and evaluate
+%     the gap against the FULL control minimum (direction AND throttle):
+%        H(u, alpha) - min H = (T/m)(lam_v . b + |b||lam_v|) + T(max(Q,0) - |b| Q)
+%     Q = |lam_v|/m + lam_m/c. Zero exactly at the minimiser; its signed
+%     MINIMUM is kept too, so an over-unit thrust along the minimiser (a
+%     negative gap) is not clipped away. u = 1 minimises H iff Q >= 0 (weak,
+%     necessary); S2 asks for Q > 0.
+n6 = PW.fullGap <= tol.gap && PW.throttleErr < tol.throttle && PW.minQmt >= 0;
+fprintf('   N6 min principle  |gap|     %9.2e / %-9.0e  %s   (signed %+.1e..%+.1e; throttle 1 to %.1e acc / %.1e mass; min Q = %.3f >= 0 %s)\n', ...
+        PW.fullGap, tol.gap, pass(n6), PW.gapMin, PW.gapMax, ...
+        PW.throttleAccErr, PW.throttleMassErr, PW.minQmt, pass(PW.minQmt >= 0));
 
 necessary = resid < tol.R && PW.Hmax < tol.H && flight.flyKm < tol.km && ...
-            flight.flyVms < tol.ms && PW.lamMf < tol.lamm && PW.adjErr < tol.adj && ...
-            PW.dirGap <= tol.gap && PW.throttleErr < 1e-10 && PW.minQmt >= 0;
+            flight.flyVms < tol.ms && PW.lamMf < tol.lamm && PW.adjErr < tol.adj && n6;
+
+% ONE call to the hypothesis gates -- the instrument that judges S1, S2, S3
+% and V1 (section 8), the same one gates_catalog_pass ran over all 18,360
+% catalog entries -- made HERE because it also carries X2. It flies its own
+% dense trajectory from z8, so its numbers are not a re-reading of the
+% script's flight. keepC at the tight tolerance, for lift_margin below.
+gates = mintime_hypothesis_gates(z8, rv0(1:6), Tnd, cnd, muStar, ...
+                                 struct('keepC', true, 'relTol', 1e-12));
 
 % X1  the independent solve is NOT one of the above: it is a cross-check on
 %     our implementation, reported apart and excluded from `necessary`, but
 %     a failure still blocks the claim -- an implementation in doubt cannot
-%     certify anything.
+%     certify anything. It is a second SHOOTING implementation on pumpkyn's
+%     field; agreement to |dz| pins its answer to ours (including the two
+%     terminal multiplier conditions, which arrival alone would not).
 fprintf('   X1 cross-check    second solver |dz| %6.2e / %-7.0e, its flight %.4f km / %.4f m/s  %s\n', ...
         V.dz, tol.dz, V.flyKm, V.flyVms, pass(V.ok));
-crossCheck = V.ok;
+% X2  the PHYSICS: pumpkyn's field (which every solver and every check above
+%     propagates) against an independently written CR3BP + thrust field and
+%     its CasADi adjoint, ROW BY ROW along the arc. N2 and N5 are consistency
+%     checks of one field with itself; this is the seven-row comparison.
+x2 = gates.fieldErr < tol.field && gates.adjErrRef < tol.field;
+fprintf('   X2 physics        pumpkyn vs independent field: state rows %.1e, adjoint rows %.1e / %-6.0e %s\n', ...
+        gates.fieldErr, gates.adjErrRef, tol.field, pass(x2));
+crossCheck = V.ok && x2;
 
 %% ========================================================================
 %  8. SUFFICIENCY HYPOTHESES (Bonnard-Caillau-Trelat) -- one at a time
 %     With section 6, these give a strict STRONG local minimizer among
-%     trajectories with the same endpoints.
+%     trajectories with the same endpoints. Every one of them is a
+%     CONTINUOUS statement tested on SAMPLES (the propagator's own dense
+%     output, or the junctions): no between-sample bound is claimed here.
 %% ========================================================================
 fprintf('\n8. SUFFICIENCY HYPOTHESES\n');
-
-% ONE call to the hypothesis gates -- the instrument that judges S1, S2, S3
-% and V1, and the same one gates_catalog_pass ran over all 18,360 catalog
-% entries. It flies its own dense trajectory from z8, so its numbers are not
-% a re-reading of the script's flight.
-gates = mintime_hypothesis_gates(z8, rv0(1:6), Tnd, cnd, muStar, struct());
 
 % S1  strengthened Legendre. For a direction on the unit sphere the second
 %     derivative of H in the control, restricted to that sphere, is
@@ -333,44 +389,78 @@ fprintf('   S1 Legendre      min|lam_v| = %.4e at t/t_f = %.3f   %s\n', ...
 
 % S2  STRICT bang: the switching function stays strictly positive, so the
 %     throttle is determined (no singular arc) -- the strict form of N6's
-%     weak condition.
+%     weak condition. On an EXACT lift this is not independent of the rest:
+%     lam_m(t) = integral_t^tf T|lam_v|/m^2 >= 0 from N4 + N5, so S1 gives
+%     Q > 0. It is kept as the margin diagnostic; a failure here means one
+%     of those premises is not established.
 fprintf('   S2 strict bang   min Q = %.4e at t/t_f = %.3f        %s\n', ...
         gates.minQmt, gates.tMinQmt/z8(8), pass(gates.minQmt > 0));
 
-% S3  normality: no abnormal lift of the SAME trajectory (dim S = 1)
-fprintf('   S3 normality     dim S = %d (1 = no abnormal lift)        %s\n', ...
-        gates.dimS, pass(gates.dimS == 1));
-% the dim S number is only as good as the lift it was measured around, so
-% show the two self-consistency residuals it rests on rather than hiding them
-fprintf('      lift residual %.1e, |lambda.f + 1| %.1e, sv gap %.1e\n', ...
-        gates.nullResid, gates.Hresid, gates.svRatio);
+% S3  normality: no abnormal lift of the SAME trajectory. The gate builds
+%     the space of STATIONARY lifts (frozen-control adjoint, lam_v || alpha,
+%     lam_m(t_f) = 0) and reports its numerical dimension; dim S = 1 is the
+%     corank-one condition that EXCLUDES an abnormal lift (the sufficient
+%     direction; it is stronger than "no abnormal minimising lift"). The
+%     rank is only as good as (a) the accepted lift's own residual, (b) the
+%     Hamiltonian residual of the independent fixed field, and (c) the
+%     Eckart-Young separation sigma_6 against the measured error in C --
+%     the threshold rule alone forces at least one small singular value
+%     (sigma_min <= nullResid by construction; Astra review 2026-09-11).
+%     All three are REQUIRED here, not merely printed.
+gatesLoose = mintime_hypothesis_gates(z8, rv0(1:6), Tnd, cnd, muStar, ...
+                                      struct('keepC', true, 'relTol', 1e-9));
+LM = lift_margin(gates.C, gatesLoose.C, z8(1:7), struct('marginMin', tol.liftMargin, 'liftTol', tol.lift));
+s3 = gates.dimS == 1 && gates.nullResid < tol.lift && gates.Hresid < tol.H && LM.certified;
+fprintf('   S3 normality     dim S = %d (1 = no abnormal lift)        %s\n', gates.dimS, pass(s3));
+fprintf('      lift residual %.1e / %.0e, |lambda.f + 1| %.1e / %.0e, sv gap %.1e\n', ...
+        gates.nullResid, tol.lift, gates.Hresid, tol.H, gates.svRatio);
+fprintf('      Eckart-Young: sigma_6 %.2e vs |dC| %.2e between two integrations, margin %.0fx / %gx  %s\n', ...
+        LM.sigma6, LM.errEst, LM.margin, tol.liftMargin, pass(LM.certified));
 
-% S4  no conjugate time in (0, t_f], by the free-time quotiented Jacobi test.
-%     PASS/FAIL is not the whole vocabulary: the instrument can also return
-%     ENDPOINT, which is UNRESOLVED rather than either. A verdict is only
-%     interpretable beside its COVERAGE, reported here as t/t_f.
+% S4  no conjugate time in (0, t_f], by the free-time quotiented Jacobi test
+%     at the junctions, AND the dense singular-spectrum scan that closes the
+%     sign test's blind spots (two zeros inside one segment, an even-order
+%     touch). The junction test can return ENDPOINT (UNRESOLVED) and must
+%     have COVERED the arc through t_f; the interval before its first
+%     full-rank junction is uncovered by it and is sampled by the scan.
+%     Two exact identities of the quotiented form are measured beside it.
 cj = it.conj;
 s4Status = 'FAIL';                                       % three outcomes, not two
-if cj.pass == 1,                          s4Status = 'PASS';
-elseif strcmpi(cj.verdict, 'ENDPOINT'),   s4Status = 'UNRESOLVED';
+if cj.pass == 1 && cj.covered,            s4Status = 'PASS';
+elseif strcmpi(cj.verdict, 'ENDPOINT') || strcmpi(cj.verdict, 'UNDETERMINED') || ~cj.covered
+                                          s4Status = 'UNRESOLVED';
 end
-fprintf('   S4 conjugate     %s, %d crossing(s), min|det| %.2e       %s\n', ...
-        cj.verdict, gv(cj, 'nCrossings'), min(abs(cj.detScaled)), s4Status);
-fprintf(['      coverage: %d junctions, first full-rank at t/t_f = %.3f, sampled through\n' ...
-         '      t/t_f = %.3f (uncovered final interval %.3f); a sign test cannot see an\n' ...
-         '      even-order zero or two zeros inside one segment\n'], ...
-        numel(cj.detScaled), cj.t(cj.firstFullRank)/tf, cj.sampledThrough/tf, 1 - cj.sampledThrough/tf);
+fprintf('   S4 conjugate     %s (%s), %d crossing(s), min|det| %.2e       %s\n', ...
+        cj.verdict, cj.reason, gv(cj, 'nCrossings'), min(abs(cj.detScaled)), s4Status);
+fprintf(['      coverage: %d junctions, first full-rank at t/t_f = %.3f (before it: uncovered),\n' ...
+         '      sampled through t/t_f = %.3f%s; identities J p(0) = 0 to %.1e, p(t)''J = 0 to %.1e\n'], ...
+        numel(cj.detScaled), cj.tFirstFullRank/tf, cj.sampledThrough/tf, ...
+        tern(cj.covered, '', ' (FINAL SEGMENT NOT COVERED)'), cj.kernelRight, cj.kernelLeft);
+% the dense scan: 8 samples per segment, interior candidates located and
+% refined twice (a zero keeps falling, a near-miss plateaus)
+CS = conj_spectrum(z8, rv0(1:6), Tnd, cnd, muStar, struct('K', 24, 'nSub', 8));
+s4Dense = CS.nInterior == 0 && CS.nZero == 0 && CS.multiplicity == 0;
+fprintf(['      dense scan (%d samples): %d interior sign change(s), %d interior candidate(s):\n' ...
+         '      %d zero, %d near-miss, %d multiplicity                                %s\n'], ...
+        numel(CS.t), CS.nInterior, CS.nInteriorCand, CS.nZero, CS.nNearMiss, CS.multiplicity, pass(s4Dense));
+if strcmp(s4Status, 'PASS') && ~s4Dense, s4Status = 'FAIL'; end
 
 % V1  H6: the reduced conjugate instrument's determinant can vanish
 %     spuriously when lambda_m(0) >= c/T (FINDINGS 40). Not a hypothesis of
-%     the theorem -- the VALIDITY condition of S4's instrument, with margin.
+%     the theorem -- the VALIDITY condition of S4's instrument. The gate is
+%     the helper's OWN verdict (strict margin AND clearance above the
+%     Hamiltonian residual), then the script's margin policy on top; the
+%     margin ratio alone let equality through and ignored the clearance
+%     (Astra review 2026-09-11). Valid for the normalisation p_0 = 1 this
+%     solver uses.
 v1Status = 'NOT CHECKED';                                % a missing margin BLOCKS S4
-if isfield(gates, 'h6Margin') && isfinite(gates.h6Margin)
-    v1Status = pass(gates.h6Margin >= tol.h6Margin);
-    fprintf('   V1 H6 validity   lambda_m(0) %.3f vs c/T %.3f, margin %5.1fx / %.1fx  %s\n', ...
-            gates.h6LamM0, gates.h6Threshold, gates.h6Margin, tol.h6Margin, v1Status);
+if isfield(gates, 'h6Ok') && isfield(gates, 'h6Margin') && isfinite(gates.h6Margin)
+    v1Status = pass(gates.h6Ok && gates.h6Margin > tol.h6Margin);
+    fprintf('   V1 H6 validity   lambda_m(0) %.3f vs c/T %.3f, margin %5.1fx > %.1fx, clearance %.3f > |H| %.1e  %s\n', ...
+            gates.h6LamM0, gates.h6Threshold, gates.h6Margin, tol.h6Margin, ...
+            gates.h6Clearance, gates.Hresid, v1Status);
 else
-    fprintf('   V1 H6 validity   NOT CHECKED (the gates returned no margin): S4 is not interpretable\n');
+    fprintf('   V1 H6 validity   NOT CHECKED (the gates returned no verdict): S4 is not interpretable\n');
 end
 
 % V2  the two INSTRUMENTS against each other on min Q: pmp_pointwise_checks
@@ -378,15 +468,16 @@ end
 %     own from z8. A WIRING check, and worth calling it that -- both
 %     propagate the same z8 deterministically, so it agrees to 0.0e+00 and
 %     cannot detect an implementation divergence. What it CAN catch is the
-%     script handing one of them the wrong flight, thrust or exhaust speed,
-%     which is the mistake that actually happens when a section is edited.
+%     script handing one of them the wrong flight or exhaust speed (min Q
+%     depends on the flight and on c only); a wrong thrust or mass ratio
+%     handed to the pointwise checks shows up in N2 instead, not here.
 agreeErr = abs(PW.minQmt - gates.minQmt)/max(gates.minQmt, 1);
 assert(agreeErr < tol.agree, ...
        'the pointwise checks and the gates disagree on min Q (%.1e)', agreeErr);
 fprintf('   V2 wiring        min Q: pointwise vs gates, %.1e / %.0e       %s\n', ...
         agreeErr, tol.agree, pass(agreeErr < tol.agree));
 
-sufficient = gates.minLamV > 0 && gates.minQmt > 0 && gates.dimS == 1 && strcmp(s4Status, 'PASS') && ...
+sufficient = gates.minLamV > 0 && gates.minQmt > 0 && s3 && strcmp(s4Status, 'PASS') && ...
              strcmp(v1Status, 'PASS');
 unresolved = strcmp(s4Status, 'UNRESOLVED') || strcmp(v1Status, 'NOT CHECKED');
 
@@ -398,15 +489,19 @@ unresolved = strcmp(s4Status, 'UNRESOLVED') || strcmp(v1Status, 'NOT CHECKED');
 %% ------------------------------------------------------------------------
 fprintf('\n   VERDICT: ');
 if necessary && sufficient && crossCheck
-    fprintf(['All required numerical checks passed. If the stated hypotheses hold\n' ...
-             '            exactly, this arc is a strict strong local minimizer among trajectories\n' ...
-             '            with the same endpoints and phases.\n']);
-    fprintf(['            EVIDENCE IS NUMERICAL AND SAMPLED: positivity is tested at the\n' ...
-             '            sampled times, dim S is a numerical rank, and the conjugate test\n' ...
-             '            is a sign test at %d junctions -- an even-order zero, or two zeros\n' ...
-             '            inside one segment, would not be seen. This is a strong numerical\n' ...
-             '            audit, not a proof. See doc/mintime_second_order_audit.tex.\n'], ...
-             size(it.Y, 2));
+    fprintf(['The numerical diagnostics are consistent with a regular normal extremal\n' ...
+             '            and with strict strong local minimality for fixed departure and\n' ...
+             '            arrival position and velocity, initial mass fraction one, and free\n' ...
+             '            terminal mass and time (phases are FIXED inputs, not optimised).\n' ...
+             '            No determinant zero was detected on the %d-junction sign test or the\n' ...
+             '            %d-sample spectrum scan. If the stated hypotheses hold exactly, the\n' ...
+             '            Bonnard-Caillau-Trelat theorem gives the strict strong local minimum.\n'], ...
+             size(it.Y, 2), numel(CS.t));
+    fprintf(['            THIS IS NUMERICAL EVIDENCE, NOT A CERTIFICATE: positivity is tested\n' ...
+             '            at sampled times with no between-sample bound, dim S is a numerical\n' ...
+             '            rank with a measured (not proven) error, and the conjugate scan\n' ...
+             '            locates and refines candidates rather than enclosing roots. See\n' ...
+             '            doc/mintime_second_order_audit.tex.\n']);
 elseif ~necessary
     fprintf(['NOT an extremal to tolerance. The second-order test is meaningless\n' ...
              '            off an extremal, so no minimality is claimed.\n']);
@@ -438,4 +533,24 @@ end
 function v = gv(s, f)
 % GV  Field or NaN.  INPUTS: s; f.  OUTPUTS: v.
 if isfield(s, f), v = s.(f); else, v = NaN; end
+end
+
+function s = tern(c, a, b)
+% TERN  Inline conditional.  INPUTS: c; a; b.  OUTPUTS: s.
+if c, s = a; else, s = b; end
+end
+
+function e = phase_interp_error(stateFun, rvTable, s, periodND, muStar)
+% PHASE_INTERP_ERROR  Distance between the periodic interpolant at phase s
+% and a CR3BP propagation of the orbit's first sample to the same phase.
+% INPUTS: stateFun (phase -> [6x1]); rvTable [N x 6]; s [scalar];
+% periodND; muStar.  OUTPUTS: e [scalar, ND, 6-vector norm].
+if s <= 0
+    rvProp = rvTable(1, 1:6).';
+else
+    [~, rvp] = pumpkyn.cr3bp.prop(s*periodND, rvTable(1, 1:6).', muStar);
+    rvProp = rvp(end, 1:6).';
+end
+x = stateFun(s);
+e = norm(x(1:6) - rvProp);
 end

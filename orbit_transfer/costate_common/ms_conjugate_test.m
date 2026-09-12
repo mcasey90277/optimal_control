@@ -40,8 +40,28 @@ function out = ms_conjugate_test(info, spec)
 %   structurally zero (sigma_min/sigma_max <= spec.rankTol [1e-13]);
 %   those samples are skipped, .firstFullRank reports where testing
 %   starts. (Review 2026-09-05: the old code counted them as focal points.)
-% • A sign change on the bracket ending at tf IS counted (it lies in
-%   (t_K, tf]) and is additionally flagged .atFinal.
+% • A sign change on the bracket ending at the last sample: if that sample
+%   is t_f AND its determinant is RESOLVED (sigma_min/sigma_max above
+%   spec.resolvedTol, so its sign is trustworthy), then opposite nonzero
+%   signs put the zero STRICTLY inside (t_K, t_f) -- a conjugate point, and
+%   the verdict is FAIL (Astra review 2026-09-11; the earlier rule called
+%   every last-bracket crossing ENDPOINT, which was unnecessarily
+%   inconclusive). A zero run reaching the last sample, an unresolved last
+%   determinant, or a last sample short of t_f stays ENDPOINT: the root may
+%   sit at t_f itself, which junction resolution cannot decide.
+% • COVERAGE: without info.Yend a free-time test cannot sample the flow at
+%   t_f and stops at t_K. That is reported as UNDETERMINED, never PASS
+%   (Astra + Gemini reviews 2026-09-11): the final segment is unmonitored.
+% • INITIAL INTERVAL: the sign test starts at the first full-rank junction;
+%   the interval before it is UNCOVERED by this instrument (reported as
+%   .tFirstFullRank). The block is structurally zero at t = 0, so a sign
+%   established at the first junction is not compared against a known
+%   short-time sign. conj_spectrum samples inside the first segment.
+% • TWO EXACT IDENTITIES are measured as implementation diagnostics: the
+%   scaling kernel J(t) p(0) = 0 (.kernelRight) and the left kernel
+%   p(t)' J(t) = 0 (.kernelLeft, from symplecticity: the scaling direction
+%   flows to (0, p(t)), and its symplectic product with any variation is
+%   conserved). Both are relative residuals, max over the live samples.
 % • FIXED-tf callers: use stateRows = 1:ny_state (ALL state rows, mass
 %   included) -- the interior Jacobi field must vanish in the full state.
 %   The mixed block [1:6 14] is the terminal shooting Jacobian and is valid
@@ -82,6 +102,12 @@ function out = ms_conjugate_test(info, spec)
 %   .zeroTol                double                  |detScaled| at or below
 %                                                   which a sample counts as
 %                                                   an exact zero [0]
+%   .resolvedTol            double                  sigma_min/sigma_max of
+%                                                   the LAST sample above
+%                                                   which its sign is
+%                                                   trusted, so a last-
+%                                                   bracket crossing is an
+%                                                   interior root [1e-10]
 %
 %% Outputs:
 %
@@ -107,12 +133,27 @@ function out = ms_conjugate_test(info, spec)
 %                                                   nInterior
 %   .atFinal                logical                 A root on the bracket
 %                                                   ending at the last sample
+%                                                   that could NOT be placed
+%                                                   strictly inside it
+%   .nEndResolved           double                  Last-bracket crossings
+%                                                   placed strictly inside
+%                                                   (counted in nInterior)
+%   .covered                logical                 Sampled through t_f
+%   .tFirstFullRank         double                  Time of the first full-
+%                                                   rank sample (NaN: never);
+%                                                   (0, tFirstFullRank) is
+%                                                   uncovered
+%   .kernelRight            double                  max |J p(0)| / (|J||p(0)|)
+%   .kernelLeft             double                  max |p(t)' J| / (|p||J|)
 %   .verdict                char                    'PASS' | 'FAIL' (interior
 %                                                   root) | 'ENDPOINT' (root
-%                                                   only on the last bracket:
+%                                                   only on the last bracket
+%                                                   and not resolvable:
 %                                                   inconclusive, refine) |
 %                                                   'UNDETERMINED' (nothing
-%                                                   testable)
+%                                                   testable, or the final
+%                                                   segment not covered)
+%   .reason                 char                    One line on the verdict
 %   .pass                   logical                 verdict == 'PASS'
 %   .stateRows/.costateCols/.freeTime               Spec echo (provenance)
 %
@@ -151,6 +192,7 @@ if freeT
 end
 
 rankTol = fieldd(spec, 'rankTol', 1e-13);
+resolvedTol = fieldd(spec, 'resolvedTol', 1e-10);
 
 % Chain ALL K segment STMs: samples at t_2 .. t_{K+1} = t_f (review
 % 2026-09-05: the old loop stopped at t_K and left the final segment
@@ -163,13 +205,32 @@ K = numel(info.PHI);
 % t_K as before.
 nS = K;
 if freeT && ~(isfield(info, 'Yend') && ~isempty(info.Yend)), nS = K - 1; end
+covered = (nS == K);
 PhiCum = eye(size(info.PHI{1}));
 dets = zeros(1, nS);  sigR = zeros(1, nS);
+kernR = zeros(1, nS);  kernL = zeros(1, nS);
 for k = 1:nS
     PhiCum = info.PHI{k} * PhiCum;             % Phi(t_{k+1}, 0)
-    M = PhiCum(rows, cols) * P;
+    J = PhiCum(rows, cols);                    % d state(t) / d costate(0)
+    M = J * P;
+    if k < K
+        yk = info.Y(:,k+1);
+    elseif isfield(info, 'Yend') && ~isempty(info.Yend)
+        yk = info.Yend;
+    else
+        yk = [];                               % fixed-time caller without y(tf)
+    end
+    % the two exact identities of the HOMOGENEOUS (scaling-quotiented) form,
+    % as relative residuals; both are skipped when no quotient is in use
+    if ~isempty(qDir)
+        nJ = max(norm(J), realmin);
+        kernR(k) = norm(J*qDir(:)) / (nJ*max(norm(qDir), realmin));
+        if ~isempty(yk) && max(rows) + 7 <= numel(yk)
+            pk = yk(rows + 7);                 % costates conjugate to the state rows
+            kernL(k) = norm(pk(:).'*J) / (nJ*max(norm(pk), realmin));
+        end
+    end
     if freeT
-        if k < K, yk = info.Y(:,k+1); else, yk = info.Yend; end
         M = [M, spec.flow(yk)];
     end
     % Sign from the pivoted LU of the EQUILIBRATED block (permutation
@@ -202,6 +263,8 @@ kFull = find(sigR > rankTol, 1);
 if isempty(kFull), kFull = nS + 1; end         % never attained: nothing to test
 live = kFull:nS;
 tested = ~isempty(live) && ~any(isnan(dets(live)));
+tFirstFullRank = NaN;
+if kFull <= nS, tFirstFullRank = info.tGrid(kFull + 1); end
 
 % ROOT COUNTING on the live samples (Astra review #2): classify each sample
 % as +, - or 0 (exact zero, or |detScaled| <= spec.zeroTol); merge runs of
@@ -214,7 +277,10 @@ tested = ~isempty(live) && ~any(isnan(dets(live)));
 % (Astra doc review 2026-09-07; the earlier 'weak minimum' reading was
 % unjustified).
 zeroTol = fieldd(spec, 'zeroTol', 0);
-nIn = 0;  nEnd = 0;  nTouch = 0;
+nIn = 0;  nEnd = 0;  nTouch = 0;  nEndResolved = 0;
+% the last sample's sign is trusted when it is t_f itself and its block is
+% resolved; then a sign change on the last bracket is strictly interior
+lastResolved = covered && tested && sigR(nS) > resolvedTol && abs(dets(nS)) > zeroTol;
 if tested
     dl = dets(live);
     cls = sign(dl);  cls(abs(dl) <= zeroTol) = 0;
@@ -223,7 +289,13 @@ if tested
     while k <= n
         if cls(k) ~= 0
             if lastSign ~= 0 && cls(k) ~= lastSign        % sign change (zeros between merged)
-                if k == n, nEnd = nEnd + 1; else, nIn = nIn + 1; end
+                if k == n && ~lastResolved
+                    nEnd = nEnd + 1;
+                elseif k == n
+                    nIn = nIn + 1;  nEndResolved = nEndResolved + 1;
+                else
+                    nIn = nIn + 1;
+                end
             end
             lastSign = cls(k);  lastSignIdx = k;  k = k + 1;
         else
@@ -241,17 +313,32 @@ if tested
     end
 end
 atFinal = nEnd > 0;
-if ~tested,      verdict = 'UNDETERMINED';
-elseif nIn > 0,  verdict = 'FAIL';
-elseif atFinal,  verdict = 'ENDPOINT';
-else,            verdict = 'PASS';
+if ~tested
+    verdict = 'UNDETERMINED';  reason = 'no full-rank finite sample to test';
+elseif nIn > 0
+    verdict = 'FAIL';
+    reason = sprintf('%d interior root(s)', nIn);
+    if nEndResolved > 0
+        reason = sprintf('%s, %d placed strictly inside the last bracket (t_f resolved)', reason, nEndResolved);
+    end
+elseif ~covered
+    verdict = 'UNDETERMINED';
+    reason = sprintf('final segment (%.6g, %.6g] not covered: info.Yend missing', ...
+                     info.tGrid(nS+1), info.tGrid(end));
+elseif atFinal
+    verdict = 'ENDPOINT';  reason = 'root on the last bracket, not resolvable at junction resolution';
+else
+    verdict = 'PASS';  reason = 'no sign change on the live samples';
 end
+kMax = @(x) max([x, 0]);
 
 out = struct('t', info.tGrid(2:nS+1), 'detScaled', dets, 'sigRatio', sigR, ...
-             'firstFullRank', kFull, 'tested', tested, ...
-             'sampledThrough', info.tGrid(nS+1), ...
+             'firstFullRank', kFull, 'tFirstFullRank', tFirstFullRank, 'tested', tested, ...
+             'sampledThrough', info.tGrid(nS+1), 'covered', covered, ...
              'nCrossings', nIn + nEnd, 'nInterior', nIn, 'nTouch', nTouch, ...
-             'atFinal', atFinal, 'verdict', verdict, 'pass', strcmp(verdict, 'PASS'), ...
+             'nEndResolved', nEndResolved, 'atFinal', atFinal, ...
+             'kernelRight', kMax(kernR(live)), 'kernelLeft', kMax(kernL(live)), ...
+             'verdict', verdict, 'reason', reason, 'pass', strcmp(verdict, 'PASS'), ...
              'stateRows', rows, 'costateCols', cols, 'freeTime', freeT);
 end
 

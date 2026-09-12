@@ -145,3 +145,22 @@
 - [x] Library moves `seed_from_z8` + `ms_tfmin` -> here — DONE 2026-08-26
   (3 call sites rerouted; golden_cells 20/20; seed builder bit-identical;
   full test suite green).
+
+## From the 2026-09-11 math review (FINDINGS 47) -- theory items, not code
+
+- [ ] Audit document: prove the SUBARC corank-one condition from the
+  whole-arc lift-space rank via analyticity of the strict all-burn CR3BP
+  extremal (away from collision, m = 0, |lam_v| = 0): a stationarity
+  constraint vanishing on an open subinterval extends along the arc.
+- [ ] Audit document: write the reduction of the free-mass, free-time
+  second variation / critical cone to the six-state NONAUTONOMOUS problem
+  the quotient determinant tests; state that the flow column is the
+  arrival-time variation, not an endpoint-preserving gauge.
+- [ ] Conjugate instrument: close the interval before the first full-rank
+  junction with a short-time sign expansion of det[J P, f] (currently
+  reported as uncovered; the dense scan samples inside the first segment).
+- [ ] Between-sample bounds for S1 (|lam_v| > 0), S2 (Q > 0) and the
+  primary clearances: derivative bounds or interval integration; today they
+  are sample minima and say so.
+- [ ] `report_optimality`'s claimed-verdict sentence still reads "same
+  endpoints"; align with the study script's endpoint statement.

@@ -51,6 +51,31 @@ Yd = Y;  Yd(50, 4) = NaN;
 V5 = validate_flight(t, Yd, tf, Tnd, cnd, mu, lStar);
 ok = chk(ok, ~V5.ok && contains(lower(V5.reason), 'finite'), 'non-finite data refused');
 
+% (Astra review 2026-09-11) the mass law must hold at EVERY sample, not
+% just the last one: an interior glitch with a correct endpoint
+Ye = Y;  Ye(150:160, 7) = Ye(150:160, 7) + 1e-3;
+V6 = validate_flight(t, Ye, tf, Tnd, cnd, mu, lStar);
+ok = chk(ok, ~V6.ok && contains(V6.reason, 'mass law'), sprintf('interior mass glitch refused: %s', V6.reason));
+ok = chk(ok, isfield(V, 'massLawErr') && V.massLawErr < 1e-12, ...
+         sprintf('and the clean flight''s pointwise mass-law error is reported: %.1e', V.massLawErr));
+
+% costates carried and non-finite
+Yf = Y;  Yf(70, 12) = Inf;
+V7 = validate_flight(t, Yf, tf, Tnd, cnd, mu, lStar);
+ok = chk(ok, ~V7.ok && contains(V7.reason, 'costate'), sprintf('non-finite costate refused: %s', V7.reason));
+
+% all-burn to a t_f that exhausts the mass: the EXPECTED final mass is
+% non-positive, and no reported mass may rescue it
+tfx = 1.05*cnd/Tnd;  tx = linspace(0, tfx, 400).';
+Yx = [r, v, max(1 - (Tnd/cnd)*tx, 1e-3), zeros(400, 7)];
+V8 = validate_flight(tx, Yx, tfx, Tnd, cnd, mu, lStar);
+ok = chk(ok, ~V8.ok && contains(V8.reason, 'exhausts'), sprintf('exhaustion refused: %s', V8.reason));
+
+% non-monotone time
+tb = t;  tb(200) = tb(199) - 1e-3;
+V9 = validate_flight(tb, Y, tf, Tnd, cnd, mu, lStar);
+ok = chk(ok, ~V9.ok && contains(V9.reason, 'times'), sprintf('non-monotone time refused: %s', V9.reason));
+
 if ok, fprintf('TEST_VALIDATE_FLIGHT: ALL PASS\n'); else, fprintf('TEST_VALIDATE_FLIGHT: FAIL\n'); end
 end
 

@@ -16,6 +16,14 @@ function L = unit_lock(action, f, L)
 %   owner is KILLED by the supervisor, the kernel frees the lock, and only
 %   then can another worker acquire it.
 %
+%   ONE CHANNEL PER FILE PER PROCESS. Java documents that closing a channel
+%   may release ALL locks the process holds on that file, whichever channel
+%   took them (POSIX fcntl semantics). So a process that already holds a
+%   lock must never open a second channel on it -- a 'probe' of its own
+%   unit would have dropped the lock on the floor. A per-process registry
+%   of held files answers 'try' and 'probe' for those without touching the
+%   file.
+%
 %   Advisory, per process, local filesystem. Not for NFS.
 %
 %% Inputs:
@@ -42,9 +50,12 @@ function L = unit_lock(action, f, L)
 %  Copyright Coorbital Inc.
 %% ------------------------ Begin Code Sequence ---------------------------
 
+persistent heldHere                     % files THIS process holds
+if isempty(heldHere), heldHere = containers.Map('KeyType', 'char', 'ValueType', 'logical'); end
 switch lower(action)
     case 'try'
         L = struct('held', false, 'file', f, 'raf', [], 'ch', [], 'fl', []);
+        if isKey(heldHere, f), return, end   % we hold it: not acquirable again, and do NOT reopen
         raf = java.io.RandomAccessFile(f, 'rw');
         ch = raf.getChannel();
         try
@@ -57,18 +68,21 @@ switch lower(action)
             return
         end
         L.held = true;  L.raf = raf;  L.ch = ch;  L.fl = fl;
+        heldHere(f) = true;
 
     case 'release'
         if ~isempty(L) && isstruct(L) && L.held
             try L.fl.release(); catch, end
             try L.ch.close();   catch, end
             try L.raf.close();  catch, end
+            if isKey(heldHere, L.file), remove(heldHere, L.file); end
         end
         L = [];
 
     case 'probe'
+        if isKey(heldHere, f), L = struct('held', true, 'mine', true);  return, end
         T = unit_lock('try', f);
-        L = struct('held', ~T.held);              % could not take it => someone holds it
+        L = struct('held', ~T.held, 'mine', false);   % could not take it => another process holds it
         if T.held, unit_lock('release', f, T); end
 
     otherwise

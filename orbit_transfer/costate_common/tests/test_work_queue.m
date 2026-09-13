@@ -175,7 +175,10 @@ ok = chk(ok, ~nested && ~isfile(fullfile(q, 'adir', 'pub.txt.tmp')), 'publish_at
 % ---- 10. unit_lock ---------------------------------------------------------------
 lf = fullfile(q, 'x.lock');
 L = unit_lock('try', lf);
-ok = chk(ok, L.held && unit_lock('probe', lf).held, 'a held lock probes as held');
+pr = unit_lock('probe', lf);
+ok = chk(ok, L.held && pr.held && pr.mine, 'a held lock probes as held, and as MINE, without a second channel');
+L2 = unit_lock('try', lf);
+ok = chk(ok, ~L2.held && L.held, 'a second try from the same process is refused and leaves the first intact');
 unit_lock('release', '', L);
 ok = chk(ok, ~unit_lock('probe', lf).held, 'and as free after release');
 

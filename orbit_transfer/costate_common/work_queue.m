@@ -12,8 +12,11 @@ function out = work_queue(action, qDir, varargin)
 %   livelocked the first version of this queue.
 %
 %  OWNERSHIP IS A PROCESS-HELD LOCK (unit_lock: a kernel file lock the
-%  owning MATLAB process holds until it releases it or dies). It is never
-%  transferred on heartbeat age. The first version reclaimed a claim whose
+%  owning MATLAB process holds until it releases it or dies), and the
+%  AUTHORITY TO ACT ON IT LIVES IN unit_lock's REGISTRY, not in the claim
+%  struct: a released claim answers "not held" whatever its copy says, so
+%  it can neither beat, publish nor release over the next owner. It is
+%  never transferred on heartbeat age. The first version reclaimed a claim whose
 %  beat was 30 minutes old, which let a slow-but-alive owner and its
 %  reclaimer both compute and both publish one unit (Astra chain review
 %  pass 2, A/B). Now a live owner cannot be stolen from; a hung owner is
@@ -65,7 +68,8 @@ function out = work_queue(action, qDir, varargin)
 %    publish(qDir, c, src, validateFcn) -> [ok, msg]: validate src (fcn
 %                                  returns [ok, msg]; optional), then move
 %                                  it onto c.output. Requires the lock.
-%    release(qDir, c)              give the unit back (done or not)
+%    release(qDir, c)              give the unit back (done or not) ->
+%                                  true if it was ours; a repeat is a no-op
 %    status(qDir, opts)            -> one state per unit: done | running |
 %                                  abandoned | retired | todo, plus .held
 %                                  (lock probe) .beatAge .owner .stalled
@@ -111,14 +115,21 @@ switch lower(action)
         opts = struct();  if ~isempty(varargin), opts = varargin{1}; end
         S = load(qMat);
         which = fieldd(opts, 'units', S.units);
+        bad = setdiff(which, S.units);
+        assert(isempty(bad), 'work_queue:units', 'reset: %s are not units of this queue', mat2str(bad));
         out = [];
         for id = which(:).'
-            if unit_lock('probe', lockFile(qDir, id)).held
+            % HOLD THE LOCK while the records are removed: a probe-then-
+            % delete let a worker claim (and reserve an attempt) between
+            % the probe and the delete (Astra pass 3, 3.1)
+            T = unit_lock('try', lockFile(qDir, id));
+            if ~T.held
                 warning('work_queue:held', 'unit %d is held by a live process; not reset', id);
                 continue
             end
             f = attFile(qDir, id);   if isfile(f), delete(f); end
             f = ownerFile(qDir, id); if isfile(f), delete(f); end
+            unit_lock('release', T.file, T.token);
             out(end+1) = id; %#ok<AGROW>
         end
 
@@ -138,19 +149,19 @@ switch lower(action)
             % RE-CHECK UNDER THE LOCK: the world may have moved since the
             % two tests above
             if isfile(art) || attempts(qDir, id) >= maxAtt
-                unit_lock('release', '', L);  continue
+                unit_lock('release', L.file, L.token);  continue
             end
-            token = sprintf('%s:%s', tag, char(java.util.UUID.randomUUID()));
+            token = sprintf('%s:%s', tag, L.token);           % the LOCK's token is the authority
             try
                 bumpAttempt(qDir, id);                        % under the lock; fails closed
                 writeOwner(qDir, id, token, tag);
             catch ME
-                unit_lock('release', '', L);
+                unit_lock('release', L.file, L.token);
                 rethrow(ME);
             end
             [ad, an, ae] = fileparts(art);
             out.id = id;  out.token = token;  out.output = art;  out.lock = L;
-            out.tmpOut = fullfile(ad, sprintf('%s%s.%s.part', an, ae, token(numel(tag)+2:end)));
+            out.tmpOut = fullfile(ad, sprintf('%s%s.%s.part', an, ae, L.token));
             out.owner = ownerFile(qDir, id);  out.reason = 'claimed';
             return
         end
@@ -184,12 +195,12 @@ switch lower(action)
 
     case 'release'
         c = varargin{1};
-        if holds(c)
+        out = false;
+        if holds(c)                          % idempotent: a second release is a no-op
             f = ownerFile(qDir, c.id);  if isfile(f), delete(f); end
             if isfield(c, 'tmpOut') && isfile(c.tmpOut), delete(c.tmpOut); end
+            out = unit_lock('release', c.lock.file, c.lock.token);
         end
-        if isstruct(c) && isfield(c, 'lock'), unit_lock('release', '', c.lock); end
-        out = [];
 
     case 'status'
         opts = struct();  if ~isempty(varargin) && isstruct(varargin{1}), opts = varargin{1}; end
@@ -202,7 +213,9 @@ switch lower(action)
         for k = 1:n
             id = Q.units(k);
             att(k) = attempts(qDir, id);
-            held(k) = unit_lock('probe', lockFile(qDir, id)).held;
+            % a published unit is immutable: no probe (a probe briefly takes a
+            % free lock, which a claimer could see as contention)
+            if ~isfile(Q.outputs{k}), held(k) = unit_lock('probe', lockFile(qDir, id)).held; end
             [owner{k}, age(k)] = readOwner(qDir, id);
             % ONE state per unit. The lock decides who is live; the owner
             % record without a lock is a process that died holding it.
@@ -250,9 +263,11 @@ end
 
 % ------------------------------------------------------------------------
 function ok = holds(c)
-% HOLDS  True if c is a live claim this process still holds.  INPUTS: c.
+% HOLDS  True if c is a claim THIS process holds RIGHT NOW: the registry in
+% unit_lock decides, not the struct's copy of a flag.  INPUTS: c.
 % OUTPUTS: ok.
-ok = isstruct(c) && isfield(c, 'lock') && isstruct(c.lock) && c.lock.held;
+ok = isstruct(c) && isfield(c, 'lock') && isstruct(c.lock) && ...
+     isfield(c.lock, 'token') && ~isempty(c.lock.token) && unit_lock('holds', c.lock.file, c.lock.token);
 end
 
 % ------------------------------------------------------------------------

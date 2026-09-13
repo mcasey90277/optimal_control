@@ -3954,3 +3954,89 @@ unit-aware rib validation; an owning parent supervisor that reaps and
 records exits; and a deterministic fault suite (stale handle, reset
 boundary, commit/kill matrix, real supervisor kills, real pool lifecycle,
 two controllers).
+
+## 56. The pass-3 blockers closed: authority in a registry, beats at every stage, a parent supervisor, and the fault suite Astra asked for (2026-09-13)
+
+Every blocker in section 55 is closed, and each closure is tested against
+the sequence that reproduced it.
+
+**Authority lives in the registry, not the struct.** `unit_lock` keeps a
+process-wide, mlock'ed map keyed by file IDENTITY (device:inode) from the
+lock file to the live Java objects and the current holder's token.
+`holds`, `beat`, `publish` and `release` ask it; a released handle has no
+authority whatever its copy of `held` says; release is idempotent and by
+token, so a stale release cannot remove a newer holder's entry, and a lock
+file deleted under a holder can still be released. The registry is
+consulted BEFORE any channel is opened (POSIX drops every lock a process
+holds on a file when any descriptor on it closes), and an overlapping-lock
+report from Java parks the second channel rather than closing it and
+errors by name. `reset` takes the unit lock and holds it while it deletes
+records, and refuses ids not in the queue. Test: A claims and releases,
+B claims, A's old struct cannot publish, beat or release (B's record
+survives); `clear functions` leaves the registry intact; a path alias
+maps to the same lock; and, across PROCESSES, a second MATLAB is still
+refused after the owner clears its functions and probes its own lock --
+the sequence that freed the lock this morning.
+
+**Beats at every capped stage.** `certify_root` takes `.progress` and
+ticks it after the polish and after each of the six fenced stages;
+`rib_from_crossing` hands the worker's heartbeat down. The longest
+silence between beats is now one stage cap (900 s) plus uncapped work,
+and hangSec = 2700 s is three of those. `run_capped` VERIFIES a
+cancellation: if the future has not finished 30 s after `cancel`, the pool
+is deleted (its worker process with it) and the call errors as
+infrastructure -- so a stuck native call fails the attempt for retry
+instead of turning into short columns behind a poisoned one-worker pool.
+`certify_root` refuses to run unfenced unless told to; the generated job
+asserts a live pool before the worker reports READY.
+
+**The launcher is the workers' parent.** Each worker runs under a
+supervisor subshell that spawned it: it enforces the spawn-to-READY
+deadline until the READY marker exists (whatever else is written), then
+heartbeat inactivity; on either it sends TERM, waits up to 30 s, sends
+KILL, kills the client's pool children, then `wait`s, so the exit code is
+real and no recycled pid can be mistaken for the worker. Exit code and
+reason go to `exit_<tag>`, the pid to `pid_<tag>`. READY is checked to
+carry the spawned pid, and "attached then failed" is reported as such.
+
+**One controller at a time.** The entry script holds `campaign.lock` for
+the whole call, so manifest creation, launch and packaging are serialised.
+Existing rib files are validated against their UNIT before the queue can
+call them done (`rib_validate` now checks exactly one rib, the column, the
+arrival phase, every point certified, points on the lattice and unique,
+and the problem identity against the campaign's), and an invalid one is
+quarantined by rename and the column re-queued. Foreign old-launcher
+workers block packaging as well as launching. The barrier's index bug is
+gone (one reason per column, parallel to the mask). 'packaged' is decided
+by a RECEIPT the chain writes with this call's invocation id, not an
+mtime. The chain takes the engine and orbits from the driver, gates
+anchors/arcs/pool by the stages that need them, fences the audit like the
+sweep, and closes only the figures it opened; the driver saves and
+restores the figure default. The finish job appends verdicts and exits
+non-zero unless packaged with a movie; the autochain checks the EXACT
+expected rib files (`ribq/expected_units.txt`) and runs one instance at a
+time. Audit- or sweep-only calls report state 'measured'.
+
+**Verified.** `test_work_queue`: 49 checks. `test_campaign_processes`, four
+phases with real MATLAB workers through the real launcher, 25/25: (0) the
+cross-process registry check above; (1) three workers, unit 3's owner
+killed -9 AFTER it wrote its temporary result -- the replacement published
+its own result, not the dead owner's file; unit 5 wrote a partial result
+and threw three times and left three `.failed` files; the only `.part`
+debris belongs to the killed attempt; survivors exited rc 0, the killed
+worker rc 137, all reaped by their supervisors; (2) maxAtt = 1, owner
+killed mid-unit: RETIRED, finished, no restart; (3) a worker that beats
+once and goes silent: the SUPERVISOR killed it after 69 s and recorded
+"143 no heartbeat for 64s", the unit is abandoned and claimable, the
+monitor alarms that no live worker remains, and no launched process
+survived. The entry script dry-runs 'pending' against the live directory
+(with the strict validator accepting all 16 real columns) and 'packaged'
+with a receipt on the 15-column scratch copy, base workspace, cwd and
+figure default intact.
+
+**Still open (Astra's hardening list):** intra-column checkpoint/resume; a
+campaign-wide supervisor that REPLACES lost capacity (idle workers cover
+the tail, but a relaunch is a call to the entry script); status probes
+are sampled, not a snapshot; the hardcoded pumpkynPie bootstrap; the
+chain is still a script. The live 24x24 run is on the old launcher and
+unaffected; its finish is armed on the new autochain.

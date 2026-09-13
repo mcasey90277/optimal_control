@@ -1,40 +1,42 @@
 #!/bin/zsh
-# RUN_CAMPAIGN_WORKERS  Launch N campaign workers against a work queue,
-# VERIFY that each one attached to the queue, and watch each for INACTIVITY.
+# RUN_CAMPAIGN_WORKERS  Launch N campaign workers against a work queue, each
+# under a SUPERVISOR that is its PARENT: it verifies READY, watches for
+# inactivity, kills a hung or unready worker, confirms the exit, reaps it,
+# and records the exit code and reason.
 #
 # Every launch bug this campaign hit is guarded here:
-#   * a launcher that silently does nothing: the loop is arithmetic (no
-#     seq), the number of children is asserted, and each worker must write
-#     a READY heartbeat (it does so only after opening the queue) within
-#     STARTUP_SEC or it is killed and the launch reported incomplete.
-#   * a tag that carried the whole argument: arguments are positional,
-#     validated, quoted, echoed back; the job path reaches MATLAB through
-#     the environment, never interpolated into MATLAB code.
-#   * a watchdog that measured LIFETIME and killed healthy workers inside
-#     their fourth column: this one reads the heartbeat AGE and kills only
-#     a worker silent for HANG_SEC. Ownership is a kernel lock held by the
-#     process (unit_lock), so killing is the ONLY way a unit changes hands
-#     -- the watchdog is the supervisor the queue relies on.
-#   * relaunch reusing w1..wN and truncating live logs: every launch gets an
-#     exclusively created directory (mktemp), and tags and logs carry it.
+#   * a launcher that silently does nothing: arithmetic loop, child count
+#     asserted, and each worker must write a READY marker (only after it
+#     has opened the queue) within STARTUP_SEC or its supervisor kills it.
+#   * a tag that carried the whole argument: positional, validated, quoted;
+#     the job path reaches MATLAB through the environment.
+#   * a watchdog that measured LIFETIME: this one measures heartbeat AGE,
+#     and only after READY. Ownership is a kernel lock the process holds
+#     (unit_lock), so a kill is the ONLY way a unit changes hands, and the
+#     supervisor confirms the exit before it records anything.
+#   * a sibling watchdog acting on a pid it did not own (pass 3): the
+#     supervisor is the parent, so the pid cannot be recycled under it
+#     before `wait` reaps it, and the exit code is real.
+#   * relaunch reusing tags and truncating live logs: every launch gets an
+#     exclusively created directory; tags, logs, pid and exit files live in it.
 #
 # Usage:
 #   run_campaign_workers.sh <jobScript> <nWorkers> <hangSec> <outDir>
-#     hangSec   seconds of heartbeat silence after which a worker is killed
-#               (the entry script sizes it from the solver's own wall cap)
-# The job script reads WORKER_TAG from the environment and calls
-# campaign_worker; heartbeats go to <outDir>/hb, the same place the
-# generated job writes them.
+#     hangSec   seconds of heartbeat silence after which a worker is killed;
+#               the entry script sizes it from the largest capped STAGE
+# Env: STARTUP_SEC [240] spawn-to-READY deadline.
+# Per launch directory: worker_<tag>.out, pid_<tag>, exit_<tag> ("<rc> <reason>").
 set -u
 usage() { echo "usage: $0 <jobScript> <nWorkers> <hangSec> <outDir>"; exit 2; }
 [ $# -eq 4 ] || usage
 JOB=$1; N=$2; HANG_SEC=$3; OUT=$4
-STARTUP_SEC=240
+STARTUP_SEC=${STARTUP_SEC:-240}
 
 # ---- validate before anything is spawned -----------------------------------
 [ -f "$JOB" ] && [ -r "$JOB" ] || { echo "REFUSING: job script not a readable file: $JOB"; exit 2; }
 [[ "$N" == <1-64> ]] || { echo "REFUSING: nWorkers must be an integer in 1..64 (got '$N')"; exit 2; }
 [[ "$HANG_SEC" == <60-> ]] || { echo "REFUSING: hangSec must be an integer >= 60 (got '$HANG_SEC')"; exit 2; }
+[[ "$STARTUP_SEC" == <30-> ]] || { echo "REFUSING: STARTUP_SEC must be an integer >= 30 (got '$STARTUP_SEC')"; exit 2; }
 mkdir -p "$OUT/hb" 2>/dev/null && [ -w "$OUT" ] && [ -w "$OUT/hb" ] || { echo "REFUSING: outDir not writable: $OUT"; exit 2; }
 MATLAB=/Applications/MATLAB_R2026a.app/bin/matlab
 [ -x "$MATLAB" ] || { echo "REFUSING: MATLAB not found at $MATLAB"; exit 2; }
@@ -42,66 +44,76 @@ HB="$OUT/hb"
 LDIR=$(mktemp -d "$OUT/launch_$(date +%Y%m%d_%H%M%S)_XXXX") || { echo "REFUSING: cannot create a launch directory in $OUT"; exit 2; }
 LAUNCH=${LDIR:t}
 LOG="$OUT/launcher.log"
-echo "$LAUNCH: $N worker(s), inactivity watchdog ${HANG_SEC}s, startup deadline ${STARTUP_SEC}s, heartbeats in $HB" | tee -a "$LOG"
+log() { echo "$(date +%H:%M:%S) $*" >> "$LOG"; }
+echo "$LAUNCH: $N worker(s), inactivity ${HANG_SEC}s after READY, startup deadline ${STARTUP_SEC}s, heartbeats in $HB" | tee -a "$LOG"
+
+# ---- the supervisor: parent of exactly one worker -----------------------------
+supervise() {
+  local TAG=$1
+  WORKER_TAG="$TAG" CAMPAIGN_JOB="$JOB" "$MATLAB" -batch "run(getenv('CAMPAIGN_JOB'))" \
+      > "$LDIR/worker_$TAG.out" 2>&1 < /dev/null &
+  local MPID=$!
+  echo $MPID > "$LDIR/pid_$TAG"
+  log "spawned $TAG (pid $MPID)"
+  local t0=$(date +%s) now reason="" AGE
+  local HBF="$HB/$TAG.hb" RDY="$HB/$TAG.ready"
+  while kill -0 $MPID 2>/dev/null; do
+    sleep 5
+    now=$(date +%s)
+    if [ ! -f "$RDY" ]; then
+      # the startup deadline applies until READY, whatever else is written
+      if [ $(( now - t0 )) -gt $STARTUP_SEC ]; then reason="no READY within ${STARTUP_SEC}s"; break; fi
+    elif [ -f "$HBF" ]; then
+      AGE=$(( now - $(stat -f %m "$HBF" 2>/dev/null || echo $now) ))
+      if [ $AGE -gt $HANG_SEC ]; then reason="no heartbeat for ${AGE}s"; break; fi
+    fi
+  done
+  if [ -n "$reason" ]; then
+    local KIDS=$(pgrep -P $MPID 2>/dev/null | tr '\n' ' ')
+    log "supervisor killing $TAG (pid $MPID): $reason"
+    kill $MPID 2>/dev/null
+    local k
+    for k in 1 2 3 4 5 6; do sleep 5; kill -0 $MPID 2>/dev/null || break; done
+    if kill -0 $MPID 2>/dev/null; then kill -9 $MPID 2>/dev/null; log "$TAG did not exit on TERM; sent KILL"; fi
+    if [ -n "$KIDS" ]; then sleep 2; kill -9 ${=KIDS} 2>/dev/null; log "$TAG: killed descendants $KIDS (its pool)"; fi
+  fi
+  wait $MPID
+  local rc=$?
+  echo "$rc ${reason:-not killed by supervisor}" > "$LDIR/exit_$TAG"
+  log "$TAG (pid $MPID) exited rc=$rc (${reason:-not killed by supervisor})"
+}
 
 # ---- spawn -----------------------------------------------------------------
-typeset -a TAGS PIDS
+typeset -a TAGS
 for (( i = 1; i <= N; i++ )); do
   TAG="w${i}_${LAUNCH#launch_}"
-  WORKER_TAG="$TAG" CAMPAIGN_JOB="$JOB" nohup "$MATLAB" -batch "run(getenv('CAMPAIGN_JOB'))" \
-      > "$LDIR/worker_$TAG.out" 2>&1 < /dev/null &
-  MPID=$!
-  TAGS+=("$TAG"); PIDS+=("$MPID")
-  echo "  spawned $TAG (pid $MPID)" | tee -a "$LOG"
-  # SUPERVISOR for this child: startup deadline, then inactivity. It acts on
-  # the pid only while that pid is still a MATLAB batch process (a recycled
-  # pid is left alone), and logs the child's exit when it sees it.
-  ( t0=$(date +%s); HBF="$HB/$TAG.hb"
-    isours() { ps -o command= -p $MPID 2>/dev/null | grep -q -- "-batch"; }   # wrapper script or binary
-    while isours; do
-      sleep 15
-      now=$(date +%s)
-      if [ ! -f "$HBF" ]; then
-        if [ $(( now - t0 )) -gt $STARTUP_SEC ]; then
-          isours && kill $MPID; sleep 5; isours && kill -9 $MPID
-          echo "$(date +%H:%M:%S) supervisor killed $TAG (pid $MPID): no READY heartbeat in ${STARTUP_SEC}s" >> "$LOG"; break
-        fi
-        continue
-      fi
-      AGE=$(( now - $(stat -f %m "$HBF") ))
-      if [ $AGE -gt $HANG_SEC ]; then
-        isours && kill $MPID; sleep 5; isours && kill -9 $MPID
-        echo "$(date +%H:%M:%S) supervisor killed $TAG (pid $MPID): no heartbeat for ${AGE}s" >> "$LOG"; break
-      fi
-    done
-    echo "$(date +%H:%M:%S) $TAG (pid $MPID) is no longer running" >> "$LOG"
-  ) > /dev/null 2>&1 < /dev/null &
+  TAGS+=("$TAG")
+  ( supervise "$TAG" ) > /dev/null 2>&1 < /dev/null &
   sleep 1
 done
-[ ${#PIDS[@]} -eq $N ] || { echo "LAUNCH FAILED: spawned ${#PIDS[@]} of $N" | tee -a "$LOG"; exit 1; }
+[ ${#TAGS[@]} -eq $N ] || { echo "LAUNCH FAILED: spawned ${#TAGS[@]} of $N" | tee -a "$LOG"; exit 1; }
 
-# ---- verify: READY means the worker opened the queue -------------------------
+# ---- verify: READY means the worker opened the queue, and it is THIS worker ----
 echo "verifying every worker attached to the queue ..."
 typeset -a FAILED
-deadline=$(( $(date +%s) + STARTUP_SEC ))
+deadline=$(( $(date +%s) + STARTUP_SEC + 30 ))
 for (( k = 1; k <= N; k++ )); do
-  TAG=${TAGS[$k]}; MPID=${PIDS[$k]}; ok=0
+  TAG=${TAGS[$k]}; ok=0; why=""
   while [ $(date +%s) -lt $deadline ]; do
-    # READY is a persistent file the worker writes once it has opened the
-    # queue; the heartbeat itself is overwritten within milliseconds
-    if [ -f "$HB/$TAG.ready" ]; then ok=1; break; fi
-    if [ -f "$HB/$TAG.hb" ] && grep -q "^fail|" "$HB/$TAG.hb"; then break; fi
-    if ! kill -0 $MPID 2>>"$LOG"; then
-      # EVIDENCE, not a verdict: say what the process table shows for that pid
-      echo "$(date +%H:%M:%S) verify: kill -0 $MPID failed for $TAG; ps says: $(ps -o pid=,ppid=,stat=,command= -p $MPID 2>&1 | cut -c1-100)" >> "$LOG"
-      break
+    if [ -f "$LDIR/pid_$TAG" ] && [ -f "$HB/$TAG.ready" ]; then
+      MPID=$(cat "$LDIR/pid_$TAG"); RPID=$(cut -d'|' -f3 "$HB/$TAG.ready")
+      if [ "$RPID" = "$MPID" ]; then
+        if [ -f "$HB/$TAG.hb" ] && grep -q "^fail|" "$HB/$TAG.hb"; then why="attached, then FAILED: $(cut -d'|' -f4- "$HB/$TAG.hb" | cut -c1-120)"; break; fi
+        ok=1; break
+      else
+        why="READY marker carries pid $RPID, not this worker's $MPID"; break
+      fi
     fi
+    if [ -f "$LDIR/exit_$TAG" ]; then why="exited before READY: $(cat "$LDIR/exit_$TAG")"; break; fi
     sleep 2
   done
-  if [ $ok -eq 1 ]; then echo "  $TAG: READY"
-  else FAILED+=("$TAG")
-       if kill -0 $MPID 2>/dev/null; then echo "  $TAG: *** NOT READY (process alive, pid $MPID; its supervisor will kill it at ${STARTUP_SEC}s) ***"
-       else echo "  $TAG: *** EXITED BEFORE READY ***"; fi
+  if [ $ok -eq 1 ]; then echo "  $TAG: READY (pid $(cat "$LDIR/pid_$TAG"))"
+  else FAILED+=("$TAG"); echo "  $TAG: *** NOT READY -- ${why:-no READY marker before the deadline; its supervisor will kill it} ***"
        echo "      last output:"; tail -5 "$LDIR/worker_$TAG.out" 2>/dev/null | sed 's/^/      /'
   fi
 done
@@ -109,4 +121,4 @@ if [ ${#FAILED[@]} -gt 0 ]; then
   echo "LAUNCH INCOMPLETE: ${#FAILED[@]} of $N worker(s) not ready: ${FAILED[*]}" | tee -a "$LOG"
   exit 1
 fi
-echo "LAUNCH OK: all $N workers attached (tags: ${TAGS[*]}; logs in $LDIR)" | tee -a "$LOG"
+echo "LAUNCH OK: all $N workers attached (tags: ${TAGS[*]}; pids, logs and exit records in $LDIR)" | tee -a "$LOG"

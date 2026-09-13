@@ -62,10 +62,12 @@ else
 end
 maxBisect = d('maxBisect', 8);  wallSec = d('wallSec', 600);
 copts = d('copts', struct());  copts.wallSec = wallSec;  copts.sA = C0.sA;
+copts.progress = d('progress', []);          % certify_root ticks it after every capped stage
 logFile = d('logFile', '');
 lg = @(varargin) logmsg(logFile, sprintf(varargin{:}));
 progress = d('progress', []);
 if isempty(progress), progress = @() []; end
+copts.progress = progress;
 
 R = struct('pts', struct([]), 'stop', '', 'nSolve', 0, 'sA', C0.sA, 'nD', nD);
 rvf = B.stateA(C0.sA);

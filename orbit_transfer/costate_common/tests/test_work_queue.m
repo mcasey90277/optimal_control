@@ -64,11 +64,21 @@ a2 = work_queue('claim', q, 'A');
 ok = chk(ok, a2.id ~= a.id, sprintf('a done unit is not handed out again (got %d, not %d)', a2.id, a.id));
 s = work_queue('status', q);
 ok = chk(ok, s.nDone == 1 && ismember(a.id, s.done), 'status reads DONE from the artifact, not a flag');
-% a claim struct that no longer holds the lock cannot publish
-fake = a;  fake.lock.held = false;  touchFile(fake.tmpOut, 'late');
-P3 = work_queue('publish', q, fake, fake.tmpOut);
-ok = chk(ok, ~P3.ok && contains(P3.msg, 'lock'), 'a process without the lock cannot publish');
-delete(fake.tmpOut);
+% A RELEASED CLAIM HAS NO AUTHORITY, whatever its struct says. Astra's
+% pass-3 reproduction: A releases but keeps its struct; B claims; A's
+% old struct must not beat, publish or release over B.
+stale = a2;                                          % A2 holds unit a2.id right now
+work_queue('release', q, stale);                     % ... and lets it go, keeping the struct
+ok = chk(ok, stale.lock.held, '(the released struct still SAYS held -- that is the trap)');
+bOwn = claimSpecific(q, 'B2', stale.id, 3);
+ok = chk(ok, bOwn.id == stale.id, sprintf('B2 now owns unit %d', bOwn.id));
+touchFile(stale.tmpOut, 'stale result');
+P3 = work_queue('publish', q, stale, stale.tmpOut);
+ok = chk(ok, ~P3.ok && contains(P3.msg, 'lock') && ~isfile(outF(stale.id)), 'the released claim cannot PUBLISH over the new owner');
+ok = chk(ok, ~work_queue('beat', q, stale), 'nor beat');
+ok = chk(ok, ~work_queue('release', q, stale) && isfile(fullfile(q, sprintf('%d.owner', stale.id))), 'nor release: B2''s owner record survives');
+delete(stale.tmpOut);
+work_queue('release', q, bOwn);
 
 % ---- 3. release without publish returns the unit -------------------------
 work_queue('release', q, b);
@@ -105,8 +115,17 @@ work_queue('init', q, 1:6, outF);
 s5 = work_queue('status', q, struct('maxAtt', 3));
 ok = chk(ok, ismember(id5, s5.retired), 'and it STAYS retired across a re-open');
 h = work_queue('claim', q, 'H');                     % hold one unit during reset
+attH = work_queue('status', q).attempts(work_queue('status', q).units == h.id);
 reset_ = work_queue('reset', q, struct('units', [id5, h.id]));
 ok = chk(ok, isequal(reset_, id5), sprintf('reset clears the retired unit (%d) and refuses the held one (%d)', id5, h.id));
+attH2 = work_queue('status', q).attempts(work_queue('status', q).units == h.id);
+ok = chk(ok, attH2 == attH && attH > 0, 'and the held unit''s attempt record is untouched (reset holds the lock while it acts)');
+try
+    work_queue('reset', q, struct('units', 99));  badReset = false;
+catch
+    badReset = true;
+end
+ok = chk(ok, badReset, 'reset refuses a unit id that is not in the queue');
 work_queue('release', q, h);
 s5b = work_queue('status', q, struct('maxAtt', 3));
 ok = chk(ok, ismember(id5, s5b.todo), 'a reset unit is claimable again');
@@ -126,7 +145,7 @@ ok = chk(ok, ismember(g.id, s6.running) && s6.held(s6.units == g.id) && strcmp(s
 ok = chk(ok, ~s6.finished, 'a campaign with a held lock is not finished');
 % an owner record WITHOUT a lock = a dead owner: abandoned, claimable
 ageFile(fullfile(q, sprintf('%d.owner', g.id)));
-unit_lock('release', '', g.lock);                     % simulate death: lock gone, record stays
+unit_lock('release', g.lock.file, g.lock.token);      % simulate death: lock gone, record stays
 s6b = work_queue('status', q, struct('maxAtt', 3, 'staleSec', 60));
 ok = chk(ok, ismember(g.id, s6b.abandoned), sprintf('a unit whose owner died holding it is ABANDONED (%d)', g.id));
 g2 = work_queue('claim', q, 'I');
@@ -172,15 +191,41 @@ catch
 end
 ok = chk(ok, ~nested && ~isfile(fullfile(q, 'adir', 'pub.txt.tmp')), 'publish_atomic refuses a directory destination (movefile would nest into it)');
 
-% ---- 10. unit_lock ---------------------------------------------------------------
+% ---- 10. unit_lock: authority lives in the registry ------------------------------
 lf = fullfile(q, 'x.lock');
 L = unit_lock('try', lf);
 pr = unit_lock('probe', lf);
 ok = chk(ok, L.held && pr.held && pr.mine, 'a held lock probes as held, and as MINE, without a second channel');
 L2 = unit_lock('try', lf);
-ok = chk(ok, ~L2.held && L.held, 'a second try from the same process is refused and leaves the first intact');
-unit_lock('release', '', L);
-ok = chk(ok, ~unit_lock('probe', lf).held, 'and as free after release');
+ok = chk(ok, ~L2.held && unit_lock('holds', lf, L.token), 'a second try from the same process is refused and leaves the first intact');
+alias = fullfile(q, '.', 'x.lock');
+ok = chk(ok, unit_lock('probe', alias).mine, 'an alias of the path maps to the same lock (identity, not string)');
+n0 = unit_lock('count');
+clear functions
+ok = chk(ok, unit_lock('count') == n0 && unit_lock('holds', lf, L.token), 'the registry survives `clear functions` (it is mlocked)');
+ok = chk(ok, unit_lock('release', lf, L.token) && ~unit_lock('release', lf, L.token), 'release is idempotent: true once, then a no-op');
+ok = chk(ok, ~unit_lock('holds', lf, L.token) && ~unit_lock('probe', lf).held, 'and afterwards the token holds nothing and the file is free');
+
+% ---- 11. rib_validate is unit-aware ---------------------------------------------
+addpath(fullfile(fileparts(fileparts(fileparts(mfilename('fullpath')))), 'DRO_tulip', 'indirect'));
+rf = fullfile(q, 'rib.mat');
+pt = struct('ok', true, 'sD', 1/24, 'z', ones(8,1));
+R = struct('j', 4, 'sA', 0.2, 'pts', [pt, setfield(pt, 'sD', 2/24)], 'stop', 'complete', 'nSolve', 2); %#ok<SFLD>
+problem = struct('thrustN', 0.07, 'ispS', 900, 'm0kg', 150, 'tauDRO', 1, 'NpTulip', 7, 'pmTulip', -1, 'sD', 0);
+save(rf, 'R', 'problem');
+spec = struct('nPts', 2, 'col', 4, 'sA', 0.2, 'nD', 24, 'problem', problem);
+[okV, ~, inf_] = rib_validate(rf, spec);
+ok = chk(ok, okV && inf_.complete && inf_.nPts == 2, 'a good rib for its unit validates as complete');
+ok = chk(ok, ~rib_validate(rf, setfield(spec, 'col', 5)), 'a rib for ANOTHER column is refused'); %#ok<SFLD>
+R.pts(2).ok = false;  save(rf, 'R', 'problem');
+ok = chk(ok, ~rib_validate(rf, spec), 'an uncertified point is refused');
+R.pts(2).ok = true;  problem.NpTulip = 8;  save(rf, 'R', 'problem');  problem.NpTulip = 7;
+ok = chk(ok, ~rib_validate(rf, spec), 'a rib certified at another operating point is refused');
+R.pts(2).sD = 0.03;  save(rf, 'R', 'problem');
+ok = chk(ok, ~rib_validate(rf, spec), 'a point off the departure lattice is refused');
+fid = fopen(rf, 'w'); fprintf(fid, 'not a mat file'); fclose(fid);
+[okV, msgV] = rib_validate(rf, spec);
+ok = chk(ok, ~okV && ~isempty(msgV), 'a corrupt file is a refusal with a reason, not an error');
 
 if ok, fprintf('TEST_WORK_QUEUE: ALL PASS\n');
 else,  fprintf('TEST_WORK_QUEUE: FAIL\n');  error('test_work_queue:fail', 'test_work_queue FAILED'); end

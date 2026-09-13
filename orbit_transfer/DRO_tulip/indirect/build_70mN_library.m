@@ -98,6 +98,10 @@ if exist('chainOverrides', 'var')
             grid.(gf{1}) = chainOverrides.grid.(gf{1});
         end
     end
+    % the OPERATING POINT too: a driver declaring another engine or orbit
+    % must not meet this block's defaults in the packager (pass 3, 3.9)
+    if isfield(chainOverrides, 'engine'), engine = chainOverrides.engine; end
+    if isfield(chainOverrides, 'orbits'), orbits = chainOverrides.orbits; end
 end
 if ~isfolder(outDir), mkdir(outDir); end
 % derived from the grid AFTER any override (identical at the defaults)
@@ -138,13 +142,22 @@ fprintf('   inputs from %s, outputs to %s\n', resDir, outDir);
 %     from the first sheet's cell (1,11). A new operating point needs a new
 %     anchor: run_dro_tulip walks to one.
 %% ========================================================================
+% PREREQUISITES ARE GATED BY THE STAGES THAT NEED THEM: a package-only run
+% on an explicit sheet and rib set must not fail for a missing default
+% anchor, arc or pool (pass 3, 3.9)
+needAnchors = run.arcs || run.sheet;
+needPool = run.sheet || run.ribs || run.audit || run.sweep;
 for k = 1:size(anchors, 1)
-    assert(isfile(anchors{k,2}), ...
-        'anchor "%s" missing: %s. Make one with run_dro_tulip and save z + it.Y.', ...
-        anchors{k,1}, anchors{k,2});
-    fprintf('1. anchor %-8s %s  (sA0 = %.4f)\n', anchors{k,1}, anchors{k,2}, anchors{k,3});
+    if needAnchors
+        assert(isfile(anchors{k,2}), ...
+            'anchor "%s" missing: %s. Make one with run_dro_tulip and save z + it.Y.', ...
+            anchors{k,1}, anchors{k,2});
+    end
+    fprintf('1. anchor %-8s %s  (sA0 = %.4f)%s\n', anchors{k,1}, anchors{k,2}, anchors{k,3}, ...
+            pick(isfile(anchors{k,2}), '', '  [absent; not needed by these stages]'));
 end
-pool = capped_pool();                       % the fence every external call runs behind
+pool = [];
+if needPool, pool = capped_pool(); end      % the fence every external call runs behind
 
 %% ========================================================================
 %  2. ARRIVAL ARCS -- pseudo-arclength continuation in the homogeneous chart,
@@ -172,7 +185,9 @@ for k = 1:size(anchors, 1)
                 nm, numel(A.q), A.q(1), A.q(end), numel(A.folds), numel(A.crossings), A.stop);
     end
 end
-assert(any(cellfun(@isfile, arcFiles)), 'no arrival arcs in %s: turn run.arcs on', resDir);
+if needAnchors
+    assert(any(cellfun(@isfile, arcFiles)), 'no arrival arcs in %s: turn run.arcs on', resDir);
+end
 
 %% ========================================================================
 %  3. THE ARRIVAL SHEET -- every grid crossing of every arc through the gate
@@ -233,6 +248,14 @@ if run.package
     cat_ = package_phase_catalog(files.sheet, ribFiles, struct('tag', tag, ...
         'thrustN', engine.thrustN, 'ispS', engine.ispS, 'm0kg', engine.m0kg, ...
         'nD', grid.nD, 'sD0', grid.sD0, 'outDir', outDir));
+    % THE RECEIPT: which invocation produced this catalog, from which
+    % inputs. The driver reads it back instead of trusting an mtime.
+    receipt = struct('invocationId', '', 'catalog', files.catalog, 'sheet', files.sheet, ...
+                     'ribFiles', {ribFiles}, 'nEntries', cat_.n_entries, 'written', char(datetime('now')));
+    if exist('chainOverrides', 'var') && isfield(chainOverrides, 'invocationId')
+        receipt.invocationId = chainOverrides.invocationId;
+    end
+    save(fullfile(outDir, 'catalog_receipt.mat'), '-struct', 'receipt');
 else
     assert(isfile(files.catalog), 'catalog missing: %s (stage 5 makes it)', files.catalog);
     L = load(files.catalog);  fn = fieldnames(L);  cat_ = L.(fn{1});   % one variable, the catalog
@@ -252,13 +275,20 @@ fprintf('5. catalog %s: %d entries, %d of %d cells, conj PASS on %d\n', files.ca
 % badness must block. Blockers are collected and reported at the end.
 blockers = {};
 if run.audit
-    Aud = audit_phase_catalog(files.catalog, struct('out', files.audit, 'pool', pool));
-    fprintf('6. audit: %d ok / %d bad\n', Aud.nOk, Aud.nBad);
-    if Aud.nBad > 0
-        fprintf('   %s\n', Aud.problems{:});
-        blockers{end+1} = sprintf('audit: %d of %d entries bad', Aud.nBad, Aud.nOk + Aud.nBad);
-        fprintf(['   the chain CONTINUES (the sweep still measures every entry); the\n' ...
-                 '   deliverable stage will refuse. See the blocker summary at the end.\n']);
+    % FENCED like the sweep: an audit that THROWS is an infrastructure
+    % failure and must not cost the sweep and the pictures behind it
+    try
+        Aud = audit_phase_catalog(files.catalog, struct('out', files.audit, 'pool', pool));
+        fprintf('6. audit: %d ok / %d bad\n', Aud.nOk, Aud.nBad);
+        if Aud.nBad > 0
+            fprintf('   %s\n', Aud.problems{:});
+            blockers{end+1} = sprintf('audit: %d of %d entries bad', Aud.nBad, Aud.nOk + Aud.nBad);
+            fprintf(['   the chain CONTINUES (the sweep still measures every entry); the\n' ...
+                     '   deliverable stage will refuse. See the blocker summary at the end.\n']);
+        end
+    catch ME
+        fprintf('6. audit THREW: %s\n', ME.message);
+        blockers{end+1} = ['audit threw: ' ME.message];
     end
 else
     if isfile(files.audit)
@@ -301,13 +331,14 @@ end
 %% ========================================================================
 if run.pictures
     try
+        figsBefore = findall(0, 'Type', 'figure');      % close only what this stage opens
         set(0, 'DefaultFigureVisible', 'off');
         Q = load(fullfile(outDir, sprintf('phase_sheet_%s', tag), ...
                           sprintf('dro_tulip_%s_tau%g_Np%d.mat', tag, orbits.tauDRO, orbits.NpTulip)));
         plot_phase_sheet(Q, files.torus);
         I = plot_torus_findings(files.catalog, files.findings);
         fprintf('8. pictures: %s, %s (%d of %d certified)\n', files.torus, files.findings, I.nCert, I.nCells);
-        close all
+        close(setdiff(findall(0, 'Type', 'figure'), figsBefore))
     catch ME
         fprintf('8. pictures THREW: %s\n', ME.message);
         blockers{end+1} = ['pictures threw: ' ME.message];   % never blocks the ship gate on its own

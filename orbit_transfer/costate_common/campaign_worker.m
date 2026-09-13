@@ -31,7 +31,7 @@ function out = campaign_worker(qDir, hbDir, tag, unitFcn, opts)
 %                                                   launcher (required)
 %  unitFcn                  function_handle         unitFcn(id, beat, tmpOut)
 %  opts                     struct (optional)
-%   .validateFcn []  [ok, msg] = validateFcn(tmpOut), run before publishing
+%   .validateFcn []  [ok, msg] = validateFcn(tmpOut, id), run before publishing
 %   .budgetSec [inf] stop cleanly between units after this
 %   .idleSec [inf]   longest wait for held units before leaving
 %   .maxAtt [3]      attempts after which a unit is retired (queue policy)
@@ -96,6 +96,11 @@ while true
     end
     tIdle = [];
 
+    % THE UNIT IS RELEASED WHATEVER HAPPENS BELOW: an error in a heartbeat,
+    % a log line or the cleanup itself must not leave the lock held by a
+    % worker that has stopped working (release is idempotent, so the
+    % ordinary release further down makes this a no-op)
+    guard = onCleanup(@() work_queue('release', qDir, c));
     campaign_heartbeat('beat', hbDir, tag, sprintf('unit %d', c.id));
     lg('worker %s: unit %d claimed (attempt record written)', tag, c.id);
     tU = tic;
@@ -103,7 +108,9 @@ while true
     % ACCOUNTING HAPPENS ONCE, at the commit boundary
     try
         unitFcn(c.id, beat, c.tmpOut);
-        P = work_queue('publish', qDir, c, c.tmpOut, validateFcn);
+        if isempty(validateFcn), vf = [];
+        else, vf = @(f) validateFcn(f, c.id); end        % the validator knows WHICH unit
+        P = work_queue('publish', qDir, c, c.tmpOut, vf);
         okUnit = P.ok;  err = P.msg;
     catch ME
         okUnit = false;  err = sprintf('%s (%s)', ME.message, ME.identifier);
@@ -115,10 +122,12 @@ while true
         nFail = nFail + 1;  failed(end+1) = c.id; %#ok<AGROW>
         lg('worker %s: unit %d FAILED after %.0f s -- %s', tag, c.id, toc(tU), err);
         if isfile(c.tmpOut)           % keep the evidence, out of the publisher's way
-            try movefile(c.tmpOut, [c.tmpOut '.failed']); catch, end
+            [okMv, msgMv] = movefile(c.tmpOut, [c.tmpOut '.failed']);
+            if ~okMv, lg('worker %s: could not preserve %s: %s', tag, c.tmpOut, msgMv); end
         end
     end
     work_queue('release', qDir, c);   % the artifact, not the claim, says done
+    clear guard
 end
 
 out = struct('nDone', nDone, 'nFailed', nFail, 'units', units, 'failed', failed, ...

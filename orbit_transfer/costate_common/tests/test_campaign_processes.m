@@ -3,30 +3,32 @@ function ok = test_campaign_processes()
 %
 %   The guarantees that only mean anything across PROCESSES, tested with
 %   real MATLAB worker processes launched by run_campaign_workers.sh
-%   against a temporary queue (about 3 minutes; each worker is a MATLAB
-%   start). Astra's pass-2 review made this a precondition for any
-%   unattended run: "concurrency is the core feature being introduced, and
-%   sequential tests cannot reach the races".
+%   against temporary queues (about six minutes). Astra's pass-2 review
+%   made this a precondition for any unattended run; its pass-3 review
+%   named the smallest cases that close the most risk, and they are here.
 %
-%   Units: 1,2,4,6 take 5 s; 3 takes 40 s and its owner is KILLED -9 mid-
-%   unit; 5 always throws. Every attempt appends a line to the unit's
-%   attempts log, so duplicate computation is visible as a count.
-%
-%     1. the launcher reports every worker READY (attached to the queue);
-%     2. units 1,2,4,6 are computed EXACTLY ONCE across three workers (the
-%        lock is exclusive across processes);
-%     3. unit 3's owner is killed; another worker takes it over (the
-%        kernel freed the lock) and it ends DONE; its attempts log shows
-%        exactly two starts;
-%     4. unit 5 is RETIRED after exactly three attempts, and a .failed
-%        file is left as evidence, no .part;
-%     5. the queue reaches FINISHED (all done or retired, no lock held) and
-%        campaign_status reports the killed worker as not done;
-%     6. no unit's artifact was written by a process without the lock: no
-%        stray .part files remain.
+%   PHASE 0  registry across processes: this process holds a lock, clears
+%            its functions, probes its own lock (the sequence that used to
+%            drop the kernel lock); a second MATLAB process must still be
+%            refused.
+%   PHASE 1  six units, three workers. 1,2,4,6 take 5 s. 3 takes 40 s and
+%            writes its temporary result after 2 s; its owner is killed -9
+%            after that write, so the takeover must not publish the dead
+%            owner's file. 5 writes a partial result then throws, every
+%            time. Checks: all READY; 1,2,4,6 computed exactly once; 3
+%            taken over and published by the REPLACEMENT; 5 retired after
+%            exactly 3 attempts with .failed evidence; the only .part
+%            debris belongs to the killed attempt; queue finished with no
+%            lock held; exit records: survivors 0, killed one non-zero.
+%   PHASE 2  one unit, maxAtt = 1, its owner killed mid-unit: the unit is
+%            RETIRED (terminal), nobody starts it again, queue finished.
+%   PHASE 3  one unit whose worker beats once then goes silent; hangSec =
+%            60: the SUPERVISOR must kill it, record the reason and a
+%            non-zero exit, and the unit must be ABANDONED (claimable),
+%            with the monitor alarming that no live worker remains.
 %
 %% Inputs:  none
-%% Outputs: ok [logical]  (also throws when false)
+%% Outputs: ok [logical]  (also throws when false; evidence kept on failure)
 %
 %% Revision History:
 %  M. Casey                                                   (c) 09/13/2026
@@ -37,60 +39,66 @@ ok = true;
 cc = fileparts(fileparts(mfilename('fullpath')));      % costate_common
 addpath(cc);
 T = fullfile(tempdir, ['cptest_' char(java.util.UUID.randomUUID())]);
-mkdir(T);  q = fullfile(T, 'q');
-% the evidence is kept when the test fails: the first run of this test
-% deleted the worker logs that would have said why the workers died
+mkdir(T);
 keep = struct('ok', false);
 cleanup = onCleanup(@() cleanupAll(T, keep));
-outF = @(id) fullfile(T, sprintf('unit%02d.done', id));
-work_queue('create', q, 1:6, outF);
+launcher = fullfile(cc, 'run_campaign_workers.sh');
+M = '/Applications/MATLAB_R2026a.app/bin/matlab';
 
-% the unit function, as a file the workers can call
+% ---- PHASE 0: the registry across processes ------------------------------------
+lf = fullfile(T, 'reg.lock');
+L = unit_lock('try', lf);
+clear functions                                        % wipes ordinary persistent state
+pr = unit_lock('probe', lf);                           % the sequence that used to free the lock
+probeOut = fullfile(T, 'other_got_it.txt');
+fid = fopen(fullfile(T, 'probe_other.m'), 'w');
+fprintf(fid, ['addpath(''%s''); Tt = unit_lock(''try'', ''%s''); fid = fopen(''%s'', ''w''); ' ...
+              'fprintf(fid, ''%%d'', Tt.held); fclose(fid); if Tt.held, unit_lock(''release'', ''%s'', Tt.token); end\n'], ...
+        cc, lf, probeOut, lf);
+fclose(fid);
+system(sprintf('%s -batch "run(''%s'')" > %s 2>&1', M, fullfile(T, 'probe_other.m'), fullfile(T, 'probe_other.log')));
+ok = chk(ok, L.held && pr.mine && unit_lock('holds', lf, L.token) && strcmp(strtrim(fileread(probeOut)), '0'), ...
+         'PHASE 0: after clear functions + own probe, a second PROCESS is still refused the lock');
+unit_lock('release', lf, L.token);
+
+% ---- the unit function, as a file the workers can call ----------------------------
 fid = fopen(fullfile(T, 'cptest_unit.m'), 'w');
 fprintf(fid, ['function cptest_unit(id, beat, tmpOut, T)\n' ...
     'fid = fopen(fullfile(T, sprintf(''unit%%02d.attempts'', id)), ''a''); fprintf(fid, ''%%s start %%d\\n'', getenv(''WORKER_TAG''), matlabProcessID); fclose(fid);\n' ...
-    'if id == 5, error(''cptest:always'', ''unit 5 always fails''); end\n' ...
-    'dur = 5; if id == 3, dur = 40; end\n' ...
-    'for k = 1:dur, pause(1); beat(); end\n' ...
+    'if id == 5, fid = fopen(tmpOut, ''w''); fprintf(fid, ''partial''); fclose(fid); error(''cptest:always'', ''unit 5 always fails''); end\n' ...
+    'if id == 8, beat(); pause(300); return, end\n' ...          % PHASE 3: silent after one beat
+    'dur = 5; if id == 3 || id == 7, dur = 40; end\n' ...
+    'for k = 1:dur\n' ...
+    '    pause(1); beat();\n' ...
+    '    if k == 2, fid = fopen(tmpOut, ''w''); fprintf(fid, ''unit %%d by %%s (early)'', id, getenv(''WORKER_TAG'')); fclose(fid); end\n' ...
+    'end\n' ...
     'fid = fopen(tmpOut, ''w''); fprintf(fid, ''unit %%d by %%s'', id, getenv(''WORKER_TAG'')); fclose(fid);\n' ...
     'end\n']);
 fclose(fid);
-job = fullfile(T, 'job.m');
-fid = fopen(job, 'w');
-fprintf(fid, ['addpath(''%s'', ''%s'');\n' ...
-    'tag = getenv(''WORKER_TAG'');\n' ...
-    'unitFcn = @(id, beat, tmpOut) cptest_unit(id, beat, tmpOut, ''%s'');\n' ...
-    'campaign_worker(''%s'', ''%s'', tag, unitFcn, struct(''logFile'', fullfile(''%s'', [''worker_'' tag ''.log'']), ...\n' ...
-    '    ''maxAtt'', 3, ''staleSec'', 60, ''validateFcn'', @(f) deal(isfile(f) && numel(fileread(f)) > 0, ''empty result'')));\n'], ...
-    cc, T, T, q, fullfile(T, 'hb'), T);
-fclose(fid);
+writeJob = @(name, q, maxAtt) writeJobFile(fullfile(T, name), cc, T, q, maxAtt);
 
-% ---- 1. launch ---------------------------------------------------------------
-launcher = fullfile(cc, 'run_campaign_workers.sh');
+% ---- PHASE 1 -------------------------------------------------------------------------
+q = fullfile(T, 'q');  outF = @(id) fullfile(T, sprintf('unit%02d.done', id));
+work_queue('create', q, 1:6, outF);
+job = writeJob('job.m', q, 3);
 [rc, txt] = system(sprintf('"%s" "%s" 3 60 "%s"', launcher, job, T));
 fprintf('%s', txt);
 ok = chk(ok, rc == 0 && contains(txt, 'LAUNCH OK') && numel(strfind(txt, ': READY')) == 3, ...
-         'the launcher reports all three workers READY (attached to the queue)');
-if ~ok
-    fprintf('--- launcher.log ---\n%s\n', fileread(fullfile(T, 'launcher.log')));
-    w = dir(fullfile(T, 'launch_*', 'worker_*.out'));
-    for m = 1:numel(w)
-        fprintf('--- %s (%d bytes) ---\n%s\n', w(m).name, w(m).bytes, fileread(fullfile(w(m).folder, w(m).name)));
-    end
-    fprintf('--- job.m ---\n%s\n', fileread(job));
-    error('test_campaign_processes:launch', 'workers did not start; evidence kept in %s', T);
-end
+         'PHASE 1: the launcher reports all three workers READY');
+if ~ok, dumpEvidence(T, job); error('test_campaign_processes:launch', 'workers did not start; evidence kept in %s', T); end
 
-% ---- 3. kill unit 3's owner mid-unit ----------------------------------------------
 t0 = tic;  owner3 = fullfile(q, '3.owner');
 while ~isfile(owner3) && toc(t0) < 120, pause(1); end
 ok = chk(ok, isfile(owner3), 'unit 3 was claimed');
-pause(8);                                            % well inside its 40 s
-parts = strsplit(strtrim(fileread(owner3)), '|');  pid3 = str2double(parts{3});  tag3 = parts{2};
+parts = strsplit(strtrim(fileread(owner3)), '|');  tag3 = parts{2};  pid3 = str2double(parts{3});
+tok3 = extractAfter(parts{1}, ':');
+% kill AFTER its early temporary write (the write is at 2 s; wait for the file)
+t0 = tic;  early3 = fullfile(T, sprintf('unit03.done.%s.part', tok3));
+while ~isfile(early3) && toc(t0) < 60, pause(0.5); end
+ok = chk(ok, isfile(early3), 'unit 3''s owner wrote its temporary result');
 system(sprintf('kill -9 %d', pid3));
-fprintf('  killed unit 3''s owner %s (pid %d) mid-unit\n', tag3, pid3);
+fprintf('  killed unit 3''s owner %s (pid %d) after its temporary write\n', tag3, pid3);
 
-% ---- wait for the campaign to finish --------------------------------------------
 t0 = tic;
 while toc(t0) < 300
     st = work_queue('status', q, struct('maxAtt', 3, 'staleSec', 60));
@@ -100,44 +108,119 @@ end
 fprintf('  finished after %.0f s: %d done, %d retired, %d held\n', toc(t0), st.nDone, st.nRetired, st.nHeld);
 ok = chk(ok, st.finished && st.nDone == 5 && st.nRetired == 1 && st.nHeld == 0, ...
          'the queue FINISHED: 5 done, 1 retired, no lock held');
-
-% ---- 2. exactly-once ------------------------------------------------------------------
 starts = @(id) numel(regexp(fileread(fullfile(T, sprintf('unit%02d.attempts', id))), 'start', 'match'));
 n = arrayfun(starts, 1:6);
 ok = chk(ok, isequal(n([1 2 4 6]), [1 1 1 1]), sprintf('units 1,2,4,6 were computed EXACTLY ONCE (starts: %s)', mat2str(n)));
-ok = chk(ok, n(3) == 2 && isfile(outF(3)), 'unit 3 was taken over after its owner was killed and finished (2 starts)');
+ok = chk(ok, n(3) == 2 && isfile(outF(3)) && ~contains(fileread(outF(3)), tag3) && ~contains(fileread(outF(3)), 'early'), ...
+         'unit 3 was taken over and PUBLISHED BY THE REPLACEMENT, not from the dead owner''s file');
 ok = chk(ok, n(5) == 3 && ismember(5, st.retired), 'unit 5 was RETIRED after exactly 3 attempts');
-
-% ---- 4, 6. evidence and no strays ------------------------------------------------------
-parts_ = dir(fullfile(T, '*.part'));  failed_ = dir(fullfile(T, '*.failed'));
-ok = chk(ok, isempty(parts_), sprintf('no stray .part files (%d)', numel(parts_)));
-ok = chk(ok, isempty(failed_) || all(contains({failed_.name}, 'unit05')), 'the only .failed evidence belongs to unit 5');
-
-% ---- 5. the monitor sees the killed worker ---------------------------------------------
-hbs = dir(fullfile(T, 'hb', '*.hb'));  tags = erase({hbs.name}, '.hb');
-% the idle survivors notice the finished queue on their next poll (15 s),
-% so give them that long before reading their final state
-t0 = tic;
-while toc(t0) < 90
-    S = campaign_status(q, fullfile(T, 'hb'), tags, struct('staleSec', 60, 'maxAtt', 3, 'quiet', true));
-    if nnz(strcmp({S.workers.state}, 'done')) >= 2, break, end
-    pause(3);
+failed_ = dir(fullfile(T, 'unit05.done.*.failed'));
+ok = chk(ok, numel(failed_) == 3 && all(arrayfun(@(f) strcmp(fileread(fullfile(f.folder, f.name)), 'partial'), failed_)), ...
+         'each of unit 5''s three attempts left its partial result as .failed evidence');
+parts_ = dir(fullfile(T, '*.part'));
+ok = chk(ok, all(contains({parts_.name}, tok3)), sprintf('the only .part debris belongs to the killed attempt (%d file(s))', numel(parts_)));
+ld = dir(fullfile(T, 'launch_*'));  ld = ld([ld.isdir]);  ldir = fullfile(ld(end).folder, ld(end).name);
+t0 = tic;  while numel(dir(fullfile(ldir, 'exit_*'))) < 3 && toc(t0) < 120, pause(2); end
+ex = dir(fullfile(ldir, 'exit_*'));
+rcs = nan(1, numel(ex));  reasons = cell(1, numel(ex));
+for k = 1:numel(ex)
+    t = strsplit(strtrim(fileread(fullfile(ex(k).folder, ex(k).name))), ' ');
+    rcs(k) = str2double(t{1});  reasons{k} = strjoin(t(2:end), ' ');
 end
+killedRow = contains({ex.name}, tag3);
+ok = chk(ok, numel(ex) == 3 && all(rcs(~killedRow) == 0) && rcs(killedRow) ~= 0, ...
+         sprintf('exit records: survivors rc 0, killed worker rc %d (reaped by its supervisor)', rcs(killedRow)));
+hbs = dir(fullfile(T, 'hb', '*.hb'));  tags = erase({hbs.name}, '.hb');
+S = campaign_status(q, fullfile(T, 'hb'), tags, struct('staleSec', 60, 'maxAtt', 3, 'quiet', true));
 k3 = strcmp({S.workers.tag}, tag3);
-ok = chk(ok, any(k3) && ~strcmp(S.workers(k3).state, 'done'), ...
-         sprintf('the killed worker %s is reported %s, not done', tag3, S.workers(k3).state));
-ok = chk(ok, nnz(strcmp({S.workers.state}, 'done')) == 2, 'the two surviving workers exited cleanly (done)');
+ok = chk(ok, any(k3) && ~strcmp(S.workers(k3).state, 'done') && nnz(strcmp({S.workers.state}, 'done')) == 2, ...
+         'the monitor reports the killed worker not done and the survivors done');
+
+% ---- PHASE 2: a kill on the FINAL attempt retires the unit ---------------------------
+q2 = fullfile(T, 'q2');  outF2 = @(id) fullfile(T, sprintf('unit%02d.done', id));
+work_queue('create', q2, 7, outF2);
+job2 = writeJob('job2.m', q2, 1);
+[rc, txt] = system(sprintf('"%s" "%s" 1 60 "%s"', launcher, job2, T));
+ok = chk(ok, rc == 0 && contains(txt, 'LAUNCH OK'), 'PHASE 2: one worker READY');
+owner7 = fullfile(q2, '7.owner');  t0 = tic;
+while ~isfile(owner7) && toc(t0) < 120, pause(1); end
+parts = strsplit(strtrim(fileread(owner7)), '|');  pid7 = str2double(parts{3});
+pause(5);  system(sprintf('kill -9 %d', pid7));
+t0 = tic;
+while toc(t0) < 120
+    st2 = work_queue('status', q2, struct('maxAtt', 1, 'staleSec', 60));
+    if ~st2.held(1), break, end
+    pause(2);
+end
+ok = chk(ok, ismember(7, st2.retired) && st2.finished && st2.nAbandoned == 0, ...
+         'a unit whose owner died on its LAST attempt is RETIRED and the queue is finished (no limbo)');
+ok = chk(ok, starts(7) == 1, 'and nobody started it again');
+
+% ---- PHASE 3: the supervisor kills a silent worker -----------------------------------
+q3 = fullfile(T, 'q3');  outF3 = @(id) fullfile(T, sprintf('unit%02d.done', id));
+work_queue('create', q3, 8, outF3);
+job3 = writeJob('job3.m', q3, 3);
+[rc, txt] = system(sprintf('"%s" "%s" 1 60 "%s"', launcher, job3, T));
+ok = chk(ok, rc == 0 && contains(txt, 'LAUNCH OK'), 'PHASE 3: one worker READY');
+ld = dir(fullfile(T, 'launch_*'));  ld = ld([ld.isdir]);  ldir3 = fullfile(ld(end).folder, ld(end).name);
+t0 = tic;
+while isempty(dir(fullfile(ldir3, 'exit_*'))) && toc(t0) < 200, pause(3); end
+ex3 = dir(fullfile(ldir3, 'exit_*'));
+if isempty(ex3), rec = 'NO EXIT RECORD'; else, rec = strtrim(fileread(fullfile(ex3(1).folder, ex3(1).name))); end
+ok = chk(ok, ~isempty(ex3) && contains(rec, 'no heartbeat') && ~startsWith(rec, '0 '), ...
+         sprintf('the SUPERVISOR killed the silent worker after ~%.0f s and recorded it: "%s"', toc(t0), rec));
+st3 = work_queue('status', q3, struct('maxAtt', 3, 'staleSec', 60));
+ok = chk(ok, ismember(8, st3.abandoned) && st3.nHeld == 0, 'its unit is ABANDONED (lock freed by the kill) and claimable');
+hbs3 = dir(fullfile(T, 'hb', 'w1_*.hb'));  tags3 = erase({hbs3.name}, '.hb');
+S3 = campaign_status(q3, fullfile(T, 'hb'), tags3(end), struct('staleSec', 60, 'maxAtt', 3, 'quiet', true));
+ok = chk(ok, any(contains(S3.alarm, 'NO LIVE WORKER')), 'and the monitor alarms that no live worker remains');
+[~, leftover] = system(sprintf('pgrep -f "CAMPAIGN_JOB=" | wc -l'));  %#ok<ASGLU>
+pidsAll = dir(fullfile(T, 'launch_*', 'pid_*'));
+alive = 0;
+for k = 1:numel(pidsAll)
+    p = str2double(strtrim(fileread(fullfile(pidsAll(k).folder, pidsAll(k).name))));
+    [s_, ~] = system(sprintf('kill -0 %d 2>/dev/null', p));  alive = alive + (s_ == 0);
+end
+ok = chk(ok, alive == 0, 'no launched worker process is still alive');
 
 if ok, fprintf('TEST_CAMPAIGN_PROCESSES: ALL PASS\n');  keep.ok = true;  cleanup = onCleanup(@() cleanupAll(T, keep));
 else,  fprintf('TEST_CAMPAIGN_PROCESSES: FAIL (evidence kept in %s)\n', T);  error('test_campaign_processes:fail', 'FAILED'); end
 end
 
+function job = writeJobFile(job, cc, T, q, maxAtt)
+% WRITEJOBFILE  A worker job for queue q.  INPUTS: job path; cc; T; q;
+% maxAtt.  OUTPUTS: job path.
+fid = fopen(job, 'w');
+fprintf(fid, ['addpath(''%s'', ''%s'');\n' ...
+    'tag = getenv(''WORKER_TAG'');\n' ...
+    'unitFcn = @(id, beat, tmpOut) cptest_unit(id, beat, tmpOut, ''%s'');\n' ...
+    'campaign_worker(''%s'', ''%s'', tag, unitFcn, struct(''logFile'', fullfile(''%s'', [''worker_'' tag ''.log'']), ...\n' ...
+    '    ''maxAtt'', %d, ''staleSec'', 60, ''validateFcn'', @(f, id) deal(isfile(f) && numel(fileread(f)) > 0, ''empty result'')));\n'], ...
+    cc, T, T, q, fullfile(T, 'hb'), T, maxAtt);
+fclose(fid);
+end
+
+function dumpEvidence(T, job)
+% DUMPEVIDENCE  Print what the launcher and workers left.  INPUTS: T; job.
+% OUTPUTS: none.
+if isfile(fullfile(T, 'launcher.log')), fprintf('--- launcher.log ---\n%s\n', fileread(fullfile(T, 'launcher.log'))); end
+w = dir(fullfile(T, 'launch_*', 'worker_*.out'));
+for m = 1:numel(w)
+    fprintf('--- %s (%d bytes) ---\n%s\n', w(m).name, w(m).bytes, fileread(fullfile(w(m).folder, w(m).name)));
+end
+fprintf('--- job ---\n%s\n', fileread(job));
+end
+
 function cleanupAll(T, keep)
-% CLEANUPALL  Kill any worker still running against T; remove T only after
-% a pass.  INPUTS: T; keep struct (.ok).  OUTPUTS: none.
-% the job path is in the workers' ENVIRONMENT, not their argv, so match on
-% the tag prefix the launcher gives them instead
-system(sprintf('pkill -9 -f "CAMPAIGN_JOB=%s" 2>/dev/null; pkill -9 -f "%s" 2>/dev/null', fullfile(T, 'job.m'), fullfile(T, 'job.m')));
+% CLEANUPALL  Kill every worker this test launched, BY THE PIDS THE LAUNCHER
+% RECORDED (the job path is in their environment, invisible to pgrep -f),
+% and their descendants; remove T only after a pass.
+% INPUTS: T; keep struct (.ok).  OUTPUTS: none.
+pids = dir(fullfile(T, 'launch_*', 'pid_*'));
+for k = 1:numel(pids)
+    p = strtrim(fileread(fullfile(pids(k).folder, pids(k).name)));
+    system(sprintf('pkill -9 -P %s 2>/dev/null; kill -9 %s 2>/dev/null', p, p));
+end
 pause(1);
 if keep.ok, try rmdir(T, 's'); catch, end, end
 end

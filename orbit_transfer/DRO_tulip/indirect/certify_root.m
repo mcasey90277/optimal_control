@@ -68,6 +68,8 @@ function C = certify_root(seed, rv0, rvf, B, opts)
 %   .pool [gcp('nocreate')] the fence's worker pool -- WITHOUT one the
 %   external calls are unfenced and can hang for hours,
 %   .capPolishSec [900] .capFlySec [300] .capWitnessSec [300]
+%   .progress [] handle called with no arguments after EVERY capped stage
+%   (the campaign heartbeat), .allowUnfenced [false],
 %   .capGatesSec [900] hard caps; exceeding one is a NAMED FAILURE,
 %   .tolH [1e-6] .tolLamMf [1e-6] .tolAdj [1e-7] .tolGap [1e-12] (on the
 %   |full gap|) .tolThrottle [1e-10] the pointwise PMP tolerances,
@@ -158,9 +160,21 @@ ovr = d('override', struct());
 if ~isempty(fieldnames(ovr)), warning('certify_root:override', 'TEST SEAM ACTIVE: instrument outputs are being overridden'); end
 flightOpts = struct('moonKmMin', d('moonKmMin', 1900), 'earthKmMin', d('earthKmMin', 6600));
 if isempty(pool)
+    % UNFENCED IS OPT-IN. In a campaign an external call that hangs would
+    % hang the worker; the launcher's supervisor would then kill it and the
+    % column would be retried behind the same missing pool, three times,
+    % and retired. Better to refuse here, once, by name.
+    assert(d('allowUnfenced', false), 'certify_root:noPool', ...
+           'no parallel pool: refusing to run external calls unfenced (pass .allowUnfenced to insist)');
     warning('certify_root:unfenced', ...
         'no parallel pool: external calls run UNFENCED and can hang indefinitely (see capped_pool)');
 end
+% PROGRESS AT STAGE BOUNDARIES. The caller's heartbeat used to fire only
+% when this whole function returned, and one certification runs seven
+% separately capped stages (up to 4500 s) -- a healthy walk could outlast
+% the supervisor's silence deadline. Now every fenced stage ticks.
+prog = d('progress', []);
+tick = @() safeTick(prog);
 lStar = 389703.264829278;  tStar = 382981.289129055;
 t0 = tic;
 rv0 = rv0(1:6);  rvf = rvf(1:6);
@@ -179,6 +193,7 @@ C = struct('ok', false, 'reason', '', 'z', nan(8,1), 'Y', [], 'tfDays', NaN, ...
 try
     [okC, z, it] = fenced(pool, capPolish, @ms_tfmin, 2, rv0, rvf, seed, B.Tnd, B.cnd, B.mu, ...
                           struct('tolR', tolR, 'wallSec', wallSec, 'conjTest', true));
+    tick();
 catch ME
     C.reason = ['ms_tfmin threw: ' ME.message];  C.wallSec = toc(t0);  return
 end
@@ -208,6 +223,7 @@ C.z = z(:);  C.Y = it.Y;  C.tfDays = z(8)*tStar/86400;
 
 % ---- 2. flown arrival, position AND velocity ---------------------------
 [okF, tF, Yf] = fenced(pool, capFly, @pumpkyn.cr3bp.tfMinProp, 2, z(8), [rv0; 1; z(1:7)], B.Tnd, B.cnd, B.mu);
+tick();
 if ~okF
     C.reason = sprintf('the flight exceeded its %g s cap', capFly);  C.wallSec = toc(t0);  return
 end
@@ -256,6 +272,7 @@ end
 % ---- 3. foreign witness ---------------------------------------------------
 try
     [okW, za] = fenced(pool, capWitness, @pumpkyn.cr3bp.tfMin, 1, rv0', rvf', z(:), B.Tnd, B.cnd, B.mu);
+    tick();
 catch ME
     C.reason = ['tfMin witness threw: ' ME.message];  C.wallSec = toc(t0);  return
 end
@@ -274,6 +291,7 @@ C.dz = norm(za(:) - z(:));
 % solution: two independent solutions that both reach the target is a much
 % stronger statement than two vectors that match. (Astra chain review.)
 [okWF, ta, Ya] = fenced(pool, capFly, @pumpkyn.cr3bp.tfMinProp, 2, za(8), [rv0; 1; za(1:7)], B.Tnd, B.cnd, B.mu);
+tick();
 if ~okWF
     C.reason = sprintf('the witness flight exceeded its %g s cap', capFly);  C.wallSec = toc(t0);  return
 end
@@ -302,6 +320,7 @@ gOpts = gatesOpts;  gOpts.nSamp = d('nSamp', 200);  gOpts.rankTol = d('rankTol',
 gOpts.keepC = true;  gOpts.relTol = relPair(1);
 try
     [okG, g] = fenced(pool, capGates, @mintime_hypothesis_gates, 1, z(:), rv0, B.Tnd, B.cnd, B.mu, gOpts);
+    tick();
 catch ME
     C.reason = ['gates threw: ' ME.message];  C.wallSec = toc(t0);  return
 end
@@ -346,6 +365,7 @@ if ~(C.Hresid <= tolH),       C.reason = sprintf('independent-field Hamiltonian 
 gOpts.relTol = relPair(2);
 try
     [okG2, g2] = fenced(pool, capGates, @mintime_hypothesis_gates, 1, z(:), rv0, B.Tnd, B.cnd, B.mu, gOpts);
+    tick();
 catch ME
     C.reason = ['second gates build threw: ' ME.message];  C.wallSec = toc(t0);  return
 end
@@ -398,6 +418,7 @@ if doSpectrum
     cOpts = conjOpts;  cOpts.K = numel(seed.tGrid) - 1;  cOpts.nSub = conjNSub;
     try
         [okS, CS] = fenced(pool, capGates, @conj_spectrum, 1, z(:), rv0, B.Tnd, B.cnd, B.mu, cOpts);
+        tick();
     catch ME
         C.reason = ['conj_spectrum threw: ' ME.message];  C.wallSec = toc(t0);  return
     end
@@ -486,4 +507,12 @@ end
 function v = fieldd(s, f, d_)
 % FIELDD  Field with default.  INPUTS: s; f; d_.  OUTPUTS: v.
 if isfield(s, f) && ~isempty(s.(f)), v = s.(f); else, v = d_; end
+end
+
+% ------------------------------------------------------------------------
+function safeTick(prog)
+% SAFETICK  Call the progress handle if there is one; never let it throw
+% into the certification.  INPUTS: prog handle or [].  OUTPUTS: none.
+if isempty(prog), return, end
+try prog(); catch, end
 end

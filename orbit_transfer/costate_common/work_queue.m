@@ -1,84 +1,75 @@
 function out = work_queue(action, qDir, varargin)
 %% Purpose:
 %
-%   A DISK WORK QUEUE for campaign units, so that N workers pull the next
-%   unclaimed unit instead of being handed static ranges.
+%   A DISK WORK QUEUE for campaign units, so that N worker processes on one
+%   host pull the next unclaimed unit instead of being handed static
+%   ranges. The unit is whatever the caller says it is (a rib column, a
+%   catalog entry, a thrust rung).
 %
-%   Why this exists (2026-09-13, doc/CAMPAIGN_DISCIPLINE.md). The 24x24
-%   library's departure axis was split by giving each worker a fixed list of
-%   columns. Columns run from 90 minutes to over 5 hours, so workers with a
-%   slow column queued behind another sat idle while their queue waited --
-%   about five hours lost in one day. Worse, a worker killed mid-unit took
-%   its whole remaining list with it, because nothing else could pick the
-%   work up.
+%   Why this exists (2026-09-13, doc/CAMPAIGN_DISCIPLINE.md): static ranges
+%   idled workers behind their own slow column, a watchdog inside a unit
+%   destroyed nine hours of work twice, and a unit that always failed
+%   livelocked the first version of this queue.
 %
-%   The unit here is whatever the caller says it is (a rib column, a catalog
-%   entry, a thrust rung). The queue owns three facts per unit: is it done,
-%   is someone working on it, and when did that someone last say so.
+%  OWNERSHIP IS A PROCESS-HELD LOCK (unit_lock: a kernel file lock the
+%  owning MATLAB process holds until it releases it or dies). It is never
+%  transferred on heartbeat age. The first version reclaimed a claim whose
+%  beat was 30 minutes old, which let a slow-but-alive owner and its
+%  reclaimer both compute and both publish one unit (Astra chain review
+%  pass 2, A/B). Now a live owner cannot be stolen from; a hung owner is
+%  killed by the launcher's inactivity watchdog, the kernel frees the lock,
+%  and only then can another worker take the unit. Heartbeat age is an
+%  ALARM, not an authority.
 %
-%  ATOMIC CLAIMING. A claim is a DIRECTORY created with mkdir, which fails
-%  when it already exists -- there is no window in which two workers both
-%  believe they own a unit. (MATLAB's fopen has no exclusive-create mode,
-%  so the obvious 'wx' is not available; mkdir is the portable primitive.)
-%  Inside it a 'beat' file carries the OWNER TOKEN and its mtime is the
-%  progress signal, because changing a file does not touch its directory.
+%  DONE IS A PUBLISHED ARTIFACT. A unit is done when its output file
+%  exists. Outputs reach their names only through 'publish', which the
+%  owner calls WHILE HOLDING THE LOCK, from an attempt-specific temporary
+%  file, after an optional validation, in one rename (publish_atomic). No
+%  separate completion flag can disagree with the file on disk, and a
+%  process that lost its lock cannot publish.
 %
-%  OWNERSHIP IS A TOKEN, NOT A PATH. Every claim is issued with a random
-%  token; beat and release act only if the claim still carries that token.
-%  Without it a worker that was reclaimed while blocked in a solver would,
-%  on returning, refresh the NEW owner's claim and then delete it.
-%  (Astra chain review 2026-09-13.)
+%  ATTEMPTS ARE COUNTED UNDER THE LOCK, BEFORE THE WORK, AND PERSIST. After
+%  maxAtt attempts a unit is RETIRED: terminal, reported, never handed out.
+%  A unit whose owner died on its last attempt is retired the moment the
+%  lock is free -- not left half-open. Only an explicit 'reset' clears
+%  attempts, and it cannot touch a unit whose lock is held. An attempt
+%  record that cannot be read is BLOCKED (never zero); one that cannot be
+%  written means no claim.
 %
-%  STALE CLAIMS ARE RECLAIMED, BY ONE RECLAIMER. A claim whose beat has not
-%  been touched for staleSec is treated as abandoned. Takeover is a RENAME
-%  of the stale directory -- atomic, so of two workers that both saw it
-%  stale exactly one wins the rename and the other moves on. A plain
-%  stat-then-rmdir let both "reclaim" and both compute the unit.
-%
-%  DONE IS AN ARTIFACT, NOT A FLAG. A unit is done when its OUTPUT FILE
-%  exists. The queue never records completion separately, so it cannot
-%  disagree with the results on disk. Callers publish that file ATOMICALLY
-%  (write to a temp name, then move), so a partial save is never mistaken
-%  for a finished unit. After a claim is won the done and attempt checks
-%  are made AGAIN, because they were made before ownership and the world
-%  may have moved.
-%
-%  ATTEMPTS ARE COUNTED, WRITTEN BEFORE THE WORK, AND PERSIST. A unit that
-%  always fails is released and immediately re-claimed, forever: the first
-%  end-to-end test of this queue livelocked on exactly that. After maxAtt
-%  attempts a unit is RETIRED. The count is written when the claim is
-%  taken, so a unit that hangs hard enough to kill the process still spends
-%  an attempt. It is NOT reset by opening the queue again -- the first
-%  version wiped attempts on every 'init', which handed the livelock back
-%  to the next run. Only an explicit 'reset' clears them. An attempt record
-%  that cannot be read or written FAILS CLOSED: unreadable means blocked,
-%  unwritable means no claim.
+%  THE UNIT SET IS FIXED AT CREATION. 'open' validates that the caller's
+%  units and outputs are the ones on disk and refuses otherwise: a resumed
+%  campaign must mean the same thing as the one it resumes.
 %
 %% Inputs:
 %
-%  action                   char                    'init' | 'open' |
-%                                                   'create' | 'reset' |
-%                                                   'claim' | 'beat' |
-%                                                   'release' | 'status'
+%  action                   char                    see below
 %  qDir                     char                    queue directory
 %  varargin                 per action:
-%    init(qDir, units, outFcn)   SAFE: 'open' if the queue exists, else
-%                                'create'. Never destroys claims or attempts.
-%    create(qDir, units, outFcn) a NEW queue; refuses if one exists
-%    open(qDir, units, outFcn)   re-open: keep claims and attempts, add any
-%                                new units, update outFcn (a HANDLE:
-%                                func2str drops what it closes over)
-%    reset(qDir, opts)           EXPLICIT wipe of claims and attempts;
-%                                refuses while any claim is fresh unless
-%                                opts.force
-%    claim(qDir, tag, opts)      -> out.id (NaN if nothing available now),
-%                                out.claim, out.token, out.reason
-%                                opts .staleSec [1800] .maxAtt [3]
-%    beat(qDir, claim, token)    -> true if still the owner
-%    release(qDir, claim, token) -> true if released (was the owner)
-%    status(qDir, opts)          -> one state per unit: done | running |
-%                                stale | retired | todo; opts .staleSec
-%                                .maxAtt as for claim
+%    create(qDir, units, outputs)  NEW queue. units [1 x n] ids; outputs
+%                                  cellstr of artifact paths (one per unit)
+%                                  or a handle outputs(id) evaluated NOW.
+%                                  Refuses if a queue exists.
+%    open(qDir, units, outputs)    resume: READ-ONLY, validates units and
+%                                  outputs against the queue on disk
+%    init(qDir, units, outputs)    open if a queue exists, else create
+%    reset(qDir, opts)             clear attempts (and dead-owner records)
+%                                  of units whose lock is NOT held;
+%                                  opts.units [all] restricts it
+%    claim(qDir, tag, opts)        -> c: .id (NaN if nothing claimable now)
+%                                  .token .output .tmpOut (attempt-specific
+%                                  temporary name in the output's folder)
+%                                  .lock (KEEP IT: releasing it is
+%                                  releasing the unit) .reason
+%                                  opts .maxAtt [3]
+%    beat(qDir, c)                 -> true if still the owner
+%    publish(qDir, c, src, validateFcn) -> [ok, msg]: validate src (fcn
+%                                  returns [ok, msg]; optional), then move
+%                                  it onto c.output. Requires the lock.
+%    release(qDir, c)              give the unit back (done or not)
+%    status(qDir, opts)            -> one state per unit: done | running |
+%                                  abandoned | retired | todo, plus .held
+%                                  (lock probe) .beatAge .owner .stalled
+%                                  (age > opts.staleSec [1800], ALARM only)
 %
 %% Outputs:
 %
@@ -96,129 +87,147 @@ switch lower(action)
         else,            out = work_queue('create', qDir, varargin{:}); end
 
     case 'create'
-        units = varargin{1};  outFcn = varargin{2};
+        [units, outputs] = unitsAndOutputs(varargin{:});
         assert(~isfile(qMat), 'work_queue:exists', ...
-               ['a queue already exists in %s: use ''open'' to resume it, or ' ...
-                '''reset'' to start over deliberately'], qDir);
+               'a queue already exists in %s: ''open'' resumes it; a different campaign needs a different directory', qDir);
         if ~isfolder(qDir), mkdir(qDir); end
-        S = struct('units', units(:).', 'outFcn', outFcn, 'created', char(datetime('now')));
+        S = struct('units', units, 'outputs', {outputs}, 'created', char(datetime('now')));
         saveAtomic(qMat, S);
         out = S;
 
     case 'open'
-        units = varargin{1};  outFcn = varargin{2};
+        [units, outputs] = unitsAndOutputs(varargin{:});
         assert(isfile(qMat), 'work_queue:missing', 'no queue in %s to open', qDir);
         S = load(qMat);
-        added = setdiff(units(:).', S.units);
-        S.units = [S.units, added];  S.outFcn = outFcn;
-        S.opened = char(datetime('now'));
-        saveAtomic(qMat, S);
-        out = S;  out.added = added;
+        assert(isequal(sort(S.units), sort(units)), 'work_queue:units', ...
+               ['the queue in %s holds units %s, not %s: a campaign''s unit set is fixed when it is ' ...
+                'created. Use a different directory for a different grid.'], qDir, mat2str(S.units), mat2str(units));
+        [~, ia] = ismember(units, S.units);
+        assert(isequal(S.outputs(ia), outputs), 'work_queue:outputs', ...
+               'the queue in %s was created with different output paths; refusing to reinterpret it', qDir);
+        out = S;
 
     case 'reset'
         opts = struct();  if ~isempty(varargin), opts = varargin{1}; end
-        force = fieldd(opts, 'force', false);  staleSec = fieldd(opts, 'staleSec', 1800);
-        cl = dir(fullfile(qDir, '*.claim'));
-        fresh = cl(arrayfun(@(c) c.isdir && claimAge(fullfile(qDir, c.name)) < staleSec, cl));
-        assert(force || isempty(fresh), 'work_queue:live', ...
-               ['reset refused: %d claim(s) are FRESH (a worker is on them). Stop the ' ...
-                'workers first, or pass .force to discard their ownership.'], numel(fresh));
-        delete(fullfile(qDir, '*.att'));
-        for k = 1:numel(cl)
-            p_ = fullfile(qDir, cl(k).name);
-            if isfolder(p_), rmdir(p_, 's'); else, delete(p_); end
+        S = load(qMat);
+        which = fieldd(opts, 'units', S.units);
+        out = [];
+        for id = which(:).'
+            if unit_lock('probe', lockFile(qDir, id)).held
+                warning('work_queue:held', 'unit %d is held by a live process; not reset', id);
+                continue
+            end
+            f = attFile(qDir, id);   if isfile(f), delete(f); end
+            f = ownerFile(qDir, id); if isfile(f), delete(f); end
+            out(end+1) = id; %#ok<AGROW>
         end
-        out = numel(cl);
 
     case 'claim'
         tag = varargin{1};
         opts = struct();  if numel(varargin) > 1, opts = varargin{2}; end
-        staleSec = fieldd(opts, 'staleSec', 1800);
         maxAtt = fieldd(opts, 'maxAtt', 3);
         Q = load(qMat);
-        outFcn = Q.outFcn;
-        out = struct('id', NaN, 'claim', '', 'token', '', 'reason', 'nothing available now');
-        for id = Q.units
-            if isfile(outFcn(id)), continue, end              % DONE: artifact exists
+        out = struct('id', NaN, 'token', '', 'output', '', 'tmpOut', '', 'lock', [], ...
+                     'owner', '', 'reason', 'nothing claimable now');
+        for k = 1:numel(Q.units)
+            id = Q.units(k);  art = Q.outputs{k};
+            if isfile(art), continue, end                     % DONE
             if attempts(qDir, id) >= maxAtt, continue, end    % RETIRED (or unreadable)
-            cf = fullfile(qDir, sprintf('%d.claim', id));
-            if isfolder(cf)
-                if claimAge(cf) < staleSec, continue, end     % someone live owns it
-                if ~takeover(cf), continue, end               % another reclaimer won
+            L = unit_lock('try', lockFile(qDir, id));
+            if ~L.held, continue, end                         % a live process owns it
+            % RE-CHECK UNDER THE LOCK: the world may have moved since the
+            % two tests above
+            if isfile(art) || attempts(qDir, id) >= maxAtt
+                unit_lock('release', '', L);  continue
             end
-            [okMk, ~, idMk] = mkdir(cf);                      % ATOMIC: create-or-exists
-            if ~okMk || strcmp(idMk, 'MATLAB:MKDIR:DirectoryExists')
-                continue                                      % lost the race, try the next
-            end
-            % RE-CHECK UNDER OWNERSHIP: both tests above were made before
-            % the claim existed, and the previous owner may have finished
-            % or spent the last attempt in between
-            if isfile(outFcn(id)) || attempts(qDir, id) >= maxAtt
-                rmdir(cf, 's');  continue
-            end
-            token = sprintf('%s:%s', tag, randomHex(8));
+            token = sprintf('%s:%s', tag, char(java.util.UUID.randomUUID()));
             try
-                bumpAttempt(qDir, id);        % BEFORE the work; fails closed
-                writeBeat(cf, token, tag);
+                bumpAttempt(qDir, id);                        % under the lock; fails closed
+                writeOwner(qDir, id, token, tag);
             catch ME
-                rmdir(cf, 's');
+                unit_lock('release', '', L);
                 rethrow(ME);
             end
-            out.id = id;  out.claim = cf;  out.token = token;  out.reason = 'claimed';
+            [ad, an, ae] = fileparts(art);
+            out.id = id;  out.token = token;  out.output = art;  out.lock = L;
+            out.tmpOut = fullfile(ad, sprintf('%s%s.%s.part', an, ae, token(numel(tag)+2:end)));
+            out.owner = ownerFile(qDir, id);  out.reason = 'claimed';
             return
         end
 
     case 'beat'
-        cf = varargin{1};  token = varargin{2};
-        out = false;
-        if ~isempty(cf) && isfolder(cf) && ownedBy(cf, token)
-            writeBeat(cf, token, tagOf(token));  out = true;
+        c = varargin{1};
+        out = holds(c);
+        if out, writeOwner(qDir, c.id, c.token, tagOf(c.token)); end
+
+    case 'publish'
+        c = varargin{1};  src = varargin{2};
+        validateFcn = [];  if numel(varargin) > 2, validateFcn = varargin{3}; end
+        out = false;  msg = '';
+        if ~holds(c), msg = 'this process no longer holds the unit''s lock';
+        elseif ~isfile(src), msg = sprintf('nothing to publish: %s does not exist', src);
+        else
+            okV = true;
+            if ~isempty(validateFcn)
+                try
+                    [okV, msg] = validateFcn(src);
+                catch ME
+                    okV = false;  msg = ['validation threw: ' ME.message];
+                end
+            end
+            if okV
+                publish_atomic(src, c.output);
+                out = true;
+            end
         end
+        out = struct('ok', out, 'msg', msg);
 
     case 'release'
-        cf = varargin{1};  token = varargin{2};
-        out = false;
-        if ~isempty(cf) && isfolder(cf) && ownedBy(cf, token)
-            rmdir(cf, 's');  out = true;
+        c = varargin{1};
+        if holds(c)
+            f = ownerFile(qDir, c.id);  if isfile(f), delete(f); end
+            if isfield(c, 'tmpOut') && isfile(c.tmpOut), delete(c.tmpOut); end
         end
+        if isstruct(c) && isfield(c, 'lock'), unit_lock('release', '', c.lock); end
+        out = [];
 
     case 'status'
         opts = struct();  if ~isempty(varargin) && isstruct(varargin{1}), opts = varargin{1}; end
         staleSec = fieldd(opts, 'staleSec', 1800);
         maxAtt = fieldd(opts, 'maxAtt', 3);
         Q = load(qMat);
-        outFcn = Q.outFcn;
         n = numel(Q.units);
         state = repmat({'todo'}, 1, n);  att = zeros(1, n);  owner = repmat({''}, 1, n);
+        held = false(1, n);  age = nan(1, n);  stalled = false(1, n);
         for k = 1:n
             id = Q.units(k);
             att(k) = attempts(qDir, id);
-            cf = fullfile(qDir, sprintf('%d.claim', id));
-            % ONE state per unit, in priority order. A live final attempt
-            % is RUNNING, not retired; a unit is retired only when nobody
-            % is on it and its attempts are spent.
-            if isfile(outFcn(id))
+            held(k) = unit_lock('probe', lockFile(qDir, id)).held;
+            [owner{k}, age(k)] = readOwner(qDir, id);
+            % ONE state per unit. The lock decides who is live; the owner
+            % record without a lock is a process that died holding it.
+            if isfile(Q.outputs{k})
                 state{k} = 'done';
-            elseif isfolder(cf)
-                owner{k} = tagOf(readToken(cf));
-                if claimAge(cf) < staleSec, state{k} = 'running';
-                else,                         state{k} = 'stale'; end
+            elseif held(k)
+                state{k} = 'running';  stalled(k) = age(k) > staleSec;
             elseif att(k) >= maxAtt
                 state{k} = 'retired';
+            elseif ~isempty(owner{k})
+                state{k} = 'abandoned';
             end
         end
         is = @(s) strcmp(state, s);
-        out = struct('units', Q.units, 'state', {state}, 'owner', {owner}, 'attempts', att, ...
+        out = struct('units', Q.units, 'outputs', {Q.outputs}, 'state', {state}, 'owner', {owner}, ...
+                     'attempts', att, 'held', held, 'beatAge', age, 'stalled', stalled, ...
                      'done', Q.units(is('done')), 'running', Q.units(is('running')), ...
-                     'stale', Q.units(is('stale')), 'retired', Q.units(is('retired')), ...
+                     'abandoned', Q.units(is('abandoned')), 'retired', Q.units(is('retired')), ...
                      'todo', Q.units(is('todo')), ...
                      'nDone', nnz(is('done')), 'nRunning', nnz(is('running')), ...
-                     'nStale', nnz(is('stale')), 'nRetired', nnz(is('retired')), ...
-                     'nTodo', nnz(is('todo')), 'n', n);
-        % what the caller usually wants to know, stated instead of inferred
-        out.nOpen = out.nTodo + out.nStale;                 % dispatchable now
-        out.complete = out.nDone == n;                       % every artifact exists
-        out.finished = out.nDone + out.nRetired == n;        % nothing more will change
+                     'nAbandoned', nnz(is('abandoned')), 'nRetired', nnz(is('retired')), ...
+                     'nTodo', nnz(is('todo')), 'nHeld', nnz(held), 'nStalled', nnz(stalled), 'n', n);
+        out.nOpen = out.nTodo + out.nAbandoned;              % claimable now
+        out.complete = out.nDone == n;                        % every artifact exists
+        out.finished = (out.nDone + out.nRetired == n) && out.nHeld == 0;   % nothing will change
 
     otherwise
         error('work_queue:action', 'unknown action "%s"', action);
@@ -226,23 +235,37 @@ end
 end
 
 % ------------------------------------------------------------------------
-function ok = takeover(cf)
-% TAKEOVER  Remove a stale claim so that exactly ONE reclaimer proceeds:
-% rename it to a unique name first (atomic), then delete the renamed copy.
-% A second reclaimer's rename fails because the source is gone.
-% INPUTS: cf.  OUTPUTS: ok logical.
-tomb = sprintf('%s.stale.%s', cf, randomHex(6));
-[ok, ~] = movefile(cf, tomb);
-if ok, try rmdir(tomb, 's'); catch, end, end
+function [units, outputs] = unitsAndOutputs(units, outputs)
+% UNITSANDOUTPUTS  Normalise the (units, outputs) pair: a handle is
+% evaluated now so the queue stores explicit paths, not a closure.
+% INPUTS: units; outputs handle or cellstr.  OUTPUTS: units row; outputs cell row.
+units = units(:).';
+if isa(outputs, 'function_handle')
+    outputs = arrayfun(outputs, units, 'UniformOutput', false);
 end
+outputs = outputs(:).';
+assert(iscellstr(outputs) && numel(outputs) == numel(units), 'work_queue:outputs', ...
+       'outputs must be one path per unit');
+end
+
+% ------------------------------------------------------------------------
+function ok = holds(c)
+% HOLDS  True if c is a live claim this process still holds.  INPUTS: c.
+% OUTPUTS: ok.
+ok = isstruct(c) && isfield(c, 'lock') && isstruct(c.lock) && c.lock.held;
+end
+
+% ------------------------------------------------------------------------
+function f = lockFile(qDir, id),  f = fullfile(qDir, sprintf('%d.lock', id));  end
+function f = attFile(qDir, id),   f = fullfile(qDir, sprintf('%d.att', id));   end
+function f = ownerFile(qDir, id), f = fullfile(qDir, sprintf('%d.owner', id)); end
 
 % ------------------------------------------------------------------------
 function n = attempts(qDir, id)
 % ATTEMPTS  How many times unit id has been claimed. FAILS CLOSED: a record
-% that exists but cannot be parsed is reported as Inf (blocked), never as
-% zero, so corruption cannot re-open an exhausted unit.
+% that exists but cannot be parsed is Inf (blocked), never zero.
 % INPUTS: qDir; id.  OUTPUTS: n.
-f = fullfile(qDir, sprintf('%d.att', id));
+f = attFile(qDir, id);
 if ~isfile(f), n = 0;  return, end
 try
     v = str2double(strtrim(fileread(f)));
@@ -254,93 +277,68 @@ end
 
 % ------------------------------------------------------------------------
 function bumpAttempt(qDir, id)
-% BUMPATTEMPT  Record a claim BEFORE the work, so a unit that hangs hard
-% enough to kill the process still spends an attempt. Written atomically
-% (temp + move); an I/O failure is an ERROR, not a silent zero.
-% INPUTS: qDir; id.  OUTPUTS: none.
-f = fullfile(qDir, sprintf('%d.att', id));
+% BUMPATTEMPT  Record a claim BEFORE the work, under the unit's lock, so a
+% unit that hangs hard enough to kill the process still spends an attempt.
+% INPUTS: qDir; id.  OUTPUTS: none (throws if it cannot be recorded).
+f = attFile(qDir, id);
 n = attempts(qDir, id);
 assert(isfinite(n), 'work_queue:attempts', 'attempt record %s is unreadable; refusing to claim', f);
-tmp = sprintf('%s.%s.tmp', f, randomHex(4));
-fid = fopen(tmp, 'w');
-assert(fid >= 0, 'work_queue:attempts', 'cannot write the attempt record %s', f);
-fprintf(fid, '%d', n + 1);  fclose(fid);
-[ok, msg] = movefile(tmp, f);
-assert(ok, 'work_queue:attempts', 'cannot publish the attempt record %s: %s', f, msg);
+writeText(f, sprintf('%d', n + 1));
 end
 
 % ------------------------------------------------------------------------
-function writeBeat(cf, token, tag)
-% WRITEBEAT  (Re)write the beat file inside a claim: its mtime is the
-% progress signal and its first field is the owner token. Written atomically
-% so a reader never sees a truncated record.
-% INPUTS: cf; token; tag.  OUTPUTS: none.
-f = fullfile(cf, 'beat');
-tmp = sprintf('%s.%s.tmp', f, randomHex(4));
-fid = fopen(tmp, 'w');
-assert(fid >= 0, 'work_queue:beat', 'cannot write the beat file in %s', cf);
-fprintf(fid, '%s|%s|%s\n', token, tag, char(datetime('now')));  fclose(fid);
-movefile(tmp, f);
+function writeOwner(qDir, id, token, tag)
+% WRITEOWNER  (Re)write the owner record; its mtime is the beat.
+% INPUTS: qDir; id; token; tag.  OUTPUTS: none.
+writeText(ownerFile(qDir, id), sprintf('%s|%s|%d|%s', token, tag, matlabProcessID, char(datetime('now'))));
 end
 
 % ------------------------------------------------------------------------
-function t = readToken(cf)
-% READTOKEN  The owner token recorded in a claim ('' if none yet).
-% INPUTS: cf.  OUTPUTS: t char.
-t = '';
-f = fullfile(cf, 'beat');
-if ~isfile(f), return, end
+function [tag, age] = readOwner(qDir, id)
+% READOWNER  Owner tag and seconds since the last beat ('' / NaN if none).
+% INPUTS: qDir; id.  OUTPUTS: tag; age.
+tag = '';  age = NaN;
+f = ownerFile(qDir, id);
+d = dir(f);
+if isempty(d), return, end
+age = seconds(datetime('now') - datetime(d.datenum, 'ConvertFrom', 'datenum'));
 try
     parts = strsplit(strtrim(fileread(f)), '|');
-    t = parts{1};
+    if numel(parts) >= 2, tag = parts{2}; else, tag = tagOf(parts{1}); end
 catch
+    tag = '?';
 end
-end
-
-% ------------------------------------------------------------------------
-function ok = ownedBy(cf, token)
-% OWNEDBY  True if the claim still carries this token.  INPUTS: cf; token.
-% OUTPUTS: ok.
-ok = ~isempty(token) && strcmp(readToken(cf), token);
 end
 
 % ------------------------------------------------------------------------
 function tag = tagOf(token)
-% TAGOF  The worker tag part of a token ('tag:hex').  INPUTS: token.
+% TAGOF  The worker tag part of a token ('tag:uuid').  INPUTS: token.
 % OUTPUTS: tag.
 c = find(token == ':', 1);
 if isempty(c), tag = token; else, tag = token(1:c-1); end
 end
 
 % ------------------------------------------------------------------------
-function a = claimAge(cf)
-% CLAIMAGE  Seconds since the claim last reported progress.  Reads the beat
-% FILE, because modifying a file does not update its directory's mtime. A
-% claim with no beat yet (a worker between mkdir and its first write) is
-% aged from the directory itself.
-% INPUTS: cf.  OUTPUTS: a.
-d = dir(fullfile(cf, 'beat'));
-if isempty(d), d = dir(cf); end                          % '.' carries the dir mtime
-if isempty(d), a = inf;  return, end
-a = seconds(datetime('now') - datetime(min([d.datenum]), 'ConvertFrom', 'datenum'));
+function writeText(f, txt)
+% WRITETEXT  Write a small record atomically: exclusive temp, then publish.
+% INPUTS: f; txt.  OUTPUTS: none (throws on any I/O failure).
+tmp = sprintf('%s.%s.tmp', f, char(java.util.UUID.randomUUID()));
+fid = fopen(tmp, 'w');
+assert(fid >= 0, 'work_queue:io', 'cannot write %s', tmp);
+nw = fprintf(fid, '%s', txt);
+st = fclose(fid);
+assert(nw == numel(txt) && st == 0, 'work_queue:io', 'short write to %s', tmp);
+publish_atomic(tmp, f);
 end
 
 % ------------------------------------------------------------------------
 function saveAtomic(f, S)
-% SAVEATOMIC  save() to a temp name, then move: a worker loading queue.mat
-% never sees a half-written file.  INPUTS: f; S struct.  OUTPUTS: none.
-tmp = sprintf('%s.%s.tmp', f, randomHex(4));
+% SAVEATOMIC  save() to an exclusive temp name, then publish: a worker
+% loading queue.mat never sees a half-written file.  INPUTS: f; S.
+% OUTPUTS: none.
+tmp = sprintf('%s.%s.tmp', f, char(java.util.UUID.randomUUID()));
 save(tmp, '-struct', 'S');
-movefile(tmp, f);
-end
-
-% ------------------------------------------------------------------------
-function h = randomHex(n)
-% RANDOMHEX  n random hex characters (independent of the global RNG state).
-% INPUTS: n.  OUTPUTS: h char.
-seed = mod(round(posixtime(datetime('now'))*1e6) + matlabProcessID, 2^31);
-s = RandStream('mt19937ar', 'Seed', seed);
-h = lower(dec2hex(randi(s, [0 15], 1, n), 1)).';
+publish_atomic(tmp, f);
 end
 
 % ------------------------------------------------------------------------

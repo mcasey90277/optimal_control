@@ -65,35 +65,43 @@ function out = run_costate_library(opts)
 %                              certified ones)
 %   .outDir ['results_fine']   everything this run writes (made absolute)
 %   .nWorkers [4]              rib workers
-%   .run                       stage switches: .sheet .calibrate .ribs
+%   .run                       stage switches: .sheet .ribs
 %                              .package .audit .sweep (all true)
 %   .launch [false]            actually spawn the rib workers
-%   .maxAtt [3] .staleSec [1800]   the ONE ownership/retry policy, handed
-%                              to the queue, the workers and the monitor
+%   .maxAtt [3]                attempts after which a column is retired
+%   .staleSec [1800]           heartbeat age reported as STALLED (alarm)
+%   .hangSec [2700]            heartbeat silence after which the launcher's
+%                              supervisor KILLS a worker: 3 x the solver's
+%                              900 s wall cap, the longest silence a
+%                              healthy walk can have between beats
+%   .foreignPattern            a pgrep pattern; if any such process is
+%                              alive the launch is refused (workers from an
+%                              older launcher hold no lock, so the queue
+%                              cannot see them) ['fine_ribs_range_job']
 %
-%  LIFECYCLE. This function is safe to call repeatedly while workers run:
-%  re-opening the queue keeps their claims and the attempt counts (the
-%  first version wiped both, so "re-run to package" would have freed
-%  columns still being walked). It returns out.state:
+%  LIFECYCLE. Calling this function while workers run is safe: 'open' is
+%  read-only (it validates the unit set against the queue on disk), and a
+%  column is owned by a kernel lock its worker holds, which no call here
+%  can take. It returns out.state:
 %    'launched'  workers were spawned; call again later to package
 %    'pending'   units remain and nothing was launched (.launch false, or
-%                workers are still on them); the command is in out.cmd
-%    'blocked'   units were RETIRED after repeated failure; the library
-%                cannot be complete until they are reset or dropped
-%    'packaged'  every unit's artifact exists and stage 4 ran
-%  Packaging NEVER runs while a unit is open: a rib file being written is
-%  not a rib.
-%   .unitSec []                skip calibration and use this
+%                workers are on them); the launch command is in out.cmd
+%    'blocked'   units were RETIRED after repeated failure, or foreign
+%                workers are alive; nothing was launched or packaged
+%    'packaged'  every column's artifact exists, none is held, and THIS
+%                call wrote the catalog
+%    'failed'    the packaging chain threw; out.blockers has the message
+%  Packaging runs only when every column is published and no lock is held.
 %
 %% Outputs:
 %
 %  out                      struct                  .state (above) .sD .sA
 %                                                   .orbits .engine .sheet
-%                                                   .queue .unitSec .cmd
+%                                                   .queue .cmd
 %                                                   .blockers (why it is not
 %                                                   'packaged') .catalog
 %                                                   .sheet .queue .catalog
-%                                                   .unitSec .cmd (the
+%                                                   .cmd (the
 %                                                   launch command) .blockers
 %
 %% Revision History:
@@ -114,7 +122,7 @@ if ~isfolder(outDir), mkdir(outDir); end
 % which changes directory to the job's folder, so a relative outDir would
 % mean something else inside the worker
 outDir = absPath(outDir);
-maxAtt = d('maxAtt', 3);  staleSec = d('staleSec', 1800);
+maxAtt = d('maxAtt', 3);  staleSec = d('staleSec', 1800);  hangSec = d('hangSec', 2700);
 
 %% ========================================================================
 %  0. WHAT THIS LIBRARY IS OF, and over which phases. The ONLY place the
@@ -149,7 +157,7 @@ assert(abs(sD(2) - sD(1) - 1/nD) < 1e-9 && abs(sA(2) - sA(1) - 1/nA) < 1e-9, ...
 sA0 = sA(1);
 
 out = struct('state', 'pending', 'sheet', '', 'queue', fullfile(outDir, 'ribq'), ...
-             'catalog', '', 'unitSec', NaN, 'cmd', '', 'blockers', {{}});
+             'catalog', '', 'cmd', '', 'blockers', {{}});
 sheetMat = fullfile(outDir, sprintf('arrival_sheet_70mN_nA%d.mat', nA));
 out.sheet = sheetMat;
 tStar = 382981.289129055;
@@ -163,6 +171,34 @@ fprintf('  departure sD : %s\n', phaseList(sD));
 fprintf('  arrival   sA : %s\n', phaseList(sA));
 fprintf('  writing to   : %s\n', outDir);
 out.sD = sD;  out.sA = sA;  out.orbits = orbits;  out.engine = engine;
+% THE CAMPAIGN MANIFEST: what this output directory IS a library of, written
+% on the first call and checked on every later one, so a re-run with other
+% orbits, engine, phases or policy cannot quietly adopt the artifacts here.
+% (Astra pass 2, ruling on the pushbacks: "one immutable configuration
+% file in a campaign-specific directory".)
+manifest = struct('orbits', orbits, 'engine', engine, 'sD', sD, 'sA', sA, ...
+                  'policy', struct('maxAtt', maxAtt, 'staleSec', staleSec, 'hangSec', hangSec), ...
+                  'codeRevision', gitRevision(here), 'created', char(datetime('now')));
+manFile = fullfile(outDir, 'campaign_manifest.mat');
+if isfile(manFile)
+    M = load(manFile);
+    for f_ = {'orbits', 'engine', 'sD', 'sA'}
+        assert(isequaln(M.(f_{1}), manifest.(f_{1})), 'run_costate_library:manifest', ...
+               ['%s differs from the campaign manifest in %s (created %s). This directory is a ' ...
+                'library of ONE problem and grid; use another .outDir.'], f_{1}, outDir, M.created);
+    end
+    if ~isequal(M.policy, manifest.policy)
+        fprintf('   NOTE: policy differs from the manifest (maxAtt/staleSec/hangSec); the manifest''s stands for this campaign\n');
+        maxAtt = M.policy.maxAtt;  staleSec = M.policy.staleSec;  hangSec = M.policy.hangSec;
+    end
+    if ~strcmp(M.codeRevision, manifest.codeRevision)
+        fprintf('   NOTE: code revision now %s, manifest was written at %s\n', manifest.codeRevision, M.codeRevision);
+    end
+else
+    tmpM = sprintf('%s.%s.part', manFile, char(java.util.UUID.randomUUID()));
+    save(tmpM, '-struct', 'manifest');  publish_atomic(tmpM, manFile);
+    fprintf('  manifest     : written (%s)\n', manFile);
+end
 
 %% 1. ARRIVAL SHEET -- from the saved arcs, no new continuation
 if on('sheet') && ~isfile(sheetMat)
@@ -175,7 +211,9 @@ assert(isfile(sheetMat), 'run_costate_library:noSheet', ...
 L_ = load(sheetMat);  S = L_.S;
 % THE SHEET ON DISK DECIDES: a reused sheet built at another operating point
 % would silently make this a library of something else
-if isfield(S, 'problem')
+assert(isfield(S, 'problem') && isstruct(S.problem), 'run_costate_library:identity', ...
+       'the sheet %s carries no problem identity; rebuild it with build_arrival_sheet', sheetMat);
+if true
     P = S.problem;
     wantP = [engine.thrustN, engine.ispS, engine.m0kg, orbits.tauDRO, orbits.NpTulip, orbits.pmTulip];
     haveP = [P.thrustN, P.ispS, P.m0kg, P.tauDRO, P.NpTulip, P.pmTulip];
@@ -205,8 +243,13 @@ if ~isempty(onlyA)
     else
         want = arrayfun(@(v) find(abs(S.sA - mod(v,1)) < 1e-9, 1), onlyA(:).'); % values
     end
+    excluded = setdiff(find(isfinite(S.TF)), want);
     cols = intersect(cols, want);
     fprintf('   .onlyA restricts the ribs to arrival phases %s\n', phaseList(S.sA(cols)));
+    if ~isempty(excluded)
+        out.blockers{end+1} = sprintf('.onlyA EXCLUDES %d certified arrival column(s) from this library: %s', ...
+                                      numel(excluded), mat2str(excluded));
+    end
 end
 safe_report(@() fprintf('1. sheet: %d of %d arrival phases certified; %d will get ribs\n', ...
                         nnz(isfinite(S.TF)), numel(S.sA), numel(cols)), 'sheet');
@@ -224,48 +267,21 @@ if isempty(cols)
     return
 end
 
-%% 2. CALIBRATE -- measure ONE unit before sizing anything
+%% 2. (calibration REMOVED) -- the watchdog is sized from the solver's wall
+%  cap, not from a column walked outside the queue's ownership (Astra pass
+%  2: an unowned calibration solve could duplicate a live worker's column)
 ribOut = @(j) fullfile(outDir, sprintf('fine_rib_col%02d.mat', j));
-out.unitSec = d('unitSec', NaN);
-if on('calibrate') && ~isfinite(out.unitSec)
-    doneAlready = cols(arrayfun(@(j) isfile(ribOut(j)), cols));
-    calMat = fullfile(outDir, 'calibration.mat');
-    if isfile(calMat)
-        cal = load(calMat);
-        out.unitSec = cal.unitSec;
-        fprintf('2. calibration: column %d measured %.0f s on %s (reused)\n', cal.column, cal.unitSec, cal.measured);
-    elseif ~isempty(doneAlready)
-        % a column already on disk means the campaign has run before; take
-        % the conservative default rather than re-walking one to time it
-        out.unitSec = 3600;
-        fprintf('2. calibration: %d column(s) already on disk; unit assumed %.0f s\n', ...
-                numel(doneAlready), out.unitSec);
-    else
-        j0 = cols(1);
-        fprintf('2. calibration: walking column %d to measure one unit ...\n', j0);
-        tC = tic;
-        build_ribs(sheetMat, struct('only', j0, 'direction', -1, 'nD', nD, ...
-                                    'nPts', nD-1, 'wallSec', 900, 'out', ribOut(j0)));
-        out.unitSec = toc(tC);
-        % persisted with what it measured: a later call must not replace a
-        % measurement with the 3600 s guess just because a rib file exists
-        cal = struct('unitSec', out.unitSec, 'column', j0, 'nD', nD, 'measured', char(datetime('now')));
-        save(fullfile(outDir, 'calibration.mat'), '-struct', 'cal');
-        fprintf('2. one column took %.0f s; budgets sized from THIS, not a guess\n', out.unitSec);
-    end
-end
-if ~isfinite(out.unitSec), out.unitSec = 3600; end
 
 %% 3. RIBS -- a work queue, one column per unit
-policy = struct('staleSec', staleSec, 'maxAtt', maxAtt);
+policy = struct('staleSec', staleSec, 'maxAtt', maxAtt, 'hangSec', hangSec);
 codeRoots = {here, fullfile(fileparts(fileparts(here)), 'costate_common')};
 if on('ribs')
-    % 'init' OPENS an existing queue (claims and attempts kept) and only
-    % creates when there is none -- see work_queue
+    % 'init' OPENS an existing queue read-only (validating the unit set) and
+    % creates one only when none exists -- see work_queue
     work_queue('init', out.queue, cols(:).', ribOut);
     st = work_queue('status', out.queue, policy);
-    fprintf('3. rib queue: %d unit(s): %d done, %d running, %d stale, %d retired, %d to do\n', ...
-            st.n, st.nDone, st.nRunning, st.nStale, st.nRetired, st.nTodo);
+    fprintf('3. rib queue: %d unit(s): %d done, %d running, %d abandoned, %d retired, %d to do\n', ...
+            st.n, st.nDone, st.nRunning, st.nAbandoned, st.nRetired, st.nTodo);
     if st.nRetired > 0
         out.blockers{end+1} = sprintf('%d column(s) RETIRED after %d failed attempts: %s (work_queue reset, or drop them)', ...
                                       st.nRetired, maxAtt, mat2str(st.retired));
@@ -274,9 +290,20 @@ if on('ribs')
     writeRibJob(jobFile, sheetMat, outDir, out.queue, nD, codeRoots, policy);
     launcher = fullfile(codeRoots{2}, 'run_campaign_workers.sh');
     out.cmd = strjoin({shq(launcher), shq(jobFile), num2str(nWorkers), ...
-                       num2str(round(out.unitSec)), shq(outDir)}, ' ');
+                       num2str(round(hangSec)), shq(outDir)}, ' ');
     if st.nOpen > 0
         if d('launch', false)
+            % workers from an older launcher hold no lock: the queue would
+            % hand out a column one of them is walking (it did, 2026-09-13)
+            pat = d('foreignPattern', 'fine_ribs_range_job');
+            [~, fp] = system(sprintf('pgrep -f %s', shq(pat)));
+            if ~isempty(strtrim(fp))
+                out.state = 'blocked';
+                out.blockers{end+1} = sprintf('%d foreign worker process(es) match "%s"; drain them before launching queue workers', ...
+                                              numel(strsplit(strtrim(fp))), pat);
+                fprintf('3. BLOCKED: %s\n', out.blockers{end});
+                return
+            end
             fprintf('3. launching %d worker(s) ...\n', nWorkers);
             [rc, txt] = system(out.cmd);
             fprintf('%s', txt);
@@ -314,24 +341,39 @@ end
 % exists as a file but is not a rib.
 ribList = arrayfun(ribOut, cols, 'UniformOutput', false);
 if on('package')
-    good = cellfun(@isRibFile, ribList);
+    good = false(size(cols));  short = {};
+    for k = 1:numel(cols)
+        [good(k), why, ri] = rib_validate(ribList{k}, nD - 1);
+        if good(k) && ~ri.complete
+            short{end+1} = sprintf('col %d: %d of %d points (%s)', cols(k), ri.nPts, nD - 1, ri.stop); %#ok<AGROW>
+        elseif ~good(k)
+            short{end+1} = sprintf('col %d: %s', cols(k), why); %#ok<AGROW>
+        end
+    end
     if ~all(good)
         out.state = 'pending';
-        out.blockers{end+1} = sprintf('%d of %d rib column(s) not on disk as a loadable rib: %s -- nothing packaged', ...
-                                      nnz(~good), numel(cols), mat2str(cols(~good)));
+        out.blockers{end+1} = sprintf('%d of %d rib column(s) are not a publishable rib: %s -- nothing packaged', ...
+                                      nnz(~good), numel(cols), strjoin(short(~good(ismember(cols, cols))), '; '));
         fprintf('3b. %s\n', out.blockers{end});
         return
     end
+    if ~isempty(short)
+        % a SHORT column is real data (the walker stalled where it says),
+        % but it is not full coverage and the caller must see that
+        out.blockers{end+1} = sprintf('%d column(s) are shorter than %d points: %s', ...
+                                      numel(short), nD - 1, strjoin(short, '; '));
+    end
     if isfolder(out.queue) && isfile(fullfile(out.queue, 'queue.mat'))
         stq = work_queue('status', out.queue, policy);
-        if stq.nRunning > 0
+        if stq.nHeld > 0
             out.state = 'pending';
-            out.blockers{end+1} = sprintf('queue still has live claims on %s -- nothing packaged', mat2str(stq.running));
+            out.blockers{end+1} = sprintf('%d unit lock(s) still held by live processes: %s -- nothing packaged', ...
+                                          stq.nHeld, mat2str(stq.units(stq.held)));
             fprintf('3b. %s\n', out.blockers{end});
             return
         end
     end
-    fprintf('3b. all %d rib columns on disk and loadable\n', numel(cols));
+    fprintf('3b. all %d rib columns published, none held\n', numel(cols));
 end
 
 %% 4. PACKAGE / AUDIT / SWEEP -- the existing chain, blockers not aborts
@@ -355,7 +397,14 @@ if on('package') || on('audit') || on('sweep')
     % the shared session, on 2026-09-13).
     % the script also cd's; the way back is held HERE, out of its reach
     home_ = pwd;  backHome = onCleanup(@() cd(home_));
-    cb = runChain(co);
+    try
+        cb = runChain(co);
+    catch ME
+        out.state = 'failed';
+        out.blockers{end+1} = sprintf('packaging chain threw: %s (%s)', ME.message, ME.identifier);
+        fprintf('4. %s\n', out.blockers{end});
+        return
+    end
     clear backHome
     if iscell(cb), out.blockers = [out.blockers, cb(:).']; end
 end
@@ -375,20 +424,6 @@ end
 end
 
 % ------------------------------------------------------------------------
-function ok = isRibFile(f)
-% ISRIBFILE  True if f exists, loads, and holds a rib struct R.
-% INPUTS: f char.  OUTPUTS: ok logical.
-ok = false;
-if ~isfile(f), return, end
-try
-    w = whos('-file', f);
-    ok = any(strcmp({w.name}, 'R'));
-catch
-    ok = false;
-end
-end
-
-% ------------------------------------------------------------------------
 function chainBlockers = runChain(chainOverrides)
 % RUNCHAIN  Run the chain SCRIPT in this function's private workspace, with
 % chainOverrides in scope; the script assigns chainBlockers as its last act.
@@ -397,6 +432,14 @@ function chainBlockers = runChain(chainOverrides)
 % be wiped. The caller restores the working directory.
 % INPUTS: chainOverrides struct.  OUTPUTS: chainBlockers cell.
 build_70mN_library;
+end
+
+% ------------------------------------------------------------------------
+function r = gitRevision(here)
+% GITREVISION  Short git hash of the code, or 'unknown'.  INPUTS: here.
+% OUTPUTS: r char.
+[st, txt] = system(sprintf('cd %s && git rev-parse --short HEAD 2>/dev/null', shq(here)));
+if st == 0, r = strtrim(txt); else, r = 'unknown'; end
 end
 
 % ------------------------------------------------------------------------
@@ -450,8 +493,9 @@ function writeRibJob(jobFile, sheetMat, outDir, qDir, nD, codeRoots, policy)
 % it. Paths are absolute and quoted as MATLAB literals; the code roots are
 % the DRIVER'S own, not something inferred from the output directory (the
 % first version derived a costate_common that did not exist). The worker's
-% heartbeat is passed to the walker as its progress callback, so a claim
-% stays fresh for as long as the column takes.
+% heartbeat is passed to the walker as its progress callback. The unit
+% writes to the attempt-specific tmpOut the queue hands it; the WORKER
+% validates that file (rib_validate) and publishes it under the lock.
 % INPUTS: jobFile; sheetMat; outDir; qDir; nD; codeRoots cell; policy.
 % OUTPUTS: none.
 roots = strjoin(cellfun(@mlq, codeRoots, 'UniformOutput', false), ', ');
@@ -462,19 +506,18 @@ txt = sprintf([ ...
  'capped_pool(1);\n' ...
  'tag = getenv(''WORKER_TAG'');\n' ...
  'assert(~isempty(tag), ''rib_unit_job:tag'', ''WORKER_TAG is not set: run this through run_campaign_workers.sh'');\n' ...
- 'ribOut = @(j) fullfile(%s, sprintf(''fine_rib_col%%02d.mat'', j));\n' ...
- 'unitFcn = @(j, beat) build_ribs(%s, struct(''only'', j, ''direction'', -1, ...\n' ...
- '        ''nD'', %d, ''nPts'', %d, ''wallSec'', 900, ''out'', ribOut(j), ''progress'', beat));\n' ...
+ 'unitFcn = @(j, beat, tmpOut) build_ribs(%s, struct(''only'', j, ''direction'', -1, ...\n' ...
+ '        ''nD'', %d, ''nPts'', %d, ''wallSec'', 900, ''out'', tmpOut, ''progress'', beat));\n' ...
  'campaign_worker(%s, %s, tag, unitFcn, struct(''logFile'', ...\n' ...
- '        fullfile(%s, [''worker_'' tag ''.log'']), ''staleSec'', %d, ''maxAtt'', %d, ''idleSec'', %d));\n'], ...
- roots, mlq(outDir), mlq(sheetMat), nD, nD-1, mlq(qDir), mlq(fullfile(outDir, 'hb')), mlq(outDir), ...
- policy.staleSec, policy.maxAtt, 2*policy.staleSec);
-tmp = [jobFile '.part'];
+ '        fullfile(%s, [''worker_'' tag ''.log'']), ''staleSec'', %d, ''maxAtt'', %d, ...\n' ...
+ '        ''validateFcn'', @(f) rib_validate(f, %d)));\n'], ...
+ roots, mlq(sheetMat), nD, nD-1, mlq(qDir), mlq(fullfile(outDir, 'hb')), mlq(outDir), ...
+ policy.staleSec, policy.maxAtt, nD-1);
+tmp = sprintf('%s.%s.part', jobFile, char(java.util.UUID.randomUUID()));
 fid = fopen(tmp, 'w');
 assert(fid >= 0, 'run_costate_library:job', 'cannot write %s', tmp);
 fprintf(fid, '%s', txt);  fclose(fid);
-[okMv, msgMv] = movefile(tmp, jobFile);
-assert(okMv, 'run_costate_library:job', 'cannot publish %s: %s', jobFile, msgMv);
+publish_atomic(tmp, jobFile);
 end
 
 % ------------------------------------------------------------------------

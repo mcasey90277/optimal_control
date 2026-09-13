@@ -19,7 +19,7 @@ function R = build_ribs(sheetMat, opts)
 %   .direction [-1] the departure sense that works out of the anchor,
 %   .nD [12] .nPts [nD-1] .wallSec [900] per point, .only [] grid columns
 %   to walk (default: every certified one), .out [results/arrival_ribs.mat]
-%   (published atomically: written as <out>.part then moved),
+%   (published atomically: written to an exclusive temp name, then one rename),
 %   .progress [] handle called after every solve (rib_from_crossing)
 %
 %% Outputs:
@@ -89,10 +89,9 @@ for j = cols(:)'
     % after every rib, not at the end -- and PUBLISHED ATOMICALLY: the
     % campaign queue reads "this file exists" as "this unit is done", so a
     % save interrupted half-way must not leave a file behind
-    tmp = sprintf('%s.part', out);
+    tmp = sprintf('%s.%s.part', out, char(java.util.UUID.randomUUID()));   % exclusive name
     save(tmp, 'R', 'problem');
-    [okMv, msgMv] = movefile(tmp, out);
-    assert(okMv, 'build_ribs:publish', 'cannot publish %s: %s', out, msgMv);
+    publish_atomic(tmp, out);                       % one rename, or an error
 end
 fprintf('build_ribs: %d ribs, %d certified points -> %s\n', ...
     numel(R), sum(arrayfun(@(r) numel(r.pts), R)), out);

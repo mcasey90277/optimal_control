@@ -114,49 +114,77 @@ refused with "not converged" -- the producer's own flag read back, not a
 solver failure. If a consumer expects a corrected root, correct it, using the
 SAME corrector the original producer used.
 
-### 12. A claim is only as fresh as its last beat -- so beat INSIDE the unit
+### 12. Beat INSIDE the unit, and size the hang deadline from the solver, not the column
 
 The first generated worker accepted a heartbeat callback and never called
-it: claims were refreshed only between columns, columns take hours, the
-lease was 30 minutes. That is the reclaim-a-live-column failure by
-construction. The unit function must call the beat at its natural inner
-cadence (here, after every solve), and the watchdog must measure THAT
-silence, not the process's lifetime.
+it: claims were refreshed only between columns, columns take hours. The
+unit function must call the beat at its natural inner cadence (here, after
+every solve, whose wall cap is 900 s). The supervisor's inactivity deadline
+is a multiple of THAT cap (hangSec = 2700 s), not of a measured column
+duration -- a 9-hour column would otherwise have earned a 36-hour deadline.
+There is no calibration solve: it ran outside the queue's ownership and
+could duplicate a live worker's column.
 
 ### 13. Re-opening a campaign must not touch what workers own
 
-"Re-run to package" is the normal path. If the entry point re-initialises
-the queue, it frees columns being walked and resets the attempt counts that
-stop the livelock. `init` opens; `reset` is a separate, explicit, refusing
-action.
+"Re-run to package" is the normal path. If the entry point re-initialised
+the queue, it freed columns being walked and reset the attempt counts that
+stop the livelock. `open` is READ-ONLY and validates the unit set; `reset`
+is a separate, explicit action that cannot touch a held unit.
 
-### 14. Ownership is a token, not a path
+### 14. Ownership is a process-held lock; heartbeat age is an alarm, never an authority
 
-Two workers can hold the same claim path in sequence (stale takeover). The
-first one, back from a blocked solver, would refresh and then delete the
-second one's claim. Beat and release are conditional on the token issued
-with the claim; takeover is an atomic rename so exactly one reclaimer wins;
-after winning, re-check done and attempts.
+The first queue transferred a claim whose beat was 30 minutes old. Two
+workers could both "reclaim" it (rename-takeover is an ABA race), and a
+slow-but-alive owner would come back and publish over its replacement.
+Tokens do not close that: a check followed by an action is the same stale
+observation. Now a unit is owned by a kernel file lock (unit_lock) that the
+process holds until it releases or DIES. Nobody can take it from a live
+owner; a hung owner is killed by the supervisor, the kernel frees the lock,
+and only then is the unit claimable. Measured on this host: the lock is
+refused across processes, released on exit, released on SIGKILL.
 
-### 15. Publish artifacts atomically, because their existence is the verdict
+### 15. Publish under the lock, from an exclusive temporary, through one rename
 
-The queue reads "file exists" as "unit done". A save interrupted half-way
-must therefore not leave a file. Write beside, then move -- rib files, the
-queue's own records, heartbeats, the generated job.
+The queue reads "artifact exists" as "unit done", so the artifact must
+appear whole or not at all, and only the owner may put it there. The unit
+writes to an attempt-specific temporary name the queue hands it; the WORKER
+validates it and moves it onto the output while still holding the lock
+(publish_atomic: java.nio ATOMIC_MOVE, which renames or throws -- movefile
+onto an existing directory nests the source inside it). "Returned
+normally" is not success; a validated publication is.
 
-### 16. Say what you can prove: pending, launched, blocked, packaged
+### 16. Say what you can prove: pending, launched, blocked, packaged, failed
 
-The entry script returns a state. Packaging runs only when every artifact
-exists and nothing is claimed. Unreadable telemetry is UNKNOWN, never
-running. Unseeded columns of the requested grid are named as blockers, not
-dropped from the count.
+The entry script returns a state. Packaging runs only when every column
+validates as a rib and no lock is held, whether or not the rib stage ran in
+this call. A short column (the walker stalled) is real data but not full
+coverage, and is named as a blocker. Unreadable telemetry is UNKNOWN.
+Unseeded columns of the requested grid are named, not dropped.
+
+### 17. One queue per campaign; drain foreign workers before it starts
+
+Workers from an older launcher hold no lock, so the queue cannot see them
+and would hand out a column one of them is walking. The entry script
+refuses to launch while any such process is alive. A queue's unit set is
+fixed when it is created; a different grid is a different directory.
+
+### 18. Concurrency is tested with processes, not with one session
+
+Sequential tests prove ordinary-case behaviour; they cannot reach a race.
+`test_campaign_processes` launches three real MATLAB workers through the
+real launcher, kills one mid-unit, and checks that every unit was computed
+exactly once, the killed unit was taken over, the always-failing unit
+retired after exactly three attempts, and the queue finished with no lock
+held.
 
 ## The shape of a campaign
 
     declare the problem ->  orbits, engine, phases, in ONE visible place
-    calibrate one unit  ->  size budgets from the measurement, persist it
-    open the queue      ->  units, and the artifact that means done
-    launch N workers    ->  verify every one checked in; unique launch id
-    beat per solve      ->  the claim stays fresh for as long as it takes
-    watch INACTIVITY    ->  never, running, stalled, failed, unknown, done
-    blockers, not aborts ->  package only when complete; gate the deliverable
+    drain foreign workers -> nothing outside the queue may be walking
+    open the queue      ->  units and their artifacts, fixed at creation
+    launch N workers    ->  each must report READY (queue opened); unique launch
+    own by LOCK         ->  a live owner is never stolen from
+    beat per solve      ->  silence beyond the solver's cap = supervisor kills
+    publish under lock  ->  validated, exclusive temp, one rename
+    blockers, not aborts ->  package only when complete and unheld

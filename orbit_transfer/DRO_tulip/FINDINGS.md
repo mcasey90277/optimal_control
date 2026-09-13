@@ -3810,3 +3810,87 @@ Astra's pass 2 on the chain (`reviews/campaign_chain_astra_pass2_2026-09-13.md`,
 206 KB, 393 s, $1.66) is not yet adjudicated beyond the items above; its
 verdict is still "not fit for an unattended multi-day campaign", centred on
 the queue's ownership protocol, which the running campaign does not use.
+
+## 54. Astra's second pass on the chain: ownership by heartbeat age was an ABA race, so ownership is now a lock the process holds (2026-09-13)
+
+`reviews/campaign_chain_astra_pass2_2026-09-13.md` (206 KB bundle with the
+pass-1 review and my section-52 adjudication included, 393 s, $1.66).
+Verdict again "not fit for an unattended multi-day campaign", and the
+centre of it was right: the first queue transferred a claim whose beat was
+30 minutes old, by renaming the stale directory. Two reclaimers could both
+succeed (A renames B's claim and creates a fresh one; C, already past its
+staleness check, renames A's fresh claim), and a slow-but-alive owner
+would come back and refresh, then delete, its replacement's claim. The
+tokens I had added did not close it: a check followed by an action is the
+same stale observation. Astra's smallest closure was a kernel-held per-unit
+lock retained through publication, with no age-based takeover at all; a
+hung owner is killed by a supervisor and the kernel frees the lock.
+
+**Primitives measured before anything was built on them.** (1) A java.nio
+FileChannel lock from MATLAB is refused across processes while held,
+acquired the moment the holder releases, and acquired after the holder is
+killed with SIGKILL -- `unit_lock`. (2) MATLAB's `movefile` onto an
+existing FILE does rename (the destination takes the source's inode; my
+first reading said "copy" and was a harness bug: the captured text held
+MATLAB's own status echo), but `movefile` onto an existing DIRECTORY moves
+the source INSIDE it, which is how a takeover could have nested one claim
+in another. java.nio `Files.move` with ATOMIC_MOVE is documented to rename
+or throw, and throws "Is a directory" on that case -- `publish_atomic`.
+
+**The model now.** A unit is owned by a lock its worker process holds
+until it releases or dies; nobody can take it from a live owner. The
+attempt is counted under the lock, before the work. The unit writes to an
+attempt-specific temporary name the queue hands it; the WORKER validates
+that file (`rib_validate` for ribs: loads, has certified points, carries a
+problem identity; coverage reported) and moves it onto the output in one
+rename while still holding the lock. "Returned normally" is not success. A
+worker killed on its last attempt leaves the unit RETIRED, not the half-
+open state Astra found (status said open, claim said skip). Heartbeat age
+is an alarm; the launcher's per-child supervisor kills a worker silent for
+`hangSec` = 2700 s (three times the solver's 900 s wall cap, the longest
+silence a healthy walk can have), and has a startup deadline independent
+of any heartbeat. The unowned calibration stage is gone. The queue's unit
+set is fixed at creation and `open` is read-only. An immutable campaign
+manifest (orbits, engine, phases, policy, code revision) is written on the
+first call and checked on every later one. The entry script refuses to
+launch while any foreign (old-launcher) worker is alive, refuses phase
+vectors the builders cannot honour, checks the sheet's phases and origin
+against the request, and names short columns as coverage blockers. Idle
+workers wait for held units (polling every 15 s) so the tail is never
+unattended. READY is a persistent file the worker writes after opening
+the queue.
+
+**Verified with processes, as Astra required.** `test_campaign_processes`
+launches three real MATLAB workers through the real launcher against a
+six-unit queue (5 s units; unit 3 takes 40 s and its owner is killed -9
+mid-unit; unit 5 always throws). All eleven checks pass: every worker
+READY; units 1, 2, 4, 6 computed EXACTLY ONCE; unit 3 taken over after the
+kill and finished (two starts); unit 5 retired after exactly three
+attempts with a `.failed` file and no stray `.part`; the queue finished
+with no lock held; the killed worker reported running-stale, not done;
+the survivors exited clean. Three runs failed first, each on the TEST or
+the LAUNCHER, never on the queue: the cleanup deleted the evidence; the
+waiter matched a job path that now travels in the environment, not argv
+(rule 4 again); and READY was a heartbeat record the worker overwrote
+within milliseconds, so a 2 s poll never saw it and reported workers that
+had finished a whole campaign as "exited before ready". The 34-check
+sequential suite passes; the entry script dry-runs both paths and refuses
+a mismatched orbit, grid or manifest.
+
+**Adjudicated and not done, with reasons.** Intra-column checkpoint/resume
+(a reclaimed column restarts from zero; Astra: conditionally acceptable
+once ownership is safe, and it is) -- open. A campaign-wide supervisor
+that replaces lost capacity -- the idle-wait covers the tail with the
+workers already launched; relaunching is a call to the entry script. The
+hardcoded pumpkynPie bootstrap in the generated job is this machine's
+environment. Separate-process race tests for simultaneous fresh claimers:
+the lock makes that a kernel property rather than a protocol, and the
+process test exercises it with three workers claiming from one queue.
+
+**Also surfaced by the new barrier.** Six of the fifteen finished 24x24
+columns are shorter than 23 points -- the walker stalled at a dense
+conjugate scan (cols 6, 7), a polish that did not converge (12, 13, 15),
+and, at column 21, a transversality margin of 1.45e-6 against a 1e-6
+tolerance after only two points. The old barrier counted those files as
+full columns. They are real, terminal, shorter columns; the ship decision
+needs to see them.

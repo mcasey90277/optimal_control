@@ -22,7 +22,11 @@ function s = fmt_num(v, w, p, unit)
 %% Outputs:
 %
 %  s                        char                    exactly w chars, plus
-%                                                   any unit
+%                                                   any unit. A value too
+%                                                   wide for w at precision
+%                                                   p is shown in %g at
+%                                                   width w, and as '#'s if
+%                                                   even that does not fit.
 %
 %% Revision History:
 %  M. Casey                                                   (c) 09/13/2026
@@ -35,6 +39,10 @@ if isempty(v) || ~isnumeric(v) || ~isscalar(v) || ~isfinite(v)
     s = repmat('-', 1, w);
 else
     s = sprintf('%*.*f', w, p, v);
+    if numel(s) > w                       % too wide for the column: say so
+        s = sprintf('%*.*g', w, max(1, w - 6), v);   % at width, fewer digits
+        if numel(s) > w, s = repmat('#', 1, w); end  % cannot be shown at all
+    end
 end
 if ~isempty(unit), s = [s ' ' unit]; end
 end

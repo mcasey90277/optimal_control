@@ -101,7 +101,11 @@ S.arcs = {files.name};  S.B = B;  S.anc = anc;  S.opts = opts;  S.built = datest
 S.problem = B.problem;          % the identity packaging must use
 S.policy = rmfield(policy, 'pool');
 S.B = rmfield(S.B, {'res', 'dRdq', 'stateA', 'stateD'});
-save(out, 'S');
+% published in one rename: an interrupted save must not leave a sheet
+% file that the chain would then reuse as if it were complete
+tmpS = sprintf('%s.%s.part', out, char(java.util.UUID.randomUUID()));
+save(tmpS, 'S');
+publish_atomic(tmpS, out);
 
 fprintf('\n  j    sA      t_f [d]   dV [km/s]  fuel [kg]  cand  cert   note\n');
 for j = 1:numel(S.sA)

@@ -47,19 +47,25 @@ function out = campaign_heartbeat(action, hbDir, varargin)
 
 if ~isfolder(hbDir), mkdir(hbDir); end
 switch lower(action)
-    case {'beat', 'done', 'fail'}
+    case {'beat', 'done', 'fail', 'ready'}
         tag = varargin{1};  msg = '';
         if numel(varargin) > 1, msg = varargin{2}; end
-        f = fullfile(hbDir, [tag '.hb']);
+        % READY is its own PERSISTENT file. It used to be a beat record,
+        % which the worker overwrote milliseconds later with its first
+        % claim, so a launcher polling every 2 s never saw it and reported
+        % workers that had finished a whole small campaign as "exited
+        % before ready" (test_campaign_processes, 2026-09-13).
+        if strcmpi(action, 'ready'), f = fullfile(hbDir, [tag '.ready']);
+        else,                              f = fullfile(hbDir, [tag '.hb']); end
         % ATOMIC: write beside, then move. Truncating the live file in place
         % let a reader see an empty record between the truncate and the
         % write -- and an empty record used to read as RUNNING.
-        tmp = sprintf('%s.%d.tmp', f, matlabProcessID);
+        tmp = sprintf('%s.%s.tmp', f, char(java.util.UUID.randomUUID()));
         fid = fopen(tmp, 'w');
         assert(fid >= 0, 'campaign_heartbeat:write', 'cannot write heartbeat %s', f);
-        fprintf(fid, '%s|%s|%s\n', lower(action), char(datetime('now')), msg);
+        fprintf(fid, '%s|%s|%d|%s\n', lower(action), char(datetime('now')), matlabProcessID, msg);
         fclose(fid);
-        movefile(tmp, f);
+        publish_atomic(tmp, f);
         out = f;
 
     case 'read'
@@ -67,13 +73,13 @@ switch lower(action)
         opts = struct();  if numel(varargin) > 1, opts = varargin{2}; end
         staleSec = fieldd(opts, 'staleSec', 1800);
         if ischar(tags), tags = {tags}; end
-        out = repmat(struct('tag', '', 'state', '', 'age', NaN, 'msg', '', 'when', ''), 1, numel(tags));
+        out = repmat(struct('tag', '', 'state', '', 'age', NaN, 'msg', '', 'when', '', 'pid', NaN, 'ready', false), 1, numel(tags));
         for k = 1:numel(tags)
             out(k).tag = tags{k};
             f = fullfile(hbDir, [tags{k} '.hb']);
             if ~isfile(f)
                 % NO FILE IS NOT HEALTH. The whole point of this function.
-                out(k).state = 'never';  out(k).msg = 'no heartbeat: the worker never started';
+                out(k).state = 'never';  out(k).msg = 'no check-in observed (never wrote a heartbeat)';
                 continue
             end
             d = dir(f);
@@ -84,21 +90,28 @@ switch lower(action)
                 txt = '';
             end
             parts = strsplit(txt, '|');
-            kind = parts{1};
-            if numel(parts) > 1, out(k).when = parts{2}; end
-            if numel(parts) > 2, out(k).msg = strjoin(parts(3:end), '|'); end
-            % ONLY a well-formed 'beat' record can mean running. Anything
-            % else -- empty, truncated, a token this reader does not know --
-            % is UNKNOWN and alarms; it must never pass as health.
+            % ONLY a complete, well-formed record can mean anything:
+            % kind|time|pid|msg with a known kind, a parseable time and a
+            % numeric pid. A truncated 'beat' alone, an empty file, or a
+            % record from another format is UNKNOWN and alarms.
+            kind = parts{1};  wellFormed = numel(parts) >= 4 && any(strcmp(kind, {'beat', 'done', 'fail'}));
+            out(k).ready = isfile(fullfile(hbDir, [tags{k} '.ready']));
+            if wellFormed
+                out(k).when = parts{2};  out(k).pid = str2double(parts{3});
+                out(k).msg = strjoin(parts(4:end), '|');
+                wellFormed = ~isnan(out(k).pid) && ~isempty(regexp(parts{2}, '^\d{2}-\w{3}-\d{4} \d{2}:\d{2}:\d{2}$', 'once'));
+            end
+            if ~wellFormed
+                out(k).state = 'unknown';
+                out(k).msg = sprintf('unreadable heartbeat record "%s"', txt);
+                continue
+            end
             switch kind
                 case 'done', out(k).state = 'done';
                 case 'fail', out(k).state = 'failed';
                 case 'beat'
                     if out(k).age > staleSec, out(k).state = 'stalled';
                     else,                      out(k).state = 'running'; end
-                otherwise
-                    out(k).state = 'unknown';
-                    out(k).msg = sprintf('unreadable heartbeat record "%s"', txt);
             end
         end
 

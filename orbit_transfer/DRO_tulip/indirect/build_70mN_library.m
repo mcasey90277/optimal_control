@@ -29,7 +29,9 @@
 %   from results/; the sheet, catalog, audit, sidecar and pictures go to
 %   outDir, which defaults to results/ (rebuild in place). Point outDir
 %   elsewhere to rebuild BESIDE the shipped files and compare. A batch
-%   driver can set the struct `chainOverrides` (.outDir, .run) before
+%   driver can set the struct `chainOverrides` (.outDir, .run, and for a
+%   library at another resolution .grid (.nA .nD .sA0 .sD0), .sheetFile and
+%   .ribFiles, the exact artifacts to package) before
 %   calling this script instead of editing it.
 %
 %   The package stage will not overwrite a catalog that carries the
@@ -86,8 +88,21 @@ if exist('chainOverrides', 'var')
             run.(sw{1}) = chainOverrides.run.(sw{1});
         end
     end
+    % THE GRID IS THE CALLER'S when it says so. This block used to pin 12 x 12,
+    % so a driver packaging the 24 x 24 library got the 12-level sheet name,
+    % the 12 x 12 rib files and a 12-point departure grid -- a wrong catalog
+    % or an assert, hours after the ribs finished.
+    if isfield(chainOverrides, 'grid')
+        for gf = fieldnames(chainOverrides.grid)'
+            assert(isfield(grid, gf{1}), 'unknown grid field "%s"', gf{1});
+            grid.(gf{1}) = chainOverrides.grid.(gf{1});
+        end
+    end
 end
 if ~isfolder(outDir), mkdir(outDir); end
+% derived from the grid AFTER any override (identical at the defaults)
+arc.levels = grid.sA0 + (-grid.nA:2*grid.nA)/grid.nA;
+rib.nPts = grid.nD - 1;
 
 % the sidecar is the THIRD sweep's. v1: lift margins differed from the
 % catalog's by up to 1.35e4. v2 (2026-09-10/11): the plateau classifier --
@@ -105,6 +120,11 @@ files = struct( ...
     'branch',  fullfile(outDir, 'arrival_branch_map.png'), ...
     'torus',   fullfile(outDir, sprintf('phase_torus_%s.png', tag)), ...
     'findings', fullfile(outDir, 'phase_torus_findings.png'));
+% an EXPLICIT sheet from the caller (the fine library's is
+% arrival_sheet_70mN_nA24.mat, not the default name)
+if exist('chainOverrides', 'var') && isfield(chainOverrides, 'sheetFile')
+    files.sheet = chainOverrides.sheetFile;
+end
 setupOpts = struct('thrustN', engine.thrustN, 'ispS', engine.ispS, 'm0kg', engine.m0kg, ...
                    'tauDRO', orbits.tauDRO, 'NpTulip', orbits.NpTulip, 'sD', grid.sD0);
 fprintf('0. LIBRARY %s: %.0f mN / Isp %g s / %g kg, DRO tau %g -> %d-petal tulip, %d x %d grid\n', ...
@@ -159,13 +179,18 @@ assert(any(cellfun(@isfile, arcFiles)), 'no arrival arcs in %s: turn run.arcs on
 %     stack, then assembled: per arrival phase, the fastest CERTIFIED root.
 %% ========================================================================
 if run.sheet
-    S = build_arrival_sheet(setfield(setupOpts, 'out', files.sheet)); %#ok<SFLD>
+    so3 = setupOpts;  so3.out = files.sheet;  so3.nA = grid.nA;  so3.sA0 = grid.sA0;
+    S = build_arrival_sheet(so3);
     plot_arrival_arcs(arcFiles(cellfun(@isfile, arcFiles)), S, files.branch);
 else
     assert(isfile(files.sheet), 'sheet missing: %s (stage 3 makes it)', files.sheet);
     L = load(files.sheet);  S = L.S;
     fprintf('3. sheet reused: %s\n', files.sheet);
 end
+% the sheet must BE the grid this run packages: a 12-level sheet under a
+% 24-level grid would place every column at the wrong arrival phase
+assert(numel(S.sA) == grid.nA, 'build_70mN_library:grid', ...
+       'sheet %s has %d arrival levels but the grid says nA = %d', files.sheet, numel(S.sA), grid.nA);
 certifiedCols = find(~isnan(S.TF(:).'));          % a column is certified iff it has a t_f
 fprintf('3. sheet: %d of %d arrival phases certified\n', numel(certifiedCols), grid.nA);
 
@@ -173,19 +198,29 @@ fprintf('3. sheet: %d of %d arrival phases certified\n', numel(certifiedCols), g
 %  4. DEPARTURE RIBS -- off every certified column, one file per column so a
 %     rib that stalls costs only its own row.
 %% ========================================================================
-ribFiles = {};
-for j = certifiedCols
-    f = fullfile(resDir, sprintf('arrival_rib_col%02d.mat', j));
-    if run.ribs
-        build_ribs(files.sheet, struct('only', j, 'direction', rib.direction, ...
-                   'nPts', rib.nPts, 'wallSec', rib.wallSec, 'out', f));
+if exist('chainOverrides', 'var') && isfield(chainOverrides, 'ribFiles')
+    % the EXACT artifact set from the caller (a work queue's outputs), not a
+    % glob of resDir -- which would have fed this library's sheet the 12 x 12
+    % ribs of the library before it
+    ribFiles = chainOverrides.ribFiles(:).';
+    missingR = ribFiles(~cellfun(@isfile, ribFiles));
+    assert(isempty(missingR), 'build_70mN_library:ribs', ...
+           '%d rib file(s) handed in do not exist: %s', numel(missingR), strjoin(missingR, ', '));
+else
+    ribFiles = {};
+    for j = certifiedCols
+        f = fullfile(resDir, sprintf('arrival_rib_col%02d.mat', j));
+        if run.ribs
+            build_ribs(files.sheet, struct('only', j, 'direction', rib.direction, ...
+                       'nPts', rib.nPts, 'wallSec', rib.wallSec, 'out', f));
+        end
+        if isfile(f), ribFiles{end+1} = f; end %#ok<SAGROW>
     end
-    if isfile(f), ribFiles{end+1} = f; end %#ok<SAGROW>
+    % ribs from the 2026-09-09/10 campaign were grouped by letter (arrival_ribA..E);
+    % carry every rib file present, once
+    allRibs = dir(fullfile(resDir, 'arrival_rib*.mat'));
+    ribFiles = unique([ribFiles, fullfile(resDir, {allRibs.name})]);
 end
-% ribs from the 2026-09-09/10 campaign were grouped by letter (arrival_ribA..E);
-% carry every rib file present, once
-allRibs = dir(fullfile(resDir, 'arrival_rib*.mat'));
-ribFiles = unique([ribFiles, fullfile(resDir, {allRibs.name})]);
 fprintf('4. ribs: %d rib files\n', numel(ribFiles));
 
 %% ========================================================================

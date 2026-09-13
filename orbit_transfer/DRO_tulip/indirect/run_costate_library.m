@@ -138,6 +138,14 @@ sD = sD(:).';  sA = sA(:).';
 nD = numel(sD);  nA = numel(sA);
 checkUniform(sD, 'departure (.sD)');
 checkUniform(sA, 'arrival (.sA)');
+% ONLY THE FULL 1/n LATTICE IS BUILT. The builders take n and an origin,
+% not a vector, so any other uniform vector (a partial span, a different
+% step, a repeated or descending phase) would be printed here and then
+% silently replaced by the lattice. Refuse it instead. (Astra pass 2, J.)
+assert(abs(sD(2) - sD(1) - 1/nD) < 1e-9 && abs(sA(2) - sA(1) - 1/nA) < 1e-9, ...
+       'run_costate_library:grid', ...
+       ['only the full periodic lattice is supported: .sD must step by 1/%d and .sA by 1/%d ' ...
+        '(got %.6g and %.6g). Change .nD/.nA, not the vectors.'], nD, nA, sD(2)-sD(1), sA(2)-sA(1));
 sA0 = sA(1);
 
 out = struct('state', 'pending', 'sheet', '', 'queue', fullfile(outDir, 'ribq'), ...
@@ -178,6 +186,16 @@ if isfield(S, 'problem')
          'Point .outDir somewhere else, or delete %s.'], ...
         haveP(1)*1000, haveP(2), haveP(3), haveP(4), haveP(5), haveP(6), ...
         wantP(1)*1000, wantP(2), wantP(3), wantP(4), wantP(5), wantP(6), sheetMat);
+end
+% THE SHEET MUST BE THE GRID ASKED FOR: its arrival phases are the requested
+% .sA, and it was certified at the requested departure origin
+wrapd = @(x) abs(mod(x + 0.5, 1) - 0.5);
+assert(numel(S.sA) == nA && max(wrapd(S.sA(:).' - sA)) < 1e-9, 'run_costate_library:grid', ...
+       'the sheet %s holds arrival phases %s, not the requested %s', sheetMat, ...
+       phaseList(S.sA(:).'), phaseList(sA));
+if isfield(S, 'problem') && isfield(S.problem, 'sD')
+    assert(wrapd(S.problem.sD - sD(1)) < 1e-9, 'run_costate_library:grid', ...
+           'the sheet was certified at departure phase %.6f, but .sD starts at %.6f', S.problem.sD, sD(1));
 end
 cols = find(isfinite(S.TF));
 onlyA = d('onlyA', []);
@@ -289,32 +307,67 @@ if on('ribs')
     end
 end
 
+%% 3b. COMPLETION BARRIER -- enforced whether or not stage 3 ran
+% (with .run.ribs off, stage 3 is skipped, and packaging used to proceed on
+% whatever happened to be on disk). A rib artifact counts only if it LOADS
+% and holds a rib: a column half-way through an older, non-atomic save
+% exists as a file but is not a rib.
+ribList = arrayfun(ribOut, cols, 'UniformOutput', false);
+if on('package')
+    good = cellfun(@isRibFile, ribList);
+    if ~all(good)
+        out.state = 'pending';
+        out.blockers{end+1} = sprintf('%d of %d rib column(s) not on disk as a loadable rib: %s -- nothing packaged', ...
+                                      nnz(~good), numel(cols), mat2str(cols(~good)));
+        fprintf('3b. %s\n', out.blockers{end});
+        return
+    end
+    if isfolder(out.queue) && isfile(fullfile(out.queue, 'queue.mat'))
+        stq = work_queue('status', out.queue, policy);
+        if stq.nRunning > 0
+            out.state = 'pending';
+            out.blockers{end+1} = sprintf('queue still has live claims on %s -- nothing packaged', mat2str(stq.running));
+            fprintf('3b. %s\n', out.blockers{end});
+            return
+        end
+    end
+    fprintf('3b. all %d rib columns on disk and loadable\n', numel(cols));
+end
+
 %% 4. PACKAGE / AUDIT / SWEEP -- the existing chain, blockers not aborts
 if on('package') || on('audit') || on('sweep')
+    % the chain is told the GRID, the SHEET and the EXACT RIB FILES. It used
+    % to be told only outDir, and its own parameter block is the 12 x 12
+    % library's: default sheet name, results/arrival_rib*.mat, nD = 12.
     co = struct('outDir', outDir, 'run', struct( ...
         'arcs', false, 'sheet', false, 'ribs', false, ...
         'package', on('package'), 'audit', on('audit'), 'sweep', on('sweep'), ...
-        'pictures', d('pictures', true), 'deliverable', false));
+        'pictures', d('pictures', true), 'deliverable', false), ...
+        'grid', struct('nA', nA, 'nD', nD, 'sA0', sA0, 'sD0', sD(1)), ...
+        'sheetFile', sheetMat);
+    co.ribFiles = ribList;
+    tChain = datenum(datetime('now')) - 2/86400;   % mtime has 1 s granularity
     fprintf('4. package / audit / sweep via build_70mN_library ...\n');
-    % the chain is a SCRIPT that reads chainOverrides from the workspace it
-    % runs in; base is the only workspace a function can hand it one in.
-    % Whatever was there before is put back afterwards, success or not.
-    prev = [];  hadPrev = evalin('base', 'exist(''chainOverrides'', ''var'')') == 1;
-    if hadPrev, prev = evalin('base', 'chainOverrides'); end
-    restore = onCleanup(@() restoreBase(hadPrev, prev));
-    assignin('base', 'chainOverrides', co);
-    evalin('base', 'build_70mN_library');
-    if evalin('base', 'exist(''chainBlockers'', ''var'')') == 1
-        cb = evalin('base', 'chainBlockers');
-        if iscell(cb), out.blockers = [out.blockers, cb(:).']; end
-    end
+    % the chain is a SCRIPT, and a script runs in the workspace of whatever
+    % calls it -- so it runs inside runChain's own workspace, not base. The
+    % first version handed it chainOverrides through base, where the
+    % script's opening clearvars wiped the caller's variables (it did, in
+    % the shared session, on 2026-09-13).
+    % the script also cd's; the way back is held HERE, out of its reach
+    home_ = pwd;  backHome = onCleanup(@() cd(home_));
+    cb = runChain(co);
+    clear backHome
+    if iscell(cb), out.blockers = [out.blockers, cb(:).']; end
 end
-cat = fullfile(outDir, 'costate_catalog_dro_tulip_70mN.mat');
-if isfile(cat) && on('package')
-    out.catalog = cat;  out.state = 'packaged';
+catFile = fullfile(outDir, 'costate_catalog_dro_tulip_70mN.mat');
+% 'packaged' means THIS call wrote the catalog: an older file from a
+% previous run must not be reported as the product of this one
+catInfo = dir(catFile);
+if on('package') && ~isempty(catInfo) && catInfo(1).datenum >= tChain
+    out.catalog = catFile;  out.state = 'packaged';
 else
     out.catalog = '';
-    if on('package'), out.blockers{end+1} = sprintf('no catalog was written to %s', cat); end
+    if on('package'), out.blockers{end+1} = sprintf('no catalog was written to %s by this call', catFile); end
 end
 if ~isempty(out.blockers)
     fprintf('BLOCKERS:\n');  fprintf('  - %s\n', out.blockers{:});
@@ -322,11 +375,28 @@ end
 end
 
 % ------------------------------------------------------------------------
-function restoreBase(hadPrev, prev)
-% RESTOREBASE  Put the caller's chainOverrides back (or remove ours).
-% INPUTS: hadPrev logical; prev.  OUTPUTS: none.
-if hadPrev, assignin('base', 'chainOverrides', prev);
-else,       evalin('base', 'clear chainOverrides'); end
+function ok = isRibFile(f)
+% ISRIBFILE  True if f exists, loads, and holds a rib struct R.
+% INPUTS: f char.  OUTPUTS: ok logical.
+ok = false;
+if ~isfile(f), return, end
+try
+    w = whos('-file', f);
+    ok = any(strcmp({w.name}, 'R'));
+catch
+    ok = false;
+end
+end
+
+% ------------------------------------------------------------------------
+function chainBlockers = runChain(chainOverrides)
+% RUNCHAIN  Run the chain SCRIPT in this function's private workspace, with
+% chainOverrides in scope; the script assigns chainBlockers as its last act.
+% Nothing else may live here: the script opens with clearvars -except
+% chainOverrides, so any other variable (a default, a cleanup handle) would
+% be wiped. The caller restores the working directory.
+% INPUTS: chainOverrides struct.  OUTPUTS: chainBlockers cell.
+build_70mN_library;
 end
 
 % ------------------------------------------------------------------------

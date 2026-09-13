@@ -3748,3 +3748,65 @@ alive at the time of writing. The new chain has been exercised end to end
 with launch off against the live results directory and returns `pending`
 with the launch command; it will be used for whatever the old workers leave
 unfinished, and for every library after this one.
+
+## 53. What the RUNNING 24x24 campaign needed to finish: a watchdog 27 minutes from firing, and a finalizer wired to the wrong library (2026-09-13)
+
+Asked "are there fixes the currently running code needs to succeed", the
+answer was yes, twice, and neither was in the rib workers' own code.
+
+**1. The old launcher's lifetime watchdog.** `run_fine_ribs_range.sh` arms
+`( sleep $SEC; kill $MPID )` per worker; these were launched with SEC =
+21600 (6 h). Workers I and J started at 07:10:36, so both would have been
+killed at 13:10 -- found at 12:43. I was half-way down column 16 after 5.5 h.
+This is incident 2 of the discipline doc again. The four watchdog subshells
+were killed with SIGKILL BEFORE their sleeps (killing the sleep first would
+have let each subshell run straight on to its kill line); all four workers
+confirmed alive. Hangs are covered by log age (the session monitor wakes on
+20 min of silence).
+
+**2. Static-range duplicates.** Worker H held [13 14]; worker K, launched
+later, held [14]. H finished 13 at 12:25 and started 14, which K had walked
+for 40 min: the skip-if-file-exists check runs only at column START. H was
+stopped (column 13 on disk, nothing lost). Worker I holds [16 17] while L
+walks 17, so a guard stops I as soon as it announces column 17, which it
+prints only after column 16 is saved.
+
+**3. The finalizer was the 12 x 12 library's.** `run_costate_library`
+stage 4 handed `build_70mN_library` only outDir and switches, and the
+chain's own parameter block pinned nA = nD = 12, the default sheet name
+(not `arrival_sheet_70mN_nA24.mat`) and the rib glob `results/arrival_rib*`
+(the 12 x 12 ribs). It would have asserted "sheet missing" hours after the
+last column, or, given a matching name, packaged the wrong ribs at nD = 12.
+Astra's pass-2 review flagged the same (K). Fixes: the chain accepts
+`chainOverrides.grid`, `.sheetFile`, `.ribFiles` (byte-identical defaults;
+the loaded sheet must have nA levels); the entry script passes the exact
+grid, sheet and per-column rib files; it runs the chain SCRIPT inside a
+local function, so its `clearvars` hits that workspace and not the shared
+base (it wiped a test harness variable in the shared session today); the
+working directory is restored by the caller; `packaged` requires a catalog
+written by THIS call (mtime); the completion barrier (every column LOADS as
+a rib, no live queue claim) now applies whether or not the rib stage runs;
+and section 0 refuses phase vectors the builders cannot honour (anything
+but the full 1/n lattice) and checks the sheet's arrival phases and
+departure origin against the request.
+
+**Verified on the finished columns, not assumed.** 15 of 19 columns
+packaged through the entry script into a scratch folder: 329 entries (19
+spine + 310 rib points) on the 576-cell grid, torus picture sensible, base
+workspace and cwd intact. A detached sample job then ran the rest of the
+chain on that catalog: audit 10/10 OK (including sD 0.9167 and 0.9583, the
+phases nearest the seam where the 12 x 12 audit failed by 2 km: here 0.003
+and 0.014 km), sweep 3 entries in 75 s on 2 workers, movie 8 frames in 15 s.
+Scaled: audit ~1-2 h, sweep ~2-3 h, full movie ~20 min for ~450 entries.
+
+**Armed.** `batch/fine_library_autochain.sh` waits for 19 columns on disk
+AND no old rib worker alive (they hold no queue claims -- Astra pass 2, N),
+then runs `batch/fine_library_finish_job.m`: package, audit, sweep, and the
+full movie `results_fine/sweep_full_library_24x24.{mp4,gif}` at slow = 2,
+with a verdict in `results_fine/FINISH_VERDICT.txt`. If the workers drain
+with columns missing it writes BLOCKED and packages nothing.
+
+Astra's pass 2 on the chain (`reviews/campaign_chain_astra_pass2_2026-09-13.md`,
+206 KB, 393 s, $1.66) is not yet adjudicated beyond the items above; its
+verdict is still "not fit for an unattended multi-day campaign", centred on
+the queue's ownership protocol, which the running campaign does not use.

@@ -19,6 +19,8 @@ function R = build_ribs(sheetMat, opts)
 %   .direction [-1] the departure sense that works out of the anchor,
 %   .nD [12] .nPts [nD-1] .wallSec [900] per point, .only [] grid columns
 %   to walk (default: every certified one), .out [results/arrival_ribs.mat]
+%   (published atomically: written as <out>.part then moved),
+%   .progress [] handle called after every solve (rib_from_crossing)
 %
 %% Outputs:
 %
@@ -47,12 +49,24 @@ if isfield(S, 'problem')
     P = S.problem;
     so.thrustN = P.thrustN;  so.ispS = P.ispS;  so.m0kg = P.m0kg;
     so.tauDRO = P.tauDRO;    so.NpTulip = P.NpTulip;  so.sD = P.sD;
+    % the BRANCH travels with the petal count. It was a hardcoded -1 in the
+    % setup, so carrying Np without pm used to be harmless; it is not now.
+    if isfield(P, 'pmTulip'), so.pmTulip = P.pmTulip; end
 end
 [B, anc] = arclength_arrival('setup', so);
 if isfield(S, 'problem')
-    assert(abs(B.problem.sD - S.problem.sD) < 1e-12 && ...
-           abs(B.problem.thrustN - S.problem.thrustN) < 1e-12, ...
-           'rib setup does not reproduce the sheet''s problem identity');
+    % check the WHOLE identity, not two of its fields: the assert existed to
+    % catch a rib built at another operating point, and thrust plus phase
+    % would have passed a tulip of the wrong petal count or branch.
+    idf = {'sD', 'thrustN', 'ispS', 'm0kg', 'tauDRO', 'NpTulip', 'pmTulip'};
+    for kf = 1:numel(idf)
+        f = idf{kf};
+        if ~isfield(S.problem, f), continue, end
+        assert(abs(B.problem.(f) - S.problem.(f)) <= 1e-12*max(1, abs(S.problem.(f))), ...
+               'build_ribs:identity', ...
+               ['rib setup does not reproduce the sheet''s problem identity: ' ...
+                '%s is %g here and %g in the sheet'], f, B.problem.(f), S.problem.(f));
+    end
 end
 
 cols = d('only', find(isfinite(S.TF)));
@@ -65,13 +79,20 @@ for j = cols(:)'
         j, S.sA(j), S.TF(j), nPts, dirn);
     t0 = tic;
     Rj = rib_from_crossing(c(k), B, anc, struct('nD', nD, 'direction', dirn, ...
-        'nPts', nPts, 'wallSec', d('wallSec', 900), 'copts', struct('pool', pool)));
+        'nPts', nPts, 'wallSec', d('wallSec', 900), 'copts', struct('pool', pool), ...
+        'progress', d('progress', [])));
     R(end+1) = struct('j', j, 'sA', S.sA(j), 'pts', Rj.pts, 'stop', Rj.stop, ...
                       'nSolve', Rj.nSolve); %#ok<AGROW>
     fprintf('  -> %d certified points, %d solves, %.0f s, %s\n', ...
         numel(Rj.pts), Rj.nSolve, toc(t0), Rj.stop);
-    if isfield(S, 'problem'), problem = S.problem; else, problem = struct(); end %#ok<NASGU>
-    save(out, 'R', 'problem');            % after every rib, not at the end
+    if isfield(S, 'problem'), problem = S.problem; else, problem = struct(); end
+    % after every rib, not at the end -- and PUBLISHED ATOMICALLY: the
+    % campaign queue reads "this file exists" as "this unit is done", so a
+    % save interrupted half-way must not leave a file behind
+    tmp = sprintf('%s.part', out);
+    save(tmp, 'R', 'problem');
+    [okMv, msgMv] = movefile(tmp, out);
+    assert(okMv, 'build_ribs:publish', 'cannot publish %s: %s', out, msgMv);
 end
 fprintf('build_ribs: %d ribs, %d certified points -> %s\n', ...
     numel(R), sum(arrayfun(@(r) numel(r.pts), R)), out);

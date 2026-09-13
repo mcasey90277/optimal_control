@@ -57,8 +57,13 @@ if ischar(arg) && strcmp(arg, 'setup')
     thrustN = d('thrustN', 0.070);  ispS = d('ispS', 900);  m0kg = d('m0kg', 150);
     ob = struct('muStar', 0.012150585609624, 'lStar', 389703.264829278, ...
                 'tStar', 382981.289129055, 'tauDRO', d('tauDRO', 1.0), ...
-                'NpTulip', d('NpTulip', 7), 'tauTulip', 5*2*pi/6, 'pmTulip', -1, ...
+                'NpTulip', d('NpTulip', 7), 'pmTulip', d('pmTulip', -1), ...
                 'ispS', ispS, 'm0kg', m0kg);
+    % THE TULIP'S PERIOD IS NOT FREE -- it is 2*pi*(Np-2)/(Np-1), locked by
+    % the petal count. It used to sit here as the literal 5*2*pi/6 beside a
+    % SETTABLE NpTulip, so asking for an 8-petal tulip would have propagated
+    % an 8-petal orbit for the 7-petal period. Identical for Np = 7.
+    ob.tauTulip = 2*pi*(ob.NpTulip - 2)/(ob.NpTulip - 1);
     lStar = ob.lStar;  tStar = ob.tStar;  mu = ob.muStar;
     % THE shared propulsion conversion (costate_common/nd_propulsion)
     ndp = nd_propulsion(thrustN, ispS, m0kg, lStar, tStar);

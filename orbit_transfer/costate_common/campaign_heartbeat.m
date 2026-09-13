@@ -51,9 +51,15 @@ switch lower(action)
         tag = varargin{1};  msg = '';
         if numel(varargin) > 1, msg = varargin{2}; end
         f = fullfile(hbDir, [tag '.hb']);
-        fid = fopen(f, 'w');
+        % ATOMIC: write beside, then move. Truncating the live file in place
+        % let a reader see an empty record between the truncate and the
+        % write -- and an empty record used to read as RUNNING.
+        tmp = sprintf('%s.%d.tmp', f, matlabProcessID);
+        fid = fopen(tmp, 'w');
+        assert(fid >= 0, 'campaign_heartbeat:write', 'cannot write heartbeat %s', f);
         fprintf(fid, '%s|%s|%s\n', lower(action), char(datetime('now')), msg);
         fclose(fid);
+        movefile(tmp, f);
         out = f;
 
     case 'read'
@@ -72,17 +78,27 @@ switch lower(action)
             end
             d = dir(f);
             out(k).age = seconds(datetime('now') - datetime(d.datenum, 'ConvertFrom', 'datenum'));
-            txt = strtrim(fileread(f));
+            try
+                txt = strtrim(fileread(f));
+            catch
+                txt = '';
+            end
             parts = strsplit(txt, '|');
             kind = parts{1};
             if numel(parts) > 1, out(k).when = parts{2}; end
             if numel(parts) > 2, out(k).msg = strjoin(parts(3:end), '|'); end
+            % ONLY a well-formed 'beat' record can mean running. Anything
+            % else -- empty, truncated, a token this reader does not know --
+            % is UNKNOWN and alarms; it must never pass as health.
             switch kind
                 case 'done', out(k).state = 'done';
                 case 'fail', out(k).state = 'failed';
-                otherwise
+                case 'beat'
                     if out(k).age > staleSec, out(k).state = 'stalled';
                     else,                      out(k).state = 'running'; end
+                otherwise
+                    out(k).state = 'unknown';
+                    out(k).msg = sprintf('unreadable heartbeat record "%s"', txt);
             end
         end
 

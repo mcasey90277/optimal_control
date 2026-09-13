@@ -28,6 +28,10 @@ function R = rib_from_crossing(C0, B, anc, opts)
 %   .maxBisect [8] halvings allowed per grid step (the 2026-09-09 sweep
 %   needed ~1/1728 of a period on the hardest step), .wallSec [600],
 %   .copts (certify_root options),
+%   .progress [] function handle called with NO arguments after EVERY
+%   solve (about every 2-3 minutes) -- the campaign worker passes its
+%   heartbeat here. Without it a claim on a multi-hour column went stale
+%   after 30 minutes and could be reclaimed mid-walk (Astra 2026-09-13).
 %   .logFile ''
 %
 %% Outputs:
@@ -60,6 +64,8 @@ maxBisect = d('maxBisect', 8);  wallSec = d('wallSec', 600);
 copts = d('copts', struct());  copts.wallSec = wallSec;  copts.sA = C0.sA;
 logFile = d('logFile', '');
 lg = @(varargin) logmsg(logFile, sprintf(varargin{:}));
+progress = d('progress', []);
+if isempty(progress), progress = @() []; end
 
 R = struct('pts', struct([]), 'stop', '', 'nSolve', 0, 'sA', C0.sA, 'nD', nD);
 rvf = B.stateA(C0.sA);
@@ -81,6 +87,7 @@ for k = 1:nPts
         copts.sD = mod(trial, 1);
         Ct = certify_root(seed, rv0, rvf, B, copts);
         R.nSolve = R.nSolve + 1;
+        try progress(); catch, end         % a beat that fails must not stop the walk
         if Ct.ok
             cur = trial;  zc = Ct.z;  Yc = Ct.Y;  Ck = Ct;  nGood = nGood + 1;
             lg('  rib sD %.4f: t_f %.4f d, %s', mod(cur,1), Ct.tfDays, Ct.reason);

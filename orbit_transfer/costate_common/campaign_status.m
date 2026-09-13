@@ -30,15 +30,19 @@ function S = campaign_status(qDir, hbDir, tags, opts)
 %% ------------------------ Begin Code Sequence ---------------------------
 
 if nargin < 4, opts = struct(); end
-staleSec = fieldd(opts, 'staleSec', 1800);
-S.queue = work_queue('status', qDir);
+staleSec = fieldd(opts, 'staleSec', 1800);  maxAtt = fieldd(opts, 'maxAtt', 3);
+% ONE policy for the queue and the heartbeats: status used to hand the
+% queue a hardcoded 1800 s while forwarding staleSec only to the workers
+S.queue = work_queue('status', qDir, struct('staleSec', staleSec, 'maxAtt', maxAtt));
 S.workers = campaign_heartbeat('read', hbDir, tags, struct('staleSec', staleSec));
 S.alarm = {};
 
 never = {S.workers(strcmp({S.workers.state}, 'never')).tag};
 stall = {S.workers(strcmp({S.workers.state}, 'stalled')).tag};
 fail  = {S.workers(strcmp({S.workers.state}, 'failed')).tag};
+unk   = {S.workers(strcmp({S.workers.state}, 'unknown')).tag};
 live  = nnz(strcmp({S.workers.state}, 'running'));
+if ~isempty(unk),   S.alarm{end+1} = sprintf('UNREADABLE HEARTBEAT: %s', strjoin(unk, ' ')); end
 if ~isempty(never), S.alarm{end+1} = sprintf('NEVER STARTED: %s', strjoin(never, ' ')); end
 if ~isempty(stall), S.alarm{end+1} = sprintf('STALLED: %s', strjoin(stall, ' ')); end
 if ~isempty(fail),  S.alarm{end+1} = sprintf('FAILED: %s', strjoin(fail, ' ')); end
@@ -47,11 +51,13 @@ if isfield(S.queue, 'nRetired') && S.queue.nRetired > 0
                              S.queue.nRetired, mat2str(S.queue.retired));
 end
 if S.queue.nStale > 0
-    S.alarm{end+1} = sprintf('%d unit(s) held by a dead claim (reclaimable): %s', ...
+    % a stale claim is a LOST LEASE: its owner has not reported, which is
+    % evidence of silence, not of death
+    S.alarm{end+1} = sprintf('%d unit(s) held by a claim with no recent beat (reclaimable): %s', ...
                              S.queue.nStale, mat2str(S.queue.stale));
 end
-if live == 0 && S.queue.nTodo > 0
-    S.alarm{end+1} = sprintf('NO LIVE WORKER but %d unit(s) still to do', S.queue.nTodo);
+if live == 0 && S.queue.nOpen > 0
+    S.alarm{end+1} = sprintf('NO LIVE WORKER but %d unit(s) still open', S.queue.nOpen);
 end
 
 if ~fieldd(opts, 'quiet', false)

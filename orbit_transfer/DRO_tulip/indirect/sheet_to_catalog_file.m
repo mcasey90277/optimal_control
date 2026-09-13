@@ -134,11 +134,16 @@ if nargin >= 2 && ~isempty(ribs)
 end
 
 % ---- meta: what the packager reads -------------------------------------
+% THE PERIOD COMES FROM THE SHEET, not from a literal. Both fields used to
+% be the hardcoded 5*2*pi/6 beside a P.NpTulip read straight from the
+% certified problem, so a catalog built at another petal count would have
+% carried a 7-petal period as its own label. Identical for Np = 7.
+tauT = P.periodTulip;
 Q.meta = struct('muStar', P.muStar, 'lStar', lStar, 'tStar', tStar, ...
     'ispS', P.ispS, 'm0kg', P.m0kg, 'tauDRO', P.tauDRO, ...
     'depFamily', 'dro', 'depParams', struct('tau', P.tauDRO), ...
-    'arrFamily', 'tulip', 'arrParams', struct('Np', P.NpTulip, 'pm', P.pmTulip, 'tau', 5*2*pi/6), ...
-    'NpTulip', P.NpTulip, 'pmTulip', P.pmTulip, 'periodTulip', 5*2*pi/6);
+    'arrFamily', 'tulip', 'arrParams', struct('Np', P.NpTulip, 'pm', P.pmTulip, 'tau', tauT), ...
+    'NpTulip', P.NpTulip, 'pmTulip', P.pmTulip, 'periodTulip', tauT);
 Q.problem = P;                                 % identity ships with the sheet
 
 if ~isempty(outMat), save(outMat, '-struct', 'Q'); end

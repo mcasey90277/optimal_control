@@ -3642,3 +3642,109 @@ flag -- so it cannot be used to clear an entry on its own.
 
 Nothing ships until one of those closes. The catalog carries the verdicts;
 the deliverable stage was off.
+
+## 52. The campaign chain reviewed: four defects that matched four paid-for incidents, and what a one-host queue actually needs (2026-09-13)
+
+`run_costate_library.m` and the five campaign primitives under it
+(`work_queue`, `campaign_worker`, `campaign_heartbeat`, `campaign_status`,
+`run_campaign_workers.sh`) went to GPT-6 Astra at xhigh (59 KB bundle,
+589 s, $1.47; `reviews/campaign_chain_astra_2026-09-13.md`). Verdict: "not
+fit for an unattended multi-day campaign". Forty findings. Each was checked
+against the code before anything was changed; the ones below were CONFIRMED
+and fixed, the rest are adjudicated at the end.
+
+**Two things fixed first, from Mike's reading of the entry script, before the
+review landed.** (1) Where the phases are chosen was not visible: the arrival
+grid came from `nA` in the sheet stage and the departure grid from `nD` deep
+in the rib stage. Section 0 now takes `.sD`/`.sA` vectors (or derives them
+from `.nD`/`.nA`/`.sA0`), refuses a non-uniform grid by name, and prints
+both. (2) Which DRO and which tulip was not visible either: they came from
+`arclength_arrival`'s own defaults. Section 0 now declares `tauDRO`,
+`NpTulip`, `pmTulip` and the engine, prints them with the derived periods,
+passes them to the sheet builder, and REFUSES to continue if the sheet on
+disk was built for a different problem. Making the tulip knobs honest
+exposed a latent defect: the setup accepted `NpTulip` but hardcoded the
+period as `5*2*pi/6` and the branch as `-1`, so an 8-petal request would
+have propagated an 8-petal orbit for the 7-petal period. The period is now
+derived, `2*pi*(Np-2)/(Np-1)`, and the branch is read; the packager
+(`sheet_to_catalog_file`) carried the same literal and now labels the
+catalog with the sheet's own period. Bitwise identical at Np = 7 (the
+rebuilt setup matches the stamped identity of the existing sheet on all 14
+fields).
+
+**The four confirmed headline defects.**
+
+1. *The generated worker never beat.* `unitFcn = @(j, beat) build_ribs(...)`
+   took `beat` and dropped it, so a claim was refreshed only between
+   columns. Columns take 1.5 to 9 hours; the stale lease was 30 minutes.
+   Any worker finishing early would have "reclaimed" a live column -- the
+   exact mechanism that cost columns 13 and 16 nine hours each under the old
+   launcher. Fix: `rib_from_crossing` takes `.progress` and calls it after
+   EVERY solve (2-3 min); `build_ribs` forwards it; the job passes the
+   worker's heartbeat there.
+2. *Re-running destroyed live ownership and reset the retry budget.*
+   `work_queue('init')` wiped every claim and every attempt file, and the
+   script's own instruction was "re-run this function to package". So the
+   documented workflow would have freed columns being walked and re-armed
+   the livelock the attempt counter was built to stop. Fix: `init` opens an
+   existing queue (claims and attempts kept, new units added) and creates
+   only when none exists; `reset` is a separate explicit action that
+   refuses while any claim is fresh.
+3. *The watchdog measured lifetime, not inactivity.* A timer started at
+   launch killed a healthy worker inside its fourth column regardless of
+   progress. Fix: the launcher's watchdog reads the heartbeat AGE and kills
+   only after WATCHDOG seconds of silence, which with per-solve beats is a
+   hang and nothing else.
+4. *Packaging followed launch with no barrier, and a file's existence was
+   completion.* Fix: the entry script returns `out.state` in {pending,
+   launched, blocked, packaged}; stage 4 runs only when every unit's
+   artifact exists and none is claimed; rib files and the queue's own
+   records are published atomically (write beside, move), so an interrupted
+   save is not a finished unit.
+
+**Also confirmed and fixed.** Ownership is now a TOKEN: beat and release
+act only if the claim still carries the caller's token, so a worker
+reclaimed while blocked in a solver cannot refresh, then delete, the new
+owner's claim. Stale takeover is a rename (atomic; one reclaimer wins).
+After winning a claim the done and attempt checks are made AGAIN. Attempt
+records fail CLOSED (unparseable = blocked, unwritable = no claim). Status
+gives ONE state per unit (a live final attempt is running, not retired) and
+`nOpen`/`complete`/`finished` are stated rather than inferred from `nTodo`.
+An empty or garbled heartbeat is UNKNOWN, never running; heartbeats are
+written atomically. The worker's whole lifecycle is guarded (a fatal error
+outside the unit try now writes a `fail` heartbeat), accounting happens once
+at the work boundary and logging cannot turn a saved unit into a failed one,
+and with `idleSec` the last live worker waits for held units instead of
+leaving the tail unattended. The generated job derived `costate_common`
+from the OUTPUT directory -- three `fileparts` of the sheet path gives
+`DRO_tulip/costate_common`, which does not exist; it worked only because
+`startup` had already put the real one on the path. Code roots now come from
+the driver's own location; every path is absolute (MATLAB's `run` changes
+directory to the job's folder); the shell command is quoted and MATLAB
+literals escaped; `system`'s return code is checked; the launcher validates
+its arguments, gives each launch an id so tags and logs are never reused,
+and detects a worker that exits before its first beat. `test_work_queue` now
+THROWS on failure and carries 28 checks, one per guarantee above (it also
+caught my own bookkeeping error: a unit I thought untouched carried a prior
+attempt, and the queue correctly retired it).
+
+**Pushed back or deferred, with reasons.** A campaign manifest with fencing
+generations and a coordinator-owned lease clock: this is one host, APFS,
+five workers; the token plus the rename takeover plus the re-check close the
+races that can actually occur here, and Astra's own text allows that "for
+one host, kernel-held interprocess locks plus an exact-child supervisor may
+be simpler". Separate-process barrier race tests: open; the claim test is
+still sequential. Intra-column checkpoint/resume in the bisecting walker: a
+real gap (a reclaimed column restarts from zero) and a bigger change; open.
+Converting `build_70mN_library` from a script to a function: deferred; the
+base-workspace handoff now saves and restores whatever was there. Tracking
+calibration through the queue: deferred; its measurement is now persisted
+so a later call cannot replace it with the 3600 s guess. `fmt_num` width
+overflow: minor, open.
+
+**State of the library.** 14 of 19 certified columns on disk; 13, 14, 16,
+17, 18 in flight on the OLD explicit-range launcher (no queue), all five
+alive at the time of writing. The new chain has been exercised end to end
+with launch off against the live results directory and returns `pending`
+with the launch command; it will be used for whatever the old workers leave
+unfinished, and for every library after this one.

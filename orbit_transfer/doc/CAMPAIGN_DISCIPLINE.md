@@ -114,10 +114,49 @@ refused with "not converged" -- the producer's own flag read back, not a
 solver failure. If a consumer expects a corrected root, correct it, using the
 SAME corrector the original producer used.
 
+### 12. A claim is only as fresh as its last beat -- so beat INSIDE the unit
+
+The first generated worker accepted a heartbeat callback and never called
+it: claims were refreshed only between columns, columns take hours, the
+lease was 30 minutes. That is the reclaim-a-live-column failure by
+construction. The unit function must call the beat at its natural inner
+cadence (here, after every solve), and the watchdog must measure THAT
+silence, not the process's lifetime.
+
+### 13. Re-opening a campaign must not touch what workers own
+
+"Re-run to package" is the normal path. If the entry point re-initialises
+the queue, it frees columns being walked and resets the attempt counts that
+stop the livelock. `init` opens; `reset` is a separate, explicit, refusing
+action.
+
+### 14. Ownership is a token, not a path
+
+Two workers can hold the same claim path in sequence (stale takeover). The
+first one, back from a blocked solver, would refresh and then delete the
+second one's claim. Beat and release are conditional on the token issued
+with the claim; takeover is an atomic rename so exactly one reclaimer wins;
+after winning, re-check done and attempts.
+
+### 15. Publish artifacts atomically, because their existence is the verdict
+
+The queue reads "file exists" as "unit done". A save interrupted half-way
+must therefore not leave a file. Write beside, then move -- rib files, the
+queue's own records, heartbeats, the generated job.
+
+### 16. Say what you can prove: pending, launched, blocked, packaged
+
+The entry script returns a state. Packaging runs only when every artifact
+exists and nothing is claimed. Unreadable telemetry is UNKNOWN, never
+running. Unseeded columns of the requested grid are named as blockers, not
+dropped from the count.
+
 ## The shape of a campaign
 
-    calibrate one unit  ->  size budgets and watchdog from the measurement
-    init the queue      ->  units, and the artifact that means done
-    launch N workers    ->  verify every one checked in
-    monitor artifacts   ->  never, running, stalled, failed, done
-    blockers, not aborts ->  gate the deliverable only
+    declare the problem ->  orbits, engine, phases, in ONE visible place
+    calibrate one unit  ->  size budgets from the measurement, persist it
+    open the queue      ->  units, and the artifact that means done
+    launch N workers    ->  verify every one checked in; unique launch id
+    beat per solve      ->  the claim stays fresh for as long as it takes
+    watch INACTIVITY    ->  never, running, stalled, failed, unknown, done
+    blockers, not aborts ->  package only when complete; gate the deliverable

@@ -28,6 +28,9 @@ function R = rib_from_crossing(C0, B, anc, opts)
 %   .maxBisect [8] halvings allowed per grid step (the 2026-09-09 sweep
 %   needed ~1/1728 of a period on the hardest step), .wallSec [600],
 %   .copts (certify_root options),
+%   .checkpoint '' path of the unit's resumable checkpoint (walk_checkpoint):
+%   written after every accepted point, resumed from when it matches this
+%   walk's identity; .problem [] identity struct stored in it,
 %   .progress [] function handle called with NO arguments after EVERY
 %   solve (about every 2-3 minutes) -- the campaign worker passes its
 %   heartbeat here. Without it a claim on a multi-hour column went stale
@@ -62,18 +65,36 @@ else
 end
 maxBisect = d('maxBisect', 8);  wallSec = d('wallSec', 600);
 copts = d('copts', struct());  copts.wallSec = wallSec;  copts.sA = C0.sA;
-copts.progress = d('progress', []);          % certify_root ticks it after every capped stage
 logFile = d('logFile', '');
 lg = @(varargin) logmsg(logFile, sprintf(varargin{:}));
 progress = d('progress', []);
 if isempty(progress), progress = @() []; end
-copts.progress = progress;
+copts.progress = progress;                   % certify_root ticks it after every capped stage
 
 R = struct('pts', struct([]), 'stop', '', 'nSolve', 0, 'sA', C0.sA, 'nD', nD);
 rvf = B.stateA(C0.sA);
 sD = anc.sD;  z = C0.z;  Y = C0.Y;  K = size(Y, 2);
 
-for k = 1:nPts
+% RESUME from the unit's checkpoint if one matches this exact walk: same
+% column identity, lattice, direction, targets and problem. A killed
+% attempt used to cost the whole column (up to nine hours).
+ckptFile = d('checkpoint', '');
+ident = struct('sA', C0.sA, 'nD', nD, 'dirn', dirn, 'targets', targets, 'sD0', anc.sD, ...
+               'problem', d('problem', struct()));
+kStart = 1;
+if ~isempty(ckptFile)
+    [Ck0, why] = walk_checkpoint('load', ckptFile, ident);
+    if ~isempty(Ck0)
+        kStart = Ck0.k + 1;  sD = Ck0.sD;  z = Ck0.z;  Y = Ck0.Y;
+        R.pts = Ck0.pts;  R.nSolve = Ck0.nSolve;
+        lg('  rib RESUMED at point %d of %d from %s (saved %s)', kStart, nPts, ckptFile, Ck0.saved);
+        if kStart > nPts, R.stop = 'complete';  return, end
+    elseif isfile(ckptFile)
+        lg('  rib checkpoint %s IGNORED: %s', ckptFile, why);
+    end
+end
+
+for k = kStart:nPts
     target = anc.sD + targets(k);          % unwrapped, absolute
     step = dirn/nD;  nb = 0;  cur = sD;  zc = z;  Yc = Y;  Ck = [];  nGood = 0;
     while abs(wrapDiff(cur, target)) > 1e-12
@@ -109,6 +130,10 @@ for k = 1:nPts
     sD = mod(target, 1);  z = zc;  Y = Yc;
     Ck.sD = sD;
     if isempty(R.pts), R.pts = Ck; else, R.pts(end+1) = Ck; end
+    if ~isempty(ckptFile)              % after every ACCEPTED point, atomically
+        walk_checkpoint('save', ckptFile, struct('identity', ident, 'k', k, 'sD', sD, 'z', z, 'Y', Y, ...
+                                                  'pts', R.pts, 'nSolve', R.nSolve));
+    end
 end
 R.stop = 'complete';
 end

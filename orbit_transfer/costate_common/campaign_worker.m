@@ -19,6 +19,11 @@ function out = campaign_worker(qDir, hbDir, tag, unitFcn, opts)
 %   the queue, so the launcher's verification means "attached to the
 %   queue", not "a file appeared".
 %
+%   CHECKPOINTS. A unit function may keep a resumable checkpoint at
+%   <output>.ckpt (walk_checkpoint); it belongs to the UNIT, so the next
+%   attempt after a kill resumes from it. The worker deletes it after the
+%   unit is published.
+%
 %   THE TAIL. When nothing is claimable but units are still held by other
 %   workers, this one WAITS (beating 'idle') until the campaign is finished
 %   -- so if the last long column's owner dies, someone is still there to
@@ -118,6 +123,9 @@ while true
     if okUnit
         nDone = nDone + 1;  units(end+1) = c.id; %#ok<AGROW>
         lg('worker %s: unit %d DONE in %.0f s -> %s', tag, c.id, toc(tU), c.output);
+        % a unit may keep a resumable checkpoint at <output>.ckpt while it
+        % runs (walk_checkpoint); once published it is no longer needed
+        if isfile([c.output '.ckpt']), delete([c.output '.ckpt']); end
     else
         nFail = nFail + 1;  failed(end+1) = c.id; %#ok<AGROW>
         lg('worker %s: unit %d FAILED after %.0f s -- %s', tag, c.id, toc(tU), err);

@@ -87,7 +87,9 @@ function out = run_costate_library(opts)
 %  read-only (it validates the unit set against the queue on disk), and a
 %  column is owned by a kernel lock its worker holds, which no call here
 %  can take. It returns out.state:
-%    'launched'  workers were spawned; call again later to package
+%    'launched'  the campaign SUPERVISOR was started: it keeps the workers
+%                alive and runs the finalize job (this function, packaging
+%                stages on) when every column is published
 %    'pending'   units remain and nothing was launched (.launch false, or
 %                workers are on them); the launch command is in out.cmd
 %    'blocked'   units were RETIRED after repeated failure, or foreign
@@ -327,9 +329,16 @@ if on('ribs')
     end
     jobFile = fullfile(outDir, 'rib_unit_job.m');
     writeRibJob(jobFile, sheetMat, outDir, out.queue, nD, codeRoots, policy);
-    launcher = fullfile(codeRoots{2}, 'run_campaign_workers.sh');
-    out.cmd = strjoin({shq(launcher), shq(jobFile), num2str(nWorkers), ...
-                       num2str(round(hangSec)), shq(outDir)}, ' ');
+    % THE SUPERVISOR owns the campaign from here: it keeps nWorkers alive
+    % (relaunching through run_campaign_workers.sh within a budget), and
+    % when every column is published runs the finalize job -- this same
+    % function with the packaging stages on -- exactly once.
+    finJob = fullfile(outDir, 'finalize_job.m');
+    writeFinalizeJob(finJob, outDir, nD, nA, sA0, codeRoots, policy);
+    supervisor = fullfile(codeRoots{2}, 'campaign_supervisor.sh');
+    out.cmd = strjoin({'nohup', shq(supervisor), shq(jobFile), num2str(nWorkers), ...
+                       num2str(round(hangSec)), shq(outDir), shq(out.queue), num2str(maxAtt), shq(finJob), ...
+                       '>', shq(fullfile(outDir, 'supervisor.out')), '2>&1 &'}, ' ');
     if st.nOpen > 0
         if d('launch', false)
             % workers from an older launcher hold no lock: the queue would
@@ -343,20 +352,21 @@ if on('ribs')
                 fprintf('3. BLOCKED: %s\n', out.blockers{end});
                 return
             end
-            fprintf('3. launching %d worker(s) ...\n', nWorkers);
+            fprintf('3. starting the campaign supervisor for %d worker(s) ...\n', nWorkers);
             [rc, txt] = system(out.cmd);
-            fprintf('%s', txt);
             if rc ~= 0
                 out.state = 'blocked';
-                out.blockers{end+1} = sprintf('launcher exited %d -- see above; nothing packaged', rc);
+                out.blockers{end+1} = sprintf('could not start the supervisor (%d): %s', rc, strtrim(txt));
                 return
             end
             out.state = 'launched';
-            fprintf('3. workers launched. Call this function again when they finish to package.\n');
+            fprintf(['3. supervisor started (log: %s). It keeps %d workers alive and runs the\n' ...
+                     '   finalize job when every column is published; verdict in %s.\n'], ...
+                    fullfile(outDir, 'supervisor.log'), nWorkers, fullfile(outDir, 'SUPERVISOR_VERDICT.txt'));
         else
             out.state = 'pending';
-            fprintf(['3. %d unit(s) to walk. Launch them with:\n\n    %s\n\n' ...
-                     '   then call this function again to package.\n'], st.nOpen, out.cmd);
+            fprintf(['3. %d unit(s) to walk. Start the supervised campaign with:\n\n    %s\n\n' ...
+                     '   (it launches the workers, replaces any that die, and packages when done)\n'], st.nOpen, out.cmd);
         end
         return
     end
@@ -554,6 +564,30 @@ end
 end
 
 % ------------------------------------------------------------------------
+function writeFinalizeJob(jobFile, outDir, nD, nA, sA0, codeRoots, policy)
+% WRITEFINALIZEJOB  The job the supervisor runs once every column is
+% published: this function again, with only the packaging stages on, on
+% the same directory and grid. It exits non-zero unless it packaged.
+% INPUTS: jobFile; outDir; nD; nA; sA0; codeRoots; policy.  OUTPUTS: none.
+roots = strjoin(cellfun(@mlq, codeRoots, 'UniformOutput', false), ', ');
+txt = sprintf([ ...
+ '%%%% FINALIZE_JOB  Package, audit and sweep the library. Written by run_costate_library.\n' ...
+ 'here = pwd; cd(''/Users/msc/Desktop/proj7/external/pumpkynPie''); startup(); cd(here);\n' ...
+ 'addpath(%s);\n' ...
+ 'out = run_costate_library(struct(''outDir'', %s, ''nD'', %d, ''nA'', %d, ''sA0'', %.10g, ...\n' ...
+ '    ''maxAtt'', %d, ''staleSec'', %d, ''hangSec'', %d, ''launch'', false, ...\n' ...
+ '    ''run'', struct(''sheet'', false, ''ribs'', true, ''package'', true, ''audit'', true, ''sweep'', true)));\n' ...
+ 'fprintf(''FINALIZE: state %%s\\n'', out.state);\n' ...
+ 'if ~strcmp(out.state, ''packaged''), error(''finalize_job:notPackaged'', ''state %%s: %%s'', out.state, strjoin(out.blockers, '' | '')); end\n'], ...
+ roots, mlq(outDir), nD, nA, sA0, policy.maxAtt, policy.staleSec, policy.hangSec);
+tmp = sprintf('%s.%s.part', jobFile, char(java.util.UUID.randomUUID()));
+fid = fopen(tmp, 'w');
+assert(fid >= 0, 'run_costate_library:job', 'cannot write %s', tmp);
+fprintf(fid, '%s', txt);  fclose(fid);
+publish_atomic(tmp, jobFile);
+end
+
+% ------------------------------------------------------------------------
 function writeRibJob(jobFile, sheetMat, outDir, qDir, nD, codeRoots, policy)
 % WRITERIBJOB  Emit the per-worker job script the launcher runs. It reads
 % WORKER_TAG from the environment and walks whatever column the queue hands
@@ -575,13 +609,14 @@ txt = sprintf([ ...
  'tag = getenv(''WORKER_TAG'');\n' ...
  'assert(~isempty(tag), ''rib_unit_job:tag'', ''WORKER_TAG is not set: run this through run_campaign_workers.sh'');\n' ...
  'S_ = load(%s);  S_ = S_.S;\n' ...
+ 'ckpt = @(j) fullfile(%s, sprintf(''fine_rib_col%%02d.mat.ckpt'', j));   %% the UNIT''s checkpoint\n' ...
  'unitFcn = @(j, beat, tmpOut) build_ribs(%s, struct(''only'', j, ''direction'', -1, ...\n' ...
- '        ''nD'', %d, ''nPts'', %d, ''wallSec'', 900, ''out'', tmpOut, ''progress'', beat));\n' ...
+ '        ''nD'', %d, ''nPts'', %d, ''wallSec'', 900, ''out'', tmpOut, ''progress'', beat, ''checkpoint'', ckpt(j)));\n' ...
  'spec = @(j) struct(''nPts'', %d, ''col'', j, ''sA'', S_.sA(j), ''nD'', %d, ''problem'', S_.problem);\n' ...
  'campaign_worker(%s, %s, tag, unitFcn, struct(''logFile'', ...\n' ...
  '        fullfile(%s, [''worker_'' tag ''.log'']), ''staleSec'', %d, ''maxAtt'', %d, ...\n' ...
  '        ''validateFcn'', @(f, j) rib_validate(f, spec(j))));\n'], ...
- roots, mlq(sheetMat), mlq(sheetMat), nD, nD-1, nD-1, nD, mlq(qDir), mlq(fullfile(outDir, 'hb')), mlq(outDir), ...
+ roots, mlq(sheetMat), mlq(outDir), mlq(sheetMat), nD, nD-1, nD-1, nD, mlq(qDir), mlq(fullfile(outDir, 'hb')), mlq(outDir), ...
  policy.staleSec, policy.maxAtt);
 tmp = sprintf('%s.%s.part', jobFile, char(java.util.UUID.randomUUID()));
 fid = fopen(tmp, 'w');

@@ -223,9 +223,28 @@ R.pts(2).ok = true;  problem.NpTulip = 8;  save(rf, 'R', 'problem');  problem.Np
 ok = chk(ok, ~rib_validate(rf, spec), 'a rib certified at another operating point is refused');
 R.pts(2).sD = 0.03;  save(rf, 'R', 'problem');
 ok = chk(ok, ~rib_validate(rf, spec), 'a point off the departure lattice is refused');
+% a worker validates its TEMPORARY result, whose name ends in .part: load
+% without '-mat' treats that as ASCII and would have refused every real unit
+R.pts(2).sD = 2/24;  rp = fullfile(q, 'rib.mat.abc.part');  save(rp, 'R', 'problem');
+ok = chk(ok, rib_validate(rp, spec), 'a valid rib saved under a .part name validates (load -mat)');
 fid = fopen(rf, 'w'); fprintf(fid, 'not a mat file'); fclose(fid);
 [okV, msgV] = rib_validate(rf, spec);
 ok = chk(ok, ~okV && ~isempty(msgV), 'a corrupt file is a refusal with a reason, not an error');
+
+% ---- 12. walk_checkpoint ------------------------------------------------------
+cf = fullfile(q, 'col.mat.ckpt');
+ident = struct('sA', 0.2, 'nD', 24, 'dirn', -1, 'targets', -(1:23)/24, 'sD0', 0, 'problem', struct('thrustN', 0.07));
+[C0, why0] = walk_checkpoint('load', cf, ident);
+ok = chk(ok, isempty(C0) && strcmp(why0, 'no checkpoint'), 'no checkpoint yet: load says so');
+walk_checkpoint('save', cf, struct('identity', ident, 'k', 5, 'sD', 0.7917, 'z', (1:8)', 'Y', ones(14, 25), 'pts', struct('sD', {0.9583, 0.9167}), 'nSolve', 12));
+[C1, ~] = walk_checkpoint('load', cf, ident);
+ok = chk(ok, ~isempty(C1) && C1.k == 5 && numel(C1.pts) == 2 && C1.nSolve == 12, 'a matching checkpoint loads with its state');
+[C2, why2] = walk_checkpoint('load', cf, setfield(ident, 'sA', 0.25)); %#ok<SFLD>
+ok = chk(ok, isempty(C2) && contains(why2, 'another walk'), 'a checkpoint for another column is refused by name');
+[C3, ~] = walk_checkpoint('load', cf, setfield(ident, 'targets', -(1:11)/12)); %#ok<SFLD>
+ok = chk(ok, isempty(C3), 'a checkpoint with other targets is refused');
+walk_checkpoint('clear', cf);
+ok = chk(ok, ~isfile(cf), 'clear removes it');
 
 if ok, fprintf('TEST_WORK_QUEUE: ALL PASS\n');
 else,  fprintf('TEST_WORK_QUEUE: FAIL\n');  error('test_work_queue:fail', 'test_work_queue FAILED'); end

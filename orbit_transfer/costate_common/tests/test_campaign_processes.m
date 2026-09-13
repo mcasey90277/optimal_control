@@ -23,9 +23,14 @@ function ok = test_campaign_processes()
 %   PHASE 2  one unit, maxAtt = 1, its owner killed mid-unit: the unit is
 %            RETIRED (terminal), nobody starts it again, queue finished.
 %   PHASE 3  one unit whose worker beats once then goes silent; hangSec =
-%            60: the SUPERVISOR must kill it, record the reason and a
-%            non-zero exit, and the unit must be ABANDONED (claimable),
-%            with the monitor alarming that no live worker remains.
+%            60: the launcher's per-worker supervisor must kill it, record
+%            the reason and a non-zero exit, and the unit must be ABANDONED
+%            (claimable), with the monitor alarming that no live worker
+%            remains.
+%   PHASE 4  four units under campaign_supervisor with two workers; one
+%            worker is killed -9: the supervisor must launch a replacement,
+%            see every unit published, run the finalizer exactly once, and
+%            release its lock.
 %
 %% Inputs:  none
 %% Outputs: ok [logical]  (also throws when false; evidence kept on failure)
@@ -67,7 +72,7 @@ fprintf(fid, ['function cptest_unit(id, beat, tmpOut, T)\n' ...
     'fid = fopen(fullfile(T, sprintf(''unit%%02d.attempts'', id)), ''a''); fprintf(fid, ''%%s start %%d\\n'', getenv(''WORKER_TAG''), matlabProcessID); fclose(fid);\n' ...
     'if id == 5, fid = fopen(tmpOut, ''w''); fprintf(fid, ''partial''); fclose(fid); error(''cptest:always'', ''unit 5 always fails''); end\n' ...
     'if id == 8, beat(); pause(300); return, end\n' ...          % PHASE 3: silent after one beat
-    'dur = 5; if id == 3 || id == 7, dur = 40; end\n' ...
+    'dur = 5; if id == 3 || id == 7, dur = 40; end; if id >= 9, dur = 12; end\n' ...
     'for k = 1:dur\n' ...
     '    pause(1); beat();\n' ...
     '    if k == 2, fid = fopen(tmpOut, ''w''); fprintf(fid, ''unit %%d by %%s (early)'', id, getenv(''WORKER_TAG'')); fclose(fid); end\n' ...
@@ -174,7 +179,36 @@ ok = chk(ok, ismember(8, st3.abandoned) && st3.nHeld == 0, 'its unit is ABANDONE
 hbs3 = dir(fullfile(T, 'hb', 'w1_*.hb'));  tags3 = erase({hbs3.name}, '.hb');
 S3 = campaign_status(q3, fullfile(T, 'hb'), tags3(end), struct('staleSec', 60, 'maxAtt', 3, 'quiet', true));
 ok = chk(ok, any(contains(S3.alarm, 'NO LIVE WORKER')), 'and the monitor alarms that no live worker remains');
-[~, leftover] = system(sprintf('pgrep -f "CAMPAIGN_JOB=" | wc -l'));  %#ok<ASGLU>
+% ---- PHASE 4: the SUPERVISOR replaces a killed worker and finalizes once ------------
+q4 = fullfile(T, 'q4');  outF4 = @(id) fullfile(T, sprintf('unit%02d.done', id));
+work_queue('create', q4, 9:12, outF4);                     % four units of 5 s (ids 9..12)
+fidE = fopen(fullfile(q4, 'expected_units.txt'), 'w'); fprintf(fidE, '%s\n', outF4(9), outF4(10), outF4(11), outF4(12)); fclose(fidE);
+job4 = writeJob('job4.m', q4, 3);
+fin = fullfile(T, 'finalize.m');
+fid = fopen(fin, 'w'); fprintf(fid, 'fid = fopen(''%s'', ''a''); fprintf(fid, ''finalized %%s\\n'', char(datetime(''now''))); fclose(fid);\n', fullfile(T, 'FINALIZED')); fclose(fid);
+sup = fullfile(cc, 'campaign_supervisor.sh');
+system(sprintf('POLL_SEC=5 nohup "%s" "%s" 2 60 "%s" "%s" 3 "%s" > "%s" 2>&1 &', sup, job4, T, q4, fin, fullfile(T, 'supervisor.out')));
+% wait for the first launch to be READY, then kill one worker
+t0 = tic;
+while numel(dir(fullfile(T, 'launch_*', 'pid_*'))) < 5 && toc(t0) < 120, pause(1); end   % 3+1+1 earlier, +2 now = 7
+t0 = tic;  while numel(dir(fullfile(T, 'launch_*', 'pid_*'))) < 7 && toc(t0) < 120, pause(1); end
+pids4 = dir(fullfile(T, 'launch_*', 'pid_*'));  [~, order] = sort([pids4.datenum]);  pids4 = pids4(order(end-1:end));
+pause(8);
+victim = str2double(strtrim(fileread(fullfile(pids4(1).folder, pids4(1).name))));
+system(sprintf('kill -9 %d', victim));
+fprintf('  killed supervised worker pid %d\n', victim);
+t0 = tic;
+while ~isfile(fullfile(T, 'SUPERVISOR_VERDICT.txt')) && toc(t0) < 240, pause(3); end
+sv = ''; if isfile(fullfile(T, 'SUPERVISOR_VERDICT.txt')), sv = fileread(fullfile(T, 'SUPERVISOR_VERDICT.txt')); end
+nLaunch = numel(dir(fullfile(T, 'launch_*', 'pid_*')));
+ok = chk(ok, contains(sv, 'FINISHED') && contains(sv, 'finalizer exited 0'), ...
+         sprintf('PHASE 4: the supervisor saw the campaign through and ran the finalizer (%s)', strtrim(regexprep(sv, '=== [^\n]* ===\s*', ''))));
+ok = chk(ok, nLaunch >= 8, sprintf('it launched a REPLACEMENT after the kill (%d worker launches in all)', nLaunch));
+ok = chk(ok, all(arrayfun(@(id) isfile(outF4(id)), 9:12)), 'all four units were published');
+ok = chk(ok, isfile(fullfile(T, 'FINALIZED')) && numel(regexp(fileread(fullfile(T, 'FINALIZED')), 'finalized', 'match')) == 1, ...
+         'the finalizer ran exactly once');
+ok = chk(ok, ~isfolder(fullfile(T, 'supervisor.lock')), 'the supervisor released its lock on exit');
+
 pidsAll = dir(fullfile(T, 'launch_*', 'pid_*'));
 alive = 0;
 for k = 1:numel(pidsAll)

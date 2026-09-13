@@ -4040,3 +4040,49 @@ the tail, but a relaunch is a call to the entry script); status probes
 are sampled, not a snapshot; the hardcoded pumpkynPie bootstrap; the
 chain is still a script. The live 24x24 run is on the old launcher and
 unaffected; its finish is armed on the new autochain.
+
+## 57. The two gaps closed: a killed column resumes from its last point, and a supervisor keeps the campaign staffed and finalizes it (2026-09-13)
+
+**Resume mid-walk.** `walk_checkpoint` (costate_common) saves the walker's
+state after every ACCEPTED point -- the point index, the last certified
+root and its multiple-shooting trajectory, the certified points so far,
+the solve count -- atomically to `<output>.ckpt`. The checkpoint belongs to
+the UNIT, not the attempt, and carries the walk's identity (arrival phase,
+lattice, direction, targets, departure origin, problem). `rib_from_crossing`
+resumes from it when the identity matches and ignores it by name when it
+does not; `build_ribs` and the generated job pass it through; the worker
+deletes it after the unit is published. Measured on a real rib: column 2
+of the live 24x24 sheet, walked with a checkpoint, killed -9 after its
+first accepted point; the next run logged "RESUMED at point 2 of 2",
+finished, and its two points are BITWISE identical (max |dz| = 0, t_f to
+all printed digits) to the same column walked unbroken by the live
+campaign. The loss budget per kill drops from a whole column (up to nine
+hours) to one point.
+
+One bug caught on the way: `load` on a file named `.part` or `.ckpt`
+without `'-mat'` reads it as ASCII and throws. `rib_validate` loads the
+worker's temporary result, which is named `.part`, so every real unit
+would have been refused publication. Both loaders now pass `'-mat'`, and a
+test saves a valid rib under a `.part` name.
+
+**Supervisor.** `campaign_supervisor.sh` is the long-lived controller: once
+a minute it counts live workers from the launchers' pid files, reads the
+queue's completion from files (every expected output exists, or the missing
+ones have spent their attempts), relaunches the deficit through
+`run_campaign_workers.sh` within a budget (3 x N launches; three
+consecutive failed launches stop it), and when every output exists runs the
+finalize job exactly once and exits with its status. All-retired remainder
+is BLOCKED (exit 4, no finalizer). One instance per campaign directory.
+`run_costate_library` with `.launch = true` now starts this supervisor, and
+writes `finalize_job.m` -- itself, with the packaging stages on -- for it
+to run. Measured (`test_campaign_processes` phase 4): four units, two
+workers, one killed -9 mid-campaign; the supervisor launched a replacement
+(8 launches in all across the test), every unit was published, the
+finalizer ran exactly once, the verdict reads "FINISHED: all outputs
+present; finalizer exited 0", and the lock was released.
+
+**Tests.** `test_work_queue` 56 checks (checkpoint identity refusal, `.part`
+validation). `test_campaign_processes` five phases, 26/26.
+
+**Live 24x24 run:** unaffected; still on the old launcher, 16/19, finish
+armed on the autochain. The supervised launch is for the next campaign.

@@ -164,6 +164,15 @@ validates it and moves it onto the output while still holding the lock
 onto an existing directory nests the source inside it). "Returned
 normally" is not success; a validated publication is.
 
+### 15b. Checkpoint every accepted point; a kill should cost a point, not a column
+
+A reclaimed column restarted from zero, so each kill could cost nine
+hours. The walker now saves its state after every accepted point to a
+checkpoint that belongs to the unit and carries the walk's identity; the
+next attempt resumes from it only if the identity matches. Measured:
+killed after point 1, resumed at point 2, result bitwise identical to an
+unbroken walk. Load non-.mat names with `'-mat'`.
+
 ### 16. Say what you can prove: pending, launched, blocked, packaged, failed
 
 The entry script returns a state. Packaging runs only when every column
@@ -207,4 +216,6 @@ pid can be mistaken for it.
     own by LOCK         ->  a live owner is never stolen from; the registry decides
     beat per STAGE      ->  silence beyond three stage caps = the parent supervisor kills
     publish under lock  ->  validated, exclusive temp, one rename
+    checkpoint per point ->  a kill costs a point, not a column
+    SUPERVISE capacity  ->  relaunch the deficit within a budget; finalize once
     blockers, not aborts ->  package only when complete and unheld

@@ -20,7 +20,8 @@ function R = build_ribs(sheetMat, opts)
 %   .nD [12] .nPts [nD-1] .wallSec [900] per point, .only [] grid columns
 %   to walk (default: every certified one), .out [results/arrival_ribs.mat]
 %   (published atomically: written to an exclusive temp name, then one rename),
-%   .progress [] handle called after every solve (rib_from_crossing)
+%   .progress [] handle called after every solve (rib_from_crossing),
+%   .checkpoint '' resumable checkpoint path, or a handle of the column j
 %
 %% Outputs:
 %
@@ -78,9 +79,12 @@ for j = cols(:)'
     fprintf('rib at grid %d (sA %.4f, t_f %.4f d), %d points, direction %+d\n', ...
         j, S.sA(j), S.TF(j), nPts, dirn);
     t0 = tic;
+    ck = d('checkpoint', '');
+    if isa(ck, 'function_handle'), ck = ck(j); end
     Rj = rib_from_crossing(c(k), B, anc, struct('nD', nD, 'direction', dirn, ...
         'nPts', nPts, 'wallSec', d('wallSec', 900), 'copts', struct('pool', pool), ...
-        'progress', d('progress', [])));
+        'progress', d('progress', []), 'checkpoint', ck, ...
+        'problem', pickField(S, 'problem', struct())));
     R(end+1) = struct('j', j, 'sA', S.sA(j), 'pts', Rj.pts, 'stop', Rj.stop, ...
                       'nSolve', Rj.nSolve); %#ok<AGROW>
     fprintf('  -> %d certified points, %d solves, %.0f s, %s\n', ...
@@ -100,4 +104,10 @@ end
 function v = fieldd(s, f, d_)
 % FIELDD  Field with default.  INPUTS: s; f; d_.  OUTPUTS: v.
 if isfield(s, f) && ~isempty(s.(f)), v = s.(f); else, v = d_; end
+end
+
+function v = pickField(s, f, d_)
+% PICKFIELD  Field with default (present even if empty).  INPUTS: s; f; d_.
+% OUTPUTS: v.
+if isfield(s, f), v = s.(f); else, v = d_; end
 end

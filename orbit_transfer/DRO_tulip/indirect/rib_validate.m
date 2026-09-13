@@ -46,7 +46,7 @@ try
     if ~isfile(f), msg = sprintf('%s does not exist', f);  return, end
     w = whos('-file', f);
     if ~any(strcmp({w.name}, 'R')), msg = sprintf('%s holds no rib struct R', f);  return, end
-    L = load(f);
+    L = load(f, '-mat');                 % a worker's temporary is named .part: without -mat, load reads it as ASCII
     R = L.R;
     if ~isstruct(R) || isempty(R), msg = 'rib struct R is empty';  return, end
     if numel(R) ~= 1, msg = sprintf('rib file holds %d ribs; a unit is exactly one', numel(R));  return, end

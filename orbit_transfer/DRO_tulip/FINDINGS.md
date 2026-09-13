@@ -3894,3 +3894,63 @@ and, at column 21, a transversality margin of 1.45e-6 against a 1e-6
 tolerance after only two points. The old barrier counted those files as
 full columns. They are real, terminal, shorter columns; the ship decision
 needs to see them.
+
+## 55. Astra's third pass: the lock architecture is right, its implementation is not yet, and two blockers reproduce (2026-09-13)
+
+`reviews/campaign_chain_astra_pass3_2026-09-13.md` (343 KB bundle incl.
+certify_root and run_capped, 531 s, $2.42). Verdict: "not yet fit" -- but
+"the rewrite does remove the pass-2 architecture's central ABA takeover
+problem ... a one-host lifetime-lock model is appropriate. The remaining
+work is no longer 'invent a sound ownership architecture'. It is
+'implement the chosen architecture faithfully, correct the false timing
+premise, and test its failure boundaries'."
+
+Its four blockers, checked before being believed:
+
+1. **A released claim keeps its authority -- REPRODUCED.** `release` closes
+   the Java lock but cannot mutate the caller's struct, so `c.lock.held`
+   stays true. In one session: A claims and releases; B claims the unit; A
+   publishes with its old struct -> `ok = 1` and the output holds A's
+   result; A's stale release deletes B's owner record. My sequential test
+   passed only because it set `fake.lock.held = false` by hand.
+2. **The registry can drop a live kernel lock -- REPRODUCED across
+   processes.** Hold a lock; `clear unit_lock` (wipes the persistent map);
+   probe the same file from the same process (opens and closes a second
+   channel). A second MATLAB process then ACQUIRES the lock while the first
+   still reports `held = 1`. POSIX fcntl semantics, exactly as predicted.
+   Also: keys are raw path strings (aliases), and a repeated stale release
+   can remove a newer registry entry.
+3. **The 2700 s hang deadline is wrong -- CONFIRMED from the code.**
+   `progress()` fires only after a whole `certify_root`, which runs seven
+   separately capped stages: polish 900 + flight 300 + witness 300 +
+   witness flight 300 + gates 900 + second gates 900 + dense conjugate scan
+   900 = 4500 s, plus uncapped work, with no aggregate cap. "3 x the 900 s
+   solve cap" multiplied the wrong number. Also `run_capped` requests
+   `cancel(fut)` and does not verify the pool worker stopped.
+4. **Reset is still check-then-act** -- by reading: it probes (acquires and
+   RELEASES) then deletes attempt/owner records without holding the lock.
+
+Also deterministic and small: the completion barrier's
+`short(~good(ismember(cols, cols)))` indexes two arrays of different
+domains and THROWS on the invalid-column path; `rib_validate` checks the
+NAME of the identity variable, not its value or the column; the startup
+deadline stops applying once any heartbeat exists; the finalizer's audit
+stage is not fenced like the sweep; `package_phase_catalog` and friends
+were not in the bundle.
+
+**Effect on the live 24x24 run: none directly.** It runs on the OLD
+launcher (no queue, no supervisor, watchdogs disarmed), and the finish job
+packages through the entry script's barrier. The indexing bug would turn
+an invalid final column into a thrown error instead of a named blocker --
+nothing is packaged either way. An audit exception would stop the finish
+job before the sweep and movie.
+
+Not yet applied. Astra's five changes, in its order: lock ownership as a
+lifecycle-controlled handle with a protected, identity-keyed registry and
+exception-safe release, with reset holding the lock; stage-level progress
+or a real aggregate deadline, plus verified pool cancellation; a campaign
+controller lock serialising manifest, launch and finalization, with strict
+unit-aware rib validation; an owning parent supervisor that reaps and
+records exits; and a deterministic fault suite (stale handle, reset
+boundary, commit/kill matrix, real supervisor kills, real pool lifecycle,
+two controllers).

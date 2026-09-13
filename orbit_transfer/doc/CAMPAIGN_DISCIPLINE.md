@@ -1,0 +1,123 @@
+# Campaign discipline
+
+Companion to `CERTIFICATION_DISCIPLINE.md`. That one is about what a result
+must satisfy before it counts. This one is about running the machine that
+produces results, and every rule below was paid for.
+
+The reference incident throughout is the 24x24 DRO-to-tulip library
+(2026-09-12/13), where the science was never wrong and roughly a day of
+machine time was lost anyway.
+
+## The primitives
+
+| unit | kills |
+|---|---|
+| `work_queue` | static work assignment, lost units, livelock |
+| `campaign_heartbeat` | monitors that report unverified health |
+| `campaign_worker` | a worker holding a queue it cannot finish |
+| `campaign_status` | liveness by process matching |
+| `run_campaign_workers.sh` | launchers that silently do nothing |
+| `safe_report`, `fmt_num` | reports that fail the work they report on |
+
+## The rules
+
+### 1. The unit of work is the unit of loss
+
+A worker owns ONE unit at a time and claims the next from a shared queue.
+Never hand a worker a list.
+
+Units are wildly uneven: rib columns ran from 90 minutes to over five hours.
+With static ranges, workers idled behind their own slow column while others
+had nothing to do -- about five hours wasted in one afternoon -- and a
+worker killed mid-list took its whole remainder with it.
+
+### 2. Done is an artifact, never a flag
+
+A unit is done when its output file exists. Nothing else records completion,
+so nothing can disagree with what is on disk.
+
+### 3. A dead worker must not take its unit with it
+
+Claims go stale. A claim not touched for `staleSec` is reclaimable, so a
+killed worker returns its unit to the queue automatically. Two workers were
+killed by watchdogs holding columns 13 and 16 after nine hours each; nothing
+could pick that work up, and both columns started again from zero.
+
+### 4. Count attempts, and write the count BEFORE the work
+
+A unit that always fails is released and immediately re-claimed, forever.
+The first end-to-end test of the queue livelocked on exactly that, and took
+the shared MATLAB session with it. After `maxAtt` attempts a unit is retired.
+
+The count is written when the claim is taken, not when the work returns, so
+a unit that hangs hard enough to kill its process still spends an attempt --
+otherwise the next run retries it and hangs identically.
+
+### 5. The watchdog must be longer than one unit
+
+A watchdog exists to catch a hang, not to interrupt work. Sized shorter than
+a unit it becomes the thing that destroys progress. `run_campaign_workers.sh`
+derives it as 4x the measured unit time and REFUSES to launch if it is
+shorter. The job's own budget stops cleanly BETWEEN units; the watchdog is
+only the backstop.
+
+### 6. Measure one unit before planning the campaign
+
+The 24x24 plan was built on 25-40 seconds per certification. The real figure
+was about 2.5 minutes. Every budget, watchdog and estimate downstream was
+wrong by that factor. Run one unit, measure it, then size everything.
+
+### 7. Liveness is an artifact's freshness, never a process match
+
+Two monitor bugs in one campaign, both reporting health never verified:
+
+* liveness was `pgrep` on the worker's tag, but the tag was in the
+  ENVIRONMENT and never appeared in the command line, so four working
+  processes were reported dead;
+* a MISSING log read as "alive, age 0 s", because the age expression fell
+  back to the current time. Three workers that never launched looked exactly
+  like workers that had just checked in.
+
+A monitor must distinguish five states and never collapse them: **never
+started**, running, stalled, failed, done. `never` is the one that keeps
+getting lost, and it is the one that means "go look".
+
+### 8. A launcher must verify it launched
+
+Three workers never started because a shell loop split a bracketed column
+list and zsh globbed it. Nothing warned; the loss surfaced nine hours later.
+The launcher now waits for each worker's heartbeat and reports loudly if it
+does not appear. Related: pass arguments positionally and echo them back --
+one mangled tag turned a column list into "all columns", and three workers
+spent nine hours redoing each other's work.
+
+### 9. Reporting must never be able to fail the work
+
+Twice a completed, correctly saved stage was reported as a FAILED job because
+its summary print threw: once on `char(string(NaN))` for a phase with no
+certified transfer, once on `[c.ok]` where a column with no candidates holds
+a plain double rather than an empty struct. Wrap reporting in `safe_report`
+and format missing values with `fmt_num`. Both are ordinary states of a
+sparse grid, not errors.
+
+### 10. A gate blocks shipping, not measuring
+
+One bad audit row used to abort the whole chain, so the second-order sweep --
+the stage whose evidence a bad row needs interpreting WITH -- never ran.
+Collect blockers, finish every stage that can run, and gate only the
+deliverable.
+
+### 11. Honour the contract of what you produce
+
+A re-scanned crossing was a bracket, not a converged root, so 120 of 120 were
+refused with "not converged" -- the producer's own flag read back, not a
+solver failure. If a consumer expects a corrected root, correct it, using the
+SAME corrector the original producer used.
+
+## The shape of a campaign
+
+    calibrate one unit  ->  size budgets and watchdog from the measurement
+    init the queue      ->  units, and the artifact that means done
+    launch N workers    ->  verify every one checked in
+    monitor artifacts   ->  never, running, stalled, failed, done
+    blockers, not aborts ->  gate the deliverable only

@@ -68,6 +68,14 @@ function A = arclength_ms(resFactory, dRdq, p0, q0, opts)
 %   .admissible             fhandle                 ok = admissible(p, q) []
 %   .deadlineSec            double                  wall budget [inf]
 %   .logFile                char                    '' = stdout
+%   .partialFile            char                    '' = none; else the arc
+%                                                   so far is saved here
+%                                                   (variable A, .stop =
+%                                                   'partial (running)')
+%                                                   every .saveEvery steps,
+%                                                   atomically, so a crash
+%                                                   mid-walk keeps its roots
+%   .saveEvery              int                     [50]
 %
 %% Outputs:
 %
@@ -117,6 +125,7 @@ augGap  = d('augGap', 1e-10);      % [R_x R_q] regular relative to its own scale
 admissible = d('admissible', []);
 deadline = d('deadlineSec', inf);
 logFile = d('logFile', '');
+partialFile = d('partialFile', '');  saveEvery = d('saveEvery', 50);
 lg = @(varargin) logmsg(logFile, sprintf(varargin{:}));
 tStart = tic;  nCalls = 0;
 
@@ -302,6 +311,14 @@ for step = 0:nStep
         end
     end
 
+    % THE ARC SO FAR, on disk: a 4000-step walk is hours of solves, and a
+    % process that dies at step 2000 used to leave nothing (the direct18 dn
+    % arc, 2026-09-14, a MATLAB segfault). Saved atomically, so a reader
+    % never sees a half-written file.
+    if ~isempty(partialFile) && mod(step, saveEvery) == 0 && step > 0
+        savePartial(partialFile, A, nCalls);
+    end
+
     if q < qStop(1) || q > qStop(2), A.stop = 'qStop'; break, end
     if step == nStep, A.stop = 'nStep'; break, end
 
@@ -403,6 +420,16 @@ for it = 1:nMax
 end
 q = w(end)*sq;  p = w(1:end-1) .* Dx;  h = resFactory(q);  R = h(p);  nCalls = nCalls + 1;
 converged = all(isfinite(R)) && norm([R; tau'*(w - wp)], inf) < tol;
+end
+
+function savePartial(f, A, nCalls)
+% SAVEPARTIAL  Write the arc so far as variable A, marked as partial, to a
+% sibling temp file and move it into place.  INPUTS: f; A; nCalls.
+A.stop = 'partial (running)';  A.nCalls = nCalls;
+tmp = [f '.part'];
+save(tmp, 'A', '-v7.3');
+[ok, msg] = movefile(tmp, f, 'f');
+if ~ok, warning('arclength_ms:partial', 'partial save to %s failed: %s', f, msg); end
 end
 
 function s = tern(c, a, b)

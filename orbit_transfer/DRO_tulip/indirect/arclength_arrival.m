@@ -35,7 +35,8 @@ function varargout = arclength_arrival(arg, opts)
 %   arc:    .direction [+1] .sAStop [+inf forward / -inf reverse] (stop
 %           beyond, on the direction's own side) .ds [0.002]
 %           .dsMin [1e-5] .dsMax [0.02] .nStep [400] .levels []
-%           .deadlineSec [inf] .logFile ''
+%           .deadlineSec [inf] .logFile '' .partialFile '' .saveEvery [50]
+%           (the arc so far, saved every saveEvery steps -- see arclength_ms)
 %
 %% Outputs:
 %
@@ -192,7 +193,8 @@ A = arclength_ms(B.res, B.dRdq, anc.p, anc.sA, struct( ...
     'ds', d('ds', 0.01), 'dsMin', d('dsMin', 1e-5), 'dsMax', d('dsMax', 0.2), ...
     'nStep', d('nStep', 400), 'qStop', qStop, 'levels', lvl, ...
     'newtonTol', d('newtonTol', 1e-9), 'admissible', adm, ...
-    'deadlineSec', d('deadlineSec', inf), 'logFile', d('logFile', '')));
+    'deadlineSec', d('deadlineSec', inf), 'logFile', d('logFile', ''), ...
+    'partialFile', d('partialFile', ''), 'saveEvery', d('saveEvery', 50)));
 A.anc = anc;  A.B = rmfield(B, {'res', 'dRdq', 'stateA', 'stateD'});
 varargout = {A};
 end

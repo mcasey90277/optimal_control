@@ -183,6 +183,28 @@ for u = 1:numel(uk)
 end
 ok = chk(ok, sameFR, sprintf('foldRatio over three decades changes nothing (%d (maxCorrFrac, newtonTarget) groups)', numel(uk)));
 
+% ---- the partial save: the arc so far lands on disk every saveEvery steps,
+% as variable A marked 'partial (running)', and a reader sees whole files
+partialF = [tempname '.mat'];
+A5 = arclength_ms(resFactory, dRdq, p0, q0, struct( ...
+    'direction', +1, 'ds', 0.1, 'dsMax', 0.3, 'nStep', 40, 'Dx', [1; 1], ...
+    'qStop', [-0.3 2], 'newtonTol', 1e-12, 'logFile', '', ...
+    'partialFile', partialF, 'saveEvery', 10));
+ok = chk(ok, isfile(partialF) && ~isfile([partialF '.part']), 'partial file written, temp moved away');
+P5 = load(partialF);
+ok = chk(ok, isfield(P5, 'A') && strcmp(P5.A.stop, 'partial (running)'), 'partial carries A marked partial (running)');
+% the last save happened at the last multiple of saveEvery the walk reached
+% (this walk hits qStop after 19 roots, so the step-10 save holds 11)
+nP = numel(P5.A.q);  nExp = floor((numel(A5.q) - 1)/10)*10 + 1;
+ok = chk(ok, nP == nExp && isequal(P5.A.q, A5.q(1:nP)), ...
+         sprintf('partial holds the first %d of %d roots (expected %d), in order', nP, numel(A5.q), nExp));
+ok = chk(ok, numel(A5.q) > nP && ~strcmp(A5.stop, 'partial (running)'), 'the returned arc is the full one, with a real stop');
+delete(partialF);
+A6 = arclength_ms(resFactory, dRdq, p0, q0, struct( ...
+    'direction', +1, 'ds', 0.1, 'dsMax', 0.3, 'nStep', 40, 'Dx', [1; 1], ...
+    'qStop', [-0.3 2], 'newtonTol', 1e-12, 'logFile', ''));
+ok = chk(ok, isequal(A6.q, A5.q), 'saving partials changes no root');
+
 if ok, fprintf('TEST_ARCLENGTH_MS: ALL PASS\n');
 else,  fprintf('TEST_ARCLENGTH_MS: FAILURE (see lines above)\n');
 end

@@ -4400,3 +4400,40 @@ unchanged, walk the rest (21 and 23 at least, more if the arcs lower the
 anchor passed 1.27 (= 0.27) with no fold and a smallest singular value
 falling to 3e-9 -- an ill-conditioned stretch or a fold ahead; the -sA arc
 folded five times in 0.7995-0.8050 and is walking an S-bend back up.
+
+## 64. The faster family mapped by continuation, and its departure ribs (2026-09-14)
+
+**The arcs from the 0.8671 anchor (17.25 d).** Both ran to their 4001-step
+budget.
+- +sA (`arrival_arc_fast2_up_long`): one smooth sheet from 0.8671 to a fold
+  at q = 1.394 (= 0.394), t_f rising 17.25 -> 21.6 d and rho falling 0.137
+  -> 0.05. Level crossings: 0.9087 at **17.92 d** (the library's old spine
+  26.43; the direct-found 19.02), 0.9504 at **18.05 d** (no entry before),
+  0.9921 at 18.36 d, 1.0337 at 18.66 d (the direct-found 18.14 is on
+  another sheet), then 1.0754 at 18.86 d against the old family's 17.80 d
+  -- so the crossover between the families lies near sA = 1.05-1.07, and
+  from 1.075 to 1.37 (= 0.075-0.37) the old family is the faster one
+  (16.2-18.3 d against 18.9-21.3 d).
+- -sA (`arrival_arc_fast2_dn_long`): an S-bend. Five folds in 0.7995-0.805,
+  then back up through the anchor's phase (19.3-19.9 d), a fold at 0.9635,
+  and down again to end at 1.020 (25.3 d). Its crossings include **16.87 d
+  at 0.8254** (the certified direct-found 18.74 there is on the other
+  side of the bend), 20.4-20.5 d at 0.9504, and a slower 23-25 d branch.
+
+**Round 3 ribs on the new spines** (four workers, supervised): column 18
+(17.83 d) walked all 23 departure points -- COMPLETE; column 19 (18.74 d)
+17 of 23, stalling at sD = 0.254 on polish non-convergence; column 24
+(18.14 d) 1 of 23: it could not step 1.6e-4 in departure phase, so that
+solution is isolated in sD. The sheet's fastest solution at a phase is not
+necessarily the one with the widest certified neighbourhood.
+
+**A finalizer bug, caught by the run.** The generated finalize job wrote
+its extra rib files as a bare cell inside `struct(...)`, which in MATLAB
+builds a struct ARRAY; the entry script's option reader failed on it in
+six seconds. Fixed with double braces (`{{...}}`); round 3's finalizer was
+patched by hand and rerun; the fix is in the generator for round 4.
+
+**Round 4** is rebuilding the sheet from all six long arcs plus the exact-
+phase seeds; every column keeps its fastest certified solution, changed
+columns get fresh ribs, and the packager receives rounds 2 and 3's rib
+files so per cell the fastest certified point of any family survives.

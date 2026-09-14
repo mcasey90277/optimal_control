@@ -63,6 +63,14 @@ function out = run_costate_library(opts)
 %   .onlyA []                  walk ribs on these arrival phases only
 %                              (values or indices into .sA; default all
 %                              certified ones)
+%   .extraRibFiles {}          rib files from ANOTHER round of this library
+%                              (e.g. the previously swept family's) handed
+%                              to the packager alongside this round's: per
+%                              cell the packager keeps the fastest certified
+%                              point, so an earlier family's certified
+%                              points survive where the new spine's rib did
+%                              not beat them. Validated against this
+%                              campaign's problem identity by the packager.
 %   .outDir ['results_fine']   everything this run writes (made absolute)
 %   .nWorkers [4]              rib workers
 %   .run                       stage switches: .sheet .ribs
@@ -450,7 +458,11 @@ if on('package') || on('audit') || on('sweep')
         'pictures', d('pictures', true), 'deliverable', false), ...
         'grid', struct('nA', nA, 'nD', nD, 'sA0', sA0, 'sD0', sD(1)), ...
         'sheetFile', sheetMat, 'engine', engine, 'orbits', orbits, 'invocationId', invocationId);
-    co.ribFiles = ribList;
+    extra = d('extraRibFiles', {});
+    if ischar(extra), extra = {extra}; end
+    extra = extra(cellfun(@isfile, extra));
+    co.ribFiles = [ribList(:); extra(:)].';
+    if ~isempty(extra), fprintf('4. packaging with %d extra rib file(s) from another round\n', numel(extra)); end
     % the chain sets figure defaults and closes figures; those are process-
     % global, so they are saved here, outside its clearvars, and restored
     dfv = get(0, 'DefaultFigureVisible');

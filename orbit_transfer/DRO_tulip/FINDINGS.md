@@ -4320,3 +4320,38 @@ the departure ribs re-walked for every column whose spine changed, under
 the supervised chain. Column 21's round-2 rib, under the corrected gate,
 certified 5 points (was 2) and stalled at sD = 0.771 on an unresolved
 conjugate candidate: that family's second-order margin ends there too.
+
+## 62. Round 3 begins: the new family seeded into the sheet; 0.992 certified, 0.950 held by the lift margin (2026-09-14)
+
+Third direct probe, seeded from the new family's certified neighbours:
+
+| sA | seed | direct t_f | polished | verdict |
+|---|---|---|---|---|
+| 0.9504 | 0.9087 (19.04 d) | 19.988 d | 19.9881 d | REFUSED: lift margin -- dim S = 1 established by a factor 3.1, gate requires 10 |
+| 0.9504 | 1.0337 (18.14 d) | 43.48 d | -- | slow branch, not polished |
+| 0.9921 | 0.9087 | 64.82 d | -- | slow branch, not polished |
+| 0.9921 | 1.0337 | 18.303 d | **18.3032 d** | **certified** |
+
+So every one of the five gap phases now has a certified transfer of the
+new family except 0.9504, whose 19.99 d candidate fails only the
+normality-rank margin (a policy gate: the abnormal-lift dimension is 1 by
+a margin of 3.1x, and the rule demands 10x; FINDINGS 30). It is kept as a
+candidate, not a library entry.
+
+**The new family's arcs.** From the 0.8671 anchor the +sA arc passed
+1.034 with no fold by step 810 (still climbing, toward the phases the old
+family holds at 16-24 d); the -sA arc folded five times in a tight
+cluster at sA = 0.7995-0.8050 and is walking back up -- so the 17.83 d
+solution at 0.7837 and the 18.74 d at 0.8254 are on sheets the direct
+solver could jump to and this arc cannot reach. The family structure is
+richer than one sheet.
+
+**Round 3.** The seven direct-found certified solutions are stored in
+`results/mintime_70mN_direct_certified.mat` and `dro_tulip_library` now
+lists them (src 'direct_certified', z8 only; the seed is rebuilt by
+seed_from_z8). The round-3 sheet (`results_fine_v3`) is being rebuilt from
+all arcs plus these seeds; each column keeps its fastest certified
+solution. Columns whose spine changes get fresh ribs under the supervised
+chain; the old family's rib files are handed to the packager as extra rib
+files, so per cell the fastest certified point of either family is kept
+(`run_costate_library .extraRibFiles`).

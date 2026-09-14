@@ -67,6 +67,18 @@ for nm = {'sweep_phase_mintime.mat', 'sweep_phase_70mN.mat'}
             'src', nm{1}, 'file', f, 'z', S.Z8(:, ii(k), jj(k)), 'Y', Yk, 'K', size(Yk, 2)); %#ok<AGROW>
     end
 end
+% solutions found by DIRECT solves and certified (FINDINGS 61): the family
+% the continuation never reached. z8 only; the consumer rebuilds the seed
+% from it (seed_from_z8), which puts the polish at a root.
+f = fullfile(here, 'results', 'mintime_70mN_direct_certified.mat');
+if isfile(f)
+    L = load(f);
+    for k = 1:numel(L.direct)
+        e = L.direct(k);
+        lib(end+1) = struct('sD', e.sD, 'sA', e.sA, 'tfDays', e.tfDays, 'src', 'direct_certified', ...
+                            'file', f, 'z', e.z(:), 'Y', [], 'K', []); %#ok<AGROW>
+    end
+end
 % the certified 70 mN CATALOG, on request (see opts above)
 if nargin >= 2 && isstruct(opts) && isfield(opts, 'includeCatalog') && opts.includeCatalog
     f = fullfile(here, 'results', 'costate_catalog_dro_tulip_70mN.mat');

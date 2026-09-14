@@ -4466,3 +4466,49 @@ reuses the other 19 rib files (round 3's, which include the complete
 23-point rib at 0.7837), and packages with rounds 2 and 3's ribs beside
 its own so each cell keeps the fastest certified point of either family.
 No blockers at launch.
+
+## 66. The family map: which family each entry belongs to, and where each family ends (2026-09-14)
+
+Item 5 of the arrival-gap plan. `family_map` reads the extremal families
+off the stored arcs -- a family is one anchor, both walk directions --
+and records per family the arrival-phase span its arcs reached, the
+final-time span, every fold, the normality floor (min |rho| and where),
+and the KIND of each end of the span: a fold (the branch turns back), the
+walk budget (the branch continues, unmapped), a walk that ended with
+|rho| -> 0, or the anchor itself (that direction was never walked). It
+then attaches every certified root at every column to the arc that
+passes through it (t_f interpolated along the arc; distinct roots at one
+phase sit >= 0.05 d apart here, the arcs interpolate to 1e-5 d), and
+every rib to the spine root it was walked from (t_f of its first three
+points extrapolated quadratically back to the spine, matched to the
+column's certified roots, refused when ambiguous). The catalog ships the
+map at `cat_.families` and an int8 `family_index` per entry (1..n a
+mapped family, -1 a certified root no mapped arc passes through, -2 a
+rib whose spine root is unidentified, 0 no entry); the schema validates
+the pair. The chain names its families in the anchors table, where the
+fast2 anchor is now declared beside the other two.
+
+Measured on the round-4 sheet (10 arcs, 24 columns):
+
+| family | anchor | sA span | t_f span | ends |
+|---|---|---|---|---|
+| fast | 0.0754 (17.80 d) | 0.0342 .. 0.8410 | 16.22 .. 25.72 d | fold at 0.0342 (19.32 d); fold at 0.8410 (25.72 d) |
+| A2 | 0.9087 (26.43 d) | 0.9084 .. 1.7109 | 25.98 .. 44.05 d | fold at 0.9084 (26.52 d); walk budget at 1.7109 (44.05 d) |
+| fast2 | 0.8671 (17.25 d) | 0.7995 .. 1.3942 | 16.86 .. 25.25 d | fold at 0.7995 (20.36 d, the S-bend, min rho 3.8e-5 at 0.801); fold at 1.3942 (21.71 d) |
+
+Columns 1-17 attach to `fast`, 19-22 to `fast2`, and three columns
+attach to NOTHING: the direct-found roots at 0.7837 (17.83 d), 0.9921
+(18.30 d) and 0.0337 (18.14 d). They are not on the fast2 arc -- fast2
+passes 0.9921 at 18.36 d and 1.0337 at 18.66 d, both certified in the
+same sheet as distinct roots (sheet_from_arcs merges only equal t_f AND
+equal z8) -- and they are faster than it by 0.05-0.5 d. So the direct
+solver found a FOURTH branch that no arc has walked, the one that won
+the 0.7837 column outright. Two arcs from the 0.7837 root
+(`arrival_arc_direct18_{up,dn}`) are walking now; the next sheet rebuild
+takes them up automatically.
+
+Where the families' ribs land in the packaged catalog (round-3 dry run,
+432 entries): 382 on `fast`, 1 on `A2`, 26 on unattached roots (the 0.7837
+column's whole rib and the 0.0337 and 0.8254 direct roots), 23 ribs
+unidentified (-2: ribs from an earlier round whose spine root is not
+among this sheet's certified roots -- expected, and now visible).

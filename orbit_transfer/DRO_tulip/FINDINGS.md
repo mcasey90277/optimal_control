@@ -4134,3 +4134,88 @@ had black text.
 18:27 on 09-12 to 16:44 on 09-13 (about 22 h wall, with the incidents and
 hand fixes in sections 50-53); finish (package, audit 406, sweep 406,
 pictures, movie) 4 h 56 min.
+
+## 59. Why arrival phases 0.825-1.034 are missing: two ends of the fast family, one gate artifact, one unexplored interval (2026-09-14)
+
+Asked why the 24x24 library has no certified transfers at sA = 0.825,
+0.867, 0.950, 0.992, 1.034. The sheet's own records answer most of it;
+GPT-6 Astra (`reviews/arrival_gap_astra_2026-09-14.md`, xhigh, 526 s,
+$0.88) corrected two of my readings and asked for one experiment, which
+settles the largest part.
+
+**The fast family (A1, anchored at sA = 0.0754, 17.8 d) spans sA = 0.034
+.. 0.841 and ends differently at each end.**
+- High end: the +sA arc reached q = 0.8410 (t_f 25.72 d) and turned back
+  with rho = 0.098 -- a FOLD of the endpoint projection, not a loss of
+  normality. It crossed 0.8254 on the way out and back, which is where the
+  two nearly equal extremals at that phase (25.503 and 25.507 d) come from
+  (I had attributed them to the second family; wrong). One is refused for
+  a 1160 km lunar approach (< 1900 km clearance), the other because the
+  dense conjugate scan left one candidate unresolved -- consistent with a
+  conjugate point approaching t_f near the fold.
+- Low end: the -sA arc reached q = 0.0342 (t_f 19.32 d) with rho -> 0: a
+  LOSS OF NORMALITY, the same way the family ends along the thrust axis at
+  72 mN. The 0.0337 grid level lies 5e-4 in phase beyond it. So the fast
+  family does not continue backward across the seam to 0.992/0.950
+  (Astra's proposed search; the arcs had already made it, and it ends).
+- 0.8671 lies strictly between the fast family's fold (0.841) and the
+  second family's lowest reach (0.9084): no arc has entered that interval.
+  Astra's intermediate-value argument does not apply because no arc joins
+  0.909 to 0.825 -- but the interval is unexplored, not empty.
+
+**The second family (A2, anchored at 0.9087, 26.43 d) is certifiable at
+0.950, 0.992, 1.034 -- the refusal is an integration artifact, measured.**
+The transversality gate reads lambda_m(t_f) off pumpkyn's tfMinProp flight
+(ode45, RelTol 1e-10, AbsTol 1e-12) over 27-28 days. Re-integrating the
+same initial state with ode113 at RelTol 1e-13 / AbsTol 1e-16:
+
+| col | t_f [d] | gate value (ode45 1e-10) | tight (ode113 1e-13) | ms residual |
+|---|---|---|---|---|
+| 21 (certified) | 26.430 | 8.5e-7 | -3.7e-8 | 4.4e-13 |
+| 22 | 26.702 | 1.437e-6 (refused) | -3.7e-8 | 1.2e-12 |
+| 23 | 27.472 | 2.323e-6 (refused) | -6.4e-8 | 3.0e-12 |
+
+The gate values reproduce the recorded refusals to three digits; at tight
+tolerance the miss falls 40x, well inside 1e-6, and the certified 26.43 d
+neighbour had passed by 15%. Astra's independent identity
+p_m(0) = int_0^tf (T/m^2)|p_v| dt (exact when p_m(tf) = 0) holds on the
+tight flights to five digits (7.0525 vs 7.0525; 3.5717 vs 3.5717). The
+departure rib at 0.909 died on the same gate after two points. Their rho
+is 0.0138 -> 0.0126, falling, so this family is nearly abnormal and may
+end by normality loss somewhere past 1.03 -- to be found, not assumed.
+
+**What is NOT the cause:** tulip geometry. The gap phases sit 25-38 Mm from
+the Moon at 0.14-0.39 km/s; certified phases include a 6.6 Mm, 1.12 km/s
+perilune pass.
+
+**Astra's corrections, kept:** the value function is exactly periodic in
+sA (the 17.8 d solution at 0.0754 is a solution at 1.0754), so a slower
+family at a phase is never "the next turn" until the fast family's
+continuation to that phase has been searched -- here it has, and it ends
+by normality loss at 0.034. A fold is a singularity of the endpoint
+projection with a terminal Jacobi degeneracy, not a reachable-set boundary.
+"Certified" means the local second-order verdict; nothing here proves a
+global minimum among disconnected extremals. Keep separate masks for
+extremal found / numerically resolved / locally optimal / clearance-
+admissible / best time found.
+
+**Routes, in the order I would take them (not applied):**
+1. Integrate the pointwise PMP checks at tight tolerance (ode113 1e-13)
+   and report the loose-tight difference as the numerical uncertainty of
+   each gate value, instead of trusting one ode45 1e-10 flight. Re-certify
+   the three A2 candidates and re-walk the 0.909 rib. Hours.
+2. Continue A2 downward from 0.909 into (0.841, 0.908): the interval no
+   arc has entered; a crossing at 0.8671 either exists there or A2 ends.
+3. Resolve the 25.503 d candidate at 0.8254 with a finer conjugate floor;
+   if it is a conjugate point at t_f, that is the fold's signature and the
+   phase's minimizer is on the other side (the Moon-grazing one, refused
+   by a real constraint) -- then 0.8254 needs a clearance-constrained
+   formulation, not a looser gate.
+4. Direct multistart solves (collocation, free t_f) at 0.8671 and 0.8254
+   with the clearance enforced, then polish and certify: the search that
+   is blind to which branch the continuation happened to follow.
+5. Map fold and normality-loss loci in (thrust, sA) before assuming a
+   fixed-thrust gap is intrinsic.
+6. Record the fast family's two ends (fold at 0.841 / 25.7 d, normality
+   loss at 0.034 / 19.3 d) as library metadata: the t_f jump to the A2
+   family at those phases is a property of the problem, not a hole.

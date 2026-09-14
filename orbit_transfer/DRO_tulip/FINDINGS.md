@@ -4437,3 +4437,32 @@ patched by hand and rerun; the fix is in the generator for round 4.
 phase seeds; every column keeps its fastest certified solution, changed
 columns get fresh ribs, and the packager receives rounds 2 and 3's rib
 files so per cell the fastest certified point of any family survives.
+
+## 65. The arrival axis is complete: 24 of 24 phases certified (2026-09-14)
+
+The round-4 sheet, rebuilt from all six long arcs (both families) plus
+the exact-phase direct-found seeds, certifies a minimum-time transfer at
+every arrival phase of the 24-grid at sD = 0. The five phases that were
+empty or dominated yesterday now read:
+
+| col | sA | before | now | source |
+|---|---|---|---|---|
+| 19 | 0.8254 | 18.738 (direct) | **16.870 d** | -sA arc crossing (the S-bend's lower sheet) |
+| 20 | 0.8671 | none | **19.323 d** | -sA arc crossing (the 17.25 d anchor itself is refused by the lift margin at the exact phase) |
+| 21 | 0.9087 | 26.430 | **17.922 d** | +sA arc crossing |
+| 22 | 0.9504 | none | **18.054 d** | +sA arc crossing (the 19.99 d direct-found one fails the lift margin) |
+| 23 | 0.9921 | none | **18.305 d** | +sA arc crossing / direct (equal) |
+| 24 | 0.0337 | none | 18.143 d | direct-found (round 3) |
+| 18 | 0.7837 | 24.737 | 17.834 d | direct-found (round 3) |
+
+Columns 1-17 keep the original family (16.2-24.1 d): the new family's
++sA arc is slower there (18.9-21.3 d), so the crossover between the two
+families sits between 0.784 and 1.075 on one side and near 0.78 on the
+other. Everything the direct probe found, the continuation of the family
+it exposed then found too, and in two columns found faster.
+
+Round 4 walks the five changed columns' ribs on four supervised workers,
+reuses the other 19 rib files (round 3's, which include the complete
+23-point rib at 0.7837), and packages with rounds 2 and 3's ribs beside
+its own so each cell keeps the fastest certified point of either family.
+No blockers at launch.

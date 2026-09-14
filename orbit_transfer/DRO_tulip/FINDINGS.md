@@ -4263,3 +4263,60 @@ and 0.9087), with the 1900 km clearance enforced as a path constraint.
 sheet rebuilt under the corrected certifier (every crossing re-certified),
 the 18 valid ribs copied in, column 21 re-walked through the supervised
 campaign (its rib had died on the same gate), finalized by the supervisor.
+
+## 61. A faster family the continuation never found: 17-19 d transfers certified across the gap, seven days under the library's swept family (2026-09-14)
+
+Direct Hermite-Simpson + Sundman solves (N = 800, IPOPT, the 1900 km lunar
+clearance as a path constraint), warm-started from the certified 26.43 d
+solution at sA = 0.9087, then harvested to multiple-shooting seeds
+(`harvest_ms_seed`, sign vote -1 on every one) and put through the full
+certifier (`certify_root`, corrected pointwise flight):
+
+| sA | direct t_f | polished, CERTIFIED t_f | library's certified t_f |
+|---|---|---|---|
+| 0.7837 | 17.834 d | **17.8336 d** | 24.737 d |
+| 0.8254 | 18.738 d | **18.7383 d** | -- (fold pair refused) |
+| 0.8671 | 17.249 d | **17.2487 d** | -- (no extremal) |
+| 0.9087 | 19.042 d | **19.0417 d** | 26.430 d |
+| 1.0337 | 18.143 d | **18.1434 d** | -- (A2 saddle) |
+| 0.9504 | 39.622 d (perilune on the floor) | polish did not converge | -- |
+| 0.9921 | 72.068 d | polish capped | -- |
+
+Every certified row passed the multiple-shooting residual, the flown
+arrival, the tfMin witness, the pointwise PMP checks, the free-time
+conjugate test, the sufficiency gates and the clearance; perilunes 6-8 Mm
+except 0.8671 at 2.0 Mm (just clear). Also certified, from the fast
+family's own seed at 0.7837: a 23.2086 d Moon-grazing transfer (perilune
+1932 km), 1.5 d faster than the library's 24.737 d there.
+
+**What this means.** The value function on the arrival axis is NOT the
+family the pseudo-arclength continuation from the 0.0754 anchor traced.
+That family is a local minimum everywhere it was certified, but from at
+least sA = 0.78 to 1.03 a different family is 5-7 days faster and was never
+reached, because the continuation follows its own sheet and both sheets
+end in folds or normality loss before meeting. Astra's pass on the gap
+said exactly this: "certified means local; a slower family at a phase is
+never the answer until the fast continuation to that phase has been
+searched" -- and a branch-blind direct solve is that search. The direct
+sweep harness was the wrong tool (cold seeds); the right one was a direct
+solve warm-started from the nearest certified trajectory of the OTHER
+family.
+
+**The 0.9504 / 0.9921 columns.** From the 0.9087 seed the solver lands on
+a 39.6 d solution with the clearance ACTIVE (perilune on the 1900 km
+floor) that the unconstrained PMP polish cannot reproduce -- an active
+path constraint needs the constrained PMP, as Astra noted -- and on a 72 d
+solution at 0.9921. Being re-probed from the new certified neighbours
+(0.9087 at 19.04 d, 1.0337 at 18.14 d).
+
+**Consequences for the library, and the plan.** The 406-entry 24x24
+library and its round-2 rebuild are certified local minima of the SWEPT
+family; over part of the range they are not the fastest certified
+transfer. The torus is to be filled with the new family: a new anchor
+(`results/mintime_70mN_anchor_fast2.mat`, sA 0.8671, 17.25 d),
+pseudo-arclength arcs from it in both arrival directions, a sheet rebuilt
+from ALL arcs so each column keeps its fastest certified solution, then
+the departure ribs re-walked for every column whose spine changed, under
+the supervised chain. Column 21's round-2 rib, under the corrected gate,
+certified 5 points (was 2) and stalled at sD = 0.771 on an unresolved
+conjugate candidate: that family's second-order margin ends there too.

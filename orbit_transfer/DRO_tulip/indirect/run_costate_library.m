@@ -584,7 +584,9 @@ function writeFinalizeJob(jobFile, outDir, nD, nA, sA0, codeRoots, policy, extra
 % OUTPUTS: none.
 roots = strjoin(cellfun(@mlq, codeRoots, 'UniformOutput', false), ', ');
 if ischar(extraRibs), extraRibs = {extraRibs}; end
-extraLit = ['{' strjoin(cellfun(@mlq, extraRibs(:).', 'UniformOutput', false), ', ') '}'];
+% DOUBLE braces: struct('f', {a, b}) builds a struct ARRAY; struct('f', {{a, b}})
+% stores the cell (the round-3 finalizer failed on exactly this)
+extraLit = ['{{' strjoin(cellfun(@mlq, extraRibs(:).', 'UniformOutput', false), ', ') '}}'];
 txt = sprintf([ ...
  '%%%% FINALIZE_JOB  Package, audit and sweep the library. Written by run_costate_library.\n' ...
  'here = pwd; cd(''/Users/msc/Desktop/proj7/external/pumpkynPie''); startup(); cd(here);\n' ...

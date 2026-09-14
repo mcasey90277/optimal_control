@@ -4086,3 +4086,51 @@ validation). `test_campaign_processes` five phases, 26/26.
 
 **Live 24x24 run:** unaffected; still on the old launcher, 16/19, finish
 armed on the autochain. The supervised launch is for the next campaign.
+
+## 58. The 24 x 24 library is built, audited, swept and filmed (2026-09-13)
+
+The doubled-resolution 70 mN DRO -> 7-petal tulip library is complete:
+`indirect/results_fine/costate_catalog_dro_tulip_70mN.mat`, and the full
+phase-sweep movie `indirect/results_fine/sweep_full_library_24x24.{mp4,gif}`.
+The finish job was started by `batch/fine_library_autochain.sh` at 16:49,
+when the last rib column had landed and every old worker had exited, and
+it finished at 21:45 with exit 0 and "CHAIN CLEAN: every stage that ran,
+passed."
+
+| | 12 x 12 (2026-09-11) | 24 x 24 (this) |
+|---|---|---|
+| certified entries | 115 | **406** of 576 cells |
+| certified arrival columns | -- | 19 of 24 |
+| t_f range | 16.23 .. 26.43 d | 16.23 .. 26.84 d |
+| audit (rebuild from keys, fly, witness, conj) | clean | **406 OK / 0 bad** |
+| second-order sweep | 0 sign changes | **0 interior crossings, 0 zeros, 0 unresolved**, worst H6 margin 5.32x, worst lift margin 23.7x |
+| conj PASS | 115 | 406 |
+
+Every column passed the unit-aware validator before packaging (nothing
+quarantined), and the receipt ties the catalog to this invocation's 19 rib
+files. The movie is 576 frames (406 certified, 170 gap frames for the
+uncertified cells), 1280 x 720, 3 fps with slow = 2, 192 s; frames checked
+at a certified phase pair and at a gap.
+
+**Coverage blockers (data, not errors):**
+- five arrival phases have no certified seed on the arrival sheet, so no
+  rib: sA = 0.8254, 0.8671, 0.9504, 0.9921, 0.0337 -- the band past the
+  fold where the fast family ends;
+- ten columns stop short of 23 points where the walker could not certify
+  the next point: polish non-convergence on most (cols 12-18), a
+  transversality margin of 1.45e-6 against 1e-6 at col 21 (2 points), and
+  at col 6 the dense conjugate scan found a ZERO -- a genuine end of the
+  certified minimum along that rib, not a numerical stall.
+
+The ship decision (deliverable zip) is Mike's; the audit and sweep that
+gate it are clean.
+
+**Cosmetic, open:** the torus picture rendered in the batch job has light
+grey axis text on a white ground (the batch MATLAB appears to use the dark
+theme's text colour); the same picture rendered in the interactive session
+had black text.
+
+**How long it took:** the arrival sheet 2026-09-12 afternoon; ribs from
+18:27 on 09-12 to 16:44 on 09-13 (about 22 h wall, with the incidents and
+hand fixes in sections 50-53); finish (package, audit 406, sweep 406,
+pictures, movie) 4 h 56 min.

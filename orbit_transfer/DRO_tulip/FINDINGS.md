@@ -4219,3 +4219,47 @@ admissible / best time found.
 6. Record the fast family's two ends (fold at 0.841 / 25.7 d, normality
    loss at 0.034 / 19.3 d) as library metadata: the t_f jump to the A2
    family at those phases is a property of the problem, not a hole.
+
+## 60. Executing the gap plan: the corrected gate exposes saddles, the second family folds at 0.908, and the direct solver takes over (2026-09-14, in progress)
+
+**Item 1, the certifier.** `certify_root` now runs the pointwise PMP checks
+(H, adjoint, transversality, control law) on a tight flight -- ode113,
+RelTol 1e-13 / AbsTol 1e-16 on the same field -- and records the loose
+flight's value and the loose-tight gap as the check's numerical
+uncertainty (`.lamMfLoose`, `.lamMfUnc`). The arrival gate keeps pumpkyn's
+own flight. Re-certifying the four A2 candidates from their stored seeds:
+
+| sA | t_f [d] | transversality now | verdict |
+|---|---|---|---|
+| 0.9087 | 26.430 | 3.7e-8 (unc 8.1e-7) | certified, as before |
+| 0.9504 | 26.702 | 3.7e-8 (unc 1.4e-6) | **conjugate test verdict 0** |
+| 0.9921 | 27.472 | 6.4e-8 (unc 2.3e-6) | **conjugate test verdict 0** |
+| 1.0337 | 28.124 | 6.2e-8 (unc 2.2e-6) | **conjugate test verdict 0** |
+
+So the gate artifact was real, and removing it recovers nothing: past
+0.909 the A2 family is a saddle (a conjugate point before t_f). The
+first-order gate had been hiding a second-order refutation.
+
+**Item 2 is impossible.** The A2 continuation in -sA went 0.90873 ->
+0.90837 and turned (tangent through zero at step 5): the family FOLDS at
+0.9084. Between the fast family's fold at 0.841 (25.7 d) and this one at
+0.908 (26.4 d) no known extremal family exists.
+
+**Item 3.** The 25.503 d candidate at 0.8254 stays UNRESOLVED with the
+conjugate floor lowered from 1e-7 to 1e-8: the near-zero is below 1e-8 --
+a genuine conjugate point at (or just before) t_f, the terminal Jacobi
+degeneracy Astra predicted next to the fold. Not a policy floor.
+
+**Item 4, in progress.** The direct sweep harness (`sweep_phasing_direct`)
+was the wrong tool: with a grid start different from its own anchor it
+cold-seeds its first wave, and its first point at 0.0754 came back as a
+55-day path through the Moon (five minutes per failure, twelve to go).
+Stopped. Replaced by a focused probe: Hermite-Simpson + Sundman direct
+solves at the five gap phases and two control phases, each warm-started
+from the certified indirect trajectory on either side of the gap (0.7837
+and 0.9087), with the 1900 km clearance enforced as a path constraint.
+
+**Round 2 of the library, in progress.** `results_fine_v2`: the arrival
+sheet rebuilt under the corrected certifier (every crossing re-certified),
+the 18 valid ribs copied in, column 21 re-walked through the supervised
+campaign (its rib had died on the same gate), finalized by the supervisor.

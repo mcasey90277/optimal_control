@@ -99,6 +99,11 @@ function C = certify_root(seed, rv0, rvf, B, opts)
 %                                                   .finalMassKg .flyKm
 %                                                   .flyVms .dz .conj .g
 %                                                   .Hmax .lamMf .adjErr
+%                                                   .lamMfLoose .lamMfUnc
+%                                                   (the loose-flight value
+%                                                   and the gap to the tight
+%                                                   one: the gate's numerical
+%                                                   uncertainty)
 %                                                   .dirGap .fullGap
 %                                                   .throttleErr (pointwise
 %                                                   PMP) .fieldErr .adjErrRef
@@ -185,7 +190,7 @@ C = struct('ok', false, 'reason', '', 'z', nan(8,1), 'Y', [], 'tfDays', NaN, ...
            'conj', -1, 'g', [], 'sA', d('sA', NaN), 'sD', d('sD', NaN), ...
            'rho', NaN, 'normR', NaN, 'wallSec', NaN, 'flyKmWitness', NaN, ...
            'flyVmsWitness', NaN, 'h6Margin', NaN, ...
-           'Hmax', NaN, 'lamMf', NaN, 'adjErr', NaN, 'dirGap', NaN, 'fullGap', NaN, ...
+           'Hmax', NaN, 'lamMf', NaN, 'lamMfLoose', NaN, 'lamMfUnc', NaN, 'adjErr', NaN, 'dirGap', NaN, 'fullGap', NaN, ...
            'throttleErr', NaN, 'fieldErr', NaN, 'adjErrRef', NaN, 'nullResid', NaN, 'nullResidRel', NaN, ...
            'Hresid', NaN, 'liftMargin', NaN, 'conjDense', [], 'okDiagnostic', false, 'fullStack', false);
 
@@ -246,8 +251,22 @@ if ~(C.flyKm < gateKm),   C.reason = sprintf('flown position miss %.1f km > %g',
 if ~(C.flyVms < gateVms), C.reason = sprintf('flown velocity miss %.2f m/s > %g', C.flyVms, gateVms); C.wallSec = toc(t0); return, end
 
 % ---- 2b. pointwise Pontryagin checks on the flight ----------------------
-PW = pmp_pointwise_checks(tF, Yf, B.Tnd, B.cnd, B.mu, pwOpts);
+% THE POINTWISE CHECKS ARE MADE ON A TIGHTLY INTEGRATED FLIGHT, and the
+% loose flight's value is kept as the check's NUMERICAL UNCERTAINTY. The
+% gate used to read lambda_m(t_f) off pumpkyn's tfMinProp flight (ode45,
+% RelTol 1e-10): over 27-28 days that integration error alone reached
+% 1.4-2.3e-6 against a 1e-6 tolerance and refused three converged
+% extremals (FINDINGS 59); at RelTol 1e-13 the same states give 4e-8.
+PWloose = pmp_pointwise_checks(tF, Yf, B.Tnd, B.cnd, B.mu, pwOpts);
+[okT, tT_, YT] = fenced(pool, capFly, @tight_flight, 2, z(8), [rv0; 1; z(1:7)], B.Tnd, B.cnd, B.mu);
+tick();
+if ~okT
+    C.reason = sprintf('the tight-tolerance flight exceeded its %g s cap', capFly);  C.wallSec = toc(t0);  return
+end
+PW = pmp_pointwise_checks(tT_, YT, B.Tnd, B.cnd, B.mu, pwOpts);
 PW = applyOverride(PW, ovr, 'PW');
+C.lamMfLoose = PWloose.lamMf;
+C.lamMfUnc = abs(PWloose.lamMf - PW.lamMf);      % how much the integration tolerance moved it
 % VALIDATE every gated field first (real finite non-negative scalar), then
 % aggregate, then compare -- see MALFORMED DATA in the header
 pwNeed = {'Hmax', 'lamMf', 'adjErr', 'fullGap', 'fieldGap', 'throttleAccErr', 'throttleMassErr', 'nSample'};
@@ -515,4 +534,15 @@ function safeTick(prog)
 % into the certification.  INPUTS: prog handle or [].  OUTPUTS: none.
 if isempty(prog), return, end
 try prog(); catch, end
+end
+
+% ------------------------------------------------------------------------
+function [t, Y] = tight_flight(tf, y0, Tnd, cnd, mu)
+% TIGHT_FLIGHT  The PMP flight integrated at a tolerance fit for a 28-day,
+% many-revolution transfer: ode113 at RelTol 1e-13 / AbsTol 1e-16 on the
+% same min-time field as tfMinProp. Used for the pointwise PMP checks only;
+% the arrival gate keeps pumpkyn's own flight.
+% INPUTS: tf; y0 [14 x 1]; Tnd; cnd; mu.  OUTPUTS: t [n x 1]; Y [n x 14].
+[t, Y] = ode113(@(tt, yy) pumpkyn.cr3bp.tfMinEoM(tt, yy, Tnd, cnd, mu), [0 tf], y0, ...
+                odeset('RelTol', 1e-13, 'AbsTol', 1e-16));
 end

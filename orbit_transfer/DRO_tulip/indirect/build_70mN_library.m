@@ -62,10 +62,14 @@ orbits = struct('tauDRO', 1.0, 'NpTulip', 7, 'pmTulip', -1);
 grid   = struct('nA', 12, 'nD', 12, 'sD0', 0, 'sA0', 0.0754);   % sA0 = the anchor's phase
 tag    = '70mN';
 
-% the two certified anchors the arcs start from (stage 1 checks them)
-anchors = { ...                       % name        seed .mat                              sA0
-    'anchor', 'results/mintime_70mN_anchor.mat',     grid.sA0;          ...
-    'cell11', 'results/mintime_70mN_certified.mat',  grid.sA0 + 10/12};
+% the certified anchors the arcs start from (stage 1 checks them); each
+% anchor names one extremal FAMILY, labelled in the last column for the
+% catalog's family map (FINDINGS 59, 64: 'fast' = the 2026-09-09 family,
+% 'A2' = the 26 d family, 'fast2' = the 2026-09-13 faster family)
+anchors = { ...                       % name        seed .mat                              sA0                 family label
+    'anchor', 'results/mintime_70mN_anchor.mat',       grid.sA0,          'fast';  ...
+    'cell11', 'results/mintime_70mN_certified.mat',    grid.sA0 + 10/12,  'A2';    ...
+    'fast2',  'results/mintime_70mN_anchor_fast2.mat', 0.8671,            'fast2'};
 
 % arc budgets: the 2026-09-09 arcs used nStep 4000 / 5 h each
 arc = struct('nStep', 4000, 'deadlineSec', 5*3600, 'span', 1.02, ...
@@ -247,7 +251,8 @@ if run.package
     if ~isempty(bakCat), fprintf('5. previous catalog backed up to %s\n', bakCat); end
     cat_ = package_phase_catalog(files.sheet, ribFiles, struct('tag', tag, ...
         'thrustN', engine.thrustN, 'ispS', engine.ispS, 'm0kg', engine.m0kg, ...
-        'nD', grid.nD, 'sD0', grid.sD0, 'outDir', outDir));
+        'nD', grid.nD, 'sD0', grid.sD0, 'outDir', outDir, ...
+        'familyLabels', {anchors(:, [1 4])}));
     % THE RECEIPT: which invocation produced this catalog, from which
     % inputs. The driver reads it back instead of trusting an mtime.
     receipt = struct('invocationId', '', 'catalog', files.catalog, 'sheet', files.sheet, ...

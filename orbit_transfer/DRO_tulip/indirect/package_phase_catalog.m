@@ -22,6 +22,9 @@ function cat_ = package_phase_catalog(sheetMat, ribMats, opts)
 %  opts                     struct (optional)
 %   .thrustN [0.070] .ispS [900] .m0kg [150] .nD [12] .sD0 [0]
 %   .tag ['70mN'] .outDir [results/] .name ['costate_catalog_dro_tulip_70mN']
+%   .familyLabels {anchor, label; ...} names for the extremal families
+%   the sheet's arcs traced; the map (family_map) is stamped into every
+%   entry and shipped at the catalog's top level. [] = no map.
 %
 %% Outputs:
 %
@@ -57,6 +60,15 @@ for k = 1:numel(ribMats)
 end
 fprintf('packaging: %d arrival phases certified, %d ribs, %d rib points\n', ...
     nnz(isfinite(S.TF)), numel(ribs), sum(cellfun(@(r) numel(r.pts), ribs)));
+
+% THE FAMILY MAP: which extremal family each entry belongs to, and where
+% each family ends, measured from the arcs the sheet names
+F = [];
+if isfield(opts, 'familyLabels') && ~isempty(opts.familyLabels)
+    F = family_map(S, struct('labels', {opts.familyLabels}));
+    fprintf('%s', F.text);
+end
+opts.families = F;
 
 % one sheet FILE in the packager's layout, in its own folder (the packager
 % globs a directory)

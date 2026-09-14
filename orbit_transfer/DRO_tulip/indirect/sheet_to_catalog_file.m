@@ -28,6 +28,9 @@ function Q = sheet_to_catalog_file(S, ribs, outMat, opts)
 %  opts                     struct (optional)
 %   .nD [12] .sD0 [0] .thrustN [0.070] .ispS [900] .m0kg [150]
 %   .tauDRO [1] .NpTulip [7] .pmTulip [-1]
+%   .families [] a family_map output: every entry is then stamped with
+%   the code of the extremal family it belongs to (Q.FAM), and the map
+%   itself ships with the sheet (Q.families)
 %
 %% Outputs:
 %
@@ -37,6 +40,9 @@ function Q = sheet_to_catalog_file(S, ribs, outMat, opts)
 %                                                   .CONJ (int8, -1 = no
 %                                                   entry) .MINLV .MINQ
 %                                                   .DIMS the verdicts
+%                                                   .FAM (int8 family codes,
+%                                                   with .families) when a
+%                                                   map was given
 %                                                   .sD .sA .rungs .meta
 %
 %% Revision History:
@@ -89,6 +95,13 @@ Q.DIMS  = nan(nD, nA, 1);
 % verdict means (it is a sign test at K-1 interior junctions), so it travels
 % with the verdict rather than being reconstructed later
 Q.KJ    = nan(nD, nA, 1);
+% THE FAMILY of every entry (family_map codes: 1..nFam mapped, -1 a root no
+% arc passes through, -2 a rib whose spine root is unidentified, 0 none)
+F = d('families', []);
+if ~isempty(F)
+    Q.FAM = zeros(nD, nA, 1, 'int8');
+    Q.families = rmfield(F, intersect(fieldnames(F), {'attach', 'ribFamily'}));
+end
 
 % ---- the spine: the certified minimum at each arrival phase, at sD0 -----
 iD0 = idxOf(Q.sD, sD0);
@@ -108,6 +121,7 @@ for j = 1:nA
     Q.TF(iD0, j, 1) = c(k).z(8);
     Q.Z8(:, iD0, j, 1) = c(k).z(:);
     Q = putVerdicts(Q, iD0, j, c(k));
+    if ~isempty(F), Q.FAM(iD0, j, 1) = int8(F.columns(j).family); end
 end
 
 % ---- the ribs: certified departure points off the spine ----------------
@@ -116,6 +130,12 @@ if nargin >= 2 && ~isempty(ribs)
     for k = 1:numel(ribs)
         R = ribs{k};
         if ~isfield(R, 'pts') || isempty(R.pts), continue, end
+        ribCode = int8(0);
+        if ~isempty(F)
+            okp = R.pts(arrayfun(@usableEntry, R.pts));
+            tfp = [okp(1:min(3, end)).tfDays];   % the points nearest the spine
+            ribCode = int8(F.ribFamily(R.sA, tfp));
+        end
         for m = 1:numel(R.pts)
             Pt = R.pts(m);
             if ~usableEntry(Pt), continue, end
@@ -129,6 +149,7 @@ if nargin >= 2 && ~isempty(ribs)
             Q.TF(iD, iA, 1) = Pt.z(8);
             Q.Z8(:, iD, iA, 1) = Pt.z(:);
             Q = putVerdicts(Q, iD, iA, Pt);
+            if ~isempty(F), Q.FAM(iD, iA, 1) = ribCode; end
         end
     end
 end

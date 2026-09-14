@@ -145,6 +145,12 @@ for kf = 1:numel(files)
     if isfield(Q, 'MINQ'),  sheets(nS,1).gate_min_qmt  = Q.MINQ;   end
     if isfield(Q, 'DIMS'),  sheets(nS,1).gate_dimS     = Q.DIMS;   end
     if isfield(Q, 'KJ'),    sheets(nS,1).conj_K        = Q.KJ;     end
+    % THE EXTREMAL FAMILY of each entry (family_map codes), when the sheet
+    % file was built with a map; the map itself rides at the top level
+    if isfield(Q, 'FAM'),   sheets(nS,1).family_index  = Q.FAM;    end
+    if isfield(Q, 'families') && ~isfield(cat_, 'families')
+        cat_.families = Q.families;
+    end
     nTot = nTot + n;
 end
 % One catalog = ONE arrival family (the picker reads the keying mode off

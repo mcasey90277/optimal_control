@@ -27,6 +27,13 @@ function out = catalog_schema(action, varargin)
 %        identifiability rule -- .Yj [14 x K+1 x n] ms junction states.
 %        Top level adds .smoothing (family + notes). Derive registry gains
 %        'deltav_from_mf'.
+%     OPTIONAL on min-time (v2) catalogs since 2026-09-14: .families (a
+%        family_map output -- the extremal families the arrival arcs
+%        traced, their phase/final-time spans, folds and ends) with a
+%        per-sheet .family_index int8 grid shaped like has_solution
+%        (codes: 1..n index .families.families, -1 a certified root no
+%        mapped arc passes through, -2 a rib whose spine root is
+%        unidentified, 0 no entry).
 %
 %% Inputs:
 %
@@ -163,6 +170,20 @@ case 'validate'
                             p{end+1} = sprintf('sheet %d: huberc entries need a finite positive delta_floor', ks);
                         end
                     end
+                end
+            end
+        end
+        % extremal-family labels (OPTIONAL, 2026-09-14): a sheet with a
+        % family_index grid needs the map it indexes into
+        if isfield(sh, 'family_index') && ~isempty(sh.family_index)
+            if ~isequal(size(sh.family_index), size(sh.has_solution))
+                p{end+1} = sprintf('sheet %d: family_index shape ~= has_solution', ks);
+            elseif ~isfield(cat_, 'families') || ~isfield(cat_.families, 'families')
+                p{end+1} = sprintf('sheet %d: family_index without a top-level .families map', ks);
+            else
+                fi = double(sh.family_index(sh.has_solution));
+                if any(fi > numel(cat_.families.families)) || any(~ismember(fi, [-2 -1 0 1:numel(cat_.families.families)]))
+                    p{end+1} = sprintf('sheet %d: family_index code outside the .families map', ks);
                 end
             end
         end

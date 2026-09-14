@@ -4355,3 +4355,48 @@ solution. Columns whose spine changes get fresh ribs under the supervised
 chain; the old family's rib files are handed to the packager as extra rib
 files, so per cell the fastest certified point of either family is kept
 (`run_costate_library .extraRibFiles`).
+
+## 63. Round 3 launched on the faster family; the seed phases had to be exact; two entries held by the lift margin (2026-09-14)
+
+**A 3e-5 phase mismatch cost a sheet rebuild.** The direct probe's targets
+were the grid phases rounded to four decimals (0.8671 for 0.867067, ...),
+so the certified solutions sat 3.3e-5 off the lattice and the sheet
+builder's seed filter (1e-6) took only the one that happened to be exact
+(0.8254). Re-certified at the exact phases from the direct solutions'
+harvested multiple-shooting seeds (a seed rebuilt from z8 alone did not
+converge at 0.909 and 0.992):
+
+| col | sA | t_f [d] | verdict |
+|---|---|---|---|
+| 18 | 0.783733 | 17.8342 | certified (also the 23.2092 d Moon-grazing one) |
+| 19 | 0.825400 | 18.7383 | certified |
+| 20 | 0.867067 | 17.2482 | REFUSED: lift margin 8.0x (rule: 10x); certified at 0.8671 |
+| 21 | 0.908733 | 19.0174 | certified |
+| 22 | 0.950400 | 19.9881 | REFUSED: lift margin 3.1x |
+| 23 | 0.992067 | 18.3046 | certified |
+| 24 | 0.033733 | 18.1431 | certified |
+
+`results/mintime_70mN_direct_certified.mat` now holds the six certified
+ones at exact phases. The 0.867067 refusal is a near miss of a policy
+threshold on a noisy estimate (the abnormal-lift rank margin moved from
+above 10 to 8.0 over 3e-5 in phase); it is recorded as a candidate, not
+a library entry, and the estimator's jitter is an item for review.
+
+**Round 3 (`results_fine_v3`).** The sheet was patched under the campaign
+lock with the exact-phase certified solutions as candidates (each column
+keeping its fastest): columns 18 (24.74 -> 17.83 d) and 24 (new, 18.14 d)
+changed, 19 was already new (18.74 d); 21 and 23 missed in the patch job
+(the z8-only seed) and join round 4. Ribs of the 18 unchanged columns
+were reused from round 2; the supervised campaign is walking 18, 19 and
+24 on four workers, with the round-2 rib files handed to the packager so
+the earlier family's certified points survive per cell.
+
+**Round 4.** When the new family's arcs finish: rebuild the sheet from all
+arcs plus the six exact-phase seeds, reuse every rib whose spine is
+unchanged, walk the rest (21 and 23 at least, more if the arcs lower the
+0.075-0.74 spine), package with both families' ribs.
+
+**Also seen along the arcs (in progress):** the +sA arc from the 0.8671
+anchor passed 1.27 (= 0.27) with no fold and a smallest singular value
+falling to 3e-9 -- an ill-conditioned stretch or a fold ahead; the -sA arc
+folded five times in 0.7995-0.8050 and is walking an S-bend back up.

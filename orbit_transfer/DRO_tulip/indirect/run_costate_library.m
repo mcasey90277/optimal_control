@@ -352,11 +352,11 @@ if on('ribs')
             % workers from an older launcher hold no lock: the queue would
             % hand out a column one of them is walking (it did, 2026-09-13)
             pat = d('foreignPattern', 'fine_ribs_range_job');
-            [~, fp] = system(sprintf('pgrep -f %s', shq(pat)));
-            if ~isempty(strtrim(fp))
+            fpids = foreignPids(pat);
+            if ~isempty(fpids)
                 out.state = 'blocked';
                 out.blockers{end+1} = sprintf('%d foreign worker process(es) match "%s"; drain them before launching queue workers', ...
-                                              numel(strsplit(strtrim(fp))), pat);
+                                              numel(fpids), pat);
                 fprintf('3. BLOCKED: %s\n', out.blockers{end});
                 return
             end
@@ -399,11 +399,11 @@ end
 if on('package')
     % foreign workers are excluded from PACKAGING too, not only from
     % launching: one could still be writing a column
-    [~, fp] = system(sprintf('pgrep -f %s', shq(foreignPat)));
-    if ~isempty(strtrim(fp))
+    fpids = foreignPids(foreignPat);
+    if ~isempty(fpids)
         out.state = 'pending';
         out.blockers{end+1} = sprintf('%d foreign worker process(es) match "%s" -- nothing packaged while they run', ...
-                                      numel(strsplit(strtrim(fp))), foreignPat);
+                                      numel(fpids), foreignPat);
         fprintf('3b. %s\n', out.blockers{end});
         return
     end
@@ -524,11 +524,51 @@ build_70mN_library;
 end
 
 % ------------------------------------------------------------------------
+function pids = foreignPids(pat)
+% FOREIGNPIDS  PIDs of the processes whose command line matches pat, from
+% pgrep, keeping ONLY lines that are whole integers. The count used to be
+% the number of whitespace tokens in whatever came back: after a killed
+% system() call the helper returned 9641 tokens of stale text and the
+% finalizer refused to package "while 9641 workers run" (2026-09-15).
+% INPUTS: pat.  OUTPUTS: pids [1 x n] double.
+[~, fp] = system(sprintf('pgrep -f %s', shq(pat)));
+tok = regexp(strtrim(fp), '^\d+$', 'match', 'lineanchors');
+pids = str2double(tok);
+pids = pids(isfinite(pids));
+end
+
+% ------------------------------------------------------------------------
 function r = gitRevision(here)
-% GITREVISION  Short git hash of the code, or 'unknown'.  INPUTS: here.
-% OUTPUTS: r char.
-[st, txt] = system(sprintf('cd %s && git rev-parse --short HEAD 2>/dev/null', shq(here)));
-if st == 0, r = strtrim(txt); else, r = 'unknown'; end
+% GITREVISION  Short git hash of the code, or 'unknown', read from the
+% repository's own files: .git/HEAD, the ref it names, packed-refs. No git
+% binary is run -- on 2026-09-15 the macOS git shim blocked on an Xcode
+% licence prompt inside system() and a finalizer sat on it for an hour.
+% INPUTS: here (a folder inside the repository).  OUTPUTS: r char.
+r = 'unknown';
+try
+    d = here;
+    while ~isfolder(fullfile(d, '.git'))
+        up = fileparts(d);
+        if strcmp(up, d) || isempty(up), return, end
+        d = up;
+    end
+    head = strtrim(fileread(fullfile(d, '.git', 'HEAD')));
+    if startsWith(head, 'ref: ')
+        ref = strtrim(head(6:end));  hash = '';
+        rf = fullfile(d, '.git', ref);
+        if isfile(rf)
+            hash = strtrim(fileread(rf));
+        elseif isfile(fullfile(d, '.git', 'packed-refs'))
+            L = strsplit(fileread(fullfile(d, '.git', 'packed-refs')), newline);
+            hit = L(endsWith(strtrim(L), [' ' ref]));
+            if ~isempty(hit), t = strsplit(strtrim(hit{1}), ' ');  hash = t{1}; end
+        end
+    else
+        hash = head;                                 % detached HEAD
+    end
+    if numel(hash) >= 7 && all(isstrprop(hash(1:7), 'xdigit')), r = hash(1:7); end
+catch
+end
 end
 
 % ------------------------------------------------------------------------

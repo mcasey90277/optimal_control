@@ -69,9 +69,32 @@ R = P.R;  R(1).z8 = R(1).z8*(1 + 1e-6);  h = fullfile(tmp, 'moved.mat');  save(h
 ok = chk(ok, refuses(@() second_order_pass(catMat, setfield(q0, 'sideMat', h)), ...
          'second_order_pass:staleSidecar'), 'a record whose z8 differs from the catalog is refused');
 
+% 6. a keyed sidecar with a DIFFERENT record count (the catalog was
+%    re-packaged with more ribs): merged, not refused -- records reused
+%    only where cell and z8 match, the rest fresh, the old file kept
+R = P.R;  n = numel(R);
+Rm = R([1:3, 5:end]);                          % entry 4 has no record any more
+Rm(2).z8 = Rm(2).z8*(1 + 1e-6);                % entry 2's record measured another root
+h = fullfile(tmp, 'grown.mat');  saveAsR(h, Rm);
+S = second_order_pass(catMat, setfield(q0, 'sideMat', h));
+Q = load(h);
+ok = chk(ok, numel(Q.R) == n, sprintf('merged sidecar has one record per entry (%d)', numel(Q.R)));
+ok = chk(ok, ~Q.R(4).done && ~Q.R(2).done && isequal(Q.R(4).key, R(4).key) && isequal(Q.R(2).z8(:), R(2).z8(:)), ...
+         'the missing entry and the moved one start fresh, keyed to this catalog');
+ok = chk(ok, isequaln(Q.R(1), R(1)) && isequaln(Q.R(3), R(3)) && isequaln(Q.R(end), R(end)) && nnz([Q.R.done]) == n - 2, ...   % isequaln: candidates carry NaNs
+         sprintf('every other record is reused with its measurements (%d of %d done)', nnz([Q.R.done]), n));
+ok = chk(ok, ~isempty(dir(fullfile(tmp, 'grown.pre_merge_*.mat'))) && S.nTodo == 2, ...
+         'the old sidecar is kept beside the merged one; two entries left to measure');
+
 rmdir(tmp, 's');
 if ok, fprintf('TEST_SECOND_ORDER_SIDECAR_IDENTITY: ALL PASS\n');
 else,  fprintf('TEST_SECOND_ORDER_SIDECAR_IDENTITY: FAIL\n'); end
+end
+
+function saveAsR(f, R)
+% SAVEASR  Save a record array under the sidecar's variable name.  INPUTS:
+% f; R.  OUTPUTS: none.
+save(f, 'R');
 end
 
 function r = refuses(fh, id)

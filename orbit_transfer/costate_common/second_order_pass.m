@@ -99,7 +99,15 @@ Z = zeros(8, n);
 for q = 1:n, Z(:, q) = s.z8(:, s.entry_index(iD(q), iA(q), iR(q))); end
 if isfile(sideMat)
     P = load(sideMat);  R = P.R;
-    if numel(R) ~= n
+    if numel(R) ~= n && isfield(R, 'key')
+        % THE CATALOG GREW OR SHRANK (re-packaged with more ribs): a keyed
+        % sidecar is merged, not refused -- a record is reused only for the
+        % entry whose cell AND z8 it measured, every other entry starts
+        % fresh. The old sidecar is kept beside the new one. (Round 7 of the
+        % 70 mN library, 2026-09-15: 538 records against 576 entries.)
+        R = mergeSidecar(R, keys, Z, sideMat, lg);
+        save(sideMat, 'R');                     % the re-keyed file is on disk before any measuring
+    elseif numel(R) ~= n
         error('second_order_pass:staleSidecar', ...
               'sidecar %s holds %d records but the catalog has %d entries', sideMat, numel(R), n);
     end
@@ -288,6 +296,35 @@ try
 catch ME
     r.msg = ME.message;
 end
+end
+
+function R = mergeSidecar(Rold, keys, Z, sideMat, lg)
+% MERGESIDECAR  Re-key a sidecar to a catalog with a different entry set:
+% a done record is reused where its (cell, z8) identity matches an entry
+% of this catalog, everything else is a fresh record. The old file is kept
+% as <sidecar>.pre_merge_<stamp>.mat.  INPUTS: Rold; keys [n x 3]; Z [8 x
+% n]; sideMat; lg.  OUTPUTS: R [1 x n].
+n = size(keys, 1);
+blank = Rold(1);
+for f = fieldnames(blank)', blank.(f{1}) = []; end
+blank.done = false;
+R = repmat(blank, 1, n);
+kOld = vertcat(Rold.key);
+nReused = 0;
+for q = 1:n
+    R(q).key = keys(q, :);  R(q).z8 = Z(:, q);
+    hit = find(all(kOld == keys(q, :), 2));
+    for h = hit(:).'
+        if Rold(h).done && isequal(Rold(h).z8(:), Z(:, q))
+            R(q) = Rold(h);  nReused = nReused + 1;  break
+        end
+    end
+end
+[pth, nm, ext] = fileparts(sideMat);
+bak = fullfile(pth, sprintf('%s.pre_merge_%s%s', nm, char(datetime('now', 'Format', 'yyyyMMdd_HHmmss')), ext));
+copyfile(sideMat, bak);
+lg('sidecar %s re-keyed to this catalog: %d of %d entries keep their measurements, %d start fresh (old file kept as %s)', ...
+   sideMat, nReused, n, n - nReused, bak);
 end
 
 function legacyMatches(R, s, keys, sideMat)

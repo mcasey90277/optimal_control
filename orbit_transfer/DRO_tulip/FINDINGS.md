@@ -4682,3 +4682,33 @@ An arc in sD at fixed sA = 0.6587 would settle it; left open.
 
 Round 8 = round 6 re-packaged with the improved rib file, then audit and
 sweep with the merged sidecar; chained behind the last improve pass.
+
+## 72. Round 8: the 24 x 24 library is finished (2026-09-15, 14:42)
+
+Round 8 -- round 6 re-packaged with the direct-hole rib and the improved
+column 15 -- closed clean: **576 entries, 576 of 576 cells; audit 576 ok /
+0 bad; second-order sweep 576 done (sidecar merged: 527 records kept, 49
+measured fresh), 0 interior conjugate crossings, worst H6 margin 4.44x,
+worst lift margin 10.6x; schema clean.** t_f runs 16.23-23.86 d (mean
+18.52, median 18.42). Families: fast 42%, direct18 21%, fast2 12.5%,
+direct11 12%, A2 none; 22 cells on roots no arc has walked and 50
+direct-solved cells with no spine to attribute. Every column is now within
+2.5 d of its own minimum except column 15, whose nine stuck cells (sD
+0.54-0.88) still carry the 23 d family (FINDINGS 71).
+
+The library of record is `DRO_tulip/indirect/results/library_70mN_24x24_final/`
+(catalog with the family map, receipt, keyed sidecar, the sD = 0 sheet
+with every candidate, the direct-cell rib, the finalizer log, the torus
+pictures); the rounds' rib files stay in `results_fine_v2..v6`.
+
+What it took, from the 406-entry, 19-column library of 2026-09-13: five
+families instead of one (three found by branch-blind direct solves
+warm-started from the wrong family, then mapped by arcs), a family map
+that attributes every entry and names each family's ends, the rib walker
+resumable per point under a supervised queue, partial saves for the arcs,
+a cell-by-cell direct filler with an improve pass, a sidecar that merges
+across re-packagings, and the chain's git and pgrep calls made unable to
+hang or lie. Open, none blocking: the nine column-15 cells (an sD-arc at
+sA = 0.6587 would say whether 23 d is the minimum there), arcs from the
+0.9921 / 0.0337 roots to attribute the last 22 unattached entries, the
+deliverable zip and the ship decision.

@@ -65,11 +65,16 @@ tag    = '70mN';
 % the certified anchors the arcs start from (stage 1 checks them); each
 % anchor names one extremal FAMILY, labelled in the last column for the
 % catalog's family map (FINDINGS 59, 64: 'fast' = the 2026-09-09 family,
-% 'A2' = the 26 d family, 'fast2' = the 2026-09-13 faster family)
+% 'A2' = the 26 d family, 'fast2' = the 2026-09-13 faster family;
+% FINDINGS 66-68: 'direct18' = the branch through the direct-found 0.7837
+% root, fastest on 0.59-0.78; 'direct11' = the branch through the
+% direct-found 0.4921 root, fastest on 0.49-0.60)
 anchors = { ...                       % name        seed .mat                              sA0                 family label
     'anchor', 'results/mintime_70mN_anchor.mat',       grid.sA0,          'fast';  ...
     'cell11', 'results/mintime_70mN_certified.mat',    grid.sA0 + 10/12,  'A2';    ...
-    'fast2',  'results/mintime_70mN_anchor_fast2.mat', 0.8671,            'fast2'};
+    'fast2',  'results/mintime_70mN_anchor_fast2.mat', 0.8671,            'fast2';  ...
+    'direct18', 'results/mintime_70mN_anchor_direct18.mat', 0.0754 + 17/24, 'direct18'; ...   % FINDINGS 66-67
+    'direct11', 'results/mintime_70mN_anchor_direct11.mat', 0.0754 + 10/24, 'direct11'};      % FINDINGS 68
 
 % arc budgets: the 2026-09-09 arcs used nStep 4000 / 5 h each
 arc = struct('nStep', 4000, 'deadlineSec', 5*3600, 'span', 1.02, ...

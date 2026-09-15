@@ -4604,3 +4604,44 @@ its lower end the 33.7 d slow sheet's fold). Audit running.
 Also: `build_arrival_sheet` now ignores `<arc>.partial.mat` files -- a walk
 in progress would otherwise enter the sheet as an arc (and twice, once it
 finishes), and `family_map` would refuse the name.
+
+## 70. The torus is full: 576 of 576 cells certified (2026-09-15, 09:10)
+
+Round 6 closed clean (538 entries, audit 538/0, sweep 0 sign changes, worst
+H6 5.32x, worst lift 11x); its ribs on the fifth branch's three columns
+(0.4921 17.96, 0.5337 18.23, 0.5754 18.83 d) walked complete, 23/23 each.
+That left 38 holes -- the tops of columns 6, 7, 15 (three cells each), the
+whole of column 24 above its lone rib point (22 cells), and a few more --
+which no continuation rib had reached.
+
+`fill_holes_direct` (new) solved them cell by cell: a direct HS+Sundman
+solve at the hole warm-started from up to three certified neighbours (the
+same column's first -- they share the arrival geometry -- then the same
+row's), harvested into a multiple-shooting seed and put through the full
+gate stack; the fastest certified root kept and made a seed for the cells
+still to come, so a column chains like a rib. **38 of 38 certified.**
+Column 24 chained 22 cells at 17.7-18.5 d from its single rib point; the
+(0.0417, 0.6587) cell certified at 17.25 d, the fourth-branch root the
+walker could not step to. Two lessons cost an hour each: run scratch
+MATLAB jobs under R2026a (R2025b has no Parallel Computing Toolbox, so
+every certification died on `gcp`), and never seed from the neighbouring
+COLUMN first -- a 16.8 d root at the next arrival phase sent IPOPT to
+100-340 d junk and burned the 900 s cap, while the same column's root
+converged in 1-3 min.
+
+Round 7 (this morning) is round 6 re-packaged with the direct-hole rib
+offered beside every earlier rib: **576 of 576 cells, 576 entries, t_f
+16.23-24.91 d (mean 18.65, median 18.48)**, five families in the map (fast
+44%, direct18 21%, fast2 13%, direct11 12%, A2 0; 22 cells on roots no arc
+has walked, 40 rib points whose spine root the map could not identify --
+mostly the direct-hole cells, which have no spine). Schema clean. Audit
+and sweep running.
+
+What "full" does not mean: the fastest known root everywhere. Column 15
+(0.6587) reads 17.2 d at its spine and its first cell and 22-24.9 d
+above that, because the fourth-branch rib stalled at once and the fast
+family's rib filled the column; its neighbours are at 17-18 d. An
+"improve" pass -- the same cell-by-cell solve at every cell slower than
+its column neighbour by more than a threshold, chained upward from the
+fast root -- is the next step, and the machinery is the hole filler with
+one more selection rule.

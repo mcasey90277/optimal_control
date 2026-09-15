@@ -59,7 +59,8 @@ if ~isfolder(resDir), mkdir(resDir); end
 %% ========================================================================
 engine = struct('thrustN', 0.070, 'ispS', 900, 'm0kg', 150);
 orbits = struct('tauDRO', 1.0, 'NpTulip', 7, 'pmTulip', -1);
-grid   = struct('nA', 12, 'nD', 12, 'sD0', 0, 'sA0', 0.0754);   % sA0 = the anchor's phase
+grid   = struct('nA', 12, 'nD', 12, 'sD0', 0, 'sA0', 0.0754, ...   % sA0 = the anchor's phase
+                'sA', [], 'sD', []);                                 % or explicit phase lists
 tag    = '70mN';
 
 % the certified anchors the arcs start from (stage 1 checks them); each

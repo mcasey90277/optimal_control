@@ -27,6 +27,14 @@ function out = fill_holes_direct(catMat, opts)
 %   .logFile                char                    ['' = stdout]
 %   .cells                  [k x 2] int             explicit (iD, iA) cells;
 %                                                   [] = every hole
+%   .improveDays            double                  [0] also re-solve every
+%                                                   FILLED cell whose t_f
+%                                                   exceeds its faster
+%                                                   column neighbour's by
+%                                                   more than this (days),
+%                                                   seeded from that
+%                                                   neighbour; the packager
+%                                                   keeps the faster root
 %   .maxCells               int                     stop after this many
 %                                                   cells [inf]
 %   .N                      int                     collocation intervals [800]
@@ -64,7 +72,7 @@ logFile = d('logFile', '');
 lg = @(varargin) logmsg(logFile, sprintf(varargin{:}));
 N = d('N', 800);  clearKm = d('clearKm', 1900);  maxCpu = d('maxCpuSec', 300);
 wallSec = d('wallSec', 600);  K = d('K', 24);  maxCells = d('maxCells', inf);
-maxSeeds = d('maxSeeds', 3);
+maxSeeds = d('maxSeeds', 3);  improveDays = d('improveDays', 0);
 [catDir, ~] = fileparts(catMat);
 outFile = d('out', fullfile(catDir, 'fine_rib_direct_holes.mat'));
 
@@ -110,8 +118,31 @@ for m = 1:numel(R)
 end
 rec = rec([rec.ok]);                          % failed records are re-made below
 
+% the IMPROVE selection (AFTER the rib file's points are admitted, so a
+% cell improved by an earlier run is the seed of the next one up): a filled cell far slower than the column neighbour
+% below or above it (a rib of a slower family filled the column while a
+% faster one stalled). Column-major order, so the chain runs upward.
+if improveDays > 0
+    tfDays = tfnd * tStar/86400;
+    slow = false(nD, nA);
+    for iA_ = 1:nA
+        for iD_ = 1:nD
+            if ~has(iD_, iA_), continue, end
+            nbv = [mod(iD_ - 2, nD) + 1, mod(iD_, nD) + 1];
+            nbv = nbv(has(nbv, iA_));
+            if ~isempty(nbv) && tfDays(iD_, iA_) - min(tfDays(nbv, iA_)) > improveDays, slow(iD_, iA_) = true; end
+        end
+    end
+    [iDs, iAs] = find(slow);
+    cells = [cells; iDs, iAs];
+    lg('  improve: %d filled cell(s) slower than a column neighbour by > %.1f d', nnz(slow), improveDays);
+end
+
 nTried = 0;  nCert = 0;
-for kc = 1:size(cells, 1)
+queued = false(nD, nA);  queued(sub2ind([nD nA], cells(:, 1), cells(:, 2))) = true;
+kc = 0;
+while kc < size(cells, 1)                       % the list grows as improvements chain
+    kc = kc + 1;
     if nTried >= maxCells, break, end
     iD = cells(kc, 1);  iA = cells(kc, 2);
     if done(iD, iA), continue, end
@@ -123,6 +154,10 @@ for kc = 1:size(cells, 1)
     nbRow = [iD, mod(iA - 2, nA) + 1;  iD, mod(iA, nA) + 1];
     nbCol = nbCol(has(sub2ind([nD nA], nbCol(:, 1), nbCol(:, 2))), :);
     nbRow = nbRow(has(sub2ind([nD nA], nbRow(:, 1), nbRow(:, 2))), :);
+    if has(iD, iA)                                  % an improve cell: faster seeds only
+        nbCol = nbCol(tfnd(sub2ind([nD nA], nbCol(:, 1), nbCol(:, 2))) < tfnd(iD, iA), :);
+        nbRow = nbRow(tfnd(sub2ind([nD nA], nbRow(:, 1), nbRow(:, 2))) < tfnd(iD, iA), :);
+    end
     [~, oc] = sort(tfnd(sub2ind([nD nA], nbCol(:, 1), nbCol(:, 2))));
     [~, orw] = sort(tfnd(sub2ind([nD nA], nbRow(:, 1), nbRow(:, 2))));
     nb = [nbCol(oc, :); nbRow(orw, :)];
@@ -136,6 +171,7 @@ for kc = 1:size(cells, 1)
     rvf = B.stateA(sA(iA));
     t0 = tic;  okCell = false;  reason = '';  tfD = NaN;  tfC = NaN;  seedUsed = [];
     best = [];  reasons = {};
+    if has(iD, iA), reasons{end+1} = sprintf('improve: cell holds %.3f d', tfnd(iD, iA)*tStar/86400); end
     for kn = 1:size(nb, 1)
         nD_ = nb(kn, 1);  nA_ = nb(kn, 2);  seedUsed = [sD(nD_), sA(nA_)];
         zN = z8(:, idx(nD_, nA_));
@@ -172,11 +208,24 @@ for kc = 1:size(cells, 1)
             reasons{end+1} = sprintf('ERROR %s (seed %.4f,%.4f)', ME.message, seedUsed);
         end
     end
+    if ~isempty(best) && has(iD, iA) && best.z(8) >= tfnd(iD, iA)
+        reasons{end+1} = sprintf('not faster than the cell''s %.3f d', tfnd(iD, iA)*tStar/86400);  best = [];
+    end
     if ~isempty(best)
         okCell = true;  R = putPoint(R, iA, sA(iA), best);  tfC = best.tfDays;
         % the new root seeds the cells still to come (its column's next
         % cell above all: that is how a rib chains)
         [has, tfnd, idx, z8] = admit(has, tfnd, idx, z8, sD, sA, best);
+        % and a column neighbour now far slower than it joins the queue --
+        % this is how the improve pass walks a whole column from one fast root
+        if improveDays > 0
+            for nbv = [mod(iD - 2, nD) + 1, mod(iD, nD) + 1]
+                if has(nbv, iA) && ~queued(nbv, iA) && (tfnd(nbv, iA) - best.z(8))*tStar/86400 > improveDays
+                    cells(end+1, :) = [nbv, iA];  queued(nbv, iA) = true;
+                    lg('    queued (%2d,%2d): %.3f d against the new %.3f d', nbv, iA, tfnd(nbv, iA)*tStar/86400, best.tfDays);
+                end
+            end
+        end
     end
     reason = strjoin(reasons, ' | ');
     nTried = nTried + 1;  nCert = nCert + okCell;

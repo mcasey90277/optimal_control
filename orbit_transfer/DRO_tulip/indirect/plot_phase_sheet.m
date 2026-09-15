@@ -36,7 +36,13 @@ function I = plot_phase_sheet(Q, outPng, ttl)
 if nargin < 2, outPng = ''; end
 if nargin < 3, ttl = ''; end
 tStar = Q.meta.tStar;
-TF = Q.TF(:,:,1);  OK = Q.OK(:,:,1);
+% DRAW IN PHASE ORDER. The grid is stored in build order -- an arrival
+% lattice that starts at the anchor's phase 0.0754 wraps its last level
+% to 0.0337 -- so the axes are sorted by phase mod 1 here; the catalog's
+% own order is untouched.
+[sAs, oA] = sort(mod(Q.sA(:).', 1));  [sDs, oD] = sort(mod(Q.sD(:).', 1));
+Q.sA = sAs;  Q.sD = sDs;
+TF = Q.TF(oD, oA, 1);  OK = Q.OK(oD, oA, 1);
 C = nan(size(TF));  C(OK) = TF(OK)*tStar/86400;
 nD = numel(Q.sD);  nA = numel(Q.sA);
 

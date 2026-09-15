@@ -112,9 +112,17 @@ if exist('chainOverrides', 'var')
     if isfield(chainOverrides, 'engine'), engine = chainOverrides.engine; end
     if isfield(chainOverrides, 'orbits'), orbits = chainOverrides.orbits; end
 end
+% THE GRID IS TWO LISTS from here on: the lattice when the caller gave
+% nD/nA/origins, the caller's own phases when it gave .sD/.sA
+if ~isfield(grid, 'sA') || isempty(grid.sA), grid.sA = grid.sA0 + (0:grid.nA-1)/grid.nA; end
+if ~isfield(grid, 'sD') || isempty(grid.sD), grid.sD = grid.sD0 + (0:grid.nD-1)/grid.nD; end
+grid.sA = grid.sA(:).';  grid.sD = grid.sD(:).';
+grid.nA = numel(grid.sA);  grid.nD = numel(grid.sD);
+if true
+end
 if ~isfolder(outDir), mkdir(outDir); end
 % derived from the grid AFTER any override (identical at the defaults)
-arc.levels = grid.sA0 + (-grid.nA:2*grid.nA)/grid.nA;
+arc.levels = [grid.sA - 1, grid.sA, grid.sA + 1];         % the list, unwrapped
 rib.nPts = grid.nD - 1;
 
 % the sidecar is the THIRD sweep's. v1: lift margins differed from the
@@ -203,7 +211,7 @@ end
 %     stack, then assembled: per arrival phase, the fastest CERTIFIED root.
 %% ========================================================================
 if run.sheet
-    so3 = setupOpts;  so3.out = files.sheet;  so3.nA = grid.nA;  so3.sA0 = grid.sA0;
+    so3 = setupOpts;  so3.out = files.sheet;  so3.sA = grid.sA;
     S = build_arrival_sheet(so3);
     plot_arrival_arcs(arcFiles(cellfun(@isfile, arcFiles)), S, files.branch);
 else
@@ -256,7 +264,7 @@ if run.package
     if ~isempty(bakCat), fprintf('5. previous catalog backed up to %s\n', bakCat); end
     cat_ = package_phase_catalog(files.sheet, ribFiles, struct('tag', tag, ...
         'thrustN', engine.thrustN, 'ispS', engine.ispS, 'm0kg', engine.m0kg, ...
-        'nD', grid.nD, 'sD0', grid.sD0, 'outDir', outDir, ...
+        'nD', grid.nD, 'sD0', grid.sD0, 'sD', grid.sD, 'outDir', outDir, ...
         'familyLabels', {anchors(:, [1 4])}));
     % THE RECEIPT: which invocation produced this catalog, from which
     % inputs. The driver reads it back instead of trusting an mtime.

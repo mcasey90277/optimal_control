@@ -26,7 +26,9 @@ function Q = sheet_to_catalog_file(S, ribs, outMat, opts)
 %                                                   .sA .z .tfDays)
 %  outMat                   char                    sheet-file path
 %  opts                     struct (optional)
-%   .nD [12] .sD0 [0] .thrustN [0.070] .ispS [900] .m0kg [150]
+%   .sD [] an explicit list of departure phases (any spacing); else the
+%   lattice .sDorigin [0] + (0:nD-1)/nD, .nD [12]
+%   .sD0 [0] .thrustN [0.070] .ispS [900] .m0kg [150]
 %   .tauDRO [1] .NpTulip [7] .pmTulip [-1]
 %   .families [] a family_map output: every entry is then stamped with
 %   the code of the extremal family it belongs to (Q.FAM), and the map
@@ -75,7 +77,11 @@ Q = struct();
 % from sD0 made idxOf(Q.sD, sD0) select row 1 by construction, so a sheet
 % certified at any departure phase was placed at departure zero. The grid is
 % the canonical k/nD one; the certified phase must LAND on it.
-Q.sD = mod(d('sDorigin', 0) + (0:nD-1)/nD, 1);
+if isfield(opts, 'sD') && ~isempty(opts.sD)
+    Q.sD = mod(opts.sD(:).', 1);  nD = numel(Q.sD);       % the caller's list
+else
+    Q.sD = mod(d('sDorigin', 0) + (0:nD-1)/nD, 1);
+end
 Q.sA = S.sA(:)';
 Q.rungs = P.thrustN;
 Q.OK = false(nD, nA, 1);

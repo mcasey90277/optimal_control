@@ -68,8 +68,15 @@ try
     if ~all([P.ok]), msg = sprintf('%d of %d rib points are not certified (.ok false)', nnz(~[P.ok]), numel(P));  return, end
     sD = [P.sD];
     if any(~isfinite(sD)), msg = 'a rib point has a non-finite departure phase';  return, end
+    sDlist = d('sD', []);
+    if ~isempty(sDlist)                      % an explicit departure list
+        sDlist = mod(sDlist(:).', 1);
+        off = arrayfun(@(v) min(abs(mod(sDlist - v + 0.5, 1) - 0.5)), sD);
+        if any(off > 1e-6), msg = sprintf('%d rib point(s) are off the %d-phase departure list', nnz(off > 1e-6), numel(sDlist));  return, end
+        if numel(unique(round(mod(sD, 1)*1e9))) ~= numel(sD), msg = 'rib has duplicate departure phases';  return, end
+    end
     nD = d('nD', NaN);
-    if isfinite(nD)
+    if isfinite(nD) && isempty(sDlist)
         off = abs(mod(sD*nD + 0.5, 1) - 0.5);
         if any(off > 1e-6*nD), msg = sprintf('%d rib point(s) are off the %d-point departure lattice', nnz(off > 1e-6*nD), nD);  return, end
         if numel(unique(round(mod(sD, 1)*nD))) ~= numel(sD), msg = 'rib has duplicate departure phases';  return, end

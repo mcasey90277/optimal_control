@@ -12,7 +12,12 @@ function S = build_arrival_sheet(opts)
 %
 %  opts                     struct (optional)
 %   .pattern ['arrival_arc_*.mat'] .out ['results/arrival_sheet_70mN.mat']
-%   .sA0 [0.0754] .nA [12] .copts (certify_crossing options)
+%   .sA [] an explicit list of arrival phases (any spacing) -- the sheet's
+%   columns; else the lattice .sA0 [0.0754] + (0:nA-1)/nA, .nA [12]
+%   .copts (certify_crossing options)
+%   .seedFiles {} .mat files holding a `direct` struct array (sD sA tfDays
+%   z src) of certified roots to seed with; .librarySeeds [true] also seed
+%   from dro_tulip_library (false for a campaign at another operating point)
 %   .rescan [true] take the arcs' crossings from a RE-SCAN of their stored
 %   path at this sheet's levels, instead of the crossings each walk happened
 %   to record. An arc records crossings of the levels it was GIVEN, so
@@ -54,8 +59,13 @@ files = files(~contains({files.name}, '.partial.'));
 assert(~isempty(files), 'no arcs match %s', pat);
 arcs = cell(1, numel(files));
 nAwant = d('nA', 12);  sA0want = d('sA0', 0.0754);
+if isfield(opts, 'sA') && ~isempty(opts.sA)
+    sAlist = mod(opts.sA(:).', 1);  nAwant = numel(sAlist);  sA0want = sAlist(1);
+else
+    sAlist = mod(sA0want + (0:nAwant-1)/nAwant, 1);
+end
 rescan = d('rescan', true);
-levels = sA0want + (0:nAwant-1)/nAwant;
+levels = sAlist;                            % crossings_from_arc scans each level mod 1
 for k = 1:numel(files)
     L = load(fullfile(files(k).folder, files(k).name));
     A = L.A;
@@ -75,16 +85,24 @@ end
 % phase: they are the arcs' start points, so they are not crossings of any
 % arc and a crossings-only sheet reports NaN at exactly the phases whose
 % solutions launched it.
-sD0 = anc.sD;  nA = nAwant;  sA0 = sA0want;
+sD0 = anc.sD;
 policy = d('copts', struct());
 policy.pool = pool;
 if ~isfield(policy, 'wallSec'), policy.wallSec = 600; end
-lib = dro_tulip_library(here);
-lib = lib(abs(mod([lib.sD] - sD0 + 0.5, 1) - 0.5) < 1e-8);
+lib = struct('sD', {}, 'sA', {}, 'tfDays', {}, 'src', {}, 'z', {}, 'Y', {});
+if d('librarySeeds', true)
+    lib0 = dro_tulip_library(here);
+    for k = 1:numel(lib0), lib(end+1) = seedRow(lib0(k)); end
+end
+for sf = d('seedFiles', {})
+    Lf = load(sf{1});
+    assert(isfield(Lf, 'direct'), 'seed file %s holds no `direct` struct array', sf{1});
+    for k = 1:numel(Lf.direct), lib(end+1) = seedRow(Lf.direct(k)); end
+end
+if ~isempty(lib), lib = lib(abs(mod([lib.sD] - sD0 + 0.5, 1) - 0.5) < 1e-8); end
 seeds = struct([]);
 for k = 1:numel(lib)
-    g = mod(lib(k).sA - sA0, 1)*nA;
-    if abs(g - round(g)) > 1e-6 && abs(g - nA) > 1e-6, continue, end   % off-grid
+    if min(abs(mod(sAlist - lib(k).sA + 0.5, 1) - 0.5)) > 1e-6, continue, end   % off-grid
     rv0 = B.stateD(sD0);
     % THE shared builder (costate_common/seed_from_entry)
     seed = seed_from_entry(lib(k), rv0(1:6), ...
@@ -99,7 +117,7 @@ for k = 1:numel(lib)
     if isempty(seeds), seeds = C; else, seeds(end+1) = C; end %#ok<AGROW>
 end
 
-S = sheet_from_arcs(arcs, struct('sA0', sA0, 'nA', nA, 'seeds', seeds, ...
+S = sheet_from_arcs(arcs, struct('sA', sAlist, 'seeds', seeds, ...
                                  'B', B, 'anc', anc, 'copts', policy));
 S.arcs = {files.name};  S.B = B;  S.anc = anc;  S.opts = opts;  S.built = datestr(now);
 S.problem = B.problem;          % the identity packaging must use
@@ -124,6 +142,13 @@ for j = 1:numel(S.sA)
     end
 end
 fprintf('saved %s\n', out);
+end
+
+function r = seedRow(e)
+% SEEDROW  One seed in the library's row layout (Y optional).  INPUTS: e.
+% OUTPUTS: r.
+r = struct('sD', e.sD, 'sA', e.sA, 'tfDays', e.tfDays, 'src', e.src, 'z', e.z(:), 'Y', []);
+if isfield(e, 'Y'), r.Y = e.Y; end
 end
 
 function v = fieldd(s, f, d_)

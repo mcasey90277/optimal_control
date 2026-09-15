@@ -60,6 +60,14 @@ function out = run_costate_library(opts)
 %   .sA  [sA0 + (0:nA-1)/nA]   arrival phases, fractions of the tulip period
 %   .nD [24] .nA [24]          resolution, used only when .sD/.sA are absent
 %   .sA0 [0.0754]              arrival origin, used only to derive .sA
+%   .arcPattern ['arrival_arc_*.mat']  the arcs the sheet is built from
+%                              (in indirect/results); a torus campaign names
+%                              its own arcs arrival_arc_<tag>_*.mat
+%   .seedFiles {}              .mat files holding a `direct` struct array
+%                              (sD sA tfDays z src) of certified roots to
+%                              seed the sheet with, beside the library's
+%   .librarySeeds [true]       also seed from dro_tulip_library (the 70 mN
+%                              campaign's own roots); false for another engine
 %   .onlyA []                  walk ribs on these arrival phases only
 %                              (values or indices into .sA; default all
 %                              certified ones)
@@ -169,17 +177,15 @@ sD = d('sD', (0:nD-1)/nD);
 sA = d('sA', sA0 + (0:nA-1)/nA);
 sD = sD(:).';  sA = sA(:).';
 nD = numel(sD);  nA = numel(sA);
-checkUniform(sD, 'departure (.sD)');
-checkUniform(sA, 'arrival (.sA)');
-% ONLY THE FULL 1/n LATTICE IS BUILT. The builders take n and an origin,
-% not a vector, so any other uniform vector (a partial span, a different
-% step, a repeated or descending phase) would be printed here and then
-% silently replaced by the lattice. Refuse it instead. (Astra pass 2, J.)
-assert(abs(sD(2) - sD(1) - 1/nD) < 1e-9 && abs(sA(2) - sA(1) - 1/nA) < 1e-9, ...
-       'run_costate_library:grid', ...
-       ['only the full periodic lattice is supported: .sD must step by 1/%d and .sA by 1/%d ' ...
-        '(got %.6g and %.6g). Change .nD/.nA, not the vectors.'], nD, nA, sD(2)-sD(1), sA(2)-sA(1));
+% THE GRID IS TWO LISTS. Any phases in [0,1), strictly increasing, distinct;
+% the lattice is the default, not a requirement (2026-09-15: the builders
+% underneath index by list, and the ribs walk explicit targets).
+checkPhaseList(sD, 'departure (.sD)');
+checkPhaseList(sA, 'arrival (.sA)');
 sA0 = sA(1);
+sD0 = sD(1);                                % the spine's departure phase
+ribTargets = rib_targets(sD, sD0, -1);      % unwrapped offsets the ribs walk
+nPts = numel(ribTargets);
 
 out = struct('state', 'pending', 'sheet', '', 'queue', fullfile(outDir, 'ribq'), ...
              'catalog', '', 'cmd', '', 'blockers', {{}});
@@ -227,7 +233,9 @@ end
 
 %% 1. ARRIVAL SHEET -- from the saved arcs, no new continuation
 if on('sheet') && ~isfile(sheetMat)
-    build_arrival_sheet(struct('nA', nA, 'sA0', sA0, 'rescan', true, 'out', sheetMat, ...
+    build_arrival_sheet(struct('sA', sA, 'rescan', true, 'out', sheetMat, ...
+        'pattern', d('arcPattern', 'arrival_arc_*.mat'), 'seedFiles', {d('seedFiles', {})}, ...
+        'librarySeeds', d('librarySeeds', true), ...
         'thrustN', engine.thrustN, 'ispS', engine.ispS, 'm0kg', engine.m0kg, ...
         'tauDRO', orbits.tauDRO, 'NpTulip', orbits.NpTulip, 'pmTulip', orbits.pmTulip));
 end
@@ -302,7 +310,7 @@ ribList = arrayfun(ribOut, cols, 'UniformOutput', false);
 %% 3. RIBS -- a work queue, one column per unit
 policy = struct('staleSec', staleSec, 'maxAtt', maxAtt, 'hangSec', hangSec);
 codeRoots = {here, fullfile(fileparts(fileparts(here)), 'costate_common')};
-ribSpec = @(j) struct('nPts', nD - 1, 'col', j, 'sA', S.sA(j), 'nD', nD, 'problem', S.problem);
+ribSpec = @(j) struct('nPts', nPts, 'col', j, 'sA', S.sA(j), 'sD', sD, 'problem', S.problem);
 if on('ribs')
     % EXISTING OUTPUTS ARE VALIDATED BEFORE THE QUEUE CAN CALL THEM DONE.
     % A file with the right name from another grid, another problem, or a
@@ -336,7 +344,7 @@ if on('ribs')
                                       st.nRetired, maxAtt, mat2str(st.retired));
     end
     jobFile = fullfile(outDir, 'rib_unit_job.m');
-    writeRibJob(jobFile, sheetMat, outDir, out.queue, nD, codeRoots, policy);
+    writeRibJob(jobFile, sheetMat, outDir, out.queue, nD, ribTargets, sD, codeRoots, policy);
     % THE SUPERVISOR owns the campaign from here: it keeps nWorkers alive
     % (relaunching through run_campaign_workers.sh within a budget), and
     % when every column is published runs the finalize job -- this same
@@ -416,7 +424,7 @@ if on('package')
         [good(k), why, ri] = rib_validate(ribList{k}, ribSpec(cols(k)));
         if good(k) && ~ri.complete
             isShort(k) = true;
-            reason{k} = sprintf('col %d: %d of %d points (%s)', cols(k), ri.nPts, nD - 1, ri.stop);
+            reason{k} = sprintf('col %d: %d of %d points (%s)', cols(k), ri.nPts, nPts, ri.stop);
         elseif ~good(k)
             reason{k} = sprintf('col %d: %s', cols(k), why);
         end
@@ -456,7 +464,7 @@ if on('package') || on('audit') || on('sweep')
         'arcs', false, 'sheet', false, 'ribs', false, ...
         'package', on('package'), 'audit', on('audit'), 'sweep', on('sweep'), ...
         'pictures', d('pictures', true), 'deliverable', false), ...
-        'grid', struct('nA', nA, 'nD', nD, 'sA0', sA0, 'sD0', sD(1)), ...
+        'grid', struct('nA', nA, 'nD', nD, 'sA0', sA0, 'sD0', sD(1), 'sA', sA, 'sD', sD), ...
         'sheetFile', sheetMat, 'engine', engine, 'orbits', orbits, 'invocationId', invocationId);
     extra = d('extraRibFiles', {});
     if ischar(extra), extra = {extra}; end
@@ -592,15 +600,14 @@ q = ['''' strrep(s, '''', '''''') ''''];
 end
 
 % ------------------------------------------------------------------------
-function checkUniform(v, name)
-% CHECKUNIFORM  The builders underneath assume a uniform phase grid; say so
-% by name rather than producing a sheet whose levels do not line up.
-% INPUTS: v; name.  OUTPUTS: none.
+function checkPhaseList(v, name)
+% CHECKPHASELIST  A phase list is at least two phases in [0,1), strictly
+% increasing and distinct; say what is wrong by name.  INPUTS: v; name.
+% OUTPUTS: none.
 assert(numel(v) >= 2, 'run_costate_library:grid', '%s grid needs at least two phases', name);
-dv = diff(v);
-assert(max(abs(dv - dv(1))) < 1e-9, 'run_costate_library:grid', ...
-       ['the %s grid must be UNIFORM (the sheet and rib builders step by a ' ...
-        'fixed 1/n). Got spacings %.6g .. %.6g'], name, min(dv), max(dv));
+assert(all(v >= 0 & v < 1), 'run_costate_library:grid', '%s phases must lie in [0, 1)', name);
+assert(all(diff(v) > 1e-9), 'run_costate_library:grid', ...
+       '%s phases must be strictly increasing and distinct', name);
 end
 
 % ------------------------------------------------------------------------
@@ -645,7 +652,7 @@ publish_atomic(tmp, jobFile);
 end
 
 % ------------------------------------------------------------------------
-function writeRibJob(jobFile, sheetMat, outDir, qDir, nD, codeRoots, policy)
+function writeRibJob(jobFile, sheetMat, outDir, qDir, nD, ribTargets, sD, codeRoots, policy)
 % WRITERIBJOB  Emit the per-worker job script the launcher runs. It reads
 % WORKER_TAG from the environment and walks whatever column the queue hands
 % it. Paths are absolute and quoted as MATLAB literals; the code roots are
@@ -654,7 +661,8 @@ function writeRibJob(jobFile, sheetMat, outDir, qDir, nD, codeRoots, policy)
 % heartbeat is passed to the walker as its progress callback. The unit
 % writes to the attempt-specific tmpOut the queue hands it; the WORKER
 % validates that file (rib_validate) and publishes it under the lock.
-% INPUTS: jobFile; sheetMat; outDir; qDir; nD; codeRoots cell; policy.
+% INPUTS: jobFile; sheetMat; outDir; qDir; nD; ribTargets (rib_targets);
+% sD (the departure list); codeRoots cell; policy.
 % OUTPUTS: none.
 roots = strjoin(cellfun(@mlq, codeRoots, 'UniformOutput', false), ', ');
 txt = sprintf([ ...
@@ -668,12 +676,12 @@ txt = sprintf([ ...
  'S_ = load(%s);  S_ = S_.S;\n' ...
  'ckpt = @(j) fullfile(%s, sprintf(''fine_rib_col%%02d.mat.ckpt'', j));   %% the UNIT''s checkpoint\n' ...
  'unitFcn = @(j, beat, tmpOut) build_ribs(%s, struct(''only'', j, ''direction'', -1, ...\n' ...
- '        ''nD'', %d, ''nPts'', %d, ''wallSec'', 900, ''out'', tmpOut, ''progress'', beat, ''checkpoint'', ckpt(j)));\n' ...
- 'spec = @(j) struct(''nPts'', %d, ''col'', j, ''sA'', S_.sA(j), ''nD'', %d, ''problem'', S_.problem);\n' ...
+ '        ''nD'', %d, ''targets'', %s, ''wallSec'', 900, ''out'', tmpOut, ''progress'', beat, ''checkpoint'', ckpt(j)));\n' ...
+ 'spec = @(j) struct(''nPts'', %d, ''col'', j, ''sA'', S_.sA(j), ''sD'', %s, ''problem'', S_.problem);\n' ...
  'campaign_worker(%s, %s, tag, unitFcn, struct(''logFile'', ...\n' ...
  '        fullfile(%s, [''worker_'' tag ''.log'']), ''staleSec'', %d, ''maxAtt'', %d, ...\n' ...
  '        ''validateFcn'', @(f, j) rib_validate(f, spec(j))));\n'], ...
- roots, mlq(sheetMat), mlq(outDir), mlq(sheetMat), nD, nD-1, nD-1, nD, mlq(qDir), mlq(fullfile(outDir, 'hb')), mlq(outDir), ...
+ roots, mlq(sheetMat), mlq(outDir), mlq(sheetMat), nD, mat2str(ribTargets, 17), numel(ribTargets), mat2str(sD, 17), mlq(qDir), mlq(fullfile(outDir, 'hb')), mlq(outDir), ...
  policy.staleSec, policy.maxAtt);
 tmp = sprintf('%s.%s.part', jobFile, char(java.util.UUID.randomUUID()));
 fid = fopen(tmp, 'w');

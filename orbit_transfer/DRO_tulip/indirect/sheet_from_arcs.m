@@ -19,7 +19,9 @@ function S = sheet_from_arcs(arcs, opts)
 %   .seeds struct array of already-certified candidates (certify_root
 %   outputs with .sA) entered before the crossings -- the arcs' own start
 %   points, which are not crossings of their own arc;
-%   .sA0 [0.0754] .nA [12] grid;  .tolDup [1e-6] (days) and .tolZ [1e-6]
+%   .sA [] an EXPLICIT list of arrival phases in [0,1), any spacing (the
+%   sheet's columns, in this order); else the lattice .sA0 [0.0754] + (0:nA-1)/nA,
+%   .nA [12];  .tolDup [1e-6] (days) and .tolZ [1e-6]
 %   (relative, on z8) -- a duplicate must match in BOTH;
 %   .certFn [@(p,sA) certify_crossing(p,sA,B,anc,copts)] -- default needs
 %   .B, .anc (from arclength_arrival setup) and optional .copts;
@@ -43,6 +45,15 @@ function S = sheet_from_arcs(arcs, opts)
 if nargin < 2, opts = struct(); end
 d = @(f,v) fieldd(opts, f, v);
 sA0 = d('sA0', 0.0754);  nA = d('nA', 12);  tolDup = d('tolDup', 1e-6);
+% THE GRID IS A LIST. A lattice is the common case, but the columns may be
+% any phases the caller names (run_phase_torus); every lookup below goes
+% through the list, so nothing assumes a spacing.
+if isfield(opts, 'sA') && ~isempty(opts.sA)
+    sAlist = mod(opts.sA(:).', 1);  nA = numel(sAlist);  sA0 = sAlist(1);
+else
+    sAlist = mod(sA0 + (0:nA-1)/nA, 1);
+end
+assert(numel(unique(round(sAlist*1e9))) == nA, 'sheet_from_arcs: repeated arrival phases in the list');
 tolZ = d('tolZ', 1e-6);
 logFile = d('logFile', '');
 lg = @(varargin) logmsg(logFile, sprintf(varargin{:}));
@@ -54,7 +65,7 @@ else
     certFn = @(p, sA) certify_crossing(p, sA, opts.B, opts.anc, copts);
 end
 
-S = struct('sA', mod(sA0 + (0:nA-1)/nA, 1), 'TF', nan(1, nA), 'Z8', nan(8, nA), ...
+S = struct('sA', sAlist, 'TF', nan(1, nA), 'Z8', nan(8, nA), ...
            'cand', {cell(1, nA)}, 'nCand', 0, 'nCert', 0, 'sA0', sA0, 'nA', nA);
 
 % ---- pre-certified SEED points -----------------------------------------
@@ -66,7 +77,7 @@ S = struct('sA', mod(sA0 + (0:nA-1)/nA, 1), 'TF', nan(1, nA), 'Z8', nan(8, nA), 
 seeds = d('seeds', struct([]));
 for k = 1:numel(seeds)
     C = seeds(k);
-    j = gridIndex(C.sA, sA0, nA);
+    j = gridIndex(C.sA, sAlist);
     C.level = C.sA;  C.arc = 0;
     S.nCand = S.nCand + 1;
     if isempty(S.cand{j}), S.cand{j} = C; else, S.cand{j} = mergeStruct(S.cand{j}, C); end
@@ -81,9 +92,7 @@ for ia = 1:numel(arcs)
     cr = arcs{ia}.crossings;
     for ic = 1:numel(cr)
         c = cr(ic);
-        j = gridIndex(c.level, sA0, nA);
-        assert(abs(mod(c.level - sA0, 1)*nA - round(mod(c.level - sA0, 1)*nA)) < 1e-6 || ...
-               abs(mod(c.level - sA0, 1)*nA - nA) < 1e-6, 'crossing level %.6f is not on the grid', c.level);
+        j = gridIndex(c.level, sAlist);         % refuses a level off the list
         sA = S.sA(j);
         if ~c.converged
             C = struct('ok', false, 'reason', sprintf('crossing not converged (|R| = %.1e)', c.normR), ...
@@ -126,13 +135,12 @@ lg('sheet_from_arcs: %d candidates, %d certified, %d/%d grid points filled', ...
    S.nCand, S.nCert, nnz(isfinite(S.TF)), nA);
 end
 
-function j = gridIndex(level, sA0, nA)
-% GRIDINDEX  Grid column of a (possibly unwrapped) phase level.
-% INPUTS: level; sA0; nA.  OUTPUTS: j.
-f = mod(level - sA0, 1)*nA;
-assert(abs(f - round(f)) < 1e-6 || abs(f - nA) < 1e-6, ...
-       'phase %.6f is not on the grid', level);
-j = mod(round(f), nA) + 1;
+function j = gridIndex(level, sAlist)
+% GRIDINDEX  Column of a (possibly unwrapped) phase level in the list:
+% the entry within 1e-6 of it mod 1, or an error.  INPUTS: level; sAlist.
+% OUTPUTS: j.
+[dm, j] = min(abs(mod(sAlist - level + 0.5, 1) - 0.5));
+assert(dm < 1e-6, 'phase %.6f is not on the grid', level);
 end
 
 function A = mergeStruct(A, C)

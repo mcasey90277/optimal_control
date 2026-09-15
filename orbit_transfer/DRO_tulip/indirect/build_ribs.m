@@ -17,7 +17,9 @@ function R = build_ribs(sheetMat, opts)
 %                                                   (build_arrival_sheet)
 %  opts                     struct (optional)
 %   .direction [-1] the departure sense that works out of the anchor,
-%   .nD [12] .nPts [nD-1] .wallSec [900] per point, .only [] grid columns
+%   .nD [12] .nPts [nD-1] .wallSec [900] per point, .targets [] explicit
+%   unwrapped departure offsets from the spine (rib_targets; beats nD/nPts),
+%   .only [] grid columns
 %   to walk (default: every certified one), .out [results/arrival_ribs.mat]
 %   (published atomically: written to an exclusive temp name, then one rename),
 %   .progress [] handle called after every solve (rib_from_crossing),
@@ -39,6 +41,8 @@ here = fileparts(mfilename('fullpath'));
 addpath(fullfile(fileparts(here), '..', 'costate_common'));
 L = load(sheetMat);  S = L.S;
 nD = d('nD', 12);  nPts = d('nPts', nD - 1);  dirn = d('direction', -1);
+targets = d('targets', []);
+if ~isempty(targets), nPts = numel(targets); end
 out = d('out', fullfile(here, 'results', 'arrival_ribs.mat'));
 pool = capped_pool();
 % RECONSTRUCT FROM THE SHEET, not from defaults. The builder used to rebuild
@@ -82,7 +86,7 @@ for j = cols(:)'
     ck = d('checkpoint', '');
     if isa(ck, 'function_handle'), ck = ck(j); end
     Rj = rib_from_crossing(c(k), B, anc, struct('nD', nD, 'direction', dirn, ...
-        'nPts', nPts, 'wallSec', d('wallSec', 900), 'copts', struct('pool', pool), ...
+        'nPts', nPts, 'targets', targets, 'wallSec', d('wallSec', 900), 'copts', struct('pool', pool), ...
         'progress', d('progress', []), 'checkpoint', ck, ...
         'problem', pickField(S, 'problem', struct())));
     R(end+1) = struct('j', j, 'sA', S.sA(j), 'pts', Rj.pts, 'stop', Rj.stop, ...

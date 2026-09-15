@@ -21,6 +21,7 @@ function cat_ = package_phase_catalog(sheetMat, ribMats, opts)
 %  ribMats                  cellstr | char | []     build_ribs outputs
 %  opts                     struct (optional)
 %   .thrustN [0.070] .ispS [900] .m0kg [150] .nD [12] .sD0 [0]
+%   .sD [] an explicit departure list (sheet_to_catalog_file)
 %   .tag ['70mN'] .outDir [results/] .name ['costate_catalog_dro_tulip_70mN']
 %   .familyLabels {anchor, label; ...} names for the extremal families
 %   the sheet's arcs traced; the map (family_map) is stamped into every

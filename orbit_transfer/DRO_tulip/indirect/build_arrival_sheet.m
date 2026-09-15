@@ -47,6 +47,10 @@ lStar = 389703.264829278;  tStar = 382981.289129055;
 pool = capped_pool();
 [B, anc] = arclength_arrival('setup', opts);
 files = dir(fullfile(here, 'results', pat));
+% a walk in progress leaves <arc>.partial.mat beside the finished arcs
+% (arclength_ms .partialFile); it is not an arc of record and would enter
+% the sheet twice once the walk finishes
+files = files(~contains({files.name}, '.partial.'));
 assert(~isempty(files), 'no arcs match %s', pat);
 arcs = cell(1, numel(files));
 nAwant = d('nA', 12);  sA0want = d('sA0', 0.0754);

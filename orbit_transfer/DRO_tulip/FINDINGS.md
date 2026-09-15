@@ -4582,3 +4582,25 @@ in `mintime_70mN_direct_certified.mat` (the next sheet rebuild seeds from
 it) and is the anchor of two more arcs (`arrival_arc_direct11_{up,dn}`,
 launched 20:40, partial saves on) that will say whether it is the fourth
 branch continuing past its fold on another sheet or a family of its own.
+
+## 69. Round 5 packaged: 534 entries, four families in the map (2026-09-14, 23:00)
+
+Round 5's ribs on the fourth branch's five columns: 0.6171, 0.7004, 0.7421
+and 0.8671 walked COMPLETE (23/23 each -- the branch's ribs are long where
+the fast family's stalled at 18-21 points); 0.6587 stalled after ONE point
+("normal-chart polish did not converge" at sD = 0.9224 from the 17.281 d
+spine). That column is the one where three roots sit within 0.11 d of each
+other (17.281, 17.380, 17.390 -- the S-bend's three sheets crossing the
+same level); the walker only follows the sheet's winner, so the packager
+keeps round 4's 22.8 d rib there. Two remedies, in order of cost: walk the
+rib from the column's OTHER certified roots when the winner's rib stalls
+(a chain feature), or direct-solve the cells next to the spine seeded from
+the neighbouring columns' rib points (17.3-17.4 d at the same sD).
+
+Packaged: 534 entries (round 4: 515), family map with four families (fast,
+A2, fast2, direct18; the direct18 span reads 0.5734..1.2242 with ten folds,
+its lower end the 33.7 d slow sheet's fold). Audit running.
+
+Also: `build_arrival_sheet` now ignores `<arc>.partial.mat` files -- a walk
+in progress would otherwise enter the sheet as an arc (and twice, once it
+finishes), and `family_map` would refuse the name.

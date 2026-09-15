@@ -4645,3 +4645,40 @@ family's rib filled the column; its neighbours are at 17-18 d. An
 its column neighbour by more than a threshold, chained upward from the
 fast root -- is the next step, and the machinery is the hole filler with
 one more selection rule.
+
+## 71. Round 7 audited clean; the improve pass; the sidecar merge (2026-09-15, noon)
+
+Round 7 (576 entries) audited **576 ok / 0 bad**. Its sweep refused its
+own sidecar -- 538 records from round 6's sweep against 576 entries -- a
+guard doing exactly what it was written for (FINDINGS 44: a positional
+sidecar must never hand one entry's measurements to another). Records are
+keyed by cell and z8, so the safe generalisation is a MERGE: reuse a
+record only for the entry whose cell and z8 it measured, start every
+other entry fresh, keep the old file, write the re-keyed one before
+measuring. `second_order_pass` does that now (same-count mismatches are
+still refused: they mean a different build); test case 6 covers it.
+
+`fill_holes_direct .improveDays`: the same cell-by-cell solve at every
+filled cell more than 2 d slower than a column neighbour, seeded from
+faster neighbours only, a root kept only if faster than what the cell
+holds, and the next slower neighbour queued when a cell improves -- so a
+column is walked from one fast root. On column 15 (0.6587), where the
+fourth-branch rib had stalled at once and the fast family's 22-25 d rib
+filled the column, the chain climbed from the 17.25 d cell:
+
+| sD | before | after |
+|---|---|---|
+| 0.1667 .. 0.5000 (9 cells) | 24.9 .. 24.0 d | **17.84 .. 17.06 d** |
+| 0.9167 | 22.9 d | 18.63 d |
+| 0.5417 .. 0.8750 (9 cells) | 23.9 .. 22.9 d | unchanged: the direct solve from the 17.06 d cell diverges (168-275 d) even at a 900 s cap, from below and from above |
+
+plus (0.0417, 0.3671) 20.33 -> 18.31 d. Eleven cells improved by more than
+two days; 49 direct points in the rib file. The nine stuck cells look
+like a fold of the fourth branch's sheet in the departure phase between
+sD 0.50 and 0.54 at this arrival phase -- the same wall the rib walker
+hit -- so the fast family's 23 d roots may be the true minima there, or
+the fast sheet may continue past a fold the direct solver cannot jump.
+An arc in sD at fixed sA = 0.6587 would settle it; left open.
+
+Round 8 = round 6 re-packaged with the improved rib file, then audit and
+sweep with the merged sidecar; chained behind the last improve pass.

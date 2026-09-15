@@ -49,6 +49,10 @@ function out = fill_holes_direct(catMat, opts)
 %                                                   certified root is kept
 %   .wallSec                double                  per certification [600]
 %   .K                      int                     shooting segments [24]
+%   .anchorMat              char                    a certified root file
+%                                                   for arclength_arrival's
+%                                                   setup (only its layout
+%                                                   is used) [the 70 mN anchor]
 %
 %% Outputs:
 %
@@ -83,18 +87,21 @@ sh = cat_.sheets(1);
 sD = sh.sD_frac(:).';  sA = sh.sA_frac(:).';  nD = numel(sD);  nA = numel(sA);
 has = sh.has_solution(:, :, 1);  tfnd = sh.tf_nd(:, :, 1);  idx = sh.entry_index(:, :, 1);
 z8 = sh.z8;
-tStar = cat_.constants.tStar_s;  lStar = cat_.constants.lStar_km;  rMoonKm = 1737.4;
+tStar = cat_.constants.tStar_s;  rMoonKm = 1737.4;
 cells = d('cells', []);
 if isempty(cells), [iDh, iAh] = find(~has);  cells = [iDh, iAh]; end
 nHoles = nnz(~has);
 lg('fill_holes_direct: %d x %d grid, %d holes, %d cells to try', nD, nA, nHoles, size(cells, 1));
 
-% ---- the physics, from the same setup the ribs used ----------------------
-[B, ~] = arclength_arrival('setup', struct('sD', 0));
-mu = B.mu;  Tmax = B.Tnd;  c = B.cnd;
+% ---- the physics, FROM THE CATALOG (engine, orbits, spine) ---------------
+so = struct('thrustN', cat_.rungs_N(1), 'ispS', cat_.thruster.isp_s, 'm0kg', cat_.thruster.m0_kg, ...
+            'tauDRO', sh.tauDRO, 'NpTulip', sh.Np, 'pmTulip', sh.pm, 'sD', sD(1));
+if isfield(opts, 'anchorMat') && ~isempty(opts.anchorMat), so.anchorMat = opts.anchorMat; end
+[B, ~] = arclength_arrival('setup', so);
 pool = capped_pool();
 floorKm = clearKm - rMoonKm;
 problem = B.problem;
+solveOpts = struct('N', N, 'K', K, 'clearKm', clearKm, 'maxCpuSec', maxCpu, 'wallSec', wallSec, 'pool', pool);
 
 % ---- resume: keep what an earlier run certified --------------------------
 R = struct('j', {}, 'sA', {}, 'pts', {}, 'stop', {}, 'nSolve', {});
@@ -167,8 +174,6 @@ while kc < size(cells, 1)                       % the list grows as improvements
         lg('  cell (%2d,%2d) sD %.4f sA %.4f: no certified neighbour', iD, iA, sD(iD), sA(iA));
         continue
     end
-    rv0 = B.stateD(sD(iD));  rv0 = rv0(1:6);
-    rvf = B.stateA(sA(iA));
     t0 = tic;  okCell = false;  reason = '';  tfD = NaN;  tfC = NaN;  seedUsed = [];
     best = [];  reasons = {};
     if has(iD, iA), reasons{end+1} = sprintf('improve: cell holds %.3f d', tfnd(iD, iA)*tStar/86400); end
@@ -177,27 +182,15 @@ while kc < size(cells, 1)                       % the list grows as improvements
         zN = z8(:, idx(nD_, nA_));
         rvN = B.stateD(sD(nD_));  rvN = rvN(1:6);
         try
-            % the neighbour's PMP flight as the warm start
-            [tauR, rvR] = pumpkyn.cr3bp.tfMinProp(zN(8), [rvN(:); 1; zN(1:7)], Tmax, c, mu);
-            sN = linspace(0, tauR(end), N + 1);
-            X0 = interp1(tauR, rvR(:, 1:7), sN, 'spline').';
-            LV = interp1(tauR, rvR(:, 11:13), sN, 'spline');
-            U0 = [(-LV ./ max(vecnorm(LV, 2, 2), eps)).'; ones(1, N + 1)];
-            o = casadi_mintime_dro(rv0, rvf(1:6), Tmax, c, mu, N, X0, U0, zN(8), struct('maxIter', 3000, ...
-                    'scheme', 'hermite-simpson', 'sundman', true, 'returnModel', true, ...
-                    'minAltKm', floorKm, 'maxCpuSec', maxCpu));
-            if isfield(o, 'model'), o = rmfield(o, 'model'); end
-            tfD = o.tf * tStar/86400;
-            peris = min(vecnorm(o.X(1:3, :) - [1 - mu; 0; 0], 2, 1))*lStar - rMoonKm;
-            if ~o.success
+            % the neighbour's PMP flight as the warm start (direct_cell_solve)
+            [C, dinfo] = direct_cell_solve(zN, rvN, sD(iD), sA(iA), B, solveOpts);
+            tfD = dinfo.tfDirectDays;
+            if ~dinfo.success
                 reasons{end+1} = sprintf('direct solve failed (seed %.4f,%.4f)', seedUsed);  continue
             end
-            if peris < floorKm + 5
-                reasons{end+1} = sprintf('direct solution rides the clearance floor (%.0f km, %.1f d, seed %.4f,%.4f)', peris, tfD, seedUsed);  continue
+            if ~C.ok && contains(C.reason, 'clearance floor')
+                reasons{end+1} = sprintf('%s (seed %.4f,%.4f)', C.reason, seedUsed);  continue
             end
-            seed = harvest_ms_seed(o, K);
-            copts = struct('pool', pool, 'wallSec', wallSec, 'sA', sA(iA), 'sD', sD(iD));
-            C = certify_root(seed, rv0, rvf, B, copts);
             if C.ok
                 if isempty(best) || C.tfDays < best.tfDays, best = C;  tfC = C.tfDays; end
                 reasons{end+1} = sprintf('certified %.3f d (seed %.4f,%.4f)', C.tfDays, seedUsed);

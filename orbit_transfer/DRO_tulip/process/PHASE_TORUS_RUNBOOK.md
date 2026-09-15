@@ -60,8 +60,10 @@ how to watch it; they remain the manual route when a step needs a hand.
 `run_costate_library(struct(...))` is the entry point. Section 0 of the file
 is the ONE place the orbits, engine and grid are chosen; the call can pass
 `nD`, `nA`, `sD0`, `sA0`, `outDir`, `nWorkers`, `extraRibFiles`, `run`
-(which stages), `launch`. The grid is a LATTICE: `sD = sD0 + (0:nD-1)/nD`,
-`sA = sA0 + (0:nA-1)/nA`. The chain script `build_70mN_library.m` holds
+(which stages), `launch`. The grid is two LISTS: pass `.sD` and `.sA`
+(any strictly increasing phases in [0,1)), or `nD`/`nA`/`sD0`/`sA0` for
+the lattice `sD0 + (0:nD-1)/nD`, `sA0 + (0:nA-1)/nA` (a lattice that wraps
+past 1 is given as `sort(mod(., 1))`). The chain script `build_70mN_library.m` holds
 the anchors table (name, seed file, sA0, family label) and the arc/rib
 budgets; every family the campaign finds gets a row there.
 

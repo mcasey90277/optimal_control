@@ -4512,3 +4512,46 @@ Where the families' ribs land in the packaged catalog (round-3 dry run,
 column's whole rib and the 0.0337 and 0.8254 direct roots), 23 ribs
 unidentified (-2: ribs from an earlier round whose spine root is not
 among this sheet's certified roots -- expected, and now visible).
+
+## 67. The fourth branch mapped: it owns 0.59-0.78 by 4-7 days (2026-09-14, evening)
+
+Both arcs from the 0.7837 root (17.83 d) are in, 4001 roots each.
+
+**up** (0.7837 -> fold at 1.2242 -> back to 0.917): t_f climbs from 17.8
+to 24.8 d. Slower than the sheet's best at every grid level it crosses
+except 0.8671 (19.01 vs 19.32 d, marginal). Its second fold at 0.8617 sits
+where the chart is weakest (min |rho| 0.015 at 0.873).
+
+**dn** (0.7837 -> fold cluster at 0.573-0.592 -> a slow sheet up to
+1.028): on the way down the branch is the fastest thing yet seen on
+0.62-0.74 --
+
+| level | col | direct18 root | round-4 best | gain |
+|---|---|---|---|---|
+| 0.7421 | 17 | **17.17 d** | 24.07 d | 6.9 d |
+| 0.7004 | 16 | **16.80 d** | 23.47 d | 6.7 d |
+| 0.6587 | 15 | **17.28 d** (17.38, 17.39 on the return legs) | 22.82 d | 5.5 d |
+| 0.6171 | 14 | **17.27 d** (17.86, 18.13) | 22.15 d | 4.9 d |
+
+-- then it loses normality (min |rho| 3.5e-5 at 0.5785) in a cluster of
+five folds between 0.5734 and 0.5917 and comes back up on a sheet at
+32-38 d that is slower than everything (0.5754 at 32.6 d, 0.9921 at 37.6 d).
+So the branch's fast sheet spans about 0.59 to 0.78, and the map now has a
+4 d step between col 13 (0.5754, fast family 21.45 d) and col 14 (17.27 d):
+the obvious place for a warm-started direct solve, from the 17.27 d root,
+to look for a fifth root below 21 d.
+
+The direct-found roots at 0.9921 (18.30 d) and 1.0337 (18.14 d) are on
+NEITHER direct18 arc (up passes them at 20.9 and 21.6 d, dn at 37.6 d), so
+they remain unattached -- a branch no arc has walked.
+
+Housekeeping the day paid for: the first dn walk died in a MATLAB segfault
+at step ~2160 with nothing on disk, so `arclength_ms` now writes the arc so
+far atomically every 50 steps (`.partialFile/.saveEvery`); the relaunch
+gave the table above from its partial file twenty minutes in. Round 2
+closed clean (409 entries, audit 409/0, sweep 0 crossings, worst H6 5.3x,
+lift 24x). Round 4's ribs finished (cols 19-23 walked to 23/16/22/21/20 of
+23 points; 491 rib points + 24 spines = 515 entries packaged) and its
+finalizer is auditing. Round 5 -- the sheet rebuilt with the direct18 arcs,
+ribs re-walked wherever a spine changes, every earlier round's ribs offered
+to the packager -- launched 18:25.

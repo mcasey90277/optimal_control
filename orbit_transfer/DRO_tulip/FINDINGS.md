@@ -4555,3 +4555,30 @@ lift 24x). Round 4's ribs finished (cols 19-23 walked to 23/16/22/21/20 of
 finalizer is auditing. Round 5 -- the sheet rebuilt with the direct18 arcs,
 ribs re-walked wherever a spine changes, every earlier round's ribs offered
 to the packager -- launched 18:25.
+
+## 68. Round 5, and a fifth root at 0.4921 (2026-09-14, night)
+
+Round 5's sheet (12 arcs, every earlier seed) certified 24/24 phases and
+the fourth branch took five columns from the fast family: 0.6171 17.273,
+0.6587 17.281, 0.7004 16.797, 0.7421 17.169 (were 22.2-24.1 d) and 0.8671
+19.009 (was 19.323). Ribs for those five columns are walking; the other
+19 ribs are reused from round 4. Round 3 closed clean (432 entries, audit
+432/0, sweep 0 crossings); round 4's audit is at 500/515.
+
+The direct probe at the branch's lower fold (0.5754, 0.5337, 0.4921,
+seeded from the certified 17.27 d and 17.28 d roots):
+
+| phase | seed | result |
+|---|---|---|
+| 0.5754 | 0.6171 | 20.00 d with the periselene AT the 1900 km floor (162 km altitude) -- a clearance-constrained arc, not an unconstrained extremal; the certifier would refuse it. The sheet's 21.45 d stands. |
+| 0.5754 | 0.6587 | failed |
+| 0.5337 | both | 76 d / 52 d, junk |
+| 0.4921 | 0.6171 | **17.959 d, periselene 10,500 km** -- harvested, ms-polished, certified at the exact grid phase in 33 s: 17.9605 d, fly 0.000 km, conj PASS, lift 9.0e3x. The sheet has 20.220 d there. |
+
+So the fast sheet is not one branch: below the fourth branch's fold at
+0.59 there is another root 2.3 d under the fast family, and at 0.5754 the
+fastest thing the direct solver finds grazes the Moon. The 0.4921 root is
+in `mintime_70mN_direct_certified.mat` (the next sheet rebuild seeds from
+it) and is the anchor of two more arcs (`arrival_arc_direct11_{up,dn}`,
+launched 20:40, partial saves on) that will say whether it is the fourth
+branch continuing past its fold on another sheet or a family of its own.

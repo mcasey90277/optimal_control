@@ -33,6 +33,28 @@ The exact jobs: `indirect/batch/torus/` (README inside).
 - 16 cores. A round with four rib workers, an arc pair and a finalizer runs at load 30-40 and everything slows; it still finishes.
 - Never shell out to `git` from a job (`run_costate_library` reads `.git` itself); if `/usr/bin/git` says "You have not agreed to the Xcode license", run `sudo xcodebuild -license accept`, and until then commit with `/Library/Developer/CommandLineTools/usr/bin/git`.
 
+## 1b. The one-call route: `run_phase_torus`
+
+Since 2026-09-15 the whole loop below is one entry script:
+
+```matlab
+spec = struct('sD', [0 1/3 2/3], 'sA', sort(mod(0.0754 + (0:23)/24, 1)), ...   % any phases in [0,1)
+    'orbits', struct('tauDRO', 1, 'NpTulip', 7, 'pmTulip', -1), ...
+    'engine', struct('thrustN', 0.070, 'ispS', 900, 'm0kg', 150), ...
+    'anchors', {{'anchor', 'results/mintime_70mN_anchor.mat', 0.0754, 'fast'}}, ...  % one certified root at sD(1)
+    'outDir', 'results/my_torus', 'tag', 'mine', 'nWorkers', 4);
+run_phase_torus(setfield(spec, 'plan', true));   % prints round 1's plan, launches nothing
+out = run_phase_torus(spec);                     % rounds until nothing changes; out.final = the library
+```
+
+Each round is a `run_costate_library` campaign in `<outDir>/round_NN`
+(arcs spawned as batch jobs, the sheet at the listed phases, ribs for
+changed columns, finalizer, holes + improve, then discovery of new
+families by direct solves at empty or slow columns); the driver resumes
+from `<outDir>/torus_state.mat` and copies the last round to
+`<outDir>/final`. Sections 2-9 describe what it does at each step and
+how to watch it; they remain the manual route when a step needs a hand.
+
 ## 2. Declare the campaign (section 0 of `run_costate_library`)
 
 `run_costate_library(struct(...))` is the entry point. Section 0 of the file

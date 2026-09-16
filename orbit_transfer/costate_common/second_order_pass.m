@@ -232,17 +232,21 @@ if d('writeback', false)
     cat_.sheets(1).conj_zero = Cz;
     cat_.sheets(1).conj_unresolved = Cu;      % NaN = swept before 2026-09-11 (no such class)
     cat_.sheets(1).h6_margin = Hm;
-    Lm = nan(size(s.has_solution));
-    for q = 1:n, Lm(iD(q), iA(q), iR(q)) = R(q).liftMargin; end
+    Lm = nan(size(s.has_solution));  Mr = Lm;
+    for q = 1:n
+        Lm(iD(q), iA(q), iR(q)) = R(q).liftMargin;
+        if isfield(R(q), 'minRelSigma') && ~isempty(R(q).minRelSigma), Mr(iD(q), iA(q), iR(q)) = R(q).minRelSigma; end
+    end
     cat_.sheets(1).lift_margin = Lm;
+    cat_.sheets(1).conj_min_rel = Mr;        % the closest near-miss, x median sigma_6 (NaN = none)
     % the sweep's remark on the entry's note, where there is something to say
     if isfield(cat_.sheets(1), 'entry_notes') && ~isempty(cat_.sheets(1).entry_notes)
         en = cat_.sheets(1).entry_notes;
         for q = 1:n
             e = s.entry_index(iD(q), iA(q), iR(q));
             nu = 0;  if isfield(R, 'nUnresolved') && ~isempty(R(q).nUnresolved), nu = R(q).nUnresolved; end
-            if (R(q).nNearMiss > 0 || nu > 0) && ~contains(en{e}, 'sweep:')
-                en{e} = strjoin([en(e), {sprintf('sweep: %d near-miss, %d unresolved', R(q).nNearMiss, nu)}], ' | ');
+            if nu > 0 && ~contains(en{e}, 'sweep:')
+                en{e} = strjoin([en(e), {sprintf('sweep: %d unresolved conjugate candidate(s)', nu)}], ' | ');
                 if startsWith(en{e}, ' | '), en{e} = en{e}(4:end); end
             end
         end

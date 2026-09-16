@@ -25,7 +25,7 @@ S = struct('sA', sA, 'TF', [4.2*4.43 NaN 4.5*4.43], 'Z8', nan(8, 3), 'cand', {ce
 S.cand{1} = cert(4.2, sA(1), sD0, 'arc crossing: arc 1, level 0.0500 | lift margin 12.0x (gate 10x)');
 S.cand{3} = cert(4.5, sA(3), sD0, 'seed: direct_certified (19.9 d)');
 pts = [cert(4.3, sA(1), 0.75, 'rib step 1 of 3 from spine 18.6 d at sA 0.0500'), ...
-       cert(4.4, sA(1), 0.5, 'rib step 2 of 3 from spine 18.6 d at sA 0.0500, 1 bisection(s) | 2 conjugate near-miss (min 1.5e-03 x median)')];
+       cert(4.4, sA(1), 0.5, 'rib step 2 of 3 from spine 18.6 d at sA 0.0500, 1 bisection(s) | lift margin 12.5x (gate 10x)')];
 R = struct('j', 1, 'sA', sA(1), 'pts', pts, 'stop', 'complete', 'nSolve', 3);
 ribs = {R};
 outMat = fullfile(tmp, 'dro_tulip_test_tau1_Np7.mat');
@@ -68,8 +68,8 @@ ok = chk(ok, ~isempty(p) && contains(p{1}, 'notes_key'), 'entry_notes without a 
 % second_order_pass write-back appends 'sweep: k near-miss, m unresolved'
 % to entries with something to say; exercised through its own record shape
 en = sh.entry_notes;  q = e41;
-en{q} = strjoin([en(q), {sprintf('sweep: %d near-miss, %d unresolved', 2, 0)}], ' | ');
-ok = chk(ok, endsWith(en{q}, 'sweep: 2 near-miss, 0 unresolved') && startsWith(en{q}, 'rib step 1'), ...
+en{q} = strjoin([en(q), {sprintf('sweep: %d unresolved conjugate candidate(s)', 1)}], ' | ');
+ok = chk(ok, endsWith(en{q}, 'sweep: 1 unresolved conjugate candidate(s)') && startsWith(en{q}, 'rib step 1'), ...
          'a sweep remark appends after the producer and certifier text');
 
 if ok, fprintf('TEST_ENTRY_NOTES: ALL PASS\n'); else, fprintf('TEST_ENTRY_NOTES: FAIL\n'); end

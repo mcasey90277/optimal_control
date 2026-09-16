@@ -130,6 +130,7 @@ if isfile(holesMat)
 end
 
 % ---- the sweep's remark, from the keyed sidecar --------------------------
+minRel = nan(size(has));                   % the closest near-miss per entry, for the grid
 if isfile(sidecarF)
     P = load(sidecarF);  R = P.R;
     for q = 1:numel(R)
@@ -137,10 +138,11 @@ if isfile(sidecarF)
         e = idx(R(q).key(1), R(q).key(2));
         if e == 0 || norm(z8(:, e) - R(q).z8(:)) > 1e-9*max(1, norm(z8(:, e))), continue, end
         nu = 0;  if isfield(R(q), 'nUnresolved') && ~isempty(R(q).nUnresolved), nu = R(q).nUnresolved; end
-        if R(q).nNearMiss > 0 || nu > 0
-            notes{e} = strjoin([notes(e), {sprintf('sweep: %d near-miss, %d unresolved', R(q).nNearMiss, nu)}], ' | ');
+        if nu > 0
+            notes{e} = strjoin([notes(e), {sprintf('sweep: %d unresolved conjugate candidate(s)', nu)}], ' | ');
             if startsWith(notes{e}, ' | '), notes{e} = notes{e}(4:end); end
         end
+        if isfield(R(q), 'minRelSigma') && ~isempty(R(q).minRelSigma), minRel(R(q).key(1), R(q).key(2)) = R(q).minRelSigma; end
     end
 end
 
@@ -155,12 +157,13 @@ fprintf('backfill_entry_notes: %d entries: %d spine, %d rib, %d direct, %d unkno
 if dryRun, return, end
 
 cat_.sheets(1).entry_notes = notes;
+if any(isfinite(minRel(:))), cat_.sheets(1).conj_min_rel = minRel; end   % closest near-miss, x median sigma_6
 cat_.notes_key = struct('layout', '<family> | <how found> | <certifier remarks> | <sweep remarks>', ...
     'how_found', {{'arc crossing: arc k (<file>), level L', 'seed: ...', ...
                    'rib step k of n off the sD = .. spine at sA .. (<round>, <file>)', ...
                    'direct cell solve seeded from (sD, sA) [, replaced t_f d]'}}, ...
-    'remarks', {{'polish plateaued |R|=.. > tolR ..', 'k conjugate near-miss (min .. x median)', ...
-                 'lift margin ..x (gate 10x)', 'H6 margin ..x', 'sweep: k near-miss, m unresolved'}}, ...
+    'remarks', {{'polish plateaued |R|=.. > tolR ..', 'lift margin ..x (gate 10x)', 'H6 margin ..x', ...
+                 'sweep: k unresolved conjugate candidate(s)'}}, ...
     'note', ['Backfilled by backfill_entry_notes on ' char(datetime('now')) ' from the sheet, the rib files and the direct cells; ' ...
              'the numbers that gate decisions live in the numeric grids (lift_margin, h6_margin, conj_*).']);
 p = catalog_schema('validate', cat_);
@@ -182,9 +185,6 @@ parts{end+1} = how;
 if isfield(C, 'reason') && contains(C.reason, 'plateaued')
     t = regexp(C.reason, 'plateaued at \|R\| = ([^,]+), above tolR = ([^)]+)', 'tokens', 'once');
     if ~isempty(t), parts{end+1} = sprintf('polish plateaued |R|=%s > tolR %s', t{1}, t{2}); end
-end
-if isfield(C, 'conjDense') && isstruct(C.conjDense) && isfield(C.conjDense, 'nNearMiss') && C.conjDense.nNearMiss > 0
-    parts{end+1} = sprintf('%d conjugate near-miss (min %.1e x median)', C.conjDense.nNearMiss, C.conjDense.minRel);
 end
 if isfield(C, 'liftMargin') && isnumeric(C.liftMargin) && isfinite(C.liftMargin) && C.liftMargin < 20
     parts{end+1} = sprintf('lift margin %.1fx (gate 10x)', C.liftMargin);

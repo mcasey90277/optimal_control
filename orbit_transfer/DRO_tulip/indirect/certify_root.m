@@ -490,9 +490,9 @@ end
 % "how found" clause in front of it; the packager ships it as entry_notes.
 rem = {};
 if plateau, rem{end+1} = sprintf('polish plateaued |R|=%.1e > tolR %.0e', it.normR, tolR); end
-if isstruct(C.conjDense) && isfield(C.conjDense, 'nNearMiss') && C.conjDense.nNearMiss > 0
-    rem{end+1} = sprintf('%d conjugate near-miss (min %.1e x median)', C.conjDense.nNearMiss, C.conjDense.minRel);
-end
+% (conjugate near-misses are cleared on nearly every entry -- the 70 mN
+% library's ridge -- so they are numbers for the grids, conj_near_miss and
+% conj_min_rel, not remarks for the note)
 if isfield(C, 'liftMargin') && isfinite(C.liftMargin) && C.liftMargin < 20
     rem{end+1} = sprintf('lift margin %.1fx (gate 10x)', C.liftMargin);
 end

@@ -32,9 +32,9 @@ hand.
 
 Known structural issues, each a step in `TODO.md` → *Cleanup plan*:
 
-- **Inverted dependencies:** `second_order_pass` and `golden_cells` put
-  `DRO_tulip/indirect` on the path, and `golden_cells` loads a gitignored
-  DRO_tulip results file.
+- **Inverted dependency:** `second_order_pass` puts `DRO_tulip/indirect`
+  on the path (cleanup step 9). `golden_cells` did too, and loaded a
+  gitignored DRO_tulip results file; fixed 2026-09-16 (step 8).
 - **The most-shared engine lives in a campaign:** `DRO_tulip/indirect/thrust_ladder_library`
   (with `casadi_mintime_dro`, `certify_dro_mintime`, `dro_residual`) is called by
   HALO, DPO, HALO_HALO and GTO, each of which adds `DRO_tulip` to its path.
@@ -139,7 +139,7 @@ folders, *internal* means called only from within this folder.
 |---|---|---|
 | `catalog_schema.m` | THE versioned schema authority (v1/v2 min-time; **v3 = objective/γ axis, 2026-09-02**: one catalog per objective, named `axis3`, stored `mf_frac` + `deltav_from_mf`, mandatory `Yj` junctions for minfuel; **v3.1, 2026-09-07: mixed continuation families** — `smoothing.family = 'mixed'` with `smoothing.codes`, per-entry `sheets.family_code` (int8) and `delta_floor` (huberc), validated; and the validator rejects any catalog whose `thruster.c_nd` disagrees with `isp_s`, the 09-02 mislabel). `DRO_tulip/build_minfuel_catalog` is the v3/v3.1 packager (two sources: `minfuel_grid.mat` + the high-γ race via `highgamma_select`). | DRO, HALO_HALO |
 | `build_costate_catalog_family.m` | Family-agnostic compact-catalog packager (ND-only quantities, `derive` formulas, `dep_family`/`dep_params` recipes; keeps the legacy `tauDRO` field = departure period so every picker works on every catalog). | DRO, HALO, DPO, HALO_HALO, GTO |
-| `golden_cells.m` + `golden_cells_data.mat` | 20-check quality regression: three engine cells (dro/halo/dpo, flown-perturbed 1 N entries + conjugate verdicts) + one harvest cell with REAL collocation duals. **Run after any change to the files above.** A quality drop (iterations, residual) is a failure even when correctness gates pass. **Not runnable from a fresh clone:** the harvest cell loads `DRO_tulip/direct/results/dsweep_12x12_cells.mat` (20 MB, gitignored) and the file puts `DRO_tulip/indirect` on the path (cleanup step 8). | entry point |
+| `golden_cells.m` + `golden_cells_data.mat` | 20-check quality regression: three engine cells (dro/halo/dpo, flown-perturbed 1 N entries + conjugate verdicts) + one harvest cell with REAL collocation duals. **Run after any change to the files above.** A quality drop (iterations, residual) is a failure even when correctness gates pass. Self-contained since 2026-09-16: the harvest cell's inputs live in `golden_cells_data.mat`, so it runs from a fresh clone with no campaign folder on the path. | entry point |
 
 **Campaign orchestration (job control, not optimal control)**
 

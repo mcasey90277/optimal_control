@@ -27,8 +27,10 @@ function ok = golden_cells()
 %
 %% Inputs:
 %
-%   none (references in golden_cells_data.mat beside this file; the
-%   harvest cell reads DRO_tulip/direct/results/dsweep_12x12_cells.mat)
+%   none (references AND the harvest cell's collocation inputs live in
+%   golden_cells_data.mat beside this file -- .cells, .harvest,
+%   .harvestCell -- so the regression runs from a fresh clone with no
+%   campaign folder on the path)
 %
 %% Outputs:
 %
@@ -36,11 +38,12 @@ function ok = golden_cells()
 %
 %% Revision History:
 %  M. Casey                                                   (c) 08/08/2026
+%  M. Casey  self-contained: harvest inputs in the data file   (c) 09/16/2026
 %  Copyright Coorbital Inc.
 %% ------------------------ Begin Code Sequence ---------------------------
 
 here = fileparts(mfilename('fullpath'));
-addpath(fullfile(fileparts(here), 'DRO_tulip', 'indirect'));
+addpath(here);                                   % costate_common only
 G = load(fullfile(here, 'golden_cells_data.mat'));
 ok = true;
 
@@ -67,13 +70,11 @@ for kc = 1:numel(G.cells)
 end
 
 %% Cell 4: harvest golden (real collocation duals through the full path):
-CC = load(fullfile(fileparts(here), 'DRO_tulip', 'direct', 'results', ...
-                   'dsweep_12x12_cells.mat'));
-cell4 = CC.CELLS{2,5};
-o = struct('X', cell4.X(1:7,:), 'lamDef', cell4.lamDef, 'Um', cell4.Um, ...
+cell4 = G.harvestCell;                % DRO_tulip dsweep_12x12 CELLS{2,5}, copied
+o = struct('X', cell4.X, 'lamDef', cell4.lamDef, 'Um', cell4.Um, ...
            'tNodes', cell4.tNodes, 'tf', cell4.tf);
 [seed, dg] = harvest_ms_seed(o, 24);
-[z, info] = ms_tfmin(cell4.rv0(1:6), cell4.rvf(1:6), seed, ...
+[z, info] = ms_tfmin(cell4.rv0, cell4.rvf, seed, ...
                      cell4.Tmax, cell4.c, cell4.muStar, struct());
 h = G.harvest;
 ok = check('harv', 'converged', info.converged) && ok;

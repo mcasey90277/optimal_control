@@ -69,12 +69,15 @@ the folder*. Steps 1–9 change no numerical result and need no decision; steps
 
 **C. Cut the library's dependency on DRO_tulip**
 
-- [ ] **8. Make `golden_cells` self-contained.** Its harvest cell loads
-  `DRO_tulip/direct/results/dsweep_12x12_cells.mat` (20 MB, gitignored), so
-  the regression cannot run from a fresh clone; it also adds
-  `DRO_tulip/indirect` to the path. Copy the cell's inputs into the committed
-  `golden_cells_data.mat` and drop the path. Gate: 20/20 with identical
-  numbers, run with `DRO_tulip` OFF the path. Half a day.
+- [x] **8. Make `golden_cells` self-contained** — DONE 2026-09-16. The
+  harvest cell's collocation inputs (`X(1:7,:)`, `lamDef`, `Um`, `tNodes`,
+  endpoints, thruster, mass ratio) are copied into
+  `golden_cells_data.mat` as `.harvestCell` (the file grows 1 KB -> 116 KB);
+  the `DRO_tulip/indirect` addpath is gone (nothing it called lived there
+  any more). Gate met: 20/20, and every cell's z, iters, normR, conjugate
+  verdict, vote margin and lambda_t BITWISE equal to the pre-change run,
+  executed with no DRO_tulip/HALO/DPO/GTO directory on the path and the
+  gitignored `dsweep_12x12_cells.mat` renamed out of reach.
 - [ ] **9. Bring `ladder_endpoints` here** (85 lines; needs only
   `get_family_orbit` and pumpkyn getters) with `test_ladder_endpoints`, and
   remove `second_order_pass`'s `DRO_tulip/indirect` addpath. DRO_tulip callers

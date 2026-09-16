@@ -4712,3 +4712,66 @@ hang or lie. Open, none blocking: the nine column-15 cells (an sD-arc at
 sA = 0.6587 would say whether 23 d is the minimum there), arcs from the
 0.9921 / 0.0337 roots to attribute the last 22 unattached entries, the
 deliverable zip and the ship decision.
+
+## 73. run_phase_torus: the driver, its first acceptance run, and the Astra review (2026-09-15)
+
+`run_phase_torus(spec)` is the one-call route to a phase torus over any
+strictly increasing lists of departure and arrival phases (the lattice
+assumption is out of the six files underneath; `rib_targets` owns the
+rib-step rule). A 3 x 3 acceptance torus from one anchor with small budgets
+ran the whole loop unassisted: arcs, sheet, ribs, finalizer, holes,
+re-package, then DISCOVERY found the 17.705 d root at 0.7421 (the direct18
+family) from the fast root, anchored it, and round 2 walked its arcs and
+ribs and finished clean. Two defects surfaced on the way and were fixed:
+the chain's grid-override block refused the new list fields, and a round
+that packaged in-call was then judged by the previous attempt's FAILED
+verdict file.
+
+GPT-6 Astra (xhigh, 45 KB bundle, $0.96, 6 min) then reviewed the driver
+and returned 21 findings (`reviews/run_phase_torus_astra_2026-09-15.md`).
+Adjudication:
+
+**Applied (17).** Campaign manifest in the state file, checked on resume
+(a different grid, engine, orbit pair or tag is refused). Arcs live in the
+campaign's own folder (`<outDir>/arcs`; `.arcDir` threaded through
+run_costate_library, build_arrival_sheet, the chain, the packager and the
+family map) so two campaigns can never consume each other's. Arc jobs
+publish through a temp file and a rename and write a `.done` / `.fail`
+verdict; the driver records their PIDs, waits on verdicts, fails fast on
+a `.fail`, and kills what is left at the deadline. A live supervisor for
+a round is adopted rather than relaunched. Anchor names are unique per
+column (`d03_1`, `d03_2`, ...); the state is saved at every promotion.
+"Spine unchanged" compares the root (t_f and z8), a lost spine is
+reported, and a rib copied into a round for a spine that has since
+changed is set aside. Every distinct certified probe root is registered
+(`direct_certified.mat`, seeded into every later sheet); a spine root
+found by the filler is registered too; promotion to anchor needs a gain
+of `.acceptDays` (0.05 d, not 86 s) AND that no known family passes
+through the root (`family_map` attachment) -- a root on an existing
+family is a seed, not an anchor, so its arcs are not walked twice.
+Discovery seeds come from every certified candidate (winning or not) of
+columns within a circular phase radius, deduplicated, three per target;
+`.probeAll` probes every column. The re-package stage asserts success.
+One stopping rule: a round that registers no root and adds no anchor is
+a fixed point ('done'); the last allowed round with pending work ends in
+'budget' with the reason recorded; a finished campaign answers "nothing
+to do" (plan mode too). The final folder is rebuilt fresh, required
+products asserted, optional ones listed when absent. Shell paths quoted,
+the startup folder and MATLAB binary are options, `.orbits`/`.engine`
+default to the 70 mN campaign, `.rib.wallSec` reaches the rib jobs.
+Discovery's direct solve is wrapped in try/catch. The phase lists must
+be at least 1e-5 apart (the shared matcher resolution).
+
+**Declined or accepted as limitations (4).** The clearance-floor
+pre-check in `direct_cell_solve` stays a 5 km heuristic: the certifier
+re-flies every candidate on ode113 and gates the continuous clearance at
+1900 km itself, so the pre-check only spares a certification. The
+direct-cell attempt has no outer wall deadline beyond the solver's CPU cap
+and the certifier's wall cap; a hang in propagation or harvest would stall
+the driver -- noted, not fenced (the fence's pool cannot be nested). The
+arc jobs' level ladder now spans every whole-period copy the walk can
+reach, but the sheet does not depend on it (its re-scan handles wrapping
+itself). And the review's closing point stands as written: a certified
+root faster than the spine is a minimum-eligible entry of the gate
+stack, not a global-minimum certificate, and discovery is a heuristic
+whose silence is evidence, not proof -- `.probeAll` is the wider net.

@@ -113,6 +113,10 @@ if exist('chainOverrides', 'var')
     if isfield(chainOverrides, 'engine'), engine = chainOverrides.engine; end
     if isfield(chainOverrides, 'orbits'), orbits = chainOverrides.orbits; end
 end
+arcDirUsed = resDir;
+if exist('chainOverrides', 'var') && isfield(chainOverrides, 'arcDir') && ~isempty(chainOverrides.arcDir)
+    arcDirUsed = chainOverrides.arcDir;         % a torus campaign's own arc folder
+end
 % THE GRID IS TWO LISTS from here on: the lattice when the caller gave
 % nD/nA/origins, the caller's own phases when it gave .sD/.sA
 if ~isfield(grid, 'sA') || isempty(grid.sA), grid.sA = grid.sA0 + (0:grid.nA-1)/grid.nA; end
@@ -266,7 +270,7 @@ if run.package
     cat_ = package_phase_catalog(files.sheet, ribFiles, struct('tag', tag, ...
         'thrustN', engine.thrustN, 'ispS', engine.ispS, 'm0kg', engine.m0kg, ...
         'nD', grid.nD, 'sD0', grid.sD0, 'sD', grid.sD, 'outDir', outDir, ...
-        'familyLabels', {anchors(:, [1 4])}));
+        'familyLabels', {anchors(:, [1 4])}, 'arcDir', arcDirUsed));
     % THE RECEIPT: which invocation produced this catalog, from which
     % inputs. The driver reads it back instead of trusting an mtime.
     receipt = struct('invocationId', '', 'catalog', files.catalog, 'sheet', files.sheet, ...

@@ -11,7 +11,7 @@ function S = build_arrival_sheet(opts)
 %% Inputs:
 %
 %  opts                     struct (optional)
-%   .pattern ['arrival_arc_*.mat'] .out ['results/arrival_sheet_70mN.mat']
+%   .pattern ['arrival_arc_*.mat'] .arcDir [results/] .out ['results/arrival_sheet_70mN.mat']
 %   .sA [] an explicit list of arrival phases (any spacing) -- the sheet's
 %   columns; else the lattice .sA0 [0.0754] + (0:nA-1)/nA, .nA [12]
 %   .copts (certify_crossing options)
@@ -51,7 +51,8 @@ lStar = 389703.264829278;  tStar = 382981.289129055;
 % the client path at pool creation)
 pool = capped_pool();
 [B, anc] = arclength_arrival('setup', opts);
-files = dir(fullfile(here, 'results', pat));
+arcDir = d('arcDir', fullfile(here, 'results'));   % a campaign may keep its own arcs
+files = dir(fullfile(arcDir, pat));
 % a walk in progress leaves <arc>.partial.mat beside the finished arcs
 % (arclength_ms .partialFile); it is not an arc of record and would enter
 % the sheet twice once the walk finishes

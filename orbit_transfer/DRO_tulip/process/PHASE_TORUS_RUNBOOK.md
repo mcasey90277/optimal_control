@@ -48,12 +48,20 @@ out = run_phase_torus(spec);                     % rounds until nothing changes;
 ```
 
 Each round is a `run_costate_library` campaign in `<outDir>/round_NN`
-(arcs spawned as batch jobs, the sheet at the listed phases, ribs for
-changed columns, finalizer, holes + improve, then discovery of new
-families by direct solves at empty or slow columns); the driver resumes
-from `<outDir>/torus_state.mat` and copies the last round to
-`<outDir>/final`. Sections 2-9 describe what it does at each step and
-how to watch it; they remain the manual route when a step needs a hand.
+(arcs spawned as batch jobs into `<outDir>/arcs` with a `.done`/`.fail`
+verdict each, the sheet at the listed phases, ribs for the columns whose
+spine ROOT changed, finalizer, holes + improve, then discovery: direct
+solves at empty or slow columns -- or every column with `.probeAll` --
+seeded from other families' certified roots within `.seedRadius`; every
+distinct certified root is registered in `<outDir>/direct_certified.mat`,
+and one that beats the spine by `.acceptDays` and lies on no known family
+becomes an anchor). The driver keeps a manifest and its status in
+`<outDir>/torus_state.mat` (a different grid/engine/orbits/tag is
+refused; a finished campaign answers "nothing to do"), stops at a fixed
+point ('done') or at `.maxRounds` with work pending ('budget'), and
+rebuilds `<outDir>/final`. Astra-reviewed 2026-09-15 (FINDINGS 73).
+Sections 2-9 describe what it does at each step and how to watch it;
+they remain the manual route when a step needs a hand.
 
 ## 2. Declare the campaign (section 0 of `run_costate_library`)
 

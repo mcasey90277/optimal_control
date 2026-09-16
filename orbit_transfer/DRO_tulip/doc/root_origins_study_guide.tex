@@ -44,6 +44,7 @@
 \newcommand{\file}[1]{\texttt{#1}}
 \newcommand{\sD}{s_D}\newcommand{\sA}{s_A}
 \newcommand{\Tnd}{T_{\mathrm{nd}}}\newcommand{\cnd}{c_{\mathrm{nd}}}
+\newcommand{\Tl}{\mathcal{T}}
 
 \title{Where the First Root Comes From\\
 \large A section-by-section guide to \file{root\_origins\_study.m}:\\
@@ -97,17 +98,18 @@ which is nearly everything --- where there is no gift.
 Three mechanisms, in the order a campaign uses them, and each one is a
 \emph{measurement} in the script rather than a claim:
 \begin{enumerate}[nosep]
-\item \textbf{The cold lottery} (\S\ref{sec:lottery}). Solve the operating
+\item \textbf{The cold lottery} (Section~\ref{sec:lottery}). Solve the operating
       point cold, from nothing but the endpoints and a time-of-flight guess,
-      at several mesh densities. The meshes that converge do not agree. That
-      is why continuation is required equipment, not a convenience.
-\item \textbf{The ladder} (\S\ref{sec:direct}--\ref{sec:indirect}). Start
+      at several mesh densities. The accepted solves do not agree. That
+      motivates informed seeding or continuation rather than trusting one
+      cold solve.
+\item \textbf{The ladder} (Section~\ref{sec:direct}--\ref{sec:indirect}). Start
       where the problem is easy --- 15\,N, a half-day transfer under one
       turn, converges cold in seconds --- and walk the engine down, each rung
       seeded by the one above. The walk has two halves and a seam: direct
       collocation down to 0.5\,N, then a covector harvest, then multiple
       shooting the rest of the way.
-\item \textbf{The basin hunt} (\S\ref{sec:hunt}). From the root reached, ask
+\item \textbf{The basin hunt} (Section~\ref{sec:hunt}). From the root reached, ask
       the direct solver for other arrival phases. It is branch-blind: it lands
       wherever its warm start is near. That is a hazard if you assume it
       returns your family, and a discovery tool if you do not.
@@ -133,58 +135,91 @@ H=1+\lr^{\!\top}\bm v+\lv^{\!\top}\bm g+\Tnd q\Big(\frac{\lv^{\!\top}\bm u}{m}-\
 \qquad
 \dot\lm=-\frac{\partial H}{\partial m}=-\frac{\Tnd q\,\|\lv\|}{m^2}.
 \]
-Free terminal mass gives $\lm(\tf)=0$; integrating $\dot\lm\le0$ backward
-gives $\lm(t)\ge0$. Then the coefficient of $q$ in $H$ is
-$-\Tnd(\|\lv\|/m+\lm/\cnd)<0$ away from a zero primer, and minimising $H$
-selects $q=1$: \textbf{minimum time is all-burn}. The shooting unknown is
-$z=(\lambda(0),\tf)\in\R^8$ with $H(\tf)=0$ closing the free-time problem.
+\label{sec:q1}This is the normal, unconstrained minimum-principle formulation ($H=L+\lambda^{\!\top}\bm f$
+with $L=1$, controls minimising $H$), with positive mass, no terminal-mass
+penalty or active terminal-mass bound, and endpoint states that do not
+depend on $\tf$. Under those assumptions the terminal mass is free, so
+$\lm(\tf)=0$ (fixed terminal position and velocity do \emph{not} make
+their costates vanish), and integrating backward,
+\[
+\lm(t)=\int_t^{\tf}\frac{\Tnd\,q(\xi)\,\|\lv(\xi)\|}{m(\xi)^2}\,\mathrm d\xi\ \ge\ 0 .
+\]
+After minimising over the direction, $\partial H/\partial q=-\Tnd\big(\|\lv\|/m+\lm/\cnd\big)$,
+strictly negative wherever $\|\lv\|/m+\lm/\cnd>0$; minimising $H$ then
+selects $q=1$. A nonzero primer is sufficient for that, not necessary.
+
+\emph{Why primer zeros cannot spoil it.} The adjoints of $\bm r$ and $\bm v$
+are linear and homogeneous in $(\lr,\lv)$:
+$\dot\lr=-\bm g_r^{\!\top}\lv$, $\dot\lv=-\lr-\bm g_v^{\!\top}\lv$. At a
+primer zero, $\dot\lv=-\lr$. If $\lr$ vanished there too, both would
+vanish identically; then $\dot\lm=0$ and $\lm\equiv\lm(\tf)=0$, giving
+$H\equiv1$, which contradicts $H(\tf)=0$. So primer zeros are isolated,
+$q=1$ almost everywhere, and the direction's being undefined at isolated
+instants does not change the trajectory: \textbf{minimum time is all-burn}
+under these assumptions. An \emph{active} lunar-clearance constraint would
+need the constrained minimum principle instead; the shooter uses the
+unconstrained one.
+
+The shooting unknown is $z=(\lambda(0),\tf)\in\R^8$, with $H(\tf)=0$
+closing the free-time problem.
 \end{rig}
 
 %=========================================================================
 \section{The flow of the script}
 %=========================================================================
 
+\emph{A note on numbering.} ``Script \S$n$'' and the \S$n$ in the section
+headings and the diagram are the script's own section numbers, 0 to 8;
+``Section~$n$'' is this document's. They differ by three.
+
 \begin{intu}
 Two things to notice in the diagram. The data objects change type at
-\S4: above it the trajectory is a discrete collocation solution (\file{X},
-\file{U}, multipliers); below it, it is a shooting root ($z$ plus junction
-states). That seam is where costates come into existence, and it is the
-only place they do. And the record \file{S} grows at every box --- the
-script saves after every rung and every probe, so an hour-long run can be
-read while it is still going, and a stopped run leaves everything it had.
+script \S4: above it the trajectory is a discrete collocation solution
+(\file{X}, \file{U}, and the NLP's multipliers); below it, it is a shooting
+root ($z$ plus junction states). Script \S4 is the first place the
+multipliers are \emph{mapped} into a state-and-costate shooting seed;
+script \S7 harvests again, from each accepted probe. And the record
+\file{S} grows as the run goes: the script checkpoints each completed mesh,
+rung, handoff, certification and probe, so an hour-long run can be read
+while it is still going. A stage interrupted mid-way may be absent, the
+cold and direct records keep diagnostics rather than full solution arrays,
+and a failed save warns rather than guaranteeing anything.
 \end{intu}
 
 \begin{figure}[!tbp]\centering
-\begin{tikzpicture}[node distance=5.5mm]
+\begin{tikzpicture}[node distance=3.6mm]
 \node[proc] (s0) {\S0 user inputs\\{\scriptsize orbits, cell, \file{op}, \file{ref} (with its problem), ladders, hunt, \file{num}, \file{tol}}};
-\node[proc,below=of s0] (s1) {\S1 orbits from parameters\\{\scriptsize \file{get\_family\_orbit}, \file{phase\_state}, \file{refApplies}}};
+\node[proc,below=of s0] (s1) {\S1 orbits from parameters\\{\scriptsize \file{get\_family\_orbit}, \file{phase\_state}, \file{refApplies}; closure and seam asserted}};
 \node[data,below=of s1] (d1) {rv0, rvf \quad Tnd, cnd \quad S.config};
-\node[proc,below=of d1] (s3) {\S3 DIRECT ladder 15 $\to$ 0.5 N\\{\scriptsize \file{casadi\_mintime\_dro} per rung; band screen; \file{directOK}}};
-\node[data,below=of s3] (d3) {oPrev: X, U, tf, lamDef \quad S.direct};
-\node[proc,below=of d3] (s4) {\S4 HANDOFF\\{\scriptsize Sundman re-solve $\to$ \file{harvest\_ms\_seed} $\to$ \file{ms\_tfmin}}};
+\node[ext,below=of d1] (s2) {\S2 COLD LOTTERY \emph{(optional)}\\{\scriptsize X0 = U0 = [], one solve per mesh}};
+\node[proc,below=of s2] (s3) {\S3 DIRECT ladder 15 $\to$ 0.5 N\\{\scriptsize stops at the first refused rung; the \emph{last accepted} rung goes on}};
+\node[data,below=of s3] (d3) {last accepted rung: X, U, tf, lamDef \quad S.direct};
+\node[proc,below=of d3] (s4) {\S4 HANDOFF\\{\scriptsize try a Sundman re-solve, else plain-time fallback $\to$ harvest $\to$ \file{ms\_tfmin}}};
 \node[data,below=of s4] (d4) {zB, itB.Y $[14{\times}K]$, itB.tGrid $[1{\times}K{+}1]$};
-\node[proc,below=of d4] (s5) {\S5 INDIRECT ladder 0.375 N $\to$ target\\{\scriptsize banked starts, grid scaled, mass row rebuilt; exponent sweep}};
+\node[proc,below=of d4] (s5) {\S5 INDIRECT ladder \emph{(optional)}\\{\scriptsize banked starts, grid scaled, mass row rebuilt; stops after two empty rungs}};
 \node[data,below=of s5] (d5) {zCur, itCur \quad S.indirect (per attempt) \quad S.reached};
-\node[gate,below=of d5,inner sep=3pt] (s6) {\S6 \file{certify\_root}\\forwarded options};
-\node[data,below=of s6] (d6) {C; polished z, Y; grid $=\sigma\,\cdot$C.z(8)};
-\node[proc,below=of d6] (s7) {\S7 BASIN HUNT at other $\sA$\\{\scriptsize \file{flyFromJunctions} warm start; candidates banked as seeds}};
-\node[proc,below=of s7] (s8) {\S8 self-check: gates B1 H1 (fatal), B1b H2 H3 B2 C1; outcomes A B C};
-\node[ext,right=18mm of s3] (s2) {\S2 COLD LOTTERY\\{\scriptsize X0 = U0 = [], one solve per mesh}};
-\node[outc,below=of s2] (oA) {outcome A};
-\node[outc,right=18mm of s6] (oB) {outcome B\\{\scriptsize decided after \S6}};
-\node[outc,right=18mm of s7] (oC) {outcome C};
-\draw[arr] (s0)--(s1); \draw[arr] (s1)--(d1); \draw[arr] (d1)--(s3); \draw[arr] (s3)--(d3);
+\node[gate,below=of d5,inner sep=2pt] (s6) {\S6 \file{certify\_root}\\forwarded options};
+\node[data,below=of s6] (d6) {pass: polished z, Y; grid $=\sigma\cdot t_f^{\mathrm{cert}}$};
+\node[proc,below=of d6] (s7) {\S7 BASIN HUNT \emph{(optional)}\\{\scriptsize all probes from the SAME held root; warm-start failure $\to$ \textsc{inconclusive}}};
+\node[proc,below=of s7] (s8) {\S8 self-check: B1b H2 H3 B2 C1 reported; outcomes A B C};
+\node[outc,right=12mm of s2] (oA) {outcome A};
+\node[outc,right=12mm of s6] (oB) {outcome B\\{\scriptsize decided after \S6}};
+\node[outc,right=12mm of s7] (oC) {outcome C};
+\node[font=\scriptsize,text=red!60!black,align=left,right=3mm of d3] (f1) {B1 asserted here:\\fatal if no rung accepted};
+\node[font=\scriptsize,text=red!60!black,align=left,right=3mm of d4] (f2) {H1 asserted here:\\fatal if no root};
+\draw[arr] (s0)--(s1); \draw[arr] (s1)--(d1); \draw[arr] (d1)--(s2); \draw[arr] (s2)--(s3); \draw[arr] (s3)--(d3);
 \draw[arr] (d3)--(s4); \draw[arr] (s4)--(d4); \draw[arr] (d4)--(s5); \draw[arr] (s5)--(d5);
-\draw[arr] (d5)--(s6); \draw[arr] (s6)--node[lbl,right]{pass: adopt}(d6); \draw[arr] (d6)--(s7); \draw[arr] (s7)--(s8);
-\draw[arr] (d1.east) to[out=0,in=180] (s2.west); \draw[arr] (s2)--(oA);
-\draw[arr] (s6.east)--(oB); \draw[arr] (s7.east)--(oC);
-\draw[arr,dashed] (s6.west) to[out=180,in=180] node[lbl,left,align=center]{fail:\\hunt as warm start only} (s7.west);
+\draw[arr] (d5)--(s6); \draw[arr] (s6)--(d6); \draw[arr] (d6)--(s7); \draw[arr] (s7)--(s8);
+\draw[arr] (s2.east)--(oA); \draw[arr] (s6.east)--(oB); \draw[arr] (s7.east)--(oC);
+\draw[arr,dashed] (s6.west) to[out=180,in=180] node[lbl,left,align=center]{fail: hunt from the\\uncertified candidate} (s7.west);
 \end{tikzpicture}
-\caption{The spine of the script. Yellow boxes are the objects handed from
-one section to the next; the lottery is a side experiment on the same
-endpoints; outcome B is decided only after certification, because ``reached
-the target engine'' and ``holds a certified root there'' are different
-claims.}
+\caption{Execution order, top to bottom; the \S{} numbers are the script's
+own. Yellow boxes are the objects handed on. The two red notes are the
+named fatal checks, asserted where their stage ends --- other validation
+assertions (orbit closure, usable multipliers, a malformed passing
+certificate) can also abort. Optional stages can be switched off in script
+\S0; outcome B is decided only after certification, because ``reached the
+target engine'' and ``holds a certified root there'' are different claims.}
 \end{figure}
 
 %=========================================================================
@@ -201,10 +236,12 @@ close is close enough. Change the experiment here and nowhere else.
 \begin{intu}
 The reference deserves a word. The campaign's certified root at this cell
 is stored with the \emph{problem it belongs to} --- orbits, phases, engine,
-mass --- and every ``vs reference'' line in the output is silent unless the
-live problem matches. Without that, editing the cell would leave a number
-on screen labelled ``the campaign's answer here'' that belongs to somewhere
-else. (Round-2 review finding; it was exactly that before.)
+mass --- and reference comparisons are computed only when the live problem
+matches. Otherwise the script says the reference belongs elsewhere; the cold
+table keeps its ``vs ref'' column but shows NaN in it, and the summary and
+the certified-root comparison suppress the number. Without that guard,
+editing the cell would leave a figure on screen labelled ``the campaign's
+answer here'' that belongs to somewhere else.
 \end{intu}
 
 \begin{snippet}{section 0: the operating point}
@@ -262,10 +299,11 @@ interior-point solver leaves a barrier slack on every bound --- measured
 $4\times10^{-8}$ to $1.3\times10^{-6}$ at IPOPT tolerance $10^{-7}$, and the
 first full run tripped a $10^{-6}$ gate on the 15\,N rung at $N=800$ with
 $1.3\times10^{-6}$. A real switch takes the throttle to 0. The $10^{-3}$
-gate sits between, and the round-2 reviewer rated it a defensible
-\emph{seed-compatibility screen}, not a proof of saturation: it cannot see a
-sustained 0.1\% under-throttle or a dip between stations. The all-burn shoot
-and the certificate downstream are what carry the claim.
+gate sits between. It is a defensible \emph{seed-compatibility screen},
+not a proof of saturation: its inequalities are strict, so it accepts a
+sustained deficit just below 0.1\%, and a dip between the sampled stations
+can escape it. The all-burn shoot and the certificate downstream are what
+carry the claim.
 \end{warn}
 
 %=========================================================================
@@ -279,12 +317,22 @@ is picked by a fraction of a period. No transfer is loaded anywhere; that is
 the whole point of the script.
 \end{eli}
 
+\begin{intu}
+Closure alone is not enough. An orbit can close to $10^{-7}$ and still have
+an interpolant whose \emph{slope} jumps where phase wraps from $1$ back to
+$0$. That matters here because phase is a continuation coordinate: nearby
+phases seed related solves, and a kink at the wrap would make two
+neighbouring endpoints disagree about the direction the orbit is moving.
+So the smoothness across the seam is checked, not just the closure.
+\end{intu}
+
 \begin{rig}
 \file{get\_family\_orbit} starts from a catalogued family seed and refines
-it to closure; the script checks $\|\bm x(T)-\bm x(0)\|<10^{-7}$ on both.
-\file{phase\_state} returns a periodic interpolant $s\mapsto\bm x(s)$ on
-$[0,1)$ and its seam mismatch (value and derivative across $s=0$), which the
-script gates at $10^{-6}$. The endpoints are then
+it to closure; the script requires both sampled closures
+$\|\bm x(T)-\bm x(0)\|<10^{-7}$. \file{phase\_state} returns a periodic
+interpolant $s\mapsto\bm x(s)$ on $[0,1)$ with its seam diagnostics; the
+script gates the larger seam-\emph{derivative} mismatch below $10^{-6}$
+and does not separately gate the seam value. The endpoints are
 $\bm x_0=\bm x_D(\sD)$, $\bm x_f=\bm x_A(\sA)$.
 \end{rig}
 
@@ -303,21 +351,21 @@ rvf = stateA(phase.sA);
 Ask the big optimiser to solve the real problem with no hints at all: just
 the two endpoints, a guess at how long the trip takes, and how finely to
 chop time. Do it three times, chopping time into 400, 800 and 1600 pieces.
-Every run that finishes says ``converged'' with tiny errors. They give
-different trips. Nothing on screen tells you which one you would have
-wanted.
+Two of the three pass every acceptance check; the third stops at its
+iteration limit. The two that pass give different trips, and nothing on
+screen tells you which one you would have wanted.
 \end{eli}
 
 \begin{intu}
-The direct method does not need a seed. With \file{X0 = U0 = []} it builds
-its own crude guess --- states linear between the endpoints, a mass ramp,
-thrust along the chord --- and IPOPT takes it from there. The trouble is
-never whether it converges; it is \emph{what} it converges to. Minimum-time
-extremals of this problem come in families, and a cold solve lands in
-whichever basin its own discretisation happens to sit near. Only the mesh
-changes between the three runs; the answers change with it. That is the
-measurement that makes seeding or continuation required equipment on a
-catalog pair.
+The direct method needs no previous converged transfer. With
+\file{X0 = U0 = []} it still builds an initial numerical guess of its own ---
+states linear between the endpoints, a mass ramp, thrust along the chord ---
+and IPOPT takes it from there. Both things matter: whether it converges, and
+\emph{what} it converges to. Minimum-time extremals of this problem come in
+families, and a cold solve lands wherever its own discretisation happens to
+lead. Only the mesh changes between the three runs; the answers change with
+it. That motivates informed seeding or continuation on a catalog pair rather
+than trusting one cold solve.
 
 What the lottery does \emph{not} show, and the script now says so: that
 each converged row is a distinct continuous extremal. Changing $N$ changes
@@ -329,19 +377,29 @@ solutions --- which is enough for the point being made.
 
 \begin{rig}
 The transcription is Hermite--Simpson with $N$ intervals on normalised time
-$s\in[0,1]$, $\mathrm d\bm x/\mathrm ds=\tf\,\bm f(\bm x,\bm u)$:
+$s\in[0,1]$, $h=1/N$. The flight time is \emph{lifted} to a per-node
+variable $\Tl_j$ with continuity $\Tl_{k+1}=\Tl_k$, and the normalised-time
+right-hand side is
 \[
-\bm x_{k+1}-\bm x_k-\frac{h}{6}\big(\bm f_k+4\bm f_{k+\frac12}+\bm f_{k+1}\big)=0,\qquad
-\bm x_{k+\frac12}=\frac{\bm x_k+\bm x_{k+1}}{2}+\frac{h}{8}\big(\bm f_k-\bm f_{k+1}\big),
+\bm F_j=\Tl_j\,\bm f(\bm x_j,\bm u_j,q_j),\qquad
+\frac{\mathrm d\bm x}{\mathrm ds}=\tf\,\bm f .
 \]
-with $\tf$ \emph{lifted} to a per-node variable $T_k$ and continuity
-$T_{k+1}=T_k$, so each defect touches only its own two nodes and the KKT
-matrix stays banded (a scalar $\tf$ gives one dense column and the linear
-solver dies at $N=400$). The objective is $\tf$; the throttle is a free
-variable in $[0,1]$.
+The defect and the midpoint interpolation are then
+\begin{align*}
+\bm x_{k+1}-\bm x_k-\frac{h}{6}\big(\bm F_k+4\bm F_{k+\frac12}+\bm F_{k+1}\big)&=0,\\
+\bm x_{k+\frac12}-\frac{\bm x_k+\bm x_{k+1}}{2}-\frac{h}{8}\big(\bm F_k-\bm F_{k+1}\big)&=0,
+\end{align*}
+with $\Tl_{k+\frac12}=(\Tl_k+\Tl_{k+1})/2$; at feasibility every $\Tl_j=\tf$.
+Equivalently, Hermite--Simpson applied to the augmented state $(\bm x,\Tl)$
+with derivative $(\Tl\bm f,\,0)$. Lifting keeps each stencil local --- the
+nodes, the midpoint and the local $\Tl$ of one interval --- so the KKT matrix
+stays banded; a single scalar $\tf$ would add a dense bordering column (the
+solver's own header records MATLAB dying on exactly that at $N=400$, an
+implementation observation rather than a mathematical consequence). The
+objective is $\tf$; the throttle is a free variable in $[0,1]$.
 
-Every cold solve is judged by the same predicate as every other direct solve
-in the script (\file{directOK}, \S\ref{sec:direct}); a run that hit its
+Every cold solve is judged by the same \emph{core} predicate as every other
+direct solve in the script (\file{directOK}, Section~\ref{sec:direct}); a run that hit its
 iteration limit is printed as an \emph{iterate} and excluded. On the
 accepted rows the script reports the spread and a cluster count:
 \[
@@ -357,13 +415,13 @@ first read of the table.
 
 \begin{snippet}{section 2: a genuinely cold solve}
 oM = solveDirect(rv0, rvf, TndOp, cndOp, muStar, N, [], [], cold.tf0, dCold);
-            [okM, whyM] = directOK(oM, tol);
+[okM, whyM] = directOK(oM, tol);
 \end{snippet}
 \begin{snippet}{section 2: the statistics on the accepted rows}
 spread   = (max([good.tf]) - min([good.tf]))/min([good.tf]);
-        nCluster = numel(uniquetol([good.tf], tol.tfCluster*min([good.tf]), 'DataScale', 1));
-        below    = nnz([good.nodeRadiusKm] < num.clearKm);
-        agree    = nnz(abs([good.rel]) < tol.same);           % 0 when the reference does not apply
+nCluster = numel(uniquetol([good.tf], tol.tfCluster*min([good.tf]), 'DataScale', 1));
+below    = nnz([good.nodeRadiusKm] < num.clearKm);
+agree    = nnz(abs([good.rel]) < tol.same);           % 0 when the reference does not apply
 \end{snippet}
 
 \begin{meas}
@@ -397,11 +455,12 @@ a screen, not a certified periselene.
 %=========================================================================
 
 \begin{eli}
-Start with an engine so strong the trip takes half a day and barely bends
---- the optimiser finds that one cold in seconds. Then turn the engine down a
-little, hand the optimiser yesterday's trip as a starting point, and solve
-again. Repeat. Each answer is a small step from the last, so the optimiser
-never has to search.
+Start with an engine so strong the trip takes half a day and under one turn
+around the Moon --- the optimiser finds that one cold in seconds. Then turn
+the engine down a little, hand the optimiser the last trip as its starting
+point, and solve again. Repeat. A good starting point usually makes each
+solve easy; it does not guarantee the optimiser stays on the same family,
+which is why every step is checked.
 \end{eli}
 
 \begin{intu}
@@ -409,8 +468,10 @@ Three things make the ladder work, and the script measures all three.
 
 \emph{The next guess.} Between rungs the flight-time guess is scaled by
 $\tf\leftarrow\tf\,(T_{\mathrm{prev}}/T)^{0.6}$, an empirical law for this
-band. Measured rung by rung it predicts the next answer to about 1\%, and
-the script prints the ratio so ``starts next to its answer'' is a number.
+band. On the default run it predicts the next answer to about 1\% on most
+rungs; the largest printed error is 2.1\%, on the last step,
+$0.75\to0.5$\,N (guess $0.7416$\,ND, answer $0.7575$\,ND). The script prints
+the ratio on every rung, so ``starts next to its answer'' is a number.
 
 \emph{The screen.} A rung that lands far from where the scaling predicted
 has landed somewhere the guess did not describe --- and it can look perfect
@@ -423,9 +484,10 @@ has no branch behind it (the true 15\,N answer is $41\times$ below the
 $4.0$\,ND cold guess).
 
 \emph{The throttle.} The solver leaves it free; every rung is checked to
-have saturated, on both sides of 1, over nodes and midpoints. Minimum time
-is all-burn, and a rung whose throttle dipped would not be the problem the
-shooting solver solves next.
+have saturated, on both sides of 1, over the node and midpoint throttle
+histories the solver returns (normally both; the predicate does not
+separately require both arrays). Minimum time is all-burn, and a rung whose
+throttle dipped would not be the problem the shooting solver solves next.
 \end{intu}
 
 \begin{snippet}{section 3: the inter-rung guess}
@@ -433,28 +495,35 @@ if ~isempty(Tprev), seedTf = seedTf*(Tprev/TN)^dladder.tfExp; end
 \end{snippet}
 \begin{snippet}{section 3: the band screen, steps only}
 band = oR.tf/seedTf;
-        inBand = isempty(Tprev) || (band <= dladder.tfBand && band >= 1/dladder.tfBand);
-        clearR = radR >= num.clearKm;
-        okR = feasR && clearR && inBand;
+inBand = isempty(Tprev) || (band <= dladder.tfBand && band >= 1/dladder.tfBand);
+clearR = radR >= num.clearKm;
+okR = feasR && clearR && inBand;
 \end{snippet}
 
 \begin{rig}
-\textbf{Delta-V falls down the ladder, and the script says why.} At fixed
-exhaust speed the all-burn mass law is $m(t)=1-\Tnd t/\cnd$, so the
-propellant fraction used is $1-m_f=\Tnd\tf/\cnd$ and the ideal
-$\Delta V=\cnd\ln(1/m_f)$. If $\tf\propto T^{-0.6}$ then
-$T\,\tf\propto T^{0.4}$ \emph{falls} as thrust falls: lower thrust, longer
-trip, less propellant. Measured 15 $\to$ 0.5\,N: $\Delta V$ 4.22 $\to$ 0.996
-km/s, mass used 22.3\% $\to$ 5.8\%. (The first draft of the script said the
-opposite under a table that showed this. Read the table.)
+\textbf{Delta-V falls down the ladder, and why.} At fixed exhaust speed
+and initial mass the all-burn mass law is $m(t)=1-\Tnd t/\cnd$, so with
+$a=\Tnd\tf/\cnd$ the propellant fraction used is $a$ and the ideal
+\[
+\Delta V_{\mathrm{nd}}=\cnd\ln\frac1{m_f}=-\cnd\ln(1-a),\qquad
+\frac{\mathrm d\Delta V_{\mathrm{nd}}}{\mathrm da}=\frac{\cnd}{1-a}>0\quad(0\le a<1).
+\]
+If $\tf\propto T^{-0.6}$ then $T\,\tf\propto T^{0.4}$ \emph{falls} as
+thrust falls, so $a$ falls and so do both the propellant and the ideal
+$\Delta V$: lower thrust, longer trip, less propellant. The script prints the
+dimensional value $\Delta V_{\mathrm{nd}}\,l^\star/t^\star$ in km/s.
+Measured 15 $\to$ 0.5\,N: 4.22 $\to$ 0.996\,km/s, mass used 22.3\% $\to$
+5.8\%.
 
 \textbf{The predicate.} Every direct solve --- cold, ladder, Sundman
-re-solve, hunt --- is judged by one function so that no section accepts
-less than another. Required diagnostics default to NaN, not 0, so a missing
-one fails; the state array must be finite; the throttle history must be
-finite and inside $[1-\epsilon,\,1+\epsilon]$. The first failed check is
-named, and the reasons are reported in an order that never calls an
-unconverged iterate a branch change.
+re-solve, hunt --- goes through one \emph{core} predicate, and each stage may
+add its own screens on top (the ladder adds the lunar floor and the band;
+the hunt adds the floor; the default lottery is unconstrained). Required
+diagnostics default to NaN, not 0, so a missing one fails; the state array
+must be finite; the throttle history must be finite and satisfy the strict
+inequalities $1-\epsilon<q<1+\epsilon$. The first failed check is named, and
+the reasons are reported in an order that never calls an unconverged
+iterate a branch change.
 \end{rig}
 
 \begin{snippet}{section 3: ideal delta-V from the mass actually used}
@@ -490,7 +559,7 @@ if ok, why = ''; else, why = checks{bad, 1}; end
 \begin{meas}
 Rung ratios matter. The first version of the ladder stepped $[15,10,5,2,1,0.5]$.
 The $1\to0.5$\,N step (ratio 0.5) returned a converged solution with defect
-$3.9\times10^{-14}$, safe periselene and $\|\bm u\|=1$ at $\tf=54.7$\,d and
+$3.9\times10^{-14}$, a node clearance above the floor and $\|\bm u\|=1$ at $\tf=54.7$\,d and
 $\Delta V=46.8$\,km/s: $16\times$ its own guess, 94\% of the mass burned, a
 very different angular excursion. The ladder accepted it, and the handoff
 then ground on a 54-day arc with integrator failures. The shipped rung set
@@ -507,18 +576,21 @@ is $1.3\times10^{-6}$, and $\tf$ goes $0.432\to3.358$\,d.
 The big optimiser never heard of costates. But to enforce ``the trajectory
 obeys physics'' at every step it keeps a set of bookkeeping numbers --- how
 much the trip time would improve if it were allowed to cheat at that step.
-Those numbers \emph{are} the costates, under another name. Read them off,
-lay them along the trip at 25 checkpoints, and hand that to the careful
-solver: it now has a starting trajectory with the steering numbers filled
-in.
+Those bookkeeping numbers contain approximations to the steering costates.
+After applying the right sign, scale and time-station mapping, lay them
+along the trip at 25 checkpoints and hand that to the careful solver: it
+now has a starting trajectory with the steering numbers filled in.
 \end{eli}
 
 \begin{intu}
 Three subtleties turn that from a slogan into working code, and the script
 checks two of them and says plainly that it cannot check the third.
-\emph{Station}: a Hermite--Simpson defect multiplier belongs at the segment
-\emph{midpoint}, not at a node; associating it with a node shifts every
-costate by half a step and still converges to a slightly wrong answer.
+\emph{Station}: in this transcription's covector mapping the defect
+multipliers are associated with segment \emph{midpoints}; associating them
+with nodes misplaces every harvested costate sample by half an interval,
+which degrades the seed and biases any direct-versus-indirect costate
+comparison. (A shooting solve that then converges still satisfies its own
+boundary-value problem; the damage is to the seed and the comparison.)
 \emph{Sign}: the convention depends on how the NLP was written, so it is
 settled by a vote --- the minimum principle requires the applied direction to
 oppose $\lv$ at every station, and the sign that satisfies that at the most
@@ -527,28 +599,33 @@ objective, the multiplier of the time equation must come out $\lambda_t=+1$.
 
 That last row exists only in the Sundman chart, where time is itself a
 state. The ladder ran in plain time, as the shipped catalog did, so the
-script re-solves the bottom rung \emph{once} with Sundman on, warm from the
-plain-time rung, and requires the two to agree in $\tf$ and in node radius
-before harvesting from it. It buys $\lambda_t=1.000000$. What a constant row
-\emph{cannot} see is a half-step station shift: midpoint association is a
-rule \file{duals\_to\_costates} applies, not a thing this number proves.
+script \emph{tries} to re-solve the bottom rung once with Sundman on, warm
+from the plain-time rung. It harvests from the re-solve only if it passes
+the core predicate and two consistency screens --- $\tf$ and node radius
+within 1\% of the plain-time rung --- and otherwise falls back to the
+plain-time solution, where H3 is not applicable. Passing the screens
+permits the handoff; it does not prove the two discretisations represent
+the same continuous root. On the default run it buys $\lambda_t=1.000000$.
+What a constant row \emph{cannot} see is a half-step station shift:
+midpoint association is a rule \file{duals\_to\_costates} applies, not a
+thing this number proves.
 \end{intu}
 
-\begin{snippet}{section 4: the Sundman re-solve must be the same solution}
+\begin{snippet}{section 4: Sundman re-solve, time and radius consistency screens}
 dSun = dLad;  dSun.sundman = true;
-    oH8 = solveDirect(rv0, rvf, TndB, cndB, muStar, dladder.N, oPrev.X, oPrev.U, oPrev.tf, dSun);
-    [feasS, whyS] = directOK(oH8, tol);
-    % the re-solve is accepted as the SAME solution as the plain-time rung on
-    % two enforced measurements: t_f agrees to tol.same and the node-sampled
-    % lunar radius agrees to tol.same -- a re-mesh moves both slightly. An
-    % aligned trajectory comparison is not made; these two are what is claimed.
-    sameTf  = abs(oH8.tf - oPrev.tf)/oPrev.tf < tol.same;
-    sameRad = abs(oH8.altMinKm - oPrev.altMinKm)/max(oPrev.altMinKm + rMoonKm, 1) < tol.same;
-    if ~feasS,       sunNote = ['Sundman re-solve refused: ' whyS];  oH8 = [];
-    elseif ~sameTf,  sunNote = sprintf('Sundman re-solve moved t_f by %.1f%%: not the same solution', ...
-                                       100*abs(oH8.tf - oPrev.tf)/oPrev.tf);  oH8 = [];
-    elseif ~sameRad, sunNote = sprintf('Sundman re-solve moved the node radius by %.0f km: not the same solution', ...
-                                       abs(oH8.altMinKm - oPrev.altMinKm));  oH8 = [];
+oH8 = solveDirect(rv0, rvf, TndB, cndB, muStar, dladder.N, oPrev.X, oPrev.U, oPrev.tf, dSun);
+[feasS, whyS] = directOK(oH8, tol);
+% the re-solve is accepted as the SAME solution as the plain-time rung on
+% two enforced measurements: t_f agrees to tol.same and the node-sampled
+% lunar radius agrees to tol.same -- a re-mesh moves both slightly. An
+% aligned trajectory comparison is not made; these two are what is claimed.
+sameTf  = abs(oH8.tf - oPrev.tf)/oPrev.tf < tol.same;
+sameRad = abs(oH8.altMinKm - oPrev.altMinKm)/max(oPrev.altMinKm + rMoonKm, 1) < tol.same;
+if ~feasS,       sunNote = ['Sundman re-solve refused: ' whyS];  oH8 = [];
+elseif ~sameTf,  sunNote = sprintf('Sundman re-solve moved t_f by %.1f%%: not the same solution', ...
+                                   100*abs(oH8.tf - oPrev.tf)/oPrev.tf);  oH8 = [];
+elseif ~sameRad, sunNote = sprintf('Sundman re-solve moved the node radius by %.0f km: not the same solution', ...
+                                   abs(oH8.altMinKm - oPrev.altMinKm));  oH8 = [];
 \end{snippet}
 \begin{snippet}{section 4: harvest, then shoot}
 [seedB, dgB] = harvest_ms_seed(oHarv, num.K);
@@ -558,14 +635,25 @@ tH = tic;
 \end{snippet}
 
 \begin{rig}
-\textbf{Sundman and $\lambda_t$.} With $\mathrm dt/\mathrm d\tau=S\,\kappa(\bm r)$,
-$\kappa=\rho^p$ ($\rho$ the lunar distance), time is a state $t(\tau)$ with
-its own defect row. The augmented Hamiltonian carries $\lambda_t\,\dot t$;
-since nothing depends explicitly on $t$, $\dot\lambda_t=0$, and the
-free-time transversality with objective $\tf$ fixes the constant at
-$\lambda_t=+1$. The eighth multiplier row of the Sundman NLP is a
-discretisation of that constant, so its value is a free check on the sign
-and scale of the whole duals-to-costates mapping.
+\textbf{Sundman and $\lambda_t$.} On $\tau\in[0,1]$, with
+$\kappa(\bm x)=\rho^p$ ($\rho$ the lunar distance) and primes for
+$\tau$-derivatives, write the minimum-time problem in \emph{Mayer} form, with
+the clock as a state and no running cost:
+\[
+\min\ t(1),\qquad \bm x'=S\kappa(\bm x)\,\bm f(\bm x,\bm u,q),\qquad
+t'=S\kappa(\bm x),\qquad t(0)=0 .
+\]
+With the normal minimising convention,
+$\mathcal H=S\kappa(\bm x)\big(\lambda_x^{\!\top}\bm f+\lambda_t\big)$.
+Nothing depends explicitly on the clock, so $\lambda_t'=-\partial\mathcal H/\partial t=0$,
+and the Mayer terminal condition gives
+$\lambda_t(1)=\partial t(1)/\partial t(1)=1$. Hence $\lambda_t\equiv1$ and
+$\mathcal H=S\kappa\,H$. (Carrying the running cost of the original form
+as well would count time twice; and under the sign-reversed maximum
+convention the constant is $-1$ --- the $+1$ is tied to the convention.) The
+eighth multiplier row of the Sundman NLP is a discretisation of that
+constant, so its value is a free check on the sign and scale of the
+duals-to-costates mapping.
 
 \textbf{Multiple shooting.} Unknowns $p=[\lambda(0);\,\bm Y_2;\dots;\bm Y_K;\,\tf]$
 with $\bm Y_k\in\R^{14}$ the junction starts ($\bm Y_1$'s state part is
@@ -575,12 +663,17 @@ fixed), $7+14(K-1)+1$ scalars; equations
 \psi\big(\Phi_K(\bm Y_K)\big)=
 \begin{bmatrix}\bm r(\tf)-\bm r_f\\ \bm v(\tf)-\bm v_f\\ \lm(\tf)\\ H(\tf)\end{bmatrix}=0,
 \]
-$14(K-1)+8$ of them: square. The Jacobian is block-bidiagonal with one
-short-segment STM per block, which is why it is conditioned where a single
-long shot is not. \file{ms\_tfmin} returns \file{info.Y} as the $14\times K$
-junction \emph{starts} and \file{info.tGrid} as $K+1$ times; the endpoint
-column is never stored, and no consumer reads it (verified in round 2 ---
-the library headers that say $K+1$ are what is wrong).
+$14(K-1)+8$ of them, so $14K-6$ unknowns and equations: 330 each at $K=24$.
+Square does not mean nonsingular. The continuity rows have block-bidiagonal
+junction structure, bordered by the free-$\tf$ column and the terminal
+rows; each block is an STM over one short segment rather than the whole
+arc, which reduces the long-shot sensitivity amplification, but the full
+Jacobian can still be ill-conditioned or singular. \file{ms\_tfmin} returns
+\file{info.Y} as the $14\times K$ junction \emph{starts} and
+\file{info.tGrid} as $K+1$ times; the endpoint column is never stored and
+no consumer reads it (the library headers that say $K+1$ are what is wrong).
+The harvested seed, by contrast, is $14\times(K+1)$: different objects, not
+contradictory counts.
 
 \textbf{Gates.} H1: shooting residual under \file{tol.R}. H2: sign vote
 $\ge90\%$. H3 has \emph{three} states --- \textsc{not applicable} in plain
@@ -596,13 +689,16 @@ else,    h3 = isfinite(lamTB) && abs(lamTB - 1) < 1e-2 && islogical(lamTOKB) && 
 \end{snippet}
 
 \begin{meas}
-Default run: Sundman re-solve within $6\times10^{-7}$ of the plain-time
-$\tf$ and 4\,km in node radius; floor slack 4514\,km (the harvested arc does
-not touch the path constraint the direct solve carried, so its multipliers
-are costates of the \emph{unconstrained} problem the shooter solves); sign
-vote 100\%; $\lambda_t=1.000000$ with the mapping's own flag true; $\|R\|=
-4.59\times10^{-12}$ in \emph{one} iteration. The seed was already a root to
-the solver's precision.
+Default run: the Sundman re-solve differs from the plain-time rung in $\tf$
+by $3.80\times10^{-8}$ relative, and both minimum node radii round to
+6414\,km. The minimum node radius is 4514\,km above the floor --- strong
+sampled evidence that the clearance constraint is inactive on the harvested
+arc, which is what permits an unconstrained covector handoff, though not a
+continuous-clearance proof; the shooting solve then checks the
+unconstrained problem independently. Sign vote 100\%; $\lambda_t=1.000000$
+with the mapping's own flag true; the handoff reached $\|R\|=
+4.59\times10^{-12}$, below the requested $10^{-11}$, in one reported
+iteration.
 \end{meas}
 
 %=========================================================================
@@ -621,13 +717,14 @@ column redone for the new engine.
 
 \begin{intu}
 Why no propagation? The banked junction starts are the states and costates
-at the normalised times $k/K$. The next rung uses the same $K$ and the same
-normalised grid, so the seed is the banked array with its time grid scaled
-to the new $\tf$ guess and its mass row rebuilt from the all-burn law for
-the new engine. Re-flying the whole arc from $\lambda(0)$ would bring back
-the amplification multiple shooting exists to avoid, and interpolating a
-flight would perturb the very numbers the previous solve converged.
-(Round-2 review; the first version did both.)
+at the normalised breakpoints $\sigma_k$ (uniform, $k/K$, in this pipeline).
+The next rung uses the same $K$ and the same normalised grid, so the seed is
+the banked array with its time grid scaled to the new $\tf$ guess and its
+mass row rebuilt from the all-burn law for the new engine. The seed need not
+satisfy the new dynamics before shooting --- that is the shooter's job.
+Re-flying the whole arc from $\lambda(0)$ would bring back the
+amplification multiple shooting exists to avoid, and interpolating a flight
+would perturb the very numbers the previous solve converged.
 
 Why a sweep of exponents? Past a winding wall the next solution has a
 different angular excursion, and a different exponent is what puts the
@@ -646,12 +743,12 @@ reason.
 
 \begin{snippet}{section 5: the next seed, without propagating anything}
 Yg = itCur.Y;  Yg(1:7, 1) = [rv0(:); 1];
-            tGs = sigK*tfGuess;
-            Yg(7, :) = 1 - Tnd*tGs(1:size(Yg, 2))/cnd;
-            capShoot = min(num.shootSec, left);
-            [okRun, zt, it] = fenced(pool, @ms_tfmin, 2, capShoot + 90, ...
-                rv0, rvf(1:6), struct('tf', tfGuess, 'tGrid', tGs, 'Y', Yg), ...
-                Tnd, cnd, muStar, struct('tolR', tol.Rsolve, 'wallSec', capShoot));
+tGs = sigK*tfGuess;
+Yg(7, :) = 1 - Tnd*tGs(1:size(Yg, 2))/cnd;
+capShoot = min(num.shootSec, left);
+[okRun, zt, it] = fenced(pool, @ms_tfmin, 2, capShoot + 90, ...
+    rv0, rvf(1:6), struct('tf', tfGuess, 'tGrid', tGs, 'Y', Yg), ...
+    Tnd, cnd, muStar, struct('tolR', tol.Rsolve, 'wallSec', capShoot));
 \end{snippet}
 
 \begin{rig}
@@ -672,50 +769,61 @@ converged ($\|R\|<$ \file{tol.R}, finite $z$, $\tf>0$); the flown witness
 from $z$ alone reached $\tf$ with positive mass and a finite $n\times14$
 flight; and it landed inside the position \emph{and} velocity gates
 (100\,km, 10\,m/s). ``Accepted'' means a usable continuation seed;
-physical validation is \S\ref{sec:certify}'s job.
+physical validation is Section~\ref{sec:certify}'s job.
 
-\textbf{The angular excursion} printed as ``turns'' is
+\textbf{The angular excursion} printed as ``turns'' is, along the samples
+of the witness flight in the rotating frame,
 \[
-\frac{1}{2\pi}\sum_i\big|\Delta_i\,\mathrm{atan2}\big(y,\ x-(1-\mu^\star)\big)\big|
+\theta_i=\operatorname{unwrap}\Big[\operatorname{atan2}\big(y_i,\ x_i-(1-\mu^\star)\big)\Big],
+\qquad
+\mathrm{turns}=\frac{1}{2\pi}\sum_i\big|\theta_{i+1}-\theta_i\big| .
 \]
-along the witness flight in the rotating frame --- total variation of the
-Moon-centred azimuth, so reversals add. It is a diagnostic, not a winding
-number.
+It is a \emph{sampled estimate} of the total variation of the Moon-centred
+azimuth, so reversals add. Unwrapping assumes adequate angular sampling and
+cannot recover reversals between samples, and the azimuth needs a nonzero
+projected Moon-centred radius. It is a diagnostic, not a winding number.
 
-\textbf{Budget.} One deadline per rung (600\,s): the remaining time is
-recomputed before the shoot and before the witness, no stage starts with
-under 10\,s left, and the fence's cancellation grace is separate from the
-work budget. A fenced call that returns \emph{not ok} is ``timed out or the
-worker errored'' --- \file{run\_capped} cannot tell them apart.
+\textbf{Budget.} One deadline per rung (600\,s of requested work): the
+remaining time is recomputed before the shoot and before the witness, and no
+stage starts with under 10\,s left. It is not a strict wall-clock cap: the
+shooting fence allows a further 90\,s of cancellation grace, and any overrun
+is charged at the next remaining-budget calculation. Direct NLP solves run
+under CPU caps, not these fences. A fenced call that returns \emph{not ok}
+is ``timed out or the worker errored'' --- \file{run\_capped} cannot tell them
+apart. Without a parallel pool the external fences disappear entirely:
+\file{fenced} calls the function directly, only the solvers' own internal
+limits remain, and certification is skipped unless \file{num.allowUnfenced}
+is set.
 \end{rig}
 
 \begin{snippet}{section 5: the witness gate, fail-closed}
 reached = okW && isnumeric(yFly) && size(yFly, 2) == 14 && size(yFly, 1) == numel(tw) && ...
-                      ~isempty(tw) && all(isfinite(yFly(:))) && all(isfinite(tw(:))) && ...
-                      abs(tw(end) - zt(8)) < 1e-9*max(1, zt(8)) && yFly(end, 7) > 0;
-            if ~reached, A(end+1) = attempt(tfExp, tfGuess, 'witness flight did not reach t_f', it.normR, NaN, NaN, toc(tA)); continue, end
-            mk  = norm(yFly(end, 1:3).' - rvf(1:3))*lStar;
-            mv  = norm(yFly(end, 4:6).' - rvf(4:6))*lStar/tStar*1000;
-            if ~(isfinite(mk) && mk < num.gateKm && isfinite(mv) && mv < num.gateVms)
-                A(end+1) = attempt(tfExp, tfGuess, 'flown miss outside the gates', it.normR, mk, mv, toc(tA));  continue
-            end
-            A(end+1) = attempt(tfExp, tfGuess, 'accepted', it.normR, mk, mv, toc(tA));
+          ~isempty(tw) && all(isfinite(yFly(:))) && all(isfinite(tw(:))) && ...
+          abs(tw(end) - zt(8)) < 1e-9*max(1, zt(8)) && yFly(end, 7) > 0;
+if ~reached, A(end+1) = attempt(tfExp, tfGuess, 'witness flight did not reach t_f', it.normR, NaN, NaN, toc(tA)); continue, end
+mk  = norm(yFly(end, 1:3).' - rvf(1:3))*lStar;
+mv  = norm(yFly(end, 4:6).' - rvf(4:6))*lStar/tStar*1000;
+if ~(isfinite(mk) && mk < num.gateKm && isfinite(mv) && mv < num.gateVms)
+    A(end+1) = attempt(tfExp, tfGuess, 'flown miss outside the gates', it.normR, mk, mv, toc(tA));  continue
+end
+A(end+1) = attempt(tfExp, tfGuess, 'accepted', it.normR, mk, mv, toc(tA));
 \end{snippet}
 \begin{snippet}{section 5: the angular-excursion diagnostic}
 ang = unwrap(atan2(best.yFly(:, 2), best.yFly(:, 1) - (1 - muStar)));
-        turns = sum(abs(diff(ang)))/(2*pi);
+turns = sum(abs(diff(ang)))/(2*pi);
 \end{snippet}
 
 \begin{meas}
 Default run: 0.375 $\to$ 0.12\,N at $I_{sp}=1710$\,s (7 rungs), the Isp
-stage $1710\to1400\to1150\to900$\,s at 0.12\,N (3 rungs in 3\,s, $\tf$
+stage $1710\to1400\to1150\to900$\,s at 0.12\,N (3 rungs in about 3\,s, $\tf$
 falling 11.119 $\to$ 10.606\,d), then 0.11 and 0.10\,N: every one of the five
 exponents \emph{unconverged}, no fence event, no seed-policy skip. Turns
 climbed 0.81 $\to$ 1.31. Worst accepted witness miss $1.8\times10^{-4}$\,km.
-Four routes were tried on this cell; the stall moved from 0.12 to 0.105 to
-0.11\,N with finer ratios and the Isp stage, and the campaign reached
-0.09\,N only from the sheet's fastest 0.5\,N cell. Where you start the deep
-walk is a choice, not a detail.
+Three reported routes from this anchor cell stalled at 0.12, 0.105 and
+0.11\,N (coarse ratios; finer ratios; finer ratios with the Isp stage). A
+fourth, the campaign's own route, started from the sheet's fastest 0.5\,N
+cell rather than this one and reached 0.09\,N before stalling at 0.067\,N.
+Where you start the deep walk is a choice, not a detail.
 \end{meas}
 
 %=========================================================================
@@ -724,28 +832,31 @@ walk is a choice, not a detail.
 
 \begin{eli}
 Now hand the trip to the inspector. It re-solves it to higher precision,
-flies it from the initial numbers alone, checks every condition the theory
-demands, asks a second, independent solver to agree, and tests that it is a
-true minimum and not a saddle. If it passes, the inspector's re-solved
-version is the one we keep.
+flies it from the initial numbers alone, checks the conditions of the
+minimum principle along that flight, asks a second, independent solver to
+agree, and runs tests designed to tell a local minimum from a saddle. If it
+passes, the inspector's re-solved version is the one we keep. A pass
+supports \emph{local} minimality under those tests' assumptions; it is not
+a proof that no faster trip exists anywhere.
 \end{eli}
 
 \begin{intu}
-Two things the round-2 review caught here, both mine.
+A certificate applies to a particular polished trajectory and to the options
+the certifier actually consumed. So two interfaces have to stay consistent.
 
-\emph{Forwarding.} The certifier reads the initial mass, the arrival gates
+\emph{The options.} The certifier reads the initial mass, the arrival gates
 and the lunar floor from \emph{its own options}, not from the problem
-struct. Putting them in the problem struct did nothing; editing them in
-\S0 would have silently left certification on defaults. They are forwarded
-and printed on the certify line.
+struct. Setting them only in the problem struct does nothing; editing them
+in script \S0 without forwarding would silently leave certification on its
+defaults. They are forwarded, and printed on the certify line.
 
-\emph{The grid.} The certifier polishes and returns the polished $z$ and
-junction states, but no time grid. The shooter keeps the \emph{normalised}
-breakpoints fixed and re-solves $\tf$, so the polished states belong to the
-polished $\tf$. I had paired them with the old grid. The certificate was
-valid; the record and the hunt's warm start were inconsistent by the
-polish's change in $\tf$ on every segment --- dormant on the default run
-only because the walk's own root was already at the polish target.
+\emph{The time grid.} The certifier polishes and returns the polished $z$
+and junction states, but no time grid. The shooter keeps the
+\emph{normalised} breakpoints fixed and re-solves $\tf$, so the polished
+states belong to the polished $\tf$. Pairing them with the pre-polish grid
+would leave the record and the hunt's warm start inconsistent by the
+polish's change in $\tf$ on every segment --- even though the certificate
+itself was valid.
 \end{intu}
 
 \begin{snippet}{section 6: forward what certify\_root reads, and the poolless policy}
@@ -761,13 +872,14 @@ else
 \end{snippet}
 \begin{snippet}{section 6: adopt the polished root WITH its grid}
 tfPre = zCur(8);
-    zCur = C.z(:);
-    itCur.Y = C.Y;  itCur.tGrid = sigK*zCur(8);  itCur.normR = gvd(C, 'normR', NaN);
+zCur = C.z(:);
+itCur.Y = C.Y;  itCur.tGrid = sigK*zCur(8);  itCur.normR = gvd(C, 'normR', NaN);
 \end{snippet}
 
 \begin{rig}
-$t_k^{\mathrm{cert}}=\sigma_k\,C.z_8$ with $\sigma$ the normalised grid
-preserved from the walk; the shapes are asserted before adoption and the
+With $t_f^{\mathrm{cert}}:=\texttt{C.z(8)}$ the polished flight time,
+$t_k^{\mathrm{cert}}=\sigma_k\,t_f^{\mathrm{cert}}$, with $\sigma$ the normalised
+grid preserved from the walk; the shapes are asserted before adoption and the
 relative change in $\tf$ is printed (it reads $0$ when the walk's root was
 already polished, which is the honest number). Without a parallel pool the
 certifier refuses to run unfenced unless told to; the script's policy knob
@@ -801,13 +913,13 @@ end
 Now that we hold one trip, go looking for others. Ask the big optimiser
 for a trip to a \emph{different} arrival point, starting from the trip we
 have. It does not know which family it came from, so it may hand back
-another --- sometimes a faster one. That is how three of the five families
-in the library were found.
+another --- sometimes a faster one. That is how the fast2, direct18 and
+direct11 families in the library were found.
 \end{eli}
 
 \begin{intu}
-What a probe measures, exactly --- and this is the sentence the round-1
-review changed. Each probe is a \emph{different} boundary-value problem (the
+What a probe measures, exactly. Each probe is a \emph{different}
+boundary-value problem (the
 arrival state moved), so its $\tf$ is not comparable to the source's as a
 basin test: one family's $\tf$ varies with phase by far more than a few
 percent, and two families can share a $\tf$. A probe yields a
@@ -815,19 +927,24 @@ percent, and two families can share a $\tf$. A probe yields a
 or slower than the source \emph{at its own phase}. Turning a candidate into
 a basin verdict needs a same-phase baseline --- continue the held family to
 $\sA$ with \file{arclength\_arrival} and compare states and costates there.
-That is what FINDINGS 61, 63 and 68 did. Every converged probe is banked as
-a harvested seed so that it can be.
+That is what FINDINGS 61, 63 and 68 did. Every probe starts from the
+\emph{same} held root, not from the previous probe's result. A probe that
+passes the core predicate and the floor keeps its direct solution arrays;
+a seed is harvested from it when usable multipliers came back, and those
+seeds are banked for later shooting and certification.
 \end{intu}
 
 \begin{rig}
 \textbf{The warm start} needs dense samples on $N+1$ nodes, which the banked
 junctions alone are not, so here --- and only here --- the source root is
-re-flown \emph{segment by segment} from its junction starts. No segment is
-longer than $1/K$ of the arc; at each interior seam the \emph{banked start}
-of the next segment is kept and the previous segment's propagated endpoint
-dropped, so a resample at a junction recovers the banked state exactly; the
-worst seam mismatch is returned in km rather than hidden ($2.7\times10^{-8}$
-on the default run). Duplicate time samples are removed, the primer norm is
+re-flown \emph{segment by segment} from its junction starts. Segment $k$
+lasts $\tf(\sigma_{k+1}-\sigma_k)$ --- $\tf/K$ on this pipeline's uniform
+grid --- and is propagated independently from its banked start. At each
+interior seam the \emph{banked start} of the next segment is kept and the
+previous segment's propagated endpoint dropped, so a resample at a junction
+recovers the banked state exactly; the worst \emph{position} seam mismatch
+is returned in km rather than hidden ($2.7\times10^{-8}$ on the default
+run). Duplicate time samples are removed, the primer norm is
 required finite and positive, and the direction guess is
 $\bm u_0=-\lv/\|\lv\|$ with throttle 1.
 \end{rig}
@@ -848,11 +965,11 @@ end
 \end{snippet}
 \begin{snippet}{section 7: the direct warm start from the re-flown source}
 sN  = linspace(0, tjH(end), dladder.N + 1);
-        X0h = interp1(tjH, yjH(:, 1:7), sN, 'spline').';
-        LVh = interp1(tjH, yjH(:, 11:13), sN, 'spline');
-        nLV = vecnorm(LVh, 2, 2);
-        assert(all(isfinite(nLV)) && all(nLV > 1e-12), 'the primer vanishes or is not finite on the source flight');
-        U0h = [(-LVh ./ nLV).'; ones(1, dladder.N + 1)];
+X0h = interp1(tjH, yjH(:, 1:7), sN, 'spline').';
+LVh = interp1(tjH, yjH(:, 11:13), sN, 'spline');
+nLV = vecnorm(LVh, 2, 2);
+assert(all(isfinite(nLV)) && all(nLV > 1e-12), 'the primer vanishes or is not finite on the source flight');
+U0h = [(-LVh ./ nLV).'; ones(1, dladder.N + 1)];
 \end{snippet}
 
 \begin{rig}
@@ -869,12 +986,12 @@ anything about basins.
 
 \begin{snippet}{section 7: the reading for each probe, in order of precedence}
 if ~oH.success,   rd = ['solver did not converge: ' oH.ipoptStatus];
-            elseif ~feasH,    rd = ['converged but refused: ' whyH];
-            elseif ~clearH,   rd = sprintf('converged but refused: node radius %.0f km under the %g km floor', radH, num.clearKm);
-            elseif rel < 0,   rd = sprintf('candidate, %.1f%% FASTER than the source at its own phase -- worth a same-phase baseline', -100*rel);
-            else,             rd = sprintf('candidate, %.1f%% slower than the source at its own phase', 100*rel);
-            end
-            if okH && ~harvOK, rd = [rd ' (NO seed harvested: multipliers unavailable; direct solution kept)']; end
+elseif ~feasH,    rd = ['converged but refused: ' whyH];
+elseif ~clearH,   rd = sprintf('converged but refused: node radius %.0f km under the %g km floor', radH, num.clearKm);
+elseif rel < 0,   rd = sprintf('candidate, %.1f%% FASTER than the source at its own phase -- worth a same-phase baseline', -100*rel);
+else,             rd = sprintf('candidate, %.1f%% slower than the source at its own phase', 100*rel);
+end
+if okH && ~harvOK, rd = [rd ' (NO seed harvested: multipliers unavailable; direct solution kept)']; end
 \end{snippet}
 
 \begin{meas}
@@ -890,22 +1007,28 @@ $\sA=0.7837$ $\to$ CPU cap. Outcome C: \textsc{candidates}, 2 accepted,
 %=========================================================================
 
 \begin{eli}
-At the end the script grades itself twice. First: did the machinery work?
-If the ladder produced nothing or the harvest could not be shot to a root,
-nothing above can be believed and the script fails. Second: what did the
-three experiments \emph{show}? A search that found nothing is a result, not
-a broken machine.
+The script grades itself twice. First: did the machinery work? If the
+ladder produced nothing, or the harvest could not be shot to a root, there
+is no usable root for the rest of the walk, and the script stops right
+there. Second: what did the three experiments \emph{show}? A search that
+found nothing is a result, not a broken machine.
 \end{eli}
 
 \begin{rig}
-Gates B1 (the direct ladder produced a rung) and H1 (the harvest shot to a
-root) are fatal. B1b, H2, H3, B2 and C1 are reported, never fatal; H3 is
-removed from the table when not applicable. Outcomes take the values
+Among the named gates, B1 (the direct ladder produced a rung) and H1 (the
+harvest shot to a root) are required to continue, and each is asserted when
+its stage ends, not at the end of the run. Other validation assertions ---
+orbit closure, usable multipliers, a malformed passing certificate --- and
+unhandled helper errors can also abort. A failed handoff does not invalidate
+the cold lottery already recorded. B1b, H2, H3, B2 and C1 are reported,
+never fatal; H3 is removed from the table when not applicable; the final
+table summarises the gates execution reached. Outcomes take the values
 \textsc{supported}, \textsc{partial}, \textsc{reached numerically},
-\textsc{candidates}, \textsc{not observed}, \textsc{inconclusive}. The whole
-record --- configuration, tolerances, every rung and probe with its reason,
-the certificate, the value-only certifier options, the gate table and the
-outcomes --- is saved, and a failed save warns rather than pretending.
+\textsc{candidates}, \textsc{not observed}, \textsc{inconclusive}, and
+\textsc{not run} for a stage switched off. The record --- configuration,
+tolerances, every rung and probe with its reason, the certificate, the
+value-only certifier options, the gate table and the outcomes --- is saved;
+a failed save warns, which is not a guarantee.
 \end{rig}
 
 \begin{snippet}{section 8: the gate table}
@@ -941,10 +1064,50 @@ outcomes = {'A cold lottery', outcomeA; 'B ladder', outcomeB; 'C basin hunt', ou
 \item That a certified root at 0.12\,N says anything about 0.07\,N. Outcome
       B on the default run is \textsc{partial}, and says so.
 \item Anything about a capped probe except that it was capped.
+\item That any root found is the globally fastest transfer, or that all
+      families have been enumerated.
+\item That the Sundman re-solve and the plain-time rung are the same
+      continuous root; the two scalar screens only reject a gross move.
+\item That an accepted direct solution or a harvested hunt seed is a
+      certified continuous extremal.
+\item That sampled clearance diagnostics and numerical integrations are
+      error-enclosed continuous proofs.
+\item Anything beyond the specified CR3BP, ideal engine and mass model, and
+      fixed endpoint phases: not mission robustness, not a higher-fidelity
+      ephemeris model.
+\item That the Hamiltonian argument of Section~\ref{sec:q1} holds where its
+      assumptions fail --- an active clearance constraint needs the
+      constrained minimum principle.
 \end{itemize}
-Every one of these was, at some point, a sentence in an earlier draft that
-claimed more. FINDINGS 76 and 77 record which reviewer caught which.
 \end{warn}
+
+%=========================================================================
+\section{Where these caveats came from}
+%=========================================================================
+
+Most of the qualifications above were, at some point, a sentence in an
+earlier draft --- of the script or of this guide --- that claimed more than
+the computation earned. They are kept out of the explanations so that each
+box explains rather than recounts, and gathered here because the failure
+modes are instructive.
+
+\begin{itemize}[nosep]
+\item \textbf{Script review, round 1} (FINDINGS 76): the throttle was not
+      checked at all; the certifier's options were never forwarded; the hunt
+      called flight-time differences across phases ``another basin''; a
+      sentence said $\Delta V$ rises down the ladder under a table showing it
+      fall; the historical lottery table mixed altitude with radius.
+\item \textbf{Script review, round 2} (FINDINGS 77): the polished root was
+      adopted with its pre-polish time grid; the poolless path could not
+      finish; H3 read missing evidence as a pass; the reference was compared
+      against problems it did not belong to; the ladder re-flew and
+      re-interpolated a converged root instead of reusing its junctions.
+\item \textbf{Review of this guide}: the Hermite--Simpson equations lacked
+      their time scaling; the turns formula lacked the unwrap; the handoff
+      box quoted a smoke run as the default run; ``to 1\%'' was 2.1\% on the
+      last step; the diagram drew the lottery as a side branch and hid the
+      fallbacks and early fatal checks.
+\end{itemize}
 
 %=========================================================================
 \section{Summary}
@@ -953,13 +1116,13 @@ claimed more. FINDINGS 76 and 77 record which reviewer caught which.
 \noindent
 \begin{tabular}{@{}p{0.26\textwidth}p{0.70\textwidth}@{}}
 \toprule
-cold lottery & one cold solve per mesh; the accepted rows disagree by 37\% and none matches the reference; continuation is required equipment \\
-direct ladder & 15 $\to$ 0.5\,N, guess $\propto T^{-0.6}$ to 1\%; band screen on steps; throttle checked both sides; $\Delta V$ falls because $T\tf\propto T^{0.4}$ \\
-handoff & Sundman re-solve of the bottom rung so $\lambda_t$ exists; midpoint stations, sign vote, $\lambda_t=1.000000$; one shooting iteration \\
+cold lottery & one cold solve per mesh; the two accepted rows disagree by 37\% and neither matches the reference; motivates seeding or continuation \\
+direct ladder & 15 $\to$ 0.5\,N, guess $\propto T^{-0.6}$ to about 1\% (worst 2.1\%); band screen on steps; throttle checked both sides; $\Delta V$ falls because $T\tf\propto T^{0.4}$ \\
+handoff & try a Sundman re-solve of the bottom rung so $\lambda_t$ exists, else plain time; midpoint stations, sign vote, $\lambda_t=1.000000$; $\|R\|<10^{-11}$ in one iteration \\
 indirect ladder & banked starts are the next seed, grid scaled, mass row rebuilt; exponent sweep is a search; per-attempt records; a stall is a policy finding \\
-certify & options forwarded; polished root adopted with $t_k=\sigma_k C.z_8$; poolless policy explicit; outcome B decided after \\
+certify & options forwarded; polished root adopted with $t_k=\sigma_k t_f^{\mathrm{cert}}$; poolless policy explicit; local, not global; outcome B decided after \\
 basin hunt & re-fly from junctions, banked start wins the seam; candidates, not basins; seeds banked; capped is capped \\
-self-check & fatal gates B1, H1; the rest reported; outcomes in their own words \\
+self-check & B1, H1 asserted where their stages end; the rest reported; outcomes in their own words, including \textsc{not run} \\
 \bottomrule
 \end{tabular}
 

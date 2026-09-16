@@ -5294,3 +5294,29 @@ run, hit its 300 s CPU cap this time at a 55-day iterate; it is recorded as
 said to show -- a lottery ticket lands on either side of its budget from
 run to run, and the script no longer reads that as anything about basins.
 Outcomes: A SUPPORTED, B PARTIAL (certified at 0.12 N), C CANDIDATES.
+
+**The guide reviewed (2026-09-16).** `doc/root_origins_study_guide.tex` went
+to GPT-6 Astra (xhigh, 578 s, $1.63) with the script, the full-run log and
+these sections inlined; review at
+`reviews/root_origins_study_guide_astra_2026-09-16.md`. It verified as RIGHT
+the Hamiltonian signs, free terminal mass giving lam_m(t_f) = 0, the mass
+adjoint and throttle coefficient, lam_t = +1 under the normal Mayer
+convention, the 14K - 6 = 330 shooting count, the ND conversions, the falling
+propellant AND falling ideal delta-V (d dV/da = c/(1-a) > 0), the next-seed
+construction, the polished-grid formula, and every lottery, ladder, handoff
+and hunt number bar two. Wrong, and fixed: the Hermite-Simpson equations
+omitted the lifted-time scaling (F = T f); the turns formula omitted the
+unwrap; **the handoff box quoted the SMOKE run (6e-7, 4 km) as the default
+run (3.80e-8, 6414 -> 6414 km)**; "predicts to 1%" was 2.1% on the last
+step (0.7416 -> 0.7575 ND), which this section's own "every rung to 1%"
+also got wrong; "four routes on this cell" counted a route from another
+cell; the forwarding fix was attributed to round 2 instead of round 1. The
+diagram drew the lottery as a side branch and hid the plain-time fallback,
+the last-accepted-rung continuation and the early fatal asserts; it is
+redrawn in execution order. The all-burn argument now carries its
+assumptions and the proof that primer zeros are isolated (vanishing
+(lam_r, lam_v) forces H = 1). Provenance was moved out of the explanatory
+boxes into its own section. **Family count reconciled:** the script header
+and the seeds document said four of five were found by branch-blind direct
+solves; this record names three (fast2 61, direct18, direct11 68), and all
+three sources now say three.

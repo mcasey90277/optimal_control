@@ -43,8 +43,9 @@
 %        arrival phase, warm-started from the root you hold. The solver is
 %        BRANCH-BLIND -- it lands in whatever basin its guess is near. That
 %        is a hazard if you assume it returns the family you started from,
-%        and a discovery tool if you do not. It is how four of the five
-%        families in the 70 mN library were found (FINDINGS 61, 63, 68).
+%        and a discovery tool if you do not. It is how three of the five
+%        families in the 70 mN library -- fast2, direct18 and direct11 --
+%        were found (FINDINGS 61, 63, 68).
 %
 %   THE SEQUENCE OF STUDY SCRIPTS:
 %     root_origins_study   (this)  where a root comes from when there is none

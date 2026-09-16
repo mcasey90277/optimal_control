@@ -126,7 +126,7 @@ while true
                                   [t0 dt], y, eo);
         Zs = Ys;
     end
-    T = [T; Ts];  Y = [Y; Ys];                     %#ok<AGROW>
+    T = [T; Ts];  Y = [Y; Ys];
     hit = ~isempty(te) && te(end) < dt - 1e-14;
     if ~hit
         yh = Zs(end, 1:14)';

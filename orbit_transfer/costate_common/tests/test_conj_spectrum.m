@@ -61,11 +61,11 @@ ok = chk(ok, S.specConsistency < 1e-12, sprintf('resolver and coarse loop agree 
 Sh = load(fullfile(fileparts(here), 'DRO_tulip', 'indirect', 'results', ...
                    'arrival_sheet_70mN_pass1.mat'));
 bad = [];
-for j = 1:numel(Sh.S.sA)
-    c = Sh.S.cand{j};
+for ks = 1:numel(Sh.S.sA)
+    c = Sh.S.cand{ks};
     for k = 1:numel(c)
         if ~c(k).ok && contains(c(k).reason, 'conjugate') && isfinite(c(k).tfDays)
-            bad = c(k);  badSA = Sh.S.sA(j);  break
+            bad = c(k);  badSA = Sh.S.sA(ks);  break
         end
     end
     if ~isempty(bad), break, end

@@ -207,7 +207,7 @@ if isfield(sheets, 'conj_pass')
     % records NaN rather than a number that would be true of only some rows
     KK = [];
     for ks = 1:numel(sheets)
-        if isfield(sheets(ks), 'conj_K'), KK = [KK; sheets(ks).conj_K(:)]; end %#ok<AGROW>
+        if isfield(sheets(ks), 'conj_K'), KK = [KK; sheets(ks).conj_K(:)]; end
     end
     KK = unique(KK(isfinite(KK)));
     if isscalar(KK), Kuse = KK; else, Kuse = NaN; end

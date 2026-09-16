@@ -1,47 +1,78 @@
 function S = conj_catalog_pass(catMat, opts)
-% CONJ_CATALOG_PASS  Run the conjugate-point test over every entry of a
-%   compact costate catalog and record the verdicts.
+%% Purpose:
 %
-%   For each stored entry: rebuild the endpoint states from the sheet's
-%   family recipes (same get_family_orbit + phase_state construction the ladder
-%   engines used), fly the stored z8 to build a K-junction seed, re-solve
-%   with ms_tfmin(conjTest) seeded AT the converged solution (1 Newton
-%   iteration expected), and record the free-time quotiented Jacobi verdict
-%   from ms_conjugate_test. A verdict is only recorded when the re-solve
-%   reproduces the stored solution (converged, |z - z8| < tolDz); otherwise
-%   the entry is marked NOT RUN (-1), never FAIL.
+%   Run the conjugate-point test over every entry of a compact costate catalog
+%   and record the verdicts.
+%
+%   For each stored entry: rebuild the endpoint states from the sheet's family
+%   recipes (same get_family_orbit + phase_state construction the ladder
+%   engines used), fly the stored z8 to build a K-junction seed, re-solve with
+%   ms_tfmin(conjTest) seeded AT the converged solution (1 Newton iteration
+%   expected), and record the free-time quotiented Jacobi verdict from
+%   ms_conjugate_test. A verdict is only recorded when the re-solve reproduces
+%   the stored solution (converged, |z - z8| < tolDz); otherwise the entry is
+%   marked NOT RUN (-1), never FAIL.
 %
 %   Campaign contract (matlab-campaign discipline): file logging, sidecar
-%   progress .mat saved after EVERY entry, attempt counter written BEFORE
-%   each solve, clean batch-budget exit between entries, resume for free.
-%   Verdicts are written back into the catalog .mat only by an explicit
-%   'writeback' call after a complete census (a .bak copy is made first).
+%   progress .mat saved after EVERY entry, attempt counter written BEFORE each
+%   solve, clean batch-budget exit between entries, resume for free. Verdicts
+%   are written back into the catalog .mat only by an explicit 'writeback'
+%   call after a complete census (a .bak copy is made first).
 %
-% INPUTS:
-%   catMat - path to a catalog .mat (single variable, schema v1/v2) [char]
-%   opts   - (optional) struct:
-%            .logFile    [''] append-mode log (empty = stdout)
-%            .batchSec   [inf] clean-exit wall budget for this call
-%            .maxEntries [inf] process at most N entries this call
-%            .K          [24] multiple-shooting segment count
-%            .maxAtt     [2] attempts per entry before it is retired
-%            .tolDz      [1e-6] |z - z8| gate for a valid re-solve
-%            .wallSec    [60] per-entry ms_tfmin wall budget (advisory)
-%            .sideMat    [<catMat minus .mat>_conjprog.mat] sidecar path
-%            .allowUndecided [0] permit writeback with at most this many
-%                        entries still undecided (recorded in .conj_test)
-%            .writeback  [false] after a COMPLETE census, write conj_pass /
-%                        conj_ncross / conj_atfinal grids + .conj_test meta
-%                        into the catalog .mat (backs up to .bak_conj first)
-%
-% OUTPUTS:
-%   S      - struct: .done (all entries decided), .nPass, .nFail, .nNotrun,
-%            .nTodo (still undecided and not retired), .sideMat
-%
-% REFERENCES:
+%% References:
 %   [1] costate_common/ms_conjugate_test.m (the instrument; header = math)
 %   [2] costate_common/golden_cells.m (the per-entry reconstruction pattern)
 %   [3] orbit_transfer/STATUS_AND_ROADMAP.md §6 step 1 (why this exists)
+%
+%% Inputs:
+%
+%  catMat                   char                    Path to a catalog .mat
+%                                                   (single variable, schema
+%                                                   v1/v2)
+%
+%  opts                     struct (optional)       .logFile [''] append-mode
+%                                                   log (empty = stdout);
+%                                                   .batchSec [inf] clean-exit
+%                                                   wall budget for this call;
+%                                                   .maxEntries [inf] process
+%                                                   at most N entries this
+%                                                   call; .K [24] multiple-
+%                                                   shooting segment count;
+%                                                   .maxAtt [2] attempts per
+%                                                   entry before it is
+%                                                   retired; .tolDz [1e-6] |z
+%                                                   - z8| gate for a valid re-
+%                                                   solve; .wallSec [60] per-
+%                                                   entry ms_tfmin wall budget
+%                                                   (advisory); .sideMat
+%                                                   [<catMat minus
+%                                                   .mat>_conjprog.mat]
+%                                                   sidecar path;
+%                                                   .allowUndecided [0] permit
+%                                                   writeback with at most
+%                                                   this many entries still
+%                                                   undecided (recorded in
+%                                                   .conj_test); .writeback
+%                                                   [false] after a COMPLETE
+%                                                   census, write conj_pass /
+%                                                   conj_ncross / conj_atfinal
+%                                                   grids + .conj_test meta
+%                                                   into the catalog .mat
+%                                                   (backs up to .bak_conj
+%                                                   first)
+%
+%% Outputs:
+%
+%  S                        struct                  .done (all entries
+%                                                   decided), .nPass, .nFail,
+%                                                   .nNotrun, .nTodo (still
+%                                                   undecided and not
+%                                                   retired), .sideMat
+%
+%% Revision History:
+%  M. Casey                                                   (c) 08/23/2026
+%  Copyright Coorbital Inc.
+%% ------------------------ Begin Code Sequence ---------------------------
 
 if nargin < 2, opts = struct(); end
 K        = fieldd(opts, 'K', 24);

@@ -130,7 +130,7 @@ switch lower(action)
             f = attFile(qDir, id);   if isfile(f), delete(f); end
             f = ownerFile(qDir, id); if isfile(f), delete(f); end
             unit_lock('release', T.file, T.token);
-            out(end+1) = id; %#ok<AGROW>
+            out(end+1) = id;
         end
 
     case 'claim'

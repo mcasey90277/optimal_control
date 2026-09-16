@@ -1,51 +1,91 @@
 function [z, info] = ms_tfmin(rv0, rvf, seed, Tmax, c, muStar, opts)
-% MS_TFMIN  Multiple-shooting solve of the CR3BP minimum-time PMP problem.
+%% Purpose:
 %
-% Solves the same problem as pumpkyn.cr3bp.tfMin (terminal conditions
-% r(tf)=rf, v(tf)=vf, lambda_m(tf)=0, H(tf)=0 with H = 1 + lambda'f), but
-% with the arc split into K short segments whose junction states are extra
-% unknowns. Short segments kill the ~1e3x Lyapunov amplification that makes
-% single shooting from collocation-derived costates intractable (measured:
-% catalog seeds miss by 36,000-560,000 km when single-shot). The seed is a
-% full state+costate TRAJECTORY, e.g. from a direct collocation solution.
+%   Multiple-shooting solve of the CR3BP minimum-time PMP problem.
 %
-% Since migration #3 this is a thin PROBLEM DEFINITION bound to the generic
-% engine costate_common/ms_bvp: this file owns only the CR3BP min-time
-% closures (propagation via tfMinProp, dynamics and terminal conditions via
-% tfMinEoM) and the z8 packing; structure, Jacobian assembly, guards, and
-% the trust-region solve live in the engine. All dynamics, STMs, and the
-% Hamiltonian come from pumpkyn calls so every convention matches tfMin
-% exactly; a converged z here is interchangeable with a tfMin solution.
+%   Solves the same problem as pumpkyn.cr3bp.tfMin (terminal conditions r(tf)
+%   = rf, v(tf) = vf, lambda_m(tf) = 0, H(tf) = 0 with H = 1 + lambda'f), but
+%   with the arc split into K short segments whose junction states are extra
+%   unknowns. Short segments kill the ~1e3x Lyapunov amplification that makes
+%   single shooting from collocation-derived costates intractable (measured:
+%   catalog seeds miss by 36,000-560,000 km when single-shot). The seed is a
+%   full state+costate TRAJECTORY, e.g. from a direct collocation solution.
 %
-% INPUTS:
-%   rv0    - initial rotating-frame pos/vel, ND [6x1 or 1x6]
-%   rvf    - final   rotating-frame pos/vel, ND [6x1 or 1x6]
-%   seed   - struct:
-%              .tf     initial time-of-flight guess, ND [scalar]
-%              .tGrid  segment-boundary times, 0..tf [1 x K+1]
-%              .Y      augmented states [r;v;m;lam_r;lam_v;lam_m] at the
-%                      boundary times [14 x K+1] (col 1 state part is
-%                      overwritten with [rv0; 1])
-%   Tmax   - max thrust accel, ND [scalar]
-%   c      - exhaust velocity, ND [scalar]
-%   muStar - CR3BP mass ratio [scalar]
-%   opts   - (optional) struct: .maxIter [100], .tolR [1e-10], .wallSec
-%            [300], .verbose [false], .keepSTMs [false] (adds info.PHI for
-%            ms_conjugate_test), .conjTest [false] (implies keepSTMs; runs
-%            the free-time quotiented Jacobi test and attaches info.conj)
+%   Since migration #3 this is a thin PROBLEM DEFINITION bound to the generic
+%   engine costate_common/ms_bvp: this file owns only the CR3BP min-time
+%   closures (propagation via tfMinProp, dynamics and terminal conditions via
+%   tfMinEoM) and the z8 packing; structure, Jacobian assembly, guards, and
+%   the trust-region solve live in the engine. All dynamics, STMs, and the
+%   Hamiltonian come from pumpkyn calls so every convention matches tfMin
+%   exactly; a converged z here is interchangeable with a tfMin solution.
 %
-% OUTPUTS:
-%   z    - [lambda0(7); tf] in tfMin's convention [8x1] (best iterate)
-%   info - struct: .converged, .normR (final inf-norm), .iters, .wall (s),
-%          .Y (14 x K junction START states; the final propagated endpoint
-%          is not included), .tGrid, .PHI {1 x K} (only if keepSTMs),
-%          .conj (ms_conjugate_test output, only if conjTest)
-%
-% REFERENCES:
+%% References:
 %   [1] pumpkyn.cr3bp.tfMin / tfMinProp / tfMinEoM (D. Koblick, Coorbital) -
 %       single-shooting original; conventions and dynamics reused verbatim.
 %   [2] Betts, "Practical Methods for Optimal Control", ch. 3 (multiple
 %       shooting structure).
+%
+%% Inputs:
+%
+%  rv0                      [6 x 1] or [1 x 6]      Initial rotating-frame
+%                                                   position/velocity, ND
+%
+%  rvf                      [6 x 1] or [1 x 6]      Final rotating-frame
+%                                                   position/velocity, ND
+%
+%  seed                     struct                  .tf initial time-of-flight
+%                                                   guess (ND); .tGrid [1 x
+%                                                   K+1] segment-boundary
+%                                                   times, 0..tf; .Y [14 x
+%                                                   K+1] or [14 x K] augmented
+%                                                   states
+%                                                   [r;v;m;lam_r;lam_v;lam_m]
+%                                                   at the boundary times (col
+%                                                   1 state part is
+%                                                   overwritten with [rv0; 1];
+%                                                   col K+1 is never read, so
+%                                                   info.Y fed back is a
+%                                                   lossless seed)
+%
+%  Tmax                     double                  Maximum thrust
+%                                                   acceleration, ND
+%
+%  c                        double                  Exhaust velocity, ND
+%
+%  muStar                   double                  CR3BP mass ratio
+%
+%  opts                     struct (optional)       .maxIter [100], .tolR
+%                                                   [1e-10], .wallSec [300],
+%                                                   .verbose [false],
+%                                                   .keepSTMs [false] (adds
+%                                                   info.PHI for
+%                                                   ms_conjugate_test),
+%                                                   .conjTest [false] (implies
+%                                                   keepSTMs; runs the free-
+%                                                   time quotiented Jacobi
+%                                                   test and attaches
+%                                                   info.conj)
+%
+%% Outputs:
+%
+%  z                        [8 x 1]                 [lambda0(7); tf] in
+%                                                   tfMin's convention (best
+%                                                   iterate)
+%
+%  info                     struct                  .converged, .normR (final
+%                                                   inf-norm), .iters, .wall
+%                                                   (s), .Y [14 x K] junction
+%                                                   START states (the final
+%                                                   propagated endpoint is not
+%                                                   included), .tGrid, .PHI {1
+%                                                   x K} (only if keepSTMs),
+%                                                   .conj (ms_conjugate_test
+%                                                   output, only if conjTest)
+%
+%% Revision History:
+%  M. Casey                                                   (c) 08/04/2026
+%  Copyright Coorbital Inc.
+%% ------------------------ Begin Code Sequence ---------------------------
 
 if nargin < 7, opts = struct(); end
 

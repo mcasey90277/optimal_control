@@ -60,7 +60,7 @@ for k = 1:numel(f)
     a = [Ss.rows(1:nEnt).(f{k})];  b = [Sp.rows(1:nEnt).(f{k})];
     same = isequaln(a, b);
     allSame = allSame && same;
-    if ~same, worst = [worst ' ' f{k}]; end %#ok<AGROW>
+    if ~same, worst = [worst ' ' f{k}]; end
 end
 ok = chk(ok, allSame, sprintf('every written-back field is bitwise identical%s', ...
          tern(allSame, sprintf(' (%d fields, %d entries)', numel(f), nEnt), [': DIFFER at' worst])));

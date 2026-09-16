@@ -44,7 +44,6 @@ if nargin == 0
      fprintf('demo: Qdot = %.6f\n', cr3bp_minfuel_qdot(y_, 0.1756418, 8.673746));
      return
 end
-%#ok<*INUSD>
 rho = sqrt(sum(y(11:13, :).^2, 1) + 1e-300);
 Qd  = -Tmax * sum(y(11:13, :) .* y(8:10, :), 1) ./ (y(7, :) .* rho);
 end

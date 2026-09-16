@@ -121,13 +121,13 @@ while true
         okUnit = false;  err = sprintf('%s (%s)', ME.message, ME.identifier);
     end
     if okUnit
-        nDone = nDone + 1;  units(end+1) = c.id; %#ok<AGROW>
+        nDone = nDone + 1;  units(end+1) = c.id;
         lg('worker %s: unit %d DONE in %.0f s -> %s', tag, c.id, toc(tU), c.output);
         % a unit may keep a resumable checkpoint at <output>.ckpt while it
         % runs (walk_checkpoint); once published it is no longer needed
         if isfile([c.output '.ckpt']), delete([c.output '.ckpt']); end
     else
-        nFail = nFail + 1;  failed(end+1) = c.id; %#ok<AGROW>
+        nFail = nFail + 1;  failed(end+1) = c.id;
         lg('worker %s: unit %d FAILED after %.0f s -- %s', tag, c.id, toc(tU), err);
         if isfile(c.tmpOut)           % keep the evidence, out of the publisher's way
             [okMv, msgMv] = movefile(c.tmpOut, [c.tmpOut '.failed']);

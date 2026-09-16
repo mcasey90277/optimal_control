@@ -12,7 +12,7 @@ function R = probe_deep_rungs(opts)
 %
 %   Per the identifiability rule (OPTIMALITY_CERTIFICATION §6, two-root
 %   adjudication): every converged sub-1 N probe entry is recorded with
-%   its FULL ms junction states (ms_bvp info.Y on the K+1 breakpoints),
+%   its FULL ms junction states (ms_bvp info.Y: the K junction STARTS),
 %   never bare z8 -- bare z8 pins t_f only to ~1e-4 ND at ~40 revs.
 %
 %   Same engine, same gates as the catalogs (ms_tfmin + flown gate + tfMin
@@ -52,8 +52,8 @@ function R = probe_deep_rungs(opts)
 %                                                   .rungs .closed .accOk
 %                                                   .tf_nd .normR .flyKm
 %                                                   .accDz .wall .revs
-%                                                   .Y {K+1-junction states
-%                                                    per closed rung}
+%                                                   .Y {[14 x K] junction
+%                                                    starts per closed rung}
 %                                                   .cell (iD,iA) .z8seed
 %
 %% Revision History:

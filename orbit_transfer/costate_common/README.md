@@ -2,21 +2,24 @@
 
 Core of the costate-catalog pipeline, and the official seed (2026-08-06) of
 a pumpkyn-style **optimal-control orbit-transfer library** — the OC companion
-to pumpkyn's astrodynamics. Its admission rule is *code reused by a second
-campaign moves here on its next touch*. Problem-agnostic pieces with a second
+to pumpkyn's astrodynamics. Its admission rule (changed 2026-09-16, was
+*reused by a second campaign*) is *generic by construction, with a test*:
+nothing in the file is specific to one campaign's orbits or bookkeeping, and
+a test pins its contract. Job control is leaving for a sibling
+`../campaign_common/` (TODO step 11). Problem-agnostic pieces with a second
 TOP-LEVEL consumer go one level further, to `../../oclib/+oc` (admission rule
 in `../../oclib/README.md`).
 
 Architecture document: `../DRO_tulip/doc/costate_library_sdd.tex`.
 Theory manual: `../DRO_tulip/doc/costate_library_methodology.tex`.
-Generated function index: `../doc/library_catalog.md` (dates from 2026-09-11
-and predates 17 of the files below; regenerate with
-`python3 orbit_transfer/doc/gen_library_catalog.py`).
+Generated function index: `../doc/library_catalog.md` (regenerated
+2026-09-16; rerun `python3 orbit_transfer/doc/gen_library_catalog.py` after
+adding files).
 
 ## State of the folder (measured 2026-09-16)
 
-**61 files, about 8,000 lines, 58 tests.** The folder no longer matches its
-own admission rule. Caller counts below are code references from outside the
+**61 files, about 8,000 lines, 58 tests.** The folder did not match its
+old admission rule; the table below is what the new one sorts. Caller counts below are code references from outside the
 folder (tests excluded); an "entry point" has no calling code and is run by
 hand.
 
@@ -79,7 +82,7 @@ folders, *internal* means called only from within this folder.
 
 | file | what | used by |
 |---|---|---|
-| `ms_bvp.m` | Generic multiple-shooting BVP engine: problem as three closures (prop/rhs/terminal), block Jacobian from segment STMs, trust-region-dogleg, iterate guards. `ms_tfmin` (this folder) is its CR3BP min-time binding. **`opts.fixedTf`** (2026-08-14) drops the t_f unknown for fixed-time problems (min-energy / min-fuel catalogs); `ms_minenergy` is the first binding. Newton polish after an early fsolve exit (its ‖JᵀR‖ test fires at ‖R‖~1e-10 on short arcs). Self-demos: oscillator BVP, free and fixed t_f. **Junction contract (verified 2026-09-16):** `info.Y` returns the K junction STARTS (14 × K) with `info.tGrid` the K+1 times, and a seed's `Y` is read only in columns 1..K, so a 14 × K array fed back is lossless. Headers that still say K+1 for `info.Y` are stale (TODO, cleanup step 3). | DRO (+ internal) |
+| `ms_bvp.m` | Generic multiple-shooting BVP engine: problem as three closures (prop/rhs/terminal), block Jacobian from segment STMs, trust-region-dogleg, iterate guards. `ms_tfmin` (this folder) is its CR3BP min-time binding. **`opts.fixedTf`** (2026-08-14) drops the t_f unknown for fixed-time problems (min-energy / min-fuel catalogs); `ms_minenergy` is the first binding. Newton polish after an early fsolve exit (its ‖JᵀR‖ test fires at ‖R‖~1e-10 on short arcs). Self-demos: oscillator BVP, free and fixed t_f. **Junction contract (verified 2026-09-16):** `info.Y` returns the K junction STARTS (14 × K) with `info.tGrid` the K+1 times, and a seed's `Y` is read only in columns 1..K, so a 14 × K array fed back is lossless. A seed may carry K or K+1 columns (headers say so since 2026-09-16). | DRO (+ internal) |
 | `ms_tfmin.m` | Min-time wrapper around `ms_bvp` (pumpkyn tfMinProp/tfMinEoM closures, free-tf terminal set, opt-in conjugate test). MOVED here from `DRO_tulip/indirect` 2026-08-26 (used by every catalog campaign + the GTO probe); no delegate — callers self-bootstrap this folder (the `ms_bvp` precedent). Equivalence gate: `golden_cells` 20/20. | DRO, GTO |
 | `ms_tfmin_hom.m` | HOMOGENEOUS-chart minimum-time multiple shooting: the objective multiplier ρ free and (ρ, λ₀) on the unit sphere, H(t_f) = ρ + λᵀf = 0. In the normal chart the fast family's \|λ₀\| runs 46 → 1449 as thrust falls toward 72 mN; on the sphere the multipliers stay bounded and ρ → 0 (loss of normality) is a finite, visible event. `tests/test_ms_tfmin_hom`. | DRO |
 | `ss_bvp_accept.m` | **Generic single-shooting acceptance gate** (2026-08-14): the pipeline's third gate for costs with no pumpkyn twin — `ms_bvp` with K = 1 on the same closures, reporting the residual AT the seed, the move \|Δz\|, and `accepted = converged ∧ \|Δz\| < 1e-6`. First concrete form of the "acceptance-gate harness" TODO. | DRO |
@@ -167,8 +170,8 @@ folders, *internal* means called only from within this folder.
 No direct test: `harvest_ms_seed` (covered only through `golden_cells`),
 `run_capped`, `current_pool`, `flown_control_error`, `true_min_altitude`,
 `preflight_screen`, `survey_family_bounds`, `newton_fixed_q`,
-`cr3bp_thrust_rhs`, `ctrl_quad`, `assert_periodic_orbit`, `duals_to_costates`
-(tested in `oclib`). `test_ladder_endpoints` lives in `DRO_tulip/indirect/tests`.
+`cr3bp_thrust_rhs`, `ctrl_quad`, `assert_periodic_orbit`. `duals_to_costates`
+is a delegate; the implementation is tested by `oclib/tests/test_duals_to_costates`. `test_ladder_endpoints` lives in `DRO_tulip/indirect/tests`.
 
 Run the relevant tests plus `golden_cells` after touching an engine.
 
@@ -176,11 +179,10 @@ Run the relevant tests plus `golden_cells` after touching an engine.
 
 - Pumpkyn house style: `%% Purpose / Inputs / Outputs / Revision History`
   headers, no Code Analyzer pragmas, never `i`/`j` as loop variables.
-  **Current state:** 57 of 61 files use the `%% Purpose` header and 4 use the
-  `% INPUTS:` form (`conj_catalog_pass`, `gates_catalog_pass`, `ms_tfmin`,
-  `rib_targets`); 7 files and 2 tests carry `%#ok` pragmas (mostly `AGROW`,
-  7 of them in `conj_resolve`); 3 tests use `j` as a loop variable. 13 of 61
-  files have a `nargin == 0` self-demo.
+  **Current state (2026-09-16):** all 61 files use the `%% Purpose` header;
+  no `%#ok` pragmas and no `i`/`j` loop variables remain (the 22 `AGROW` /
+  `INUSD` warnings the pragmas hid are now visible — preallocate on next
+  touch). 13 of 61 files have a `nargin == 0` self-demo.
 - Physics only through pumpkyn calls (`tfMinProp`/`tfMinEoM`/getters);
   nothing is ever written into pumpkyn.
 - The five standing principles + principle 7 (defenses against silent

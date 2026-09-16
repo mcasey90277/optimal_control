@@ -1,6 +1,6 @@
 # Orbit-transfer library catalog — generated function reference
 
-Generated 2026-09-11 by `gen_library_catalog.py`.
+Generated 2026-09-16 by `gen_library_catalog.py`.
 **Do not edit by hand** — regenerate with:
 ```sh
 python3 orbit_transfer/doc/gen_library_catalog.py
@@ -37,7 +37,7 @@ The costate-pipeline library: family construction, multiple shooting, seeds, con
 ### `arclength_ms.m`
 `A = arclength_ms(resFactory, dRdq, p0, q0, opts)`  
 GENERIC pseudo-arclength continuation of a root curve R(p, q) = 0 in any parameter q, for any residual that comes with its Jacobian. This is the engine behind branch tracing in thrust (arclength_thrust's job) and in arrival phase (the sheet); it owns nothing about orbits.
-*in: `resFactory`, `dRdq`, `opts`, `direction`, `Dx`, `sq`, `nStep`, `qStop`, `levels`, `newtonTarget`, `maxCorrFrac`, `foldRatio`, `admissible`, `deadlineSec`, `logFile` · out: `A`*
+*in: `resFactory`, `dRdq`, `opts`, `direction`, `Dx`, `sq`, `nStep`, `qStop`, `levels`, `newtonTarget`, `maxCorrFrac`, `foldRatio`, `admissible`, `deadlineSec`, `logFile`, `partialFile`, `saveEvery` · out: `A`*
 
 ### `assert_periodic_orbit.m`
 `ok = assert_periodic_orbit(tau, rv, tol, throwOnFail)`  
@@ -48,6 +48,21 @@ PERIODICITY GUARD for a propagated orbit, made a single-home helper (migration #
 `cat_ = build_costate_catalog_family(catDir, outMat, spec)`  
 FAMILY-AGNOSTIC catalog packager: packages any campaign's thrust-ladder sheets into ONE shareable costate CATALOG in the COMPACT format (data minimization per D. Koblick): only canonical nondimensional quantities are stored -- phase fractions, the z8 vectors (which already contain t_f), thrust rungs, and per-sheet availability/flight-time lookup grids. Everything else (days, Delta-V, masses) is DERIVABLE and the formulas ride along in .derive.
 *in: `catDir`, `outMat`, `spec`, `glob`, `name`, `description`, `provenance`, `depReconstruction` · out: `cat_`*
+
+### `campaign_heartbeat.m`
+`out = campaign_heartbeat(action, hbDir, varargin)`  
+HEARTBEATS as the only liveness signal for campaign workers, and the five states a monitor must be able to tell apart.
+*in: `action`, `hbDir`, `varargin` · out: `out`*
+
+### `campaign_status.m`
+`S = campaign_status(qDir, hbDir, tags, opts)`  
+What a campaign is actually doing, read from ARTIFACTS ONLY: the queue's outputs and the workers' heartbeats. No process matching, because that is what reported four live workers dead (their tag was in the environment, not the command line).
+*in: `tags`, `opts` · out: `S`*
+
+### `campaign_worker.m`
+`out = campaign_worker(qDir, hbDir, tag, unitFcn, opts)`  
+One campaign worker: claim a unit, run it, PUBLISH its validated result under the unit's lock, release, repeat, until the campaign is finished or the budget is spent. Launched as its own MATLAB process by run_campaign_workers.sh, N at a time, against one work_queue.
+*in: `tag`, `unitFcn`, `opts` · out: `out`*
 
 ### `capped_pool.m`
 `pool = capped_pool(nWorkers)`  
@@ -64,9 +79,14 @@ THE versioned schema authority for compact costate catalogs -- the normative fie
 CONJ_CATALOG_PASS  Run the conjugate-point test over every entry of a compact costate catalog and record the verdicts.
 *in: `catMat`, `opts`, `logFile`, `batchSec`, `K`, `maxAtt`, `tolDz`, `wallSec`, `sideMat`, `writeback` · out: `S`*
 
+### `conj_resolve.m`
+`R = conj_resolve(Mfun, tGrid, opts)`  
+CANDIDATE DETECTION AND RESOLUTION for a dense conjugate-matrix scan, as a pure function of a matrix-valued function of time, so that it can be driven by synthetic matrices in tests (Astra review #3, 2026-09-11) and by the propagated CR3BP conjugate matrix in conj_spectrum.
+*in: `Mfun`, `tGrid`, `opts` · out: `R`*
+
 ### `conj_spectrum.m`
 `out = conj_spectrum(z8, rv0, Tmax, c, muStar, opts)`  
-DENSE singular-spectrum scan of the free-time quotiented conjugate matrix, closing the two blind spots of the sampled sign test:
+DENSE singular-spectrum scan of the free-time quotiented conjugate matrix, adding sensitivity to the two blind spots of the sampled sign test (it does not close them: no between-sample bound is proven):
 *in: `z8`, `rv0`, `opts` · out: `out`*
 
 ### `conjugate_pole_predict.m`
@@ -114,6 +134,11 @@ CR3BP dynamics with thrust and mass flow -- the single shared RHS for flown-cont
 Lagrange quadratic control reconstruction through the node/midpoint/ node samples of a Hermite-Simpson interval, at normalized time w. Extracted verbatim from certify_dro_mintime/local_q (migration #4); shared by flown_control_error and true_min_altitude.
 *in: `ua`, `um`, `ub`, `w` · out: `u`*
 
+### `current_pool.m`
+`pool = current_pool()`  
+The open parallel pool, or [] when there is none -- and, unlike a bare gcp('nocreate'), it does not THROW when the Parallel Computing Toolbox is missing or its licence is held by another MATLAB session on this machine. A shared desktop session holding the PCT seat is enough to make every `matlab -batch` job on the same machine poolless, so the fence must degrade to an unfenced call rather than crash the campaign.
+*out: `pool`*
+
 ### `duals_to_costates.m`
 `[lam, tStations, diag_] = duals_to_costates(spec)`  
 DELEGATE. The covector mapping -- defect-constraint KKT multipliers to continuous-costate samples, with the scheme-specific station association, sign vote, and lambda_t check -- was promoted to the cross-folder optimal-control library on 2026-08-09 and lives at
@@ -133,6 +158,11 @@ THE flown-control verifier (migration #4): flies a direct solution's RECONSTRUCT
 `F = fly_transfer(z8, rv0, rvf, phys)`  
 Fly converged min-time costates ONCE and hand back everything the consumers then recompute: the flight itself, its admissibility, where it actually arrived, and the mass and Delta-V that follow from it.
 *in: `z8`, `phys` · out: `F`*
+
+### `fmt_num.m`
+`s = fmt_num(v, w, p, unit)`  
+Format a number at a FIXED WIDTH, rendering the missing case as dashes of that same width instead of throwing.
+*in: `v`, `w`, `p`, `unit` · out: `s`*
 
 ### `gates_catalog_pass.m`
 `S = gates_catalog_pass(catMat, opts)`  
@@ -192,7 +222,7 @@ GENERIC multiple-shooting two-point BVP engine -- the family- and problem-agnost
 ### `ms_conjugate_test.m`
 `out = ms_conjugate_test(info, spec)`  
 CONJUGATE-POINT TEST on a converged multiple-shooting extremal -- the first piece of second-order optimality checking this pipeline has had. First-order (PMP) conditions admit maxima and saddle extremals too; a conjugate point in (0, tf) means the extremal STOPS being locally minimizing there (Jacobi's necessary condition).
-*in: `info`, `spec`, `flow`, `stateRows`, `costateCols`, `quotientDir`, `freeTime`, `rankTol`, `zeroTol` · out: `out`, `t`, `detScaled`, `sigRatio`, `firstFullRank`, `tested`, `sampledThrough`, `nCrossings`, `nInterior`, `nTouch`, `atFinal`, `verdict`, `pass`*
+*in: `info`, `spec`, `flow`, `stateRows`, `costateCols`, `quotientDir`, `freeTime`, `rankTol`, `zeroTol`, `resolvedTol`, `kernelTol` · out: `out`, `t`, `detScaled`, `sigRatio`, `firstFullRank`, `tested`, `sampledThrough`, `nCrossings`, `nInterior`, `nTouch`, `atFinal`, `nEndResolved`, `nUnresolved`, `covered`, `tFirstFullRank`, `kernelRight`, `kernelLeft`, `kernelChecked`, `kernelOk`, `verdict`, `reason`, `pass`*
 
 ### `ms_tfmin.m`
 `[z, info] = ms_tfmin(rv0, rvf, seed, Tmax, c, muStar, opts)`  
@@ -208,6 +238,11 @@ HOMOGENEOUS minimum-time multiple shooting: the same problem as ms_tfmin with th
 `p = nd_propulsion(thrustN, ispS, m0kg, lStar, tStar)`  
 THE nondimensional propulsion conversion for the CR3BP campaigns: a thruster in engineering units (N, s, kg) becomes the two numbers every solver here actually takes -- the ND exhaust speed c and the ND thrust acceleration at unit mass fraction T.
 *in: `thrustN`, `ispS`, `m0kg`, `lStar`, `tStar` · out: `p`*
+
+### `newton_fixed_q.m`
+`[p, converged, normR, nCalls] = newton_fixed_q(resFactory, q, p, Dx, tol, nMax)`  
+Scaled Newton at a FIXED continuation parameter, used to land exactly on a requested level.
+*in: `resFactory`, `q`, `p`, `Dx`, `tol`, `nMax` · out: `p`, `converged`, `normR`, `nCalls`*
 
 ### `periodic_pp.m`
 `[pp, seam, dpp] = periodic_pp(t, y, opts)`  
@@ -229,10 +264,25 @@ First-order (Pontryagin) checks evaluated ON A FLIGHT, at sampled times, complem
 CHEAP SANITY PRE-CHECK on a direct solution BEFORE any integrator touches it, made a single-home helper (migration #4). A solve can meet the discrete defect test to 1e-9 and still be physically wild; integrating such a trajectory crawls near the lunar singularity WITHOUT BOUND (measured: one cell pinned a catalog run 16 min at 100% CPU). Screens on the discrete nodes only -- altitude floor and a plausible time of flight -- so it costs microseconds.
 *in: `o`, `muStar`, `lStar`, `floorKm`, `seedTf` · out: `ok`, `why`, `minAltKm`*
 
+### `publish_atomic.m`
+`publish_atomic(src, dst)`  
+Publish a finished file: move src onto dst in ONE rename(2), replacing any existing dst, so that a reader sees either the old file or the new one and never a partial or missing one. This is the only way a campaign artifact, queue record or heartbeat reaches its final name.
+*in: `src`, `dst`*
+
+### `rib_targets.m`
+`[targets, sDpts] = rib_targets(sD, sD0, dirn)`  
+RIB_TARGETS  The unwrapped departure offsets a rib walks from its spine to reach every other phase of a departure list, in walking order.
+*in: `sD`, `sD0`, `dirn` · out: `targets`, `sDpts`*
+
 ### `run_capped.m`
 `[ok, varargout] = run_capped(pool, fcn, nout, capSec, varargin)`  
 Runs fcn(args) on a parfeval worker under a HARD wall-clock cap; on timeout or worker error the future is CANCELLED (the worker is killed and restarted), so no single stuck computation can stall the caller.
 *in: `pool`, `fcn`, `nout`, `capSec`, `varargin` · out: `ok`, `varargout`*
+
+### `safe_report.m`
+`ok = safe_report(fcn, label)`  
+Run a REPORTING block so that it can never fail the work it reports on.
+*in: `fcn`, `label` · out: `ok`*
 
 ### `scalar_verdict.m`
 `[ok, v] = scalar_verdict(x)`  
@@ -269,12 +319,27 @@ Finds the "REASONABLE" members of ANY orbit family, by Darin's criteria: perisel
 Minimum lunar altitude of the PROPAGATED trajectory, not of the nodes. A collocation altitude floor binds at nodes only; this checks it BETWEEN nodes, where periselene actually happens. Extracted verbatim from certify_dro_mintime/local_true_min_alt (migration #4).
 *in: `o`, `muStar`, `Tmax`, `c`, `lStar`, `rMoonKm` · out: `amin`*
 
+### `unit_lock.m`
+`out = unit_lock(action, f, token)`  
+A PROCESS-HELD lock on a file, as a lifecycle-controlled capability: java.nio FileChannel.tryLock (POSIX fcntl record locking on macOS), which the kernel holds for this MATLAB process until it releases the lock or dies. Measured on this host (2026-09-13): a second MATLAB process is refused while the first holds it, acquires it the moment the first releases, and acquires it after the first is killed -9.
+*in: `action`, `f`, `token` · out: `out`*
+
 ### `validate_flight.m`
 `V = validate_flight(t, Y, tf, Tnd, cnd, mu, lStar, opts)`  
 ONE admissibility check for a flown all-burn trajectory, shared by the certifier and the study script so that "the flight is admissible" means the same thing everywhere. A returned array is not a completed flight: an integrator that stops early without throwing hands back a short, perfectly finite trajectory, and every metric taken from its last row then describes a flight that never happened. This checks
 *in: `t`, `Y`, `tf`, `lStar`, `opts` · out: `V`*
 
-**tests/**: `test_arclength_arrival.m`, `test_arclength_ms.m`, `test_arclength_ms_thrust.m`, `test_catalog_schema_v3.m`, `test_certify_caps.m`, `test_certify_crossing.m`, `test_conj_fixedtf.m`, `test_conj_spectrum.m`, `test_conjugate_pole_predict.m`, `test_cr3bp_minenergy_pmp.m`, `test_deliverable_audit_gate.m`, `test_dro_tulip_seed.m`, `test_flight_to_junctions.m`, `test_fly_transfer.m`, `test_gates_h6_wiring.m`, `test_gto_family.m`, `test_guard_catalog_overwrite.m`, `test_h6_margin.m`, `test_huber_saltation.m`, `test_lift_margin.m`, `test_lift_space_dim.m`, `test_minfuel_pmp.m`, `test_mintime_gates.m`, `test_ms_bvp_extra.m`, `test_ms_bvp_fixedtf.m`, `test_ms_tfmin_hom.m`, `test_nd_propulsion.m`, `test_periodic_pp.m`, `test_phase_state.m`, `test_plot_phase_sheet.m`, `test_plot_transfer_3d.m`, `test_pmp_pointwise_checks.m`, `test_print_transfer_summary.m`, `test_report_optimality.m`, `test_rib_from_crossing.m`, `test_run_dro_tulip.m`, `test_run_dro_tulip_catalog.m`, `test_scalar_verdict.m`, `test_second_order_pass.m`, `test_second_order_sidecar_identity.m`, `test_seed_from_entry.m`, `test_sheet_from_arcs.m`, `test_sheet_to_catalog_file.m`, `test_ss_bvp_accept.m`, `test_validate_flight.m`, `test_verify_with_pumpkyn.m`
+### `walk_checkpoint.m`
+`varargout = walk_checkpoint(action, f, varargin)`  
+A resumable CHECKPOINT for a sequential walk (a rib column): the state after the last accepted point, saved atomically, so that an attempt killed nine hours into a column is continued by the next attempt from the last accepted point instead of from zero (Astra pass 2/3: "a reclaimed column restarts from zero" -- the declared loss budget was a whole column per kill).
+*in: `action`, `f`, `varargin` · out: `save`, `load`*
+
+### `work_queue.m`
+`out = work_queue(action, qDir, varargin)`  
+A DISK WORK QUEUE for campaign units, so that N worker processes on one host pull the next unclaimed unit instead of being handed static ranges. The unit is whatever the caller says it is (a rib column, a catalog entry, a thrust rung).
+*in: `action`, `qDir`, `varargin` · out: `out`*
+
+**tests/**: `test_arclength_arrival.m`, `test_arclength_ms.m`, `test_arclength_ms_thrust.m`, `test_campaign_processes.m`, `test_catalog_schema_v3.m`, `test_certify_caps.m`, `test_certify_crossing.m`, `test_certify_enforcement.m`, `test_conj_coverage.m`, `test_conj_fixedtf.m`, `test_conj_resolve.m`, `test_conj_spectrum.m`, `test_conjugate_pole_predict.m`, `test_cr3bp_minenergy_pmp.m`, `test_crossings_from_arc.m`, `test_deliverable_audit_gate.m`, `test_dro_tulip_seed.m`, `test_entry_notes.m`, `test_family_map.m`, `test_flight_to_junctions.m`, `test_fly_transfer.m`, `test_gates_h6_wiring.m`, `test_gto_family.m`, `test_guard_catalog_overwrite.m`, `test_h6_margin.m`, `test_huber_saltation.m`, `test_lift_margin.m`, `test_lift_space_dim.m`, `test_minfuel_pmp.m`, `test_mintime_gates.m`, `test_movie_phase_sweep.m`, `test_ms_bvp_extra.m`, `test_ms_bvp_fixedtf.m`, `test_ms_tfmin_hom.m`, `test_nd_propulsion.m`, `test_periodic_pp.m`, `test_phase_lists.m`, `test_phase_state.m`, `test_plot_phase_sheet.m`, `test_plot_transfer_3d.m`, `test_pmp_pointwise_checks.m`, `test_print_transfer_summary.m`, `test_report_optimality.m`, `test_rib_from_crossing.m`, `test_run_dro_tulip.m`, `test_run_dro_tulip_catalog.m`, `test_scalar_verdict.m`, `test_second_order_parallel.m`, `test_second_order_pass.m`, `test_second_order_sidecar_identity.m`, `test_seed_from_entry.m`, `test_sheet_from_arcs.m`, `test_sheet_to_catalog_file.m`, `test_ss_bvp_accept.m`, `test_stm_variational.m`, `test_validate_flight.m`, `test_verify_with_pumpkyn.m`, `test_work_queue.m`
 
 ## verify_common
 

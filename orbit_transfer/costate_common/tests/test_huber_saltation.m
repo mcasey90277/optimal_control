@@ -46,11 +46,11 @@ for k = 1:size(fams, 1)
     sm = fams{k,1};
     [~, PHI] = cr3bp_minfuel_prop(dt, y0, true, T_, c_, mu_, sm);
     PHIfd = zeros(14);
-    for j = 1:14
-        e = zeros(14,1);  e(j) = h;
+    for col = 1:14
+        e = zeros(14,1);  e(col) = h;
         yp = cr3bp_minfuel_prop(dt, y0 + e, false, T_, c_, mu_, sm);
         ym = cr3bp_minfuel_prop(dt, y0 - e, false, T_, c_, mu_, sm);
-        PHIfd(:, j) = (yp - ym) / (2*h);
+        PHIfd(:, col) = (yp - ym) / (2*h);
     end
     err = max(abs(PHI(:) - PHIfd(:))) / max(abs(PHIfd(:)));
     ok = chk(ok, err < fams{k,3}, ...

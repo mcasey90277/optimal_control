@@ -1,26 +1,49 @@
 function S = gates_catalog_pass(catMat, opts)
-% GATES_CATALOG_PASS  Run the min-time sufficiency-hypothesis gates
-%   (mintime_hypothesis_gates: strong Legendre min|lam_v|, all-burn
-%   min Q_mt, abnormal-lift dim S) over every entry of a compact costate
-%   catalog and record them -- the catalog-scale form of the audit
-%   (doc/mintime_second_order_audit.tex, section 7).
+%% Purpose:
+%
+%   Run the min-time sufficiency-hypothesis gates (mintime_hypothesis_gates:
+%   strong Legendre min|lam_v|, all-burn min Q_mt, abnormal-lift dim S) over
+%   every entry of a compact costate catalog and record them -- the catalog-
+%   scale form of the audit (doc/mintime_second_order_audit.tex, section 7).
+%
 %   Same campaign contract as conj_catalog_pass: endpoints rebuilt from the
 %   sheet recipes, one tfMinProp flight + one 7x7 adjoint integration per
 %   entry, sidecar progress .mat after EVERY entry, attempt counter before
-%   each flight, clean batch-budget exit, resume for free; writeback into
-%   the catalog only on an explicit call after a complete census.
-% INPUTS:
-%   catMat - path to a catalog .mat (single variable, schema v1/v2) [char]
-%   opts   - (optional) struct: .logFile [''], .batchSec [inf],
-%            .maxEntries [inf], .maxAtt [2], .nSamp [200], .rankTol [1e-8],
-%            .sideMat [<catMat minus .mat>_gatesprog.mat], .writeback [false]
-% OUTPUTS:
-%   S - struct: .done, .nDone, .nTodo, .nH2fail (min|lam_v| <= lamVTol),
-%       .nH3fail (min Q_mt <= 0), .nAbnormal (dim S ~= 1), .sideMat
-% REFERENCES:
+%   each flight, clean batch-budget exit, resume for free; writeback into the
+%   catalog only on an explicit call after a complete census.
+%
+%% References:
 %   [1] costate_common/mintime_hypothesis_gates.m (the instrument)
 %   [2] costate_common/conj_catalog_pass.m (the campaign skeleton)
 %   [3] doc/mintime_second_order_audit.tex (why these three)
+%
+%% Inputs:
+%
+%  catMat                   char                    Path to a catalog .mat
+%                                                   (single variable, schema
+%                                                   v1/v2)
+%
+%  opts                     struct (optional)       .logFile [''], .batchSec
+%                                                   [inf], .maxEntries [inf],
+%                                                   .maxAtt [2], .nSamp [200],
+%                                                   .rankTol [1e-8], .lamVTol
+%                                                   [1e-6], .sideMat [<catMat
+%                                                   minus
+%                                                   .mat>_gatesprog.mat],
+%                                                   .writeback [false]
+%
+%% Outputs:
+%
+%  S                        struct                  .done, .nDone, .nTodo,
+%                                                   .nH2fail (min|lam_v| <=
+%                                                   lamVTol), .nH3fail (min
+%                                                   Q_mt <= 0), .nAbnormal
+%                                                   (dim S ~= 1), .sideMat
+%
+%% Revision History:
+%  M. Casey                                                   (c) 09/07/2026
+%  Copyright Coorbital Inc.
+%% ------------------------ Begin Code Sequence ---------------------------
 
 if nargin < 2, opts = struct(); end
 batchSec = fieldd(opts, 'batchSec', inf);

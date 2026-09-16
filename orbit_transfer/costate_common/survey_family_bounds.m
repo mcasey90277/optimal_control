@@ -70,7 +70,7 @@ for k = 1:numel(paramGrid)
         ok = pa >= altFloorKm && mx <= maxDistKm;
         R = struct('params',p, 'periodDays',tt(end)*tStar/86400, ...
             'periAltKm',pa, 'maxMoonKm',mx, 'admissible',ok);
-        if isempty(rows), rows = R; else, rows(end+1,1) = R; end %#ok<AGROW>
+        if isempty(rows), rows = R; else, rows(end+1,1) = R; end
         fprintf('  %-26s  %8.3f   %11.0f   %11.0f   %s\n', pstr(p), ...
                 tt(end)*tStar/86400, pa, mx, admstr(ok));
     catch e
@@ -93,7 +93,7 @@ function s = pstr(p)
 % PSTR  Compact one-line parameter description.  INPUTS: p.  OUTPUTS: s.
 f = setdiff(fieldnames(p), {'muStar','contTol'}, 'stable');
 s = '';
-for k = 1:numel(f), s = [s sprintf('%s=%.4g ', f{k}, p.(f{k}))]; end %#ok<AGROW>
+for k = 1:numel(f), s = [s sprintf('%s=%.4g ', f{k}, p.(f{k}))]; end
 end
 
 function s = admstr(t)

@@ -210,13 +210,13 @@ ok = chk(ok, ~unit_lock('holds', lf, L.token) && ~unit_lock('probe', lf).held, '
 addpath(fullfile(fileparts(fileparts(fileparts(mfilename('fullpath')))), 'DRO_tulip', 'indirect'));
 rf = fullfile(q, 'rib.mat');
 pt = struct('ok', true, 'sD', 1/24, 'z', ones(8,1));
-R = struct('j', 4, 'sA', 0.2, 'pts', [pt, setfield(pt, 'sD', 2/24)], 'stop', 'complete', 'nSolve', 2); %#ok<SFLD>
+R = struct('j', 4, 'sA', 0.2, 'pts', [pt, setfield(pt, 'sD', 2/24)], 'stop', 'complete', 'nSolve', 2);
 problem = struct('thrustN', 0.07, 'ispS', 900, 'm0kg', 150, 'tauDRO', 1, 'NpTulip', 7, 'pmTulip', -1, 'sD', 0);
 save(rf, 'R', 'problem');
 spec = struct('nPts', 2, 'col', 4, 'sA', 0.2, 'nD', 24, 'problem', problem);
 [okV, ~, inf_] = rib_validate(rf, spec);
 ok = chk(ok, okV && inf_.complete && inf_.nPts == 2, 'a good rib for its unit validates as complete');
-ok = chk(ok, ~rib_validate(rf, setfield(spec, 'col', 5)), 'a rib for ANOTHER column is refused'); %#ok<SFLD>
+ok = chk(ok, ~rib_validate(rf, setfield(spec, 'col', 5)), 'a rib for ANOTHER column is refused');
 R.pts(2).ok = false;  save(rf, 'R', 'problem');
 ok = chk(ok, ~rib_validate(rf, spec), 'an uncertified point is refused');
 R.pts(2).ok = true;  problem.NpTulip = 8;  save(rf, 'R', 'problem');  problem.NpTulip = 7;
@@ -239,9 +239,9 @@ ok = chk(ok, isempty(C0) && strcmp(why0, 'no checkpoint'), 'no checkpoint yet: l
 walk_checkpoint('save', cf, struct('identity', ident, 'k', 5, 'sD', 0.7917, 'z', (1:8)', 'Y', ones(14, 25), 'pts', struct('sD', {0.9583, 0.9167}), 'nSolve', 12));
 [C1, ~] = walk_checkpoint('load', cf, ident);
 ok = chk(ok, ~isempty(C1) && C1.k == 5 && numel(C1.pts) == 2 && C1.nSolve == 12, 'a matching checkpoint loads with its state');
-[C2, why2] = walk_checkpoint('load', cf, setfield(ident, 'sA', 0.25)); %#ok<SFLD>
+[C2, why2] = walk_checkpoint('load', cf, setfield(ident, 'sA', 0.25));
 ok = chk(ok, isempty(C2) && contains(why2, 'another walk'), 'a checkpoint for another column is refused by name');
-[C3, ~] = walk_checkpoint('load', cf, setfield(ident, 'targets', -(1:11)/12)); %#ok<SFLD>
+[C3, ~] = walk_checkpoint('load', cf, setfield(ident, 'targets', -(1:11)/12));
 ok = chk(ok, isempty(C3), 'a checkpoint with other targets is refused');
 walk_checkpoint('clear', cf);
 ok = chk(ok, ~isfile(cf), 'clear removes it');
@@ -258,7 +258,7 @@ while true
     r = work_queue('claim', q, tag, struct('maxAtt', maxAtt));
     assert(~isnan(r.id), 'claimSpecific: unit %d never came up', id);
     if r.id == id, break, end
-    held{end+1} = r; %#ok<AGROW>
+    held{end+1} = r;
 end
 for k = 1:numel(held), work_queue('release', q, held{k}); end
 end

@@ -189,12 +189,12 @@ for e = 1:numel(starts)
         nStart = nStart + 1;
         c = resolveWindow(1, min(b+2, N), 'start', 1);
         tUncovered = c.tUncovered;
-        cands(end+1) = c; %#ok<AGROW>
+        cands(end+1) = c;
         continue
     end
     cls = 'interior';  if b == N, cls = 'endpoint'; end
     [~, im] = min(rel(a:b));  km = a + im - 1;
-    cands(end+1) = resolveWindow(max(a-2, 1), min(b+2, N), cls, km); %#ok<AGROW>
+    cands(end+1) = resolveWindow(max(a-2, 1), min(b+2, N), cls, km);
 end
 
 % ---- verdict ------------------------------------------------------------------
@@ -239,10 +239,10 @@ R.nEval = nEval;  R.zeroFloor = zeroFloor;  R.clearFactor = clearFactor;
         h1 = dt/refine;  h2 = dt/refine^2;
         t1 = (tA + h1/2):h1:(tB - h1/4);           % shifted: no coarse node is re-sampled
         t2 = (tA + h2/2):h2:(tB - h2/4);
-        for t = t1, E(end+1) = evalAt(t); end %#ok<AGROW>
+        for t = t1, E(end+1) = evalAt(t); end
         m1 = min(arrayfun(@(x) x.sv(end), E(numel(Ec(ia:ib))+1:end)));
         n1 = numel(E);
-        for t = t2, E(end+1) = evalAt(t); end %#ok<AGROW>
+        for t = t2, E(end+1) = evalAt(t); end
         m2 = min(arrayfun(@(x) x.sv(end), E(n1+1:end)));
         c.refineRatio  = m1/max(coarseMin, realmin);
         c.refineRatio2 = m2/max(m1, realmin);
@@ -273,7 +273,7 @@ R.nEval = nEval;  R.zeroFloor = zeroFloor;  R.clearFactor = clearFactor;
         for q = 1:numel(locs)
             L = locs(q);
             brackets(q, :) = [E(L-1).t, E(L+1).t];
-            E = [E, golden(E(L-1).t, E(L+1).t)]; %#ok<AGROW>
+            E = [E, golden(E(L-1).t, E(L+1).t)];
         end
         [~, order] = sort([E.t]);  E = E(order);
         v = arrayfun(@(x) x.sv(end), E) / med;
@@ -324,8 +324,8 @@ R.nEval = nEval;  R.zeroFloor = zeroFloor;  R.clearFactor = clearFactor;
         e1 = evalAt(x1);  e2 = evalAt(x2);  Eb = [e1, e2];
         f1 = e1.sv(end);  f2 = e2.sv(end);
         for it = 1:goldenIter
-            if f1 < f2, b = x2;  x2 = x1;  f2 = f1;  x1 = b - gr*(b - a);  e1 = evalAt(x1);  f1 = e1.sv(end);  Eb(end+1) = e1; %#ok<AGROW>
-            else,       a = x1;  x1 = x2;  f1 = f2;  x2 = a + gr*(b - a);  e2 = evalAt(x2);  f2 = e2.sv(end);  Eb(end+1) = e2; %#ok<AGROW>
+            if f1 < f2, b = x2;  x2 = x1;  f2 = f1;  x1 = b - gr*(b - a);  e1 = evalAt(x1);  f1 = e1.sv(end);  Eb(end+1) = e1;
+            else,       a = x1;  x1 = x2;  f1 = f2;  x2 = a + gr*(b - a);  e2 = evalAt(x2);  f2 = e2.sv(end);  Eb(end+1) = e2;
             end
             if (b - a) < 1e-9*max(abs(b), 1), break, end
         end

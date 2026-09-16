@@ -6,32 +6,43 @@ Measured state and the reasons for each step are in `README.md` → *State of
 the folder*. Steps 1–9 change no numerical result and need no decision; steps
 10–13 depend on step 0. Each step names the gate that says it is done.
 
-- [ ] **0. Two decisions (Mike).** (a) The admission rule: keep *used by two
-  campaigns*, or change it to *generic by construction, with a test* — this
-  decides whether the 36 DRO_tulip-only files belong here. (b) Where job
-  control lives: a sibling shared folder (proposal:
-  `orbit_transfer/campaign_common/`) or here.
+- [x] **0. Two decisions (Mike) — DECIDED 2026-09-16.** (a) The admission
+  rule becomes *generic by construction, with a test*: a file belongs here
+  when nothing in it is specific to one campaign's orbits or bookkeeping and
+  a test pins its contract, whether or not a second campaign calls it yet.
+  The reason: DRO_tulip is the reference campaign new ones copy, so under
+  *used by two campaigns* code born there could never be admitted. Clear
+  stays: `ms_bvp`, `arclength_ms`, `conj_resolve`, `scalar_verdict`; clear
+  goes: `rib_targets` (step 6). (b) Job control moves to a sibling folder,
+  `orbit_transfer/campaign_common/` (step 11); the execution fences
+  (`run_capped`, `capped_pool`, `current_pool`) stay here.
 
 **A. Documentation and style — no behaviour change**
 
 - [x] **1. README reflects the folder** — DONE 2026-09-16 (all 61 files in
   layers with measured consumers; tests classified; conventions with their
   current violations).
-- [ ] **2. Regenerate `../doc/library_catalog.md`** (dates from 2026-09-11,
-  predates 17 files): `python3 orbit_transfer/doc/gen_library_catalog.py`.
-  Minutes.
-- [ ] **3. Fix the junction contract text.** Headers that describe
-  `info.Y` from `ms_bvp`/`ms_tfmin` as K+1 columns: it is the K junction
-  STARTS with K+1 times, and seeds are read in columns 1..K (verified by
-  Astra round 2, FINDINGS 77). Comments only. Gate: Code Analyzer output
-  message-for-message unchanged. Under an hour.
-- [ ] **4. House-style pass.** Remove the 21 `%#ok` pragma lines in 7 files
-  and 2 tests (mostly `AGROW`; 7 in `conj_resolve`) — preallocate where it is
-  cheap, otherwise just drop the suppression; rename `j` loop variables in
-  `test_conj_spectrum`, `test_huber_saltation`, `test_sheet_to_catalog_file`;
-  convert the 4 `% INPUTS:` headers (`conj_catalog_pass`, `gates_catalog_pass`,
-  `ms_tfmin`, `rib_targets`) to `%% Purpose`. Gate: Code Analyzer diff shows
-  only the removed suppressions; the touched tests pass. An hour or two.
+- [x] **2. Regenerate `../doc/library_catalog.md`** — DONE 2026-09-16
+  (84 functions).
+- [x] **3. Fix the junction contract text** — DONE 2026-09-16. On reading,
+  the `info.Y` OUTPUT docs of `ms_bvp` and `ms_tfmin` were already right
+  ([14 x K] starts); the stale text was the SEED docs, which did not say
+  column K+1 is never read, and `DRO_tulip/indirect/probe_deep_rungs`,
+  which described its stored `it.Y` as K+1. Seed-builder outputs
+  (`seed_from_z8`, `seed_from_entry`, `harvest_ms_seed`,
+  `flight_to_junctions`) and the min-fuel catalog's `.Yj` genuinely are
+  K+1 (`build_minfuel_catalog` appends the endpoint) and were left alone.
+  Gate met: Code Analyzer messages identical on all three files.
+- [x] **4. House-style pass** — DONE 2026-09-16. 21 `%#ok` lines removed
+  (suppression dropped, no code changed — no preallocation, so behaviour is
+  untouched); `j` loop variables renamed; the 4 `% INPUTS:` headers now
+  `%% Purpose` / `%% References` / `%% Inputs` / `%% Outputs` /
+  `%% Revision History` (content kept; `gates_catalog_pass` now also
+  documents `.lamVTol`, which the code already read). Gate met: Code Analyzer
+  diff is exactly the 22 messages the 21 pragmas had suppressed (one
+  `cr3bp_minfuel_prop` line grows two arrays), nothing else; touched tests
+  pass (see README → Tests). The `AGROW` warnings are now visible, which is
+  the point; preallocate them on next touch.
 
 **B. Small removals and moves — one consumer each**
 
@@ -226,8 +237,8 @@ the folder*. Steps 1–9 change no numerical result and need no decision; steps
 - [ ] **Batched-driver + monitor templates**: halo/DPO shell drivers differ
   only in names; extract, and make monitors watch process liveness (a
   silent MATLAB death produced no log line and no alert, 2026-08-07).
-- [ ] `survey_family_bounds` / older files still carry `%#ok` pragmas from
-  before the no-pragma rule; strip on next touch.
+- [x] `survey_family_bounds` / older files still carry `%#ok` pragmas —
+  DONE 2026-09-16 with cleanup step 4.
 - [ ] `golden_cells` engine cells converge in 1 iteration (wide Newton
   basin) — consider a rougher engineered seed so the iteration channel has
   more dynamic range.

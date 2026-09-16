@@ -64,9 +64,12 @@ function [p, info] = ms_bvp(prob, seed, opts)
 %   .tf                     double                  Time-of-flight guess
 %   .tGrid                  [1 x K+1]               Segment boundary times,
 %                                                   0..tf
-%   .Y                      [ny x K+1]              States at the boundary
+%   .Y                      [ny x K+1] or [ny x K]  States at the boundary
 %                                                   times (col 1: fixed
-%                                                   part used as-is)
+%                                                   part used as-is); only
+%                                                   cols 1..K are read, so
+%                                                   info.Y fed back as a
+%                                                   seed is lossless
 %   .extra                  [nExtra x 1] (optional) seed for the extras
 %
 %  opts                     struct (optional)       .maxIter [100], .tolR

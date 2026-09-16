@@ -35,9 +35,9 @@ mkC = @(sD, sA, tf) struct('ok', true, 'reason', 'certified', 'z', [(1:7)'*tf; t
                            'g', struct('minLamV', 3.2 + tf, 'minQmt', 3.8 + tf, 'dimS', 1));
 S = struct('sA', mod(sA0 + (0:nA-1)/nA, 1), 'TF', nan(1, nA), 'Z8', nan(8, nA), ...
            'cand', {cell(1, nA)}, 'sA0', sA0, 'nA', nA);
-for j = [1 3]                                   % two certified spine points
-    C = mkC(sD0, S.sA(j), 4 + j/10);
-    S.cand{j} = C;  S.TF(j) = C.tfDays;  S.Z8(:, j) = C.z;
+for kp = [1 3]                                   % two certified spine points
+    C = mkC(sD0, S.sA(kp), 4 + kp/10);
+    S.cand{kp} = C;  S.TF(kp) = C.tfDays;  S.Z8(:, kp) = C.z;
 end
 ribs = {struct('sA', S.sA(1), 'pts', [mkC(11/12, S.sA(1), 4.5), mkC(10/12, S.sA(1), 4.6)])};
 

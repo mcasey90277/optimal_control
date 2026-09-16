@@ -38,7 +38,11 @@ function out = run_phase_torus(spec)
 %
 %% Inputs:
 %
-%  spec                     struct
+%  spec                     struct                  every field below is read
+%                                                   in section 0 (the input
+%                                                   table); unknown fields
+%                                                   are refused; call with no
+%                                                   arguments for an example
 %   .sD, .sA                [1 x nD], [1 x nA]     phases in [0,1), strictly
 %                                                   increasing, no two closer
 %                                                   than 1e-5 (give a lattice
@@ -88,26 +92,29 @@ function out = run_phase_torus(spec)
 %  Copyright Coorbital Inc.
 %% ------------------------ Begin Code Sequence ---------------------------
 
+%% ========================================================================
+%  0. USER INPUTS -- everything a campaign IS, in one place. Every field of
+%     `spec` is read, defaulted and checked here and nowhere else; a field
+%     that is not in the table is refused by name (a typo must not become
+%     a silently ignored setting). Call with no arguments for an example.
+%% ========================================================================
 here = fileparts(mfilename('fullpath'));
 addpath(here, fullfile(fileparts(fileparts(here)), 'costate_common'));
-d = @(f, v) fieldd(spec, f, v);
-sD = spec.sD(:).';  sA = spec.sA(:).';
-assert(all(diff(sD) > 0) && all(diff(sA) > 0) && all(sD >= 0 & sD < 1) && all(sA >= 0 & sA < 1), ...
-       'run_phase_torus: .sD and .sA must be strictly increasing lists in [0,1)');
-assert(min([diff(sD), 1 - (sD(end) - sD(1))]) > 1e-5 && min([diff(sA), 1 - (sA(end) - sA(1))]) > 1e-5, ...
-       'run_phase_torus: phases closer than 1e-5 of a period cannot be resolved');
-orbits = withDefaults(fieldd(spec, 'orbits', struct()), struct('tauDRO', 1.0, 'NpTulip', 7, 'pmTulip', -1));
-engine = withDefaults(fieldd(spec, 'engine', struct()), struct('thrustN', 0.070, 'ispS', 900, 'm0kg', 150));
-outDir = absPath(spec.outDir);  if ~isfolder(outDir), mkdir(outDir); end
-tag = d('tag', 'torus');
-arc = withDefaults(fieldd(spec, 'arc', struct()), struct('nStep', 4000, 'deadlineSec', 6*3600, 'span', 1.15));
-rib = withDefaults(fieldd(spec, 'rib', struct()), struct('wallSec', 900));
-nWorkers = d('nWorkers', 4);  improveDays = d('improveDays', 2);  slowDays = d('slowDays', 2);
-acceptDays = d('acceptDays', 0.05);  seedRadius = d('seedRadius', 0.15);  probeAll = d('probeAll', false);
-maxRounds = d('maxRounds', 6);  discover = d('discover', true);  plan = d('plan', false);
-librarySeeds = d('librarySeeds', false);
-matlabBin = d('matlab', '/Applications/MATLAB_R2026a.app/bin/matlab');
-startupDir = d('startup', '/Users/msc/Desktop/proj7/external/pumpkynPie');
+if nargin == 0, out = exampleSpec(here);  return, end
+in = userInputs(spec);
+
+% the names the body uses (read-only from here on)
+sD = in.sD;  sA = in.sA;  orbits = in.orbits;  engine = in.engine;  tag = in.tag;
+outDir = in.outDir;  arc = in.arc;  rib = in.rib;  nWorkers = in.nWorkers;
+improveDays = in.improveDays;  slowDays = in.slowDays;  acceptDays = in.acceptDays;
+seedRadius = in.seedRadius;  probeAll = in.probeAll;  maxRounds = in.maxRounds;
+discover = in.discover;  plan = in.plan;  librarySeeds = in.librarySeeds;
+matlabBin = in.matlab;  startupDir = in.startup;
+
+%% ========================================================================
+%  1. THE CAMPAIGN FOLDER -- its arcs, registry, anchors, jobs, log, state
+%% ========================================================================
+if ~isfolder(outDir), mkdir(outDir); end
 logF = fullfile(outDir, 'torus.log');
 lg = @(varargin) logmsg(logF, sprintf(varargin{:}));
 arcDir = fullfile(outDir, 'arcs');  if ~isfolder(arcDir), mkdir(arcDir); end   % THIS campaign's arcs
@@ -127,14 +134,7 @@ if isfile(stateF)
     end
     lg('resuming: status %s, %d round(s) done, %d anchor(s)', st.status, st.roundsDone, size(st.anchors, 1));
 else
-    anchors = spec.anchors;
-    assert(size(anchors, 2) == 4 && size(anchors, 1) >= 1, 'run_phase_torus: .anchors is {name, file, sA, label; ...}');
-    for k = 1:size(anchors, 1)
-        anchors{k, 2} = absPath(anchors{k, 2});
-        assert(isfile(anchors{k, 2}), 'anchor %s: file %s missing', anchors{k, 1}, anchors{k, 2});
-    end
-    assert(numel(unique(anchors(:, 1))) == size(anchors, 1), 'run_phase_torus: anchor names must be unique');
-    st = struct('manifest', manifest, 'roundsDone', 0, 'anchors', {anchors}, 'rounds', struct([]), ...
+    st = struct('manifest', manifest, 'roundsDone', 0, 'anchors', {in.anchors}, 'rounds', struct([]), ...
                 'status', 'running', 'reason', '', 'jobs', struct('pid', {}, 'file', {}));
     saveState(stateF, st);
 end
@@ -284,6 +284,112 @@ if ~isempty(st.rounds)
     lg('library of record: %s (status %s)', fin, st.status);
 end
 out.state = st.status;  out.reason = st.reason;
+end
+
+% ==========================================================================
+function in = userInputs(spec)
+% USERINPUTS  The user-input table: name, default ([] = required), meaning.
+% Unknown fields are refused by name, required ones must be present, the
+% rest take their defaults; then the values are checked and a summary is
+% printed.  INPUTS: spec.  OUTPUTS: in (every field of the table).
+T = { ...
+ % name           default                                         meaning
+ 'sD',            [],   'departure phases in [0,1), strictly increasing; sD(1) is the spine every arc and rib starts from'; ...
+ 'sA',            [],   'arrival phases in [0,1), strictly increasing (a lattice that wraps past 1: sort(mod(., 1)))'; ...
+ 'anchors',       [],   '{name, file, sA, label; ...}: certified roots at sD(1) the arcs start from (best.z, best.it.Y)'; ...
+ 'outDir',        [],   'the campaign folder (rounds, arcs, registry, anchors, state, final)'; ...
+ 'orbits',        struct('tauDRO', 1.0, 'NpTulip', 7, 'pmTulip', -1), ...
+                        'the orbit pair: DRO period (ND), tulip petal count, tulip branch'; ...
+ 'engine',        struct('thrustN', 0.070, 'ispS', 900, 'm0kg', 150), ...
+                        'the thruster and the initial mass'; ...
+ 'tag',           'torus', 'names the campaign''s arcs (arrival_arc_<tag>_...)'; ...
+ 'arc',           struct('nStep', 4000, 'deadlineSec', 6*3600, 'span', 1.15), ...
+                        'arc budget: steps, wall deadline, arrival-phase span from the anchor'; ...
+ 'rib',           struct('wallSec', 900), 'rib budget: wall cap per departure point'; ...
+ 'nWorkers',      4,    'rib workers (one MATLAB each)'; ...
+ 'maxRounds',     6,    'rounds before the campaign stops with status ''budget'''; ...
+ 'improveDays',   2,    'improve pass: re-solve a filled cell slower than a column neighbour by more than this (days)'; ...
+ 'slowDays',      2,    'discovery: probe a column whose spine is slower than a neighbour''s by more than this (days)'; ...
+ 'acceptDays',    0.05, 'discovery: a probe must beat the spine by this (days) to become an anchor'; ...
+ 'seedRadius',    0.15, 'discovery: other families'' roots within this circular phase distance seed a probe'; ...
+ 'probeAll',      false, 'discovery: probe every column, not only the empty and slow ones'; ...
+ 'discover',      true, 'run the discovery step at all'; ...
+ 'librarySeeds',  false, 'also seed the sheet from the 70 mN library''s own roots (dro_tulip_library)'; ...
+ 'matlab',        '/Applications/MATLAB_R2026a.app/bin/matlab', 'the MATLAB that runs the batch jobs (R2026a: has the Parallel Computing Toolbox)'; ...
+ 'startup',       '/Users/msc/Desktop/proj7/external/pumpkynPie', 'folder whose startup() builds the path in every batch job'; ...
+ 'plan',          false, 'print what the next round would do and launch nothing'};
+names = T(:, 1);
+extra = setdiff(fieldnames(spec), names);
+assert(isempty(extra), 'run_phase_torus:input', 'unknown input(s): %s. The inputs are: %s', ...
+       strjoin(extra, ', '), strjoin(names, ', '));
+in = struct();
+for k = 1:size(T, 1)
+    nm = T{k, 1};  dflt = T{k, 2};
+    if isfield(spec, nm) && ~isempty(spec.(nm))
+        v = spec.(nm);
+        if isstruct(dflt), v = withDefaults(v, dflt); end       % a partial struct keeps the other defaults
+        in.(nm) = v;
+    else
+        assert(~isempty(dflt), 'run_phase_torus:input', 'required input .%s is missing: %s', nm, T{k, 3});
+        in.(nm) = dflt;
+    end
+end
+% ---- checks --------------------------------------------------------------
+in.sD = in.sD(:).';  in.sA = in.sA(:).';
+for ax = {'sD', 'sA'}
+    v = in.(ax{1});
+    assert(isnumeric(v) && numel(v) >= 2 && all(v >= 0 & v < 1) && all(diff(v) > 0), 'run_phase_torus:input', ...
+           '.%s must be at least two phases in [0,1), strictly increasing', ax{1});
+    assert(min([diff(v), 1 - (v(end) - v(1))]) > 1e-5, 'run_phase_torus:input', ...
+           '.%s has phases closer than 1e-5 of a period, which the sheet and rib matchers cannot resolve', ax{1});
+end
+assert(iscell(in.anchors) && size(in.anchors, 2) == 4 && size(in.anchors, 1) >= 1, 'run_phase_torus:input', ...
+       '.anchors must be a cell table {name, file, sA, label; ...} with at least one row');
+for k = 1:size(in.anchors, 1)
+    in.anchors{k, 2} = absPath(in.anchors{k, 2});
+    assert(isfile(in.anchors{k, 2}), 'run_phase_torus:input', 'anchor %s: file %s missing', in.anchors{k, 1}, in.anchors{k, 2});
+end
+assert(numel(unique(in.anchors(:, 1))) == size(in.anchors, 1), 'run_phase_torus:input', 'anchor names must be unique');
+in.outDir = absPath(in.outDir);
+assert(in.nWorkers >= 1 && in.maxRounds >= 1 && in.arc.nStep >= 1 && in.arc.deadlineSec > 0 && in.rib.wallSec > 0, ...
+       'run_phase_torus:input', 'budgets must be positive');
+assert(in.acceptDays >= 0 && in.seedRadius > 0 && in.seedRadius <= 0.5, 'run_phase_torus:input', ...
+       '.acceptDays >= 0 and 0 < .seedRadius <= 0.5');
+% ---- the summary ---------------------------------------------------------
+fprintf('PHASE TORUS\n');
+fprintf('  grid      : %d departure x %d arrival phases (sD %s; sA %s)\n', numel(in.sD), numel(in.sA), phaseList(in.sD), phaseList(in.sA));
+fprintf('  orbits    : DRO tau %.4f -> %d-petal tulip, branch %+d\n', in.orbits.tauDRO, in.orbits.NpTulip, in.orbits.pmTulip);
+fprintf('  engine    : %.0f mN, Isp %g s, %g kg\n', in.engine.thrustN*1000, in.engine.ispS, in.engine.m0kg);
+fprintf('  anchors   : %s\n', strjoin(cellfun(@(n, a) sprintf('%s (sA %.4f)', n, a), in.anchors(:, 1), in.anchors(:, 3), 'UniformOutput', false), ', '));
+fprintf('  budgets   : arcs %d steps / %.1f h, ribs %.0f s per point, %d workers, %d rounds\n', in.arc.nStep, in.arc.deadlineSec/3600, in.rib.wallSec, in.nWorkers, in.maxRounds);
+fprintf('  search    : improve > %.1f d, probe columns slower by > %.1f d%s, accept a gain > %.2f d, seeds within %.2f\n', ...
+        in.improveDays, in.slowDays, tern(in.probeAll, ' (and every other column)', ''), in.acceptDays, in.seedRadius);
+fprintf('  output    : %s (tag %s)%s\n', in.outDir, in.tag, tern(in.plan, '  [PLAN ONLY]', ''));
+end
+
+function s = phaseList(v)
+% PHASELIST  A phase vector as text, abbreviated when long.  INPUTS: v.
+% OUTPUTS: s.
+if numel(v) <= 6, s = mat2str(v, 4);
+else, s = sprintf('[%s ... %s] (%d)', strjoin(arrayfun(@(x) sprintf('%.4f', x), v(1:3), 'UniformOutput', false), ' '), ...
+                  strjoin(arrayfun(@(x) sprintf('%.4f', x), v(end-1:end), 'UniformOutput', false), ' '), numel(v));
+end
+end
+
+function spec = exampleSpec(here)
+% EXAMPLESPEC  The 70 mN DRO -> tulip 24 x 24 torus as a spec, printed and
+% returned (nothing runs).  INPUTS: here.  OUTPUTS: spec.
+spec = struct( ...
+    'sD',      (0:23)/24, ...                               % departure phases
+    'sA',      sort(mod(0.0754 + (0:23)/24, 1)), ...        % arrival phases (the 24-lattice from the first anchor's phase)
+    'orbits',  struct('tauDRO', 1.0, 'NpTulip', 7, 'pmTulip', -1), ...
+    'engine',  struct('thrustN', 0.070, 'ispS', 900, 'm0kg', 150), ...
+    'anchors', {{'anchor', fullfile(here, 'results', 'mintime_70mN_anchor.mat'), 0.0754, 'fast'}}, ...
+    'outDir',  fullfile(here, 'results', 'torus_70mN_24x24'), ...
+    'tag',     '70mN', ...
+    'nWorkers', 4, 'maxRounds', 6, 'plan', true);
+fprintf('run_phase_torus: an example spec (plan mode). Edit and call run_phase_torus(spec).\n');
+disp(spec);
 end
 
 % ==========================================================================

@@ -47,6 +47,11 @@ run_phase_torus(setfield(spec, 'plan', true));   % prints round 1's plan, launch
 out = run_phase_torus(spec);                     % rounds until nothing changes; out.final = the library
 ```
 
+`run_phase_torus()` with no arguments prints an example spec (the 70 mN
+24 x 24 torus). Section 0 of the file is the input table -- every field,
+its default and its meaning -- and it refuses an unknown field by name,
+so a typo cannot become a silently ignored setting.
+
 Each round is a `run_costate_library` campaign in `<outDir>/round_NN`
 (arcs spawned as batch jobs into `<outDir>/arcs` with a `.done`/`.fail`
 verdict each, the sheet at the listed phases, ribs for the columns whose

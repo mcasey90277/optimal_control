@@ -235,6 +235,19 @@ if d('writeback', false)
     Lm = nan(size(s.has_solution));
     for q = 1:n, Lm(iD(q), iA(q), iR(q)) = R(q).liftMargin; end
     cat_.sheets(1).lift_margin = Lm;
+    % the sweep's remark on the entry's note, where there is something to say
+    if isfield(cat_.sheets(1), 'entry_notes') && ~isempty(cat_.sheets(1).entry_notes)
+        en = cat_.sheets(1).entry_notes;
+        for q = 1:n
+            e = s.entry_index(iD(q), iA(q), iR(q));
+            nu = 0;  if isfield(R, 'nUnresolved') && ~isempty(R(q).nUnresolved), nu = R(q).nUnresolved; end
+            if (R(q).nNearMiss > 0 || nu > 0) && ~contains(en{e}, 'sweep:')
+                en{e} = strjoin([en(e), {sprintf('sweep: %d near-miss, %d unresolved', R(q).nNearMiss, nu)}], ' | ');
+                if startsWith(en{e}, ' | '), en{e} = en{e}(4:end); end
+            end
+        end
+        cat_.sheets(1).entry_notes = en;
+    end
     cat_.second_order = struct('date', datestr(now, 'yyyy-mm-dd'), ...
         'instruments', 'costate_common/{conj_spectrum,h6_margin,lift_margin}', ...
         'nSub', nSub, 'K', K, 'relTolPair', relPair, ...

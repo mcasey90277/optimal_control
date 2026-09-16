@@ -93,6 +93,8 @@ for kf = 1:numel(files)
     [nD, nA, nR] = size(Q.OK);
     z8 = zeros(8, nnz(Q.OK));
     idx = zeros(nD, nA, nR);
+    notes = repmat({''}, 1, nnz(Q.OK));
+    hasNotes = isfield(Q, 'NOTE');
     n = 0;
     for iD = 1:nD
         for iA = 1:nA
@@ -101,6 +103,7 @@ for kf = 1:numel(files)
                 n = n + 1;
                 z8(:,n) = Q.Z8(:,iD,iA,kr);
                 idx(iD,iA,kr) = n;
+                if hasNotes && kr == 1, notes{n} = Q.NOTE{iD, iA}; end
             end
         end
     end
@@ -148,6 +151,21 @@ for kf = 1:numel(files)
     % THE EXTREMAL FAMILY of each entry (family_map codes), when the sheet
     % file was built with a map; the map itself rides at the top level
     if isfield(Q, 'FAM'),   sheets(nS,1).family_index  = Q.FAM;    end
+    % THE ENTRY NOTES (one per solved entry, z8 column order): how it was
+    % found, the certifier's remarks, the sweep's (appended at write-back)
+    if hasNotes
+        sheets(nS,1).entry_notes = notes;
+        if ~isfield(cat_, 'notes_key')
+            cat_.notes_key = struct('layout', '<family> | <how found> | <certifier remarks> | <sweep remarks>', ...
+                'how_found', {{'arc crossing: arc k, level L', 'seed: <source> (t_f)', ...
+                               'rib step k of n from spine t_f at sA [, m bisection(s)]', ...
+                               'direct cell solve seeded from (sD, sA) t_f, k seed(s) raced [, replaced t_f]', ...
+                               'discovery probe at column j ...; anchored as <name>'}}, ...
+                'remarks', {{'polish plateaued |R|=.. > tolR ..', 'k conjugate near-miss (min .. x median)', ...
+                             'lift margin ..x (gate 10x)', 'H6 margin ..x', 'sweep: k near-miss, m unresolved'}}, ...
+                'note', 'The numbers that gate decisions live in the numeric grids (lift_margin, h6_margin, conj_*); the note is the story.');
+        end
+    end
     if isfield(Q, 'families') && ~isfield(cat_, 'families')
         cat_.families = Q.families;
     end

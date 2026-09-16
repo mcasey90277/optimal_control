@@ -99,6 +99,7 @@ for ia = 1:numel(arcs)
                        'z', nan(8,1), 'tfDays', NaN, 'sA', sA);
         else
             C = certFn(c.p, sA);
+            C.note = join_note(sprintf('arc crossing: arc %d, level %.4f', ia, c.level), C);
         end
         C.level = c.level;  C.arc = ia;
         % Merge with an existing candidate at this grid point only if it is
@@ -133,6 +134,15 @@ for ia = 1:numel(arcs)
 end
 lg('sheet_from_arcs: %d candidates, %d certified, %d/%d grid points filled', ...
    S.nCand, S.nCert, nnz(isfinite(S.TF)), nA);
+end
+
+function s = join_note(prefix, C)
+% JOIN_NOTE  The entry's provenance note: this producer's clause in front
+% of whatever the certifier (or an earlier producer) already wrote.
+% INPUTS: prefix (char); C (struct, .note optional).  OUTPUTS: s.
+parts = {prefix};
+if isfield(C, 'note') && ~isempty(C.note), parts{end+1} = C.note; end
+s = strjoin(parts, ' | ');
 end
 
 function j = gridIndex(level, sAlist)

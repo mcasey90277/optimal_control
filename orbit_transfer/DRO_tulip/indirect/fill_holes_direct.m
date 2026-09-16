@@ -175,7 +175,7 @@ while kc < size(cells, 1)                       % the list grows as improvements
         continue
     end
     t0 = tic;  okCell = false;  reason = '';  tfD = NaN;  tfC = NaN;  seedUsed = [];
-    best = [];  reasons = {};
+    best = [];  reasons = {};  bestSeed = [];  bestSeedTf = NaN;  nRaced = 0;
     if has(iD, iA), reasons{end+1} = sprintf('improve: cell holds %.3f d', tfnd(iD, iA)*tStar/86400); end
     for kn = 1:size(nb, 1)
         nD_ = nb(kn, 1);  nA_ = nb(kn, 2);  seedUsed = [sD(nD_), sA(nA_)];
@@ -191,8 +191,11 @@ while kc < size(cells, 1)                       % the list grows as improvements
             if ~C.ok && contains(C.reason, 'clearance floor')
                 reasons{end+1} = sprintf('%s (seed %.4f,%.4f)', C.reason, seedUsed);  continue
             end
+            nRaced = nRaced + 1;
             if C.ok
-                if isempty(best) || C.tfDays < best.tfDays, best = C;  tfC = C.tfDays; end
+                if isempty(best) || C.tfDays < best.tfDays
+                    best = C;  tfC = C.tfDays;  bestSeed = seedUsed;  bestSeedTf = tfnd(nD_, nA_)*tStar/86400;
+                end
                 reasons{end+1} = sprintf('certified %.3f d (seed %.4f,%.4f)', C.tfDays, seedUsed);
             else
                 reasons{end+1} = sprintf('%s (direct %.3f d, seed %.4f,%.4f)', C.reason, tfD, seedUsed);
@@ -205,6 +208,9 @@ while kc < size(cells, 1)                       % the list grows as improvements
         reasons{end+1} = sprintf('not faster than the cell''s %.3f d', tfnd(iD, iA)*tStar/86400);  best = [];
     end
     if ~isempty(best)
+        clause = sprintf('direct cell solve seeded from (%.4f, %.4f) %.3f d, %d seed(s) raced', bestSeed, bestSeedTf, nRaced);
+        if has(iD, iA), clause = sprintf('%s, replaced %.3f d', clause, tfnd(iD, iA)*tStar/86400); end
+        best.note = join_note(clause, best);
         okCell = true;  R = putPoint(R, iA, sA(iA), best);  tfC = best.tfDays;
         % the new root seeds the cells still to come (its column's next
         % cell above all: that is how a rib chains)
@@ -232,6 +238,15 @@ lg('fill_holes_direct: %d holes, %d tried, %d certified -> %s', nHoles, nTried, 
 out = struct('nHoles', nHoles, 'nTried', nTried, 'nCert', nCert, 'file', outFile, 'cells', rec);
 end
 
+function s = join_note(prefix, C)
+% JOIN_NOTE  The entry's provenance note: this producer's clause in front
+% of whatever the certifier (or an earlier producer) already wrote.
+% INPUTS: prefix (char); C (struct, .note optional).  OUTPUTS: s.
+parts = {prefix};
+if isfield(C, 'note') && ~isempty(C.note), parts{end+1} = C.note; end
+s = strjoin(parts, ' | ');
+end
+
 function [has, tfnd, idx, z8] = admit(has, tfnd, idx, z8, sD, sA, C)
 % ADMIT  Enter a certified point into the seed grid.  INPUTS: has; tfnd;
 % idx; z8; sD; sA; C (certify_root output with .sD .sA .z).  OUTPUTS: the
@@ -251,7 +266,7 @@ m = find([R.j] == j, 1);
 if isempty(m)
     R(end+1) = struct('j', j, 'sA', sAj, 'pts', C, 'stop', 'direct cells', 'nSolve', 1);
 else
-    R(m).pts(end+1) = C;  R(m).nSolve = R(m).nSolve + 1;
+    R(m).pts = append_point(R(m).pts, C);  R(m).nSolve = R(m).nSolve + 1;
 end
 end
 
@@ -277,4 +292,16 @@ line = sprintf('%s %s', char(datetime('now', 'Format', 'HH:mm:ss')), s);
 if isempty(f), fprintf('%s\n', line);
 else, fid = fopen(f, 'a');  fprintf(fid, '%s\n', line);  fclose(fid);  fprintf('%s\n', line);
 end
+end
+
+function pts = append_point(pts, C)
+% APPEND_POINT  Append a certified point to a rib, harmonising fields: a
+% rib resumed from a checkpoint written before the .note field existed
+% must still accept new points.  INPUTS: pts (struct array or []); C.
+% OUTPUTS: pts.
+if isempty(pts), pts = C;  return, end
+for f = setdiff(fieldnames(C), fieldnames(pts))', [pts.(f{1})] = deal([]); end
+for f = setdiff(fieldnames(pts), fieldnames(C))', C.(f{1}) = []; end
+C = orderfields(C, pts);
+pts(end+1) = C;
 end

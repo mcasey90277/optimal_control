@@ -113,6 +113,7 @@ for k = 1:numel(lib)
     % seeds that populate the same sheet. (Astra chain review 2026-09-10.)
     C = certify_root(seed, rv0, B.stateA(lib(k).sA), B, ...
                      setfield(setfield(policy, 'sA', lib(k).sA), 'sD', sD0)); %#ok<SFLD>
+    C.note = join_note(sprintf('seed: %s (%.3f d)', lib(k).src, lib(k).tfDays), C);
     fprintf('library seed (%.4f, %.4f) [%s]: %s\n', sD0, lib(k).sA, lib(k).src, C.reason);
     if isempty(seeds), seeds = C; else, seeds(end+1) = C; end %#ok<AGROW>
 end
@@ -142,6 +143,15 @@ for j = 1:numel(S.sA)
     end
 end
 fprintf('saved %s\n', out);
+end
+
+function s = join_note(prefix, C)
+% JOIN_NOTE  The entry's provenance note: this producer's clause in front
+% of whatever the certifier (or an earlier producer) already wrote.
+% INPUTS: prefix (char); C (struct, .note optional).  OUTPUTS: s.
+parts = {prefix};
+if isfield(C, 'note') && ~isempty(C.note), parts{end+1} = C.note; end
+s = strjoin(parts, ' | ');
 end
 
 function r = seedRow(e)

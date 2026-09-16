@@ -161,12 +161,19 @@ for k = st.roundsDone + 1 : maxRounds
 
     % ---- 3. ribs, package, audit, sweep (the supervised campaign) --------
     extra = earlierRibs(outDir, k);
+    verdictF = fullfile(V, 'SUPERVISOR_VERDICT.txt');
+    before = 0;  if isfile(verdictF), before = dir(verdictF).datenum; end   % a stale verdict from an earlier attempt
     o2 = run_costate_library(setfields(common, struct('outDir', V, 'nWorkers', nWorkers, 'launch', true, ...
              'extraRibFiles', {extra}, ...
              'run', struct('sheet', false, 'ribs', true, 'package', true, 'audit', true, 'sweep', true))));
     lg('round %d launched: state %s%s', k, o2.state, tern(isempty(o2.blockers), '', [' -- ' strjoin(o2.blockers, ' | ')]));
-    verdict = waitForVerdict(fullfile(V, 'SUPERVISOR_VERDICT.txt'), 48*3600, 60, lg);
-    assert(contains(verdict, 'FINISHED'), 'run_phase_torus: round %d did not finish: %s', k, verdict);
+    if strcmp(o2.state, 'packaged')
+        lg('round %d packaged in this call (every column was already published)', k);
+    else
+        assert(strcmp(o2.state, 'launched'), 'run_phase_torus: round %d could not launch: %s', k, strjoin(o2.blockers, ' | '));
+        verdict = waitForVerdict(verdictF, before, 48*3600, 60, lg);
+        assert(contains(verdict, 'FINISHED'), 'run_phase_torus: round %d did not finish: %s', k, verdict);
+    end
     catMat = fullfile(V, 'costate_catalog_dro_tulip_70mN.mat');
     assert(isfile(catMat), 'run_phase_torus: round %d left no catalog', k);
 
@@ -268,6 +275,7 @@ for j = targets
     end
     if isempty(best) || (isfinite(tf(j)) && best.tfDays >= tf(j) - 1e-3), continue, end
     name = sprintf('d%02d', j);
+    best.note = join_note(sprintf('discovery probe at column %d from another family''s root; anchored as %s', j, name), best);
     direct(end+1) = struct('sD', sD0, 'sA', S.sA(j), 'tfDays', best.tfDays, 'z', best.z(:), ...
         'src', sprintf('run_phase_torus discovery at column %d, %s', j, char(datetime('now'))));
     save(seedFile, 'direct');
@@ -279,6 +287,15 @@ for j = targets
     if isempty(roots), roots = best; else, roots(end+1) = best; end
     lg('  NEW ROOT at column %d: %.3f d (spine %s) -> anchor %s', j, best.tfDays, tern(isfinite(tf(j)), sprintf('%.3f d', tf(j)), 'none'), name);
 end
+end
+
+function s = join_note(prefix, C)
+% JOIN_NOTE  The entry's provenance note: this producer's clause in front
+% of whatever the certifier (or an earlier producer) already wrote.
+% INPUTS: prefix (char); C (struct, .note optional).  OUTPUTS: s.
+parts = {prefix};
+if isfield(C, 'note') && ~isempty(C.note), parts{end+1} = C.note; end
+s = strjoin(parts, ' | ');
 end
 
 function saveAnchor(anc, best, Tnd, cnd)
@@ -329,11 +346,12 @@ while true
 end
 end
 
-function v = waitForVerdict(f, deadlineSec, pollSec, lg)
-% WAITFORVERDICT  Wait for the supervisor's verdict file.  INPUTS: f;
-% deadlineSec; pollSec; lg.  OUTPUTS: v (its last line, or 'DEADLINE').
+function v = waitForVerdict(f, before, deadlineSec, pollSec, lg)
+% WAITFORVERDICT  Wait for a supervisor verdict file NEWER than `before`
+% (a datenum; 0 = any).  INPUTS: f; before; deadlineSec; pollSec; lg.
+% OUTPUTS: v (its last line, or 'DEADLINE').
 t0 = tic;
-while ~isfile(f)
+while ~isfile(f) || dir(f).datenum <= before
     if toc(t0) > deadlineSec, v = 'DEADLINE';  lg('  wait: no verdict in %.0f h', deadlineSec/3600);  return, end
     pause(pollSec);
 end

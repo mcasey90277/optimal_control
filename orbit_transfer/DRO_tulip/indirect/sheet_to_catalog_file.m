@@ -108,6 +108,9 @@ if ~isempty(F)
     Q.FAM = zeros(nD, nA, 1, 'int8');
     Q.families = rmfield(F, intersect(fieldnames(F), {'attach', 'ribFamily'}));
 end
+% THE ENTRY NOTES: how each entry was found and what the certifier remarked,
+% one short text per cell (the family's label in front when a map exists)
+Q.NOTE = repmat({''}, nD, nA);
 
 % ---- the spine: the certified minimum at each arrival phase, at sD0 -----
 iD0 = idxOf(Q.sD, sD0);
@@ -127,7 +130,9 @@ for j = 1:nA
     Q.TF(iD0, j, 1) = c(k).z(8);
     Q.Z8(:, iD0, j, 1) = c(k).z(:);
     Q = putVerdicts(Q, iD0, j, c(k));
-    if ~isempty(F), Q.FAM(iD0, j, 1) = int8(F.columns(j).family); end
+    code = 0;
+    if ~isempty(F), Q.FAM(iD0, j, 1) = int8(F.columns(j).family);  code = Q.FAM(iD0, j, 1); end
+    Q.NOTE{iD0, j} = noteOf(c(k), F, code);
 end
 
 % ---- the ribs: certified departure points off the spine ----------------
@@ -156,6 +161,7 @@ if nargin >= 2 && ~isempty(ribs)
             Q.Z8(:, iD, iA, 1) = Pt.z(:);
             Q = putVerdicts(Q, iD, iA, Pt);
             if ~isempty(F), Q.FAM(iD, iA, 1) = ribCode; end
+            Q.NOTE{iD, iA} = noteOf(Pt, F, ribCode);
         end
     end
 end
@@ -206,6 +212,21 @@ function assertNear(a, b, name)
 assert(abs(a - b) <= 1e-12*max(abs(b), 1), ...
     ['opts.%s = %g contradicts the CERTIFIED problem identity (%g). ' ...
      'Packaging may assert the identity, not change it.'], name, a, b);
+end
+
+function s = noteOf(C, F, code)
+% NOTEOF  An entry's note: the family label (when a map exists), then the
+% producer's and certifier's text.  INPUTS: C; F ([] = no map); code.
+% OUTPUTS: s char.
+parts = {};
+if ~isempty(F)
+    if code >= 1, parts{end+1} = ['family ' F.families(code).label];
+    elseif code == -1, parts{end+1} = 'family: unattached root (no arc passes through it)';
+    elseif code == -2, parts{end+1} = 'family: spine unidentified';
+    end
+end
+if isfield(C, 'note') && ~isempty(C.note), parts{end+1} = C.note; end
+s = strjoin(parts, ' | ');
 end
 
 function Q = putVerdicts(Q, iD, iA, C)

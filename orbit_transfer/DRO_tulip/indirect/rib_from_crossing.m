@@ -96,7 +96,7 @@ end
 
 for k = kStart:nPts
     target = anc.sD + targets(k);          % unwrapped, absolute
-    step = dirn/nD;  nb = 0;  cur = sD;  zc = z;  Yc = Y;  Ck = [];  nGood = 0;
+    step = dirn/nD;  nb = 0;  cur = sD;  zc = z;  Yc = Y;  Ck = [];  nGood = 0;  nHalved = 0;
     while abs(wrapDiff(cur, target)) > 1e-12
         % never overshoot the grid point, and RESTORE the step after two
         % clean sub-steps -- a walk that only ever halves crawls at the
@@ -123,13 +123,15 @@ for k = kStart:nPts
                 lg('  rib STOP: %s', R.stop);
                 return
             end
-            step = step/2;  nb = nb + 1;  nGood = 0;
+            step = step/2;  nb = nb + 1;  nGood = 0;  nHalved = nHalved + 1;
             lg('  rib sD %.4f -> %.4f refused (%s); halving to %.5f', mod(cur,1), mod(trial,1), Ct.reason, step);
         end
     end
     sD = mod(target, 1);  z = zc;  Y = Yc;
     Ck.sD = sD;
-    if isempty(R.pts), R.pts = Ck; else, R.pts(end+1) = Ck; end
+    Ck.note = join_note(sprintf('rib step %d of %d from spine %.3f d at sA %.4f%s', k, nPts, C0.tfDays, C0.sA, ...
+                                tern(nHalved > 0, sprintf(', %d bisection(s)', nHalved), '')), Ck);
+    R.pts = append_point(R.pts, Ck);
     if ~isempty(ckptFile)              % after every ACCEPTED point, atomically
         walk_checkpoint('save', ckptFile, struct('identity', ident, 'k', k, 'sD', sD, 'z', z, 'Y', Y, ...
                                                   'pts', R.pts, 'nSolve', R.nSolve));
@@ -153,4 +155,30 @@ function logmsg(f, s)
 % LOGMSG  Print, and append to a log file when one is named.  INPUTS: f; s.
 fprintf('%s\n', s);
 if ~isempty(f), fid = fopen(f, 'a'); fprintf(fid, '%s\n', s); fclose(fid); end
+end
+
+function s = join_note(prefix, C)
+% JOIN_NOTE  The entry's provenance note: this producer's clause in front
+% of whatever the certifier (or an earlier producer) already wrote.
+% INPUTS: prefix (char); C (struct, .note optional).  OUTPUTS: s.
+parts = {prefix};
+if isfield(C, 'note') && ~isempty(C.note), parts{end+1} = C.note; end
+s = strjoin(parts, ' | ');
+end
+
+function s = tern(c, a, b)
+% TERN  Ternary.  INPUTS: c; a; b.  OUTPUTS: s.
+if c, s = a; else, s = b; end
+end
+
+function pts = append_point(pts, C)
+% APPEND_POINT  Append a certified point to a rib, harmonising fields: a
+% rib resumed from a checkpoint written before the .note field existed
+% must still accept new points.  INPUTS: pts (struct array or []); C.
+% OUTPUTS: pts.
+if isempty(pts), pts = C;  return, end
+for f = setdiff(fieldnames(C), fieldnames(pts))', [pts.(f{1})] = deal([]); end
+for f = setdiff(fieldnames(pts), fieldnames(C))', C.(f{1}) = []; end
+C = orderfields(C, pts);
+pts(end+1) = C;
 end

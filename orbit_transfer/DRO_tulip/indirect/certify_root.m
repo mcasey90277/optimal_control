@@ -184,7 +184,7 @@ lStar = 389703.264829278;  tStar = 382981.289129055;
 t0 = tic;
 rv0 = rv0(1:6);  rvf = rvf(1:6);
 
-C = struct('ok', false, 'reason', '', 'z', nan(8,1), 'Y', [], 'tfDays', NaN, ...
+C = struct('ok', false, 'reason', '', 'note', '', 'z', nan(8,1), 'Y', [], 'tfDays', NaN, ...
            'dvKms', NaN, 'propellantKg', NaN, 'finalMassKg', NaN, ...
            'flyKm', NaN, 'flyVms', NaN, 'dz', NaN, ...
            'conj', -1, 'g', [], 'sA', d('sA', NaN), 'sD', d('sD', NaN), ...
@@ -484,6 +484,22 @@ if plateau
 else
     C.reason = 'certified';
 end
+% THE ENTRY'S NOTE: the certifier's remarks about a root that passed but
+% not comfortably -- a plateaued polish, conjugate near-misses, a lift or
+% H6 margin near its gate. Producers (sheet, rib, direct filler) put their
+% "how found" clause in front of it; the packager ships it as entry_notes.
+rem = {};
+if plateau, rem{end+1} = sprintf('polish plateaued |R|=%.1e > tolR %.0e', it.normR, tolR); end
+if isstruct(C.conjDense) && isfield(C.conjDense, 'nNearMiss') && C.conjDense.nNearMiss > 0
+    rem{end+1} = sprintf('%d conjugate near-miss (min %.1e x median)', C.conjDense.nNearMiss, C.conjDense.minRel);
+end
+if isfield(C, 'liftMargin') && isfinite(C.liftMargin) && C.liftMargin < 20
+    rem{end+1} = sprintf('lift margin %.1fx (gate 10x)', C.liftMargin);
+end
+if isfield(C, 'h6Margin') && isfinite(C.h6Margin) && C.h6Margin < 3
+    rem{end+1} = sprintf('H6 margin %.2fx', C.h6Margin);
+end
+C.note = strjoin(rem, '; ');
 end
 
 

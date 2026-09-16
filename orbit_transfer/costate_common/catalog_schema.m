@@ -34,6 +34,9 @@ function out = catalog_schema(action, varargin)
 %        (codes: 1..n index .families.families, -1 a certified root no
 %        mapped arc passes through, -2 a rib whose spine root is
 %        unidentified, 0 no entry).
+%     OPTIONAL since 2026-09-15: per-sheet .entry_notes (cellstr, one text
+%        per solved entry in z8 column order: family | how found |
+%        certifier remarks | sweep remarks) with a top-level .notes_key.
 %
 %% Inputs:
 %
@@ -185,6 +188,15 @@ case 'validate'
                 if any(fi > numel(cat_.families.families)) || any(~ismember(fi, [-2 -1 0 1:numel(cat_.families.families)]))
                     p{end+1} = sprintf('sheet %d: family_index code outside the .families map', ks);
                 end
+            end
+        end
+        % entry notes (OPTIONAL, 2026-09-15): one text per solved entry, in
+        % z8 column order, and a notes_key at the top level
+        if isfield(sh, 'entry_notes') && ~isempty(sh.entry_notes)
+            if ~iscellstr(sh.entry_notes) || numel(sh.entry_notes) ~= nnz(sh.has_solution)
+                p{end+1} = sprintf('sheet %d: entry_notes must be a cellstr with one entry per solved cell', ks);
+            elseif ~isfield(cat_, 'notes_key')
+                p{end+1} = sprintf('sheet %d: entry_notes without a top-level .notes_key', ks);
             end
         end
         % conjugate-point verdicts (OPTIONAL, added 2026-08-23): when a

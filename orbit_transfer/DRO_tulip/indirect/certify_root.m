@@ -65,7 +65,7 @@ function C = certify_root(seed, rv0, rvf, B, opts)
 %   .gateKm [100] .gateVms [10] .tolDz [1e-6] .wallSec [600] .m0kg [150]
 %   .tolR [3e-11] polish tolerance, .tolRelax [1e-8] a polish that plateaus
 %   below this still goes to the gates (and says so in .reason),
-%   .pool [gcp('nocreate')] the fence's worker pool -- WITHOUT one the
+%   .pool [current_pool()] the fence's worker pool -- WITHOUT one the
 %   external calls are unfenced and can hang for hours,
 %   .capPolishSec [900] .capFlySec [300] .capWitnessSec [300]
 %   .progress [] handle called with no arguments after EVERY capped stage
@@ -149,7 +149,12 @@ tolRelax = d('tolRelax', 1e-8);
 % call FAILS with a named reason: silently accepting a candidate whose
 % witness or gates could not be run would put an unverified entry in the
 % catalog, which is the one thing this stack exists to prevent.
-pool = d('pool', gcp('nocreate'));
+% NOT d('pool', gcp('nocreate')): MATLAB evaluates arguments eagerly, so a
+% caller that already passed a pool would still trip gcp -- and gcp THROWS
+% when the Parallel Computing Toolbox is absent or its licence is held by
+% another MATLAB session on this machine. A caller that passes .pool = []
+% means UNFENCED, which every fenced() call below already handles.
+if isfield(opts, 'pool'), pool = opts.pool; else, pool = current_pool(); end
 capPolish  = d('capPolishSec',  900);
 capFly     = d('capFlySec',     300);
 capWitness = d('capWitnessSec', 300);

@@ -30,11 +30,20 @@ function pool = capped_pool(nWorkers)
 if nargin < 1 || isempty(nWorkers), nWorkers = 4; end
 pool = [];
 if isempty(ver('parallel')), warning('capped_pool:noPCT', 'Parallel Computing Toolbox unavailable: calls will run UNFENCED'); return, end
-pool = gcp('nocreate');
+pool = current_pool();
 if ~isempty(pool) && isvalid(pool), return, end
-c = parcluster('Processes');
-tmp = fullfile(tempdir, sprintf('capped_pool_%d_%s', feature('getpid'), datestr(now, 'HHMMSSFFF')));
-if ~isfolder(tmp), mkdir(tmp); end
-c.JobStorageLocation = tmp;
-pool = c.parpool(min(nWorkers, c.NumWorkers));
+% A MISSING FENCE MUST DEGRADE, NOT CRASH. The licence can be held by
+% another MATLAB session on this machine (a shared desktop session is
+% enough), and a campaign that dies at pool creation loses the whole run
+% rather than the fence. Consumers already branch on an empty pool.
+try
+    c = parcluster('Processes');
+    tmp = fullfile(tempdir, sprintf('capped_pool_%d_%s', feature('getpid'), datestr(now, 'HHMMSSFFF')));
+    if ~isfolder(tmp), mkdir(tmp); end
+    c.JobStorageLocation = tmp;
+    pool = c.parpool(min(nWorkers, c.NumWorkers));
+catch ME
+    pool = [];
+    warning('capped_pool:noPool', 'could not open a pool (%s): calls will run UNFENCED', ME.message);
+end
 end

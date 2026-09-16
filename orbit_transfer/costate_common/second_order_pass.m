@@ -152,7 +152,7 @@ todo = find(~[R.done]);
 % USE a pool if the caller already made one (the chain does, via capped_pool);
 % never create one here -- a sweep started inside a fenced worker must not
 % spawn a nested pool.
-pool = gcp('nocreate');
+pool = current_pool();       % [] rather than an error when there is no PCT
 useParallel = ~isempty(pool) && isvalid(pool) && d('parallel', true);
 if useParallel
     chunk = max(1, round(d('chunk', 2*pool.NumWorkers)));

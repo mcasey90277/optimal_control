@@ -56,7 +56,7 @@ tolDz = d('tolDz', 1e-6);  gateKm = d('gateKm', 100);  gateVms = d('gateVms', 10
 capSec = d('capSec', 300);
 % NOT d('pool', gcp('nocreate')): MATLAB evaluates arguments eagerly, so that
 % form starts a pool query even when the caller supplied one.
-if isfield(opts, 'pool'), pool = opts.pool; else, pool = gcp('nocreate'); end
+if isfield(opts, 'pool'), pool = opts.pool; else, pool = current_pool(); end
 if isempty(pool)
     warning('verify_with_pumpkyn:unfenced', ...
         'no parallel pool: the foreign solver runs UNFENCED and can hang indefinitely');

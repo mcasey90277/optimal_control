@@ -381,28 +381,39 @@ identical solver, scheme and $\tf$ guess, varying nothing but the mesh:
 \begin{center}\small
 \begin{tabular}{@{}rrrrl@{}}
 \toprule
-$N$ & $\tf$ (ND) & vs.\ reference & periselene (km) & status \\
+$N$ & $\tf$ (ND) & vs.\ reference & min node radius (km) & status \\
 \midrule
-\multicolumn{5}{@{}l@{}}{\emph{2026-08-03, unconstrained}}\\
-400  & 4.3807 & $+9.1\%$  & 4819 & converged \\
-800  & 4.4507 & $+10.8\%$ & $-343$ & converged, \textbf{inside the Moon} \\
-1600 & 4.7833 & $+19.1\%$ & 4680 & converged, 7.8\,m worst-interval error \\
+\multicolumn{5}{@{}l@{}}{\emph{2026-08-03, unconstrained (logged as altitude; $+1737.4$ here)}}\\
+400  & 4.3807 & $+9.1\%$  & 6556 & converged \\
+800  & 4.4507 & $+10.8\%$ & 1394 & converged, \textbf{through the Moon} (altitude $-343$) \\
+1600 & 4.7833 & $+19.1\%$ & 6417 & converged, 7.8\,m worst-interval position error \\
 \midrule
 \multicolumn{5}{@{}l@{}}{\emph{2026-09-15, reproduced by \file{root\_origins\_study}}}\\
 400  & 4.6809 & $+16.6\%$ & 6563 & converged \\
-800  & 4.9909 & $+24.3\%$ & 2243 & iteration limit \\
+800  & 4.9909 & $+24.3\%$ & 2243 & \emph{iterate}: iteration limit, excluded \\
 1600 & 6.4126 & $+59.7\%$ & 1995 & converged \\
 \bottomrule
 \end{tabular}
 \end{center}
 
 \noindent
+``Min node radius'' is the smallest Moon-centre distance over the collocation
+NODES: a screen, not a certified periselene, since the arc between nodes is
+not checked. The 7.8\,m figure is a worst-interval position error --- an
+accuracy measure, not an endpoint error and not a minimality certificate.
+
+\noindent
 The reference is $\tf = 4.0152$\,ND $= 17.798$\,d. The 2026-08-03 $N=1600$ row
 is the decisive one: a genuinely accurate, physical, lunar-safe minimum-time
 extremal that is 19\% slower than the reference. \textbf{The accuracy
-machinery works cold; basin selection does not.} Mesh density acts as a de
-facto random seed. That is why seeding or continuation is required equipment
-on a catalog pair rather than a convenience.
+machinery works cold; basin selection does not.} Stated exactly: the mesh
+is the only input that changed, and the converged flight times changed with
+it, none of them matching the reference. That is deterministic mesh
+sensitivity of the cold solve, and it is enough to make seeding or
+continuation required equipment on a catalog pair. Whether every converged
+row is a distinct physical extremal, rather than a discretisation artefact
+that a finer mesh would merge, is not settled by flight times alone; it needs
+each row taken to a common fine mesh or through the shooting solver.
 \end{rig}
 
 \subsection{The ladder}
@@ -439,17 +450,33 @@ T)^{0.6}$, an empirical scaling for this band; measured 2026-09-15 it
 predicts the next rung to about 1\%. Isp is walked separately at fixed
 thrust, because it only changes the depletion rate. On the indirect half the
 exponent is \emph{swept} over $\{1.0, 1.3, 1.7, 2.2, 3.0\}$ and the fastest
-converged rung kept: past a winding wall the correct next solution has a
-different number of revolutions, and only a different exponent puts the guess
-in its basin.
+converged candidate kept. Call that what it is: a small search over guesses
+at each rung, not branch-preserving continuation. It is the campaign's own
+rule and it is what got the recorded chain past a winding wall, where the
+next solution has a different angular excursion and a different exponent is
+what puts the guess near it; it can also switch branches, which is why the
+angular excursion is printed beside every rung.
+
+Two more things the ladder measures rather than assumes. The all-burn
+propellant fraction is $1 - m_f = T\,\tf / c$ in nondimensional units, so if
+$\tf \propto T^{-0.6}$ then $T\,\tf \propto T^{0.4}$ \emph{falls} as thrust
+falls: lower thrust, longer trip, less $\Delta V$ --- measured 4.22 $\to$ 0.996
+km/s from 15 to 0.5\,N. And the throttle, which the direct solver leaves
+free on purpose, is checked to saturate on every rung ($1 - u_{\min}$ below
+$10^{-6}$); minimum time is all-burn, and a rung whose throttle dipped would
+not be the problem the shooting solver solves next.
 
 \textbf{Every rung must be screened against its own guess.} A rung that lands
-far from where the scaling predicted has left the branch, and seeding the
-next rung from it walks a different family down --- while looking perfect.
+far from where the scaling predicted has, at the least, left the branch the
+guess was on, and seeding the next rung from it walks something else down
+--- while looking perfect. The band is a plausibility heuristic, not a branch
+detector: a sharp turn on the same branch can trip it and a jump to a
+nearby-time branch can pass it; it is applied to steps only, never to the
+cold top rung.
 Measured on this cell 2026-09-15, a single $1 \to 0.5$\,N step (ratio 0.5)
 returned a converged extremal with defect $4\times10^{-14}$, safe periselene,
 $\tf = 54.7$\,d and $\Delta V = 46.8$\,km/s: 16$\times$ its own guess, 94\% of
-the mass burned, a different winding number. The shipped catalog steps by
+the mass burned, a very different angular excursion. The shipped catalog steps by
 about 0.75 per rung and \file{preflight\_screen} rejects anything outside
 $[0.3, 3]\times$ the guess. A basin jump is a statement about the \emph{step},
 not about the problem: the remedy is a finer ratio, never a looser gate.
@@ -481,10 +508,16 @@ ratios $\sim$0.85 $+$ $I_{sp}$ stage at 0.12\,N & 0.12\,N ($I_{sp}=900$) & 0.11\
 \noindent
 A finer ratio buys real depth, because a jump is a property of the step. The
 $I_{sp}$ stage is cheap and helps --- three rungs in four seconds, $\tf$
-falling 4.6\% at fixed thrust --- but it does not move this wall. Revolutions
-climb $0.81 \to 1.31$ across the walk: it is a \emph{winding} wall, and the
-anchor phase meets it near 0.11\,N while the sheet's fastest 0.5\,N cell
-reaches 0.09\,N. Where you start the deep walk is a choice, not a detail.
+falling 4.6\% at fixed thrust --- but it does not move this stall. The
+angular excursion climbs $0.81 \to 1.31$ turns across the walk. What the
+stall is a statement about is \emph{this search policy} --- these rung
+ratios, exponents, budgets and seed-propellant cap --- on this cell; it is
+not by itself a proof that no root exists below, and the diagnostics that
+would distinguish a fold from ill-conditioning from a poor seed (arclength
+steps in thrust, rank and sensitivity of the shooting Jacobian, a budget
+study) are not run here. What is established is that the anchor phase stalls
+near 0.11\,N under a policy that took the sheet's fastest 0.5\,N cell to
+0.09\,N. Where you start the deep walk is a choice, not a detail.
 \end{rig}
 
 \subsection{The basin hunt}
@@ -504,6 +537,20 @@ read what comes back: a root faster than its seed is a new family worth
 anchoring. Four of the five families in the 70\,mN library were found exactly
 this way.
 \end{intu}
+
+\begin{rig}
+What a probe measures, exactly. Each probe is a \emph{different}
+boundary-value problem --- the arrival state moved --- so its $\tf$ is not
+comparable to the source's as a basin test: one family's $\tf$ varies with
+phase by far more than a few percent, and two families can share a $\tf$.
+A probe yields a \emph{candidate}: a converged transfer at phase $\sA$, some
+percent faster or slower than the source at its own phase. Turning a
+candidate into a basin verdict needs a same-phase baseline: continue the
+held family to $\sA$ with \file{arclength\_arrival} and compare the two
+roots' states and costates there. That is what the campaign did in FINDINGS
+61, 63 and 68, and it is why every converged probe is banked as a harvested
+seed.
+\end{rig}
 
 \subsection{The study scripts}
 

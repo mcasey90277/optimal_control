@@ -5005,3 +5005,132 @@ direct11 (sections 61, 63, 68), reproduced from a cold start in one run.
 - **fine_sheet_job's candidate counter shadowed its certified-column count**,
   so the verdict line reported the last column's candidate count. Fixed with
   the loop's own names (and the loop variable renamed off `j`).
+
+## 76. root_origins_study reviewed by GPT-6 Astra: a wrong sentence about delta-V, an unchecked throttle, a table that mixed altitude with radius, and a "basin test" that was not one (2026-09-16)
+
+`reviews/root_origins_study_astra_2026-09-16.md` (xhigh, 411 s, $1.18; the
+prompt carried the script plus the contracts of every helper it calls, so the
+reviewer could verify rather than speculate). Every finding was checked
+against the code before anything changed. What follows is the triage.
+
+### Verified wrong in the script, fixed
+
+- **"dV rises slowly while t_f rises fast" was false, and the script's own
+  table said so.** Ideal dV fell 4.2204 -> 0.9960 km/s down the direct
+  ladder. At fixed exhaust speed the all-burn propellant fraction is
+  `T*t_f/c`, and if `t_f ~ T^-0.6` then `T*t_f ~ T^0.4` FALLS as thrust
+  falls. The script now prints both directions as measurements with that
+  argument. (I wrote a slogan and did not read my own numbers.)
+- **The throttle was never checked.** The direct solver leaves it FREE on
+  purpose (its header: pinning it would be simpler; checking that it
+  saturates is a genuine test of the formulation) and the script checked
+  only `maxUnit`, the direction norm. Astra proposed `thrLock = true`; the
+  campaign's own design says check, not pin. `directOK` -- one feasibility
+  predicate for every direct solve in the script -- now gates on `thrMin`
+  (measured `1 - u_min` 5.8e-7 and 3.6e-8 on the smoke rungs), and on
+  `maxInterp` and `tfSpread`, which the solver computes separately from
+  `maxDefect` and which no section had looked at.
+- **The recorded lottery table mixed altitude with radius.** FINDINGS'
+  2026-08-03 column is "min node alt"; I quoted -343 km as a "periselene"
+  beside a live column that prints Moon-centre RADIUS. A radius cannot be
+  negative. Script and document now convert (+1737.4 km) and label both.
+- **Section 0 settings never reached certification.** `certify_root` reads
+  `m0kg`, `gateKm`, `gateVms` and `moonKmMin` from ITS OWN options
+  (defaults 150 / 100 / 10 / 1900) and not from the problem struct;
+  editing `op.m0kg` or `num.clearKm` would silently have left the
+  certificate on defaults. Forwarded, and printed on the certify line.
+- **The hunt's "same basin / ANOTHER BASIN" labels were unsupported.** Each
+  probe is a different boundary-value problem (the arrival state moved), so
+  its t_f is not comparable to the source's as a basin test: one family's
+  t_f varies with phase by far more than 2%, and two families can share a
+  t_f. The hunt now reports a CANDIDATE ("X% faster/slower than the source
+  at its own phase"), banks each converged probe as a harvested seed, and
+  says what turns a candidate into a verdict: a same-phase baseline from
+  `arclength_arrival` and a comparison of states and costates there --
+  which is what sections 61, 63 and 68 actually did.
+- **`uniquetol` did not implement the advertised relative test** (its
+  default scales by the largest element, so a long outlier regroups the
+  others). Now an explicit absolute tolerance, `tol.tfCluster` x the
+  shortest converged t_f, and called a flight-time CLUSTER count, which is
+  what it is.
+- **The depletion guard's comment was wrong.** `m(t_f) = 1 - T t_f/c`, so
+  exhaustion is at `t_f = c/T`; the `0.6 c/T` cut keeps 40% of the mass. It
+  is a seed-propellant POLICY (`iladder.maxPropFrac`, recorded when it
+  skips), not a physical bound.
+- **The flown-miss gate was fail-open on NaN**, had no velocity gate, and
+  did not check that the witness reached t_f with positive mass. Fixed;
+  `gateVms` added.
+- **Refusal reasons in the wrong order**: a band failure was reported before
+  a convergence failure, so an unconverged iterate could be labelled a
+  "basin jump". Precedence fixed; the band is now called what it is, a
+  plausibility heuristic applied to steps only, not a branch detector.
+- **An Isp-only rung that failed re-ran the identical solve five times**
+  (the exponent has no effect on an Isp step). One attempt.
+- **`revs` was total swept azimuth, not a winding number.** Renamed
+  `turns`, defined on the printed header (reversals add).
+- **The indirect ladder re-flew the whole arc from lambda(0)** to build the
+  next seed, bringing back the amplification multiple shooting exists to
+  avoid, and the banked junctions were never used. New `flyFromJunctions`
+  rebuilds the trajectory segment by segment from `it.Y`; the hunt's warm
+  start uses it too, with duplicate time samples removed and a zero-primer
+  check, inside the try.
+- **The pool was created AFTER the handoff shoot**, so that shoot and every
+  full-arc propagation ran unfenced even with a pool. Pool first; the
+  handoff, the reconstructions and the witness flights are fenced; the
+  per-rung budget is passed into the fence caps.
+- **The polished root was not adopted.** `certify_root` polishes; the
+  certificate belongs to `C.z`/`C.Y`, but the hunt and the record used the
+  pre-polish candidate. On `C.ok` the polished root is adopted and marked;
+  the certificate, the options it ran with, the gate table and the three
+  outcomes are saved. `saveq` reports failure instead of swallowing it.
+- **"CERTIFIED root" was printed unconditionally** on the short-ladder
+  branch. Section 6 now branches on `C.ok` first.
+- **Two hardcoded tolerances** (seam 1e-6, solver target 1e-11) made "one
+  source" false. Moved into `tol` with solve targets and acceptance
+  thresholds kept apart and said to be different things.
+- **"Direct ladder finished" tested thrust alone** and its label differed
+  between the print and the gate table. Now the accepted-row index.
+- Refused rungs and thrown probes were absent from the records; "of N
+  probes" meant returned records. Every attempt is recorded with a reason
+  taxonomy (timeout / unconverged / flown-miss / seed-policy skip / bad
+  flight), and A, B and C each print an OUTCOME (SUPPORTED / PARTIAL /
+  CANDIDATES / NOT OBSERVED / INCONCLUSIVE) separate from the machinery
+  gates.
+- Prose softened where the computation did not earn it: "winding wall, not
+  a sensitivity one" -> "this search policy stalled on this cell"; "never
+  loaded" -> the orbit getter refines a catalogued family seed, no TRANSFER
+  is loaded; "near-impulsive, sub-revolution" -> the measured half-day.
+
+### Verified NOT a numerical defect (the review's #2)
+
+Astra ranked "the certification seed violates the junction-array contract"
+second: `ms_tfmin` returns `info.Y` as 14 x K junction STARTS while the seed
+contract documents 14 x (K+1). Measured: `reached.Y` is [14 24], `tGrid`
+[1 25]. Then read the consumer: `ms_bvp` packs its unknowns from
+`seed.Y(:,1)` and `seed.Y(:,2:K)` and never reads column K+1, and
+`certify_root` touches only `seed.tGrid`. The K starts plus the fixed
+departure state ARE the complete parameterisation; the endpoint column is
+redundant. So feeding `it.Y` back is lossless and the certificates stand.
+What IS wrong is the DOCUMENTED contract (`ms_bvp` header: ".Y [14 x K+1]")
+against what `info.Y` returns, and my comment "full K+1 junction states".
+Comment fixed; the library header mismatch is an open item, and anything
+that indexes `.Y(:, end)` on an ms info output is reading the K-th START,
+not the endpoint.
+
+### Disagreed, with reasons
+
+- `thrLock = true`: see above -- check, do not pin.
+- "Certify periselene between nodes": the per-rung column is a node screen
+  and now says so; the CERTIFIED root's clearance comes from
+  `validate_flight` on the dense flight inside `certify_root`, which is the
+  continuous check the reviewer asked for, just not per rung.
+
+### Smoke after the changes (R2026a, reduced settings)
+
+Lottery N = 200/400: 4.5510 / 4.6809 ND, 2 clusters, 0 within 1% of the
+reference -> A SUPPORTED. Direct ladder 3/3 accepted, throttle saturated to
+5.8e-7 / 3.6e-8. Sundman re-solve within 6.1e-7 of the plain-time rung's
+t_f; floor slack 4514 km; H2 100%, H3 lambda_t 1.000000 with the mapping's
+own check agreeing, H1 |R| 6.3e-13. Indirect 2/2. Certified at 0.375 N /
+1400 s from the FORWARDED options. Hunt: 1 candidate, 13.7% slower, banked.
+Full default run relaunched to refresh the record.

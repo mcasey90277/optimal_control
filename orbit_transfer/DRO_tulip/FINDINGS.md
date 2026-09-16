@@ -5163,3 +5163,113 @@ options: 10.6060 d, flown miss 0.000 km / 0.000 m/s, conjugate PASS. Hunt:
 three converged candidates, two faster than the source (14.4% at sA 0.5754,
 1.8% at 0.7837), banked as seeds; basin identity not claimed. Outcomes: A
 SUPPORTED, B PARTIAL (0.12 N of 0.07 N), C CANDIDATES.
+
+## 77. root_origins_study, Astra round 2: the fixes verified, one of them wrong, and the two disputes adjudicated (2026-09-16)
+
+`reviews/root_origins_study_astra_round2_2026-09-16.md` (xhigh, 494 s,
+$1.53). The bundle carried the current script, the round-1 review verbatim,
+section 76's triage, the full default run's output and the complete bodies
+of every helper the script calls, so the reviewer could verify the fixes
+rather than re-review from scratch. Its verdict on the round-1 list: 14 FIX
+OK, 9 FIX PARTIAL, **1 FIX WRONG**. Every item was checked against the code
+before anything changed.
+
+### The wrong fix, and it was mine
+
+**Adopting the certifier's polished root with the pre-polish time grid.**
+`certify_root` polishes with `ms_tfmin` and returns `C.z` and `C.Y`
+(junction starts) but no grid; `ms_bvp` keeps the NORMALIZED breakpoints
+fixed and re-solves t_f, so the junction TIMES belong to the polished t_f.
+I paired `C.Y` with the old `itCur.tGrid`. The certificate was valid; the
+record and the hunt's warm start were internally inconsistent by the
+polish's change in t_f on every segment -- dormant in the default run only
+because the pre-polish residual was already below the polish target. Fixed:
+`itCur.tGrid = sig*C.z(8)` with the normalized grid preserved from the walk,
+shapes asserted, and the relative change printed (it will read ~1e-12 when
+the walk's own root was already polished, which is the honest number).
+
+### The two disputes
+
+- **Junction-array shape.** Astra withdrew its round-1 numerical claim
+  after reading `ms_bvp`: no consumer reads column K+1 or infers K from
+  `size(Y, 2)`; a 14 x K starts array plus K+1 times is lossless. It named
+  the library headers as what to correct and said not to append an
+  endpoint merely to satisfy an obsolete header. Agreed; still an open
+  library item.
+- **Throttle.** Astra agreed pinning is not mandatory and supplied the PMP
+  structure that makes saturation expected here: with free terminal mass
+  the mass costate satisfies lam_m(t_f) = 0 and lam_m' = -T q |lam_v|/m^2,
+  so lam_m >= 0 and the throttle coefficient in H is strictly negative away
+  from a zero primer -- q = 1. On the 1e-3 gate: defensible as an explicitly
+  approximate SEED-COMPATIBILITY screen backed by the all-burn shoot and
+  the certificate; not a proof of saturation. What it cannot catch: a
+  sustained 0.1% under-throttle, overshoot above one, deviation between
+  stations, malformed values hidden by a min. Applied: the throttle is now
+  checked on BOTH sides (min below 1 - tol and max above 1 + tol refuse)
+  over nodes and midpoints, and the history must be finite. Its suggested
+  time-weighted integrated deficit is recorded as a better statistic for
+  the certifier, not built here.
+
+### The partial fixes, completed
+
+- **Poolless policy.** The script's `fenced` degrades without a pool, but
+  `certify_root` asserts unless `.allowUnfenced`; a poolless run would have
+  aborted at section 6 after an hour. Now `num.allowUnfenced` (default
+  false) is an explicit section-0 policy: without a pool the ladder and hunt
+  run unfenced and say so, and certification is recorded as "not certified:
+  no parallel pool" instead of throwing.
+- **`run_capped` returns ok = false for a timeout OR a worker error.** I
+  had labelled that "timeout". Now "fence: timed out or worker errored".
+- **One deadline per rung.** Remaining budget is recomputed before the
+  shoot and before the witness; no stage starts with under 10 s left; the
+  +90 s cancellation grace is separate from the work budget.
+- **No re-propagation on the ladder.** K and the normalized grid are the
+  same rung to rung, so the banked starts ARE the next seed: grid scaled to
+  the guess, mass row rebuilt. The 120 s fenced reconstruction per rung is
+  gone, and so is the interpolation that perturbed converged junctions.
+  `flyFromJunctions` stays for the hunt, which needs dense samples; its
+  seam rule now keeps the BANKED start of the next segment (so a resample
+  at a junction recovers it exactly), validates its inputs and segments,
+  and returns the worst seam mismatch in km rather than hiding it.
+- **`directOK` fails closed.** Required diagnostics default to NaN, not 0;
+  the state array must be finite; the throttle history must be finite.
+- **H3 has three states.** NOT APPLICABLE in plain time (kept out of the
+  pass count), PASS/FAIL in the Sundman chart where a missing or non-finite
+  lambda_t, or a mapping flag that is not true, FAILS. Missing evidence is
+  never read as agreement.
+- **The hunt tracks solver-converged, accepted and harvested apart.** An
+  accepted direct solution whose multipliers did not come back keeps its
+  numbers (X, U, t_f) so "anchor it" stays possible; the summary prints all
+  four counts; a clearance-only refusal has its own reason.
+- **Per-exponent attempt records** (guess, outcome, residual, misses,
+  seconds) replace the aggregate counters; a rung that ran out of budget
+  is recorded as that.
+- **The reference carries its problem.** `ref` holds the orbits, cell,
+  engine and mass it belongs to; every "vs reference" line is silent
+  unless the live problem matches.
+- **B's outcome is decided after certification**: SUPPORTED means a
+  certified root at the target engine; "reached numerically" is its own
+  state; the initial engine is printed from the table, not hardcoded.
+- The Sundman re-solve now ENFORCES the node-radius agreement its comment
+  claimed; the Sundman claim about lambda_t says sign and scale, not
+  station association; the record is value-only (no pool handle) and
+  carries the whole configuration and tolerances; the first rung's throttle
+  slack and the worst accepted-rung slack are printed; misses are printed in
+  scientific notation where "0.0 km" hid the resolution; the header no
+  longer says every mesh converges, "revolutions" or "winding wall".
+
+### Not applied
+
+Astra's time-weighted throttle deficit and complementarity comparison
+belong in the certifier, not a study script. Its per-exponent record is
+in; a separate per-stage timing breakdown is not.
+
+**Smoke after round 2 (R2026a, reduced settings):** lottery 2/2, 2 clusters,
+A SUPPORTED; direct ladder 3/3 with the first rung's slack now printed
+(6.4e-7) and the worst slack 6.4e-7 against the 1e-3 gate; Sundman re-solve
+within 6.1e-7 in t_f and 4 km in node radius; H2/H3 PASS with the mapping's
+flag true; H1 6.3e-13; indirect 2/2 with the worst accepted flown miss
+8.4e-8 km printed in full; certified, polish moved t_f by 0 (the walk's root
+was already at the polish target) and the grid rescaled with it; hunt: 1
+attempted / 1 solver-converged / 1 accepted / 1 harvested, seam mismatch
+5.2e-9 km on the re-flown source. Full default run relaunched.

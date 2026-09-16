@@ -4875,3 +4875,133 @@ All three are real gaps between "measured under this refinement" and
 "bounded". They are studies, not fixes, and each is a half-day. Recorded
 as open; the script's existing text already says the lift margin is a
 measured sensitivity and not a proven rank separation.
+
+## 75. Where the first root comes from: the cold lottery, two ladders, and the winding wall at the anchor cell (2026-09-15)
+
+`indirect/root_origins_study.m` is the prequel to `anchor_study.m`. That script
+starts from a certified root of a neighbouring transfer; this one starts from
+nothing and measures the three mechanisms that make a first root: a cold solve
+where the problem is easy, a ladder down the engine axis, and a branch-blind
+basin hunt. Full default run: ~50 min under R2026a, log kept as
+`origins_run6` in the session scratchpad, record
+`indirect/results/root_origins_study.mat`.
+
+**Provenance stated honestly at the top of the script.** The very first
+DRO->tulip root on this machine was not built here: it arrived with
+pumpkynPie as a converged indirect solution of exactly this cell (Darin's
+walk-down), and it is the "reference" every early table is quoted against.
+Everything in this script is the route for the cells that got no gift.
+
+### The cold lottery, reproduced at the operating point
+
+Same solver, same scheme, same t_f guess (4.0 ND); only the mesh changes.
+70 mN / Isp 900 s / 150 kg, sD 0, sA 0.0754, unconstrained (as the 2026-08-03
+record was). Reference: 4.0152 ND = 17.798 d.
+
+| N | t_f (ND) | vs reference | periselene | status |
+|---|---|---|---|---|
+| 400 | 4.6809 | +16.6% | 6563 km | converged |
+| 800 | 4.9909 | +24.3% | 2243 km | Maximum_Iterations_Exceeded |
+| 1600 | 6.4126 | +59.7% | 1995 km | converged |
+
+Spread 37.0%, two distinct basins at a 2% threshold, none of them the
+campaign's root. This is the same phenomenon as the 2026-08-03 table
+(4.38 / 4.45 / 4.78) with a wider spread; the conclusion is unchanged and now
+reproducible from one script.
+
+### The direct ladder, and a basin jump that looked perfect
+
+15 -> 0.5 N at Isp 1710 s, 11 rungs, N = 800. t_f grew 0.432 -> 3.358 d and
+dV fell 4.2204 -> 0.9960 km/s. The inter-rung guess `tf <- tf*(Tprev/T)^0.6`
+predicted every rung to **1%** (printed rung by rung).
+
+**A coarse rung set jumps basins, and nothing in the solver output says so.**
+The first version of the ladder used [15 10 5 2 1 0.5] (ratios down to 0.4).
+The 1 -> 0.5 N step returned a converged solution with defect 3.9e-14, safe
+periselene and |u| = 1: **t_f 54.655 d, dV 46.8075 km/s -- 16x its own guess,
+94% of the mass burned, a different winding number.** The ladder accepted it
+and the handoff then ground on a 54-day many-revolution trajectory with ode45
+tolerance failures.
+
+The fix is the campaign's own `preflight_screen` rule, now in the script: a
+rung is REFUSED if its t_f leaves [1/3, 3] x the guess that produced it. Two
+details matter. The band applies to a STEP only -- the top rung's guess is a
+cold round number with no branch behind it, and at 15 N the true answer is 41x
+below it (the first version of the screen refused the 15 N rung and killed the
+run). And a basin jump is a statement about the STEP, not the problem: the
+remedy is a finer ratio, never a looser gate. The shipped rung set steps by
+about 0.75 and does not jump.
+
+### The seam: harvest with lambda_t exposed
+
+The ladder runs in plain time, as the shipped catalog did. Under Sundman the
+defect system carries the time state, so the multipliers carry one more row --
+lambda_t, which PMP fixes at +1 when the objective is t_f. That row is a free
+check on station association, sign and scale together, and it does not exist
+without Sundman. The script re-solves the bottom rung ONCE in the Sundman
+chart and harvests from that: **sign vote 100.0%, lambda_t = 1.000000**,
+shooting |R| 4.59e-12 in ONE iteration.
+
+### The indirect ladder, and the wall at THIS cell
+
+Below ~0.5 N the walk continues by multiple shooting on banked junction
+states. 0.375 -> 0.12 N at Isp 1710 (7 rungs), then the Isp stage 1710 ->
+1400 -> 1150 -> 900 at fixed 0.12 N (3 rungs, **4 seconds total**, t_f falling
+11.119 -> 10.606 d), then 0.11 and 0.10 N both REFUSE.
+
+| route | deepest closed | wall |
+|---|---|---|
+| thrust only, Isp 1710 throughout, ratios ~0.5 | 0.16 N | 0.12 N |
+| thrust only, Isp 1710 throughout, ratios ~0.85 | 0.12 N | 0.105 N |
+| ratios ~0.85 + Isp stage at 0.12 N | 0.12 N (Isp 900) | 0.11 N |
+| *campaign, from the FASTEST 0.5 N cell* | *0.09 N* | *0.067 N* |
+
+Two findings. **A finer rung ratio buys real depth** (0.16 -> 0.12 N), because
+a jump is a step property. **The Isp stage is free and helps but does not move
+this wall**: it drops t_f 4.6% at fixed thrust in 4 s (faster depletion, a
+lighter vehicle, more late-arc acceleration) and the next thrust rung still
+refuses. Revolutions climb 0.81 -> 1.31 across the walk: this is a WINDING
+wall, and **its depth is a property of the CELL**. The anchor phase walls near
+0.11 N; the campaign reached 0.09 N because it started the deep walk from the
+fastest 0.5 N entry of the sheet. Where you start the deep walk is a choice,
+not a detail.
+
+The root at 0.12 N / Isp 900 s **certifies**: t_f 10.6060 d, flown miss
+0.000 km / 0.000 m/s, conjugate PASS, lift margin 32542x. B2 (target engine
+reached) is reported FAIL and does NOT throw -- a wall is a finding, and
+section 6 prints what was and was not demonstrated.
+
+### The basin hunt, demonstrated live
+
+From the 0.12 N root at sA 0.0754, warm-starting the DIRECT solver at three
+other arrival phases:
+
+| sA | t_f | vs source | reading |
+|---|---|---|---|
+| 0.3254 | 11.240 d | +6.0% | another basin, slower |
+| 0.5754 | 9.081 d | **-14.4%** | **another basin, and FASTER** |
+| 0.7837 | 10.411 d | -1.8% | same basin, continued |
+
+Two of three landed in another basin and one came back 14% faster than the
+family it was seeded from. That is the move that found fast2, direct18 and
+direct11 (sections 61, 63, 68), reproduced from a cold start in one run.
+
+### Two latent bugs found on the way
+
+- **certify_root could not run without the Parallel Computing Toolbox.** It
+  built its pool as `d('pool', gcp('nocreate'))`; MATLAB evaluates arguments
+  eagerly, so gcp ran even when the caller had already passed a pool -- and
+  gcp THROWS when PCT is absent or its licence is held by another MATLAB
+  session on this machine. The desktop session is enough to take the seat,
+  and then every `matlab -batch` job here loses certification at its first
+  call. `verify_with_pumpkyn` had documented the eager half and still called
+  gcp unguarded on the other branch. New `costate_common/current_pool` returns
+  the open pool or [] without throwing; certify_root, verify_with_pumpkyn and
+  second_order_pass route through it, certify_root honours an explicit
+  `.pool = []` (which is what capped_pool returns and which means UNFENCED),
+  and capped_pool no longer dies if a pool cannot be opened. Note for the
+  record: **R2025b has no Parallel Computing licence here; R2026a does**, and
+  the campaign launchers already point at R2026a.
+- **fine_sheet_job's candidate counter shadowed its certified-column count**,
+  so the verdict line reported the last column's candidate count. Fixed with
+  the loop's own names (and the loop variable renamed off `j`).

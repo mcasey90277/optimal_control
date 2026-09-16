@@ -345,6 +345,189 @@ re-solved at exactly that level before certification --- never interpolated.
 \end{rig}
 
 %=========================================================================
+\section{The first root of all}\label{sec:first}
+%=========================================================================
+
+\begin{eli}
+Every one of the three constructions above needs something that already
+exists: a solve to harvest, a root to re-cut, a previous answer to nudge. So
+where does the very first one come from, when the drawer is empty?
+
+Two honest answers. For this campaign, it was a gift: a converged
+DRO$\to$tulip transfer arrived with \file{pumpkynPie}, and it is the
+``reference'' every early measurement is quoted against. For every other
+cell, thrust and orbit pair --- which is almost everything --- you have to
+make one. You do that by solving an easier problem first, then slowly
+changing the problem into the one you wanted.
+\end{eli}
+
+\subsection{Why you cannot simply solve it cold}
+
+\begin{intu}
+The direct method does not need a seed at all. Hand it the two endpoints, a
+guess at $\tf$ and a mesh, and it will build its own crude starting
+trajectory and converge. The trouble is not whether it converges; it is
+\emph{what it converges to}. Minimum-time extremals of this problem come in
+families, and a cold solve lands in whichever basin its own discretisation
+happens to sit near. Nothing in the solver's output distinguishes a good
+basin from a bad one: the defects are tiny either way.
+\end{intu}
+
+\begin{rig}
+Measured at the campaign's own operating point --- DRO $\tau=1$ to a 7-petal
+tulip, $\sD=0$, $\sA=0.0754$, 70\,mN, $I_{sp}=900$\,s, 150\,kg --- with the
+identical solver, scheme and $\tf$ guess, varying nothing but the mesh:
+
+\begin{center}\small
+\begin{tabular}{@{}rrrrl@{}}
+\toprule
+$N$ & $\tf$ (ND) & vs.\ reference & periselene (km) & status \\
+\midrule
+\multicolumn{5}{@{}l@{}}{\emph{2026-08-03, unconstrained}}\\
+400  & 4.3807 & $+9.1\%$  & 4819 & converged \\
+800  & 4.4507 & $+10.8\%$ & $-343$ & converged, \textbf{inside the Moon} \\
+1600 & 4.7833 & $+19.1\%$ & 4680 & converged, 7.8\,m worst-interval error \\
+\midrule
+\multicolumn{5}{@{}l@{}}{\emph{2026-09-15, reproduced by \file{root\_origins\_study}}}\\
+400  & 4.6809 & $+16.6\%$ & 6563 & converged \\
+800  & 4.9909 & $+24.3\%$ & 2243 & iteration limit \\
+1600 & 6.4126 & $+59.7\%$ & 1995 & converged \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\noindent
+The reference is $\tf = 4.0152$\,ND $= 17.798$\,d. The 2026-08-03 $N=1600$ row
+is the decisive one: a genuinely accurate, physical, lunar-safe minimum-time
+extremal that is 19\% slower than the reference. \textbf{The accuracy
+machinery works cold; basin selection does not.} Mesh density acts as a de
+facto random seed. That is why seeding or continuation is required equipment
+on a catalog pair rather than a convenience.
+\end{rig}
+
+\subsection{The ladder}
+
+\begin{eli}
+Start where the problem is easy and make it hard one small step at a time,
+carrying the answer with you. At 15\,N the transfer is nearly impulsive and
+takes half a day; the solver finds it cold in seconds. Turn the thrust down a
+little, start from the answer you just got, solve again. Repeat until the
+engine is the one you actually have.
+\end{eli}
+
+\begin{intu}
+The ladder is continuation along the engine axis instead of the phase axis,
+and the two halves of it are not the same machine.
+
+Down to about 0.5\,N each rung is a fresh \emph{direct} solve warm-started
+from the previous rung's discrete trajectory. Below that the arc winds more,
+the mesh must resolve more revolutions, and the collocation basin narrows;
+the walk continues in the \emph{indirect} chart, where each rung re-cuts the
+previous rung's flown PMP trajectory onto a new $\tf$, rebuilds the mass row
+from the all-burn law for the new engine, and solves \file{ms\_tfmin}. Each
+of $K$ short segments is far less sensitive than one long shot, which is why
+shooting survives where the NLP does not.
+
+The seam between the two halves is exactly the covector harvest of
+\S\ref{sec:three}(1). It is the only place in the whole chain where costates
+come into existence.
+\end{intu}
+
+\begin{rig}
+Between rungs the next $\tf$ guess is $\tf \leftarrow \tf\,(T_{\text{prev}} /
+T)^{0.6}$, an empirical scaling for this band; measured 2026-09-15 it
+predicts the next rung to about 1\%. Isp is walked separately at fixed
+thrust, because it only changes the depletion rate. On the indirect half the
+exponent is \emph{swept} over $\{1.0, 1.3, 1.7, 2.2, 3.0\}$ and the fastest
+converged rung kept: past a winding wall the correct next solution has a
+different number of revolutions, and only a different exponent puts the guess
+in its basin.
+
+\textbf{Every rung must be screened against its own guess.} A rung that lands
+far from where the scaling predicted has left the branch, and seeding the
+next rung from it walks a different family down --- while looking perfect.
+Measured on this cell 2026-09-15, a single $1 \to 0.5$\,N step (ratio 0.5)
+returned a converged extremal with defect $4\times10^{-14}$, safe periselene,
+$\tf = 54.7$\,d and $\Delta V = 46.8$\,km/s: 16$\times$ its own guess, 94\% of
+the mass burned, a different winding number. The shipped catalog steps by
+about 0.75 per rung and \file{preflight\_screen} rejects anything outside
+$[0.3, 3]\times$ the guess. A basin jump is a statement about the \emph{step},
+not about the problem: the remedy is a finer ratio, never a looser gate.
+
+The recorded chain to 70\,mN: \file{thrust\_ladder\_library} 15\,N $\to$
+0.5\,N at $I_{sp}=1710$\,s (direct); \file{probe\_deep\_rungs} 0.5 $\to$
+0.09\,N (indirect), stalling at 0.067\,N on a basin/winding wall;
+\file{probe\_abstract\_case} $I_{sp}$ 1710 $\to$ 900\,s at 0.09\,N, then
+0.09 $\to$ 0.07\,N.
+\end{rig}
+
+\begin{rig}
+\textbf{How deep a walk gets is a property of the cell.} Four routes down the
+same axis, all measured 2026-09-15 at $\sD=0$, $\sA=0.0754$ except the last:
+
+\begin{center}\small
+\begin{tabular}{@{}lll@{}}
+\toprule
+route & deepest closed & wall \\
+\midrule
+thrust only, $I_{sp}=1710$, ratios $\sim$0.5 & 0.16\,N & 0.12\,N \\
+thrust only, $I_{sp}=1710$, ratios $\sim$0.85 & 0.12\,N & 0.105\,N \\
+ratios $\sim$0.85 $+$ $I_{sp}$ stage at 0.12\,N & 0.12\,N ($I_{sp}=900$) & 0.11\,N \\
+\emph{campaign, from the fastest 0.5\,N cell} & \emph{0.09\,N} & \emph{0.067\,N} \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\noindent
+A finer ratio buys real depth, because a jump is a property of the step. The
+$I_{sp}$ stage is cheap and helps --- three rungs in four seconds, $\tf$
+falling 4.6\% at fixed thrust --- but it does not move this wall. Revolutions
+climb $0.81 \to 1.31$ across the walk: it is a \emph{winding} wall, and the
+anchor phase meets it near 0.11\,N while the sheet's fastest 0.5\,N cell
+reaches 0.09\,N. Where you start the deep walk is a choice, not a detail.
+\end{rig}
+
+\subsection{The basin hunt}
+
+\begin{eli}
+Once you hold one root, you can go looking for the others. Ask the direct
+solver for a transfer to a \emph{different} arrival phase, starting from the
+trajectory you have. It does not know which family it came from, so it may
+hand back a different one --- sometimes a faster one.
+\end{eli}
+
+\begin{intu}
+A direct solve is \textbf{branch-blind}. This is a hazard whenever you assume
+the answer belongs to the family you seeded from, and a discovery tool the
+moment you stop assuming it. Solve where the known family looks slow, and
+read what comes back: a root faster than its seed is a new family worth
+anchoring. Four of the five families in the 70\,mN library were found exactly
+this way.
+\end{intu}
+
+\subsection{The study scripts}
+
+\begin{rig}
+Four scripts open the chain in order; each is runnable, computes its own
+gates and prints PASS/FAIL for every claim it makes.
+
+\begin{center}\small
+\begin{tabular}{@{}ll@{}}
+\toprule
+\file{root\_origins\_study} & where a root comes from when there is none:
+the cold lottery, \\
+ & both ladders, the harvest seam, the basin hunt \\
+\file{anchor\_study} & how a root becomes a seed and then a new root;
+five anchors \\
+\file{transfer\_study} & is that root a minimum? the gate stack, opened
+one gate at a time \\
+\file{run\_phase\_torus} & a whole library over a phase grid \\
+\bottomrule
+\end{tabular}
+\end{center}
+\end{rig}
+
+%=========================================================================
 \section{The route, end to end}\label{sec:route}
 %=========================================================================
 

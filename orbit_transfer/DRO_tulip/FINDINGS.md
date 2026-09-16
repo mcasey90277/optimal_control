@@ -4823,6 +4823,21 @@ against a threshold named in section 0 -- which also settles the
 convention Astra asked about: 1900 km is a MOON-CENTRE distance, a
 162.6 km altitude floor.
 
+*And the new gate immediately caught its own author.* The first version of
+N7 sliced `flight.Y(1:3, :)`, but `fly_transfer` returns the flight from
+`pumpkyn.cr3bp.tfMinProp` as `[nTimes x 14]` -- times down the rows -- so it
+measured the distance between the first three TIME SAMPLES and reported a
+comfortable 332,999 km PASS at `t/t_f = 0.000`. The implausible location,
+not the implausible number, is what gave it away: a lunar transfer's
+closest approach is not at departure. Corrected to `flight.Y(:, 1:3)`, the
+gate reads **6410.6 km from the Moon's centre at t/t_f = 0.999** (altitude
+4673.2 km, margin +4510.6 km), which is the tulip end, where it belongs.
+The lesson is the review's own: a gate that computes the wrong quantity
+passes just as loudly as one that computes the right one, so every new
+gate needs a number whose PLAUSIBILITY can be judged, not merely its
+verdict. On the shipped anchor the whole script now reports 14 of 14 gates
+passed, `studyOK = true`.
+
 *Gate inputs are validated before they are compared.* A negative
 "absolute" residual satisfies `< tol` and a NaN count makes `> 0` false;
 either would let a broken instrument print PASS. Every scalar the

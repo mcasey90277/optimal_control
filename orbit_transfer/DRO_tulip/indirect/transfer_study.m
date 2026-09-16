@@ -373,7 +373,12 @@ fprintf('   N6 min principle  |gap|     %9.2e / %-9.0e  %s   (signed %+.1e..%+.1
 %     in section 0. The admissibility flag enforces the library's default;
 %     this line says what the number is and which convention it is in
 %     (Astra review 2026-09-15).
-dMoonKm = lStar * vecnorm(flight.Y(1:3, :) - [1 - muStar; 0; 0], 2, 1);
+% fly_transfer's Y comes from pumpkyn.cr3bp.tfMinProp, which returns
+% [nTimes x 14] -- TIMES down the rows, components across. Slicing it the
+% other way silently measures the distance between the first three time
+% SAMPLES and passes with a huge number (caught on the first run of this
+% gate, 2026-09-15: it reported 332,999 km at t/t_f = 0).
+dMoonKm = lStar * vecnorm(flight.Y(:, 1:3) - [1 - muStar, 0, 0], 2, 2).';
 [dMin, iMin] = min(dMoonKm);
 n7 = dMin >= tol.clearKm;
 fprintf(['   N7 lunar clear    min d     %9.1f / %-9.1f  %s   (Moon CENTRE distance, km; at t/t_f = %.3f; ' ...

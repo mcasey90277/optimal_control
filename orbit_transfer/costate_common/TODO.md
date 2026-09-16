@@ -1,5 +1,106 @@
 # costate_common — TODO
 
+## Cleanup plan (2026-09-16), easiest to hardest
+
+Measured state and the reasons for each step are in `README.md` → *State of
+the folder*. Steps 1–9 change no numerical result and need no decision; steps
+10–13 depend on step 0. Each step names the gate that says it is done.
+
+- [ ] **0. Two decisions (Mike).** (a) The admission rule: keep *used by two
+  campaigns*, or change it to *generic by construction, with a test* — this
+  decides whether the 36 DRO_tulip-only files belong here. (b) Where job
+  control lives: a sibling shared folder (proposal:
+  `orbit_transfer/campaign_common/`) or here.
+
+**A. Documentation and style — no behaviour change**
+
+- [x] **1. README reflects the folder** — DONE 2026-09-16 (all 61 files in
+  layers with measured consumers; tests classified; conventions with their
+  current violations).
+- [ ] **2. Regenerate `../doc/library_catalog.md`** (dates from 2026-09-11,
+  predates 17 files): `python3 orbit_transfer/doc/gen_library_catalog.py`.
+  Minutes.
+- [ ] **3. Fix the junction contract text.** Headers that describe
+  `info.Y` from `ms_bvp`/`ms_tfmin` as K+1 columns: it is the K junction
+  STARTS with K+1 times, and seeds are read in columns 1..K (verified by
+  Astra round 2, FINDINGS 77). Comments only. Gate: Code Analyzer output
+  message-for-message unchanged. Under an hour.
+- [ ] **4. House-style pass.** Remove the 21 `%#ok` pragma lines in 7 files
+  and 2 tests (mostly `AGROW`; 7 in `conj_resolve`) — preallocate where it is
+  cheap, otherwise just drop the suppression; rename `j` loop variables in
+  `test_conj_spectrum`, `test_huber_saltation`, `test_sheet_to_catalog_file`;
+  convert the 4 `% INPUTS:` headers (`conj_catalog_pass`, `gates_catalog_pass`,
+  `ms_tfmin`, `rib_targets`) to `%% Purpose`. Gate: Code Analyzer diff shows
+  only the removed suppressions; the touched tests pass. An hour or two.
+
+**B. Small removals and moves — one consumer each**
+
+- [ ] **5. Retire unused code.** `conjugate_pole_predict` and its test: no
+  production caller, and the 2026-09-10 chain review asked that it leave the
+  certification path — move to a diagnostics folder or delete (git keeps it).
+  `cr3bp_field`: test-only (`test_arclength_arrival`'s oracle) — make it a
+  test helper, UNLESS the deferred Hermite `periodic_pp` item above is
+  scheduled, which would use it. Gate: no remaining code reference; the
+  test passes. Under an hour.
+- [ ] **6. Move `rib_targets` to `DRO_tulip/indirect`** (its only caller is
+  the rib walker), with `test_phase_lists`, which also tests DRO_tulip code.
+  Gate: `test_phase_lists` from its new home. Under an hour.
+- [ ] **7. Move the 16 campaign-only tests** to `DRO_tulip/indirect/tests`
+  (15) and `GTO_tulip` (1): the list is in the README. Check each one's path
+  bootstrap, many resolve paths relative to this folder. Gate: every moved
+  test run once from its new home. Half a day.
+
+**C. Cut the library's dependency on DRO_tulip**
+
+- [ ] **8. Make `golden_cells` self-contained.** Its harvest cell loads
+  `DRO_tulip/direct/results/dsweep_12x12_cells.mat` (20 MB, gitignored), so
+  the regression cannot run from a fresh clone; it also adds
+  `DRO_tulip/indirect` to the path. Copy the cell's inputs into the committed
+  `golden_cells_data.mat` and drop the path. Gate: 20/20 with identical
+  numbers, run with `DRO_tulip` OFF the path. Half a day.
+- [ ] **9. Bring `ladder_endpoints` here** (85 lines; needs only
+  `get_family_orbit` and pumpkyn getters) with `test_ladder_endpoints`, and
+  remove `second_order_pass`'s `DRO_tulip/indirect` addpath. DRO_tulip callers
+  already have this folder on their path. Gate: both tests pass, and
+  `grep DRO_tulip costate_common/*.m` finds comments only. Half a day.
+- [ ] **10. Tests for the untested core, BEFORE steps 11–12** so the moves
+  have a net: `harvest_ms_seed` (real duals from `golden_cells_data`),
+  `run_capped` (timeout vs worker error), `flown_control_error`,
+  `true_min_altitude`, `preflight_screen`, `newton_fixed_q`,
+  `survey_family_bounds`. A day.
+
+**D. Structural moves — each needs a campaign-level reproduction, not only unit tests**
+
+- [ ] **11. Split out campaign orchestration** (depends on 0b): `work_queue`,
+  `campaign_worker`, `unit_lock`, `publish_atomic`, `walk_checkpoint`,
+  `campaign_heartbeat`, `campaign_status`, `safe_report`, `fmt_num`. The
+  execution fences (`run_capped`, `capped_pool`, `current_pool`) STAY: the
+  certifier needs them. Every consumer is DRO_tulip, but generated finalize
+  jobs embed their code roots (`run_costate_library`) and the batch
+  launchers add paths. Gate: `test_campaign_processes`, `test_work_queue`, then
+  a small `run_phase_torus` acceptance run (the torus3b size) to a fixed
+  point. A day.
+- [ ] **12. Bring the shared thrust ladder here** (depends on 0a):
+  `DRO_tulip/indirect/thrust_ladder_library` with its DRO_tulip closure
+  `casadi_mintime_dro`, `certify_dro_mintime`, `dro_residual` — 4 files,
+  1,291 lines — called by HALO, DPO, HALO_HALO and GTO, which then stop
+  adding `DRO_tulip` to their paths (runners and batched shell drivers).
+  Gate, per the 2026-07-26 lesson that fast tests passed while a moved
+  campaign was broken: `golden_cells` 20/20 AND re-solving one stored catalog
+  cell per campaign (HALO, DPO, HALO_HALO) and matching its entry. Days.
+
+**E. Rule-gated**
+
+- [ ] **13. Promote the problem-agnostic engines to `../../oclib/+oc`:**
+  `ms_bvp` and `ms_conjugate_test` first (named "next" below since
+  2026-08-09), then `arclength_ms`, `newton_fixed_q`, `conj_resolve`,
+  `lift_space_dim`. Blocked by `oclib`'s admission rule, not by effort: each
+  needs a second TOP-LEVEL consumer (the planned cart-pole PMP-BVP demo, or
+  booster_landing) and an equivalence gate, with a delegate left here as for
+  `duals_to_costates`. Days, after a consumer exists.
+
+---
+
 - [ ] **DEFERRED, with the measurement: a Hermite scheme for `periodic_pp`**
   (asked 2026-09-11 — is a choice of interpolant TYPE worth an option?).
   Measured first, on the tau = 1 DRO (105 samples) and the 7-petal tulip

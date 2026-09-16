@@ -190,7 +190,7 @@ arcFiles = {};
 for k = 1:size(anchors, 1)
     for direction = [-1, +1]
         nm = sprintf('%s_%s', anchors{k,1}, pick(direction < 0, 'dn', 'up'));
-        f  = fullfile(resDir, sprintf('arrival_arc_%s_long.mat', nm));
+        f  = fullfile(arcDirUsed, sprintf('arrival_arc_%s_long.mat', nm));
         arcFiles{end+1} = f; %#ok<SAGROW>
         if ~run.arcs
             fprintf('2. arc %-10s %s\n', nm, pick(isfile(f), 'reused', 'MISSING (run.arcs is off)'));
@@ -200,7 +200,7 @@ for k = 1:size(anchors, 1)
         [~, anc] = arclength_arrival('setup', so);
         ao = so;  ao.direction = direction;  ao.sAStop = anchors{k,3} + direction*arc.span;
         ao.levels = arc.levels;  ao.nStep = arc.nStep;  ao.deadlineSec = arc.deadlineSec;
-        ao.logFile = fullfile(resDir, sprintf('arrival_arc_%s_long.log', nm));
+        ao.logFile = fullfile(arcDirUsed, sprintf('arrival_arc_%s_long.log', nm));
         A = arclength_arrival(anc, ao);
         save(f, 'A', '-v7.3');
         fprintf('2. arc %-10s %d roots, sA %.4f -> %.4f, %d folds, %d crossings, stop = %s\n', ...
@@ -208,7 +208,7 @@ for k = 1:size(anchors, 1)
     end
 end
 if needAnchors
-    assert(any(cellfun(@isfile, arcFiles)), 'no arrival arcs in %s: turn run.arcs on', resDir);
+    assert(any(cellfun(@isfile, arcFiles)), 'no arrival arcs in %s: turn run.arcs on', arcDirUsed);
 end
 
 %% ========================================================================

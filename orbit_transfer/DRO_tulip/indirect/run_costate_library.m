@@ -271,6 +271,10 @@ if isfield(S, 'problem') && isfield(S.problem, 'sD')
            'the sheet was certified at departure phase %.6f, but .sD starts at %.6f', S.problem.sD, sD(1));
 end
 cols = find(isfinite(S.TF));
+if nPts == 0                                 % ONE departure phase: the sheet is the library, nothing to walk
+    cols = [];
+    fprintf('   one departure phase (%.4f): no ribs; the certified sheet is packaged as it is\n', sD(1));
+end
 onlyA = d('onlyA', []);
 foreignPat = d('foreignPattern', 'fine_ribs_range_job');
 if ~isempty(onlyA)
@@ -313,7 +317,7 @@ ribList = arrayfun(ribOut, cols, 'UniformOutput', false);
 policy = struct('staleSec', staleSec, 'maxAtt', maxAtt, 'hangSec', hangSec);
 codeRoots = {here, fullfile(fileparts(fileparts(here)), 'costate_common')};
 ribSpec = @(j) struct('nPts', nPts, 'col', j, 'sA', S.sA(j), 'sD', sD, 'problem', S.problem);
-if on('ribs')
+if on('ribs') && nPts > 0
     % EXISTING OUTPUTS ARE VALIDATED BEFORE THE QUEUE CAN CALL THEM DONE.
     % A file with the right name from another grid, another problem, or a
     % save that died half-way would otherwise be "done" to the queue and
@@ -352,7 +356,21 @@ if on('ribs')
     % when every column is published runs the finalize job -- this same
     % function with the packaging stages on -- exactly once.
     finJob = fullfile(outDir, 'finalize_job.m');
-    writeFinalizeJob(finJob, outDir, nD, nA, sA0, codeRoots, policy, d('extraRibFiles', {}));
+    % THE FINALIZER MUST REPRODUCE THIS CALL, not a lattice approximation of
+    % it: the phase LISTS, the engine, the orbits, the arc folder and
+    % pattern, the seed files and the rib budget all travel with it. Passing
+    % only (outDir, nD, nA, sA0) silently rebuilt a lattice grid with default
+    % physics from the DEFAULT arc folder -- which globbed another campaign's
+    % arcs and then could not find its own (caught by the 3 x 3 acceptance
+    % torus, 2026-09-15; Astra's finding 2 in a second guise).
+    finSpec = struct('outDir', outDir, 'sD', sD, 'sA', sA, ...
+        'thrustN', engine.thrustN, 'ispS', engine.ispS, 'm0kg', engine.m0kg, ...
+        'tauDRO', orbits.tauDRO, 'NpTulip', orbits.NpTulip, 'pmTulip', orbits.pmTulip, ...
+        'arcDir', d('arcDir', fullfile(here, 'results')), 'arcPattern', d('arcPattern', 'arrival_arc_*.mat'), ...
+        'librarySeeds', d('librarySeeds', true), 'ribWallSec', d('ribWallSec', 900), ...
+        'seedFiles', {d('seedFiles', {})}, 'extraRibFiles', {d('extraRibFiles', {})}, ...
+        'maxAtt', policy.maxAtt, 'staleSec', policy.staleSec, 'hangSec', policy.hangSec, 'launch', false);
+    writeFinalizeJob(finJob, finSpec, codeRoots);
     supervisor = fullfile(codeRoots{2}, 'campaign_supervisor.sh');
     out.cmd = strjoin({'nohup', shq(supervisor), shq(jobFile), num2str(nWorkers), ...
                        num2str(round(hangSec)), shq(outDir), shq(out.queue), num2str(maxAtt), shq(finJob), ...
@@ -607,14 +625,16 @@ function checkPhaseList(v, name)
 % CHECKPHASELIST  A phase list is at least two phases in [0,1), strictly
 % increasing and distinct; say what is wrong by name.  INPUTS: v; name.
 % OUTPUTS: none.
-assert(numel(v) >= 2, 'run_costate_library:grid', '%s grid needs at least two phases', name);
+assert(numel(v) >= 1, 'run_costate_library:grid', '%s grid needs at least one phase', name);
 assert(all(v >= 0 & v < 1), 'run_costate_library:grid', '%s phases must lie in [0, 1)', name);
-assert(all(diff(v) > 1e-9), 'run_costate_library:grid', ...
-       '%s phases must be strictly increasing and distinct', name);
-% the resolution contract shared by every mod-1 matcher underneath (1e-6):
-% two phases closer than 1e-5 of a period could not be told apart
-assert(min([diff(v), 1 - (v(end) - v(1))]) > 1e-5, 'run_costate_library:grid', ...
-       '%s phases closer than 1e-5 of a period cannot be resolved by the sheet and rib matchers', name);
+if numel(v) >= 2
+    assert(all(diff(v) > 1e-9), 'run_costate_library:grid', ...
+           '%s phases must be strictly increasing and distinct', name);
+    % the resolution contract shared by every mod-1 matcher underneath (1e-6):
+    % two phases closer than 1e-5 of a period could not be told apart
+    assert(min([diff(v), 1 - (v(end) - v(1))]) > 1e-5, 'run_costate_library:grid', ...
+           '%s phases closer than 1e-5 of a period cannot be resolved by the sheet and rib matchers', name);
+end
 end
 
 % ------------------------------------------------------------------------
@@ -630,32 +650,53 @@ end
 end
 
 % ------------------------------------------------------------------------
-function writeFinalizeJob(jobFile, outDir, nD, nA, sA0, codeRoots, policy, extraRibs)
+function writeFinalizeJob(jobFile, finSpec, codeRoots)
 % WRITEFINALIZEJOB  The job the supervisor runs once every column is
-% published: this function again, with only the packaging stages on, on
-% the same directory and grid. It exits non-zero unless it packaged.
-% INPUTS: jobFile; outDir; nD; nA; sA0; codeRoots; policy; extraRibs cellstr.
-% OUTPUTS: none.
+% published: this function again, with only the packaging stages on, on the
+% same directory, the same grid LISTS, the same physics and the same arc
+% folder. It exits non-zero unless it packaged.
+% INPUTS: jobFile; finSpec (every setting the call must reproduce);
+% codeRoots cellstr.  OUTPUTS: none.
 roots = strjoin(cellfun(@mlq, codeRoots, 'UniformOutput', false), ', ');
-if ischar(extraRibs), extraRibs = {extraRibs}; end
-% DOUBLE braces: struct('f', {a, b}) builds a struct ARRAY; struct('f', {{a, b}})
-% stores the cell (the round-3 finalizer failed on exactly this)
-extraLit = ['{{' strjoin(cellfun(@mlq, extraRibs(:).', 'UniformOutput', false), ', ') '}}'];
 txt = sprintf([ ...
  '%%%% FINALIZE_JOB  Package, audit and sweep the library. Written by run_costate_library.\n' ...
  'here = pwd; cd(''/Users/msc/Desktop/proj7/external/pumpkynPie''); startup(); cd(here);\n' ...
  'addpath(%s);\n' ...
- 'out = run_costate_library(struct(''outDir'', %s, ''nD'', %d, ''nA'', %d, ''sA0'', %.10g, ...\n' ...
- '    ''maxAtt'', %d, ''staleSec'', %d, ''hangSec'', %d, ''launch'', false, ''extraRibFiles'', %s, ...\n' ...
- '    ''run'', struct(''sheet'', false, ''ribs'', true, ''package'', true, ''audit'', true, ''sweep'', true)));\n' ...
+ 'spec = %s;\n' ...
+ 'spec.run = struct(''sheet'', false, ''ribs'', true, ''package'', true, ''audit'', true, ''sweep'', true);\n' ...
+ 'out = run_costate_library(spec);\n' ...
  'fprintf(''FINALIZE: state %%s\\n'', out.state);\n' ...
  'if ~strcmp(out.state, ''packaged''), error(''finalize_job:notPackaged'', ''state %%s: %%s'', out.state, strjoin(out.blockers, '' | '')); end\n'], ...
- roots, mlq(outDir), nD, nA, sA0, policy.maxAtt, policy.staleSec, policy.hangSec, extraLit);
+ roots, structLit(finSpec));
 tmp = sprintf('%s.%s.part', jobFile, char(java.util.UUID.randomUUID()));
 fid = fopen(tmp, 'w');
 assert(fid >= 0, 'run_costate_library:job', 'cannot write %s', tmp);
 fprintf(fid, '%s', txt);  fclose(fid);
 publish_atomic(tmp, jobFile);
+end
+
+% ------------------------------------------------------------------------
+function t = structLit(S)
+% STRUCTLIT  A struct of simple values as MATLAB source: numeric scalars and
+% vectors at full precision, char as a quoted literal, logicals as
+% true/false, cellstr as a CELL inside braces (struct('f', {{...}}) stores
+% the cell; struct('f', {...}) would build a struct ARRAY -- the bug that
+% broke round 3's finalizer, 2026-09-14).
+% INPUTS: S struct.  OUTPUTS: t char.
+fn = fieldnames(S);
+parts = cell(1, numel(fn));
+for k = 1:numel(fn)
+    f = fn(k);
+    v = S.(f{1});
+    if ischar(v),            lit = mlq(v);
+    elseif islogical(v),     lit = tern(v, 'true', 'false');
+    elseif isnumeric(v),     lit = mat2str(v, 17);
+    elseif iscell(v),        lit = ['{{' strjoin(cellfun(@mlq, v(:).', 'UniformOutput', false), ', ') '}}'];
+    else, error('run_costate_library:job', 'cannot write field .%s of class %s into a job', f{1}, class(v));
+    end
+    parts{k} = sprintf('''%s'', %s', f{1}, lit);
+end
+t = ['struct(' strjoin(parts, ', ') ')'];
 end
 
 % ------------------------------------------------------------------------

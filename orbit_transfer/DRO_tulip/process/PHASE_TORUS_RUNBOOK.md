@@ -39,8 +39,9 @@ Since 2026-09-15 the whole loop below is one entry script:
 
 ```matlab
 spec = struct('sD', [0 1/3 2/3], 'sA', sort(mod(0.0754 + (0:23)/24, 1)), ...   % any phases in [0,1)
-    'orbits', struct('tauDRO', 1, 'NpTulip', 7, 'pmTulip', -1), ...
-    'engine', struct('thrustN', 0.070, 'ispS', 900, 'm0kg', 150), ...
+    'departure', struct('family', 'dro', 'tau', 1.0), ...            % the DRO and its period (ND)
+    'arrival',   struct('family', 'tulip', 'Np', 7, 'pm', -1), ...    % the tulip: petals, branch (period locked by Np)
+    'engine',    struct('thrustN', 0.070, 'ispS', 900, 'm0kg', 150), ...
     'anchors', {{'anchor', 'results/mintime_70mN_anchor.mat', 0.0754, 'fast'}}, ...  % one certified root at sD(1)
     'outDir', 'results/my_torus', 'tag', 'mine', 'nWorkers', 4);
 run_phase_torus(setfield(spec, 'plan', true));   % prints round 1's plan, launches nothing

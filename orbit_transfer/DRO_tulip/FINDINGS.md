@@ -5134,3 +5134,32 @@ t_f; floor slack 4514 km; H2 100%, H3 lambda_t 1.000000 with the mapping's
 own check agreeing, H1 |R| 6.3e-13. Indirect 2/2. Certified at 0.375 N /
 1400 s from the FORWARDED options. Hunt: 1 candidate, 13.7% slower, banked.
 Full default run relaunched to refresh the record.
+
+**Addendum, first full run after the review.** The new throttle gate at
+`1 - u_min < 1e-6` refused the 15 N rung at N = 800 with `1 - u_min =
+1.30e-6` (N = 400 had given 6.4e-7 on the same rung; 5.8e-7 and 3.6e-8 lower
+down). That is interior-point bound slack at IPOPT's tol 1e-7, and it grows
+with problem size and wherever the switching function is small -- not a
+throttle dip, which would take u toward 0. The campaign's own
+`certify_dro_mintime` carries the same check as G6*, ADVISORY at 1 - 1e-6 and
+excluded from passAll, for the reason its comment gives: full throttle is an
+empirical property of the extremals found here, not a theorem. Gate set to
+1e-3 with that rationale in the tolerance block: above any barrier slack seen,
+three orders below any dip that would change the problem the shooting solver
+solves next. Rerun launched.
+
+**Full default run of the reviewed script (2026-09-16, R2026a, ~55 min).**
+Every number the pre-review run produced is reproduced: lottery 4.6809 /
+4.9909 (iterate, excluded) / 6.4126 ND; direct ladder 11/11 accepted with
+`1 - u_min` under the 1e-3 gate on every rung; handoff sign vote 100%,
+lambda_t 1.000000 with the mapping's own check agreeing, |R| 4.59e-12 in one
+iteration; indirect ladder 10 of 12 rungs accepted, 0.375 -> 0.12 N then the
+Isp stage, then 0.11 and 0.10 N refused. The new per-rung taxonomy says WHAT
+refused them: `unconverged 5` on each -- every exponent's shooting solve
+returned without converging, none timed out, none was skipped by the seed
+policy. So the stall is the shooting solver failing to converge from these
+seeds, not a budget artefact. Certified at 0.12 N / 900 s on the forwarded
+options: 10.6060 d, flown miss 0.000 km / 0.000 m/s, conjugate PASS. Hunt:
+three converged candidates, two faster than the source (14.4% at sA 0.5754,
+1.8% at 0.7837), banked as seeds; basin identity not claimed. Outcomes: A
+SUPPORTED, B PARTIAL (0.12 N of 0.07 N), C CANDIDATES.

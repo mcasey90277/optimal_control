@@ -173,6 +173,10 @@ num = struct('maxIter', 3000, 'maxCpuSec', 900, 'coldCpuSec', 1800, ...
 %% tolerances. ACCEPTANCE thresholds and SOLVE targets are different things
 %  and are kept apart: a solver is ASKED for more than the gate requires, so
 %  a solve that plateaus above its own target can still be inside the gate.
+%  On thrMin: an interior-point solver leaves a barrier slack on every bound
+%  -- measured 4e-8 .. 1.3e-6 at IPOPT tol 1e-7, and the first full run
+%  tripped a 1e-6 gate on the 15 N rung at N = 800 with 1.3e-6. A real
+%  switch takes the throttle to 0. The 1e-3 gate sits between.
 tol = struct( ...
     'closure',   1e-7,  ...  % orbit periodicity
     'seamDeriv', 1e-6,  ...  % interpolant derivative mismatch across s = 0
@@ -181,7 +185,7 @@ tol = struct( ...
     'tfSpread',  1e-8,  ...  % lifted-time continuity across the nodes
     'termErr',   1e-7,  ...  % terminal boundary residual
     'unit',      1e-8,  ...  % |u| = 1 on the solved directions
-    'thrMin',    1e-6,  ...  % 1 - throttle: the throttle is FREE, so saturation is CHECKED
+    'thrMin',    1e-3,  ...  % 1 - throttle: the throttle is FREE, so saturation is CHECKED (see above)
     'R',         1e-8,  ...  % multiple-shooting residual, inf-norm (acceptance)
     'Rsolve',    1e-11, ...  % what the shooting solver is ASKED for (tighter than the gate)
     'tfCluster', 0.02,  ...  % ND-relative spread within which two t_f are one cluster

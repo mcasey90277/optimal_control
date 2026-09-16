@@ -29,7 +29,8 @@ function varargout = arclength_arrival(arg, opts)
 %
 %  opts                     struct (optional)
 %   setup:  .thrustN [0.070] .ispS [900] .m0kg [150] .tauDRO [1] .NpTulip [7]
-%           .sD [0] departure phase, .anchorMat [results/mintime_70mN_anchor.mat]
+%           .sD [0] departure phase, .physicsOnly [false] (return B only, no
+%           anchor: for a problem that has no root yet), .anchorMat [results/mintime_70mN_anchor.mat]
 %           (root as z + it.Y, or best.z + best.it.Y), .sA0 [0.0754] the
 %           anchor's arrival phase, .K [from the anchor]
 %   arc:    .direction [+1] .sAStop [+inf forward / -inf reverse] (stop
@@ -100,6 +101,10 @@ if ischar(arg) && strcmp(arg, 'setup')
     sD = d('sD', 0);
     B.problem.sD = sD;
     B.rv0 = B.stateD(sD);
+    % PHYSICS ONLY: the orbits, the engine and the closures, no anchor -- for
+    % a caller making the first root of a NEW problem (anchor_by_direct_solve),
+    % which has no root of that problem to polish yet
+    if d('physicsOnly', false), varargout = {B, []};  return, end
 
     % the anchor: a certified rho = 1 root, re-normalised onto the sphere
     anchorMat = d('anchorMat', fullfile(here, 'results', 'mintime_70mN_anchor.mat'));

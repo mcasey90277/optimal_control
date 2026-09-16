@@ -14,11 +14,14 @@ try
                                    'out', fullfile(outDir, 'arrival_sheet_70mN_nA24.mat')));
     nc = nnz(isfinite(S.TF));
     fprintf('\nFINE SHEET: %d of %d arrival phases certified (coarse sheet had 11 of 12)\n', nc, numel(S.sA));
-    for j = 1:numel(S.sA)
-        c = S.cand{j};
-        if isfinite(S.TF(j)), tfs = sprintf('%8.4f d', S.TF(j)); else, tfs = '       - '; end
-        fprintf('  j %2d  sA %.4f  cand %2d  cert %2d  t_f %s\n', j, S.sA(j), numel(c), ...
-                nnz([c.ok]), tfs);
+    for jc = 1:numel(S.sA)                       % never `j`: it is sqrt(-1)
+        c = S.cand{jc};
+        % a column no arc crossed holds [] (a double), not an empty struct,
+        % so numel/[c.ok] must be guarded -- this print crashed the job
+        % TWICE on columns the sheet had already handled correctly
+        if isstruct(c), nCand = numel(c); nCert = nnz([c.ok]); else, nCand = 0; nCert = 0; end
+        if isfinite(S.TF(jc)), tfs = sprintf('%8.4f d', S.TF(jc)); else, tfs = '       - '; end
+        fprintf('  j %2d  sA %.4f  cand %2d  cert %2d  t_f %s\n', jc, S.sA(jc), nCand, nCert, tfs);
     end
     vtxt = sprintf('FINE SHEET DONE: %d of %d columns certified', nc, numel(S.sA));
 catch ME

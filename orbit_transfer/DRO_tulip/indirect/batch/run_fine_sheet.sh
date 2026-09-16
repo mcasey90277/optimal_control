@@ -1,5 +1,5 @@
 #!/bin/zsh
-# RUN_RESWEEP  Launch fine_sheet_job.m in a clean MATLAB -batch session under an
+# RUN_FINE_SHEET  Launch fine_sheet_job.m in a clean MATLAB -batch session under an
 # OS watchdog. Log to files only (matlab -batch buffers stdout). Completion is
 # results_fine/VERDICT.txt, never the log. Usage: nohup batch/run_resweep.sh &
 ROOT=/Users/msc/Desktop/optimal_control/orbit_transfer/DRO_tulip/indirect

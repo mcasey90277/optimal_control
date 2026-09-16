@@ -689,7 +689,8 @@ for k = 1:numel(fn)
     f = fn(k);
     v = S.(f{1});
     if ischar(v),            lit = mlq(v);
-    elseif islogical(v),     lit = tern(v, 'true', 'false');
+    elseif islogical(v) && isscalar(v)
+        if v, lit = 'true'; else, lit = 'false'; end
     elseif isnumeric(v),     lit = mat2str(v, 17);
     elseif iscell(v),        lit = ['{{' strjoin(cellfun(@mlq, v(:).', 'UniformOutput', false), ', ') '}}'];
     else, error('run_costate_library:job', 'cannot write field .%s of class %s into a job', f{1}, class(v));

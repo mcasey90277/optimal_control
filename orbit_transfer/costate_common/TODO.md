@@ -78,11 +78,17 @@ the folder*. Steps 1–9 change no numerical result and need no decision; steps
   verdict, vote margin and lambda_t BITWISE equal to the pre-change run,
   executed with no DRO_tulip/HALO/DPO/GTO directory on the path and the
   gitignored `dsweep_12x12_cells.mat` renamed out of reach.
-- [ ] **9. Bring `ladder_endpoints` here** (85 lines; needs only
-  `get_family_orbit` and pumpkyn getters) with `test_ladder_endpoints`, and
-  remove `second_order_pass`'s `DRO_tulip/indirect` addpath. DRO_tulip callers
-  already have this folder on their path. Gate: both tests pass, and
-  `grep DRO_tulip costate_common/*.m` finds comments only. Half a day.
+- [x] **9. Bring `ladder_endpoints` here** — DONE 2026-09-16, with
+  `test_ladder_endpoints` (now in `tests/`, reading DRO_tulip and HALO_tulip
+  results only as fixture data). `second_order_pass` no longer adds
+  `DRO_tulip/indirect` to the path, and neither do its three tests, which
+  had added it only to reach `ladder_endpoints` (and would have hidden a
+  broken move). All eight DRO_tulip callers already put this folder on
+  their path. Gate met: `test_ladder_endpoints`, `test_second_order_pass`,
+  `test_second_order_sidecar_identity` and `test_second_order_parallel`
+  pass with every DRO/HALO/DPO/GTO directory removed from the path first;
+  `grep DRO_tulip costate_common/*.m` finds comments, the demo's and
+  `golden_cells`' data-file references, and no addpath.
 - [ ] **10. Tests for the untested core, BEFORE steps 11–12** so the moves
   have a net: `harvest_ms_seed` (real duals from `golden_cells_data`),
   `run_capped` (timeout vs worker error), `flown_control_error`,

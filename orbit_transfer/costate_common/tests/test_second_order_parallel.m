@@ -27,7 +27,7 @@ function ok = test_second_order_parallel()
 ok = true;
 here = fileparts(fileparts(mfilename('fullpath')));
 ind = fullfile(fileparts(here), 'DRO_tulip', 'indirect');
-addpath(here, ind);
+addpath(here);                                   % ind: fixture data only
 catMat = fullfile(ind, 'results', 'costate_catalog_dro_tulip_70mN.mat');
 if ~isfile(catMat)
     fprintf('  SKIP  no 70 mN catalog on disk (%s)\n', catMat);  return

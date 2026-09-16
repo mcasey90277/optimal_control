@@ -18,7 +18,7 @@ function ok = test_second_order_pass()
 
 ok = true;
 here = fileparts(fileparts(mfilename('fullpath')));
-addpath(here, fullfile(fileparts(here), 'DRO_tulip', 'indirect'));
+addpath(here);                                   % the fixture below is data only
 catMat = fullfile(fileparts(here), 'DRO_tulip', 'indirect', 'results', 'costate_catalog_dro_tulip_70mN.mat');
 if ~isfile(catMat), fprintf('  SKIP  no 70 mN catalog on disk\n'); return, end
 side = fullfile(tempdir, sprintf('sop_test_%d.mat', round(1e6*rand)));

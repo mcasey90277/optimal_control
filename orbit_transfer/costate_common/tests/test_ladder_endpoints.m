@@ -28,8 +28,10 @@ function ok = test_ladder_endpoints()
 %% ------------------------ Begin Code Sequence ---------------------------
 
 here = fileparts(mfilename('fullpath'));
-ind  = fileparts(here);                         % DRO_tulip/indirect
-ot   = fileparts(fileparts(ind));               % orbit_transfer
+cc   = fileparts(here);                         % costate_common
+ot   = fileparts(cc);                           % orbit_transfer
+ind  = fullfile(ot, 'DRO_tulip', 'indirect');   % fixture data only
+addpath(cc);
 ok   = true;
 
 %% Case 1 -- legacy meta (fine sheet): bitwise vs the original rule:

@@ -43,13 +43,14 @@ function [tD, rvD, tT, rvT] = ladder_endpoints(ob)
 %
 %% Revision History:
 %  M. Casey                                                   (c) 08/31/2026
+%  M. Casey  moved from DRO_tulip/indirect into costate_common (c) 09/16/2026
 %  Copyright Coorbital Inc.
 %% ------------------------ Begin Code Sequence ---------------------------
 
 if nargin == 0
    %Demo: rebuild the DRO fine sheet's endpoint pair and plot both orbits:
      here = fileparts(mfilename('fullpath'));
-        Q = load(fullfile(here, '..', 'direct', 'results', ...
+        Q = load(fullfile(fileparts(here), 'DRO_tulip', 'direct', 'results', ...
                           'thrust_ladder_12x12.mat'), 'meta');
 [tD, rvD, tT, rvT] = ladder_endpoints(Q.meta);
      figure('color',[1 1 1]);

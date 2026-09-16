@@ -65,7 +65,7 @@ function S = second_order_pass(catMat, opts)
 if nargin < 2, opts = struct(); end
 d = @(f,v) fieldd(opts, f, v);
 here = fileparts(mfilename('fullpath'));
-addpath(here, fullfile(fileparts(here), 'DRO_tulip', 'indirect'));
+addpath(here);
 sideMat = d('sideMat', [strrep(catMat, '.mat', '') '_2ndprog.mat']);
 logFile = d('logFile', '');  batchSec = d('batchSec', inf);
 maxEnt = d('maxEntries', inf);  K = d('K', 24);  nSub = d('nSub', 8);

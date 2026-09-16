@@ -18,7 +18,7 @@ adding files).
 
 ## State of the folder (measured 2026-09-16)
 
-**58 files and 41 tests** (61 and 58 before cleanup steps 5–7, 2026-09-16). The folder did not match its
+**59 files and 42 tests** (61 and 58 before cleanup steps 5–7, 2026-09-16). The folder did not match its
 old admission rule; the table below is what the new one sorts. Caller counts below are code references from outside the
 folder (tests excluded); an "entry point" has no calling code and is run by
 hand.
@@ -32,9 +32,10 @@ hand.
 
 Known structural issues, each a step in `TODO.md` → *Cleanup plan*:
 
-- **Inverted dependency:** `second_order_pass` puts `DRO_tulip/indirect`
-  on the path (cleanup step 9). `golden_cells` did too, and loaded a
-  gitignored DRO_tulip results file; fixed 2026-09-16 (step 8).
+- ~~Inverted dependencies~~ — fixed 2026-09-16: `golden_cells` loaded a
+  gitignored DRO_tulip results file (step 8), and `second_order_pass` put
+  `DRO_tulip/indirect` on the path to reach `ladder_endpoints`, which now
+  lives here (step 9). No file in this folder adds a campaign to the path.
 - **The most-shared engine lives in a campaign:** `DRO_tulip/indirect/thrust_ladder_library`
   (with `casadi_mintime_dro`, `certify_dro_mintime`, `dro_residual`) is called by
   HALO, DPO, HALO_HALO and GTO, each of which adds `DRO_tulip` to its path.
@@ -59,6 +60,7 @@ folders, *internal* means called only from within this folder.
 | `assert_periodic_orbit.m` | The closure guard as a standalone assertion (NaN-safe `~(err<tol)` form). | internal |
 | `periodic_pp.m` | The C1-**periodic** cubic through one period of a closed orbit, its derivative (from the interpolant's own coefficients) and its seam: `seam.value` is the DATA's closure, which no interpolant can improve, `seam.deriv` the interpolant's derivative mismatch at the seam. An ordinary not-a-knot spline is not C1 at s = 0 — measured on the 7-petal tulip its derivative jumps by ~1e-2 there, while in VALUE the two agree below a millimetre except within a fraction of a percent of the seam, where the gap reaches metres. Extracted 2026-09-11 from two private copies that disagreed on policy (`transfer_study`'s `periodicPP` errored without the Curve Fitting Toolbox; `arclength_arrival`'s `makePP` fell back in silence) — the policy is now `opts.onMissing`, and the fallback warns. `tests/test_periodic_pp` (convergence order, both seams, the not-a-knot contrast, three refusals). | internal (`phase_state`) |
 | `phase_state.m` | THE endpoint rule: one periodic orbit in, two closures out — the state at a phase FRACTION and `dx/ds` (per unit phase, so it carries the period). Built on `periodic_pp`. Consumers: every campaign engine that evaluates an endpoint at a phase — the live instruments (`second_order_pass`, `conj_catalog_pass`, `gates_catalog_pass`, `audit_phase_catalog`), the ladder engines and phase sweeps (`thrust_ladder_library` and 10 more), the GTO campaign tools, plus `arclength_arrival` (its `dstateA` is what `dR/dsA` differentiates) and `transfer_study`. Migrated 2026-09-11, 18 files; the recipient-facing deliverable helpers keep their inline `interp1` DELIBERATELY (a shipped catalog's helpers carry no dependency on this library) — see TODO. `tests/test_phase_state` — including the EQUIVALENCE GATE: four golden vectors from the pre-move implementations reproduced **bitwise**, one of them next to the seam. | DRO, GTO |
+| `ladder_endpoints.m` | A thrust-ladder sheet's departure and arrival orbits rebuilt from its OWN meta recipe: `depFamily`/`arrFamily` recipes through `get_family_orbit`, and the legacy DRO/tulip construction verbatim for sheets built before those fields existed, so old sheets rebuild bitwise. Moved from `DRO_tulip/indirect` 2026-09-16 (cleanup step 9). `tests/test_ladder_endpoints`. | DRO (8 callers), `second_order_pass` |
 
 **Units**
 
@@ -122,7 +124,7 @@ folders, *internal* means called only from within this folder.
 | `lift_space_dim.m` | The numerical-rank rule behind the abnormal-lift gate (2026-09-07): dim S = #{sv < tol}, tol = min(max(rankTol·sv₁, 10·nullResid), 1e-3·sv₁). A null space cannot be resolved finer than its known member's residual — the first catalog-wide pass with a fixed 1e-8 under-counted 512 entries as "dim S = 0" (gaps sv₇/sv₆ ~ 1e-7..2.5e-6, i.e. clean one-dimensional null spaces); the cap keeps a noisy lift from ever inflating the count. `tests/test_lift_space_dim` (5/5). | internal |
 | `lift_margin.m` | The `dim S` rank statement as a **measured margin**: `dim S >= 1` is constructive (the lift is exhibited; a zero or non-finite vector is refused), `dim S <= 1` is Eckart-Young -- `sigma_6 / \|\|dC\|\|` with the error MEASURED by rebuilding C at a second integration setting. The pair matters: with a loose 1e-7 second build the "error" is that build's own error, and seven long-arc entries with sigma_6 = 0.99 read 4-9x; the sweep uses [1e-12 1e-9] (43x on the same entry). `tests/test_lift_margin`. | DRO |
 | `h6_margin.m` | H6, `lambda_m(0) < c/T`, the reduced conjugate instrument's validity condition, with the clearance of h_max = -1 + (T/c) lambda_m(0) below zero judged against the arc's own Hamiltonian residual (`opts.Hresid`, wired from `mintime_hypothesis_gates`). ENFORCED in `certify_root` since 2026-09-10 -- it had been computed and ignored. | DRO |
-| `second_order_pass.m` | Campaign sweep of the three second-order instruments over a catalog: sidecar after every entry (resume for free), writeback only on a complete census (`conj_interior`, `conj_interior_cand`, `conj_near_miss`, `conj_zero`, `h6_margin`, `lift_margin`). Latest run 2026-09-15: all 576 entries of the 70 mN library of record, 0 interior crossings, worst H6 4.44x, worst lift 11x. **Since 2026-09-11 every sidecar record carries the identity of the entry it measured (cell key + z8)**, and a resumed record must match the catalog (`second_order_pass:staleSidecar`): the sidecar had been positional, so a re-packaged catalog with a different entry set would have inherited other entries' measurements. A pre-key sidecar is adopted only with `adoptLegacy`, and only if every written-back value equals the catalog's. The library of record's sidecar is `second_order_progress_v3.mat`, beside its catalog; the first sweep's `second_order_progress.mat` disagrees with the catalog's lift margins by up to 1.35e4 and must not be used. `tests/test_second_order_sidecar_identity` (5 checks, mutation-tested). **Inverted dependency:** it puts `DRO_tulip/indirect` on the path and calls that campaign's `ladder_endpoints` (cleanup step 9). | DRO |
+| `second_order_pass.m` | Campaign sweep of the three second-order instruments over a catalog: sidecar after every entry (resume for free), writeback only on a complete census (`conj_interior`, `conj_interior_cand`, `conj_near_miss`, `conj_zero`, `h6_margin`, `lift_margin`). Latest run 2026-09-15: all 576 entries of the 70 mN library of record, 0 interior crossings, worst H6 4.44x, worst lift 11x. **Since 2026-09-11 every sidecar record carries the identity of the entry it measured (cell key + z8)**, and a resumed record must match the catalog (`second_order_pass:staleSidecar`): the sidecar had been positional, so a re-packaged catalog with a different entry set would have inherited other entries' measurements. A pre-key sidecar is adopted only with `adoptLegacy`, and only if every written-back value equals the catalog's. The library of record's sidecar is `second_order_progress_v3.mat`, beside its catalog; the first sweep's `second_order_progress.mat` disagrees with the catalog's lift margins by up to 1.35e4 and must not be used. `tests/test_second_order_sidecar_identity` (5 checks, mutation-tested).  | DRO |
 | `conj_catalog_pass.m` | Catalog-scale conjugate-point sweep: per entry, rebuild endpoints from the sheet recipes, fly the stored z8, re-solve with `ms_tfmin(conjTest)` seeded at the solution (verdict only when \|z−z8\| < 1e-6), store `conj_pass/conj_ncross/conj_atfinal` grids + `conj_test` provenance. Campaign contract: sidecar resume, attempt-before-solve, batch budget, explicit writeback with backup. First run 2026-08-23: 15,896 entries, 15,895/1/0. Entry point: no calling code, run by hand over every shipped catalog. | entry point |
 
 **Execution fences**
@@ -157,7 +159,7 @@ folders, *internal* means called only from within this folder.
 
 ## Tests
 
-`tests/` holds 41 tests. Classified 2026-09-16 by what they call (after
+`tests/` holds 42 tests. Classified 2026-09-16 by what they call (after
 cleanup steps 5–7: `test_conjugate_pole_predict` deleted with its function,
 `test_phase_lists` moved with `rib_targets`, the 15 DRO_tulip-only tests moved
 to `DRO_tulip/indirect/tests`):
@@ -165,13 +167,13 @@ to `DRO_tulip/indirect/tests`):
 | kind | count | tests |
 |---|---|---|
 | library only | 25 | `test_arclength_ms`, `test_arclength_ms_thrust`, `test_campaign_processes`, `test_catalog_schema_v3`, `test_conj_fixedtf`, `test_conj_resolve`, `test_cr3bp_minenergy_pmp`, `test_h6_margin`, `test_huber_saltation`, `test_lift_margin`, `test_lift_space_dim`, `test_minfuel_pmp`, `test_mintime_gates`, `test_ms_bvp_extra`, `test_ms_bvp_fixedtf`, `test_ms_tfmin_hom`, `test_nd_propulsion`, `test_periodic_pp`, `test_phase_state`, `test_scalar_verdict`, `test_second_order_parallel`, `test_second_order_pass`, `test_second_order_sidecar_identity`, `test_ss_bvp_accept`, `test_validate_flight` |
-| library, through campaign fixtures | 16 | `test_arclength_arrival`, `test_certify_caps`, `test_certify_enforcement`, `test_conj_coverage`, `test_conj_spectrum`, `test_dro_tulip_seed`, `test_entry_notes`, `test_flight_to_junctions`, `test_fly_transfer`, `test_gates_h6_wiring`, `test_gto_family` (GTO_tulip fixture), `test_pmp_pointwise_checks`, `test_seed_from_entry`, `test_sheet_to_catalog_file`, `test_stm_variational`, `test_work_queue` |
+| library, through campaign fixtures | 17 | `test_arclength_arrival`, `test_ladder_endpoints`, `test_certify_caps`, `test_certify_enforcement`, `test_conj_coverage`, `test_conj_spectrum`, `test_dro_tulip_seed`, `test_entry_notes`, `test_flight_to_junctions`, `test_fly_transfer`, `test_gates_h6_wiring`, `test_gto_family` (GTO_tulip fixture), `test_pmp_pointwise_checks`, `test_seed_from_entry`, `test_sheet_to_catalog_file`, `test_stm_variational`, `test_work_queue` |
 
 No direct test: `harvest_ms_seed` (covered only through `golden_cells`),
 `run_capped`, `current_pool`, `flown_control_error`, `true_min_altitude`,
 `preflight_screen`, `survey_family_bounds`, `newton_fixed_q`,
 `cr3bp_thrust_rhs`, `ctrl_quad`, `assert_periodic_orbit`. `duals_to_costates`
-is a delegate; the implementation is tested by `oclib/tests/test_duals_to_costates`. `test_ladder_endpoints` and the campaign-code tests live in `DRO_tulip/indirect/tests`.
+is a delegate; the implementation is tested by `oclib/tests/test_duals_to_costates`. The campaign-code tests live in `DRO_tulip/indirect/tests`.
 
 Run the relevant tests plus `golden_cells` after touching an engine.
 

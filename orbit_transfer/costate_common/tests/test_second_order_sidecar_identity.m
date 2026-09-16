@@ -29,7 +29,7 @@ function ok = test_second_order_sidecar_identity()
 
 ok = true;
 here = fileparts(fileparts(mfilename('fullpath')));
-addpath(here, fullfile(fileparts(here), 'DRO_tulip', 'indirect'));
+addpath(here);                                   % DRO_tulip results are data only
 res = fullfile(fileparts(here), 'DRO_tulip', 'indirect', 'results');
 catMat = fullfile(res, 'costate_catalog_dro_tulip_70mN.mat');
 v2 = fullfile(res, 'second_order_progress_v2.mat');

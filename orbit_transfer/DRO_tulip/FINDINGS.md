@@ -4775,3 +4775,88 @@ itself). And the review's closing point stands as written: a certified
 root faster than the spine is a minimum-eligible entry of the gate
 stack, not a global-minimum certificate, and discovery is a heuristic
 whose silence is evidence, not proof -- `.probeAll` is the wider net.
+
+## 74. The study script reviewed: an enforcement gap in S4, a false branch, and a script that could not fail (2026-09-15)
+
+GPT-6 Astra (xhigh, 53 KB bundle, $0.99, 7 min) reviewed
+`transfer_study.m` -- the campaign's teaching artifact, whose contract is
+that every necessary and sufficient condition is computed and gated IN the
+script with its own PASS/FAIL. Fourteen findings
+(`reviews/transfer_study_astra_2026-09-15.md`). Adjudication:
+
+**Applied.**
+
+*S4 could pass on a scan that was never testable.* The dense conjugate
+scan's own verdict `CS.clear` was printed and never required; the
+downgrade tested only the counters. `CS.clear` is
+`testable AND nZero==0 AND nUnresolved==0 AND nInterior==0`, so a NOT
+TESTABLE scan leaves every counter at zero and left S4 at PASS -- weaker
+than `certify_root`, which refuses `~clear` outright. The script now
+validates the scan's fields (scalar logicals, non-negative integer
+counts), requires `.clear`, requires the flag to AGREE with its own
+counters, and reports NOT TESTABLE as UNRESOLVED with the reason that no
+zero was looked for, so none was excluded. This is exactly the failure
+mode the study-script rule exists to prevent, in the script that states
+the rule.
+
+*A verdict branch claimed what it had not established.* Reaching the
+`~crossCheck` branch establishes only `necessary`; the text said "every
+PMP and sufficiency line passed, but the CROSS-CHECK failed" -- false
+whenever a sufficiency gate had also failed. The branch now names the
+actual sufficiency status (PASS / UNRESOLVED / FAIL) beside S4's and V1's.
+
+*The script could not fail.* Every gate could print FAIL and the script
+still exited 0. There is now a named gate table, a `studyOK` scalar, a
+one-line self-check naming what did not pass, and an assertion -- with the
+policy stated in section 0: a failed NECESSARY or CROSS-CHECK gate throws
+(the root or the implementation is broken), while a failed or unresolved
+SUFFICIENCY gate is a legitimate finding about this trajectory and is
+reported. `selfCheck.strict = true` makes any outcome short of a claim an
+error, for a regression harness. The plot is drawn before the assertion,
+so a failing run still leaves the picture that explains it.
+
+*The lunar clearance had no visible calculation.* It was enforced only by
+the flight's admissibility flag. N7 now computes
+`d_M(t) = lStar * |r(t) - (1-mu, 0, 0)|` in the script, reports its
+minimum, where it occurs, the altitude and the margin, and gates it
+against a threshold named in section 0 -- which also settles the
+convention Astra asked about: 1900 km is a MOON-CENTRE distance, a
+162.6 km altitude floor.
+
+*Gate inputs are validated before they are compared.* A negative
+"absolute" residual satisfies `< tol` and a NaN count makes `> 0` false;
+either would let a broken instrument print PASS. Every scalar the
+necessary block compares is now checked real, finite and non-negative
+first, and the script fails closed on malformed data -- the policy
+`certify_root` already followed.
+
+**Declined, with reasons.**
+
+*"Compute N2-N6 in the script instead of calling the library
+instrument."* This reverses a documented decision recorded at the call
+site: the script DID recompute all four and compare, and the comparison
+measured 0.0e+00, because a copy of the same arithmetic on the same
+samples is not an independent implementation. Running the instrument the
+18,360 catalog entries were certified with is the stronger statement. The
+pedagogical concern behind the finding is real, and the right answer is
+not a tautological re-computation but showing the equations in the
+narrative -- Astra's own derivation (including the `+C lambda_v` Coriolis
+term in the velocity adjoint) is now quoted in
+`doc/seeds_and_solution_route.tex`.
+
+*"No conjugate time in (0, t_f]" overstates what a sampled scan
+establishes.* Correct, and already said: the verdict block states in full
+that this is numerical evidence and not a certificate, that positivity is
+tested at sampled times with no between-sample bound, and that
+application of the theorem remains conditional on the subarc-normality
+argument and the free-mass/free-time reduction. The audit
+`doc/mintime_second_order_audit.tex` is the home of that argument; the
+script points at it. No wording change; a interval-arithmetic enclosure
+is the open item, recorded here.
+
+*Propagation-accuracy refinement studies, an FD step-size sweep, a
+lift-margin error budget over trajectory and constraint refinement.*
+All three are real gaps between "measured under this refinement" and
+"bounded". They are studies, not fixes, and each is a half-day. Recorded
+as open; the script's existing text already says the lift margin is a
+measured sensitivity and not a proven rank separation.

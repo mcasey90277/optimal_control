@@ -111,7 +111,21 @@ tol = struct( ...
     ...                       %   attributed to any one source
     'liftMargin', 10,   ...   % S3 Eckart-Young margin sigma_6 / |dC| (lift_margin)
     'h6Margin',  1.0,   ...   % V1 required (c/T)/lambda_m(0), STRICT
+    'clearKm',   1900,  ...   % N7 lunar clearance: MOON-CENTRE distance (not
+    ...                       %   altitude; the Moon's radius is 1737.4 km, so
+    ...                       %   this is a 162.6 km altitude floor), computed
+    ...                       %   in the script and gated here
     'agree',     1e-6);       % V2 inline numbers vs the library instruments
+
+% THE SCRIPT'S SELF-CHECK. A study script that prints FAIL and exits 0 is a
+% report, not a check. `strict` decides what an unsuccessful study DOES:
+%   false (default)  a failed NECESSARY or CROSS-CHECK gate throws -- those
+%                    mean the root or the implementation is broken. A failed
+%                    or unresolved SUFFICIENCY gate is a legitimate finding
+%                    about this trajectory and is reported, not thrown.
+%   true             any gate short of a full claim throws. Use it in a
+%                    regression harness, where "unresolved" is a regression.
+selfCheck = struct('strict', false);
 
 %% ========================================================================
 %  1. DEPARTURE ORBIT -- a distant retrograde orbit (DRO)
@@ -353,8 +367,34 @@ fprintf('   N6 min principle  |gap|     %9.2e / %-9.0e  %s   (signed %+.1e..%+.1
         n6gap, tol.gap, pass(n6), PW.gapMin, PW.gapMax, ...
         PW.throttleAccErr, PW.throttleMassErr, PW.minQmt, pass(PW.minQmt >= 0));
 
+% N7  LUNAR CLEARANCE, computed here rather than read off the flight's
+%     admissibility flag: the distance to the Moon's CENTRE along the flown
+%     arc, its minimum, where it occurs, and the margin against the policy
+%     in section 0. The admissibility flag enforces the library's default;
+%     this line says what the number is and which convention it is in
+%     (Astra review 2026-09-15).
+dMoonKm = lStar * vecnorm(flight.Y(1:3, :) - [1 - muStar; 0; 0], 2, 1);
+[dMin, iMin] = min(dMoonKm);
+n7 = dMin >= tol.clearKm;
+fprintf(['   N7 lunar clear    min d     %9.1f / %-9.1f  %s   (Moon CENTRE distance, km; at t/t_f = %.3f; ' ...
+         'altitude %.1f km; margin %+.1f km)\n'], ...
+        dMin, tol.clearKm, pass(n7), flight.t(iMin)/flight.t(end), dMin - 1737.4, dMin - tol.clearKm);
+
+% FAIL CLOSED on malformed gate inputs. A negative "absolute" residual
+% satisfies "< tol", and a NaN count makes "> 0" false: either would let a
+% broken instrument print PASS. The certifier validates its inputs before
+% comparing them (certify_root.m); so does this script (Astra 2026-09-15).
+for fv = {{'N1 residual', resid}, {'N2 max|H|', PW.Hmax}, {'N3 fly km', flight.flyKm}, ...
+          {'N3 fly m/s', flight.flyVms}, {'N4 |lambda_m(t_f)|', PW.lamMf}, ...
+          {'N5 adjoint error', PW.adjErr}, {'N6 gap', n6gap}, {'N6 throttle', PW.throttleErr}, ...
+          {'N7 min Moon distance', dMin}}
+    assert(isscalar(fv{1}{2}) && isreal(fv{1}{2}) && isfinite(fv{1}{2}) && fv{1}{2} >= 0, ...
+           'transfer_study:malformed', '%s is not a real finite non-negative scalar (%g): the gate cannot be judged', ...
+           fv{1}{1}, fv{1}{2});
+end
+
 necessary = resid < tol.R && PW.Hmax < tol.H && flight.flyKm < tol.km && ...
-            flight.flyVms < tol.ms && PW.lamMf < tol.lamm && PW.adjErr < tol.adj && n6;
+            flight.flyVms < tol.ms && PW.lamMf < tol.lamm && PW.adjErr < tol.adj && n6 && n7;
 
 % ONE call to the hypothesis gates -- the instrument that judges S1, S2, S3
 % and V1 (section 8), the same one gates_catalog_pass ran over all 18,360
@@ -462,9 +502,29 @@ fprintf(['      dense scan (%d samples): %d coarse sign change(s); candidates %d
          '      %d start transient(s) (uncovered); floor %.0e x median, clear at %gx      %s\n'], ...
         numel(CS.t), CS.nInterior, CS.nInteriorCand, CS.nEndCand, CS.nZero, CS.nNearMiss, ...
         CS.nUnresolved, CS.multiplicity, CS.nStart, CS.zeroFloor, CS.clearFactor, pass(CS.clear));
-if strcmp(s4Status, 'PASS')
+% THE SCAN'S OWN VERDICT IS REQUIRED, not merely printed. CS.clear is
+% (testable AND no zero AND no unresolved AND no interior sign change), so
+% a scan that is NOT TESTABLE leaves every counter at zero and would have
+% left S4 at PASS -- weaker than certify_root, which refuses ~clear. The
+% counters are checked too (multiplicity is not in CS.clear) and any
+% disagreement between the flag and the counters is itself disqualifying.
+% (Astra review 2026-09-15, finding 1.)
+scanOK = islogical(CS.clear) && isscalar(CS.clear) && islogical(CS.testable) && isscalar(CS.testable) && ...
+         all(cellfun(@(f) isscalar(CS.(f)) && isfinite(CS.(f)) && CS.(f) >= 0 && CS.(f) == round(CS.(f)), ...
+                     {'nInterior', 'nZero', 'nUnresolved', 'multiplicity', 'nNearMiss', 'nInteriorCand'}));
+scanConsistent = scanOK && (CS.clear == (CS.testable && CS.nZero == 0 && CS.nUnresolved == 0 && CS.nInterior == 0));
+if ~scanOK
+    s4Status = 'UNRESOLVED';
+    fprintf('      the dense scan returned malformed counters: S4 is not interpretable\n');
+elseif ~scanConsistent
+    s4Status = 'UNRESOLVED';
+    fprintf('      the dense scan''s .clear (%d) disagrees with its own counters: S4 is not interpretable\n', CS.clear);
+elseif ~CS.testable
+    s4Status = 'UNRESOLVED';
+    fprintf('      the dense scan was NOT TESTABLE on this arc: no zero was looked for, so none was excluded\n');
+elseif strcmp(s4Status, 'PASS')
     if CS.nZero > 0 || CS.multiplicity > 0 || CS.nInterior > 0, s4Status = 'FAIL';
-    elseif CS.nUnresolved > 0,                                    s4Status = 'UNRESOLVED';
+    elseif CS.nUnresolved > 0 || ~CS.clear,                       s4Status = 'UNRESOLVED';
     end
 end
 
@@ -533,13 +593,45 @@ elseif ~necessary
     fprintf(['NOT an extremal to tolerance. The second-order test is meaningless\n' ...
              '            off an extremal, so no minimality is claimed.\n']);
 elseif ~crossCheck
-    fprintf(['every PMP and sufficiency line passed, but the CROSS-CHECK failed: the\n' ...
-             '            implementation is in doubt, so no claim is made.\n']);
+    % NAME what actually holds. Reaching here establishes `necessary` only;
+    % sufficiency may ALSO have failed, and the old wording asserted it had
+    % passed (Astra review 2026-09-15, finding 13).
+    fprintf(['the PMP (necessary) gates passed, but the CROSS-CHECK failed: the\n' ...
+             '            implementation is in doubt, so no claim is made. Sufficiency is %s\n' ...
+             '            (S4 %s, V1 %s) and is not claimed either way.\n'], ...
+            tern(sufficient, 'PASS', tern(unresolved, 'UNRESOLVED', 'FAIL')), s4Status, v1Status);
 elseif unresolved
     fprintf(['an extremal; sufficiency is UNRESOLVED (%s / %s): no minimality is\n' ...
              '            claimed and none is refuted.\n'], s4Status, v1Status);
 else
     fprintf('an extremal, but a sufficiency hypothesis fails: no minimality claimed.\n');
+end
+
+%% ------------------------------------------------------------------------
+%  THE SELF-CHECK. Every gate, by name, with its status; then one scalar,
+%  then an assertion. The plot is drawn FIRST when the check fails, so a
+%  failing run still leaves the picture that explains it.
+%% ------------------------------------------------------------------------
+gateStatus = { ...
+    'N1 BVP residual',    resid < tol.R; ...
+    'N2 Hamiltonian',     PW.Hmax < tol.H; ...
+    'N3 flown arrival',   flight.flyKm < tol.km && flight.flyVms < tol.ms; ...
+    'N4 transversality',  PW.lamMf < tol.lamm; ...
+    'N5 adjoint eqs',     PW.adjErr < tol.adj; ...
+    'N6 min principle',   n6; ...
+    'N7 lunar clearance', n7; ...
+    'X1 second solver',   V.ok; ...
+    'X2 field agreement', x2; ...
+    'S1 strong Legendre', gates.minLamV > 0; ...
+    'S2 Q_mt > 0',        gates.minQmt > 0; ...
+    'S3 dim S = 1',       s3; ...
+    'S4 conjugate',       strcmp(s4Status, 'PASS'); ...
+    'V1 H6 validity',     strcmp(v1Status, 'PASS')};
+failed = gateStatus(~[gateStatus{:, 2}], 1);
+studyOK = necessary && crossCheck && sufficient;
+fprintf('\n   SELF-CHECK: %d of %d gates passed', nnz([gateStatus{:, 2}]), size(gateStatus, 1));
+if isempty(failed), fprintf('; studyOK = true\n');
+else, fprintf('; NOT passed: %s%s\n', strjoin(failed', ', '), tern(unresolved, sprintf(' (S4 %s, V1 %s)', s4Status, v1Status), ''));
 end
 
 %% ========================================================================
@@ -550,6 +642,18 @@ T = struct('z', z8, 'sD', sD, 'sA', sA, 'tfDays', flight.tfDays, 'dvKms', flight
            'propellantKg', flight.propellantKg, 'finalMassKg', flight.finalMassKg);
 P = plot_transfer_3d(T, B, struct('flight', flight));
 fprintf('\n9. Figure %d is rotatable (flight supplied: %d).\n', P.fig.Number, P.flightSupplied);
+
+% ---- and now the script fails if it should (section 0's policy) ---------
+assert(necessary && crossCheck, 'transfer_study:brokenRoot', ...
+       ['the root or the implementation is in doubt -- these gates did not pass: %s. ' ...
+        'Nothing above supports a claim.'], strjoin(failed', ', '));
+if selfCheck.strict
+    assert(studyOK, 'transfer_study:notClaimed', ...
+           'strict self-check: the study did not reach a claim (%s)', strjoin(failed', ', '));
+elseif ~studyOK
+    fprintf(['   (the necessary conditions and the cross-checks hold; sufficiency is not\n' ...
+             '    claimed. Set selfCheck.strict = true in section 0 to make this an error.)\n']);
+end
 
 %% ------------------------------------------------------------------------
 function s = pass(c)

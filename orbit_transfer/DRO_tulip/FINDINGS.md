@@ -5273,3 +5273,24 @@ flag true; H1 6.3e-13; indirect 2/2 with the worst accepted flown miss
 was already at the polish target) and the grid rescaled with it; hunt: 1
 attempted / 1 solver-converged / 1 accepted / 1 harvested, seam mismatch
 5.2e-9 km on the re-flown source. Full default run relaunched.
+
+**Full default run of the round-2 script (2026-09-16, R2026a, ~55 min).**
+Every rung of the previous full run reproduces to the printed digits with
+the no-propagation seeding (the banked starts, grid scaled, mass row
+rebuilt): direct 11/11, worst accepted throttle slack 1.3e-6 against the
+1e-3 gate (now printed, first rung included); handoff sign vote 100%,
+lambda_t 1.000000 with the mapping's flag true, |R| 4.59e-12 in one
+iteration; indirect 10 of 12 accepted; the two refusals at 0.11 and 0.10 N
+now carry their per-exponent record -- all five exponents `unconverged` on
+each, no fence event, no seed-policy skip. Worst accepted flown miss
+1.78e-4 km / 1.76e-5 m/s, printed in full. Certified at 0.12 N / 900 s:
+10.6060 d, flown miss 9.64e-5 km, conjugate PASS; polish moved t_f by 0 and
+the grid was rescaled with it. Hunt: source re-flown from its junctions
+with a worst seam mismatch of 2.7e-8 km; 3 attempted, 2 solver-converged,
+2 accepted, 2 harvested, 1 faster (14.4% at sA 0.5754). The third probe
+(sA 0.7837), which converged in 61 s to a -1.8% candidate on the previous
+run, hit its 300 s CPU cap this time at a 55-day iterate; it is recorded as
+"solver did not converge", which is the only thing a capped probe can be
+said to show -- a lottery ticket lands on either side of its budget from
+run to run, and the script no longer reads that as anything about basins.
+Outcomes: A SUPPORTED, B PARTIAL (certified at 0.12 N), C CANDIDATES.

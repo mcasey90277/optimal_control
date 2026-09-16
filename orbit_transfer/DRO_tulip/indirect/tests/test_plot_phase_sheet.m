@@ -18,7 +18,8 @@ function ok = test_plot_phase_sheet()
 %% ------------------------ Begin Code Sequence ---------------------------
 
 ok = true;
-here = fileparts(fileparts(mfilename('fullpath')));
+ot   = fileparts(fileparts(fileparts(fileparts(mfilename('fullpath')))));  % orbit_transfer
+here = fullfile(ot, 'costate_common');
 addpath(here, fullfile(fileparts(here), 'DRO_tulip', 'indirect'));
 nD = 12;  nA = 12;
 

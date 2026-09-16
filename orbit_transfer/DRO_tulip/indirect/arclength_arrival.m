@@ -15,9 +15,12 @@ function varargout = arclength_arrival(arg, opts)
 %
 %   Why arrival phase is a cheap parameter here (GPT-6 Astra, 2026-09-09):
 %   it enters ONLY the six terminal state-matching rows,
-%       R_sA = [0; -x_A'(sA); 0; 0; 0],   x_A'(sA) = T_A * f_cr3bp(x_A(sA)),
-%   so the derivative is analytic (cr3bp_field) -- no finite differencing
-%   of the whole residual, unlike thrust.
+%       R_sA = [0; -x_A'(sA); 0; 0; 0],
+%   and x_A'(sA) is the derivative of the phase INTERPOLANT the residual
+%   targets (phase_state's dstateA), not T_A * f_cr3bp(x_A(sA)): the field
+%   at the interpolated state is a different function of sA (chain review
+%   2026-09-10) -- still no finite differencing of the whole residual,
+%   unlike thrust.
 %
 %   Scaling is per BLOCK, as the engine demands: states 1, costates 1 (they
 %   live on the unit sphere in this chart), t_f by its anchor value, rho 1,

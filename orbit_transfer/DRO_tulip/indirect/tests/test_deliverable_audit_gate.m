@@ -19,7 +19,8 @@ function ok = test_deliverable_audit_gate()
 %% ------------------------ Begin Code Sequence ---------------------------
 
 ok = true;
-here = fileparts(fileparts(mfilename('fullpath')));
+ot   = fileparts(fileparts(fileparts(fileparts(mfilename('fullpath')))));  % orbit_transfer
+here = fullfile(ot, 'costate_common');
 addpath(here, fullfile(fileparts(here), 'DRO_tulip'), fullfile(fileparts(here), 'DRO_tulip', 'indirect'));
 catMat = fullfile(fileparts(here), 'DRO_tulip', 'indirect', 'results', ...
                   'costate_catalog_dro_tulip_70mN.mat');

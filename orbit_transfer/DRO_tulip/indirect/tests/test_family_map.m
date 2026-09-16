@@ -15,7 +15,7 @@ function test_family_map()
 % OUTPUTS: none (asserts; prints PASS)
 
 here = fileparts(mfilename('fullpath'));
-addpath(fullfile(here, '..', '..', 'DRO_tulip', 'indirect'));
+addpath(fileparts(here));                  % DRO_tulip/indirect
 arcDir = tempname;  mkdir(arcDir);
 cleaner = onCleanup(@() rmdir(arcDir, 's'));
 tStar = 86400*4;                       % 4 days per ND unit: t_f nd = days/4

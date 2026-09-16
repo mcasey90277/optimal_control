@@ -8,7 +8,8 @@ function ok = test_phase_lists()
 % OUTPUTS: ok [logical]  every check passed (prints PASS/FAIL per check)
 
 ok = true;
-here = fileparts(fileparts(mfilename('fullpath')));
+ot   = fileparts(fileparts(fileparts(fileparts(mfilename('fullpath')))));  % orbit_transfer
+here = fullfile(ot, 'costate_common');
 addpath(here, fullfile(fileparts(here), 'DRO_tulip', 'indirect'));
 
 % ---- rib_targets: nearest first, unwrapped, the spine excluded ----------

@@ -17,7 +17,8 @@ function ok = test_sheet_from_arcs()
 %% ------------------------ Begin Code Sequence ---------------------------
 
 ok = true;
-here = fileparts(fileparts(mfilename('fullpath')));
+ot   = fileparts(fileparts(fileparts(fileparts(mfilename('fullpath')))));  % orbit_transfer
+here = fullfile(ot, 'costate_common');
 addpath(here, fullfile(fileparts(here), 'DRO_tulip', 'indirect'));
 sA0 = 0.0754;  nA = 12;
 

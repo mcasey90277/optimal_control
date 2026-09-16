@@ -20,7 +20,8 @@ function ok = test_report_optimality()
 %% ------------------------ Begin Code Sequence ---------------------------
 
 ok = true;
-here = fileparts(fileparts(mfilename('fullpath')));
+ot   = fileparts(fileparts(fileparts(fileparts(mfilename('fullpath')))));  % orbit_transfer
+here = fullfile(ot, 'costate_common');
 addpath(here, fullfile(fileparts(here), 'DRO_tulip', 'indirect'));
 
 good = struct('ok', true, 'reason', 'certified', 'normR', 2.1e-11, 'flyKm', 0.0004, ...

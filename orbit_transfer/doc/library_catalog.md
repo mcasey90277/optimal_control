@@ -76,8 +76,8 @@ THE versioned schema authority for compact costate catalogs -- the normative fie
 
 ### `conj_catalog_pass.m`
 `S = conj_catalog_pass(catMat, opts)`  
-CONJ_CATALOG_PASS  Run the conjugate-point test over every entry of a compact costate catalog and record the verdicts.
-*in: `catMat`, `opts`, `logFile`, `batchSec`, `K`, `maxAtt`, `tolDz`, `wallSec`, `sideMat`, `writeback` · out: `S`*
+Run the conjugate-point test over every entry of a compact costate catalog and record the verdicts.
+*in: `catMat`, `opts` · out: `S`*
 
 ### `conj_resolve.m`
 `R = conj_resolve(Mfun, tGrid, opts)`  
@@ -88,16 +88,6 @@ CANDIDATE DETECTION AND RESOLUTION for a dense conjugate-matrix scan, as a pure 
 `out = conj_spectrum(z8, rv0, Tmax, c, muStar, opts)`  
 DENSE singular-spectrum scan of the free-time quotiented conjugate matrix, adding sensitivity to the two blind spots of the sampled sign test (it does not close them: no between-sample bound is proven):
 *in: `z8`, `rv0`, `opts` · out: `out`*
-
-### `conjugate_pole_predict.m`
-`W = conjugate_pole_predict(s, condJ, opts)`  
-EARLY WARNING that a continuation is walking into a conjugate point, fitted from the conditioning the solver already reports at every step.
-*in: `s`, `condJ`, `opts` · out: `W`*
-
-### `cr3bp_field.m`
-`f = cr3bp_field(x, muStar)`  
-The BALLISTIC circular restricted three-body field in the rotating frame, ND units: xdot = v, vdot = g(r) + h(v), no thrust. Written out rather than calling pumpkyn.cr3bp.eom because that routine's dimension-argument convention is not documented for a single state, and this derivative feeds a continuation tangent where an ambiguity would be silent. Six lines, no dependencies, matched to the g(r) in doc/algorithms_orbit_transfer.tex section 2.1.
-*in: `x`, `muStar` · out: `f`*
 
 ### `cr3bp_minenergy_pmp.m`
 `[F, A, aux] = cr3bp_minenergy_pmp(y, Tmax, c, muStar)`  
@@ -166,7 +156,7 @@ Format a number at a FIXED WIDTH, rendering the missing case as dashes of that s
 
 ### `gates_catalog_pass.m`
 `S = gates_catalog_pass(catMat, opts)`  
-GATES_CATALOG_PASS  Run the min-time sufficiency-hypothesis gates (mintime_hypothesis_gates: strong Legendre min|lam_v|, all-burn min Q_mt, abnormal-lift dim S) over every entry of a compact costate catalog and record them -- the catalog-scale form of the audit (doc/mintime_second_order_audit.tex, section 7). Same campaign contract as conj_catalog_pass: endpoints rebuilt from the sheet recipes, one tfMinProp flight + one 7x7 adjoint integration per entry, sidecar progress .mat after EVERY entry, attempt counter before each flight, clean batch-budget exit, resume for free; writeback into the catalog only on an explicit call after a complete census. INPUTS: catMat - path to a catalog .mat (single variable, schema v1/v2) [char] opts   - (optional) struct: .logFile [''], .batchSec [inf], .maxEntries [inf], .maxAtt [2], .nSamp [200], .rankTol [1e-8], .sideMat [<catMat minus .mat>_gatesprog.mat], .writeback [false] OUTPUTS: S - struct: .done, .nDone, .nTodo, .nH2fail (min|lam_v| <= lamVTol), .nH3fail (min Q_mt <= 0), .nAbnormal (dim S ~= 1), .sideMat REFERENCES: [1] costate_common/mintime_hypothesis_gates.m (the instrument) [2] costate_common/conj_catalog_pass.m (the campaign skeleton) [3] doc/mintime_second_order_audit.tex (why these three)
+Run the min-time sufficiency-hypothesis gates (mintime_hypothesis_gates: strong Legendre min|lam_v|, all-burn min Q_mt, abnormal-lift dim S) over every entry of a compact costate catalog and record them -- the catalog- scale form of the audit (doc/mintime_second_order_audit.tex, section 7).
 *in: `catMat`, `opts` · out: `S`*
 
 ### `get_family_orbit.m`
@@ -226,8 +216,8 @@ CONJUGATE-POINT TEST on a converged multiple-shooting extremal -- the first piec
 
 ### `ms_tfmin.m`
 `[z, info] = ms_tfmin(rv0, rvf, seed, Tmax, c, muStar, opts)`  
-MS_TFMIN  Multiple-shooting solve of the CR3BP minimum-time PMP problem.
-*in: `rv0`, `rvf`, `seed`, `tf`, `tGrid`, `Y`, `Tmax`, `c`, `muStar`, `opts` · out: `z`, `info`*
+Multiple-shooting solve of the CR3BP minimum-time PMP problem.
+*in: `rv0`, `rvf`, `seed`, `Tmax`, `c`, `muStar`, `opts` · out: `z`, `info`*
 
 ### `ms_tfmin_hom.m`
 `[z, info] = ms_tfmin_hom(rv0, rvf, seed, Tmax, c, muStar, opts)`  
@@ -268,11 +258,6 @@ CHEAP SANITY PRE-CHECK on a direct solution BEFORE any integrator touches it, ma
 `publish_atomic(src, dst)`  
 Publish a finished file: move src onto dst in ONE rename(2), replacing any existing dst, so that a reader sees either the old file or the new one and never a partial or missing one. This is the only way a campaign artifact, queue record or heartbeat reaches its final name.
 *in: `src`, `dst`*
-
-### `rib_targets.m`
-`[targets, sDpts] = rib_targets(sD, sD0, dirn)`  
-RIB_TARGETS  The unwrapped departure offsets a rib walks from its spine to reach every other phase of a departure list, in walking order.
-*in: `sD`, `sD0`, `dirn` · out: `targets`, `sDpts`*
 
 ### `run_capped.m`
 `[ok, varargout] = run_capped(pool, fcn, nout, capSec, varargin)`  
@@ -339,7 +324,7 @@ A resumable CHECKPOINT for a sequential walk (a rib column): the state after the
 A DISK WORK QUEUE for campaign units, so that N worker processes on one host pull the next unclaimed unit instead of being handed static ranges. The unit is whatever the caller says it is (a rib column, a catalog entry, a thrust rung).
 *in: `action`, `qDir`, `varargin` · out: `out`*
 
-**tests/**: `test_arclength_arrival.m`, `test_arclength_ms.m`, `test_arclength_ms_thrust.m`, `test_campaign_processes.m`, `test_catalog_schema_v3.m`, `test_certify_caps.m`, `test_certify_crossing.m`, `test_certify_enforcement.m`, `test_conj_coverage.m`, `test_conj_fixedtf.m`, `test_conj_resolve.m`, `test_conj_spectrum.m`, `test_conjugate_pole_predict.m`, `test_cr3bp_minenergy_pmp.m`, `test_crossings_from_arc.m`, `test_deliverable_audit_gate.m`, `test_dro_tulip_seed.m`, `test_entry_notes.m`, `test_family_map.m`, `test_flight_to_junctions.m`, `test_fly_transfer.m`, `test_gates_h6_wiring.m`, `test_gto_family.m`, `test_guard_catalog_overwrite.m`, `test_h6_margin.m`, `test_huber_saltation.m`, `test_lift_margin.m`, `test_lift_space_dim.m`, `test_minfuel_pmp.m`, `test_mintime_gates.m`, `test_movie_phase_sweep.m`, `test_ms_bvp_extra.m`, `test_ms_bvp_fixedtf.m`, `test_ms_tfmin_hom.m`, `test_nd_propulsion.m`, `test_periodic_pp.m`, `test_phase_lists.m`, `test_phase_state.m`, `test_plot_phase_sheet.m`, `test_plot_transfer_3d.m`, `test_pmp_pointwise_checks.m`, `test_print_transfer_summary.m`, `test_report_optimality.m`, `test_rib_from_crossing.m`, `test_run_dro_tulip.m`, `test_run_dro_tulip_catalog.m`, `test_scalar_verdict.m`, `test_second_order_parallel.m`, `test_second_order_pass.m`, `test_second_order_sidecar_identity.m`, `test_seed_from_entry.m`, `test_sheet_from_arcs.m`, `test_sheet_to_catalog_file.m`, `test_ss_bvp_accept.m`, `test_stm_variational.m`, `test_validate_flight.m`, `test_verify_with_pumpkyn.m`, `test_work_queue.m`
+**tests/**: `test_arclength_arrival.m`, `test_arclength_ms.m`, `test_arclength_ms_thrust.m`, `test_campaign_processes.m`, `test_catalog_schema_v3.m`, `test_certify_caps.m`, `test_certify_enforcement.m`, `test_conj_coverage.m`, `test_conj_fixedtf.m`, `test_conj_resolve.m`, `test_conj_spectrum.m`, `test_cr3bp_minenergy_pmp.m`, `test_dro_tulip_seed.m`, `test_entry_notes.m`, `test_flight_to_junctions.m`, `test_fly_transfer.m`, `test_gates_h6_wiring.m`, `test_gto_family.m`, `test_h6_margin.m`, `test_huber_saltation.m`, `test_lift_margin.m`, `test_lift_space_dim.m`, `test_minfuel_pmp.m`, `test_mintime_gates.m`, `test_ms_bvp_extra.m`, `test_ms_bvp_fixedtf.m`, `test_ms_tfmin_hom.m`, `test_nd_propulsion.m`, `test_periodic_pp.m`, `test_phase_state.m`, `test_pmp_pointwise_checks.m`, `test_scalar_verdict.m`, `test_second_order_parallel.m`, `test_second_order_pass.m`, `test_second_order_sidecar_identity.m`, `test_seed_from_entry.m`, `test_sheet_to_catalog_file.m`, `test_ss_bvp_accept.m`, `test_stm_variational.m`, `test_validate_flight.m`, `test_work_queue.m`
 
 ## verify_common
 

@@ -46,20 +46,26 @@ the folder*. Steps 1–9 change no numerical result and need no decision; steps
 
 **B. Small removals and moves — one consumer each**
 
-- [ ] **5. Retire unused code.** `conjugate_pole_predict` and its test: no
-  production caller, and the 2026-09-10 chain review asked that it leave the
-  certification path — move to a diagnostics folder or delete (git keeps it).
-  `cr3bp_field`: test-only (`test_arclength_arrival`'s oracle) — make it a
-  test helper, UNLESS the deferred Hermite `periodic_pp` item above is
-  scheduled, which would use it. Gate: no remaining code reference; the
-  test passes. Under an hour.
-- [ ] **6. Move `rib_targets` to `DRO_tulip/indirect`** (its only caller is
-  the rib walker), with `test_phase_lists`, which also tests DRO_tulip code.
-  Gate: `test_phase_lists` from its new home. Under an hour.
-- [ ] **7. Move the 16 campaign-only tests** to `DRO_tulip/indirect/tests`
-  (15) and `GTO_tulip` (1): the list is in the README. Check each one's path
-  bootstrap, many resolve paths relative to this folder. Gate: every moved
-  test run once from its new home. Half a day.
+- [x] **5. Retire unused code** — DONE 2026-09-16. `conjugate_pole_predict`
+  and its test DELETED (no caller; last present at commit f84e82b if the
+  pole fit is ever wanted as a diagnostic). `cr3bp_field` became a local
+  function of `tests/test_arclength_arrival`, its only consumer; the
+  deferred Hermite item notes where to restore it from.
+  `DRO_tulip/indirect/arclength_arrival`'s header still claimed its
+  derivative came from `cr3bp_field`; corrected to the interpolant.
+  Gate met: no code reference remains; `test_arclength_arrival` passes.
+
+- [x] **6. Move `rib_targets` to `DRO_tulip/indirect`** — DONE 2026-09-16,
+  with `test_phase_lists`. Gate met: the test passes from its new home.
+
+- [x] **7. Move the campaign-only tests** — DONE 2026-09-16: 15 tests to
+  `DRO_tulip/indirect/tests` (each bootstrap now climbs to `orbit_transfer`
+  and names `costate_common` explicitly). `test_gto_family` was
+  misclassified and STAYS: it tests this folder's `get_family_orbit`
+  through a GTO_tulip fixture. Gate met: all 15 plus `test_phase_lists` and
+  `test_arclength_arrival` pass from their homes, each run with
+  `costate_common`, `DRO_tulip` and `DRO_tulip/indirect` removed from the
+  path first, so every test had to find its own dependencies.
 
 **C. Cut the library's dependency on DRO_tulip**
 
@@ -125,7 +131,9 @@ the folder*. Steps 1–9 change no numerical result and need no decision; steps
   - The variant worth building when it IS needed is **Hermite**, not a
     higher-order spline for its own sake: the table already carries the
     derivative of its position rows (the velocity rows), and the
-    acceleration is available from `cr3bp_field`. A spline discards both.
+    acceleration is available from the ballistic CR3BP field (a local
+    function of `tests/test_arclength_arrival` since 2026-09-16; promote it
+    back into the library when this is built). A spline discards both.
     Hermite would enforce them, cutting the error and making the
     interpolant self-consistent by construction. `opts.scheme` is already
     the hook, so deferring costs one switch case.

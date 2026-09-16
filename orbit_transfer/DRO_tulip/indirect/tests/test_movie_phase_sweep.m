@@ -30,7 +30,8 @@ function ok = test_movie_phase_sweep()
 %% ------------------------ Begin Code Sequence ---------------------------
 
 ok = true;
-here = fileparts(fileparts(mfilename('fullpath')));
+ot   = fileparts(fileparts(fileparts(fileparts(mfilename('fullpath')))));  % orbit_transfer
+here = fullfile(ot, 'costate_common');
 ind = fullfile(fileparts(here), 'DRO_tulip', 'indirect');
 addpath(here, ind);
 stem = [tempname '_sweep'];

@@ -18,7 +18,7 @@ adding files).
 
 ## State of the folder (measured 2026-09-16)
 
-**61 files, about 8,000 lines, 58 tests.** The folder did not match its
+**58 files and 41 tests** (61 and 58 before cleanup steps 5–7, 2026-09-16). The folder did not match its
 old admission rule; the table below is what the new one sorts. Caller counts below are code references from outside the
 folder (tests excluded); an "entry point" has no calling code and is run by
 hand.
@@ -26,9 +26,9 @@ hand.
 | who uses it | files |
 |---|---|
 | two or more campaigns | 9 — `get_family_orbit`, `build_costate_catalog_family`, `nd_propulsion`, `ms_tfmin`, `phase_state`, `seed_from_z8`, `catalog_schema`, `ms_conjugate_test`, `duals_to_costates` |
-| DRO_tulip only | 36 |
+| DRO_tulip only | 35 (`rib_targets` moved out) |
 | DPO_tulip only | 1 — `survey_family_bounds` |
-| no caller outside the folder | 15 — 9 internal helpers, 4 entry points (`conj_catalog_pass`, `gates_catalog_pass`, `golden_cells`, `campaign_status`), 2 unused in production (`conjugate_pole_predict`; `cr3bp_field`, test-only) |
+| no caller outside the folder | 13 — 9 internal helpers, 4 entry points (`conj_catalog_pass`, `gates_catalog_pass`, `golden_cells`, `campaign_status`) |
 
 Known structural issues, each a step in `TODO.md` → *Cleanup plan*:
 
@@ -40,8 +40,9 @@ Known structural issues, each a step in `TODO.md` → *Cleanup plan*:
   HALO, DPO, HALO_HALO and GTO, each of which adds `DRO_tulip` to its path.
 - **Job control lives here:** the nine orchestration files at the bottom are
   campaign infrastructure, not optimal control.
-- **Tests of campaign code live here:** 16 of the 58 tests exercise only
-  DRO_tulip (15) or GTO_tulip (1) code.
+- ~~Tests of campaign code live here~~ — fixed 2026-09-16: the 15
+  DRO_tulip-only tests moved to `DRO_tulip/indirect/tests`. (`test_gto_family`
+  was misclassified: it tests this folder's `get_family_orbit`, so it stays.)
 
 ## Contents by layer
 
@@ -58,7 +59,6 @@ folders, *internal* means called only from within this folder.
 | `assert_periodic_orbit.m` | The closure guard as a standalone assertion (NaN-safe `~(err<tol)` form). | internal |
 | `periodic_pp.m` | The C1-**periodic** cubic through one period of a closed orbit, its derivative (from the interpolant's own coefficients) and its seam: `seam.value` is the DATA's closure, which no interpolant can improve, `seam.deriv` the interpolant's derivative mismatch at the seam. An ordinary not-a-knot spline is not C1 at s = 0 — measured on the 7-petal tulip its derivative jumps by ~1e-2 there, while in VALUE the two agree below a millimetre except within a fraction of a percent of the seam, where the gap reaches metres. Extracted 2026-09-11 from two private copies that disagreed on policy (`transfer_study`'s `periodicPP` errored without the Curve Fitting Toolbox; `arclength_arrival`'s `makePP` fell back in silence) — the policy is now `opts.onMissing`, and the fallback warns. `tests/test_periodic_pp` (convergence order, both seams, the not-a-knot contrast, three refusals). | internal (`phase_state`) |
 | `phase_state.m` | THE endpoint rule: one periodic orbit in, two closures out — the state at a phase FRACTION and `dx/ds` (per unit phase, so it carries the period). Built on `periodic_pp`. Consumers: every campaign engine that evaluates an endpoint at a phase — the live instruments (`second_order_pass`, `conj_catalog_pass`, `gates_catalog_pass`, `audit_phase_catalog`), the ladder engines and phase sweeps (`thrust_ladder_library` and 10 more), the GTO campaign tools, plus `arclength_arrival` (its `dstateA` is what `dR/dsA` differentiates) and `transfer_study`. Migrated 2026-09-11, 18 files; the recipient-facing deliverable helpers keep their inline `interp1` DELIBERATELY (a shipped catalog's helpers carry no dependency on this library) — see TODO. `tests/test_phase_state` — including the EQUIVALENCE GATE: four golden vectors from the pre-move implementations reproduced **bitwise**, one of them next to the seam. | DRO, GTO |
-| `rib_targets.m` | The unwrapped departure offsets a rib walks from its spine, nearest first, for any spacing of the departure list. Phase-torus-specific: its only caller is the DRO_tulip rib walker (cleanup step 6). `tests/test_phase_lists`. | DRO |
 
 **Units**
 
@@ -70,7 +70,6 @@ folders, *internal* means called only from within this folder.
 
 | file | what | used by |
 |---|---|---|
-| `cr3bp_field.m` | The ballistic CR3BP field f = [v; g(r) + h(v)]. **Test-only today:** `arclength_arrival`'s dR/dsA deliberately differentiates the phase INTERPOLANT instead (the field is a different function of sA; chain review 2026-09-10), so the one remaining consumer is `tests/test_arclength_arrival`, which uses it as an oracle for the propagated orbit's derivative (cleanup step 5). | tests only |
 | `cr3bp_thrust_rhs.m` | CR3BP dynamics with thrust and mass flow: the shared right-hand side behind `flown_control_error` and `true_min_altitude`. | internal |
 | `mintime_rhs_point.m` | The 14-state minimum-time PMP field at a point (pumpkyn `tfMinEoM`, state and costate rows). Shared by `ms_tfmin` and `ms_tfmin_hom`; extracted 2026-09-08 on its second consumer. | internal |
 | `mintime_prop_seg.m` | One multiple-shooting segment of the minimum-time PMP flow via pumpkyn `tfMinProp`, with the 14 × 14 STM on request. The propagator closure of `ms_tfmin` and `ms_tfmin_hom`, and the flow `conj_spectrum` samples; extracted 2026-09-08. | internal |
@@ -119,7 +118,6 @@ folders, *internal* means called only from within this folder.
 | `ms_conjugate_test.m` | Jacobi (conjugate-point) test, BOTH time conventions. Free-final-time (min-time): det([Φ_xλ·P, f(t)]) on the costate-scaling quotient — the naive 6×6 det is IDENTICALLY singular there (scaling + λ_m invariances); read the header before changing anything. **Fixed-final-time** (min-energy/min-fuel, 2026-09-02, **corrected 2026-09-05**): the SAME instrument with `freeTime=false`, `quotientDir=[]` (the running cost breaks the scaling invariance), **rows 1:7 = the full state** (a Jacobi field must vanish in r, v AND m; the earlier `[1:6 14]` block is the terminal shooting Jacobian, meaningful only at t_f), cols 8:14. Since 09-05 for BOTH conventions: samples through t_f (`ms_bvp` returns `.Yend`), equilibrated sign test, initial-coast/saturated-arc structural zeros skipped (`.firstFullRank`), last bracket counted, spec echoed. Validated on the LQ π-conjugate case + coast + final-segment fixtures (`tests/test_conj_fixedtf`, 10/10); golden 20/20. Necessary condition, junction resolution — see `doc/extremal_and_local_min_survey.md` for what sufficiency would need. | DRO, verify_common |
 | `conj_spectrum.m` | **Dense singular-SPECTRUM scan** of the free-time quotiented conjugate matrix, closing both blind spots of the sampled sign test (two conjugate times inside one segment; an even-multiplicity crossing with no sign change). Built on `mintime_prop_seg`, sub-divided. It is a CANDIDATE-DETECTION scan: every sigma_6 dip and every determinant sign change is a LOCATED candidate (t/t_f, sigma_6/sigma_5) classified start / endpoint / interior, and every interior one is refined TWICE (4x, then 16x) -- a zero keeps falling at both levels or carries a sign change, a near-miss plateaus. One level was not enough: four 70 mN entries read 0.49 at the first level and 0.8-1.0 at the second (FINDINGS 42). `tests/test_conj_spectrum`: certified anchor (no interior candidate) and refuted control (interior zero, first-level ratio 0.06). | DRO |
 | `conj_resolve.m` | Candidate detection and resolution for a dense conjugate-matrix scan, written as a PURE function of a matrix-valued function of time so synthetic matrices can drive it in tests; `conj_spectrum` feeds it the propagated CR3BP matrix. Column-normalised samples, sign trusted only above `signTol`, coarse local minima located and refined, a vanishing raw column counted as a candidate in its own right (Astra review #3, 2026-09-11). `tests/test_conj_resolve`. | internal (`conj_spectrum`) |
-| `conjugate_pole_predict.m` | Early warning that a continuation is walking into a conjugate point, fitted from the conditioning the solver already reports: log cond = a − p·log(s_pole − s), a POLE rather than an exponential (on the measured departure walk it put the singularity at 0.0469 against a measured 0.04665). **Unused:** no production caller; the 2026-09-10 chain review asked that it move to diagnostics and never be read as certification evidence (cleanup step 5). `tests/test_conjugate_pole_predict`. | **none** |
 | `mintime_hypothesis_gates.m` + `gates_catalog_pass.m` | **Sufficiency-hypothesis gates for the min-time conjugate test** (2026-09-06, `doc/mintime_second_order_audit.tex`): on the dense `tfMinProp` flight of an entry, min\|λ_v\| (strong Legendre), min Q_mt = \|λ_v\|/m + λ_m/c (all-burn is the PMP control; `tfMinEoM`'s own switching function), and the abnormal-lift probe dim S = 1 (lifts of a fixed trajectory form a linear space; λ·f is a functional on it whose kernel is the abnormal lifts). Golden cells 15/15. `gates_catalog_pass` runs them catalog-wide with the `conj_catalog_pass` campaign contract (sidecar `*_gatesprog.mat`, resume, writeback). `gates_catalog_pass` is an entry point with no calling code; 2026-09-07 it passed 18,360/18,360 entries across the four catalogs. | DRO; entry point |
 | `lift_space_dim.m` | The numerical-rank rule behind the abnormal-lift gate (2026-09-07): dim S = #{sv < tol}, tol = min(max(rankTol·sv₁, 10·nullResid), 1e-3·sv₁). A null space cannot be resolved finer than its known member's residual — the first catalog-wide pass with a fixed 1e-8 under-counted 512 entries as "dim S = 0" (gaps sv₇/sv₆ ~ 1e-7..2.5e-6, i.e. clean one-dimensional null spaces); the cap keeps a noisy lift from ever inflating the count. `tests/test_lift_space_dim` (5/5). | internal |
 | `lift_margin.m` | The `dim S` rank statement as a **measured margin**: `dim S >= 1` is constructive (the lift is exhibited; a zero or non-finite vector is refused), `dim S <= 1` is Eckart-Young -- `sigma_6 / \|\|dC\|\|` with the error MEASURED by rebuilding C at a second integration setting. The pair matters: with a loose 1e-7 second build the "error" is that build's own error, and seven long-arc entries with sigma_6 = 0.99 read 4-9x; the sweep uses [1e-12 1e-9] (43x on the same entry). `tests/test_lift_margin`. | DRO |
@@ -159,19 +157,21 @@ folders, *internal* means called only from within this folder.
 
 ## Tests
 
-`tests/` holds 58 tests. Classified 2026-09-16 by what they call:
+`tests/` holds 41 tests. Classified 2026-09-16 by what they call (after
+cleanup steps 5–7: `test_conjugate_pole_predict` deleted with its function,
+`test_phase_lists` moved with `rib_targets`, the 15 DRO_tulip-only tests moved
+to `DRO_tulip/indirect/tests`):
 
 | kind | count | tests |
 |---|---|---|
-| library only | 26 | `test_arclength_ms`, `test_arclength_ms_thrust`, `test_campaign_processes`, `test_catalog_schema_v3`, `test_conj_fixedtf`, `test_conj_resolve`, `test_conjugate_pole_predict`, `test_cr3bp_minenergy_pmp`, `test_h6_margin`, `test_huber_saltation`, `test_lift_margin`, `test_lift_space_dim`, `test_minfuel_pmp`, `test_mintime_gates`, `test_ms_bvp_extra`, `test_ms_bvp_fixedtf`, `test_ms_tfmin_hom`, `test_nd_propulsion`, `test_periodic_pp`, `test_phase_state`, `test_scalar_verdict`, `test_second_order_parallel`, `test_second_order_pass`, `test_second_order_sidecar_identity`, `test_ss_bvp_accept`, `test_validate_flight` |
-| library, through DRO_tulip fixtures | 16 | `test_arclength_arrival`, `test_certify_caps`, `test_certify_enforcement`, `test_conj_coverage`, `test_conj_spectrum`, `test_dro_tulip_seed`, `test_entry_notes`, `test_flight_to_junctions`, `test_fly_transfer`, `test_gates_h6_wiring`, `test_phase_lists`, `test_pmp_pointwise_checks`, `test_seed_from_entry`, `test_sheet_to_catalog_file`, `test_stm_variational`, `test_work_queue` |
-| campaign code only | 16 | DRO_tulip: `test_certify_crossing`, `test_crossings_from_arc`, `test_deliverable_audit_gate`, `test_family_map`, `test_guard_catalog_overwrite`, `test_movie_phase_sweep`, `test_plot_phase_sheet`, `test_plot_transfer_3d`, `test_print_transfer_summary`, `test_report_optimality`, `test_rib_from_crossing`, `test_run_dro_tulip`, `test_run_dro_tulip_catalog`, `test_sheet_from_arcs`, `test_verify_with_pumpkyn`; GTO_tulip: `test_gto_family` |
+| library only | 25 | `test_arclength_ms`, `test_arclength_ms_thrust`, `test_campaign_processes`, `test_catalog_schema_v3`, `test_conj_fixedtf`, `test_conj_resolve`, `test_cr3bp_minenergy_pmp`, `test_h6_margin`, `test_huber_saltation`, `test_lift_margin`, `test_lift_space_dim`, `test_minfuel_pmp`, `test_mintime_gates`, `test_ms_bvp_extra`, `test_ms_bvp_fixedtf`, `test_ms_tfmin_hom`, `test_nd_propulsion`, `test_periodic_pp`, `test_phase_state`, `test_scalar_verdict`, `test_second_order_parallel`, `test_second_order_pass`, `test_second_order_sidecar_identity`, `test_ss_bvp_accept`, `test_validate_flight` |
+| library, through campaign fixtures | 16 | `test_arclength_arrival`, `test_certify_caps`, `test_certify_enforcement`, `test_conj_coverage`, `test_conj_spectrum`, `test_dro_tulip_seed`, `test_entry_notes`, `test_flight_to_junctions`, `test_fly_transfer`, `test_gates_h6_wiring`, `test_gto_family` (GTO_tulip fixture), `test_pmp_pointwise_checks`, `test_seed_from_entry`, `test_sheet_to_catalog_file`, `test_stm_variational`, `test_work_queue` |
 
 No direct test: `harvest_ms_seed` (covered only through `golden_cells`),
 `run_capped`, `current_pool`, `flown_control_error`, `true_min_altitude`,
 `preflight_screen`, `survey_family_bounds`, `newton_fixed_q`,
 `cr3bp_thrust_rhs`, `ctrl_quad`, `assert_periodic_orbit`. `duals_to_costates`
-is a delegate; the implementation is tested by `oclib/tests/test_duals_to_costates`. `test_ladder_endpoints` lives in `DRO_tulip/indirect/tests`.
+is a delegate; the implementation is tested by `oclib/tests/test_duals_to_costates`. `test_ladder_endpoints` and the campaign-code tests live in `DRO_tulip/indirect/tests`.
 
 Run the relevant tests plus `golden_cells` after touching an engine.
 
@@ -179,10 +179,10 @@ Run the relevant tests plus `golden_cells` after touching an engine.
 
 - Pumpkyn house style: `%% Purpose / Inputs / Outputs / Revision History`
   headers, no Code Analyzer pragmas, never `i`/`j` as loop variables.
-  **Current state (2026-09-16):** all 61 files use the `%% Purpose` header;
+  **Current state (2026-09-16):** all 58 files use the `%% Purpose` header;
   no `%#ok` pragmas and no `i`/`j` loop variables remain (the 22 `AGROW` /
   `INUSD` warnings the pragmas hid are now visible — preallocate on next
-  touch). 13 of 61 files have a `nargin == 0` self-demo.
+  touch). 13 of 58 files have a `nargin == 0` self-demo.
 - Physics only through pumpkyn calls (`tfMinProp`/`tfMinEoM`/getters);
   nothing is ever written into pumpkyn.
 - The five standing principles + principle 7 (defenses against silent

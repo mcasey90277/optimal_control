@@ -38,7 +38,8 @@ function ok = test_crossings_from_arc()
 %% ------------------------ Begin Code Sequence ---------------------------
 
 ok = true;
-here = fileparts(fileparts(mfilename('fullpath')));
+ot   = fileparts(fileparts(fileparts(fileparts(mfilename('fullpath')))));  % orbit_transfer
+here = fullfile(ot, 'costate_common');
 ind = fullfile(fileparts(here), 'DRO_tulip', 'indirect');
 addpath(here, ind);
 arcFile = fullfile(ind, 'results', 'arrival_arc_cell11_dn_long.mat');

@@ -18,7 +18,7 @@ adding files).
 
 ## State of the folder (measured 2026-09-16)
 
-**59 files and 42 tests** (61 and 58 before cleanup steps 5–7, 2026-09-16). The folder did not match its
+**59 files and 49 tests** (61 and 58 before cleanup steps 5–7, 2026-09-16). The folder did not match its
 old admission rule; the table below is what the new one sorts. Caller counts below are code references from outside the
 folder (tests excluded); an "entry point" has no calling code and is run by
 hand.
@@ -159,21 +159,21 @@ folders, *internal* means called only from within this folder.
 
 ## Tests
 
-`tests/` holds 42 tests. Classified 2026-09-16 by what they call (after
+`tests/` holds 49 tests. Classified 2026-09-16 by what they call (after
 cleanup steps 5–7: `test_conjugate_pole_predict` deleted with its function,
 `test_phase_lists` moved with `rib_targets`, the 15 DRO_tulip-only tests moved
 to `DRO_tulip/indirect/tests`):
 
 | kind | count | tests |
 |---|---|---|
-| library only | 25 | `test_arclength_ms`, `test_arclength_ms_thrust`, `test_campaign_processes`, `test_catalog_schema_v3`, `test_conj_fixedtf`, `test_conj_resolve`, `test_cr3bp_minenergy_pmp`, `test_h6_margin`, `test_huber_saltation`, `test_lift_margin`, `test_lift_space_dim`, `test_minfuel_pmp`, `test_mintime_gates`, `test_ms_bvp_extra`, `test_ms_bvp_fixedtf`, `test_ms_tfmin_hom`, `test_nd_propulsion`, `test_periodic_pp`, `test_phase_state`, `test_scalar_verdict`, `test_second_order_parallel`, `test_second_order_pass`, `test_second_order_sidecar_identity`, `test_ss_bvp_accept`, `test_validate_flight` |
-| library, through campaign fixtures | 17 | `test_arclength_arrival`, `test_ladder_endpoints`, `test_certify_caps`, `test_certify_enforcement`, `test_conj_coverage`, `test_conj_spectrum`, `test_dro_tulip_seed`, `test_entry_notes`, `test_flight_to_junctions`, `test_fly_transfer`, `test_gates_h6_wiring`, `test_gto_family` (GTO_tulip fixture), `test_pmp_pointwise_checks`, `test_seed_from_entry`, `test_sheet_to_catalog_file`, `test_stm_variational`, `test_work_queue` |
+| library only | 31 | `test_arclength_ms`, `test_flown_control_error`, `test_newton_fixed_q`, `test_preflight_screen`, `test_run_capped`, `test_survey_family_bounds`, `test_true_min_altitude`, `test_arclength_ms_thrust`, `test_campaign_processes`, `test_catalog_schema_v3`, `test_conj_fixedtf`, `test_conj_resolve`, `test_cr3bp_minenergy_pmp`, `test_h6_margin`, `test_huber_saltation`, `test_lift_margin`, `test_lift_space_dim`, `test_minfuel_pmp`, `test_mintime_gates`, `test_ms_bvp_extra`, `test_ms_bvp_fixedtf`, `test_ms_tfmin_hom`, `test_nd_propulsion`, `test_periodic_pp`, `test_phase_state`, `test_scalar_verdict`, `test_second_order_parallel`, `test_second_order_pass`, `test_second_order_sidecar_identity`, `test_ss_bvp_accept`, `test_validate_flight` |
+| library, through campaign fixtures | 18 | `test_arclength_arrival`, `test_harvest_ms_seed` (golden-cell duals), `test_ladder_endpoints`, `test_certify_caps`, `test_certify_enforcement`, `test_conj_coverage`, `test_conj_spectrum`, `test_dro_tulip_seed`, `test_entry_notes`, `test_flight_to_junctions`, `test_fly_transfer`, `test_gates_h6_wiring`, `test_gto_family` (GTO_tulip fixture), `test_pmp_pointwise_checks`, `test_seed_from_entry`, `test_sheet_to_catalog_file`, `test_stm_variational`, `test_work_queue` |
 
-No direct test: `harvest_ms_seed` (covered only through `golden_cells`),
-`run_capped`, `current_pool`, `flown_control_error`, `true_min_altitude`,
-`preflight_screen`, `survey_family_bounds`, `newton_fixed_q`,
-`cr3bp_thrust_rhs`, `ctrl_quad`, `assert_periodic_orbit`. `duals_to_costates`
-is a delegate; the implementation is tested by `oclib/tests/test_duals_to_costates`. The campaign-code tests live in `DRO_tulip/indirect/tests`.
+No direct test (2026-09-16): `current_pool`, `capped_pool` (both exercised
+by `test_run_capped` and the pool tests), `assert_periodic_orbit`
+(exercised by `test_survey_family_bounds`). `duals_to_costates`
+is a delegate; the implementation is tested by `oclib/tests/test_duals_to_costates`.
+The campaign-code tests live in `DRO_tulip/indirect/tests`.
 
 Run the relevant tests plus `golden_cells` after touching an engine.
 

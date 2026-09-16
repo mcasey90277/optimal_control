@@ -89,11 +89,22 @@ the folder*. Steps 1–9 change no numerical result and need no decision; steps
   pass with every DRO/HALO/DPO/GTO directory removed from the path first;
   `grep DRO_tulip costate_common/*.m` finds comments, the demo's and
   `golden_cells`' data-file references, and no addpath.
-- [ ] **10. Tests for the untested core, BEFORE steps 11–12** so the moves
-  have a net: `harvest_ms_seed` (real duals from `golden_cells_data`),
-  `run_capped` (timeout vs worker error), `flown_control_error`,
-  `true_min_altitude`, `preflight_screen`, `newton_fixed_q`,
-  `survey_family_bounds`. A day.
+- [x] **10. Tests for the untested core** — DONE 2026-09-16, seven tests,
+  each on a fixture with a known answer: `test_harvest_ms_seed` (real duals
+  from `golden_cells_data`, bitwise against the pchip/extrap construction,
+  sign flip, uniform mesh), `test_run_capped` (in-time, worker error,
+  timeout within the cap, pool survives), `test_flown_control_error` (true
+  flight of a quadratic throttle: zero error, injected misses read back,
+  linear reconstruction caught; also covers `ctrl_quad` and
+  `cr3bp_thrust_rhs`), `test_true_min_altitude` (a flyby whose periselene
+  falls between nodes), `test_preflight_screen`, `test_newton_fixed_q`
+  (analytic root, guards, cap), `test_survey_family_bounds` (real DROs,
+  one admissible, one rejected, one unbuildable). Gate: all pass with no
+  campaign directory on the path; one planted bug per function is caught
+  by a failing ASSERTION (not a throw), files restored md5-identical. The
+  one undetected mutant (dropping `newton_fixed_q`'s non-finite-RESIDUAL
+  guard) is equivalent: a NaN residual always yields a NaN step, which the
+  step guard catches on the same call.
 
 **D. Structural moves — each needs a campaign-level reproduction, not only unit tests**
 

@@ -1,8 +1,8 @@
 function ok = test_local_residual()
-% TEST_LOCAL_RESIDUAL  Unit test for oc.local_residual (G1-gate engine).
+%% Purpose:
 %
-%   Three checks on a linear system dz = A z whose flow is exactly
-%   expm(A dt):
+%   Unit test for oc.local_residual (G1-gate engine). Three checks on a
+%   linear system dz = A z whose flow is exactly expm(A dt):
 %     1. EXACT NODES: nodes sampled from the true flow give per-interval
 %        residuals at integrator tolerance (< 1e-10), NOT zero (that
 %        would mean nothing was integrated).
@@ -11,8 +11,18 @@ function ok = test_local_residual()
 %        else -- the residual is LOCAL.
 %     3. SHAPES: dX is [nx x N], one column per interval.
 %
-% INPUTS:  none
-% OUTPUTS: ok - all checks pass [logical]
+%% Inputs:
+%
+%  none
+%
+%% Outputs:
+%
+%  ok                       logical                 All checks passed
+%
+%% Revision History:
+%  M. Casey                                                   (c) 08/25/2026
+%  Copyright Coorbital Inc.
+%% ------------------------ Begin Code Sequence ---------------------------
 
 here = fileparts(mfilename('fullpath'));
 addpath(fileparts(here));                         % oclib root -> +oc visible

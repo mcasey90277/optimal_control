@@ -62,6 +62,24 @@ function [zEnd, out] = fly_control(z0, tGrid, rhs, opts)
 %  Copyright Coorbital Inc.
 %% ------------------------ Begin Code Sequence ---------------------------
 
+if nargin == 0
+   %Demo: fly a damped oscillator node to node and end to end, and compare
+   %both terminal states with the exact flow:
+     A    = [0 1; -2 -0.3];
+     tG   = linspace(0, 6, 25);
+     z0   = [1; 0];
+     [zP, out] = oc.fly_control(z0, tG, @(t, z) A*z);
+     zS   = oc.fly_control(z0, tG, @(t, z) A*z, struct('mode', 'span'));
+     zRef = expm(A*tG(end))*z0;
+     fprintf('perInterval miss %.2e, span miss %.2e\n', ...
+             sqrt(sum((zP - zRef).^2)), sqrt(sum((zS - zRef).^2)));
+     figure('color',[1 1 1]);
+     plot(out.t, out.Z, '-');  grid on
+     xlabel('t');  ylabel('z');  legend({'position', 'velocity'});
+     [zEnd, out] = deal([]);
+     return
+end
+
 if nargin < 4, opts = struct(); end
 d = @(f,v) fieldd(opts, f, v);
 mode   = d('mode', 'perInterval');

@@ -66,6 +66,24 @@ function [dX, out] = local_residual(X, tGrid, rhs, opts)
 %  Copyright Coorbital Inc.
 %% ------------------------ Begin Code Sequence ---------------------------
 
+if nargin == 0
+   %Demo: nodes of a forward-Euler solution of a damped oscillator, measured
+   %against the true flow -- the residual is the per-interval Euler error:
+     A  = [0 1; -2 -0.3];
+     tG = linspace(0, 6, 25);
+     X  = zeros(2, numel(tG));  X(:,1) = [1; 0];
+     for k = 1:numel(tG)-1
+         X(:,k+1) = X(:,k) + (tG(k+1) - tG(k))*A*X(:,k);
+     end
+     [dX, out] = oc.local_residual(X, tG, @(t, z) A*z);
+     figure('color',[1 1 1]);
+     semilogy(out.tMid, sqrt(sum(dX.^2, 1)), 'o-');  grid on
+     xlabel('interval midpoint');  ylabel('|local residual|');
+     title(sprintf('forward Euler, worst interval %d', out.kWorst));
+     [dX, out] = deal([]);
+     return
+end
+
 if nargin < 4, opts = struct(); end
 d = @(f,v) fieldd(opts, f, v);
 solver = d('solver', @ode113);

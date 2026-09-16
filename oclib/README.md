@@ -19,6 +19,18 @@ Campaign folders keep thin delegates at the old paths so no caller breaks.
 | `oc.local_residual` | The local-residual engine (G1): per-interval re-integration RESTARTING from the transcription's own left node; returns the raw per-component miss at the right node (dimensional splitting stays with the caller — CR3BP vs MEE layouts differ). Sibling of `fly_control`, which CARRIES the state. | `orbit_transfer` DRO gate (`dro_residual`, rerouted) + `orbit_transfer` earth-MEE gate (`mee_residual`, new). **Admission-rule note:** both consumers are inside `orbit_transfer` — the second *top-level* consumer (booster R1's tracking-error gate) is anticipated, not yet real. Recorded rather than hidden. | DRO: old-vs-new max diff 1.7e-18 on both stored reference solutions + 3/3 instrument harness; unit test `tests/test_local_residual` (exactness, injected-error locality, shape) |
 | `oc.fly_control` | The flown-control engine: integrate an RHS closure (dynamics + the caller's control reconstruction) over a node grid, per-interval-restart or single-span, configurable integrator/tolerances. Control reconstruction stays with the consumer — it is domain policy (annulus splits, throttle clamps). | `orbit_transfer` G1b (`flown_control_error`, perInterval/ode113) + `booster_landing` G2 (span/ode45) | orbit: globKm 0.891913 / 8.443927 at d = 0.000e+00; booster: G2 residuals 0.0088486 m / 0.000299075 m/s / 1.02479e-05 kg identical |
 
+## Tests
+
+`tests/` holds one unit test per function, each on a problem with an exact
+answer, so all three run from a fresh clone with no campaign data:
+`test_duals_to_costates` (station rules for the three schemes, h-scaling,
+the sign vote in both orientations, the lambda_t check, refusals),
+`test_fly_control` (exact flow in both modes, control looked up from global
+time, solver option, refusal), `test_local_residual` (exact nodes, injected
+error stays local). Each returns `ok`. Every function also carries a
+`nargin == 0` self-demo; `duals_to_costates`'s demo reads a gitignored
+DRO_tulip results file, so it runs only on the machine that holds it.
+
 ## Why this exists (the one-sentence version)
 
 Booster G5 compared a Hermite–Simpson segment dual against the *node*
@@ -39,10 +51,10 @@ transcription-side and PMP-side *structure* only.
 1. ~~`oc.duals_to_costates`~~ (this move)
 2. ~~`oc.fly_control`~~ (done)
 3. ~~(part) local-residual engine~~ — `oc.local_residual` landed 2026-08-25
-   (see table). `oc.ms_bvp` + `oc.ms_conjugate_test` promotion unchanged,
-   plus a cart-pole PMP-BVP demo as the cross-folder integration test;
-   `ms_tfmin` and the fly-z8→K-junction seed builder (now written twice:
-   `conj_catalog_pass` + `mintime_ms_bvp_probe`) are queued for
-   `costate_common`
+   (see table). Still open: `oc.ms_bvp` + `oc.ms_conjugate_test`, plus a
+   cart-pole PMP-BVP demo as the cross-folder integration test that would
+   supply their second top-level consumer (`costate_common/TODO.md`,
+   cleanup step 13). `ms_tfmin` and the seed builder `seed_from_z8` moved
+   into `costate_common` on 2026-08-26.
 4. (deferred) transcription defect builders — build for the next new
    campaign, adopt backward if the diff supports it

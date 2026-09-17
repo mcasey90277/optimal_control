@@ -135,6 +135,23 @@ test_cartpole_pmp          % the whole indirect solve end to end (~2 min: two ms
   solver stopping iterate on the same root) and is NOT a reason to
   regenerate: doing so on every wobble is how a tripwire stops being one.
 
+## The movie
+
+`movie_cartpole` animates both solutions on one clock, with the two control
+histories traced underneath:
+
+```matlab
+cd collocation_examples/ex3_cart_pole_pmp
+movie_cartpole                                   % ~6 min, writes .mp4 and .gif
+movie_cartpole(struct('seconds', 5, 'out', out)) % shorter, reusing a solve
+```
+
+It writes `cartpole_direct_vs_indirect.mp4` (1280x720, 30 fps) and `.gif`.
+The carts move as one and the control traces sit on top of each other: that
+is the 0.062% cost agreement made visible. Frames are forced to an exact
+1280x720 because H.264 shears frames whose dimensions are not multiples of
+16, which shows up as diagonal coloured streaks.
+
 ## What it produces (measured 2026-09-17)
 
 | quantity | value | what it means |

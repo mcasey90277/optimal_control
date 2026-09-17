@@ -1,5 +1,7 @@
 function P = thrust_ladder_library(outMat, opts)
-% THRUST_LADDER_LIBRARY  Build a costate library with a THRUST axis.
+%% Purpose:
+%
+%   Build a costate library with a THRUST axis.
 %
 % For every phase pair on the (departure x arrival) torus, anchor a direct
 % minimum-time solve at the HIGH-thrust end -- where the transfer is nearly
@@ -13,7 +15,8 @@ function P = thrust_ladder_library(outMat, opts)
 % (fly the control) -> ms_tfmin multiple-shooting refinement -> acceptance by
 % pumpkyn.cr3bp.tfMin. Results save after EVERY rung.
 %
-% INPUTS:
+%% Inputs:
+%
 %   outMat - output .mat path (rewritten after every rung)
 %   opts   - (optional) struct:
 %              .rungs     thrust rung set, N, high to low
@@ -42,15 +45,22 @@ function P = thrust_ladder_library(outMat, opts)
 %              .maxCpuSec IPOPT max_cpu_time per rung (s), passed straight
 %                         through to casadi_mintime_dro               [300]
 %
-% OUTPUTS:
+%% Outputs:
+%
 %   P - struct with [nD x nA x nRung] arrays .TF (ND), .FLYKM, .ACCDZ,
 %       .RES, .WALL, .OK, plus .Z8 [8 x nD x nA x nRung] refined costates,
 %       .rungs, .sD, .sA, .meta (orbit + thruster definition).
 %
-% REFERENCES:
+%% References:
 %   [1] casadi_mintime_dro.m -- the direct transcription.
 %   [2] ms_tfmin.m -- multiple-shooting refinement.
 %   [3] process/COSTATE_LIBRARY_PIPELINE.md -- the three-step process.
+%
+%% Revision History:
+%  M. Casey                                                   (c) 08/05/2026
+%  M. Casey  moved into costate_common (cleanup step 12)      (c) 09/16/2026
+%  Copyright Coorbital Inc.
+%% ------------------------ Begin Code Sequence ---------------------------
 
 if nargin < 2, opts = struct(); end
 d = @(f,v) fdef(opts, f, v);
@@ -258,7 +268,6 @@ for kc = 1:min(size(todo,1), maxCells)
         seedU(1:3,:) = seedU(1:3,:) ./ max(vecnorm(seedU(1:3,:),2,1), eps);
         seedU(4,:)   = min(max(seedU(4,:),0),1);
         seedTf = o.tf;  Tprev = TN;
-        rungs_ = rungs; %#ok<NASGU>
         save(outMat, 'TF','FLYKM','ACCDZ','RES','WALL','OK','Z8','ATT', ...
              'rungs','sD','sA','meta');                        % EVERY rung
     end

@@ -1,5 +1,7 @@
 function R = dro_residual(o, muStar, Tmax, c, opts)
-% DRO_RESIDUAL  True continuous-time local error of a direct DRO->tulip solution.
+%% Purpose:
+%
+%   True continuous-time local error of a direct DRO->tulip solution.
 %
 % THE POINT OF THIS FUNCTION. A collocation NLP drives its DEFECTS to machine
 % precision, but a defect only says the returned numbers satisfy the QUADRATURE
@@ -34,7 +36,8 @@ function R = dro_residual(o, muStar, Tmax, c, opts)
 % (.thrOvershoot). Both are silently repaired inside the RHS; large values mean
 % the reconstruction, not the solution, is what is being measured.
 %
-% INPUTS:
+%% Inputs:
+%
 %   o      - solution struct from casadi_mintime_dro. Uses .X [7x(N+1)],
 %            .U [4x(N+1)], .s [1x(N+1)], .tf, and, when
 %            o.scheme = 'hermite-simpson', .Um [4xN] midpoint controls.
@@ -46,7 +49,8 @@ function R = dro_residual(o, muStar, Tmax, c, opts)
 %                     stay well below the residuals being measured, or the
 %                     measurement reports its own integrator error.
 %
-% OUTPUTS:
+%% Outputs:
+%
 %   R - struct: .Rr/.RrMax/.RrMed  POSITION error [ND length; x lStar for km]
 %       .Rv/.RvMax/.RvMed  VELOCITY error [ND; x lStar/tStar for km/s]
 %       .Rm/.RmMax         mass-fraction error [dimensionless]
@@ -61,10 +65,16 @@ function R = dro_residual(o, muStar, Tmax, c, opts)
 %                    [0,1] (0 = healthy)
 %       .relTol .absTol
 %
-% REFERENCES:
+%% References:
 %   [1] Betts, "Practical Methods for Optimal Control", Ch. 4 -- discretization
 %       error estimation and mesh refinement.
 %   [2] orbit_transfer/DRO_tulip/FINDINGS.md -- the measurement this implements.
+%
+%% Revision History:
+%  M. Casey                                                   (c) 08/02/2026
+%  M. Casey  moved into costate_common (cleanup step 12)      (c) 09/16/2026
+%  Copyright Coorbital Inc.
+%% ------------------------ Begin Code Sequence ---------------------------
 
 if nargin < 5, opts = struct(); end
 relTol = local_default(opts, 'relTol', 1e-11);

@@ -210,6 +210,18 @@ the folder*. Steps 1–9 change no numerical result and need no decision; steps
   (all-burn identity) is an option there, so the DERIVED-not-rescaled rule
   has one home. Gate: bitwise equal to the engines' inline form on a real
   flight; `golden_cells` covers `seed_from_z8`'s 3e-13 query-form shift.
+- [ ] **`certify_dro_mintime` has no test of its own** (2026-09-16): it
+  arrived with the ladder engine and is covered only through campaign
+  re-solves, so it carries a `gap` exemption in `tests/test_folder_rules`.
+  It composes four gates whose thresholds decide what a campaign certifies;
+  a fixture test (a stored solution, one gate perturbed at a time) would
+  pin them. Drop the exemption when it lands.
+
+- [ ] **Reflow the four ladder-engine headers into the aligned columns**
+  (2026-09-16): converted to `%% Purpose` on arrival with their documented
+  content kept as prose; the Inputs/Outputs blocks are not in the house
+  column format yet. Cosmetic, mechanical.
+
 - [ ] **Unify `dro_residual` and `verify_common/mee_residual`** (2026-09-16,
   from step 12): both are thin layouts over `oc.local_residual` — the CR3BP
   Cartesian [r;v;m] split and the MEE one. They now live in different

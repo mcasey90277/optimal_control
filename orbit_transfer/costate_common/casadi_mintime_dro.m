@@ -1,5 +1,7 @@
 function out = casadi_mintime_dro(rv0, rvf, Tmax, c, muStar, N, X0, U0, tf0, opts)
-% CASADI_MINTIME_DRO  Direct-collocation minimum-time CR3BP transfer, free t_f.
+%% Purpose:
+%
+%   Direct-collocation minimum-time CR3BP transfer, free t_f.
 %
 % The direct twin of pumpkyn.cr3bp.tfMin. Same problem, same dynamics, same
 % endpoints -- solved by transcription instead of by shooting, so the two can be
@@ -39,7 +41,8 @@ function out = casadi_mintime_dro(rv0, rvf, Tmax, c, muStar, N, X0, U0, tf0, opt
 % S = -||lambda_v||*c/m - lambda_m > 0. In the converged solution lambda_m runs
 % 5.50 -> 0 while staying positive, so S < 0 and u = 1 throughout.
 %
-% INPUTS:
+%% Inputs:
+%
 %   rv0, rvf - departure / arrival states [1x6, ND rotating barycentric]
 %   Tmax     - ND thrust acceleration at unit mass fraction [scalar]
 %   c        - ND exhaust velocity [scalar]
@@ -94,7 +97,8 @@ function out = casadi_mintime_dro(rv0, rvf, Tmax, c, muStar, N, X0, U0, tf0, opt
 %                       which re-inflates the barrier and can eject a warm
 %                       iterate from its basin -- see the floor experiments.
 %
-% OUTPUTS:
+%% Outputs:
+%
 %   out - struct: .X [7x(N+1)] .U [4x(N+1)] .tf .s (the grid) .success
 %         .objective ('time'|'energy') .J (the energy cost Int s^2 dt at the
 %         solution; NaN for 'time')
@@ -110,9 +114,15 @@ function out = casadi_mintime_dro(rv0, rvf, Tmax, c, muStar, N, X0, U0, tf0, opt
 %         .tfSpread (max deviation across the lifted copies -- should be ~0)
 %         .model (opts.returnModel only)
 %
-% REFERENCES:
+%% References:
 %   [1] pumpkyn.cr3bp.tfMinEoM (the dynamics and control law mirrored here).
 %   [2] orbit_transfer/doc/transfer_problem_space.md.
+%
+%% Revision History:
+%  M. Casey                                                   (c) 07/31/2026
+%  M. Casey  moved into costate_common (cleanup step 12)      (c) 09/16/2026
+%  Copyright Coorbital Inc.
+%% ------------------------ Begin Code Sequence ---------------------------
 
 if nargin < 10, opts = struct(); end
 g = @(f,v) local_default(opts, f, v);

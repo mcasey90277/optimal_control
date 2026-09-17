@@ -1,5 +1,7 @@
 function C = certify_dro_mintime(o, p, Tmax, c, opts)
-% CERTIFY_DRO_MINTIME  Pass/fail gate for a direct DRO->tulip min-time solution.
+%% Purpose:
+%
+%   Pass/fail gate for a direct DRO->tulip min-time solution.
 %
 % WHY THIS EXISTS. Every solve in this campaign reported a defect of 1e-14 and
 % every one of them was wrong. The defect is a statement about the
@@ -44,7 +46,8 @@ function C = certify_dro_mintime(o, p, Tmax, c, opts)
 % and they are reported separately so that a solve which passes all of them and
 % still fails G1 is visible for what it is.
 %
-% INPUTS:
+%% Inputs:
+%
 %   o     - solution struct from casadi_mintime_dro
 %   p     - params from dro_tulip_endpoints (.muStar .lStar .tStar)
 %   Tmax  - ND thrust acceleration at unit mass fraction [scalar]
@@ -59,15 +62,22 @@ function C = certify_dro_mintime(o, p, Tmax, c, opts)
 %           .rMoonKm   [1737.4]
 %           .verbose   [true]
 %
-% OUTPUTS:
+%% Outputs:
+%
 %   C - struct: .pass (G1 && G2), .passAll (every gate), .gates (struct array
 %       with .id .name .value .tol .pass .units), .resid (from dro_residual),
 %       .worstAltKm, .tfErrRel
 %
-% REFERENCES:
+%% References:
 %   [1] orbit_transfer/DRO_tulip/FINDINGS.md
 %   [2] orbit_transfer/OPTIMALITY_CERTIFICATION.md -- the repo-wide register
 %       this gate reports into.
+%
+%% Revision History:
+%  M. Casey                                                   (c) 08/02/2026
+%  M. Casey  moved into costate_common (cleanup step 12)      (c) 09/16/2026
+%  Copyright Coorbital Inc.
+%% ------------------------ Begin Code Sequence ---------------------------
 
 if nargin < 5, opts = struct(); end
 d = @(f,v) local_default(opts, f, v);

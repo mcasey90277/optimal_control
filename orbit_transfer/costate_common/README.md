@@ -18,7 +18,7 @@ adding files).
 
 ## State of the folder (2026-09-16)
 
-**54 files and 48 tests** after cleanup steps 5–12 (2026-09-16); 61 files
+**54 files and 50 tests** after cleanup steps 5–12 (2026-09-16); 61 files
 and 58 tests when the cleanup began (nine job-control files left, four
 ladder-engine files arrived). The table below is the measurement
 taken when the cleanup began, kept because the plan was built from it:
@@ -50,6 +50,80 @@ Known structural issues, each a step in `TODO.md` → *Cleanup plan*:
 - ~~Tests of campaign code live here~~ — fixed 2026-09-16: the 15
   DRO_tulip-only tests moved to `DRO_tulip/indirect/tests`. (`test_gto_family`
   was misclassified: it tests this folder's `get_family_orbit`, so it stays.)
+
+## Rules: what belongs here
+
+We got sloppy, and it took a five-day cleanup to undo (2026-09-16,
+`TODO.md`). The old rule — *used by a second campaign* — could never admit
+code born in the reference campaign, which is where most code is born, so
+nothing was ever measured against it: job control, campaign-only tests, dead
+code and a dependency on `DRO_tulip` all accumulated without anyone having
+to justify them. These rules replace it, and `tests/test_folder_rules`
+enforces the mechanical half.
+
+### A file may live here only if all three hold
+
+1. **Generic by construction.** Nothing in it names one campaign's orbits,
+   folders, files or bookkeeping. Whatever is campaign-specific arrives as
+   an argument: endpoints through `get_family_orbit`, output paths from the
+   caller, physics from the sheet's own meta. Not "it could be generalized
+   later" — generic as written.
+2. **A test pins its contract**, and that test runs with no campaign folder
+   on the path. A file whose only evidence is "the campaign still works" is
+   not tested; it is *watched*.
+3. **A real consumer exists**, or it is an entry point run by hand and this
+   README says which. Code kept because it might be useful is kept in git.
+
+### What does not belong (each of these was here)
+
+| not this | where it goes | the example |
+|---|---|---|
+| job control — queues, locks, workers, heartbeats | `../campaign_common/` | nine files, moved in step 11 |
+| tests of campaign code | that campaign's `tests/` | 15 moved to `DRO_tulip/indirect/tests` |
+| anything that `addpath`s a campaign | fix the dependency, don't add the path | `second_order_pass` reached into `DRO_tulip` for `ladder_endpoints`; the file moved here instead |
+| anything that reads a campaign results file | pass the data in, or commit a fixture | `golden_cells` loaded a 20 MB gitignored sheet, so the regression could not run from a fresh clone |
+| recipient-facing deliverable helpers | beside the catalog they ship with | a shipped catalog must carry no dependency on this library |
+| code with no caller | delete it; git keeps it | `conjugate_pole_predict`, `cr3bp_field` |
+
+### Which folder, when it is not this one
+
+| folder | takes |
+|---|---|
+| `../../oclib/+oc` | machinery used by a second TOP-LEVEL folder (`orbit_transfer`, `booster_landing`, …), moved with an equivalence gate and a delegate left behind |
+| `costate_common` (here) | generic optimal-control machinery: orbits and endpoints, PMP fields, shooting and continuation, seeds, the ladder engine, catalog schema and packaging, the second-order instruments |
+| `../verify_common` | first-order gates, reports and residuals |
+| `../campaign_common` | job control |
+| `../cr3bp_common` | the shared GTO problem definition for the earth campaigns |
+| the campaign folder | everything else, including anything that speaks one campaign's language |
+
+Two library folders must not depend on each other. That is why
+`dro_residual` sits here beside the ladder that reaches it, rather than in
+`verify_common` beside its MEE sibling — a placement the TODO records as
+unfinished business rather than a good outcome.
+
+### Leaving is the same rule, backwards
+
+A file leaves when its only caller is one campaign **and** it speaks that
+campaign's language (`rib_targets` → `DRO_tulip/indirect`), or when nothing
+calls it at all. Prefer deleting to keeping: the commit is the archive, and
+the README says where to look.
+
+### When you add or change a file here
+
+- the header quartet (`%% Purpose / Inputs / Outputs / Revision History`),
+  and a `nargin == 0` self-demo where a demo means anything;
+- a test, in `tests/`, named in the table below;
+- `golden_cells` 20/20 — a quality drop (iterations, residual) is a failure
+  even when every correctness gate passes;
+- `tests/test_folder_rules` green: no campaign on the path, no pragmas, no
+  `i`/`j`, every file exercised or exempt **with its reason written in the
+  test**;
+- this README's table updated, and `python3 orbit_transfer/doc/gen_library_catalog.py` rerun.
+
+An exemption is a debt, not an escape: it is a line in
+`tests/test_folder_rules` that names the file, the kind and the reason, and
+the test fails when one goes stale — including when the file finally gets a
+test and the exemption should be dropped.
 
 ## Contents by layer
 
@@ -166,7 +240,7 @@ above stay here, because the certifier needs them.
 
 ## Tests
 
-`tests/` holds 47 tests. Classified 2026-09-16 by what they call (after
+`tests/` holds 50 tests. Two are about the FOLDER rather than one function: `test_folder_rules` (the rules above) and `test_thrust_ladder` (the shared engine, re-solved against a shipped sheet). The rest, classified 2026-09-16 by what they call (after
 cleanup steps 5–7: `test_conjugate_pole_predict` deleted with its function,
 `test_phase_lists` moved with `rib_targets`, the 15 DRO_tulip-only tests moved
 to `DRO_tulip/indirect/tests`):
@@ -188,7 +262,11 @@ Run the relevant tests plus `golden_cells` after touching an engine.
 
 - Pumpkyn house style: `%% Purpose / Inputs / Outputs / Revision History`
   headers, no Code Analyzer pragmas, never `i`/`j` as loop variables.
-  **Current state (2026-09-16):** all 50 files use the `%% Purpose` header;
+  `tests/test_folder_rules` enforces these, and the admission rules above.
+  **Current state (2026-09-16):** all 54 files use the `%% Purpose` header
+  (the four that arrived with the ladder engine were converted on arrival,
+  keeping their documented content; reflowing them into the aligned Inputs
+  and Outputs columns is a TODO);
   no `%#ok` pragmas and no `i`/`j` loop variables remain (the 22 `AGROW` /
   `INUSD` warnings the pragmas hid are now visible — preallocate on next
   touch). files with a `nargin == 0` self-demo: see the generated index.

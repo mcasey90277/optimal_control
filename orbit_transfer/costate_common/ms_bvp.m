@@ -8,7 +8,7 @@ function [p, info] = ms_bvp(prob, seed, opts)
 %       oclib/+oc/ms_bvp.m                   (call as oc.ms_bvp)
 %
 %   because a SECOND top-level consumer exists: the cart-pole PMP-BVP demo
-%   (collocation_examples/ex3_cart_pole_pmp) solves its Pontryagin boundary
+%   (optimal_control_examples/ex3_cart_pole_pmp) solves its Pontryagin boundary
 %   value problem through the same engine, with no orbit, no CR3BP quantity
 %   and no campaign anywhere in it -- which is the property the engine's
 %   problem-agnostic contract claims. One home per contract. This delegate

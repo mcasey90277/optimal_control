@@ -14,8 +14,8 @@
 
 - Problem constants, exactly the existing example's: `m1 = 5` kg, `m2 = 1` kg, `L = 2` m, `g = 9.8` m/s^2, `t_f = 5` s, `x(0) = [0;0;0;0]`, `x(t_f) = [0;pi;0;0]`.
 - House MATLAB style: `%% Purpose / Inputs / Outputs / Revision History` header quartet closed by the `Begin Code Sequence` divider; **no** `%#ok` pragmas; **never** `i` or `j` as loop variables; `nargin == 0` self-demo where a demo means anything; norms as `sqrt(sum(...))`, never `norm`, in any file that must stay complex-step safe.
-- Every new function file gets a test under `collocation_examples/ex3_cart_pole_pmp/tests/`. Tests are functions returning `ok` (logical) and printing one `PASS`/`FAIL` line per check, following `orbit_transfer/costate_common/tests/test_ms_bvp_fixedtf.m`.
-- Nothing under `collocation_examples/ex2_cart_pole_swing_up/` is modified.
+- Every new function file gets a test under `optimal_control_examples/ex3_cart_pole_pmp/tests/`. Tests are functions returning `ok` (logical) and printing one `PASS`/`FAIL` line per check, following `orbit_transfer/costate_common/tests/test_ms_bvp_fixedtf.m`.
+- Nothing under `optimal_control_examples/ex2_cart_pole_swing_up/` is modified.
 - Run MATLAB headlessly as `/Applications/MATLAB_R2026a.app/bin/matlab -batch "run('<script>')"`; the shared MCP session is not required by any step.
 - A deviation from the spec is recorded in the plan and in the code's header, never applied silently.
 
@@ -26,9 +26,9 @@
 ### Task 1: The direct-solution fixture
 
 **Files:**
-- Create: `collocation_examples/ex3_cart_pole_pmp/gen_direct_ref.m`
-- Create: `collocation_examples/ex3_cart_pole_pmp/data/cartpole_direct_ref.mat` (produced by the above)
-- Test: `collocation_examples/ex3_cart_pole_pmp/tests/test_direct_ref.m`
+- Create: `optimal_control_examples/ex3_cart_pole_pmp/gen_direct_ref.m`
+- Create: `optimal_control_examples/ex3_cart_pole_pmp/data/cartpole_direct_ref.mat` (produced by the above)
+- Test: `optimal_control_examples/ex3_cart_pole_pmp/tests/test_direct_ref.m`
 
 **Interfaces:**
 - Consumes: nothing.
@@ -119,7 +119,7 @@ end
 - [ ] **Step 2: Run it to verify it fails**
 
 ```bash
-cd /Users/msc/Desktop/optimal_control/collocation_examples/ex3_cart_pole_pmp/tests
+cd /Users/msc/Desktop/optimal_control/optimal_control_examples/ex3_cart_pole_pmp/tests
 /Applications/MATLAB_R2026a.app/bin/matlab -batch "ok = test_direct_ref()"
 ```
 
@@ -238,7 +238,7 @@ end
 - [ ] **Step 4: Generate the fixture and run the test**
 
 ```bash
-cd /Users/msc/Desktop/optimal_control/collocation_examples/ex3_cart_pole_pmp
+cd /Users/msc/Desktop/optimal_control/optimal_control_examples/ex3_cart_pole_pmp
 /Applications/MATLAB_R2026a.app/bin/matlab -batch "gen_direct_ref"
 cd tests && /Applications/MATLAB_R2026a.app/bin/matlab -batch "ok = test_direct_ref(); exit(~ok)"
 ```
@@ -248,9 +248,9 @@ Expected: PASS on all seven checks. **If `max|u|` is at the bound**, the relaxed
 - [ ] **Step 5: Commit**
 
 ```bash
-git add collocation_examples/ex3_cart_pole_pmp/gen_direct_ref.m \
-        collocation_examples/ex3_cart_pole_pmp/data/cartpole_direct_ref.mat \
-        collocation_examples/ex3_cart_pole_pmp/tests/test_direct_ref.m
+git add optimal_control_examples/ex3_cart_pole_pmp/gen_direct_ref.m \
+        optimal_control_examples/ex3_cart_pole_pmp/data/cartpole_direct_ref.mat \
+        optimal_control_examples/ex3_cart_pole_pmp/tests/test_direct_ref.m
 git commit -m "cart-pole PMP: the direct-solution fixture and its validation"
 ```
 
@@ -259,8 +259,8 @@ git commit -m "cart-pole PMP: the direct-solution fixture and its validation"
 ### Task 2: The dynamics, split as drift plus control column
 
 **Files:**
-- Create: `collocation_examples/ex3_cart_pole_pmp/cartpole_field.m`
-- Test: `collocation_examples/ex3_cart_pole_pmp/tests/test_cartpole_field.m`
+- Create: `optimal_control_examples/ex3_cart_pole_pmp/cartpole_field.m`
+- Test: `optimal_control_examples/ex3_cart_pole_pmp/tests/test_cartpole_field.m`
 
 **Interfaces:**
 - Consumes: nothing.
@@ -346,7 +346,7 @@ end
 - [ ] **Step 2: Run it to verify it fails**
 
 ```bash
-cd /Users/msc/Desktop/optimal_control/collocation_examples/ex3_cart_pole_pmp/tests
+cd /Users/msc/Desktop/optimal_control/optimal_control_examples/ex3_cart_pole_pmp/tests
 /Applications/MATLAB_R2026a.app/bin/matlab -batch "ok = test_cartpole_field()"
 ```
 
@@ -421,7 +421,7 @@ end
 - [ ] **Step 4: Run the test to verify it passes**
 
 ```bash
-cd /Users/msc/Desktop/optimal_control/collocation_examples/ex3_cart_pole_pmp/tests
+cd /Users/msc/Desktop/optimal_control/optimal_control_examples/ex3_cart_pole_pmp/tests
 /Applications/MATLAB_R2026a.app/bin/matlab -batch "ok = test_cartpole_field(); exit(~ok)"
 ```
 
@@ -430,8 +430,8 @@ Expected: PASS on all four checks.
 - [ ] **Step 5: Commit**
 
 ```bash
-git add collocation_examples/ex3_cart_pole_pmp/cartpole_field.m \
-        collocation_examples/ex3_cart_pole_pmp/tests/test_cartpole_field.m
+git add optimal_control_examples/ex3_cart_pole_pmp/cartpole_field.m \
+        optimal_control_examples/ex3_cart_pole_pmp/tests/test_cartpole_field.m
 git commit -m "cart-pole PMP: the dynamics split as drift plus control column"
 ```
 
@@ -440,9 +440,9 @@ git commit -m "cart-pole PMP: the dynamics split as drift plus control column"
 ### Task 3: The state Jacobian, generated symbolically
 
 **Files:**
-- Create: `collocation_examples/ex3_cart_pole_pmp/gen_state_jac.m`
-- Create: `collocation_examples/ex3_cart_pole_pmp/cartpole_state_jac.m` (generated by the above, then given a house header by hand)
-- Test: `collocation_examples/ex3_cart_pole_pmp/tests/test_cartpole_state_jac.m`
+- Create: `optimal_control_examples/ex3_cart_pole_pmp/gen_state_jac.m`
+- Create: `optimal_control_examples/ex3_cart_pole_pmp/cartpole_state_jac.m` (generated by the above, then given a house header by hand)
+- Test: `optimal_control_examples/ex3_cart_pole_pmp/tests/test_cartpole_state_jac.m`
 
 **Interfaces:**
 - Consumes: `cartpole_field` (Task 2) for the test's cross-check only.
@@ -540,7 +540,7 @@ end
 - [ ] **Step 2: Run it to verify it fails**
 
 ```bash
-cd /Users/msc/Desktop/optimal_control/collocation_examples/ex3_cart_pole_pmp/tests
+cd /Users/msc/Desktop/optimal_control/optimal_control_examples/ex3_cart_pole_pmp/tests
 /Applications/MATLAB_R2026a.app/bin/matlab -batch "ok = test_cartpole_state_jac()"
 ```
 
@@ -597,7 +597,7 @@ Then hand-write `cartpole_state_jac.m` as the house-styled wrapper around the ge
 - [ ] **Step 4: Run the test to verify it passes**
 
 ```bash
-cd /Users/msc/Desktop/optimal_control/collocation_examples/ex3_cart_pole_pmp
+cd /Users/msc/Desktop/optimal_control/optimal_control_examples/ex3_cart_pole_pmp
 /Applications/MATLAB_R2026a.app/bin/matlab -batch "gen_state_jac"
 cd tests && /Applications/MATLAB_R2026a.app/bin/matlab -batch "ok = test_cartpole_state_jac(); exit(~ok)"
 ```
@@ -607,9 +607,9 @@ Expected: PASS on all four checks.
 - [ ] **Step 5: Commit**
 
 ```bash
-git add collocation_examples/ex3_cart_pole_pmp/gen_state_jac.m \
-        collocation_examples/ex3_cart_pole_pmp/cartpole_state_jac.m \
-        collocation_examples/ex3_cart_pole_pmp/tests/test_cartpole_state_jac.m
+git add optimal_control_examples/ex3_cart_pole_pmp/gen_state_jac.m \
+        optimal_control_examples/ex3_cart_pole_pmp/cartpole_state_jac.m \
+        optimal_control_examples/ex3_cart_pole_pmp/tests/test_cartpole_state_jac.m
 git commit -m "cart-pole PMP: exact state Jacobian, generated symbolically"
 ```
 
@@ -618,8 +618,8 @@ git commit -m "cart-pole PMP: exact state Jacobian, generated symbolically"
 ### Task 4: The PMP field
 
 **Files:**
-- Create: `collocation_examples/ex3_cart_pole_pmp/cartpole_pmp_rhs.m`
-- Test: `collocation_examples/ex3_cart_pole_pmp/tests/test_cartpole_pmp_rhs.m`
+- Create: `optimal_control_examples/ex3_cart_pole_pmp/cartpole_pmp_rhs.m`
+- Test: `optimal_control_examples/ex3_cart_pole_pmp/tests/test_cartpole_pmp_rhs.m`
 
 **Interfaces:**
 - Consumes: `cartpole_field` (Task 2), `cartpole_state_jac` (Task 3).
@@ -718,7 +718,7 @@ end
 - [ ] **Step 2: Run it to verify it fails**
 
 ```bash
-cd /Users/msc/Desktop/optimal_control/collocation_examples/ex3_cart_pole_pmp/tests
+cd /Users/msc/Desktop/optimal_control/optimal_control_examples/ex3_cart_pole_pmp/tests
 /Applications/MATLAB_R2026a.app/bin/matlab -batch "ok = test_cartpole_pmp_rhs()"
 ```
 
@@ -791,7 +791,7 @@ end
 - [ ] **Step 4: Run the test to verify it passes**
 
 ```bash
-cd /Users/msc/Desktop/optimal_control/collocation_examples/ex3_cart_pole_pmp/tests
+cd /Users/msc/Desktop/optimal_control/optimal_control_examples/ex3_cart_pole_pmp/tests
 /Applications/MATLAB_R2026a.app/bin/matlab -batch "ok = test_cartpole_pmp_rhs(); exit(~ok)"
 ```
 
@@ -800,8 +800,8 @@ Expected: PASS on all five checks.
 - [ ] **Step 5: Commit**
 
 ```bash
-git add collocation_examples/ex3_cart_pole_pmp/cartpole_pmp_rhs.m \
-        collocation_examples/ex3_cart_pole_pmp/tests/test_cartpole_pmp_rhs.m
+git add optimal_control_examples/ex3_cart_pole_pmp/cartpole_pmp_rhs.m \
+        optimal_control_examples/ex3_cart_pole_pmp/tests/test_cartpole_pmp_rhs.m
 git commit -m "cart-pole PMP: the 8-state Pontryagin field"
 ```
 
@@ -810,8 +810,8 @@ git commit -m "cart-pole PMP: the 8-state Pontryagin field"
 ### Task 5: The propagator with its state-transition matrix
 
 **Files:**
-- Create: `collocation_examples/ex3_cart_pole_pmp/cartpole_pmp_prop.m`
-- Test: `collocation_examples/ex3_cart_pole_pmp/tests/test_cartpole_pmp_prop.m`
+- Create: `optimal_control_examples/ex3_cart_pole_pmp/cartpole_pmp_prop.m`
+- Test: `optimal_control_examples/ex3_cart_pole_pmp/tests/test_cartpole_pmp_prop.m`
 
 **Interfaces:**
 - Consumes: `cartpole_pmp_rhs` (Task 4).
@@ -906,7 +906,7 @@ end
 - [ ] **Step 2: Run it to verify it fails**
 
 ```bash
-cd /Users/msc/Desktop/optimal_control/collocation_examples/ex3_cart_pole_pmp/tests
+cd /Users/msc/Desktop/optimal_control/optimal_control_examples/ex3_cart_pole_pmp/tests
 /Applications/MATLAB_R2026a.app/bin/matlab -batch "ok = test_cartpole_pmp_prop()"
 ```
 
@@ -1015,7 +1015,7 @@ end
 - [ ] **Step 4: Run the test to verify it passes**
 
 ```bash
-cd /Users/msc/Desktop/optimal_control/collocation_examples/ex3_cart_pole_pmp/tests
+cd /Users/msc/Desktop/optimal_control/optimal_control_examples/ex3_cart_pole_pmp/tests
 /Applications/MATLAB_R2026a.app/bin/matlab -batch "ok = test_cartpole_pmp_prop(); exit(~ok)"
 ```
 
@@ -1024,8 +1024,8 @@ Expected: PASS on all seven checks. **If the throw check fails** because the int
 - [ ] **Step 5: Commit**
 
 ```bash
-git add collocation_examples/ex3_cart_pole_pmp/cartpole_pmp_prop.m \
-        collocation_examples/ex3_cart_pole_pmp/tests/test_cartpole_pmp_prop.m
+git add optimal_control_examples/ex3_cart_pole_pmp/cartpole_pmp_prop.m \
+        optimal_control_examples/ex3_cart_pole_pmp/tests/test_cartpole_pmp_prop.m
 git commit -m "cart-pole PMP: propagator with complex-step variational STM"
 ```
 
@@ -1034,9 +1034,9 @@ git commit -m "cart-pole PMP: propagator with complex-step variational STM"
 ### Task 6: The solve
 
 **Files:**
-- Create: `collocation_examples/ex3_cart_pole_pmp/run_cartpole_pmp.m`
-- Create: `collocation_examples/ex3_cart_pole_pmp/data/cartpole_pmp_ref.mat` (written once, in Step 4)
-- Test: `collocation_examples/ex3_cart_pole_pmp/tests/test_cartpole_pmp.m`
+- Create: `optimal_control_examples/ex3_cart_pole_pmp/run_cartpole_pmp.m`
+- Create: `optimal_control_examples/ex3_cart_pole_pmp/data/cartpole_pmp_ref.mat` (written once, in Step 4)
+- Test: `optimal_control_examples/ex3_cart_pole_pmp/tests/test_cartpole_pmp.m`
 - Read: `orbit_transfer/costate_common/ms_bvp.m` (the engine; interface in its header)
 
 **Interfaces:**
@@ -1124,7 +1124,7 @@ end
 - [ ] **Step 2: Run it to verify it fails**
 
 ```bash
-cd /Users/msc/Desktop/optimal_control/collocation_examples/ex3_cart_pole_pmp/tests
+cd /Users/msc/Desktop/optimal_control/optimal_control_examples/ex3_cart_pole_pmp/tests
 /Applications/MATLAB_R2026a.app/bin/matlab -batch "ok = test_cartpole_pmp()"
 ```
 
@@ -1292,7 +1292,7 @@ end
 - [ ] **Step 4: Solve once, write the regression reference, then run the test**
 
 ```bash
-cd /Users/msc/Desktop/optimal_control/collocation_examples/ex3_cart_pole_pmp
+cd /Users/msc/Desktop/optimal_control/optimal_control_examples/ex3_cart_pole_pmp
 /Applications/MATLAB_R2026a.app/bin/matlab -batch "out = run_cartpole_pmp(struct('plot',false)); lam0 = out.lam0; J = out.J; save('data/cartpole_pmp_ref.mat','lam0','J'); fprintf('lam0 = [%s], J = %.8f\n', sprintf('%.12g ', lam0), J)"
 cd tests && /Applications/MATLAB_R2026a.app/bin/matlab -batch "ok = test_cartpole_pmp(); exit(~ok)"
 ```
@@ -1304,9 +1304,9 @@ Expected: PASS on all eight checks.
 - [ ] **Step 5: Commit**
 
 ```bash
-git add collocation_examples/ex3_cart_pole_pmp/run_cartpole_pmp.m \
-        collocation_examples/ex3_cart_pole_pmp/data/cartpole_pmp_ref.mat \
-        collocation_examples/ex3_cart_pole_pmp/tests/test_cartpole_pmp.m
+git add optimal_control_examples/ex3_cart_pole_pmp/run_cartpole_pmp.m \
+        optimal_control_examples/ex3_cart_pole_pmp/data/cartpole_pmp_ref.mat \
+        optimal_control_examples/ex3_cart_pole_pmp/tests/test_cartpole_pmp.m
 git commit -m "cart-pole PMP: the indirect solve, seeded from the direct solution's duals"
 ```
 
@@ -1319,7 +1319,7 @@ git commit -m "cart-pole PMP: the indirect solve, seeded from the direct solutio
 - Create: `orbit_transfer/costate_common/ms_bvp.m` (delegate)
 - Modify: `oclib/README.md` (contents table, roadmap item 3)
 - Modify: `orbit_transfer/costate_common/README.md` (the `ms_bvp` row), `orbit_transfer/costate_common/TODO.md` (step 13)
-- Modify: `collocation_examples/ex3_cart_pole_pmp/run_cartpole_pmp.m:engine default` → `@oc.ms_bvp`
+- Modify: `optimal_control_examples/ex3_cart_pole_pmp/run_cartpole_pmp.m:engine default` → `@oc.ms_bvp`
 - Test: existing suites, listed in the gates below
 
 **Interfaces:**
@@ -1350,7 +1350,7 @@ function [p, info] = ms_bvp(prob, seed, opts)
 %
 %   DELEGATE since 2026-09-16: the generic multiple-shooting engine was
 %   promoted to the cross-folder library, oclib/+oc/ms_bvp, when the
-%   cart-pole PMP-BVP demo (collocation_examples/ex3_cart_pole_pmp) became
+%   cart-pole PMP-BVP demo (optimal_control_examples/ex3_cart_pole_pmp) became
 %   its second TOP-LEVEL consumer. This file keeps every costate_common
 %   caller working; the contract, the maths and the tests live with the
 %   implementation.
@@ -1390,7 +1390,7 @@ engine = d('engine', @oc.ms_bvp);
 cd /Users/msc/Desktop/optimal_control/orbit_transfer/costate_common/tests
 /Applications/MATLAB_R2026a.app/bin/matlab -batch "for t = {'test_ms_bvp_extra','test_ms_bvp_fixedtf','test_ms_tfmin_hom','test_arclength_ms','test_folder_rules'}, ok = feval(t{1}); fprintf('%s %d\n', t{1}, ok); end"
 cd ../ && /Applications/MATLAB_R2026a.app/bin/matlab -batch "ok = golden_cells(); fprintf('GOLDEN %d\n', ok)" | tail -25
-cd /Users/msc/Desktop/optimal_control/collocation_examples/ex3_cart_pole_pmp/tests
+cd /Users/msc/Desktop/optimal_control/optimal_control_examples/ex3_cart_pole_pmp/tests
 /Applications/MATLAB_R2026a.app/bin/matlab -batch "ok = test_cartpole_pmp(); exit(~ok)"
 ```
 
@@ -1407,7 +1407,7 @@ Expected: every test green; `golden_cells` 20/20 with the SAME residuals and ite
 
 - [ ] **Step 5: Update the documentation and commit**
 
-`oclib/README.md`: add the `oc.ms_bvp` row (consumers: `orbit_transfer` via the costate_common delegate, and `collocation_examples/ex3_cart_pole_pmp` directly; equivalence gate: golden_cells 20/20 plus the four-campaign re-solve plus the cart-pole test), and mark roadmap item 3's `ms_bvp` half done, leaving `ms_conjugate_test` open with its reason.
+`oclib/README.md`: add the `oc.ms_bvp` row (consumers: `orbit_transfer` via the costate_common delegate, and `optimal_control_examples/ex3_cart_pole_pmp` directly; equivalence gate: golden_cells 20/20 plus the four-campaign re-solve plus the cart-pole test), and mark roadmap item 3's `ms_bvp` half done, leaving `ms_conjugate_test` open with its reason.
 
 `costate_common/README.md`: change the `ms_bvp.m` row to say DELEGATE, pointing at `../../oclib/+oc/ms_bvp`, exactly as the `duals_to_costates` row reads.
 
@@ -1419,7 +1419,7 @@ git add oclib/+oc/ms_bvp.m oclib/README.md \
         orbit_transfer/costate_common/ms_bvp.m \
         orbit_transfer/costate_common/README.md \
         orbit_transfer/costate_common/TODO.md \
-        collocation_examples/ex3_cart_pole_pmp/run_cartpole_pmp.m
+        optimal_control_examples/ex3_cart_pole_pmp/run_cartpole_pmp.m
 git commit -m "oclib: promote ms_bvp, with the cart-pole PMP-BVP as its second consumer"
 ```
 

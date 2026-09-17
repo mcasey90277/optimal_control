@@ -1,6 +1,6 @@
 # Cart-pole PMP-BVP — design (2026-09-16)
 
-An indirect solve of the cart-pole swing-up the `collocation_examples`
+An indirect solve of the cart-pole swing-up the `optimal_control_examples`
 already solve directly: form the Pontryagin boundary-value problem and shoot
 it with `ms_bvp`. Two purposes, in order:
 
@@ -60,7 +60,7 @@ its cross-check against the direct solve is unambiguous.
 
 ## Files
 
-New folder `collocation_examples/ex3_cart_pole_pmp/`:
+New folder `optimal_control_examples/ex3_cart_pole_pmp/`:
 
 | file | what |
 |---|---|

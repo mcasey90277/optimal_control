@@ -1,6 +1,6 @@
 # The One Problem This Repository Solves, Many Times
 
-Every campaign folder here — `collocation_examples`, `mpc`, `orbit_transfer`,
+Every campaign folder here — `optimal_control_examples`, `mpc`, `orbit_transfer`,
 `booster_landing`, and (once its Phase-2 optimizer exists) `missiles` — is an
 instance of the **same mathematical object**, solved by one of a small number
 of routes, verified by the same discipline. This document states that object
@@ -52,7 +52,7 @@ the third is the NLP engine underneath route 1.
 
 **Route 1 — Direct (discretize, then optimize).** Choose nodes, write the
 dynamics as *defect constraints* between adjacent states — trapezoidal
-(`collocation_examples`) or Hermite–Simpson (everything research-grade) — and
+(`optimal_control_examples`) or Hermite–Simpson (everything research-grade) — and
 the cost as a quadrature; hand the resulting sparse NLP to fmincon
 (tutorials), IPOPT/CasADi (orbit, booster), or quadprog-class solvers (MPC).
 The KKT conditions of this NLP are a *discretization of the PMP conditions* —
@@ -194,7 +194,7 @@ Cart-pole SI numbers span ~10²: no need.
 
 ### 3.8 What each folder contributes that the others genuinely don't
 
-- `collocation_examples`: the transcription itself, small enough to read in
+- `optimal_control_examples`: the transcription itself, small enough to read in
   one sitting, with an **analytic answer** (u* = 6−12t) as ground truth.
 - `mpc`: feedback via re-solving; the only folder where solve *latency* is a
   constraint.
@@ -303,7 +303,7 @@ should only ever share the *verification* vocabulary.
 
 ### Suggested reading path (for a newcomer, or us in six months)
 
-1. `collocation_examples/ex1_block_move` — route 1 with an analytic answer.
+1. `optimal_control_examples/ex1_block_move` — route 1 with an analytic answer.
 2. `min_energy_tutorial` — route 2 on the same class of problem.
 3. `orbit_transfer/DRO_tulip/doc/costate_library_methodology.tex` — both
    routes joined by the covector bridge, at research grade.

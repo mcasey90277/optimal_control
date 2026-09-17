@@ -5,7 +5,7 @@ function [p, info] = ms_bvp(prob, seed, opts)
 %   problem-agnostic core of ms_tfmin. PROMOTED 2026-09-16 out of
 %   orbit_transfer/costate_common into the cross-folder library, call it as
 %   oc.ms_bvp: the cart-pole PMP-BVP demo
-%   (collocation_examples/ex3_cart_pole_pmp) is its second TOP-LEVEL
+%   (optimal_control_examples/ex3_cart_pole_pmp) is its second TOP-LEVEL
 %   consumer, which is what the admission rule asks for. A delegate stays at
 %   the old path so every costate_common caller works unchanged.
 %

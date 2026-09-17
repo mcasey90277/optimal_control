@@ -10,7 +10,8 @@ Educational implementations of **optimal control and estimation** methods. Core 
 
 ```
 optimal_control/
-├── collocation_examples/        # standalone direct-collocation tutorials
+├── optimal_control_examples/    # standalone worked examples: direct collocation,
+│   │                            #   indirect PMP, and the teaching docs that pair them
 │   ├── ex1_block_move/          # Minimum-energy point-to-point motion
 │   ├── block_main.m             # Basic implementation (10 segments)
 │   ├── block_move_2.m           # Cleaner version with plots (100 segments)
@@ -215,7 +216,7 @@ x(1) = 1,  v(1) = 0   (end at position 1, at rest)
 ### Running Block Move
 
 ```matlab
-cd collocation_examples/ex1_block_move
+cd optimal_control_examples/ex1_block_move
 block_move_3  % recommended version
 ```
 
@@ -263,7 +264,7 @@ Final:   q1=0, q2=π, q1dot=0, q2dot=0  (cart at origin, pendulum up, at rest)
 ### Running Cart-Pole
 
 ```matlab
-cd collocation_examples/ex2_cart_pole_swing_up/trap_collocation
+cd optimal_control_examples/ex2_cart_pole_swing_up/trap_collocation
 cart_pole_swing_up_trap_1  % takes ~1-2 minutes
 ```
 

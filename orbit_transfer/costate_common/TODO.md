@@ -158,7 +158,7 @@ the folder*. Steps 1–9 change no numerical result and need no decision; steps
   booster_landing) and an equivalence gate, with a delegate left here as for
   `duals_to_costates`. Days, after a consumer exists.
   - [x] **`ms_bvp` DONE 2026-09-16** — the consumer arrived: the cart-pole
-    PMP-BVP demo (`collocation_examples/ex3_cart_pole_pmp`) solves its
+    PMP-BVP demo (`optimal_control_examples/ex3_cart_pole_pmp`) solves its
     Pontryagin BVP through the same engine with no orbit, no CR3BP quantity
     and no pumpkyn call, which is the second TOP-LEVEL consumer the rule
     asks for. Implementation now at `../../oclib/+oc/ms_bvp.m`; this folder
@@ -189,7 +189,7 @@ the folder*. Steps 1–9 change no numerical result and need no decision; steps
   exactly like a rejected iterate, returning the same `rejectR`/`eye(n)`
   pair either way. The shooting loop then simply fails to converge, with no
   trace of which case it was. This now reaches every consumer of the
-  package, not only `orbit_transfer`: `collocation_examples/
+  package, not only `orbit_transfer`: `optimal_control_examples/
   ex3_cart_pole_pmp/cartpole_pmp_prop.m`'s header documents the identical
   hazard from the cart-pole side and narrows its OWN try/catch (relabelling
   only `MATLAB:ode*` identifiers, rethrowing everything else unchanged) so

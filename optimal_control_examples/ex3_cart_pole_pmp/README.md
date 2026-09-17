@@ -67,7 +67,7 @@ direct one. It does not report the residual `2u + lam'G`: `U` is built as
 ## Running the solve
 
 ```matlab
-cd collocation_examples/ex3_cart_pole_pmp
+cd optimal_control_examples/ex3_cart_pole_pmp
 run_cartpole_pmp                                          % K=8, plots vs. the direct fixture
 out = run_cartpole_pmp(struct('K', 16, 'plot', false));   % no plot, returns the struct
 ```
@@ -75,7 +75,7 @@ out = run_cartpole_pmp(struct('K', 16, 'plot', false));   % no plot, returns the
 Headless, from the repository root:
 
 ```
-/Applications/MATLAB_R2026a.app/bin/matlab -batch "cd collocation_examples/ex3_cart_pole_pmp; run_cartpole_pmp"
+/Applications/MATLAB_R2026a.app/bin/matlab -batch "cd optimal_control_examples/ex3_cart_pole_pmp; run_cartpole_pmp"
 ```
 
 `run_cartpole_pmp.m` adds only `oclib` to the path beyond its own folder —
@@ -93,7 +93,7 @@ fails — a bare `test_x` prints `FAIL` and still exits 0, which is fine
 interactively and useless in automation:
 
 ```matlab
-cd collocation_examples/ex3_cart_pole_pmp
+cd optimal_control_examples/ex3_cart_pole_pmp
 run_tests                                      % ~3 min, errors on any failure
 ```
 
@@ -141,7 +141,7 @@ test_cartpole_pmp          % the whole indirect solve end to end (~2 min: two ms
 histories traced underneath:
 
 ```matlab
-cd collocation_examples/ex3_cart_pole_pmp
+cd optimal_control_examples/ex3_cart_pole_pmp
 movie_cartpole                                   % ~6 min, writes .mp4 and .gif
 movie_cartpole(struct('seconds', 5, 'out', out)) % shorter, reusing a solve
 ```

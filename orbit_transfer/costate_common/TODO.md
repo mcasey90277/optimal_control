@@ -157,8 +157,46 @@ the folder*. Steps 1–9 change no numerical result and need no decision; steps
   needs a second TOP-LEVEL consumer (the planned cart-pole PMP-BVP demo, or
   booster_landing) and an equivalence gate, with a delegate left here as for
   `duals_to_costates`. Days, after a consumer exists.
+  - [x] **`ms_bvp` DONE 2026-09-16** — the consumer arrived: the cart-pole
+    PMP-BVP demo (`collocation_examples/ex3_cart_pole_pmp`) solves its
+    Pontryagin BVP through the same engine with no orbit, no CR3BP quantity
+    and no pumpkyn call, which is the second TOP-LEVEL consumer the rule
+    asks for. Implementation now at `../../oclib/+oc/ms_bvp.m`; this folder
+    keeps the delegate, so no caller changed. Gates, all run on the move:
+    `golden_cells` 20/20 **bit-identical** to the pre-move capture (z, ‖R‖
+    and iteration counts equal to the last bit, `max|Δz| = 0` on all four
+    cells); the four-campaign ladder re-solve unchanged to the printed digit
+    (HALO 4.551e-14, DPO 1.130e-14, HALO_HALO 3.478e-14, GTO 2.720e-14
+    max |Δt_f|, OK flags matching); `test_ms_bvp_extra`,
+    `test_ms_bvp_fixedtf`, `test_ms_tfmin_hom`, `test_arclength_ms`,
+    `test_folder_rules` green; `test_cartpole_pmp` 9/9 through `@oc.ms_bvp`.
+    No new folder-rules exemption was needed — the two `ms_bvp` tests call
+    the delegate, so rule 6 is satisfied by the forwarding itself.
+  - [ ] **The rest stay open, for the same reason they always were.**
+    `ms_conjugate_test` is the one to watch: the cart-pole demo does NOT
+    use it (a fixed-t_f, scalar-control, four-unknown extremal exercises the
+    engine, not the Jacobi test), so it still has one top-level consumer and
+    the rule still refuses it. `arclength_ms`, `newton_fixed_q`,
+    `conj_resolve` and `lift_space_dim` likewise: no second consumer yet.
 
 ---
+
+- [ ] **`ms_bvp`'s `residual()` bare `catch` on `prob.prop` (found while
+  building the cart-pole PMP-BVP demo, 2026-09-16 — not fixed here, `ms_bvp`
+  itself is out of scope for that branch).** The catch has no identifier
+  check and no logging: it treats a genuine coding bug inside a CONSUMER's
+  propagator (undefined variable, missing struct field, dimension mismatch)
+  exactly like a rejected iterate, returning the same `rejectR`/`eye(n)`
+  pair either way. The shooting loop then simply fails to converge, with no
+  trace of which case it was. This now reaches every consumer of the
+  package, not only `orbit_transfer`: `collocation_examples/
+  ex3_cart_pole_pmp/cartpole_pmp_prop.m`'s header documents the identical
+  hazard from the cart-pole side and narrows its OWN try/catch (relabelling
+  only `MATLAB:ode*` identifiers, rethrowing everything else unchanged) so
+  it does not compound the problem, but that is a consumer-side mitigation,
+  not a fix. Candidate fix: rethrow anything without the propagator's own
+  documented collapse identifier, or at minimum log `err.identifier` /
+  `err.message` before rejecting the iterate.
 
 - [ ] **DEFERRED, with the measurement: a Hermite scheme for `periodic_pp`**
   (asked 2026-09-11 — is a choice of interpolant TYPE worth an option?).

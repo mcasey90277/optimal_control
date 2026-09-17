@@ -27,6 +27,13 @@ thrust 1–15 N), every entry accepted UNCHANGED by `pumpkyn.cr3bp.tfMin`.
   `costate_compare`), `viz/`, `results/` (incl.
   `dsweep_12x12_cells.mat` — the full-data-contract flagship torus that
   feeds `costate_common/golden_cells`).
+- **The shared engine left on 2026-09-16** (cleanup step 12):
+  `indirect/thrust_ladder_library.m` (THE ladder engine, family-agnostic
+  endpoints), `direct/lib/casadi_mintime_dro.m`,
+  `direct/certify/certify_dro_mintime.m` and `direct/certify/dro_residual.m`
+  are now in `costate_common`, so HALO, DPO, HALO_HALO and GTO no longer put
+  this campaign on their path. The names keep their `dro` prefix.
+
 - **`run_minenergy_pilot.m`** (root) — the first NON-min-time run of the
   pipeline (2026-08-14): fixed-t_f MIN-ENERGY (J = ∫s² dt) on flagship
   12×12 cells at t_f = γ·t_f^min — direct energy solve
@@ -36,9 +43,7 @@ thrust 1–15 N), every entry accepted UNCHANGED by `pumpkyn.cr3bp.tfMin`.
 - **`indirect/`** — `ms_tfmin.m` lived here until 2026-08-26 (now
   `costate_common/ms_tfmin`, the min-time binding of `ms_bvp`), **`ms_minenergy.m`** (its
   fixed-t_f min-energy sibling, 2026-08-14; `tests/test_ms_minenergy.m`
-  = synthetic known-answer BVP), `thrust_ladder_library.m`
-  (THE ladder engine, family-agnostic endpoints — halo/DPO campaigns call
-  it unmodified), `extend_thrust_ladder`/`densify_ladder`, packagers
+  = synthetic known-answer BVP), `extend_thrust_ladder`/`densify_ladder`, packagers
   (`build_costate_catalog.m`, `build_costate_lib*.m`), pickers + examples
   (`costate_catalog_pick`, `costate_lib_describe`,
   `costate_catalog_extremes(_movies)` — demos run on whatever

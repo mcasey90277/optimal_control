@@ -2,9 +2,10 @@
 
 Second catalog campaign (2026-08-07/08), and the proof that the pipeline is
 family-agnostic: the front door differs from the DRO catalog's ONLY in the
-departure-family block — the engines (`DRO_tulip/indirect/
-thrust_ladder_library`, `ms_tfmin`) and the shared library
-(`costate_common`) run unmodified.
+departure-family block — the engines (`thrust_ladder_library`, `ms_tfmin`)
+run unmodified. Both lived in `DRO_tulip` until 2026-09-16, when the ladder
+engine moved into `costate_common`; this campaign now puts no DRO_tulip
+folder on its path.
 
 ## Files
 

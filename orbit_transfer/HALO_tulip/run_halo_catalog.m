@@ -88,10 +88,9 @@ if exist('batchSecIn','var') && ~isempty(batchSecIn), batchSec = batchSecIn; end
 %% ======================= END ADJUSTABLE PARAMETERS ======================
 
 here = fileparts(mfilename('fullpath'));
-droDir = fullfile(fileparts(here), 'DRO_tulip');
-addpath(fullfile(droDir,'direct'), fullfile(droDir,'direct','lib'), ...
-        fullfile(droDir,'direct','certify'), fullfile(droDir,'indirect'), ...
-        fullfile(fileparts(here),'costate_common'), ...
+% the shared ladder engine lives in costate_common since 2026-09-16
+% (cleanup step 12); no campaign folder is needed on the path
+addpath(fullfile(fileparts(here),'costate_common'), ...
         fullfile(fileparts(fileparts(here)),'oclib'), ...   %oc.local_residual (path-gap fix 2026-08-31)
         fullfile(getenv('HOME'),'casadi-3.7.0'));
 catDir = fullfile(here, 'direct', 'results', 'catalog');

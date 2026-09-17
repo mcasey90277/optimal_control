@@ -127,14 +127,26 @@ the folder*. Steps 1–9 change no numerical result and need no decision; steps
   every field but the provenance note carrying the campaign tag
   (`test3b` -> `test3c`), which was the change.
 
-- [ ] **12. Bring the shared thrust ladder here** (depends on 0a):
-  `DRO_tulip/indirect/thrust_ladder_library` with its DRO_tulip closure
-  `casadi_mintime_dro`, `certify_dro_mintime`, `dro_residual` — 4 files,
-  1,291 lines — called by HALO, DPO, HALO_HALO and GTO, which then stop
-  adding `DRO_tulip` to their paths (runners and batched shell drivers).
-  Gate, per the 2026-07-26 lesson that fast tests passed while a moved
-  campaign was broken: `golden_cells` 20/20 AND re-solving one stored catalog
-  cell per campaign (HALO, DPO, HALO_HALO) and matching its entry. Days.
+- [x] **12. Bring the shared thrust ladder here** — DONE 2026-09-16.
+  `thrust_ladder_library`, `casadi_mintime_dro`, `certify_dro_mintime` and
+  `dro_residual` (with `test_dro_residual`) moved from `DRO_tulip` into this
+  folder; their fixed-depth self-`addpath` guards are gone (the siblings are
+  here now), and `dro_residual` keeps one for `oclib`. HALO, DPO, HALO_HALO,
+  `probe_l1_l2_halo` and GTO's `setup_paths` no longer put ANY DRO_tulip
+  folder on the path. Eight DRO scripts that had reached the engine through
+  their own `direct/lib` and `direct/certify` now add `costate_common`.
+  Placement note: `dro_residual`'s MEE sibling `mee_residual` lives in
+  `../verify_common`, which argues for putting both there — refused for now
+  because `thrust_ladder_library` → `certify_dro_mintime` → `dro_residual`
+  would then make the two library folders mutually dependent. Unifying the
+  two residuals is a separate item, below.
+  Gate met: the per-campaign re-solve, run BEFORE and AFTER the move (the
+  before-run proves the gate itself). One stored cell per campaign, its top
+  three rungs re-solved from the sheet's own meta (each rung seeds from the
+  one above, so a truncated ladder reproduces the stored run's first rungs),
+  compared against the shipped sheet — HALO, DPO, HALO_HALO and GTO, plus
+  `golden_cells` 20/20, `test_dro_residual` 3/3 and the CasADi engine's
+  bitwise regression `test_minenergy_objective`.
 
 **E. Rule-gated**
 
@@ -198,6 +210,13 @@ the folder*. Steps 1–9 change no numerical result and need no decision; steps
   (all-burn identity) is an option there, so the DERIVED-not-rescaled rule
   has one home. Gate: bitwise equal to the engines' inline form on a real
   flight; `golden_cells` covers `seed_from_z8`'s 3e-13 query-form shift.
+- [ ] **Unify `dro_residual` and `verify_common/mee_residual`** (2026-09-16,
+  from step 12): both are thin layouts over `oc.local_residual` — the CR3BP
+  Cartesian [r;v;m] split and the MEE one. They now live in different
+  library folders. Either give `oc.local_residual` a layout descriptor and
+  keep one caller-side splitter, or move both beside each other once the
+  ladder's dependency direction allows it.
+
 - [ ] **The shooting residual is PROPAGATION-MODE dependent, and every
   campaign quotes the tighter mode.** Measured 2026-09-11 on the 70 mN
   anchor: the SAME converged point gives `|R| = 7.84e-12` when the residual

@@ -21,6 +21,7 @@ function test_minenergy_objective()
 % OUTPUTS: none (prints PASS/FAIL; errors on failure)
 
 here = fileparts(mfilename('fullpath'));
+addpath(fullfile(here, '..', '..', '..', '..', 'costate_common'));   % casadi_mintime_dro
 addpath(fullfile(here, '..', '..', 'lib'));
 S  = load(fullfile(here, '..', '..', 'results', 'dsweep_12x12_cells.mat'));
 cc = S.CELLS{6,6};

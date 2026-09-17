@@ -84,6 +84,17 @@ folders, *internal* means called only from within this folder.
 | `cr3bp_minfuel_pmp.m` + `cr3bp_minfuel_prop.m` | **Smoothed energy→fuel PMP field**, THREE families selected by `smooth = {family, p[, delta]}`: `'eps'` Bertrand–Epenoy L = (1−p)s + ps² (ε = 1 is the min-energy field exactly; always arrives, slow at the floor); `'huber'` (PLQ core s = pQ below Q = 1, JUMP to 1 above — propagated **event-split with the saltation matrix** Φ⁺ = [I + (F⁺−F⁻)nᵀ/(nᵀF⁻)]Φ⁻ since 2026-09-05; the 09-02 "refuted" verdict was our missing saltation — with it Huber is 5× faster than ε and failure-free where it works, and walls at grazing-risk switch-structure changes on ~30% of cells, FINDINGS §22–24); `'huberc'` (2026-09-06: Huber core + CONTINUOUS ramp p→1 over Q ∈ [1, 1+δ], exact argmin of a convex H; passes Huber's walls, and at fixed δ ≈ 0.03 the p-walk is failure-free, FINDINGS §25–26; the only family to reach the floor at γ = 2, §28). Q̇ is throttle-independent and continuous across the switch (`cr3bp_minfuel_qdot`). Smoothing parameters are CasADi Function inputs. `ms_minfuel` (DRO_tulip/indirect) is the fixed-tf binding; `run_minfuel_race` walks (p, δ) rungs with loose/tight gates and a family per arm. | DRO |
 | `cr3bp_minfuel_qdot.m` | Closed-form dQ/dt = −T λ_vᵀλ_r/(m\|λ_v\|) along the min-fuel flow (2026-09-06, Astra review #2): the throttle drops out exactly, so nᵀ(F⁺−F⁻) = 0 at every switch (measured 9e-16) — the exact transversality of a crossing, used by the Huber propagator's branch/grazing logic and by `DRO_tulip/indirect/huber_switch_diag`. | DRO |
 
+**The shared ladder engine** (moved here 2026-09-16, cleanup step 12: it
+was in `DRO_tulip`, and HALO, DPO, HALO_HALO and GTO each put that campaign
+on their path to reach it)
+
+| file | what | used by |
+|---|---|---|
+| `thrust_ladder_library.m` | THE thrust-ladder engine: for every phase pair, anchor a direct min-time solve at the high-thrust end and walk the thrust DOWN, each rung warm-started from the rung above, running the full pipeline per rung (direct solve → flown-control verification → `ms_tfmin` refinement → tfMin acceptance) and saving after every rung. Family-agnostic through `get_family_orbit`/`phase_state`; the campaign supplies orbits, rungs and thruster. | DRO, HALO, DPO, HALO_HALO, GTO |
+| `casadi_mintime_dro.m` | The CR3BP minimum-time DIRECT transcription (CasADi + IPOPT; Hermite-Simpson or trapezoid, optional Sundman, altitude floor, throttle lock). Self-contained apart from CasADi. The name is legacy — the endpoints are arguments, and five campaigns solve through it. | the ladder + 14 DRO scripts |
+| `certify_dro_mintime.m` | The certifier composing a direct solution's gates: continuous residual (`dro_residual`), flown control end to end (`flown_control_error`), propagated lunar clearance (`true_min_altitude`), plus the discrete checks. Name likewise legacy. | the ladder + 5 DRO scripts |
+| `dro_residual.m` | The G1 continuous-residual gate for a CR3BP Cartesian solution: per-interval re-integration through `oc.local_residual`, with the control reconstruction and the position/velocity/mass split that belong to this layout. Its MEE sibling `mee_residual` lives in `../verify_common`; unifying the two is a TODO, not done here. | `certify_dro_mintime`; `tests/test_dro_residual` |
+
 **Shooting solvers and continuation**
 
 | file | what | used by |

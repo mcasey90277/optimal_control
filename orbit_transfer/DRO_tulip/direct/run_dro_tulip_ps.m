@@ -22,6 +22,7 @@ function run_dro_tulip_ps()
    tStar = 382981.289129055;           % Characteristic time (s)
 
 here = fileparts(mfilename('fullpath'));
+addpath(fullfile(fileparts(fileparts(here)),'costate_common'));
 addpath(fullfile(here,'lib'));
 addpath(fullfile(getenv('HOME'),'casadi-3.7.0'));
 

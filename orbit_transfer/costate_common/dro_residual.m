@@ -98,6 +98,9 @@ end
 % dynamics with this campaign's reconstructed control, miss at the right
 % node. The control convention (linear / Hermite-Simpson quadratic) stays
 % HERE -- it is domain policy; the engine owns only the structure.
+if isempty(which('oc.local_residual'))
+    addpath(fullfile(fileparts(fileparts(fileparts(mfilename('fullpath')))), 'oclib'));
+end
 dXall = oc.local_residual(o.X(1:7,:), t, ...
     @(tt,z) local_rhs(z, local_u_at(tt, t, o, hasMid), muStar, Tmax, c), ...
     struct('solver', @ode113, 'RelTol', relTol, 'AbsTol', absTol));

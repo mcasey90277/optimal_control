@@ -45,7 +45,8 @@ function run_phase_sweep_ps()
    tStar = 382981.289129055;           % Characteristic time (s)
 
 here = fileparts(mfilename('fullpath'));
-addpath(fullfile(here,'lib'), fullfile(here,'certify'), fullfile(here,'viz'));
+addpath(fullfile(fileparts(fileparts(here)),'costate_common'), ...
+        fullfile(here,'lib'), fullfile(here,'certify'), fullfile(here,'viz'));
 addpath(fullfile(getenv('HOME'),'casadi-3.7.0'));
 
 %% Sweep Settings:

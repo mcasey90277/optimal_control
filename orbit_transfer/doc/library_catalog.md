@@ -54,10 +54,20 @@ FAMILY-AGNOSTIC catalog packager: packages any campaign's thrust-ladder sheets i
 The parallel pool that run_capped's hard wall-clock fence needs, with a PRIVATE JobStorageLocation so that concurrently running `matlab -batch` sessions do not collide over the default one.
 *in: `nWorkers` · out: `pool`*
 
+### `casadi_mintime_dro.m`
+`out = casadi_mintime_dro(rv0, rvf, Tmax, c, muStar, N, X0, U0, tf0, opts)`  
+CASADI_MINTIME_DRO  Direct-collocation minimum-time CR3BP transfer, free t_f.
+*in: `Tmax`, `c`, `muStar`, `N`, `X0`, `U0`, `tf0`, `opts`, `scheme`, `tfFix`, `muInit` · out: `out`*
+
 ### `catalog_schema.m`
 `out = catalog_schema(action, varargin)`  
 THE versioned schema authority for compact costate catalogs -- the normative field list, the validator, and the NAMED FORMULA REGISTRY (retiring the accepted debt of `cat.derive` free-form strings being the only statement of the derivations). One home: packagers stamp, pickers and consumers validate, everyone derives through here.
 *in: `action`, `varargin` · out: `out`*
+
+### `certify_dro_mintime.m`
+`C = certify_dro_mintime(o, p, Tmax, c, opts)`  
+CERTIFY_DRO_MINTIME  Pass/fail gate for a direct DRO->tulip min-time solution.
+*in: `o`, `p`, `Tmax`, `c`, `opts`, `posTolKm`, `tfRef`, `tfRelTol`, `rMoonKm`, `verbose` · out: `C`*
 
 ### `conj_catalog_pass.m`
 `S = conj_catalog_pass(catMat, opts)`  
@@ -113,6 +123,11 @@ Lagrange quadratic control reconstruction through the node/midpoint/ node sample
 `pool = current_pool()`  
 The open parallel pool, or [] when there is none -- and, unlike a bare gcp('nocreate'), it does not THROW when the Parallel Computing Toolbox is missing or its licence is held by another MATLAB session on this machine. A shared desktop session holding the PCT seat is enough to make every `matlab -batch` job on the same machine poolless, so the fence must degrade to an unfenced call rather than crash the campaign.
 *out: `pool`*
+
+### `dro_residual.m`
+`R = dro_residual(o, muStar, Tmax, c, opts)`  
+DRO_RESIDUAL  True continuous-time local error of a direct DRO->tulip solution.
+*in: `o`, `muStar`, `Tmax`, `c`, `opts` · out: `R`, `minDirNorm`*
 
 ### `duals_to_costates.m`
 `[lam, tStations, diag_] = duals_to_costates(spec)`  
@@ -274,6 +289,11 @@ GENERIC SINGLE-SHOOTING ACCEPTANCE GATE -- the family- and cost-agnostic form of
 Finds the "REASONABLE" members of ANY orbit family, by Darin's criteria: periselene altitude >= 500 km (no lunar impact, with the same margin the transfer campaigns use) and the whole orbit within 100 Mm of the Moon (lunar vicinity, far enough out to take in L1/L2). Pure propagation via get_family_orbit -- no optimization.
 *in: `family`, `paramGrid`, `outMat` · out: `B`, `family`, `rows`, `admissible`*
 
+### `thrust_ladder_library.m`
+`P = thrust_ladder_library(outMat, opts)`  
+THRUST_LADDER_LIBRARY  Build a costate library with a THRUST axis.
+*in: `outMat`, `opts`, `rungs`, `ispS`, `m0kg`, `N`, `floorKm`, `gateKm`, `cells`, `maxIter`, `logFile`, `thrLock`, `tf0` · out: `P`*
+
 ### `true_min_altitude.m`
 `amin = true_min_altitude(o, muStar, Tmax, c, lStar, rMoonKm)`  
 Minimum lunar altitude of the PROPAGATED trajectory, not of the nodes. A collocation altitude floor binds at nodes only; this checks it BETWEEN nodes, where periselene actually happens. Extracted verbatim from certify_dro_mintime/local_true_min_alt (migration #4).
@@ -284,7 +304,7 @@ Minimum lunar altitude of the PROPAGATED trajectory, not of the nodes. A colloca
 ONE admissibility check for a flown all-burn trajectory, shared by the certifier and the study script so that "the flight is admissible" means the same thing everywhere. A returned array is not a completed flight: an integrator that stops early without throwing hands back a short, perfectly finite trajectory, and every metric taken from its last row then describes a flight that never happened. This checks
 *in: `t`, `Y`, `tf`, `lStar`, `opts` · out: `V`*
 
-**tests/**: `test_arclength_arrival.m`, `test_arclength_ms.m`, `test_arclength_ms_thrust.m`, `test_catalog_schema_v3.m`, `test_certify_caps.m`, `test_certify_enforcement.m`, `test_conj_coverage.m`, `test_conj_fixedtf.m`, `test_conj_resolve.m`, `test_conj_spectrum.m`, `test_cr3bp_minenergy_pmp.m`, `test_dro_tulip_seed.m`, `test_entry_notes.m`, `test_flight_to_junctions.m`, `test_flown_control_error.m`, `test_fly_transfer.m`, `test_gates_h6_wiring.m`, `test_gto_family.m`, `test_h6_margin.m`, `test_harvest_ms_seed.m`, `test_huber_saltation.m`, `test_ladder_endpoints.m`, `test_lift_margin.m`, `test_lift_space_dim.m`, `test_minfuel_pmp.m`, `test_mintime_gates.m`, `test_ms_bvp_extra.m`, `test_ms_bvp_fixedtf.m`, `test_ms_tfmin_hom.m`, `test_nd_propulsion.m`, `test_newton_fixed_q.m`, `test_periodic_pp.m`, `test_phase_state.m`, `test_pmp_pointwise_checks.m`, `test_preflight_screen.m`, `test_run_capped.m`, `test_scalar_verdict.m`, `test_second_order_parallel.m`, `test_second_order_pass.m`, `test_second_order_sidecar_identity.m`, `test_seed_from_entry.m`, `test_sheet_to_catalog_file.m`, `test_ss_bvp_accept.m`, `test_stm_variational.m`, `test_survey_family_bounds.m`, `test_true_min_altitude.m`, `test_validate_flight.m`
+**tests/**: `test_arclength_arrival.m`, `test_arclength_ms.m`, `test_arclength_ms_thrust.m`, `test_catalog_schema_v3.m`, `test_certify_caps.m`, `test_certify_enforcement.m`, `test_conj_coverage.m`, `test_conj_fixedtf.m`, `test_conj_resolve.m`, `test_conj_spectrum.m`, `test_cr3bp_minenergy_pmp.m`, `test_dro_residual.m`, `test_dro_tulip_seed.m`, `test_entry_notes.m`, `test_flight_to_junctions.m`, `test_flown_control_error.m`, `test_fly_transfer.m`, `test_gates_h6_wiring.m`, `test_gto_family.m`, `test_h6_margin.m`, `test_harvest_ms_seed.m`, `test_huber_saltation.m`, `test_ladder_endpoints.m`, `test_lift_margin.m`, `test_lift_space_dim.m`, `test_minfuel_pmp.m`, `test_mintime_gates.m`, `test_ms_bvp_extra.m`, `test_ms_bvp_fixedtf.m`, `test_ms_tfmin_hom.m`, `test_nd_propulsion.m`, `test_newton_fixed_q.m`, `test_periodic_pp.m`, `test_phase_state.m`, `test_pmp_pointwise_checks.m`, `test_preflight_screen.m`, `test_run_capped.m`, `test_scalar_verdict.m`, `test_second_order_parallel.m`, `test_second_order_pass.m`, `test_second_order_sidecar_identity.m`, `test_seed_from_entry.m`, `test_sheet_to_catalog_file.m`, `test_ss_bvp_accept.m`, `test_stm_variational.m`, `test_survey_family_bounds.m`, `test_true_min_altitude.m`, `test_validate_flight.m`
 
 ## verify_common
 

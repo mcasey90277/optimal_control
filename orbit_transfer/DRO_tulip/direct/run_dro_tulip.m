@@ -79,6 +79,7 @@ vizN    = d('vizN', []);
 verbose = d('verbose', true);
 
 here = fileparts(mfilename('fullpath'));
+addpath(fullfile(fileparts(fileparts(here)),'costate_common'));
 addpath(fullfile(here,'lib'));
 addpath(fullfile(here,'viz'));
 addpath(fullfile(here,'certify'));

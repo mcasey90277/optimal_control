@@ -2,14 +2,13 @@ function setup_paths()
 %% Purpose:
 %
 %   GTO_tulip/catalog module paths: this dir + costate_common (family
-%   provider, preflight/harvest helpers) + the DRO_tulip engine tree
-%   (direct transcription + its lib/certify helpers + the indirect
-%   ms_tfmin-based thrust-ladder driver, unmodified) + the top-level
-%   oclib/+oc package (see below) + casadi + pumpkyn/pumpkynPie (via
-%   pumpkynPie's own startup, if not already on the path).
-%   Mirrors HALO_tulip/run_halo_catalog.m's addpath set -- that driver is
-%   the proven working reference; the brief's slimmer two-dir sketch left
-%   casadi_mintime_dro and certify_dro_mintime unresolved.
+%   provider, preflight/harvest helpers, and since 2026-09-16 the shared
+%   ladder engine itself -- thrust_ladder_library, casadi_mintime_dro,
+%   certify_dro_mintime, dro_residual) + the top-level oclib/+oc package
+%   (see below) + casadi + pumpkyn/pumpkynPie (via pumpkynPie's own
+%   startup, if not already on the path). No DRO_tulip folder is needed:
+%   until that move this module mirrored HALO_tulip's addpath set to reach
+%   casadi_mintime_dro and certify_dro_mintime inside the DRO campaign.
 %
 %   ADDED 2026-08-26 (Task 3 pilot launch): certify_dro_mintime ->
 %   dro_residual now calls oc.local_residual (repo-wide "oclib move 3",
@@ -37,11 +36,9 @@ function setup_paths()
 
 here = fileparts(mfilename('fullpath'));
 ot = fileparts(fileparts(here));
-droDir = fullfile(ot, 'DRO_tulip');
+% the shared ladder engine lives in costate_common since 2026-09-16
+% (cleanup step 12); no DRO_tulip folder is needed on the path
 addpath(here, fullfile(ot, 'costate_common'), ...
-        fullfile(droDir, 'direct'), fullfile(droDir, 'direct', 'lib'), ...
-        fullfile(droDir, 'direct', 'certify'), ...
-        fullfile(droDir, 'indirect'), ...
         fullfile(fileparts(ot), 'oclib'), ...
         fullfile(getenv('HOME'), 'casadi-3.7.0'));
 if isempty(which('pumpkyn.cr3bp.tfMin'))

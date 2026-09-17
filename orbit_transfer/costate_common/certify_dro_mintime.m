@@ -116,11 +116,7 @@ G(end+1) = add('G1v','local VELOCITY accuracy (worst interval)', worstVms, 1.0, 
 
 globKm = NaN;
 if ~isempty(globTolKm)
-    % shared verifier (migration #4): costate_common/flown_control_error
-    if isempty(which('flown_control_error'))
-        addpath(fullfile(fileparts(fileparts(fileparts(fileparts( ...
-            mfilename('fullpath'))))), 'costate_common'));
-    end
+    % shared verifier (migration #4): flown_control_error, this folder
     [gr, gv] = flown_control_error(o, mu, Tmax, c);
     globKm  = gr * lStar;
     globVms = gv * lStar/p.tStar * 1000;

@@ -204,11 +204,7 @@ for kc = 1:min(size(todo,1), maxCells)
             break
         end
         % Cheap sanity pre-check before any integrator touches the solve
-        % (one home: costate_common/preflight_screen).
-        if isempty(which('preflight_screen'))
-            addpath(fullfile(fileparts(fileparts(fileparts( ...
-                mfilename('fullpath')))), 'costate_common'));
-        end
+        % (preflight_screen, this folder).
         [pfOK, ~, pfAltKm] = preflight_screen(o, muStar, lStar, floorKm, seedTf);
         if ~pfOK
             lg('  (%2d,%2d) T=%5.1f  rejected pre-flight (minAlt %.0f km, tf %.4f) -- ladder stops', ...
@@ -230,12 +226,7 @@ for kc = 1:min(size(todo,1), maxCells)
             % Covector mapping + seed assembly live in ONE home now
             % (costate_common: duals_to_costates via harvest_ms_seed);
             % the sign vote and the Hermite-Simpson midpoint association
-            % are enforced there. Self-resolve the path for callers that
-            % add only indirect/.
-            if isempty(which('harvest_ms_seed'))
-                addpath(fullfile(fileparts(fileparts(fileparts( ...
-                    mfilename('fullpath')))), 'costate_common'));
-            end
+            % are enforced there (harvest_ms_seed, this folder).
             for K = msSeg
                 seed = harvest_ms_seed(o, K);
                 [z, info] = ms_tfmin(rv0(1:6), rvf(1:6), seed, Tnd, cnd, muStar, ...

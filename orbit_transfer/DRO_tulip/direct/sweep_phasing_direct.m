@@ -84,6 +84,7 @@ tauT    = d('tauTulip', 5*2*pi/6);
 pmT     = d('pmTulip', -1);
 
 here = fileparts(mfilename('fullpath'));
+addpath(fullfile(fileparts(fileparts(here)),'costate_common'));
 addpath(fullfile(here,'lib'));  addpath(fullfile(here,'certify'));
 addpath(fullfile(getenv('HOME'),'casadi-3.7.0'));
 rd = fullfile(here,'results');  if ~isfolder(rd), mkdir(rd); end

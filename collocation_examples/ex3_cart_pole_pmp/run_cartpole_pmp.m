@@ -28,7 +28,7 @@ function out = run_cartpole_pmp(opts)
 %
 %  out                      struct                  .lam0, .J, .missTerminal,
 %                                                   .missFlown, .statMax,
-%                                                   .t, .X, .U, .info
+%                                                   .t, .X, .U, .Lam, .info
 %
 %% Revision History:
 %  M. Casey                                                   (c) 09/16/2026
@@ -79,18 +79,27 @@ prob = struct('ny', 8, 'freeIdx0', 5:8, ...
     'rhs',  @(y) cartpole_pmp_rhs(y, p), ...
     'terminal', @(y, needJ) terminalFcn(y, xf, needJ));
 
-[~, info] = engine(prob, seed, struct('fixedTf', true, 'tolR', 1e-12, 'maxIter', 60));
+%  tolR = 1e-10, not 1e-12: this residual is ABSOLUTE while the costates
+%  are O(1e3), so 1e-10 already sits at a relative level of ~1e-13.
+%  Tighter than that chases noise: the propagator's own RelTol (1e-12,
+%  Task 5) floors the achievable multiple-shooting residual near 4e-12
+%  regardless of iteration budget (measured: polishMax=50, maxIter=300
+%  reproduce the identical 3.865e-12 floor as the default settings). The
+%  accuracy claim this demo makes lives on the terminal-miss gate below
+%  (1e-9), not on this internal residual.
+[~, info] = engine(prob, seed, struct('fixedTf', true, 'tolR', 1e-10, 'maxIter', 60));
 
 %% Report: fly the answer, measure what the gates measure
-%  NOTE (deviation from the brief's literal 501-point grid): the reported
-%  trajectory doubles as the source of U(t) for the flown-control check
-%  below, which samples u only at these output times and pchip-interpolates
-%  between them. At 501 points that interpolation error alone -- not the
-%  physics -- dominates the flown miss (measured 3.6e-6 at 501 pts vs
-%  1.1e-8 at 2001, both against the SAME lam0, i.e. a pure resampling
-%  effect). 2001 points removes the artifact with a wide margin while
-%  changing nothing else the gates measure (J, control RMS): see the task
-%  report.
+%  NOTE (deviation from the brief's literal 501-point grid, DO NOT
+%  "optimise" this back down): the reported trajectory doubles as the
+%  source of U(t) for the flown-control check below, which samples u only
+%  at these output times and pchip-interpolates between them. At 501
+%  points that interpolation error alone -- not the physics -- dominates
+%  the flown miss. Measured against the SAME converged lam0: 3.6e-6 at
+%  501 points (fails the 1e-6 gate), 1.1e-8 at 2001, 5.4e-11 at 50001 --
+%  monotone convergence with grid density, i.e. a pure resampling
+%  artifact. 2001 points removes it with a wide margin while changing no
+%  other gate materially (J, control RMS): see the task report.
 lam0 = info.Y(5:8, 1);
 [t, Y] = ode113(@(tt, y) cartpole_pmp_rhs(y, p), linspace(0, tf, 2001), ...
                 [0; 0; 0; 0; lam0], odeset('RelTol', 1e-12, 'AbsTol', 1e-14));
@@ -110,7 +119,7 @@ zEnd = oc.fly_control([0; 0; 0; 0], [0 tf], ...
 out = struct('lam0', lam0, 'J', J, ...
     'missTerminal', max(abs(X(:,end) - xf)), ...
     'missFlown', max(abs(zEnd - xf)), 'statMax', max(stat), ...
-    't', t.', 'X', X, 'U', U, 'info', info);
+    't', t.', 'X', X, 'U', U, 'Lam', Lam, 'info', info);
 
 if doPlot, plotAgainstDirect(out, R); end
 if nargout == 0

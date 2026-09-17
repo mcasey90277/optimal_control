@@ -1,0 +1,716 @@
+\documentclass[11pt]{article}
+\usepackage[margin=1in]{geometry}
+\usepackage{amsmath,amssymb,amsthm,bm}
+\usepackage{booktabs,array}
+\usepackage[most]{tcolorbox}
+\usepackage{listings}
+\usepackage{tikz}
+\usetikzlibrary{arrows.meta,positioning}
+\usepackage{hyperref}
+\usepackage{xcolor}
+\hypersetup{colorlinks=true,linkcolor=blue!50!black,citecolor=blue!50!black,urlcolor=blue!50!black}
+
+% ---- three-level boxes (same scheme as orbit_transfer/doc/algorithms_orbit_transfer.tex)
+\newtcolorbox{eli}{colback=green!5,colframe=green!45!black,title=ELI5,fonttitle=\bfseries,breakable}
+\newtcolorbox{intu}{colback=blue!4,colframe=blue!45!black,title=Intuition,fonttitle=\bfseries,breakable}
+\newtcolorbox{rig}{colback=gray!6,colframe=black!70,title=Rigor,fonttitle=\bfseries,breakable}
+\newtcolorbox{warn}{colback=orange!6,colframe=orange!70!black,title=Where it breaks / what is assumed,fonttitle=\bfseries,breakable}
+
+\lstset{
+  language=Matlab, basicstyle=\footnotesize\ttfamily, keywordstyle=\color{blue!60!black},
+  commentstyle=\color{green!35!black}\itshape, stringstyle=\color{purple!60!black},
+  numbers=left, numberstyle=\tiny\color{gray}, frame=single, rulecolor=\color{black!30},
+  breaklines=true, showstringspaces=false, columns=fullflexible, xleftmargin=14pt
+}
+
+\newcommand{\file}[1]{\texttt{#1}}
+\newcommand{\R}{\mathbb{R}}
+\newcommand{\lam}{\lambda}
+\newcommand{\tf}{t_f}
+
+\title{Two Ways to Swing Up a Pendulum\\
+\large Direct collocation and the indirect Pontryagin method, taught side by side}
+\author{M.~Casey \quad (Coorbital, \file{collocation\_examples/})}
+\date{2026-09-17}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+The cart-pole swing-up in \file{collocation\_examples/} is solved twice in this
+repository: once by \emph{direct collocation} (\file{ex2\_cart\_pole\_swing\_up/}),
+which chops the trajectory into pieces and hands the whole thing to a nonlinear
+programming solver, and once by the \emph{indirect} Pontryagin method
+(\file{ex3\_cart\_pole\_pmp/}), which writes down the conditions an optimal
+trajectory must satisfy and then solves those. The two land on the same motion:
+their costs agree to $0.062\%$ and their control histories to $0.42\%$ RMS.
+
+This document explains both methods, and the bridge between them --- the fact
+that the multipliers the NLP solver produces \emph{are} samples of the costates
+the Pontryagin method shoots. Every section is given three times: a picture with
+no mathematics (ELI5), the reasoning an engineer needs in order to trust it
+(Intuition), and the equations the code implements (Rigor). Code is quoted from
+the repository as it actually stands, with line-level explanation.
+
+A closing chapter is about a sign error that lived in this code for a long time,
+what it cost, and the one test that would have caught it on day one.
+\end{abstract}
+
+\tableofcontents
+
+% =======================================================================
+\section{What problem is this, exactly?}
+
+Before any method: \emph{which} optimal control problem is being solved? The
+three classical choices lead to very different mathematics, and calling this one
+by the wrong name will send you looking for structure that is not there.
+
+\begin{eli}
+We want to swing a pendulum from hanging straight down to balanced straight up,
+in exactly five seconds, by sliding the cart it is attached to back and forth.
+Lots of different pushes would get it there. We want the \emph{gentlest} one ---
+the one that uses the least force overall. We are not in a hurry (five seconds
+is fixed, not something we are trying to shrink), and we are not paying for fuel
+by the litre. We are paying for \emph{effort}.
+\end{eli}
+
+\begin{intu}
+Three costs, three worlds:
+\begin{itemize}
+\item \textbf{Minimum time} $J=\tf$: ``get there as fast as possible''. The final
+  time is an unknown, and the answer almost always pushes as hard as the limits
+  allow. The interesting structure is \emph{when} to switch between limits.
+\item \textbf{Minimum fuel} $J=\int|u|\,dt$: ``spend as little propellant as
+  possible''. Because $|u|$ is linear in the control's magnitude, the optimum
+  is bang--bang: full on or full off, with a switching function deciding which.
+  This is the world where you need saltation matrices, smoothing homotopies, and
+  all the switch-detection machinery in \file{orbit\_transfer/}.
+\item \textbf{Minimum energy (effort)} $J=\int u^2\,dt$: ``push as gently as
+  possible''. The cost is \emph{quadratic}, so the optimal control comes out as a
+  smooth formula rather than a switching rule. Nothing bangs; nothing switches.
+\end{itemize}
+Ours is the third, with $\tf$ fixed at $5$~s. That choice is what makes this
+problem a good teaching example: the optimality condition can be solved for $u$
+in closed form, so the only hard part left is the boundary-value problem ---
+which is exactly the part we want to teach.
+\end{intu}
+
+\begin{rig}
+The problem solved by both \file{ex2} and \file{ex3} is
+\[
+\min_{u(\cdot)}\; J=\int_0^{\tf} u(t)^2\,dt,
+\qquad \tf = 5~\text{s fixed},
+\]
+subject to $\dot x = f(x)+g(x)\,u$ with
+$x=[q_1,\;q_2,\;\dot q_1,\;\dot q_2]^\top$ and boundary conditions
+\[
+x(0)=[0,\;0,\;0,\;0]^\top,\qquad x(\tf)=[0,\;\pi,\;0,\;0]^\top ,
+\]
+i.e.\ hanging at rest to upright at rest, cart returning to the origin. The
+control is unconstrained: no bound enters the formulation. (The direct fixture
+is solved at a deliberately loose bound of $2000$~N purely so that the bound is
+inactive --- measured $\max|u| = 68.5$~N --- and it therefore approximates the
+same unconstrained optimum.)
+
+Naming: in the literature this is \emph{minimum energy} or \emph{minimum
+effort}; both names appear. ``Energy'' here refers to the \emph{control} energy
+$\int u^2$, which is not the mechanical energy of the cart-pole. The mechanical
+energy makes its own appearance in \S\ref{sec:signerror}, as a test.
+\end{rig}
+
+\begin{warn}
+The word ``energy'' is overloaded. $\int u^2\,dt$ has units of
+$\mathrm{N^2\,s}$ --- it is not joules, and it is not the work done by the
+force ($\int u\,\dot q_1\,dt$, which \emph{is} joules and \emph{is} the quantity
+the physics test in \S\ref{sec:signerror} uses). Keep them apart.
+\end{warn}
+
+% =======================================================================
+\section{The plant: a cart, a rod, a bob}
+
+\begin{eli}
+A cart slides on a rail. A rigid rod hangs off it with a weight on the end. You
+can push the cart left or right; you cannot touch the rod. Everything the rod
+does, it does because the cart moved underneath it --- like balancing a broom on
+your palm, except your palm may only slide along a straight line.
+\end{eli}
+
+\begin{intu}
+Two degrees of freedom ($q_1$, the cart's position; $q_2$, the rod's angle) and
+only one actuator (the force $u$ on the cart). That deficit --- more things to
+control than knobs to control them with --- is what makes this
+\emph{underactuated}, and it is why the answer has to be a swing: the only way to
+put energy into the rod is to move the cart so that the rod is dragged, and the
+only way to stop the rod at the top is to move the cart out from under it at
+exactly the right moment.
+
+The single most important structural fact for everything that follows is that
+the force enters \emph{linearly}. Push twice as hard and the acceleration
+contribution doubles exactly. Formally $\dot x = f(x)+g(x)u$: a part that happens
+anyway (the drift $f$, gravity and centrifugal terms) plus a part proportional
+to what you do ($g$, the control column). Almost every nice property we exploit
+downstream traces back to that split.
+\end{intu}
+
+\begin{rig}
+With $q_2$ measured from \emph{hanging}, the bob sits at
+$(q_1+L\sin q_2,\;-L\cos q_2)$, and the Lagrangian equations give
+\[
+f(x)=\begin{bmatrix}\dot q_1\\[2pt] \dot q_2\\[4pt]
+\dfrac{Lm_2 s\,\dot q_2^{\,2}+m_2 g\,c\,s}{D_1}\\[10pt]
+-\dfrac{Lm_2 c\,s\,\dot q_2^{\,2}+(m_1+m_2)g\,s}{D_2}\end{bmatrix},
+\qquad
+g(x)=\begin{bmatrix}0\\0\\ \dfrac{1}{D_1}\\[8pt] -\dfrac{c}{D_2}\end{bmatrix},
+\]
+with $s=\sin q_2$, $c=\cos q_2$, $D_1=m_1+m_2(1-c^2)=m_1+m_2 s^2$ and
+$D_2=L(m_1+m_2)\bigl(1-\tfrac{m_2}{m_1+m_2}c^2\bigr)=L\,D_1$. Constants:
+$m_1=5$~kg, $m_2=1$~kg, $L=2$~m, $g=9.8~\mathrm{m/s^2}$.
+
+Note the minus signs on the fourth row of both $f$ and $g$. They are the subject
+of \S\ref{sec:signerror}.
+
+In code, \file{ex3\_cart\_pole\_pmp/cartpole\_field.m} is exactly this split:
+
+\begin{lstlisting}
+q1d = x(3);  q2d = x(4);
+s = sin(x(2));  c = cos(x(2));
+D1 = p.m1 + p.m2*(1 - c^2);
+D2 = p.L*(p.m1 + p.m2)*(1 - (p.m2/(p.m1 + p.m2))*c^2);
+
+F = [q1d;
+     q2d;
+     (p.L*p.m2*s*q2d^2 + p.m2*p.g*c*s)/D1;
+    -(p.L*p.m2*c*s*q2d^2 + (p.m1 + p.m2)*p.g*s)/D2];
+G = [0; 0; 1/D1; -c/D2];
+\end{lstlisting}
+
+Two details that matter later. First, \texttt{F} is the derivative at $u=0$ and
+\texttt{G} is exactly $\partial\dot x/\partial u$, so \texttt{F + G*u} is the full
+dynamics --- the test suite checks this against an independently written copy of
+the equations rather than trusting the claim. Second, the file contains no
+\texttt{abs}, \texttt{norm}, \texttt{max}, \texttt{min}, or branch on a state
+value. That makes it \emph{complex-step safe}, which \S\ref{sec:stm} cashes in.
+\end{rig}
+
+% =======================================================================
+\section{Method 1: direct collocation (discretize, then optimize)}
+
+\begin{eli}
+Guess the whole movie at once. Chop the five seconds into 200 slices and write
+down, for every slice boundary, where the cart is, how fast it is going, where
+the rod is pointing, and how hard you are pushing. That is a big list of
+numbers --- about a thousand of them. Now hand the list to a solver and say:
+``adjust these until (a) the pieces fit together like a physically possible
+movie, (b) the start and end look the way I asked, and (c) the total push is as
+small as you can make it.''
+
+The solver does not know any physics. It only knows the rules you wrote down.
+\end{eli}
+
+\begin{intu}
+The trick that makes this work is how ``physically possible'' is expressed. You
+do \emph{not} integrate the equations of motion. Instead you write, for each
+slice, an equation that says: \emph{the change in the state across this slice
+equals the average of the slopes at its two ends, times the slice width}. That
+is the trapezoid rule, turned from an integration scheme into a constraint.
+
+Each such equation is called a \emph{defect}: it is zero when the piece is
+consistent, nonzero when it is not. The solver's job is to drive all of them to
+zero while minimizing cost. The states and controls are all decision variables
+on an equal footing, which is why this family is called
+\emph{simultaneous} or \emph{discretize-then-optimize}.
+
+Why it is popular: it is robust, it needs no good initial guess for the
+costates (there are none), and bounds on states or controls are just bounds on
+variables. Why it has a ceiling: the answer is only as good as the mesh, and the
+optimality it achieves is the optimality of the \emph{discretized} problem,
+which is not quite the problem you asked about.
+\end{intu}
+
+\begin{rig}
+Let $N$ be the number of segments, $h=\tf/N$, and let $x_k, u_k$ denote the
+state and control at node $k=1,\dots,N+1$. The decision vector stacks them by
+variable:
+\[
+Z=\bigl[q_1^{(1..N+1)},\;q_2^{(1..N+1)},\;\dot q_1^{(1..N+1)},\;\dot q_2^{(1..N+1)},\;u^{(1..N+1)}\bigr]^\top\in\R^{5(N+1)} .
+\]
+The trapezoidal defect for segment $k$ is
+\[
+\zeta_k \;=\; x_{k+1}-x_k-\frac{h}{2}\bigl[\,\hat f(x_{k+1},u_{k+1})+\hat f(x_k,u_k)\,\bigr] \;=\;0,
+\qquad \hat f = f+g\,u,
+\]
+and the cost is the trapezoid quadrature of the running cost,
+\[
+J\approx\frac{h}{2}\sum_{k=1}^{N}\bigl(u_k^2+u_{k+1}^2\bigr).
+\]
+Together with the eight boundary conditions this is a nonlinear program in
+$\R^{5(N+1)}$ with $4N+8$ equality constraints, handed to \texttt{fmincon}.
+
+The defects, from \file{ex2\_cart\_pole\_swing\_up/try2/nonlcon\_cart\_pole.m},
+written vectorized over all segments at once:
+
+\begin{lstlisting}
+% kinematic rows: change in position = average velocity x h
+ceq1 = q1(2:end) - q1(1:end-1) - h/2.*(q1dot(2:end) + q1dot(1:end-1));
+ceq2 = q2(2:end) - q2(1:end-1) - h/2.*(q2dot(2:end) + q2dot(1:end-1));
+
+% dynamic rows: change in velocity = average acceleration x h
+term_kp1_cart_accel = cart_accel(q2(2:end), q2dot(2:end), u(2:end), L, m1, m2, g);
+term_k_cart_accel   = cart_accel(q2(1:end-1), q2dot(1:end-1), u(1:end-1), L, m1, m2, g);
+ceq3 = q1dot(2:end) - q1dot(1:end-1) - h/2.*(term_kp1_cart_accel + term_k_cart_accel);
+\end{lstlisting}
+
+Line by line: \texttt{q1(2:end)} is every node from the second onward and
+\texttt{q1(1:end-1)} every node up to the second-to-last, so their difference is
+the vector of changes across all $N$ segments in one shot. Subtracting
+\texttt{h/2} times the sum of the endpoint slopes is precisely $\zeta_k$ for
+every $k$. Rows \texttt{ceq1}/\texttt{ceq2} use velocity as the slope of
+position (that part is exact kinematics); \texttt{ceq3}/\texttt{ceq4} call the
+acceleration helpers for the slope of velocity.
+
+And the objective, from \file{objective.m}:
+
+\begin{lstlisting}
+J = h/2 .* sum (u(2:end).^2 + u(1:end-1).^2,1);
+\end{lstlisting}
+
+which is the quadrature above, again vectorized over segments.
+\end{rig}
+
+\begin{warn}
+A converged NLP means \emph{the defects are small}, not \emph{the trajectory is
+accurate}. These are different claims, and on stiff problems they can differ by
+many orders of magnitude --- the orbit-transfer library has a documented case of
+a defect of $1.4\times10^{-14}$ next to a true local error of $1.5$. The honest
+check is to re-integrate the reconstructed control with a real integrator and
+see where you actually arrive; \file{oc.local\_residual} and
+\file{oc.fly\_control} exist for exactly this.
+\end{warn}
+
+% =======================================================================
+\section{Method 2: the indirect method (optimize, then discretize)}
+
+\begin{eli}
+Instead of guessing the whole movie, ask a different question: \emph{what must
+be true of the best movie?} Physics and calculus answer that for you. It turns
+out that alongside the four numbers describing the cart and rod, there are four
+more shadow numbers --- one attached to each --- that tell you how much the final
+result would improve if that quantity were nudged. Those shadows obey their own
+equations, running alongside the real ones.
+
+Here is the magic: once you know the four shadows at the \emph{start}, the best
+push at every instant is given by a formula, and the whole movie follows by
+playing the equations forward. So the entire problem shrinks from a thousand
+unknowns to four. The catch is that you do not know those four numbers --- you
+have to hunt for the ones that make the rod finish upright.
+\end{eli}
+
+\begin{intu}
+The shadow variables are the \emph{costates} $\lambda$, and they are Lagrange
+multipliers for the dynamics --- the price of the constraint ``the state must
+actually obey the equations of motion''. Pontryagin's Minimum Principle says an
+optimal trajectory makes a certain scalar, the Hamiltonian
+\[
+H = \underbrace{u^2}_{\text{what this instant costs}} \;+\; \underbrace{\lambda^\top(f+gu)}_{\text{what this instant buys}},
+\]
+as small as possible \emph{at each instant}, with respect to $u$ alone.
+
+Because our cost is quadratic in $u$ and the dynamics are linear in $u$, $H$ is a
+quadratic in $u$ with a positive leading coefficient --- a parabola opening
+upward. Minimizing a parabola is done by setting its derivative to zero, which
+gives $u$ in closed form. This is the sense in which minimum-energy problems are
+\emph{easy}: there is no switching, no case analysis, no bang--bang. Change the
+cost to $\int|u|$ and the parabola becomes a V with a flat bottom, and all the
+switching machinery appears.
+
+So the method is: eliminate $u$ analytically, leaving an eight-dimensional flow
+in $(x,\lambda)$; then find the four unknown initial costates that make the
+terminal conditions come out right. Four unknowns, four equations. That is a
+root-find, not an optimization --- which is why it converges quadratically when
+it converges, and why it can be delicate.
+\end{intu}
+
+\begin{rig}
+With $H=u^2+\lambda^\top(f+gu)$, the three PMP conditions are
+\[
+\dot x = \frac{\partial H}{\partial\lambda}=f+gu,
+\qquad
+\dot\lambda = -\frac{\partial H}{\partial x},
+\qquad
+u^\star=\arg\min_u H .
+\]
+Stationarity gives $\partial H/\partial u = 2u+\lambda^\top g = 0$, hence
+\[
+\boxed{\,u^\star=-\tfrac12\lambda^\top g\,}
+\qquad\text{and}\qquad
+\frac{\partial^2H}{\partial u^2}=2>0,
+\]
+so the stationary point is the \emph{pointwise minimizer} everywhere (the
+Legendre--Clebsch condition holds strictly). Substituting $u^\star$ closes an
+autonomous 8-state system in $y=[x;\lambda]$.
+
+The costate equation deserves care. After substituting $u^\star(x,\lambda)$ the
+Hamiltonian becomes $\bar H(x,\lambda)=H(x,\lambda,u^\star)$, and
+\[
+\bar H_x = H_x + H_u\,u^\star_x = H_x
+\qquad\text{because } H_u=0 \text{ at } u^\star .
+\]
+So one may differentiate \emph{holding $u$ fixed} and then evaluate at $u^\star$
+--- the $\partial u^\star/\partial x$ term drops out exactly. Since the running
+cost $u^2$ has no state dependence,
+\[
+\dot\lambda = -A(x,u^\star)^\top\lambda,
+\qquad A = \frac{\partial (f+gu)}{\partial x}\bigg|_{u\ \text{fixed}} .
+\]
+Boundary conditions: $x(0)$ is fully specified (4 conditions) and $x(\tf)$ is
+fully specified (4 more). With $\tf$ fixed there is no transversality condition
+on $\tf$, and because the terminal state is fully constrained there is no
+condition $\lambda(\tf)=0$ either. The unknowns are exactly $\lambda(0)\in\R^4$.
+
+The whole of \file{cartpole\_pmp\_rhs.m} is four lines:
+
+\begin{lstlisting}
+x = y(1:4);  lam = y(5:8);
+[F, G] = cartpole_field(x, p);
+u = -(lam.'*G)/2;
+A = cartpole_state_jac(x, u, p);
+dy = [F + G*u; -A.'*lam];
+\end{lstlisting}
+
+Line 3 is $u^\star$. Line 4 evaluates $A$ at that control --- fixed-$u$
+differentiation, per the argument above. Line 5 stacks $\dot x$ on top of
+$\dot\lambda$. Note \texttt{.'} (transpose) rather than \texttt{'} (conjugate
+transpose) in both places: on a complex-stepped path a conjugate transpose would
+silently destroy the derivative.
+\end{rig}
+
+\begin{warn}
+$H_{uu}>0$ makes $u^\star$ the unique minimizer \emph{at each instant}. It does
+\emph{not} make the resulting trajectory a minimizing one. The boundary-value
+problem can have several extremals, saddles among them; ruling those out needs a
+second-order test (a conjugate-point or Jacobi test --- see
+\file{costate\_common/ms\_conjugate\_test.m} in the orbit-transfer library).
+Everything this demo verifies is consistent with a \emph{normal extremal},
+which is a weaker statement than ``the optimum''.
+\end{warn}
+
+% =======================================================================
+\section{The bridge: NLP multipliers \emph{are} costates}\label{sec:bridge}
+
+This is the conceptual heart of the pairing, and the reason the two examples
+live next to each other.
+
+\begin{eli}
+The first method never mentions shadow numbers. But it computes them anyway,
+without being asked --- they fall out of how the solver enforces ``the pieces
+must fit''. So you can run the easy, robust method, read the shadows out of its
+answer, and hand them to the fussy, precise method as a starting guess. Easy
+method warms up the hard one.
+\end{eli}
+
+\begin{intu}
+When \texttt{fmincon} enforces the defect $\zeta_k=0$, it attaches a Lagrange
+multiplier $\mu_k$ to it. Stationarity of the NLP's own Lagrangian with respect
+to the state variables is, term by term, a discretization of the adjoint
+equation $\dot\lambda=-H_x$. So $\mu_k$ is a sample of $\lambda$ --- up to a
+scaling that depends on how the defect was written, a sign that depends on the
+solver's conventions, and a \emph{station}: for the trapezoid rule the natural
+association is with nodes, for Hermite--Simpson with interval midpoints.
+
+Getting that association wrong injects a half-step phase error into every seed,
+and it is a genuinely easy mistake --- it has been made in this codebase and
+caught by review. That is why the rules live in one place,
+\file{oclib/+oc/duals\_to\_costates.m}, rather than being re-derived per campaign.
+\end{intu}
+
+\begin{rig}
+The seed construction in \file{run\_cartpole\_pmp.m}:
+
+\begin{lstlisting}
+[lamS, tS] = oc.duals_to_costates(struct('scheme', 'trapezoid', 'mu', R.muDefect, ...
+                                         'tNodes', R.tN, 'velRows', 3:4));
+\end{lstlisting}
+
+\texttt{'scheme','trapezoid'} selects the station rule; \texttt{mu} is the
+$4\times N$ array of defect multipliers harvested from the direct solve;
+\texttt{velRows} names which rows hold the velocity costates (the default
+\texttt{4:6} is for the 7-state CR3BP problems, and would be wrong here).
+
+The global sign is convention-dependent. The library resolves it by a ``primer
+vote'': the implied thrust direction $-\lambda_v/\|\lambda_v\|$ should align
+with the thrust direction the solver actually used. A scalar force has no
+direction to vote on, so this demo does the scalar analogue --- and, after
+review, does it with a confidence measure rather than a bare sign test:
+
+\begin{lstlisting}
+signCorr = sum(uImplied.*uDirect) / sqrt(sum(uImplied.^2)*sum(uDirect.^2));
+assert(abs(signCorr) > 0.5, 'run_cartpole_pmp:sign', ...
+       'implied vs direct control correlation %.3f: the seed carries no usable sign information', signCorr);
+if signCorr < 0, lamS = -lamS;  uImplied = -uImplied; end
+\end{lstlisting}
+
+The normalized correlation is a real diagnostic: measured $0.9998$ here. A bare
+$\sum u_{\text{implied}}u_{\text{direct}}\neq 0$ test would have accepted an
+arbitrarily weak agreement. The code also reports the \emph{amplitude ratio}
+($1.009$ measured), because a sign vote cannot detect a costate seed that points
+the right way but is scaled wrongly.
+\end{rig}
+
+% =======================================================================
+\section{Multiple shooting and the state-transition matrix}\label{sec:stm}
+
+\begin{eli}
+Playing the equations forward for five seconds from a guessed start is like
+rolling a marble down a long bumpy hill and hoping it lands in a cup: tiny
+errors at the top become huge misses at the bottom. So we cut the five seconds
+into eight shorter rolls, let each one start wherever it likes, and add the rule
+``where one roll ends is where the next begins''. More unknowns, but each roll is
+short enough to be predictable.
+
+To steer the hunt we also need to know how the landing point moves when the
+starting point moves. That sensitivity is a matrix, and we compute it by
+carrying it along with the trajectory.
+\end{eli}
+
+\begin{intu}
+The reason single shooting fails on long arcs is Lyapunov amplification: the
+sensitivity of the endpoint to the initial costate grows roughly exponentially
+with the arc length. In the orbit campaigns, catalog seeds that are perfectly
+good miss by 36{,}000 to 560{,}000~km when single-shot. Splitting the horizon
+into $K$ segments replaces one badly-conditioned map with $K$ well-conditioned
+ones, at the price of carrying the junction states as extra unknowns and adding
+continuity constraints.
+
+The Newton step needs the Jacobian of ``miss'' with respect to the unknowns, and
+the pieces of that Jacobian are \emph{state-transition matrices}: $\Phi =
+\partial y(t_{k+1})/\partial y(t_k)$. You get $\Phi$ by integrating its own
+differential equation alongside the state, $\dot\Phi = A_8\Phi$, starting from
+the identity.
+\end{intu}
+
+\begin{rig}
+The engine (\file{oclib/+oc/ms\_bvp.m}) asks the problem for three closures:
+\texttt{prop} (propagate, optionally with $\Phi$), \texttt{rhs} (the field at a
+point), and \texttt{terminal} (the terminal residual and its Jacobian). The demo
+supplies them:
+
+\begin{lstlisting}
+prob = struct('ny', 8, 'freeIdx0', 5:8, ...
+    'prop', @(dt, y0, needSTM) cartpole_pmp_prop(dt, y0, needSTM, p), ...
+    'rhs',  @(y) cartpole_pmp_rhs(y, p), ...
+    'terminal', @(y, needJ) terminalFcn(y, xf, needJ));
+\end{lstlisting}
+
+\texttt{'ny',8} is the augmented state dimension; \texttt{'freeIdx0',5:8} says
+that of the eight components at $t=0$, only rows 5--8 (the costates) are
+unknowns --- rows 1--4 are the fixed initial state. With \texttt{opts.fixedTf}
+the unknown vector is
+$p=[\lambda(0);\,y_2;\dots;y_K]$ and the equations are the $K-1$ continuity
+blocks plus the 4 terminal conditions.
+
+The variational integration, from \file{cartpole\_pmp\_prop.m}:
+
+\begin{lstlisting}
+y = z(1:8);
+PHI = reshape(z(9:72), 8, 8);
+dy = cartpole_pmp_rhs(y, p);
+A = zeros(8);
+h = 1e-20;
+for col = 1:8
+    yp = y;  yp(col) = yp(col) + 1i*h;
+    A(:,col) = imag(cartpole_pmp_rhs(yp, p))/h;
+end
+dz = [dy; reshape(A*PHI, 64, 1)];
+\end{lstlisting}
+
+Seventy-two equations: eight for $y$, sixty-four for $\Phi$. The Jacobian $A$
+comes from a \emph{complex step}: perturb one component by $ih$ with
+$h=10^{-20}$ and read the imaginary part of the output. Unlike a finite
+difference this has no subtractive cancellation, so it is accurate to machine
+precision even at absurdly small $h$.
+
+Which raises the subtlety that dictated the design of
+\file{cartpole\_state\_jac.m}. The complex step above runs \emph{through}
+\file{cartpole\_pmp\_rhs}, which itself needs $A$ for the costate equation. Had
+that inner $A$ also been computed by a complex step, the two would share the
+same imaginary channel and the inner derivative would be silently corrupted ---
+no error, no warning, just wrong numbers. That is why the inner Jacobian is
+generated symbolically instead:
+
+\begin{lstlisting}
+syms q1 q2 q1d q2d u m1 m2 L g real
+xs = [q1; q2; q1d; q2d];
+ps = struct('m1', m1, 'm2', m2, 'L', L, 'g', g);
+[F, G] = cartpole_field(xs, ps);        % the FIELD ITSELF, on symbols
+A = simplify(jacobian(F + G*u, xs));
+matlabFunction(A, 'File', out, 'Vars', {xs, u, [m1; m2; L; g]}, ...);
+\end{lstlisting}
+
+The generator calls \file{cartpole\_field} on symbolic inputs, so there is no
+second copy of the physics to drift out of step --- a lesson learned the hard
+way (\S\ref{sec:signerror}).
+\end{rig}
+
+% =======================================================================
+\section{What the two methods produce}
+
+Both solve the same problem; the comparison is the point.
+
+\begin{center}
+\begin{tabular}{lrr}
+\toprule
+& \textbf{Direct (ex2 formulation)} & \textbf{Indirect (ex3)}\\
+\midrule
+unknowns & $1005$ & $4$ (plus $7\times8$ junction states)\\
+cost $J$ & $2781.109846$ & $2779.381719$\\
+terminal miss & pinned by constraint & $3.67\times10^{-11}$\\
+needs a costate guess & no & yes\\
+handles bounds & trivially & needs switching structure\\
+accuracy limit & the mesh & the integrator\\
+\bottomrule
+\end{tabular}
+\end{center}
+
+The costs differ by $0.062\%$, and the control histories by $0.42\%$ RMS. The
+gap is the direct method's discretization error: the indirect solve is the more
+accurate of the two, because it never discretizes the dynamics at all --- it
+integrates them.
+
+\begin{intu}
+The practical division of labour, and the reason the orbit-transfer library uses
+both: the direct method is \emph{robust but coarse}, the indirect method is
+\emph{sharp but fragile}. So run the direct method to get into the right basin,
+harvest its multipliers (\S\ref{sec:bridge}), and let the indirect method polish
+the answer to integrator accuracy. That is precisely the pipeline the costate
+catalogs use, at scale, on orbit transfers.
+\end{intu}
+
+% =======================================================================
+\section{How we know it is right}
+
+\begin{eli}
+Getting a pretty answer is easy. Knowing it is the right answer is the job. We
+check four different things, and each one can fail on its own.
+\end{eli}
+
+\begin{intu}
+Verification has layers, and they catch different faults:
+\begin{enumerate}
+\item \textbf{Did the root-find converge?} The engine's own residual. Necessary,
+  and nearly meaningless by itself.
+\item \textbf{Does the trajectory hit the target?} Re-fly $\lambda(0)$ from
+  scratch and measure the terminal miss. This catches a converged solve of the
+  \emph{wrong} equations.
+\item \textbf{Is it an extremal?} Along an autonomous, fixed-$\tf$ extremal the
+  Hamiltonian is \emph{constant} (not zero --- that would require free $\tf$).
+  Measured spread: $5.8\times10^{-13}$ relative.
+\item \textbf{Does the control actually fly?} Take $u(t)$ and integrate the true
+  dynamics with it. Measured arrival error: $1.7\times10^{-7}$.
+\end{enumerate}
+A trap worth naming: a check that recomputes the thing it is testing proves
+nothing. The stationarity residual $|2u+\lambda^\top g|$ is exactly zero when $u$
+was \emph{built} as $-\lambda^\top g/2$ --- it measures arithmetic, not
+optimality. This demo used to report that number as evidence; it no longer does.
+\end{intu}
+
+\begin{rig}
+The engine's own residual and the reported miss are different quantities and
+were confused here once. Measured on the converged root: the engine's last-arc
+terminal residual is $7.27\times10^{-14}$, while re-flying $\lambda(0)$ over the
+whole horizon gives $6.88\times10^{-9}$ at \texttt{RelTol} $10^{-12}$,
+$8.20\times10^{-10}$ at $10^{-13}$, and $3.67\times10^{-11}$ at $10^{-14}$. The
+loose figure was the \emph{measurement}, not the solution --- the reporting
+integration's own error. The fix was to tighten the measurement, not the gate.
+\end{rig}
+
+% =======================================================================
+\section{A sign error, and the test that would have caught it}\label{sec:signerror}
+
+\begin{eli}
+For a long time the equations in this repository had one minus sign missing. It
+made the hanging position \emph{unstable} --- in that world, a pendulum hanging
+straight down would fall \emph{upwards}. Both methods solved that world happily,
+and agreed with each other beautifully, because they were both asking the same
+wrong question. Agreeing with yourself is not evidence.
+\end{eli}
+
+\begin{intu}
+Every test in the folder was \emph{relative}: the field was checked against a
+copy of the equations, the Jacobian against the field, the STM against the flow,
+the indirect solve against the direct one. A fault shared by all of them cancels
+everywhere and is invisible.
+
+What breaks the circle is a test whose reference comes from \emph{outside} the
+equations under test. For mechanics the cheapest such reference is a
+conservation law. You can write the energy from the \emph{geometry} alone ---
+where the masses are and how fast they move --- without consulting the
+acceleration formulas at all. Then physics demands a relationship between that
+energy and the work being done, and any sign error in the accelerations breaks
+it.
+\end{intu}
+
+\begin{rig}
+Build the energy from positions only. The bob is at
+$(q_1+L\sin q_2,\,-L\cos q_2)$, so
+\[
+E=\tfrac12 m_1\dot q_1^2+\tfrac12 m_2\bigl\|\dot r_{\text{bob}}\bigr\|^2-m_2gL\cos q_2 ,
+\]
+and the only external force doing work is $u$ acting on the cart, giving the
+\emph{pointwise} identity
+\[
+\frac{dE}{dt}=\nabla E\cdot \dot x = u\,\dot q_1 \qquad\text{for every } (x,u).
+\]
+No integration is needed: evaluate both sides at a scatter of states and
+controls. From \file{tests/test\_cartpole\_physics.m}:
+
+\begin{lstlisting}
+gradE = energy_gradient(x, p);          % complex step through the GEOMETRIC energy
+[F, G] = cartpole_field(x, p);
+xdot = F + G*u;
+worstField = max(worstField, abs(gradE.'*xdot - u*x(3)));
+\end{lstlisting}
+
+Measured: $5.7\times10^{-14}$~W against a $460$~W scale with the corrected
+equations, and $337$~W with the old ones. The same file also checks that the
+linearization about $q_2=0$ is oscillatory with
+$\omega^2=(m_1+m_2)g/(Lm_1)=5.880000$ (hanging is \emph{stable}), that $q_2=\pi$
+is a real unstable pair, and that an unforced flight conserves $E$
+($1.6\times10^{-12}$~J over 3~s).
+\end{rig}
+
+\begin{warn}
+The general rule, worth carrying to any physics code: \textbf{at least one test
+must not be a mirror}. If every check compares the implementation against
+another expression of the same implementation, the suite measures internal
+consistency and nothing else. Conservation laws, analytic limits, equilibrium
+character and dimensional analysis are all cheap sources of an outside opinion.
+\end{warn}
+
+% =======================================================================
+\section{Where the code lives}
+
+\begin{center}
+\begin{tabular}{ll}
+\toprule
+\textbf{path} & \textbf{what it is}\\
+\midrule
+\file{ex2\_cart\_pole\_swing\_up/try2/} & the direct method: objective, defects, dynamics helpers\\
+\file{ex3\_cart\_pole\_pmp/cartpole\_field.m} & $f$ and $g$, the one home for the physics\\
+\file{ex3\_cart\_pole\_pmp/cartpole\_pmp\_rhs.m} & the 8-state PMP field\\
+\file{ex3\_cart\_pole\_pmp/cartpole\_pmp\_prop.m} & propagator and variational STM\\
+\file{ex3\_cart\_pole\_pmp/run\_cartpole\_pmp.m} & seed, shoot, verify, report\\
+\file{ex3\_cart\_pole\_pmp/run\_tests.m} & the runner that fails on failure\\
+\file{oclib/+oc/ms\_bvp.m} & the shared multiple-shooting engine\\
+\file{oclib/+oc/duals\_to\_costates.m} & the covector rules (\S\ref{sec:bridge})\\
+\file{orbit\_transfer/doc/algorithms\_orbit\_transfer.tex} & the same ideas at campaign scale\\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\paragraph{Reading order for someone new.} Run \file{run\_cartpole\_pmp} and
+watch it print; read \file{cartpole\_pmp\_rhs.m} (four lines, the whole
+principle); then \file{run\_cartpole\_pmp.m} top to bottom; then
+\file{test\_cartpole\_physics.m}, which is the shortest statement of what it
+means to actually believe a dynamics model.
+
+\end{document}

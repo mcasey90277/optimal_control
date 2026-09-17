@@ -247,7 +247,7 @@ N = 200;     % number of segments
 ```
 q1ddot = (L*m2*sin(q2)*q2dot² + u + m2*g*cos(q2)*sin(q2)) / (m1 + m2*(1-cos²(q2)))
 
-q2ddot = (L*m2*cos(q2)*sin(q2)*q2dot² + u*cos(q2) + (m1+m2)*g*sin(q2)) / (L*(m1+m2)*(1 - m2/(m1+m2)*cos²(q2)))
+q2ddot = -(L*m2*cos(q2)*sin(q2)*q2dot² + u*cos(q2) + (m1+m2)*g*sin(q2)) / (L*(m1+m2)*(1 - m2/(m1+m2)*cos²(q2)))
 ```
 
 **Boundary Conditions:**

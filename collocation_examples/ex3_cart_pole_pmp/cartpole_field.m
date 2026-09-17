@@ -56,6 +56,6 @@ D2 = p.L*(p.m1 + p.m2)*(1 - (p.m2/(p.m1 + p.m2))*c^2);
 F = [q1d;
      q2d;
      (p.L*p.m2*s*q2d^2 + p.m2*p.g*c*s)/D1;
-     (p.L*p.m2*c*s*q2d^2 + (p.m1 + p.m2)*p.g*s)/D2];
-G = [0; 0; 1/D1; c/D2];
+    -(p.L*p.m2*c*s*q2d^2 + (p.m1 + p.m2)*p.g*s)/D2];
+G = [0; 0; 1/D1; -c/D2];
 end

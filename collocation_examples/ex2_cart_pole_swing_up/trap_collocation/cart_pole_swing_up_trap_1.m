@@ -183,9 +183,11 @@ function [c,ceq] = nonlcon(X,T,L,m1,m2,g,d)
     term_k_cart_accel = term_k_cart_accel./(m1 + m2.*(1-cos(q2(1:end-1)).^2));
     ceq3 = q1dot(2:end) - q1dot(1:end-1) - h/2.*(term_kp1_cart_accel + term_k_cart_accel);
 
-    term_kp1_pend_accel = (L*m2.*cos(q2(2:end)).*sin(q2(2:end)).*q2dot(2:end).^2 + u(2:end).*cos(q2(2:end)) + (m1+m2)*g.*sin(q2(2:end)));
+    % SIGN FIXED 2026-09-17: leading MINUS on the pendulum numerator (Kelly,
+    % SIAM Review 2017, App. E.1); see try2/pendulum_accel.m for the record.
+    term_kp1_pend_accel = -(L*m2.*cos(q2(2:end)).*sin(q2(2:end)).*q2dot(2:end).^2 + u(2:end).*cos(q2(2:end)) + (m1+m2)*g.*sin(q2(2:end)));
     term_kp1_pend_accel = term_kp1_pend_accel./(L*(m1+m2).*(1-m2/(m1+m2).*cos(q2(2:end)).^2));
-    term_k_pend_accel = (L*m2.*cos(q2(1:end-1)).*sin(q2(1:end-1)).*q2dot(1:end-1).^2 + u(1:end-1).*cos(q2(1:end-1)) + (m1+m2)*g.*sin(q2(1:end-1)));
+    term_k_pend_accel = -(L*m2.*cos(q2(1:end-1)).*sin(q2(1:end-1)).*q2dot(1:end-1).^2 + u(1:end-1).*cos(q2(1:end-1)) + (m1+m2)*g.*sin(q2(1:end-1)));
     term_k_pend_accel = term_k_pend_accel./(L*(m1+m2).*(1-m2/(m1+m2).*cos(q2(1:end-1)).^2));
     ceq4 = q2dot(2:end) - q2dot(1:end-1) - h/2 .* (term_kp1_pend_accel + term_k_pend_accel);
 

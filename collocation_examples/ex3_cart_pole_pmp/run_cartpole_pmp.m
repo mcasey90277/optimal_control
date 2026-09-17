@@ -25,7 +25,9 @@ function out = run_cartpole_pmp(opts)
 %  opts                     struct (optional)       .K segments [8], .plot
 %                                                   [true when nargout = 0],
 %                                                   .engine solver handle
-%                                                   [@oc.ms_bvp]; a caller
+%                                                   [@oc.ms_bvp], .tolR
+%                                                   [1e-10], .polishMax [5];
+%                                                   a caller
 %                                                   who instead passes the
 %                                                   costate_common delegate
 %                                                   (ms_bvp) must put
@@ -36,12 +38,26 @@ function out = run_cartpole_pmp(opts)
 %
 %% Outputs:
 %
-%  out                      struct                  .lam0, .J, .missTerminal,
-%                                                   .missFlown, .statMax,
-%                                                   .t, .X, .U, .Lam, .info
+%  out                      struct                  .ok and .why (THE front
+%                                                   door's verdict: converged,
+%                                                   reporting flight reached
+%                                                   t_f, terminal miss < 1e-9,
+%                                                   flown miss < 1e-6), .lam0,
+%                                                   .J, .missTerminal (from
+%                                                   a single re-flight of
+%                                                   lam0), .missEngine (the
+%                                                   shooting's own last-arc
+%                                                   residual), .missFlown,
+%                                                   .Hrel (spread
+%                                                   of the Hamiltonian along
+%                                                   the arc), .t, .X, .U,
+%                                                   .Lam, .info, .seed
+%                                                   (.signCorr .flipped
+%                                                   .ampRatio)
 %
 %% Revision History:
 %  M. Casey                                                   (c) 09/16/2026
+%  M. Casey  Astra review: own verdict, sign confidence, H     (c) 09/17/2026
 %  Copyright Coorbital Inc.
 %% ------------------------ Begin Code Sequence ---------------------------
 
@@ -67,16 +83,25 @@ xf = [0; pi; 0; 0];
 %  direct solve actually used.
 [lamS, tS] = oc.duals_to_costates(struct('scheme', 'trapezoid', 'mu', R.muDefect, ...
                                          'tNodes', R.tN, 'velRows', 3:4));
-uImplied = zeros(1, numel(tS));
-Xs = interp1(R.tN, R.X.', tS, 'pchip').';
+tS = tS(:).';                                   % ROWS throughout: a column here
+uImplied = zeros(1, numel(tS));                 % would turn the products below
+Xs = interp1(R.tN, R.X.', tS, 'pchip').';       % into an outer product, silently
 for k = 1:numel(tS)
     [~, Gk] = cartpole_field(Xs(:,k), p);
     uImplied(k) = -(lamS(:,k).'*Gk)/2;
 end
-uDirect = interp1(R.tN, R.U, tS, 'pchip');
-if sum(uImplied.*uDirect) < 0, lamS = -lamS; end
-assert(sum(uImplied.*uDirect) ~= 0, 'run_cartpole_pmp:sign', ...
-       'the implied and solved controls are orthogonal: the seed carries no sign information');
+uDirect = reshape(interp1(R.tN, R.U, tS, 'pchip'), 1, []);
+assert(all(isfinite(uImplied)) && all(isfinite(uDirect)) && any(uImplied) && any(uDirect), ...
+       'run_cartpole_pmp:sign', 'the seed or the direct control is non-finite or identically zero');
+% NORMALISED correlation, with a bar: "not exactly zero" admits a vote of no
+% meaning. The sign vote cannot see a wrong costate SCALE, so the amplitude
+% ratio is reported beside it (1 = the mapping's magnitude is right too).
+signCorr = sum(uImplied.*uDirect) / sqrt(sum(uImplied.^2)*sum(uDirect.^2));
+assert(abs(signCorr) > 0.5, 'run_cartpole_pmp:sign', ...
+       'implied vs direct control correlation %.3f: the seed carries no usable sign information', signCorr);
+if signCorr < 0, lamS = -lamS;  uImplied = -uImplied; end
+seedDiag = struct('signCorr', abs(signCorr), 'flipped', signCorr < 0, ...
+                  'ampRatio', sqrt(sum(uImplied.^2)/sum(uDirect.^2)));
 tGrid = linspace(0, tf, K+1);
 Xg   = interp1(R.tN, R.X.', tGrid, 'pchip').';
 Lg   = interp1(tS, lamS.', tGrid, 'pchip', 'extrap').';
@@ -97,7 +122,10 @@ prob = struct('ny', 8, 'freeIdx0', 5:8, ...
 %  reproduce the identical 3.865e-12 floor as the default settings). The
 %  accuracy claim this demo makes lives on the terminal-miss gate below
 %  (1e-9), not on this internal residual.
-[~, info] = engine(prob, seed, struct('fixedTf', true, 'tolR', 1e-10, 'maxIter', 60));
+tolR     = d('tolR', 1e-10);
+polishMax = d('polishMax', 5);
+[~, info] = engine(prob, seed, struct('fixedTf', true, 'tolR', tolR, 'maxIter', 60, ...
+                                      'polishMax', polishMax));
 
 %% Report: fly the answer, measure what the gates measure
 %  NOTE (deviation from the brief's literal 501-point grid, DO NOT
@@ -111,31 +139,72 @@ prob = struct('ny', 8, 'freeIdx0', 5:8, ...
 %  artifact. 2001 points removes it with a wide margin while changing no
 %  other gate materially (J, control RMS): see the task report.
 lam0 = info.Y(5:8, 1);
+% RelTol 1e-14, not the propagator's 1e-12: this single shot re-flies the
+% WHOLE 5 s horizon from lam0, so its own integration error lands directly
+% in the terminal miss that is this demo's headline accuracy claim. Measured
+% on the converged root, re-flying the identical lam0: miss 6.88e-09 at
+% RelTol 1e-12, 8.20e-10 at 1e-13, 3.67e-11 at 1e-14, while the ENGINE's own
+% last-arc terminal residual is 7.27e-14 -- i.e. the loose figure was the
+% measurement, not the solution. The gate stays at 1e-9.
 [t, Y] = ode113(@(tt, y) cartpole_pmp_rhs(y, p), linspace(0, tf, 2001), ...
-                [0; 0; 0; 0; lam0], odeset('RelTol', 1e-12, 'AbsTol', 1e-14));
+                [0; 0; 0; 0; lam0], odeset('RelTol', 2.5e-14, 'AbsTol', 1e-16));
+% the reporting flight has no collapse protection of its own: a truncated
+% return would otherwise be reported as "the terminal state"
+reachedTf = (numel(t) == 2001) && (t(end) == tf) && all(isfinite(Y(:)));
 X = Y(:,1:4).';  Lam = Y(:,5:8).';
-U = zeros(1, numel(t));  stat = zeros(1, numel(t));
+U = zeros(1, numel(t));  H = zeros(1, numel(t));
 for k = 1:numel(t)
-    [~, G] = cartpole_field(X(:,k), p);
-    U(k)    = -(Lam(:,k).'*G)/2;
-    stat(k) = abs(2*U(k) + Lam(:,k).'*G);
+    [Fk, G] = cartpole_field(X(:,k), p);
+    U(k) = -(Lam(:,k).'*G)/2;
+    H(k) = U(k)^2 + Lam(:,k).'*(Fk + G*U(k));
 end
 J = trapz(t, U.^2);
+% H is CONSTANT (not zero: t_f is fixed) along any trajectory of this
+% autonomous Hamiltonian flow, so its spread measures how well the costate
+% equation was integrated -- not optimality, and not the seed's basin. The
+% residual 2u + lam'G is NOT reported: U is built as -lam'G/2 on the line
+% above, so it is zero by construction and measures nothing.
+Hrel = (max(H) - min(H)) / max(abs(H));
 
-uOf = @(tt) interp1(t, U, min(max(tt, t(1)), t(end)), 'pchip');
+% THE CONTROL AS A FUNCTION OF TIME, in closed form. Interpolating the
+% sampled U put the resampling error straight into the flown miss (8.9e-07
+% against a 1e-06 gate, and 3.6e-06 on a coarser grid): the interpolant, not
+% the physics, was being measured. lam(t) comes from the same converged
+% costate arc -- cubic-Hermite in the COSTATES, whose own derivative the flow
+% supplies exactly -- and u = -lam'G/2 is then evaluated from the flown
+% state, so the control the check flies is the PMP control at that instant.
+ppL = pchip(t, Lam);
+uOf = @(tt, x) closedFormU(ppL, min(max(tt, t(1)), t(end)), x, p);
 zEnd = oc.fly_control([0; 0; 0; 0], [0 tf], ...
-    @(tt, x) flyRhs(x, uOf(tt), p), struct('mode', 'span', 'solver', @ode113));
+    @(tt, x) flyRhs(x, uOf(tt, x), p), struct('mode', 'span', 'solver', @ode113, ...
+                                              'RelTol', 1e-13, 'AbsTol', 1e-15));
 
-out = struct('lam0', lam0, 'J', J, ...
-    'missTerminal', max(abs(X(:,end) - xf)), ...
-    'missFlown', max(abs(zEnd - xf)), 'statMax', max(stat), ...
-    't', t.', 'X', X, 'U', U, 'Lam', Lam, 'info', info);
+missTerminal = max(abs(X(:,end) - xf));
+missFlown    = max(abs(zEnd - xf));
+% the SHOOTING's own terminal accuracy, independent of the reporting flight:
+% propagate the engine's last junction over its own interval
+dtLast    = info.tGrid(end) - info.tGrid(end-1);
+yLast     = cartpole_pmp_prop(dtLast, info.Y(:,end), false, p);
+missEngine = max(abs(yLast(1:4) - xf));
+% THE FRONT DOOR'S OWN VERDICT. It used to measure and leave judging to the
+% tests; a caller now gets .ok and the reason, so an unconverged or truncated
+% solve cannot be read as an answer.
+why = '';
+if ~info.converged,           why = sprintf('engine not converged (|R| = %.2e)', info.normR);
+elseif ~reachedTf,            why = 'reporting flight truncated or non-finite';
+elseif ~(missTerminal < 1e-9), why = sprintf('terminal miss %.2e', missTerminal);
+elseif ~(missFlown < 1e-6),   why = sprintf('flown miss %.2e', missFlown);
+end
+out = struct('ok', isempty(why), 'why', why, 'lam0', lam0, 'J', J, ...
+    'missTerminal', missTerminal, 'missEngine', missEngine, 'missFlown', missFlown, 'Hrel', Hrel, ...
+    't', t.', 'X', X, 'U', U, 'Lam', Lam, 'info', info, 'seed', seedDiag);
 
 if doPlot, plotAgainstDirect(out, R); end
+if ~out.ok, warning('run_cartpole_pmp:notOk', 'NOT a solution: %s', why); end
 if nargout == 0
-    fprintf(['cart-pole PMP-BVP: J = %.6f (direct %.6f), terminal miss %.2e, ', ...
-             'flown miss %.2e, stationarity %.2e\n'], ...
-            out.J, R.J, out.missTerminal, out.missFlown, out.statMax);
+    fprintf(['cart-pole PMP-BVP (%s): J = %.6f (direct %.6f), terminal miss %.2e, ', ...
+             'flown miss %.2e, H spread %.2e rel\n'], ...
+            tern(out.ok, 'ok', ['NOT OK: ' why]), out.J, R.J, out.missTerminal, out.missFlown, out.Hrel);
     clear out
 end
 end
@@ -149,6 +218,16 @@ function [g, dgdy] = terminalFcn(y, xf, needJ)
 g = y(1:4) - xf;
 dgdy = [];
 if needJ, dgdy = [eye(4), zeros(4)]; end
+end
+
+function u = closedFormU(ppL, tt, x, p)
+%% Purpose:
+%
+%   The PMP control at time tt: the costate from the converged arc, G from
+%   the FLOWN state, u = -lam'G/2. No interpolation of u itself.
+%
+[~, G] = cartpole_field(x, p);
+u = -(ppval(ppL, tt).'*G)/2;
 end
 
 function dx = flyRhs(x, u, p)
@@ -171,6 +250,14 @@ ylabel('q_2 (rad)'); legend({'indirect (PMP-BVP)', 'direct (collocation)'}, 'Loc
 title('cart-pole swing-up: indirect vs direct');
 subplot(2,1,2); plot(out.t, out.U, 'k', R.tN, R.U, 'r--'); grid on
 xlabel('t (s)'); ylabel('u (N)');
+end
+
+function s = tern(c, a, b)
+%% Purpose:
+%
+%   a if c, else b.
+%
+if c, s = a; else, s = b; end
 end
 
 function v = fieldd(s, f, v0)

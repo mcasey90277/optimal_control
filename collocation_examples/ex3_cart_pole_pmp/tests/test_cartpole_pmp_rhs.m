@@ -4,8 +4,12 @@ function ok = test_cartpole_pmp_rhs()
 %   The PMP field must BE the Pontryagin conditions, not merely resemble
 %   them:
 %     1. the control is the stationary point: 2u + lam'G = 0 exactly;
-%     2. it is the MINIMISER, not just a stationary point: H at u* is below
-%        H at u* +/- d for a scatter of d (Legendre, d2H/du2 = 2 > 0);
+%     2. POINTWISE Hamiltonian minimisation: H at u* is below H at u* +/- d.
+%        Honest scope: given check 1 this gap is algebraically d^2, so it adds
+%        no independent evidence; it documents the Legendre condition
+%        (d2H/du2 = 2 > 0). It says NOTHING about the trajectory being a
+%        minimum -- H_uu > 0 gives the unique pointwise minimiser, and the BVP
+%        can still have several normal extremals, saddles included;
 %     3. the state rows are F + G u*;
 %     4. the costate rows are -dH/dx, checked against a complex step of H
 %        taken with u HELD FIXED (which is legitimate: dH/du = 0 at u*);
@@ -31,13 +35,20 @@ addpath(here);
 p = struct('m1', 5, 'm2', 1, 'L', 2, 'g', 9.8);
 
 rngWas = rng(5);  restore = onCleanup(@() rng(rngWas));
-worstStat = 0;  worstState = 0;  worstCostate = 0;  minGap = inf;
+worstStat = 0;  worstState = 0;  worstCostate = 0;  minGap = inf;  lamMax = 0;
 for k = 1:15
-    y = [randn; 2*randn; randn; randn; 3*randn; 3*randn; 3*randn; 3*randn];
+    % half the scatter at O(1) costates, half at the SOLUTION scale (the
+    % converged arc has |lam| ~ 1e3): a term that only matters at scale
+    % would be invisible to unit-sized costates
+    lamScale = 3;  if k > 8, lamScale = 1500; end
+    y = [randn; 2*randn; randn; randn; lamScale*randn(4,1)];
+    assert(all(isfinite(y)), 'test_cartpole_pmp_rhs: non-finite sample');
     x = y(1:4);  lam = y(5:8);
     [dy, u] = cartpole_pmp_rhs(y, p);
     [F, G] = cartpole_field(x, p);
 
+    assert(all(isfinite(dy)) && isfinite(u), 'test_cartpole_pmp_rhs: non-finite field');
+    lamMax     = max(lamMax, max(abs(lam)));
     worstStat  = max(worstStat, abs(2*u + lam.'*G));
     worstState = max(worstState, max(abs(dy(1:4) - (F + G*u))));
 
@@ -58,15 +69,17 @@ for k = 1:15
     end
     worstCostate = max(worstCostate, max(abs(dy(5:8) + dHdx)));
 end
-ok = chk(ok, worstStat < 1e-12, sprintf('u is stationary: max |2u + lam''G| = %.1e', worstStat));
-ok = chk(ok, minGap > 0, sprintf('and a MINIMISER: worst H(u*+d) - H(u*) = %.3e > 0', minGap));
-ok = chk(ok, worstState < 1e-12, sprintf('state rows are F + G u* (worst %.1e)', worstState));
-ok = chk(ok, worstCostate < 1e-9, sprintf('costate rows are -dH/dx (worst %.1e)', worstCostate));
+ok = chk(ok, worstStat < 1e-12*max(1, lamMax), sprintf('u is stationary: max |2u + lam''G| = %.1e', worstStat));
+ok = chk(ok, minGap > 0, sprintf('pointwise H-minimiser (Legendre): worst H(u*+d) - H(u*) = %.3e > 0', minGap));
+ok = chk(ok, worstState < 1e-12*max(1, lamMax), sprintf('state rows are F + G u* (worst %.1e)', worstState));
+ok = chk(ok, worstCostate < 1e-9*max(1, lamMax), ...
+         sprintf('costate rows are -dH/dx (worst %.1e at |lam| up to %.0f)', worstCostate, lamMax));
 
 y0 = [0.1; 0.2; 0; 0; 0; 0; 0; 0];
 [dy0, u0] = cartpole_pmp_rhs(y0, p);
-ok = chk(ok, u0 == 0 && all(dy0(5:8) == 0) && any(dy0(1:4) ~= 0), ...
-         'lam = 0 gives u = 0, still costates, and the uncontrolled drift');
+F0 = cartpole_field(y0(1:4), p);
+ok = chk(ok, u0 == 0 && all(dy0(5:8) == 0) && isequal(dy0(1:4), F0), ...
+         'lam = 0 gives u = 0, still costates, and EXACTLY the uncontrolled drift F');
 
 if ok, fprintf('TEST_CARTPOLE_PMP_RHS: ALL PASS\n');
 else,  fprintf('TEST_CARTPOLE_PMP_RHS: FAILURE (see lines above)\n');

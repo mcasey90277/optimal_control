@@ -49,7 +49,13 @@ out = run_cartpole_pmp(struct('K', 8, 'plot', false));
 R = load(fullfile(here, 'data', 'cartpole_direct_ref.mat'));
 p = R.p;
 
+ok = chk(ok, out.ok, sprintf('the front door''s OWN verdict: ok (%s)', tern(isempty(out.why), 'no reason recorded', out.why)));
 ok = chk(ok, out.info.converged, 'ms_bvp reports converged');
+ok = chk(ok, out.t(end) == R.tf && numel(out.t) == 2001 && all(isfinite(out.X(:))) && all(isfinite(out.Lam(:))), ...
+         sprintf('the reported flight reaches t_f = %g and is finite throughout', R.tf));
+ok = chk(ok, out.seed.signCorr > 0.9 && abs(out.seed.ampRatio - 1) < 0.5, ...
+         sprintf('the dual seed is informative: |corr| %.3f, amplitude ratio %.3f (flipped = %d)', ...
+                 out.seed.signCorr, out.seed.ampRatio, out.seed.flipped));
 ok = chk(ok, out.missTerminal < 1e-9, sprintf('terminal miss %.2e < 1e-9', out.missTerminal));
 
 %% Hamiltonian constancy: H = u^2 + lam'(F + G u) is conserved along an
@@ -101,9 +107,37 @@ ref = load(fullfile(here, 'data', 'cartpole_pmp_ref.mat'));
 ok = chk(ok, max(abs(out.lam0 - ref.lam0)) < 1e-8, ...
          sprintf('regression: lam0 reproduces (%.1e)', max(abs(out.lam0 - ref.lam0))));
 
+%% A DIFFERENT SEGMENT COUNT, checked as a solve in its own right. Comparing
+%% lam0 alone would pass even if the engine ignored K entirely, or returned
+%% junk interface states, or failed to converge -- so check the structure it
+%% returned and re-derive its continuity from the nodes it handed back.
 out16 = run_cartpole_pmp(struct('K', 16, 'plot', false));
+ok = chk(ok, out16.ok && out16.info.converged && out16.missTerminal < 1e-9, ...
+         sprintf('K = 16 is a solve in its own right: ok, converged, miss %.2e', out16.missTerminal));
 ok = chk(ok, max(abs(out16.lam0 - out.lam0)) < 1e-7, ...
          sprintf('K = 16 finds the same extremal (%.1e)', max(abs(out16.lam0 - out.lam0))));
+ok = chk(ok, size(out16.info.Y, 2) == 16 && numel(out16.info.tGrid) == 17 ...
+             && abs(out16.info.tGrid(end) - R.tf) < 1e-12, ...
+         sprintf('the engine honoured K: %d junction starts, %d grid times ending at t_f', ...
+                 size(out16.info.Y, 2), numel(out16.info.tGrid)));
+ok = chk(ok, max(abs(out16.info.Y(1:4,1) - [0;0;0;0])) < 1e-12, ...
+         'and held the fixed departure state at junction 1');
+
+% CONTINUITY, recomputed from the engine's own nodes: propagate each junction
+% start over its own interval and compare with the next one. This is the half
+% of multiple shooting that lam0 cannot speak for.
+worstGap = 0;
+for k = 1:size(out16.info.Y, 2)
+    dtk = out16.info.tGrid(k+1) - out16.info.tGrid(k);
+    yk  = cartpole_pmp_prop(dtk, out16.info.Y(:,k), false, p);
+    if k < size(out16.info.Y, 2)
+        worstGap = max(worstGap, max(abs(yk - out16.info.Y(:,k+1))));
+    else
+        worstGap = max(worstGap, max(abs(yk(1:4) - [0; pi; 0; 0])));   % last arc hits the target
+    end
+end
+ok = chk(ok, worstGap < 1e-7, ...
+         sprintf('segment continuity re-derived from the engine''s nodes: worst gap %.2e', worstGap));
 
 if ok, fprintf('TEST_CARTPOLE_PMP: ALL PASS\n');
 else,  fprintf('TEST_CARTPOLE_PMP: FAILURE (see lines above)\n');
@@ -111,6 +145,14 @@ end
 end
 
 % ------------------------------------------------------------------------
+function s = tern(c, a, b)
+%% Purpose:
+%
+%   a if c, else b.
+%
+if c, s = a; else, s = b; end
+end
+
 function ok = chk(ok, cond, label)
 %% Purpose:
 %

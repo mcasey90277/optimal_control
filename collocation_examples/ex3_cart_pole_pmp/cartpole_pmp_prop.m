@@ -17,23 +17,22 @@ function [yEnd, PHI] = cartpole_pmp_prop(dt, y0, needSTM, p)
 % • Tolerances 1e-12 / 1e-14: the STM feeds a Newton step, and an integrator
 %   sloppier than the step it informs turns quadratic convergence into a
 %   crawl.
-% • THROWS on a non-finite result, per the engine's contract -- the solver
-%   converts a throw into a rejected iterate and backtracks. An ode113
-%   failure on this problem does NOT raise a MATLAB error and does NOT
-%   produce non-finite values: it emits a warning and returns whatever it
-%   integrated up to the point the step size collapsed below the minimum,
-%   silently short of the requested dt. A finite-value check alone misses
-%   that case, so the real gate is whether the returned time grid reached
-%   dt.
-% • The try/catch around ode113 is a narrow backstop, not a second
-%   detector: it relabels only identifiers ode113 itself raises
-%   ('MATLAB:ode*', e.g. bad sizes or options) as
-%   cartpole_pmp_prop:collapse. A genuine programming error inside
-%   cartpole_pmp_rhs/rhs_with_stm (undefined variable, missing p field,
-%   dimension mismatch) is rethrown UNCHANGED, with its own identifier --
-%   oc.ms_bvp's residual() does a bare catch on prob.prop, so relabelling
-%   every error as "collapse" would make a real bug indistinguishable from
-%   a rejected iterate and surface only as mysterious non-convergence.
+% • THROWS cartpole_pmp_prop:collapse when the integration is truncated (the
+%   returned grid does not end exactly at dt -- ode113 warns and stops early
+%   on a blow-up rather than producing non-finite values) or the result is
+%   non-finite. Per the engine's contract a throw is a rejected iterate.
+%   Every OTHER error propagates unchanged: nothing is relabelled.
+% • REAL base state only when needSTM: the STM's complex step through the
+%   field assumes y is real, so this function is not itself complex-steppable
+%   on that path. Inputs are validated (cartpole_pmp_prop:input).
+% • WHY the reached-dt gate and not a finiteness check alone: an ode113
+%   failure on this problem does not raise an error and does not produce
+%   non-finite values. It warns, and returns whatever it integrated before
+%   the step size collapsed -- finite, plausible, and silently short of dt.
+% • No try/catch around ode113: it has nothing to catch on a collapse (see
+%   above), and relabelling whatever else is thrown would turn a coding bug
+%   in the field into a "rejected iterate" -- oc.ms_bvp's residual() catches
+%   everything from prob.prop -- that surfaces only as non-convergence.
 %
 %% Inputs:
 %
@@ -65,34 +64,44 @@ if nargin == 0
      return
 end
 
+% A malformed request is refused by name BEFORE any shortcut: the dt == 0
+% branch would otherwise hand a non-finite or mis-sized y0 straight back.
+if ~(isnumeric(y0) && isreal(y0) && numel(y0) == 8 && all(isfinite(y0(:))))
+    error('cartpole_pmp_prop:input', 'y0 must be 8 real finite values');
+end
+if ~(isnumeric(dt) && isreal(dt) && isscalar(dt) && isfinite(dt))
+    error('cartpole_pmp_prop:input', 'dt must be a real finite scalar');
+end
+
 if dt == 0
     yEnd = y0(:);
     PHI = [];  if needSTM, PHI = eye(8); end
     return
 end
 
+% No try/catch here, deliberately. ode113 does not THROW when this flow blows
+% up -- it warns and returns a truncated grid -- so the detectors below are
+% the whole collapse contract, and anything that does throw (a coding error
+% in the field, a bad option) propagates with its own identifier instead of
+% being relabelled as a collapse the engine would quietly backtrack over.
 oo = odeset('RelTol', 1e-12, 'AbsTol', 1e-14);
-try
-    if needSTM
-        z0 = [y0(:); reshape(eye(8), 64, 1)];
-        [T, Z] = ode113(@(t, z) rhs_with_stm(z, p), [0 dt], z0, oo);
-        zEnd = Z(end,:).';
-        yEnd = zEnd(1:8);
-        PHI  = reshape(zEnd(9:72), 8, 8);
-    else
-        [T, Y] = ode113(@(t, y) cartpole_pmp_rhs(y, p), [0 dt], y0(:), oo);
-        yEnd = Y(end,:).';
-        PHI  = [];
-    end
-catch err
-    if startsWith(err.identifier, 'MATLAB:ode')
-        error('cartpole_pmp_prop:collapse', ...
-              'the PMP flow failed to integrate over dt = %g: %s', dt, err.message);
-    end
-    rethrow(err);
+if needSTM
+    z0 = [y0(:); reshape(eye(8), 64, 1)];
+    [T, Z] = ode113(@(t, z) rhs_with_stm(z, p), [0 dt], z0, oo);
+    zEnd = Z(end,:).';
+    yEnd = zEnd(1:8);
+    PHI  = reshape(zEnd(9:72), 8, 8);
+else
+    [T, Y] = ode113(@(t, y) cartpole_pmp_rhs(y, p), [0 dt], y0(:), oo);
+    yEnd = Y(end,:).';
+    PHI  = [];
 end
 
-reachedEnd = abs(T(end) - dt) <= 1e-9*max(1, abs(dt));
+% EXACT, not a tolerance band: on success ode113 returns the requested
+% endpoint bitwise (measured), and a band in seconds would accept a
+% truncation on a short segment, where a tiny time deficit near a collapse
+% need not mean a tiny state error.
+reachedEnd = (T(end) == dt);
 if ~reachedEnd || ~all(isfinite(yEnd)) || (needSTM && ~all(isfinite(PHI(:))))
     error('cartpole_pmp_prop:collapse', ...
           'the PMP flow left the finite range over dt = %g (integrator reached t = %g)', ...

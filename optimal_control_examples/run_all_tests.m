@@ -48,7 +48,17 @@ for k = 1:size(suites, 1)
         fprintf('\n######## %s\n', names{n});
         t0 = tic;
         try
-            res(n) = logical(feval(suites{k,2}{m}));
+            %% A non-scalar verdict (e.g. []) must not reach res(n) = v: with
+            %% res logical and n a scalar index, res(n) = [] is MATLAB's
+            %% element-DELETION syntax, not an assignment -- it would shrink
+            %% res instead of recording a failure, silently or (for the last
+            %% suite) with an uncaught out-of-bounds error downstream:
+            v = feval(suites{k,2}{m});
+            if ~isscalar(v)
+                error('run_all_tests:badVerdict', ...
+                      '%s did not return a scalar verdict', names{n});
+            end
+            res(n) = logical(v);
         catch err
             fprintf('  THREW  %s\n', err.message);
             res(n) = false;

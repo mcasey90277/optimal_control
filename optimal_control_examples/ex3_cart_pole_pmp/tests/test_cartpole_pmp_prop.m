@@ -34,7 +34,7 @@ function ok = test_cartpole_pmp_prop()
 
 ok = true;
 here = fileparts(fileparts(mfilename('fullpath')));
-addpath(here);
+addpath(here, fullfile(fileparts(here), 'cartpole_common'));
 p = struct('m1', 5, 'm2', 1, 'L', 2, 'g', 9.8);
 y0 = [0; 0; 0; 0; 0.8; -1.5; 0.4; 0.2];
 dt = 0.6;

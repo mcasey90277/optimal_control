@@ -64,7 +64,7 @@ function out = run_cartpole_pmp(opts)
 if nargin < 1, opts = struct(); end
 here = fileparts(mfilename('fullpath'));
 root = fileparts(fileparts(here));
-addpath(here, fullfile(root, 'oclib'));
+addpath(here, fullfile(root, 'oclib'), fullfile(fileparts(here), 'cartpole_common'));
 d = @(f, v) fieldd(opts, f, v);
 K      = d('K', 8);
 engine = d('engine', @oc.ms_bvp);

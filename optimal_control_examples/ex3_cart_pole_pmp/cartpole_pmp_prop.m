@@ -58,6 +58,8 @@ function [yEnd, PHI] = cartpole_pmp_prop(dt, y0, needSTM, p)
 
 if nargin == 0
    %Demo: half a second of the flow, with its STM conditioning:
+     here = fileparts(mfilename('fullpath'));
+     addpath(here, fullfile(fileparts(here), 'cartpole_common'));
      pd = struct('m1', 5, 'm2', 1, 'L', 2, 'g', 9.8);
      [yE, PH] = cartpole_pmp_prop(0.5, [0;0;0;0; 0.8; -1.5; 0.4; 0.2], true, pd);
      fprintf('y(0.5) = [%s]\n  cond(PHI) = %.3e\n', sprintf('%.4f ', yE), cond(PH));

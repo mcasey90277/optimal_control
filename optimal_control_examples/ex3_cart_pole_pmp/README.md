@@ -13,7 +13,7 @@ whole path and letting `fmincon` find state and control at every node
 Principle: writes down the boundary-value problem the optimal trajectory
 must satisfy, and finds the one unknown that trajectory needs — the
 initial costate `lam(0)` — by multiple shooting. It reuses the physics
-(`cartpole_field.m` reproduces `ex2`'s `cart_accel`/`pendulum_accel`
+(`cartpole_common/cartpole_field.m` reproduces `ex2`'s `cart_accel`/`pendulum_accel`
 exactly, pinned by test) and the shared shooting engine `oc.ms_bvp`
 (`oclib`), not the orbit-transfer campaigns' machinery.
 
@@ -44,12 +44,16 @@ the `oc.ms_bvp` call).
 
 ## The files
 
+As of 2026-09-17 the plant itself -- `cartpole_field.m`, `cartpole_state_jac.m`,
+`cartpole_state_jac_gen.m`, `gen_state_jac.m`, the constants (`cartpole_params.m`),
+and the physical oracle (`test_cartpole_physics.m` and the other plant tests) --
+moved to the sibling `../cartpole_common/` folder, shared with whatever
+minimum-fuel example copies it next; see `cartpole_common/README.md`. This
+folder's own `addpath` calls add that folder alongside their own.
+
 | file | owns |
 |---|---|
-| `cartpole_field.m` | The dynamics split `xdot = F(x) + G(x) u`; same equations and constants as `ex2_cart_pole_swing_up/try2`'s `cart_accel`/`pendulum_accel` (pinned by `test_cartpole_field`); complex-step safe. |
-| `cartpole_state_jac.m` | The exact `4x4` state Jacobian `A = d(F + G u)/dx` at fixed `u`. A thin wrapper that unpacks `p` and calls the generated `cartpole_state_jac_gen.m`; there is no hand-copied body, so regenerating is one command. Generated rather than complex-stepped because it is used *inside* a function that is itself complex-stepped (see `cartpole_pmp_prop.m`). |
-| `gen_state_jac.m` | Generator (Symbolic Math Toolbox + `matlabFunction`): calls `cartpole_field` ITSELF on symbolic inputs, so it holds no second copy of the physics, and writes `cartpole_state_jac_gen.m`. Re-run it whenever `cartpole_field` changes. |
-| `cartpole_pmp_rhs.m` | The 8-state PMP field `y = [x; lam]`: the closed-form control `u* = -lam'G/2`, the state rows `F + G u*`, and the costate rows `-A'lam`. This file, not `cartpole_field.m`, is where the optimality condition lives. |
+| `cartpole_pmp_rhs.m` | The 8-state PMP field `y = [x; lam]`: the closed-form control `u* = -lam'G/2`, the state rows `F + G u*`, and the costate rows `-A'lam`. This file, not `cartpole_common/cartpole_field.m`, is where the optimality condition lives. |
 | `cartpole_pmp_prop.m` | The propagator contract `oc.ms_bvp` expects (`prob.prop`): `dt, y0, needSTM -> yEnd, PHI`, integrating with `ode113` and taking `PHI` by COMPLEX STEP through `cartpole_pmp_rhs` (safe only because `cartpole_state_jac` is generated, not itself complex-stepped — a complex step inside a complex step would corrupt the inner derivative). Throws `cartpole_pmp_prop:collapse` on integrator failure, per the engine's contract; see its header for exactly which errors are relabelled and which are rethrown unchanged. |
 | `gen_direct_ref.m` | One-shot generator of `data/cartpole_direct_ref.mat`: a direct trapezoidal solve of the SAME problem at a relaxed force bound (so it approximates the unconstrained optimum the PMP-BVP solves), harvesting the defect Lagrange multipliers the PMP seed is built from. Run once; the `.mat` is committed. |
 
@@ -78,10 +82,11 @@ Headless, from the repository root:
 /Applications/MATLAB_R2026a.app/bin/matlab -batch "cd optimal_control_examples/ex3_cart_pole_pmp; run_cartpole_pmp"
 ```
 
-`run_cartpole_pmp.m` adds only `oclib` to the path beyond its own folder —
-it needs nothing from `orbit_transfer` (see the header note on `.engine`
-if you want to pass the `costate_common` delegate instead of `@oc.ms_bvp`;
-that requires putting that folder on the path yourself).
+`run_cartpole_pmp.m` adds only `oclib` and the sibling `cartpole_common`
+(the plant) to the path beyond its own folder — it needs nothing from
+`orbit_transfer` (see the header note on `.engine` if you want to pass the
+`costate_common` delegate instead of `@oc.ms_bvp`; that requires putting
+that folder on the path yourself).
 
 ## Running the tests
 
@@ -101,12 +106,14 @@ run_tests                                      % ~3 min, errors on any failure
 /Applications/MATLAB_R2026a.app/bin/matlab -batch "cd('<this folder>'); exit(~run_tests())"
 ```
 
-Individually, from `tests/` (each adds the paths it needs):
+Individually (each adds the paths it needs). The plant tests moved with the
+plant and now live in `../cartpole_common/tests/`; the rest are still in
+this folder's own `tests/`:
 
 ```matlab
-test_cartpole_physics      % THE independent oracle: power balance, equilibria, energy (~instant)
-test_cartpole_field        % cartpole_field vs. ex2's own helpers (~instant)
-test_cartpole_state_jac    % the generated Jacobian vs. complex-step and finite-difference (~instant)
+test_cartpole_physics      % ../cartpole_common/tests: THE independent oracle: power balance, equilibria, energy (~instant)
+test_cartpole_field        % ../cartpole_common/tests: cartpole_field vs. ex2's own helpers (~instant)
+test_cartpole_state_jac    % ../cartpole_common/tests: the generated Jacobian vs. complex-step and finite-difference (~instant)
 test_cartpole_pmp_rhs      % the PMP field IS the PMP conditions (~instant)
 test_direct_ref            % the committed direct fixture: feasible, stationary, off its bound (~instant)
 test_cartpole_pmp_prop     % the propagator, the STM, and the collapse contract by identifier (~1 min)
@@ -176,7 +183,7 @@ survived everything else because the direct and indirect solves agreed to
 0.075% while solving the same wrong problem, and every other check compared
 the field against itself or against `ex2`.
 
-What now prevents a repeat is `tests/test_cartpole_physics`: it derives its
+What now prevents a repeat is `cartpole_common/tests/test_cartpole_physics`: it derives its
 reference from the GEOMETRY alone — bob at `(q1 + L sin q2, -L cos q2)` —
 and demands the pointwise power balance `dE/dt = u q1dot`, the right
 equilibrium characters, and energy conservation under no force. It fails

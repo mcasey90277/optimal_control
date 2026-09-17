@@ -31,7 +31,7 @@ function ok = test_cartpole_pmp_rhs()
 
 ok = true;
 here = fileparts(fileparts(mfilename('fullpath')));
-addpath(here);
+addpath(here, fullfile(fileparts(here), 'cartpole_common'));
 p = struct('m1', 5, 'm2', 1, 'L', 2, 'g', 9.8);
 
 rngWas = rng(5);  restore = onCleanup(@() rng(rngWas));

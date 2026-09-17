@@ -43,7 +43,7 @@ function ok = test_cartpole_pmp()
 ok = true;
 here = fileparts(fileparts(mfilename('fullpath')));
 root = fileparts(fileparts(here));                 % optimal_control
-addpath(here, fullfile(root, 'oclib'));
+addpath(here, fullfile(root, 'oclib'), fullfile(fileparts(here), 'cartpole_common'));
 
 out = run_cartpole_pmp(struct('K', 8, 'plot', false));
 R = load(fullfile(here, 'data', 'cartpole_direct_ref.mat'));

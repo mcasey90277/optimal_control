@@ -36,7 +36,9 @@ function ok = run_tests()
 
 here = fileparts(mfilename('fullpath'));
 root = fileparts(fileparts(here));
-addpath(here, fullfile(here, 'tests'), fullfile(root, 'oclib'));
+addpath(here, fullfile(here, 'tests'), fullfile(root, 'oclib'), ...
+        fullfile(fileparts(here), 'cartpole_common'), ...
+        fullfile(fileparts(here), 'cartpole_common', 'tests'));
 
 names = {'test_cartpole_physics'      % the independent oracle: geometry only
          'test_cartpole_field'        % dynamics vs the ex2 helpers

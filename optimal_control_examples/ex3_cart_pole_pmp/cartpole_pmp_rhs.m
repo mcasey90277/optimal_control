@@ -45,6 +45,8 @@ function [dy, u] = cartpole_pmp_rhs(y, p)
 
 if nargin == 0
    %Demo: the field and its control at a representative point:
+     here = fileparts(mfilename('fullpath'));
+     addpath(here, fullfile(fileparts(here), 'cartpole_common'));
      pd = struct('m1', 5, 'm2', 1, 'L', 2, 'g', 9.8);
      [dy, u] = cartpole_pmp_rhs([0; 0.5; 0; 0; 1; -2; 0.5; 0.3], pd);
      fprintf('u* = %.6f,  dy = [%s]\n', u, sprintf('%.4f ', dy));

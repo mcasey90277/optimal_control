@@ -71,7 +71,7 @@ if nargin < 2, opts = struct(); end
 d = @(f, v) fieldd(opts, f, v);
 here = fileparts(mfilename('fullpath'));
 D = fullfile(fileparts(fileparts(here)), 'DRO_tulip', 'direct');
-addpath(here, fullfile(fileparts(fileparts(here)), 'costate_common'), D, fullfile(D, 'lib'), fullfile(D, 'certify'));
+addpath(here, fullfile(fileparts(fileparts(here)), 'costate_common'), fullfile(fileparts(fileparts(here)), 'campaign_common'), D, fullfile(D, 'lib'), fullfile(D, 'certify'));
 logFile = d('logFile', '');
 lg = @(varargin) logmsg(logFile, sprintf(varargin{:}));
 N = d('N', 800);  clearKm = d('clearKm', 1900);  maxCpu = d('maxCpuSec', 300);

@@ -41,7 +41,7 @@ function ok = test_campaign_processes()
 %% ------------------------ Begin Code Sequence ---------------------------
 
 ok = true;
-cc = fileparts(fileparts(mfilename('fullpath')));      % costate_common
+cc = fileparts(fileparts(mfilename('fullpath')));      % campaign_common
 addpath(cc);
 T = fullfile(tempdir, ['cptest_' char(java.util.UUID.randomUUID())]);
 mkdir(T);

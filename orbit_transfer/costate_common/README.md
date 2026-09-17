@@ -5,8 +5,8 @@ a pumpkyn-style **optimal-control orbit-transfer library** — the OC companion
 to pumpkyn's astrodynamics. Its admission rule (changed 2026-09-16, was
 *reused by a second campaign*) is *generic by construction, with a test*:
 nothing in the file is specific to one campaign's orbits or bookkeeping, and
-a test pins its contract. Job control is leaving for a sibling
-`../campaign_common/` (TODO step 11). Problem-agnostic pieces with a second
+a test pins its contract. Job control lives in the sibling
+`../campaign_common/` since 2026-09-16 (TODO step 11). Problem-agnostic pieces with a second
 TOP-LEVEL consumer go one level further, to `../../oclib/+oc` (admission rule
 in `../../oclib/README.md`).
 
@@ -16,19 +16,24 @@ Generated function index: `../doc/library_catalog.md` (regenerated
 2026-09-16; rerun `python3 orbit_transfer/doc/gen_library_catalog.py` after
 adding files).
 
-## State of the folder (measured 2026-09-16)
+## State of the folder (2026-09-16)
 
-**59 files and 49 tests** (61 and 58 before cleanup steps 5–7, 2026-09-16). The folder did not match its
-old admission rule; the table below is what the new one sorts. Caller counts below are code references from outside the
+**50 files and 47 tests** after cleanup steps 5–11 (2026-09-16); 61 files
+and 58 tests when the cleanup began. The table below is the measurement
+taken when the cleanup began, kept because the plan was built from it:
+since then `conjugate_pole_predict`, `cr3bp_field` and `rib_targets` left,
+`ladder_endpoints` arrived, and the nine job-control files (most of them
+"DRO_tulip only", plus `campaign_heartbeat` and `campaign_status`) moved to
+`../campaign_common/`. Caller counts are code references from outside the
 folder (tests excluded); an "entry point" has no calling code and is run by
 hand.
 
 | who uses it | files |
 |---|---|
 | two or more campaigns | 9 — `get_family_orbit`, `build_costate_catalog_family`, `nd_propulsion`, `ms_tfmin`, `phase_state`, `seed_from_z8`, `catalog_schema`, `ms_conjugate_test`, `duals_to_costates` |
-| DRO_tulip only | 35 (`rib_targets` moved out) |
+| DRO_tulip only | 36 |
 | DPO_tulip only | 1 — `survey_family_bounds` |
-| no caller outside the folder | 13 — 9 internal helpers, 4 entry points (`conj_catalog_pass`, `gates_catalog_pass`, `golden_cells`, `campaign_status`) |
+| no caller outside the folder | 15 — 9 internal helpers, 4 entry points (`conj_catalog_pass`, `gates_catalog_pass`, `golden_cells`, `campaign_status`), 2 unused in production (`conjugate_pole_predict`; `cr3bp_field`, test-only) |
 
 Known structural issues, each a step in `TODO.md` → *Cleanup plan*:
 
@@ -39,8 +44,8 @@ Known structural issues, each a step in `TODO.md` → *Cleanup plan*:
 - **The most-shared engine lives in a campaign:** `DRO_tulip/indirect/thrust_ladder_library`
   (with `casadi_mintime_dro`, `certify_dro_mintime`, `dro_residual`) is called by
   HALO, DPO, HALO_HALO and GTO, each of which adds `DRO_tulip` to its path.
-- **Job control lives here:** the nine orchestration files at the bottom are
-  campaign infrastructure, not optimal control.
+- ~~Job control lives here~~ — moved 2026-09-16: the nine orchestration
+  files and both launcher scripts are in `../campaign_common/` (step 11).
 - ~~Tests of campaign code live here~~ — fixed 2026-09-16: the 15
   DRO_tulip-only tests moved to `DRO_tulip/indirect/tests`. (`test_gto_family`
   was misclassified: it tests this folder's `get_family_orbit`, so it stays.)
@@ -143,31 +148,21 @@ folders, *internal* means called only from within this folder.
 | `build_costate_catalog_family.m` | Family-agnostic compact-catalog packager (ND-only quantities, `derive` formulas, `dep_family`/`dep_params` recipes; keeps the legacy `tauDRO` field = departure period so every picker works on every catalog). | DRO, HALO, DPO, HALO_HALO, GTO |
 | `golden_cells.m` + `golden_cells_data.mat` | 20-check quality regression: three engine cells (dro/halo/dpo, flown-perturbed 1 N entries + conjugate verdicts) + one harvest cell with REAL collocation duals. **Run after any change to the files above.** A quality drop (iterations, residual) is a failure even when correctness gates pass. Self-contained since 2026-09-16: the harvest cell's inputs live in `golden_cells_data.mat`, so it runs from a fresh clone with no campaign folder on the path. | entry point |
 
-**Campaign orchestration (job control, not optimal control)**
-
-| file | what | used by |
-|---|---|---|
-| `work_queue.m` | A disk work queue so N worker processes on one host pull the next unclaimed unit (a rib column, an entry, a rung) instead of static ranges. Ownership is a process-held kernel lock (`unit_lock`), never transferred on heartbeat age; attempts are recorded before work starts, and a unit that always fails cannot livelock the queue. `tests/test_work_queue`, `tests/test_campaign_processes`. | DRO |
-| `campaign_worker.m` | One worker process: claim a unit, run it, VALIDATE its temporary output and publish it in one rename under the unit's lock, release, repeat. A unit function that returns without a valid output is a failed attempt, not a done unit. Launched N at a time by `run_campaign_workers.sh`. | DRO |
-| `unit_lock.m` | A process-held file lock (java.nio `FileChannel.tryLock`, POSIX record locking) whose authority lives in a process-wide REGISTRY keyed by the file's device:inode, so a released or stale handle can never act on a newer holder's lock. Measured: refused while held, acquired on release and after `kill -9`. | DRO (+ internal) |
-| `publish_atomic.m` | Move a finished file onto its final name in ONE rename(2) (java.nio `ATOMIC_MOVE`), so a reader sees the old file or the new one, never a partial or missing one. Not `movefile`: onto an existing directory it nests the source inside it. The only way a campaign artifact, queue record or heartbeat reaches its final name. | DRO (+ internal) |
-| `walk_checkpoint.m` | A resumable checkpoint for a sequential walk (a rib column): the state after the last accepted point, saved atomically at `<output>.ckpt`, carrying the unit's identity and refused by name on a mismatch, so a column killed hours in resumes from its last point. | DRO |
-| `campaign_heartbeat.m` | Heartbeats as the only liveness signal, and the five states a monitor must tell apart. No heartbeat is NOT evidence of health -- a missing log once read as "alive, age 0 s", and a `pgrep` on an environment-only tag reported live workers dead. | internal |
-| `campaign_status.m` | What a campaign is actually doing, read from ARTIFACTS ONLY (queue outputs and heartbeats, no process matching): units not being worked on, and workers that are not working. Entry point. | entry point |
-| `safe_report.m` | Run a REPORTING block so it can never fail the work it reports on: catch, say so loudly, return false. Twice a correctly saved stage was reported FAILED because its summary print threw. | DRO |
-| `fmt_num.m` | Format a number at a fixed width, rendering NaN or empty as dashes of the same width instead of throwing -- the two shapes that broke a campaign print, and the reason a movie title or table column does not jump frame to frame. | DRO |
+**Campaign orchestration** moved to `../campaign_common/` on 2026-09-16
+(cleanup step 11): job control, not optimal control. The execution fences
+above stay here, because the certifier needs them.
 
 ## Tests
 
-`tests/` holds 49 tests. Classified 2026-09-16 by what they call (after
+`tests/` holds 47 tests. Classified 2026-09-16 by what they call (after
 cleanup steps 5–7: `test_conjugate_pole_predict` deleted with its function,
 `test_phase_lists` moved with `rib_targets`, the 15 DRO_tulip-only tests moved
 to `DRO_tulip/indirect/tests`):
 
 | kind | count | tests |
 |---|---|---|
-| library only | 31 | `test_arclength_ms`, `test_flown_control_error`, `test_newton_fixed_q`, `test_preflight_screen`, `test_run_capped`, `test_survey_family_bounds`, `test_true_min_altitude`, `test_arclength_ms_thrust`, `test_campaign_processes`, `test_catalog_schema_v3`, `test_conj_fixedtf`, `test_conj_resolve`, `test_cr3bp_minenergy_pmp`, `test_h6_margin`, `test_huber_saltation`, `test_lift_margin`, `test_lift_space_dim`, `test_minfuel_pmp`, `test_mintime_gates`, `test_ms_bvp_extra`, `test_ms_bvp_fixedtf`, `test_ms_tfmin_hom`, `test_nd_propulsion`, `test_periodic_pp`, `test_phase_state`, `test_scalar_verdict`, `test_second_order_parallel`, `test_second_order_pass`, `test_second_order_sidecar_identity`, `test_ss_bvp_accept`, `test_validate_flight` |
-| library, through campaign fixtures | 18 | `test_arclength_arrival`, `test_harvest_ms_seed` (golden-cell duals), `test_ladder_endpoints`, `test_certify_caps`, `test_certify_enforcement`, `test_conj_coverage`, `test_conj_spectrum`, `test_dro_tulip_seed`, `test_entry_notes`, `test_flight_to_junctions`, `test_fly_transfer`, `test_gates_h6_wiring`, `test_gto_family` (GTO_tulip fixture), `test_pmp_pointwise_checks`, `test_seed_from_entry`, `test_sheet_to_catalog_file`, `test_stm_variational`, `test_work_queue` |
+| library only | 30 | `test_arclength_ms`, `test_flown_control_error`, `test_newton_fixed_q`, `test_preflight_screen`, `test_run_capped`, `test_survey_family_bounds`, `test_true_min_altitude`, `test_arclength_ms_thrust`, `test_catalog_schema_v3`, `test_conj_fixedtf`, `test_conj_resolve`, `test_cr3bp_minenergy_pmp`, `test_h6_margin`, `test_huber_saltation`, `test_lift_margin`, `test_lift_space_dim`, `test_minfuel_pmp`, `test_mintime_gates`, `test_ms_bvp_extra`, `test_ms_bvp_fixedtf`, `test_ms_tfmin_hom`, `test_nd_propulsion`, `test_periodic_pp`, `test_phase_state`, `test_scalar_verdict`, `test_second_order_parallel`, `test_second_order_pass`, `test_second_order_sidecar_identity`, `test_ss_bvp_accept`, `test_validate_flight` |
+| library, through campaign fixtures | 17 | `test_arclength_arrival`, `test_harvest_ms_seed` (golden-cell duals), `test_ladder_endpoints`, `test_certify_caps`, `test_certify_enforcement`, `test_conj_coverage`, `test_conj_spectrum`, `test_dro_tulip_seed`, `test_entry_notes`, `test_flight_to_junctions`, `test_fly_transfer`, `test_gates_h6_wiring`, `test_gto_family` (GTO_tulip fixture), `test_pmp_pointwise_checks`, `test_seed_from_entry`, `test_sheet_to_catalog_file`, `test_stm_variational` |
 
 No direct test (2026-09-16): `current_pool`, `capped_pool` (both exercised
 by `test_run_capped` and the pool tests), `assert_periodic_orbit`
@@ -181,10 +176,10 @@ Run the relevant tests plus `golden_cells` after touching an engine.
 
 - Pumpkyn house style: `%% Purpose / Inputs / Outputs / Revision History`
   headers, no Code Analyzer pragmas, never `i`/`j` as loop variables.
-  **Current state (2026-09-16):** all 58 files use the `%% Purpose` header;
+  **Current state (2026-09-16):** all 50 files use the `%% Purpose` header;
   no `%#ok` pragmas and no `i`/`j` loop variables remain (the 22 `AGROW` /
   `INUSD` warnings the pragmas hid are now visible — preallocate on next
-  touch). 13 of 58 files have a `nargin == 0` self-demo.
+  touch). files with a `nargin == 0` self-demo: see the generated index.
 - Physics only through pumpkyn calls (`tfMinProp`/`tfMinEoM`/getters);
   nothing is ever written into pumpkyn.
 - The five standing principles + principle 7 (defenses against silent

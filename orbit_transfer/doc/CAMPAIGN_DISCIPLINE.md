@@ -10,6 +10,8 @@ machine time was lost anyway.
 
 ## The primitives
 
+All of them live in `orbit_transfer/campaign_common/` (see its README).
+
 | unit | kills |
 |---|---|
 | `work_queue` | static work assignment, lost units, livelock |

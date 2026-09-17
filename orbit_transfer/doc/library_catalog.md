@@ -49,21 +49,6 @@ PERIODICITY GUARD for a propagated orbit, made a single-home helper (migration #
 FAMILY-AGNOSTIC catalog packager: packages any campaign's thrust-ladder sheets into ONE shareable costate CATALOG in the COMPACT format (data minimization per D. Koblick): only canonical nondimensional quantities are stored -- phase fractions, the z8 vectors (which already contain t_f), thrust rungs, and per-sheet availability/flight-time lookup grids. Everything else (days, Delta-V, masses) is DERIVABLE and the formulas ride along in .derive.
 *in: `catDir`, `outMat`, `spec`, `glob`, `name`, `description`, `provenance`, `depReconstruction` · out: `cat_`*
 
-### `campaign_heartbeat.m`
-`out = campaign_heartbeat(action, hbDir, varargin)`  
-HEARTBEATS as the only liveness signal for campaign workers, and the five states a monitor must be able to tell apart.
-*in: `action`, `hbDir`, `varargin` · out: `out`*
-
-### `campaign_status.m`
-`S = campaign_status(qDir, hbDir, tags, opts)`  
-What a campaign is actually doing, read from ARTIFACTS ONLY: the queue's outputs and the workers' heartbeats. No process matching, because that is what reported four live workers dead (their tag was in the environment, not the command line).
-*in: `tags`, `opts` · out: `S`*
-
-### `campaign_worker.m`
-`out = campaign_worker(qDir, hbDir, tag, unitFcn, opts)`  
-One campaign worker: claim a unit, run it, PUBLISH its validated result under the unit's lock, release, repeat, until the campaign is finished or the budget is spent. Launched as its own MATLAB process by run_campaign_workers.sh, N at a time, against one work_queue.
-*in: `tag`, `unitFcn`, `opts` · out: `out`*
-
 ### `capped_pool.m`
 `pool = capped_pool(nWorkers)`  
 The parallel pool that run_capped's hard wall-clock fence needs, with a PRIVATE JobStorageLocation so that concurrently running `matlab -batch` sessions do not collide over the default one.
@@ -149,11 +134,6 @@ THE flown-control verifier (migration #4): flies a direct solution's RECONSTRUCT
 Fly converged min-time costates ONCE and hand back everything the consumers then recompute: the flight itself, its admissibility, where it actually arrived, and the mass and Delta-V that follow from it.
 *in: `z8`, `phys` · out: `F`*
 
-### `fmt_num.m`
-`s = fmt_num(v, w, p, unit)`  
-Format a number at a FIXED WIDTH, rendering the missing case as dashes of that same width instead of throwing.
-*in: `v`, `w`, `p`, `unit` · out: `s`*
-
 ### `gates_catalog_pass.m`
 `S = gates_catalog_pass(catMat, opts)`  
 Run the min-time sufficiency-hypothesis gates (mintime_hypothesis_gates: strong Legendre min|lam_v|, all-burn min Q_mt, abnormal-lift dim S) over every entry of a compact costate catalog and record them -- the catalog- scale form of the audit (doc/mintime_second_order_audit.tex, section 7).
@@ -178,6 +158,11 @@ H6: exclude the REDUCED problem's spurious-zero mechanism.
 `[seed, diag_] = harvest_ms_seed(o, K)`  
 Builds a multiple-shooting SEED from a direct collocation solution -- the harvest path, made a single-home library function (migration #3; the sign-vote + midpoint-association rules previously lived inline in thrust_ladder_library, the exact one-home-per-rule violation that let the Hermite-Simpson midpoint bug exist in two places).
 *in: `o`, `X`, `lamDef`, `Um`, `tNodes`, `tf`, `K` · out: `seed`, `diag_`*
+
+### `ladder_endpoints.m`
+`[tD, rvD, tT, rvT] = ladder_endpoints(ob)`  
+Rebuilds a thrust-ladder sheet's departure and arrival orbits from its OWN meta recipe, family-agnostically -- the endpoint provider for extend_thrust_ladder (and any future ladder tool that reads engine- native sheet files). Mirrors densify_ladder's proven meta-dispatch pattern (diagnostic-A, 2026-08-26):
+*in: `ob` · out: `tD`, `rvD`, `tT`, `rvT`*
 
 ### `lift_margin.m`
 `M = lift_margin(C1, C2, lam, opts)`  
@@ -254,20 +239,10 @@ First-order (Pontryagin) checks evaluated ON A FLIGHT, at sampled times, complem
 CHEAP SANITY PRE-CHECK on a direct solution BEFORE any integrator touches it, made a single-home helper (migration #4). A solve can meet the discrete defect test to 1e-9 and still be physically wild; integrating such a trajectory crawls near the lunar singularity WITHOUT BOUND (measured: one cell pinned a catalog run 16 min at 100% CPU). Screens on the discrete nodes only -- altitude floor and a plausible time of flight -- so it costs microseconds.
 *in: `o`, `muStar`, `lStar`, `floorKm`, `seedTf` · out: `ok`, `why`, `minAltKm`*
 
-### `publish_atomic.m`
-`publish_atomic(src, dst)`  
-Publish a finished file: move src onto dst in ONE rename(2), replacing any existing dst, so that a reader sees either the old file or the new one and never a partial or missing one. This is the only way a campaign artifact, queue record or heartbeat reaches its final name.
-*in: `src`, `dst`*
-
 ### `run_capped.m`
 `[ok, varargout] = run_capped(pool, fcn, nout, capSec, varargin)`  
 Runs fcn(args) on a parfeval worker under a HARD wall-clock cap; on timeout or worker error the future is CANCELLED (the worker is killed and restarted), so no single stuck computation can stall the caller.
 *in: `pool`, `fcn`, `nout`, `capSec`, `varargin` · out: `ok`, `varargout`*
-
-### `safe_report.m`
-`ok = safe_report(fcn, label)`  
-Run a REPORTING block so that it can never fail the work it reports on.
-*in: `fcn`, `label` · out: `ok`*
 
 ### `scalar_verdict.m`
 `[ok, v] = scalar_verdict(x)`  
@@ -304,27 +279,12 @@ Finds the "REASONABLE" members of ANY orbit family, by Darin's criteria: perisel
 Minimum lunar altitude of the PROPAGATED trajectory, not of the nodes. A collocation altitude floor binds at nodes only; this checks it BETWEEN nodes, where periselene actually happens. Extracted verbatim from certify_dro_mintime/local_true_min_alt (migration #4).
 *in: `o`, `muStar`, `Tmax`, `c`, `lStar`, `rMoonKm` · out: `amin`*
 
-### `unit_lock.m`
-`out = unit_lock(action, f, token)`  
-A PROCESS-HELD lock on a file, as a lifecycle-controlled capability: java.nio FileChannel.tryLock (POSIX fcntl record locking on macOS), which the kernel holds for this MATLAB process until it releases the lock or dies. Measured on this host (2026-09-13): a second MATLAB process is refused while the first holds it, acquires it the moment the first releases, and acquires it after the first is killed -9.
-*in: `action`, `f`, `token` · out: `out`*
-
 ### `validate_flight.m`
 `V = validate_flight(t, Y, tf, Tnd, cnd, mu, lStar, opts)`  
 ONE admissibility check for a flown all-burn trajectory, shared by the certifier and the study script so that "the flight is admissible" means the same thing everywhere. A returned array is not a completed flight: an integrator that stops early without throwing hands back a short, perfectly finite trajectory, and every metric taken from its last row then describes a flight that never happened. This checks
 *in: `t`, `Y`, `tf`, `lStar`, `opts` · out: `V`*
 
-### `walk_checkpoint.m`
-`varargout = walk_checkpoint(action, f, varargin)`  
-A resumable CHECKPOINT for a sequential walk (a rib column): the state after the last accepted point, saved atomically, so that an attempt killed nine hours into a column is continued by the next attempt from the last accepted point instead of from zero (Astra pass 2/3: "a reclaimed column restarts from zero" -- the declared loss budget was a whole column per kill).
-*in: `action`, `f`, `varargin` · out: `save`, `load`*
-
-### `work_queue.m`
-`out = work_queue(action, qDir, varargin)`  
-A DISK WORK QUEUE for campaign units, so that N worker processes on one host pull the next unclaimed unit instead of being handed static ranges. The unit is whatever the caller says it is (a rib column, a catalog entry, a thrust rung).
-*in: `action`, `qDir`, `varargin` · out: `out`*
-
-**tests/**: `test_arclength_arrival.m`, `test_arclength_ms.m`, `test_arclength_ms_thrust.m`, `test_campaign_processes.m`, `test_catalog_schema_v3.m`, `test_certify_caps.m`, `test_certify_enforcement.m`, `test_conj_coverage.m`, `test_conj_fixedtf.m`, `test_conj_resolve.m`, `test_conj_spectrum.m`, `test_cr3bp_minenergy_pmp.m`, `test_dro_tulip_seed.m`, `test_entry_notes.m`, `test_flight_to_junctions.m`, `test_fly_transfer.m`, `test_gates_h6_wiring.m`, `test_gto_family.m`, `test_h6_margin.m`, `test_huber_saltation.m`, `test_lift_margin.m`, `test_lift_space_dim.m`, `test_minfuel_pmp.m`, `test_mintime_gates.m`, `test_ms_bvp_extra.m`, `test_ms_bvp_fixedtf.m`, `test_ms_tfmin_hom.m`, `test_nd_propulsion.m`, `test_periodic_pp.m`, `test_phase_state.m`, `test_pmp_pointwise_checks.m`, `test_scalar_verdict.m`, `test_second_order_parallel.m`, `test_second_order_pass.m`, `test_second_order_sidecar_identity.m`, `test_seed_from_entry.m`, `test_sheet_to_catalog_file.m`, `test_ss_bvp_accept.m`, `test_stm_variational.m`, `test_validate_flight.m`, `test_work_queue.m`
+**tests/**: `test_arclength_arrival.m`, `test_arclength_ms.m`, `test_arclength_ms_thrust.m`, `test_catalog_schema_v3.m`, `test_certify_caps.m`, `test_certify_enforcement.m`, `test_conj_coverage.m`, `test_conj_fixedtf.m`, `test_conj_resolve.m`, `test_conj_spectrum.m`, `test_cr3bp_minenergy_pmp.m`, `test_dro_tulip_seed.m`, `test_entry_notes.m`, `test_flight_to_junctions.m`, `test_flown_control_error.m`, `test_fly_transfer.m`, `test_gates_h6_wiring.m`, `test_gto_family.m`, `test_h6_margin.m`, `test_harvest_ms_seed.m`, `test_huber_saltation.m`, `test_ladder_endpoints.m`, `test_lift_margin.m`, `test_lift_space_dim.m`, `test_minfuel_pmp.m`, `test_mintime_gates.m`, `test_ms_bvp_extra.m`, `test_ms_bvp_fixedtf.m`, `test_ms_tfmin_hom.m`, `test_nd_propulsion.m`, `test_newton_fixed_q.m`, `test_periodic_pp.m`, `test_phase_state.m`, `test_pmp_pointwise_checks.m`, `test_preflight_screen.m`, `test_run_capped.m`, `test_scalar_verdict.m`, `test_second_order_parallel.m`, `test_second_order_pass.m`, `test_second_order_sidecar_identity.m`, `test_seed_from_entry.m`, `test_sheet_to_catalog_file.m`, `test_ss_bvp_accept.m`, `test_stm_variational.m`, `test_survey_family_bounds.m`, `test_true_min_altitude.m`, `test_validate_flight.m`
 
 ## verify_common
 
@@ -370,6 +330,57 @@ MEE_RESIDUAL  True continuous-time (continuous-longitude) local error of a direc
 SETUP_VERIFY_COMMON  Put orbit_transfer/verify_common on the MATLAB path. Self-contained: no campaign paths, no CasADi (callers add CasADi themselves). OUTPUTS: none (path side effect)
 
 **tests/**: `test_certified_guard.m`, `test_foc_check_10N.m`, `test_foc_check_toy.m`, `test_foc_dual_to_costate.m`, `test_foc_ipopt_inertia.m`, `test_foc_manifest.m`, `test_foc_mesh_invariance.m`, `test_foc_report.m`, `test_foc_terminal_covector.m`
+
+## campaign_common
+
+Campaign job control, not optimal control: disk work queue, process locks, workers, supervisor, heartbeats, atomic publish, checkpoints. See its README.md.
+
+### `campaign_heartbeat.m`
+`out = campaign_heartbeat(action, hbDir, varargin)`  
+HEARTBEATS as the only liveness signal for campaign workers, and the five states a monitor must be able to tell apart.
+*in: `action`, `hbDir`, `varargin` · out: `out`*
+
+### `campaign_status.m`
+`S = campaign_status(qDir, hbDir, tags, opts)`  
+What a campaign is actually doing, read from ARTIFACTS ONLY: the queue's outputs and the workers' heartbeats. No process matching, because that is what reported four live workers dead (their tag was in the environment, not the command line).
+*in: `tags`, `opts` · out: `S`*
+
+### `campaign_worker.m`
+`out = campaign_worker(qDir, hbDir, tag, unitFcn, opts)`  
+One campaign worker: claim a unit, run it, PUBLISH its validated result under the unit's lock, release, repeat, until the campaign is finished or the budget is spent. Launched as its own MATLAB process by run_campaign_workers.sh, N at a time, against one work_queue.
+*in: `tag`, `unitFcn`, `opts` · out: `out`*
+
+### `fmt_num.m`
+`s = fmt_num(v, w, p, unit)`  
+Format a number at a FIXED WIDTH, rendering the missing case as dashes of that same width instead of throwing.
+*in: `v`, `w`, `p`, `unit` · out: `s`*
+
+### `publish_atomic.m`
+`publish_atomic(src, dst)`  
+Publish a finished file: move src onto dst in ONE rename(2), replacing any existing dst, so that a reader sees either the old file or the new one and never a partial or missing one. This is the only way a campaign artifact, queue record or heartbeat reaches its final name.
+*in: `src`, `dst`*
+
+### `safe_report.m`
+`ok = safe_report(fcn, label)`  
+Run a REPORTING block so that it can never fail the work it reports on.
+*in: `fcn`, `label` · out: `ok`*
+
+### `unit_lock.m`
+`out = unit_lock(action, f, token)`  
+A PROCESS-HELD lock on a file, as a lifecycle-controlled capability: java.nio FileChannel.tryLock (POSIX fcntl record locking on macOS), which the kernel holds for this MATLAB process until it releases the lock or dies. Measured on this host (2026-09-13): a second MATLAB process is refused while the first holds it, acquires it the moment the first releases, and acquires it after the first is killed -9.
+*in: `action`, `f`, `token` · out: `out`*
+
+### `walk_checkpoint.m`
+`varargout = walk_checkpoint(action, f, varargin)`  
+A resumable CHECKPOINT for a sequential walk (a rib column): the state after the last accepted point, saved atomically, so that an attempt killed nine hours into a column is continued by the next attempt from the last accepted point instead of from zero (Astra pass 2/3: "a reclaimed column restarts from zero" -- the declared loss budget was a whole column per kill).
+*in: `action`, `f`, `varargin` · out: `save`, `load`*
+
+### `work_queue.m`
+`out = work_queue(action, qDir, varargin)`  
+A DISK WORK QUEUE for campaign units, so that N worker processes on one host pull the next unclaimed unit instead of being handed static ranges. The unit is whatever the caller says it is (a rib column, a catalog entry, a thrust rung).
+*in: `action`, `qDir`, `varargin` · out: `out`*
+
+**tests/**: `test_campaign_processes.m`, `test_work_queue.m`
 
 ## cr3bp_common
 

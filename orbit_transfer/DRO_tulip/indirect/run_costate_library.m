@@ -137,7 +137,8 @@ function out = run_costate_library(opts)
 if nargin < 1, opts = struct(); end
 d = @(f,v) fieldd(opts, f, v);
 here = fileparts(mfilename('fullpath'));
-addpath(here, fullfile(fileparts(fileparts(here)), 'costate_common'));
+addpath(here, fullfile(fileparts(fileparts(here)), 'costate_common'), ...
+        fullfile(fileparts(fileparts(here)), 'campaign_common'));
 outDir = d('outDir', fullfile(here, 'results_fine'));
 nWorkers = d('nWorkers', 4);
 run_ = d('run', struct());
@@ -315,7 +316,8 @@ ribList = arrayfun(ribOut, cols, 'UniformOutput', false);
 
 %% 3. RIBS -- a work queue, one column per unit
 policy = struct('staleSec', staleSec, 'maxAtt', maxAtt, 'hangSec', hangSec);
-codeRoots = {here, fullfile(fileparts(fileparts(here)), 'costate_common')};
+jobRoot   = fullfile(fileparts(fileparts(here)), 'campaign_common');   % queue, workers, supervisor
+codeRoots = {here, fullfile(fileparts(fileparts(here)), 'costate_common'), jobRoot};
 ribSpec = @(j) struct('nPts', nPts, 'col', j, 'sA', S.sA(j), 'sD', sD, 'problem', S.problem);
 if on('ribs') && nPts > 0
     % EXISTING OUTPUTS ARE VALIDATED BEFORE THE QUEUE CAN CALL THEM DONE.
@@ -371,7 +373,7 @@ if on('ribs') && nPts > 0
         'seedFiles', {d('seedFiles', {})}, 'extraRibFiles', {d('extraRibFiles', {})}, ...
         'maxAtt', policy.maxAtt, 'staleSec', policy.staleSec, 'hangSec', policy.hangSec, 'launch', false);
     writeFinalizeJob(finJob, finSpec, codeRoots);
-    supervisor = fullfile(codeRoots{2}, 'campaign_supervisor.sh');
+    supervisor = fullfile(jobRoot, 'campaign_supervisor.sh');
     out.cmd = strjoin({'nohup', shq(supervisor), shq(jobFile), num2str(nWorkers), ...
                        num2str(round(hangSec)), shq(outDir), shq(out.queue), num2str(maxAtt), shq(finJob), ...
                        '>', shq(fullfile(outDir, 'supervisor.out')), '2>&1 &'}, ' ');

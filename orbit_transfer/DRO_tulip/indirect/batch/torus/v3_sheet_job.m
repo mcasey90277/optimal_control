@@ -4,7 +4,7 @@
 % decided afterwards from which columns' spines changed.
 here = pwd; cd('/Users/msc/Desktop/proj7/external/pumpkynPie'); startup(); cd(here);
 ind = '/Users/msc/Desktop/optimal_control/orbit_transfer/DRO_tulip/indirect';
-addpath(ind, '/Users/msc/Desktop/optimal_control/orbit_transfer/costate_common');
+addpath(ind, '/Users/msc/Desktop/optimal_control/orbit_transfer/costate_common', '/Users/msc/Desktop/optimal_control/orbit_transfer/campaign_common');
 out = run_costate_library(struct('outDir', fullfile(ind, 'results_fine_v3'), 'nD', 24, 'nA', 24, 'sA0', 0.0754, ...
     'launch', false, 'run', struct('sheet', true, 'ribs', false, 'package', false, 'audit', false, 'sweep', false)));
 fprintf('\nV3 SHEET: state %s\n', out.state);  fprintf('  blocker: %s\n', out.blockers{:});

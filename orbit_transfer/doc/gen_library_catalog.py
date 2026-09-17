@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Generate library_catalog.md — the function reference for OUR orbit-transfer
-library layers (oclib/+oc, costate_common, verify_common, cr3bp_common).
+library layers (oclib/+oc, costate_common, verify_common, campaign_common, cr3bp_common).
 
 Mirrors the gen_pumpkyn_catalog.py pattern: parse each .m file's signature
 line and its pumpkyn-style header (%% Purpose block, or the H1 comment line
@@ -31,6 +31,10 @@ LAYERS = [
     ("verify_common", OT / "verify_common",
      "First-order optimality gate layer + the shared continuous-residual "
      "(G1) gate. See its README.md and OPTIMALITY_CERTIFICATION.md."),
+    ("campaign_common", OT / "campaign_common",
+     "Campaign job control, not optimal control: disk work queue, process "
+     "locks, workers, supervisor, heartbeats, atomic publish, checkpoints. "
+     "See its README.md."),
     ("cr3bp_common", OT / "cr3bp_common",
      "Shared CR3BP GTO problem definition (params, endpoints, setup)."),
 ]

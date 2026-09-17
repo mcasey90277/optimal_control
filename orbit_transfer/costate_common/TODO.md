@@ -108,15 +108,25 @@ the folder*. Steps 1–9 change no numerical result and need no decision; steps
 
 **D. Structural moves — each needs a campaign-level reproduction, not only unit tests**
 
-- [ ] **11. Split out campaign orchestration** (depends on 0b): `work_queue`,
-  `campaign_worker`, `unit_lock`, `publish_atomic`, `walk_checkpoint`,
-  `campaign_heartbeat`, `campaign_status`, `safe_report`, `fmt_num`. The
-  execution fences (`run_capped`, `capped_pool`, `current_pool`) STAY: the
-  certifier needs them. Every consumer is DRO_tulip, but generated finalize
-  jobs embed their code roots (`run_costate_library`) and the batch
-  launchers add paths. Gate: `test_campaign_processes`, `test_work_queue`, then
-  a small `run_phase_torus` acceptance run (the torus3b size) to a fixed
-  point. A day.
+- [x] **11. Split out campaign orchestration** — DONE 2026-09-16. The nine
+  files plus `run_campaign_workers.sh` and `campaign_supervisor.sh` and
+  their two tests now live in `../campaign_common/` (README there). The
+  fences stayed. Consumers repointed: `run_costate_library` (third code
+  root threaded into the generated rib and finalize jobs; the supervisor is
+  launched from the new folder), `build_ribs`, `build_arrival_sheet`,
+  `fill_holes_direct`, and four archived `batch/torus/v*_job.m`.
+  Gate met, in two parts: (a) `test_work_queue` and
+  `test_campaign_processes` (real worker processes, kills, supervisor,
+  finalizer) pass with `costate_common` and every campaign folder stripped
+  from the path; (b) the torus3b 3 x 3 acceptance campaign was re-run
+  end to end from the same spec (`results/torus3c_step11`, job script
+  adding ONLY costate_common, so the driver had to find campaign_common
+  itself): same two rounds, same sheet counts, the same new anchor
+  (17.705 d at sA 0.7421), same holes census, fixed point after round 2,
+  and its final catalog is BITWISE identical to the 2026-09-15 one in
+  every field but the provenance note carrying the campaign tag
+  (`test3b` -> `test3c`), which was the change.
+
 - [ ] **12. Bring the shared thrust ladder here** (depends on 0a):
   `DRO_tulip/indirect/thrust_ladder_library` with its DRO_tulip closure
   `casadi_mintime_dro`, `certify_dro_mintime`, `dro_residual` — 4 files,

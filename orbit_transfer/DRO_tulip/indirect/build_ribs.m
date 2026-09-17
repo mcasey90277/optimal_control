@@ -38,7 +38,7 @@ function R = build_ribs(sheetMat, opts)
 if nargin < 2, opts = struct(); end
 d = @(f,v) fieldd(opts, f, v);
 here = fileparts(mfilename('fullpath'));
-addpath(fullfile(fileparts(here), '..', 'costate_common'));
+addpath(fullfile(fileparts(here), '..', 'costate_common'), fullfile(fileparts(here), '..', 'campaign_common'));
 L = load(sheetMat);  S = L.S;
 nD = d('nD', 12);  nPts = d('nPts', nD - 1);  dirn = d('direction', -1);
 targets = d('targets', []);

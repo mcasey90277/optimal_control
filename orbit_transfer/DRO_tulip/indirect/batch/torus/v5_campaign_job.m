@@ -6,7 +6,7 @@
 % fastest certified point of any family is kept. Log: results_fine_v5/round5.log
 here = pwd; cd('/Users/msc/Desktop/proj7/external/pumpkynPie'); startup(); cd(here);
 ind = '/Users/msc/Desktop/optimal_control/orbit_transfer/DRO_tulip/indirect';
-addpath(ind, '/Users/msc/Desktop/optimal_control/orbit_transfer/costate_common');
+addpath(ind, '/Users/msc/Desktop/optimal_control/orbit_transfer/costate_common', '/Users/msc/Desktop/optimal_control/orbit_transfer/campaign_common');
 V5 = fullfile(ind, 'results_fine_v5');  V4 = fullfile(ind, 'results_fine_v4');
 V3 = fullfile(ind, 'results_fine_v3');  V2 = fullfile(ind, 'results_fine_v2');
 if ~isfolder(V5), mkdir(V5); end

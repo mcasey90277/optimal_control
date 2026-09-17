@@ -42,7 +42,7 @@ function S = build_arrival_sheet(opts)
 if nargin < 1, opts = struct(); end
 d = @(f,v) fieldd(opts, f, v);
 here = fileparts(mfilename('fullpath'));
-addpath(fullfile(fileparts(here), '..', 'costate_common'));
+addpath(fullfile(fileparts(here), '..', 'costate_common'), fullfile(fileparts(here), '..', 'campaign_common'));
 pat = d('pattern', 'arrival_arc_*.mat');
 out = d('out', fullfile(here, 'results', 'arrival_sheet_70mN.mat'));
 lStar = 389703.264829278;  tStar = 382981.289129055;

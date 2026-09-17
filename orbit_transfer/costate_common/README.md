@@ -18,13 +18,14 @@ adding files).
 
 ## State of the folder (2026-09-16)
 
-**50 files and 47 tests** after cleanup steps 5–11 (2026-09-16); 61 files
-and 58 tests when the cleanup began. The table below is the measurement
+**54 files and 48 tests** after cleanup steps 5–12 (2026-09-16); 61 files
+and 58 tests when the cleanup began (nine job-control files left, four
+ladder-engine files arrived). The table below is the measurement
 taken when the cleanup began, kept because the plan was built from it:
 since then `conjugate_pole_predict`, `cr3bp_field` and `rib_targets` left,
-`ladder_endpoints` arrived, and the nine job-control files (most of them
-"DRO_tulip only", plus `campaign_heartbeat` and `campaign_status`) moved to
-`../campaign_common/`. Caller counts are code references from outside the
+`ladder_endpoints` and the four ladder-engine files arrived, and the nine
+job-control files (most of them "DRO_tulip only", plus `campaign_heartbeat`
+and `campaign_status`) moved to `../campaign_common/`. Caller counts are code references from outside the
 folder (tests excluded); an "entry point" has no calling code and is run by
 hand.
 

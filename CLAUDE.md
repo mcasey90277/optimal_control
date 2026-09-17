@@ -54,9 +54,30 @@ optimal_control/
 │   │                            #   minfuel field carries the eps/huber smoothing families),
 │   │                            #   run_capped (parfeval hard timeouts), flown_control_error,
 │   │                            #   catalog packager + schema v2/v3 (v3 = objective/gamma
-│   │                            #   axis, 2026-09-02), golden_cells regression, tests/
+│   │                            #   axis, 2026-09-02), golden_cells regression, tests/.
+│   │                            #   THE SHARED LADDER ENGINE lives here since 2026-09-16:
+│   │                            #   thrust_ladder_library + casadi_mintime_dro (CR3BP
+│   │                            #   min-time direct transcription) + certify_dro_mintime +
+│   │                            #   dro_residual -- the `dro` names are legacy, five
+│   │                            #   campaigns solve through them.
+│   │                            #   CLEANUP 2026-09-16 (README + TODO in the folder):
+│   │                            #   admission rule is now "generic by construction, with a
+│   │                            #   test"; 61 files/58 tests -> 54/48 (the ladder engine
+│   │                            #   arrived as the job control left); no campaign folder
+│   │                            #   is on the library's path and golden_cells runs from a
+│   │                            #   fresh clone.
 │   ├── verify_common/           # first-order optimality gate layer (foc_check/foc_report,
-│   │                            #   IPOPT inertia, PMP residual, mesh tools, certified_guard)
+│   │                            #   IPOPT inertia, PMP residual, mesh tools, certified_guard,
+│   │                            #   mee_residual -- dro_residual's MEE sibling, which now
+│   │                            #   lives in costate_common; unifying them is a TODO)
+│   ├── campaign_common/         # JOB CONTROL, not optimal control (split out of
+│   │                            #   costate_common 2026-09-16): work_queue, unit_lock,
+│   │                            #   campaign_worker, publish_atomic, walk_checkpoint,
+│   │                            #   campaign_heartbeat/_status, safe_report, fmt_num +
+│   │                            #   run_campaign_workers.sh and campaign_supervisor.sh.
+│   │                            #   Rules + the incidents behind them: doc/CAMPAIGN_DISCIPLINE.md.
+│   │                            #   The execution FENCES (run_capped, capped_pool,
+│   │                            #   current_pool) stayed in costate_common.
 │   ├── DRO_tulip/               # COSTATE-CATALOG CAMPAIGNS (min-time PMP costates for Darin's
 │   ├── HALO_tulip/              #   pumpkyn tfMin; direct solve -> covector harvest -> ms_tfmin
 │   ├── DPO_tulip/               #   -> tfMin acceptance). DRO_tulip = reference implementation
@@ -91,9 +112,21 @@ optimal_control/
 │   │                            #   new campaign, change the parameter blocks.
 │   │                            #   ALGORITHM DOC: doc/algorithms_orbit_transfer.tex
 │   │                            #   (OCP + both pipelines, ELI5/intuition/rigor).
+│   │                            #   THE SHARED ENGINE LEFT 2026-09-16: thrust_ladder_library,
+│   │                            #   casadi_mintime_dro, certify_dro_mintime and dro_residual
+│   │                            #   are in costate_common, so HALO/DPO/HALO_HALO/GTO put NO
+│   │                            #   DRO_tulip folder on their path. Campaign-only tests from
+│   │                            #   costate_common now live in indirect/tests/.
 │   ├── min_fuel_paper/          # paper outline (co-author Koblick)
 │   ├── min_fuel_papers/         # reference PDFs
 │   └── abstracts/               # conference abstract drafts
+├── oclib/                       # CROSS-FOLDER optimal-control package (+oc), used by
+│   │                            #   MORE THAN ONE top-level folder: oc.duals_to_costates
+│   │                            #   (covector rules), oc.fly_control (flown-control engine),
+│   │                            #   oc.local_residual (G1 per-interval re-integration).
+│   │                            #   Admission: a second TOP-LEVEL consumer + an equivalence
+│   │                            #   gate; campaign folders keep thin delegates. Call as
+│   │                            #   oc.<fn> after addpath('.../oclib'). tests/ per function.
 ├── booster_landing/             # Falcon-9-class 3-DOF powered-descent campaign
 │   │                            #   (2026-08-09): min-fuel PDG solved 2 ways
 │   │                            #   (HS NLP + lossless convexification), 5-gate

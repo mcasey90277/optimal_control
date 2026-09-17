@@ -2,9 +2,18 @@ function ok = test_direct_ref()
 %% Purpose:
 %
 %   The committed direct-solution fixture is a real solution of the problem
-%   the indirect demo solves: right shape, boundary conditions met, its own
-%   trapezoidal defects small, and a control that stayed inside the relaxed
-%   bound (so it is the UNCONSTRAINED optimum the PMP solve is compared to).
+%   the indirect demo solves: right shape, its own trapezoidal defects
+%   small, and a control that stayed inside the relaxed bound (so it is the
+%   UNCONSTRAINED optimum the PMP solve is compared to). The trapezoidal
+%   defect check is the check that measures dynamics accuracy: it recomputes
+%   the derivative field from the independently authored
+%   ex2_cart_pole_swing_up/try2 helpers (cart_accel, pendulum_accel), not
+%   from a copy of gen_direct_ref.m's own dynamics, so an error shared by
+%   both would not cancel out. The initial- and terminal-state checks below
+%   measure something different: those nodes are pinned by equality
+%   constraints in gen_direct_ref.m's NLP, not propagated by the dynamics,
+%   so a near-exact match there is evidence the boundary rows were wired up
+%   correctly, not evidence of integration accuracy.
 %
 %% Inputs:
 %
@@ -21,6 +30,7 @@ function ok = test_direct_ref()
 
 ok = true;
 here = fileparts(fileparts(mfilename('fullpath')));
+addpath(fullfile(fileparts(here), 'ex2_cart_pole_swing_up', 'try2'));
 R = load(fullfile(here, 'data', 'cartpole_direct_ref.mat'));
 
 ok = chk(ok, isequal(size(R.X), [4 201]) && isequal(size(R.U), [1 201]) ...
@@ -28,18 +38,26 @@ ok = chk(ok, isequal(size(R.X), [4 201]) && isequal(size(R.U), [1 201]) ...
          'shapes: X [4 x 201], U [1 x 201], muDefect [4 x 200]');
 ok = chk(ok, R.tN(1) == 0 && abs(R.tN(end) - 5) < 1e-12 && abs(R.tf - 5) < 1e-12, ...
          'the grid spans the fixed 5 s horizon');
-ok = chk(ok, max(abs(R.X(:,1) - [0;0;0;0])) < 1e-8, 'starts at rest, pendulum down');
+ok = chk(ok, max(abs(R.X(:,1) - [0;0;0;0])) < 1e-8, ...
+         'initial state matches the pinned target [0;0;0;0] (an equality-constraint node, not propagated)');
 ok = chk(ok, max(abs(R.X(:,end) - [0;pi;0;0])) < 1e-6, ...
-         sprintf('ends at rest, pendulum up (miss %.1e)', max(abs(R.X(:,end) - [0;pi;0;0]))));
+         sprintf(['terminal state matches the pinned target [0;pi;0;0] (an equality-' ...
+                  'constraint node, not propagated; miss %.1e)'], ...
+                 max(abs(R.X(:,end) - [0;pi;0;0]))));
 ok = chk(ok, max(abs(R.U)) < 0.9*R.uMax, ...
          sprintf('the control stayed off the relaxed bound: max |u| = %.1f N of %.0f N', ...
                  max(abs(R.U)), R.uMax));
 
-% its own trapezoidal defects, recomputed here from the stored nodes
+% its own trapezoidal defects, recomputed here from the stored nodes using
+% the example's OWN, independently authored dynamics helpers (not a copy
+% of gen_direct_ref.m's internal ref_field) so a shared error cannot cancel
 h = diff(R.tN);
 F = zeros(4, 201);
 for k = 1:201
-    F(:,k) = ref_field(R.X(:,k), R.U(k), R.p);
+    q2 = R.X(2,k);  q1dot = R.X(3,k);  q2dot = R.X(4,k);  u = R.U(k);
+    F(:,k) = [q1dot; q2dot; ...
+              cart_accel(q2, q2dot, u, R.p.L, R.p.m1, R.p.m2, R.p.g); ...
+              pendulum_accel(q2, q2dot, u, R.p.L, R.p.m1, R.p.m2, R.p.g)];
 end
 d = R.X(:,2:end) - R.X(:,1:end-1) - (h/2).*(F(:,2:end) + F(:,1:end-1));
 ok = chk(ok, max(abs(d(:))) < 1e-6, sprintf('trapezoidal defects small: %.1e', max(abs(d(:)))));
@@ -51,21 +69,6 @@ end
 end
 
 % ------------------------------------------------------------------------
-function dx = ref_field(x, u, p)
-%% Purpose:
-%
-%   The example's own dynamics, written out here so the fixture is checked
-%   against the problem statement rather than against the code under test.
-%
-q2 = x(2);  q1d = x(3);  q2d = x(4);
-s = sin(q2);  c = cos(q2);
-D1 = p.m1 + p.m2*(1 - c^2);
-D2 = p.L*(p.m1 + p.m2)*(1 - (p.m2/(p.m1 + p.m2))*c^2);
-dx = [q1d; q2d;
-      (p.L*p.m2*s*q2d^2 + u + p.m2*p.g*c*s)/D1;
-      (p.L*p.m2*c*s*q2d^2 + u*c + (p.m1 + p.m2)*p.g*s)/D2];
-end
-
 function ok = chk(ok, cond, label)
 %% Purpose:
 %

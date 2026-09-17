@@ -24,8 +24,16 @@ function [yEnd, PHI] = cartpole_pmp_prop(dt, y0, needSTM, p)
 %   integrated up to the point the step size collapsed below the minimum,
 %   silently short of the requested dt. A finite-value check alone misses
 %   that case, so the real gate is whether the returned time grid reached
-%   dt; an outright ode113 error (unlikely here, but not ruled out) is
-%   also caught and rethrown under the same identifier.
+%   dt.
+% • The try/catch around ode113 is a narrow backstop, not a second
+%   detector: it relabels only identifiers ode113 itself raises
+%   ('MATLAB:ode*', e.g. bad sizes or options) as
+%   cartpole_pmp_prop:collapse. A genuine programming error inside
+%   cartpole_pmp_rhs/rhs_with_stm (undefined variable, missing p field,
+%   dimension mismatch) is rethrown UNCHANGED, with its own identifier --
+%   ms_bvp's residual() does a bare catch on prob.prop, so relabelling
+%   every error as "collapse" would make a real bug indistinguishable from
+%   a rejected iterate and surface only as mysterious non-convergence.
 %
 %% Inputs:
 %
@@ -77,8 +85,11 @@ try
         PHI  = [];
     end
 catch err
-    error('cartpole_pmp_prop:collapse', ...
-          'the PMP flow failed to integrate over dt = %g: %s', dt, err.message);
+    if startsWith(err.identifier, 'MATLAB:ode')
+        error('cartpole_pmp_prop:collapse', ...
+              'the PMP flow failed to integrate over dt = %g: %s', dt, err.message);
+    end
+    rethrow(err);
 end
 
 reachedEnd = abs(T(end) - dt) <= 1e-9*max(1, abs(dt));

@@ -181,6 +181,23 @@ the folder*. Steps 1–9 change no numerical result and need no decision; steps
 
 ---
 
+- [ ] **`ms_bvp`'s `residual()` bare `catch` on `prob.prop` (found while
+  building the cart-pole PMP-BVP demo, 2026-09-16 — not fixed here, `ms_bvp`
+  itself is out of scope for that branch).** The catch has no identifier
+  check and no logging: it treats a genuine coding bug inside a CONSUMER's
+  propagator (undefined variable, missing struct field, dimension mismatch)
+  exactly like a rejected iterate, returning the same `rejectR`/`eye(n)`
+  pair either way. The shooting loop then simply fails to converge, with no
+  trace of which case it was. This now reaches every consumer of the
+  package, not only `orbit_transfer`: `collocation_examples/
+  ex3_cart_pole_pmp/cartpole_pmp_prop.m`'s header documents the identical
+  hazard from the cart-pole side and narrows its OWN try/catch (relabelling
+  only `MATLAB:ode*` identifiers, rethrowing everything else unchanged) so
+  it does not compound the problem, but that is a consumer-side mitigation,
+  not a fix. Candidate fix: rethrow anything without the propagator's own
+  documented collapse identifier, or at minimum log `err.identifier` /
+  `err.message` before rejecting the iterate.
+
 - [ ] **DEFERRED, with the measurement: a Hermite scheme for `periodic_pp`**
   (asked 2026-09-11 — is a choice of interpolant TYPE worth an option?).
   Measured first, on the tau = 1 DRO (105 samples) and the 7-petal tulip

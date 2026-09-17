@@ -60,7 +60,12 @@ for k = 1:201
               pendulum_accel(q2, q2dot, u, R.p.L, R.p.m1, R.p.m2, R.p.g)];
 end
 d = R.X(:,2:end) - R.X(:,1:end-1) - (h/2).*(F(:,2:end) + F(:,1:end-1));
-ok = chk(ok, max(abs(d(:))) < 1e-6, sprintf('trapezoidal defects small: %.1e', max(abs(d(:)))));
+% Gate 1e-12, not the original 1e-6: the committed fixture measures 6.5e-14
+% here, so 1e-6 would have accepted a fixture eight orders of magnitude
+% worse than the one actually shipped. 1e-12 keeps ~2 orders of margin
+% above the measured value (cross-version/BLAS noise) while refusing
+% anything that regressed materially.
+ok = chk(ok, max(abs(d(:))) < 1e-12, sprintf('trapezoidal defects small: %.1e', max(abs(d(:)))));
 ok = chk(ok, R.J > 0 && isfinite(R.J), sprintf('a finite positive cost: J = %.6f', R.J));
 
 if ok, fprintf('TEST_DIRECT_REF: ALL PASS\n');

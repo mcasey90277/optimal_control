@@ -48,15 +48,13 @@ for k = 1:25
     Gref = [0; 0; a1p - a1m; a2p - a2m];
     worstGRef = max(worstGRef, max(abs(G - Gref)));
 
-    % Helpers are truly affine: second difference should vanish
-    a1pp = cart_accel(x(2), x(4), u+1, p.L, p.m1, p.m2, p.g);
-    a1zm = cart_accel(x(2), x(4), u,   p.L, p.m1, p.m2, p.g);
+    % Helpers are truly affine: second difference should vanish. Reuses
+    % a1p/a1m/a2p/a2m from the G-reference block above (same u+1, u
+    % evaluations); only the u-1 point is new.
     a1mm = cart_accel(x(2), x(4), u-1, p.L, p.m1, p.m2, p.g);
-    a2pp = pendulum_accel(x(2), x(4), u+1, p.L, p.m1, p.m2, p.g);
-    a2zm = pendulum_accel(x(2), x(4), u,   p.L, p.m1, p.m2, p.g);
     a2mm = pendulum_accel(x(2), x(4), u-1, p.L, p.m1, p.m2, p.g);
-    worstAffine2 = max(worstAffine2, max(abs([a1pp - 2*a1zm + a1mm; ...
-                                              a2pp - 2*a2zm + a2mm])));
+    worstAffine2 = max(worstAffine2, max(abs([a1p - 2*a1m + a1mm; ...
+                                              a2p - 2*a2m + a2mm])));
 end
 ok = chk(ok, worst < 1e-12, sprintf('F + G*u equals the example helpers (worst %.1e)', worst));
 ok = chk(ok, worstGRef < 1e-12, sprintf('G is the exact d(xdot)/du from independent helpers (worst %.1e)', worstGRef));

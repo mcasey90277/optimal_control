@@ -4,13 +4,19 @@ function ok = test_cartpole_pmp()
 %   The whole indirect solve, and the claims the spec makes for it:
 %     1. it converges, and the terminal state is hit to 1e-9;
 %     2. the Hamiltonian H = u^2 + lam'(F + G u) is CONSTANT along the arc
-%        -- an autonomous, fixed-t_f PMP extremal must conserve it; this
-%        catches a wrong costate rate, a wrong seed basin, or a mis-scaled
-%        control that the pointwise stationarity identity (below) cannot;
-%     3. dH/du = 0 at the reported control, checked by a CENTRED FINITE
-%        DIFFERENCE that perturbs u directly -- independent of the
-%        u* = -lam'G/2 formula that built U, unlike an algebraic
-%        recomputation of the same expression;
+%        -- but this flow is HAMILTONIAN, so H is conserved along EVERY
+%        trajectory of it, whatever lam(0) is; constancy therefore cannot
+%        tell a converged extremal from a wrong seed basin. What it does
+%        catch: a wrong costate rate or a mis-scaled control, either of
+%        which breaks the conservation law that the pointwise stationarity
+%        identity (below) cannot see;
+%     3. an ARITHMETIC-CONSISTENCY check on the reported (U, Lam) pair, NOT
+%        an optimality test: out.U was built as u = -lam'G/2 from the same
+%        Lam, X and cartpole_field this check reuses, and H is exactly
+%        quadratic in u, so a centred finite difference of H in u equals
+%        2u + lam'G identically -- it cannot fail by construction. Kept as
+%        a cross-check that the stored (X, Lam, U) triple is internally
+%        self-consistent with the field, not as evidence of optimality;
 %     4. flying the recovered control through the true dynamics
 %        (oc.fly_control) arrives where the solve says -- the G1b idea;
 %     5. the cost agrees with the direct fixture to 1% (the gap is the
@@ -37,7 +43,7 @@ function ok = test_cartpole_pmp()
 ok = true;
 here = fileparts(fileparts(mfilename('fullpath')));
 root = fileparts(fileparts(here));                 % optimal_control
-addpath(here, fullfile(root, 'oclib'), fullfile(root, 'orbit_transfer', 'costate_common'));
+addpath(here, fullfile(root, 'oclib'));
 
 out = run_cartpole_pmp(struct('K', 8, 'plot', false));
 R = load(fullfile(here, 'data', 'cartpole_direct_ref.mat'));
@@ -60,8 +66,13 @@ relRangeH = (max(H) - min(H)) / max(abs(H));
 ok = chk(ok, relRangeH < 1e-9, ...
          sprintf('Hamiltonian constant along the arc: relative range %.2e', relRangeH));
 
-%% dH/du = 0 by CENTRED FINITE DIFFERENCE, perturbing u directly at a
-%% handful of sample times -- does not reuse the u* = -lam'G/2 formula.
+%% Arithmetic-consistency check, NOT an optimality test (see item 3 above):
+%% a CENTRED FINITE DIFFERENCE of H in u, evaluated at the stored u0 =
+%% out.U(k) = -lam'G/2, is 2*u0 + lam'G identically -- zero by construction
+%% for this exactly-quadratic H, regardless of whether (X, Lam) solve the
+%% true PMP. What a nonzero result WOULD catch is a mismatch between out.U
+%% and out.Lam/out.X (e.g. a stale or mis-indexed pairing), not a wrong
+%% extremal.
 du = 1e-4;
 idxFD = round(linspace(2, M-1, 7));
 worstFD = 0;
@@ -73,7 +84,8 @@ for k = idxFD
     worstFD = max(worstFD, abs((Hp - Hm)/(2*du)));
 end
 ok = chk(ok, worstFD < 1e-6, ...
-         sprintf('dH/du = 0 by finite difference: worst |dH/du| = %.2e (curvature d2H/du2 = 2)', worstFD));
+         sprintf(['arithmetic consistency of (U, Lam), not optimality: centred FD of ', ...
+                  '2u + lam''G = %.2e (identically zero by construction)'], worstFD));
 
 ok = chk(ok, out.missFlown < 1e-6, sprintf('flown control arrives: %.2e', out.missFlown));
 

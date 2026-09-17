@@ -3,7 +3,10 @@ function out = run_cartpole_pmp(opts)
 %
 %   Solve the cart-pole minimum-effort swing-up INDIRECTLY: build the
 %   Pontryagin boundary-value problem and shoot it with the shared multiple-
-%   shooting engine oc.ms_bvp (oclib; costate_common keeps a delegate).
+%   shooting engine oc.ms_bvp (oclib). This file needs nothing from
+%   orbit_transfer: costate_common keeps its own delegate (ms_bvp.m) for
+%   its own campaigns, but this demo calls oc.ms_bvp directly and adds only
+%   oclib to the path.
 %
 %   Four unknowns -- lam(0) -- against four terminal conditions, at fixed
 %   final time. The seed comes from the committed direct solution's defect
@@ -22,7 +25,14 @@ function out = run_cartpole_pmp(opts)
 %  opts                     struct (optional)       .K segments [8], .plot
 %                                                   [true when nargout = 0],
 %                                                   .engine solver handle
-%                                                   [@oc.ms_bvp]
+%                                                   [@oc.ms_bvp]; a caller
+%                                                   who instead passes the
+%                                                   costate_common delegate
+%                                                   (ms_bvp) must put
+%                                                   orbit_transfer/
+%                                                   costate_common on the
+%                                                   path themselves -- this
+%                                                   file no longer does
 %
 %% Outputs:
 %
@@ -38,7 +48,7 @@ function out = run_cartpole_pmp(opts)
 if nargin < 1, opts = struct(); end
 here = fileparts(mfilename('fullpath'));
 root = fileparts(fileparts(here));
-addpath(here, fullfile(root, 'oclib'), fullfile(root, 'orbit_transfer', 'costate_common'));
+addpath(here, fullfile(root, 'oclib'));
 d = @(f, v) fieldd(opts, f, v);
 K      = d('K', 8);
 engine = d('engine', @oc.ms_bvp);
@@ -55,8 +65,8 @@ xf = [0; pi; 0; 0];
 %  and the sign is fixed here by the same principle in scalar form -- the
 %  implied control u = -lam'G/2 must agree in sign with the control the
 %  direct solve actually used.
-[lamS, tS, dg] = oc.duals_to_costates(struct('scheme', 'trapezoid', 'mu', R.muDefect, ...
-                                             'tNodes', R.tN, 'velRows', 3:4));
+[lamS, tS] = oc.duals_to_costates(struct('scheme', 'trapezoid', 'mu', R.muDefect, ...
+                                         'tNodes', R.tN, 'velRows', 3:4));
 uImplied = zeros(1, numel(tS));
 Xs = interp1(R.tN, R.X.', tS, 'pchip').';
 for k = 1:numel(tS)

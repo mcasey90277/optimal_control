@@ -174,7 +174,7 @@ on their path to reach it)
 
 | file | what | used by |
 |---|---|---|
-| `ms_bvp.m` | Generic multiple-shooting BVP engine: problem as three closures (prop/rhs/terminal), block Jacobian from segment STMs, trust-region-dogleg, iterate guards. `ms_tfmin` (this folder) is its CR3BP min-time binding. **`opts.fixedTf`** (2026-08-14) drops the t_f unknown for fixed-time problems (min-energy / min-fuel catalogs); `ms_minenergy` is the first binding. Newton polish after an early fsolve exit (its ‖JᵀR‖ test fires at ‖R‖~1e-10 on short arcs). Self-demos: oscillator BVP, free and fixed t_f. **Junction contract (verified 2026-09-16):** `info.Y` returns the K junction STARTS (14 × K) with `info.tGrid` the K+1 times, and a seed's `Y` is read only in columns 1..K, so a 14 × K array fed back is lossless. A seed may carry K or K+1 columns (headers say so since 2026-09-16). | DRO (+ internal) |
+| `ms_bvp.m` | **DELEGATE** since 2026-09-16: the generic multiple-shooting BVP engine was promoted to the cross-folder library — `../../oclib/+oc/ms_bvp` (call it `oc.ms_bvp`) — when the cart-pole PMP-BVP demo (`collocation_examples/ex3_cart_pole_pmp`) became the second TOP-LEVEL consumer. This delegate keeps every costate_common caller working unchanged; the contract, the maths and the self-demos live with the implementation. Equivalence gate: `golden_cells` 20/20 **bit-identical** (z, ‖R‖ and iteration counts all to the last bit), the four-campaign ladder re-solve (HALO 4.551e-14, DPO 1.130e-14, HALO_HALO 3.478e-14, GTO 2.720e-14 max |Δt_f|), and `test_cartpole_pmp` 9/9. | DRO (+ internal), collocation_examples/ex3_cart_pole_pmp (delegates to `oclib`) |
 | `ms_tfmin.m` | Min-time wrapper around `ms_bvp` (pumpkyn tfMinProp/tfMinEoM closures, free-tf terminal set, opt-in conjugate test). MOVED here from `DRO_tulip/indirect` 2026-08-26 (used by every catalog campaign + the GTO probe); no delegate — callers self-bootstrap this folder (the `ms_bvp` precedent). Equivalence gate: `golden_cells` 20/20. | DRO, GTO |
 | `ms_tfmin_hom.m` | HOMOGENEOUS-chart minimum-time multiple shooting: the objective multiplier ρ free and (ρ, λ₀) on the unit sphere, H(t_f) = ρ + λᵀf = 0. In the normal chart the fast family's \|λ₀\| runs 46 → 1449 as thrust falls toward 72 mN; on the sphere the multipliers stay bounded and ρ → 0 (loss of normality) is a finite, visible event. `tests/test_ms_tfmin_hom`. | DRO |
 | `ss_bvp_accept.m` | **Generic single-shooting acceptance gate** (2026-08-14): the pipeline's third gate for costs with no pumpkyn twin — `ms_bvp` with K = 1 on the same closures, reporting the residual AT the seed, the move \|Δz\|, and `accepted = converged ∧ \|Δz\| < 1e-6`. First concrete form of the "acceptance-gate harness" TODO. | DRO |
@@ -254,6 +254,9 @@ No direct test (2026-09-16): `current_pool`, `capped_pool` (both exercised
 by `test_run_capped` and the pool tests), `assert_periodic_orbit`
 (exercised by `test_survey_family_bounds`). `duals_to_costates`
 is a delegate; the implementation is tested by `oclib/tests/test_duals_to_costates`.
+`ms_bvp` is a delegate too since 2026-09-16 (`oclib/+oc/ms_bvp`); its tests
+stayed here — `test_ms_bvp_extra` and `test_ms_bvp_fixedtf` call the delegate,
+which is what proves the forwarding as well as the engine.
 The campaign-code tests live in `DRO_tulip/indirect/tests`.
 
 Run the relevant tests plus `golden_cells` after touching an engine.

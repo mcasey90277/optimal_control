@@ -2,7 +2,7 @@ function [yEnd, PHI] = cartpole_pmp_prop(dt, y0, needSTM, p)
 %% Purpose:
 %
 %   Propagate the cart-pole PMP flow, with the 8x8 state-transition matrix
-%   on request -- the propagator contract costate_common/ms_bvp expects as
+%   on request -- the propagator contract oc.ms_bvp expects as
 %   prob.prop.
 %
 %   The variational equations are integrated ALONGSIDE the state (72
@@ -31,7 +31,7 @@ function [yEnd, PHI] = cartpole_pmp_prop(dt, y0, needSTM, p)
 %   cartpole_pmp_prop:collapse. A genuine programming error inside
 %   cartpole_pmp_rhs/rhs_with_stm (undefined variable, missing p field,
 %   dimension mismatch) is rethrown UNCHANGED, with its own identifier --
-%   ms_bvp's residual() does a bare catch on prob.prop, so relabelling
+%   oc.ms_bvp's residual() does a bare catch on prob.prop, so relabelling
 %   every error as "collapse" would make a real bug indistinguishable from
 %   a rejected iterate and surface only as mysterious non-convergence.
 %

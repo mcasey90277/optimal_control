@@ -3,7 +3,7 @@ function out = run_cartpole_pmp(opts)
 %
 %   Solve the cart-pole minimum-effort swing-up INDIRECTLY: build the
 %   Pontryagin boundary-value problem and shoot it with the shared multiple-
-%   shooting engine (costate_common/ms_bvp, or oclib's oc.ms_bvp).
+%   shooting engine oc.ms_bvp (oclib; costate_common keeps a delegate).
 %
 %   Four unknowns -- lam(0) -- against four terminal conditions, at fixed
 %   final time. The seed comes from the committed direct solution's defect
@@ -22,7 +22,7 @@ function out = run_cartpole_pmp(opts)
 %  opts                     struct (optional)       .K segments [8], .plot
 %                                                   [true when nargout = 0],
 %                                                   .engine solver handle
-%                                                   [@ms_bvp]
+%                                                   [@oc.ms_bvp]
 %
 %% Outputs:
 %
@@ -41,7 +41,7 @@ root = fileparts(fileparts(here));
 addpath(here, fullfile(root, 'oclib'), fullfile(root, 'orbit_transfer', 'costate_common'));
 d = @(f, v) fieldd(opts, f, v);
 K      = d('K', 8);
-engine = d('engine', @ms_bvp);
+engine = d('engine', @oc.ms_bvp);
 doPlot = d('plot', nargout == 0);
 
 R = load(fullfile(here, 'data', 'cartpole_direct_ref.mat'));

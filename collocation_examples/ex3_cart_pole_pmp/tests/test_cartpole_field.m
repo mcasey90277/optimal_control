@@ -5,9 +5,10 @@ function ok = test_cartpole_field()
 %   this pins cartpole_field against that example's own helpers:
 %     1. F + G*u reproduces cart_accel / pendulum_accel at a scatter of
 %        states and controls;
-%     2. the split is affine: G is the exact d(xdot)/du;
-%     3. the first two rows are the kinematics;
-%     4. it is complex-step safe (an imaginary perturbation propagates).
+%     2. G is the exact d(xdot)/du, verified against independent helpers;
+%     3. the helpers are truly affine in u (second differences vanish);
+%     4. the first two rows are the kinematics;
+%     5. it is complex-step safe (an imaginary perturbation propagates).
 %
 %% Inputs:
 %
@@ -29,7 +30,7 @@ addpath(fullfile(fileparts(here), 'ex2_cart_pole_swing_up', 'try2'));
 p = struct('m1', 5, 'm2', 1, 'L', 2, 'g', 9.8);
 
 rngWas = rng(11);  restore = onCleanup(@() rng(rngWas));
-worst = 0;  worstAffine = 0;
+worst = 0;  worstGRef = 0;  worstAffine2 = 0;
 for k = 1:25
     x = [2*randn; pi*randn; randn; 2*randn];
     u = 50*randn;
@@ -38,12 +39,28 @@ for k = 1:25
     a1 = cart_accel(x(2), x(4), u, p.L, p.m1, p.m2, p.g);
     a2 = pendulum_accel(x(2), x(4), u, p.L, p.m1, p.m2, p.g);
     worst = max(worst, max(abs(dx(3:4) - [a1; a2])));
-    % affine in u: the difference quotient in u is exactly G
-    [F2, ~] = cartpole_field(x, p);
-    worstAffine = max(worstAffine, max(abs((F2 + G*(u+1)) - (dx + G))));
+
+    % G is the true control derivative (independent reference)
+    a1p = cart_accel(x(2), x(4), u+1, p.L, p.m1, p.m2, p.g);
+    a1m = cart_accel(x(2), x(4), u,   p.L, p.m1, p.m2, p.g);
+    a2p = pendulum_accel(x(2), x(4), u+1, p.L, p.m1, p.m2, p.g);
+    a2m = pendulum_accel(x(2), x(4), u,   p.L, p.m1, p.m2, p.g);
+    Gref = [0; 0; a1p - a1m; a2p - a2m];
+    worstGRef = max(worstGRef, max(abs(G - Gref)));
+
+    % Helpers are truly affine: second difference should vanish
+    a1pp = cart_accel(x(2), x(4), u+1, p.L, p.m1, p.m2, p.g);
+    a1zm = cart_accel(x(2), x(4), u,   p.L, p.m1, p.m2, p.g);
+    a1mm = cart_accel(x(2), x(4), u-1, p.L, p.m1, p.m2, p.g);
+    a2pp = pendulum_accel(x(2), x(4), u+1, p.L, p.m1, p.m2, p.g);
+    a2zm = pendulum_accel(x(2), x(4), u,   p.L, p.m1, p.m2, p.g);
+    a2mm = pendulum_accel(x(2), x(4), u-1, p.L, p.m1, p.m2, p.g);
+    worstAffine2 = max(worstAffine2, max(abs([a1pp - 2*a1zm + a1mm; ...
+                                              a2pp - 2*a2zm + a2mm])));
 end
 ok = chk(ok, worst < 1e-12, sprintf('F + G*u equals the example helpers (worst %.1e)', worst));
-ok = chk(ok, worstAffine < 1e-12, sprintf('the split is exactly affine in u (worst %.1e)', worstAffine));
+ok = chk(ok, worstGRef < 1e-12, sprintf('G is the exact d(xdot)/du from independent helpers (worst %.1e)', worstGRef));
+ok = chk(ok, worstAffine2 < 1e-12, sprintf('the helpers are truly affine in u: second difference (worst %.1e)', worstAffine2));
 
 x = [0.3; 1.1; -0.7; 0.4];
 [F, G] = cartpole_field(x, p);

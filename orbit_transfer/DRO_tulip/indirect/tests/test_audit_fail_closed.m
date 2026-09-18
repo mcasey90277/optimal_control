@@ -25,8 +25,8 @@ A = audit_phase_catalog(catMat, setfield(base, 'cappedWrap', @(realCap) @(vararg
 ok = chk(ok, A.nBad == 1 && contains(A.rows(1).problem, 'hypothesis'), sprintf('gates failure -> BAD (%s)', A.rows(1).problem));
 
 % ---- a recomputed gate that is not positive is BAD ------------------------
-A = audit_phase_catalog(catMat, setfield(base, 'cappedWrap', @(realCap) @(varargin) tampered(realCap, varargin, 'minLamV', -1))); %#ok<SFLD>
-ok = chk(ok, A.nBad == 1 && contains(A.rows(1).problem, 'lam_v'), sprintf('min|lam_v| <= 0 -> BAD (%s)', A.rows(1).problem));
+A = audit_phase_catalog(catMat, setfield(base, 'cappedWrap', @(realCap) @(varargin) tampered(realCap, varargin, 'minLamVBound', 1e-7))); %#ok<SFLD>
+ok = chk(ok, A.nBad == 1 && contains(A.rows(1).problem, 'lam_v'), sprintf('H2 lower bound under the floor (sampled minimum untouched) -> BAD (%s)', A.rows(1).problem));
 
 % ---- a polished root that moved away from the stored one is BAD -----------
 A = audit_phase_catalog(catMat, setfield(base, 'cappedWrap', @(realCap) @(varargin) movedRoot(realCap, varargin))); %#ok<SFLD>

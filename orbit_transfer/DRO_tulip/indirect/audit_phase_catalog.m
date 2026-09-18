@@ -33,6 +33,7 @@ function A = audit_phase_catalog(catMat, opts)
 %   .gateKm [100] .gateVms [10] gross flight screens, .tolFlyKm [1] the
 %   ENDPOINT-REPRODUCTION gate (see below), .tolDz [1e-6] .idx [] entries to audit
 %   (default all), .out '' save path, .pool [capped_pool()], .tolMove [1e-6],
+%   .hypFloor [1e-5] the certifier's H2/H3 floor on the whole-arc lower bounds,
 %   .cappedWrap [] @(realCap) -> a replacement fence (tests/test_audit_fail_closed)
 %
 %% Outputs:
@@ -67,6 +68,7 @@ pool = d('pool', capped_pool());
 cap = @capped;
 if isfield(opts, 'cappedWrap') && ~isempty(opts.cappedWrap), cap = opts.cappedWrap(@capped); end
 tolMove = d('tolMove', 1e-6);               % how far the re-polish may move a stored root
+hypFloor = d('hypFloor', 1e-5);             % H2/H3 floor on the between-sample bounds (as certify_root)
 
 L = load(catMat);  fn = fieldnames(L);  c = L.(fn{1});
 assert(numel(c.sheets) == 1, 'this audit handles a single-sheet phase catalog');
@@ -167,12 +169,13 @@ for kk = idx(:)'
         end
     end
     [okG, g] = cap(pool, 900, @mintime_hypothesis_gates, 1, z8, rv0(1:6), Tnd, cnd, mu, struct());
-    if ~(okG && isstruct(g) && all(isfield(g, {'dimS', 'minLamV', 'minQmt', 'h6Ok'})))
+    if ~(okG && isstruct(g) && all(isfield(g, {'dimS', 'minLamVBound', 'minQmtBound', 'h6Ok'})))
         bad{end+1} = 'hypothesis gates failed or timed out';
     else
         r.dimSNow = g.dimS;
-        if ~(isscalar(g.minLamV) && g.minLamV > 0), bad{end+1} = sprintf('H2: min|lam_v| = %g is not positive', g.minLamV); end
-        if ~(isscalar(g.minQmt)  && g.minQmt  > 0), bad{end+1} = sprintf('H3: min Q_mt = %g is not positive', g.minQmt); end
+        % the certifier's policy: the LOWER BOUND over the whole arc, above the floor
+        if ~(isscalar(g.minLamVBound) && g.minLamVBound > hypFloor), bad{end+1} = sprintf('H2: lower bound of min|lam_v| over the arc is %g, not above %g', g.minLamVBound, hypFloor); end
+        if ~(isscalar(g.minQmtBound)  && g.minQmtBound  > hypFloor), bad{end+1} = sprintf('H3: lower bound of min Q_mt over the arc is %g, not above %g', g.minQmtBound, hypFloor); end
         if ~(isscalar(g.dimS)    && g.dimS == 1),   bad{end+1} = sprintf('dim S = %g, not 1', g.dimS); end
         if ~(isscalar(g.h6Ok)    && logical(g.h6Ok)), bad{end+1} = 'H6 does not hold'; end
         if isfinite(r.dimSStored) && r.dimSStored ~= r.dimSNow

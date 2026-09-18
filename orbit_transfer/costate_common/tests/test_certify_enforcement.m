@@ -110,7 +110,11 @@ seam = { ...
     struct('LM', struct('certified', 'yes'))      , 'lift_margin', 'LM.certified = ''yes''';
     struct('CS', struct('nZero', -1))             , 'malformed',   'CS.nZero = -1';
     struct('CS', struct('clear', true, 'nUnresolved', 1)), 'inconsistent', 'CS.clear = true with nUnresolved = 1';
-    struct('CS', struct('clear', 1))              , 'malformed',   'CS.clear = 1 (double, not logical)'};
+    struct('CS', struct('clear', 1))              , 'malformed',   'CS.clear = 1 (double, not logical)';
+    struct('g',  struct('minLamVBound', 1e-7))    , 'H2',          'g.minLamVBound = 1e-7 (positive, but under the floor)';
+    struct('g',  struct('minQmtBound', -1e-3))    , 'H3',          'g.minQmtBound = -1e-3 (the sampled minimum is fine; the bound is not)';
+    struct('CS', struct('multiplicity', 1))       , 'inconsistent', 'CS.multiplicity = 1 with clear = true and nZero = 0';
+    struct('CS', struct('nNearMiss', 0))          , 'override',    'a HARMLESS override still cannot certify (the seam must not ship)'};
 for k = 1:size(seam, 1)
     o = base;  o.override = seam{k,1};
     Ck = certify_root(seed, rv0(1:6), rvf(1:6), B, o);

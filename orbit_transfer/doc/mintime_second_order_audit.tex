@@ -320,12 +320,26 @@ factor, and its sign changes are the same events.
 
 \section{What a sufficient certificate needs}\label{sec:hyp}
 
-The BCT sufficiency theorem for a normal extremal with a point target and free
-final time (BCT 2007 Thm.~3.x in their numbering; the statement in Agrachev--Sachkov
-\S21.3 is equivalent) reads: \emph{if the strong Legendre condition holds along
-$[0,\tf]$ and there is no conjugate time in $(0,\tf]$, then the extremal
-trajectory is a strict strong (i.e.\ $C^0$-topology) local minimizer among
-trajectories with the same endpoints.} Applied to \eqref{eq:dyn6} via
+The theorem, as BCT state it (checked against the paper, 2026-09-18; the
+earlier ``Thm.~3.x'' was not an identifiable statement). Their standing
+assumption is that the set $U$ of control values is \emph{open} in a manifold
+$N$ (``the bang-bang case is not treated here''), with $N=S^2$, $U=N$ for orbit
+transfer (their footnote~1). Under
+\textbf{(L)} the strong Legendre condition along the extremal and
+\textbf{(S)} \emph{strong regularity}: the control is of corank one on
+\emph{every subinterval} $[t_1,t_2]\subset[0,T]$,
+\textbf{Theorem~2.12} reads: \emph{the first geometric conjugate time coincides
+with the first conjugate time $t_c$; the trajectory is locally optimal on
+$[0,t_c)$ in the $L^\infty$ topology, and in the $C^0$ topology whenever the
+extremal is normal; for $t>t_c$ it is not locally optimal in $L^\infty$ topology
+on $[0,t]$.} (Theorem~1.13 gives the same sufficiency for a corank-one extremal.)
+For a normal extremal with free final time the geometric conjugate times are
+computed by their \emph{Test~3} (\S2.3, item (1)(b)): a zero of
+$\det(\delta x_1,\dots,\delta x_{n-1},\,f)$ over the Jacobi fields tangent to
+$\{H_r=0\}$ --- which is the instrument's determinant, \S\ref{sec:equiv}.
+Two words of the sentence that stood here were not the theorem's: it said
+``\emph{strict} strong local minimizer''; BCT conclude \emph{local optimality in
+the $C^0$ topology}, without ``strict''. Applied to \eqref{eq:dyn6} via
 \S\ref{sec:reductions}, each hypothesis becomes a per-entry statement:
 
 \begin{center}\small
@@ -334,13 +348,102 @@ trajectories with the same endpoints.} Applied to \eqref{eq:dyn6} via
 hypothesis & what it means here & status / gate \\
 \midrule
 H1 normal extremal & a lift with $\lambda_0=1$ exists & \textbf{have} (the BVP is solved with $\lambda_0=1$ to $10^{-10}$; pumpkyn agrees to $|\Delta z|\sim10^{-9}$). Abnormal lifts of the same trajectory: \textbf{excluded by the $\dim S=1$ probe} (\S\ref{sec:abnormal}), built and passing on the golden cells \\
-H2 strong Legendre & $H_{\alpha\alpha}|_{TS^2}=\tfrac{T}{m}|\lv|\,I\succ0$, i.e.\ $|\lv(t)|>0$ on $[0,\tf]$ & \textbf{gated} (\texttt{mintime\_hypothesis\_gates}, dense flight): golden cells $\min|\lv|=0.091$ (dro), $0.012$ (halo), $0.143$ (dpo) \\
-H3 all-burn is the PMP control & $Q_{mt}(t)>0$ on $[0,\tf]$, eq.~\eqref{eq:Qmt} & \textbf{gated}: $\min Q_{mt}=0.099$, $0.045$, $0.178$; this is \texttt{tfMinEoM}'s own switching function, so it also certifies that the event-driven propagator flew no switch \\
+H2 strong Legendre & $H_{\alpha\alpha}|_{TS^2}=\tfrac{T}{m}|\lv|\,I\succ0$, i.e.\ $|\lv(t)|>0$ on $[0,\tf]$ & \textbf{gated with a margin, over the whole arc} (2026-09-18, \S\ref{sec:gaps}): a lower bound on $\min_{[0,\tf]}|\lv|$ must exceed $10^{-5}$. Golden cells, sampled: $\min|\lv|=0.091$ (dro), $0.012$ (halo), $0.143$ (dpo) \\
+H3 all-burn is the PMP control & $Q_{mt}(t)>0$ on $[0,\tf]$, eq.~\eqref{eq:Qmt} & \textbf{gated with a margin, over the whole arc} (same bound and floor): $\min Q_{mt}=0.099$, $0.045$, $0.178$; this is \texttt{tfMinEoM}'s own switching function, so it also certifies that the event-driven propagator flew no switch \\
 H4 smoothness / no collision & $m>0$, $r$ away from the primaries & \textbf{have} (\texttt{true\_min\_altitude} screen) \\
 H5 no conjugate time on $(0,\tf]$ & $\det[\Phi_{rv}P,f_{rv}]\neq0$ on $(0,\tf]$ & \textbf{assessed}, not proved: sign changes at $K$ junctions (now including $\tf$); even-multiplicity zeros and pairs within one segment are invisible \\
 \bottomrule
 \end{tabular}
 \end{center}
+
+\subsection{What the theorem does not cover, and what is now checked (2026-09-18)}\label{sec:gaps}
+Reading the source, and the two reviews of 2026-09-17 (FINDINGS 78, 80), leave
+five items. Each is stated with what was done about it.
+
+\paragraph{(a) The throttle is outside BCT's setting.}
+BCT assume an open control set; theirs is the problem with the control on
+$S^2$, which is ours \emph{after} the throttle is fixed at $s=1$
+(\S\ref{sec:reductions}). Against competitors that throttle, $s\in[0,1]$ is a
+closed set with the extremal on its boundary, and Theorem~2.12 does not speak.
+The theory that does is the second-order sufficiency theory for controls with a
+\emph{continuous} component entering nonlinearly and a \emph{bang-bang}
+component entering linearly (Osmolovskii--Maurer 2006, 2009; their 2012
+monograph; Maurer--Osmolovskii 2004 for the time-optimal bang-bang case). Our
+bang-bang component has \emph{no switch}: under the \emph{strict bang-bang
+property}, here $Q_{mt}>0$ on all of $[0,\tf]$, the critical cone contains no
+switching-time variation and the quadratic form reduces to the smooth one in
+the direction. \textbf{That reduction is cited, not instantiated here}: their
+continuous component is unconstrained in $\mathbb{R}^m$ and ours lives on
+$S^2$, so a chart argument is owed. What is exact and checkable is the gap
+\[
+ H(s,\alpha)-H(1,\alpha^{*})\;=\;T\,Q_{mt}\,(1-s)\;+\;\frac{s\,T\,|\lv|}{2m}\,\|\alpha-\alpha^{*}\|^{2},
+\]
+whose two coefficients are H3 and H2: uniform lower bounds on them are the
+quantitative strict-bang and Legendre statements.
+
+\paragraph{(b) H2 and H3 were sampled positivity with no margin.}
+The gate was $\min_k|\lv(t_k)|>0$ and $\min_k Q_{mt}(t_k)>0$: it passed
+$10^{-300}$, passed values below the costates' own numerical error
+($\sim10^{-6}$ in $\lm$ on the flown arc), and said nothing between samples.
+Both now use one slope bound. In the CR3BP
+$\dot\lambda_v=-\lr-(\partial_v f_v)^{\!\top}\lv$ with
+$\|\partial_v f_v\|=2$ (Coriolis), so
+$\big|\tfrac{d}{dt}|\lv|\big|\le|\lr|+2|\lv|$; and on an all-burn arc, with
+$\dot m=-T/c$ and $\dot\lambda_m=-T|\lv|/m^{2}$, the two mass terms of
+$\dot Q_{mt}$ cancel:
+\[
+ \dot Q_{mt}\;=\;\frac{1}{m}\,\frac{d|\lv|}{dt}\qquad\text{exactly.}
+\]
+With $L_k$ the larger of the slope bound at the two ends of a sample interval,
+$\min_{[t_k,t_{k+1}]}v\ \ge\ \tfrac12(v_k+v_{k+1})-\tfrac12L_k\,\Delta t_k$
+(\texttt{between\_sample\_bound}). The certifier and the catalog audit gate the
+\emph{bound} above $10^{-5}$, ten times the measured $\lm$ uncertainty. On the
+$70$\,mN library ($576$ entries, $\sim7000$ samples per flight, steps
+$\le0.0035$) the bound sits within $1\%$ of the sampled minimum; the smallest
+bounds are $0.2785$ ($|\lv|$) and $0.3126$ ($Q_{mt}$). This is an estimate on a
+finely sampled flight, not a validated enclosure: $L_k$ is taken at the
+interval's ends.
+
+\paragraph{(c) Strong regularity (S) is checked on the whole arc only.}
+$\dim S=1$ (\S\ref{sec:abnormal}) is corank one on $[0,\tf]$. BCT's (S) asks
+it on every subinterval; Theorem~2.12, which identifies the geometric
+conjugate time we compute with the first conjugate time, is stated under (S).
+\textbf{Not checked.} It is checkable: the lift-space rank on prefixes
+$[0,t]$ and on a few interior windows, by the same construction.
+
+\paragraph{(d) The certificate is for FIXED phases.}
+The endpoints are points, $x(0)=x_D(s_D)$ and $x_{rv}(\tf)=x_A(s_A)$, and the
+variation space of the conjugate test is that of the point-to-point problem.
+Nothing above addresses sliding an endpoint along its orbit, which is the
+question a phase catalog is consulted for; a saddle of the free-phase problem
+passes by construction. The first-order part is free. With
+$H=1+\lambda\!\cdot\!f$ and $\lambda\!\cdot\!f=-1$, $\lambda$ is the gradient
+of the cost-to-go, and
+\[
+ \frac{\partial\tf}{\partial s_D}=+\lambda_{rv}(0)\cdot x_D'(s_D),\qquad
+ \frac{\partial\tf}{\partial s_A}=-\lambda_{rv}(\tf)\cdot x_A'(s_A)
+\]
+(\texttt{phase\_sensitivity}; the mass costate does not enter: $m(0)$ does not
+depend on the phase and $m(\tf)$ is free). Two uses.
+\emph{Cross-check X3} (\texttt{phase\_transversality\_check}): re-solve the
+transfer at $s\pm2\times10^{-4}$ and difference the two flight times --- an
+oracle that never reads a costate. On the $70$\,mN library, twelve sampled
+derivatives agree with the formula to between $4\times10^{-8}$ and
+$9\times10^{-4}$ relative. It is the first check of $\lambda(\tf)$ against
+anything other than the solve that produced it.
+\emph{Stationarity:} an entry is a first-order candidate for the
+orbit-to-orbit minimum where both sensitivities vanish. None of the $576$ is:
+the fastest, $16.226$\,d, has $(\partial_{s_D},\partial_{s_A})\tf=(-0.92,-2.05)$
+d per unit phase, so the free-phase minimum lies between grid points. The
+second-order free-phase condition (endpoint tangent and curvature terms in the
+accessory problem) is a separate problem and is not attempted.
+
+\paragraph{(e) H5 remains assessed.}
+Unchanged: candidate-triggered sampling with a policy floor; the uncovered
+initial interval is reported, not bounded, and the short-time sign of the
+determinant has not been derived. Two consumer defects were closed: a scan
+reporting \texttt{multiplicity}${}>0$ with its other counts zero certified,
+and the certifier's test seam could return a shippable certificate.
 
 \subsection{On normality}\label{sec:abnormal}
 An abnormal extremal is a solution of the same BVP with $\lambda_0=0$, i.e.\ with
@@ -451,11 +554,17 @@ having been skipped).}
 With \texttt{mintime\_hypothesis\_gates} (H1$'$, H2, H3 on the dense flight,
 passing on the golden cells) the statement becomes: \emph{the entry is a
 normal extremal admitting no abnormal lift, with the strong Legendre condition
-and the all-burn condition holding along the whole flown arc, and no sign
-change of the BCT conjugate determinant at the sampled times on $(0,\tf]$.}
-That satisfies every hypothesis of the BCT sufficiency theorem except that H5
-is sampled rather than proved; it is the sentence a methods paper can carry,
-with the sampling caveat stated. Running the gates over the catalogs is a
+and the all-burn condition holding with a margin over the whole flown arc, and
+no sign change of the BCT conjugate determinant at the sampled times on
+$(0,\tf]$.}
+\emph{Revised 2026-09-18.} That is what is measured. It is \emph{not} every
+hypothesis of Theorem~2.12: H5 is sampled rather than proved, (S) is checked on
+the whole arc only, and the throttle puts the original problem outside BCT's
+open-control setting (\S\ref{sec:gaps}). The sentence a methods paper can carry
+is: \emph{each entry is a normal extremal of the fixed-phase all-burn problem
+that passes a numerical assessment of the hypotheses of BCT's Theorem~2.12; if
+those hypotheses hold it is locally optimal in the $C^0$ topology among
+all-burn trajectories with the same endpoints.} Running the gates over the catalogs is a
 one-hour campaign (one flight per entry) and is the natural next step.
 
 \section{The fixed-$\tf$ line, for contrast}\label{sec:fixedtf}
@@ -494,7 +603,21 @@ the statement of \S\ref{sec:meaning}.
 \begin{itemize}
 \item B.~Bonnard, J.-B.~Caillau, E.~Tr\'elat, ``Second order optimality
 conditions in the smooth case and applications in optimal control,''
-\emph{ESAIM: COCV} 13 (2007) 207--236.
+\emph{ESAIM: COCV} 13(2) (2007) 207--236, doi:10.1051/cocv:2007012. Theorems 1.13 and 2.12;
+the free-final-time Test~3 of \S2.3.
+\item N.~P.~Osmolovskii, H.~Maurer, ``Second order optimality conditions for
+controls with continuous and bang-bang components,'' in \emph{Systems, Control,
+Modeling and Optimization}, IFIP, Springer, 2006, pp.~297--307,
+doi:10.1007/0-387-33882-9\_28.
+\item N.~P.~Osmolovskii, H.~Maurer, ``Second order sufficient optimality
+conditions for a control problem with continuous and bang-bang control
+components: Riccati approach,'' in \emph{System Modeling and Optimization}, IFIP
+AICT, Springer, 2009, pp.~411--429, doi:10.1007/978-3-642-04802-9\_24.
+\item N.~P.~Osmolovskii, H.~Maurer, \emph{Applications to Regular and Bang-Bang
+Control}, SIAM, 2012, doi:10.1137/1.9781611972368.
+\item H.~Maurer, N.~P.~Osmolovskii, ``Second order sufficient conditions for
+time-optimal bang-bang control,'' \emph{SIAM J.\ Control Optim.} 42(6) (2004)
+2239--2263, doi:10.1137/S0363012902402578.
 \item A.~Agrachev, Y.~Sachkov, \emph{Control Theory from the Geometric
 Viewpoint}, Springer 2004, Ch.~20--21.
 \item R.~Vinter, \emph{Optimal Control}, Birkh\"auser 2000 (endpoint

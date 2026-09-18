@@ -5461,3 +5461,108 @@ With no arguments it PLANS and creates nothing; `struct('go', true)` builds
 against itself, on four planted differences, on relabelled families and on
 a foreign grid, and the adoption and plan mode. The build itself has not
 been run yet.
+
+## 80. Track A: the costates tested against something that is not the costates; H2/H3 with a margin; two certifier holes closed; the theorem read (2026-09-18)
+
+Section 78 asked whether the local-optimality tests are sufficient and
+listed what would close the gap cheaply. Four items, each test-first.
+
+### X3, the phase-transversality cross-check
+
+In the library's convention (`H = 1 + lam.f`, normal chart `lam.f = -1`) the
+costate is the gradient of the cost-to-go, so for endpoints sliding along
+their orbits
+
+    dT/ds_D = + lam_rv(0)   . x_D'(s_D)
+    dT/ds_A = - lam_rv(t_f) . x_A'(s_A)
+
+(`costate_common/phase_sensitivity`; the mass costate does not enter). The
+sign and the transposes are pinned by an oracle with no orbit in it: the
+minimum-time single integrator, `T = |x_f - x_0|`, where the formula matches
+a numerical derivative of `T` to 1e-8 (`tests/test_phase_sensitivity`).
+
+`indirect/phase_transversality_check` applies it to a catalog. On the 70 mN
+library of record:
+
+- **The exact test.** Re-solve the transfer at `s +/- 2e-4` in each phase
+  and difference the two flight times; no costate is read. Twelve sampled
+  derivatives (six cells, both phases): relative error 4e-8 to 9e-4, verdict
+  PASS. This is the first check of `lam(t_f)` against anything but the solve
+  that produced it. The verdict is three-valued -- a re-solve that does not
+  converge is UNRESOLVED, not FAIL (two did not at the first attempt; a retry
+  at half the offset with a longer budget resolved both).
+- **The grid is the limit in arrival phase, not the costates.** Against the
+  sheet's own central differences the arrival sensitivity looked 20% off;
+  against the exact re-solve it is right to 5 digits. At 24 arrival phases
+  the flight time is under-resolved along `s_A` (a 7-petal tulip): trapezoid
+  edge residuals have a median of 311 min, against 0.5 min along `s_D`. The
+  arrival edge map is returned and not judged.
+- **Family labels hide jumps.** Along departure phase, 43 of 576 edges have
+  a residual above 10 min -- the two cells are not neighbours on one smooth
+  branch -- and **33 of the 43 sit inside one family label**. Column 15
+  (sA 0.6587) jumps by 4 to 7 days between adjacent departure phases. This
+  is the measured form of section 78's "identity by t_f alone": the family
+  map attaches by flight time within 0.02 d and cannot see these.
+  `costate_common/phase_edge_residuals` is the instrument; it costs nothing.
+- **No entry is a free-phase optimum.** The fastest entry, (1,3), 16.226 d,
+  has `(dT/ds_D, dT/ds_A) = (-0.92, -2.05)` d per unit phase; the entry
+  nearest stationarity in both phases, (16,3), 16.600 d, still has
+  (-0.60, -0.21). The orbit-to-orbit minimum lies between grid points, and
+  the sensitivities say which way. A free-phase polish (two more unknowns,
+  the two transversality equations) is the natural next step.
+
+Result file: `indirect/results/phase_transversality_70mN_24x24.mat`.
+
+### H2 and H3 with a margin, over the whole arc
+
+The gate was `min_k |lam_v(t_k)| > 0` and `min_k Q_mt(t_k) > 0`: it passed
+1e-300, passed values below the flight's own lambda_m error, and said
+nothing between samples (FINDINGS 30 speaks of a 1e-6 gate the certifier
+never had). One slope bound now covers both: in the CR3BP
+`|d|lam_v|/dt| <= |lam_r| + 2|lam_v|`, and on an all-burn arc the two mass
+terms of `dQ_mt/dt` cancel, leaving `dQ_mt/dt = (d|lam_v|/dt)/m` exactly.
+`costate_common/between_sample_bound` turns samples plus a slope bound into
+a lower bound over the interval (oracle: `1.2 + cos 3t`, true minimum 0.2
+between samples; the coarse sampled minimum 0.2086 overstates it, the bound
+does not). `mintime_hypothesis_gates` reports `.minLamVBound .minQmtBound
+.dtMax`; `certify_root` and `audit_phase_catalog` gate the BOUNDS above
+`hypFloor` = 1e-5. Measured on all 576 entries (about 7000 samples per
+flight, steps <= 0.0035): the bound is within 1% of the sampled minimum,
+smallest bounds 0.2785 and 0.3126, so no entry moves. It is an estimate on
+a finely sampled flight, not a validated enclosure.
+
+### Two holes in the certifier, found by mutation and shown live
+
+Injected through the existing harness (`test_certify_enforcement`):
+`multiplicity = 1` with every other dense-scan count zero returned
+"certified"; and ANY test-seam override returned "certified", with nothing
+in the certificate recording it. Now `multiplicity == 0` is part of the
+scan's consistency test (it counts located zeros of corank >= 2, so it can
+be nonzero only when `nZero` is; all 576 entries carry 0), and a non-empty
+override makes the result DIAGNOSTIC ONLY.
+
+### The theorem, read from the source
+
+`doc/mintime_second_order_audit.tex` cited "BCT 2007 Thm. 3.x". The paper
+was read (ESAIM COCV 13(2) 207-236). It is **Theorem 2.12** (with 1.13),
+under (L) strong Legendre and (S) strong regularity = corank one on EVERY
+subinterval; the free-final-time normal case is their **Test 3**, a zero of
+`det(dx_1..dx_{n-1}, f)`, which IS the instrument's determinant. Three
+corrections: the conclusion is "locally optimal in the C0 topology", not
+"strict"; BCT assume an OPEN control set and say the bang-bang case is not
+treated -- their orbit-transfer control lives on S^2, which is our problem
+only after the throttle is fixed at 1; and (S) is checked here on the whole
+arc only. The throttle case belongs to Osmolovskii-Maurer's theory of
+controls with continuous and bang-bang components (2006, 2009, SIAM 2012;
+references verified through Crossref), cited in the new subsection "What the
+theorem does not cover, and what is now checked" as the framework, NOT instantiated (their continuous component is in R^m, ours on
+S^2). The certificate sentence was rewritten to say what is measured.
+
+### Still open on this track
+
+Strong regularity on subintervals (checkable: lift-space rank on prefixes);
+the short-time sign of the determinant and a bound on the uncovered prefix;
+an independent accessory-problem inertia test; the free-phase second-order
+condition; validated enclosures if a theorem is ever wanted. And one to
+act on: the 43 departure-phase jumps should be reconciled with the family
+map before the map is trusted for anchoring decisions.

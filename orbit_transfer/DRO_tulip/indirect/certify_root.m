@@ -78,6 +78,8 @@ function C = certify_root(seed, rv0, rvf, B, opts)
 %   with lift_margin's liftTol), .liftMarginMin [10] Eckart-Young
 %   margin, .relTolPair [1e-12 1e-9] the two adjoint integration settings
 %   the margin is measured between,
+%   .hypFloor [1e-5] floor on the H2/H3 lower bounds over the whole arc
+%   (min|lam_v|, min Q_mt; ten times the flight's lambda_m uncertainty),
 %   .h6MarginMin [1] required (c/T)/lambda_m(0) ratio, .moonKmMin [1900]
 %   .earthKmMin [6600] flight clearances (validate_flight),
 %   .conjSpectrum [true] run the dense scan, .conjNSub [8] its samples per
@@ -87,7 +89,9 @@ function C = certify_root(seed, rv0, rvf, B, opts)
 %   injects a wrong field through these),
 %   .override [struct()] TEST SEAM: fields .PW .g .LM .CS whose members
 %   overwrite the corresponding instrument outputs after they are computed,
-%   so each gate can be made the first failing one and fed malformed data
+%   so each gate can be made the first failing one and fed malformed data.
+%   ANY override makes the result DIAGNOSTIC ONLY (C.ok false): a root
+%   certified through the seam must never be packaged
 %   (Astra review #3). Warns loudly; never set it in production,
 %   .nSamp [200] .rankTol [1e-8] .sA .sD (recorded, not used)
 %
@@ -163,6 +167,7 @@ h6MarginMin = d('h6MarginMin', 1);
 tolH = d('tolH', 1e-6);  tolLamMf = d('tolLamMf', 1e-6);
 tolAdj = d('tolAdj', 1e-7);  tolGap = d('tolGap', 1e-12);  tolThrottle = d('tolThrottle', 1e-10);
 tolField = d('tolField', 1e-10);  tolLift = d('tolLift', 1e-6);  liftMarginMin = d('liftMarginMin', 10);
+hypFloor = d('hypFloor', 1e-5);                 % H2/H3: floor on the between-sample lower bounds
 relPair = d('relTolPair', [1e-12 1e-9]);
 doSpectrum = d('conjSpectrum', true);  conjNSub = d('conjNSub', 8);  conjOpts = d('conjOpts', struct());
 pwOpts = d('pwOpts', struct());  gatesOpts = d('gatesOpts', struct());
@@ -379,6 +384,22 @@ for kg = 1:3
 end
 if ~(gv(1) > 0), C.reason = sprintf('min|lam_v| = %.2e not > 0', gv(1)); C.wallSec = toc(t0); return, end
 if ~(gv(2) > 0), C.reason = sprintf('min Q_mt = %.2e not > 0', gv(2));   C.wallSec = toc(t0); return, end
+% H2 AND H3 WITH A MARGIN, OVER THE WHOLE ARC. "> 0" on a sampled minimum
+% passed 1e-300, passed values under the costates' own numerical error, and
+% said nothing about the gaps between samples. The gate is now on the LOWER
+% BOUND over [0, t_f] (between_sample_bound) and the floor is ten times the
+% measured lambda_m uncertainty of the flight, 1e-6 (FINDINGS 59, 80).
+bounds = {'minLamVBound', 'H2', 'min|lam_v|', hypFloor;  'minQmtBound', 'H3', 'min Q_mt', hypFloor};
+for kb = 1:2
+    if ~isfield(g, bounds{kb, 1}), C.reason = ['gates omitted ' bounds{kb, 1}]; C.wallSec = toc(t0); return, end
+    [okb, vb] = scalar_verdict(g.(bounds{kb, 1}));
+    if ~okb, C.reason = sprintf('gate %s is not a real finite scalar', bounds{kb, 1}); C.wallSec = toc(t0); return, end
+    if ~(vb > bounds{kb, 4})
+        C.reason = sprintf('%s: the lower bound of %s over the whole arc is %.2e, not above the floor %.0e', bounds{kb, 2}, bounds{kb, 3}, vb, bounds{kb, 4});
+        C.wallSec = toc(t0);  return
+    end
+    C.(bounds{kb, 1}) = vb;
+end
 if gv(3) ~= 1,   C.reason = sprintf('dim S = %g (abnormal lift)', gv(3)); C.wallSec = toc(t0); return, end
 % dim S = 1 is only as good as (a) the accepted lift's own residual, (b) the
 % independent field's Hamiltonian residual and (c) the Eckart-Young
@@ -459,7 +480,11 @@ if doSpectrum
             C.reason = sprintf('dense scan: %s is not a scalar logical (malformed)', f2{1});  C.wallSec = toc(t0);  return
         end
     end
-    consistent = CS.clear == (CS.testable && CS.nZero == 0 && CS.nUnresolved == 0 && CS.nInterior == 0);
+    % multiplicity counts located zeros of corank >= 2, so it can be nonzero
+    % only when nZero is: a "clear" scan reporting one is an inconsistent
+    % record. It was validated as a count and then left out of this test, so
+    % multiplicity = 1 with the other counts zero certified (FINDINGS 80).
+    consistent = CS.clear == (CS.testable && CS.nZero == 0 && CS.nUnresolved == 0 && CS.nInterior == 0 && CS.multiplicity == 0);
     if ~consistent, C.reason = 'dense scan: .clear is inconsistent with its counts (malformed)'; C.wallSec = toc(t0); return, end
     C.conjDense = struct('nInterior', CS.nInterior, 'nInteriorCand', CS.nInteriorCand, ...
                          'nEndCand', CS.nEndCand, 'nStart', CS.nStart, 'nZero', CS.nZero, ...
@@ -480,6 +505,16 @@ else
     C.okDiagnostic = true;  C.wallSec = toc(t0);
     C.reason = 'DIAGNOSTIC ONLY: every gate that ran passed, but the dense conjugate scan was switched off (conjSpectrum = false); not certified';
     if plateau, C.reason = sprintf('%s (polish plateaued at |R| = %.1e)', C.reason, it.normR); end
+    return
+end
+
+% THE TEST SEAM CANNOT SHIP. With .override active some instrument output was
+% replaced after it was computed, so whatever passed above is not a
+% measurement of this root. A warning used to be the only barrier, and the
+% certificate did not record the override (FINDINGS 80).
+if ~isempty(fieldnames(ovr))
+    C.okDiagnostic = true;  C.wallSec = toc(t0);
+    C.reason = 'DIAGNOSTIC ONLY: the test-seam override was active (instrument outputs replaced); not certified';
     return
 end
 

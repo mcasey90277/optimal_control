@@ -87,6 +87,10 @@ function g = mintime_hypothesis_gates(z8, rv0, Tmax, c, muStar, opts)
 %                                                   exclusion), .C when
 %                                                   opts.keepC,
 %                                                   .minLamV .tMinLamV
+%                                                   .minLamVBound .minQmtBound
+%                                                   (lower bounds over ALL of
+%                                                   [0,tf], between_sample_bound)
+%                                                   .dtMax (largest sample step)
 %                                                   .minQmt .tMinQmt .dimS
 %                                                   .sv [7x1] .svRatio
 %                                                   .rankTolUsed
@@ -116,6 +120,16 @@ Qmt  = rho ./ Y(:, 7) + Y(:, 14) / c;
 [g.minLamV, i1] = min(rho);  g.tMinLamV = tau(i1);
 [g.minQmt,  i2] = min(Qmt);  g.tMinQmt  = tau(i2);
 g.nSwitchFlown = nnz(Qmt <= 0);
+% BETWEEN THE SAMPLES. H2 and H3 are statements about ALL of [0, t_f]; the two
+% minima above are statements about the samples. One slope bound covers both:
+% in the CR3BP  lam_v' = -lam_r - (Coriolis)' lam_v,  so
+% |d|lam_v|/dt| <= |lam_r| + 2|lam_v|; and on an all-burn arc the two mass
+% terms of dQ_mt/dt cancel, leaving dQ_mt/dt = (d|lam_v|/dt)/m exactly.
+lamR = sqrt(sum(Y(:, 8:10).^2, 2));
+slope = lamR + 2*rho;
+g.minLamVBound = between_sample_bound(tau, rho, slope);
+g.minQmtBound  = between_sample_bound(tau, Qmt, slope./Y(:, 7));
+g.dtMax = max(diff(tau));
 
 % --- normal-lift check: lam.f == -1 along the arc ---------------------------
 F = zeros(size(Y, 1), 7);

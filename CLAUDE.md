@@ -25,6 +25,23 @@ optimal_control/
 │       ├── objective.m                   # Cost function (trap quadrature of u²)
 │       ├── cart_accel.m                  # Cart acceleration from Lagrangian EOM
 │       └── pendulum_accel.m             # Pendulum angular acceleration
+│   ├── cartpole_common/         # the shared cart-pole plant (Task 1, 2026-09-17):
+│   │                            #   cartpole_field, cartpole_state_jac (+ generator), cartpole_params,
+│   │                            #   and tests/ incl. test_cartpole_physics -- the geometry-derived
+│   │                            #   power-balance oracle that caught a sign error every other
+│   │                            #   (self-comparing) test in the folder had missed
+│   ├── ex3_cart_pole_pmp/       # indirect PMP min-energy swing-up:
+│   │                            #   run_cartpole_pmp.m (seed/shoot/verify front door) +
+│   │                            #   cartpole_minenergy_study.m, the numbered study script (0
+│   │                            #   tolerances .. 9 plot; N1-N6/S1-S2 gates computed inline, S2
+│   │                            #   asserted against oc.ms_conjugate_test). Min-time/min-fuel (ex4/ex5)
+│   │                            #   SPECCED at docs/superpowers/specs/2026-09-17-cartpole-three-
+│   │                            #   objectives-design.md, not yet built.
+│   ├── run_all_tests.m          # one runner, one real exit code, for
+│   │                            #   every suite in the tree (5 suites currently)
+│   ├── teaching_docs/           # direct_and_indirect_cartpole.tex/.pdf, "Two Ways
+│   │                            #   to Swing Up a Pendulum" -- ELI5/Intuition/Rigor
+│   │                            #   walkthrough pairing ex2 (direct) with ex3 (indirect PMP)
 ├── orbit_transfer/              # top-level container: all orbit-transfer work
 │   ├── cr3bp_common/            # shared CR3BP GTO library: cr3bp_lt_params,
 │   │                            #   minfuel_config, gto_{tulip,elfo}_endpoints,
@@ -124,7 +141,10 @@ optimal_control/
 ├── oclib/                       # CROSS-FOLDER optimal-control package (+oc), used by
 │   │                            #   MORE THAN ONE top-level folder: oc.duals_to_costates
 │   │                            #   (covector rules), oc.fly_control (flown-control engine),
-│   │                            #   oc.local_residual (G1 per-interval re-integration).
+│   │                            #   oc.local_residual (G1 per-interval re-integration), and
+│   │                            #   oc.ms_conjugate_test (Jacobi/conjugate-point test; promoted
+│   │                            #   2026-09-17, cart-pole min-energy study script its 2nd
+│   │                            #   top-level consumer).
 │   │                            #   Admission: a second TOP-LEVEL consumer + an equivalence
 │   │                            #   gate; campaign folders keep thin delegates. Call as
 │   │                            #   oc.<fn> after addpath('.../oclib'). tests/ per function.

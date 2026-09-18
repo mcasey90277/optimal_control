@@ -169,7 +169,7 @@ $m_1=5$~kg, $m_2=1$~kg, $L=2$~m, $g=9.8~\mathrm{m/s^2}$.
 Note the minus signs on the fourth row of both $f$ and $g$. They are the subject
 of \S\ref{sec:signerror}.
 
-In code, \file{ex3\_cart\_pole\_pmp/cartpole\_field.m} is exactly this split:
+In code, \file{cartpole\_common/cartpole\_field.m} is exactly this split:
 
 \begin{lstlisting}
 q1d = x(3);  q2d = x(4);
@@ -695,7 +695,7 @@ character and dimensional analysis are all cheap sources of an outside opinion.
 \textbf{path} & \textbf{what it is}\\
 \midrule
 \file{ex2\_cart\_pole\_swing\_up/try2/} & the direct method: objective, defects, dynamics helpers\\
-\file{ex3\_cart\_pole\_pmp/cartpole\_field.m} & $f$ and $g$, the one home for the physics\\
+\file{cartpole\_common/cartpole\_field.m} & $f$ and $g$, the one home for the physics\\
 \file{ex3\_cart\_pole\_pmp/cartpole\_pmp\_rhs.m} & the 8-state PMP field\\
 \file{ex3\_cart\_pole\_pmp/cartpole\_pmp\_prop.m} & propagator and variational STM\\
 \file{ex3\_cart\_pole\_pmp/run\_cartpole\_pmp.m} & seed, shoot, verify, report\\
@@ -712,5 +712,75 @@ watch it print; read \file{cartpole\_pmp\_rhs.m} (four lines, the whole
 principle); then \file{run\_cartpole\_pmp.m} top to bottom; then
 \file{test\_cartpole\_physics.m}, which is the shortest statement of what it
 means to actually believe a dynamics model.
+
+% =======================================================================
+\section{The executable companion, and the objective that never has to choose}\label{sec:companion}
+
+\begin{eli}
+Everything this document described is also a script you can run:
+\file{cartpole\_minenergy\_study.m}. Press Run and it works through the same
+story in the same order, printing PASS or FAIL as it goes instead of only at
+the end. One more thing worth noticing on the way out: at no point did the
+best push ever require a decision. It fell out of a formula, every time, at
+every instant. The next two chapters of this project --- not written yet ---
+change exactly that: give the cart a top speed of push it may not exceed, or
+make it pay for every newton instead of every newton squared, and the same
+question stops having a formula for an answer and starts having a switch.
+\end{eli}
+
+\begin{intu}
+The script is not organized section-for-section with this document --- it is
+organized as a pipeline, load $\to$ seed $\to$ solve $\to$ check --- so here is
+the correspondence:
+\begin{itemize}\itemsep2pt
+\item \S1 (what problem is this) $\leftrightarrow$ the script's steps 0 and 2:
+  the tolerance table, then the same cost and boundary conditions, in code.
+\item \S2 (the plant) $\leftrightarrow$ step 1: \file{cartpole\_params}, and
+  the physics oracle (V1) run and asserted \emph{first}, before anything
+  downstream is allowed to mean anything.
+\item \S4--\S\ref{sec:stm} (the indirect method, the bridge, shooting)
+  $\leftrightarrow$ steps 3 and 4: the seed lifted verbatim from
+  \file{run\_cartpole\_pmp.m}'s own multiplier block, then \texttt{oc.ms\_bvp}.
+\item \S7 (what the two methods produce) $\leftrightarrow$ the X1 check
+  folded into step 6.
+\item \S8 (how we know it is right) $\leftrightarrow$ steps 5--8: the
+  independent-seed check (X2), the necessary conditions (N1--N6), the
+  sufficiency test (S1--S2), and the cross-check against the library
+  instrument.
+\item \S\ref{sec:signerror} (the sign error) $\leftrightarrow$ step 1's V1
+  oracle again --- the same outside-the-equations check, run once and relied
+  on everywhere after.
+\end{itemize}
+Why no switch here: an unconstrained control being minimized against a
+\emph{strictly convex} cost is a parabola with nowhere to hit a wall. Put a
+wall in front of it (a bound on $u$) or straighten the parabola into a line
+or a V (a cost linear in $u$ or in $|u|$) and the minimizer stops living where
+calculus finds it and starts living at the wall --- which is a decision, made
+anew whenever the wall relocates.
+\end{intu}
+
+\begin{rig}
+Here $H(u) = u^2 + \sigma u$ (dropping the parts independent of $u$), with
+$\sigma = \lambda^\top g$ the switching function already named in \S1. \S4
+already showed why this problem gives a formula: $H$ is \emph{strictly}
+convex in $u$ ($H_{uu}=2>0$ everywhere) and $u$ ranges over all of $\R$, so
+the stationary point $H_u=0$ is both necessary and sufficient for the
+global minimizer --- one equation, one answer.
+
+That argument leaned on two properties together: \emph{no bound on $u$},
+and a cost \emph{strictly} convex in $u$. Both are what a different
+objective can change. Bound the control, or replace $u^2$ by a cost that is
+merely convex rather than strictly so (linear in $u$, or in $|u|$), and $H$
+no longer has an interior minimum for calculus to find: the minimizer is
+pushed onto the boundary of the allowed set (a wall) or onto the one point
+where a piecewise-linear cost fails to be smooth (a corner) --- and which
+wall or corner it sits at can change during the flight. That is a switch,
+decided by a sign, not a derivative. Minimum time (control bounded, cost
+$t_f$) and minimum fuel (control bounded, cost $\int|u|\,dt$) are exactly
+the two objectives in this family that do this. Locating and tracking the
+switch --- including the saltation matrices a jump in structure requires
+--- is sub-projects B and C's content, and arrives with their code; their
+equations are not repeated here.
+\end{rig}
 
 \end{document}

@@ -40,7 +40,7 @@ function movie_cartpole(opts)
 
 if nargin < 1, opts = struct(); end
 here = fileparts(mfilename('fullpath'));
-addpath(here);
+addpath(here, fullfile(fileparts(here), 'cartpole_common'));
 d = @(f, v) fieldd(opts, f, v);
 fps     = d('fps', 30);
 seconds = d('seconds', 10);

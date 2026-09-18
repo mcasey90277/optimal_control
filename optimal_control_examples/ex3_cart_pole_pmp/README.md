@@ -13,7 +13,7 @@ whole path and letting `fmincon` find state and control at every node
 Principle: writes down the boundary-value problem the optimal trajectory
 must satisfy, and finds the one unknown that trajectory needs — the
 initial costate `lam(0)` — by multiple shooting. It reuses the physics
-(`cartpole_field.m` reproduces `ex2`'s `cart_accel`/`pendulum_accel`
+(`cartpole_common/cartpole_field.m` reproduces `ex2`'s `cart_accel`/`pendulum_accel`
 exactly, pinned by test) and the shared shooting engine `oc.ms_bvp`
 (`oclib`), not the orbit-transfer campaigns' machinery.
 
@@ -44,12 +44,19 @@ the `oc.ms_bvp` call).
 
 ## The files
 
+As of 2026-09-17 the plant itself -- `cartpole_field.m`, `cartpole_state_jac.m`,
+`cartpole_state_jac_gen.m`, `gen_state_jac.m`, the constants (`cartpole_params.m`),
+and the physical oracle (`test_cartpole_physics.m` and the other plant tests) --
+moved to the sibling `../cartpole_common/` folder, shared with
+`ex4_cart_pole_mintime/` (minimum-time) and then `ex5_cart_pole_minfuel/`
+(minimum-fuel) per
+`docs/superpowers/specs/2026-09-17-cartpole-three-objectives-design.md`;
+see `cartpole_common/README.md`. This folder's own `addpath` calls add
+that folder alongside their own.
+
 | file | owns |
 |---|---|
-| `cartpole_field.m` | The dynamics split `xdot = F(x) + G(x) u`; same equations and constants as `ex2_cart_pole_swing_up/try2`'s `cart_accel`/`pendulum_accel` (pinned by `test_cartpole_field`); complex-step safe. |
-| `cartpole_state_jac.m` | The exact `4x4` state Jacobian `A = d(F + G u)/dx` at fixed `u`. A thin wrapper that unpacks `p` and calls the generated `cartpole_state_jac_gen.m`; there is no hand-copied body, so regenerating is one command. Generated rather than complex-stepped because it is used *inside* a function that is itself complex-stepped (see `cartpole_pmp_prop.m`). |
-| `gen_state_jac.m` | Generator (Symbolic Math Toolbox + `matlabFunction`): calls `cartpole_field` ITSELF on symbolic inputs, so it holds no second copy of the physics, and writes `cartpole_state_jac_gen.m`. Re-run it whenever `cartpole_field` changes. |
-| `cartpole_pmp_rhs.m` | The 8-state PMP field `y = [x; lam]`: the closed-form control `u* = -lam'G/2`, the state rows `F + G u*`, and the costate rows `-A'lam`. This file, not `cartpole_field.m`, is where the optimality condition lives. |
+| `cartpole_pmp_rhs.m` | The 8-state PMP field `y = [x; lam]`: the closed-form control `u* = -lam'G/2`, the state rows `F + G u*`, and the costate rows `-A'lam`. This file, not `cartpole_common/cartpole_field.m`, is where the optimality condition lives. |
 | `cartpole_pmp_prop.m` | The propagator contract `oc.ms_bvp` expects (`prob.prop`): `dt, y0, needSTM -> yEnd, PHI`, integrating with `ode113` and taking `PHI` by COMPLEX STEP through `cartpole_pmp_rhs` (safe only because `cartpole_state_jac` is generated, not itself complex-stepped — a complex step inside a complex step would corrupt the inner derivative). Throws `cartpole_pmp_prop:collapse` on integrator failure, per the engine's contract; see its header for exactly which errors are relabelled and which are rethrown unchanged. |
 | `gen_direct_ref.m` | One-shot generator of `data/cartpole_direct_ref.mat`: a direct trapezoidal solve of the SAME problem at a relaxed force bound (so it approximates the unconstrained optimum the PMP-BVP solves), harvesting the defect Lagrange multipliers the PMP seed is built from. Run once; the `.mat` is committed. |
 
@@ -78,10 +85,11 @@ Headless, from the repository root:
 /Applications/MATLAB_R2026a.app/bin/matlab -batch "cd optimal_control_examples/ex3_cart_pole_pmp; run_cartpole_pmp"
 ```
 
-`run_cartpole_pmp.m` adds only `oclib` to the path beyond its own folder —
-it needs nothing from `orbit_transfer` (see the header note on `.engine`
-if you want to pass the `costate_common` delegate instead of `@oc.ms_bvp`;
-that requires putting that folder on the path yourself).
+`run_cartpole_pmp.m` adds only `oclib` and the sibling `cartpole_common`
+(the plant) to the path beyond its own folder — it needs nothing from
+`orbit_transfer` (see the header note on `.engine` if you want to pass the
+`costate_common` delegate instead of `@oc.ms_bvp`; that requires putting
+that folder on the path yourself).
 
 ## Running the tests
 
@@ -90,27 +98,38 @@ from `tests/` (each adds the paths it needs):
 
 Run them ALL through the runner, which fails the process if any check
 fails — a bare `test_x` prints `FAIL` and still exits 0, which is fine
-interactively and useless in automation:
+interactively and useless in automation. Timings below are RE-MEASURED
+2026-09-17 (task 4, final-fix pass) on this machine; the earlier "~1-3
+min" figures throughout this section were never re-taken after the suite
+sped up and were off by roughly 20x:
 
 ```matlab
 cd optimal_control_examples/ex3_cart_pole_pmp
-run_tests                                      % ~3 min, errors on any failure
+run_tests                                      % ~8 s total, errors on any failure
 ```
 
 ```
 /Applications/MATLAB_R2026a.app/bin/matlab -batch "cd('<this folder>'); exit(~run_tests())"
 ```
 
-Individually, from `tests/` (each adds the paths it needs):
+Individually (each adds the paths it needs). The plant tests moved with the
+plant and now live in `../cartpole_common/tests/`; the rest are still in
+this folder's own `tests/`. One plant test, `test_cartpole_params`
+(constants only, nothing PMP-specific), is deliberately NOT in this
+folder's own `run_tests` list -- it is covered by the repository-root
+`run_all_tests` suite instead
+(`optimal_control_examples/run_all_tests.m`), alongside the rest of
+`cartpole_common`'s tests:
 
 ```matlab
-test_cartpole_physics      % THE independent oracle: power balance, equilibria, energy (~instant)
-test_cartpole_field        % cartpole_field vs. ex2's own helpers (~instant)
-test_cartpole_state_jac    % the generated Jacobian vs. complex-step and finite-difference (~instant)
+test_cartpole_physics      % ../cartpole_common/tests: THE independent oracle: power balance, equilibria, energy (~instant)
+test_cartpole_field        % ../cartpole_common/tests: cartpole_field vs. ex2's own helpers (~instant)
+test_cartpole_state_jac    % ../cartpole_common/tests: the generated Jacobian vs. complex-step and finite-difference (~instant)
 test_cartpole_pmp_rhs      % the PMP field IS the PMP conditions (~instant)
 test_direct_ref            % the committed direct fixture: feasible, stationary, off its bound (~instant)
-test_cartpole_pmp_prop     % the propagator, the STM, and the collapse contract by identifier (~1 min)
-test_cartpole_pmp          % the whole indirect solve end to end (~2 min: two ms_bvp shoots, K=8 and K=16)
+test_cartpole_pmp_prop     % the propagator, the STM, and the collapse contract by identifier (~0 s)
+test_cartpole_pmp          % the whole indirect solve end to end (~3 s: two ms_bvp shoots, K=8 and K=16)
+test_minenergy_study       % the study script: it runs, it reaches a verdict, it agrees with the front door (~5 s)
 ```
 
 ## Fixture provenance
@@ -135,6 +154,65 @@ test_cartpole_pmp          % the whole indirect solve end to end (~2 min: two ms
   solver stopping iterate on the same root) and is NOT a reason to
   regenerate: doing so on every wobble is how a tripwire stops being one.
 
+## Study script
+
+`cartpole_minenergy_study.m` solves the same problem again, but it is not
+another front door: it is the *study* of the solve, and the first of three
+entry scripts (minimum energy here, minimum time and minimum fuel to
+follow) in the style of
+`orbit_transfer/DRO_tulip/indirect/transfer_study.m`.
+
+```matlab
+cd optimal_control_examples/ex3_cart_pole_pmp
+cartpole_minenergy_study                       % ~4 s, prints sections 1-9 and a verdict
+```
+
+What the style is FOR:
+
+- **The steps are visible rather than behind a front door.** The script does
+  not call `run_cartpole_pmp`; it loads the fixture, maps the duals, shoots,
+  re-flies and checks, in numbered sections you can read top to bottom.
+- **Every condition is computed inline and gated inline**, printed as
+  `value / threshold  PASS|FAIL`, with one `tol` struct in section 0 whose
+  every field carries what it gates and the number that was *measured* for
+  it. Diagnostic IDs are stable: `N` necessary, `S` sufficiency, `V`
+  validity, `X` cross-check.
+- **Section 8 asserts the script against the library**, so the two cannot
+  drift: at *every* one of the eight samples, the Jacobi determinant the
+  script rebuilds from `info.PHI` must match `oc.ms_conjugate_test`'s own in
+  sign *and* magnitude, and the instrument's time axis must be the junction
+  times it claims. Sign alone does not discriminate -- a deliberately
+  reversed STM product still came out `+1` -- so the gate compares
+  `|det|^(1/4)` against the instrument's `sign(det)*|det|^(1/m)` report.
+- **Two computations deliberately stay in the library**, because a second
+  copy of either would be a second *unverified* copy: the physics oracle
+  (`test_cartpole_physics`, V1, run as the script's first act) and the
+  conjugate-point sweep (S2).
+- **A gate that cannot fail is not carried as if it could.** On this problem
+  N6's minimum-principle gap is an algebraic identity (`H(u+d) - H(u) = d^2`
+  for every costate and sample, because the cost is quadratic and the control
+  unconstrained), so the probe is kept as narrative and as a template for the
+  bounded problems. The `tol.u` check beside it is described the same way and
+  no better: both it and the inline reconstruction evaluate the same closed
+  form from the same inputs, so its exact zero is expected -- it catches the
+  two *copies* drifting apart by typo or refactor, not a physics error and
+  not the solver's own control. Neither half of N6 is load-bearing until the
+  control is bounded.
+- **It refuses to pass quietly.** The script `assert`s its necessary
+  verdict, so a failed `N`, `X` or `V` gate throws. A failed or unresolved
+  `S` gate is a *finding about this trajectory* and is reported, not thrown,
+  unless `selfCheck.strict` is set. On this trajectory S2 is clean: 8
+  samples, all live from t = 0.625 s, no interior conjugate point, none
+  unresolved, covered through `t_f`.
+
+`tests/test_minenergy_study.m` runs it in an isolated workspace and checks
+the verdict's shape, that the claim is not made unless both sections support
+it, and that `J` and `lam0` match `run_cartpole_pmp` -- the study and the
+front door must not drift apart. A throw out of the study *is* the failure
+report for a necessary gate; there is deliberately no separate check on
+`verdict.necessary`, because after an assert that throws such a check could
+never fail.
+
 ## The movie
 
 `movie_cartpole` animates both solutions on one clock, with the two control
@@ -152,15 +230,21 @@ is the 0.062% cost agreement made visible. Frames are forced to an exact
 1280x720 because H.264 shears frames whose dimensions are not multiples of
 16, which shows up as diagonal coloured streaks.
 
-## What it produces (measured 2026-09-17)
+## What it produces (re-measured 2026-09-17, task 4)
+
+The terminal miss, flown miss and Hamiltonian spread below supersede earlier
+figures (3.67e-11, 1.67e-07, 5.77e-13) taken at settings this folder no
+longer ships; `run_cartpole_pmp` and `cartpole_minenergy_study` now print
+identical values for every row.
 
 | quantity | value | what it means |
 |---|---|---|
 | `J` indirect / direct | 2779.381719 / 2781.109846 | 0.062% apart; the gap is the 201-node trapezoid's discretization error, and the indirect solve is the more accurate of the two |
-| terminal miss | 3.67e-11 | re-flying `lam0` over the whole 5 s and comparing with `x_f`. Gate 1e-9 |
-| engine residual | 7.27e-14 | the shooting's OWN last-arc terminal residual, independent of the reporting flight |
-| flown miss | 1.67e-07 | flying the closed-form control `u = -lam'G/2` through the true dynamics. Gate 1e-6 |
-| Hamiltonian spread | 5.77e-13 relative | `H` is constant (not zero: `t_f` is fixed) along an extremal of this autonomous flow |
+| BVP residual | 9.607e-12 | `oc.ms_bvp`'s own `normR` at the accepted iterate. Gate 1e-10 |
+| terminal miss | 1.475e-10 | re-flying `lam0` over the whole 5 s at `RelTol` 2.5e-14 and comparing with `x_f`. Gate 1e-9 |
+| engine residual | 7.268e-14 | the shooting's OWN last-arc terminal residual, independent of the reporting flight |
+| flown miss | 1.972e-07 | flying the closed-form control `u = -lam'G/2` through the true dynamics. Gate 1e-6 |
+| Hamiltonian spread | 3.381e-12 relative | `H` is constant (not zero: `t_f` is fixed, `H = -99.274321`) along an extremal of this autonomous flow |
 | seed quality | correlation 0.9998, amplitude ratio 1.009 | the dual-derived costates agree with the direct solve's control in sign AND scale |
 | `max\|u\|` | 68.5 N | well inside the fixture's relaxed 2000 N bound |
 
@@ -176,7 +260,7 @@ survived everything else because the direct and indirect solves agreed to
 0.075% while solving the same wrong problem, and every other check compared
 the field against itself or against `ex2`.
 
-What now prevents a repeat is `tests/test_cartpole_physics`: it derives its
+What now prevents a repeat is `cartpole_common/tests/test_cartpole_physics`: it derives its
 reference from the GEOMETRY alone — bob at `(q1 + L sin q2, -L cos q2)` —
 and demands the pointwise power balance `dE/dt = u q1dot`, the right
 equilibrium characters, and energy conservation under no force. It fails

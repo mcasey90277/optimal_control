@@ -5408,3 +5408,56 @@ certifier, derived from the problem's geometry, free.
 refactor first, then instantiate DPO as its second consumer, the same
 admission rule oclib uses; a copy made today carries the DRO literals and
 the shipped-anchor dependency with it.
+
+## 79. The P0 repairs, and one script that rebuilds the library (2026-09-18)
+
+**The P0 items of section 78, fixed test-first.** Each was given a failing
+check before the code changed; the front-door check reproduced the headline
+defect live (a campaign at `sD(1) = 0.2` built its sheet at departure phase
+0 and died on "the sheet was certified at departure phase 0.000000").
+
+| # | defect | repair | where |
+|---|---|---|---|
+| 1 | the sheet, ribs, filler and discovery were set up at the SHIPPED operating point | the front door takes `.anchorMat`/`.anchorSA` and passes `sD(1)`, the anchor and its phase to the sheet; `commonOpts` carries them from the driver; ribs, filler and discovery ask for the closures only (`physicsOnly`) and no longer re-polish the 70 mN anchor | `run_costate_library` stage 1, `run_phase_torus>commonOpts, physicsOpts`, `build_ribs>setupFromSheet`, `fill_holes_direct>physicsFromCatalog` |
+| 2 | a failed arc could never be retried; a MATLAB that died at launch left no verdict | `spawnArc` clears stale `.done/.fail/.pid`; each arc job runs under a small shell wrapper (`jobs/arc_*.sh`) that records MATLAB's pid and writes the `.fail` if MATLAB exits with no verdict | `run_phase_torus>spawnArc` |
+| 3 | a `budget` campaign refused to resume | `campaignEnded`: `budget` ends the call only while `.maxRounds <= roundsDone` | `run_phase_torus>campaignEnded` |
+| 4 | a resumed round dropped the filler's roots (`fh.nCert` counts this call only) | the round's own holes file is offered to the first package (`roundExtras`); spine roots are registered from the FILE | `run_phase_torus` round loop |
+| 5 | recorded PIDs were never read on resume (two writers on one arc) | `adoptLiveJobs`: a live recorded job is waited on, not respawned; `killJobs` stops wrapper and MATLAB | `run_phase_torus>runArcs` |
+| 6 | discovery could re-anchor a root the filler had just anchored | ONE rule for both paths, `promotionVerdict`: newly registered, beats the spine by `acceptDays`, on no known family; filler anchors are now counted | `run_phase_torus>promotionVerdict` |
+| 7 | `packaged` stood in for audit and sweep success; the audit failed OPEN | `out.stages` (package/audit/sweep: true, false, NaN = not run), required by `assertPackaged` and by the generated finalizer; the audit treats a failed or timed-out re-polish or gates call, a moved root (`tolMove` 1e-6) and any non-pass of H2/H3/dim S/H6 as a BAD row | `run_costate_library>stageOutcomes`, `audit_phase_catalog` |
+
+Tests (`indirect/tests/`): `test_run_phase_torus_p0` 20, `test_run_costate_library_seams` 10,
+`test_fill_holes_physics` 5, `test_audit_fail_closed` 4, all green; the local
+helpers are reached through a `localfunctions` seam (`run_phase_torus('localfunctions')`
+and the same on the front door, the filler and the rib builder). Regression:
+`test_phase_lists`, `test_rib_from_crossing`, `test_sheet_from_arcs`,
+`test_family_map`, `test_crossings_from_arc` pass; an untampered audit of
+entry 1 of the library of record is still a clean row (polished root
+1.3e-10 from the stored one). Not yet exercised: a live round under the new
+wiring (the 3 x 3 acceptance torus should be re-run), and the fail-closed
+audit over all 576 entries.
+
+A lesson from the patching itself: a substring replace of `capped(pool,`
+also renamed the fence's own definition line and its `run_capped` call.
+The test caught it; a diff against git, read line by line, confirmed the
+repair. Bulk renames take a word boundary.
+
+**One script rebuilds the library: `indirect/reproduce_library_70mN.m`.**
+`run_phase_torus` is the engine but was not the reproduction: the record
+was built by hand over eight rounds (section 10 of the runbook), the
+driver's example spec has one anchor, and nothing compared a rebuild with
+the record. The script is the build as one chain, in six numbered sections:
+switches; the problem and the 24 x 24 grid; the FIVE families (anchor,
+cell11, fast2, direct18, direct11 -- the chain script's table); the ten
+walked arcs and the seven direct-found seed roots, adopted into the
+campaign folder (`adopt_walked_arcs`; nothing is ever overwritten);
+`run_phase_torus` with discovery off; and `compare_phase_catalogs`, cell by
+cell against the record (coverage, t_f to 1e-6 d, z8 to 1e-6 relative,
+families compared as a PARTITION so index renumbering is not a difference).
+With no arguments it PLANS and creates nothing; `struct('go', true)` builds
+(about 6-10 h with adopted arcs, about 30 h with `.adoptArcs = false`);
+`struct('compareOnly', true)` re-runs the comparison on a finished folder.
+`test_reproduce_library` (16 checks) pins the comparison on the record
+against itself, on four planted differences, on relabelled families and on
+a foreign grid, and the adoption and plan mode. The build itself has not
+been run yet.

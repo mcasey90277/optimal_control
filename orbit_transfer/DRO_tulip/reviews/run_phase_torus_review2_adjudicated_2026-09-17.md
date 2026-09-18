@@ -65,6 +65,10 @@ Verdicts: **CONFIRMED** = the host reproduced the mechanism at the cited lines (
 
 Astra's reading of the logs is right and worth keeping: the 09-16 run's new anchor came from the FILLER, its discovery stage ran no probe (at three columns a third of a period apart, `seedRadius = 0.15` excludes every neighbour), and round 2 declared a fixed point with one freshly certified off-spine cell. Neither log exercises: a restart during arc publication, a late supervisor, a changed manifest, non-default physics or `sD(1) ~= 0`, or last-round discovery. Those are the acceptance cases to add before the driver is used for another orbit pair.
 
+## 3b. Status, 2026-09-18
+
+P0 1-5 and P1 6, 7 (filler anchors counted), 9 (`packaged` is not audit success) are FIXED, test-first; the pipeline adjudication's P0-3 (audit fails open) is fixed with them. Record and the list of tests: FINDINGS 79. Still open from this document: P1 8, 10-13 and all of P2 except the `j` loop variables (renamed) and the unquoted `run()` literal (now `mlq`-quoted inside the arc wrapper).
+
 ## 4. Fix order
 
 P0 1-5 first (1 and 4 are small edits; 2, 3 are one-liners; 5 is a liveness check). Then 6, 8, 9, 10, 12. The rest with the next rewrite. The one-phase-path block (`run_costate_library.m:274-308`, blocked unconditionally when `nPts == 0`) belongs to the pipeline adjudication but blocks `phase_torus_examples` example 1 today.

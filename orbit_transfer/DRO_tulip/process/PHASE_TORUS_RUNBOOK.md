@@ -69,6 +69,27 @@ rebuilds `<outDir>/final`. Astra-reviewed 2026-09-15 (FINDINGS 73).
 Sections 2-9 describe what it does at each step and how to watch it;
 they remain the manual route when a step needs a hand.
 
+## 1c. Rebuilding THIS library: `reproduce_library_70mN`
+
+The 70 mN 24 x 24 library of record was built by hand (section 10). One
+script rebuilds it and checks the result against the record:
+
+```matlab
+reproduce_library_70mN                         % PLAN: prints the families, arcs, seed roots; creates nothing
+out = reproduce_library_70mN(struct('go', true));          % build + compare + verdict (about 6-10 h)
+out = reproduce_library_70mN(struct('compareOnly', true)); % compare a finished folder again
+```
+
+It gives `run_phase_torus` all FIVE families as anchors (so discovery is
+off and the rounds are deterministic in structure), adopts the ten arcs
+already walked and the seven direct-found seed roots into the campaign
+folder, and ends with `compare_phase_catalogs` against
+`results/library_70mN_24x24_final`: coverage, t_f (1e-6 d), z8 (1e-6
+relative) and the family partition, every differing cell named.
+`.adoptArcs = false` re-walks the arcs (about 30 h); `.discover = true`
+lets the driver search as well. Resumable: call it again with the same
+options (FINDINGS 79).
+
 ## 2. Declare the campaign (section 0 of `run_costate_library`)
 
 `run_costate_library(struct(...))` is the entry point. Section 0 of the file

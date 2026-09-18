@@ -5566,3 +5566,62 @@ an independent accessory-problem inertia test; the free-phase second-order
 condition; validated enclosures if a theorem is ever wanted. And one to
 act on: the 43 departure-phase jumps should be reconciled with the family
 map before the map is trusted for anchoring decisions.
+
+## 81. The reproduction chain reviewed, rehearsed, and launched; the record passes the fail-closed audit (2026-09-18)
+
+**Astra on the reproduction chain (xhigh, 154 KB, $1.46): NO-GO as
+supplied.** Adjudication: `reviews/reproduce_library_adjudicated_2026-09-18.md`.
+It confirmed the wiring (spec fields, arc adoption, the wrapper's shell
+semantics, the family-partition comparison: zero differences iff the
+partitions are identical) and found seven launch blockers, all fixed
+test-first the same afternoon:
+
+- **My own Track A defect.** `certify_root` added `.minLamVBound` /
+  `.minQmtBound` only on the success path, so a failed and a passed
+  certificate had different field sets; the sheet's seed loop and the rib
+  walker append certificates raw, and MATLAB refuses that. With
+  `librarySeeds = true` the full build would have thrown in its first
+  sheet. Every field is now born in the initializer (`test_certify_schema`).
+- The audit's new validators were weaker than the certifier's: `Inf` passed
+  `> floor`, `logical(2)` is true, `logical(NaN)` THREW instead of making a
+  BAD row. `realScalar` before every comparison.
+- `compare_phase_catalogs` reported a MATCH for a catalog holding a NaN
+  flight time (`NaN > tol` is false), reported "0 differences" when a family
+  map was absent, compared libraries of different engines, and miscounted
+  agreeing cells. Now `.nNonfinite`, `.familiesCompared` (required),
+  problem identity asserted, `.nAgree`; costates compared without t_f in the
+  norm.
+- The script's verdict paired the final catalog with "the newest audit file
+  anywhere"; `finalAudit` reads the last round of the driver's state and
+  requires it to cover every entry.
+
+Its findings on interrupted runs (non-transactional final publication, the
+fixed-point decision using this invocation's counters, registration before
+promotion, PID existence as ownership, mtime verdicts, arc identity on
+adoption) are recorded as limitations, not fixed: a fresh uninterrupted
+build does not exercise them.
+
+**The 3 x 3 rehearsal (`results/torus3d_p0`, the 09-16 spec).** Fixed point
+in 2 rounds, 2 anchors, 91 min; its catalog is identical to the 09-16 run's
+in all 7 cells (zero deviation in t_f, costates and family). Seen working
+live: the arc wrapper with a pid file per arc; the package/audit/sweep
+assertion on every packaging; the round-2 sheet through the seed loop;
+"1 new anchor" counted in round 1 (09-16 logged 0). It found one bug: the
+packaging chain names its audit `audit_70mN.mat` whatever tag the driver
+was given, so the script's lookup by the driver's tag only worked where the
+two tags coincide -- as they would have in the full build, by accident. The
+lookup is by pattern in the last round now. Final audit 7 ok / 0 bad.
+
+**The library of record under the fail-closed audit: 576 ok / 0 bad.**
+All 576 entries, 152 min, chunked and resumable
+(`results/audit_failclosed_record_2026-09-18/`). The audit now treats a
+failed or timed-out re-polish or gates call, a polished root more than 1e-6
+from the stored one, a non-finite or malformed gate value, and any non-pass
+of the H2/H3 whole-arc bounds (floor 1e-5), dim S = 1 or H6 as a BAD row.
+Section 78's caveat -- that the record's "576 / 0" was measured by an audit
+that failed open -- is closed: the count stands under the policy that cannot
+skip a row.
+
+**The full build was launched at 15:22** into
+`results/reproduce_70mN_24x24` (five anchors, ten adopted arcs, seven seed
+roots, discovery off). Its verdict belongs in the next section.

@@ -78,15 +78,15 @@ ok = chk(ok, R.nZOver == 1, 'a 5e-6 relative costate change is caught (costates 
 % ---- the script's audit is THE FINAL CATALOG'S audit, complete ---------------
 Hs = reproduce_library_70mN('localfunctions');
 aud = fullfile(tmpRoot(), 'audbind');  r1 = fullfile(aud, 'round_01');  r2 = fullfile(aud, 'round_02');  mkdir(r1);  mkdir(r2);
-A = struct('nOk', 10, 'nBad', 0); save(fullfile(r1, 'audit_T.mat'), 'A'); %#ok<NASGU>
-A = struct('nOk', 576, 'nBad', 0); save(fullfile(r2, 'audit_T.mat'), 'A'); %#ok<NASGU>
+A = struct('nOk', 10, 'nBad', 0); save(fullfile(r1, 'audit_70mN.mat'), 'A'); %#ok<NASGU>
+A = struct('nOk', 576, 'nBad', 0); save(fullfile(r2, 'audit_70mN.mat'), 'A');   % the chain names it by ITS tag, not the driver's %#ok<NASGU>
 st = struct('rounds', struct('dir', {r1, r2})); save(fullfile(aud, 'torus_state.mat'), 'st'); %#ok<NASGU>
-[Af, why] = Hs.finalAudit(aud, 'T', 576);
+[Af, why] = Hs.finalAudit(aud, 576);
 ok = chk(ok, ~isempty(Af) && Af.nOk == 576, ['the audit of the LAST round in the driver''s state is the one read: ' why]);
-[Af, why] = Hs.finalAudit(aud, 'T', 500);
+[Af, why] = Hs.finalAudit(aud, 500);
 ok = chk(ok, isempty(Af), ['an audit that does not cover every catalog entry is not accepted: ' why]);
-delete(fullfile(r2, 'audit_T.mat'));
-[Af, why] = Hs.finalAudit(aud, 'T', 576);
+delete(fullfile(r2, 'audit_70mN.mat'));
+[Af, why] = Hs.finalAudit(aud, 576);
 ok = chk(ok, isempty(Af), ['no fallback to an EARLIER round''s audit: ' why]);
 rmdir(aud, 's');
 

@@ -202,7 +202,7 @@ if compareOnly, out.state = 'compared'; end
 %     the last round's count is read back here so it is on the page)
 %% ========================================================================
 Lc = load(out.catalog);  fnc = fieldnames(Lc);  nEntries = Lc.(fnc{1}).n_entries;
-[out.audit, whyAudit] = finalAudit(outDir, tag, nEntries);
+[out.audit, whyAudit] = finalAudit(outDir, nEntries);
 fprintf('\n6. VERDICT\n');
 fprintf('   campaign status       : %s\n', out.state);
 if ~isempty(out.audit)
@@ -242,22 +242,29 @@ fprintf('  record    : %s\n', recordCat);
 end
 
 % ==========================================================================
-function [A, why] = finalAudit(outDir, tag, nEntries)
+function [A, why] = finalAudit(outDir, nEntries)
 % FINALAUDIT  The audit OF THE FINAL CATALOG, or [] with the reason. `final`
 % is copied from the LAST round in the driver's state, so that round's
-% audit_<tag>.mat is the only one that counts: an earlier round's, or one that
+% audit file is the only one that counts: an earlier round's, or one that
 % covers fewer entries than the catalog holds, says nothing about the library
-% being judged (it used to be "the newest audit file found anywhere").
-% INPUTS: outDir; tag; nEntries (entries in the final catalog).
+% being judged (it used to be "the newest audit file found anywhere"). The file
+% is found by PATTERN: the packaging chain names it audit_<its own tag>.mat,
+% which is '70mN' whatever tag the driver was given (seen in the 3 x 3
+% rehearsal, where the driver's tag was 'test3d').
+% INPUTS: outDir; nEntries (entries in the final catalog).
 % OUTPUTS: A (audit_phase_catalog output) | []; why (char).
 A = [];
 stateF = fullfile(outDir, 'torus_state.mat');
 if ~isfile(stateF), why = 'the campaign has no state file';  return, end
 L = load(stateF);
 if isempty(L.st.rounds), why = 'the campaign finished no round';  return, end
-f = fullfile(L.st.rounds(end).dir, sprintf('audit_%s.mat', tag));
-if ~isfile(f), why = sprintf('the last round has no audit file (%s)', f);  return, end
-La = load(f);
+lastRound = L.st.rounds(end).dir;
+found = dir(fullfile(lastRound, 'audit_*.mat'));
+if numel(found) ~= 1
+    why = sprintf('the last round (%s) holds %d audit file(s), not exactly one', lastRound, numel(found));
+    return
+end
+La = load(fullfile(found.folder, found.name));
 if La.A.nOk + La.A.nBad ~= nEntries
     why = sprintf('the last round''s audit covers %d entries, the final catalog holds %d', La.A.nOk + La.A.nBad, nEntries);
     return

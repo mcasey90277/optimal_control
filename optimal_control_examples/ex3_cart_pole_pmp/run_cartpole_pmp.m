@@ -6,7 +6,7 @@ function out = run_cartpole_pmp(opts)
 %   shooting engine oc.ms_bvp (oclib). This file needs nothing from
 %   orbit_transfer: costate_common keeps its own delegate (ms_bvp.m) for
 %   its own campaigns, but this demo calls oc.ms_bvp directly and adds only
-%   oclib to the path.
+%   oclib and cartpole_common to the path.
 %
 %   Four unknowns -- lam(0) -- against four terminal conditions, at fixed
 %   final time. The seed comes from the committed direct solution's defect

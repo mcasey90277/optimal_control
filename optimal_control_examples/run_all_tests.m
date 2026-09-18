@@ -48,12 +48,42 @@ for k = 1:size(suites, 1)
         fprintf('\n######## %s\n', names{n});
         t0 = tic;
         try
+            %% Name-collision guard: today there is exactly one run_tests in
+            %% the tree, so bare-name feval dispatch is unambiguous. It will
+            %% not stay that way -- once ex4/ex5 each ship their own
+            %% run_tests.m, feval resolution rests on path order, which
+            %% MATLAB's CURRENT-FOLDER precedence overrides regardless of
+            %% addpath order. The ex3 README teaches readers to cd into the
+            %% example folder first, so once a second run_tests exists,
+            %% running from inside ex4 (say) could silently re-resolve to
+            %% ex3's run_tests and report a false PASS in ex4's row. Nothing
+            %% is broken by this collision today; this assertion exists so
+            %% that when it does happen, it fails loudly here instead of
+            %% passing quietly:
+            fn = suites{k,2}{m};
+            cand1 = fullfile(here, folder, [fn '.m']);
+            cand2 = fullfile(here, folder, 'tests', [fn '.m']);
+            if isfile(cand1)
+                expected = cand1;
+            elseif isfile(cand2)
+                expected = cand2;
+            else
+                error('run_all_tests:missingFile', ...
+                      '%s: no source file found at %s or %s', fn, cand1, cand2);
+            end
+            actual = which(fn);
+            assert(strcmp(actual, expected), 'run_all_tests:nameCollision', ...
+                   ['%s resolved to\n  %s\ninstead of the expected\n  %s\n' ...
+                    'A same-named function elsewhere on the path (or in the ' ...
+                    'current folder) is shadowing this suite.'], ...
+                   fn, actual, expected);
+
             %% A non-scalar verdict (e.g. []) must not reach res(n) = v: with
             %% res logical and n a scalar index, res(n) = [] is MATLAB's
             %% element-DELETION syntax, not an assignment -- it would shrink
             %% res instead of recording a failure, silently or (for the last
             %% suite) with an uncaught out-of-bounds error downstream:
-            v = feval(suites{k,2}{m});
+            v = feval(fn);
             if ~isscalar(v)
                 error('run_all_tests:badVerdict', ...
                       '%s did not return a scalar verdict', names{n});

@@ -39,6 +39,9 @@ optimal_control/
 │   │                            #   objectives-design.md, not yet built.
 │   ├── run_all_tests.m          # one runner, one real exit code, for
 │   │                            #   every suite in the tree (5 suites currently)
+│   ├── teaching_docs/           # direct_and_indirect_cartpole.tex/.pdf, "Two Ways
+│   │                            #   to Swing Up a Pendulum" -- ELI5/Intuition/Rigor
+│   │                            #   walkthrough pairing ex2 (direct) with ex3 (indirect PMP)
 ├── orbit_transfer/              # top-level container: all orbit-transfer work
 │   ├── cr3bp_common/            # shared CR3BP GTO library: cr3bp_lt_params,
 │   │                            #   minfuel_config, gto_{tulip,elfo}_endpoints,

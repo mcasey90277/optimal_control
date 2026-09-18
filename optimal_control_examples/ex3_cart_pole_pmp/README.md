@@ -47,9 +47,12 @@ the `oc.ms_bvp` call).
 As of 2026-09-17 the plant itself -- `cartpole_field.m`, `cartpole_state_jac.m`,
 `cartpole_state_jac_gen.m`, `gen_state_jac.m`, the constants (`cartpole_params.m`),
 and the physical oracle (`test_cartpole_physics.m` and the other plant tests) --
-moved to the sibling `../cartpole_common/` folder, shared with whatever
-minimum-fuel example copies it next; see `cartpole_common/README.md`. This
-folder's own `addpath` calls add that folder alongside their own.
+moved to the sibling `../cartpole_common/` folder, shared with
+`ex4_cart_pole_mintime/` (minimum-time) and then `ex5_cart_pole_minfuel/`
+(minimum-fuel) per
+`docs/superpowers/specs/2026-09-17-cartpole-three-objectives-design.md`;
+see `cartpole_common/README.md`. This folder's own `addpath` calls add
+that folder alongside their own.
 
 | file | owns |
 |---|---|
@@ -95,11 +98,14 @@ from `tests/` (each adds the paths it needs):
 
 Run them ALL through the runner, which fails the process if any check
 fails — a bare `test_x` prints `FAIL` and still exits 0, which is fine
-interactively and useless in automation:
+interactively and useless in automation. Timings below are RE-MEASURED
+2026-09-17 (task 4, final-fix pass) on this machine; the earlier "~1-3
+min" figures throughout this section were never re-taken after the suite
+sped up and were off by roughly 20x:
 
 ```matlab
 cd optimal_control_examples/ex3_cart_pole_pmp
-run_tests                                      % ~3 min, errors on any failure
+run_tests                                      % ~8 s total, errors on any failure
 ```
 
 ```
@@ -108,7 +114,12 @@ run_tests                                      % ~3 min, errors on any failure
 
 Individually (each adds the paths it needs). The plant tests moved with the
 plant and now live in `../cartpole_common/tests/`; the rest are still in
-this folder's own `tests/`:
+this folder's own `tests/`. One plant test, `test_cartpole_params`
+(constants only, nothing PMP-specific), is deliberately NOT in this
+folder's own `run_tests` list -- it is covered by the repository-root
+`run_all_tests` suite instead
+(`optimal_control_examples/run_all_tests.m`), alongside the rest of
+`cartpole_common`'s tests:
 
 ```matlab
 test_cartpole_physics      % ../cartpole_common/tests: THE independent oracle: power balance, equilibria, energy (~instant)
@@ -116,9 +127,9 @@ test_cartpole_field        % ../cartpole_common/tests: cartpole_field vs. ex2's 
 test_cartpole_state_jac    % ../cartpole_common/tests: the generated Jacobian vs. complex-step and finite-difference (~instant)
 test_cartpole_pmp_rhs      % the PMP field IS the PMP conditions (~instant)
 test_direct_ref            % the committed direct fixture: feasible, stationary, off its bound (~instant)
-test_cartpole_pmp_prop     % the propagator, the STM, and the collapse contract by identifier (~1 min)
-test_cartpole_pmp          % the whole indirect solve end to end (~2 min: two ms_bvp shoots, K=8 and K=16)
-test_minenergy_study       % the study script: it runs, it reaches a verdict, it agrees with the front door (~2 min)
+test_cartpole_pmp_prop     % the propagator, the STM, and the collapse contract by identifier (~0 s)
+test_cartpole_pmp          % the whole indirect solve end to end (~3 s: two ms_bvp shoots, K=8 and K=16)
+test_minenergy_study       % the study script: it runs, it reaches a verdict, it agrees with the front door (~5 s)
 ```
 
 ## Fixture provenance
@@ -153,7 +164,7 @@ follow) in the style of
 
 ```matlab
 cd optimal_control_examples/ex3_cart_pole_pmp
-cartpole_minenergy_study                       % ~1 min, prints sections 1-9 and a verdict
+cartpole_minenergy_study                       % ~4 s, prints sections 1-9 and a verdict
 ```
 
 What the style is FOR:

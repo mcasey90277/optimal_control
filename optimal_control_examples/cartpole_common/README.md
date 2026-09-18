@@ -25,8 +25,10 @@ rather than against an independent oracle -- see `test_cartpole_physics.m`.
 
 **Objective-independent only.** Anything that knows about a cost, a
 boundary condition, a horizon, or a solve method belongs in an example
-folder (`ex1_block_move`, `ex2_cart_pole_swing_up`, `ex3_cart_pole_pmp`, and
-whatever minimum-fuel example follows), not here. This folder is the plant
+folder (`ex1_block_move`, `ex2_cart_pole_swing_up`, `ex3_cart_pole_pmp`,
+`ex4_cart_pole_mintime`, and `ex5_cart_pole_minfuel` -- per
+`docs/superpowers/specs/2026-09-17-cartpole-three-objectives-design.md`),
+not here. This folder is the plant
 and nothing else: the state, its derivative, and the derivative's Jacobian,
 plus the physical oracle that pins them independently of any example's own
 agreement with itself. If a function needs to know whether the problem is
@@ -35,13 +37,21 @@ minimum-energy, minimum-time, or minimum-fuel, it does not belong in
 
 ## Consumers
 
-- `ex3_cart_pole_pmp/` (minimum-time / PMP-BVP swing-up) -- the first
-  consumer; `run_cartpole_pmp.m`, `run_tests.m`, `movie_cartpole.m`,
-  `cartpole_pmp_rhs.m` and `cartpole_pmp_prop.m` all add this folder to the
-  path alongside their own.
-- A minimum-fuel cart-pole example is expected to copy this folder's
-  consumption pattern next (the reason this extraction happened before that
-  example was written, not after).
+- `ex3_cart_pole_pmp/` (minimum-energy / PMP-BVP swing-up) -- the first
+  consumer. Its files (`run_cartpole_pmp.m`, `run_tests.m`,
+  `movie_cartpole.m`, `cartpole_pmp_rhs.m`, `cartpole_pmp_prop.m`) all add
+  this folder to the path for `cartpole_field`/`cartpole_state_jac`
+  (called directly by `cartpole_pmp_rhs.m`; the rest need it because they
+  call things that call it). `cartpole_params()` itself has a single
+  direct caller: the study script, `cartpole_minenergy_study.m` --
+  `run_cartpole_pmp.m` instead reads `p` back out of the committed direct
+  fixture.
+- `ex4_cart_pole_mintime/` (minimum-time) and `ex5_cart_pole_minfuel/`
+  (minimum-fuel) are expected to copy this folder's consumption pattern
+  next, per
+  `docs/superpowers/specs/2026-09-17-cartpole-three-objectives-design.md`
+  (the reason this extraction happened before either was written, not
+  after).
 
 Nothing in this folder references `orbit_transfer`, a CR3BP quantity, or
 pumpkyn in an executable line, and nothing here should start to.

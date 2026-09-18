@@ -95,11 +95,22 @@ tol = struct( ...
     ...                      % about solver noise.
     'agree',    1e-6,  ...   % inline numbers vs the library instrument,
     ...                      % RELATIVE. Used only on dimensionless ratios.
-    'tSec',     1e-12, ...   % time-axis agreement with the instrument, in
-    ...                      % SECONDS and ABSOLUTE -- its own field because a
-    ...                      % relative tolerance reused on a dimensional
-    ...                      % quantity is how a gate stops meaning anything.
-    ...                      % MEASURED 0 exactly (both read info.tGrid).
+    'tSec',     1e-12, ...   % V2b's time-axis check, dtWorst = max(abs(
+    ...                      % conjOut.t - it.tGrid(2:end))). BE EXACT ABOUT
+    ...                      % WHAT THIS IS, the same standard as tol.u below:
+    ...                      % oc.ms_conjugate_test builds out.t AS
+    ...                      % info.tGrid(2:nS+1) (its own :347), and on this
+    ...                      % FIXED-t_f path nS == K unconditionally (:228-
+    ...                      % 229; nS = K-1 is a freeT-only branch) -- so
+    ...                      % both sides are the same slice of the same
+    ...                      % array, and MEASURED 0 exactly is an identity,
+    ...                      % not agreement. It pins the sampling convention
+    ...                      % and sample COUNT against a future library
+    ...                      % change, nothing more; it does not protect the
+    ...                      % determinant-to-instant attribution (see
+    ...                      % section 8's comment). It acquires real teeth
+    ...                      % in B (minimum time), where a free t_f can make
+    ...                      % nS = K-1 and conjOut.covered can go false.
     'xJ',       2e-3,  ...   % direct vs indirect cost, relative. MEASURED
     ...                      % 6.214e-04 -- this is the DISCRETISATION gap
     ...                      % between the two methods, not solver error, so
@@ -304,7 +315,8 @@ fprintf('  N5 adjoint equations    %.3e / %.1e (rel)              %s\n', adjWors
 %
 %  Beside it, the tol.u check, and it is worth being exact about what that
 %  one is too. cartpole_pmp_rhs returns the PMP control as a second output,
-%  and this script rebuilds the same control inline at :198. Both evaluate
+%  and this script rebuilds the same control inline in section 6's flight
+%  loop above. Both evaluate
 %  -(lam'G)/2 from the same cartpole_field call on the same inputs, and
 %  ode113 throws the second output away -- so this is NOT the control the
 %  solver integrated, and the measured exact zero is expected, not a
@@ -408,8 +420,19 @@ fprintf('\n=== 8. inline vs library\n');
 %  relative error eps in the determinant appears as about eps/4 in
 %  |det|^(1/4), so tol.agree is effectively 4x looser on the determinant than
 %  it reads.
-%  And the TIME AXIS: the instrument's .t must be the junction times it
-%  claims, or every determinant above is attributed to the wrong instant.
+%  And the TIME AXIS check below (V2b's dtWorst). BE EXACT ABOUT WHAT THIS
+%  IS, the same honest standard as tol.u above: oc.ms_conjugate_test sets
+%  out.t = info.tGrid(2:nS+1) (its own :347), and nS == K unconditionally on
+%  this FIXED-t_f path (:228-229; nS = K-1 needs freeT) -- so conjOut.t and
+%  it.tGrid(2:end) are THE SAME SLICE OF THE SAME ARRAY, for every trajectory
+%  and every plant. dtWorst == 0 is therefore an identity, not a measurement
+%  of whether a determinant is attributed to the right instant: the actual
+%  misattribution risk -- a determinant paired with the wrong junction -- is
+%  untouched by comparing tGrid with itself, and nothing here catches it.
+%  This gate is not deleted for that reason: it pins the sampling convention
+%  and sample COUNT against a future library change, and it acquires real
+%  teeth in B (minimum time), where a free t_f can make nS = K-1 and
+%  conjOut.covered can go false.
 Phi   = eye(8);
 dMine = zeros(1, numel(it.PHI));
 for k = 1:numel(it.PHI)

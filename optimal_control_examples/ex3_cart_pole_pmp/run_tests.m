@@ -55,7 +55,19 @@ for k = 1:numel(names)
     fprintf('\n==== %s\n', names{k});
     t0 = tic;
     try
-        res(k) = logical(feval(names{k}));
+        %% A non-scalar verdict (e.g. []) must not reach res(k) = v: with res
+        %% logical and k a scalar index, res(k) = [] is MATLAB's element-
+        %% DELETION syntax, not an assignment -- it would shrink res instead
+        %% of recording a failure, and because test_minenergy_study is LAST
+        %% in names (line 50), the shrink would surface as an uncaught
+        %% out-of-bounds error in the summary loop below, not the named
+        %% run_tests:failed (ported from run_all_tests.m, same defect).
+        v = feval(names{k});
+        if ~isscalar(v)
+            error('run_tests:badVerdict', ...
+                  '%s did not return a scalar verdict', names{k});
+        end
+        res(k) = logical(v);
     catch err
         fprintf('  THREW  %s (%s)\n', err.message, err.identifier);
         res(k) = false;

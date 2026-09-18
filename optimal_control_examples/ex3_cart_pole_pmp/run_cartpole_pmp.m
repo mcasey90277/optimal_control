@@ -139,13 +139,17 @@ polishMax = d('polishMax', 5);
 %  artifact. 2001 points removes it with a wide margin while changing no
 %  other gate materially (J, control RMS): see the task report.
 lam0 = info.Y(5:8, 1);
-% RelTol 1e-14, not the propagator's 1e-12: this single shot re-flies the
+% RelTol 2.5e-14, not the propagator's 1e-12: this single shot re-flies the
 % WHOLE 5 s horizon from lam0, so its own integration error lands directly
 % in the terminal miss that is this demo's headline accuracy claim. Measured
 % on the converged root, re-flying the identical lam0: miss 6.88e-09 at
-% RelTol 1e-12, 8.20e-10 at 1e-13, 3.67e-11 at 1e-14, while the ENGINE's own
-% last-arc terminal residual is 7.27e-14 -- i.e. the loose figure was the
-% measurement, not the solution. The gate stays at 1e-9.
+% RelTol 1e-12, 8.20e-10 at 1e-13, and 1.475e-10 at the 2.5e-14 actually set
+% below, while the ENGINE's own last-arc terminal residual is 7.268e-14 --
+% i.e. the loose figure was the measurement, not the solution. The gate stays
+% at 1e-9. (The 3.67e-11 this paragraph used to quote came from a probe at
+% RelTol 1e-14 and was never re-taken at the shipped setting; re-measured
+% 2026-09-17 alongside cartpole_minenergy_study, which prints the same
+% numbers.)
 [t, Y] = ode113(@(tt, y) cartpole_pmp_rhs(y, p), linspace(0, tf, 2001), ...
                 [0; 0; 0; 0; lam0], odeset('RelTol', 2.5e-14, 'AbsTol', 1e-16));
 % the reporting flight has no collapse protection of its own: a truncated

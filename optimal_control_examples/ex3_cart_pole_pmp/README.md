@@ -167,15 +167,23 @@ What the style is FOR:
   it. Diagnostic IDs are stable: `N` necessary, `S` sufficiency, `V`
   validity, `X` cross-check.
 - **Section 8 asserts the script against the library**, so the two cannot
-  drift: the Jacobi determinant the script rebuilds from `info.PHI` must
-  match `oc.ms_conjugate_test`'s own, in sign *and* magnitude. Sign alone
-  does not discriminate -- a deliberately reversed STM product still came
-  out `+1` on this trajectory -- so the gate compares `|det|^(1/4)` against
-  the instrument's `sign(det)*|det|^(1/m)` report.
+  drift: at *every* one of the eight samples, the Jacobi determinant the
+  script rebuilds from `info.PHI` must match `oc.ms_conjugate_test`'s own in
+  sign *and* magnitude, and the instrument's time axis must be the junction
+  times it claims. Sign alone does not discriminate -- a deliberately
+  reversed STM product still came out `+1` -- so the gate compares
+  `|det|^(1/4)` against the instrument's `sign(det)*|det|^(1/m)` report.
 - **Two computations deliberately stay in the library**, because a second
   copy of either would be a second *unverified* copy: the physics oracle
   (`test_cartpole_physics`, V1, run as the script's first act) and the
   conjugate-point sweep (S2).
+- **A gate that cannot fail is not carried as if it could.** On this problem
+  N6's minimum-principle gap is an algebraic identity (`H(u+d) - H(u) = d^2`
+  for every costate and sample, because the cost is quadratic and the control
+  unconstrained), so the probe is kept as narrative and as a template for the
+  bounded problems, and N6's actual teeth come from comparing the control the
+  script rebuilds with the one `cartpole_pmp_rhs` integrated -- a different
+  code path.
 - **It refuses to pass quietly.** The script `assert`s its necessary
   verdict, so a failed `N`, `X` or `V` gate throws. A failed or unresolved
   `S` gate is a *finding about this trajectory* and is reported, not thrown,

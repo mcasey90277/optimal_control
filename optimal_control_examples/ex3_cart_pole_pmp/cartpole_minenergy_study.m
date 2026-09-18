@@ -65,14 +65,32 @@ tol = struct( ...
     ...                      % MEASURED 1.972e-07.
     'gap',      -1e-10, ...  % minimum-principle gap floor: H(u*+d) - H(u*)
     ...                      % must exceed this (i.e. be non-negative to
-    ...                      % round-off) for every probe d. MEASURED worst
-    ...                      % gap +1.000e-02, which is exactly d^2 at the
-    ...                      % smallest probe (d = 0.1): H is quadratic in u
-    ...                      % with H_uu = 2, so the gap IS d^2 and the floor
-    ...                      % is never approached on this problem.
+    ...                      % round-off) for every probe d. On THIS problem
+    ...                      % the gap is d^2 IDENTICALLY (see N6), so the
+    ...                      % measured +1.000e-02 is d^2 at d = 0.1 and the
+    ...                      % floor is unreachable: the gate is carried as a
+    ...                      % template for the bounded problems, and N6's
+    ...                      % teeth here come from tol.u beside it.
     'adj',      1e-9,  ...   % adjoint equations, relative, vs complex-step
     ...                      % differentiation of H. MEASURED 6.091e-16.
-    'agree',    1e-6,  ...   % inline numbers vs the library instrument.
+    'u',        1e-12, ...   % the U this script rebuilt against the control
+    ...                      % cartpole_pmp_rhs ACTUALLY integrated (its second
+    ...                      % output), relative. A genuinely different code
+    ...                      % path, unlike the d-probe beside it. MEASURED
+    ...                      % 0 (bit-identical: the two lines compute
+    ...                      % -lam'G/2 from the same inputs, so any drift is
+    ...                      % a real divergence, not round-off).
+    'dLam0',    1e-6,  ...   % X2: a perturbed seed must return the SAME root,
+    ...                      % max|dlam(0)|. MEASURED 6.139e-11 -- four orders
+    ...                      % of margin, so the gate is about basins, not
+    ...                      % about solver noise.
+    'agree',    1e-6,  ...   % inline numbers vs the library instrument,
+    ...                      % RELATIVE. Used only on dimensionless ratios.
+    'tSec',     1e-12, ...   % time-axis agreement with the instrument, in
+    ...                      % SECONDS and ABSOLUTE -- its own field because a
+    ...                      % relative tolerance reused on a dimensional
+    ...                      % quantity is how a gate stops meaning anything.
+    ...                      % MEASURED 0 exactly (both read info.tGrid).
     'xJ',       2e-3,  ...   % direct vs indirect cost, relative. MEASURED
     ...                      % 6.214e-04 -- this is the DISCRETISATION gap
     ...                      % between the two methods, not solver error, so
@@ -114,6 +132,13 @@ R  = load(fullfile(here, 'data', 'cartpole_direct_ref.mat'));
 tf = R.tf;
 x0 = [0; 0; 0; 0];
 xf = [0; pi; 0; 0];
+%  The study solves cartpole_params()'s plant; X1 grades it against a fixture
+%  that carries its OWN constants (R.p). Nothing else ties them together, so
+%  a fixture regenerated at other constants would have X1 comparing the
+%  indirect solve of one plant with the direct solve of another, under a gate
+%  loose enough (0.2% on J) to hide a small plant change.
+assert(isequal(p, R.p) && abs(tf - 5) < 1e-12, 'study:plant', ...
+       'the fixture was generated with different constants');
 fprintf('\n=== 2. minimise J = int_0^%g u^2 dt,  x(0) = [0 0 0 0],  x(t_f) = [0 pi 0 0]\n', tf);
 fprintf('  control UNBOUNDED, so H = u^2 + lam''(F + G u) is minimised at its\n');
 fprintf('  stationary point: u* = -lam''G/2, with H_uu = 2 > 0 exactly.\n');
@@ -121,36 +146,52 @@ fprintf('  t_f FIXED, so H is constant along the arc but NOT zero, and there\n')
 fprintf('  is no transversality condition to check (N4 does not apply).\n');
 
 %% 3. The seed: the direct solve's multipliers become costates
+%  LIFTED VERBATIM from run_cartpole_pmp.m's seed block (identifiers retitled
+%  study:sign, since this is not the front door). The study and the front
+%  door must build the SAME seed from the same fixture, and a paraphrase is
+%  exactly how two copies of one computation start to differ -- which is the
+%  failure this whole folder exists downstream of.
+%
 %  duals_to_costates resolves the GLOBAL SIGN by a primer vote over 3-vector
 %  thrust directions. This problem's control is a scalar force, so there is
-%  no such vote: the mapping is asked for the costates unsigned, and the sign
-%  is fixed here by the same principle in scalar form -- the implied control
-%  u = -lam'G/2 must agree in sign with the control the direct solve used.
+%  no such vote: the mapping is asked for the costates unsigned (no uDir),
+%  and the sign is fixed here by the same principle in scalar form -- the
+%  implied control u = -lam'G/2 must agree in sign with the control the
+%  direct solve actually used.
+K = 8;                                          % segments (the seed grid below)
 [lamS, tS] = oc.duals_to_costates(struct('scheme', 'trapezoid', 'mu', R.muDefect, ...
                                          'tNodes', R.tN, 'velRows', 3:4));
-tS       = tS(:).';
-uImplied = zeros(1, numel(tS));
-Xs       = interp1(R.tN, R.X.', tS, 'pchip').';
+tS = tS(:).';                                   % ROWS throughout: a column here
+uImplied = zeros(1, numel(tS));                 % would turn the products below
+Xs = interp1(R.tN, R.X.', tS, 'pchip').';       % into an outer product, silently
 for k = 1:numel(tS)
     [~, Gk] = cartpole_field(Xs(:,k), p);
     uImplied(k) = -(lamS(:,k).'*Gk)/2;
 end
-uDirect  = reshape(interp1(R.tN, R.U, tS, 'pchip'), 1, []);
+uDirect = reshape(interp1(R.tN, R.U, tS, 'pchip'), 1, []);
+assert(all(isfinite(uImplied)) && all(isfinite(uDirect)) && any(uImplied) && any(uDirect), ...
+       'study:sign', 'the seed or the direct control is non-finite or identically zero');
+% NORMALISED correlation, with a bar: "not exactly zero" admits a vote of no
+% meaning. The sign vote cannot see a wrong costate SCALE, so the amplitude
+% ratio is reported beside it (1 = the mapping's magnitude is right too).
 signCorr = sum(uImplied.*uDirect) / sqrt(sum(uImplied.^2)*sum(uDirect.^2));
+assert(abs(signCorr) > 0.5, 'study:sign', ...
+       'implied vs direct control correlation %.3f: the seed carries no usable sign information', signCorr);
 if signCorr < 0, lamS = -lamS;  uImplied = -uImplied; end
-ampRatio = sqrt(sum(uImplied.^2)/sum(uDirect.^2));
+seedDiag = struct('signCorr', abs(signCorr), 'flipped', signCorr < 0, ...
+                  'ampRatio', sqrt(sum(uImplied.^2)/sum(uDirect.^2)));
+tGrid = linspace(0, tf, K+1);
+Xg   = interp1(R.tN, R.X.', tGrid, 'pchip').';
+Lg   = interp1(tS, lamS.', tGrid, 'pchip', 'extrap').';
+seed = struct('tf', tf, 'tGrid', tGrid, 'Y', [Xg; Lg]);
+seed.Y(1:4,1) = [0; 0; 0; 0];                  % the fixed departure state
+
 fprintf('\n=== 3. seed from the direct multipliers\n');
 fprintf('  sign correlation %+.4f (flipped: %d), amplitude ratio %.4f\n', ...
-        signCorr, signCorr < 0, ampRatio);
+        signCorr, seedDiag.flipped, seedDiag.ampRatio);
 fprintf('  the correlation votes the SIGN only; the amplitude ratio is printed\n');
 fprintf('  beside it because a wrong costate SCALE is invisible to that vote.\n');
-
-K     = 8;
-tGrid = linspace(0, tf, K+1);
-Xg    = interp1(R.tN, R.X.', tGrid, 'pchip').';
-Lg    = interp1(tS, lamS.', tGrid, 'pchip', 'extrap').';
-seed  = struct('tf', tf, 'tGrid', tGrid, 'Y', [Xg; Lg]);
-seed.Y(1:4,1) = x0;
+fprintf('  both are gated by the lifted asserts above (finite, non-zero, |corr| > 0.5).\n');
 
 %% 4. Solve: four unknowns lam(0) against four terminal conditions
 prob = struct('ny', 8, 'freeIdx0', 5:8, ...
@@ -176,9 +217,10 @@ seed2 = seed;  seed2.Y(5:8,:) = 1.05*seed.Y(5:8,:);
 [~, it2] = oc.ms_bvp(prob, seed2, struct('fixedTf', true, 'tolR', tol.R, ...
                                          'maxIter', 60, 'polishMax', 5));
 dLam0 = max(abs(it2.Y(5:8,1) - lam0));
-X2    = it2.converged && dLam0 < 1e-6;
+X2    = it2.converged && dLam0 < tol.dLam0;
 fprintf('\n=== 5. perturbed seed (costates x 1.05)\n');
-fprintf('  X2 same root: max|dlam(0)| = %.3e / 1.0e-06                %s\n', dLam0, pf(X2));
+fprintf('  X2 same root: max|dlam(0)| = %.3e / %.1e                %s\n', ...
+        dLam0, tol.dLam0, pf(X2));
 
 %% 6. NECESSARY conditions
 %  ONE flight, read by sections 6 through 9. RelTol 2.5e-14, not the
@@ -238,21 +280,40 @@ end
 N5 = adjWorst < tol.adj;
 fprintf('  N5 adjoint equations    %.3e / %.1e (rel)              %s\n', adjWorst, tol.adj, pf(N5));
 
-%  N6: the minimum principle itself -- H(u* + d) - H(u*) >= 0 for every
-%  probe d, at a scatter of times. Not a derivative check: a probe at finite
-%  d would catch a stationary point that is a MAXIMUM, which dH/du = 0 would
-%  not.
+%  N6: the minimum principle, H(u* + d) - H(u*) >= 0 for every probe d at a
+%  scatter of times. BE HONEST ABOUT WHAT THIS MEASURES HERE. With an
+%  UNCONSTRAINED QUADRATIC cost the gap reduces algebraically:
+%      H(u+d) - H(u) = 2 u d + d^2 + sigma d,  and  u = -sigma/2 by
+%  construction, so the gap is d^2 IDENTICALLY -- for every lambda, every F,
+%  every G, every sample. The printed worst gap is therefore d^2 at the
+%  smallest probe (1e-02 at d = 0.1), a constant, not a measurement; and it
+%  cannot catch a maximum either, because H_uu = +2 follows from the
+%  algebraic form of H everywhere. The probe is kept as NARRATIVE and the
+%  gate is carried as a TEMPLATE for the bounded problems (minimum time,
+%  minimum fuel), where u* is an argmin over a compact set, the gap stops
+%  being an identity, and this same probe has real teeth.
+%
+%  What has teeth HERE, at no extra cost: cartpole_pmp_rhs returns as its
+%  second output the control it ACTUALLY integrated, so comparing it with the
+%  U this script rebuilt gates a genuinely different code path -- the study's
+%  own reconstruction drifting from the engine's control.
 gapWorst = inf;
+uWorst   = 0;
 for k = round(linspace(1, nPts, 41))
-    [Fk, Gk] = cartpole_field(X(:,k), p);
+    [Fk, Gk]  = cartpole_field(X(:,k), p);
+    [~, uRhs] = cartpole_pmp_rhs([X(:,k); Lam(:,k)], p);
+    uWorst    = max(uWorst, abs(U(k) - uRhs)/max(1, abs(uRhs)));
     for d = [-10 -1 -0.1 0.1 1 10]
         uP  = U(k) + d;
         HP  = uP^2 + Lam(:,k).'*(Fk + Gk*uP);
         gapWorst = min(gapWorst, HP - H(k));
     end
 end
-N6 = gapWorst > tol.gap;
-fprintf('  N6 min-principle gap    %+.3e / %+.1e (worst)         %s\n', gapWorst, tol.gap, pf(N6));
+N6 = (gapWorst > tol.gap) && (uWorst < tol.u);
+fprintf('  N6 min-principle gap    %+.3e / %+.1e (worst; = d^2 identically)  %s\n', ...
+        gapWorst, tol.gap, pf(gapWorst > tol.gap));
+fprintf('     rebuilt u vs the field''s own u*  %.3e / %.1e (rel)           %s\n', ...
+        uWorst, tol.u, pf(uWorst < tol.u));
 
 %  The flown-control check: the CLOSED-FORM control on the flown state, not
 %  an interpolant of U (interpolating u put the resampling error straight
@@ -304,32 +365,40 @@ end
 
 %% 8. ASSERT the inline numbers against the library instrument
 fprintf('\n=== 8. inline vs library\n');
-%  What the instrument computed, re-derived here where it is cheap: the
-%  determinant it reports at the FINAL sample must match a determinant built
-%  from the same STM by this script's own two lines. The ORDER is the
-%  instrument's own -- it accumulates PhiCum = PHI{k}*PhiCum from k = 1, so
-%  Phi(t_f, 0) = PHI{K}*...*PHI{1}, left-multiplying as k advances.
-PHIend = it.PHI{end};
-for k = numel(it.PHI)-1:-1:1, PHIend = PHIend*it.PHI{k}; end
-Mend    = PHIend(1:4, 5:8);
-detMine = det(Mend);
-dMine   = sign(detMine);
-dLib    = sign(conjOut.detScaled(end));
-%  MAGNITUDE TOO, not the sign alone. The instrument reports
-%  sign(det)*|det|^(1/m), so |det(Mend)|^(1/4) is directly comparable -- and
-%  the comparison is what gives this gate teeth. MEASURED: a deliberately
-%  REVERSED product (PHI{1}*...*PHI{K} instead of PHI{K}*...*PHI{1}) still
-%  came out sign +1 on this trajectory, so a sign-only check would have
-%  passed the very error this gate exists to catch. Its |det|^(1/4) is
-%  2.246689e-01 against the instrument's 1.091147e-01 (106% off), so the
-%  magnitude comparison fires on it. Agreement on the correct ordering:
-%  2.72e-13 relative.
-magMine = abs(detMine)^(1/4);
-magLib  = abs(conjOut.detScaled(end));
-dMag    = abs(magMine - magLib)/max(magLib, realmin);
-V2b     = isequal(dMine, dLib) && dMine ~= 0 && dMag < tol.agree;
-fprintf('  V2 det at t_f           sign %+d vs %+d, |det|^(1/4) %.6e vs %.6e (rel %.2e / %.1e)  %s\n', ...
-        dMine, dLib, magMine, magLib, dMag, tol.agree, pf(V2b));
+%  What the instrument computed, re-derived here where it is cheap -- at
+%  EVERY sample, not only the last. S2's whole verdict rests on the signs of
+%  these eight determinants, so a cross-check that reads one of them leaves
+%  an interior bug (a PhiCum reset, an off-by-one between dets(k) and
+%  tGrid(k+1), a wrong interior sign) passing both V2b and V2c.
+%  The ORDER is the instrument's own -- it accumulates PhiCum = PHI{k}*PhiCum
+%  from k = 1, so Phi(t_{k+1}, 0) = PHI{k}*...*PHI{1}, left-multiplying as k
+%  advances.
+%  SIGN AND MAGNITUDE, not the sign alone. The instrument reports
+%  sign(det)*|det|^(1/m), so |det|^(1/4) is directly comparable -- and the
+%  magnitude comparison is what gives this gate teeth. MEASURED: a
+%  deliberately REVERSED product (PHI{1}*...*PHI{K}) still came out sign +1
+%  at t_f on this trajectory, so a sign-only check would have passed the very
+%  error the gate exists to catch. MEASURED on the correct ordering: worst
+%  |det|^(1/4) relative difference 1.18e-13 over all 8 samples; on the
+%  reversed one the last sample alone is 106% off.
+%  And the TIME AXIS: the instrument's .t must be the junction times it
+%  claims, or every determinant above is attributed to the wrong instant.
+Phi   = eye(8);
+dMine = zeros(1, numel(it.PHI));
+for k = 1:numel(it.PHI)
+    Phi      = it.PHI{k}*Phi;                  % Phi(t_{k+1}, 0)
+    dMine(k) = det(Phi(1:4, 5:8));
+end
+magMine   = abs(dMine).^(1/4);
+magLib    = abs(conjOut.detScaled);
+signOk    = isequal(sign(dMine), sign(conjOut.detScaled)) && all(sign(dMine) ~= 0);
+dMagWorst = max(abs(magMine - magLib)./max(magLib, realmin));
+dtWorst   = max(abs(conjOut.t - it.tGrid(2:end)));
+V2b       = signOk && (dMagWorst < tol.agree) && (dtWorst < tol.tSec);
+fprintf('  V2 Jacobi det, all %d samples: signs match %d, |det|^(1/4) rel %.2e / %.1e,\n', ...
+        numel(dMine), signOk, dMagWorst, tol.agree);
+fprintf('     t axis %.1e s / %.1e                                       %s\n', ...
+        dtWorst, tol.tSec, pf(V2b));
 
 %  Where re-deriving would mean a second unverified copy of delicate
 %  machinery (the sweep, the bracketing, the equilibration), the instrument's
@@ -342,7 +411,7 @@ live  = conjOut.firstFullRank:nSamp;
 nLive = numel(live);
 V2c   = islogical(conjOut.tested) && conjOut.tested && islogical(conjOut.covered) && ...
         nSamp == numel(conjOut.detScaled) && nSamp == numel(conjOut.sigRatio) && ...
-        isequal(conjOut.covered, abs(conjOut.sampledThrough - tf) <= tol.agree) && ...
+        isequal(conjOut.covered, abs(conjOut.sampledThrough - tf) <= tol.tSec) && ...
         isequal(conjOut.pass, strcmp(conjOut.verdict, 'PASS')) && ...
         conjOut.nUnresolved == nnz(conjOut.sigRatio(live) <= tol.sigRatio | ...
                                    conjOut.detScaled(live) == 0);

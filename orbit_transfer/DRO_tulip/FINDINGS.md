@@ -5320,3 +5320,91 @@ boxes into its own section. **Family count reconciled:** the script header
 and the seeds document said four of five were found by branch-blind direct
 solves; this record names three (fast2 61, direct18, direct11 68), and all
 three sources now say three.
+
+## 78. The library generator reviewed as a whole: two Astra passes, two host forks, and what "certified" currently means (2026-09-17)
+
+Mike asked for the DRO -> tulip costate-library generation code to go to
+GPT-6 Astra at xhigh with an independent host review, and for thought on
+three goals: sufficient tests for local optimality, a generator for any
+orbit pair, and awareness of the cart-pole work in
+`optimal_control_examples`. Two Astra passes ran through the raw API
+(`run_phase_torus` with every callee interface, 228 KB, $1.86, 7 min; the
+pipeline + gate stack + audit document, 439 KB, $2.88, 9 min) and two host
+forks read the gate stack and the pipeline independently. Every adjudicated
+claim was verified at its cited lines; the MATLAB semantics in dispute
+(row orientation of the sheet fields, the launcher's `exec`, `pgrep`
+self-match under `zsh -c`) were checked in the shared session.
+
+Records: `reviews/run_phase_torus_review2_adjudicated_2026-09-17.md`
+(19 driver findings, P0-P2) and
+`reviews/library_pipeline_and_optimality_adjudicated_2026-09-17.md`
+(21 pipeline findings, the Q2 gap table, the Q3 abstraction). Astra
+transcripts beside them.
+
+**A mis-bundled first launch.** The first driver bundle inlined
+`DRO_tulip/run_costate_library.m`, the August thrust-ladder script, instead
+of `DRO_tulip/indirect/run_costate_library.m`, the struct-driven front door
+the driver calls. Two functions with one name, one folder apart; the
+driver's `addpath` order makes MATLAB pick the right one, a reader will
+not. Killed at 5 min, relaunched. Rename or delete the August script.
+
+**What the passes converged on, independently.** (1) The sheet, ribs,
+filler and discovery are all set up at the shipped operating point:
+`run_costate_library` passes the sheet builder no `sD`, `anchorMat` or
+`sA0`, so every campaign so far has worked because every campaign used
+`sD0 = 0` and the 70 mN anchor. (2) Root identity is t_f alone in the
+registry (1e-3 d), the family map (0.02 d) and the catalog winner
+(1e-9 d); only the sheet compares z8. (3) The optimality certificate is
+for the FIXED-PHASE point-to-point problem with SAMPLED H2/H3 positivity
+and an ASSESSED (not proved) H5; a free-phase saddle passes by
+construction, and the theorem the audit invokes is not cited. (4) The
+catalog audit fails open: a polish that times out leaves `conjNow = NaN`
+and every rejection is `isfinite(x) && ...`. The 576/0 figures of sections
+70-72 stand as measurements of what the audit checked, not of what its
+name says; re-run fail-closed before quoting them again.
+
+**Driver-only defects, host-found and Astra-confirmed:** a failed arc can
+never be retried (`.fail` tested before `.done`, never cleared); a
+`budget` campaign cannot be resumed although its stop reason says to;
+recorded PIDs are never read on resume (duplicate writers); discovery can
+re-anchor a root the filler just anchored (`added` is required on the
+spine path, not the discovery path); a resumed round drops the filler's
+roots (`fh.nCert` counts this call only).
+
+**Goal 2 (local-optimality tests), the answer.** Not sufficient for the
+claim, sufficient for the assessment. Cheap and next: Lipschitz margins
+for H2/H3 above the measured lambda_m uncertainty; the phase-transversality
+cross-check `dt_f/ds_A = tau_A lambda_rv(t_f) . f_orb(x_f)` against the
+sheet's own differences (zero cost, and the first check of lambda(t_f)
+against anything); the fail-closed mutation suite through audit and
+certifier; `multiplicity == 0` in the certifier's consistency test. Then
+the short-time sign, an independent accessory-problem inertia test, and
+one paragraph citing the mixed bang/smooth sufficiency theorem. Astra's
+exact gap identity `H(s,alpha) - H(1,alpha*) = T Q_mt (1-s) + (s T
+|lambda_v| / 2m)|alpha - alpha*|^2` is the quantitative form of H2/H3.
+
+**Goal 3 (any orbit pair), the answer.** The thrust-ladder pipeline is
+already pair-generic (`ladder_endpoints` / `get_family_orbit`); the
+phase-torus pipeline is wired to `arclength_arrival`'s literal
+`tauDRO/NpTulip/pmTulip` and every identity check downstream copies that
+list. One `pair` struct (`dep`/`arr` with family, params, `state(s)`,
+`dstate(s)`, period, `kind`, `wrap`; `model`; one identity string) as
+`B.problem` is the refactor, and `physicsOnly` setup is its first step.
+GTO is departure-only under this abstraction: as an arrival it is an
+epoch-dependent rendezvous with a target-motion term in the free-time
+condition, a different problem class. Four documented families are not
+in `get_family_orbit` (Pumpkin, LPO, Axial, Cycler). The z8-only schema
+needs junction states before any long-transfer pair.
+
+**Goal 4 (the cart-pole work).** Its lessons are the same ones this review
+found: an audit that re-runs the same instruments is a mirror, not an
+oracle (the sign error that nine reviews missed); a gate that cannot fail
+is carried as narrative, not as a gate (N6); every study script asserts its
+inline numbers against the shared instrument. The phase-transversality
+check is this pipeline's power-balance oracle: independent of the
+certifier, derived from the problem's geometry, free.
+
+**Goal 5 (replicate the study scripts under DPO_tulip).** Do the `pair`
+refactor first, then instantiate DPO as its second consumer, the same
+admission rule oclib uses; a copy made today carries the DRO literals and
+the shipped-anchor dependency with it.

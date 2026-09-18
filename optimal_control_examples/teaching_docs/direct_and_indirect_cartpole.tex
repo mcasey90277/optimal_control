@@ -713,4 +713,77 @@ principle); then \file{run\_cartpole\_pmp.m} top to bottom; then
 \file{test\_cartpole\_physics.m}, which is the shortest statement of what it
 means to actually believe a dynamics model.
 
+% =======================================================================
+\section{The executable companion, and the objective that never has to choose}\label{sec:companion}
+
+\begin{eli}
+Everything this document described is also a script you can run:
+\file{cartpole\_minenergy\_study.m}. Press Run and it works through the same
+story in the same order, printing PASS or FAIL as it goes instead of only at
+the end. One more thing worth noticing on the way out: at no point did the
+best push ever require a decision. It fell out of a formula, every time, at
+every instant. The next two chapters of this project --- not written yet ---
+change exactly that: give the cart a top speed of push it may not exceed, or
+make it pay for every newton instead of every newton squared, and the same
+question stops having a formula for an answer and starts having a switch.
+\end{eli}
+
+\begin{intu}
+The script is not organized section-for-section with this document --- it is
+organized as a pipeline, load $\to$ seed $\to$ solve $\to$ check --- so here is
+the correspondence:
+\begin{itemize}\itemsep2pt
+\item \S1 (what problem is this) $\leftrightarrow$ the script's steps 0 and 2:
+  the tolerance table, then the same cost and boundary conditions, in code.
+\item \S2 (the plant) $\leftrightarrow$ step 1: \file{cartpole\_params}, and
+  the physics oracle (V1) run and asserted \emph{first}, before anything
+  downstream is allowed to mean anything.
+\item \S4--\S\ref{sec:stm} (the indirect method, the bridge, shooting)
+  $\leftrightarrow$ steps 3 and 4: the seed lifted verbatim from
+  \file{run\_cartpole\_pmp.m}'s own multiplier block, then \texttt{oc.ms\_bvp}.
+\item \S7 (what the two methods produce) $\leftrightarrow$ the X1 check
+  folded into step 6.
+\item \S8 (how we know it is right) $\leftrightarrow$ steps 5--8: the
+  independent-seed check (X2), the necessary conditions (N1--N6), the
+  sufficiency test (S1--S2), and the cross-check against the library
+  instrument.
+\item \S\ref{sec:signerror} (the sign error) $\leftrightarrow$ step 1's V1
+  oracle again --- the same outside-the-equations check, run once and relied
+  on everywhere after.
+\end{itemize}
+Why no switch here: an unconstrained control being minimized against a
+\emph{strictly convex} cost is a parabola with nowhere to hit a wall. Put a
+wall in front of it (a bound on $u$) or straighten the parabola into a line
+or a V (a cost linear in $u$ or in $|u|$) and the minimizer stops living where
+calculus finds it and starts living at the wall --- which is a decision, made
+anew whenever the wall relocates.
+\end{intu}
+
+\begin{rig}
+Dropping the parts of $H$ that do not depend on $u$, the three costs reduce
+to $H(u) = u^2 + \sigma u$ here, $H(u) = 1 + \sigma u$ for minimum time, and
+$H(u) = |u| + \sigma u$ for minimum fuel, all sharing $\sigma = \lambda^\top g$
+--- the switching function already named in \S\ref{sec:stm}, where on this
+problem it does nothing but sit at a nonzero value.
+
+$H(u)=u^2+\sigma u$ is \emph{strictly} convex ($H_{uu}=2>0$ everywhere) and
+$u$ ranges over all of $\R$, so $H_u=0$ is both necessary and sufficient for
+the global minimizer: one equation, one formula, the box in \S4. $H(u) =
+1+\sigma u$ is \emph{affine} in $u$ ($H_{uu}=0$): an affine function has no
+interior minimum, so minimizing it over the compact set $|u|\le u_{\max}$
+forces the answer to a boundary point, $u^\star=-u_{\max}\operatorname{sign}\sigma$,
+except at the isolated instants where $\sigma=0$ --- a switch. $H(u) =
+|u|+\sigma u$ is convex but only \emph{piecewise} linear, with a corner at
+$u=0$ and no strict convexity anywhere; minimizing it over $|u|\le u_{\max}$
+gives $u^\star=-u_{\max}\operatorname{sign}\sigma$ when $|\sigma|>1$,
+$u^\star=0$ when $|\sigma|<1$, and leaves $u^\star$ undetermined by this
+condition alone on any interval where $|\sigma|\equiv1$ --- a switch with a
+dead zone. In both new problems $\sigma$'s zeros or unit crossings, not a
+derivative, decide the structure of the control, and locating them (event
+detection, saltation matrices across the jump) is the content of
+sub-projects B (minimum time) and C (minimum fuel). Their equations are not
+repeated here; this document will get them when the code exists to teach
+from, the same rule \S1--\S\ref{sec:stm} followed for this objective.
+\end{rig}
+
 \end{document}

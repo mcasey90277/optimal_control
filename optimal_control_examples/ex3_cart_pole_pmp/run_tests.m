@@ -46,7 +46,8 @@ names = {'test_cartpole_physics'      % the independent oracle: geometry only
          'test_cartpole_pmp_rhs'      % the PMP field
          'test_direct_ref'            % the committed fixture
          'test_cartpole_pmp_prop'     % propagator, STM, collapse contract
-         'test_cartpole_pmp'};        % the solve, end to end (slowest)
+         'test_cartpole_pmp'          % the solve, end to end
+         'test_minenergy_study'};     % the study script, gates and verdict (slowest)
 
 res = false(1, numel(names));
 secs = zeros(1, numel(names));

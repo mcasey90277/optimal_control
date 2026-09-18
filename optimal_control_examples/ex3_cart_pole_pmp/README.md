@@ -118,6 +118,7 @@ test_cartpole_pmp_rhs      % the PMP field IS the PMP conditions (~instant)
 test_direct_ref            % the committed direct fixture: feasible, stationary, off its bound (~instant)
 test_cartpole_pmp_prop     % the propagator, the STM, and the collapse contract by identifier (~1 min)
 test_cartpole_pmp          % the whole indirect solve end to end (~2 min: two ms_bvp shoots, K=8 and K=16)
+test_minenergy_study       % the study script: it runs, it reaches a verdict, it agrees with the front door (~2 min)
 ```
 
 ## Fixture provenance
@@ -142,6 +143,54 @@ test_cartpole_pmp          % the whole indirect solve end to end (~2 min: two ms
   solver stopping iterate on the same root) and is NOT a reason to
   regenerate: doing so on every wobble is how a tripwire stops being one.
 
+## Study script
+
+`cartpole_minenergy_study.m` solves the same problem again, but it is not
+another front door: it is the *study* of the solve, and the first of three
+entry scripts (minimum energy here, minimum time and minimum fuel to
+follow) in the style of
+`orbit_transfer/DRO_tulip/indirect/transfer_study.m`.
+
+```matlab
+cd optimal_control_examples/ex3_cart_pole_pmp
+cartpole_minenergy_study                       % ~1 min, prints sections 1-9 and a verdict
+```
+
+What the style is FOR:
+
+- **The steps are visible rather than behind a front door.** The script does
+  not call `run_cartpole_pmp`; it loads the fixture, maps the duals, shoots,
+  re-flies and checks, in numbered sections you can read top to bottom.
+- **Every condition is computed inline and gated inline**, printed as
+  `value / threshold  PASS|FAIL`, with one `tol` struct in section 0 whose
+  every field carries what it gates and the number that was *measured* for
+  it. Diagnostic IDs are stable: `N` necessary, `S` sufficiency, `V`
+  validity, `X` cross-check.
+- **Section 8 asserts the script against the library**, so the two cannot
+  drift: the Jacobi determinant the script rebuilds from `info.PHI` must
+  match `oc.ms_conjugate_test`'s own, in sign *and* magnitude. Sign alone
+  does not discriminate -- a deliberately reversed STM product still came
+  out `+1` on this trajectory -- so the gate compares `|det|^(1/4)` against
+  the instrument's `sign(det)*|det|^(1/m)` report.
+- **Two computations deliberately stay in the library**, because a second
+  copy of either would be a second *unverified* copy: the physics oracle
+  (`test_cartpole_physics`, V1, run as the script's first act) and the
+  conjugate-point sweep (S2).
+- **It refuses to pass quietly.** The script `assert`s its necessary
+  verdict, so a failed `N`, `X` or `V` gate throws. A failed or unresolved
+  `S` gate is a *finding about this trajectory* and is reported, not thrown,
+  unless `selfCheck.strict` is set. On this trajectory S2 is clean: 8
+  samples, all live from t = 0.625 s, no interior conjugate point, none
+  unresolved, covered through `t_f`.
+
+`tests/test_minenergy_study.m` runs it in an isolated workspace and checks
+the verdict's shape, that the claim is not made unless both sections support
+it, and that `J` and `lam0` match `run_cartpole_pmp` -- the study and the
+front door must not drift apart. A throw out of the study *is* the failure
+report for a necessary gate; there is deliberately no separate check on
+`verdict.necessary`, because after an assert that throws such a check could
+never fail.
+
 ## The movie
 
 `movie_cartpole` animates both solutions on one clock, with the two control
@@ -159,15 +208,21 @@ is the 0.062% cost agreement made visible. Frames are forced to an exact
 1280x720 because H.264 shears frames whose dimensions are not multiples of
 16, which shows up as diagonal coloured streaks.
 
-## What it produces (measured 2026-09-17)
+## What it produces (re-measured 2026-09-17, task 4)
+
+The terminal miss, flown miss and Hamiltonian spread below supersede earlier
+figures (3.67e-11, 1.67e-07, 5.77e-13) taken at settings this folder no
+longer ships; `run_cartpole_pmp` and `cartpole_minenergy_study` now print
+identical values for every row.
 
 | quantity | value | what it means |
 |---|---|---|
 | `J` indirect / direct | 2779.381719 / 2781.109846 | 0.062% apart; the gap is the 201-node trapezoid's discretization error, and the indirect solve is the more accurate of the two |
-| terminal miss | 3.67e-11 | re-flying `lam0` over the whole 5 s and comparing with `x_f`. Gate 1e-9 |
-| engine residual | 7.27e-14 | the shooting's OWN last-arc terminal residual, independent of the reporting flight |
-| flown miss | 1.67e-07 | flying the closed-form control `u = -lam'G/2` through the true dynamics. Gate 1e-6 |
-| Hamiltonian spread | 5.77e-13 relative | `H` is constant (not zero: `t_f` is fixed) along an extremal of this autonomous flow |
+| BVP residual | 9.607e-12 | `oc.ms_bvp`'s own `normR` at the accepted iterate. Gate 1e-10 |
+| terminal miss | 1.475e-10 | re-flying `lam0` over the whole 5 s at `RelTol` 2.5e-14 and comparing with `x_f`. Gate 1e-9 |
+| engine residual | 7.268e-14 | the shooting's OWN last-arc terminal residual, independent of the reporting flight |
+| flown miss | 1.972e-07 | flying the closed-form control `u = -lam'G/2` through the true dynamics. Gate 1e-6 |
+| Hamiltonian spread | 3.381e-12 relative | `H` is constant (not zero: `t_f` is fixed, `H = -99.274321`) along an extremal of this autonomous flow |
 | seed quality | correlation 0.9998, amplitude ratio 1.009 | the dual-derived costates agree with the direct solve's control in sign AND scale |
 | `max\|u\|` | 68.5 N | well inside the fixture's relaxed 2000 N bound |
 

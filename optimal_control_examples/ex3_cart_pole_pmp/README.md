@@ -181,9 +181,12 @@ What the style is FOR:
   N6's minimum-principle gap is an algebraic identity (`H(u+d) - H(u) = d^2`
   for every costate and sample, because the cost is quadratic and the control
   unconstrained), so the probe is kept as narrative and as a template for the
-  bounded problems, and N6's actual teeth come from comparing the control the
-  script rebuilds with the one `cartpole_pmp_rhs` integrated -- a different
-  code path.
+  bounded problems. The `tol.u` check beside it is described the same way and
+  no better: both it and the inline reconstruction evaluate the same closed
+  form from the same inputs, so its exact zero is expected -- it catches the
+  two *copies* drifting apart by typo or refactor, not a physics error and
+  not the solver's own control. Neither half of N6 is load-bearing until the
+  control is bounded.
 - **It refuses to pass quietly.** The script `assert`s its necessary
   verdict, so a failed `N`, `X` or `V` gate throws. A failed or unresolved
   `S` gate is a *finding about this trajectory* and is reported, not thrown,

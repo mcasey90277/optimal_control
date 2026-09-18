@@ -73,13 +73,22 @@ tol = struct( ...
     ...                      % teeth here come from tol.u beside it.
     'adj',      1e-9,  ...   % adjoint equations, relative, vs complex-step
     ...                      % differentiation of H. MEASURED 6.091e-16.
-    'u',        1e-12, ...   % the U this script rebuilt against the control
-    ...                      % cartpole_pmp_rhs ACTUALLY integrated (its second
-    ...                      % output), relative. A genuinely different code
-    ...                      % path, unlike the d-probe beside it. MEASURED
-    ...                      % 0 (bit-identical: the two lines compute
-    ...                      % -lam'G/2 from the same inputs, so any drift is
-    ...                      % a real divergence, not round-off).
+    'u',        1e-12, ...   % the U this script rebuilt against the u that
+    ...                      % cartpole_pmp_rhs returns as its second output,
+    ...                      % relative. BE PRECISE ABOUT WHAT THIS IS: both
+    ...                      % sides evaluate the SAME closed form -(lam'G)/2
+    ...                      % from the SAME cartpole_field call on the SAME
+    ...                      % inputs, and ode113 discards that second output
+    ...                      % entirely, so this is NOT the control the solver
+    ...                      % integrated and the MEASURED 0.000e+00 is an
+    ...                      % expected tautology, not evidence of independent
+    ...                      % agreement. What it does catch is HUMAN
+    ...                      % divergence -- a typo or a refactor moving one
+    ...                      % of the two copies away from the other -- which
+    ...                      % is why the gate sits at 1e-12 rather than at a
+    ...                      % round-off allowance. It cannot catch a physics
+    ...                      % error (V1 does that), and it only becomes
+    ...                      % load-bearing in the bounded problems.
     'dLam0',    1e-6,  ...   % X2: a perturbed seed must return the SAME root,
     ...                      % max|dlam(0)|. MEASURED 6.139e-11 -- four orders
     ...                      % of margin, so the gate is about basins, not
@@ -293,10 +302,18 @@ fprintf('  N5 adjoint equations    %.3e / %.1e (rel)              %s\n', adjWors
 %  minimum fuel), where u* is an argmin over a compact set, the gap stops
 %  being an identity, and this same probe has real teeth.
 %
-%  What has teeth HERE, at no extra cost: cartpole_pmp_rhs returns as its
-%  second output the control it ACTUALLY integrated, so comparing it with the
-%  U this script rebuilt gates a genuinely different code path -- the study's
-%  own reconstruction drifting from the engine's control.
+%  Beside it, the tol.u check, and it is worth being exact about what that
+%  one is too. cartpole_pmp_rhs returns the PMP control as a second output,
+%  and this script rebuilds the same control inline at :198. Both evaluate
+%  -(lam'G)/2 from the same cartpole_field call on the same inputs, and
+%  ode113 throws the second output away -- so this is NOT the control the
+%  solver integrated, and the measured exact zero is expected, not a
+%  coincidence worth celebrating. The gate is there to catch the two COPIES
+%  drifting apart by typo or refactor, nothing more; it says nothing about
+%  the physics (V1's job) or about optimality. In B (minimum time) and C
+%  (minimum fuel) the control is an argmin over a bounded set and the two
+%  sides stop being the same expression -- there the comparison becomes
+%  load-bearing, and so does the d-probe above it.
 gapWorst = inf;
 uWorst   = 0;
 for k = round(linspace(1, nPts, 41))
@@ -381,6 +398,16 @@ fprintf('\n=== 8. inline vs library\n');
 %  error the gate exists to catch. MEASURED on the correct ordering: worst
 %  |det|^(1/4) relative difference 1.18e-13 over all 8 samples; on the
 %  reversed one the last sample alone is 106% off.
+%  WHY THAT RESIDUAL IS 1e-13 AND NOT 1e-16, so nobody later "tightens"
+%  tol.agree toward machine epsilon: the two sides run DIFFERENT DETERMINANT
+%  ALGORITHMS at every sample. The instrument equilibrates the block, takes a
+%  pivoted LU, and reassembles |det|^(1/m) by log-sum-exp; this script takes
+%  a plain det() and then abs(.)^(1/4). Association order in the STM product
+%  differs as well, but the algorithmic difference is the larger and the
+%  permanent one. Note also that the 4th root COMPRESSES the comparison: a
+%  relative error eps in the determinant appears as about eps/4 in
+%  |det|^(1/4), so tol.agree is effectively 4x looser on the determinant than
+%  it reads.
 %  And the TIME AXIS: the instrument's .t must be the junction times it
 %  claims, or every determinant above is attributed to the wrong instant.
 Phi   = eye(8);

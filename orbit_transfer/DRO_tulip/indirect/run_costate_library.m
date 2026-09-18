@@ -81,6 +81,11 @@ function out = run_costate_library(opts)
 %                              points survive where the new spine's rib did
 %                              not beat them. Validated against this
 %                              campaign's problem identity by the packager.
+%   .anchorMat, .anchorSA      the campaign's anchor root file and the arrival
+%                              phase it was certified at; the sheet is set up
+%                              from them at departure phase sD(1). Default:
+%                              the shipped 70 mN anchor at 0.0754
+%   .sheetBuilder              [@build_arrival_sheet] injectable (tests)
 %   .outDir ['results_fine']   everything this run writes (made absolute)
 %   .nWorkers [4]              rib workers
 %   .run                       stage switches: .sheet .ribs
@@ -128,6 +133,10 @@ function out = run_costate_library(opts)
 %                                                   .sheet .queue .catalog
 %                                                   .cmd (the
 %                                                   launch command) .blockers
+%                                                   .stages (.package .audit
+%                                                   .sweep: true | false | NaN
+%                                                   = not run) -- 'packaged'
+%                                                   alone is NOT audit success
 %
 %% Revision History:
 %  M. Casey                                                   (c) 09/13/2026
@@ -135,6 +144,9 @@ function out = run_costate_library(opts)
 %% ------------------------ Begin Code Sequence ---------------------------
 
 if nargin < 1, opts = struct(); end
+% TEST SEAM: handles to this file's local functions, by name
+% (tests/test_run_costate_library_seams)
+if ischar(opts) && strcmp(opts, 'localfunctions'), out = localHandles(localfunctions);  return, end
 d = @(f,v) fieldd(opts, f, v);
 here = fileparts(mfilename('fullpath'));
 addpath(here, fullfile(fileparts(fileparts(here)), 'costate_common'), ...
@@ -191,7 +203,8 @@ ribTargets = rib_targets(sD, sD0, -1);      % unwrapped offsets the ribs walk
 nPts = numel(ribTargets);
 
 out = struct('state', 'pending', 'sheet', '', 'queue', fullfile(outDir, 'ribq'), ...
-             'catalog', '', 'cmd', '', 'blockers', {{}});
+             'catalog', '', 'cmd', '', 'blockers', {{}}, ...
+             'stages', struct('package', NaN, 'audit', NaN, 'sweep', NaN));
 sheetMat = fullfile(outDir, sprintf('arrival_sheet_70mN_nA%d.mat', nA));
 out.sheet = sheetMat;
 tStar = 382981.289129055;
@@ -235,12 +248,26 @@ else
 end
 
 %% 1. ARRIVAL SHEET -- from the saved arcs, no new continuation
+% The sheet is set up at THIS campaign's operating point: the spine's
+% departure phase sD(1) and, when given, the campaign's own anchor (its file
+% and its arrival phase). Leaving them out used to mean "departure phase 0
+% and the shipped 70 mN anchor at 0.0754", which was true of every campaign
+% run so far and of no other: a campaign at sD(1) = 0.2 walked its arcs and
+% then died on the grid assert below (FINDINGS 78).
 if on('sheet') && ~isfile(sheetMat)
-    build_arrival_sheet(struct('sA', sA, 'rescan', true, 'out', sheetMat, ...
+    sheetOpts = struct('sA', sA, 'sD', sD0, 'rescan', true, 'out', sheetMat, ...
         'pattern', d('arcPattern', 'arrival_arc_*.mat'), 'arcDir', d('arcDir', fullfile(here, 'results')), ...
         'seedFiles', {d('seedFiles', {})}, 'librarySeeds', d('librarySeeds', true), ...
         'thrustN', engine.thrustN, 'ispS', engine.ispS, 'm0kg', engine.m0kg, ...
-        'tauDRO', orbits.tauDRO, 'NpTulip', orbits.NpTulip, 'pmTulip', orbits.pmTulip));
+        'tauDRO', orbits.tauDRO, 'NpTulip', orbits.NpTulip, 'pmTulip', orbits.pmTulip);
+    if ~isempty(d('anchorMat', ''))
+        assert(~isempty(d('anchorSA', [])), 'run_costate_library:anchor', ...
+               '.anchorMat needs .anchorSA, the arrival phase that anchor was certified at');
+        sheetOpts.anchorMat = d('anchorMat', '');
+        sheetOpts.sA0 = d('anchorSA', []);           % arclength_arrival's name for the anchor's phase
+    end
+    sheetBuilder = d('sheetBuilder', @build_arrival_sheet);   % injectable, for the seam test
+    sheetBuilder(sheetOpts);
 end
 assert(isfile(sheetMat), 'run_costate_library:noSheet', ...
        'the arrival sheet is missing: %s (stage 1 makes it)', sheetMat);
@@ -538,9 +565,37 @@ if on('package')
 elseif on('audit') || on('sweep')
     out.state = 'measured';                        % audit/sweep ran; nothing was packaged by design
 end
+% 'packaged' says only that THIS call wrote a catalog. Whether the audit and
+% the sweep behind it passed is a separate fact, reported per stage so a
+% caller can require all three (FINDINGS 78).
+out.stages = stageOutcomes(out.blockers, on);
 if ~isempty(out.blockers)
     fprintf('BLOCKERS:\n');  fprintf('  - %s\n', out.blockers{:});
 end
+end
+
+% ------------------------------------------------------------------------
+function s = stageOutcomes(blockers, on)
+% STAGEOUTCOMES  Did package, audit and sweep each pass? Read from the
+% blockers the chain returned: an audit blocker begins 'audit', a sweep
+% blocker 'sweep', a packaging failure names the chain or the receipt. A
+% stage that was switched off is NaN (not run), never a pass or a fail.
+% INPUTS: blockers (cellstr); on (handle, on('stage') -> logical).
+% OUTPUTS: s struct .package .audit .sweep (true | false | NaN).
+begins = @(prefixes) any(cellfun(@(b) any(startsWith(b, prefixes)), blockers));
+s = struct('package', NaN, 'audit', NaN, 'sweep', NaN);
+if on('package'), s.package = ~begins({'packaging chain threw', 'no catalog receipt', 'the catalog receipt'}); end
+if on('audit'),   s.audit   = ~begins({'audit'}); end
+if on('sweep'),   s.sweep   = ~begins({'sweep'}); end
+end
+
+% ------------------------------------------------------------------------
+function H = localHandles(fh)
+% LOCALHANDLES  This file's local functions as a struct of handles keyed by
+% name -- the TEST SEAM: a test calls the real helper, not a copy of it.
+% INPUTS: fh (cell of handles, from localfunctions).  OUTPUTS: H struct.
+H = struct();
+for k = 1:numel(fh), H.(func2str(fh{k})) = fh{k}; end
 end
 
 % ------------------------------------------------------------------------
@@ -668,7 +723,9 @@ txt = sprintf([ ...
  'spec.run = struct(''sheet'', false, ''ribs'', true, ''package'', true, ''audit'', true, ''sweep'', true);\n' ...
  'out = run_costate_library(spec);\n' ...
  'fprintf(''FINALIZE: state %%s\\n'', out.state);\n' ...
- 'if ~strcmp(out.state, ''packaged''), error(''finalize_job:notPackaged'', ''state %%s: %%s'', out.state, strjoin(out.blockers, '' | '')); end\n'], ...
+ 'if ~strcmp(out.state, ''packaged''), error(''finalize_job:notPackaged'', ''state %%s: %%s'', out.state, strjoin(out.blockers, '' | '')); end\n' ...
+ 'failed = fieldnames(out.stages);  failed = failed(structfun(@(v) isequal(v, false), out.stages));\n' ...
+ 'if ~isempty(failed), error(''finalize_job:stageFailed'', ''packaged, but %%s did not pass: %%s'', strjoin(failed, '', ''), strjoin(out.blockers, '' | '')); end\n'], ...
  roots, structLit(finSpec));
 tmp = sprintf('%s.%s.part', jobFile, char(java.util.UUID.randomUUID()));
 fid = fopen(tmp, 'w');

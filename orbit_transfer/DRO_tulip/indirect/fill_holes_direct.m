@@ -49,7 +49,8 @@ function out = fill_holes_direct(catMat, opts)
 %                                                   certified root is kept
 %   .wallSec                double                  per certification [600]
 %   .K                      int                     shooting segments [24]
-%   .anchorMat              char                    a certified root file
+%   .anchorMat              char                    IGNORED since 2026-09-18 (the
+%                                                   setup is closures-only); was a certified root file
 %                                                   for arclength_arrival's
 %                                                   setup (only its layout
 %                                                   is used) [the 70 mN anchor]
@@ -67,6 +68,8 @@ function out = fill_holes_direct(catMat, opts)
 %  Copyright Coorbital Inc.
 %% ------------------------ Begin Code Sequence ---------------------------
 
+% TEST SEAM: handles to this file's local functions (tests/test_fill_holes_physics)
+if ischar(catMat) && strcmp(catMat, 'localfunctions'), out = localHandles(localfunctions);  return, end
 if nargin < 2, opts = struct(); end
 d = @(f, v) fieldd(opts, f, v);
 here = fileparts(mfilename('fullpath'));
@@ -94,10 +97,7 @@ nHoles = nnz(~has);
 lg('fill_holes_direct: %d x %d grid, %d holes, %d cells to try', nD, nA, nHoles, size(cells, 1));
 
 % ---- the physics, FROM THE CATALOG (engine, orbits, spine) ---------------
-so = struct('thrustN', cat_.rungs_N(1), 'ispS', cat_.thruster.isp_s, 'm0kg', cat_.thruster.m0_kg, ...
-            'tauDRO', sh.tauDRO, 'NpTulip', sh.Np, 'pmTulip', sh.pm, 'sD', sD(1));
-if isfield(opts, 'anchorMat') && ~isempty(opts.anchorMat), so.anchorMat = opts.anchorMat; end
-[B, ~] = arclength_arrival('setup', so);
+[B, ~] = arclength_arrival('setup', physicsFromCatalog(cat_, sh, sD(1)));
 pool = capped_pool();
 floorKm = clearKm - rMoonKm;
 problem = B.problem;
@@ -304,4 +304,26 @@ for f = setdiff(fieldnames(C), fieldnames(pts))', [pts.(f{1})] = deal([]); end
 for f = setdiff(fieldnames(pts), fieldnames(C))', C.(f{1}) = []; end
 C = orderfields(C, pts);
 pts(end+1) = C;
+end
+
+% ------------------------------------------------------------------------
+function so = physicsFromCatalog(cat_, sh, sD1)
+% PHYSICSFROMCATALOG  The setup request for this catalog's problem: engine,
+% orbits and the spine's departure phase, CLOSURES ONLY. The filler needs
+% the endpoint closures and the propulsion constants, never an anchor; asking
+% for one made it re-polish the shipped 70 mN anchor, which fails for any
+% other engine, orbit pair or departure phase (FINDINGS 78).
+% INPUTS: cat_ (catalog struct); sh (its sheet); sD1 (spine departure phase).
+% OUTPUTS: so struct for arclength_arrival('setup', so).
+so = struct('thrustN', cat_.rungs_N(1), 'ispS', cat_.thruster.isp_s, 'm0kg', cat_.thruster.m0_kg, ...
+            'tauDRO', sh.tauDRO, 'NpTulip', sh.Np, 'pmTulip', sh.pm, 'sD', sD1, 'physicsOnly', true);
+end
+
+% ------------------------------------------------------------------------
+function H = localHandles(fh)
+% LOCALHANDLES  This file's local functions as a struct of handles keyed by
+% name -- the TEST SEAM: a test calls the real helper, not a copy of it.
+% INPUTS: fh (cell of handles, from localfunctions).  OUTPUTS: H struct.
+H = struct();
+for k = 1:numel(fh), H.(func2str(fh{k})) = fh{k}; end
 end

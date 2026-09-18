@@ -15,7 +15,11 @@ function A = audit_phase_catalog(catMat, opts)
 %     WITNESS pumpkyn tfMin from z8 returns z8, and ITS solution also flies
 %             to the target
 %     SECOND  the conjugate verdict and the three hypothesis gates,
-%             RECOMPUTED and compared with what the catalog stores
+%             RECOMPUTED and compared with what the catalog stores. FAIL
+%             CLOSED: a re-polish or gates call that fails or times out, a
+%             polished root that left the stored one (.tolMove), a gate
+%             that is not a pass (H2, H3, dim S = 1, H6) -- each is a BAD
+%             row, never a skipped check
 %
 %   Written 2026-09-10 after an external review found labelling and export
 %   defects in the builder. The builder has been fixed; this answers the
@@ -28,7 +32,8 @@ function A = audit_phase_catalog(catMat, opts)
 %  opts                     struct (optional)
 %   .gateKm [100] .gateVms [10] gross flight screens, .tolFlyKm [1] the
 %   ENDPOINT-REPRODUCTION gate (see below), .tolDz [1e-6] .idx [] entries to audit
-%   (default all), .out '' save path, .pool [capped_pool()]
+%   (default all), .out '' save path, .pool [capped_pool()], .tolMove [1e-6],
+%   .cappedWrap [] @(realCap) -> a replacement fence (tests/test_audit_fail_closed)
 %
 %% Outputs:
 %
@@ -57,6 +62,11 @@ gateKm = d('gateKm', 100);  gateVms = d('gateVms', 10);  tolDz = d('tolDz', 1e-6
 % (the worst legitimate entry measures 0.29 km) and well below that failure.
 tolFlyKm = d('tolFlyKm', 1);
 pool = d('pool', capped_pool());
+% the fence. A test may WRAP it (opts.cappedWrap = @(realCap) wrappedCap) to
+% knock one call out; the real one is handed in because it is local here
+cap = @capped;
+if isfield(opts, 'cappedWrap') && ~isempty(opts.cappedWrap), cap = opts.cappedWrap(@capped); end
+tolMove = d('tolMove', 1e-6);               % how far the re-polish may move a stored root
 
 L = load(catMat);  fn = fieldnames(L);  c = L.(fn{1});
 assert(numel(c.sheets) == 1, 'this audit handles a single-sheet phase catalog');
@@ -80,14 +90,14 @@ idx = d('idx', 1:numel(iD));
 rows = struct('iD', {}, 'iA', {}, 'sD', {}, 'sA', {}, 'tfStored', {}, 'tfZ8', {}, ...
               'flyKm', {}, 'flyVms', {}, 'dz', {}, 'witKm', {}, 'massErr', {}, ...
               'conjStored', {}, 'conjNow', {}, 'dimSStored', {}, 'dimSNow', {}, ...
-              'ok', {}, 'problem', {});
+              'dzPolish', {}, 'ok', {}, 'problem', {});
 problems = {};
 for kk = idx(:)'
     r = struct('iD', iD(kk), 'iA', iA(kk), 'sD', s.sD_frac(iD(kk)), 'sA', s.sA_frac(iA(kk)), ...
                'tfStored', s.tf_nd(iD(kk), iA(kk), iR(kk)), 'tfZ8', NaN, 'flyKm', NaN, ...
                'flyVms', NaN, 'dz', NaN, 'witKm', NaN, 'massErr', NaN, ...
                'conjStored', NaN, 'conjNow', NaN, 'dimSStored', NaN, 'dimSNow', NaN, ...
-               'ok', false, 'problem', '');
+               'dzPolish', NaN, 'ok', false, 'problem', '');
     z8 = s.z8(:, s.entry_index(iD(kk), iA(kk), iR(kk)));
     r.tfZ8 = z8(8);
     if isfield(s, 'conj_pass'),  r.conjStored  = double(s.conj_pass(iD(kk), iA(kk), iR(kk))); end
@@ -102,7 +112,7 @@ for kk = idx(:)'
 
     rv0 = stD(r.sD);  rvf = stA(r.sA);
     % FLIGHT
-    [okF, tF, Yf] = capped(pool, 300, @pumpkyn.cr3bp.tfMinProp, 2, z8(8), [rv0(1:6); 1; z8(1:7)], Tnd, cnd, mu);
+    [okF, tF, Yf] = cap(pool, 300, @pumpkyn.cr3bp.tfMinProp, 2, z8(8), [rv0(1:6); 1; z8(1:7)], Tnd, cnd, mu);
     if ~okF, r.problem = 'flight timed out';  rows(end+1) = r;  problems{end+1} = r.problem; continue, end %#ok<AGROW>
     r.flyKm  = norm(Yf(end,1:3) - rvf(1:3)')*lStar;
     r.flyVms = norm(Yf(end,4:6) - rvf(4:6)')*lStar/tStar*1000;
@@ -121,10 +131,10 @@ for kk = idx(:)'
     if r.massErr > 1e-6,      bad{end+1} = sprintf('mass law %.1e', r.massErr); end
 
     % WITNESS
-    [okW, za] = capped(pool, 300, @pumpkyn.cr3bp.tfMin, 1, rv0(1:6)', rvf(1:6)', z8, Tnd, cnd, mu);
+    [okW, za] = cap(pool, 300, @pumpkyn.cr3bp.tfMin, 1, rv0(1:6)', rvf(1:6)', z8, Tnd, cnd, mu);
     if okW && isnumeric(za) && numel(za) == 8 && all(isfinite(za))
         r.dz = norm(za(:) - z8(:));
-        [okWF, ~, Ya] = capped(pool, 300, @pumpkyn.cr3bp.tfMinProp, 2, za(8), [rv0(1:6); 1; za(1:7)], Tnd, cnd, mu);
+        [okWF, ~, Ya] = cap(pool, 300, @pumpkyn.cr3bp.tfMinProp, 2, za(8), [rv0(1:6); 1; za(1:7)], Tnd, cnd, mu);
         if okWF, r.witKm = norm(Ya(end,1:3) - rvf(1:3)')*lStar; end
     end
     if ~(isfinite(r.dz) && r.dz <= tolDz), bad{end+1} = sprintf('witness |dz| %.1e', r.dz); end
@@ -132,21 +142,43 @@ for kk = idx(:)'
 
     % SECOND ORDER, recomputed
     seed = seed_from_z8(z8, rv0(1:6), 24, Tnd, cnd, mu);
-    [okP, ~, it] = capped(pool, 900, @ms_tfmin, 2, rv0(1:6), rvf(1:6), seed, Tnd, cnd, mu, ...
-                          struct('tolR', 3e-11, 'wallSec', 600, 'conjTest', true));
-    if okP && isfield(it, 'conj') && isfield(it.conj, 'pass')
-        [okc, cv] = scalar_verdict(it.conj.pass);
-        if okc, r.conjNow = cv; end
+    % FAIL CLOSED. Every check below used to read `isfinite(x) && x ~= ...`,
+    % so a re-polish that timed out (x = NaN) was a CLEAN row: the audit
+    % passed exactly the entries it had failed to examine (FINDINGS 78). A
+    % result that is missing, malformed or not a pass is now a BAD row.
+    [okP, zp, it] = cap(pool, 900, @ms_tfmin, 2, rv0(1:6), rvf(1:6), seed, Tnd, cnd, mu, ...
+                           struct('tolR', 3e-11, 'wallSec', 600, 'conjTest', true));
+    if ~(okP && isnumeric(zp) && numel(zp) == 8 && all(isfinite(zp)))
+        bad{end+1} = 're-polish failed or timed out: no second-order verdict';
+    else
+        % the verdict below belongs to the POLISHED root; it speaks for the
+        % stored one only if the polish did not leave it
+        r.dzPolish = norm(zp(:) - z8(:));
+        if ~(r.dzPolish <= tolMove), bad{end+1} = sprintf('polished root moved %.1e from the stored one (limit %g)', r.dzPolish, tolMove); end
+        if isstruct(it) && isfield(it, 'conj') && isfield(it.conj, 'pass')
+            [okc, cv] = scalar_verdict(it.conj.pass);
+            if okc, r.conjNow = cv; end
+        end
+        if ~isfinite(r.conjNow),  bad{end+1} = 're-polish returned no conjugate verdict';
+        elseif r.conjNow ~= 1,    bad{end+1} = sprintf('conjugate verdict %g', r.conjNow);
+        end
+        if isfinite(r.conjStored) && isfinite(r.conjNow) && r.conjStored ~= r.conjNow
+            bad{end+1} = sprintf('conj stored %g, recomputed %g', r.conjStored, r.conjNow);
+        end
     end
-    [okG, g] = capped(pool, 900, @mintime_hypothesis_gates, 1, z8, rv0(1:6), Tnd, cnd, mu, struct());
-    if okG && isstruct(g), r.dimSNow = g.dimS; end
-    if isfinite(r.conjStored) && isfinite(r.conjNow) && r.conjStored ~= r.conjNow
-        bad{end+1} = sprintf('conj stored %g, recomputed %g', r.conjStored, r.conjNow);
+    [okG, g] = cap(pool, 900, @mintime_hypothesis_gates, 1, z8, rv0(1:6), Tnd, cnd, mu, struct());
+    if ~(okG && isstruct(g) && all(isfield(g, {'dimS', 'minLamV', 'minQmt', 'h6Ok'})))
+        bad{end+1} = 'hypothesis gates failed or timed out';
+    else
+        r.dimSNow = g.dimS;
+        if ~(isscalar(g.minLamV) && g.minLamV > 0), bad{end+1} = sprintf('H2: min|lam_v| = %g is not positive', g.minLamV); end
+        if ~(isscalar(g.minQmt)  && g.minQmt  > 0), bad{end+1} = sprintf('H3: min Q_mt = %g is not positive', g.minQmt); end
+        if ~(isscalar(g.dimS)    && g.dimS == 1),   bad{end+1} = sprintf('dim S = %g, not 1', g.dimS); end
+        if ~(isscalar(g.h6Ok)    && logical(g.h6Ok)), bad{end+1} = 'H6 does not hold'; end
+        if isfinite(r.dimSStored) && r.dimSStored ~= r.dimSNow
+            bad{end+1} = sprintf('dim S stored %g, recomputed %g', r.dimSStored, r.dimSNow);
+        end
     end
-    if isfinite(r.dimSStored) && isfinite(r.dimSNow) && r.dimSStored ~= r.dimSNow
-        bad{end+1} = sprintf('dim S stored %g, recomputed %g', r.dimSStored, r.dimSNow);
-    end
-    if isfinite(r.conjNow) && r.conjNow ~= 1, bad{end+1} = sprintf('conjugate verdict %g', r.conjNow); end
 
     r.ok = isempty(bad);
     if ~r.ok, r.problem = strjoin(bad, '; ');  problems{end+1} = sprintf('(%d,%d): %s', r.iD, r.iA, r.problem); end %#ok<AGROW>

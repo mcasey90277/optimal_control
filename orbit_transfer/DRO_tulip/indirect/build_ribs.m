@@ -35,6 +35,8 @@ function R = build_ribs(sheetMat, opts)
 %  Copyright Coorbital Inc.
 %% ------------------------ Begin Code Sequence ---------------------------
 
+% TEST SEAM: handles to this file's local functions (tests/test_fill_holes_physics)
+if ischar(sheetMat) && strcmp(sheetMat, 'localfunctions'), R = localHandles(localfunctions);  return, end
 if nargin < 2, opts = struct(); end
 d = @(f,v) fieldd(opts, f, v);
 here = fileparts(mfilename('fullpath'));
@@ -49,16 +51,14 @@ pool = capped_pool();
 % the default setup, so a sheet certified at a non-default operating point
 % could acquire ribs generated at a different one -- valid trajectories, but
 % not valid additions to that sheet. (Astra chain review 2026-09-10.)
-so = d('setupOpts', struct());
-if isfield(S, 'problem')
-    P = S.problem;
-    so.thrustN = P.thrustN;  so.ispS = P.ispS;  so.m0kg = P.m0kg;
-    so.tauDRO = P.tauDRO;    so.NpTulip = P.NpTulip;  so.sD = P.sD;
-    % the BRANCH travels with the petal count. It was a hardcoded -1 in the
-    % setup, so carrying Np without pm used to be harmless; it is not now.
-    if isfield(P, 'pmTulip'), so.pmTulip = P.pmTulip; end
-end
-[B, anc] = arclength_arrival('setup', so);
+% CLOSURES ONLY. A rib starts from a root the SHEET already certified, so it
+% needs the endpoint closures and the propulsion constants and nothing else.
+% It used to take the full setup, which re-polishes the shipped 70 mN anchor
+% and so fails for any other engine, orbit pair or departure phase
+% (FINDINGS 78). The walker reads one thing from `anc`: the spine's phase.
+so = setupFromSheet(S, d('setupOpts', struct()));
+[B, ~] = arclength_arrival('setup', so);
+anc = struct('sD', B.problem.sD);
 if isfield(S, 'problem')
     % check the WHOLE identity, not two of its fields: the assert existed to
     % catch a rib built at another operating point, and thrust plus phase
@@ -114,4 +114,28 @@ function v = pickField(s, f, d_)
 % PICKFIELD  Field with default (present even if empty).  INPUTS: s; f; d_.
 % OUTPUTS: v.
 if isfield(s, f), v = s.(f); else, v = d_; end
+end
+
+function so = setupFromSheet(S, so)
+% SETUPFROMSHEET  The setup request that reproduces the SHEET's problem:
+% engine, orbits, branch and the spine's departure phase, closures only.
+% INPUTS: S (sheet; .problem optional); so (caller's setup options).
+% OUTPUTS: so struct for arclength_arrival('setup', so).
+if isfield(S, 'problem')
+    P = S.problem;
+    so.thrustN = P.thrustN;  so.ispS = P.ispS;  so.m0kg = P.m0kg;
+    so.tauDRO = P.tauDRO;    so.NpTulip = P.NpTulip;  so.sD = P.sD;
+    % the BRANCH travels with the petal count. It was a hardcoded -1 in the
+    % setup, so carrying Np without pm used to be harmless; it is not now.
+    if isfield(P, 'pmTulip'), so.pmTulip = P.pmTulip; end
+end
+so.physicsOnly = true;
+end
+
+function H = localHandles(fh)
+% LOCALHANDLES  This file's local functions as a struct of handles keyed by
+% name -- the TEST SEAM: a test calls the real helper, not a copy of it.
+% INPUTS: fh (cell of handles, from localfunctions).  OUTPUTS: H struct.
+H = struct();
+for k = 1:numel(fh), H.(func2str(fh{k})) = fh{k}; end
 end

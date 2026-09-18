@@ -107,6 +107,9 @@ function out = run_phase_torus(spec)
 here = fileparts(mfilename('fullpath'));
 addpath(here, fullfile(fileparts(fileparts(here)), 'costate_common'));
 if nargin == 0, out = exampleSpec(here);  return, end
+% TEST SEAM: handles to this file's local functions, by name
+% (tests/test_run_phase_torus_p0)
+if ischar(spec) && strcmp(spec, 'localfunctions'), out = localHandles(localfunctions);  return, end
 in = userInputs(spec);
 
 % the names the body uses (read-only from here on)
@@ -145,19 +148,22 @@ else
     saveState(stateF, st);
 end
 out = struct('state', st.status, 'reason', st.reason, 'rounds', st.rounds, 'final', '', 'anchors', {st.anchors});
-if any(strcmp(st.status, {'done', 'budget'}))
-    lg('this campaign already ended: %s (%s). Nothing to do; use another outDir or delete torus_state.mat to rebuild.', st.status, st.reason);
+[ended, whyEnded] = campaignEnded(st, maxRounds);
+if ended
+    lg('%s', whyEnded);
     out.state = 'nothing to do';  out.final = fullfile(outDir, 'final');
     return
+end
+if strcmp(st.status, 'budget')               % a larger .maxRounds reopens a budget-limited campaign
+    lg('continuing a budget-limited campaign: %d round(s) done, .maxRounds is now %d', st.roundsDone, maxRounds);
+    st.status = 'running';  st.reason = '';
+    saveState(stateF, st);
 end
 lg('run_phase_torus: %d x %d phases, tag %s, %d anchor(s), out %s%s', numel(sD), numel(sA), tag, ...
    size(st.anchors, 1), outDir, tern(plan, ' [PLAN ONLY]', ''));
 if isfile(seedFile), L0 = load(seedFile);  lg('registry: %d certified root(s) registered off the arcs', numel(L0.direct)); end
 
-common = struct('sD', sD, 'sA', sA, 'thrustN', engine.thrustN, 'ispS', engine.ispS, 'm0kg', engine.m0kg, ...
-                'tauDRO', orbits.tauDRO, 'NpTulip', orbits.NpTulip, 'pmTulip', orbits.pmTulip, ...
-                'arcPattern', sprintf('arrival_arc_%s_*.mat', tag), 'arcDir', arcDir, ...
-                'librarySeeds', librarySeeds, 'ribWallSec', rib.wallSec);
+common = commonOpts(in, st.anchors, arcDir, sprintf('arrival_arc_%s_*.mat', tag));
 if isfile(seedFile), common.seedFiles = {seedFile}; end
 
 for k = st.roundsDone + 1 : maxRounds
@@ -192,9 +198,9 @@ for k = st.roundsDone + 1 : maxRounds
         Sp = load(prevSheet);  Sp = Sp.S;
         same = isfinite(S.TF) & isfinite(Sp.TF) & abs(S.TF - Sp.TF) <= 1e-6 & all(abs(S.Z8 - Sp.Z8) <= 1e-9*max(1, abs(Sp.Z8)), 1);
         changed = isfinite(S.TF) & ~same;
-        for j = find(same)
-            src = fullfile(fileparts(prevSheet), sprintf('fine_rib_col%02d.mat', j));
-            dst = fullfile(V, sprintf('fine_rib_col%02d.mat', j));
+        for jc = find(same)                         % jc: an arrival column
+            src = fullfile(fileparts(prevSheet), sprintf('fine_rib_col%02d.mat', jc));
+            dst = fullfile(V, sprintf('fine_rib_col%02d.mat', jc));
             if isfile(src) && ~isfile(dst), copyfile(src, dst); end
         end
         lost = isfinite(Sp.TF) & ~isfinite(S.TF);
@@ -202,17 +208,20 @@ for k = st.roundsDone + 1 : maxRounds
     end
     % a rib copied into THIS round by an earlier attempt for a spine that has
     % since changed must not satisfy the walk: set it aside
-    for j = find(changed)
-        f = fullfile(V, sprintf('fine_rib_col%02d.mat', j));
-        if isfile(f) && ~ribMatchesSpine(f, S, j)
+    for jc = find(changed)
+        f = fullfile(V, sprintf('fine_rib_col%02d.mat', jc));
+        if isfile(f) && ~ribMatchesSpine(f, S, jc)
             movefile(f, sprintf('%s.stale_%s', f, char(datetime('now', 'Format', 'yyyyMMdd_HHmmss'))));
-            lg('round %d: stale rib for column %d set aside (its spine changed)', k, j);
+            lg('round %d: stale rib for column %d set aside (its spine changed)', k, jc);
         end
     end
     lg('round %d sheet: %d of %d columns certified; %d to walk: %s', k, nnz(isfinite(S.TF)), numel(sA), nnz(changed), mat2str(find(changed)));
 
     % ---- 3. ribs, package, audit, sweep (the supervised campaign) --------
-    extra = earlierRibs(outDir, k);
+    % earlier rounds' ribs, AND this round's own holes file when an earlier
+    % attempt of this round already wrote one (a resumed round must package
+    % the cells that attempt certified)
+    extra = roundExtras(outDir, k);
     verdict = runRound(V, common, nWorkers, extra, lg);
     assert(contains(verdict, 'FINISHED') || contains(verdict, 'packaged'), 'run_phase_torus: round %d did not finish: %s', k, verdict);
     catMat = fullfile(V, 'costate_catalog_dro_tulip_70mN.mat');
@@ -220,25 +229,31 @@ for k = st.roundsDone + 1 : maxRounds
 
     % ---- 4. holes and the improve pass; spine roots registered; re-package -
     fh = fill_holes_direct(catMat, struct('logFile', fullfile(V, 'fill_holes_direct.log'), ...
-             'improveDays', improveDays, 'anchorMat', st.anchors{1, 2}));
+             'improveDays', improveDays));
     lg('round %d holes/improve: %d holes, %d tried, %d certified', k, fh.nHoles, fh.nTried, fh.nCert);
-    nRegistered = 0;
-    if fh.nCert > 0
-        [nReg, st] = registerSpineRoots(fh.file, S, sD(1), seedFile, st, stateF, arcDir, tag, anchorDir, acceptDays, lg);
+    % THE FILE DECIDES, not this call's counter. On a resumed round the
+    % filler skips the cells an earlier attempt certified and reports
+    % nCert = 0, yet those roots are on disk: they are registered here from
+    % the file, and were offered to the packager above (roundExtras).
+    nRegistered = 0;  nFillerAnchors = 0;
+    if isfile(fh.file)
+        [nReg, nFillerAnchors, st] = registerSpineRoots(fh.file, S, sD(1), seedFile, st, stateF, arcDir, tag, anchorDir, acceptDays, lg);
         nRegistered = nRegistered + nReg;
+    end
+    if fh.nCert > 0                              % new cells this call: the catalog must take them in
         o3 = run_costate_library(setfields(common, struct('outDir', V, 'launch', false, ...
-                 'extraRibFiles', {[extra, {fh.file}]}, ...
+                 'extraRibFiles', {unique([extra, {fh.file}], 'stable')}, ...
                  'run', struct('sheet', false, 'ribs', true, 'package', true, 'audit', true, 'sweep', true))));
-        assert(strcmp(o3.state, 'packaged'), 'run_phase_torus: round %d re-package failed: %s', k, strjoin(o3.blockers, ' | '));
+        assertPackaged(o3, fileName(V), 're-package with the direct cells');
         lg('round %d re-packaged with the direct cells', k);
     end
 
     % ---- 5. discovery ----------------------------------------------------
-    newAnchors = 0;
+    newAnchors = nFillerAnchors;                 % anchors come from the filler AND from discovery
     if discover
-        [nReg, newAnchors, st] = discoverRoots(S, st, stateF, sD(1), engine, orbits, tag, slowDays, acceptDays, ...
-                                              seedRadius, probeAll, seedFile, anchorDir, arcDir, lg);
-        nRegistered = nRegistered + nReg;
+        [nReg, nDiscovered, st] = discoverRoots(S, st, stateF, sD(1), engine, orbits, tag, slowDays, acceptDays, ...
+                                                seedRadius, probeAll, seedFile, anchorDir, arcDir, lg);
+        nRegistered = nRegistered + nReg;  newAnchors = newAnchors + nDiscovered;
     end
     if isfile(seedFile), common.seedFiles = {seedFile}; end
 
@@ -415,14 +430,18 @@ end
 
 % ==========================================================================
 function st = runArcs(need, st, stateF, engine, orbits, sD0, sA, arc, jobDir, matlabBin, startupDir, here, lg)
-% RUNARCS  Spawn one batch job per needed arc, record the PIDs, wait for
-% each job's VERDICT file (.done / .fail), kill what is left at the deadline.
-% INPUTS: as named.  OUTPUTS: st (jobs recorded).
+% RUNARCS  Make every needed arc exist. A job an earlier driver left RUNNING
+% is adopted (never a second writer on one file); the rest are spawned.
+% Then wait on each arc's VERDICT file (.done / .fail): a .fail stops the
+% campaign at once, and at the deadline whatever is left is killed.
+% INPUTS: as named (need rows: name, anchor file, anchor phase, direction,
+% arc file).  OUTPUTS: st (job record emptied once every arc is done).
 files = need(:, 5);
-for q = 1:size(need, 1)
-    [pid, jobFile] = spawnArc(need{q, 1}, need{q, 2}, need{q, 3}, need{q, 4}, need{q, 5}, ...
-                              engine, orbits, sD0, sA, arc, jobDir, matlabBin, startupDir, here, lg);
-    st.jobs(end+1) = struct('pid', pid, 'file', jobFile);
+[adopted, st] = adoptLiveJobs(need, st, lg);
+for q = find(~adopted(:).')
+    pid = spawnArc(need{q, 1}, need{q, 2}, need{q, 3}, need{q, 4}, need{q, 5}, ...
+                   engine, orbits, sD0, sA, arc, jobDir, matlabBin, startupDir, here, lg);
+    st.jobs(end+1) = struct('pid', pid, 'file', need{q, 5});
 end
 saveState(stateF, st);
 t0 = tic;  deadline = arc.deadlineSec + 1800;
@@ -431,11 +450,13 @@ while true
     failed = cellfun(@(f) isfile([f '.fail']), files);
     if any(failed)
         f = files{find(failed, 1)};
-        error('run_phase_torus:arc', 'arc %s FAILED: %s', fileName(f), strtrim(fileread([f '.fail'])));
+        why = strtrim(fileread([f '.fail']));
+        st = killJobs(st, stateF);               % its siblings must not run on unowned
+        error('run_phase_torus:arc', 'arc %s FAILED: %s', fileName(f), why);
     end
     if all(done), break, end
     if toc(t0) > deadline
-        for j = 1:numel(st.jobs), system(sprintf('kill %d 2>/dev/null', st.jobs(j).pid)); end
+        st = killJobs(st, stateF);
         error('run_phase_torus:arc', '%d arc(s) did not finish within %.0f h; their jobs were killed', nnz(~done), deadline/3600);
     end
     pause(120);
@@ -445,13 +466,77 @@ saveState(stateF, st);
 lg('  %d arc(s) done', numel(files));
 end
 
+function [adopted, st] = adoptLiveJobs(need, st, lg)
+% ADOPTLIVEJOBS  Which needed arcs already have a LIVE job from an earlier
+% driver? Those are adopted -- waited on, not spawned again: two MATLABs
+% walking one arc would race on one output file. A recorded job that is dead,
+% or whose arc is no longer needed, leaves the record.
+% INPUTS: need (rows as in runArcs); st (.jobs: pid, file = the arc file);
+% lg.  OUTPUTS: adopted [nNeed x 1 logical]; st (dead jobs removed).
+adopted = false(size(need, 1), 1);
+keep = false(1, numel(st.jobs));
+for q = 1:numel(st.jobs)
+    job = st.jobs(q);
+    hit = find(strcmp(need(:, 5), job.file), 1);
+    alive = pidAlive(job.pid) || pidAlive(arcMatlabPid(job.file));
+    if alive && ~isempty(hit)
+        adopted(hit) = true;  keep(q) = true;
+        lg('  arc %s: a job from an earlier driver is still running (pid %d) -- adopted, not respawned', fileName(job.file), job.pid);
+    end
+end
+st.jobs = st.jobs(keep);
+end
+
+function st = killJobs(st, stateF)
+% KILLJOBS  Stop every recorded arc job: the shell wrapper and the MATLAB it
+% started (its pid is in <arc>.pid). The record is emptied and saved.
+% INPUTS: st; stateF.  OUTPUTS: st.
+for q = 1:numel(st.jobs)
+    for pid = [st.jobs(q).pid, arcMatlabPid(st.jobs(q).file)]
+        if isfinite(pid), system(sprintf('kill %d 2>/dev/null', pid)); end
+    end
+end
+st.jobs = struct('pid', {}, 'file', {});
+saveState(stateF, st);
+end
+
+function tf = pidAlive(pid)
+% PIDALIVE  Is this process alive (signal 0 reaches it)?  INPUTS: pid.
+% OUTPUTS: tf logical (false for NaN).
+tf = isscalar(pid) && isfinite(pid) && pid > 0 && system(sprintf('kill -0 %d 2>/dev/null', pid)) == 0;
+end
+
+function pid = arcMatlabPid(arcFile)
+% ARCMATLABPID  The pid of the MATLAB an arc's wrapper started, from
+% <arcFile>.pid; NaN when there is none.  INPUTS: arcFile.  OUTPUTS: pid.
+pid = NaN;
+if isfile([arcFile '.pid']), pid = str2double(strtrim(fileread([arcFile '.pid']))); end
+end
+
 function [pid, jobFile] = spawnArc(name, anchorMat, sA0, dirn, outMat, engine, orbits, sD0, sA, arc, jobDir, matlabBin, startupDir, here, lg)
-% SPAWNARC  Write and launch one arc job. The job saves through a temp
-% file and a rename, then writes <outMat>.done, or <outMat>.fail with the
-% error.  INPUTS: as named.  OUTPUTS: pid; jobFile.
+% SPAWNARC  Write and launch ONE arc job, as three readable files in jobDir:
+%   arc_<name>_<dn|up>.m    the MATLAB job: walk the arc, save it through a
+%                           temp file and a rename, then write <arc>.done --
+%                           or <arc>.fail with the error
+%   arc_<name>_<dn|up>.sh   a shell wrapper that starts MATLAB, records its
+%                           pid in <arc>.pid, and GUARANTEES a verdict: if
+%                           MATLAB exits having written neither file (a
+%                           licence, path or pool failure before the job's own
+%                           try/catch) the wrapper writes the .fail
+%   arc_<name>_<dn|up>.out  MATLAB's stdout
+% Verdict files of an EARLIER attempt are removed first: a stale .fail used
+% to stop the retry on its first poll.
+% INPUTS: as named.  OUTPUTS: pid (the wrapper's); jobFile.
 dn = tern(dirn < 0, 'dn', 'up');
-jobFile = fullfile(jobDir, sprintf('arc_%s_%s.m', name, dn));
-lgF = strrep(outMat, '.mat', '.log');  partF = strrep(outMat, '.mat', '.partial.mat');
+stem = fullfile(jobDir, sprintf('arc_%s_%s', name, dn));
+jobFile = [stem '.m'];  shFile = [stem '.sh'];  outLog = [stem '.out'];
+[arcFolder, arcBase] = fileparts(outMat);
+lgF = fullfile(arcFolder, [arcBase '.log']);  partF = fullfile(arcFolder, [arcBase '.partial.mat']);
+for ext = {'.done', '.fail', '.pid'}
+    if isfile([outMat ext{1}]), delete([outMat ext{1}]); end
+end
+
+% ---- the MATLAB job ------------------------------------------------------
 kmin = floor(min(sA) + min(sA0 - arc.span, 0)) - 1;  kmax = ceil(max(sA) + max(sA0 + arc.span, 1)) + 1;
 levels = reshape(sA(:) + (kmin:kmax), 1, []);            % every whole-period copy the walk can reach
 txt = sprintf([ ...
@@ -477,13 +562,35 @@ txt = sprintf([ ...
  engine.thrustN, engine.ispS, engine.m0kg, orbits.tauDRO, orbits.NpTulip, orbits.pmTulip, ...
  sD0, sA0, mlq(anchorMat), dirn, sA0 + dirn*arc.span, mat2str(levels, 17), arc.nStep, round(arc.deadlineSec), ...
  mlq(lgF), mlq(partF), sprintf('%s_%s', name, dn), sprintf('%s_%s', name, dn));
-fid = fopen(jobFile, 'w');  fprintf(fid, '%s', txt);  fclose(fid);
-outLog = strrep(jobFile, '.m', '.out');
-cmd = sprintf('nohup %s -batch %s > %s 2>&1 & echo $!', shq(matlabBin), shq(sprintf('run(''%s'')', jobFile)), shq(outLog));
-[st, msg] = system(cmd);
+writeText(jobFile, txt);
+
+% ---- the shell wrapper ---------------------------------------------------
+sh = sprintf([ ...
+ '#!/bin/sh\n' ...
+ '# Written by run_phase_torus: run ONE arc job and guarantee a verdict file.\n' ...
+ 'ARC=%s\n' ...
+ '%s -batch %s > %s 2>&1 &\n' ...
+ 'echo $! > "$ARC.pid"\n' ...
+ 'wait $!\n' ...
+ 'rc=$?\n' ...
+ 'if [ ! -f "$ARC.done" ] && [ ! -f "$ARC.fail" ]; then\n' ...
+ '  echo "MATLAB exited (code $rc) without writing a verdict; see its log in the jobs folder" > "$ARC.fail"\n' ...
+ 'fi\n'], ...
+ shq(outMat), shq(matlabBin), shq(sprintf('run(%s)', mlq(jobFile))), shq(outLog));
+writeText(shFile, sh);
+
+[rc, msg] = system(sprintf('nohup /bin/sh %s > /dev/null 2>&1 & echo $!', shq(shFile)));
 pid = str2double(strtrim(msg));
-assert(st == 0 && isfinite(pid), 'run_phase_torus: could not launch %s: %s', jobFile, msg);
+assert(rc == 0 && isfinite(pid), 'run_phase_torus: could not launch %s: %s', shFile, msg);
 lg('  arc %s_%s launched (pid %d, %s)', name, dn, pid, jobFile);
+end
+
+function writeText(file, txt)
+% WRITETEXT  Write a text file, or say which one could not be written.
+% INPUTS: file; txt.  OUTPUTS: none.
+fid = fopen(file, 'w');
+assert(fid >= 0, 'run_phase_torus: cannot write %s', file);
+fprintf(fid, '%s', txt);  fclose(fid);
 end
 
 function verdict = runRound(V, common, nWorkers, extra, lg)
@@ -501,127 +608,224 @@ else
              'extraRibFiles', {extra}, ...
              'run', struct('sheet', false, 'ribs', true, 'package', true, 'audit', true, 'sweep', true))));
     lg('  launched: state %s%s', o2.state, tern(isempty(o2.blockers), '', [' -- ' strjoin(o2.blockers, ' | ')]));
-    if strcmp(o2.state, 'packaged'), verdict = 'packaged in this call';  return, end
+    if strcmp(o2.state, 'packaged')
+        assertPackaged(o2, fileName(V), 'in-call package');
+        verdict = 'packaged in this call';  return
+    end
     assert(strcmp(o2.state, 'launched'), 'run_phase_torus: round could not launch: %s', strjoin(o2.blockers, ' | '));
 end
 verdict = waitForVerdict(verdictF, before, 48*3600, 60, lg);
 end
 
-function [nReg, st] = registerSpineRoots(holesFile, S, sD0, seedFile, st, stateF, arcDir, tag, anchorDir, acceptDays, lg)
+function [nReg, nNew, st] = registerSpineRoots(holesFile, S, sD0, seedFile, st, stateF, arcDir, tag, anchorDir, acceptDays, lg)
 % REGISTERSPINEROOTS  Direct-solved cells ON THE SPINE are roots the next
-% sheet must see; one faster than its column's spine by acceptDays that no
-% known family passes through becomes an anchor.  INPUTS: as named.
-% OUTPUTS: nReg (roots registered); st.
-nReg = 0;
+% sheet must see, so each is registered; one that passes promotionVerdict
+% becomes an anchor. Works from the holes FILE, so cells certified by an
+% earlier attempt of this round are registered too.
+% INPUTS: as named.  OUTPUTS: nReg (roots registered); nNew (anchors
+% added); st.
+nReg = 0;  nNew = 0;
 H = load(holesFile);
-F = [];
+F = [];                                          % the family map: built only if a root needs it
 for m = 1:numel(H.R)
     for q = 1:numel(H.R(m).pts)
         p = H.R(m).pts(q);
-        if abs(mod(p.sD - sD0 + 0.5, 1) - 0.5) > 1e-8, continue, end
-        j = find(abs(mod(S.sA - p.sA + 0.5, 1) - 0.5) < 1e-8, 1);
-        if isempty(j), continue, end
+        onSpine = abs(mod(p.sD - sD0 + 0.5, 1) - 0.5) <= 1e-8;
+        jc = find(abs(mod(S.sA - p.sA + 0.5, 1) - 0.5) < 1e-8, 1);      % its arrival column
+        if ~onSpine || isempty(jc), continue, end
         added = registerRoot(seedFile, p, sD0, sprintf('direct cell solve on the spine, round %d', st.roundsDone + 1));
         nReg = nReg + added;
-        if added && (~isfinite(S.TF(j)) || p.tfDays < S.TF(j) - acceptDays)
-            if isempty(F), F = family_map(S, struct('arcDir', arcDir)); end
-            [famP, ~] = F.attach(S.sA(j), p.tfDays);
-            if famP >= 1
-                lg('  spine cell at column %d: %.3f d lies on family %s -- registered, not anchored', j, p.tfDays, F.families(famP).label);
-            else
-                st = promote(st, stateF, p, j, S, arcDir, tag, anchorDir, lg, 'spine cell');
-            end
+        if ~added, continue, end
+        if isempty(F), F = family_map(S, struct('arcDir', arcDir)); end
+        [famP, ~] = F.attach(S.sA(jc), p.tfDays);
+        [promoteIt, why] = promotionVerdict(added, p.tfDays, S.TF(jc), acceptDays, famP);
+        if promoteIt
+            st = promote(st, stateF, p, jc, S, arcDir, tag, anchorDir, lg, 'spine cell');
+            nNew = nNew + 1;
+        else
+            lg('  spine cell at column %d (%.3f d): registered, not anchored -- %s', jc, p.tfDays, why);
         end
     end
+end
+end
+
+function [promoteIt, why] = promotionVerdict(added, tfDays, tfSpine, acceptDays, famCode)
+% PROMOTIONVERDICT  THE rule for turning a certified root into an anchor,
+% used by both paths (filler and discovery). All three must hold:
+%   1. the root was NEWLY registered -- a root already in the registry was
+%      judged when it arrived and is never anchored twice;
+%   2. it beats its column's spine by acceptDays (any root beats an empty
+%      column);
+%   3. no known family passes through it -- a root on a walked family is a
+%      seed, and walking its arcs again would buy nothing.
+% INPUTS: added (logical); tfDays; tfSpine (NaN = empty column); acceptDays;
+% famCode (family_map attachment: >= 1 is a known family).
+% OUTPUTS: promoteIt (logical); why (char, the deciding clause).
+promoteIt = false;
+if ~added
+    why = 'it was already registered';
+elseif isfinite(tfSpine) && ~(tfDays < tfSpine - acceptDays)
+    why = sprintf('it does not beat the %.3f d spine by %.2f d', tfSpine, acceptDays);
+elseif famCode >= 1
+    why = sprintf('it lies on known family %d, whose arcs are already walked', famCode);
+else
+    promoteIt = true;  why = 'new, faster than the spine, on no known family';
 end
 end
 
 function [nReg, nNew, st] = discoverRoots(S, st, stateF, sD0, engine, orbits, tag, slowDays, acceptDays, seedRadius, probeAll, seedFile, anchorDir, arcDir, lg)
 % DISCOVERROOTS  Branch-blind direct solves at the spine's target columns,
 % seeded from other families' certified roots within a phase radius (every
-% certified candidate of those columns, not only the winners); every
-% distinct certified root is registered; one faster than the spine by
-% acceptDays that no known family passes through is promoted.
+% certified candidate of those columns, not only the winners). Every
+% distinct certified root is registered; the fastest at each column is
+% promoted if promotionVerdict says so.
 % INPUTS: as named.  OUTPUTS: nReg; nNew; st.
 nReg = 0;  nNew = 0;
 nA = numel(S.sA);  tf = S.TF;
 F = family_map(S, struct('arcDir', arcDir));
 fam = [F.columns.family];
+
+% ---- the target columns: empty ones, and ones far slower than a neighbour
 if probeAll, targets = 1:nA; else
     targets = find(~isfinite(tf));
-    for j = find(isfinite(tf))
-        nb = [mod(j - 2, nA) + 1, mod(j, nA) + 1];  nb = nb(isfinite(tf(nb)));
-        if ~isempty(nb) && tf(j) - min(tf(nb)) > slowDays, targets(end+1) = j; end
+    for jc = find(isfinite(tf))
+        nb = [mod(jc - 2, nA) + 1, mod(jc, nA) + 1];  nb = nb(isfinite(tf(nb)));
+        if ~isempty(nb) && tf(jc) - min(tf(nb)) > slowDays, targets(end+1) = jc; end
     end
 end
 targets = unique(targets, 'stable');
 if isempty(targets), lg('discovery: no target column'); return, end
 lg('discovery: %d column(s) to probe: %s', numel(targets), mat2str(targets));
-so = struct('thrustN', engine.thrustN, 'ispS', engine.ispS, 'm0kg', engine.m0kg, 'tauDRO', orbits.tauDRO, ...
-            'NpTulip', orbits.NpTulip, 'pmTulip', orbits.pmTulip, 'sD', sD0, 'anchorMat', st.anchors{1, 2});
-[B, ~] = arclength_arrival('setup', so);
+
+% the closures and the engine only: a probe has its own seed and needs no
+% anchor polished (physicsOpts)
+[B, ~] = arclength_arrival('setup', physicsOpts(engine, orbits, sD0));
 pool = capped_pool();
 rv0 = B.stateD(sD0);  rv0 = rv0(1:6);
-for j = targets
+for jc = targets
     % the seed pool: every certified candidate at columns within seedRadius
     % (circular), of a family other than the target's (any family when the
     % target is empty or unattached), fastest first, distinct roots, three
-    dist = abs(mod(S.sA - S.sA(j) + 0.5, 1) - 0.5);
-    near = find(dist <= seedRadius & (1:nA) ~= j);
+    dist = abs(mod(S.sA - S.sA(jc) + 0.5, 1) - 0.5);
+    near = find(dist <= seedRadius & (1:nA) ~= jc);
     seeds = struct('z', {}, 'tf', {}, 'col', {});
-    for jj = near
-        c = S.cand{jj};
+    for jn = near                                % jn: a neighbouring column
+        c = S.cand{jn};
         if isempty(c), continue, end
         for kk = find([c.ok])
-            [famC, ~] = F.attach(S.sA(jj), c(kk).tfDays);
-            if fam(j) >= 1 && famC == fam(j), continue, end
-            if any(arrayfun(@(p) abs(p.tf - c(kk).tfDays) < 1e-3 && p.col == jj, seeds)), continue, end
-            seeds(end+1) = struct('z', c(kk).z(:), 'tf', c(kk).tfDays, 'col', jj);
+            [famC, ~] = F.attach(S.sA(jn), c(kk).tfDays);
+            if fam(jc) >= 1 && famC == fam(jc), continue, end
+            if any(arrayfun(@(p) abs(p.tf - c(kk).tfDays) < 1e-3 && p.col == jn, seeds)), continue, end
+            seeds(end+1) = struct('z', c(kk).z(:), 'tf', c(kk).tfDays, 'col', jn);
         end
     end
-    if isempty(seeds), lg('  column %d (sA %.4f): no seed of another family within %.2f', j, S.sA(j), seedRadius); continue, end
+    if isempty(seeds), lg('  column %d (sA %.4f): no seed of another family within %.2f', jc, S.sA(jc), seedRadius); continue, end
     [~, ord] = sort([seeds.tf]);  seeds = seeds(ord(1:min(3, end)));
-    best = [];
+
+    % ---- probe from each seed; register every certified root ------------
+    best = [];  bestAdded = false;
     for p = seeds
         try
-            [C, info] = direct_cell_solve(p.z, rv0, sD0, S.sA(j), B, struct('pool', pool));
+            [C, info] = direct_cell_solve(p.z, rv0, sD0, S.sA(jc), B, struct('pool', pool));
         catch ME
             C = struct('ok', false, 'reason', ['threw: ' ME.message]);  info = struct('tfDirectDays', NaN);
         end
-        lg('  column %d (sA %.4f) from column %d (%.3f d): direct %.3f d, %s', j, S.sA(j), p.col, p.tf, info.tfDirectDays, C.reason);
+        lg('  column %d (sA %.4f) from column %d (%.3f d): direct %.3f d, %s', jc, S.sA(jc), p.col, p.tf, info.tfDirectDays, C.reason);
         if ~C.ok, continue, end
-        C.note = join_note(sprintf('discovery probe at column %d from column %d (%.3f d)', j, p.col, p.tf), C);
-        added = registerRoot(seedFile, C, sD0, sprintf('discovery probe at column %d, round %d', j, st.roundsDone + 1));
+        C.note = join_note(sprintf('discovery probe at column %d from column %d (%.3f d)', jc, p.col, p.tf), C);
+        added = registerRoot(seedFile, C, sD0, sprintf('discovery probe at column %d, round %d', jc, st.roundsDone + 1));
         nReg = nReg + added;
-        if isempty(best) || C.tfDays < best.tfDays, best = C; end
+        if isempty(best) || C.tfDays < best.tfDays, best = C;  bestAdded = added; end
     end
-    if isempty(best) || (isfinite(tf(j)) && best.tfDays >= tf(j) - acceptDays), continue, end
-    [famB, ~] = F.attach(S.sA(j), best.tfDays);
-    if famB >= 1
-        lg('  column %d: the %.3f d root lies on family %s already -- registered, not anchored', j, best.tfDays, F.families(famB).label);
-        continue
+    if isempty(best), continue, end
+
+    % ---- the fastest one: anchor it, or say why not ----------------------
+    [famB, ~] = F.attach(S.sA(jc), best.tfDays);
+    [promoteIt, why] = promotionVerdict(bestAdded, best.tfDays, tf(jc), acceptDays, famB);
+    if promoteIt
+        st = promote(st, stateF, best, jc, S, arcDir, tag, anchorDir, lg, 'discovery');
+        nNew = nNew + 1;
+    else
+        lg('  column %d: the %.3f d root is registered, not anchored -- %s', jc, best.tfDays, why);
     end
-    st = promote(st, stateF, best, j, S, arcDir, tag, anchorDir, lg, 'discovery');
-    nNew = nNew + 1;
 end
 end
 
-function st = promote(st, stateF, C, j, S, arcDir, tag, anchorDir, lg, how)
+function common = commonOpts(in, anchors, arcDir, arcPattern)
+% COMMONOPTS  What every run_costate_library call of this campaign shares:
+% the two phase lists, the engine, the orbits, where this campaign's arcs
+% live -- and the OPERATING POINT of the sheet: the first anchor's file and
+% the arrival phase it was certified at. (The departure phase of the spine
+% is sD(1), which travels in the list.) Without the anchor the sheet was set
+% up from the shipped 70 mN anchor at 0.0754 whatever the campaign was.
+% INPUTS: in (userInputs); anchors {name, file, sA, label; ...}; arcDir;
+% arcPattern.  OUTPUTS: common struct.
+common = struct('sD', in.sD, 'sA', in.sA, ...
+                'thrustN', in.engine.thrustN, 'ispS', in.engine.ispS, 'm0kg', in.engine.m0kg, ...
+                'tauDRO', in.orbits.tauDRO, 'NpTulip', in.orbits.NpTulip, 'pmTulip', in.orbits.pmTulip, ...
+                'arcPattern', arcPattern, 'arcDir', arcDir, ...
+                'anchorMat', anchors{1, 2}, 'anchorSA', anchors{1, 3}, ...
+                'librarySeeds', in.librarySeeds, 'ribWallSec', in.rib.wallSec);
+end
+
+function so = physicsOpts(engine, orbits, sD0)
+% PHYSICSOPTS  A setup request for the CLOSURES ONLY (endpoint states and
+% propulsion constants) at the spine's departure phase -- no anchor is
+% loaded or polished.  INPUTS: engine; orbits; sD0.  OUTPUTS: so struct for
+% arclength_arrival('setup', so).
+so = struct('thrustN', engine.thrustN, 'ispS', engine.ispS, 'm0kg', engine.m0kg, ...
+            'tauDRO', orbits.tauDRO, 'NpTulip', orbits.NpTulip, 'pmTulip', orbits.pmTulip, ...
+            'sD', sD0, 'physicsOnly', true);
+end
+
+function [ended, why] = campaignEnded(st, maxRounds)
+% CAMPAIGNENDED  Is there nothing left for this call to do? A campaign at
+% its fixed point ('done') has ended. One that stopped on its round budget
+% ('budget') has ended only while .maxRounds has not been raised past the
+% rounds already run -- its own stop message tells the user to raise it.
+% INPUTS: st (.status .roundsDone .reason); maxRounds.  OUTPUTS: ended
+% (logical); why (char, for the log).
+ended = false;  why = '';
+if strcmp(st.status, 'done')
+    ended = true;
+    why = sprintf('this campaign reached its fixed point (%s). Nothing to do; use another outDir to rebuild.', st.reason);
+elseif strcmp(st.status, 'budget') && maxRounds <= st.roundsDone
+    ended = true;
+    why = sprintf('this campaign stopped on its budget after %d round(s) (%s). Raise .maxRounds above %d to continue it.', ...
+                  st.roundsDone, st.reason, st.roundsDone);
+end
+end
+
+function assertPackaged(o, roundName, what)
+% ASSERTPACKAGED  A round's catalog counts only if the call PACKAGED it and
+% every stage that ran behind it passed. 'packaged' alone says a catalog was
+% written; an audit or sweep blocker used to ride along unnoticed.
+% INPUTS: o (run_costate_library output: .state .blockers .stages);
+% roundName; what (char, for the message).  OUTPUTS: none (throws).
+assert(strcmp(o.state, 'packaged'), 'run_phase_torus:package', '%s: %s did not package (state %s): %s', ...
+       roundName, what, o.state, strjoin(o.blockers, ' | '));
+names = fieldnames(o.stages);
+failed = names(structfun(@(v) isequal(v, false), o.stages));
+assert(isempty(failed), 'run_phase_torus:stage', '%s: %s wrote a catalog but %s did not pass: %s', ...
+       roundName, what, strjoin(failed, ', '), strjoin(o.blockers, ' | '));
+end
+
+function st = promote(st, stateF, C, jc, S, arcDir, tag, anchorDir, lg, how)
 % PROMOTE  A certified root becomes an anchor with a unique, immutable name;
 % the state is saved at once.  INPUTS: as named.  OUTPUTS: st.
-base = sprintf('d%02d', j);
+base = sprintf('d%02d', jc);
 nSame = nnz(startsWith(st.anchors(:, 1), base));
 name = sprintf('%s_%d', base, nSame + 1);
 anc = fullfile(anchorDir, sprintf('mintime_%s_anchor_%s.mat', tag, name));
 assert(~isfile(anc), 'run_phase_torus: anchor file %s exists already', anc);
 Tnd = S.B.Tnd;  cnd = S.B.cnd;
-best = struct('z', C.z(:), 'it', struct('Y', C.Y), 'sA', S.sA(j), 'sD', C.sD, 'tfDays', C.tfDays, ...
-              'origin', sprintf('%s at column %d, %s', how, j, char(datetime('now'))));
+best = struct('z', C.z(:), 'it', struct('Y', C.Y), 'sA', S.sA(jc), 'sD', C.sD, 'tfDays', C.tfDays, ...
+              'origin', sprintf('%s at column %d, %s', how, jc, char(datetime('now'))));
 save(anc, 'best', 'Tnd', 'cnd');
-st.anchors(end+1, :) = {name, anc, S.sA(j), name};
+st.anchors(end+1, :) = {name, anc, S.sA(jc), name};
 saveState(stateF, st);
-lg('  NEW ANCHOR %s: %.3f d at sA %.4f (%s; spine %s); arcs %s', name, C.tfDays, S.sA(j), how, ...
-   tern(isfinite(S.TF(j)), sprintf('%.3f d', S.TF(j)), 'none'), fileName(arcFile(arcDir, tag, name, -1)));
+lg('  NEW ANCHOR %s: %.3f d at sA %.4f (%s; spine %s); arcs %s', name, C.tfDays, S.sA(jc), how, ...
+   tern(isfinite(S.TF(jc)), sprintf('%.3f d', S.TF(jc)), 'none'), fileName(arcFile(arcDir, tag, name, -1)));
 end
 
 function added = registerRoot(seedFile, C, sD0, src)
@@ -640,15 +844,15 @@ if added
 end
 end
 
-function ok = ribMatchesSpine(ribFile, S, j)
+function ok = ribMatchesSpine(ribFile, S, jc)
 % RIBMATCHESSPINE  Does a rib file's first point continue this sheet's spine
-% root at column j (t_f within 0.5 d of the spine)?  INPUTS: ribFile; S; j.
+% root at column jc (t_f within 0.5 d of the spine)?  INPUTS: ribFile; S; jc.
 % OUTPUTS: ok.
 ok = false;
 try
     L = load(ribFile);  r = L.R(1);
-    if isempty(r.pts) || ~isfinite(S.TF(j)), return, end
-    ok = abs(r.pts(1).tfDays - S.TF(j)) < 0.5;
+    if isempty(r.pts) || ~isfinite(S.TF(jc)), return, end
+    ok = abs(r.pts(1).tfDays - S.TF(jc)) < 0.5;
 catch
 end
 end
@@ -666,8 +870,10 @@ txt = strtrim(fileread(f));  lines = strsplit(txt, newline);  v = strtrim(lines{
 lg('  verdict: %s', v);
 end
 
-function x = earlierRibs(outDir, k)
-% EARLIERRIBS  Every rib file of rounds 1..k-1 (and their direct-cell ribs).
+function x = roundExtras(outDir, k)
+% ROUNDEXTRAS  The rib files round k offers the packager beside its own:
+% every rib file of rounds 1..k-1 (and their direct-cell files), AND round
+% k's own direct-cell file when an earlier attempt of the round left one.
 % INPUTS: outDir; k.  OUTPUTS: x (cellstr).
 x = {};
 for q = 1:k-1
@@ -675,6 +881,8 @@ for q = 1:k-1
     f = [dir(fullfile(V, 'fine_rib_col*.mat')); dir(fullfile(V, 'fine_rib_direct_holes.mat'))];
     x = [x, fullfile(V, {f.name})];
 end
+holes = fullfile(outDir, sprintf('round_%02d', k), 'fine_rib_direct_holes.mat');
+if isfile(holes), x{end+1} = holes; end
 end
 
 function f = arcFile(arcDir, tag, name, dirn)
@@ -740,4 +948,12 @@ function logmsg(f, s)
 % LOGMSG  Append to the log and echo.  INPUTS: f; s.  OUTPUTS: none.
 line = sprintf('%s %s', char(datetime('now', 'Format', 'HH:mm:ss')), s);
 fid = fopen(f, 'a');  fprintf(fid, '%s\n', line);  fclose(fid);  fprintf('%s\n', line);
+end
+
+function H = localHandles(fh)
+% LOCALHANDLES  This file's local functions as a struct of handles keyed by
+% name -- the TEST SEAM: a test calls the real helper, not a copy of it.
+% INPUTS: fh (cell of handles, from localfunctions).  OUTPUTS: H struct.
+H = struct();
+for k = 1:numel(fh), H.(func2str(fh{k})) = fh{k}; end
 end

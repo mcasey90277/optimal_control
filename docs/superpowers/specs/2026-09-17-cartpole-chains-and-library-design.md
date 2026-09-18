@@ -109,12 +109,27 @@ clean its residual. **Every rung converges tight or is discarded** (L11); a
 partially converged rung never seeds the next.
 
 **Transcription:** trapezoid, plus switch-aware refinement (decided 2026-09-17).
-The orbit work found the solver's Hessian approximation — not collocation
-order — to be the wall for min-fuel, and that Hermite–Simpson made it worse
-under the same solver (L6). So `fmincon` is the default for all three, and
-**CasADi+IPOPT's exact Hessian is the named escalation for min-fuel** if it
-smears or stalls. That is a decision point recorded in the min-fuel chain's
-parameter block, not a surprise.
+
+**Solver backends (Mike, 2026-09-17: IPOPT "is an option", not a mandate).**
+Every direct front door supports two NLP backends behind one switch:
+`fmincon` (the teaching line; ex1–ex3 use it) and CasADi+IPOPT (the orbit
+campaigns' solver, with an exact sparse Hessian). They share **one
+transcription**: the defect and cost code is written once, in operations CasADi
+overloads (the plant is sin, cos and division), and is evaluated numerically for
+`fmincon` and symbolically for CasADi. The backend a chain uses is set in its
+parameter block and chosen by measurement, recorded per objective. The orbit
+work found the solver's Hessian approximation — not collocation order — to be
+the wall for min-fuel, and that Hermite–Simpson made it *worse* under the same
+solver (L6), so min-fuel is where IPOPT is expected to earn its place; min-energy
+and min-time converged fine under the weak solver there.
+
+Two things follow. **X3 — backend agreement — is a new cross-check in stage 5:**
+both backends on the same transcription must find the same optimum to a stated
+tolerance; disagreement is a basin or conditioning finding, adjudicated by the
+mesh-density check (L2) and a cold re-solve, never by preferring one solver.
+And each backend's **multiplier sign convention is verified by its own minimal
+test before anything reads the duals** (L23): `fmincon`'s `lambda.eqnonlin`
+ordering, and `opti.lam_g` by recorded row range — never `opti.dual()`.
 
 ## Study scripts
 
@@ -155,8 +170,8 @@ physics, a cart-pole version is a rewrite not a promotion.
 | `pmp_pointwise_checks` | **B** | hardcoded 14-state `[r;v;m;λ]` layout and the thrust/exhaust formula for recovering the applied control. Cut: externalise "recover the control from the field" as a caller closure, the move already made for `oc.fly_control` | min-time chain, stage 8 — **this is the instrument Mike named** (H constancy, transversality, adjoint residual, min-principle gap) |
 | `conj_spectrum` | B | hardwired `mintime_prop_seg` and `muStar`/`Tmax`/`c`. Cut: a caller-supplied STM-providing `prop` closure, mirroring `ms_bvp` | min-fuel chain, stage 8 |
 | `lift_margin`, `lift_space_dim` | A | — (pure linear algebra) | the normality gate |
-| `foc_ipopt_inertia` | A | — (interprets a `regHistory` vector) | min-fuel chain, only if IPOPT is escalated to |
-| `foc_check` | B | needs a CasADi `opti` + a labelled constraint-row registry and a `foc_manifest` entry | **refused for now**: our direct solves are `fmincon`, so the KKT/first-variation check is written against `fmincon`'s `lambda` in stage 5, with its sign convention verified by a minimal test first (L23) |
+| `foc_ipopt_inertia` | A | — (interprets a `regHistory` vector) | the first chain that runs the IPOPT backend; a weak-minimum witness for all three objectives thereafter |
+| `foc_check` | B | needs a CasADi `opti` + a labelled constraint-row registry (`creg`) and a `foc_manifest` entry. Cut: emit the same `creg` groups from the cart-pole transcription's CasADi path and add a `'cartpole'` manifest entry with `dirRows = []`, `thrRow = []` | the first chain that runs the IPOPT backend. The `fmincon` path gets its own first-variation check in stage 5, written against `lambda.eqnonlin`; **the two must agree on the same solution** — a second instance of X3 |
 | `h6_margin`, `mintime_hypothesis_gates`, `validate_flight`, `certify_root`, `report_optimality` | C | the theory is min-time CR3BP (all-burn switching, reduced-Hamiltonian spurious zero, pumpkyn witness) | not promoted; `report_optimality`'s three-section scorecard *pattern* is adopted for the cart-pole certificate printer |
 
 Rules for every promotion, all of which the `ms_conjugate_test` move followed:
@@ -337,8 +352,11 @@ problems read (L5). Pulls nothing new. Smallest; a day.
 (free `t_f` on a normalised mesh), the `u_max` ladder with band gates, switch-
 aware refinement, the true-residual and mesh-density checks, harvest and seed
 probe. Produces `t_min`, the switch band, the `t_min(u_max)` front, and the
-banked seed. Pulls `certified_guard`, `scalar_verdict`. The `fmincon` first-
-variation check is written here with its sign convention tested first (L23).
+banked seed. Pulls `certified_guard`, `scalar_verdict`, and — if the IPOPT backend is
+exercised here — `foc_ipopt_inertia` and the generalised `foc_check`. The direct
+front door ships with both backends; the first-variation check for the `fmincon`
+path is written here, each backend's sign convention tested first (L23), and X3
+measured on the min-time problem.
 
 **3 — the min-time chain, stages 7–9, and `cartpole_mintime_study.m`.**
 `bangbang_prop` into `cartpole_common` with its FD-of-the-state-map oracle (L7)
@@ -410,5 +428,7 @@ Every sub-project, before it is called done:
 | min-fuel smears under `fmincon` | no bang-off-bang structure resolved | IPOPT escalation recorded in the parameter block (L6) |
 | chattering near 40 N | event loop stalls | cap the event count; report the band; the count is not a gate (L3) |
 | mesh density selects a wrong basin | a confident wrong `t_min` | two or three densities per cold solve (L2) |
+| the two NLP backends disagree on one transcription | which one to believe | neither: X3 fails, and the mesh-density check plus a cold re-solve adjudicate; the disagreement is recorded as a basin/conditioning finding |
+| the shared transcription code is not CasADi-symbol-safe | the IPOPT path silently evaluates something else | the transcription is tested by evaluating one defect vector both ways on the same point and asserting equality to round-off |
 | a chain script that has only ever run cached | a defect ships on first live run | live-path test (L18) |
 | the switch count from the seed does not match the shoot | mistaken for a failure | reported, not gated; the band and the cold re-solve decide (L3, L-branch) |

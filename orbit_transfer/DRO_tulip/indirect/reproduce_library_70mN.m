@@ -73,6 +73,8 @@ function out = reproduce_library_70mN(opts)
 %  Copyright Coorbital Inc.
 %% ------------------------ Begin Code Sequence ---------------------------
 
+% TEST SEAM: handles to this file's local functions (tests/test_reproduce_library)
+if nargin == 1 && ischar(opts) && strcmp(opts, 'localfunctions'), out = localHandles(localfunctions);  return, end
 if nargin < 1, opts = struct(); end
 here = fileparts(mfilename('fullpath'));
 res  = fullfile(here, 'results');
@@ -124,8 +126,8 @@ spec.anchors = { ...
     'direct11', fullfile(res, 'mintime_70mN_anchor_direct11.mat'),          sA0 + 10/24,     'direct11'};    % found by a direct solve at 0.4921
 names = spec.anchors(:, 1);
 for k = 1:numel(names)
-    assert(isfile(spec.anchors{k, 2}), 'reproduce_library_70mN:anchor', ...
-           'the %s anchor is missing: %s', names{k}, spec.anchors{k, 2});
+    assert(compareOnly || isfile(spec.anchors{k, 2}), 'reproduce_library_70mN:anchor', ...
+           'the %s anchor is missing: %s', names{k}, spec.anchors{k, 2});      % (a comparison needs no anchor)
 end
 
 %% ========================================================================
@@ -157,6 +159,13 @@ if ~compareOnly
         nCopied = adopt_walked_arcs(res, names, fullfile(outDir, 'arcs'), tag);
         fprintf('3. arcs: %d adopted now, %d already in the campaign folder\n', nCopied, 2*numel(names) - nCopied);
     else
+        % "re-walk" is only true of a folder that holds no arcs: the driver walks
+        % an arc only when its file is ABSENT, so arcs left by an earlier call
+        % would be used as they are
+        have = dir(fullfile(outDir, 'arcs', sprintf('arrival_arc_%s_*_long.mat', tag)));
+        assert(isempty(have), 'reproduce_library_70mN:arcs', ...
+               ['.adoptArcs = false asks for the arcs to be walked again, but %s already holds %d arc(s), ' ...
+                'which the driver would reuse. Use a fresh .outDir.'], fullfile(outDir, 'arcs'), numel(have));
         fprintf('3. arcs: NOT adopted -- run_phase_torus walks all %d (about 2-6 h each)\n', 2*numel(names));
     end
     campaignRegistry = fullfile(outDir, 'direct_certified.mat');
@@ -192,15 +201,17 @@ if compareOnly, out.state = 'compared'; end
 %     (every round's catalog is audited before run_phase_torus accepts it;
 %     the last round's count is read back here so it is on the page)
 %% ========================================================================
-out.audit = lastAudit(outDir, tag);
+Lc = load(out.catalog);  fnc = fieldnames(Lc);  nEntries = Lc.(fnc{1}).n_entries;
+[out.audit, whyAudit] = finalAudit(outDir, tag, nEntries);
 fprintf('\n6. VERDICT\n');
+fprintf('   campaign status       : %s\n', out.state);
 if ~isempty(out.audit)
-    fprintf('   audit (fail-closed)   : %d ok / %d bad   [record: 576 ok / 0 bad, on the older fail-open audit]\n', out.audit.nOk, out.audit.nBad);
+    fprintf('   audit (fail-closed)   : %d ok / %d bad, covering all %d entries of the final catalog\n', out.audit.nOk, out.audit.nBad, nEntries);
 else
-    fprintf('   audit (fail-closed)   : no audit file found under %s\n', outDir);
+    fprintf('   audit (fail-closed)   : NOT ESTABLISHED -- %s\n', whyAudit);
 end
-fprintf('   same library as record: %s  (%d of %d cells agree in t_f, z8 and family)\n', ...
-        passFail(out.comparison.ok), out.comparison.nBoth - height(out.comparison.cells), out.comparison.nRef);
+fprintf('   same library as record: %s  (%d of %d cells agree in t_f, costates and family)\n', ...
+        passFail(out.comparison.ok), out.comparison.nAgree, out.comparison.nRef);
 out.ok = out.comparison.ok && ~isempty(out.audit) && out.audit.nBad == 0;
 fprintf('   REPRODUCED            : %s\n', passFail(out.ok));
 end
@@ -231,16 +242,34 @@ fprintf('  record    : %s\n', recordCat);
 end
 
 % ==========================================================================
-function A = lastAudit(outDir, tag)
-% LASTAUDIT  The audit result of the LAST round on disk (audit_<tag>.mat,
-% written by the packaging chain), or [] when there is none.
-% INPUTS: outDir; tag.  OUTPUTS: A (audit_phase_catalog output) | [].
+function [A, why] = finalAudit(outDir, tag, nEntries)
+% FINALAUDIT  The audit OF THE FINAL CATALOG, or [] with the reason. `final`
+% is copied from the LAST round in the driver's state, so that round's
+% audit_<tag>.mat is the only one that counts: an earlier round's, or one that
+% covers fewer entries than the catalog holds, says nothing about the library
+% being judged (it used to be "the newest audit file found anywhere").
+% INPUTS: outDir; tag; nEntries (entries in the final catalog).
+% OUTPUTS: A (audit_phase_catalog output) | []; why (char).
 A = [];
-rounds = dir(fullfile(outDir, 'round_*'));
-for k = numel(rounds):-1:1
-    f = fullfile(rounds(k).folder, rounds(k).name, sprintf('audit_%s.mat', tag));
-    if isfile(f), L = load(f);  A = L.A;  return, end
+stateF = fullfile(outDir, 'torus_state.mat');
+if ~isfile(stateF), why = 'the campaign has no state file';  return, end
+L = load(stateF);
+if isempty(L.st.rounds), why = 'the campaign finished no round';  return, end
+f = fullfile(L.st.rounds(end).dir, sprintf('audit_%s.mat', tag));
+if ~isfile(f), why = sprintf('the last round has no audit file (%s)', f);  return, end
+La = load(f);
+if La.A.nOk + La.A.nBad ~= nEntries
+    why = sprintf('the last round''s audit covers %d entries, the final catalog holds %d', La.A.nOk + La.A.nBad, nEntries);
+    return
 end
+A = La.A;  why = 'the last round''s audit, covering every entry';
+end
+
+function H = localHandles(fh)
+% LOCALHANDLES  This file's local functions as a struct of handles keyed by
+% name -- the TEST SEAM.  INPUTS: fh (cell of handles).  OUTPUTS: H struct.
+H = struct();
+for k = 1:numel(fh), H.(func2str(fh{k})) = fh{k}; end
 end
 
 % ==========================================================================

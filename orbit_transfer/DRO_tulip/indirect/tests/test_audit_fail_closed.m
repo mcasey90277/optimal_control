@@ -28,6 +28,13 @@ ok = chk(ok, A.nBad == 1 && contains(A.rows(1).problem, 'hypothesis'), sprintf('
 A = audit_phase_catalog(catMat, setfield(base, 'cappedWrap', @(realCap) @(varargin) tampered(realCap, varargin, 'minLamVBound', 1e-7))); %#ok<SFLD>
 ok = chk(ok, A.nBad == 1 && contains(A.rows(1).problem, 'lam_v'), sprintf('H2 lower bound under the floor (sampled minimum untouched) -> BAD (%s)', A.rows(1).problem));
 
+% ---- malformed gate values are BAD rows, never passes and never exceptions ---
+% (review 2026-09-18: Inf passed `> floor`; logical(2) is true; logical(NaN) THROWS)
+for mal = {'minLamVBound', Inf, 'Inf'; 'minQmtBound', [1 1], 'a vector'; 'h6Ok', 2, '2'; 'h6Ok', NaN, 'NaN'; 'dimS', 1i, 'complex'}.'
+    A = audit_phase_catalog(catMat, setfield(base, 'cappedWrap', @(realCap) @(varargin) tampered(realCap, varargin, mal{1}, mal{2}))); %#ok<SFLD>
+    ok = chk(ok, A.nBad == 1, sprintf('%s = %s -> BAD (%s)', mal{1}, mal{3}, A.rows(1).problem));
+end
+
 % ---- a polished root that moved away from the stored one is BAD -----------
 A = audit_phase_catalog(catMat, setfield(base, 'cappedWrap', @(realCap) @(varargin) movedRoot(realCap, varargin))); %#ok<SFLD>
 ok = chk(ok, A.nBad == 1 && contains(A.rows(1).problem, 'moved'), sprintf('polished root moved -> BAD (%s)', A.rows(1).problem));

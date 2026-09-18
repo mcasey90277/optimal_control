@@ -51,6 +51,45 @@ s.family_index = cast(relabelled, 'like', s.family_index);  new.sheets(1) = s;
 R = compare_phase_catalogs(new, ref, quiet);
 ok = chk(ok, R.ok && R.nFamilyDiff == 0, 'families relabelled (same partition): still a match');
 
+% ---- FALSE PASSES closed (review 2026-09-18) -------------------------------
+% In MATLAB `NaN > tol` is false, so a non-finite entry used to compare EQUAL.
+new = ref;  new.sheets(1).tf_nd(5, 5) = NaN;
+R = compare_phase_catalogs(new, ref, quiet);
+ok = chk(ok, ~R.ok && R.nNonfinite == 1, 'a NaN flight time in a covered cell is a difference, not a match');
+new = ref;  k = new.sheets(1).entry_index(6, 6);  new.sheets(1).z8(3, k) = NaN;
+R = compare_phase_catalogs(new, ref, quiet);
+ok = chk(ok, ~R.ok && R.nNonfinite == 1, 'a NaN costate is a difference, not a match');
+% a catalog with no family map: the family comparison is NOT ESTABLISHED, never "0 differences"
+new = ref;  new.sheets = rmfield(new.sheets, 'family_index');
+R = compare_phase_catalogs(new, ref, quiet);
+ok = chk(ok, ~R.ok && ~R.familiesCompared, 'a missing family map means "not established", and that is not a match');
+% another problem (engine) on the same grid is refused
+new = ref;  new.thruster.isp_s = new.thruster.isp_s + 100;
+ok = chk(ok, throws(@() compare_phase_catalogs(new, ref, quiet)), 'a catalog of another engine is refused, not compared');
+% the count of agreeing cells is a count of CELLS (a cell with two differences is one cell)
+new = ref;  s = new.sheets(1);  s.tf_nd(3, 5) = s.tf_nd(3, 5) + 1e-3;  k = s.entry_index(3, 5);  s.z8(1:7, k) = 1.01*s.z8(1:7, k);  new.sheets(1) = s;
+R = compare_phase_catalogs(new, ref, quiet);
+ok = chk(ok, R.nAgree == 575 && R.nTfOver == 1 && R.nZOver == 1, sprintf('one cell wrong twice: %d of 576 agree (575)', R.nAgree));
+% the costates are compared on their own: a costate change is not diluted by t_f
+new = ref;  s = new.sheets(1);  k = s.entry_index(9, 9);  s.z8(1:7, k) = s.z8(1:7, k)*(1 + 5e-6);  new.sheets(1) = s;
+R = compare_phase_catalogs(new, ref, quiet);
+ok = chk(ok, R.nZOver == 1, 'a 5e-6 relative costate change is caught (costates compared without t_f in the norm)');
+
+% ---- the script's audit is THE FINAL CATALOG'S audit, complete ---------------
+Hs = reproduce_library_70mN('localfunctions');
+aud = fullfile(tmpRoot(), 'audbind');  r1 = fullfile(aud, 'round_01');  r2 = fullfile(aud, 'round_02');  mkdir(r1);  mkdir(r2);
+A = struct('nOk', 10, 'nBad', 0); save(fullfile(r1, 'audit_T.mat'), 'A'); %#ok<NASGU>
+A = struct('nOk', 576, 'nBad', 0); save(fullfile(r2, 'audit_T.mat'), 'A'); %#ok<NASGU>
+st = struct('rounds', struct('dir', {r1, r2})); save(fullfile(aud, 'torus_state.mat'), 'st'); %#ok<NASGU>
+[Af, why] = Hs.finalAudit(aud, 'T', 576);
+ok = chk(ok, ~isempty(Af) && Af.nOk == 576, ['the audit of the LAST round in the driver''s state is the one read: ' why]);
+[Af, why] = Hs.finalAudit(aud, 'T', 500);
+ok = chk(ok, isempty(Af), ['an audit that does not cover every catalog entry is not accepted: ' why]);
+delete(fullfile(r2, 'audit_T.mat'));
+[Af, why] = Hs.finalAudit(aud, 'T', 576);
+ok = chk(ok, isempty(Af), ['no fallback to an EARLIER round''s audit: ' why]);
+rmdir(aud, 's');
+
 % ---- another grid is refused ----------------------------------------------
 new = ref;  new.sheets(1).sA_frac(4) = new.sheets(1).sA_frac(4) + 1e-4;
 ok = chk(ok, throws(@() compare_phase_catalogs(new, ref, quiet)), 'a catalog on another grid is refused, not compared');
@@ -95,4 +134,9 @@ function ok = chk(ok, c, msg)
 % OUTPUTS: ok.
 if c, fprintf('  PASS  %s\n', msg); else, fprintf('  FAIL  %s\n', msg); end
 ok = ok && c;
+end
+
+function d = tmpRoot()
+% TMPROOT  A fresh temporary folder name.  INPUTS: none.  OUTPUTS: d.
+d = fullfile(tempdir, sprintf('reprolib_%s', char(java.util.UUID.randomUUID())));
 end

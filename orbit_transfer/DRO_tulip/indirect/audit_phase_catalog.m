@@ -169,16 +169,21 @@ for kk = idx(:)'
         end
     end
     [okG, g] = cap(pool, 900, @mintime_hypothesis_gates, 1, z8, rv0(1:6), Tnd, cnd, mu, struct());
-    if ~(okG && isstruct(g) && all(isfield(g, {'dimS', 'minLamVBound', 'minQmtBound', 'h6Ok'})))
+    if ~(okG && isstruct(g) && isscalar(g) && all(isfield(g, {'dimS', 'minLamVBound', 'minQmtBound', 'h6Ok'})))
         bad{end+1} = 'hypothesis gates failed or timed out';
     else
-        r.dimSNow = g.dimS;
-        % the certifier's policy: the LOWER BOUND over the whole arc, above the floor
-        if ~(isscalar(g.minLamVBound) && g.minLamVBound > hypFloor), bad{end+1} = sprintf('H2: lower bound of min|lam_v| over the arc is %g, not above %g', g.minLamVBound, hypFloor); end
-        if ~(isscalar(g.minQmtBound)  && g.minQmtBound  > hypFloor), bad{end+1} = sprintf('H3: lower bound of min Q_mt over the arc is %g, not above %g', g.minQmtBound, hypFloor); end
-        if ~(isscalar(g.dimS)    && g.dimS == 1),   bad{end+1} = sprintf('dim S = %g, not 1', g.dimS); end
-        if ~(isscalar(g.h6Ok)    && logical(g.h6Ok)), bad{end+1} = 'H6 does not hold'; end
-        if isfinite(r.dimSStored) && r.dimSStored ~= r.dimSNow
+        % VALIDATE, THEN COMPARE (as the certifier does). `x > floor` is true for
+        % Inf, logical(2) is true, and logical(NaN) THROWS -- so each value must
+        % be a real finite scalar before it is read as a measurement.
+        if ~realScalar(g.minLamVBound) || ~(g.minLamVBound > hypFloor), bad{end+1} = sprintf('H2: lower bound of min|lam_v| over the arc is %s, not a finite value above %g', showValue(g.minLamVBound), hypFloor); end
+        if ~realScalar(g.minQmtBound)  || ~(g.minQmtBound  > hypFloor), bad{end+1} = sprintf('H3: lower bound of min Q_mt over the arc is %s, not a finite value above %g', showValue(g.minQmtBound), hypFloor); end
+        if ~realScalar(g.dimS) || g.dimS ~= 1
+            bad{end+1} = sprintf('dim S = %s, not 1', showValue(g.dimS));
+        else
+            r.dimSNow = g.dimS;
+        end
+        if ~(realScalar(g.h6Ok) && g.h6Ok == 1), bad{end+1} = sprintf('H6 does not hold (h6Ok = %s)', showValue(g.h6Ok)); end
+        if isfinite(r.dimSStored) && isfinite(r.dimSNow) && r.dimSStored ~= r.dimSNow
             bad{end+1} = sprintf('dim S stored %g, recomputed %g', r.dimSStored, r.dimSNow);
         end
     end
@@ -210,6 +215,19 @@ if isempty(pool)
     return
 end
 [varargout{1}, varargout{2:nout+1}] = run_capped(pool, fh, nout, capSec, varargin{:});
+end
+
+function tf = realScalar(x)
+% REALSCALAR  Is x one real, finite number (or one logical)? The test a gate
+% value must pass BEFORE it is compared with anything.  INPUTS: x.
+% OUTPUTS: tf.
+tf = (isnumeric(x) || islogical(x)) && isscalar(x) && isreal(x) && isfinite(double(x));
+end
+
+function t = showValue(x)
+% SHOWVALUE  A gate value as text for a BAD row, whatever its shape.
+% INPUTS: x.  OUTPUTS: t char.
+if (isnumeric(x) || islogical(x)) && numel(x) <= 4, t = mat2str(double(x), 4); else, t = sprintf('<%s %s>', class(x), mat2str(size(x))); end
 end
 
 function s = ternS(c, a, b)

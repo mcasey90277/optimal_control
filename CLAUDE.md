@@ -33,10 +33,10 @@ optimal_control/
 │   ├── ex3_cart_pole_pmp/       # indirect PMP min-energy swing-up:
 │   │                            #   run_cartpole_pmp.m (seed/shoot/verify front door) +
 │   │                            #   cartpole_minenergy_study.m, the numbered study script (0
-│   │                            #   tolerances .. 9 plot; N1-N6/S1-S2 gates asserted against
-│   │                            #   oc.ms_conjugate_test). Min-time/min-fuel (ex4/ex5) SPECCED at
-│   │                            #   docs/superpowers/specs/2026-09-17-cartpole-three-objectives-
-│   │                            #   design.md, not yet built.
+│   │                            #   tolerances .. 9 plot; N1-N6/S1-S2 gates computed inline, S2
+│   │                            #   asserted against oc.ms_conjugate_test). Min-time/min-fuel (ex4/ex5)
+│   │                            #   SPECCED at docs/superpowers/specs/2026-09-17-cartpole-three-
+│   │                            #   objectives-design.md, not yet built.
 │   ├── run_all_tests.m          # one runner, one real exit code, for
 │   │                            #   every suite in the tree (5 suites currently)
 ├── orbit_transfer/              # top-level container: all orbit-transfer work

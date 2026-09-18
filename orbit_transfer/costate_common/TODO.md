@@ -172,12 +172,27 @@ the folder*. Steps 1–9 change no numerical result and need no decision; steps
     `test_folder_rules` green; `test_cartpole_pmp` 9/9 through `@oc.ms_bvp`.
     No new folder-rules exemption was needed — the two `ms_bvp` tests call
     the delegate, so rule 6 is satisfied by the forwarding itself.
+  - [x] **`ms_conjugate_test` DONE 2026-09-17** — the second consumer
+    arrived: the cart-pole study scripts (`optimal_control_examples`,
+    cart-pole sub-project A Task 4) call the Jacobi test directly on a
+    fixed-t_f min-energy PMP extremal, which is the second TOP-LEVEL
+    consumer the rule asks for. Implementation now at
+    `../../oclib/+oc/ms_conjugate_test.m`; this folder keeps the delegate,
+    so no caller changed (only two comment lines and one Revision History
+    line differ from the pre-move file — no executable line moved). Gates,
+    all run on the move: `golden_cells` 20/20 **bit-identical** to the
+    pre-move capture (dro/halo/dpo/harv z, iters, normR all unchanged);
+    the four-campaign ladder re-solve unchanged to the printed digit
+    (HALO 4.551e-14, DPO 1.130e-14, HALO_HALO 3.478e-14, GTO 2.720e-14
+    max |Δt_f|, dZ8 bit-identical too, OK flags matching); `test_conj_fixedtf`,
+    `test_conj_coverage`, `test_conj_spectrum`, `test_conj_resolve`,
+    `test_folder_rules` green, PASS/FAIL output byte-identical pre/post move.
+    No new folder-rules exemption was needed — the five conjugate tests call
+    the delegate, so rule 6 is satisfied by the forwarding itself, same as
+    `ms_bvp`.
   - [ ] **The rest stay open, for the same reason they always were.**
-    `ms_conjugate_test` is the one to watch: the cart-pole demo does NOT
-    use it (a fixed-t_f, scalar-control, four-unknown extremal exercises the
-    engine, not the Jacobi test), so it still has one top-level consumer and
-    the rule still refuses it. `arclength_ms`, `newton_fixed_q`,
-    `conj_resolve` and `lift_space_dim` likewise: no second consumer yet.
+    `arclength_ms`, `newton_fixed_q`, `conj_resolve` and `lift_space_dim`:
+    no second top-level consumer yet.
 
 ---
 

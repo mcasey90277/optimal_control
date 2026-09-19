@@ -25,7 +25,9 @@ function R = compare_phase_catalogs(newCat, refCat, opts)
 %   which cells belong together. The families of the two catalogs are paired
 %   off, largest overlap first; a cell outside its family's pairing is a
 %   difference.
-% • The two catalogs must be on the same grid; another grid is refused.
+% • The two catalogs must be on the same grid: the same SET of phases on each
+%   axis, in any order (cells are matched by phase, and reported by the
+%   reference's indices). Another grid is refused.
 %
 %% Inputs:
 %
@@ -41,6 +43,9 @@ function R = compare_phase_catalogs(newCat, refCat, opts)
 %
 %  R                        struct                  .ok (a match) .nRef .nNew
 %                                                   .nBoth .nOnlyRef .nOnlyNew
+%                                                   .nNewFaster .nNewSlower
+%                                                   .noWorse (covers the
+%                                                   reference, slower nowhere)
 %                                                   .nNonfinite .nTfOver
 %                                                   .nZOver .nFamilyDiff
 %                                                   .familiesCompared .nAgree
@@ -68,10 +73,18 @@ sameProblem = all(abs(idN - idR) <= 1e-9*max(1, abs(idR))) && abs(tStarN - tStar
 assert(sameProblem, 'compare_phase_catalogs:problem', ...
        ['the two catalogs are libraries of DIFFERENT problems ' ...
         '(thrust N, Isp s, m0 kg, DRO tau, tulip Np, branch: new %s, reference %s)'], mat2str(idN, 6), mat2str(idR, 6));
-circ = @(x) abs(mod(x + 0.5, 1) - 0.5);                     % circular phase distance
-sameGrid = numel(sn.sD_frac) == numel(sr.sD_frac) && numel(sn.sA_frac) == numel(sr.sA_frac) && ...
-           max(circ(sn.sD_frac(:) - sr.sD_frac(:))) < 1e-9 && max(circ(sn.sA_frac(:) - sr.sA_frac(:))) < 1e-9;
-assert(sameGrid, 'compare_phase_catalogs:grid', 'the two catalogs are on different phase grids; nothing to compare');
+% THE SAME GRID MEANS THE SAME SET OF PHASES, in any order. A catalog may list
+% its arrival phases from the anchor's (0.0754 ... 0.9921 0.0337) or sorted
+% (0.0337 first): those are one grid, and a cell is a PAIR OF PHASES, not a
+% pair of indices. The new catalog is brought into the reference's order here,
+% so every index below is the reference's.
+[pD, okD] = matchPhases(sr.sD_frac, sn.sD_frac);            % reference row    k  <->  new row    pD(k)
+[pA, okA] = matchPhases(sr.sA_frac, sn.sA_frac);            % reference column k  <->  new column pA(k)
+assert(okD && okA, 'compare_phase_catalogs:grid', 'the two catalogs are on different phase grids; nothing to compare');
+for f = {'has_solution', 'tf_nd', 'entry_index', 'family_index'}
+    if isfield(sn, f{1}), sn.(f{1}) = sn.(f{1})(pD, pA, :); end
+end
+sn.sD_frac = sn.sD_frac(pD);   sn.sA_frac = sn.sA_frac(pA);
 
 %% 2. Coverage: which cells each catalog holds:
 hasN = logical(sn.has_solution(:, :, 1));   hasR = logical(sr.has_solution(:, :, 1));
@@ -81,10 +94,11 @@ both = hasN & hasR;
 %% 3. Per common cell: flight time, and the costates on their own:
 % t_f is compared by itself, so it is left OUT of the costate norm -- in one
 % 8-vector a flight time of order 4 dilutes a change in costates of order 1.
-dTf = zeros(nBoth, 1);  dZ = zeros(nBoth, 1);
+dTf = zeros(nBoth, 1);  dZ = zeros(nBoth, 1);  signedTf = zeros(nBoth, 1);
 for q = 1:nBoth
     iD = iDs(q);  iA = iAs(q);
-    dTf(q) = abs(sn.tf_nd(iD, iA, 1) - sr.tf_nd(iD, iA, 1))*tStar/86400;
+    signedTf(q) = (sn.tf_nd(iD, iA, 1) - sr.tf_nd(iD, iA, 1))*tStar/86400;      % < 0: the new catalog is FASTER here
+    dTf(q) = abs(signedTf(q));
     zn = sn.z8(1:7, sn.entry_index(iD, iA, 1));   zr = sr.z8(1:7, sr.entry_index(iD, iA, 1));
     dZ(q) = sqrt(sum((zn - zr).^2))/max(sqrt(sum(zr.^2)), realmin);
 end
@@ -108,7 +122,10 @@ what = strings(0, 1);  ciD = zeros(0, 1);  ciA = zeros(0, 1);
 [a, b] = find(hasR & ~hasN);   [ciD, ciA, what] = addCells(ciD, ciA, what, a, b, "missing from the new catalog");
 [a, b] = find(hasN & ~hasR);   [ciD, ciA, what] = addCells(ciD, ciA, what, a, b, "only in the new catalog");
 [ciD, ciA, what] = addCells(ciD, ciA, what, iDs(nonfinite), iAs(nonfinite), "a non-finite flight time or costate");
-[ciD, ciA, what] = addCells(ciD, ciA, what, iDs(tfOver), iAs(tfOver), compose("t_f differs by %.2e d", dTf(tfOver)));
+% a different flight time is a different ROOT; say which catalog holds the better one
+faster = tfOver & signedTf < 0;   slower = tfOver & signedTf > 0;
+[ciD, ciA, what] = addCells(ciD, ciA, what, iDs(faster), iAs(faster), compose("the NEW catalog is faster by %.3f d", dTf(faster)));
+[ciD, ciA, what] = addCells(ciD, ciA, what, iDs(slower), iAs(slower), compose("the new catalog is SLOWER by %.3f d", dTf(slower)));
 [ciD, ciA, what] = addCells(ciD, ciA, what, iDs(zOver & ~tfOver), iAs(zOver & ~tfOver), compose("z8 differs by %.2e (relative)", dZ(zOver & ~tfOver)));
 [ciD, ciA, what] = addCells(ciD, ciA, what, iDs(famDiff), iAs(famDiff), "owned by a different family");
 sDcol = reshape(sr.sD_frac(ciD), [], 1);   sAcol = reshape(sr.sA_frac(ciA), [], 1);     % columns, whatever the grids' orientation
@@ -118,12 +135,17 @@ cells = table(ciD, ciA, sDcol, sAcol, what, 'VariableNames', {'iD', 'iA', 'sD', 
 R = struct('nRef', nnz(hasR), 'nNew', nnz(hasN), 'nBoth', nBoth, ...
            'nOnlyRef', nnz(hasR & ~hasN), 'nOnlyNew', nnz(hasN & ~hasR), ...
            'nNonfinite', nnz(nonfinite), 'nTfOver', nnz(tfOver), 'nZOver', nnz(zOver), ...
+           'nNewFaster', nnz(faster), 'nNewSlower', nnz(slower), ...
            'nFamilyDiff', nnz(famDiff), 'familiesCompared', familiesCompared, ...
            'nAgree', nnz(~(nonfinite | tfOver | zOver | famDiff)), ...        % common CELLS with no difference at all
            'worstTfDays', max([dTf(isfinite(dTf)); 0]), 'worstZRel', max([dZ(isfinite(dZ)); 0]), ...
            'tolTfDays', tolTfDays, 'tolZRel', tolZRel, 'cells', cells);
 R.ok = R.nOnlyRef == 0 && R.nOnlyNew == 0 && R.nNonfinite == 0 && R.nTfOver == 0 && R.nZOver == 0 && ...
        R.nFamilyDiff == 0 && R.familiesCompared;
+% NO WORSE: every reference cell is covered, nothing is non-finite, and no cell
+% is slower. Not "the same library" -- but for a minimum-time library a rebuild
+% that matches or beats every entry is a better one, and that must be visible.
+R.noWorse = R.nOnlyRef == 0 && R.nNonfinite == 0 && R.nNewSlower == 0;
 if doPrint, printReport(R, maxList); end
 end
 
@@ -141,6 +163,21 @@ assert(isstruct(c) && isfield(c, 'sheets') && isscalar(c.sheets), 'compare_phase
        'a phase catalog with exactly one sheet is expected');
 s = c.sheets(1);  tStar = c.constants.tStar_s;
 id = [c.rungs_N(1), c.thruster.isp_s, c.thruster.m0_kg, s.tauDRO, s.Np, s.pm];
+end
+
+% ------------------------------------------------------------------------
+function [p, ok] = matchPhases(sRef, sNew)
+% MATCHPHASES  The permutation that lines a phase list up with a reference
+% one: sNew(p(k)) is the same phase as sRef(k), circularly, to 1e-9. `ok` is
+% false unless the two lists hold exactly the same phases, each once.
+% INPUTS: sRef, sNew (phase lists in [0,1), any order).  OUTPUTS: p [1 x n];
+% ok (logical).
+p = [];  ok = false;
+if numel(sRef) ~= numel(sNew), return, end
+dist = abs(mod(sNew(:).' - sRef(:) + 0.5, 1) - 0.5);        % (reference k, new q): circular distance
+[dmin, p] = min(dist, [], 2);
+p = p(:).';
+ok = all(dmin < 1e-9) && numel(unique(p)) == numel(p);      % every phase found, none used twice
 end
 
 % ------------------------------------------------------------------------
@@ -183,6 +220,9 @@ fprintf('  coverage  : reference %d cells, new %d, common %d; %d missing, %d ext
         R.nRef, R.nNew, R.nBoth, R.nOnlyRef, R.nOnlyNew, pf(R.nOnlyRef == 0 && R.nOnlyNew == 0));
 fprintf('  t_f       : worst deviation %.3e d (tolerance %.0e d); %d cell(s) over      %s\n', ...
         R.worstTfDays, R.tolTfDays, R.nTfOver, pf(R.nTfOver == 0));
+if R.nTfOver > 0
+    fprintf('              of those, the NEW catalog is faster in %d and slower in %d\n', R.nNewFaster, R.nNewSlower);
+end
 fprintf('  costates  : worst relative deviation %.3e (tolerance %.0e); %d cell(s) over   %s\n', ...
         R.worstZRel, R.tolZRel, R.nZOver, pf(R.nZOver == 0));
 fprintf('  finite    : %d cell(s) hold a non-finite flight time or costate                  %s\n', R.nNonfinite, pf(R.nNonfinite == 0));
@@ -192,12 +232,18 @@ else
     fprintf('  families  : NOT ESTABLISHED -- a catalog carries no family map                  FAIL\n');
 end
 fprintf('  agreement : %d of %d common cells agree in everything\n', R.nAgree, R.nBoth);
-fprintf('  VERDICT   : %s\n', pf(R.ok));
+fprintf('  VERDICT   : %s (same library)%s\n', pf(R.ok), passIf(~R.ok && R.noWorse, '   -- but NO WORSE than the reference in any cell', ''));
 n = height(R.cells);
 for q = 1:min(n, maxList)
     fprintf('    cell (%2d,%2d)  sD %.4f  sA %.4f : %s\n', R.cells.iD(q), R.cells.iA(q), R.cells.sD(q), R.cells.sA(q), R.cells.what(q));
 end
 if n > maxList, fprintf('    ... and %d more (R.cells holds them all)\n', n - maxList); end
+end
+
+% ------------------------------------------------------------------------
+function t = passIf(c, a, b)
+% PASSIF  a when c, else b.  INPUTS: c; a; b.  OUTPUTS: t.
+if c, t = a; else, t = b; end
 end
 
 % ------------------------------------------------------------------------

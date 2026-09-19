@@ -5625,3 +5625,68 @@ skip a row.
 **The full build was launched at 15:22** into
 `results/reproduce_70mN_24x24` (five anchors, ten adopted arcs, seven seed
 roots, discovery off). Its verdict belongs in the next section.
+
+## 82. The library rebuilt by one script: every root of the record reproduced or beaten (2026-09-19)
+
+`reproduce_library_70mN(struct('go', true))` ran unattended from
+2026-09-18 15:22 to 09-19 15:34 (24 h 12 min) into
+`indirect/results/reproduce_70mN_24x24`. One round, a fixed point
+("24 certified spines, 24 walked, 0 new roots, 0 new anchors; status done").
+
+| stage | result | time |
+|---|---|---|
+| arcs | 10 adopted, 0 walked; 7 seed roots in the registry | seconds |
+| arrival sheet | 24 of 24 columns certified | 1 h 34 |
+| ribs | 24 columns, 4 workers, none retired | ~9 h |
+| package / audit / sweep | 519 of 576 cells; audit 519 / 0 (fail-closed); 0 interior crossings, worst H6 5.32x, lift 11x | ~4 h |
+| holes + improve | 57 holes, 58 tried, **58 certified** | 7 h |
+| re-package / audit / sweep | **576 of 576**; audit **576 ok / 0 bad** | 2 h 31 |
+
+The 6-10 h estimate was wrong by a factor of three: the runbook's per-round
+rib figures are for rounds that walk only the CHANGED columns, a rebuild
+walks all 24; and the filler's 57 direct solves (about 9 min each) were not
+budgeted. Quote a day, or raise `.nWorkers`.
+
+**The comparison with the record** (`compare_phase_catalogs`,
+`reproduce_result.mat`):
+
+- coverage 576 / 576 in both; nothing non-finite;
+- **565 cells hold the SAME root** (t_f within 1e-6 d, costates within 1e-6);
+- **11 cells hold a different root, and in all 11 the REBUILD is faster**,
+  by 1.95 to 3.93 d; the record is faster in none. Nine are rows 14-22 of
+  the column at sA 0.6587 (record 22.95-23.86 d, rebuild 19.05-21.42 d):
+  the "9 stuck col-15 cells" left open on 09-15, and the column where
+  section 80's edge map measured jumps of 4 to 7 days between neighbours.
+  The other two are (3, sA 0.2837) 19.862 -> 17.287 d and (4, sA 0.3254)
+  19.758 -> 17.806 d. Fastest entry 16.226 d in both; mean t_f 18.5236 ->
+  18.4678 d. The rebuild's filler, seeded from each hole's certified
+  neighbours in one pass over a complete first-round catalog, found what
+  eight hand-driven rounds had left;
+- **82 cells differ in FAMILY LABEL only, with identical roots.** The record
+  labels the ribs of the columns at sA 0.4921 and 0.7837 `direct11` and
+  `direct18`; the rebuild labels them "rib unidentified" (-2); 20 cells go
+  from "unattached" to "rib unidentified". That is `family_map`'s rib
+  attachment by flight time within 0.03 d (sections 78, 80), now measured as
+  NON-REPRODUCIBLE: the same roots, walked in one round instead of eight,
+  get other labels. The family names differ too (`70mN_anchor` for `fast`):
+  the driver does not pass the label table the chain script had.
+
+So the script's strict verdict is FAIL ("the same library": 494 of 576
+cells agree in everything) and the comparator's second line is the finding:
+**NO WORSE than the record in any cell** -- covers it, slower nowhere,
+faster in 11. For a minimum-time library that is a better library, and the
+record should be superseded by it once the labels are dealt with.
+
+Two defects found by the run itself, both in the comparator, both fixed
+test-first: it demanded the two catalogs list their phases in the same
+ORDER (the record lists arrival phases from the anchor's, 0.0754 ... 0.9921
+0.0337; the driver sorts them), so the first verdict was "different grids"
+-- cells are matched by phase now; and it could not say which catalog held
+the better root (`.nNewFaster .nNewSlower .noWorse`).
+
+Open: (1) decide whether `final/` of this run becomes the library of
+record; (2) make family labels reproducible (root identity with costates,
+lineage by root ID) or stop comparing them; (3) pass the family label table
+through the driver; (4) the 11 improved cells deserve a look in the
+second-order sweep written into the new catalog (it ran: 0 interior
+crossings over all 576).

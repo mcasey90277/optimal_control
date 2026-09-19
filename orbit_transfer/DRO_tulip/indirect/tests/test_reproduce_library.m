@@ -90,6 +90,34 @@ delete(fullfile(r2, 'audit_70mN.mat'));
 ok = chk(ok, isempty(Af), ['no fallback to an EARLIER round''s audit: ' why]);
 rmdir(aud, 's');
 
+% ---- THE SAME PHASES IN ANOTHER ORDER are the same grid ---------------------
+% (the first full rebuild, 2026-09-19: the record lists its arrival phases from
+% the anchor's, 0.0754 ... 0.9921 0.0337; the driver sorts them, 0.0337 first.
+% Cells are matched by PHASE, never by index.)
+new = ref;  s = new.sheets(1);  p = [24, 1:23];                 % a cyclic shift of the columns
+s.sA_frac = s.sA_frac(p);
+for f = {'has_solution', 'tf_nd', 'entry_index', 'family_index'}, s.(f{1}) = s.(f{1})(:, p, :); end
+new.sheets(1) = s;
+R = compare_phase_catalogs(new, ref, quiet);
+ok = chk(ok, R.ok && R.nAgree == 576, sprintf('columns cyclically shifted: still the same library (%d of 576 agree)', R.nAgree));
+s2 = s;  pd = [13:24, 1:12];  s2.sD_frac = s2.sD_frac(pd);      % and the rows too
+for f = {'has_solution', 'tf_nd', 'entry_index', 'family_index'}, s2.(f{1}) = s2.(f{1})(pd, :, :); end
+new.sheets(1) = s2;
+R = compare_phase_catalogs(new, ref, quiet);
+ok = chk(ok, R.ok && R.nAgree == 576, 'rows AND columns reordered: still the same library');
+s3 = s;  s3.tf_nd(4, 7) = s3.tf_nd(4, 7) + 1e-3;  new.sheets(1) = s3;   % a difference planted in the SHIFTED catalog ...
+R = compare_phase_catalogs(new, ref, quiet);
+ok = chk(ok, R.nTfOver == 1 && any(abs(R.cells.sA - s3.sA_frac(7)) < 1e-12 & R.cells.iD == 4), ...
+         '... is reported at its PHASE (the reference''s indices and phases name the cell)');
+
+% ---- a different root is FASTER or SLOWER, and the report says which --------
+new = ref;  s = new.sheets(1);  s.tf_nd(2, 2) = s.tf_nd(2, 2) - 0.5;  s.tf_nd(8, 8) = s.tf_nd(8, 8) - 0.2;  s.tf_nd(9, 9) = s.tf_nd(9, 9) + 0.3;  new.sheets(1) = s;
+R = compare_phase_catalogs(new, ref, quiet);
+ok = chk(ok, R.nNewFaster == 2 && R.nNewSlower == 1 && ~R.noWorse, sprintf('two cells faster, one slower: counted %d / %d', R.nNewFaster, R.nNewSlower));
+s.tf_nd(9, 9) = ref.sheets(1).tf_nd(9, 9);  new.sheets(1) = s;
+R = compare_phase_catalogs(new, ref, quiet);
+ok = chk(ok, ~R.ok && R.noWorse && R.nNewFaster == 2 && R.nNewSlower == 0, 'only faster cells: not the same library, but NO WORSE than the reference in any cell');
+
 % ---- another grid is refused ----------------------------------------------
 new = ref;  new.sheets(1).sA_frac(4) = new.sheets(1).sA_frac(4) + 1e-4;
 ok = chk(ok, throws(@() compare_phase_catalogs(new, ref, quiet)), 'a catalog on another grid is refused, not compared');

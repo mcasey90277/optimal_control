@@ -23,6 +23,17 @@ ok = chk(ok, X.okExact, 'the exact gate passes');
 ok = chk(ok, isequal(size(X.edgeD), [24 24]) && X.nEdgeD == nnz(isfinite(X.edgeD)) && X.nEdgeDJump <= X.nEdgeD, 'the departure-phase edge map is counted consistently');
 ok = chk(ok, isfield(X, 'stationary') && height(X.stationary) >= 1 && all(diff(X.stationary.gradNorm) >= 0), ...
          'the cells nearest first-order stationarity in BOTH phases are listed, smallest gradient first');
+% ---- the BRANCH MAP: which neighbours may be interpolated between ------------
+ok = chk(ok, all(isfield(X, {'safeD', 'safeA', 'branch', 'nBranch', 'safeMinutes'})), 'the check returns .safeD .safeA .branch .nBranch');
+if all(isfield(X, {'safeD', 'safeA', 'branch', 'nBranch'}))
+    ok = chk(ok, isequal(X.safeD, abs(X.edgeD) <= X.safeMinutes) && isequal(X.safeA, abs(X.edgeA) <= X.safeMinutes), ...
+             'an edge is SAFE exactly when its trapezoid residual is within .safeMinutes');
+    ok = chk(ok, isequal(size(X.branch), [24 24]) && all(X.branch(:) >= 1) && X.nBranch == max(X.branch(:)) && nnz(X.branch == 1) >= nnz(X.branch == X.nBranch), ...
+             sprintf('every entry belongs to a branch; %d branches, the largest numbered 1 (%d cells)', X.nBranch, nnz(X.branch == 1)));
+    [jD, jA] = find(~X.safeD, 1);                       % across an unsafe edge the two cells are joined only by another route, if at all
+    ok = chk(ok, ~isempty(jD), 'the record has unsafe departure-phase edges (the jumps of FINDINGS 80)');
+end
+
 % ---- the exact test's verdict is THREE-valued --------------------------------
 % A re-solve that does not converge says nothing about a costate: it is
 % UNRESOLVED, not FAIL. A resolved disagreement is FAIL whatever else happened.

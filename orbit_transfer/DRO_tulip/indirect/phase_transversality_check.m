@@ -45,6 +45,8 @@ function X = phase_transversality_check(catMat, opts)
 %   .nExact                 int                     sample size [6]
 %   .delta                  double                  phase offset of the re-solve [2e-4]
 %   .relTol                 double                  exact-test gate [1e-3]
+%   .safeMinutes            double                  an edge within this is SAFE
+%                                                   to interpolate across [5]
 %   .jumpMinutes            double                  an s_D edge above this is a
 %                                                   JUMP [10]
 %   .print                  logical                 print the report [true]
@@ -55,6 +57,9 @@ function X = phase_transversality_check(catMat, opts)
 %  X                        struct                  .dTf_dsD .dTf_dsA [nD x nA,
 %                                                   ND time per unit phase]
 %                                                   .edgeD .edgeA [minutes]
+%                                                   .safeD .safeA (logical, per
+%                                                   edge) .branch .nBranch
+%                                                   (phase_branches)
 %                                                   .sameFamD .nEdgeD
 %                                                   .nEdgeDJump .jumps (table)
 %                                                   .exact (struct array)
@@ -73,6 +78,7 @@ here = fileparts(mfilename('fullpath'));
 addpath(here, fullfile(fileparts(fileparts(here)), 'costate_common'));
 delta = pick(opts, 'delta', 2e-4);        relTol = pick(opts, 'relTol', 1e-3);
 jumpMinutes = pick(opts, 'jumpMinutes', 10);   say = pick(opts, 'print', true);
+safeMinutes = pick(opts, 'safeMinutes', 5);
 
 %% 1. The catalog, and the endpoint closures of ITS problem:
 L = load(catMat);  fn = fieldnames(L);  c = L.(fn{1});
@@ -112,6 +118,16 @@ jumps = table(jD, nextD, jA, sD(jD).', sD(nextD).', sA(jA).', edgeD(sub2ind([nD 
               'VariableNames', {'iD', 'iDnext', 'iA', 'sD', 'sDnext', 'sA', 'residualMin', 'sameFamily'});
 jumps = sortrows(jumps, 'residualMin', 'descend', 'ComparisonMethod', 'abs');
 
+%% 3b. The branch map: which neighbours may be interpolated between?
+% An edge is SAFE when its residual is within safeMinutes: the two entries'
+% flight times AND costates are consistent with one smooth branch, so a guess
+% interpolated between them is a guess on that branch. Cells joined by safe
+% edges form a BRANCH (phase_branches). This is the reproducible replacement
+% for the family label in that role: it is computed from the entries
+% themselves, not from which arc found them.
+safeD = abs(edgeD) <= safeMinutes;   safeA = abs(edgeA) <= safeMinutes;      % NaN edges are not safe
+[branch, nBranch] = phase_branches(safeD, safeA, has);
+
 %% 4. The exact test: re-solve at s +/- delta, never reading a costate:
 cells = pick(opts, 'exactCells', []);
 if isempty(cells)
@@ -141,6 +157,7 @@ stationary = table(oD, oA, sD(oD).', sA(oA).', TF(order)*tStar/86400, GD(order)*
 
 X = struct('catMat', catMat, 'dTf_dsD', GD, 'dTf_dsA', GA, 'edgeD', edgeD, 'edgeA', edgeA, 'sameFamD', sameFamD, ...
            'nEdgeD', nnz(isfinite(edgeD)), 'nEdgeDJump', height(jumps), 'jumpMinutes', jumpMinutes, 'jumps', jumps, ...
+           'safeMinutes', safeMinutes, 'safeD', safeD, 'safeA', safeA, 'branch', branch, 'nBranch', nBranch, ...
            'exact', exact, 'relTol', relTol, 'delta', delta, 'verdictExact', verdictExact, 'okExact', okExact, 'stationary', stationary, 'when', char(datetime('now')));
 if say, printReport(X, TF, tStar); end
 if ~isempty(pick(opts, 'out', '')), save(opts.out, 'X'); end
@@ -241,6 +258,9 @@ for q = 1:min(5, height(X.jumps))
     j = X.jumps(q, :);
     fprintf('     jump: column %2d (sA %.4f), sD %.4f -> %.4f: %.0f min%s\n', j.iA, j.sA, j.sD, j.sDnext, j.residualMin, passIf(j.sameFamily, '  [same family label]', ''));
 end
+sz = arrayfun(@(b) nnz(X.branch == b), 1:X.nBranch);
+fprintf('  branch map    : edges within %g min are SAFE to interpolate across: %d of %d in s_D, %d of %d in s_A;\n', X.safeMinutes, nnz(X.safeD), numel(X.safeD), nnz(X.safeA), numel(X.safeA));
+fprintf('                  %d branch(es); the largest hold %s cells\n', X.nBranch, mat2str(sz(1:min(5, end))));
 [tfMin, kMin] = min(TF(:));  [mD, mA] = ind2sub(size(TF), kMin);
 fprintf('  stationarity  : the fastest entry (%d,%d), %.3f d, has dT/ds = (%+.3f, %+.3f) d per unit phase\n', mD, mA, tfMin*tStar/86400, ...
         X.dTf_dsD(kMin)*tStar/86400, X.dTf_dsA(kMin)*tStar/86400);

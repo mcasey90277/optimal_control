@@ -36,6 +36,9 @@ function F = family_map(S, opts)
 %   .tolFold                double                  a fold this close to a
 %                                                   span end IS the end
 %                                                   [2e-3]
+%   .tolCos                 double                  costate identity: 1 - cos of
+%                                                   the angle between initial
+%                                                   costates [1e-4]
 %   .tolDays                double                  t_f match tolerance when
 %                                                   attaching a spine point
 %                                                   to an arc [0.02]; distinct
@@ -103,6 +106,7 @@ rhoFloor = d('rhoFloor', 1e-3);
 tolFold = d('tolFold', 2e-3);
 tolDays = d('tolDays', 0.02);
 tolRib = d('tolRib', 0.03);
+tolCos = d('tolCos', 1e-4);                 % costate identity: 1 - cos(angle) between initial costates
 assert(isfield(S, 'arcs') && ~isempty(S.arcs), 'family_map: the sheet names no arcs');
 
 % ---- the arcs, one record per S.arcs entry (the sheet's indices) --------
@@ -130,7 +134,12 @@ for k = 1:nArcs
     arcs(k).tfDaysMin = min(tf);  arcs(k).tfDaysMax = max(tf);
     arcs(k).folds = fq;  arcs(k).rhoMin = rmin;  arcs(k).rhoMinAt = q(im);
     arcs(k).stop = char(string(A.stop));
-    walk{k} = struct('q', q, 'tf', tf, 'rho', rho);
+    % THE INITIAL COSTATE along the arc: rows 1:7 of every point, in the
+    % homogeneous chart (= rho * the normal-chart costate, measured on the
+    % anchor arc 2026-09-19), so its DIRECTION is the root's identity
+    lam0 = zeros(7, numel(q));
+    if A.anc.n >= 7 + A.anc.nExtra + 1, lam0 = cell2mat(cellfun(@(v) v(1:7), A.p(:).', 'UniformOutput', false)); end
+    walk{k} = struct('q', q, 'tf', tf, 'rho', rho, 'lam0', lam0);
 end
 
 % ---- the families: one per anchor ---------------------------------------
@@ -161,7 +170,7 @@ for m = 1:nFam
 end
 
 % ---- attachment: which family passes through (sA, t_f) on the spine ----
-attach = @(sA, tfDays) attachPoint(sA, tfDays, walk, arcs, tolDays);
+attach = @(sA, tfDays, varargin) attachPoint(sA, tfDays, walk, arcs, tolDays, tolCos, varargin{:});
 
 % ---- the sheet's columns: the winner and every certified root ----------
 nA = numel(S.sA);
@@ -175,12 +184,12 @@ for j = 1:nA
     cand = repmat(struct('tfDays', NaN, 'family', 0, 'label', ''), 1, numel(ok));
     for kk = 1:numel(ok)
         cand(kk).tfDays = c(ok(kk)).tfDays;
-        [fam, ~] = attach(S.sA(j), c(ok(kk)).tfDays);
+        [fam, ~] = attach(S.sA(j), c(ok(kk)).tfDays, c(ok(kk)).z);
         [cand(kk).family, cand(kk).label] = codeOf(fam, fams);
     end
     cols(j).candidates = cand;
     if ~isfinite(S.TF(j)), continue, end
-    [fam, gap] = attach(S.sA(j), S.TF(j));
+    [fam, gap] = attach(S.sA(j), S.TF(j), winnerZ(S, j));
     [cols(j).family, cols(j).label] = codeOf(fam, fams);
     cols(j).gapDays = gap;
 end
@@ -237,33 +246,50 @@ for k = ia
 end
 end
 
-function [fam, gap] = attachPoint(sA, tfDays, walk, arcs, tolDays)
-% ATTACHPOINT  The family whose arc passes through arrival phase sA (mod 1)
-% at final time tfDays: t_f is interpolated along every arc where it
-% crosses the level, and the nearest match within tolDays wins.
-% INPUTS: sA; tfDays; walk; arcs; tolDays.  OUTPUTS: fam (0 = none); gap
-% (days to the nearest arc at that level).
-fam = 0;  gap = Inf;
+function [fam, gap, cosGap] = attachPoint(sA, tfDays, walk, arcs, tolDays, tolCos, z)
+% ATTACHPOINT  The family whose arc PASSES THROUGH a root: at arrival phase
+% sA (mod 1) the arc has the root's flight time (within tolDays) AND, when
+% the root's costates z are given, the root's initial costate direction
+% (1 - cos within tolCos). Flight time alone cannot tell two families apart
+% where they cross in the (phase, t_f) plane -- exactly where a new family is
+% found -- and it filed a third root through such a point under whichever
+% arc it met first, so that root was never anchored (FINDINGS 78, 80, 82).
+% Without z, or for an arc that stores no costates, the rule is the old one.
+% INPUTS: sA; tfDays; walk; arcs; tolDays; tolCos; z (optional, [7|8 x 1]
+% normal-chart costates, any positive scale).  OUTPUTS: fam (0 = none); gap
+% (days to the best-matching arc); cosGap (1 - cos to it; NaN when no
+% costates were compared).
+fam = 0;  gap = Inf;  cosGap = NaN;
+haveZ = nargin >= 7 && numel(z) >= 7 && any(z(1:7) ~= 0);
+best = Inf;                                   % the match is ranked by costates first, then time
 for k = 1:numel(walk)
     w = walk{k};
     for lev = (floor(min(w.q)) - 1 : ceil(max(w.q)) + 1) + mod(sA, 1)
         s = w.q - lev;
         ic = find(s(1:end-1) .* s(2:end) <= 0 & (s(1:end-1) ~= s(2:end)));
-        for c = ic
-            a = s(c) / (s(c) - s(c+1));
-            tfc = (1 - a)*w.tf(c) + a*w.tf(c+1);
-            g = abs(tfc - tfDays);
-            if g < gap, gap = g;  fam = arcs(k).family; end
-        end
-        % a root sitting exactly on the level (the anchor, say)
-        on = find(s == 0);
-        for c = on
-            g = abs(w.tf(c) - tfDays);
-            if g < gap, gap = g;  fam = arcs(k).family; end
+        on = find(s == 0);                    % a root sitting exactly on the level (the anchor, say)
+        for c = [ic, on]
+            if any(c == on), a = 0; else, a = s(c) / (s(c) - s(c+1)); end
+            c2 = min(c + 1, numel(w.q));
+            g = abs((1 - a)*w.tf(c) + a*w.tf(c2) - tfDays);
+            cg = NaN;
+            lamArc = (1 - a)*w.lam0(:, c) + a*w.lam0(:, c2);
+            if haveZ && any(lamArc ~= 0)
+                cg = 1 - (lamArc.'*z(1:7))/(sqrt(sum(lamArc.^2))*sqrt(sum(z(1:7).^2)));
+            end
+            passes = g <= tolDays && (isnan(cg) || cg <= tolCos);
+            score = g + 1e6*(~passes);        % any passing crossing beats every failing one
+            if score < best, best = score;  gap = g;  cosGap = cg;  fam = arcs(k).family*passes; end
         end
     end
 end
-if gap > tolDays, fam = 0; end
+end
+
+function z = winnerZ(S, j)
+% WINNERZ  The costates of column j's winning root, or [] when the sheet
+% stores none (then the flight-time rule applies).  INPUTS: S; j.  OUTPUTS: z.
+z = [];
+if isfield(S, 'Z8') && size(S.Z8, 2) >= j && all(isfinite(S.Z8(:, j))), z = S.Z8(:, j); end
 end
 
 function [code, label] = codeOf(fam, fams)

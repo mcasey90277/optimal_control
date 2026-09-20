@@ -5726,3 +5726,49 @@ smooth branch. For that use the label is the wrong instrument (it attaches by
 flight time, and section 82 measured it non-reproducible, section 80 found 33
 jumps INSIDE one label); the right one is already in hand: the trapezoid edge
 residual of section 80, computed from the entries themselves.
+
+## 84. A root is known by its costates; the branch map; family_index labelled as provenance; a guide to the rebuild (2026-09-19)
+
+Three recommendations of section 83, each test-first.
+
+**Root identity by costates, inside the driver.** `family_map>attachPoint`
+attached a root to a family when the arc's interpolated flight time at that
+arrival phase came within 0.02 d. It now ALSO requires, when the root's
+costates are given, that the arc's initial costate direction agree
+(1 - cos <= `tolCos` = 1e-4). Every arc point stores lam(0) in rows 1:7, in
+the homogeneous chart (= rho x the normal-chart costate; measured on the anchor
+arc: ratio 0.05343 on every component, 1 - cos 2e-7 against the library's
+anchor), so the direction is free. The driver passes the costates at all three
+call sites (spine cell, discovery probe, seed pool), and the registry's
+duplicate test is `sameRoot` -- the seven costates within 1e-6 relative --
+instead of "t_f within 1e-3 d". `test_family_costate_identity`: two synthetic
+families crossing at one (phase, t_f) with different costates are told apart,
+and a THIRD root through that point is unattached -- the case that matters,
+since an unattached faster root is what gets anchored and walked. Arcs or
+callers with no costates fall back to the flight-time rule
+(`test_family_map` unchanged, passing). Rib labels (`ribCode`) are still by
+flight time; they are provenance only.
+
+**The branch map.** `costate_common/phase_branches`: cells joined by SAFE
+edges (trapezoid residual within `safeMinutes` = 5) form a branch, on the
+torus. `phase_transversality_check` returns `.safeD .safeA .branch .nBranch`.
+On the library of record: **525 of 576 edges safe along s_D, 9 of 576 along
+s_A; 50 branches**, most of them one arrival column as a ring in departure
+phase. That is the honest answer to "may I interpolate between neighbours":
+yes along departure phase almost everywhere, NO along arrival phase at 24
+phases -- the 7-petal tulip puts structure at a seventh of a period.
+Interpolating a guess in s_A needs a finer arrival grid. 42 departure-phase
+jumps remain (34 inside one family label); the column at sA 0.6587 still
+jumps 4.4 d between sD 0.5000 and 0.5417, so that column holds two branches
+even after the rebuild's improvement. X3 on the new record: 11 of 12
+derivatives agree (worst 3.9e-4), one re-solve unresolved -> UNRESOLVED.
+File: `library_70mN_24x24_final/phase_transversality.mat`.
+
+**`family_index` says what it is.** `sheet_to_catalog_file` writes
+`Q.families.note`: provenance, rib attachment not reproducible, nothing reads
+it, use the branch map to decide interpolation.
+
+**A guide for the next session:** `process/REPRODUCE_LIBRARY_GUIDE.md` (what
+the script does, measured times, the unattended-run pattern, how to read the
+verdict, seven traps, the unfixed limitations), and the job that ran, kept as
+a template: `indirect/batch/reproduce_library_job.m`.

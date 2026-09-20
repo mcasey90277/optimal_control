@@ -637,7 +637,7 @@ for m = 1:numel(H.R)
         nReg = nReg + added;
         if ~added, continue, end
         if isempty(F), F = family_map(S, struct('arcDir', arcDir)); end
-        [famP, ~] = F.attach(S.sA(jc), p.tfDays);
+        [famP, ~] = F.attach(S.sA(jc), p.tfDays, p.z);           % by flight time AND costates
         [promoteIt, why] = promotionVerdict(added, p.tfDays, S.TF(jc), acceptDays, famP);
         if promoteIt
             st = promote(st, stateF, p, jc, S, arcDir, tag, anchorDir, lg, 'spine cell');
@@ -713,9 +713,9 @@ for jc = targets
         c = S.cand{jn};
         if isempty(c), continue, end
         for kk = find([c.ok])
-            [famC, ~] = F.attach(S.sA(jn), c(kk).tfDays);
+            [famC, ~] = F.attach(S.sA(jn), c(kk).tfDays, c(kk).z);
             if fam(jc) >= 1 && famC == fam(jc), continue, end
-            if any(arrayfun(@(p) abs(p.tf - c(kk).tfDays) < 1e-3 && p.col == jn, seeds)), continue, end
+            if any(arrayfun(@(p) p.col == jn && sameRoot(p.z, c(kk).z), seeds)), continue, end
             seeds(end+1) = struct('z', c(kk).z(:), 'tf', c(kk).tfDays, 'col', jn);
         end
     end
@@ -740,7 +740,7 @@ for jc = targets
     if isempty(best), continue, end
 
     % ---- the fastest one: anchor it, or say why not ----------------------
-    [famB, ~] = F.attach(S.sA(jc), best.tfDays);
+    [famB, ~] = F.attach(S.sA(jc), best.tfDays, best.z);         % by flight time AND costates
     [promoteIt, why] = promotionVerdict(bestAdded, best.tfDays, tf(jc), acceptDays, famB);
     if promoteIt
         st = promote(st, stateF, best, jc, S, arcDir, tag, anchorDir, lg, 'discovery');
@@ -830,18 +830,31 @@ end
 
 function added = registerRoot(seedFile, C, sD0, src)
 % REGISTERROOT  Append a certified root to the campaign's registry unless
-% an equal one (same sA, t_f within 1e-3 d) is there; atomic write.
+% the SAME root (same sA, same costates: sameRoot) is there; atomic write.
 % INPUTS: seedFile; C (certify_root output); sD0; src.  OUTPUTS: added
 % (logical).
 if isfile(seedFile), L = load(seedFile);  direct = L.direct;
 else, direct = struct('sD', {}, 'sA', {}, 'tfDays', {}, 'z', {}, 'src', {});
 end
-dup = ~isempty(direct) && any(abs(mod([direct.sA] - C.sA + 0.5, 1) - 0.5) < 1e-8 & abs([direct.tfDays] - C.tfDays) < 1e-3);
+% A ROOT IS KNOWN BY ITS COSTATES. "The same arrival phase and a flight time
+% within 1e-3 d" (86 s) merged distinct roots near a family crossing, which is
+% where they matter; the same phase and the same costates is the same root.
+samePhase = abs(mod([direct.sA] - C.sA + 0.5, 1) - 0.5) < 1e-8;
+dup = any(samePhase & arrayfun(@(r) sameRoot(r.z, C.z), direct));
 added = ~dup;
 if added
     direct(end+1) = struct('sD', sD0, 'sA', C.sA, 'tfDays', C.tfDays, 'z', C.z(:), 'src', src);
     tmp = [seedFile '.part'];  save(tmp, 'direct');  movefile(tmp, seedFile, 'f');
 end
+end
+
+function tf = sameRoot(zA, zB)
+% SAMEROOT  Are two solution vectors the same root? The seven initial
+% costates agree to 1e-6 relative (a re-polish moves them ~1e-9; distinct
+% roots differ at order one). Normal chart, so there is no scale to quotient.
+% INPUTS: zA, zB [8 x 1] (costates 1:7, t_f 8).  OUTPUTS: tf.
+a = zA(1:7);  b = zB(1:7);
+tf = sqrt(sum((a(:) - b(:)).^2)) <= 1e-6*max(sqrt(sum(b(:).^2)), realmin);
 end
 
 function ok = ribMatchesSpine(ribFile, S, jc)

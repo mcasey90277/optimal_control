@@ -91,6 +91,17 @@ ok = chk(ok, ~throws(@() H.assertPackaged(good, 'round_01', 'test')), 'assertPac
 ok = chk(ok,  throws(@() H.assertPackaged(badA, 'round_01', 'test')), 'assertPackaged: a catalog whose audit failed is refused');
 ok = chk(ok,  throws(@() H.assertPackaged(setfield(good, 'state', 'pending'), 'round_01', 'test')), 'assertPackaged: a call that did not package is refused'); %#ok<SFLD>
 
+% ---- 8. the registry knows a root by its COSTATES, not its flight time ------
+% Two roots at one arrival phase whose flight times are 1e-4 d apart are one
+% root only if their costates agree; the old rule (t_f within 1e-3 d) merged them.
+reg = fullfile(tmp, 'registry.mat');
+zA = [1; 2; 3; 4; 5; 6; 7; 4.0];  zB = [7; 6; 5; 4; 3; 2; 1; 4.0];
+root = @(z, tf) struct('sA', 0.25, 'tfDays', tf, 'z', z);
+ok = chk(ok,  H.registerRoot(reg, root(zA, 17.7050), 0, 'first'), 'a root is registered');
+ok = chk(ok, ~H.registerRoot(reg, root(zA*(1 + 1e-9), 17.7050 + 2e-7), 0, 'a re-polish'), 'the same costates again: a duplicate');
+ok = chk(ok,  H.registerRoot(reg, root(zB, 17.7051), 0, 'another root'), 'other costates at nearly the same flight time: a DISTINCT root, registered');
+L = load(reg);  ok = chk(ok, numel(L.direct) == 2, 'the registry holds two roots');
+
 if ok, fprintf('test_run_phase_torus_p0: ALL PASS\n'); else, fprintf('test_run_phase_torus_p0: FAIL\n'); end
 end
 

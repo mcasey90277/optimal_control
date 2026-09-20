@@ -20,17 +20,20 @@ base = struct('idx', 1, 'pool', []);
 A = audit_phase_catalog(catMat, setfield(base, 'cappedWrap', @(realCap) @(varargin) failing(realCap, varargin, 'ms_tfmin'))); %#ok<SFLD>
 ok = chk(ok, A.nBad == 1 && contains(A.rows(1).problem, 'polish'), sprintf('polish timeout -> BAD (%s)', A.rows(1).problem));
 
+Lk = load(catMat);  fk = fieldnames(Lk);
+ok = chk(ok, isfield(A, 'contentKey') && strcmp(A.contentKey, catalog_content_key(Lk.(fk{1}))), 'the audit carries the content key of the catalog it read');
+
 % ---- a hypothesis call that fails is BAD ----------------------------------
 A = audit_phase_catalog(catMat, setfield(base, 'cappedWrap', @(realCap) @(varargin) failing(realCap, varargin, 'mintime_hypothesis_gates'))); %#ok<SFLD>
 ok = chk(ok, A.nBad == 1 && contains(A.rows(1).problem, 'hypothesis'), sprintf('gates failure -> BAD (%s)', A.rows(1).problem));
 
 % ---- a recomputed gate that is not positive is BAD ------------------------
-A = audit_phase_catalog(catMat, setfield(base, 'cappedWrap', @(realCap) @(varargin) tampered(realCap, varargin, 'minLamVBound', 1e-7))); %#ok<SFLD>
-ok = chk(ok, A.nBad == 1 && contains(A.rows(1).problem, 'lam_v'), sprintf('H2 lower bound under the floor (sampled minimum untouched) -> BAD (%s)', A.rows(1).problem));
+A = audit_phase_catalog(catMat, setfield(base, 'cappedWrap', @(realCap) @(varargin) tampered(realCap, varargin, 'minLamVEstimate', 1e-7))); %#ok<SFLD>
+ok = chk(ok, A.nBad == 1 && contains(A.rows(1).problem, 'lam_v') && contains(A.rows(1).problem, 'ESTIMATE'), sprintf('H2 lower-bound ESTIMATE under the floor (sampled minimum untouched) -> BAD (%s)', A.rows(1).problem));
 
 % ---- malformed gate values are BAD rows, never passes and never exceptions ---
 % (review 2026-09-18: Inf passed `> floor`; logical(2) is true; logical(NaN) THROWS)
-for mal = {'minLamVBound', Inf, 'Inf'; 'minQmtBound', [1 1], 'a vector'; 'h6Ok', 2, '2'; 'h6Ok', NaN, 'NaN'; 'dimS', 1i, 'complex'}.'
+for mal = {'minLamVEstimate', Inf, 'Inf'; 'minQmtEstimate', [1 1], 'a vector'; 'h6Ok', 2, '2'; 'h6Ok', NaN, 'NaN'; 'dimS', 1i, 'complex'}.'
     A = audit_phase_catalog(catMat, setfield(base, 'cappedWrap', @(realCap) @(varargin) tampered(realCap, varargin, mal{1}, mal{2}))); %#ok<SFLD>
     ok = chk(ok, A.nBad == 1, sprintf('%s = %s -> BAD (%s)', mal{1}, mal{3}, A.rows(1).problem));
 end

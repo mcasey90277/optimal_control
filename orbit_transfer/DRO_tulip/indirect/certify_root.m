@@ -203,7 +203,7 @@ C = struct('ok', false, 'reason', '', 'note', '', 'z', nan(8,1), 'Y', [], 'tfDay
            'Hmax', NaN, 'lamMf', NaN, 'lamMfLoose', NaN, 'lamMfUnc', NaN, 'adjErr', NaN, 'dirGap', NaN, 'fullGap', NaN, ...
            'throttleErr', NaN, 'fieldErr', NaN, 'adjErrRef', NaN, 'nullResid', NaN, 'nullResidRel', NaN, ...
            'Hresid', NaN, 'liftMargin', NaN, 'conjDense', [], 'okDiagnostic', false, 'fullStack', false, ...
-           'minLamVBound', NaN, 'minQmtBound', NaN);   % EVERY field is born here: producers append certificates into
+           'minLamVEstimate', NaN, 'minQmtEstimate', NaN);   % EVERY field is born here: producers append certificates into
                                                        % struct arrays, which MATLAB refuses across differing field sets
 
 % ---- 1. normal-chart polish + conjugate test ---------------------------
@@ -389,15 +389,18 @@ if ~(gv(2) > 0), C.reason = sprintf('min Q_mt = %.2e not > 0', gv(2));   C.wallS
 % H2 AND H3 WITH A MARGIN, OVER THE WHOLE ARC. "> 0" on a sampled minimum
 % passed 1e-300, passed values under the costates' own numerical error, and
 % said nothing about the gaps between samples. The gate is now on the LOWER
-% BOUND over [0, t_f] (between_sample_bound) and the floor is ten times the
-% measured lambda_m uncertainty of the flight, 1e-6 (FINDINGS 59, 80).
-bounds = {'minLamVBound', 'H2', 'min|lam_v|', hypFloor;  'minQmtBound', 'H3', 'min Q_mt', hypFloor};
+% BOUND ESTIMATE over [0, t_f] (between_sample_bound: sampled slope, so an
+% estimate, not an enclosure). The floor, 1e-5, is ten times the measured
+% lambda_m uncertainty of the flight, 1e-6 (FINDINGS 59, 80): a value under
+% it cannot be told from zero by this flight. It is a resolution floor, not
+% a margin with physical meaning.
+bounds = {'minLamVEstimate', 'H2', 'min|lam_v|', hypFloor;  'minQmtEstimate', 'H3', 'min Q_mt', hypFloor};
 for kb = 1:2
     if ~isfield(g, bounds{kb, 1}), C.reason = ['gates omitted ' bounds{kb, 1}]; C.wallSec = toc(t0); return, end
     [okb, vb] = scalar_verdict(g.(bounds{kb, 1}));
     if ~okb, C.reason = sprintf('gate %s is not a real finite scalar', bounds{kb, 1}); C.wallSec = toc(t0); return, end
     if ~(vb > bounds{kb, 4})
-        C.reason = sprintf('%s: the lower bound of %s over the whole arc is %.2e, not above the floor %.0e', bounds{kb, 2}, bounds{kb, 3}, vb, bounds{kb, 4});
+        C.reason = sprintf('%s: the lower-bound ESTIMATE of %s over the whole arc is %.2e, not above the floor %.0e', bounds{kb, 2}, bounds{kb, 3}, vb, bounds{kb, 4});
         C.wallSec = toc(t0);  return
     end
     C.(bounds{kb, 1}) = vb;

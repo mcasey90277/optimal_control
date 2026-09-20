@@ -111,8 +111,8 @@ seam = { ...
     struct('CS', struct('nZero', -1))             , 'malformed',   'CS.nZero = -1';
     struct('CS', struct('clear', true, 'nUnresolved', 1)), 'inconsistent', 'CS.clear = true with nUnresolved = 1';
     struct('CS', struct('clear', 1))              , 'malformed',   'CS.clear = 1 (double, not logical)';
-    struct('g',  struct('minLamVBound', 1e-7))    , 'H2',          'g.minLamVBound = 1e-7 (positive, but under the floor)';
-    struct('g',  struct('minQmtBound', -1e-3))    , 'H3',          'g.minQmtBound = -1e-3 (the sampled minimum is fine; the bound is not)';
+    struct('g',  struct('minLamVEstimate', 1e-7)) , 'H2: the lower-bound estimate',        'g.minLamVEstimate = 1e-7 (positive, but under the floor)';
+    struct('g',  struct('minQmtEstimate', -1e-3)) , 'H3: the lower-bound estimate',        'g.minQmtEstimate = -1e-3 (the sampled minimum is fine; the estimate is not)';
     struct('CS', struct('multiplicity', 1))       , 'inconsistent', 'CS.multiplicity = 1 with clear = true and nZero = 0';
     struct('CS', struct('nNearMiss', 0))          , 'override',    'a HARMLESS override still cannot certify (the seam must not ship)'};
 for k = 1:size(seam, 1)

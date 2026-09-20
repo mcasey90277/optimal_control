@@ -169,14 +169,14 @@ for kk = idx(:)'
         end
     end
     [okG, g] = cap(pool, 900, @mintime_hypothesis_gates, 1, z8, rv0(1:6), Tnd, cnd, mu, struct());
-    if ~(okG && isstruct(g) && isscalar(g) && all(isfield(g, {'dimS', 'minLamVBound', 'minQmtBound', 'h6Ok'})))
+    if ~(okG && isstruct(g) && isscalar(g) && all(isfield(g, {'dimS', 'minLamVEstimate', 'minQmtEstimate', 'h6Ok'})))
         bad{end+1} = 'hypothesis gates failed or timed out';
     else
         % VALIDATE, THEN COMPARE (as the certifier does). `x > floor` is true for
         % Inf, logical(2) is true, and logical(NaN) THROWS -- so each value must
         % be a real finite scalar before it is read as a measurement.
-        if ~realScalar(g.minLamVBound) || ~(g.minLamVBound > hypFloor), bad{end+1} = sprintf('H2: lower bound of min|lam_v| over the arc is %s, not a finite value above %g', showValue(g.minLamVBound), hypFloor); end
-        if ~realScalar(g.minQmtBound)  || ~(g.minQmtBound  > hypFloor), bad{end+1} = sprintf('H3: lower bound of min Q_mt over the arc is %s, not a finite value above %g', showValue(g.minQmtBound), hypFloor); end
+        if ~realScalar(g.minLamVEstimate) || ~(g.minLamVEstimate > hypFloor), bad{end+1} = sprintf('H2: lower-bound ESTIMATE of min|lam_v| over the arc is %s, not a finite value above %g', showValue(g.minLamVEstimate), hypFloor); end
+        if ~realScalar(g.minQmtEstimate)  || ~(g.minQmtEstimate  > hypFloor), bad{end+1} = sprintf('H3: lower-bound ESTIMATE of min Q_mt over the arc is %s, not a finite value above %g', showValue(g.minQmtEstimate), hypFloor); end
         if ~realScalar(g.dimS) || g.dimS ~= 1
             bad{end+1} = sprintf('dim S = %s, not 1', showValue(g.dimS));
         else
@@ -197,7 +197,8 @@ for kk = idx(:)'
 end
 
 A = struct('rows', rows, 'nOk', nnz([rows.ok]), 'nBad', nnz(~[rows.ok]), ...
-           'problems', {problems}, 'catMat', catMat, 'when', datestr(now));
+           'problems', {problems}, 'catMat', catMat, 'when', datestr(now), ...
+           'contentKey', catalog_content_key(c));   % binds this audit to WHAT it read, not to where it sits
 fprintf('AUDIT SUMMARY: %d entries audited, %d OK, %d BAD\n', numel(rows), A.nOk, A.nBad);
 if ~isempty(d('out', '')), save(d('out', ''), 'A'); end
 end

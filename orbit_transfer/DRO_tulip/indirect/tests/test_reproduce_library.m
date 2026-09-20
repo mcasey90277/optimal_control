@@ -81,12 +81,18 @@ aud = fullfile(tmpRoot(), 'audbind');  r1 = fullfile(aud, 'round_01');  r2 = ful
 A = struct('nOk', 10, 'nBad', 0); save(fullfile(r1, 'audit_70mN.mat'), 'A'); %#ok<NASGU>
 A = struct('nOk', 576, 'nBad', 0); save(fullfile(r2, 'audit_70mN.mat'), 'A');   % the chain names it by ITS tag, not the driver's %#ok<NASGU>
 st = struct('rounds', struct('dir', {r1, r2})); save(fullfile(aud, 'torus_state.mat'), 'st'); %#ok<NASGU>
-[Af, why] = Hs.finalAudit(aud, 576);
+[Af, why, how] = Hs.finalAudit(aud, 576, 'abc');
 ok = chk(ok, ~isempty(Af) && Af.nOk == 576, ['the audit of the LAST round in the driver''s state is the one read: ' why]);
-[Af, why] = Hs.finalAudit(aud, 500);
+ok = chk(ok, strcmp(how, 'count only'), 'an audit made before content keys existed is accepted, and SAID to be bound by count only');
+[Af, why] = Hs.finalAudit(aud, 500, 'abc');
 ok = chk(ok, isempty(Af), ['an audit that does not cover every catalog entry is not accepted: ' why]);
+A = struct('nOk', 576, 'nBad', 0, 'contentKey', 'abc'); save(fullfile(r2, 'audit_70mN.mat'), 'A'); %#ok<NASGU>
+[Af, why, how] = Hs.finalAudit(aud, 576, 'abc');
+ok = chk(ok, ~isempty(Af) && strcmp(how, 'content key'), ['an audit carrying the catalog''s own key is bound by it: ' why]);
+[Af, why] = Hs.finalAudit(aud, 576, 'xyz');
+ok = chk(ok, isempty(Af) && contains(why, 'content'), ['the right count of ANOTHER catalog''s entries is not accepted: ' why]);
 delete(fullfile(r2, 'audit_70mN.mat'));
-[Af, why] = Hs.finalAudit(aud, 576);
+[Af, why] = Hs.finalAudit(aud, 576, 'abc');
 ok = chk(ok, isempty(Af), ['no fallback to an EARLIER round''s audit: ' why]);
 rmdir(aud, 's');
 

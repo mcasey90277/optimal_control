@@ -17,7 +17,7 @@ The phase-sensitivity signs and derivation (mass costate does not enter; free fi
 | `.adoptArcs = false` refused its own arcs on resume | CONFIRMED | allowed when the campaign's state file exists |
 | Audit document: "the two Hamiltonians agree" is WRONG (`H_7 = H_6 - k lam_m`, `p_tau = -k lam_m`; host re-derived it); the L_k inequality does not follow from end samples; "reduction is sound" overstated; X3 numbers stale; "minimum lies between grid points" overstated; (S) "checkable" overstated; gap coefficient wording | ALL ACCEPTED | `doc/mintime_second_order_audit.tex` corrected; H2 => H3 on an exact all-burn extremal noted |
 
-## Accepted, DEFERRED until the 96-phase sheet job ends (it is running these files)
+## Accepted, deferred while the 96-phase sheet job ran; APPLIED 2026-09-20 (test-first, 115 checks green in a batch process)
 - `mintime_hypothesis_gates`: use `|lam_r|` as the slope bound; rename `.minLamVBound/.minQmtBound` to `...Estimate`; header "no abnormal lift iff dim S = 1" -> a sufficient exclusion of stationary lifts.
 - `certify_root` / `audit_phase_catalog`: the refusal text must say "lower-bound ESTIMATE"; the floor's justification.
 - `between_sample_bound`: validate finite inputs and non-negative slopes.

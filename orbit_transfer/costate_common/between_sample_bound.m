@@ -1,7 +1,7 @@
 function [lo, k] = between_sample_bound(t, v, L)
 %% Purpose:
 %
-%   A LOWER BOUND on min v(t) over the whole interval [t(1), t(end)], from
+%   A LOWER-BOUND ESTIMATE of min v(t) over the whole interval [t(1), t(end)], from
 %   samples of v and a bound L on its slope. A sampled minimum only says what
 %   v was AT the samples; a hypothesis of the form "v(t) > 0 for all t" needs
 %   the gaps between them covered too.
@@ -23,7 +23,7 @@ function [lo, k] = between_sample_bound(t, v, L)
 %   the sampling is refined (tests/test_between_sample_bound).
 % • Use: the minimum-time hypotheses H2 (|lam_v| > 0) and H3 (Q_mt > 0) in
 %   mintime_hypothesis_gates, where one quantity bounds both slopes:
-%   |d|lam_v|/dt| <= |lam_r| + 2|lam_v| in the CR3BP, and dQ_mt/dt =
+%   |d|lam_v|/dt| <= |lam_r| in the CR3BP (Coriolis is skew), and dQ_mt/dt =
 %   (d|lam_v|/dt)/m exactly on an all-burn arc.
 %
 %% Inputs:
@@ -46,6 +46,9 @@ function [lo, k] = between_sample_bound(t, v, L)
 t = t(:);  v = v(:);  L = L(:);
 assert(numel(t) >= 2 && numel(v) == numel(t) && numel(L) == numel(t), 'between_sample_bound:size', ...
        't, v and L must be vectors of one length (at least two samples)');
+assert(isreal(t) && isreal(v) && isreal(L) && all(isfinite(t)) && all(isfinite(v)) && all(isfinite(L)), ...
+       'between_sample_bound:finite', 'times, samples and slope bounds must be real and finite');
+assert(all(L >= 0), 'between_sample_bound:slope', 'a slope bound is a magnitude: it cannot be negative');
 dt = diff(t);
 assert(all(dt > 0), 'between_sample_bound:time', 'the sample times must be strictly increasing');
 perInterval = 0.5*(v(1:end-1) + v(2:end)) - 0.5*max(L(1:end-1), L(2:end)).*dt;

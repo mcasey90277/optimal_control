@@ -16,7 +16,9 @@ function g = mintime_hypothesis_gates(z8, rv0, Tmax, c, muStar, opts)
 %         control FROZEN, lam_v(t) || alpha(t) for all t, lam_m(tf) = 0 }.
 %         lam.f is a linear functional on S (conserved along each lift)
 %         whose kernel is the abnormal lifts; our normal lift has
-%         lam.f = -1. Hence: no abnormal lift <=> dim S = 1. Computed as
+%         lam.f = -1. Hence dim S = 1 EXCLUDES an abnormal lift of this
+%         trajectory with this control frozen (a sufficient exclusion,
+%         not a characterisation of normality at large). Computed as
 %         7 - rank(C), C = [ [alpha_k]_x Psi_v(t_k) ; e_m' Psi(tf) ] over
 %         samples t_k, Psi the fixed-control adjoint fundamental matrix.
 %                                                    -> dimS, svRatio, sv
@@ -87,8 +89,8 @@ function g = mintime_hypothesis_gates(z8, rv0, Tmax, c, muStar, opts)
 %                                                   exclusion), .C when
 %                                                   opts.keepC,
 %                                                   .minLamV .tMinLamV
-%                                                   .minLamVBound .minQmtBound
-%                                                   (lower bounds over ALL of
+%                                                   .minLamVEstimate .minQmtEstimate
+%                                                   (lower-bound ESTIMATES over
 %                                                   [0,tf], between_sample_bound)
 %                                                   .dtMax (largest sample step)
 %                                                   .minQmt .tMinQmt .dimS
@@ -122,13 +124,17 @@ Qmt  = rho ./ Y(:, 7) + Y(:, 14) / c;
 g.nSwitchFlown = nnz(Qmt <= 0);
 % BETWEEN THE SAMPLES. H2 and H3 are statements about ALL of [0, t_f]; the two
 % minima above are statements about the samples. One slope bound covers both:
-% in the CR3BP  lam_v' = -lam_r - (Coriolis)' lam_v,  so
-% |d|lam_v|/dt| <= |lam_r| + 2|lam_v|; and on an all-burn arc the two mass
-% terms of dQ_mt/dt cancel, leaving dQ_mt/dt = (d|lam_v|/dt)/m exactly.
+% in the CR3BP  lam_v' = -lam_r - (Coriolis)' lam_v,  and the Coriolis matrix
+% is SKEW, so it turns lam_v without changing its length:
+% d|lam_v|/dt = -lam_v.lam_r/|lam_v|, hence |d|lam_v|/dt| <= |lam_r| (the
+% earlier + 2|lam_v| was slack; Astra 2026-09-19, checked against a flown arc
+% in tests/test_between_sample_bound). On an all-burn arc the two mass terms
+% of dQ_mt/dt cancel, leaving dQ_mt/dt = (d|lam_v|/dt)/m exactly.
+% These are ESTIMATES, not enclosures: the slope is sampled too.
 lamR = sqrt(sum(Y(:, 8:10).^2, 2));
-slope = lamR + 2*rho;
-g.minLamVBound = between_sample_bound(tau, rho, slope);
-g.minQmtBound  = between_sample_bound(tau, Qmt, slope./Y(:, 7));
+slope = lamR;
+g.minLamVEstimate = between_sample_bound(tau, rho, slope);
+g.minQmtEstimate  = between_sample_bound(tau, Qmt, slope./Y(:, 7));
 g.dtMax = max(diff(tau));
 
 % --- normal-lift check: lam.f == -1 along the arc ---------------------------

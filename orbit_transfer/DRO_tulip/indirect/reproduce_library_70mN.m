@@ -216,11 +216,11 @@ if compareOnly, out.state = 'compared'; end
 %     the last round's count is read back here so it is on the page)
 %% ========================================================================
 Lc = load(out.catalog);  fnc = fieldnames(Lc);  nEntries = Lc.(fnc{1}).n_entries;
-[out.audit, whyAudit] = finalAudit(outDir, nEntries);
+[out.audit, whyAudit, out.auditBinding] = finalAudit(outDir, nEntries, catalog_content_key(Lc.(fnc{1})));
 fprintf('\n6. VERDICT\n');
 fprintf('   campaign status       : %s\n', out.state);
 if ~isempty(out.audit)
-    fprintf('   audit (fail-closed)   : %d ok / %d bad, covering all %d entries of the final catalog\n', out.audit.nOk, out.audit.nBad, nEntries);
+    fprintf('   audit (fail-closed)   : %d ok / %d bad, covering all %d entries of the final catalog (bound to it by %s)\n', out.audit.nOk, out.audit.nBad, nEntries, out.auditBinding);
 else
     fprintf('   audit (fail-closed)   : NOT ESTABLISHED -- %s\n', whyAudit);
 end
@@ -280,7 +280,7 @@ hrs = sheet + ribs + finalize + filler + repack + arcs;
 end
 
 % ==========================================================================
-function [A, why] = finalAudit(outDir, nEntries)
+function [A, why, how] = finalAudit(outDir, nEntries, key)
 % FINALAUDIT  The audit OF THE FINAL CATALOG, or [] with the reason. `final`
 % is copied from the LAST round in the driver's state, so that round's
 % audit file is the only one that counts: an earlier round's, or one that
@@ -289,9 +289,13 @@ function [A, why] = finalAudit(outDir, nEntries)
 % is found by PATTERN: the packaging chain names it audit_<its own tag>.mat,
 % which is '70mN' whatever tag the driver was given (seen in the 3 x 3
 % rehearsal, where the driver's tag was 'test3d').
-% INPUTS: outDir; nEntries (entries in the final catalog).
-% OUTPUTS: A (audit_phase_catalog output) | []; why (char).
-A = [];
+% The audit is bound to the catalog by CONTENT (catalog_content_key: which
+% cells hold a root, their flight times, their costates), so the right count
+% of another catalog's entries is refused. An audit written before keys
+% existed (2026-09-20) is accepted on its count and SAID to be so.
+% INPUTS: outDir; nEntries (entries in the final catalog); key (its content key).
+% OUTPUTS: A (audit_phase_catalog output) | []; why (char); how ('content key' | 'count only' | '').
+A = [];  how = '';
 stateF = fullfile(outDir, 'torus_state.mat');
 if ~isfile(stateF), why = 'the campaign has no state file';  return, end
 L = load(stateF);
@@ -306,6 +310,15 @@ La = load(fullfile(found.folder, found.name));
 if La.A.nOk + La.A.nBad ~= nEntries
     why = sprintf('the last round''s audit covers %d entries, the final catalog holds %d', La.A.nOk + La.A.nBad, nEntries);
     return
+end
+if isfield(La.A, 'contentKey')
+    if ~strcmp(La.A.contentKey, key)
+        why = 'the last round''s audit is of a catalog with other content (content keys differ)';
+        return
+    end
+    how = 'content key';
+else
+    how = 'count only';
 end
 A = La.A;  why = 'the last round''s audit, covering every entry';
 end

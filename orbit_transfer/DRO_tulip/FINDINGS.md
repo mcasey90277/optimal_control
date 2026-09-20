@@ -5868,3 +5868,28 @@ measurement should be made there before trusting an interpolated guess:
 it needs a rib at 48 departure phases on one column, not a whole library.
 Whether a 1% or a 3% guess CONVERGES when polished is still an experiment
 to run (fenced, in a batch process).
+
+## 87. The deferred Track A review items, applied (2026-09-20)
+
+Held back while the 96-phase sheet job was running the same files; applied
+test-first once it ended (six suites, 115 checks, run in a batch process).
+
+- **Slope rule.** The Coriolis matrix is skew, so it turns lam_v without
+  changing its length: |d|lam_v|/dt| <= |lam_r|. The gate used
+  |lam_r| + 2|lam_v|. The test checks the inequality against a differenced,
+  independently flown anchor arc, not against the gate's own algebra.
+- **Names say what they are.** `.minLamVBound/.minQmtBound` are now
+  `.minLamVEstimate/.minQmtEstimate` in the gates, the certifier and the
+  audit; refusals read "lower-bound ESTIMATE". The slope is sampled, so this
+  is not an enclosure. Certificates stored in existing result files keep the
+  old field names; nothing reads them (the audit recomputes).
+- **dim S = 1** is described as a sufficient exclusion of an abnormal lift of
+  this trajectory with its control frozen, not as "iff".
+- **`between_sample_bound`** refuses non-finite or complex inputs and a
+  negative slope bound.
+- **The audit is bound to its catalog by content.** `catalog_content_key`
+  (MD5 of which cells hold a root, their flight times, their costates;
+  labels excluded because the family map is rewritten after the audit) is
+  stored in the audit and checked by `reproduce_library_70mN`'s final
+  verdict, which now prints how the audit was bound. Audits made before
+  today carry no key and are accepted on their count, and said to be so.

@@ -31,7 +31,7 @@ try
 catch ME
     ok = chk(ok, false, ['they do NOT append into one struct array: ' ME.message]);
 end
-ok = chk(ok, isfinite(Cgood.minLamVBound) && isfinite(Cgood.minQmtBound) && isnan(Cearly.minLamVBound), ...
+ok = chk(ok, isfinite(Cgood.minLamVEstimate) && isfinite(Cgood.minQmtEstimate) && isnan(Cearly.minLamVEstimate), ...
          'the H2/H3 bounds are numbers on a pass and NaN where the gate was never reached');
 if ok, fprintf('test_certify_schema: ALL PASS\n'); else, fprintf('test_certify_schema: FAIL\n'); end
 end

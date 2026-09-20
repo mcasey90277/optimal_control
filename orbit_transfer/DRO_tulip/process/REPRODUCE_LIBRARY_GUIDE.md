@@ -96,6 +96,16 @@ The runbook's "ribs 3–5 h per round" is for rounds that walk only the CHANGED
 columns; a rebuild walks all 24. With `.adoptArcs = false` add ≈ 20 h (ten
 arcs, 2–6 h each). More rib workers is the first thing to raise.
 
+### Which resolution is worth building (measured 2026-09-20, FINDINGS 86)
+
+A 96-phase spine arrival sheet was built to answer this without a full build.
+Along arrival phase the trapezoid edge residual has median 167 / 20 / 2.4 min
+at 24 / 48 / 96 phases, and a linearly interpolated costate is wrong by
+3.1% / 0.85% at neighbours 1/24 / 1/48 apart, inside one family. 17 of the
+96 edges are family hand-overs, which no resolution smooths. So refine the
+ARRIVAL axis first (`.nA = 48`, about two days); the departure axis has not
+been measured the same way (one 48-phase rib would do it).
+
 ## 5. Running it unattended (the pattern that worked)
 
 Follow the `matlab-campaign` skill. Concretely:

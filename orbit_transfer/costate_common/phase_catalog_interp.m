@@ -210,7 +210,7 @@ cornerDistance = sqrt([wD, 1 - wD, wD, 1 - wD].^2 + [wA, wA, 1 - wA, 1 - wA].^2)
 oneD = kD(1) == kD(2);  oneA = kA(1) == kA(2);
 if ~oneD && ~oneA
     cand = struct('tier', 'bilinear', 'corners', 1:4, 'weights', wBilinear);
-    for ke = 1:4, cand(end+1) = struct('tier', 'linear', 'corners', edges(ke).corners, 'weights', edges(ke).weights); end %#ok<AGROW>
+    cand = [cand, arrayfun(@(e) struct('tier', 'linear', 'corners', e.corners, 'weights', e.weights), edges)];
     singles = cornerOrder;
 elseif oneD && ~oneA
     cand = struct('tier', 'linear', 'corners', [1 3], 'weights', [1 - wA, wA]);   singles = pick([1 3], wA);
@@ -219,7 +219,7 @@ elseif ~oneD && oneA
 else
     cand = struct('tier', {}, 'corners', {}, 'weights', {});                      singles = 1;
 end
-for kc = singles, cand(end+1) = struct('tier', 'nearest', 'corners', kc, 'weights', 1); end %#ok<AGROW>
+cand = [cand, arrayfun(@(kc) struct('tier', 'nearest', 'corners', kc, 'weights', 1), singles)];
 if nearestOnly, cand = cand(strcmp({cand.tier}, 'nearest')); end
 bestTier = 'none';  if ~isempty(cand), bestTier = cand(1).tier; end
 

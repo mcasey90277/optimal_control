@@ -5893,3 +5893,41 @@ test-first once it ended (six suites, 115 checks, run in a batch process).
   stored in the audit and checked by `reproduce_library_70mN`'s final
   verdict, which now prints how the audit was bound. Audits made before
   today carry no key and are accepted on their count, and said to be so.
+
+## 88. Is an interpolated costate a usable guess? The experiment, run properly (2026-09-20)
+
+The question section 86 left open, and the experiment that hung the shared
+session on 09-19 when it was run unfenced. This time: a batch process, every
+solve under `run_capped`, results saved after each solve. On the 96-phase
+spine sheet the true root of every column is known, so 14 columns whose two
+neighbours on each side come from the same arc were polished
+(`seed_from_z8` then `ms_tfmin`, 600 iterations) from two kinds of guess at
+two neighbour distances. "Converged" means `info.converged` and the SAME
+root as the sheet's to 1e-5 relative; no solve landed on another root.
+
+| guess | neighbours 1/96 away | neighbours 1/48 away |
+|---|---|---|
+| mean of the two neighbours | **12 of 14**, guess error 0.8%, 14 s | 7 of 14, guess error 3.2%, 62 s |
+| copy of one neighbour | 3 of 14, guess error 4.1%, 74 s | 1 of 14, guess error 9.3%, 80 s |
+
+(Medians. The 1/96 column is what a 48-phase library offers a user at a
+midpoint; the 1/48 column is what the 24-phase record offers.)
+
+1. **Interpolation is worth a factor of four over the nearest entry**, and
+   it needs the finer grid: 86% at the resolution of a 48-phase library, 50%
+   at the record's. That is the case for `.nA = 48`, in numbers.
+2. **The first run said 7 and 3 of 14, and was wrong about why.** Every
+   failure was the solver's default 100-iteration cap: the guesses fly
+   within 90-400 km of the target (true root: 0.0 km, 1-2 iterations) and
+   the damped Newton then needs 90-500 iterations. A guess this good that
+   takes this long says the polish from a FLOWN guess is poorly conditioned,
+   as it must be after 26 days: `seed_from_z8` re-flies the guess from t = 0
+   and every junction inherits the amplified error. The binding rule of
+   2026-08-25 (ship the junction states, not bare z8) is the cure:
+   interpolate the junctions of the two neighbours, do not re-fly. Untested
+   here because the sheet stores z8 only.
+3. Guess error does not predict failure by itself: column 35 fails at 0.5%
+   and column 51 converges at 5%. The failures sit in particular stretches
+   of an arc (columns 35, 93), which is where to look next.
+
+Record: `results/sheet96_resolution_test/interp_seed_experiment/`.

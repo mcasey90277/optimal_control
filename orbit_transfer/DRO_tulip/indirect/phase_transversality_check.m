@@ -190,10 +190,15 @@ end
 function dxD = departureTangent(B, s)
 % DEPARTURETANGENT  d(departure state)/d(phase) of the closure the solver
 % uses, by central difference (the setup exposes the arrival derivative
-% B.dstateA but not the departure one; the closure is a smooth periodic
-% spline, so a 1e-6 step is accurate to ~1e-10).  INPUTS: B; s.
+% B.dstateA but not the departure one). THE STEP IS 1e-4, NOT SMALLER: the
+% closure's values carry round-off near 5e-10, so the difference quotient's
+% error GROWS as the step shrinks -- measured against phase_state's analytic
+% derivative: 2.6e-5 at 1e-3, 6.1e-6 at 1e-4, 5.8e-5 at 1e-5, 5.8e-4 at 1e-6
+% (the step this used until 2026-09-20, believing it good to 1e-10; the
+% stored dTf_dsD maps of 09-19 are off by up to 5.9e-4, 0.16 min per grid
+% step, which moves none of their verdicts).  INPUTS: B; s.
 % OUTPUTS: dxD [6 x 1].
-e = 1e-6;
+e = 1e-4;
 a = B.stateD(s + e);  b = B.stateD(s - e);
 dxD = (a(1:6) - b(1:6))/(2*e);
 dxD = dxD(:);

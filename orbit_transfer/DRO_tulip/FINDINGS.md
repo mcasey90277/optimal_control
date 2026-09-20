@@ -5690,3 +5690,39 @@ lineage by root ID) or stop comparing them; (3) pass the family label table
 through the driver; (4) the 11 improved cells deserve a look in the
 second-order sweep written into the new catalog (it ran: 0 interior
 crossings over all 576).
+
+## 83. The rebuilt library adopted as the library of record (2026-09-19)
+
+Mike's decision, 2026-09-19. `indirect/results/library_70mN_24x24_final/` now
+holds the library rebuilt by `reproduce_library_70mN` (section 82): catalog,
+receipt, fail-closed audit (576 / 0), sweep sidecar, sheet, direct-cell file,
+pictures, the comparison with its predecessor, and a provenance README. The
+hand-built library of 2026-09-15 is kept whole beside it as
+`library_70mN_24x24_handbuilt_2026-09-15/`; nothing was deleted. The path is
+unchanged, so the four test suites that read the record, the reproduction
+script (a future rebuild is now compared with THIS library) and the runbook
+need no edit; the four suites pass on the new record (54 checks), and the
+installed catalog compares with the archive as in section 82 (565 same root,
+11 faster, 0 slower, 0 missing, 82 label-only).
+
+What changes for a reader of the catalog: the arrival phases are listed
+SORTED (0.0337 first) where the hand-built file listed them from the anchor's
+phase, so column k is not the column it was -- address cells by phase; and the
+family names carry the campaign tag (`70mN_anchor` for `fast`).
+
+`results/` is not tracked by git: the library of record exists on this disk
+only. A deliverable zip, or tracking `library_70mN_24x24_final/` (3 MB without
+the sheet), would fix that.
+
+**The family label** (`family_index`). It says which continuation family -- one
+connected branch of the minimum-time extremal set, traced by the arcs from one
+anchor -- supplied an entry. The map (`family_map`) has two jobs: inside the
+driver it decides whether a newly found root lies on a branch already walked
+(no new arcs) or starts a new one (anchor it, walk it); in the catalog it is a
+per-entry annotation. NOTHING reads the stored annotation: not the pickers,
+not the audit, not the certifier. It matters for one future use, interpolating
+a costate guess between neighbouring entries, which is only valid on one
+smooth branch. For that use the label is the wrong instrument (it attaches by
+flight time, and section 82 measured it non-reproducible, section 80 found 33
+jumps INSIDE one label); the right one is already in hand: the trapezoid edge
+residual of section 80, computed from the entries themselves.

@@ -118,6 +118,37 @@ s.tf_nd(9, 9) = ref.sheets(1).tf_nd(9, 9);  new.sheets(1) = s;
 R = compare_phase_catalogs(new, ref, quiet);
 ok = chk(ok, ~R.ok && R.noWorse && R.nNewFaster == 2 && R.nNewSlower == 0, 'only faster cells: not the same library, but NO WORSE than the reference in any cell');
 
+% ---- A REFINED GRID is compared on the cells the two grids SHARE ---------------
+% (a 48 x 48 rebuild against the 24 x 24 record: every record phase is on the
+% finer grid, so the record's cells are the common cells)
+coarse = ref;  s = coarse.sheets(1);  pick2 = 1:2:24;
+s.sD_frac = s.sD_frac(pick2);  s.sA_frac = s.sA_frac(pick2);
+for f = {'has_solution', 'tf_nd', 'entry_index', 'family_index'}, s.(f{1}) = s.(f{1})(pick2, pick2, :); end
+coarse.sheets(1) = s;
+R = compare_phase_catalogs(ref, coarse, quiet);                  % the FINER catalog is the new one
+ok = chk(ok, R.ok && ~R.sameGrid && R.nBoth == 144 && R.nAgree == 144, sprintf('finer new vs coarser reference: %d common cells, all agree', R.nBoth));
+ok = chk(ok, R.nNewOffGrid == 576 - 144 && R.nRefOffGrid == 0, sprintf('%d cells of the finer catalog lie off the reference grid and are not judged', R.nNewOffGrid));
+R = compare_phase_catalogs(coarse, ref, quiet);                  % and the other way round
+ok = chk(ok, R.ok && R.nBoth == 144 && R.nRefOffGrid == 576 - 144 && R.nOnlyRef == 0, 'coarser new vs finer reference: the reference''s extra cells are off-grid, NOT "missing"');
+fine = ref;  k = fine.sheets(1).entry_index(3, 3);  fine.sheets(1).tf_nd(3, 3) = fine.sheets(1).tf_nd(3, 3) - 0.4;   % (3,3) is on the coarse grid
+R = compare_phase_catalogs(fine, coarse, quiet);
+ok = chk(ok, ~R.ok && R.noWorse && R.nNewFaster == 1, 'a faster root on a shared cell is still found on a refined grid');
+
+% ---- the script takes the resolution as an option ------------------------------
+o = reproduce_library_70mN(struct('nD', 48, 'nA', 48, 'print', false));
+ok = chk(ok, numel(o.spec.sD) == 48 && numel(o.spec.sA) == 48 && issorted(o.spec.sA) && contains(o.spec.outDir, '48x48'), 'nD = nA = 48: two 48-phase lists, and a folder of its own');
+rs = ref.sheets(1).sA_frac;  d = min(abs(mod(o.spec.sA(:).' - rs(:) + 0.5, 1) - 0.5), [], 2);
+ok = chk(ok, max(d) < 1e-12 && max(abs(o.spec.sD(1:2:end) - ref.sheets(1).sD_frac)) < 1e-12, 'every phase of the 24 x 24 record is on the 48 x 48 grid');
+o24 = reproduce_library_70mN(struct('print', false));
+ok = chk(ok, numel(o24.spec.sD) == 24 && endsWith(o24.spec.outDir, 'reproduce_70mN_24x24'), 'the default is unchanged: 24 x 24, the same folder as before');
+
+% ---- the time estimate is COMPUTED from the measured rates ----------------------
+% (the plan used to print "6-10 h"; the 24 x 24 rebuild took 24 h 12 min)
+e24 = Hs.estimateHours(24, 24, 4, true);  e48 = Hs.estimateHours(48, 48, 4, true);
+ok = chk(ok, abs(e24 - 24.2) < 2, sprintf('24 x 24 with 4 workers: %.1f h (measured 24.2)', e24));
+ok = chk(ok, e48 > 80 && e48 < 110 && Hs.estimateHours(48, 48, 8, true) < e48 && Hs.estimateHours(24, 24, 4, false) > e24 + 10, ...
+         sprintf('48 x 48: %.0f h (about four days); more workers shorten it; walking the arcs adds most of a day', e48));
+
 % ---- another grid is refused ----------------------------------------------
 new = ref;  new.sheets(1).sA_frac(4) = new.sheets(1).sA_frac(4) + 1e-4;
 ok = chk(ok, throws(@() compare_phase_catalogs(new, ref, quiet)), 'a catalog on another grid is refused, not compared');

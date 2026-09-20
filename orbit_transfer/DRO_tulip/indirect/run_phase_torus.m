@@ -164,6 +164,7 @@ lg('run_phase_torus: %d x %d phases, tag %s, %d anchor(s), out %s%s', numel(sD),
 if isfile(seedFile), L0 = load(seedFile);  lg('registry: %d certified root(s) registered off the arcs', numel(L0.direct)); end
 
 common = commonOpts(in, st.anchors, arcDir, sprintf('arrival_arc_%s_*.mat', tag));
+if in.roundDeadlineHours > 0, common.roundDeadlineHours = in.roundDeadlineHours; end
 if isfile(seedFile), common.seedFiles = {seedFile}; end
 
 for k = st.roundsDone + 1 : maxRounds
@@ -329,6 +330,7 @@ T = { ...
  'arc',           struct('nStep', 4000, 'deadlineSec', 6*3600, 'span', 1.15), ...
                         'arc budget: steps, wall deadline, arrival-phase span from the anchor'; ...
  'rib',           struct('wallSec', 900), 'rib budget: wall cap per departure point'; ...
+ 'roundDeadlineHours', 0, 'how long to wait for a round''s ribs + finalizer; 0 = derive it from the grid and the workers (roundDeadlineSec)'; ...
  'nWorkers',      4,    'rib workers (one MATLAB each)'; ...
  'maxRounds',     6,    'rounds before the campaign stops with status ''budget'''; ...
  'improveDays',   2,    'improve pass: re-solve a filled cell slower than a column neighbour by more than this (days)'; ...
@@ -614,7 +616,7 @@ else
     end
     assert(strcmp(o2.state, 'launched'), 'run_phase_torus: round could not launch: %s', strjoin(o2.blockers, ' | '));
 end
-verdict = waitForVerdict(verdictF, before, 48*3600, 60, lg);
+verdict = waitForVerdict(verdictF, before, roundDeadlineSec(numel(common.sD), numel(common.sA), nWorkers, fieldd(common, 'roundDeadlineHours', [])), 60, lg);
 end
 
 function [nReg, nNew, st] = registerSpineRoots(holesFile, S, sD0, seedFile, st, stateF, arcDir, tag, anchorDir, acceptDays, lg)
@@ -776,6 +778,21 @@ function so = physicsOpts(engine, orbits, sD0)
 so = struct('thrustN', engine.thrustN, 'ispS', engine.ispS, 'm0kg', engine.m0kg, ...
             'tauDRO', orbits.tauDRO, 'NpTulip', orbits.NpTulip, 'pmTulip', orbits.pmTulip, ...
             'sD', sD0, 'physicsOnly', true);
+end
+
+function sec = roundDeadlineSec(nD, nA, nWorkers, userHours)
+% ROUNDDEADLINESEC  How long to wait for one round's ribs + finalizer before
+% giving up. It was a flat 48 h, sized for 24 x 24; a 48 x 48 round is about
+% 55 h of honest work and the driver would have abandoned it. The wait is
+% now THREE TIMES an estimate from the rates measured on the 2026-09-18/19
+% rebuild (24 x 24, 4 workers): 235 worker-seconds per rib point (552 points
+% in 9 h) and 28 s per entry for package + audit + sweep (519 entries in 4 h)
+% -- and never less than 48 h. An explicit .roundDeadlineHours wins.
+% INPUTS: nD, nA (grid); nWorkers; userHours ([] = derive).  OUTPUTS: sec.
+if ~isempty(userHours), sec = userHours*3600;  return, end
+ribSec   = nA*max(nD - 1, 0)*235/max(nWorkers, 1);
+finalSec = nD*nA*28;
+sec = max(48*3600, 3*(ribSec + finalSec));
 end
 
 function [ended, why] = campaignEnded(st, maxRounds)

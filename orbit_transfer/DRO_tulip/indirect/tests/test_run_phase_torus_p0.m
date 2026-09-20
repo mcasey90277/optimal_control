@@ -102,6 +102,15 @@ ok = chk(ok, ~H.registerRoot(reg, root(zA*(1 + 1e-9), 17.7050 + 2e-7), 0, 'a re-
 ok = chk(ok,  H.registerRoot(reg, root(zB, 17.7051), 0, 'another root'), 'other costates at nearly the same flight time: a DISTINCT root, registered');
 L = load(reg);  ok = chk(ok, numel(L.direct) == 2, 'the registry holds two roots');
 
+% ---- 9. the wait for a round scales with the round -------------------------------
+% (48 h was sized for 24 x 24; a 48 x 48 round of ribs + audit + sweep is about
+% 55 h of work, and the driver used to give up on it)
+h = @(nD, nA, nW, user) H.roundDeadlineSec(nD, nA, nW, user)/3600;
+ok = chk(ok, h(24, 24, 4, []) == 48, 'a 24 x 24 round keeps the 48 h wait');
+ok = chk(ok, h(48, 48, 4, []) > 100 && h(24, 96, 4, []) > 100, sprintf('a 48 x 48 round waits %.0f h, 24 x 96 waits %.0f h', h(48, 48, 4, []), h(24, 96, 4, [])));
+ok = chk(ok, h(48, 48, 8, []) < h(48, 48, 4, []), 'more rib workers, a shorter wait');
+ok = chk(ok, h(48, 48, 4, 200) == 200, 'an explicit .roundDeadlineHours is honoured');
+
 if ok, fprintf('test_run_phase_torus_p0: ALL PASS\n'); else, fprintf('test_run_phase_torus_p0: FAIL\n'); end
 end
 

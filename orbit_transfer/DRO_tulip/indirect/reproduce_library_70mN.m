@@ -50,6 +50,15 @@ function out = reproduce_library_70mN(opts)
 %                                                   would run, create nothing [false]
 %   .outDir                 char                    the campaign folder
 %                                                   [results/reproduce_70mN_24x24]
+%   .nD, .nA                int                     the RESOLUTION: departure and
+%                                                   arrival phases [24, 24]. The
+%                                                   arcs are re-scanned at any nA;
+%                                                   a multiple of 24 keeps every
+%                                                   record cell on the grid, and
+%                                                   the comparison is then made
+%                                                   on those shared cells. Cost
+%                                                   grows with nD*nA: 24 x 24 is a
+%                                                   day, 48 x 48 about four
 %   .adoptArcs              logical                 adopt the walked arcs [true]
 %   .discover               logical                 run the discovery step [false]
 %   .nWorkers               int                     rib workers [4]
@@ -84,7 +93,9 @@ addpath(here, fullfile(fileparts(fileparts(here)), 'costate_common'));
 %  0. THE SWITCHES
 %% ========================================================================
 go          = pick(opts, 'go', false);
-outDir      = pick(opts, 'outDir', fullfile(res, 'reproduce_70mN_24x24'));
+nD          = pick(opts, 'nD', 24);              % departure phases  } the RESOLUTION. 24 x 24 is the record's;
+nA          = pick(opts, 'nA', 24);              % arrival phases    } any multiple of 24 keeps every record cell on the grid
+outDir      = pick(opts, 'outDir', fullfile(res, sprintf('reproduce_70mN_%dx%d', nD, nA)));
 adoptArcs   = pick(opts, 'adoptArcs', true);
 discover    = pick(opts, 'discover', false);
 nWorkers    = pick(opts, 'nWorkers', 4);
@@ -102,8 +113,8 @@ tag = '70mN';
 sA0    = 0.0754;                                   % the first anchor's arrival phase: the grid's origin
 engine = struct('thrustN', 0.070, 'ispS', 900, 'm0kg', 150);
 spec = struct( ...
-    'sD',        (0:23)/24, ...                                    % 24 departure phases; sD(1) = 0 is the spine
-    'sA',        sort(mod(sA0 + (0:23)/24, 1)), ...                % 24 arrival phases
+    'sD',        (0:nD-1)/nD, ...                                  % nD departure phases; sD(1) = 0 is the spine
+    'sA',        sort(mod(sA0 + (0:nA-1)/nA, 1)), ...              % nA arrival phases, a lattice through the first anchor's
     'departure', struct('family', 'dro', 'tau', 1.0), ...          % the DRO of period 1.0 ND (4.43 d)
     'arrival',   struct('family', 'tulip', 'Np', 7, 'pm', -1), ... % the 7-petal southern tulip
     'engine',    engine, ...
@@ -176,8 +187,8 @@ if ~compareOnly
     end
 
     %% ====================================================================
-    %  4. THE BUILD -- one call. Each round: sheet at the 24 arrival phases
-    %     from every arc, ribs down the 23 other departure phases for every
+    %  4. THE BUILD -- one call. Each round: sheet at the nA arrival phases
+    %     from every arc, ribs down the nD - 1 other departure phases for every
     %     column, package + audit + second-order sweep, then direct solves
     %     for the holes. It stops at a fixed point (a round that registers no
     %     new root and adds no anchor).
@@ -210,8 +221,9 @@ if ~isempty(out.audit)
 else
     fprintf('   audit (fail-closed)   : NOT ESTABLISHED -- %s\n', whyAudit);
 end
-fprintf('   same library as record: %s  (%d of %d cells agree in t_f, costates and family)\n', ...
-        passFail(out.comparison.ok), out.comparison.nAgree, out.comparison.nRef);
+fprintf('   same library as record: %s  (%d of %d shared cells agree in t_f, costates and family%s)\n', ...
+        passFail(out.comparison.ok), out.comparison.nAgree, out.comparison.nBoth, ...
+        ternary(out.comparison.sameGrid, '', sprintf('; %d new cells lie off the record''s grid', out.comparison.nNewOffGrid)));
 out.ok = out.comparison.ok && ~isempty(out.audit) && out.audit.nBad == 0;
 fprintf('   REPRODUCED            : %s\n', passFail(out.ok));
 end
@@ -231,14 +243,37 @@ for k = 1:numel(names)
 end
 nFound = nnz(cellfun(@isfile, walked));
 if adoptArcs
-    fprintf('  arcs      : ADOPT the %d walked arcs (%d missing would stop the run); expect about 6-10 h\n', nFound, numel(walked) - nFound);
+    fprintf('  arcs      : ADOPT the %d walked arcs (%d missing would stop the run)\n', nFound, numel(walked) - nFound);
 else
-    fprintf('  arcs      : RE-WALK all %d (2-6 h each); expect about 30 h\n', numel(walked));
+    fprintf('  arcs      : RE-WALK all %d (2-6 h each)\n', numel(walked));
 end
+hrs = estimateHours(numel(spec.sD), numel(spec.sA), spec.nWorkers, adoptArcs);
+fprintf('  time      : about %.0f h (%.1f days) with %d rib workers, from the rates measured on the 24 x 24 rebuild\n', hrs, hrs/24, spec.nWorkers);
 fprintf('  seed roots: %d certified direct-found roots adopted into the campaign''s registry\n', nRegistryRoots);
 fprintf('  discovery : %s\n', ternary(spec.discover, 'ON (probes at empty and slow columns)', 'off (all five families are given)'));
 fprintf('  output    : %s\n', spec.outDir);
 fprintf('  record    : %s\n', recordCat);
+end
+
+% ==========================================================================
+function hrs = estimateHours(nD, nA, nWorkers, adoptArcs)
+% ESTIMATEHOURS  How long a build takes, from the rates MEASURED on the
+% 24 x 24 rebuild of 2026-09-18/19 (4 rib workers, 24 h 12 min in all):
+%   sheet       1 h 34 for 24 arrival phases           -> scales with nA
+%   ribs        235 worker-seconds per rib point       -> nA (nD - 1) points / workers
+%   finalizer   28 s per entry (package, audit, sweep) -> nD nA entries
+%   filler      10 % of the cells are holes, 7.2 min each
+%   re-package  15.7 s per entry (the audit runs over the whole catalog again)
+%   arcs        ten arcs, about 2 h each on two at a time, when they are walked
+% The first estimate quoted for this script was "6-10 h". It was a guess.
+% INPUTS: nD; nA; nWorkers; adoptArcs.  OUTPUTS: hrs.
+sheet    = 1.57*nA/24;
+ribs     = nA*max(nD - 1, 0)*235/max(nWorkers, 1)/3600;
+finalize = nD*nA*28/3600;
+filler   = 0.10*nD*nA*7.2/60;
+repack   = nD*nA*15.7/3600;
+arcs     = 20*(~adoptArcs);
+hrs = sheet + ribs + finalize + filler + repack + arcs;
 end
 
 % ==========================================================================

@@ -25,7 +25,10 @@ function R = compare_phase_catalogs(newCat, refCat, opts)
 %   which cells belong together. The families of the two catalogs are paired
 %   off, largest overlap first; a cell outside its family's pairing is a
 %   difference.
-% • The two catalogs must be on the same grid: the same SET of phases on each
+% • A REFINED GRID IS COMPARED ON THE SHARED CELLS (a 48 x 48 rebuild against a
+%   24 x 24 record): .sameGrid is false, and the entries off the other
+%   catalog's grid are counted (.nNewOffGrid .nRefOffGrid), not judged.
+% • Otherwise the two catalogs must be on the same grid: the same SET of phases on each
 %   axis, in any order (cells are matched by phase, and reported by the
 %   reference's indices). Another grid is refused.
 %
@@ -41,7 +44,10 @@ function R = compare_phase_catalogs(newCat, refCat, opts)
 %
 %% Outputs:
 %
-%  R                        struct                  .ok (a match) .nRef .nNew
+%  R                        struct                  .ok (a match on the cells
+%                                                   compared) .sameGrid
+%                                                   .nRefOffGrid .nNewOffGrid
+%                                                   .nRef .nNew
 %                                                   .nBoth .nOnlyRef .nOnlyNew
 %                                                   .nNewFaster .nNewSlower
 %                                                   .noWorse (covers the
@@ -78,13 +84,29 @@ assert(sameProblem, 'compare_phase_catalogs:problem', ...
 % (0.0337 first): those are one grid, and a cell is a PAIR OF PHASES, not a
 % pair of indices. The new catalog is brought into the reference's order here,
 % so every index below is the reference's.
-[pD, okD] = matchPhases(sr.sD_frac, sn.sD_frac);            % reference row    k  <->  new row    pD(k)
-[pA, okA] = matchPhases(sr.sA_frac, sn.sA_frac);            % reference column k  <->  new column pA(k)
-assert(okD && okA, 'compare_phase_catalogs:grid', 'the two catalogs are on different phase grids; nothing to compare');
+%
+% ONE GRID MAY REFINE THE OTHER. A 48 x 48 rebuild holds every phase of a
+% 24 x 24 record and more; the comparison is then made on the cells the two
+% grids SHARE, and the cells that lie off the other catalog's grid are counted
+% (.nNewOffGrid, .nRefOffGrid) and NOT judged -- they are not "missing" or
+% "extra", there is nothing to compare them with. Two grids that merely
+% overlap (neither holds all of the other's phases) are still refused.
+[rD, nD_] = commonPhases(sr.sD_frac, sn.sD_frac);           % reference rows rD    <->  new rows nD_
+[rA, nA_] = commonPhases(sr.sA_frac, sn.sA_frac);           % reference columns rA <->  new columns nA_
+nested = @(k, a, b) numel(k) == min(numel(a), numel(b)) && ~isempty(k);
+assert(nested(rD, sr.sD_frac, sn.sD_frac) && nested(rA, sr.sA_frac, sn.sA_frac), 'compare_phase_catalogs:grid', ...
+       'the two catalogs are on different phase grids (neither holds all of the other''s phases); nothing to compare');
+nRefCells = nnz(sr.has_solution(:, :, 1));   nNewCells = nnz(sn.has_solution(:, :, 1));
+sameGrid = numel(rD) == numel(sr.sD_frac) && numel(rD) == numel(sn.sD_frac) && ...
+           numel(rA) == numel(sr.sA_frac) && numel(rA) == numel(sn.sA_frac);
 for f = {'has_solution', 'tf_nd', 'entry_index', 'family_index'}
-    if isfield(sn, f{1}), sn.(f{1}) = sn.(f{1})(pD, pA, :); end
+    if isfield(sn, f{1}), sn.(f{1}) = sn.(f{1})(nD_, nA_, :); end
+    if isfield(sr, f{1}), sr.(f{1}) = sr.(f{1})(rD, rA, :); end
 end
-sn.sD_frac = sn.sD_frac(pD);   sn.sA_frac = sn.sA_frac(pA);
+sn.sD_frac = sn.sD_frac(nD_);   sn.sA_frac = sn.sA_frac(nA_);
+sr.sD_frac = sr.sD_frac(rD);    sr.sA_frac = sr.sA_frac(rA);
+nRefOffGrid = nRefCells - nnz(sr.has_solution(:, :, 1));    % entries of each catalog at phases the other does not have
+nNewOffGrid = nNewCells - nnz(sn.has_solution(:, :, 1));
 
 %% 2. Coverage: which cells each catalog holds:
 hasN = logical(sn.has_solution(:, :, 1));   hasR = logical(sr.has_solution(:, :, 1));
@@ -132,7 +154,8 @@ sDcol = reshape(sr.sD_frac(ciD), [], 1);   sAcol = reshape(sr.sA_frac(ciA), [], 
 cells = table(ciD, ciA, sDcol, sAcol, what, 'VariableNames', {'iD', 'iA', 'sD', 'sA', 'what'});
 
 %% 6. The verdict:
-R = struct('nRef', nnz(hasR), 'nNew', nnz(hasN), 'nBoth', nBoth, ...
+R = struct('sameGrid', sameGrid, 'nRefOffGrid', nRefOffGrid, 'nNewOffGrid', nNewOffGrid, ...
+           'nRef', nnz(hasR), 'nNew', nnz(hasN), 'nBoth', nBoth, ...
            'nOnlyRef', nnz(hasR & ~hasN), 'nOnlyNew', nnz(hasN & ~hasR), ...
            'nNonfinite', nnz(nonfinite), 'nTfOver', nnz(tfOver), 'nZOver', nnz(zOver), ...
            'nNewFaster', nnz(faster), 'nNewSlower', nnz(slower), ...
@@ -166,18 +189,18 @@ id = [c.rungs_N(1), c.thruster.isp_s, c.thruster.m0_kg, s.tauDRO, s.Np, s.pm];
 end
 
 % ------------------------------------------------------------------------
-function [p, ok] = matchPhases(sRef, sNew)
-% MATCHPHASES  The permutation that lines a phase list up with a reference
-% one: sNew(p(k)) is the same phase as sRef(k), circularly, to 1e-9. `ok` is
-% false unless the two lists hold exactly the same phases, each once.
-% INPUTS: sRef, sNew (phase lists in [0,1), any order).  OUTPUTS: p [1 x n];
-% ok (logical).
-p = [];  ok = false;
-if numel(sRef) ~= numel(sNew), return, end
+function [kRef, kNew] = commonPhases(sRef, sNew)
+% COMMONPHASES  The phases two lists SHARE (circularly, to 1e-9), as index
+% pairs: sRef(kRef(q)) is the same phase as sNew(kNew(q)), in the reference's
+% order. The lists may be in any order and of different lengths; a phase is
+% paired at most once.  INPUTS: sRef, sNew (phase lists in [0,1)).
+% OUTPUTS: kRef, kNew [1 x nCommon].
 dist = abs(mod(sNew(:).' - sRef(:) + 0.5, 1) - 0.5);        % (reference k, new q): circular distance
-[dmin, p] = min(dist, [], 2);
-p = p(:).';
-ok = all(dmin < 1e-9) && numel(unique(p)) == numel(p);      % every phase found, none used twice
+[dmin, q] = min(dist, [], 2);
+hit = dmin < 1e-9;
+kRef = find(hit).';   kNew = q(hit).';
+[~, first] = unique(kNew, 'stable');                        % a new phase is used once
+kRef = kRef(first);   kNew = kNew(first);
 end
 
 % ------------------------------------------------------------------------
@@ -216,6 +239,9 @@ function printReport(R, maxList)
 % then the differing cells.  INPUTS: R; maxList.  OUTPUTS: none.
 pf = @passFail;
 fprintf('CATALOG COMPARISON (new against reference)\n');
+if ~R.sameGrid
+    fprintf('  grids     : DIFFERENT RESOLUTIONS -- compared on the cells the two grids share; off the other''s grid and not judged: %d new, %d reference\n', R.nNewOffGrid, R.nRefOffGrid);
+end
 fprintf('  coverage  : reference %d cells, new %d, common %d; %d missing, %d extra            %s\n', ...
         R.nRef, R.nNew, R.nBoth, R.nOnlyRef, R.nOnlyNew, pf(R.nOnlyRef == 0 && R.nOnlyNew == 0));
 fprintf('  t_f       : worst deviation %.3e d (tolerance %.0e d); %d cell(s) over      %s\n', ...

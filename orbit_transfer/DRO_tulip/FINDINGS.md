@@ -5820,3 +5820,51 @@ with four data-flow diagrams; `process/REPRODUCE_LIBRARY_GUIDE.md`.
 interpolated midpoint seed) was run unfenced in the shared interactive
 MATLAB session and occupied it for over 45 minutes with no way to interrupt
 it. Solver calls go in a batch process, fenced, always.
+
+## 86. How many arrival phases? Measured on a 96-phase spine sheet (2026-09-20)
+
+`results/sheet96_resolution_test/`: the spine's arrival sheet (sD = 0) built at
+96 arrival phases from the ten adopted arcs and the seven seed roots
+(`build_arrival_sheet`, 6 h 25 min, **96 of 96 columns certified**), then the
+trapezoid edge residual along s_A on that row, and on the same row subsampled.
+
+| arrival phases | median residual | 75% | 90% | within 5 min |
+|---|---|---|---|---|
+| 24 | 167 min | 1395 | 2447 | 0 of 24 |
+| 48 | 20.3 min | 124 | 721 | 10 of 48 |
+| 96 | 2.36 min | 17.7 | 114 | 60 of 96 |
+
+The median falls by 8.2 and 8.6 per halving: third order, as the trapezoid
+residual should. The tail does not fall, because it is not resolution: the
+winner of a column comes from one of five families (anchor 38 columns,
+direct18 26, fast2 15, direct11 11, seed roots 6), and **17 of the 96 edges
+are family hand-overs** -- median residual 115 min, costate jump 68%. Within
+a family (79 edges) the median is 1.8 min, 72% are within 5 min, and the
+costates change by 5.4% per step.
+
+**Interpolation error, measured with no solve.** The 96-phase sheet holds
+the true entry between any two columns two steps apart. Linear
+interpolation of the seven costates at that midpoint, same-family triples
+only:
+
+| neighbours apart | costate error, median | 90% | t_f error, median |
+|---|---|---|---|
+| 1/12 | 11.4% | 88% | 138 min |
+| 1/24 (the record's spacing) | 3.1% | 27% | 61 min |
+| 1/48 | 0.85% | 4.4% | 14 min |
+
+A factor 3.7 per halving: second order, as linear interpolation should be;
+1/96 would give about 0.2%. So along arrival phase a 48-phase library
+yields a costate guess good to about 1% inside a family, the record's 24
+phases about 3% with a long tail. No resolution helps across a family
+hand-over; those 17 edges are boundaries, and an interpolator must know
+where they are (the winning arc of each column says so, exactly).
+
+Two consequences. (1) For interpolation the arrival axis is the one to
+refine, to 48 at least; 24 x 48 costs about two days, 24 x 96 about four.
+(2) Along departure phase the flight times are smooth at 24 phases
+(section 84) but the costates change by 32% per step, so the same
+measurement should be made there before trusting an interpolated guess:
+it needs a rib at 48 departure phases on one column, not a whole library.
+Whether a 1% or a 3% guess CONVERGES when polished is still an experiment
+to run (fenced, in a batch process).

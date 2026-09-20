@@ -5931,3 +5931,44 @@ midpoint; the 1/48 column is what the 24-phase record offers.)
    of an arc (columns 35, 93), which is where to look next.
 
 Record: `results/sheet96_resolution_test/interp_seed_experiment/`.
+
+## 89. The costate interpolator, and what it says about the two libraries (2026-09-20)
+
+Built: `costate_common/phase_catalog_interp` (the blend and the rule for which
+corners may be blended; pure, 30 checks), `costate_common/polish_costate_guess`
+(fly, cut into junctions, polish; one function so it can run under
+`run_capped`), `indirect/arrival_sheet_as_catalog` (an arrival sheet read as a
+one-row catalog) and the entry script `indirect/interp_study.m`, in
+`transfer_study`'s style: tolerances, library, query, the cell worked out by
+hand and asserted against the function (V1), guess, flown miss, fenced
+polish, same-branch test, `certify_root`, nearest-entry baseline, figures.
+
+**The rule that decides a blend is the finding.** Family labels are not
+enough (a family folds) and a cap on the costate difference is blunt: on the
+record a step inside one branch measures 0.3-0.4 and a change of branch
+0.7-0.9. A cap of 1.0 blended two branches at (0.02, 0.14) into a guess that
+hung the solver until the 600 s fence killed it -- the hang of 09-19,
+reproduced and contained. The sharp rule is TIME CONSISTENCY: neighbours a, b
+on one branch satisfy T_b - T_a = (G_a + G_b)/2 (s_b - s_a) to third order,
+G = dT/ds from their own costates (`phase_sensitivity`). On that cell the
+arrival edges miss by 70-100 min and the departure edges by 1220-2160 min.
+The cap is 300 min at a step of 1/24, scaled as step^1.5 (38 min at 1/96,
+where one branch measures 2-18 and a hand-over 115).
+
+**The record, at 1/24, cannot be blended.** Of its 576 cells 224 pass the
+rule on all four edges, 324 on one edge, 28 on none. But in the CLEANEST cell
+(edge residuals under 1 min, corner costates 22-44% apart) the bilinear
+guess flies 26,500 km off and does not converge in 600 iterations. A
+four-point cubic does not help: measured on the 96-phase sheet it cuts the
+costate error 2.6 times at 1/48 (0.95% -> 0.37%) and not at all at 1/24
+(7.3% -> 6.1%), because the costates vary on the scale of that grid.
+
+**The 96-phase spine can.** Query (0, 0.2050): the two neighbours differ by
+1.3%; the blend is off by 0.13%, flies 563 km off unsolved, polishes in 39
+iterations (5 s) onto its corners' branch, and certifies (t_f 16.4935 d).
+From the nearest entry alone: 5,408 km, 433 iterations (54 s), same root.
+
+Also measured: taking the guess's t_f from the corners' first-order
+predictions rather than from the blend of their t_f is closer by hours on
+the record (the blend was +160 and +325 min from them) and a wash at 1/96
+(-9.5 against +8.8 min). A cubic Hermite in (T, G) would use both; not built.

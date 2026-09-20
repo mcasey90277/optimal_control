@@ -157,9 +157,12 @@ if doBaseline && ~isempty(rows)
 end
 R = struct('rows', rows, 'summary', S, 'outDir', outDir);
 
-txt = sprintf(['INTERPOLATOR SCORE  %s\n  %d random off-grid queries (seed %d); grid steps 1/%.0f (departure), 1/%.0f (arrival)\n' ...
+stepText = {'a single line', 'a single line'};
+if K.gapD > 0, stepText{1} = sprintf('1/%.0f', 1/K.gapD); end
+if K.gapA > 0, stepText{2} = sprintf('1/%.0f', 1/K.gapA); end
+txt = sprintf(['INTERPOLATOR SCORE  %s\n  %d random off-grid queries (seed %d); grid steps: %s (departure), %s (arrival)\n' ...
                '  USABLE (converged on its corners'' branch): %d of %d = %.0f%%\n  converged %d, of which on ANOTHER branch %d\n'], ...
-              K.catMat, S.nQuery, seed, 1/max(K.gapD, eps), 1/max(K.gapA, eps), S.nUsable, S.nQuery, 100*S.hitRate, S.nConverged, S.nOtherBranch);
+              K.catMat, S.nQuery, seed, stepText{1}, stepText{2}, S.nUsable, S.nQuery, 100*S.hitRate, S.nConverged, S.nOtherBranch);
 for kt = 1:numel(tiers)
     if S.byTier(kt).n > 0, txt = [txt sprintf('    tier %-8s: %3d queries, %3d usable\n', tiers{kt}, S.byTier(kt).n, S.byTier(kt).usable)]; end %#ok<AGROW>
 end

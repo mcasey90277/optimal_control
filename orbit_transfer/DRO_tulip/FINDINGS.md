@@ -5972,3 +5972,26 @@ Also measured: taking the guess's t_f from the corners' first-order
 predictions rather than from the blend of their t_f is closer by hours on
 the record (the blend was +160 and +325 min from them) and a wash at 1/96
 (-9.5 against +8.8 min). A cubic Hermite in (T, G) would use both; not built.
+
+## 90. The library's hit rate as a source of guesses: the 96-phase spine (2026-09-20)
+
+`score_interpolator`, 60 seeded random arrival phases on the 96-phase spine
+(s_D = 0), each blended, polished under a 420 s cap (600 iterations), and
+compared with the nearest entry alone:
+
+| | usable | median unsolved miss | median iterations |
+|---|---|---|---|
+| blend | **52 of 60 = 87%** | 629 km | 48 |
+| nearest entry alone | 42 of 60 = 70% | 790 km | 121 |
+
+No converged solve left its corners' branch. 51 queries were blended from
+two neighbours (46 usable); 9 sat on a hand-over between families and fell
+back to one entry (6 usable). Agrees with the 14-column experiment of
+section 88 (12 of 14).
+
+The eight misses are not poor guesses. Three flew within 100 km of the
+target and still did not converge, one of them stopping after 17 iterations
+at 6 km; they sit at s_A 0.414, 0.450 and 0.578, where the family map puts
+folds of direct11 and direct18 (0.428-0.440, 0.573-0.592). Near a fold the
+shooting Jacobian is nearly singular and a root-finder stalls however good
+its start: those cells need the arclength polish, not a better guess.

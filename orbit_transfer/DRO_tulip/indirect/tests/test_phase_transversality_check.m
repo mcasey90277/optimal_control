@@ -23,16 +23,23 @@ ok = chk(ok, X.okExact, 'the exact gate passes');
 ok = chk(ok, isequal(size(X.edgeD), [24 24]) && X.nEdgeD == nnz(isfinite(X.edgeD)) && X.nEdgeDJump <= X.nEdgeD, 'the departure-phase edge map is counted consistently');
 ok = chk(ok, isfield(X, 'stationary') && height(X.stationary) >= 1 && all(diff(X.stationary.gradNorm) >= 0), ...
          'the cells nearest first-order stationarity in BOTH phases are listed, smallest gradient first');
-% ---- the BRANCH MAP: which neighbours may be interpolated between ------------
-ok = chk(ok, all(isfield(X, {'safeD', 'safeA', 'branch', 'nBranch', 'safeMinutes'})), 'the check returns .safeD .safeA .branch .nBranch');
-if all(isfield(X, {'safeD', 'safeA', 'branch', 'nBranch'}))
-    ok = chk(ok, isequal(X.safeD, abs(X.edgeD) <= X.safeMinutes) && isequal(X.safeA, abs(X.edgeA) <= X.safeMinutes), ...
-             'an edge is SAFE exactly when its trapezoid residual is within .safeMinutes');
-    ok = chk(ok, isequal(size(X.branch), [24 24]) && all(X.branch(:) >= 1) && X.nBranch == max(X.branch(:)) && nnz(X.branch == 1) >= nnz(X.branch == X.nBranch), ...
-             sprintf('every entry belongs to a branch; %d branches, the largest numbered 1 (%d cells)', X.nBranch, nnz(X.branch == 1)));
-    [jD, jA] = find(~X.safeD, 1);                       % across an unsafe edge the two cells are joined only by another route, if at all
-    ok = chk(ok, ~isempty(jD), 'the record has unsafe departure-phase edges (the jumps of FINDINGS 80)');
+% ---- TIME-CONSISTENT EDGES and CANDIDATE COMPONENTS (renamed after review 2026-09-19) ----
+% A small flight-time residual says two neighbours are consistent with one smooth
+% branch OF FLIGHT TIMES. It is a heuristic, not a licence to interpolate costates:
+% on this library the costates change by ~30% across such an edge.
+need = {'timeConsistentD', 'timeConsistentA', 'component', 'nComponent', 'consistentMinutes', 'costateJumpD'};
+ok = chk(ok, all(isfield(X, need)) && ~any(isfield(X, {'safeD', 'branch'})), 'the check returns .timeConsistentD/.A .component .costateJumpD, and nothing called "safe"');
+if all(isfield(X, need))
+    ok = chk(ok, isequal(X.timeConsistentD, abs(X.edgeD) <= X.consistentMinutes), 'an edge is time-consistent exactly when its trapezoid residual is within .consistentMinutes');
+    % the under-resolved arrival axis is NOT used to join cells: every component lies in ONE arrival column
+    sameCol = true;
+    for b_ = 1:X.nComponent, [~, cA] = find(X.component == b_);  sameCol = sameCol && numel(unique(cA)) == 1; end
+    ok = chk(ok, sameCol && X.nComponent >= 24, sprintf('components are joined through departure-phase edges only: %d components, each inside one arrival column', X.nComponent));
+    jt = X.costateJumpD(X.timeConsistentD);
+    ok = chk(ok, isequal(size(X.costateJumpD), [24 24]) && median(jt) > 0.05, sprintf('costate jump across a time-consistent edge: median %.2f -- reported, because it is NOT small', median(jt)));
 end
+e = X.exact(1);
+ok = chk(ok, all(isfield(e, {'stepD', 'stepA', 'absErrD', 'absErrA'})) && e.stepA > 0, 'each exact derivative records the step it actually used and its absolute error');
 
 % ---- the exact test's verdict is THREE-valued --------------------------------
 % A re-solve that does not converge says nothing about a costate: it is

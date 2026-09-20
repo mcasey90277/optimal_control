@@ -1,11 +1,14 @@
-function [branch, nBranch] = phase_branches(safeD, safeA, has)
+function [branch, nBranch] = phase_components(safeD, safeA, has)
 %% Purpose:
 %
-%   WHICH CELLS OF A PHASE SHEET MAY BE INTERPOLATED BETWEEN? Two neighbouring
-%   entries lie on one smooth branch of solutions when the edge between them
-%   is SAFE (a small trapezoid residual, phase_edge_residuals). Cells joined
-%   by a chain of safe edges form a BRANCH; this labels the branches, on the
-%   torus (both phase axes wrap).
+%   CANDIDATE COMPONENTS OF A PHASE SHEET. Cells joined by a chain of accepted
+%   edges (for instance time-consistent edges, phase_edge_residuals) form a
+%   connected component of the grid graph; this labels them, on the torus
+%   (both phase axes wrap). It is graph bookkeeping: a component is only as
+%   meaningful as the edge test behind it, it is NOT an established solution
+%   branch, and two members of one component need not be interpolable (the
+%   component may wind round the torus or follow a fold). Renamed from
+%   phase_branches after review, 2026-09-19.
 %
 %   It replaces the family label for this purpose. A family label says which
 %   continuation arc an entry was FOUND on; it attaches by flight time, is
@@ -42,7 +45,7 @@ function [branch, nBranch] = phase_branches(safeD, safeA, has)
 %% ------------------------ Begin Code Sequence ---------------------------
 
 [nD, nA] = size(has);
-assert(isequal(size(safeD), [nD nA]) && isequal(size(safeA), [nD nA]), 'phase_branches:size', ...
+assert(isequal(size(safeD), [nD nA]) && isequal(size(safeA), [nD nA]), 'phase_components:size', ...
        'the two edge masks and the cell mask must have one size');
 id = reshape(1:nD*nA, nD, nA);                       % a node per cell
 nextD = circshift(id, -1, 1);   nextA = circshift(id, -1, 2);

@@ -40,6 +40,32 @@ ok = chk(ok, F.attach(0.30, 19) >= 1, 'no costates given: the flight-time rule, 
 ok = chk(ok, F.attach(0.20, 18, z(e(:, 1))) == 1 && F.attach(0.20, 18, z(e(:, 2))) == 0, 'away from the crossing: A''s arc with A''s costates, and not with C''s');
 lam = e(:, 1) + 5e-3*e(:, 4);                                    % 1 - cos ~ 1.2e-5: a re-polish of the same root
 ok = chk(ok, F.attach(0.20, 18, z(lam)) == 1, 'costates within 1 - cos 1e-4 are the same root');
+% ---- FAIL CLOSED (review 2026-09-19): this rule decides whether hours of arcs are walked ----
+[~, ~, ~, st] = F.attach(0.20, 18, z(e(:, 1)));
+ok = chk(ok, strcmp(st, 'attached'), 'a clean match says so: status attached');
+[fam, ~, ~, st] = F.attach(0.20, 18, z([NaN; zeros(6, 1)]));
+ok = chk(ok, fam == 0 && strcmp(st, 'unknown'), 'NON-FINITE costates from the caller: UNKNOWN and unattached -- never a silent flight-time match');
+[fam, ~, ~, st] = F.attach(0.20, 25, z(e(:, 1)));
+ok = chk(ok, fam == 0 && strcmp(st, 'none'), 'no arc near that flight time: none');
+% an arc walked in a NEGATIVE chart (rho < 0) stores -|rho| * lam0: the same root, antiparallel rows
+writeArc(arcDir, 'arrival_arc_delta_up_long.mat', linspace(0.60, 0.90, 31), (30 - 5*linspace(0.60, 0.90, 31))/4, -0.05, e(:, 5), n, nExtra);
+S2 = S;  S2.arcs{end+1} = 'arrival_arc_delta_up_long.mat';
+F2 = family_map(S2, struct('arcDir', arcDir));
+ok = chk(ok, F2.attach(0.70, 26.5, z(e(:, 5))) == 3, 'rho < 0: the chart''s SIGN is used, so the stored antiparallel rows are the same root');
+% an arc that stores NO costates, asked about a root that has them: unknown, not attached
+writeArc(arcDir, 'arrival_arc_eps_up_long.mat', linspace(0.60, 0.90, 31), (40 - 5*linspace(0.60, 0.90, 31))/4, 0.05, zeros(7, 1), n, nExtra);
+S3 = S;  S3.arcs{end+1} = 'arrival_arc_eps_up_long.mat';
+F3 = family_map(S3, struct('arcDir', arcDir));
+[fam, ~, ~, st] = F3.attach(0.70, 36.5, z(e(:, 6)));
+ok = chk(ok, fam == 0 && strcmp(st, 'unknown'), 'the arc has no costates to compare with: UNKNOWN, so the root is anchored rather than suppressed');
+ok = chk(ok, F3.attach(0.70, 36.5) == 3, '... while a legacy caller with no costates still gets the flight-time rule');
+% two families through one root (the same costates, the same time): attached, and SAID to be ambiguous
+writeArc(arcDir, 'arrival_arc_zeta_up_long.mat', q, (16 + 10*q)/4, rho, e(:, 1), n, nExtra);
+S4 = S;  S4.arcs{end+1} = 'arrival_arc_zeta_up_long.mat';
+F4 = family_map(S4, struct('arcDir', arcDir));
+[fam, ~, ~, st] = F4.attach(0.20, 18, z(e(:, 1)));
+ok = chk(ok, fam >= 1 && strcmp(st, 'ambiguous'), 'two families pass through the root: attached (it IS on a walked family) and reported ambiguous');
+
 if ok, fprintf('test_family_costate_identity: ALL PASS\n'); else, fprintf('test_family_costate_identity: FAIL\n'); end
 end
 

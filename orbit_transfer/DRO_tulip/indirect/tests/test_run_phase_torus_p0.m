@@ -101,6 +101,11 @@ ok = chk(ok,  H.registerRoot(reg, root(zA, 17.7050), 0, 'first'), 'a root is reg
 ok = chk(ok, ~H.registerRoot(reg, root(zA*(1 + 1e-9), 17.7050 + 2e-7), 0, 'a re-polish'), 'the same costates again: a duplicate');
 ok = chk(ok,  H.registerRoot(reg, root(zB, 17.7051), 0, 'another root'), 'other costates at nearly the same flight time: a DISTINCT root, registered');
 L = load(reg);  ok = chk(ok, numel(L.direct) == 2, 'the registry holds two roots');
+ok = chk(ok,  H.sameRoot(zA, zA*(1 + 1e-9)) && H.sameRoot(zA*(1 + 1e-9), zA), 'sameRoot is symmetric');
+ok = chk(ok, ~H.sameRoot(zA, [zA(1:7); 4.0 + 1e-3]), 'the same costates with another flight time are not the same root');
+ok = chk(ok, ~H.sameRoot(zA, [NaN; zA(2:8)]) && ~H.sameRoot(zA, [zeros(7, 1); 4.0]), 'a non-finite or all-zero costate vector is never "the same root"');
+ok = chk(ok, throws(@() H.registerRoot(reg, root([NaN; zA(2:8)], 17.7), 0, 'bad')), 'a root with non-finite costates is refused, not registered');
+ok = chk(ok,  H.registerRoot(reg, root(zA, 17.7050), 0.25, 'another spine'), 'the same costates at ANOTHER departure phase are a distinct record');
 
 % ---- 9. the wait for a round scales with the round -------------------------------
 % (48 h was sized for 24 x 24; a 48 x 48 round of ribs + audit + sweep is about

@@ -44,7 +44,7 @@ ok = chk(ok, abs(R.worstTfDays - 1e-3*ref.constants.tStar_s/86400) < 1e-9, sprin
 ok = chk(ok, any(R.cells.iD == 3 & R.cells.iA == 5) && any(R.cells.iD == 7 & R.cells.iA == 2), 'the differing cells are named');
 
 % ---- the same family partition under other index numbers is a match ------
-new = ref;  s = new.sheets(1);  fiAll = double(s.family_index);  u = unique(fiAll(s.has_solution));
+new = ref;  s = new.sheets(1);  fiAll = double(s.family_index);  u = unique(fiAll(s.has_solution & fiAll >= 1));   % FAMILIES only: status codes (< 1) are not relabelled
 perm = circshift(u, 1);  relabelled = fiAll;
 for q = 1:numel(u), relabelled(fiAll == u(q)) = perm(q); end
 s.family_index = cast(relabelled, 'like', s.family_index);  new.sheets(1) = s;
@@ -148,6 +148,19 @@ e24 = Hs.estimateHours(24, 24, 4, true);  e48 = Hs.estimateHours(48, 48, 4, true
 ok = chk(ok, abs(e24 - 24.2) < 2, sprintf('24 x 24 with 4 workers: %.1f h (measured 24.2)', e24));
 ok = chk(ok, e48 > 80 && e48 < 110 && Hs.estimateHours(48, 48, 8, true) < e48 && Hs.estimateHours(24, 24, 4, false) > e24 + 10, ...
          sprintf('48 x 48: %.0f h (about four days); more workers shorten it; walking the arcs adds most of a day', e48));
+
+% ---- the family pairing is OPTIMAL, and status codes are not families ---------
+% overlap [6 5; 5 0]: greedy pairs the 6 and leaves 10 cells "different"; the best pairing matches 10 and leaves 6
+new = ref;  s = new.sheets(1);  fr = ones(24, 'int8');  fn_ = ones(24, 'int8');  idx = find(s.has_solution);
+fr(idx(1:11)) = 1;  fr(idx(12:16)) = 2;  fr(idx(17:end)) = 3;
+fn_(idx(1:6)) = 1;  fn_(idx(7:11)) = 2;  fn_(idx(12:16)) = 1;  fn_(idx(17:end)) = 3;
+refF = ref;  refF.sheets(1).family_index = fr;  s.family_index = fn_;  new.sheets(1) = s;
+R = compare_phase_catalogs(new, refF, quiet);
+ok = chk(ok, R.nFamilyDiff == 6, sprintf('overlap [6 5; 5 0]: %d cells differ under the OPTIMAL pairing (6; greedy said 10)', R.nFamilyDiff));
+s2 = ref.sheets(1);  f2 = double(s2.family_index);  known = find(f2 >= 1 & s2.has_solution, 3);
+newS = ref;  g2 = s2.family_index;  g2(known(1)) = -2;  newS.sheets(1).family_index = g2;     % a known family relabelled "unidentified"
+R = compare_phase_catalogs(newS, ref, quiet);
+ok = chk(ok, R.nFamilyDiff == 1, 'a status code (-2 unidentified) is compared as a status, never paired with a family');
 
 % ---- another grid is refused ----------------------------------------------
 new = ref;  new.sheets(1).sA_frac(4) = new.sheets(1).sA_frac(4) + 1e-4;

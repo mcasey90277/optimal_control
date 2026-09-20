@@ -137,8 +137,14 @@ for k = 1:nArcs
     % THE INITIAL COSTATE along the arc: rows 1:7 of every point, in the
     % homogeneous chart (= rho * the normal-chart costate, measured on the
     % anchor arc 2026-09-19), so its DIRECTION is the root's identity
+    % The chart's SIGN matters: the stored rows are rho * lam0, so for rho < 0
+    % they are ANTIPARALLEL to the costate. |rho| is a display quantity
+    % (distance from losing normality); identity uses the signed value.
     lam0 = zeros(7, numel(q));
-    if A.anc.n >= 7 + A.anc.nExtra + 1, lam0 = cell2mat(cellfun(@(v) v(1:7), A.p(:).', 'UniformOutput', false)); end
+    if A.anc.n >= 7 + A.anc.nExtra + 1
+        lam0 = cell2mat(cellfun(@(v) v(1:7), A.p(:).', 'UniformOutput', false));
+        if A.anc.nExtra >= 1, lam0 = lam0 .* sign(cellfun(@(v) v(A.anc.n), A.p(:).')); end
+    end
     walk{k} = struct('q', q, 'tf', tf, 'rho', rho, 'lam0', lam0);
 end
 
@@ -246,7 +252,7 @@ for k = ia
 end
 end
 
-function [fam, gap, cosGap] = attachPoint(sA, tfDays, walk, arcs, tolDays, tolCos, z)
+function [fam, gap, cosGap, status] = attachPoint(sA, tfDays, walk, arcs, tolDays, tolCos, z)
 % ATTACHPOINT  The family whose arc PASSES THROUGH a root: at arrival phase
 % sA (mod 1) the arc has the root's flight time (within tolDays) AND, when
 % the root's costates z are given, the root's initial costate direction
@@ -254,14 +260,26 @@ function [fam, gap, cosGap] = attachPoint(sA, tfDays, walk, arcs, tolDays, tolCo
 % where they cross in the (phase, t_f) plane -- exactly where a new family is
 % found -- and it filed a third root through such a point under whichever
 % arc it met first, so that root was never anchored (FINDINGS 78, 80, 82).
-% Without z, or for an arc that stores no costates, the rule is the old one.
+%
+% FAIL CLOSED. The answer decides whether hours of arcs are walked, so a
+% comparison that could not be made is never a match (review 2026-09-19):
+%   'attached'   one family passes in time AND costates
+%   'ambiguous'  two or more families do: the root is on a walked family
+%                (fam = the closest in time), and the map says it is not unique
+%   'none'       no arc comes within tolDays, or none has these costates
+%   'unknown'    the caller's costates are not finite, or the only arcs that
+%                match in time store no costates: fam = 0, so the root is
+%                anchored rather than suppressed
+% A caller that gives NO costates (or all-zero ones: a legacy sheet) gets the
+% flight-time rule, and the status says 'attached (flight time only)'.
 % INPUTS: sA; tfDays; walk; arcs; tolDays; tolCos; z (optional, [7|8 x 1]
 % normal-chart costates, any positive scale).  OUTPUTS: fam (0 = none); gap
-% (days to the best-matching arc); cosGap (1 - cos to it; NaN when no
-% costates were compared).
+% (days to the best crossing); cosGap (1 - cos to it, NaN if not compared);
+% status (char, above).
 fam = 0;  gap = Inf;  cosGap = NaN;
-haveZ = nargin >= 7 && numel(z) >= 7 && any(z(1:7) ~= 0);
-best = Inf;                                   % the match is ranked by costates first, then time
+given = nargin >= 7 && numel(z) >= 7 && any(z(1:7) ~= 0 | ~isfinite(z(1:7)));
+if given && ~all(isfinite(z(1:7))), status = 'unknown';  return, end
+passFam = [];  passGap = [];  passCos = [];  timeOnlyHit = false;  nearestCos = NaN;
 for k = 1:numel(walk)
     w = walk{k};
     for lev = (floor(min(w.q)) - 1 : ceil(max(w.q)) + 1) + mod(sA, 1)
@@ -272,16 +290,33 @@ for k = 1:numel(walk)
             if any(c == on), a = 0; else, a = s(c) / (s(c) - s(c+1)); end
             c2 = min(c + 1, numel(w.q));
             g = abs((1 - a)*w.tf(c) + a*w.tf(c2) - tfDays);
-            cg = NaN;
-            lamArc = (1 - a)*w.lam0(:, c) + a*w.lam0(:, c2);
-            if haveZ && any(lamArc ~= 0)
-                cg = 1 - (lamArc.'*z(1:7))/(sqrt(sum(lamArc.^2))*sqrt(sum(z(1:7).^2)));
+            closest = g < gap;                 % the crossing nearest in time: reported even when nothing passes,
+            if closest, gap = g;  nearestCos = NaN; end                  % so a reader sees WHY a root was unattached
+            if g > tolDays, continue, end
+            if ~given                          % legacy caller: flight time is all there is
+                passFam(end+1) = arcs(k).family;  passGap(end+1) = g;  passCos(end+1) = NaN; %#ok<AGROW>
+                continue
             end
-            passes = g <= tolDays && (isnan(cg) || cg <= tolCos);
-            score = g + 1e6*(~passes);        % any passing crossing beats every failing one
-            if score < best, best = score;  gap = g;  cosGap = cg;  fam = arcs(k).family*passes; end
+            lamArc = (1 - a)*w.lam0(:, c) + a*w.lam0(:, c2);
+            if ~(all(isfinite(lamArc)) && any(lamArc ~= 0)), timeOnlyHit = true;  continue, end   % nothing to compare with
+            cg = 1 - (lamArc.'*z(1:7))/(sqrt(sum(lamArc.^2))*sqrt(sum(z(1:7).^2)));
+            if closest, nearestCos = cg; end
+            if cg <= tolCos
+                passFam(end+1) = arcs(k).family;  passGap(end+1) = g;  passCos(end+1) = cg; %#ok<AGROW>
+            end
         end
     end
+end
+if ~isempty(passFam)
+    [gap, best] = min(passGap);  fam = passFam(best);  cosGap = passCos(best);
+    if numel(unique(passFam)) > 1, status = 'ambiguous';
+    elseif given,                  status = 'attached';
+    else,                          status = 'attached (flight time only)';
+    end
+elseif timeOnlyHit
+    status = 'unknown';
+else
+    status = 'none';  cosGap = nearestCos;     % the nearest arc in time, and how far its costates were
 end
 end
 

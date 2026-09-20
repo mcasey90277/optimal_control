@@ -5772,3 +5772,51 @@ it, use the branch map to decide interpolation.
 the script does, measured times, the unattended-run pattern, how to read the
 verdict, seven traps, the unfixed limitations), and the job that ran, kept as
 a template: `indirect/batch/reproduce_library_job.m`.
+
+## 85. Track A reviewed: the mathematics holds, three claims did not; any resolution; an SDD (2026-09-19)
+
+**Astra on the unreviewed code of sections 80 and 84 (xhigh, $1.52).**
+Adjudication: `reviews/trackA_identity_branches_adjudicated_2026-09-19.md`.
+It CONFIRMED the mathematics everything rests on -- the phase-sensitivity
+signs, `lam_m' = -T|lam_v|/m^2`, the exact cancellation
+`dQ_mt/dt = (d|lam_v|/dt)/m`, the Hamiltonian gap identity -- and gave a
+better slope bound for free (the Coriolis matrix is skew, so
+`|d|lam_v|/dt| <= |lam_r|`). Three claims of mine did not survive:
+
+1. **"Safe to interpolate" was wrong twice over.** A small flight-time edge
+   residual is a heuristic about flight times, not evidence of a common
+   costate branch; and measured on the record, the costates change by **32%
+   (median), up to 88%**, across time-consistent departure-phase edges. The
+   function is now `phase_components`, the outputs `.timeConsistentD/.A
+   .component .costateJumpD`, the arrival axis no longer joins cells, and
+   whether an interpolated guess is usable is stated to be an experiment.
+2. **The between-sample "bound" is an estimate.** `L_k` is taken at an
+   interval's ends, and from that the inequality does not follow. The audit
+   document says so now; the code rename waits for the sheet job.
+3. **Root identity failed open.** Non-finite costates, or an arc storing
+   none, silently fell back to the flight-time rule; `abs(rho)` lost the
+   chart's sign. `attachPoint` now returns `attached / ambiguous / none /
+   unknown`, and `unknown` leaves a root unattached, so it is anchored.
+
+Also fixed: `sameRoot` (symmetric, finite, t_f compared; registry dedup on
+both phases), the X3 gate (absolute + relative, steps recorded, no longer
+called an oracle), optimal family pairing in the comparator, and the audit
+document's one WRONG sentence (`H_7 = H_6 - k lam_m`; the two Hamiltonians
+are not equal). H2 implies H3 on an exact all-burn extremal.
+
+**Any resolution.** `reproduce_library_70mN(struct('nD', 48, 'nA', 48))`:
+the script takes the resolution as an option; the driver's wait for a round
+scales with the grid (it was a flat 48 h, which a 48 x 48 round outlives);
+the comparator compares on the cells two nested grids share; the plan prints
+a time estimate computed from measured rates (24.5 h for 24 x 24, measured
+24.2; 96 h for 48 x 48). For interpolation the axis to refine is arrival
+phase: a 96-phase spine sheet is being built to measure how the s_A residual
+falls (`results/sheet96_resolution_test/`).
+
+**Documents.** `doc/reproduce_library_sdd.tex`, a Software Design Document
+with four data-flow diagrams; `process/REPRODUCE_LIBRARY_GUIDE.md`.
+
+**A rule broken, and its cost.** A throwaway experiment (polish an
+interpolated midpoint seed) was run unfenced in the shared interactive
+MATLAB session and occupied it for over 45 minutes with no way to interrupt
+it. Solver calls go in a batch process, fenced, always.

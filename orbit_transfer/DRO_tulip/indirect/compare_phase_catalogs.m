@@ -205,21 +205,26 @@ end
 
 % ------------------------------------------------------------------------
 function paired = inPairedFamily(fRef, fNew)
-% INPAIREDFAMILY  Pair the reference families with the new ones, largest
-% overlap first, each family used once; a cell is `paired` when its two
-% indices are a matched pair. Index NUMBERS never matter, only which cells
-% sit together.  INPUTS: fRef, fNew [n x 1] family index per common cell.
+% INPAIREDFAMILY  Do two family labellings agree, as PARTITIONS? Families
+% (codes >= 1) are paired one-to-one so that the number of agreeing cells is
+% MAXIMAL (an assignment problem, matchpairs) -- index numbers never matter,
+% only which cells sit together. A greedy largest-overlap pairing recognises
+% identical partitions but overstates the differences between unequal ones
+% (overlap [6 5; 5 0]: greedy leaves 10 cells different, the optimum 6).
+% STATUS CODES (< 1: unattached, unidentified, none) are not families and are
+% never paired with one: such a cell agrees only if both codes are equal.
+% INPUTS: fRef, fNew [n x 1] family code per common cell.
 % OUTPUTS: paired [n x 1 logical].
-[uR, ~, kR] = unique(fRef);  [uN, ~, kN] = unique(fNew);
+paired = false(size(fRef));
+status = fRef < 1 | fNew < 1;
+paired(status) = fRef(status) == fNew(status);
+k = find(~status);
+if isempty(k), return, end
+[uR, ~, kR] = unique(fRef(k));  [uN, ~, kN] = unique(fNew(k));
 overlap = accumarray([kR, kN], 1, [numel(uR), numel(uN)]);     % cells shared by (ref family, new family)
-partner = zeros(numel(uR), 1);                                 % new-family number paired with each ref family
-work = overlap;
-while any(work(:) > 0)
-    [~, big] = max(work(:));  [r, n] = ind2sub(size(work), big);
-    partner(r) = n;
-    work(r, :) = 0;  work(:, n) = 0;                           % each family is used once
-end
-paired = partner(kR) == kN;
+M = matchpairs(max(overlap(:)) - overlap, max(overlap(:)) + 1);  % maximise the matched overlap
+partner = zeros(numel(uR), 1);  partner(M(:, 1)) = M(:, 2);
+paired(k) = partner(kR) == kN;
 end
 
 % ------------------------------------------------------------------------

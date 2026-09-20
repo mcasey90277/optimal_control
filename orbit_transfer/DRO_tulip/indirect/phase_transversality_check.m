@@ -8,17 +8,24 @@ function X = phase_transversality_check(catMat, opts)
 %     1. SENSITIVITIES at every entry: dT/ds_D = +lam(0) . x_D'(s_D) and
 %        dT/ds_A = -lam(t_f) . x_A'(s_A)  (costate_common/phase_sensitivity).
 %        One flight per entry; about ten seconds for 576 entries.
-%     2. THE EXACT TEST on a sample of entries: re-solve the transfer at
-%        s +/- delta in each phase and difference the two flight times. The
-%        re-solve never reads a costate, so this is an ORACLE for lam(0) and
-%        lam(t_f), not a mirror of them. Gate: relative error <= .relTol;
+%     2. THE FINITE-DIFFERENCE TEST on a sample of entries: re-solve the
+%        transfer at s +/- delta in each phase and difference the two flight
+%        times. The OBSERVABLE does not use the returned costates; the re-solve
+%        itself is an indirect solve seeded from the stored ones, and each
+%        derivative tests ONE scalar projection of an endpoint costate. So it
+%        is a consistency test, not an independent oracle (that is the
+%        single-integrator test of phase_sensitivity). A converged re-solve is
+%        assumed to have stayed on the branch; that is not checked. Gate:
+%        |formula - FD| <= .absTol + .relTol max(|.|);
 %        the verdict is PASS / FAIL / UNRESOLVED (a re-solve that does not
 %        converge is not evidence about a costate).
 %     3. THE EDGE MAP in departure phase: along every rib, the trapezoid
-%        residual between neighbouring cells (phase_edge_residuals). Small
-%        means "one smooth branch"; large means a jump between the two cells,
-%        whatever the family label says. Reported, not gated: a jump is a
-%        fact about the library's branches, not an error in an entry.
+%        residual between neighbouring cells (phase_edge_residuals). Small is
+%        CONSISTENT with one smooth branch of flight times, large suggests a
+%        jump -- a heuristic in both directions (see section 3b in the code).
+%        Reported, not gated. With it: time-consistent edges, the candidate
+%        components they join (through s_D only), and the COSTATE jump across
+%        each edge.
 %
 %   It also lists the cells nearest FIRST-ORDER STATIONARITY in both phases
 %   (smallest |grad T|): the library's entries are minima at fixed phases,
@@ -45,8 +52,10 @@ function X = phase_transversality_check(catMat, opts)
 %   .nExact                 int                     sample size [6]
 %   .delta                  double                  phase offset of the re-solve [2e-4]
 %   .relTol                 double                  exact-test gate [1e-3]
-%   .safeMinutes            double                  an edge within this is SAFE
-%                                                   to interpolate across [5]
+%   .consistentMinutes      double                  an edge within this is
+%                                                   time-consistent [5]
+%   .absTol                 double                  absolute part of the finite-
+%                                                   difference gate [1e-5]
 %   .jumpMinutes            double                  an s_D edge above this is a
 %                                                   JUMP [10]
 %   .print                  logical                 print the report [true]
@@ -57,9 +66,10 @@ function X = phase_transversality_check(catMat, opts)
 %  X                        struct                  .dTf_dsD .dTf_dsA [nD x nA,
 %                                                   ND time per unit phase]
 %                                                   .edgeD .edgeA [minutes]
-%                                                   .safeD .safeA (logical, per
-%                                                   edge) .branch .nBranch
-%                                                   (phase_branches)
+%                                                   .timeConsistentD/.A (per
+%                                                   edge) .component .nComponent
+%                                                   (phase_components)
+%                                                   .costateJumpD
 %                                                   .sameFamD .nEdgeD
 %                                                   .nEdgeDJump .jumps (table)
 %                                                   .exact (struct array)
@@ -78,7 +88,7 @@ here = fileparts(mfilename('fullpath'));
 addpath(here, fullfile(fileparts(fileparts(here)), 'costate_common'));
 delta = pick(opts, 'delta', 2e-4);        relTol = pick(opts, 'relTol', 1e-3);
 jumpMinutes = pick(opts, 'jumpMinutes', 10);   say = pick(opts, 'print', true);
-safeMinutes = pick(opts, 'safeMinutes', 5);
+consistentMinutes = pick(opts, 'consistentMinutes', 5);   absTol = pick(opts, 'absTol', 1e-5);
 
 %% 1. The catalog, and the endpoint closures of ITS problem:
 L = load(catMat);  fn = fieldnames(L);  c = L.(fn{1});
@@ -118,15 +128,25 @@ jumps = table(jD, nextD, jA, sD(jD).', sD(nextD).', sA(jA).', edgeD(sub2ind([nD 
               'VariableNames', {'iD', 'iDnext', 'iA', 'sD', 'sDnext', 'sA', 'residualMin', 'sameFamily'});
 jumps = sortrows(jumps, 'residualMin', 'descend', 'ComparisonMethod', 'abs');
 
-%% 3b. The branch map: which neighbours may be interpolated between?
-% An edge is SAFE when its residual is within safeMinutes: the two entries'
-% flight times AND costates are consistent with one smooth branch, so a guess
-% interpolated between them is a guess on that branch. Cells joined by safe
-% edges form a BRANCH (phase_branches). This is the reproducible replacement
-% for the family label in that role: it is computed from the entries
-% themselves, not from which arc found them.
-safeD = abs(edgeD) <= safeMinutes;   safeA = abs(edgeA) <= safeMinutes;      % NaN edges are not safe
-[branch, nBranch] = phase_branches(safeD, safeA, has);
+%% 3b. Time-consistent edges, candidate components, and the costate jump
+% An edge is TIME-CONSISTENT when its trapezoid residual is within
+% consistentMinutes: the two flight times and the two phase sensitivities fit
+% one smooth branch of flight times. That is a HEURISTIC (review 2026-09-19):
+% two different branches can give a small residual (equal times and slopes; a
+% jump cancelled by the slope term), one branch can give a large one (large
+% T''', a coarse grid, a fold), and it tests one scalar, not the costates. So:
+%  - nothing here is called "safe"; whether a guess interpolated across an edge
+%    is USABLE is an experiment (polish it), not a residual;
+%  - the costate jump across each departure-phase edge is reported beside it
+%    (.costateJumpD, relative): on the 70 mN library it is ~30% even on
+%    time-consistent edges, so linear interpolation of costates is crude;
+%  - the under-resolved arrival axis is NOT used to join cells: an accidentally
+%    small residual there must not merge unrelated components.
+timeConsistentD = abs(edgeD) <= consistentMinutes;   timeConsistentA = abs(edgeA) <= consistentMinutes;   % NaN is not consistent
+[component, nComponent] = phase_components(timeConsistentD, false(nD, nA), has);
+Z = nan(7, nD, nA);
+for iD = 1:nD, for iA = find(has(iD, :)), Z(:, iD, iA) = sh.z8(1:7, sh.entry_index(iD, iA, 1)); end, end
+costateJumpD = squeeze(sqrt(sum((circshift(Z, -1, 2) - Z).^2, 1))./sqrt(sum(Z.^2, 1)));
 
 %% 4. The exact test: re-solve at s +/- delta, never reading a costate:
 cells = pick(opts, 'exactCells', []);
@@ -135,14 +155,16 @@ if isempty(cells)
     k = randperm(rs, numel(aD), min(pick(opts, 'nExact', 6), numel(aD)));
     cells = [aD(k), aA(k)];
 end
-exact = struct('iD', {}, 'iA', {}, 'formulaD', {}, 'exactD', {}, 'relErrD', {}, 'formulaA', {}, 'exactA', {}, 'relErrA', {}, 'resolved', {});
+exact = struct('iD', {}, 'iA', {}, 'formulaD', {}, 'exactD', {}, 'relErrD', {}, 'formulaA', {}, 'exactA', {}, 'relErrA', {}, 'resolved', {}, ...
+               'stepD', {}, 'stepA', {}, 'absErrD', {}, 'absErrA', {});
 for q = 1:size(cells, 1)
     iD = cells(q, 1);  iA = cells(q, 2);
     assert(has(iD, iA), 'phase_transversality_check: cell (%d,%d) holds no entry', iD, iA);
     z8 = sh.z8(:, sh.entry_index(iD, iA, 1));
-    [exD, exA] = exactDerivatives(B, z8, sD(iD), sA(iA), delta);
-    e = struct('iD', iD, 'iA', iA, 'formulaD', GD(iD, iA), 'exactD', exD, 'relErrD', relErr(GD(iD, iA), exD), ...
-               'formulaA', GA(iD, iA), 'exactA', exA, 'relErrA', relErr(GA(iD, iA), exA), 'resolved', isfinite(exD) && isfinite(exA));
+    [exD, exA, stepD, stepA] = exactDerivatives(B, z8, sD(iD), sA(iA), delta);
+    e = struct('iD', iD, 'iA', iA, 'formulaD', GD(iD, iA), 'exactD', exD, 'relErrD', relErr(GD(iD, iA), exD, absTol/relTol), ...
+               'formulaA', GA(iD, iA), 'exactA', exA, 'relErrA', relErr(GA(iD, iA), exA, absTol/relTol), 'resolved', isfinite(exD) && isfinite(exA), ...
+               'stepD', stepD, 'stepA', stepA, 'absErrD', abs(GD(iD, iA) - exD), 'absErrA', abs(GA(iD, iA) - exA));
     exact(end+1) = e; %#ok<AGROW>
 end
 verdictExact = exactVerdict(exact, relTol);
@@ -157,7 +179,8 @@ stationary = table(oD, oA, sD(oD).', sA(oA).', TF(order)*tStar/86400, GD(order)*
 
 X = struct('catMat', catMat, 'dTf_dsD', GD, 'dTf_dsA', GA, 'edgeD', edgeD, 'edgeA', edgeA, 'sameFamD', sameFamD, ...
            'nEdgeD', nnz(isfinite(edgeD)), 'nEdgeDJump', height(jumps), 'jumpMinutes', jumpMinutes, 'jumps', jumps, ...
-           'safeMinutes', safeMinutes, 'safeD', safeD, 'safeA', safeA, 'branch', branch, 'nBranch', nBranch, ...
+           'consistentMinutes', consistentMinutes, 'timeConsistentD', timeConsistentD, 'timeConsistentA', timeConsistentA, ...
+           'component', component, 'nComponent', nComponent, 'costateJumpD', costateJumpD, 'absTol', absTol, ...
            'exact', exact, 'relTol', relTol, 'delta', delta, 'verdictExact', verdictExact, 'okExact', okExact, 'stationary', stationary, 'when', char(datetime('now')));
 if say, printReport(X, TF, tStar); end
 if ~isempty(pick(opts, 'out', '')), save(opts.out, 'X'); end
@@ -177,7 +200,7 @@ dxD = dxD(:);
 end
 
 % ==========================================================================
-function [exD, exA] = exactDerivatives(B, z8, sD, sA, delta)
+function [exD, exA, stepD, stepA] = exactDerivatives(B, z8, sD, sA, delta)
 % EXACTDERIVATIVES  dT/ds_D and dT/ds_A by RE-SOLVING the transfer with one
 % phase moved to s - d and s + d (ms_tfmin, seeded from this entry) and
 % differencing the two flight times. No costate is read. Each derivative is
@@ -187,18 +210,20 @@ function [exD, exA] = exactDerivatives(B, z8, sD, sA, delta)
 rv0 = pickState(B.stateD(sD));   rvf = pickState(B.stateA(sA));
 seed = seed_from_z8(z8, rv0, 24, B.Tnd, B.cnd, B.mu);
 ladder = [delta, 120; delta/2, 300];                 % [phase offset, wall seconds]
-exD = NaN;  exA = NaN;
+exD = NaN;  exA = NaN;  stepD = NaN;  stepA = NaN;
 for a = 1:size(ladder, 1)
     d = ladder(a, 1);  wall = ladder(a, 2);
     if ~isfinite(exA)
         tm = resolveTf(B, rv0, pickState(B.stateA(sA - d)), seed, wall);
         tp = resolveTf(B, rv0, pickState(B.stateA(sA + d)), seed, wall);
         exA = (tp - tm)/(2*d);                       % NaN if either side is NaN
+        if isfinite(exA), stepA = d; end
     end
     if ~isfinite(exD)
         tm = resolveTf(B, pickState(B.stateD(sD - d)), rvf, seed, wall);
         tp = resolveTf(B, pickState(B.stateD(sD + d)), rvf, seed, wall);
         exD = (tp - tm)/(2*d);
+        if isfinite(exD), stepD = d; end
     end
 end
 end
@@ -242,7 +267,7 @@ function printReport(X, TF, tStar)
 fprintf('PHASE-TRANSVERSALITY CROSS-CHECK (X3)  %s\n', X.catMat);
 fprintf('  sensitivities : %d entries; |dT/ds_D| median %.3f d per unit phase, |dT/ds_A| median %.3f\n', nnz(isfinite(X.dTf_dsD)), ...
         median(abs(X.dTf_dsD(:)), 'omitnan')*tStar/86400, median(abs(X.dTf_dsA(:)), 'omitnan')*tStar/86400);
-fprintf('  X3 exact test : formula against a re-solve at s +/- %.0e (no costate is read)\n', X.delta);
+fprintf('  X3 finite-difference test : formula against re-solves at s +/- %.0e (the observable uses no returned costate)\n', X.delta);
 for e = X.exact
     fprintf('     cell (%2d,%2d)  dT/ds_D %+.6f vs %+.6f (rel %.1e)   dT/ds_A %+.6f vs %+.6f (rel %.1e)%s\n', e.iD, e.iA, ...
             e.formulaD, e.exactD, e.relErrD, e.formulaA, e.exactA, e.relErrA, passIf(e.resolved, '', '   UNRESOLVED'));
@@ -258,9 +283,11 @@ for q = 1:min(5, height(X.jumps))
     j = X.jumps(q, :);
     fprintf('     jump: column %2d (sA %.4f), sD %.4f -> %.4f: %.0f min%s\n', j.iA, j.sA, j.sD, j.sDnext, j.residualMin, passIf(j.sameFamily, '  [same family label]', ''));
 end
-sz = arrayfun(@(b) nnz(X.branch == b), 1:X.nBranch);
-fprintf('  branch map    : edges within %g min are SAFE to interpolate across: %d of %d in s_D, %d of %d in s_A;\n', X.safeMinutes, nnz(X.safeD), numel(X.safeD), nnz(X.safeA), numel(X.safeA));
-fprintf('                  %d branch(es); the largest hold %s cells\n', X.nBranch, mat2str(sz(1:min(5, end))));
+sz = arrayfun(@(b) nnz(X.component == b), 1:X.nComponent);  jt = X.costateJumpD(X.timeConsistentD);
+fprintf('  time-consistent edges (residual <= %g min; a heuristic, not an interpolation licence): %d of %d in s_D, %d of %d in s_A\n', ...
+        X.consistentMinutes, nnz(X.timeConsistentD), numel(X.timeConsistentD), nnz(X.timeConsistentA), numel(X.timeConsistentA));
+fprintf('  components    : %d, joined through s_D edges only; the largest hold %s cells\n', X.nComponent, mat2str(sz(1:min(5, end))));
+fprintf('  costate jump  : across a time-consistent s_D edge the costates change by %.0f%% (median), %.0f%% (90%%)\n', 100*median(jt), 100*prctile(jt, 90));
 [tfMin, kMin] = min(TF(:));  [mD, mA] = ind2sub(size(TF), kMin);
 fprintf('  stationarity  : the fastest entry (%d,%d), %.3f d, has dT/ds = (%+.3f, %+.3f) d per unit phase\n', mD, mA, tfMin*tStar/86400, ...
         X.dTf_dsD(kMin)*tStar/86400, X.dTf_dsA(kMin)*tStar/86400);
@@ -269,10 +296,13 @@ fprintf('                  the entry nearest stationarity in both phases: (%d,%d
 end
 
 % ==========================================================================
-function r = relErr(a, b)
-% RELERR  |a - b| / max(|b|, tiny); NaN if either is not finite.
-% INPUTS: a; b.  OUTPUTS: r.
-if isfinite(a) && isfinite(b), r = abs(a - b)/max(abs(b), 1e-12); else, r = NaN; end
+function r = relErr(a, b, floor_)
+% RELERR  The error of a against b, scaled so that  r <= relTol  means
+% |a - b| <= absTol + relTol * max(|a|, |b|)  when floor_ = absTol/relTol. A
+% purely relative error is meaningless near a STATIONARY phase, where the
+% derivative itself goes to zero -- the very points this tool looks for.
+% NaN if either is not finite.  INPUTS: a; b; floor_.  OUTPUTS: r.
+if isfinite(a) && isfinite(b), r = abs(a - b)/(max(abs(a), abs(b)) + floor_); else, r = NaN; end
 end
 
 function t = passIf(c, a, b)

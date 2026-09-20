@@ -856,7 +856,10 @@ end
 % A ROOT IS KNOWN BY ITS COSTATES. "The same arrival phase and a flight time
 % within 1e-3 d" (86 s) merged distinct roots near a family crossing, which is
 % where they matter; the same phase and the same costates is the same root.
-samePhase = abs(mod([direct.sA] - C.sA + 0.5, 1) - 0.5) < 1e-8;
+assert(numel(C.z) >= 8 && all(isfinite(C.z(1:8))) && any(C.z(1:7) ~= 0), 'run_phase_torus:registry', ...
+       'a root with non-finite or all-zero costates cannot be registered (sA %.4f, %s)', C.sA, src);
+circ = @(x) abs(mod(x + 0.5, 1) - 0.5);
+samePhase = circ([direct.sA] - C.sA) < 1e-8 & circ([direct.sD] - sD0) < 1e-8;      % BOTH phases: a record is a cell's root
 dup = any(samePhase & arrayfun(@(r) sameRoot(r.z, C.z), direct));
 added = ~dup;
 if added
@@ -866,12 +869,20 @@ end
 end
 
 function tf = sameRoot(zA, zB)
-% SAMEROOT  Are two solution vectors the same root? The seven initial
-% costates agree to 1e-6 relative (a re-polish moves them ~1e-9; distinct
-% roots differ at order one). Normal chart, so there is no scale to quotient.
+% SAMEROOT  Are two solution vectors the same root? Both must be finite with
+% non-zero costates; the seven initial costates must agree to 1e-6 of the
+% larger norm (SYMMETRIC), and the flight times to 1e-6 relative. A re-polish
+% moves a root by ~1e-9; this is a registry rule, not a proof of identity --
+% near a fold distinct roots can be closer than any fixed tolerance, and an
+% ill-conditioned polish can move one root further (review 2026-09-19).
+% Normal chart, so there is no scale to quotient.
 % INPUTS: zA, zB [8 x 1] (costates 1:7, t_f 8).  OUTPUTS: tf.
+tf = false;
+if numel(zA) < 8 || numel(zB) < 8 || ~all(isfinite(zA(1:8))) || ~all(isfinite(zB(1:8))), return, end
 a = zA(1:7);  b = zB(1:7);
-tf = sqrt(sum((a(:) - b(:)).^2)) <= 1e-6*max(sqrt(sum(b(:).^2)), realmin);
+na = sqrt(sum(a(:).^2));  nb = sqrt(sum(b(:).^2));
+if na == 0 || nb == 0, return, end
+tf = sqrt(sum((a(:) - b(:)).^2)) <= 1e-6*max(na, nb) && abs(zA(8) - zB(8)) <= 1e-6*max(abs(zA(8)), abs(zB(8)));
 end
 
 function ok = ribMatchesSpine(ribFile, S, jc)

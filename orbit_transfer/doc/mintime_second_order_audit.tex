@@ -107,8 +107,14 @@ argument is wrong: the stated problem admits a throttle $s\in[0,1]$, so the
 all-burn trajectories are a strict subset and a first-order variation really
 does produce extra mass freedom,
 $\delta m_f=-k\,\delta\tf-k\!\int_0^{\tf}\!\delta s$ (Astra review,
-2026-09-10). The reduction is nevertheless sound, and what carries it is
-\textbf{H3, which we already gate on}.
+2026-09-10). What H3 gives is the reduction \emph{at the level of critical
+directions}: under a strict bang throttle the first-order variation
+$\int_0^{\tf}-TQ_{mt}\,\delta s\,dt$ is non-negative for every feasible
+$\delta s\le0$ and vanishes only for $\delta s=0$, so critical directions carry
+no throttle component, and with no switch there is no switching-time variable.
+That is \emph{not} by itself a second-order sufficiency theorem for the
+throttled problem (\S\ref{sec:gaps}(a); wording corrected 2026-09-19).
+\textbf{H3 is what we gate on.}
 
 With the throttle explicit the Hamiltonian is \emph{affine} in $s$:
 \[
@@ -135,9 +141,17 @@ costate, and it is worth adding to the gate set: it uses only quantities the
 flight already produces and it fails if any of the three is wrong.
 
 The reduced system \eqref{eq:dyn6} is non-autonomous through $m(t)$. The
-7-state autonomous form is its standard autonomization; the two Hamiltonians
-agree, $\lm$ playing the role of the time costate for the mass clock. In the
-7-state form $H\equiv0$ is a first integral; in the 6-state form it is not.
+7-state autonomous form is its standard autonomization, but the two
+Hamiltonians are \emph{not} equal (corrected 2026-09-19, external review; the
+sentence that stood here said they agree). With $k=T/c$ the mass is a clock,
+$m=m_0-kt$; the clock's costate is $p_\tau=-k\lm$ (indeed
+$\dot p_\tau=-k\dot\lambda_m=k\,\partial_mH_6=-\partial_tH_6$), and
+\[
+  H_7\;=\;H_6+p_\tau\;=\;H_6-k\lm ,\qquad H_6=1+\lambda_{rv}\!\cdot\!f_{rv}.
+\]
+So $H_7\equiv0$ is a first integral, while $H_6=k\lm(t)$ varies along the arc
+and vanishes only at $\tf$, where $\lm(\tf)=0$. The two \emph{formulations} are
+equivalent under this transformation; the two Hamiltonians are not identical.
 Nothing below depends on which form is used, but the instrument's row and column
 choices are the 6-state ones, and \S\ref{sec:equiv} shows why that is right.
 
@@ -378,26 +392,54 @@ $S^2$, so a chart argument is owed. What is exact and checkable is the gap
 \[
  H(s,\alpha)-H(1,\alpha^{*})\;=\;T\,Q_{mt}\,(1-s)\;+\;\frac{s\,T\,|\lv|}{2m}\,\|\alpha-\alpha^{*}\|^{2},
 \]
-whose two coefficients are H3 and H2: uniform lower bounds on them are the
-quantitative strict-bang and Legendre statements.
+whose first coefficient is H3 and whose second is H2 \emph{times} $s$: H2 is
+the positive angular Hessian at the reference throttle $s=1$, not a uniform
+coefficient over all throttles (the second term vanishes at $s=0$, where the
+first carries the whole gap). What the Osmolovskii--Maurer framework would
+still require, beyond a chart on $S^2$: the applicable theorem named, its
+endpoint qualifications and regularity, the second-variation (coercivity)
+condition, the free-time treatment, and the topology of the asserted minimum.
 
 \paragraph{(b) H2 and H3 were sampled positivity with no margin.}
 The gate was $\min_k|\lv(t_k)|>0$ and $\min_k Q_{mt}(t_k)>0$: it passed
 $10^{-300}$, passed values below the costates' own numerical error
 ($\sim10^{-6}$ in $\lm$ on the flown arc), and said nothing between samples.
 Both now use one slope bound. In the CR3BP
-$\dot\lambda_v=-\lr-(\partial_v f_v)^{\!\top}\lv$ with
-$\|\partial_v f_v\|=2$ (Coriolis), so
-$\big|\tfrac{d}{dt}|\lv|\big|\le|\lr|+2|\lv|$; and on an all-burn arc, with
+$\dot\lambda_v=-\lr-C^{\!\top}\lv$ with $C=\partial_v f_v$ the Coriolis matrix,
+which is \emph{skew}; so it drops out of
+$\tfrac{d}{dt}|\lv|=\hat\lambda_v\!\cdot\!\dot\lambda_v=-\hat\lambda_v\!\cdot\!\lr$
+and
+\[
+  \Big|\tfrac{d}{dt}|\lv|\Big|\;\le\;|\lr|
+\]
+(external review, 2026-09-19; the code's first version used the looser
+$|\lr|+2|\lv|$). On an all-burn arc, with
 $\dot m=-T/c$ and $\dot\lambda_m=-T|\lv|/m^{2}$, the two mass terms of
 $\dot Q_{mt}$ cancel:
 \[
  \dot Q_{mt}\;=\;\frac{1}{m}\,\frac{d|\lv|}{dt}\qquad\text{exactly.}
 \]
-With $L_k$ the larger of the slope bound at the two ends of a sample interval,
+If $L_k$ bounds $|v'|$ \emph{on the whole interval}, then
 $\min_{[t_k,t_{k+1}]}v\ \ge\ \tfrac12(v_k+v_{k+1})-\tfrac12L_k\,\Delta t_k$
-(\texttt{between\_sample\_bound}). The certifier and the catalog audit gate the
-\emph{bound} above $10^{-5}$, ten times the measured $\lm$ uncertainty. On the
+(\texttt{between\_sample\_bound}). \textbf{The code takes $L_k$ as the larger of
+the slope bound at the interval's two ENDS, and from that definition the
+inequality does not follow}: end samples cannot see an interior excursion
+($v=1-a\sin^2(\pi t/h)$ has zero slope at both ends and dips to $1-a$). What is
+computed is therefore a \emph{lower-bound estimate}, not a bound. A rigorous
+version is cheap in principle: with $\|\partial_rf_v\|\le\kappa$ on the
+interval, $(|\lr|,|\lv|)$ obeys the comparison system
+$\dot a\le\kappa b,\ \dot b\le a$, so
+$|\lr(t)|\le a_0\cosh(\sqrt\kappa h)+\sqrt\kappa\,b_0\sinh(\sqrt\kappa h)$, which
+is a valid $L_k$ --- given a lower bound on the distances to the primaries over
+the interval, which end samples again do not supply. Not implemented.
+Note also that H2 \emph{implies} H3 on an exact all-burn extremal:
+$\lm(t)=\int_t^{\tf}T|\lv|/m^2\,d\tau\ge0$, so $Q_{mt}\ge|\lv|/m>0$; H3 is a
+numerical consistency check, not an independent hypothesis. The certifier and the catalog audit gate the
+\emph{estimate} above $10^{-5}$. (That floor was motivated as ten times the
+measured $\lm$ uncertainty; that is not an error budget for either quantity ---
+$\epsilon_Q\le\epsilon_{\lambda_v}/m+\epsilon_{\lm}/c$, and the error in
+$|\lv|$ is governed by the error in $\lv$. The observed margins are five orders
+larger than the floor, so nothing turns on it here.) On the
 $70$\,mN library ($576$ entries, $\sim7000$ samples per flight, steps
 $\le0.0035$) the bound sits within $1\%$ of the sampled minimum; the smallest
 bounds are $0.2785$ ($|\lv|$) and $0.3126$ ($Q_{mt}$). This is an estimate on a
@@ -408,8 +450,11 @@ interval's ends.
 $\dim S=1$ (\S\ref{sec:abnormal}) is corank one on $[0,\tf]$. BCT's (S) asks
 it on every subinterval; Theorem~2.12, which identifies the geometric
 conjugate time we compute with the first conjugate time, is stated under (S).
-\textbf{Not checked.} It is checkable: the lift-space rank on prefixes
-$[0,t]$ and on a few interior windows, by the same construction.
+\textbf{Not checked.} The lift-space rank on prefixes $[0,t]$ and on a few
+interior windows would be additional numerical probes; they would not check a
+condition quantified over \emph{every} subinterval. A proof would have to
+propagate the rank property, e.g.\ by analyticity away from collisions and
+$\lv=0$; that argument is not supplied.
 
 \paragraph{(d) The certificate is for FIXED phases.}
 The endpoints are points, $x(0)=x_D(s_D)$ and $x_{rv}(\tf)=x_A(s_A)$, and the
@@ -426,15 +471,24 @@ of the cost-to-go, and
 (\texttt{phase\_sensitivity}; the mass costate does not enter: $m(0)$ does not
 depend on the phase and $m(\tf)$ is free). Two uses.
 \emph{Cross-check X3} (\texttt{phase\_transversality\_check}): re-solve the
-transfer at $s\pm2\times10^{-4}$ and difference the two flight times --- an
-oracle that never reads a costate. On the $70$\,mN library, twelve sampled
-derivatives agree with the formula to between $4\times10^{-8}$ and
-$9\times10^{-4}$ relative. It is the first check of $\lambda(\tf)$ against
-anything other than the solve that produced it.
+transfer at $s\pm2\times10^{-4}$ and difference the two flight times. It is a
+\emph{finite-difference consistency test}: the observable does not use the
+returned costates, but the re-solve is an indirect solve seeded from the stored
+ones in the same implementation, and each derivative tests one scalar
+projection of an endpoint costate, not the whole vector. (The independent
+oracle is the analytic single-integrator test of the formula.) Results: on the
+hand-built library, twelve of twelve sampled derivatives agree, $4\times10^{-8}$
+to $9\times10^{-4}$ relative; on the rebuilt library now of record, eleven
+agree ($6\times10^{-8}$ to $4\times10^{-4}$) and one re-solve did not
+converge, so the verdict there is UNRESOLVED, not PASS. The formulas are
+smooth-branch sensitivities: they equal the gradient of the minimum-time value
+only where that value is differentiable and this branch realises it.
 \emph{Stationarity:} an entry is a first-order candidate for the
-orbit-to-orbit minimum where both sensitivities vanish. None of the $576$ is:
-the fastest, $16.226$\,d, has $(\partial_{s_D},\partial_{s_A})\tf=(-0.92,-2.05)$
-d per unit phase, so the free-phase minimum lies between grid points. The
+orbit-to-orbit minimum where both sensitivities vanish. None of the $576$
+\emph{stored roots} is: the fastest, $16.226$\,d, has
+$(\partial_{s_D},\partial_{s_A})\tf=(-0.92,-2.05)$ d per unit phase. That says
+where to look next on this branch; it does not exclude an unrecorded branch
+with a stationary root at a grid phase, nor locate the global minimum. The
 second-order free-phase condition (endpoint tangent and curvature terms in the
 accessory problem) is a separate problem and is not attempted.
 

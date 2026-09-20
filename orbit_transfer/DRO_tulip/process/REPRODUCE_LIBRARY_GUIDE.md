@@ -203,7 +203,7 @@ interrupted, read those before trusting a resume — or start a fresh `outDir`.
 | `indirect/audit_phase_catalog.m` | the fail-closed audit | `tests/test_audit_fail_closed` |
 | `indirect/certify_root.m` | the gate stack | `costate_common/tests/test_certify_enforcement`, `test_certify_schema` |
 | `indirect/family_map.m` | families; root identity by costates | `tests/test_family_map`, `test_family_costate_identity` |
-| `indirect/phase_transversality_check.m` | costates vs an oracle; the BRANCH MAP | `tests/test_phase_transversality_check` |
+| `indirect/phase_transversality_check.m` | costates vs a finite-difference test; time-consistent edges and candidate components (a heuristic, not an interpolation licence) | `tests/test_phase_transversality_check` |
 
 The `localfunctions` seam: `H = some_file('localfunctions')` returns handles to
 that file's local functions, so a test calls the real helper.

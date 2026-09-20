@@ -173,8 +173,11 @@ if ~compareOnly
         % "re-walk" is only true of a folder that holds no arcs: the driver walks
         % an arc only when its file is ABSENT, so arcs left by an earlier call
         % would be used as they are
+        % ... unless this IS that campaign resuming: its own arcs are then the
+        % ones it walked, and a second call must not refuse them
         have = dir(fullfile(outDir, 'arcs', sprintf('arrival_arc_%s_*_long.mat', tag)));
-        assert(isempty(have), 'reproduce_library_70mN:arcs', ...
+        resuming = isfile(fullfile(outDir, 'torus_state.mat'));
+        assert(isempty(have) || resuming, 'reproduce_library_70mN:arcs', ...
                ['.adoptArcs = false asks for the arcs to be walked again, but %s already holds %d arc(s), ' ...
                 'which the driver would reuse. Use a fresh .outDir.'], fullfile(outDir, 'arcs'), numel(have));
         fprintf('3. arcs: NOT adopted -- run_phase_torus walks all %d (about 2-6 h each)\n', 2*numel(names));

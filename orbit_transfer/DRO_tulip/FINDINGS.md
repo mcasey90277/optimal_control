@@ -5995,3 +5995,17 @@ at 6 km; they sit at s_A 0.414, 0.450 and 0.578, where the family map puts
 folds of direct11 and direct18 (0.428-0.440, 0.573-0.592). Near a fold the
 shooting Jacobian is nearly singular and a root-finder stalls however good
 its start: those cells need the arclength polish, not a better guess.
+
+## 91. The 24 x 24 record scores zero (2026-09-20)
+
+The same 60 seeded queries, now on the whole torus of the library of record:
+**0 of 60 usable, from the blend and from the nearest entry alone.** Twenty
+queries had four corners that pass the time-consistency rule, 36 an edge,
+4 a single entry; none converged in 600 iterations. Median unsolved miss
+42,200 km for the blend, 56,300 km for the nearest entry (87% and 70%
+usable, 629 and 790 km, on the 96-phase spine, section 90).
+
+So at 1/24 in both phases the record is a table of certified transfers and
+not yet a source of guesses for the transfers between them. The arrival
+axis at 1/96 is enough; what the departure axis needs is still unmeasured,
+and the 24 x 48 build will show what halving one axis alone buys.

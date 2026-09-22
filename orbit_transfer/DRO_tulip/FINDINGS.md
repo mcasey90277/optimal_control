@@ -6009,3 +6009,29 @@ So at 1/24 in both phases the record is a table of certified transfers and
 not yet a source of guesses for the transfers between them. The arrival
 axis at 1/96 is enough; what the departure axis needs is still unmeasured,
 and the 24 x 48 build will show what halving one axis alone buys.
+
+## 92. The 24 x 48 library, built and scored (2026-09-21/22)
+
+`reproduce_library_70mN` with `.nA = 48`, 8 rib workers: one round, 34 h 26
+min (sheet 3 h, ribs 18 h, package/audit/sweep 12 h, filler 8 h, re-audit
+5 h). **1,095 of 1,152 cells certified, audit 1,095 OK / 0 bad.** Against the
+24 x 24 record on the 560 cells they share: 551 the same root, 9 slower, 16
+missing (all among the 57 holes). Its verdict says REPRODUCED = FAIL, which
+is the comparator asking a same-grid question of a finer grid (defect noted).
+
+**The filler's failures were mostly not physics.** Of 133 cells tried, 75
+certified; of the 58 that did not, 47 threw "The parallel pool has shut
+down": `fill_holes_direct` runs long direct solves in-process, the pool idles
+past its 30-minute timeout, and every fenced call after 11:28 failed on the
+missing fence. Fix pending: IdleTimeout = Inf and a revive before each cell.
+
+**Scored: 1 of 60 usable** (`score_interpolator`, the same 60 seeded queries
+as sections 90-91), nearest entry 0 of 60, median unsolved miss 39,800 km.
+28 queries had four blendable corners, 30 an edge; none of those converged.
+
+So halving the ARRIVAL step alone buys nothing on the torus, though along
+arrival alone (the spine, section 90) 1/96 gives 87%. The departure axis at
+1/24 is the limit: its costates change ~32% per step (section 84) and no
+finer departure spacing has been measured. That measurement -- one rib at 96
+departure phases on one arrival column, scored -- is the next step; the
+state of the whole line is in `process/INTERPOLATION_STATUS.md`.

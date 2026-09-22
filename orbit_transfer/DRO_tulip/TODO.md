@@ -1,5 +1,24 @@
 # DRO_tulip — TODO
 
+## Live (2026-09-22): the interpolation line -- see `process/INTERPOLATION_STATUS.md`
+
+- [ ] **Measure the departure axis**: one rib at 96 departure phases on one
+  arrival column, wrapped as a one-column catalog, scored with
+  `score_interpolator` (the arrival axis is done: 1/96 gives 87% usable).
+- [ ] **Fix the hole filler's pool** (`fill_holes_direct`): IdleTimeout = Inf
+  + revive before each cell; 47 of the 24 x 48 filler's 58 failures were
+  "The parallel pool has shut down". Test-first, then refill the 57 holes.
+- [ ] `reproduce_library_70mN` verdict on a FINER grid than the record: say
+  "compared on shared cells", not REPRODUCED = FAIL.
+- [ ] Decide on the 24 x 48 library (`results/reproduce_70mN_24x48/final`):
+  adopt as record (1,095/1,152, audit clean, 551 of 560 shared cells agree)
+  or hold until refilled.
+- [ ] Fold cells: arclength polish from the blended guess (8 of 60 spine
+  misses are folds).
+- [ ] Junction-state interpolation instead of re-flying a guessed z8.
+- [ ] `results/` is not git-tracked: back up the record and the 24 x 48.
+
+
 - [x] **`conj_spectrum` locates, classifies and refines its candidates;
   review-2 items on the sweep-held files applied** (FINDINGS 42, 2026-09-10):
   sign changes are candidates, interior ones refined 4x (zero vs near-miss),

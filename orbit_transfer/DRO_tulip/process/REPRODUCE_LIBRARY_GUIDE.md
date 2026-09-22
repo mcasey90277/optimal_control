@@ -106,6 +106,14 @@ at 24 / 48 / 96 phases, and a linearly interpolated costate is wrong by
 ARRIVAL axis first (`.nA = 48`, about two days); the departure axis has not
 been measured the same way (one 48-phase rib would do it).
 
+**Measured 24 x 48 build (2026-09-20/21, 8 rib workers):** sheet 3 h 14,
+ribs ~18 h, package + audit + sweep ~12 h, filler 7 h 43 (132 holes tried,
+75 certified; 47 of the failures were the pool defect in
+`process/INTERPOLATION_STATUS.md`), re-package + audit 1,095 entries ~5 h:
+**34 h 26 min** in one round, against the script's 40 h estimate. Its
+verdict reads REPRODUCED = FAIL only because the comparator asks the
+same-library question of a finer grid (551 of 560 shared cells agree).
+
 ## 5. Running it unattended (the pattern that worked)
 
 Follow the `matlab-campaign` skill. Concretely:

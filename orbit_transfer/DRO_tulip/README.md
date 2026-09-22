@@ -105,6 +105,16 @@ arrival and the `tfMin` witness. Every refutation is slower than the certified
 solution at its phase, and at a fold nose the test separates two roots 26
 minutes apart. FINDINGS §37 (machinery), §38 (the result).
 
+## Interpolating BETWEEN the grid points (2026-09-20..22)
+
+The library's purpose is a costate guess for transfers NOT on its grid. The
+interpolator (`costate_common/phase_catalog_interp`, `polish_costate_guess`),
+its entry script `indirect/interp_study.m` and the scorer
+`indirect/score_interpolator.m` exist; the state of the measurements -- 87%
+usable along arrival at 1/96, 0-2% on the 24 x 24 and 24 x 48 libraries, the
+departure axis unmeasured -- is kept in **`process/INTERPOLATION_STATUS.md`**.
+Read that first when picking this up. FINDINGS 86-92.
+
 ## Studying ONE transfer, and checking it
 
 `transfer_study.m` is the front door for understanding rather than throughput:

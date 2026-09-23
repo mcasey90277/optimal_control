@@ -194,28 +194,46 @@ bullets(s, 0.5, 1.5, 7.1, 5.9, [
     (0, [("Wider effort underway: ", GOLD, True), ("~18,400 min-time entries over DRO / halo / DPO \u2192 tulip and halo \u2194 halo, thrust 0.5-15 N", WHITE, False)]),
     (0, [("Current investigation: ", GOLD, True), ("interpolating between cells. Along arrival phase at 1/96 spacing, 87% of blended guesses converge (70% from the nearest entry); departure spacing still to be measured", WHITE, False)]),
 ], size=16)
-# the pipeline as a four-step flow (replaces the 6-row stage/tool table)
-FX, FW, FY, FH, GAP = 8.25, 4.6, 2.0, 0.98, 0.32
-text(s, FX, FY - 0.5, FW, 0.4, "How each entry is computed", 17, GOLD, True)
-steps = [("1  Direct solve", "collocation + IPOPT finds the basin"),
-         ("2  Costate polish", "multiple shooting on the PMP equations"),
-         ("3  Phase continuation", "walk the root across the 24 \u00d7 24 grid"),
-         ("4  Certify + audit", "optimality checks, pumpkyn witness, re-fly")]
+# the build as a five-step flow (counts from the catalog's entry notes,
+# assets/provenance_counts.txt written by make_provenance_torus.m)
+with open(os.path.join(A, "provenance_counts.txt")) as f:
+    PC = {k: int(v) for k, v in (t.split("=") for t in f.read().split())}
+FX, FW, FY, FH, GAP = 8.25, 4.6, 1.95, 0.82, 0.27
+text(s, FX, FY - 0.5, FW, 0.4, "How the 576 entries were built", 17, GOLD, True)
+steps = [("1  Seed roots", f"{PC['seed']} on the s_D = 0 row: Darin's root + direct solves"),
+         ("2  Arclength along s_A", f"{PC['arc']} more cells on the s_D = 0 row"),
+         ("3  Ribs along s_D", f"{PC['rib']} cells, multiple-shooting corrector each step"),
+         ("4  Direct fills", f"{PC['direct']} cells where a rib stalled"),
+         ("5  Certify + audit", "every one of the 576 cells")]
 for k, (hd, sub) in enumerate(steps):
     y = FY + k*(FH + GAP)
     b = s.shapes.add_shape(MSO_SHAPE.ROUNDED_RECTANGLE, Inches(FX), Inches(y), Inches(FW), Inches(FH))
     b.adjustments[0] = 0.18
     b.fill.solid();  b.fill.fore_color.rgb = RGBColor(0x14, 0x1E, 0x2E)
-    b.line.color.rgb = GOLD if k == 3 else BLUE;  b.line.width = Pt(1.75)
+    b.line.color.rgb = GOLD if k == len(steps) - 1 else BLUE;  b.line.width = Pt(1.75)
     tf = b.text_frame;  tf.word_wrap = True;  tf.vertical_anchor = MSO_ANCHOR.MIDDLE
+    tf.margin_top = tf.margin_bottom = Inches(0.02)
     p = tf.paragraphs[0];  p.alignment = PP_ALIGN.CENTER
-    r = p.add_run();  r.text = hd;  r.font.size = Pt(17);  r.font.bold = True;  r.font.color.rgb = WHITE
+    r = p.add_run();  r.text = hd;  r.font.size = Pt(16);  r.font.bold = True;  r.font.color.rgb = WHITE
     p = tf.add_paragraph();  p.alignment = PP_ALIGN.CENTER
-    r = p.add_run();  r.text = sub;  r.font.size = Pt(13);  r.font.color.rgb = GREY
-    if k < 3:
-        a = s.shapes.add_shape(MSO_SHAPE.DOWN_ARROW, Inches(FX + FW/2 - 0.16), Inches(y + FH + 0.03),
-                               Inches(0.32), Inches(GAP - 0.06))
+    r = p.add_run();  r.text = sub;  r.font.size = Pt(12);  r.font.color.rgb = GREY
+    if k < len(steps) - 1:
+        a = s.shapes.add_shape(MSO_SHAPE.DOWN_ARROW, Inches(FX + FW/2 - 0.15), Inches(y + FH + 0.03),
+                               Inches(0.30), Inches(GAP - 0.06))
         a.fill.solid();  a.fill.fore_color.rgb = GOLD;  a.line.fill.background()
+
+# ================================================================ provenance
+nCont = PC['arc'] + PC['rib']
+s = new_slide(prs, f"Six seed roots grow the library: {100*nCont/576:.0f}% of cells come from continuation",
+              "Where every cell of the 24 \u00d7 24 library came from, read from each entry's own provenance note")
+s.shapes.add_picture(os.path.join(A, "phase_torus_provenance.png"), Inches(0.35), Inches(1.35), Inches(7.7))
+bullets(s, 8.35, 1.55, 4.75, 5.8, [
+    (0, [(f"Seeds ({PC['seed']}): ", GOLD, True), ("all on the s_D = 0 row. One is Darin's pumpkynPie root, one came from an earlier phase sweep, four are direct solves", WHITE, False)]),
+    (0, [(f"Arclength along s_A ({PC['arc']}): ", GOLD, True), ("pseudo-arclength walks from the seeds fill the rest of that row, through folds", WHITE, False)]),
+    (0, [(f"Ribs along s_D ({PC['rib']}): ", GOLD, True), ("from each s_D = 0 cell, 23 steps in \u2212s_D (through the wrap at s_D = 1), so rows are shown in walk order", WHITE, False)]),
+    (0, [(f"Direct fills ({PC['direct']}): ", GOLD, True), ("where a rib stalled, a direct solve warm-started from a certified neighbour; two columns are almost all fills", WHITE, False)]),
+    (0, [("Same certificate for all: ", GOLD, True), ("provenance changes how a root was found, not how it is checked", WHITE, False)]),
+], size=15)
 
 # ================================================================ phase grid
 s = new_slide(prs, "Transfer time more sensitive to arrival phase than departure phase",

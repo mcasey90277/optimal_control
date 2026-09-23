@@ -169,7 +169,7 @@ text(s, 7.2, 6.75, 5.9, 0.4,
      11, GREY)
 
 # ================================================================ overview (movie)
-s = new_slide(prs, "We Computed A Costate Library For DRO-to-Tulip Orbit Transfers")
+s = new_slide(prs, "We computed a costate library for DRO-to-tulip orbit transfers")
 GW = 9.0
 s.shapes.add_picture(os.path.join(A, "extremes_70mN.gif"), Inches((13.333 - GW) / 2),
                      Inches(1.0), Inches(GW), Inches(GW * 720 / 1280))
@@ -182,17 +182,17 @@ bullets(s, (13.333 - GW) / 2, 6.15, GW, 1.3, [
 ], size=17)
 
 # ================================================================ library
-s = new_slide(prs, "The costate library: costates computed for pairs of departure and arrival phases")
+s = new_slide(prs, "The costate library: one certified root per departure/arrival phase pair")
 bullets(s, 0.5, 1.5, 7.1, 5.9, [
     (0, [("What an entry is: ", GOLD, True), ("(s_D, s_A) \u2192 z\u2088 = [\u03bb(7); t_f], plus its certificate", WHITE, False)]),
-    (0, [("A root: ", GOLD, True), ("a z\u2088 that solves the shooting equations: flown from the DRO state with u = \u2212\u03bb_v/|\u03bb_v|, it arrives on the tulip state at t_f with H = 0 and \u03bb_m(t_f) = 0. Each root is one extremal", WHITE, False)]),
-    (1, [("the equations are nonlinear, so a cell can hold several roots (distinct extremals, different t_f); goal is to find a local minimizer", WHITE, False)]),
+    (0, [("A root: ", GOLD, True), ("a z\u2088 that solves the shooting equations. Flown from the DRO state with u = \u2212\u03bb_v/|\u03bb_v|, it reaches the tulip state at t_f with H = 0 and \u03bb_m(t_f) = 0; each root is one extremal", WHITE, False)]),
+    (1, [("the equations are nonlinear, so a cell can hold several roots with different t_f; we keep one that is certified as a local minimizer", WHITE, False)]),
     (0, [("70 mN costate library: ", GOLD, True), ("24 \u00d7 24 phase grid, ", WHITE, False), ("576 of 576 cells certified", GREEN, True)]),
-    (1, [("five solution families found; the library keeps the fastest root in each cell", WHITE, False)]),
+    (1, [("five solution families found; each cell keeps the fastest certified root", WHITE, False)]),
     (0, [("Necessary conditions: ", GOLD, True), ("flown miss, H = 0, transversality, adjoint equations, minimum-principle gap", WHITE, False)]),
     (0, [("Sufficiency: ", GOLD, True), ("conjugate-point test (no interior crossing), Legendre / switching / H6 margins, abnormal-lift rank", WHITE, False)]),
     (0, [("Wider effort underway: ", GOLD, True), ("~18,400 min-time entries over DRO / halo / DPO \u2192 tulip and halo \u2194 halo, thrust 0.5-15 N", WHITE, False)]),
-    (0, [("Current investigation: ", GOLD, True), ("interpolating between cells. Along arrival phase at 1/96 spacing, 87% of blended guesses converge (70% from the nearest entry); departure spacing still to be measured", WHITE, False)]),
+    (0, [("Current work: ", GOLD, True), ("interpolating costates between cells. At 1/96 arrival-phase spacing, 87% of blended guesses converge (70% from the nearest entry alone); the departure spacing needed is not yet measured", WHITE, False)]),
 ], size=16)
 # the build as a five-step flow (counts from the catalog's entry notes,
 # assets/provenance_counts.txt written by make_provenance_torus.m)
@@ -200,11 +200,11 @@ with open(os.path.join(A, "provenance_counts.txt")) as f:
     PC = {k: int(v) for k, v in (t.split("=") for t in f.read().split())}
 FX, FW, FY, FH, GAP = 8.25, 4.6, 1.95, 0.82, 0.27
 text(s, FX, FY - 0.5, FW, 0.4, "How the 576 entries were built", 17, GOLD, True)
-steps = [("1  Seed roots", f"{PC['seed']} on the s_D = 0 row: Darin's root + direct solves"),
+steps = [("1  Seed roots", f"{PC['seed']} on the s_D = 0 row, incl. Darin's original root"),
          ("2  Arclength along s_A", f"{PC['arc']} more cells on the s_D = 0 row"),
-         ("3  Ribs along s_D", f"{PC['rib']} cells, multiple-shooting corrector each step"),
+         ("3  Ribs along s_D", f"{PC['rib']} cells, each step re-solved by multiple shooting"),
          ("4  Direct fills", f"{PC['direct']} cells where a rib stalled"),
-         ("5  Certify + audit", "every one of the 576 cells")]
+         ("5  Certify + audit", "all 576 cells")]
 for k, (hd, sub) in enumerate(steps):
     y = FY + k*(FH + GAP)
     b = s.shapes.add_shape(MSO_SHAPE.ROUNDED_RECTANGLE, Inches(FX), Inches(y), Inches(FW), Inches(FH))
@@ -222,34 +222,33 @@ for k, (hd, sub) in enumerate(steps):
                                Inches(0.30), Inches(GAP - 0.06))
         a.fill.solid();  a.fill.fore_color.rgb = GOLD;  a.line.fill.background()
 
+# ================================================================ phase grid
+s = new_slide(prs, "Transfer time depends mostly on the arrival phase",
+              "Minimum time over the 24 \u00d7 24 phase torus (70 mN, Isp 900 s, 150 kg)")
+s.shapes.add_picture(os.path.join(A, "phase_torus_dark.png"), Inches(0.4), Inches(1.4), Inches(6.9))
+bullets(s, 7.6, 1.6, 5.4, 5.6, [
+    (0, [("Vertical stripes: ", GOLD, True), ("t_f is almost constant down a column, so where you meet the tulip dominates", WHITE, False)]),
+    (0, [("Range: ", GOLD, True), (f"{float(fast['tf']):.2f} to {float(slow['tf']):.2f} d over the phase torus", WHITE, False)]),
+    (0, [("Sharp steps: ", GOLD, True), ("the bottom row and the isolated blocks are hand-overs between solution families, not noise", WHITE, False)]),
+    (0, [("Every cell: ", GOLD, True), ("certified root, second-order sweep clean (0 interior conjugate crossings)", WHITE, False)]),
+    (0, [("Use: ", GOLD, True), ("pick a departure and an arrival phase; the library returns the costates that fly that transfer", WHITE, False)]),
+], size=17)
+
 # ================================================================ provenance
 nCont = PC['arc'] + PC['rib']
 s = new_slide(prs, f"Six seed roots grow the library: {100*nCont/576:.0f}% of cells come from continuation",
               "Where every cell of the 24 \u00d7 24 library came from, read from each entry's own provenance note")
 s.shapes.add_picture(os.path.join(A, "phase_torus_provenance.png"), Inches(0.35), Inches(1.35), Inches(7.7))
 bullets(s, 8.35, 1.55, 4.75, 5.8, [
-    (0, [(f"Seeds ({PC['seed']}): ", GOLD, True), ("all on the s_D = 0 row. One is Darin's pumpkynPie root, one came from an earlier phase sweep, four are direct solves", WHITE, False)]),
+    (0, [(f"Seeds ({PC['seed']}): ", GOLD, True), ("all on the s_D = 0 row", WHITE, False)]),
     (0, [(f"Arclength along s_A ({PC['arc']}): ", GOLD, True), ("pseudo-arclength walks from the seeds fill the rest of that row, through folds", WHITE, False)]),
-    (0, [(f"Ribs along s_D ({PC['rib']}): ", GOLD, True), ("from each s_D = 0 cell, 23 steps in \u2212s_D (through the wrap at s_D = 1), so rows are shown in walk order", WHITE, False)]),
-    (0, [(f"Direct fills ({PC['direct']}): ", GOLD, True), ("where a rib stalled, a direct solve warm-started from a certified neighbour; two columns are almost all fills", WHITE, False)]),
-    (0, [("Same certificate for all: ", GOLD, True), ("provenance changes how a root was found, not how it is checked", WHITE, False)]),
+    (0, [(f"Ribs along s_D ({PC['rib']}): ", GOLD, True), ("from each s_D = 0 cell, 23 fixed steps in \u2212s_D (wrapping through s_D = 1), halved when a step fails; rows are plotted in walk order", WHITE, False)]),
+    (0, [(f"Direct fills ({PC['direct']}): ", GOLD, True), ("where a rib stalled, a direct solve warm-started from a certified neighbor; two columns are almost all fills", WHITE, False)]),
 ], size=15)
-
-# ================================================================ phase grid
-s = new_slide(prs, "Transfer time more sensitive to arrival phase than departure phase",
-              "Minimum time over the 24 \u00d7 24 phase torus (70 mN, Isp 900 s, 150 kg)")
-s.shapes.add_picture(os.path.join(A, "phase_torus_dark.png"), Inches(0.4), Inches(1.4), Inches(6.9))
-bullets(s, 7.6, 1.6, 5.4, 5.6, [
-    (0, [("Vertical stripes: ", GOLD, True), ("t_f is almost constant down a column, so where you meet the tulip dominates", WHITE, False)]),
-    (0, [("Range: ", GOLD, True), (f"{float(fast['tf']):.2f} to {float(slow['tf']):.2f} d over the phase torus", WHITE, False)]),
-    (0, [("Bottom row and blocks: ", GOLD, True), ("sharp steps are hand-overs between solution families, not noise", WHITE, False)]),
-    (0, [("Every cell: ", GOLD, True), ("certified root, second-order sweep clean (0 interior conjugate crossings)", WHITE, False)]),
-    (0, [("Use: ", GOLD, True), ("pick the departure and arrival phase and the library returns the costates to fly it", WHITE, False)]),
-], size=17)
 
 # ================================================================ CR3BP
 s = new_slide(prs, "CR3BP: both orbits are periodic in the Earth-Moon rotating frame",
-              "Circular restricted three-body problem, nondimensionalised on the Earth-Moon distance and period")
+              "Circular restricted three-body problem, nondimensionalized by the Earth-Moon distance and period")
 eq2 = eq_png("eq_cr3bp.png", [
     r"$\ddot x - 2\dot y = \partial\Omega/\partial x,\quad \ddot y + 2\dot x = \partial\Omega/\partial y,\quad \ddot z = \partial\Omega/\partial z$",
     r"$\Omega = \frac{1}{2}(x^2+y^2) + \frac{1-\mu}{r_1} + \frac{\mu}{r_2},\qquad C = 2\Omega - \|v\|^2$",
@@ -266,7 +265,7 @@ table(s, 0.5, 2.75, 6.3, [
 bullets(s, 0.5, 5.45, 6.4, 1.4, [
     (0, [("DRO: ", GOLD, True), ("stable, retrograde, planar, around the Moon", WHITE, False)]),
     (0, [("Tulip: ", GOLD, True), ("7-petal 3D resonant orbit over the lunar poles", WHITE, False)]),
-    (0, [("Orbits from pumpkyn's catalogued families; ", GOLD, True), ("positions set by phase fractions s_D, s_A ∈ [0,1)", WHITE, False)]),
+    (0, [("Both orbits from pumpkyn's families; ", GOLD, True), ("a point on each is set by its phase fraction s_D or s_A ∈ [0,1)", WHITE, False)]),
 ], size=16)
 s.shapes.add_picture(os.path.join(A, "cr3bp_geometry.png"), Inches(7.0), Inches(1.45), Inches(6.0))
 
@@ -296,9 +295,9 @@ table(s, 8.1, 1.5, 4.8, [
     ["Propellant flow", "0.69 kg/day"],
 ], colw=[2.3, 2.5], size=15)
 bullets(s, 0.5, 4.73, 7.3, 2.6, [
-    (0, [("Solved in two stages: ", GOLD, True), ("direct collocation (CasADi/IPOPT) finds the basin; multiple shooting on the PMP field polishes the costates to ~1e-13", WHITE, False)]),
-    (0, [("Pontryagin: ", GOLD, True), ("the control is fixed by the costates; the problem becomes an 8-unknown two-point BVP", WHITE, False)]),
-    (0, [("Fuel follows time: ", GOLD, True), ("all-burn (a theorem for min time) means propellant = 0.69 kg/day × t_f, so across the library the fastest transfer is also the cheapest", WHITE, False)]),
+    (0, [("How a root is found: ", GOLD, True), ("a direct collocation solve (CasADi/IPOPT) or a continuation step from a neighboring root supplies the guess; multiple shooting on the PMP equations polishes it to ~1e-13", WHITE, False)]),
+    (0, [("Pontryagin: ", GOLD, True), ("the costates fix the control, turning the problem into a two-point boundary-value problem in 8 unknowns", WHITE, False)]),
+    (0, [("Fuel follows time: ", GOLD, True), ("a min-time transfer thrusts continuously, so propellant = 0.69 kg/day × t_f and the fastest transfer in the library is also the cheapest", WHITE, False)]),
 ], size=16)
 s.shapes.add_picture(os.path.join(HERE, "..", "indirect", "results", "transfer_3d_anchor.png"),
                      Inches(8.1), Inches(4.3), Inches(4.8))
@@ -394,7 +393,7 @@ if APPENDIX:
     ], colw=[2.3, 3.6, 4.8, 1.8], size=12, rowh=0.62,
         colors=[WHITE, WHITE, BLUE, GREEN])
     bullets(s, 0.4, 5.35, 12.5, 2.1, [
-        (0, [("S4 in words: ", GOLD, True), ("perturb the initial costate in the 5 directions that keep the problem normalized and watch where the (r,v) state goes; a conjugate time is where some combination of those perturbations (plus a shift along the flow) returns to zero displacement. Past it, a neighbouring extremal reaches the same point and the arc stops being minimizing", WHITE, False)]),
+        (0, [("S4 in words: ", GOLD, True), ("perturb the initial costate in the 5 directions that keep the problem normalized and watch where the (r,v) state goes; a conjugate time is where some combination of those perturbations (plus a shift along the flow) returns to zero displacement. Past it, a neighboring extremal reaches the same point and the arc stops being minimizing", WHITE, False)]),
         (0, [("H6 is ours, not the theorem's: ", GOLD, True), ("the reduced Hamiltonian is not conserved, so det = 0 could mean h(t) = 0 instead of a rank drop; since λ_m falls monotonically to 0 and h vanishes only at λ_m = c/T, λ_m(0) < c/T excludes it", WHITE, False)]),
     ], size=13)
 

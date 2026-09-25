@@ -32,7 +32,8 @@ addpath(here, fullfile(fileparts(here), 'oclib'));
 %% another such function):
 suites = { 'cartpole_common',   {'test_cartpole_params', 'test_cartpole_physics', ...
                                  'test_cartpole_field',  'test_cartpole_state_jac'}
-           'ex3_cart_pole_pmp', {'run_tests'} };
+           'ex3_cart_pole_pmp', {'run_tests'}
+           'conjugate_points',  {'run_conjugate_tests'} };
 
 nT      = sum(cellfun(@numel, suites(:,2)));
 names   = cell(1, nT);

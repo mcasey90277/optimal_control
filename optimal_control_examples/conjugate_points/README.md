@@ -21,6 +21,10 @@ conjugate_point_study             % the guide's numbers + figures, PASS/FAIL per
 run_conjugate_tests               % the test suite (throws on failure)
 ```
 
+**Video:** `video/` builds a narrated ~4-minute explainer from the explorer
+itself (MATLAB director + AI or draft narration + ffmpeg). Start with
+`video/README.md`; the script is `doc/youtube_script.md`.
+
 ## Files
 
 | file | what it does |

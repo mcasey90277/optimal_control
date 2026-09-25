@@ -1,0 +1,1 @@
+Stretch a soap film between two rings, and it takes the shape of the least possible area. Here's the strange part. When you solve the math for that shape, you get two answers. Two curves, both satisfying the exact same equation. Nature only ever builds one of them. Today we'll see why. And the reason has a name: the conjugate point.

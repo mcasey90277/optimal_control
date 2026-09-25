@@ -33,7 +33,9 @@ function app = conjugate_point_explorer(varargin)
 %% Inputs:
 %
 %  varargin                 name/value              'Visible' ['on'|'off'],
-%                                                   'Preset' [index, 2]
+%                                                   'Preset' [index, 2],
+%                                                   'Size' [w h pixels,
+%                                                   default 1500 920]
 %
 %% Outputs:
 %
@@ -43,6 +45,9 @@ function app = conjugate_point_explorer(varargin)
 %                                                   setDelta(d) readout()
 %                                                   state() shrink()
 %                                                   setScaled(tf)
+%                                                   setProblem(F,a,b,ya,yb,
+%                                                   pRange) .axes (the six
+%                                                   uiaxes, by name)
 %
 %% References:
 %
@@ -57,6 +62,7 @@ function app = conjugate_point_explorer(varargin)
 ip = inputParser;
 ip.addParameter('Visible', 'on');
 ip.addParameter('Preset', 2);
+ip.addParameter('Size', [1500 920]);
 ip.parse(varargin{:});
 here = fileparts(mfilename('fullpath'));
 addpath(here);
@@ -66,7 +72,7 @@ st = struct('prob', [], 'E', [], 'scan', [], 'k', 1, 'S', [], 'V', [], ...
             'fan', [], 'tEnd', [], 'curve', [], 'msg', '', 'diff', []);
 
 % ------------------------------------------------------------ layout
-fig = uifigure('Name', 'Conjugate Point Explorer', 'Position', [40 40 1500 920], ...
+fig = uifigure('Name', 'Conjugate Point Explorer', 'Position', [40 40 ip.Results.Size], ...
                'Visible', ip.Results.Visible);
 main = uigridlayout(fig, [1 2]);
 main.ColumnWidth = {420, '1x'};
@@ -122,7 +128,9 @@ end
 app = struct('fig', fig, 'setPreset', @setPreset, 'solve', @solve, ...
              'selectExtremal', @selectExtremal, 'setDelta', @setDelta, ...
              'readout', @() strjoin(txt.Value, newline), 'state', @getState, ...
-             'shrink', @shrink, 'setScaled', @setScaled);
+             'shrink', @shrink, 'setScaled', @setScaled, 'setProblem', @setProblem, ...
+             'axes', struct('curves', axC, 'difference', axD, 'jacobi', axH, ...
+                            'shooting', axR, 'mode', axM, 'deltaJ', axJ));
 setPreset(ip.Results.Preset);
 
 % ------------------------------------------------------------ callbacks
@@ -213,6 +221,14 @@ setPreset(ip.Results.Preset);
         d = max(min(d, sld.Limits(2)), sld.Limits(1));
         sld.Value = d;
         redrawDelta();
+    end
+
+    function setProblem(F, a, b, ya, yb, pRange)
+        % type a problem into the fields and solve (the Custom route, scripted)
+        ddPreset.Value = 'Custom';
+        efF.Value = F;  efA.Value = a;  efB.Value = b;  efYa.Value = ya;  efYb.Value = yb;
+        if nargin >= 6, efP1.Value = pRange(1);  efP2.Value = pRange(2); end
+        solve();
     end
 
     function setScaled(v)

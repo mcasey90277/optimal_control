@@ -58,7 +58,8 @@ second, independent instrument.
 \includegraphics[width=\textwidth]{figures/explorer_pendulum.png}
 \caption{The explorer on the pendulum preset. Top: the extremal (blue) and four
 neighbours leaving the same start point with slightly different slopes (orange);
-they cross the extremal near $t_c$ (green), well before $b = 5$. Middle: the
+they cross the extremal near $t_c$ (green), well before $b = 5$. Second strip: the
+difference $y(t;p+\delta) - y_0(t)$, whose zeros are the crossings. Third row: the
 Jacobi field (left) and the shooting function (right). Bottom: the lowest mode of
 the second variation (left), and the cost change along it (right) --- a downward
 parabola, so this extremal is \emph{not} a minimiser.}
@@ -68,9 +69,12 @@ parabola, so this extremal is \emph{not} a minimiser.}
 Run \file{conjugate\_point\_explorer} from the folder. Pick a preset or type your
 own $F(t, y, y')$ (write $y'$ as \file{yp}), the interval $[a,b]$ and the end
 values, and press \emph{Solve}. The explorer finds \emph{every} extremal in the
-slope range you give it, and for the one you select it draws the five panels of
+slope range you give it, and for the one you select it draws the six panels of
 Figure~\ref{fig:explorer} and writes a readout with a verdict. The slider changes
-the slope perturbation $\delta$; \emph{Shrink} animates $\delta \to 0$.
+the slope perturbation $\delta$; \emph{Shrink} animates $\delta \to 0$. The
+checkbox \emph{divide by delta} rescales the difference strip to
+$(y(t;p+\delta) - y_0(t))/\delta$, which is the quantity that becomes the Jacobi
+field $h$ as $\delta \to 0$ (drawn dashed beside it).
 
 % =======================================================================
 \section{The problem, and why an extremal is only a candidate}
@@ -244,7 +248,9 @@ once. They are computed by different code, so when they agree you are seeing the
 theory, not an artefact:
 \begin{enumerate}
 \item \textbf{Neighbours cross.} Fly the extremal with slope $p + \delta$ and find
-where it crosses $y_0$ (\file{cov\_perturbed.m}).
+where it crosses $y_0$ (\file{cov\_perturbed.m}). The difference strip shows the
+same event as a zero of $y(t;p+\delta) - y_0(t)$; divided by $\delta$ that
+difference converges to $h$, which is how views~1 and~2 become one.
 \item \textbf{$h$ vanishes.} Integrate the Jacobi equation and find its zeros
 (\file{cov\_shoot.m}).
 \item \textbf{The shooting function turns.} The extremals are the roots of
@@ -339,8 +345,12 @@ its conjugate point?
 Extremal 2: $y'(0) = -0.505173$, $J = 4.968943$, $t_c = 3.301088$. Crossing
 errors at $\delta = 0.6, 0.3, 0.15, 0.075, 0.0375, 0.01875$:
 $0.115, 0.078, 0.044, 0.024, 0.012, 0.0062$ (halving ratios rise to $1.97$:
-first order). Extremal 1: $y'(0) = -1.834052$, $J = 3.690547$, first zero of $h$
-at $6.636 > b$: a weak local minimiser, and the lower of the two costs.
+first order). Now tick \emph{divide by delta}: the four rescaled differences lie
+close to the dashed Jacobi field and approach it as $\delta$ shrinks (their
+largest distance from $h$ on $[0,5]$ is $0.116, 0.078, 0.045, 0.024$ for
+$\delta = 0.6, 0.3, 0.15, 0.075$). On the oscillator presets they sit exactly on
+it, for any $\delta$. Extremal 1: $y'(0) = -1.834052$, $J = 3.690547$, first zero
+of $h$ at $6.636 > b$: a weak local minimiser, and the lower of the two costs.
 \end{chk}
 \end{expt}
 

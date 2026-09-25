@@ -25,7 +25,7 @@ run_conjugate_tests               % the test suite (throws on failure)
 
 | file | what it does |
 |---|---|
-| `conjugate_point_explorer.m` | the GUI (programmatic `uifigure`, so it diffs and tests like code); five views: curves + neighbours, Jacobi field, shooting function, lowest second-variation mode, ΔJ along it; readout with the Legendre, Jacobi and Morse checks and a verdict. Returns a handle API for scripting. |
+| `conjugate_point_explorer.m` | the GUI (programmatic `uifigure`, so it diffs and tests like code); six views: curves + neighbours, their difference from the extremal (optionally ÷ δ, which converges to the Jacobi field, drawn dashed), Jacobi field, shooting function, lowest second-variation mode, ΔJ along it; readout with the Legendre, Jacobi and Morse checks and a verdict. Returns a handle API for scripting. |
 | `cov_problem.m` | text Lagrangian → symbolic Euler–Lagrange field y'' = g, its Jacobi linearisation, and the second-variation coefficients P, R, Q0 (Symbolic Math Toolbox) |
 | `cov_shoot.m` | one extremal from (a, ya) with slope p, flown together with its Jacobi field h = ∂y/∂p; records the zeros of h |
 | `cov_extremals.m` | all extremals in a slope range: scan the shooting function r(p) = y(b;p) − yb, refine each sign change |

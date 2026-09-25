@@ -10,6 +10,9 @@ function app = conjugate_point_explorer(varargin)
 %                 the same left point with slope p + delta (a fan at delta,
 %                 delta/2, delta/4, delta/8). Where they meet the extremal
 %                 again is (in the limit delta -> 0) the conjugate point.
+%     Difference  neighbour minus extremal, on the same time axis: its zeros
+%                 are the crossings. Tick "divide by delta" and the curves
+%                 collapse onto the Jacobi field h (dashed) as delta -> 0.
 %     Jacobi      h(t) = dy/dp, the linearised neighbour. Its first zero
 %                 after a is the conjugate point t_c.
 %     Shooting    r(p) = y(b; p) - yb. Its roots are the extremals; its
@@ -39,6 +42,7 @@ function app = conjugate_point_explorer(varargin)
 %                                                   selectExtremal(k)
 %                                                   setDelta(d) readout()
 %                                                   state() shrink()
+%                                                   setScaled(tf)
 %
 %% References:
 %
@@ -59,7 +63,7 @@ addpath(here);
 
 presets = cov_presets;
 st = struct('prob', [], 'E', [], 'scan', [], 'k', 1, 'S', [], 'V', [], ...
-            'fan', [], 'tEnd', [], 'curve', [], 'msg', '');
+            'fan', [], 'tEnd', [], 'curve', [], 'msg', '', 'diff', []);
 
 % ------------------------------------------------------------ layout
 fig = uifigure('Name', 'Conjugate Point Explorer', 'Position', [40 40 1500 920], ...
@@ -67,8 +71,8 @@ fig = uifigure('Name', 'Conjugate Point Explorer', 'Position', [40 40 1500 920],
 main = uigridlayout(fig, [1 2]);
 main.ColumnWidth = {420, '1x'};
 
-ctl = uigridlayout(main, [14 2]);
-ctl.RowHeight = {30, 22, 22, 22, 26, 26, 26, 26, 32, 26, 22, 26, 48, '1x'};
+ctl = uigridlayout(main, [15 2]);
+ctl.RowHeight = {30, 22, 22, 22, 26, 26, 26, 26, 32, 26, 22, 26, 22, 48, '1x'};
 ctl.ColumnWidth = {'1x', '1x'};
 
 hdr = uilabel(ctl, 'Text', 'Conjugate Point Explorer', 'FontSize', 18, 'FontWeight', 'bold');
@@ -97,24 +101,28 @@ sld.Layout.Column = [1 2];
 cbFan = uicheckbox(ctl, 'Text', 'fan: delta, /2, /4, /8', 'Value', true, ...
                    'ValueChangedFcn', @(~, ~) redrawDelta());
 uibutton(ctl, 'Text', 'Shrink delta -> 0', 'ButtonPushedFcn', @(~, ~) shrink());
+cbScale = uicheckbox(ctl, 'Text', 'difference plot: divide by delta (-> Jacobi field h)', ...
+                     'Value', false, 'ValueChangedFcn', @(~, ~) redrawDelta());
+cbScale.Layout.Column = [1 2];
 lblNote = uilabel(ctl, 'Text', '', 'WordWrap', 'on', 'FontAngle', 'italic');
 lblNote.Layout.Column = [1 2];
 txt = uitextarea(ctl, 'Editable', 'off', 'FontName', 'Menlo', 'FontSize', 11, 'WordWrap', 'off');
 txt.Layout.Column = [1 2];
 
-right = uigridlayout(main, [3 2]);
-right.RowHeight = {'1.3x', '1x', '1x'};
+right = uigridlayout(main, [4 2]);
+right.RowHeight = {'1.15x', '0.8x', '1x', '1x'};
 axC = uiaxes(right);  axC.Layout.Column = [1 2];
+axD = uiaxes(right);  axD.Layout.Column = [1 2];   % neighbour minus extremal
 axH = uiaxes(right);  axR = uiaxes(right);
 axM = uiaxes(right);  axJ = uiaxes(right);
-for ax = [axC axH axR axM axJ]
+for ax = [axC axD axH axR axM axJ]
     ax.Box = 'on';  ax.XGrid = 'on';  ax.YGrid = 'on';  ax.FontSize = 11;
 end
 
 app = struct('fig', fig, 'setPreset', @setPreset, 'solve', @solve, ...
              'selectExtremal', @selectExtremal, 'setDelta', @setDelta, ...
              'readout', @() strjoin(txt.Value, newline), 'state', @getState, ...
-             'shrink', @shrink);
+             'shrink', @shrink, 'setScaled', @setScaled);
 setPreset(ip.Results.Preset);
 
 % ------------------------------------------------------------ callbacks
@@ -207,6 +215,12 @@ setPreset(ip.Results.Preset);
         redrawDelta();
     end
 
+    function setScaled(v)
+        % the difference panel: raw (false) or divided by delta (true)
+        cbScale.Value = logical(v);
+        redrawDelta();
+    end
+
     function shrink()
         d0 = sld.Value;
         for kk = 1:24
@@ -218,7 +232,7 @@ setPreset(ip.Results.Preset);
 
 % ------------------------------------------------------------ drawing
     function clearAll()
-        for ax = [axC axH axR axM axJ]
+        for ax = [axC axD axH axR axM axJ]
             cla(ax);  legend(ax, 'off');  delete(findall(ax, 'Tag', 'beyondB'));
         end
     end
@@ -341,13 +355,63 @@ setPreset(ip.Results.Preset);
         end
         title(axC, sprintf('F = %s:  extremal and its neighbours  (red o: first crossing; green: t_c)', pr.Fstr), ...
               'Interpreter', 'none');
-        xlabel(axC, 't');  ylabel(axC, 'y');
+        ylabel(axC, 'y');
+        drawDifference(cols);
         % mark p + delta on the shooting plot
         plotShooting();
         hold(axR, 'on');
         xline(axR, e.p + d, '-', 'p+\delta', 'Color', [0.95 0.45 0.10], 'LineWidth', 1.5);
         hold(axR, 'off');
         writeReadout();
+    end
+
+    function drawDifference(cols)
+        % neighbour minus extremal, y(t; p+delta) - y0(t): its zeros ARE the
+        % crossings. Divided by delta it tends to the Jacobi field h (dashed)
+        % as delta -> 0 -- exactly, for any delta, on a linear problem.
+        pr = st.prob;
+        scaled = cbScale.Value;
+        cla(axD);  hold(axD, 'on');
+        shadeBeyond(axD, pr.b, st.tEnd);
+        tD = linspace(pr.a, st.tEnd, 800);
+        tD = tD(tD <= st.S.tStop);
+        z0 = deval(st.S.sol, tD);
+        D = nan(numel(st.fan), numel(tD));
+        for kk = 1:numel(st.fan)
+            F1 = st.fan(kk);
+            if isempty(F1.S.sol), continue, end
+            ok1 = tD <= F1.S.tStop;
+            z1 = deval(F1.S.sol, tD(ok1));
+            D(kk, ok1) = z1(1,:) - z0(1, ok1);
+            if scaled, D(kk,:) = D(kk,:)/F1.delta; end
+            plot(axD, tD, D(kk,:), 'LineWidth', 1.6, 'Color', cols(kk,:));
+            if ~isempty(F1.tCross)
+                plot(axD, F1.tCross(1), 0, 'o', 'MarkerSize', 9, 'LineWidth', 2, 'Color', [0.8 0.1 0.1]);
+            end
+        end
+        h = z0(3,:);
+        if scaled
+            plot(axD, tD, h, 'k--', 'LineWidth', 2);
+        end
+        yline(axD, 0, 'k-');
+        xline(axD, pr.b, 'k--', 'b', 'LabelVerticalAlignment', 'bottom');
+        for c = st.S.tConj
+            xline(axD, c, ':', 't_c', 'Color', [0 0.6 0], 'LineWidth', 2);
+        end
+        hold(axD, 'off');
+        xlim(axD, [pr.a st.tEnd]);
+        inView = tD <= min(st.tEnd, pr.b + 0.15*(pr.b - pr.a));
+        vals = D(:, inView);
+        if scaled, vals = [vals(:); h(inView).']; end
+        lim = max(abs(vals(isfinite(vals))));
+        if ~isempty(lim) && lim > 0, ylim(axD, [-1.15 1.15]*lim); end
+        if scaled
+            title(axD, '(y(t; p+\delta) - y_0(t)) / \delta   \rightarrow   Jacobi field h(t)  (dashed)  as \delta \rightarrow 0');
+        else
+            title(axD, 'Difference  y(t; p+\delta) - y_0(t)   (zeros = crossings)');
+        end
+        xlabel(axD, 't');
+        st.diff = struct('t', tD, 'D', D, 'h', h, 'scaled', scaled);
     end
 
     function shadeBeyond(ax, b, tEnd)

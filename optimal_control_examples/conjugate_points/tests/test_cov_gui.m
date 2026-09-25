@@ -56,6 +56,36 @@ tc = arrayfun(@(f) firstOr(f.tCross), s.fan);
 ok = rep(ok, numel(tc) == 4 && all(abs(tc - pi) < 1e-6), ...
          'oscillator: all 4 neighbours cross at pi', mat2str(tc, 8));
 
+% difference panel: raw zeros are the crossings; scaled by 1/delta it IS h
+% on a linear problem, for every delta
+app.setScaled(false);
+s = app.state();
+zOK = true;
+for kk = 1:numel(s.fan)
+    dz = interp1(s.diff.t, s.diff.D(kk,:), s.fan(kk).tCross(1));
+    zOK = zOK && abs(dz) < 1e-6*max(abs(s.diff.D(kk,:)));
+end
+ok = rep(ok, zOK && size(s.diff.D, 1) == 4, 'difference: zero at each crossing', '');
+app.setScaled(true);
+s = app.state();
+inAB = s.diff.t <= s.prob.b;
+errOsc = max(abs(s.diff.D(:, inAB) - s.diff.h(inAB)), [], 'all');
+ok = rep(ok, s.diff.scaled && errOsc < 1e-7, 'oscillator: (y_d - y0)/d = h exactly', ...
+         sprintf('max err %.1e', errOsc));
+
+% nonlinear: the scaled difference approaches h at first order in delta
+kp = find(strcmp({P.name}, 'Pendulum (nonlinear)'));
+app.setPreset(kp);  app.selectExtremal(2);  app.setScaled(true);
+s = app.state();
+inAB = s.diff.t <= s.prob.b;
+errP = max(abs(s.diff.D(:, inAB) - s.diff.h(inAB)), [], 2).';
+rat = errP(1:end-1)./errP(2:end);
+ok = rep(ok, all(diff(errP) < 0) && abs(rat(end) - 2) < 0.2, ...
+         'pendulum: (y_d - y0)/d -> h, first order', ...
+         sprintf('errors %s, ratios %s', mat2str(errP, 3), mat2str(rat, 3)));
+app.setScaled(false);
+app.setPreset(ko);
+
 f = findall(app.fig, 'Type', 'uieditfield', 'Value', P(ko).F);
 f(1).Value = 'yp^2 - 4*y^2';                 % Jacobi field sin(2t)/2: t_c = pi/2
 app.solve();

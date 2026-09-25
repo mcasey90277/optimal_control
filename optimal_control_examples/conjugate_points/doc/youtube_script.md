@@ -105,7 +105,7 @@ All numbers below are the verified checkpoints from `conjugate_point_study.m`.
 >
 > It's the same test engineers use to certify optimal spacecraft trajectories. There, the "starting slope" becomes the starting costates, but the question is identical: do the neighbours come back before you arrive?
 >
-> Type in your own Lagrangian and go find some conjugate points.
+> Now continue your night walk.
 
 **END CARD:** *Conjugate Point Explorer · MATLAB · link in description*
 

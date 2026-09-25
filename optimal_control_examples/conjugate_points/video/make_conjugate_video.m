@@ -67,6 +67,7 @@ scenes = d('scenes', 1:numel(S));
 
 app = conjugate_point_explorer('Visible', 'off', 'Preset', 1, 'Size', [W H]);
 closer = onCleanup(@() delete(app.fig));
+pinLight(app.fig);          % the Mac's evening dark mode must not reach the video
 
 tag = '';  if preview, tag = '_preview'; end
 vidFile = fullfile(outDir, ['conjugate_points_silent' tag '.mp4']);
@@ -79,12 +80,14 @@ tNow = 0;                                              % the video clock [s]
 nWritten = 0;
 prev = [];                                             % last frame written
 beatLog = cell(0, 4);
+srcExt = {};                                           % audio type per scene
 view = 'full';  caption = '';  card = {};
 
 for si = scenes
     sc = S(si);
     txt = strtrim(fileread(fullfile(here, 'narration', sc.file)));
     [y, dur, src] = sceneAudio(fullfile(here, 'audio', erase(sc.file, '.txt')), fsA);
+    srcExt{end+1} = src(find(src == '.', 1, 'last'):end); %#ok<AGROW>
     fprintf('scene %d  %-12s  %5.1f s  (%s)\n', si, sc.file, dur, src);
     track = [track; zeros(round(lead*fsA), 1); y; zeros(round(tail*fsA), 1)]; %#ok<AGROW>
     T = lead + dur + tail;
@@ -125,6 +128,11 @@ writeShot({render(app, view, caption, card)}, nF);
 track = [track; zeros(round(endCard*fsA), 1)];
 tNow = tNow + endCard;
 close(vw);
+if numel(unique(srcExt)) > 1
+    % a misnamed final-voice file silently falls back to the draft: say so
+    warning('make_conjugate_video:mixedVoices', ['scenes use different audio types (%s): ' ...
+            'check audio/ for a misnamed file (must be sceneNN.mp3)'], strjoin(srcExt, ' '));
+end
 
 audFile = fullfile(outDir, ['narration' tag '.wav']);
 peak = max(abs(track));
@@ -260,7 +268,9 @@ function img = closeUp(src, W, H)
 % INPUTS: src uiaxes; W, H pixels. OUTPUTS: img [H x W x 3] uint8.
 f = figure('Visible', 'off', 'Color', 'w', 'Units', 'pixels', 'Position', [0 0 W H], ...
            'InvertHardcopy', 'off');
-ax = axes(f, 'Position', [0.07 0.14 0.90 0.76]);
+pinLight(f);
+ax = axes(f, 'Position', [0.07 0.14 0.90 0.76], 'Color', 'w', 'XColor', 'k', 'YColor', 'k', ...
+          'GridColor', [0.15 0.15 0.15]);
 copyobj(allchild(src), ax);
 set(ax, 'XLim', src.XLim, 'YLim', src.YLim, 'YDir', src.YDir, 'XGrid', 'on', 'YGrid', 'on', ...
         'Box', 'on', 'FontSize', 20, 'FontWeight', 'bold', 'LineWidth', 1.5, 'Layer', 'top');
@@ -271,11 +281,21 @@ end
 for C = findall(ax, 'Type', 'constantline').'
     C.LineWidth = 1.6*C.LineWidth;  C.FontSize = 18;
 end
-title(ax, src.Title.String, 'Interpreter', src.Title.Interpreter, 'FontSize', 22);
-xlabel(ax, src.XLabel.String, 'FontSize', 20);
-ylabel(ax, src.YLabel.String, 'FontSize', 20);
+title(ax, src.Title.String, 'Interpreter', src.Title.Interpreter, 'FontSize', 22, 'Color', 'k');
+xlabel(ax, src.XLabel.String, 'FontSize', 20, 'Color', 'k');
+ylabel(ax, src.YLabel.String, 'FontSize', 20, 'Color', 'k');
 img = imresize(print(f, '-RGBImage', '-r0'), [H W]);
 close(f);
+end
+
+function pinLight(f)
+% PINLIGHT  Force the light theme (R2025a+ figures follow the OS appearance,
+% so a render after sunset came out with black plot areas). No-op on
+% releases without figure themes. INPUTS: f figure or uifigure.
+try
+    f.Theme = 'light';
+catch
+end
 end
 
 function img = fitCanvas(I, W, H, bg)

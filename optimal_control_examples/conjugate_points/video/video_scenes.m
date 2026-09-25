@@ -119,7 +119,7 @@ S(end+1) = scene('scene07.txt', { ...
   'And the number of those directions',     {{'view', 'mode'}, {'caption', '4.  The Morse count'}}
   'It''s the same test engineers use',      {{'card', {'The same test, bigger problems', ...
                                               'certifying optimal spacecraft trajectories'}}}
-  'Type in your own Lagrangian',            {{'view', 'full'}, {'caption', 'Type in your own Lagrangian'}} });
+  'Now continue your night walk',           {{'view', 'full'}, {'caption', ''}} });
 end
 
 % ---------------------------------------------------------------------------

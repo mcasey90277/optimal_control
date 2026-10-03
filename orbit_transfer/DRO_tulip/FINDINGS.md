@@ -6035,3 +6035,32 @@ arrival alone (the spine, section 90) 1/96 gives 87%. The departure axis at
 finer departure spacing has been measured. That measurement -- one rib at 96
 departure phases on one arrival column, scored -- is the next step; the
 state of the whole line is in `process/INTERPOLATION_STATUS.md`.
+
+## 93. The filler's pool fixed; the 24 x 48 refilled to 1,143 of 1,152 (2026-10-02/03)
+
+Defect 1 of `process/INTERPOLATION_STATUS.md`, fixed test-first (commit
+9b39afd): `capped_pool` opens pools with `IdleTimeout = Inf`, and
+`fill_holes_direct` revives a dead pool before each cell (`livePool`). The
+new `tests/test_fill_holes_pool` failed before the fix and passes after.
+
+The refill could not be a rerun of the build job: the campaign is at its
+fixed point, so `run_phase_torus` returns "nothing to do" and never re-enters
+the filler. `batch/refill_24x48_job.m` replays step 4 on round 1 with the
+driver's own helpers and the saved spec (filler, re-package, audit, sweep,
+refresh `final/`). It ran 18:03 -> about 03:00 (filler 4 h 12 min).
+
+| | before | after |
+|---|---|---|
+| cells certified | 1,095 of 1,152 | **1,143 of 1,152** |
+| audit | 1,095 ok / 0 bad | **1,143 ok / 0 bad** |
+| filler failures "pool has shut down" | 47 | **0** |
+
+58 cells tried: 48 holes certified, 1 improve cell faster (2,18: 20.33 ->
+18.31 d), 9 holes not (physics: failed direct solves, solutions on the
+clearance floor). No filled cell is on the spine, so the fixed-point status
+stands (spine roots and discovery were not replayed).
+
+Against the 24 x 24 record on the 576 cells the grids share: **557 the same
+root, 1 faster, 9 slower, 9 missing** (the nine remaining holes are all
+record cells), 0 cells the record lacks. The adoption question is now those
+9 slower and 9 missing cells against the 567 new arrival-phase cells.

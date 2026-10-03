@@ -62,17 +62,19 @@ SCORE_LIBRARY=<catalog .mat, or 'record' | 'spine96'> nohup \
   `spine96_catalog.mat` (the one-row view), `sheet96_residuals.mat`,
   `interp_seed_experiment/`, `interp_score/` (52 of 60).
 - `indirect/results/reproduce_70mN_24x48/` -- the 24 x 48 campaign; `final/`
-  holds its catalog (1,095 of 1,152 cells, audit 1,095/0); `interim_round1/`
+  holds its catalog (1,143 of 1,152 cells after the 10-02 refill, audit 1,143/0); `interim_round1/`
   is the copy that was scored (1 of 60).
 
 ## Open defects
 
-1. **The hole filler's pool dies.** `fill_holes_direct` runs its direct solves
+1. **FIXED 2026-10-02 (FINDINGS 93): the hole filler's pool died.** `fill_holes_direct` runs its direct solves
    in-process; the worker pool idles past its 30-minute timeout and shuts
    down, and every fenced call after that throws "The parallel pool has shut
    down". 47 of the 24 x 48 filler's 58 failures are this, not the physics.
-   Fix: create the pool with `IdleTimeout = Inf`, revive a dead pool before
-   each cell. Test-first; then rerun the filler on the 57 holes (it resumes).
+   Fixed: `IdleTimeout = Inf`, revive before each cell; refilled by
+   `batch/refill_24x48_job.m`: 1,143 of 1,152 cells, audit 1,143/0, 0 pool
+   failures; vs the record on shared cells 557 same, 1 faster, 9 slower,
+   9 missing.
 2. `reproduce_library_70mN`'s verdict says REPRODUCED = FAIL for a build on a
    finer grid than the record, because its same-library test is not the
    right question for a different grid; the comparison on shared cells (551
@@ -86,7 +88,7 @@ SCORE_LIBRARY=<catalog .mat, or 'record' | 'spine96'> nohup \
    (`rib_from_crossing`, hours), wrap it as a one-column catalog
    (`arrival_sheet_as_catalog` has the pattern; the rib needs its own
    wrapper), score it. That says whether departure needs 1/48 or 1/96.
-2. Fix defect 1, refill the 24 x 48 holes, decide whether to adopt the
+2. (Defect 1 fixed and refilled, FINDINGS 93.) Decide whether to adopt the
    24 x 48 as the record (it is a superset of the record on 551 cells; the
    9 slower cells and 16 holes are the argument against).
 3. Then a full build at the measured resolution (a 48 x 96 build is ~4 days

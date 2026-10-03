@@ -5,18 +5,18 @@
 - [ ] **Measure the departure axis**: one rib at 96 departure phases on one
   arrival column, wrapped as a one-column catalog, scored with
   `score_interpolator` (the arrival axis is done: 1/96 gives 87% usable).
-- [ ] **Fix the hole filler's pool** (`fill_holes_direct`): IdleTimeout = Inf
-  + revive before each cell; 47 of the 24 x 48 filler's 58 failures were
-  "The parallel pool has shut down". Test-first, then refill the 57 holes.
+- [x] **Fix the hole filler's pool** -- DONE 2026-10-02 (FINDINGS 93):
+  refilled 24 x 48 = 1,143/1,152, audit clean, 0 pool failures.
 - [ ] `reproduce_library_70mN` verdict on a FINER grid than the record: say
   "compared on shared cells", not REPRODUCED = FAIL.
 - [ ] Decide on the 24 x 48 library (`results/reproduce_70mN_24x48/final`):
-  adopt as record (1,095/1,152, audit clean, 551 of 560 shared cells agree)
-  or hold until refilled.
+  adopt as record (1,143/1,152, audit clean; on 576 shared cells 557 same,
+  1 faster, 9 slower, 9 missing).
 - [ ] Fold cells: arclength polish from the blended guess (8 of 60 spine
   misses are folds).
 - [ ] Junction-state interpolation instead of re-flying a guessed z8.
-- [ ] `results/` is not git-tracked: back up the record and the 24 x 48.
+- [x] `results/` backed up 2026-10-02: `~/Backups/DRO_tulip_results_2026-10-02.tar.gz`
+  (771 MB, same disk -- copy off-machine).
 
 
 - [x] **`conj_spectrum` locates, classifies and refines its candidates;

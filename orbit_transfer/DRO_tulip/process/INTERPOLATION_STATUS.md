@@ -56,8 +56,11 @@ SCORE_LIBRARY=<catalog .mat, or 'record' | 'spine96'> nohup \
 
 ## Data on disk (results/ is NOT git-tracked)
 
-- `indirect/results/library_70mN_24x24_final/` -- the record (576/576), its
-  audit, `phase_transversality.mat`, `interp_score/` (0 of 60).
+- `indirect/results/library_70mN_24x48_merged/` -- **the library of record
+  since 2026-10-03** (FINDINGS 95): 24 x 48, 1,152/1,152, audit 1,152/0.
+- `indirect/results/library_70mN_24x24_final/` -- the 24 x 24 reference (the
+  record until 10-03; 576/576), its audit, `phase_transversality.mat`,
+  `interp_score/` (0 of 60).
 - `indirect/results/sheet96_resolution_test/` -- the 96-phase spine sheet,
   `spine96_catalog.mat` (the one-row view), `sheet96_residuals.mat`,
   `interp_seed_experiment/`, `interp_score/` (52 of 60).
@@ -88,9 +91,9 @@ SCORE_LIBRARY=<catalog .mat, or 'record' | 'spine96'> nohup \
    (`rib_from_crossing`, hours), wrap it as a one-column catalog
    (`arrival_sheet_as_catalog` has the pattern; the rib needs its own
    wrapper), score it. That says whether departure needs 1/48 or 1/96.
-2. (Defect 1 fixed and refilled, FINDINGS 93; merged with the record to
-   1,152/1,152, audit clean, `results/library_70mN_24x48_merged/`, FINDINGS
-   94 -- adoption pending.) Decide whether to adopt the
+2. DONE 2026-10-03: defect 1 fixed and refilled (FINDINGS 93), merged with
+   the 24 x 24 to 1,152/1,152, audit clean (94), ADOPTED as the record (95).
+   (Original item:) Decide whether to adopt the
    24 x 48 as the record (it is a superset of the record on 551 cells; the
    9 slower cells and 16 holes are the argument against).
 3. Then a full build at the measured resolution (a 48 x 96 build is ~4 days

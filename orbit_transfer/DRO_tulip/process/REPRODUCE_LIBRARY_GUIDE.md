@@ -18,7 +18,8 @@ out = reproduce_library_70mN(struct('compareOnly', true));    % re-run the compa
 
 - It builds a complete, certified 24 × 24 library (576 minimum-time transfers)
   into `indirect/results/reproduce_70mN_24x24/`, then compares it cell by cell
-  with the library of record, `indirect/results/library_70mN_24x24_final/`.
+  with the 24 x 24 reference, `indirect/results/library_70mN_24x24_final/`
+  (the library of record until 2026-10-03; now `library_70mN_24x48_merged/`).
 - **It takes about 24 hours on this machine with 4 rib workers.** Not 6–10.
   See section 4.
 - It needs the shared MATLAB path (pumpkyn/pumpkynPie via `startup`), CasADi
@@ -228,8 +229,9 @@ that file's local functions, so a test calls the real helper.
 
 ## 10. Where things live
 
-- Library of record: `indirect/results/library_70mN_24x24_final/` (README inside;
-  adopted 2026-09-19). Its predecessor: `library_70mN_24x24_handbuilt_2026-09-15/`.
+- Library of record: `indirect/results/library_70mN_24x48_merged/` (README inside;
+  adopted 2026-10-03, FINDINGS 95). The 24 x 24 reference, the record from
+  2026-09-19: `indirect/results/library_70mN_24x24_final/`. Its predecessor: `library_70mN_24x24_handbuilt_2026-09-15/`.
 - The first rebuild's campaign folder: `indirect/results/reproduce_70mN_24x24/`.
 - The 3 × 3 rehearsal: `indirect/results/torus3d_p0/`.
 - **`results/` is not tracked by git.** The record exists on this disk only.

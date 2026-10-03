@@ -5,6 +5,14 @@ its reference implementation. Product: libraries of converged min-time PMP
 costates `z8 = [λ(7); tf]` over (DRO period × tulip petals × phasing torus ×
 thrust 1–15 N), every entry accepted UNCHANGED by `pumpkyn.cr3bp.tfMin`.
 
+**Library of record (2026-10-03):** `indirect/results/library_70mN_24x48_merged/`
+-- 70 mN / Isp 900 s / 150 kg, DRO tau 1 -> 7-petal tulip, 24 departure x 48
+arrival phases, **1,152 of 1,152 cells certified, fail-closed audit 1,152/0**
+(FINDINGS 92-95; README inside). The 24 x 24 library of 2026-09-19 is kept
+unchanged as the 24 x 24 reference. `results/` is not git-tracked; backups in
+`~/Backups/DRO_tulip_results_<date>.tar.gz`. Live line: interpolation between
+grid points (`process/INTERPOLATION_STATUS.md`).
+
 **Docs (read these first):**
 
 | file | what |

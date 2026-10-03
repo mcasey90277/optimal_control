@@ -4,9 +4,10 @@ function out = reproduce_library_70mN(opts)
 %   REBUILD THE 70 mN DRO -> TULIP COSTATE LIBRARY FROM ITS ANCHORS, IN ONE
 %   CALL, AND CHECK THE RESULT AGAINST THE LIBRARY OF RECORD.
 %
-%   The library of record (results/library_70mN_24x24_final, 576 certified
+%   The 24 x 24 reference (results/library_70mN_24x24_final, 576 certified
 %   minimum-time transfers over a 24 x 24 grid of departure and arrival
-%   phases) was built by hand over eight rounds, 2026-09-13 to 09-15
+%   phases; the library of record 2026-09-19 to 10-03, superseded by the
+%   24 x 48 results/library_70mN_24x48_merged, FINDINGS 95) was built by hand over eight rounds, 2026-09-13 to 09-15
 %   (FINDINGS 59-72, process/PHASE_TORUS_RUNBOOK.md section 10). This script
 %   is that build as one reproducible chain:
 %

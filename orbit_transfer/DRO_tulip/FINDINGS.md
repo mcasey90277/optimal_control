@@ -6087,3 +6087,32 @@ the 24 x 24 record, into `results/library_70mN_24x48_merged/`:
 Not yet adopted as the library of record: the README, status page and the
 archiving of the 24 x 24 record follow the section-83 pattern when Mike
 decides.
+
+## 95. The merged 24 x 48 adopted as the library of record (2026-10-03)
+
+Mike's decision, 2026-10-03. **`indirect/results/library_70mN_24x48_merged/`
+is the library of record**: 24 departure x 48 arrival phases, 1,152 of 1,152
+cells, fail-closed audit 1,152 ok / 0 bad bound to the file by its content
+key, no worse than the 24 x 24 on any of the 576 shared cells (section 94).
+README inside (provenance: build, refill, merge).
+
+Unlike section 83 the path CHANGED, on purpose: the 24 x 24 folder's name
+says 24 x 24, and eleven tests and scripts load it as a 24 x 24 fixture. So
+`library_70mN_24x24_final/` stays, whole and unchanged (a SUPERSEDED header
+on its README), as the 24 x 24 reference -- the tests, and
+`reproduce_library_70mN`'s comparison of a 24 x 24 rebuild, still read it.
+What "the record" means was repointed: `interp_study` and
+`batch/score_interpolator_job` ('record' = the merged library, 'record24' =
+the old one), the README's new header, the runbook, the reproduction guide,
+`INTERPOLATION_STATUS.md`, `STATUS_AND_ROADMAP.md`. The slide generators keep
+the 24 x 24 (the deck shows that torus).
+
+Not in the folder: a catalog receipt and the phase-torus pictures (the
+build's describe the pre-merge content; none is regenerated yet), and an
+interpolation score (expected near the unmerged 1 of 60: the departure axis
+is the limit, being measured now -- `batch/departure_rib96_job.m`).
+
+Backup: `~/Backups/DRO_tulip_results_2026-10-03.tar.gz` (all of `results/`,
+775 MB, the running rib's folder excluded; made just before the README was
+written) plus `DRO_tulip_results_2026-10-03_libraries.tar.gz` (15 MB: both
+library folders in their final state). Same disk as the work: copy off-machine.

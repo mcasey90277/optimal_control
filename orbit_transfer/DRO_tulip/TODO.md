@@ -9,7 +9,7 @@
   refilled 24 x 48 = 1,143/1,152, audit clean, 0 pool failures.
 - [ ] `reproduce_library_70mN` verdict on a FINER grid than the record: say
   "compared on shared cells", not REPRODUCED = FAIL.
-- [ ] Adopt `results/library_70mN_24x48_merged/` as the library of record
+- [x] ADOPTED 2026-10-03 (FINDINGS 95): `results/library_70mN_24x48_merged/` is the library of record
   (FINDINGS 94: 24 x 48 + the record's faster/missing entries = 1,152/1,152,
   audit 1,152/0, no worse than the record on any shared cell). Section-83
   pattern: repoint README/status, archive the 24 x 24 record whole.

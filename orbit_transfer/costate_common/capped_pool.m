@@ -24,6 +24,7 @@ function pool = capped_pool(nWorkers)
 %
 %% Revision History:
 %  M. Casey                                                   (c) 09/10/2026
+%  M. Casey  new pools open with IdleTimeout = Inf            (c) 10/02/2026
 %  Copyright Coorbital Inc.
 %% ------------------------ Begin Code Sequence ---------------------------
 
@@ -41,7 +42,11 @@ try
     tmp = fullfile(tempdir, sprintf('capped_pool_%d_%s', feature('getpid'), datestr(now, 'HHMMSSFFF')));
     if ~isfolder(tmp), mkdir(tmp); end
     c.JobStorageLocation = tmp;
-    pool = c.parpool(min(nWorkers, c.NumWorkers));
+    % IDLE-PROOF: a fence pool must outlive the in-process work between its
+    % calls. With the default 30-minute IdleTimeout, fill_holes_direct's
+    % long direct solves let the pool shut down, and every fenced call after
+    % that threw (47 of 58 failures in the 24 x 48 filler, FINDINGS 92).
+    pool = c.parpool(min(nWorkers, c.NumWorkers), 'IdleTimeout', Inf);
 catch ME
     pool = [];
     warning('capped_pool:noPool', 'could not open a pool (%s): calls will run UNFENCED', ME.message);

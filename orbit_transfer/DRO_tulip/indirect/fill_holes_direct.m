@@ -65,6 +65,7 @@ function out = fill_holes_direct(catMat, opts)
 %
 %% Revision History:
 %  M. Casey                                                   (c) 09/15/2026
+%  M. Casey  fence pool revived before each cell (livePool)   (c) 10/02/2026
 %  Copyright Coorbital Inc.
 %% ------------------------ Begin Code Sequence ---------------------------
 
@@ -99,6 +100,7 @@ lg('fill_holes_direct: %d x %d grid, %d holes, %d cells to try', nD, nA, nHoles,
 % ---- the physics, FROM THE CATALOG (engine, orbits, spine) ---------------
 [B, ~] = arclength_arrival('setup', physicsFromCatalog(cat_, sh, sD(1)));
 pool = capped_pool();
+wantFence = ~isempty(pool);                    % no PCT: run unfenced, do not retry every cell
 floorKm = clearKm - rMoonKm;
 problem = B.problem;
 solveOpts = struct('N', N, 'K', K, 'clearKm', clearKm, 'maxCpuSec', maxCpu, 'wallSec', wallSec, 'pool', pool);
@@ -153,6 +155,10 @@ while kc < size(cells, 1)                       % the list grows as improvements
     if nTried >= maxCells, break, end
     iD = cells(kc, 1);  iA = cells(kc, 2);
     if done(iD, iA), continue, end
+    % the fence pool can die between cells (idle timeout, or run_capped
+    % deleting a pool whose call would not stop): reopen it before a cell
+    % rather than let every later certification throw (FINDINGS 92)
+    pool = livePool(pool, wantFence);  solveOpts.pool = pool;
     % the nearest certified neighbours: the same column's (they share the
     % arrival geometry -- a rib IS this continuation) before the same row's
     % (they share the departure state), each group fastest first; every
@@ -236,6 +242,23 @@ while kc < size(cells, 1)                       % the list grows as improvements
 end
 lg('fill_holes_direct: %d holes, %d tried, %d certified -> %s', nHoles, nTried, nCert, outFile);
 out = struct('nHoles', nHoles, 'nTried', nTried, 'nCert', nCert, 'file', outFile, 'cells', rec);
+end
+
+function pool = livePool(pool, wanted)
+% LIVEPOOL  The fence pool, alive and idle-proof. A pool that was deleted,
+% disconnected or shut down is reopened through capped_pool; a live one is
+% kept and its IdleTimeout set to Inf. Nothing is created when no fence was
+% wanted (the filler started without a pool).
+% INPUTS: pool (parallel.Pool or []); wanted (logical).
+% OUTPUTS: pool (parallel.Pool or []).
+if ~wanted, return, end
+alive = ~isempty(pool) && isvalid(pool) && pool.Connected;
+if ~alive
+    if ~isempty(pool), try delete(pool); catch, end, end
+    pool = capped_pool();
+    if isempty(pool), return, end
+end
+if ~isinf(pool.IdleTimeout), pool.IdleTimeout = Inf; end
 end
 
 function s = join_note(prefix, C)

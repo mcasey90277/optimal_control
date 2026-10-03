@@ -6064,3 +6064,26 @@ Against the 24 x 24 record on the 576 cells the grids share: **557 the same
 root, 1 faster, 9 slower, 9 missing** (the nine remaining holes are all
 record cells), 0 cells the record lacks. The adoption question is now those
 9 slower and 9 missing cells against the 567 new arrival-phase cells.
+
+## 94. The 24 x 48 merged with the record: 1,152 of 1,152, audit clean (2026-10-03)
+
+`merge_phase_catalogs` (test-first, 16 checks, three deliberate mutants each
+caught): the base catalog, except where the donor's entry is faster (by more
+than 1e-3 d) or the base has none -- then the donor's entry is taken with
+every per-cell grid and per-entry field it carries. It refuses another
+engine, orbit pair, family numbering or second-order settings.
+
+`batch/merge_24x48_job.m`, base = the refilled 24 x 48 (section 93), donor =
+the 24 x 24 record, into `results/library_70mN_24x48_merged/`:
+
+| | |
+|---|---|
+| record entries faster | 9 -- eight in arrival column 2 (sD 0.54-0.88, ~0.55 d each), and (4,48) 19.66 -> 17.78 d |
+| holes filled | 9 -- all of arrival column 32 (sA 0.6587), departure rows 14-22 |
+| cells | **1,152 of 1,152: the torus is full** |
+| vs the record, 576 shared cells | 575 agree, 0 missing, 0 slower, 1 faster (`noWorse`) |
+| full audit (fail closed, every verdict recomputed) | **1,152 ok / 0 bad**, content key matches the merged file |
+
+Not yet adopted as the library of record: the README, status page and the
+archiving of the 24 x 24 record follow the section-83 pattern when Mike
+decides.

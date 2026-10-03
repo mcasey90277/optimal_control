@@ -88,7 +88,9 @@ SCORE_LIBRARY=<catalog .mat, or 'record' | 'spine96'> nohup \
    (`rib_from_crossing`, hours), wrap it as a one-column catalog
    (`arrival_sheet_as_catalog` has the pattern; the rib needs its own
    wrapper), score it. That says whether departure needs 1/48 or 1/96.
-2. (Defect 1 fixed and refilled, FINDINGS 93.) Decide whether to adopt the
+2. (Defect 1 fixed and refilled, FINDINGS 93; merged with the record to
+   1,152/1,152, audit clean, `results/library_70mN_24x48_merged/`, FINDINGS
+   94 -- adoption pending.) Decide whether to adopt the
    24 x 48 as the record (it is a superset of the record on 551 cells; the
    9 slower cells and 16 holes are the argument against).
 3. Then a full build at the measured resolution (a 48 x 96 build is ~4 days

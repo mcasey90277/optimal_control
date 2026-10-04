@@ -46,6 +46,15 @@ loop = extractBetween(src, 'while kc < size(cells, 1)', 'function s = join_note'
 ok = chk(ok, ~isempty(loop) && contains(loop{1}, 'pool = livePool(pool, wantFence)') ...
          && contains(loop{1}, 'solveOpts.pool = pool'), 'wiring: the cell loop revives the pool and passes it on');
 
+% ---- the filler keeps its candidates (optimality-status spec 5) -----------
+C1 = struct('ok', false, 'status', 3, 'z', ones(8, 1));  C0 = struct('ok', false, 'status', -1, 'z', nan(8, 1));
+o = H.keepCandidate(struct([]), C1);  o = H.keepCandidate(o, C0);
+ok = chk(ok, numel(o) == 1 && o(1).status == 3, 'keepCandidate keeps a status >= 1 result, drops one below the floor');
+o = H.keepCandidate(o, C1);
+ok = chk(ok, numel(o) == 1, 'keepCandidate keeps a repeated result once');
+ok = chk(ok, contains(loop{1}, 'others = keepCandidate(others, C)') && contains(src, '''others'''), ...
+         'wiring: the seed loop keeps candidates and the cell record stores them');
+
 if ok, fprintf('test_fill_holes_pool: ALL PASS\n'); else, fprintf('test_fill_holes_pool: FAIL\n'); end
 end
 

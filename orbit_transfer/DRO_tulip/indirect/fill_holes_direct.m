@@ -107,11 +107,12 @@ solveOpts = struct('N', N, 'K', K, 'clearKm', clearKm, 'maxCpuSec', maxCpu, 'wal
 
 % ---- resume: keep what an earlier run certified --------------------------
 R = struct('j', {}, 'sA', {}, 'pts', {}, 'stop', {}, 'nSolve', {});
-rec = struct('iD', {}, 'iA', {}, 'sD', {}, 'sA', {}, 'seed', {}, 'tfDirect', {}, 'tfCert', {}, 'ok', {}, 'reason', {}, 'wall', {});
+rec = struct('iD', {}, 'iA', {}, 'sD', {}, 'sA', {}, 'seed', {}, 'tfDirect', {}, 'tfCert', {}, 'ok', {}, 'reason', {}, 'wall', {}, 'others', {});
 if isfile(outFile)
     Lo = load(outFile);
     if isfield(Lo, 'R'), R = Lo.R; end
     if isfield(Lo, 'rec'), rec = Lo.rec; end
+    if ~isempty(rec) && ~isfield(rec, 'others'), [rec.others] = deal(struct([])); end   % records from before the field
     lg('  resuming: %d rib(s), %d cell record(s) on disk', numel(R), numel(rec));
 end
 % a cell certified earlier is done and becomes a SEED for its neighbours;
@@ -176,12 +177,12 @@ while kc < size(cells, 1)                       % the list grows as improvements
     nb = [nbCol(oc, :); nbRow(orw, :)];
     nb = nb(1:min(end, maxSeeds), :);
     if isempty(nb)
-        rec(end+1) = cellRec(iD, iA, sD(iD), sA(iA), [], NaN, NaN, false, 'no certified neighbour', 0);
+        rec(end+1) = cellRec(iD, iA, sD(iD), sA(iA), [], NaN, NaN, false, 'no certified neighbour', 0, struct([]));
         lg('  cell (%2d,%2d) sD %.4f sA %.4f: no certified neighbour', iD, iA, sD(iD), sA(iA));
         continue
     end
     t0 = tic;  okCell = false;  reason = '';  tfD = NaN;  tfC = NaN;  seedUsed = [];
-    best = [];  reasons = {};  bestSeed = [];  bestSeedTf = NaN;  nRaced = 0;
+    best = [];  reasons = {};  bestSeed = [];  bestSeedTf = NaN;  nRaced = 0;  others = struct([]);
     if has(iD, iA), reasons{end+1} = sprintf('improve: cell holds %.3f d', tfnd(iD, iA)*tStar/86400); end
     for kn = 1:size(nb, 1)
         nD_ = nb(kn, 1);  nA_ = nb(kn, 2);  seedUsed = [sD(nD_), sA(nA_)];
@@ -197,9 +198,11 @@ while kc < size(cells, 1)                       % the list grows as improvements
             if ~C.ok && contains(C.reason, 'clearance floor')
                 reasons{end+1} = sprintf('%s (seed %.4f,%.4f)', C.reason, seedUsed);  continue
             end
+            others = keepCandidate(others, C);
             nRaced = nRaced + 1;
             if C.ok
                 if isempty(best) || C.tfDays < best.tfDays
+                    others = keepCandidate(others, best);
                     best = C;  tfC = C.tfDays;  bestSeed = seedUsed;  bestSeedTf = tfnd(nD_, nA_)*tStar/86400;
                 end
                 reasons{end+1} = sprintf('certified %.3f d (seed %.4f,%.4f)', C.tfDays, seedUsed);
@@ -211,7 +214,11 @@ while kc < size(cells, 1)                       % the list grows as improvements
         end
     end
     if ~isempty(best) && has(iD, iA) && best.z(8) >= tfnd(iD, iA)
-        reasons{end+1} = sprintf('not faster than the cell''s %.3f d', tfnd(iD, iA)*tStar/86400);  best = [];
+        reasons{end+1} = sprintf('not faster than the cell''s %.3f d', tfnd(iD, iA)*tStar/86400);
+        others = keepCandidate(others, best);  best = [];
+    end
+    if ~isempty(best) && ~isempty(others)      % the kept root is not an alternative to itself
+        others = others(~arrayfun(@(o) same_root(o.z, best.z), others));
     end
     if ~isempty(best)
         clause = sprintf('direct cell solve seeded from (%.4f, %.4f) %.3f d, %d seed(s) raced', bestSeed, bestSeedTf, nRaced);
@@ -234,7 +241,7 @@ while kc < size(cells, 1)                       % the list grows as improvements
     end
     reason = strjoin(reasons, ' | ');
     nTried = nTried + 1;  nCert = nCert + okCell;
-    rec(end+1) = cellRec(iD, iA, sD(iD), sA(iA), seedUsed, tfD, tfC, okCell, reason, toc(t0));
+    rec(end+1) = cellRec(iD, iA, sD(iD), sA(iA), seedUsed, tfD, tfC, okCell, reason, toc(t0), others);
     lg('  cell (%2d,%2d) sD %.4f sA %.4f: %s  direct %.3f d  cert %.3f d  %s  (%.0f s)', iD, iA, sD(iD), sA(iA), ...
        pick(okCell, 'CERTIFIED', 'no'), tfD, tfC, reason, toc(t0));
     tmp = [outFile '.part'];
@@ -293,10 +300,20 @@ else
 end
 end
 
-function r = cellRec(iD, iA, sDv, sAv, seed, tfD, tfC, ok, reason, wall)
-% CELLREC  One cell's record.  INPUTS: as named.  OUTPUTS: r struct.
+function r = cellRec(iD, iA, sDv, sAv, seed, tfD, tfC, ok, reason, wall, others)
+% CELLREC  One cell's record.  INPUTS: as named; others (struct array).  OUTPUTS: r struct.
 r = struct('iD', iD, 'iA', iA, 'sD', sDv, 'sA', sAv, 'seed', seed, 'tfDirect', tfD, ...
-           'tfCert', tfC, 'ok', ok, 'reason', reason, 'wall', wall);
+           'tfCert', tfC, 'ok', ok, 'reason', reason, 'wall', wall, 'others', {others});
+end
+
+function others = keepCandidate(others, C)
+% KEEPCANDIDATE  Keep a candidate the catalog may record as an alternative:
+% any certify_root result with status >= 1 (the packager filters the test
+% seam and the floor again; an identical z is kept once).  INPUTS: others (struct array); C.  OUTPUTS: others.
+if ~(isstruct(C) && isfield(C, 'status') && C.status >= 1), return, end
+% a result is pushed when first solved and again if the race displaces it: once is enough
+if ~isempty(others) && isfield(C, 'z') && any(arrayfun(@(o) isequal(o.z, C.z), others)), return, end
+others = append_point(others, C);
 end
 
 function v = pick(c, a, b)

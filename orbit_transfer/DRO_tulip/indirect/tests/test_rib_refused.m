@@ -8,7 +8,7 @@ function ok = test_rib_refused()
 % OUTPUTS: ok [logical]  every check passed (prints PASS/FAIL per check)
 
 ok = true;
-% nD = 48: the 1/12 and 1/24 steps out of the anchor fail the polish (status 0, nothing
+% nD = 48: the 1/12 and 1/24 steps out of the anchor fail the polish (status -1, below the floor: nothing
 % to keep -- see test_rib_from_crossing); the 1/48 step solves, so a forced
 % coarse FAIL is what refuses it (status 2).
 ot = fileparts(fileparts(fileparts(fileparts(mfilename('fullpath')))));
@@ -28,6 +28,16 @@ R = rib_from_crossing(C0, B, anc, struct('nD', 48, 'direction', -1, 'nPts', 1, '
                                          'walkPastConjugate', true));
 ok = chk(ok, isempty(R.pts) && strcmp(R.stop, 'complete') && numel(R.refused) == 1 && R.refused(1).walked ...
          && abs(R.refused(1).sD - 47/48) < 1e-9, 'walkPastConjugate: advances through the status-2 point and records it');
+
+% every status >= 1 refusal is kept, not only the conjugate ones
+pw = struct('pool', forced.pool, 'override', struct('PW', struct('Hmax', 1)));
+R = rib_from_crossing(C0, B, anc, struct('nD', 48, 'direction', -1, 'nPts', 1, 'maxBisect', 1, 'copts', pw));
+ok = chk(ok, isempty(R.pts) && numel(R.refused) >= 1 && all([R.refused.status] == 1), ...
+         sprintf('pointwise failure: kept as status 1 (%d refused)', numel(R.refused)));
+gt = struct('pool', forced.pool, 'override', struct('g', struct('dimS', 2)));
+R = rib_from_crossing(C0, B, anc, struct('nD', 48, 'direction', -1, 'nPts', 1, 'maxBisect', 1, 'copts', gt));
+ok = chk(ok, isempty(R.pts) && numel(R.refused) >= 1 && all([R.refused.status] == 3), ...
+         sprintf('late-gate failure, conjugate passes: kept as status 3 (%d refused)', numel(R.refused)));
 if ok, fprintf('test_rib_refused: ALL PASS\n'); else, fprintf('test_rib_refused: FAIL\n'); end
 end
 

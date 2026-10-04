@@ -71,6 +71,8 @@ bOld = rmfield(base, 'alternatives');  bOld.sheets = rmfield(bOld.sheets, {'stat
 dOld = rmfield(donor, 'alternatives');  dOld.sheets = rmfield(dOld.sheets, {'status', 'status_reason', 'junctions'});
 [Mo, io] = merge_phase_catalogs(bOld, dOld);
 ok = chk(ok, io.nFaster == 1 && io.nFilled == 1 && ~isfield(Mo, 'alternatives'), 'REVIEW FOCUS 2: catalogs without the layer merge as before');
+ok = chk(ok, refuses(base, dOld), 'refuses a layered base with an unlayered donor (no half-merge)');
+ok = chk(ok, refuses(bOld, donor), 'refuses an unlayered base with a layered donor (layer would be dropped)');
 
 % ---- refusals: not the same problem ----------------------------------------
 ok = chk(ok, refuses(base, setf(donor, 'thruster', struct('isp_s', 1710, 'm0_kg', 150))), 'refuses another engine');

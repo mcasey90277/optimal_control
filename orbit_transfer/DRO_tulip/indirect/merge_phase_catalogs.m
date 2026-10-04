@@ -90,6 +90,9 @@ for f = [gridF; entryF]'
     assert(isfield(sd, f{1}), 'merge_phase_catalogs:fields', 'the donor lacks %s: a taken cell would carry a stale value', f{1});
 end
 
+assert(~(isfield(sd, 'status') && ~isfield(sb, 'status')), 'merge_phase_catalogs:layer', ...
+       'the donor carries a status layer the base lacks: rebuild/backfill the base first');
+
 % ---- the shared cells ------------------------------------------------------
 onGrid = @(g, s) find(abs(mod(g - s + 0.5, 1) - 0.5) < 1e-8, 1);
 mapD = arrayfun(@(s) emptyToZero(onGrid(sb.sD_frac, s)), sd.sD_frac);

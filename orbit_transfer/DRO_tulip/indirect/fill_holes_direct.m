@@ -331,15 +331,9 @@ end
 
 % ------------------------------------------------------------------------
 function so = physicsFromCatalog(cat_, sh, sD1)
-% PHYSICSFROMCATALOG  The setup request for this catalog's problem: engine,
-% orbits and the spine's departure phase, CLOSURES ONLY. The filler needs
-% the endpoint closures and the propulsion constants, never an anchor; asking
-% for one made it re-polish the shipped 70 mN anchor, which fails for any
-% other engine, orbit pair or departure phase (FINDINGS 78).
-% INPUTS: cat_ (catalog struct); sh (its sheet); sD1 (spine departure phase).
-% OUTPUTS: so struct for arclength_arrival('setup', so).
-so = struct('thrustN', cat_.rungs_N(1), 'ispS', cat_.thruster.isp_s, 'm0kg', cat_.thruster.m0_kg, ...
-            'tauDRO', sh.tauDRO, 'NpTulip', sh.Np, 'pmTulip', sh.pm, 'sD', sD1, 'physicsOnly', true);
+% PHYSICSFROMCATALOG  Delegate: the request lives in catalog_setup_request.
+% INPUTS: cat_; sh (unused, read from cat_); sD1.  OUTPUTS: so.
+so = catalog_setup_request(cat_, sD1);
 end
 
 % ------------------------------------------------------------------------

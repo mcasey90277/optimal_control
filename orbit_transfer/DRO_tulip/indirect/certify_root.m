@@ -87,7 +87,7 @@ function C = certify_root(seed, rv0, rvf, B, opts)
 %   .pwOpts [struct()] .gatesOpts [struct()] forwarded to
 %   pmp_pointwise_checks / mintime_hypothesis_gates (the mutation test
 %   injects a wrong field through these),
-%   .override [struct()] TEST SEAM: fields .PW .g .LM .CS whose members
+%   .override [struct()] TEST SEAM: fields .conj .PW .g .LM .CS whose members
 %   overwrite the corresponding instrument outputs after they are computed,
 %   so each gate can be made the first failing one and fed malformed data.
 %   ANY override makes the result DIAGNOSTIC ONLY (C.ok false): a root
@@ -119,11 +119,45 @@ function C = certify_root(seed, rv0, rvf, B, opts)
 %                                                   .normR .wallSec
 %                                                   .flyKmWitness
 %                                                   .flyVmsWitness
+%                                                   .stage [0-8] last gate
+%                                                   group passed
+%                                                   .conjVerdict ('PASS' |
+%                                                   'FAIL' | 'UNDETERMINED'
+%                                                   | '') .conjFound
+%                                                   .conjReason
+%                                                   .hypAfterConj ('held' or
+%                                                   the failing gate's
+%                                                   reason) .overridden
+%                                                   .status .status_reason
+%                                                   (optimality_status)
+%
+%   A coarse conjugate FAIL is a finding, not a stop: the hypothesis gates
+%   and H6 still run "for the record" and the result returns after H6 (the
+%   dense scan is skipped); C.reason stays the conjugate reason.
 %
 %% Revision History:
 %  M. Casey                                                   (c) 09/09/2026
 %  Copyright Coorbital Inc.
 %% ------------------------ Begin Code Sequence ---------------------------
+if nargin < 5, opts = struct(); end
+C = certify_core(seed, rv0, rvf, B, opts);
+% THE STATUS, stamped on every result (spec 4). A coarse conjugate FAIL ran
+% the gates and H6 for the record: if they held the reason stays the
+% conjugate one; if one failed, that gate's reason moves to .hypAfterConj and
+% the conjugate reason comes back.
+if C.conjFound
+    if C.stage >= 7
+        C.hypAfterConj = 'held';
+    else
+        C.hypAfterConj = C.reason;  C.reason = C.conjReason;
+    end
+end
+[C.status, C.status_reason] = optimality_status(C);
+end
+
+function C = certify_core(seed, rv0, rvf, B, opts)
+% CERTIFY_CORE  The gate stack itself (the body certify_root always had).
+% INPUTS/OUTPUTS: as certify_root.
 
 if nargin < 5, opts = struct(); end
 d = @(f,v) fieldd(opts, f, v);
@@ -203,7 +237,9 @@ C = struct('ok', false, 'reason', '', 'note', '', 'z', nan(8,1), 'Y', [], 'tfDay
            'Hmax', NaN, 'lamMf', NaN, 'lamMfLoose', NaN, 'lamMfUnc', NaN, 'adjErr', NaN, 'dirGap', NaN, 'fullGap', NaN, ...
            'throttleErr', NaN, 'fieldErr', NaN, 'adjErrRef', NaN, 'nullResid', NaN, 'nullResidRel', NaN, ...
            'Hresid', NaN, 'liftMargin', NaN, 'conjDense', [], 'okDiagnostic', false, 'fullStack', false, ...
-           'minLamVEstimate', NaN, 'minQmtEstimate', NaN);   % EVERY field is born here: producers append certificates into
+           'minLamVEstimate', NaN, 'minQmtEstimate', NaN ...
+           , 'stage', 0, 'conjVerdict', '', 'conjFound', false, 'conjReason', '', 'hypAfterConj', '', ...
+           'overridden', ~isempty(fieldnames(ovr)), 'status', 0, 'status_reason', '');   % EVERY field is born here: producers append certificates into
                                                        % struct arrays, which MATLAB refuses across differing field sets
 
 % ---- 1. normal-chart polish + conjugate test ---------------------------
@@ -214,6 +250,7 @@ try
 catch ME
     C.reason = ['ms_tfmin threw: ' ME.message];  C.wallSec = toc(t0);  return
 end
+if isfield(it, 'conj') && isstruct(it.conj), it.conj = applyOverride(it.conj, ovr, 'conj'); end
 if ~okC
     C.reason = sprintf('polish exceeded its %g s cap (or the worker errored)', capPolish);
     C.wallSec = toc(t0);  return
@@ -237,6 +274,7 @@ if ~(okCv && cvFlag == 1 && nr <= tolR)
     end
 end
 C.z = z(:);  C.Y = it.Y;  C.tfDays = z(8)*tStar/86400;
+C.stage = 1;
 
 % ---- 2. flown arrival, position AND velocity ---------------------------
 [okF, tF, Yf] = fenced(pool, capFly, @pumpkyn.cr3bp.tfMinProp, 2, z(8), [rv0; 1; z(1:7)], B.Tnd, B.cnd, B.mu);
@@ -261,6 +299,7 @@ C.finalMassKg  = mf*m0kg;
 C.dvKms = B.cnd*log(1/mf)*lStar/tStar;
 if ~(C.flyKm < gateKm),   C.reason = sprintf('flown position miss %.1f km > %g', C.flyKm, gateKm);  C.wallSec = toc(t0); return, end
 if ~(C.flyVms < gateVms), C.reason = sprintf('flown velocity miss %.2f m/s > %g', C.flyVms, gateVms); C.wallSec = toc(t0); return, end
+C.stage = 2;
 
 % ---- 2b. pointwise Pontryagin checks on the flight ----------------------
 % THE POINTWISE CHECKS ARE MADE ON A TIGHTLY INTEGRATED FLIGHT, and the
@@ -299,6 +338,7 @@ if ~(C.throttleErr <= tolThrottle)
                        PW.throttleAccErr, PW.throttleMassErr, tolThrottle);
     C.wallSec = toc(t0);  return
 end
+C.stage = 3;
 
 % ---- 3. foreign witness ---------------------------------------------------
 try
@@ -336,14 +376,23 @@ if ~(C.flyKmWitness < gateKm && C.flyVmsWitness < gateVms)
     C.wallSec = toc(t0);  return
 end
 if ~(isfinite(C.dz) && C.dz <= tolDz), C.reason = sprintf('tfMin witness |dz| = %.2e > %g', C.dz, tolDz); C.wallSec = toc(t0); return, end
+C.stage = 4;
 
 % ---- 4. conjugate test ----------------------------------------------------
 if isfield(it, 'conj') && isfield(it.conj, 'pass')
     [okJ, jv] = scalar_verdict(it.conj.pass);
     if okJ, C.conj = jv; else, C.conj = -1; end
 end
+if isfield(it, 'conj') && isfield(it.conj, 'verdict'), C.conjVerdict = char(it.conj.verdict); end
 if ~(C.conj == 1)
-    C.reason = sprintf('conjugate test verdict %g', C.conj);  C.wallSec = toc(t0);  return
+    C.reason = sprintf('conjugate test verdict %g (%s)', C.conj, C.conjVerdict);
+    if ~strcmp(C.conjVerdict, 'FAIL'), C.wallSec = toc(t0);  return, end
+    % A FAIL IS A FINDING, NOT A STOP: a conjugate point refutes optimality
+    % only under the hypotheses the gates and H6 check, so they are run for
+    % the record and the result returns after H6 (spec 2, Mike 2026-10-04).
+    C.conjFound = true;  C.conjReason = C.reason;
+else
+    C.stage = 5;
 end
 
 % ---- 5. hypothesis gates --------------------------------------------------
@@ -435,6 +484,7 @@ if ~okL || ~certL
     if isfield(LM, 'reason') && ischar(LM.reason), why = LM.reason; else, why = 'certified flag malformed or false'; end
     C.reason = ['lift_margin: ' why];  C.wallSec = toc(t0);  return
 end
+C.stage = 6;
 
 % ---- 6. H6, enforced ----------------------------------------------------
 % The reduced instrument's determinant can vanish spuriously when
@@ -458,6 +508,8 @@ if ~(h6m > h6MarginMin)
                        h6m, h6MarginMin);
     C.wallSec = toc(t0);  return
 end
+C.stage = 7;
+if C.conjFound, C.wallSec = toc(t0);  return, end   % gates + H6 were for the record only
 
 % ---- 7. dense conjugate scan --------------------------------------------
 % The junction sign test cannot see two zeros inside one segment or an
@@ -497,13 +549,17 @@ if doSpectrum
                          'multiplicity', CS.multiplicity, 'clear', CS.clear, 'testable', CS.testable, ...
                          'minRel', CS.minRel, 'tUncovered', CS.tUncovered);
     if ~CS.clear
+        C.conjFound = (CS.nZero + CS.nInterior + CS.multiplicity) > 0;
+        if C.conjFound, C.conjReason = ''; end
         C.reason = sprintf(['dense conjugate scan not clear: %d coarse sign change(s), %d zero, ' ...
                             '%d UNRESOLVED, %d multiplicity (%d near-miss cleared)%s'], ...
                            CS.nInterior, CS.nZero, CS.nUnresolved, CS.multiplicity, CS.nNearMiss, ...
                            tern(CS.testable, '', '; NOT TESTABLE'));
+        if C.conjFound, C.conjReason = C.reason; end
         C.wallSec = toc(t0);  return
     end
     C.fullStack = true;
+    C.stage = 8;
 else
     % DIAGNOSTIC contract: the gates that ran passed, but this is not a
     % certification and must not be packaged as one

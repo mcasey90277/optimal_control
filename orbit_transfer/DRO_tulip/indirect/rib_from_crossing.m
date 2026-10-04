@@ -36,6 +36,11 @@ function R = rib_from_crossing(C0, B, anc, opts)
 %   heartbeat here. Without it a claim on a multi-hour column went stale
 %   after 30 minutes and could be reclaimed mid-walk (Astra 2026-09-13).
 %   .logFile ''
+%   .walkPastConjugate [false] when true a candidate that certify_root
+%   scores status 2 (necessary conditions hold, a conjugate point was found)
+%   ADVANCES the walk like a certified one; it is recorded in R.refused with
+%   .walked = true and never enters R.pts. Off: such a candidate is refused,
+%   bisected and (at maxBisect) stops the walk, as before.
 %
 %% Outputs:
 %
@@ -43,6 +48,14 @@ function R = rib_from_crossing(C0, B, anc, opts)
 %                                                   certify_root outputs,
 %                                                   certified only) .stop
 %                                                   .nSolve .sA .nD
+%                                                   .refused (struct array
+%                                                   of every non-ok
+%                                                   candidate with
+%                                                   status >= 1, the point
+%                                                   the walk stopped at
+%                                                   included, overridden
+%                                                   ones flagged; each with
+%                                                   .walked [logical])
 %
 %% Revision History:
 %  M. Casey                                                   (c) 09/09/2026
@@ -68,10 +81,11 @@ copts = d('copts', struct());  copts.wallSec = wallSec;  copts.sA = C0.sA;
 logFile = d('logFile', '');
 lg = @(varargin) logmsg(logFile, sprintf(varargin{:}));
 progress = d('progress', []);
+walkPast = d('walkPastConjugate', false);
 if isempty(progress), progress = @() []; end
 copts.progress = progress;                   % certify_root ticks it after every capped stage
 
-R = struct('pts', struct([]), 'stop', '', 'nSolve', 0, 'sA', C0.sA, 'nD', nD);
+R = struct('pts', struct([]), 'refused', struct([]), 'stop', '', 'nSolve', 0, 'sA', C0.sA, 'nD', nD);
 rvf = B.stateA(C0.sA);
 sD = anc.sD;  z = C0.z;  Y = C0.Y;  K = size(Y, 2);
 
@@ -87,6 +101,7 @@ if ~isempty(ckptFile)
     if ~isempty(Ck0)
         kStart = Ck0.k + 1;  sD = Ck0.sD;  z = Ck0.z;  Y = Ck0.Y;
         R.pts = Ck0.pts;  R.nSolve = Ck0.nSolve;
+        if isfield(Ck0, 'refused'), R.refused = Ck0.refused; end
         lg('  rib RESUMED at point %d of %d from %s (saved %s)', kStart, nPts, ckptFile, Ck0.saved);
         if kStart > nPts, R.stop = 'complete';  return, end
     elseif isfile(ckptFile)
@@ -111,7 +126,12 @@ for k = kStart:nPts
         Ct = certify_root(seed, rv0, rvf, B, copts);
         R.nSolve = R.nSolve + 1;
         try progress(); catch, end         % a beat that fails must not stop the walk
-        if Ct.ok
+        advance = Ct.ok || (walkPast && Ct.status == 2);
+        if ~Ct.ok && Ct.status >= 1               % KEEP what the walk refused (spec 5)
+            Ct.walked = advance;
+            R.refused = append_point(R.refused, Ct);
+        end
+        if advance
             cur = trial;  zc = Ct.z;  Yc = Ct.Y;  Ck = Ct;  nGood = nGood + 1;
             lg('  rib sD %.4f: t_f %.4f d, %s', mod(cur,1), Ct.tfDays, Ct.reason);
             if nGood >= 2 && abs(step) < 1/nD
@@ -129,12 +149,14 @@ for k = kStart:nPts
     end
     sD = mod(target, 1);  z = zc;  Y = Yc;
     Ck.sD = sD;
-    Ck.note = join_note(sprintf('rib step %d of %d from spine %.3f d at sA %.4f%s', k, nPts, C0.tfDays, C0.sA, ...
-                                tern(nHalved > 0, sprintf(', %d bisection(s)', nHalved), '')), Ck);
-    R.pts = append_point(R.pts, Ck);
+    if Ck.ok                           % only certified lattice points join R.pts
+        Ck.note = join_note(sprintf('rib step %d of %d from spine %.3f d at sA %.4f%s', k, nPts, C0.tfDays, C0.sA, ...
+                                    tern(nHalved > 0, sprintf(', %d bisection(s)', nHalved), '')), Ck);
+        R.pts = append_point(R.pts, Ck);
+    end
     if ~isempty(ckptFile)              % after every ACCEPTED point, atomically
         walk_checkpoint('save', ckptFile, struct('identity', ident, 'k', k, 'sD', sD, 'z', z, 'Y', Y, ...
-                                                  'pts', R.pts, 'nSolve', R.nSolve));
+                                                  'pts', R.pts, 'refused', R.refused, 'nSolve', R.nSolve));
     end
 end
 R.stop = 'complete';

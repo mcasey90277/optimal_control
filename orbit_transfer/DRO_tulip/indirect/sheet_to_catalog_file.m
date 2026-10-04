@@ -33,6 +33,8 @@ function Q = sheet_to_catalog_file(S, ribs, outMat, opts)
 %   .families [] a family_map output: every entry is then stamped with
 %   the code of the extremal family it belongs to (Q.FAM), and the map
 %   itself ships with the sheet (Q.families)
+%   .extraAlternatives [] make_alternative rows found elsewhere (e.g. the
+%   hole filler's) to add to the alternatives table
 %
 %% Outputs:
 %
@@ -45,6 +47,13 @@ function Q = sheet_to_catalog_file(S, ribs, outMat, opts)
 %                                                   .FAM (int8 family codes,
 %                                                   with .families) when a
 %                                                   map was given
+%                                                   .STATUS (int8, 0 = no
+%                                                   entry) .SREASON .JUNC
+%                                                   {nD x nA} each primary's
+%                                                   status, reason and
+%                                                   junctions [14 x K]
+%                                                   .ALT the alternatives
+%                                                   (dedup_alternatives)
 %                                                   .sD .sA .rungs .meta
 %
 %% Revision History:
@@ -118,6 +127,13 @@ end
 % THE ENTRY NOTES: how each entry was found and what the certifier remarked,
 % one short text per cell (the family's label in front when a map exists)
 Q.NOTE = repmat({''}, nD, nA);
+% THE STATUS LAYER (optimality-status spec 3): every primary's status and
+% reason and its junctions, and the ALTERNATIVES -- every other transfer the
+% builders found above the floor, deduplicated against the primaries.
+Q.STATUS = zeros(nD, nA, 1, 'int8');
+Q.SREASON = repmat({''}, nD, nA);
+Q.JUNC = cell(nD, nA);
+alts = d('extraAlternatives', []);
 
 % ---- the spine: the certified minimum at each arrival phase, at sD0 -----
 iD0 = idxOf(Q.sD, sD0);
@@ -131,6 +147,10 @@ for j = 1:nA
     c = S.cand{j};
     if isempty(c), continue, end
     k = find([c.ok] & abs([c.tfDays] - S.TF(j)) < 1e-9, 1);
+    for m = 1:numel(c)
+        if ~isempty(k) && m == k, continue, end
+        alts = [alts, make_alternative(c(m), sD0, S.sA(j), iD0, j, sprintf('sheet candidate, column %d', j))];
+    end
     if isempty(k), continue, end
     if ~usableEntry(c(k)), continue, end
     Q.OK(iD0, j, 1) = true;
@@ -140,6 +160,7 @@ for j = 1:nA
     code = 0;
     if ~isempty(F), Q.FAM(iD0, j, 1) = int8(F.columns(j).family);  code = Q.FAM(iD0, j, 1); end
     Q.NOTE{iD0, j} = noteOf(c(k), F, code);
+    Q = putStatus(Q, iD0, j, c(k));
 end
 
 % ---- the ribs: certified departure points off the spine ----------------
@@ -162,16 +183,38 @@ if nargin >= 2 && ~isempty(ribs)
             % keep the faster. Compared only AFTER usableEntry, because
             % `existingTF <= NaN` is false and an unusable point would
             % otherwise displace a good one.
-            if Q.OK(iD, iA, 1) && Q.TF(iD, iA, 1) <= Pt.z(8), continue, end
+            if Q.OK(iD, iA, 1) && Q.TF(iD, iA, 1) <= Pt.z(8)
+                alts = [alts, make_alternative(Pt, Pt.sD, Pt.sA, iD, iA, sprintf('rib point at sA %.4f, slower than the cell''s', R.sA))];
+                continue
+            end
+            if Q.OK(iD, iA, 1)                     % the displaced primary is kept as an alternative
+                alts = [alts, primaryAsAlternative(Q, iD, iA)];
+            end
             Q.OK(iD, iA, 1) = true;
             Q.TF(iD, iA, 1) = Pt.z(8);
             Q.Z8(:, iD, iA, 1) = Pt.z(:);
             Q = putVerdicts(Q, iD, iA, Pt);
             if ~isempty(F), Q.FAM(iD, iA, 1) = ribCode; end
             Q.NOTE{iD, iA} = noteOf(Pt, F, ribCode);
+            Q = putStatus(Q, iD, iA, Pt);
+        end
+        if isfield(R, 'refused')
+            for m = 1:numel(R.refused)
+                Rf = R.refused(m);
+                iD = idxOf(Q.sD, Rf.sD);  iA = idxOf(Q.sA, Rf.sA);
+                if isempty(iD), iD = 0; end
+                if isempty(iA), iA = 0; end
+                walked = 'walked: unrecorded';          % a refusal from an older walker
+                if isfield(Rf, 'walked') && ~isempty(Rf.walked), walked = sprintf('walked %d', Rf.walked); end
+                alts = [alts, make_alternative(Rf, Rf.sD, Rf.sA, iD, iA, sprintf('rib refusal at sA %.4f (%s)', R.sA, walked))];
+            end
         end
     end
 end
+
+% ---- the alternatives, deduplicated against the primaries ---------------
+view = struct('has_solution', Q.OK, 'entry_index', reshape(1:numel(Q.OK), size(Q.OK)), 'z8', reshape(Q.Z8, 8, []));
+Q.ALT = dedup_alternatives(alts, view);
 
 % ---- meta: what the packager reads -------------------------------------
 % THE PERIOD COMES FROM THE SHEET, not from a literal. Both fields used to
@@ -187,6 +230,26 @@ Q.meta = struct('muStar', P.muStar, 'lStar', lStar, 'tStar', tStar, ...
 Q.problem = P;                                 % identity ships with the sheet
 
 if ~isempty(outMat), save(outMat, '-struct', 'Q'); end
+end
+
+function Q = putStatus(Q, iD, iA, C)
+% PUTSTATUS  A primary's status, reason and junctions.  INPUTS: Q; iD; iA;
+% C (certify_root result; legacy results are classified).  OUTPUTS: Q.
+if isfield(C, 'status') && isfield(C, 'stage'), st = C.status;  why = C.status_reason;
+else, [st, why] = optimality_status(C); end
+Q.STATUS(iD, iA, 1) = int8(st);  Q.SREASON{iD, iA} = why;
+if isfield(C, 'Y'), Q.JUNC{iD, iA} = C.Y; end
+end
+
+function A = primaryAsAlternative(Q, iD, iA)
+% PRIMARYASALTERNATIVE  The current primary of a cell as an alternatives row
+% (it is being displaced by a faster root). flyKm = 0: the displaced primary
+% was certified, so its flight passed; the audit re-flies it.
+% INPUTS: Q; iD; iA.  OUTPUTS: A.
+C = struct('ok', true, 'stage', 8, 'status', double(Q.STATUS(iD, iA, 1)), 'status_reason', Q.SREASON{iD, iA}, ...
+           'z', Q.Z8(:, iD, iA, 1), 'Y', Q.JUNC{iD, iA}, 'flyKm', 0, 'flyVms', 0, 'conj', double(Q.CONJ(iD, iA, 1)), ...
+           'overridden', false, 'g', struct('minLamV', Q.MINLV(iD, iA, 1), 'minQmt', Q.MINQ(iD, iA, 1), 'dimS', Q.DIMS(iD, iA, 1)));
+A = make_alternative(C, Q.sD(iD), Q.sA(iA), iD, iA, 'displaced primary (packaging)');
 end
 
 function ok = usableEntry(C)

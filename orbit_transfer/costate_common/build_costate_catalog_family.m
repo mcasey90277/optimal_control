@@ -38,6 +38,10 @@ function cat_ = build_costate_catalog_family(catDir, outMat, spec)
 %   .provenance             char                    How it was made
 %   .depReconstruction      char                    Derive-string for the
 %                                                   departure orbit
+%   .statusKey              struct (optional)       The optimality-status
+%                                                   legend, shipped as
+%                                                   cat_.status_key when the
+%                                                   sheets carry a status
 %
 %% Outputs:
 %
@@ -94,6 +98,7 @@ for kf = 1:numel(files)
     z8 = zeros(8, nnz(Q.OK));
     idx = zeros(nD, nA, nR);
     notes = repmat({''}, 1, nnz(Q.OK));
+    reasons = repmat({''}, 1, nnz(Q.OK));  juncs = cell(1, nnz(Q.OK));
     hasNotes = isfield(Q, 'NOTE');
     n = 0;
     for iD = 1:nD
@@ -104,6 +109,8 @@ for kf = 1:numel(files)
                 z8(:,n) = Q.Z8(:,iD,iA,kr);
                 idx(iD,iA,kr) = n;
                 if hasNotes && kr == 1, notes{n} = Q.NOTE{iD, iA}; end
+                if isfield(Q, 'SREASON') && kr == 1, reasons{n} = Q.SREASON{iD, iA}; end
+                if isfield(Q, 'JUNC') && kr == 1, juncs{n} = Q.JUNC{iD, iA}; end
             end
         end
     end
@@ -151,6 +158,21 @@ for kf = 1:numel(files)
     % THE EXTREMAL FAMILY of each entry (family_map codes), when the sheet
     % file was built with a map; the map itself rides at the top level
     if isfield(Q, 'FAM'),   sheets(nS,1).family_index  = Q.FAM;    end
+    % THE OPTIMALITY STATUS of every primary (status grid, reason and
+    % junctions per entry, z8 column order) and the sheet's ALTERNATIVES,
+    % when the sheet file carries them. The legend comes from the caller
+    % (spec.statusKey): this library does not reach into a campaign.
+    if isfield(Q, 'STATUS')
+        sheets(nS,1).status        = Q.STATUS;
+        sheets(nS,1).status_reason = reasons;
+        sheets(nS,1).junctions     = juncs;
+        if isfield(spec, 'statusKey') && ~isfield(cat_, 'status_key'), cat_.status_key = spec.statusKey; end
+    end
+    if isfield(Q, 'ALT') && ~isempty(Q.ALT)
+        altK = Q.ALT;  [altK.sheet] = deal(nS);
+        if ~isfield(cat_, 'alternatives') || isempty(cat_.alternatives), cat_.alternatives = altK;
+        else, cat_.alternatives = [cat_.alternatives, altK]; end
+    end
     % THE ENTRY NOTES (one per solved entry, z8 column order): how it was
     % found, the certifier's remarks, the sweep's (appended at write-back)
     if hasNotes
@@ -179,6 +201,10 @@ assert(numel(unique({sheets.arr_family})) == 1, ...
 % order sheets by (departure period, arrival period) for human readability
 [~, ord] = sortrows([[sheets.tau_dep]', [sheets.tau_arr]']);
 cat_.sheets = sheets(ord);
+if isfield(cat_, 'alternatives')               % alternatives follow their sheet's new position
+    invOrd(ord) = 1:numel(ord);
+    for k = 1:numel(cat_.alternatives), cat_.alternatives(k).sheet = invOrd(cat_.alternatives(k).sheet); end
+end
 cat_.n_entries = nTot;
 if isfield(ob, 'env')
     cat_.env = ob.env;                         % environment pinning (v2)

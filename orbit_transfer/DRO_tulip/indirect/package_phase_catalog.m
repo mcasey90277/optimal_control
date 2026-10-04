@@ -27,6 +27,8 @@ function cat_ = package_phase_catalog(sheetMat, ribMats, opts)
 %   .familyLabels {anchor, label; ...} names for the extremal families
 %   the sheet's arcs traced; the map (family_map) is stamped into every
 %   entry and shipped at the catalog's top level. [] = no map.
+%   .extraAlternatives [] make_alternative rows to add to the catalog's
+%   alternatives table (passed through to sheet_to_catalog_file)
 %
 %% Outputs:
 %
@@ -97,7 +99,8 @@ cat_ = build_costate_catalog_family(sheetDir, fullfile(outDir, [name '.mat']), s
         'arclength_arrival), departure axis by the bisecting walker (rib_from_crossing); ' ...
         'assembled by sheet_from_arcs with the certified library as seeds; ' ...
         'FINDINGS 37-38, 2026-09-09.'], ...
-    'depReconstruction', 'DRO of period tau_dep, pumpkyn get_family_orbit(''dro'', tau)'));
+    'depReconstruction', 'DRO of period tau_dep, pumpkyn get_family_orbit(''dro'', tau)', ...
+    'statusKey', status_key()));
 end
 
 function assertSameProblem(a, b, src)

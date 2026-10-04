@@ -7,6 +7,11 @@
   ~2,000 km away (26x the spine's amplification); interpolate the
   neighbours' ms junction states instead, rescore the rib (44% covered) and
   the spine (87%).
+- [ ] **Investigate the conjugate point at s_D ~0.17** (Mike 2026-10-04: conjugate
+  points along a candidate optimum warrant investigation). The rib at s_A
+  0.2837 stopped on a conjugate ZERO at s_D 0.1717 (FINDINGS 96); the 24 x 48
+  ribs on columns 14-16 stalled at 0.164-0.172 the same way. Is it one curve
+  on the torus? What root holds the other side, and do the branches fold?
 - [x] **Measured the departure axis** -- DONE 2026-10-03 (FINDINGS 96-97): one rib at 96 departure phases on one
   arrival column, wrapped as a one-column catalog, scored with
   `score_interpolator` (the arrival axis is done: 1/96 gives 87% usable).

@@ -17,10 +17,13 @@ cert = @(z1, tf, sD, sA) struct('ok', true, 'status', 4, 'status_reason', 'full 
         'flyKm', 0.1, 'flyVms', 0.01, 'reason', 'certified', 'note', '', 'conj', 1, 'conjVerdict', 'PASS', ...
         'g', struct('minLamV', 1, 'minQmt', 1, 'dimS', 1), 'h6Margin', 5, 'liftMargin', 30, 'overridden', false);
 ref = @(C, st) setf(C, 'ok', false, 'status', st, 'status_reason', sprintf('status %d', st), 'reason', 'x');
-S = struct('problem', P, 'sA', [0.25 0.75], 'TF', [NaN NaN]);
+S = struct('problem', P, 'sA', [0.25 0.75 0.5], 'TF', [NaN NaN NaN]);
 c1 = [cert(1, 4.0, 0, 0.25), ref(cert(2, 4.5, 0, 0.25), 2), ref(setf(cert(3, 4.6, 0, 0.25), 'flyKm', 900), 3)];
 c2 = [cert(4, 4.2, 0, 0.75), setf(ref(cert(5, 4.3, 0, 0.75), 3), 'overridden', true)];
-S.cand = {c1, c2};  S.TF = [c1(1).tfDays, c2(1).tfDays];
+% column 3 has NO certified winner (S.TF NaN): its refusals above the floor
+% (status 2 and 3) must still reach the alternatives table
+c3 = [ref(cert(9, 4.7, 0, 0.5), 2), ref(cert(10, 4.8, 0, 0.5), 3)];
+S.cand = {c1, c2, c3};  S.TF = [c1(1).tfDays, c2(1).tfDays, NaN];
 rib = struct('sA', 0.25, 'pts', [cert(6, 4.1, 0.5, 0.25)], 'refused', [ref(cert(7, 4.4, 0.5, 0.25), 1)], 'stop', 'complete');
 % rib2 also refuses a TWIN of its own primary (8) and a REPEAT of rib1's
 % refusal (7): both must be deduplicated away (mutation check: without
@@ -35,13 +38,16 @@ R = rib2;  save(fullfile(tmp, 'rib2.mat'), 'R', 'problem');
 c = package_phase_catalog(fullfile(tmp, 'sheet.mat'), {fullfile(tmp, 'rib1.mat'), fullfile(tmp, 'rib2.mat')}, ...
         struct('nD', 2, 'outDir', tmp, 'name', 'cat_test', 'thrustN', P.thrustN, 'ispS', P.ispS, 'm0kg', P.m0kg));
 sh = c.sheets(1);
-ok = chk(ok, isequal(sh.status, int8([4 4; 4 0])) && numel(sh.junctions) == 3 && numel(sh.status_reason) == 3, ...
+ok = chk(ok, isequal(sh.status, int8([4 4 0; 4 0 0])) && numel(sh.junctions) == 3 && numel(sh.status_reason) == 3, ...
          'primaries: status 4 grid, junctions and reasons per entry');
 k = sh.entry_index(2, 1);
 ok = chk(ok, sh.z8(1, k) == 8 && isequal(sh.junctions{k}, 8*ones(14, 24)), 'the faster rib point is the primary and carries its junctions');
 A = c.alternatives;  firsts = arrayfun(@(a) a.z8(1), A);
-ok = chk(ok, isequal(sort(firsts), [2 6 7]), sprintf('alternatives: sheet refusal (2), rib refusal (7), the slower certified rib point (6); twin (8) and repeat (7) deduplicated -- got %s', mat2str(sort(firsts))));
+ok = chk(ok, isequal(sort(firsts), [2 6 7 9 10]), sprintf('alternatives: sheet refusal (2), rib refusal (7), the slower certified rib point (6), the winnerless column''s refusals (9, 10); twin (8) and repeat (7) deduplicated -- got %s', mat2str(sort(firsts))));
 ok = chk(ok, ~any(firsts == 3) && ~any(firsts == 5), 'below the floor (3) and overridden (5) are not recorded');
+w = A(firsts == 9 | firsts == 10);
+ok = chk(ok, numel(w) == 2 && all([w.iD] == 1) && all([w.iA] == 3) && isequal(sort([w.status]), [2 3]), ...
+         'a column with no certified winner still records its candidates (iD = spine row, iA = that column)');
 ok = chk(ok, isfield(c, 'status_key') && isequal(c.status_key.codes, [4 3 2 1 0 -1]), 'the legend ships in the catalog');
 rmdir(tmp, 's');
 if ok, fprintf('test_package_status: ALL PASS\n'); else, fprintf('test_package_status: FAIL\n'); end

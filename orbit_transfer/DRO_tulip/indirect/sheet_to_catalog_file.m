@@ -139,20 +139,32 @@ alts = d('extraAlternatives', []);
 iD0 = idxOf(Q.sD, sD0);
 assert(~isempty(iD0), 'the certified departure phase %.6f is not on the %d-point grid', sD0, nD);
 for j = 1:nA
-    if ~isfinite(S.TF(j)), continue, end
-    % EXPORT FROM THE CERTIFICATE, not from the summary. A finite S.TF is a
-    % summary claim; without the certificate behind it there is nothing to
-    % ship, and t_f is taken from the certificate's own z(8) so the two
-    % representations cannot disagree.
-    c = S.cand{j};
+    % THE ALTERNATIVES FIRST, for every column that has candidates -- also
+    % the columns with no certified winner, which is exactly where the
+    % non-optimal transfers live. The winner k is [] when S.TF(j) is NaN or
+    % no candidate matches it.
+    c = [];
+    if isfield(S, 'cand') && iscell(S.cand) && j <= numel(S.cand), c = S.cand{j}; end
     if isempty(c), continue, end
-    k = find([c.ok] & abs([c.tfDays] - S.TF(j)) < 1e-9, 1);
+    k = [];
+    if isfinite(S.TF(j)), k = find([c.ok] & abs([c.tfDays] - S.TF(j)) < 1e-9, 1); end
     for m = 1:numel(c)
         if ~isempty(k) && m == k, continue, end
         alts = [alts, make_alternative(c(m), sD0, S.sA(j), iD0, j, sprintf('sheet candidate, column %d', j))];
     end
+    % EXPORT FROM THE CERTIFICATE, not from the summary. A finite S.TF is a
+    % summary claim; without the certificate behind it there is nothing to
+    % ship, and t_f is taken from the certificate's own z(8) so the two
+    % representations cannot disagree.
     if isempty(k), continue, end
-    if ~usableEntry(c(k)), continue, end
+    if ~usableEntry(c(k))
+        % not shippable as the primary; make_alternative applies the floor,
+        % and a candidate without a finite 8-vector is not a transfer at all
+        if hasFiniteZ(c(k))
+            alts = [alts, make_alternative(c(k), sD0, S.sA(j), iD0, j, sprintf('sheet winner unusable as primary, column %d', j))];
+        end
+        continue
+    end
     Q.OK(iD0, j, 1) = true;
     Q.TF(iD0, j, 1) = c(k).z(8);
     Q.Z8(:, iD0, j, 1) = c(k).z(:);
@@ -213,8 +225,8 @@ if nargin >= 2 && ~isempty(ribs)
 end
 
 % ---- the alternatives, deduplicated against the primaries ---------------
-view = struct('has_solution', Q.OK, 'entry_index', reshape(1:numel(Q.OK), size(Q.OK)), 'z8', reshape(Q.Z8, 8, []));
-Q.ALT = dedup_alternatives(alts, view);
+sheetView = struct('has_solution', Q.OK, 'entry_index', reshape(1:numel(Q.OK), size(Q.OK)), 'z8', reshape(Q.Z8, 8, []));
+Q.ALT = dedup_alternatives(alts, sheetView);
 
 % ---- meta: what the packager reads -------------------------------------
 % THE PERIOD COMES FROM THE SHEET, not from a literal. Both fields used to
@@ -250,6 +262,12 @@ C = struct('ok', true, 'stage', 8, 'status', double(Q.STATUS(iD, iA, 1)), 'statu
            'z', Q.Z8(:, iD, iA, 1), 'Y', Q.JUNC{iD, iA}, 'flyKm', 0, 'flyVms', 0, 'conj', double(Q.CONJ(iD, iA, 1)), ...
            'overridden', false, 'g', struct('minLamV', Q.MINLV(iD, iA, 1), 'minQmt', Q.MINQ(iD, iA, 1), 'dimS', Q.DIMS(iD, iA, 1)));
 A = make_alternative(C, Q.sD(iD), Q.sA(iA), iD, iA, 'displaced primary (packaging)');
+end
+
+function ok = hasFiniteZ(C)
+% HASFINITEZ  The result carries a real finite 8-vector z.  INPUTS: C.
+% OUTPUTS: ok.
+ok = isfield(C, 'z') && isnumeric(C.z) && numel(C.z) == 8 && isreal(C.z) && all(isfinite(C.z(:)));
 end
 
 function ok = usableEntry(C)

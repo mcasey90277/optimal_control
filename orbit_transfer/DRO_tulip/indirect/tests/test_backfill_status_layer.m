@@ -11,7 +11,7 @@ ok = true;
 here = fileparts(fileparts(mfilename('fullpath')));
 addpath(here, fullfile(fileparts(fileparts(here)), 'costate_common'));
 L = load(fullfile(here, 'results', 'library_70mN_24x24_final', 'costate_catalog_dro_tulip_70mN.mat'));  rec = L.(char(fieldnames(L)));
-sh = rec.sheets(1);  k11 = sh.entry_index(1, 1);  k12 = sh.entry_index(1, 2);
+sh = rec.sheets(1);  k11 = sh.entry_index(1, 1);  k12 = sh.entry_index(1, 2);  k13 = sh.entry_index(1, 3);
 tmp = tempname;  mkdir(tmp);
 catalog = rec;  recMat = fullfile(tmp, 'record.mat');  save(recMat, 'catalog');
 legacy = @(z, reason, ok_) struct('ok', ok_, 'z', z, 'Y', z(1)*ones(14, 24), 'flyKm', 0.1, 'flyVms', 0.01, 'reason', reason, ...
@@ -31,25 +31,46 @@ R = struct('sA', sh.sA_frac(2), 'pts', {pt, pt, pt}, ...
            'stop', {['stalled at sD = 0.1720 stepping to 0.1719' conjStop], ['stalled at sD = 0.1717 stepping to 0.1716' conjStop], ...
                     'stalled at sD = 0.5000 stepping to 0.4900: normal-chart polish did not converge (|R| = 3.9e-05)'});
 save(fullfile(tmp, 'ribs.mat'), 'R');
-H = backfill_status_layer('harvest', recMat, {fullfile(tmp, 'sheet.mat'), fullfile(tmp, 'ribs.mat')}, tmp);
+% the (1,3) primary's root, certified at the NEIGHBOURING departure phase:
+% another transfer, which must not donate its junctions to (1,3)
+S = struct('problem', struct('sD', sh.sD_frac(2)), 'sA', sh.sA_frac(3), 'TF', 1, ...
+           'cand', {{legacy(sh.z8(:, k13), 'certified', true)}});
+save(fullfile(tmp, 'sheetN.mat'), 'S');
+src = {fullfile(tmp, 'sheet.mat'), fullfile(tmp, 'ribs.mat'), fullfile(tmp, 'sheetN.mat')};
+H = backfill_status_layer('harvest', recMat, src, tmp);
+ok = chk(ok, isempty(H.primJ{k13}), 'the same root at a neighbouring phase does not donate junctions');
 ok = chk(ok, numel(H.stops) == 1 && H.stops(1).sDto == 0.1716 && isequal(H.stops(1).z, sh.z8(:, k12)), ...
          'one stop per conjugate stall (the shortest step kept); a polish-failure stall is no stop');
 ok = chk(ok, isequal(H.primJ{k11}, sh.z8(1, k11)*ones(14, 24)) && isequal(H.primJ{k12}, sh.z8(1, k12)*ones(14, 24)), ...
          'primaries get their junctions by root');
 ok = chk(ok, numel(H.needRecert) == 1 && same_root(H.cands(H.needRecert).z, zAlt), 'the legacy verdict-0 candidate is listed for re-certification');
-ok = chk(ok, numel(H.unmatched) == nnz(sh.has_solution) - 2, 'every other primary is listed as unmatched (needs a re-polish)');
+ok = chk(ok, numel(H.unmatched) == nnz(sh.has_solution) - 2 && ismember(k13, H.unmatched), 'every other primary is listed as unmatched (needs a re-polish)');
 % a fake re-certification: the verdict-0 candidate is a real FAIL with hypotheses held
 Cr = H.cands(H.needRecert);  Cr.stage = 7;  Cr.status = 2;  Cr.status_reason = 'conjugate point found (gates and H6 held): x';
 Cr.conjFound = true;  Cr.hypAfterConj = 'held';  Cr.overridden = false;
 items = struct('kind', 'cand', 'index', H.needRecert, 'C', Cr, 'moved', false);
-save(fullfile(tmp, 'recert_1.mat'), 'items');
+harvestKey = H.harvestKey;
+save(fullfile(tmp, 'recert_1.mat'), 'items', 'harvestKey');
 threw = '';
 try, backfill_status_layer('assemble', recMat, tmp); catch ME, threw = ME.identifier; end
 ok = chk(ok, strcmp(threw, 'backfill_status_layer:unmatched'), 'assemble refuses while primaries lack junctions');
 c2 = backfill_status_layer('assemble', recMat, tmp, struct('allowUnmatched', true));
 ok = chk(ok, strcmp(catalog_content_key(c2), catalog_content_key(rec)), 'primaries bit-identical (content key)');
-ok = chk(ok, numel(c2.alternatives) == 1 && c2.alternatives.status == 2 && ~c2.alternatives.inferred, ...
+a = c2.alternatives;  ka = find(arrayfun(@(r) same_root(r.z8, zAlt), a));
+ok = chk(ok, numel(a) == 2 && isscalar(ka) && a(ka).status == 2 && ~a(ka).inferred, ...
          'the alternative carries the re-certified status, not the inferred one');
+ok = chk(ok, any(arrayfun(@(r) r.iD == 2 && r.iA == 3 && same_root(r.z8, sh.z8(:, k13)), a)), ...
+         'the neighbouring-phase root is an alternative of its own cell');
+% a recert file made against another harvest is refused, and so is a re-harvest over recert files
+harvestKey = repmat('0', 1, 32);
+save(fullfile(tmp, 'recert_2.mat'), 'items', 'harvestKey');
+threw = '';
+try, backfill_status_layer('assemble', recMat, tmp, struct('allowUnmatched', true)); catch ME, threw = ME.identifier; end
+ok = chk(ok, strcmp(threw, 'backfill_status_layer:harvestKey'), 'assemble refuses a recert file of another harvest');
+delete(fullfile(tmp, 'recert_2.mat'));
+threw = '';
+try, backfill_status_layer('harvest', recMat, src, tmp); catch ME, threw = ME.identifier; end
+ok = chk(ok, strcmp(threw, 'backfill_status_layer:staleRecert'), 'harvest refuses while recert files sit in outDir');
 ok = chk(ok, all(c2.sheets(1).status(sh.has_solution) == 4), 'every primary is status 4');
 rmdir(tmp, 's');
 if ok, fprintf('test_backfill_status_layer: ALL PASS\n'); else, fprintf('test_backfill_status_layer: FAIL\n'); end

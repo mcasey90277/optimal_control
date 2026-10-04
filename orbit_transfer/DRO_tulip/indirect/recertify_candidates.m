@@ -24,6 +24,9 @@ function items = recertify_candidates(harvestMat, chunk, nChunk, outMat, opts)
 %   candidate's z, 'prim': the entry's z8). A moved primary is recorded and
 %   never written (assemble refuses to use it); 'stop' is a new solve and
 %   never moved.
+% • The harvest key (backfill_status_layer 'key') is checked against
+%   harvest.mat, stamped into outMat, and a resume refuses an outMat made
+%   against another harvest (recertify_candidates:harvestKey).
 % • Saves atomically: <outMat>.part then movefile. One log line per item in
 %   <outMat>.log.
 % • The fence: certify_root gets opts.pool (default capped_pool(1)); with no
@@ -60,6 +63,9 @@ function items = recertify_candidates(harvestMat, chunk, nChunk, outMat, opts)
 
 if nargin < 5, opts = struct(); end
 H = load(harvestMat);
+key = backfill_status_layer('key', H);
+assert(isfield(H, 'harvestKey') && strcmp(H.harvestKey, key), 'recertify_candidates:harvestKey', ...
+       '%s does not match its own stamped key: rebuild it', harvestMat);
 certifier = fieldd(opts, 'certifier', @certify_root);
 K = fieldd(opts, 'K', 24);
 allowUnfenced = isfield(opts, 'allowUnfenced') && isequal(opts.allowUnfenced, true);
@@ -84,7 +90,15 @@ mine = chunk:nChunk:numel(kinds);
 
 % ---- resume ----------------------------------------------------------------------
 items = struct('kind', {}, 'index', {}, 'C', {}, 'moved', {}, 'err', {});
-if isfile(outMat), R = load(outMat);  items = R.items; end
+if isfile(outMat)
+    R = load(outMat);
+    if ~(isfield(R, 'harvestKey') && strcmp(R.harvestKey, key))
+        error('recertify_candidates:harvestKey', ['%s was made against another harvest (key mismatch): its indices ' ...
+              'do not address these candidates; move it away'], outMat);
+    end
+    items = R.items;
+end
+harvestKey = key;
 logF = [outMat '.log'];
 
 for q = mine
@@ -118,7 +132,7 @@ for q = mine
     it = struct('kind', kind, 'index', index, 'C', C, 'moved', moved, 'err', err);
     if isempty(at), items(end+1) = it; else, items(at) = it; end
     part = [outMat '.part'];
-    save(part, 'items', '-mat');  movefile(part, outMat, 'f');
+    save(part, 'items', 'harvestKey', '-mat');  movefile(part, outMat, 'f');
     fid = fopen(logF, 'a');
     fprintf(fid, '%s %s %d at (%.6f, %.6f): %s | %.0f s\n', char(datetime('now', 'Format', 'HH:mm:ss')), kind, index, ...
             sD, sA, verdict(C, moved, err), toc(t0));

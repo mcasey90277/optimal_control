@@ -25,7 +25,9 @@ stops = struct('sA', 0.75, 'sDfrom', 0.5, 'sDto', 0.49, 'z', z1, 'Y', ones(14, 2
 unmatched = [5 7];
 unmatchedInfo = struct('k', {5, 7}, 'sD', {0.125, 0.375}, 'sA', {0.25, 0.5}, 'z8', {zp5, zp7});
 harvestMat = fullfile(tmp, 'harvest.mat');
-save(harvestMat, 'cands', 'needRecert', 'stops', 'unmatched', 'unmatchedInfo');
+harvestKey = backfill_status_layer('key', struct('cands', {cands}, 'needRecert', needRecert, 'stops', {stops}, ...
+                                                 'unmatched', unmatched, 'unmatchedInfo', {unmatchedInfo}));
+save(harvestMat, 'cands', 'needRecert', 'stops', 'unmatched', 'unmatchedInfo', 'harvestKey');
 
 B = struct('stateD', @(s) [s; 0; 0; 0; 0; 0], 'stateA', @(s) [0; s; 0; 0; 0; 0], 'Tnd', 1, 'cnd', 1, 'mu', 0.01);
 seeder = @(z8, rv0, K) struct('tf', z8(8), 'tGrid', linspace(0, z8(8), K + 1), 'Y', repmat([rv0(:); 1; z8(1:7)], 1, K + 1));
@@ -66,6 +68,12 @@ ok = chk(ok, nCalls(callLog) == n0 + 1 && numel(it) == 2 && isempty(it(1).err) &
          'the re-run retries only the item that threw, replacing it');
 lines = splitlines(strtrim(fileread([out2 '.log'])));
 ok = chk(ok, numel(lines) == 3, 'one log line per item certified');
+% a chunk file of ANOTHER harvest is refused on resume
+L = load(out1);  items = L.items;  harvestKey = repmat('0', 1, 32);  save(out1, 'items', 'harvestKey');
+threw = '';
+try, recertify_candidates(harvestMat, 1, 2, out1, o); catch ME, threw = ME.identifier; end
+ok = chk(ok, strcmp(threw, 'recertify_candidates:harvestKey') && nCalls(callLog) == n0 + 1, ...
+         'a resume refuses a chunk file made against another harvest');
 ok = chk(ok, ~isfile([out1 '.part']) && ~isfile([out2 '.part']), 'no partial file left behind');
 rmdir(tmp, 's');
 if ok, fprintf('test_recertify_candidates: ALL PASS\n'); else, fprintf('test_recertify_candidates: FAIL\n'); end

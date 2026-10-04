@@ -38,6 +38,19 @@ function out = backfill_status_layer(mode, recordMat, varargin)
 %   yields no stop. Stalls at the same arrival phase whose targets agree to
 %   1e-3 are one stop (two builds walked the same rib): the shortest step
 %   from its seed is kept.
+% • Junctions are donated to a primary only by a candidate AT its cell
+%   (sD, sA within 1e-8, circular) that is same_root: junctions carry the
+%   endpoint states, so the same costates at a neighbouring phase are
+%   another transfer.
+% • THE HARVEST KEY (MD5 of the candidates' z8 and phases, the stops, the
+%   unmatched primaries and the work list, in order) binds the indices:
+%   harvest.mat and every recert_*.mat carry it; recertify_candidates
+%   (resume) and assemble refuse a mismatch, and harvest refuses to run
+%   while recert_*.mat files sit in outDir.
+% • assemble reads each (kind, index) once across recert files (an overlap:
+%   last file wins, logged and counted). A re-certified result replaces
+%   EVERY legacy copy of its (phases, root) -- e.g. the 24 x 24 build's
+%   copy of a 24 x 48 candidate -- so dedup order is not load-bearing.
 % • assemble: a re-certified candidate REPLACES its legacy record unless
 %   the re-certification moved to another root -- then the legacy record
 %   stays (status inferred) and the new root enters as its own row (spec 7:
@@ -50,7 +63,9 @@ function out = backfill_status_layer(mode, recordMat, varargin)
 %
 %% Inputs:
 %
-%  mode                     char                    'harvest' | 'assemble'
+%  mode                     char                    'harvest' | 'assemble' |
+%                                                   'key' (second argument:
+%                                                   a harvest struct)
 %  recordMat                char                    the library of record (.mat,
 %                                                   one variable, one sheet)
 %  'harvest':  sources      cell {1 x n} char       source .mat files
@@ -67,7 +82,9 @@ function out = backfill_status_layer(mode, recordMat, varargin)
 %                                                   .stops .unmatched
 %                                                   .unmatchedInfo .nBySource
 %                                                   .sources .recordMat
+%                                                   .harvestKey
 %                                                   'assemble': the v2 catalog
+%                                                   'key': char [1 x 32]
 %
 %% Revision History:
 %  M. Casey                                                   (c) 10/04/2026
@@ -80,8 +97,10 @@ switch mode
     case 'assemble'
         opts = struct();  if numel(varargin) >= 2, opts = varargin{2}; end
         out = assemble(recordMat, varargin{1}, opts);
+    case 'key'                                 % backfill_status_layer('key', H): the harvest key
+        out = harvestKey(recordMat);
     otherwise
-        error('backfill_status_layer:mode', 'mode must be ''harvest'' or ''assemble'', got ''%s''', mode);
+        error('backfill_status_layer:mode', 'mode must be ''harvest'', ''assemble'' or ''key'', got ''%s''', mode);
 end
 end
 
@@ -92,6 +111,11 @@ function H = harvest(recordMat, sources, outDir)
 % OUTPUTS: H [struct] what harvest.mat holds.
 c = loadCatalog(recordMat);  sh = c.sheets(1);
 if ischar(sources), sources = {sources}; end
+old = dir(fullfile(outDir, 'recert_*.mat'));
+if ~isempty(old)
+    error('backfill_status_layer:staleRecert', ['%s holds %d recert_*.mat file(s) indexed against an earlier ' ...
+          'harvest: move them away before harvesting again'], outDir, numel(old));
+end
 cl = {};  stops = struct('sA', {}, 'sDfrom', {}, 'sDto', {}, 'z', {}, 'Y', {}, 'why', {}, 'source', {});
 nBySource = zeros(1, numel(sources));
 for ks = 1:numel(sources)
@@ -105,16 +129,19 @@ stops = dedupStops(stops);
 
 % ---- junctions for the primaries, by root -------------------------------------
 nE = size(sh.z8, 2);  primJ = cell(1, nE);
-Zc = nan(8, numel(cl));  hasY = false(1, numel(cl));
+Zc = nan(8, numel(cl));  hasY = false(1, numel(cl));  sDc = nan(1, numel(cl));  sAc = sDc;
 for m = 1:numel(cl)
-    Zc(:, m) = cl{m}.z(:);
+    Zc(:, m) = cl{m}.z(:);  sDc(m) = cl{m}.sD;  sAc(m) = cl{m}.sA;
     hasY(m) = isfield(cl{m}, 'Y') && ~isempty(cl{m}.Y);
 end
+onCell = @(a, b) abs(mod(a - b + 0.5, 1) - 0.5) < 1e-8;
 prim = primaryList(sh);
 for q = 1:numel(prim)
     k = prim(q).k;  z8 = sh.z8(:, k);
-    % prefilter on t_f (cheap), then the library's rule decides
-    near = find(hasY & abs(Zc(8, :) - z8(8)) <= 1e-6*abs(z8(8)));
+    % only a candidate AT the primary's cell may donate junctions (junctions
+    % hold the endpoint states: the same root at a neighbouring phase is
+    % another transfer); prefilter on t_f, then the library's rule decides
+    near = find(hasY & onCell(sDc, prim(q).sD) & onCell(sAc, prim(q).sA) & abs(Zc(8, :) - z8(8)) <= 1e-6*abs(z8(8)));
     for m = near
         if same_root(Zc(:, m), z8), primJ{k} = cl{m}.Y;  break, end
     end
@@ -140,6 +167,7 @@ end
 H = struct('needRecert', needRecert, 'unmatched', unmatched, 'nBySource', nBySource, ...
            'recordMat', recordMat);
 H.cands = cands;  H.primJ = primJ;  H.stops = stops;  H.unmatchedInfo = unmatchedInfo;  H.sources = sources;
+H.harvestKey = harvestKey(H);
 if ~isfolder(outDir), mkdir(outDir); end
 save(fullfile(outDir, 'harvest.mat'), '-struct', 'H');     % v7: v7.3 writes one HDF5 object per field per candidate
 end
@@ -152,39 +180,72 @@ function c2 = assemble(recordMat, outDir, opts)
 allowUnmatched = isfield(opts, 'allowUnmatched') && isequal(opts.allowUnmatched, true);
 [c, vn] = loadCatalog(recordMat);  sh = c.sheets(1);
 H = load(fullfile(outDir, 'harvest.mat'));
+key = harvestKey(H);
+assert(isfield(H, 'harvestKey') && strcmp(H.harvestKey, key), 'backfill_status_layer:harvestKey', ...
+       'harvest.mat does not match its own stamped key: rebuild it');
 cl = num2cell(H.cands);
 stops = struct([]);  if isfield(H, 'stops'), stops = H.stops; end
 primJ = H.primJ;
 extra = {};  nRecert = 0;  nMoved = 0;  movedPrim = [];  primNot4 = [];  nErr = 0;
 
 % ---- the re-certifications ---------------------------------------------------
+% one item per (kind, index) across files; files are bound to this harvest
 files = dir(fullfile(outDir, 'recert_*.mat'));
+allItems = {};  ids = {};  nOverlap = 0;
 for kf = 1:numel(files)
     R = load(fullfile(outDir, files(kf).name));
+    if ~(isfield(R, 'harvestKey') && strcmp(R.harvestKey, key))
+        error('backfill_status_layer:harvestKey', ['%s was made against another harvest (key mismatch): its ' ...
+              'indices do not address these candidates'], files(kf).name);
+    end
     for it = R.items(:)'
-        if isfield(it, 'err') && ~isempty(it.err), nErr = nErr + 1;  continue, end
-        switch it.kind
-            case 'cand'
-                Cr = it.C;  Cr.sD = cl{it.index}.sD;  Cr.sA = cl{it.index}.sA;
-                if it.moved
-                    nMoved = nMoved + 1;
-                    Cr.source = [cl{it.index}.source ' -> re-certification moved to another root'];
-                    extra{end+1} = Cr;
-                else
-                    Cr.source = [cl{it.index}.source ' (re-certified)'];
-                    cl{it.index} = Cr;  nRecert = nRecert + 1;
-                end
-            case 'stop'
-                s = stops(it.index);  Cr = it.C;  Cr.sD = s.sDto;  Cr.sA = s.sA;
-                Cr.source = sprintf('%s stop at sD %.4f, re-solved from %.4f', s.source, s.sDto, s.sDfrom);
+        id = sprintf('%s:%d', it.kind, it.index);
+        at = find(strcmp(ids, id), 1);
+        if isempty(at), allItems{end+1} = it;  ids{end+1} = id;
+        else
+            nOverlap = nOverlap + 1;  allItems{at} = it;   % last write wins
+            fprintf('backfill_status_layer: %s re-certified in more than one file; %s wins\n', id, files(kf).name);
+        end
+    end
+end
+recertified = [];
+for q = 1:numel(allItems)
+    it = allItems{q};
+    if isfield(it, 'err') && ~isempty(it.err), nErr = nErr + 1;  continue, end
+    switch it.kind
+        case 'cand'
+            Cr = it.C;  Cr.sD = cl{it.index}.sD;  Cr.sA = cl{it.index}.sA;
+            if it.moved
+                nMoved = nMoved + 1;
+                Cr.source = [cl{it.index}.source ' -> re-certification moved to another root'];
                 extra{end+1} = Cr;
-            case 'prim'
-                if it.moved
-                    movedPrim(end+1) = it.index;
-                else
-                    primJ{it.index} = it.C.Y;
-                    if ~(isfield(it.C, 'status') && isequal(it.C.status, 4)), primNot4(end+1) = it.index; end
-                end
+            else
+                Cr.source = [cl{it.index}.source ' (re-certified)'];
+                cl{it.index} = Cr;  nRecert = nRecert + 1;  recertified(end+1) = it.index;
+            end
+        case 'stop'
+            s = stops(it.index);  Cr = it.C;  Cr.sD = s.sDto;  Cr.sA = s.sA;
+            Cr.source = sprintf('%s stop at sD %.4f, re-solved from %.4f', s.source, s.sDto, s.sDfrom);
+            extra{end+1} = Cr;
+        case 'prim'
+            if it.moved
+                movedPrim(end+1) = it.index;
+            else
+                primJ{it.index} = it.C.Y;
+                if ~(isfield(it.C, 'status') && isequal(it.C.status, 4)), primNot4(end+1) = it.index; end
+            end
+    end
+end
+% THE RE-CERTIFIED RESULT REPLACES EVERY COPY of its (phases, root): the
+% harvest listed one representative per (phases, root), and another build's
+% copy of the same legacy candidate must not survive dedup with the
+% inferred status (row order then does not matter)
+for q = recertified
+    for m = 1:numel(cl)
+        if m == q || ~(nearPhase(cl{m}.sD, cl{q}.sD) && nearPhase(cl{m}.sA, cl{q}.sA)), continue, end
+        if isfield(cl{m}, 'stage') && ~isempty(cl{m}.stage), continue, end      % already stamped
+        if same_root(cl{m}.z, H.cands(q).z)
+            Cr = cl{q};  Cr.source = [cl{m}.source ' (re-certified as ' H.cands(q).source ')'];  cl{m} = Cr;
         end
     end
 end
@@ -225,7 +286,8 @@ c2.status_key = status_key();
 c2.status_layer = struct('built', char(datetime('now', 'Format', 'yyyy-MM-dd')), 'recordMat', recordMat, ...
                          'sources', {H.sources}, 'nCandidates', numel(H.cands), 'nRecert', nRecert, ...
                          'nMoved', nMoved, 'movedPrimaries', movedPrim, 'primNot4', primNot4, ...
-                         'nRecertErrors', nErr, 'nStops', numel(stops), 'nUnmatched', numel(missing), ...
+                         'nRecertErrors', nErr, 'nRecertOverlap', nOverlap, 'nStops', numel(stops), ...
+                         'nUnmatched', numel(missing), 'harvestKey', key, ...
                          'note', ['status layer backfilled from candidates on disk (spec 6); primaries are the ' ...
                                   'record''s, bit-identical (catalog_content_key)']);
 kRec = catalog_content_key(c);  kNew = catalog_content_key(c2);
@@ -302,6 +364,10 @@ function [cl, kept] = addCand(cl, C, sD, sA, source)
 kept = false;
 if ~isstruct(C) || ~isfield(C, 'z'), return, end            % e.g. a rho refusal
 if optimality_status(C) < 1, return, end                     % below the floor
+if ~(isfinite(sD) && isfinite(sA))
+    fprintf('backfill_status_layer: skipped a candidate of %s without phases (sD %g, sA %g)\n', source, sD, sA);
+    return
+end
 C.sD = mod(sD, 1);  C.sA = mod(sA, 1);  C.source = source;
 cl{end+1} = C;  kept = true;
 end
@@ -321,6 +387,22 @@ code = optimality_status(struct('z', ones(8, 1), 'flyKm', 0, 'flyVms', 0, 'reaso
 if code < 2, return, end
 st = struct('sA', sA, 'sDfrom', last.sD, 'sDto', str2double(tok{2}), 'z', last.z(:), 'Y', last.Y, ...
             'why', tok{3}, 'source', tag);
+end
+
+function key = harvestKey(H)
+% HARVESTKEY  MD5 of what the re-certification indexes, in order: every
+% candidate's z8 and phases, every stop, every unmatched primary, the work
+% list. recert files carry it; resume and assemble refuse a mismatch.
+% INPUTS: H [struct] harvest.  OUTPUTS: key [char 1 x 32].
+md = java.security.MessageDigest.getInstance('MD5');
+put = @(kind, v) md.update([uint8(kind), typecast(double(v(:)'), 'uint8')]);
+for m = 1:numel(H.cands), put('c', [H.cands(m).z(:); H.cands(m).sD; H.cands(m).sA]); end
+for m = 1:numel(H.stops), s = H.stops(m);  put('s', [s.sA; s.sDfrom; s.sDto; s.z(:)]); end
+if isfield(H, 'unmatchedInfo')
+    for m = 1:numel(H.unmatchedInfo), p = H.unmatchedInfo(m);  put('p', [p.k; p.sD; p.sA; p.z8(:)]); end
+end
+put('n', H.needRecert);  put('u', H.unmatched);
+key = lower(reshape(dec2hex(typecast(md.digest(), 'uint8'), 2).', 1, []));
 end
 
 function st = dedupStops(st)

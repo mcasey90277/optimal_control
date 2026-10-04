@@ -55,6 +55,23 @@ all_idx = s.entry_index(s.has_solution);
 ok = chk(ok, numel(unique(all_idx)) == numel(all_idx) && all(all_idx >= 1 & all_idx <= size(s.z8, 2)), ...
          'every entry_index distinct and in range');
 
+% ---- the status layer (optimality-status spec 5) ----------------------------
+A = M.alternatives;
+ok = chk(ok, numel(A) == 1 && A(1).iD == 1 && A(1).iA == 1 && A(1).status == 4 && strcmp(A(1).source, 'displaced primary (merge)') ...
+         && isequal(A(1).z8, b.z8(:, b.entry_index(1, 1))), 'the displaced base primary is kept as an alternative');
+ok = chk(ok, s.status(1, 3) == 4 && numel(s.junctions) == size(s.z8, 2), 'status grid and junctions travel with taken entries');
+Cd = struct('ok', true, 'stage', 8, 'status', 3, 'status_reason', 'donor alt', 'z', [0.3*ones(7, 1); 21], ...
+            'Y', ones(14, 24), 'flyKm', 0, 'flyVms', 0, 'overridden', false);
+d6 = donor;  d6.alternatives = make_alternative(Cd, donor.sheets.sD_frac(2), donor.sheets.sA_frac(2), 2, 2, 'donor alt');
+M6 = merge_phase_catalogs(base, d6);
+iAlt = find(strcmp({M6.alternatives.source}, 'donor alt'));
+ok = chk(ok, numel(M6.alternatives) == 2 && isscalar(iAlt) && M6.alternatives(iAlt).iD == 2 && M6.alternatives(iAlt).iA == 3, ...
+         'donor alternatives are remapped onto the base grid (donor col 2 -> base col 3)');
+bOld = rmfield(base, 'alternatives');  bOld.sheets = rmfield(bOld.sheets, {'status', 'status_reason', 'junctions'});
+dOld = rmfield(donor, 'alternatives');  dOld.sheets = rmfield(dOld.sheets, {'status', 'status_reason', 'junctions'});
+[Mo, io] = merge_phase_catalogs(bOld, dOld);
+ok = chk(ok, io.nFaster == 1 && io.nFilled == 1 && ~isfield(Mo, 'alternatives'), 'REVIEW FOCUS 2: catalogs without the layer merge as before');
+
 % ---- refusals: not the same problem ----------------------------------------
 ok = chk(ok, refuses(base, setf(donor, 'thruster', struct('isp_s', 1710, 'm0_kg', 150))), 'refuses another engine');
 d2 = donor;  d2.sheets.Np = 8;
@@ -77,11 +94,13 @@ nD = numel(sD);  nA = numel(sA);  n = nD*nA;
 sh = struct('tauDRO', 1, 'Np', 7, 'pm', -1, 'sD_frac', sD, 'sA_frac', sA, ...
             'has_solution', true(nD, nA), 'tf_nd', 20*ones(nD, nA), 'entry_index', reshape(1:n, nD, nA), ...
             'z8', [rand(7, n); 20*ones(1, n)], 'conj_pass', int8(ones(nD, nA)), 'h6_margin', 5*ones(nD, nA), ...
-            'family_index', int8(ones(nD, nA)), 'entry_notes', {arrayfun(@(k) sprintf('fam | found %d', k), 1:n, 'UniformOutput', false)});
+            'family_index', int8(ones(nD, nA)), 'entry_notes', {arrayfun(@(k) sprintf('fam | found %d', k), 1:n, 'UniformOutput', false)}, ...
+            'status', int8(4*ones(nD, nA)), 'status_reason', {repmat({'full stack passed'}, 1, n)}, ...
+            'junctions', {repmat({ones(14, 24)}, 1, n)});
 c = struct('constants', struct('tStar_s', tStar), 'thruster', struct('isp_s', 900, 'm0_kg', 150), 'rungs_N', 0.07, ...
            'families', struct('labels', {{'a', 'b', 'c', 'd', 'e'}}), ...
            'second_order', struct('instruments', 'x', 'nSub', 8, 'K', 24, 'relTolPair', [1e-12 1e-9]), ...
-           'n_entries', n, 'sheets', sh);
+           'n_entries', n, 'sheets', sh, 'alternatives', struct([]));
 end
 
 function sh = setHole(sh, rows, cols)

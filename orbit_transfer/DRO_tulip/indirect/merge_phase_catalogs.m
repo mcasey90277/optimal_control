@@ -27,6 +27,12 @@ function [M, info] = merge_phase_catalogs(base, donor, opts)
 % • A faster donor entry REPLACES the base entry in its z8 column; a filled
 %   hole takes a new column at the end. Base cells the donor does not
 %   improve are bit-identical.
+% • STATUS LAYER (when both catalogs carry .status): a base primary displaced
+%   by a faster donor entry is kept as an ALTERNATIVE (status from the base's
+%   status grid, source 'displaced primary (merge)'); the donor's alternatives
+%   are remapped onto the base grid (off-grid cells -> 0) and merged with the
+%   base's; all are deduplicated against the merged primaries. Catalogs
+%   without the layer merge exactly as before.
 %
 %% Inputs:
 %
@@ -47,6 +53,7 @@ function [M, info] = merge_phase_catalogs(base, donor, opts)
 %
 %% Revision History:
 %  M. Casey                                                   (c) 10/03/2026
+%  M. Casey  displaced primaries + alternatives merged                10/04/2026
 %  Copyright Coorbital Inc.
 %% ------------------------ Begin Code Sequence ---------------------------
 
@@ -91,6 +98,9 @@ nShared = nnz(mapD)*nnz(mapA);
 assert(nShared > 0, 'merge_phase_catalogs:grid', 'the donor shares no cell with the base');
 tolND = tolDays*86400/base.constants.tStar_s;
 
+hasLayer = isfield(sb, 'status') && isfield(sd, 'status');
+alts = struct([]);
+
 % ---- take the donor's entry where it is faster or the base has none -------
 rows = zeros(0, 7);
 for jA = find(mapA)
@@ -102,6 +112,13 @@ for jA = find(mapA)
         if ~filled && ~(tfDn < tfB - tolND), continue, end
         kd = sd.entry_index(jD, jA, 1);
         if filled, kb = size(sb.z8, 2) + 1; else, kb = sb.entry_index(iD, iA, 1); end
+        if ~filled && hasLayer                   % keep the displaced primary BEFORE it is overwritten
+            kb0 = sb.entry_index(iD, iA, 1);
+            Cp = struct('ok', true, 'stage', 8, 'status', double(sb.status(iD, iA, 1)), ...
+                        'status_reason', sb.status_reason{kb0}, 'z', sb.z8(:, kb0), 'Y', sb.junctions{kb0}, ...
+                        'flyKm', 0, 'flyVms', 0, 'overridden', false);
+            alts = appendAlt(alts, make_alternative(Cp, sb.sD_frac(iD), sb.sA_frac(iA), iD, iA, 'displaced primary (merge)'));
+        end
         for f = entryF', sb.(f{1})(:, kb) = sd.(f{1})(:, kd); end
         if filled, why = 'hole in the base'; else, why = sprintf('faster by %.4f d', (tfB - tfDn)*base.constants.tStar_s/86400); end
         sb.entry_notes{kb} = sprintf('%s | merged from %s: %s', sd.entry_notes{kd}, tag, why);
@@ -113,6 +130,22 @@ end
 
 M = base;  M.sheets = sb;
 M.n_entries = nnz(sb.has_solution);
+if hasLayer
+    allA = struct([]);
+    if isfield(base, 'alternatives'), allA = appendAlt(allA, base.alternatives); end
+    if isfield(donor, 'alternatives')
+        dA = donor.alternatives;
+        for ka = 1:numel(dA)
+            a = dA(ka);
+            if a.iD > 0, a.iD = mapD(a.iD); end
+            if a.iA > 0, a.iA = mapA(a.iA); end
+            allA = appendAlt(allA, a);
+        end
+    end
+    allA = appendAlt(allA, alts);
+    M.alternatives = dedup_alternatives(allA, M.sheets);
+    if isfield(base, 'status_key'), M.status_key = base.status_key; end
+end
 info = struct('nFaster', nnz(rows(:, 7) == 0), 'nFilled', nnz(rows(:, 7) == 1), 'nShared', nShared, 'rows', rows);
 M.merge = struct('donor', tag, 'date', char(datetime('now', 'Format', 'yyyy-MM-dd')), 'tolDays', tolDays, ...
                  'nFaster', info.nFaster, 'nFilled', info.nFilled, 'rows', rows, ...
@@ -121,6 +154,16 @@ M.merge = struct('donor', tag, 'date', char(datetime('now', 'Format', 'yyyy-MM-d
 end
 
 % ---------------------------------------------------------------------------
+function A = appendAlt(A, B)
+% APPENDALT  Concatenate alternative rows, skipping empties; rows built here
+% get .sheet = 1 so the field sets agree.  INPUTS: A; B.  OUTPUTS: A.
+if isempty(B), return, end
+if ~isfield(B, 'sheet'), for kb = 1:numel(B), B(kb).sheet = 1; end, end
+if isempty(A), A = B; return, end
+if ~isfield(A, 'sheet'), for ka = 1:numel(A), A(ka).sheet = 1; end, end
+A = [A(:); B(:)]';
+end
+
 function c = asCatalog(c)
 % ASCATALOG  A catalog struct from a struct or a .mat path.
 % INPUTS: c (struct or char).  OUTPUTS: c (struct).

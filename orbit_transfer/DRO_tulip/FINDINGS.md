@@ -6116,3 +6116,50 @@ Backup: `~/Backups/DRO_tulip_results_2026-10-03.tar.gz` (all of `results/`,
 775 MB, the running rib's folder excluded; made just before the README was
 written) plus `DRO_tulip_results_2026-10-03_libraries.tar.gz` (15 MB: both
 library folders in their final state). Same disk as the work: copy off-machine.
+
+## 96. The departure axis measured: one rib at 96 phases is smooth and second order (2026-10-03)
+
+`batch/departure_rib96_job.m`: one rib (`build_ribs` -> `rib_from_crossing`,
+full gate stack per point) at 96 departure phases on arrival phase 0.2837
+(spine96 column 28 = 24 x 24 column 7, the smoothest departure ring of the
+24 x 24: one family, worst costate step 43%). 1 h 44 min, 131 solves.
+**79 of 95 points certified**, s_D 0.9896 down to 0.1771 without a gap; the
+walk STOPPED at 0.1717 -> 0.1716 because the dense conjugate scan found a
+ZERO: past that phase this branch is not a local minimum, and the certifier
+refused it. The 24 x 48 build's ribs on columns 14-16 stalled at nearly the
+same departure phase (0.164-0.172) for the same reason (section 93's chain
+log). So the 24 x 24's cells at s_D 0.04-0.17 in this column must be another
+root -- the one non-time-consistent edge of that ring.
+
+Wrapped by the new `rib_as_catalog` (the departure twin of
+`arrival_sheet_as_catalog`; 12 checks, three mutants caught) and measured
+the way section 86 measured arrival -- linear midpoint error with the true
+entry known, 77 consecutive lattice points, no solve:
+
+| neighbours apart | costate error median / 90% / max | t_f error median | arrival, in-family (86) |
+|---|---|---|---|
+| 1/48 | **0.51%** / 0.68% / 0.73% | 0.46 min | 0.85% |
+| 1/24 | **2.0%** / 2.7% / 2.9% | 1.8 min | 3.1% |
+| 1/12 | 8.0% / 10.7% / 11.3% | 7.2 min | 11.4% |
+| 1/6 | 29.8% / 38.8% / 40.6% | 27 min | -- |
+
+A factor 4 per halving: second order, as linear interpolation should be.
+The costates change 8.4% per 1/96 step (median; max 10.5%) -- a steep but
+SMOOTH slope; the ~32-36% per 1/24 step of sections 84-85 is that slope,
+not unresolved structure. The error does not grow toward the conjugate
+point (1.2-1.35% at 1/24 spacing next to the stop; the worst, 2.9%, is at
+s_D 0.49).
+
+**What this changes.** On this column the departure axis at 1/24 is no
+worse for interpolation than arrival at 1/24, and at 1/48 it is better than
+arrival at 1/48. So the departure resolution ALONE does not explain why the
+24 x 48 scored 1 of 60 (section 92) while the arrival spine scored 52 of 60
+(section 90). Candidates to separate next: the 2-D blend itself (a bilinear
+guess carries both axes' errors and a cross term), the branch structure (a
+conjugate-point end like this one inside a ring; cells from other roots),
+and the re-flight amplification of a z8 guess (section 88). The 1-D score
+along this rib (`batch/score_rib96_job.m`, running) is the first separator:
+a high score says 1-D works on BOTH axes and the torus failure is in the
+combination.
+
+Record: `results/departure_rib96_test/` (rib, checkpoint, heartbeat).

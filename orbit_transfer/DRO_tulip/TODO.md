@@ -2,7 +2,12 @@
 
 ## Live (2026-09-22): the interpolation line -- see `process/INTERPOLATION_STATUS.md`
 
-- [ ] **Measure the departure axis**: one rib at 96 departure phases on one
+- [ ] **Junction-state interpolation** -- NOW FIRST (FINDINGS 97): along a
+  departure rib the guesses are 0.04% off yet re-flying a guessed z8 lands
+  ~2,000 km away (26x the spine's amplification); interpolate the
+  neighbours' ms junction states instead, rescore the rib (44% covered) and
+  the spine (87%).
+- [x] **Measured the departure axis** -- DONE 2026-10-03 (FINDINGS 96-97): one rib at 96 departure phases on one
   arrival column, wrapped as a one-column catalog, scored with
   `score_interpolator` (the arrival axis is done: 1/96 gives 87% usable).
 - [x] **Fix the hole filler's pool** -- DONE 2026-10-02 (FINDINGS 93):

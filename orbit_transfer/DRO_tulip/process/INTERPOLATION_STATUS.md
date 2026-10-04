@@ -84,6 +84,19 @@ SCORE_LIBRARY=<catalog .mat, or 'record' | 'spine96'> nohup \
    of 560 agree, 9 slower, 16 missing) is the useful part. Make the verdict
    say "finer grid: compared on shared cells" instead of FAIL.
 
+## UPDATE 2026-10-03 (FINDINGS 96-97) -- read before the list below
+
+- The departure axis is MEASURED: one rib at 96 phases (s_A 0.2837), 79/95
+  certified (stopped at a conjugate point, s_D 0.17). Midpoint error 0.51% at
+  1/48, 2.0% at 1/24: smooth, second order, no worse than arrival.
+- Scored as a one-column catalog (`rib_as_catalog`): 44% usable where covered
+  (20/45), against the spine's 87%. The guesses are excellent (0.04%); the
+  re-flight of a guessed z8 amplifies costate error 26x more along this rib
+  than along the spine. **Junction-state interpolation is now step 1**; a
+  finer full build waits for it.
+- The library of record is the merged 24 x 48 (FINDINGS 95); the 24 x 48 refill
+  and the departure measurement (old steps 1-2) are DONE.
+
 ## Next steps, in order
 
 1. **Measure the departure axis** the way the arrival axis was measured: ONE

@@ -6163,3 +6163,50 @@ a high score says 1-D works on BOTH axes and the torus failure is in the
 combination.
 
 Record: `results/departure_rib96_test/` (rib, checkpoint, heartbeat).
+
+## 97. The departure rib scores 44% where it is covered: the guesses are good, the re-flight is the wall (2026-10-03)
+
+`batch/score_rib96_job.m`: the 96-phase rib of section 96 as a one-column
+catalog, `score_interpolator`, the usual 60 seeded queries.
+
+| | queries | usable |
+|---|---|---|
+| the gap s_D (0, 0.1771) -- nothing to blend (rib stopped at the conjugate point) | 15 | 0 |
+| **the covered stretch** | **45** | **20 = 44%** |
+| all, blend / nearest entry alone | 60 | 33% / 5% |
+
+All 25 covered failures are the 600-iteration cap; none converged onto
+another branch. The arrival spine at the same step scores 87% (section 90).
+
+**The guesses are not the problem.** Held-out test, no solve (every other
+rib point removed, each guessed from its two neighbours 1/48 apart): costate
+error 0.51%, t_f error 0.44 min median (0.94 max) whether t_f is blended or
+predicted from the corners' sensitivities; the departure sensitivities agree
+with finite differences of the flight times. The usable queries' guesses
+were off by **0.04%** (median, against the root found).
+
+**The re-flight is.** Flown miss per unit relative costate error of the
+guess, usable linear queries:
+
+| | miss | guess error | km per unit error | iterations |
+|---|---|---|---|---|
+| arrival spine (s_D = 0) | 499 km | 0.14% | 2.5e5 | 48 |
+| departure rib (s_A 0.2837) | 1,974 km | 0.04% | **6.7e6** | 288 |
+
+The same polish (`seed_from_z8` re-flies the guessed z8 from t = 0, then
+`ms_tfmin`) amplifies a costate error **26 times more** along this rib than
+along the spine. A guess four times better than the spine's lands four
+times farther away and needs six times the iterations; a quarter of a
+percent more and it exceeds the 600-iteration cap. That is a property of
+the TRAJECTORIES (the single-shot sensitivity of these arcs), not of the
+interpolation, and no finer grid cures it: the guess error is already at
+0.04%.
+
+**Consequence for the plan.** The lever is the polish, not the resolution:
+interpolate the neighbours' MULTIPLE-SHOOTING JUNCTION STATES (the binding
+rule of 2026-08-25, section 88's diagnosis) instead of re-flying a guessed
+z8 across 17-19 days. It is now the first next step; a finer full build
+waits for it. Also plausible on the torus: the 24 x 48's 1 of 60 is the same
+wall plus the 2-D blend -- testable once junction interpolation exists.
+
+Record: `results/departure_rib96_test/interp_score/`.

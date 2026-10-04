@@ -18,7 +18,12 @@
 %               in N chunks (audit_status_layer .idxAlt = CHUNK:NCHUNK:end),
 %               one process each: thousands of full re-certifications do not
 %               fit one serial process
-%   verdict  -- reads every audit chunk and rewrites the verdict.
+%   verdict  -- reads every audit chunk and rewrites the verdict, which
+%               starts with ONE decision token (backfill_clean_verdict):
+%               CLEAN only if audit nBad == 0, coverage complete, primNot4
+%               and movedPrimaries empty, content key equal, and the
+%               comparison with the record shows no change; else NOT CLEAN
+%               with the failing conditions named.
 %   audit    -- one audit chunk (CHUNK, NCHUNK from the environment); what
 %               run_recertify.sh launches with its second argument 'audit'.
 %
@@ -106,13 +111,19 @@ try
             nAlt = numel(c2.alternatives);  nPrimCat = nnz(c2.sheets(1).has_solution);
             dupl = unique(seen(arrayfun(@(x) nnz(seen == x) > 1, seen)));
             gap = setdiff(1:nAlt, seen);
-            if numel(seen) ~= nAlt || numel(unique(seen)) ~= nAlt || nPrim ~= nPrimCat
+            coverageOk = numel(seen) == nAlt && numel(unique(seen)) == nAlt && nPrim == nPrimCat;
+            if ~coverageOk
                 error('backfill_v2_job:coverage', ['audit coverage incomplete: %d alternative row(s) audited for %d ' ...
                       'alternatives (%d never, e.g. %s; %d more than once, e.g. %s); %d primaries audited of %d'], ...
                       numel(seen), nAlt, numel(gap), mat2str(gap(1:min(5, end))), numel(dupl), ...
                       mat2str(dupl(1:min(5, end))), nPrim, nPrimCat);
             end
-            msg = ['BACKFILL VERDICT: ' summaryLine(c2, recordMat, Cm.C) ...
+            Lr = load(recordMat);  rec = Lr.(char(fieldnames(Lr)));
+            V = struct('nBad', nBad, 'coverageOk', coverageOk, 'primNot4', c2.status_layer.primNot4, ...
+                       'movedPrimaries', c2.status_layer.movedPrimaries, ...
+                       'contentKeyEqual', strcmp(catalog_content_key(c2), catalog_content_key(rec)), 'cmp', Cm.C);
+            [token, whyNot] = backfill_clean_verdict(V);
+            msg = ['BACKFILL VERDICT: ' token tern(isempty(whyNot), '', [' (' whyNot ')']) ' | ' summaryLine(c2, recordMat, Cm.C) ...
                    sprintf(' | audit %d ok / %d bad | primaries audited %d | alternatives audited %d of %d', ...
                            nOk, nBad, nPrim, numel(unique(seen)), nAlt)];
 

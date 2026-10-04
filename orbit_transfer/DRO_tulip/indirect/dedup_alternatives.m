@@ -2,8 +2,10 @@ function A = dedup_alternatives(A, sheet)
 %% Purpose:
 %
 %   One root, one record: drop every alternative that is the same root
-%   (same_root) as the PRIMARY of its cell, or as an earlier row at the same
-%   phases; return the rest sorted by (sD, sA, t_f).
+%   (same_root) as the PRIMARY of its cell; within a group of rows that are
+%   the same root at the same phases keep ONE -- a stamped row over an
+%   inferred one, then the higher established status, then the first.
+%   Return the rest sorted by (sD, sA, t_f).
 %
 %% Inputs:
 %
@@ -17,6 +19,8 @@ function A = dedup_alternatives(A, sheet)
 %
 %% Revision History:
 %  M. Casey                                                   (c) 10/04/2026
+%  M. Casey  final review I2: the kept twin is the stamped, then the
+%            higher-status, then the first row                       10/04/2026
 %  Copyright Coorbital Inc.
 %% ------------------------ Begin Code Sequence ---------------------------
 
@@ -30,11 +34,23 @@ for k = 1:numel(A)
     end
     for m = 1:k-1
         if keep(m) && near(A(m).sD, a.sD) && near(A(m).sA, a.sA) && same_root(A(m).z8, a.z8)
-            keep(k) = false;  break
+            % one kept row per group: the later row replaces it only if better
+            if better(a, A(m)), keep(m) = false; else, keep(k) = false; end
+            break
         end
     end
 end
 A = A(keep);
 [~, order] = sortrows([[A.sD].', [A.sA].', [A.tf_nd].']);
 A = A(order);
+end
+
+% ---------------------------------------------------------------------------
+function tf = better(a, b)
+% BETTER  Row a is preferred to row b: stamped over inferred, then the higher
+% status; a tie is not better (the first is kept).  INPUTS: a; b (rows).
+% OUTPUTS: tf logical.
+ia = isequal(a.inferred, true);  ib = isequal(b.inferred, true);
+if ia ~= ib, tf = ~ia;  return, end
+tf = double(a.status) > double(b.status);
 end

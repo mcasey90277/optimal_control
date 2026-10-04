@@ -31,6 +31,10 @@ A = audit_status_layer(tmp, struct('skipPrimaries', true, 'idxAlt', 2, 'certifie
 ok = chk(ok, A.nBad == 1 && contains(A.altRows(1).why, 'status not reproduced'), 'a different status is BAD, named');
 A = audit_status_layer(tmp, struct('skipPrimaries', true, 'idxAlt', 3, 'certifier', fake(3, [0.01; zeros(7, 1)]), 'pool', [], 'allowUnfenced', true));
 ok = chk(ok, A.nBad == 1 && A.altRows(1).moved && contains(A.altRows(1).why, 'moved'), 'REVIEW FOCUS 5: a root that moved is BAD, not relabelled');
+A = audit_status_layer(tmp, struct('skipPrimaries', true, 'idxAlt', 1, 'pool', [], 'allowUnfenced', true, ...
+                                   'certifier', @(seed, rv0, rvf, B, o) struct('z', nan(8, 1), 'status', -1, 'reason', 'normal-chart polish did not converge')));
+ok = chk(ok, A.nBad == 1 && ~A.altRows(1).moved && contains(A.altRows(1).why, 'below the floor on re-certification: normal-chart polish'), ...
+         sprintf('M4: a failed polish is "below the floor on re-certification", not "moved" (%s)', A.altRows(1).why));
 ok = chk(ok, numel(A.altContentKey) == 32 && ~strcmp(A.altContentKey, alternatives_content_key(setf(c, 'alternatives', row))), ...
          'the alternatives key is bound to the table''s content');
 c2 = c;  c2.alternatives(2).status = 3;                                  % same rows, one status differs
@@ -41,6 +45,13 @@ A = audit_status_layer(tmp, struct('skipPrimaries', true, 'idxAlt', [1 3], 'cert
 ok = chk(ok, A.nBad == 2 && all(contains({A.altRows.why}, 'no pool: refusing to re-certify unfenced')), ...
          'no pool and no allowUnfenced -> every alternative BAD, not a crash');
 boom = @(varargin) error('test:called', 'the certifier must not be called');
+% C2: a stored status that is not a real scalar ([] from field harmonising)
+% is BAD -- `~(3 == [])` is empty and used to read as reproduced
+catalog = setf(c, 'alternatives', setf(row, 'status', []));  save(tmp, 'catalog');
+A = audit_status_layer(tmp, struct('skipPrimaries', true, 'idxAlt', 1, 'certifier', fake(3, 0), 'pool', [], 'allowUnfenced', true));
+ok = chk(ok, A.nBad == 1 && ~A.altRows(1).ok && contains(A.altRows(1).why, 'stored status'), ...
+         sprintf('C2: an empty stored status is BAD, not reproduced (%s)', A.altRows(1).why));
+catalog = c;  save(tmp, 'catalog');
 A = audit_status_layer(tmp, struct('skipPrimaries', true, 'idxAlt', 4, 'certifier', boom, 'pool', [], 'allowUnfenced', true));
 ok = chk(ok, A.nBad == 1 && contains(A.altRows(1).why, 'junction defect') && contains(A.altRows(1).why, ' km'), ...
          sprintf('corrupted alternative junctions are BAD before the certifier runs (%s)', A.altRows(1).why));

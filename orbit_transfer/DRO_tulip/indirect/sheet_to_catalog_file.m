@@ -58,6 +58,9 @@ function Q = sheet_to_catalog_file(S, ribs, outMat, opts)
 %
 %% Revision History:
 %  M. Casey                                                   (c) 09/09/2026
+%  M. Casey  final review: a rib without certified points still gives its
+%            refusals (I3); an empty/malformed status is re-classified
+%            (C2); a displaced primary's flight is NaN, not 0 (M2)   10/04/2026
 %  Copyright Coorbital Inc.
 %% ------------------------ Begin Code Sequence ---------------------------
 
@@ -180,15 +183,17 @@ if nargin >= 2 && ~isempty(ribs)
     if ~iscell(ribs), ribs = {ribs}; end
     for k = 1:numel(ribs)
         R = ribs{k};
-        if ~isfield(R, 'pts') || isempty(R.pts), continue, end
+        % a rib with NO certified point still contributes its refusals
+        % below: only the points loop is guarded
+        pts = struct([]);  if isfield(R, 'pts') && ~isempty(R.pts), pts = R.pts; end
         ribCode = int8(0);
-        if ~isempty(F)
-            okp = R.pts(arrayfun(@usableEntry, R.pts));
+        if ~isempty(F) && ~isempty(pts)
+            okp = pts(arrayfun(@usableEntry, pts));
             tfp = [okp(1:min(3, end)).tfDays];   % the points nearest the spine
             ribCode = int8(F.ribFamily(R.sA, tfp));
         end
-        for m = 1:numel(R.pts)
-            Pt = R.pts(m);
+        for m = 1:numel(pts)
+            Pt = pts(m);
             if ~usableEntry(Pt), continue, end
             iD = idxOf(Q.sD, Pt.sD);  iA = idxOf(Q.sA, Pt.sA);
             assert(~isempty(iD) && ~isempty(iA), 'rib point (%.4f, %.4f) is off the grid', Pt.sD, Pt.sA);
@@ -210,7 +215,7 @@ if nargin >= 2 && ~isempty(ribs)
             Q.NOTE{iD, iA} = noteOf(Pt, F, ribCode);
             Q = putStatus(Q, iD, iA, Pt);
         end
-        if isfield(R, 'refused')
+        if isfield(R, 'refused') && ~isempty(R.refused)
             for m = 1:numel(R.refused)
                 Rf = R.refused(m);
                 iD = idxOf(Q.sD, Rf.sD);  iA = idxOf(Q.sA, Rf.sA);
@@ -246,22 +251,29 @@ end
 
 function Q = putStatus(Q, iD, iA, C)
 % PUTSTATUS  A primary's status, reason and junctions.  INPUTS: Q; iD; iA;
-% C (certify_root result; legacy results are classified).  OUTPUTS: Q.
-if isfield(C, 'status') && isfield(C, 'stage'), st = C.status;  why = C.status_reason;
-else, [st, why] = optimality_status(C); end
+% C (certify_root result; legacy results, and stamps whose .status is not a
+% real scalar -- e.g. [] from field harmonising -- are classified).
+% OUTPUTS: Q.
+[st, why, inferred] = optimality_status(C);
+if ~inferred && isfield(C, 'status') && isnumeric(C.status) && isscalar(C.status) && isreal(C.status) && isfinite(C.status)
+    st = double(C.status);
+    if isfield(C, 'status_reason') && ischar(C.status_reason) && ~isempty(C.status_reason), why = C.status_reason;
+    else, why = sprintf('status %d (stamped; no reason recorded)', st); end
+end
 Q.STATUS(iD, iA, 1) = int8(st);  Q.SREASON{iD, iA} = why;
 if isfield(C, 'Y'), Q.JUNC{iD, iA} = C.Y; end
 end
 
 function A = primaryAsAlternative(Q, iD, iA)
 % PRIMARYASALTERNATIVE  The current primary of a cell as an alternatives row
-% (it is being displaced by a faster root). flyKm = 0: the displaced primary
-% was certified, so its flight passed; the audit re-flies it.
+% (it is being displaced by a faster root). Its flight is NOT measured here,
+% so flyKm = flyVms = NaN, and the row is built on make_alternative's
+% displaced-primary path (stamped status 4, no floor); the audit re-flies it.
 % INPUTS: Q; iD; iA.  OUTPUTS: A.
 C = struct('ok', true, 'stage', 8, 'status', double(Q.STATUS(iD, iA, 1)), 'status_reason', Q.SREASON{iD, iA}, ...
-           'z', Q.Z8(:, iD, iA, 1), 'Y', Q.JUNC{iD, iA}, 'flyKm', 0, 'flyVms', 0, 'conj', double(Q.CONJ(iD, iA, 1)), ...
+           'z', Q.Z8(:, iD, iA, 1), 'Y', Q.JUNC{iD, iA}, 'flyKm', NaN, 'flyVms', NaN, 'conj', double(Q.CONJ(iD, iA, 1)), ...
            'overridden', false, 'g', struct('minLamV', Q.MINLV(iD, iA, 1), 'minQmt', Q.MINQ(iD, iA, 1), 'dimS', Q.DIMS(iD, iA, 1)));
-A = make_alternative(C, Q.sD(iD), Q.sA(iA), iD, iA, 'displaced primary (packaging)');
+A = make_alternative(C, Q.sD(iD), Q.sA(iA), iD, iA, 'displaced primary (packaging)', struct('displacedPrimary', true));
 end
 
 function ok = hasFiniteZ(C)

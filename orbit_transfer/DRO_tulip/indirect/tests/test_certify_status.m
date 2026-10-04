@@ -2,7 +2,8 @@ function ok = test_certify_status()
 % TEST_CERTIFY_STATUS  certify_root stamps .status on every result; a coarse
 % conjugate FAIL still runs the hypothesis gates and H6 (for the record) and
 % is status 2 when they hold, 3 when they do not; UNDETERMINED is 3; a
-% pointwise failure is 1; a dense-scan zero is 2; the untouched anchor is 4.
+% pointwise failure is 1; a dense-scan zero is 2 only by a trusted sign
+% bracket (a floor-level zero is 3); the untouched anchor is 4.
 % Uses the test seam (.override), so every forced result is .overridden.
 %
 % INPUTS:  none
@@ -45,9 +46,20 @@ o = base;  o.override = struct('PW', struct('Hmax', 1));
 C = run(o);
 ok = chk(ok, C.status == 1 && C.stage == 2, sprintf('pointwise failure -> 1 (%s)', C.reason));
 
-o = base;  o.override = struct('CS', struct('nZero', 1, 'clear', false));
+% C1 (final review): only a DEFINITE refutation is status 2 -- a zero by a
+% trusted sign bracket (or a coarse trusted sign change); a zero located at
+% the numerical floor is not, and stays 3 with the scan's findings named
+o = base;  o.override = struct('CS', struct('nZero', 1, 'nZeroSign', 0, 'nZeroFloor', 1, 'clear', false));
 C = run(o);
-ok = chk(ok, C.status == 2 && C.conjFound && C.stage == 7, sprintf('dense-scan zero -> 2 (%s)', C.reason));
+ok = chk(ok, C.status == 3 && ~C.conjFound && C.stage == 7 && contains(C.reason, '1 zero') && contains(C.reason, '1 at the floor') ...
+         && C.conjDense.nZeroFloor == 1 && C.conjDense.nZeroSign == 0, ...
+         sprintf('C1: a floor-level dense-scan zero -> 3, not 2 (%s)', C.reason));
+o = base;  o.override = struct('CS', struct('nZero', 1, 'nZeroSign', 1, 'nZeroFloor', 0, 'clear', false));
+C = run(o);
+ok = chk(ok, C.status == 2 && C.conjFound && C.stage == 7, sprintf('C1: a sign-bracketed dense-scan zero -> 2 (%s)', C.reason));
+o = base;  o.override = struct('CS', struct('nZero', 1, 'nZeroSign', 1, 'nZeroFloor', 1, 'clear', false));
+C = run(o);
+ok = chk(ok, C.status == 3 && contains(C.reason, 'malformed'), 'C1: nZeroSign + nZeroFloor ~= nZero is malformed (status 3, not 2)');
 
 if ok, fprintf('test_certify_status: ALL PASS\n'); else, fprintf('test_certify_status: FAIL\n'); end
 end

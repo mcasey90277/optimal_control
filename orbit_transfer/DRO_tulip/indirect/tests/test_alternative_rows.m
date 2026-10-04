@@ -30,6 +30,26 @@ Cc = C;  Cc.ok = true;  Cc.status = 4;
 A4 = make_alternative(Cc, 0.25, 0.5, 7, 13, 'x');
 ok = chk(ok, A4.status == 4, 'a certified slower root is a status-4 row');
 
+% C2: a field-harmonised legacy record (status = [], stage = []) is classified,
+% not trusted; a stamped status without a reason does not crash
+Hm = L;  Hm.stage = [];  Hm.status = [];  Hm.status_reason = [];  Hm.conjFound = [];  Hm.hypAfterConj = [];
+A5 = make_alternative(Hm, 0.25, 0.5, 7, 13, 'harmonised');
+ok = chk(ok, isstruct(A5) && isequal(A5.status, 3) && A5.inferred, 'C2: a harmonised legacy record is re-classified (status 3, inferred)');
+Cn = rmfield(C, 'status_reason');
+try, A6 = make_alternative(Cn, 0.25, 0.5, 7, 13, 'x'); threw = false; catch, threw = true; A6 = []; end
+ok = chk(ok, ~threw && isstruct(A6) && A6.status == 3 && ischar(A6.status_reason), 'C2: a stamped status without .status_reason is a row, not a crash');
+
+% M2: a displaced certified primary has no measured flight (NaN): built
+% directly (no floor), and ONLY through the displaced-primary path
+Cd = struct('ok', true, 'stage', 8, 'status', 4, 'status_reason', 'full stack passed', 'z', z, 'Y', Y, ...
+            'flyKm', NaN, 'flyVms', NaN, 'overridden', false);
+ok = chk(ok, isempty(make_alternative(Cd, 0.25, 0.5, 7, 13, 'x')), 'M2: a NaN flight is below the floor on the ordinary path');
+try, Ad = make_alternative(Cd, 0.25, 0.5, 7, 13, 'displaced primary (test)', struct('displacedPrimary', true)); catch, Ad = []; end
+ok = chk(ok, isstruct(Ad) && Ad.status == 4 && isnan(Ad.flyKm) && isnan(Ad.flyVms) && ~Ad.inferred, ...
+         'M2: a displaced status-4 primary is a row with flyKm = flyVms = NaN (not measured)');
+try, Ad3 = make_alternative(setf(Cd, 'status', 3), 0.25, 0.5, 7, 13, 'x', struct('displacedPrimary', true)); catch, Ad3 = 0; end
+ok = chk(ok, isempty(Ad3), 'M2: the bypass is for a stamped status 4 only');
+
 % dedup: a primary's twin, a repeated root, a distinct root kept
 sheet = struct('sD_frac', [0 0.25], 'sA_frac', [0.5 0.75], 'has_solution', [false false; true false], ...
                'entry_index', [0 0; 1 0], 'z8', z);
@@ -38,6 +58,18 @@ Ad = [make_alternative(C, 0.25, 0.5, 2, 1, 'twin of primary'), ...
       make_alternative(setz(C, z + [1; zeros(7, 1)]), 0.25, 0.5, 2, 1, 'repeat')];
 Ad = dedup_alternatives(Ad, sheet);
 ok = chk(ok, numel(Ad) == 1 && strcmp(Ad.source, 'distinct'), 'dedup drops the primary''s twin and the repeat');
+% I2: within one root at one phase pair, a stamped row beats an inferred
+% one, then the higher established status, then the first
+zr = z + [2; zeros(7, 1)];
+Ai = make_alternative(setz(L, zr), 0.25, 0.5, 2, 1, 'inferred first');          % legacy verdict 0 -> 3, inferred
+As2 = make_alternative(setf(setz(C, zr), 'status', 2, 'status_reason', 'two'), 0.25, 0.5, 2, 1, 'stamped 2');
+As3 = make_alternative(setz(C, zr), 0.25, 0.5, 2, 1, 'stamped 3');
+Ad = dedup_alternatives([Ai, As2, As3], sheet);
+ok = chk(ok, numel(Ad) == 1 && strcmp(Ad.source, 'stamped 3'), sprintf('I2: stamped over inferred, then the higher status (kept %s)', Ad(1).source));
+Ad = dedup_alternatives([As3, Ai], sheet);
+ok = chk(ok, numel(Ad) == 1 && strcmp(Ad.source, 'stamped 3'), 'I2: a later inferred twin never displaces a stamped row');
+Ad = dedup_alternatives([As2, setf(As2, 'source', 'stamped 2 again')], sheet);
+ok = chk(ok, numel(Ad) == 1 && strcmp(Ad.source, 'stamped 2'), 'I2: a tie keeps the first');
 
 % same_root and the delegates
 ok = chk(ok, same_root(z, z + 1e-9) && same_root(z + 1e-9, z) && ~same_root(z, z + [0.01; zeros(7, 1)]), 'same_root: symmetric, 1e-6');
@@ -48,6 +80,11 @@ Hf = fill_holes_direct('localfunctions');
 ok = chk(ok, isequal(Hf.physicsFromCatalog(c, c.sheets(1), 0), catalog_setup_request(c, 0)), 'fill_holes_direct''s physicsFromCatalog delegates');
 
 if ok, fprintf('test_alternative_rows: ALL PASS\n'); else, fprintf('test_alternative_rows: FAIL\n'); end
+end
+
+function s = setf(s, varargin)
+% SETF  Set name/value pairs.  INPUTS: s; pairs.  OUTPUTS: s.
+for k = 1:2:numel(varargin), s.(varargin{k}) = varargin{k+1}; end
 end
 
 function C = setz(C, z)

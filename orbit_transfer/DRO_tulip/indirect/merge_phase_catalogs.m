@@ -29,10 +29,14 @@ function [M, info] = merge_phase_catalogs(base, donor, opts)
 %   improve are bit-identical.
 % • STATUS LAYER (when both catalogs carry .status): a base primary displaced
 %   by a faster donor entry is kept as an ALTERNATIVE (status from the base's
-%   status grid, source 'displaced primary (merge)'); the donor's alternatives
-%   are remapped onto the base grid (off-grid cells -> 0) and merged with the
-%   base's; all are deduplicated against the merged primaries. Catalogs
-%   without the layer merge exactly as before.
+%   status grid, source 'displaced primary (merge)'; its flight is not
+%   measured here, so flyKm = flyVms = NaN and the row is built on
+%   make_alternative's displaced-primary path); the donor's alternatives are
+%   placed on the base grid BY PHASE (circular, 1e-8 against the base's
+%   sD_frac/sA_frac -- not by the donor's iD/iA, so an alternative off the
+%   donor grid but on the base grid gets its base cell; off the base grid
+%   -> 0) and merged with the base's; all are deduplicated against the
+%   merged primaries. Catalogs without the layer merge exactly as before.
 %
 %% Inputs:
 %
@@ -54,6 +58,8 @@ function [M, info] = merge_phase_catalogs(base, donor, opts)
 %% Revision History:
 %  M. Casey                                                   (c) 10/03/2026
 %  M. Casey  displaced primaries + alternatives merged                10/04/2026
+%  M. Casey  final review: donor alternatives placed by phase (I4); the
+%            displaced primary's flight NaN, not 0 (M2)              10/04/2026
 %  Copyright Coorbital Inc.
 %% ------------------------ Begin Code Sequence ---------------------------
 
@@ -119,8 +125,9 @@ for jA = find(mapA)
             kb0 = sb.entry_index(iD, iA, 1);
             Cp = struct('ok', true, 'stage', 8, 'status', double(sb.status(iD, iA, 1)), ...
                         'status_reason', sb.status_reason{kb0}, 'z', sb.z8(:, kb0), 'Y', sb.junctions{kb0}, ...
-                        'flyKm', 0, 'flyVms', 0, 'overridden', false);
-            alts = appendAlt(alts, make_alternative(Cp, sb.sD_frac(iD), sb.sA_frac(iA), iD, iA, 'displaced primary (merge)'));
+                        'flyKm', NaN, 'flyVms', NaN, 'overridden', false);       % flight not measured here
+            alts = appendAlt(alts, make_alternative(Cp, sb.sD_frac(iD), sb.sA_frac(iA), iD, iA, 'displaced primary (merge)', ...
+                                                    struct('displacedPrimary', true)));
         end
         for f = entryF', sb.(f{1})(:, kb) = sd.(f{1})(:, kd); end
         if filled, why = 'hole in the base'; else, why = sprintf('faster by %.4f d', (tfB - tfDn)*base.constants.tStar_s/86400); end
@@ -139,9 +146,9 @@ if hasLayer
     if isfield(donor, 'alternatives')
         dA = donor.alternatives;
         for ka = 1:numel(dA)
-            a = dA(ka);
-            if a.iD > 0, a.iD = mapD(a.iD); end
-            if a.iA > 0, a.iA = mapA(a.iA); end
+            a = dA(ka);                          % placed by PHASE, not by the donor's indices
+            a.iD = emptyToZero(onGrid(sb.sD_frac, a.sD));
+            a.iA = emptyToZero(onGrid(sb.sA_frac, a.sA));
             allA = appendAlt(allA, a);
         end
     end

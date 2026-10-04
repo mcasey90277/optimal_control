@@ -8,10 +8,10 @@ function out = backfill_status_layer(mode, recordMat, varargin)
 %                   sheets, rib files, rib checkpoints, hole-filler files),
 %                   give each primary of the record the junctions of the
 %                   first candidate that is the same root (same_root), list
-%                   the legacy candidates whose status is ambiguous
-%                   ("conjugate test verdict 0": FAIL or UNDETERMINED) and
-%                   the rib stop points worth a re-solve, and the primaries
-%                   no source covers. Writes <outDir>/harvest.mat. No solve.
+%                   every legacy (inferred-status) candidate that would
+%                   become an alternative, the rib stop points worth a
+%                   re-solve, and the primaries no source covers. Writes
+%                   <outDir>/harvest.mat. No solve.
 %     'assemble' -- read harvest.mat and every recert_*.mat, and write the v2
 %                   catalog: primaries UNCHANGED (content key asserted equal
 %                   to the record's), status 4 grid, junctions per entry,
@@ -30,7 +30,11 @@ function out = backfill_status_layer(mode, recordMat, varargin)
 %   no .stage/.status; they are kept in a cell array and harmonised (missing
 %   fields = []) only once, at the end. Candidates below the floor (no z, a
 %   rho refusal without flyKm, an inadmissible flight) are skipped early.
-% • needRecert: the legacy verdict-0 candidates, one per (phases, root).
+% • needRecert: EVERY candidate above the floor whose status is inferred
+%   (unstamped) and whose root is NOT the root of its cell's primary (a
+%   twin of the primary is dropped as an alternative anyway), one per
+%   (phases, root): no alternative ships on an inferred status. (Before the
+%   final review only the "conjugate test verdict 0" ones were listed.)
 %   stops: every rib that STALLED on a refusal the classifier places at 2
 %   or 3 (a conjugate or gate finding, not a polish failure): its last
 %   certified point is the seed, the stall's target phase the solve
@@ -88,6 +92,8 @@ function out = backfill_status_layer(mode, recordMat, varargin)
 %
 %% Revision History:
 %  M. Casey                                                   (c) 10/04/2026
+%  M. Casey  final review I1: needRecert = every inferred candidate that
+%            would become an alternative, one per (phases, root)     10/04/2026
 %  Copyright Coorbital Inc.
 %% ------------------------ Begin Code Sequence ---------------------------
 
@@ -150,11 +156,16 @@ isPrim = false(1, nE);  isPrim([prim.k]) = true;
 unmatched = find(isPrim & cellfun(@isempty, primJ));
 unmatchedInfo = prim(ismember([prim.k], unmatched));
 
-% ---- the ambiguous legacy candidates, one per (phases, root) -------------------
+% ---- every inferred candidate that would become an alternative, one per -------
+% ---- (phases, root): not the root of its cell's primary ------------------------
 needRecert = [];
 for m = 1:numel(cl)
-    [~, why] = optimality_status(cl{m});
-    if ~startsWith(why, 'necessary only (inferred): legacy verdict 0'), continue, end
+    [code, ~, inferred] = optimality_status(cl{m});
+    if ~inferred || code < 1, continue, end
+    iD = idxOf(sh.sD_frac, cl{m}.sD);  iA = idxOf(sh.sA_frac, cl{m}.sA);
+    if iD > 0 && iA > 0 && sh.has_solution(iD, iA, 1) && same_root(cl{m}.z, sh.z8(:, sh.entry_index(iD, iA, 1)))
+        continue                                    % the primary's twin: dropped by dedup, never an alternative
+    end
     dup = false;
     for q = needRecert
         if nearPhase(cl{q}.sD, cl{m}.sD) && nearPhase(cl{q}.sA, cl{m}.sA) && same_root(cl{q}.z, cl{m}.z)

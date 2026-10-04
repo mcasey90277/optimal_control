@@ -6,8 +6,10 @@ function items = recertify_candidates(harvestMat, chunk, nChunk, outMat, opts)
 %   H6 after a conjugate failure) on one chunk of the work a harvest
 %   (backfill_status_layer 'harvest') listed, saving after every item.
 %
-%     kind 'cand' -- a legacy candidate whose status is ambiguous (verdict
-%                    0), re-seeded from its OWN junctions at its own phases;
+%     kind 'cand' -- a legacy candidate whose status is inferred (every one
+%                    that would become an alternative, not only verdict 0),
+%                    re-seeded from its OWN junctions at its own phases (from
+%                    its z8 when it carries none);
 %     kind 'stop' -- a rib's stall point, seeded from the rib's last
 %                    certified point and solved in one step at the phase the
 %                    rib stalled stepping to;

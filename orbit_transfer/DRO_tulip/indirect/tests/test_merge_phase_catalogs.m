@@ -67,6 +67,21 @@ M6 = merge_phase_catalogs(base, d6);
 iAlt = find(strcmp({M6.alternatives.source}, 'donor alt'));
 ok = chk(ok, numel(M6.alternatives) == 2 && isscalar(iAlt) && M6.alternatives(iAlt).iD == 2 && M6.alternatives(iAlt).iA == 3, ...
          'donor alternatives are remapped onto the base grid (donor col 2 -> base col 3)');
+ok = chk(ok, isnan(A(1).flyKm) && isnan(A(1).flyVms), 'M2: the displaced primary''s flight is NaN (not measured), not a fake 0');
+% I4: donor alternatives are placed by PHASE, not by the donor's indices: an
+% alternative OFF the donor grid (iD = iA = 0) but ON the base grid takes the
+% base cell, and is then deduplicated against that cell's primary
+kb12 = b.entry_index(1, 2);  kb24 = b.entry_index(2, 4);
+Ct = setfs(Cd, 'z', b.z8(:, kb12));                                   % the base (1,2) primary's root
+Cu = setfs(Cd, 'z', [0.7*ones(7, 1); 22]);                            % a new root at base (2,4)
+d7 = donor;  d7.alternatives = [make_alternative(Ct, base.sheets.sD_frac(1), base.sheets.sA_frac(2), 0, 0, 'twin off donor grid'), ...
+                                make_alternative(Cu, base.sheets.sD_frac(2), base.sheets.sA_frac(4), 0, 0, 'new off donor grid')];
+M7 = merge_phase_catalogs(base, d7);
+src7 = {M7.alternatives.source};
+iu = find(strcmp(src7, 'new off donor grid'));
+ok = chk(ok, ~any(strcmp(src7, 'twin off donor grid')), 'I4: an off-donor-grid twin of a base primary is deduplicated away');
+ok = chk(ok, isscalar(iu) && M7.alternatives(iu).iD == 2 && M7.alternatives(iu).iA == 4, ...
+         'I4: an off-donor-grid alternative on the base grid takes the base cell');
 bOld = rmfield(base, 'alternatives');  bOld.sheets = rmfield(bOld.sheets, {'status', 'status_reason', 'junctions'});
 dOld = rmfield(donor, 'alternatives');  dOld.sheets = rmfield(dOld.sheets, {'status', 'status_reason', 'junctions'});
 [Mo, io] = merge_phase_catalogs(bOld, dOld);
@@ -118,6 +133,11 @@ end
 function c = setf(c, f, v)
 % SETF  Set a top-level field.  INPUTS: c; f; v.  OUTPUTS: c.
 c.(f) = v;
+end
+
+function s = setfs(s, varargin)
+% SETFS  Set name/value pairs on a struct.  INPUTS: s; pairs.  OUTPUTS: s.
+for k = 1:2:numel(varargin), s.(varargin{k}) = varargin{k+1}; end
 end
 
 function r = refuses(base, donor)

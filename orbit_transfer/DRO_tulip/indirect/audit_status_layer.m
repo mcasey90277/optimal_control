@@ -31,6 +31,11 @@ function A_ = audit_status_layer(catMat, opts)
 %   .allowUnfenced (the seam test does). .certifier is a TEST SEAM only.
 % • A throw anywhere in a row (setup, flight, certifier) is a BAD row, and
 %   every tolerance test is written so that NaN fails.
+% • A stored status that is not a real finite scalar (e.g. [] from field
+%   harmonising) is BAD before anything is flown; the comparison is
+%   ~isequal(now, stored), so an empty value can never read as reproduced.
+% • A re-certification that returns no finite z (the polish failed) is
+%   "below the floor on re-certification: <reason>", not a moved root.
 % • .out: the partial save after each alternative is CRASH SALVAGE (rows so
 %   far + both content keys), not a resume.
 %
@@ -67,6 +72,8 @@ function A_ = audit_status_layer(catMat, opts)
 %
 %% Revision History:
 %  M. Casey                                                   (c) 10/04/2026
+%  M. Casey  final review: malformed stored status BAD, ~isequal compare
+%            (C2); failed re-polish named below the floor (M4)       10/04/2026
 %  Copyright Coorbital Inc.
 %% ------------------------ Begin Code Sequence ---------------------------
 
@@ -126,6 +133,9 @@ end
 % ---- alternatives: fly, then re-certify from their own junctions ----------
 for k = idx
     a = Alt(k);  moved = false;  sNow = NaN;  why = setupWhy;
+    if isempty(why) && ~(isfield(a, 'status') && isnumeric(a.status) && isscalar(a.status) && isreal(a.status) && isfinite(a.status))
+        why = 'stored status is not a real finite scalar (malformed)';
+    end
     if isempty(why) && isempty(a.junctions), why = 'no junctions'; end
     if isempty(why), why = flightWhy(a.z8, a.junctions, B, a.sD, a.sA, phys, tolAlt); end
     if isempty(why) && isempty(pool) && ~allowUnfenced, why = 'no pool: refusing to re-certify unfenced'; end
@@ -137,10 +147,16 @@ for k = idx
             seed.Y(1:7, 1) = [rv0(1:6); 1];  seed.Y(8:14, 1) = a.z8(1:7);
             C = certifier(seed, rv0(1:6), rvf(1:6), B, struct('sD', a.sD, 'sA', a.sA, 'pool', pool, ...
                                                               'allowUnfenced', allowUnfenced));
-            moved = ~same_root(C.z, a.z8);
-            if moved, why = 'the re-certification moved to another root';
-            elseif ~(C.status == a.status), why = sprintf('status not reproduced: stored %d, now %d (%s)', a.status, C.status, C.reason); end
-            sNow = C.status;
+            rNow = '';  if isfield(C, 'reason') && ischar(C.reason), rNow = C.reason; end
+            sNow = NaN;  if isfield(C, 'status') && isnumeric(C.status) && isscalar(C.status), sNow = double(C.status); end
+            zNow = [];  if isfield(C, 'z'), zNow = C.z; end
+            if ~(isnumeric(zNow) && numel(zNow) == 8 && isreal(zNow) && all(isfinite(zNow(:))))
+                why = ['below the floor on re-certification: ' rNow];           % the polish failed: no root to compare
+            else
+                moved = ~same_root(zNow, a.z8);
+                if moved, why = 'the re-certification moved to another root';
+                elseif ~isequal(sNow, double(a.status)), why = sprintf('status not reproduced: stored %d, now %g (%s)', a.status, sNow, rNow); end
+            end
         catch ME
             moved = false;  sNow = NaN;  why = ['re-certification threw: ' ME.message];
         end

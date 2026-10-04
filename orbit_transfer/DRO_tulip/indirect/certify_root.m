@@ -28,7 +28,12 @@ function C = certify_root(seed, rv0, rvf, B, opts)
 %        lambda_m(0) < c/T: the helper's own verdict (strict margin AND
 %        clearance above the Hamiltonian residual), then margin > h6MarginMin;
 %     7. the dense conjugate scan (conj_spectrum): no located zero, no
-%        multiplicity, nothing UNRESOLVED.
+%        multiplicity, nothing UNRESOLVED. A scan that is not clear REFUTES
+%        (conjFound, status 2) only DEFINITELY: a zero located by a trusted
+%        sign bracket (nZeroSign) or a coarse trusted sign change
+%        (nInterior). A zero at the numerical floor (nZeroFloor) or a
+%        corank count (multiplicity) alone blocks certification but is not
+%        a refutation: status 3, the reason saying what the scan found.
 %   Gates 2b, 5 and 7 were widened on 2026-09-11 so that the certifier
 %   enforces the SAME checks as transfer_study (Astra review #2: "the
 %   production certifier still enforces less than the study" -- the same
@@ -137,6 +142,9 @@ function C = certify_root(seed, rv0, rvf, B, opts)
 %
 %% Revision History:
 %  M. Casey                                                   (c) 09/09/2026
+%  M. Casey  final review C1: dense-scan conjFound only on a definite
+%            refutation (nZeroSign + nInterior > 0); nZeroSign/nZeroFloor
+%            validated, consistent with nZero, stored in conjDense  10/04/2026
 %  Copyright Coorbital Inc.
 %% ------------------------ Begin Code Sequence ---------------------------
 if nargin < 5, opts = struct(); end
@@ -528,7 +536,7 @@ if doSpectrum
     CS = applyOverride(CS, ovr, 'CS');
     % counts must be finite non-negative integers, the flags scalar
     % logicals, and .clear CONSISTENT with the counts
-    for f2 = {'nInterior', 'nZero', 'nUnresolved', 'multiplicity', 'nNearMiss', 'nInteriorCand', 'nEndCand', 'nStart'}
+    for f2 = {'nInterior', 'nZero', 'nZeroSign', 'nZeroFloor', 'nUnresolved', 'multiplicity', 'nNearMiss', 'nInteriorCand', 'nEndCand', 'nStart'}
         [okv, vv] = nonneg_verdict(CS, f2{1});
         if ~okv || vv ~= round(vv), C.reason = sprintf('dense scan: %s is not a finite non-negative integer (malformed)', f2{1}); C.wallSec = toc(t0); return, end
     end
@@ -541,20 +549,26 @@ if doSpectrum
     % only when nZero is: a "clear" scan reporting one is an inconsistent
     % record. It was validated as a count and then left out of this test, so
     % multiplicity = 1 with the other counts zero certified (FINDINGS 80).
-    consistent = CS.clear == (CS.testable && CS.nZero == 0 && CS.nUnresolved == 0 && CS.nInterior == 0 && CS.multiplicity == 0);
+    % the sign/floor split of the zeros must account for every zero: it is
+    % what decides whether a zero is a definite refutation (status 2)
+    consistent = CS.clear == (CS.testable && CS.nZero == 0 && CS.nUnresolved == 0 && CS.nInterior == 0 && CS.multiplicity == 0) ...
+                 && CS.nZeroSign + CS.nZeroFloor == CS.nZero;
     if ~consistent, C.reason = 'dense scan: .clear is inconsistent with its counts (malformed)'; C.wallSec = toc(t0); return, end
     C.conjDense = struct('nInterior', CS.nInterior, 'nInteriorCand', CS.nInteriorCand, ...
                          'nEndCand', CS.nEndCand, 'nStart', CS.nStart, 'nZero', CS.nZero, ...
-                         'nNearMiss', CS.nNearMiss, 'nUnresolved', CS.nUnresolved, ...
+                         'nZeroSign', CS.nZeroSign, 'nZeroFloor', CS.nZeroFloor, 'nNearMiss', CS.nNearMiss, 'nUnresolved', CS.nUnresolved, ...
                          'multiplicity', CS.multiplicity, 'clear', CS.clear, 'testable', CS.testable, ...
                          'minRel', CS.minRel, 'tUncovered', CS.tUncovered);
     if ~CS.clear
-        C.conjFound = (CS.nZero + CS.nInterior + CS.multiplicity) > 0;
-        if C.conjFound, C.conjReason = ''; end
+        % DEFINITE refutation only: a trusted sign bracket or a coarse
+        % trusted sign change. Floor-level zeros and the corank count alone
+        % stay status 3 (final review C1).
+        C.conjFound = (CS.nZeroSign + CS.nInterior) > 0;
         C.reason = sprintf(['dense conjugate scan not clear: %d coarse sign change(s), %d zero, ' ...
-                            '%d UNRESOLVED, %d multiplicity (%d near-miss cleared)%s'], ...
+                            '%d UNRESOLVED, %d multiplicity (%d near-miss cleared; zeros: %d by trusted sign ' ...
+                            'bracket, %d at the floor)%s'], ...
                            CS.nInterior, CS.nZero, CS.nUnresolved, CS.multiplicity, CS.nNearMiss, ...
-                           tern(CS.testable, '', '; NOT TESTABLE'));
+                           CS.nZeroSign, CS.nZeroFloor, tern(CS.testable, '', '; NOT TESTABLE'));
         if C.conjFound, C.conjReason = C.reason; end
         C.wallSec = toc(t0);  return
     end

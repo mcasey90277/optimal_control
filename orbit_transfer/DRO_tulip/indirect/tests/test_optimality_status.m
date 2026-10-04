@@ -49,14 +49,33 @@ lg = @(varargin) setf(L, varargin{:});
 ok = chk(ok, c == 4 && inf_, 'legacy certified -> 4, inferred');
 c = optimality_status(lg('reason', 'conjugate test verdict 0'));
 ok = chk(ok, c == 3, 'legacy "verdict 0" is FAIL or UNDETERMINED -> 3 (re-certify to resolve)');
+% C1 (final review): the legacy dense reason has no sign/floor split of its
+% zeros, so only a coarse trusted sign change is a DEFINITE refutation
 c = optimality_status(lg('reason', 'dense conjugate scan not clear: 0 coarse sign change(s), 1 zero, 0 UNRESOLVED, 0 multiplicity (3 near-miss cleared)'));
-ok = chk(ok, c == 2, 'legacy dense-scan zero -> 2 (the dense scan runs after gates + H6)');
+ok = chk(ok, c == 3, 'C1: legacy dense-scan zero without a coarse sign change -> 3 (may be a floor-level zero)');
+c = optimality_status(lg('reason', 'dense conjugate scan not clear: 0 coarse sign change(s), 1 zero, 0 UNRESOLVED, 1 multiplicity (3 near-miss cleared)'));
+ok = chk(ok, c == 3, 'C1: legacy multiplicity alone -> 3');
+c = optimality_status(lg('reason', 'dense conjugate scan not clear: 1 coarse sign change(s), 1 zero, 0 UNRESOLVED, 0 multiplicity (3 near-miss cleared)'));
+ok = chk(ok, c == 2, 'C1: legacy coarse trusted sign change -> 2 (the dense scan runs after gates + H6)');
 c = optimality_status(lg('reason', 'independent-field Hamiltonian residual 2.0e-05 > 1e-06'));
 ok = chk(ok, c == 3, 'legacy gate failure that mentions "Hamiltonian" -> 3, not 1');
 c = optimality_status(lg('reason', 'minimum-principle |full gap| 1.0e-09 > 1e-12'));
 ok = chk(ok, c == 1, 'legacy pointwise failure -> 1');
 [c, r, inf_] = optimality_status(lg('reason', 'some wording no build ever used'));
 ok = chk(ok, c == 1 && inf_ && contains(r, 'inferred'), 'REVIEW FOCUS 1: unrecognised legacy reason -> lowest recordable tier, inferred');
+
+% ---- C2: field-harmonised legacy records (missing fields filled with []) ----
+Hm = setf(L, 'stage', [], 'conjFound', [], 'hypAfterConj', [], 'status', [], 'status_reason', []);
+hm = @(varargin) setf(Hm, varargin{:});
+[c, ~, inf_] = optimality_status(hm('reason', 'conjugate test verdict 0'));
+ok = chk(ok, c == 3 && inf_, 'C2: a harmonised legacy record (stage = []) is inferred, not read as stamped');
+[c, ~, inf_] = optimality_status(hm('reason', 'minimum-principle |full gap| 1.0e-09 > 1e-12'));
+ok = chk(ok, c == 1 && inf_, 'C2: a harmonised legacy pointwise failure -> 1 inferred (not 3 via an empty stage)');
+[~, ~, inf_] = optimality_status(hm('stage', NaN, 'reason', 'conjugate test verdict 0'));
+ok = chk(ok, inf_, 'C2: a non-finite stage is not a stamp');
+Sh = rmfield(base, 'hypAfterConj');  Sh.stage = 7;  Sh.conjFound = true;  Sh.reason = 'conjugate test verdict 0 (FAIL)';
+try, [c, r] = optimality_status(Sh); threw = false; catch, threw = true; c = NaN; r = ''; end
+ok = chk(ok, ~threw && c == 3 && contains(r, 'not recorded'), 'C2: a stamped conjugate finding without .hypAfterConj is 3, not a crash');
 
 % ---- the legend -------------------------------------------------------------
 K = status_key();

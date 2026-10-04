@@ -15,6 +15,13 @@ function [code, reason, inferred] = optimality_status(C, opts)
 %   reason text, conservatively: anything unrecognised takes the lowest
 %   recordable tier and inferred = true. A legacy "conjugate test verdict
 %   0" is FAIL or UNDETERMINED and is 3 until re-certified.
+% • STAMPED means .stage is present, non-empty and a real finite scalar. A
+%   legacy record whose missing fields were filled with [] (field
+%   harmonising) has .stage = [] and is LEGACY, never read as stamped.
+% • Status 2 needs a DEFINITE refutation. A legacy dense-scan reason has no
+%   sign/floor split of its zeros (a zero at the numerical floor, or a
+%   corank count, is not definite), so it is inferred 2 only when its
+%   coarse trusted sign-change count is > 0; otherwise 3.
 % • The floor: a finite z8 and a flown miss within opts.gateKm / gateVms.
 %
 %% Inputs:
@@ -30,13 +37,16 @@ function [code, reason, inferred] = optimality_status(C, opts)
 %
 %% Revision History:
 %  M. Casey                                                   (c) 10/04/2026
+%  M. Casey  final review C1/C2: legacy dense 2 only on a coarse sign
+%            change; stamped only with a real finite .stage; guarded
+%            .hypAfterConj                                          10/04/2026
 %  Copyright Coorbital Inc.
 %% ------------------------ Begin Code Sequence ---------------------------
 
 if nargin < 2, opts = struct(); end
 gateKm = fieldd(opts, 'gateKm', 100);  gateVms = fieldd(opts, 'gateVms', 10);
 r = '';  if isfield(C, 'reason') && ischar(C.reason), r = C.reason; end
-inferred = ~isfield(C, 'stage');
+inferred = ~(isfield(C, 'stage') && isnumeric(C.stage) && isscalar(C.stage) && isreal(C.stage) && isfinite(C.stage));
 
 % ---- the floor --------------------------------------------------------------
 z = [];  if isfield(C, 'z'), z = C.z; end
@@ -56,11 +66,13 @@ if ~inferred
     if C.stage < 4
         code = 1;  reason = ['neither: necessary conditions not established -- ' r];
     elseif isfield(C, 'conjFound') && isequal(C.conjFound, true)
-        if strcmp(C.hypAfterConj, 'held')
+        hyp = 'hypotheses not recorded';
+        if isfield(C, 'hypAfterConj') && ischar(C.hypAfterConj) && ~isempty(C.hypAfterConj), hyp = C.hypAfterConj; end
+        if strcmp(hyp, 'held')
             code = 2;  reason = ['conjugate point found (gates and H6 held): ' r];
         else
             code = 3;  reason = sprintf(['necessary only: conjugate point found, but its hypotheses were not ' ...
-                                         'established (%s) -- %s'], C.hypAfterConj, r);
+                                         'established (%s) -- %s'], hyp, r);
         end
     else
         code = 3;  reason = ['necessary only: ' r];
@@ -77,10 +89,12 @@ elseif startsWith(r, 'conjugate test verdict')
     code = 3;  reason = ['necessary only (inferred): legacy verdict 0 is FAIL or UNDETERMINED; re-certify to resolve -- ' r];
 elseif startsWith(r, 'dense conjugate scan not clear')
     n = str2double(regexp(r, '(\d+) coarse sign change\(s\), (\d+) zero, (\d+) UNRESOLVED, (\d+) multiplicity', 'tokens', 'once'));
-    if numel(n) == 4 && (n(1) + n(2) + n(4)) > 0
+    % only a coarse trusted sign change is definite here: the legacy text does
+    % not say whether its zeros were sign-bracketed or at the floor
+    if numel(n) == 4 && n(1) > 0
         code = 2;  reason = ['conjugate point found (inferred; the dense scan runs after gates and H6): ' r];
     else
-        code = 3;  reason = ['necessary only (inferred): ' r];
+        code = 3;  reason = ['necessary only (inferred; no definite refutation -- a zero may be at the floor): ' r];
     end
 elseif ~isempty(regexp(r, gates, 'once')) || contains(r, 'lower-bound ESTIMATE')
     code = 3;  reason = ['necessary only (inferred): ' r];

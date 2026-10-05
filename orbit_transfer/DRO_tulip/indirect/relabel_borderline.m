@@ -16,9 +16,12 @@ function [c, info] = relabel_borderline(c, altRows)
 % • altRows(m).k is the GLOBAL alternative index (audit_status_layer
 %   iterates k over the table, chunked or not). The caller binds the rows to
 %   this catalog (content keys); an index outside the table is refused.
-% • A MOVED row is never relabelled (spec 7, Review Focus 5: another root is
-%   not this alternative), nor is a row with no finite re-audit status >= 1
-%   (below the floor, a throw): both are listed in info.notRelabelled.
+% • ONLY a status flip on the SAME root is relabelled: the audit's why must
+%   start with 'status not reproduced' or 'borderline status not reached',
+%   the root must not have moved (spec 7, Review Focus 5), and both the
+%   stored and the re-audit status must be integer codes 1..4. Every other
+%   BAD row (moved, below the floor, flight, throw, malformed) is listed in
+%   info.notRelabelled with why.
 % • Every alternative gets a logical scalar .borderline (false unless
 %   relabelled here, an existing true is kept) so the struct array stays
 %   uniform. OK rows and rows the audit never saw are otherwise untouched.
@@ -45,6 +48,8 @@ function [c, info] = relabel_borderline(c, altRows)
 %
 %% Revision History:
 %  M. Casey                                                   (c) 10/05/2026
+%  M. Casey  fix round 1: same-root flips only (why prefix), codes
+%            1..4 for stored and re-audit status                     10/05/2026
 %  Copyright Coorbital Inc.
 %% ------------------------ Begin Code Sequence ---------------------------
 
@@ -61,17 +66,27 @@ for m = 1:numel(altRows)
     assert(isscalar(k) && k >= 1 && k <= numel(A) && k == round(k), 'relabel_borderline:index', ...
            'audit row %d names alternative %g, outside the table (1..%d)', m, k, numel(A));
     sNow = r.statusNow;
+    why = char(r.why);
+    stored = A(k).status;
     if isequal(r.moved, true)
-        notRel(end+1) = struct('k', k, 'why', ['the root moved: ' r.why]);
+        notRel(end+1) = struct('k', k, 'why', ['the root moved: ' why]);
         continue
     end
-    if ~(isnumeric(sNow) && isscalar(sNow) && isreal(sNow) && isfinite(sNow) && sNow >= 1)
-        notRel(end+1) = struct('k', k, 'why', sprintf('no finite re-audit status >= 1 (%g): %s', sNow, r.why));
+    if ~(startsWith(why, 'status not reproduced') || startsWith(why, 'borderline status not reached'))
+        notRel(end+1) = struct('k', k, 'why', ['not a status flip on the same root: ' why]);
         continue
     end
-    stored = double(A(k).status);
+    if ~isCode(sNow)
+        notRel(end+1) = struct('k', k, 'why', sprintf('re-audit status is not an integer code 1..4 (%s): %s', num2str(sNow), why));
+        continue
+    end
+    if ~isCode(stored)
+        notRel(end+1) = struct('k', k, 'why', sprintf('stored status is not an integer code 1..4 (%s): %s', num2str(stored), why));
+        continue
+    end
+    stored = double(stored);  sNow = double(sNow);
     newSt = min(stored, double(sNow));
-    A(k).status_reason = sprintf('borderline: stored %d, re-audit %d -- %s | earlier: %s', stored, sNow, r.why, A(k).status_reason);
+    A(k).status_reason = sprintf('borderline: stored %d, re-audit %d -- %s | earlier: %s', stored, sNow, why, A(k).status_reason);
     A(k).status = newSt;
     A(k).borderline = true;
     rows(end+1, :) = [k, stored, sNow, newSt];
@@ -83,4 +98,11 @@ c.status_layer.borderlineNote = ['a borderline status (alternatives.borderline) 
                                  'root at that status or higher'];
 info = struct('rows', rows);
 info.notRelabelled = notRel;
+end
+
+% ---------------------------------------------------------------------------
+function tf = isCode(v)
+% ISCODE  v is a real finite integer status code in 1..4.
+% INPUTS: v (any).  OUTPUTS: tf [logical].
+tf = isnumeric(v) && isscalar(v) && isreal(v) && isfinite(v) && v == round(v) && v >= 1 && v <= 4;
 end

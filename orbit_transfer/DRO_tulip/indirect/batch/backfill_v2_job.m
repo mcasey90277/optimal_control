@@ -38,6 +38,12 @@
 %               audit_round1/ (they no longer match the alternatives key),
 %               and writes ~/BACKFILL_V2_RELABEL_VERDICT.txt. Then re-run the
 %               audit (borderline rows: the stored status is a lower bound).
+%               NOT ATOMIC (save, then moves). RECOVERY / UNDO: copy
+%               costate_catalog_dro_tulip_70mN_prerelabel.mat back over
+%               costate_catalog_dro_tulip_70mN.mat, move the contents of
+%               audit_round1/ back into <outDir>, then delete the
+%               _prerelabel copy and the empty audit_round1/ (the stage
+%               refuses while either exists).
 %
 % BACKFILL_OUT overrides the output folder (default
 % results/library_70mN_24x48_v2). Paths follow this file's location, so the

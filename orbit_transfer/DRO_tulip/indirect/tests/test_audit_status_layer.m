@@ -32,11 +32,13 @@ ok = chk(ok, A.nBad == 0 && A.altRows(1).ok, 'a reproduced status passes');
 A = audit_status_layer(tmp, struct('skipPrimaries', true, 'idxAlt', 2, 'certifier', fake(3, 0), 'pool', [], 'allowUnfenced', true));
 ok = chk(ok, A.nBad == 1 && contains(A.altRows(1).why, 'status not reproduced'), 'a different status is BAD, named');
 A = audit_status_layer(tmp, struct('skipPrimaries', true, 'idxAlt', 3, 'certifier', fake(3, [0.01; zeros(7, 1)]), 'pool', [], 'allowUnfenced', true));
-ok = chk(ok, A.nBad == 1 && A.altRows(1).moved && contains(A.altRows(1).why, 'moved'), 'REVIEW FOCUS 5: a root that moved is BAD, not relabelled');
+ok = chk(ok, A.nBad == 1 && A.altRows(1).moved && contains(A.altRows(1).why, 'moved') && isnan(A.altRows(1).statusNow), ...
+         'REVIEW FOCUS 5: a root that moved is BAD, not relabelled; statusNow NaN (another root''s status)');
 A = audit_status_layer(tmp, struct('skipPrimaries', true, 'idxAlt', 1, 'pool', [], 'allowUnfenced', true, ...
-                                   'certifier', @(seed, rv0, rvf, B, o) struct('z', nan(8, 1), 'status', -1, 'reason', 'normal-chart polish did not converge')));
+                                   'certifier', @(seed, rv0, rvf, B, o) struct('z', nan(8, 1), 'status', 3, 'reason', 'normal-chart polish did not converge')));
 ok = chk(ok, A.nBad == 1 && ~A.altRows(1).moved && contains(A.altRows(1).why, 'below the floor on re-certification: normal-chart polish'), ...
          sprintf('M4: a failed polish is "below the floor on re-certification", not "moved" (%s)', A.altRows(1).why));
+ok = chk(ok, isnan(A.altRows(1).statusNow), 'FIX 1: below the floor -> statusNow NaN even when the certifier reports a finite status');
 ok = chk(ok, numel(A.altContentKey) == 32 && ~strcmp(A.altContentKey, alternatives_content_key(setf(c, 'alternatives', row))), ...
          'the alternatives key is bound to the table''s content');
 c2 = c;  c2.alternatives(2).status = 3;                                  % same rows, one status differs

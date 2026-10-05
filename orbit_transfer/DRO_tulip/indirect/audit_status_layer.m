@@ -42,6 +42,10 @@ function A_ = audit_status_layer(catMat, opts)
 %   root (same_root) AND its status >= the stored one; otherwise BAD
 %   ("borderline status not reached: stored lower bound X, now Y"). Rows
 %   without the field, or with it false, keep the exact-match rule.
+% • .statusNow is reported ONLY when the same root was re-established; it is
+%   NaN on every BAD row where it was not (malformed, flight, no pool,
+%   below the floor, moved, throw), so it can never be read as this row's
+%   status (relabel_borderline relies on it).
 % • .out: the partial save after each alternative is CRASH SALVAGE (rows so
 %   far + both content keys), not a resume.
 %
@@ -81,6 +85,7 @@ function A_ = audit_status_layer(catMat, opts)
 %  M. Casey  final review: malformed stored status BAD, ~isequal compare
 %            (C2); failed re-polish named below the floor (M4)       10/04/2026
 %  M. Casey  borderline rows: stored status a lower bound          10/05/2026
+%  M. Casey  fix round 1: statusNow NaN unless the same root      10/05/2026
 %  Copyright Coorbital Inc.
 %% ------------------------ Begin Code Sequence ---------------------------
 
@@ -159,10 +164,12 @@ for k = idx
             zNow = [];  if isfield(C, 'z'), zNow = C.z; end
             if ~(isnumeric(zNow) && numel(zNow) == 8 && isreal(zNow) && all(isfinite(zNow(:))))
                 why = ['below the floor on re-certification: ' rNow];           % the polish failed: no root to compare
+                sNow = NaN;                                                     % no root re-established: no status to report
             else
                 moved = ~same_root(zNow, a.z8);
                 if moved
                     why = 'the re-certification moved to another root';
+                    sNow = NaN;                                                 % another root's status is not this row's
                 elseif isBorderline(a)
                     % the stored status is a LOWER BOUND: reached or exceeded (NaN fails)
                     if ~(sNow >= double(a.status))

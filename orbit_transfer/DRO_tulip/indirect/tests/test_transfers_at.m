@@ -29,7 +29,7 @@ T = transfers_at(c, 1 - 1e-9, sh.sA_frac(1));
 ok = chk(ok, numel(T) == 3 && issorted([T.tfDays]) && strcmp(T(2).kind, 'primary') && T(1).status == 3 && T(3).status == 2, ...
          'REVIEW FOCUS 4: the wrap finds s_D = 0; ranked by t_f: necessary-only, primary, conjugate');
 ok = chk(ok, strcmp(T(3).statusName, 'conjugate point found'), 'status names from status_key');
-cB = relabel_borderline(c, struct('k', 2, 'ok', false, 'why', 'lift margin 9.1 < 10', 'statusNow', 4, 'moved', false));
+cB = relabel_borderline(c, struct('k', 2, 'ok', false, 'why', 'status not reproduced: stored 3, now 4 (lift margin 9.1 < 10)', 'statusNow', 4, 'moved', false));
 T = transfers_at(cB, 0, sh.sA_frac(1));
 ok = chk(ok, numel(T) == 3 && T(1).status == 3 && startsWith(T(1).reason, 'borderline: stored 3, re-audit 4'), ...
          'a table carrying .borderline (relabel_borderline) still reads; the reason says borderline');

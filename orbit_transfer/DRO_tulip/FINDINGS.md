@@ -6210,3 +6210,60 @@ waits for it. Also plausible on the torus: the 24 x 48's 1 of 60 is the same
 wall plus the 2-D blend -- testable once junction interpolation exists.
 
 Record: `results/departure_rib96_test/interp_score/`.
+
+## 98. The optimality-status layer: the library records transfers, not only optima (2026-10-04/05)
+
+Mike, 2026-10-04: record every orbit transfer the pipeline finds, with its
+thrust program, and annotate each entry with what has been ESTABLISHED about
+its optimality -- "an orbit transfer does not have to be optimal to be
+useful". Design: `docs/superpowers/specs/2026-10-04-library-optimality-status-design.md`;
+plan (12 tasks, subagent-driven, each task reviewed):
+`docs/superpowers/plans/2026-10-04-library-optimality-status.md`.
+
+**The statuses** (`optimality_status`, legend `status_key`):
+
+| code | name | established |
+|---|---|---|
+| 4 | sufficient | the full certify_root stack |
+| 3 | necessary only | pointwise Pontryagin + tfMin witness; sufficiency not |
+| 2 | conjugate point found | 3 + a DEFINITE refutation (coarse trusted sign change, or dense `nZeroSign + nInterior > 0`) with the hypothesis gates and H6 holding: NOT locally optimal |
+| 1 | neither | flies to the target (100 km / 10 m/s); necessary not established |
+
+`certify_root` stamps every result and, after a coarse conjugate FAIL, runs
+the gates and H6 for the record. Ribs keep their refusals (stop points
+included; `walkPastConjugate` is opt-in, off by default), the filler keeps
+its candidates, the packager writes `status`, `status_reason` and
+`junctions` per primary and an `alternatives` table beside the unchanged
+primary grid. `transfers_at(cat, sD, sA)` returns every transfer at a phase
+pair, ranked; `entry_thrust_program` flies one from its junctions.
+
+**Two corrections on the way, both caught before data was written.** (1) The
+final branch review found that floor-level dense-scan zeros (not proven by a
+sign bracket) were labelled "conjugate point found"; the first backfill run
+was stopped after 25 min and the rule tightened to a definite refutation.
+(2) My option-1 design took "the lower of two runs" by numeric code, but 2 is
+a STRONGER claim than 3; the relabel was undone and replaced by the MEET in
+the evidence lattice 1 < 3 < {2, 4} (`status_meet`).
+
+**The library of record, rebuilt in place of a rebuild**
+(`batch/backfill_v2_job.m` -> `results/library_70mN_24x48_v2/`):
+
+| stage | result |
+|---|---|
+| harvest | 2,944 candidates from 79 build files; 0 of 1,152 primaries without junctions (all matched by root at their own cell) |
+| re-certify | 653 inferred candidates + 4 rib stop points, 8 chunks, 1.7 h: 0 moved, 0 errors |
+| assemble | primaries bit-identical (content key equal; 1,152/1,152 agree with the merged record); **656 alternatives** |
+| audit round 1 | 1,803 ok / 5 bad -- five statuses that do not reproduce between runs: lift margins 9.1/8.7/5.3 against the gate 10, a tfMin witness 300 s cap under load, one gate on re-run |
+| relabel | Mike's option 1: the meet of the two runs, marked borderline (a lower bound): k219 -> 1, k21 -> 3, k419/k491/k544 stay 3 |
+| audit round 2 | **1,808 ok / 0 bad; verdict CLEAN** |
+
+The 656 alternatives: **268 sufficient** (certified, slower than their cell's
+primary), **110 necessary only**, **268 conjugate point found**, **10 neither**.
+Adopted as the library of record 2026-10-05 (the merged library of section 95
+is its source, kept unchanged).
+
+**What it opens.** 268 extremals that are certifiably NOT local minima are now
+data -- the conjugate-point question of 2026-10-04 (the s_D ~0.17 stop) has a
+population to map, and `walkPastConjugate` can trace those branches past the
+conjugate point. The junctions every entry now carries are the input the
+junction-state interpolation of section 97 needs.

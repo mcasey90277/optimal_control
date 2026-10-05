@@ -1,7 +1,9 @@
 function ok = test_audit_status_layer()
 % TEST_AUDIT_STATUS_LAYER  The status audit fails closed: a reproduced
 % status passes; a different status, a root that moved, and corrupted
-% junctions are each a BAD row naming why; the content keys are bound.
+% junctions are each a BAD row naming why; the content keys are bound. A
+% BORDERLINE row (stored status a lower bound) passes iff the same root is
+% re-certified at a status >= the stored one; borderline = false is exact.
 % The alternatives carry REAL junctions (seed_from_z8 of entry (1,1)) since
 % the audit flies them before re-certifying; without a pool and without
 % .allowUnfenced every alternative is BAD, not a crash.
@@ -67,6 +69,29 @@ catalog = rmfield(c, 'rungs_N');  save(tmp, 'catalog');
 A = audit_status_layer(tmp, struct('skipPrimaries', true, 'idxAlt', [1 2], 'certifier', fake(3, 0), 'pool', [], 'allowUnfenced', true));
 ok = chk(ok, A.nBad == 2 && all(contains({A.altRows.why}, 'setup failed')), ...
          'a failed setup makes every pending row BAD; the audit returns');
+% BORDERLINE rows (relabel_borderline): the stored status is a LOWER BOUND --
+% OK iff the same root and re-certified status >= stored; others exact
+bl = setf(row, 'borderline', true);  nb = setf(row, 'borderline', false);
+catalog = setf(c, 'alternatives', [bl, nb]);  save(tmp, 'catalog');
+aud = @(idx, st, dz) audit_status_layer(tmp, struct('skipPrimaries', true, 'idxAlt', idx, 'certifier', fake(st, dz), ...
+                                                    'pool', [], 'allowUnfenced', true));
+A = aud(1, 4, 0);
+ok = chk(ok, A.nBad == 0 && A.altRows(1).ok && A.altRows(1).statusNow == 4, 'borderline: re-certified HIGHER (4 >= 3) is OK');
+A = aud(1, 3, 0);
+ok = chk(ok, A.nBad == 0 && A.altRows(1).ok, 'borderline: re-certified EQUAL is OK');
+A = aud(1, 2, 0);
+ok = chk(ok, A.nBad == 1 && ~A.altRows(1).ok && contains(A.altRows(1).why, 'borderline status not reached: stored lower bound 3, now 2'), ...
+         sprintf('borderline: re-certified LOWER is BAD, naming the lower bound (%s)', A.altRows(1).why));
+A = aud(1, 4, [0.01; zeros(7, 1)]);
+ok = chk(ok, A.nBad == 1 && A.altRows(1).moved && contains(A.altRows(1).why, 'moved'), 'borderline: a moved root is still BAD');
+A = aud(2, 4, 0);
+ok = chk(ok, A.nBad == 1 && contains(A.altRows(1).why, 'status not reproduced: stored 3, now 4'), ...
+         'borderline = false keeps the exact-match rule (higher is BAD)');
+ok = chk(ok, ~strcmp(alternatives_content_key(setf(c, 'alternatives', [bl, nb])), alternatives_content_key(setf(c, 'alternatives', [nb, nb]))) ...
+         && strcmp(alternatives_content_key(setf(c, 'alternatives', nb)), alternatives_content_key(setf(c, 'alternatives', row))), ...
+         'the alternatives key binds the borderline flag (false hashes as absent: old keys unchanged)');
+A = aud(1, NaN, 0);
+ok = chk(ok, A.nBad == 1 && ~A.altRows(1).ok, 'borderline: a NaN re-certified status is BAD');
 delete(tmp);
 if ok, fprintf('test_audit_status_layer: ALL PASS\n'); else, fprintf('test_audit_status_layer: FAIL\n'); end
 end

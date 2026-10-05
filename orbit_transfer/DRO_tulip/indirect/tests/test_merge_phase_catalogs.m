@@ -82,6 +82,20 @@ iu = find(strcmp(src7, 'new off donor grid'));
 ok = chk(ok, ~any(strcmp(src7, 'twin off donor grid')), 'I4: an off-donor-grid twin of a base primary is deduplicated away');
 ok = chk(ok, isscalar(iu) && M7.alternatives(iu).iD == 2 && M7.alternatives(iu).iA == 4, ...
          'I4: an off-donor-grid alternative on the base grid takes the base cell');
+% BORDERLINE: a relabelled base table (.borderline on every row) merges with
+% rows built by make_alternative (no such field): the field sets are
+% harmonised, the flag kept, the new rows false
+bB = base;  bB.alternatives = make_alternative(Cu, base.sheets.sD_frac(3), base.sheets.sA_frac(4), 3, 4, 'base borderline');
+bB.alternatives.borderline = true;
+try
+    M8 = merge_phase_catalogs(bB, d7);  src8 = {M8.alternatives.source};
+    okB = isfield(M8.alternatives, 'borderline') && M8.alternatives(strcmp(src8, 'base borderline')).borderline ...
+          && ~M8.alternatives(strcmp(src8, 'new off donor grid')).borderline ...
+          && ~M8.alternatives(strcmp(src8, 'displaced primary (merge)')).borderline;
+catch ME
+    okB = false;  fprintf('    (merge threw: %s)\n', ME.message);
+end
+ok = chk(ok, okB, 'a borderline base table merges with make_alternative rows (flag kept, new rows false)');
 bOld = rmfield(base, 'alternatives');  bOld.sheets = rmfield(bOld.sheets, {'status', 'status_reason', 'junctions'});
 dOld = rmfield(donor, 'alternatives');  dOld.sheets = rmfield(dOld.sheets, {'status', 'status_reason', 'junctions'});
 [Mo, io] = merge_phase_catalogs(bOld, dOld);

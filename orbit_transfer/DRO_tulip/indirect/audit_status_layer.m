@@ -36,6 +36,12 @@ function A_ = audit_status_layer(catMat, opts)
 %   ~isequal(now, stored), so an empty value can never read as reproduced.
 % • A re-certification that returns no finite z (the polish failed) is
 %   "below the floor on re-certification: <reason>", not a moved root.
+% • BORDERLINE rows (.borderline == true, set by relabel_borderline after a
+%   status flipped between runs at a threshold): the stored status is a
+%   LOWER BOUND. Such a row is OK iff the re-certification lands on the SAME
+%   root (same_root) AND its status >= the stored one; otherwise BAD
+%   ("borderline status not reached: stored lower bound X, now Y"). Rows
+%   without the field, or with it false, keep the exact-match rule.
 % • .out: the partial save after each alternative is CRASH SALVAGE (rows so
 %   far + both content keys), not a resume.
 %
@@ -74,6 +80,7 @@ function A_ = audit_status_layer(catMat, opts)
 %  M. Casey                                                   (c) 10/04/2026
 %  M. Casey  final review: malformed stored status BAD, ~isequal compare
 %            (C2); failed re-polish named below the floor (M4)       10/04/2026
+%  M. Casey  borderline rows: stored status a lower bound          10/05/2026
 %  Copyright Coorbital Inc.
 %% ------------------------ Begin Code Sequence ---------------------------
 
@@ -154,8 +161,16 @@ for k = idx
                 why = ['below the floor on re-certification: ' rNow];           % the polish failed: no root to compare
             else
                 moved = ~same_root(zNow, a.z8);
-                if moved, why = 'the re-certification moved to another root';
-                elseif ~isequal(sNow, double(a.status)), why = sprintf('status not reproduced: stored %d, now %g (%s)', a.status, sNow, rNow); end
+                if moved
+                    why = 'the re-certification moved to another root';
+                elseif isBorderline(a)
+                    % the stored status is a LOWER BOUND: reached or exceeded (NaN fails)
+                    if ~(sNow >= double(a.status))
+                        why = sprintf('borderline status not reached: stored lower bound %d, now %g (%s)', a.status, sNow, rNow);
+                    end
+                elseif ~isequal(sNow, double(a.status))
+                    why = sprintf('status not reproduced: stored %d, now %g (%s)', a.status, sNow, rNow);
+                end
             end
         catch ME
             moved = false;  sNow = NaN;  why = ['re-certification threw: ' ME.message];
@@ -201,6 +216,13 @@ function [B, phys] = setupAt(c, sD)
 [B, ~] = arclength_arrival('setup', catalog_setup_request(c, sD));
 phys = struct('Tnd', B.Tnd, 'cnd', B.cnd, 'mu', B.mu, 'lStar', c.constants.lStar_km, ...
               'tStar', c.constants.tStar_s, 'm0kg', c.thruster.m0_kg);
+end
+
+function tf = isBorderline(a)
+% ISBORDERLINE  The row was relabelled conservatively (relabel_borderline):
+% its stored status is a lower bound.  INPUTS: a [struct] alternatives row.
+% OUTPUTS: tf [logical] true only for a .borderline that is exactly true.
+tf = isfield(a, 'borderline') && isequal(a.borderline, true);
 end
 
 function v = fieldd(s, f, d_)

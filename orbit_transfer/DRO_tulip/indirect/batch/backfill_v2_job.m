@@ -26,6 +26,18 @@
 %               with the failing conditions named.
 %   audit    -- one audit chunk (CHUNK, NCHUNK from the environment); what
 %               run_recertify.sh launches with its second argument 'audit'.
+%   relabel  -- after a NOT CLEAN audit whose only problems are statuses that
+%               flip at a threshold: relabel_borderline on every audit chunk's
+%               altRows (global index .k). Refuses unless every audit_alt_*.mat
+%               is a final save bound to THIS catalog (both content keys), no
+%               alternative is audited twice, and no pre-relabel copy or
+%               audit_round1/ exists yet. Copies the catalog to
+%               costate_catalog_dro_tulip_70mN_prerelabel.mat, saves the
+%               relabelled one back (same file, same variable name), moves
+%               audit_*.mat, audit_*_batch.out and audit_driver.log into
+%               audit_round1/ (they no longer match the alternatives key),
+%               and writes ~/BACKFILL_V2_RELABEL_VERDICT.txt. Then re-run the
+%               audit (borderline rows: the stored status is a lower bound).
 %
 % BACKFILL_OUT overrides the output folder (default
 % results/library_70mN_24x48_v2). Paths follow this file's location, so the
@@ -37,7 +49,9 @@
 %
 % INPUTS:  none (environment: BACKFILL_STAGE, BACKFILL_OUT, CHUNK, NCHUNK)
 % OUTPUTS: <verdictF> (one line); <outDir>/{harvest, recert_*, audit_*,
-%          comparison_with_record, costate_catalog_dro_tulip_70mN}.mat
+%          comparison_with_record, costate_catalog_dro_tulip_70mN}.mat;
+%          relabel: <outDir>/costate_catalog_dro_tulip_70mN_prerelabel.mat,
+%          <outDir>/audit_round1/
 stage = lower(strtrim(getenv('BACKFILL_STAGE')));  if isempty(stage), stage = 'harvest'; end
 ind = fileparts(fileparts(mfilename('fullpath')));
 RES = fullfile(ind, 'results');
@@ -45,6 +59,7 @@ recordMat = fullfile(RES, 'library_70mN_24x48_merged', 'costate_catalog_dro_tuli
 outDir = strtrim(getenv('BACKFILL_OUT'));  if isempty(outDir), outDir = fullfile(RES, 'library_70mN_24x48_v2'); end
 verdictF = fullfile(getenv('HOME'), 'BACKFILL_V2_VERDICT.txt');
 if strcmp(stage, 'audit'), verdictF = fullfile(getenv('HOME'), sprintf('BACKFILL_V2_AUDIT_%s_VERDICT.txt', getenv('CHUNK'))); end
+if strcmp(stage, 'relabel'), verdictF = fullfile(getenv('HOME'), 'BACKFILL_V2_RELABEL_VERDICT.txt'); end
 
 here = pwd; cd('/Users/msc/Desktop/proj7/external/pumpkynPie'); startup(); cd(here);
 addpath(ind, fullfile(fileparts(fileparts(ind)), 'costate_common'), fullfile(getenv('HOME'), 'casadi-3.7.0'));
@@ -127,8 +142,45 @@ try
                    sprintf(' | audit %d ok / %d bad | primaries audited %d | alternatives audited %d of %d', ...
                            nOk, nBad, nPrim, numel(unique(seen)), nAlt)];
 
+        case 'relabel'
+            catMat = fullfile(outDir, 'costate_catalog_dro_tulip_70mN.mat');
+            preMat = fullfile(outDir, 'costate_catalog_dro_tulip_70mN_prerelabel.mat');
+            arch = fullfile(outDir, 'audit_round1');
+            assert(~isfile(preMat), 'backfill_v2_job:relabelled', '%s exists: this catalog was relabelled already', preMat);
+            assert(~isfolder(arch), 'backfill_v2_job:archive', '%s exists: refusing to mix audit rounds', arch);
+            L = load(catMat);  vn = char(fieldnames(L));  c2 = L.(vn);
+            ck = catalog_content_key(c2);  ak = alternatives_content_key(c2);
+            chunks = dir(fullfile(outDir, 'audit_alt_*.mat'));
+            assert(~isempty(chunks), 'backfill_v2_job:noAudit', 'no audit_alt_*.mat in %s: run the audit first', outDir);
+            rows = struct('k', {}, 'ok', {}, 'why', {}, 'statusNow', {}, 'moved', {});
+            for f = chunks'
+                Q = load(fullfile(outDir, f.name));
+                assert(isfield(Q, 'audit'), 'backfill_v2_job:auditChunk', '%s is a partial (crash salvage): rerun that chunk', f.name);
+                assert(strcmp(Q.audit.contentKey, ck) && strcmp(Q.audit.altContentKey, ak), ...
+                       'backfill_v2_job:auditKey', '%s audited another catalog: refusing to relabel from it', f.name);
+                ar = Q.audit.altRows;
+                if ~isempty(ar), rows = [rows, rmfield(ar, setdiff(fieldnames(ar), fieldnames(rows)))]; end
+            end
+            seen = [rows.k];
+            assert(numel(unique(seen)) == numel(seen), 'backfill_v2_job:duplicate', 'an alternative is audited in two chunks');
+            [c3, info] = relabel_borderline(c2, rows);
+            assert(copyfile(catMat, preMat), 'backfill_v2_job:copy', 'could not copy %s', catMat);
+            S = struct();  S.(vn) = c3;  save(catMat, '-struct', 'S');
+            mkdir(arch);
+            moved = [dir(fullfile(outDir, 'audit_*.mat')); dir(fullfile(outDir, 'audit_*_batch.out')); dir(fullfile(outDir, 'audit_driver.log'))];
+            for f = moved', movefile(fullfile(outDir, f.name), fullfile(arch, f.name)); end
+            st = [c3.alternatives.status];
+            rl = strjoin(arrayfun(@(m) sprintf('k%d %d->%d (re-audit %d)', info.rows(m, 1), info.rows(m, 2), info.rows(m, 4), ...
+                                              info.rows(m, 3)), 1:size(info.rows, 1), 'UniformOutput', false), ', ');
+            nr = strjoin(arrayfun(@(x) sprintf('k%d (%s)', x.k, x.why), info.notRelabelled, 'UniformOutput', false), '; ');
+            msg = sprintf(['BACKFILL RELABEL: %d borderline of %d alternatives [%s] | NOT relabelled %d%s | status counts ' ...
+                           '4: %d, 3: %d, 2: %d, 1: %d | pre-relabel copy %s | %d audit file(s) moved to audit_round1/ | ' ...
+                           'next: batch/run_recertify.sh N audit, then BACKFILL_STAGE=verdict'], ...
+                          size(info.rows, 1), numel(st), rl, numel(info.notRelabelled), tern(isempty(nr), '', [' [' nr ']']), ...
+                          nnz(st == 4), nnz(st == 3), nnz(st == 2), nnz(st == 1), preMat, numel(moved));
+
         otherwise
-            error('backfill_v2_job:stage', 'BACKFILL_STAGE must be harvest | assemble | audit | verdict, got ''%s''', stage);
+            error('backfill_v2_job:stage', 'BACKFILL_STAGE must be harvest | assemble | audit | verdict | relabel, got ''%s''', stage);
     end
 catch ME
     msg = sprintf('BACKFILL %s FAILED: %s | %s', upper(stage), ME.identifier, strrep(ME.message, newline, ' '));

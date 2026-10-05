@@ -13,6 +13,9 @@ function key = alternatives_content_key(c)
 % • Labels (status_reason, source, gate margins) are left out on purpose:
 %   the audit re-derives the status, it does not vouch for the prose.
 % • Bit-exact: a costate changed in its last bit is another table.
+% • The BORDERLINE flag (relabel_borderline) is bound: it changes what the
+%   audit accepts (a lower-bound status). A false flag hashes as an absent
+%   one, so the keys of tables without the field are unchanged.
 %
 %% Inputs:
 %
@@ -27,6 +30,7 @@ function key = alternatives_content_key(c)
 %
 %% Revision History:
 %  M. Casey                                                   (c) 10/04/2026
+%  M. Casey  borderline flag bound (true rows only)                10/05/2026
 %  Copyright Coorbital Inc.
 %% ------------------------ Begin Code Sequence ---------------------------
 
@@ -37,6 +41,9 @@ md = java.security.MessageDigest.getInstance('MD5');
 md.update(typecast(double(numel(A)), 'uint8'));
 for k = 1:numel(A)
     md.update(typecast(double([A(k).sD; A(k).sA; A(k).status; A(k).z8(:)]), 'uint8'));
+    if isfield(A, 'borderline') && isequal(A(k).borderline, true)
+        md.update(uint8('borderline'));      % a lower-bound status; false hashes as absent (old keys unchanged)
+    end
 end
 key = lower(reshape(dec2hex(typecast(md.digest(), 'uint8'), 2).', 1, []));
 end

@@ -60,6 +60,7 @@ function [M, info] = merge_phase_catalogs(base, donor, opts)
 %  M. Casey  displaced primaries + alternatives merged                10/04/2026
 %  M. Casey  final review: donor alternatives placed by phase (I4); the
 %            displaced primary's flight NaN, not 0 (M2)              10/04/2026
+%  M. Casey  borderline field harmonised when tables concatenate   10/05/2026
 %  Copyright Coorbital Inc.
 %% ------------------------ Begin Code Sequence ---------------------------
 
@@ -166,12 +167,23 @@ end
 % ---------------------------------------------------------------------------
 function A = appendAlt(A, B)
 % APPENDALT  Concatenate alternative rows, skipping empties; rows built here
-% get .sheet = 1 so the field sets agree.  INPUTS: A; B.  OUTPUTS: A.
+% get .sheet = 1, and once either side carries .borderline (relabel_borderline)
+% the other side's rows get borderline = false, so the field sets agree. Any
+% other difference in fields still throws.  INPUTS: A; B.  OUTPUTS: A.
 if isempty(B), return, end
-if ~isfield(B, 'sheet'), for kb = 1:numel(B), B(kb).sheet = 1; end, end
+B = withField(B, 'sheet', 1);
 if isempty(A), A = B; return, end
-if ~isfield(A, 'sheet'), for ka = 1:numel(A), A(ka).sheet = 1; end, end
+A = withField(A, 'sheet', 1);
+if isfield(A, 'borderline') || isfield(B, 'borderline')
+    A = withField(A, 'borderline', false);  B = withField(B, 'borderline', false);
+end
 A = [A(:); B(:)]';
+end
+
+function S = withField(S, f, v)
+% WITHFIELD  Add field f = v to every row of S when S lacks it.
+% INPUTS: S struct array; f char; v default.  OUTPUTS: S.
+if ~isfield(S, f), for k = 1:numel(S), S(k).(f) = v; end, end
 end
 
 function c = asCatalog(c)

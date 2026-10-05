@@ -56,8 +56,10 @@ SCORE_LIBRARY=<catalog .mat, or 'record' | 'spine96'> nohup \
 
 ## Data on disk (results/ is NOT git-tracked)
 
-- `indirect/results/library_70mN_24x48_merged/` -- **the library of record
-  since 2026-10-03** (FINDINGS 95): 24 x 48, 1,152/1,152, audit 1,152/0.
+- `indirect/results/library_70mN_24x48_v2/` -- **the library of record since
+  2026-10-05** (FINDINGS 98): the merged library's 1,152 primaries + status
+  layer + junctions + 656 alternatives; audit CLEAN.
+- `indirect/results/library_70mN_24x48_merged/` -- its source (FINDINGS 95).
 - `indirect/results/library_70mN_24x24_final/` -- the 24 x 24 reference (the
   record until 10-03; 576/576), its audit, `phase_transversality.mat`,
   `interp_score/` (0 of 60).

@@ -113,16 +113,18 @@ allowUnfenced = false;       % true: run the solves in THIS session if no worker
 %       spine96   one departure phase (s_D = 0), 96 arrival phases: an arrival
 %                 sheet wrapped as a one-row catalog (arrival_sheet_as_catalog).
 %                 Fine enough that blending WORKS along arrival phase.
-%       record    the library of record: 24 x 48, 1,152 cells (FINDINGS 95). The
+%       record    the library of record: 24 x 48, 1,152 cells + 656 alternatives
+%                 with optimality status (FINDINGS 98; was the merged library, 95). The
 %                 unmerged 24 x 48 scored 1 of 60: along departure the costates
 %                 still change 30-40% per 1/24 step (FINDINGS 92).
 %       record24  the 24 x 24 library (the record 2026-09-19 to 10-03). At 1/24
 %                 the costates change by 30-40% per step INSIDE one branch, and
 %                 no blend of them converges (FINDINGS 89).
-library = 'spine96';                          % 'spine96' | 'record' | 'record24' | a catalog file's path
+library = 'spine96';                          % 'spine96' | 'record' | 'merged' | 'record24' | a catalog file's path
 switch library
     case 'spine96', catMat = fullfile(here, 'results', 'sheet96_resolution_test', 'spine96_catalog.mat');
-    case 'record',  catMat = fullfile(here, 'results', 'library_70mN_24x48_merged', 'costate_catalog_dro_tulip_70mN.mat');
+    case 'record',  catMat = fullfile(here, 'results', 'library_70mN_24x48_v2', 'costate_catalog_dro_tulip_70mN.mat');     % since 2026-10-05 (FINDINGS 98)
+    case 'merged',  catMat = fullfile(here, 'results', 'library_70mN_24x48_merged', 'costate_catalog_dro_tulip_70mN.mat');
     case 'record24', catMat = fullfile(here, 'results', 'library_70mN_24x24_final', 'costate_catalog_dro_tulip_70mN.mat');
     otherwise,      catMat = library;
 end

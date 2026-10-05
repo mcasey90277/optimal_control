@@ -7,9 +7,10 @@ themselves are explained in `doc/phase_torus_methods.tex`; this file is the
 operational recipe: what to run, in what order, what to watch, what each
 failure looks like, and what it cost.
 
-Library of record for this torus (since 2026-10-03, FINDINGS 95):
-`indirect/results/library_70mN_24x48_merged/`, 24 x 48, 1,152 cells (README
-inside). The 24 x 24 library this runbook built, `library_70mN_24x24_final/`,
+Library of record for this torus (since 2026-10-05, FINDINGS 98):
+`indirect/results/library_70mN_24x48_v2/`, 24 x 48, 1,152 cells plus 656
+alternatives with optimality status (README inside; the merged library of
+FINDINGS 95 is its source). The 24 x 24 library this runbook built, `library_70mN_24x24_final/`,
 is kept unchanged as the 24 x 24 reference. The rounds' rib files: `indirect/results_fine_v2 .. v6`.
 The exact jobs: `indirect/batch/torus/` (README inside).
 

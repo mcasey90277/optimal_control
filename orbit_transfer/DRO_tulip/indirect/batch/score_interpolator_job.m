@@ -18,7 +18,8 @@ addpath(ind, fullfile(fileparts(fileparts(ind)), 'costate_common'));  cd(ind);
 which_ = getenv('SCORE_LIBRARY');  if isempty(which_), which_ = 'record'; end
 nQuery = str2double(getenv('SCORE_NQUERY'));  if ~isfinite(nQuery), nQuery = 60; end
 switch which_
-    case 'record',  catMat = fullfile(ind, 'results', 'library_70mN_24x48_merged', 'costate_catalog_dro_tulip_70mN.mat');   % since 2026-10-03
+    case 'record',  catMat = fullfile(ind, 'results', 'library_70mN_24x48_v2', 'costate_catalog_dro_tulip_70mN.mat');   % since 2026-10-05
+    case 'merged',  catMat = fullfile(ind, 'results', 'library_70mN_24x48_merged', 'costate_catalog_dro_tulip_70mN.mat');
     case 'record24', catMat = fullfile(ind, 'results', 'library_70mN_24x24_final', 'costate_catalog_dro_tulip_70mN.mat');
     case 'spine96', catMat = fullfile(ind, 'results', 'sheet96_resolution_test', 'spine96_catalog.mat');
     otherwise,      catMat = which_;

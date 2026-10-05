@@ -5,7 +5,12 @@ its reference implementation. Product: libraries of converged min-time PMP
 costates `z8 = [λ(7); tf]` over (DRO period × tulip petals × phasing torus ×
 thrust 1–15 N), every entry accepted UNCHANGED by `pumpkyn.cr3bp.tfMin`.
 
-**Library of record (2026-10-03):** `indirect/results/library_70mN_24x48_merged/`
+**Library of record (2026-10-05):** `indirect/results/library_70mN_24x48_v2/` -- the
+merged library below plus the OPTIMALITY-STATUS LAYER (FINDINGS 98): every entry's status
+(4 sufficient / 3 necessary only / 2 conjugate point found / 1 neither), its junction
+states, and 656 alternative transfers; `transfers_at` + `entry_thrust_program` for
+mission design; fail-closed audit CLEAN. Its source:
+`indirect/results/library_70mN_24x48_merged/`
 -- 70 mN / Isp 900 s / 150 kg, DRO tau 1 -> 7-petal tulip, 24 departure x 48
 arrival phases, **1,152 of 1,152 cells certified, fail-closed audit 1,152/0**
 (FINDINGS 92-95; README inside). The 24 x 24 library of 2026-09-19 is kept

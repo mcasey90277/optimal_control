@@ -34,7 +34,7 @@
 
 \title{\code{reproduce\_library\_70mN}:\\[2pt] \large Rebuilding the 70\,mN DRO\,$\to$\,Tulip Costate Library\\ Software Design Document}
 \author{M.~Casey}
-\date{September 19, 2026}
+\date{September 19, 2026; status layer added October 5, 2026}
 
 \begin{document}
 \maketitle
@@ -528,6 +528,192 @@ arrays need one field set on every return path; \code{NaN > tol} is false,
 so an unvalidated comparison passes NaN; a bulk substring rename also renamed
 a function definition; an idle parallel pool times out and the certifier
 then refuses to run.
+
+% =========================================================================
+\section{Status layer}\label{sec:status}
+
+\paragraph{Purpose.} An orbit transfer need not be optimal to be useful: a
+mission designer may well pick a slower or non-optimal transfer. So the
+library records \emph{transfers and their thrust programs}, and each one
+carries what has been \emph{established} about its optimality. The status is
+never what might be true: a transfer whose checks did not all run gets the
+highest tier actually reached, with the reason.
+
+\subsection{Data model}
+
+\begin{center}\small
+\begin{tabular}{@{}cL{0.17\textwidth}L{0.62\textwidth}@{}}
+\toprule
+code & name & meaning \\
+\midrule
+4 & sufficient & first- and second-order conditions hold (``certified'') \\
+3 & necessary only & first-order necessary conditions hold; sufficiency not established \\
+2 & conjugate point found & an extremal with a conjugate point, under the regularity hypotheses: not locally optimal \\
+1 & neither & flies to the target, but the necessary conditions are not established \\
+0 & (empty cell) & nothing recorded \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\noindent The sheet (the primaries: each cell's fastest status-4 transfer)
+gains three fields, so every existing reader works unchanged:
+\code{status} ($n_D\times n_A$, \code{int8}), \code{status\_reason}
+(cell, one per entry: ``full stack passed'', or the first failed or unrun
+check) and \code{junctions} (cell, one $14\times K$ array per entry, $K=24$:
+state and costate at the multiple-shooting junctions). Junctions are stored
+because a bare $z_8$ flown over 17--26 days amplifies costate error by
+$10^{5}$--$10^{7}$\,km per unit relative error.
+
+The catalog gains a top-level struct array \code{alternatives}, one row per
+non-primary transfer: \code{sD}, \code{sA} (exact phases), \code{iD},
+\code{iA} (grid cell, 0 off the grid), \code{z8}, \code{junctions},
+\code{tf\_nd}, \code{status}, \code{status\_reason}, \code{inferred} (status
+inferred from a legacy record), \code{borderline}, the numbers behind the
+status (\code{conj}, \code{conjVerdict}, \code{minLamV}, \code{minQmt},
+\code{dimS}, \code{h6Margin}, \code{liftMargin}, \code{flyKm},
+\code{flyVms}) and \code{source}. \emph{One root, one record}: roots are
+compared by \code{same\_root} (costates within $10^{-6}$ relative), and a
+primary is never also an alternative. \code{status\_key} is the legend
+(codes, names, meanings, order of checks), so the file explains itself, and
+\code{status\_layer} records that the layer is present. A designer calls
+\code{transfers\_at(cat,sD,sA)} (primary plus alternatives, ranked by $t_f$,
+with $\Delta V$ and propellant) and \code{entry\_thrust\_program}, which flies
+the entry segment by segment from its junctions and returns its trajectory and
+thrust program (the older \code{fly\_transfer} is a single flight from $z_8$).
+
+\subsection{The classifier}
+
+\code{optimality\_status} is one pure function, called by
+\code{certify\_root} (stamping) and by the harvester (legacy records), so the
+two cannot disagree. \code{certify\_root} returns at its first failing stage
+and stamps the last stage passed: 1 polish, 2 flight, 3 pointwise
+Pontryagin, 4 \code{tfMin} witness, 5 coarse conjugate, 6 hypothesis gates,
+7 H6, 8 dense conjugate scan.
+
+\begin{center}\small
+\begin{tabular}{@{}L{0.58\textwidth}L{0.34\textwidth}@{}}
+\toprule
+outcome & status \\
+\midrule
+polish fails, flight inadmissible, or miss $>$ 100\,km / 10\,m/s & not recorded (below the floor) \\
+stage 3 fails ($\rho<0$, Hamiltonian, transversality, adjoint, minimum-principle gap); or stage 4 witness disagrees, times out, throws & 1 neither \\
+necessary established; a conjugate test unresolved or not run & 3 necessary only \\
+necessary established; a \emph{definite} refutation and the gates hold & 2 conjugate point found \\
+definite refutation, but gates or H6 failed or could not run & 3 (``conjugate point found, hypotheses not established'') \\
+conjugate tests pass; a gate, H6 or lift check fails & 3 necessary only \\
+everything passes & 4 sufficient \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\noindent Status 2 needs a \textbf{definite} refutation: a coarse test with a
+trusted sign change, or the dense scan with \code{nZeroSign} $+$
+\code{nInterior} $>0$. A zero at the numerical floor or a corank count is not
+definite. After a conjugate failure the certifier still runs the gates and
+H6, for the record (the result is still not ok), so a status-2 label is
+backed by the hypotheses it needs. A check that could not run never creates a
+status; the entry gets the highest tier established, with ``not checked''.
+A legacy record without a stamp is inferred from its fields, then its reason
+text, and an unplaceable one takes the lower tier with \code{inferred}\,=\,true.
+
+\subsection{Evidence lattice and borderline rule}
+
+Status 2 claims more than 3 (it needs everything 3 needs plus a reproducible
+refutation), and 2 and 4 are incomparable, so the order is by what was
+established, not by the number (Figure~\ref{fig:lattice}). \code{status\_meet}
+is the greatest common lower bound. A check that sits at its threshold (a lift
+margin of 9 against a gate of 10, a witness timing out under load) can flip a
+status between runs on the \emph{same} root. Such an alternative is
+\emph{relabelled borderline}: its status becomes the meet of the two runs, and
+the audit treats it as a \textbf{lower bound}: it is OK iff a
+re-certification of the same root has a meet with it equal to it.
+
+\begin{figure}[h]
+\centering
+\begin{tikzpicture}
+  \node[proc, minimum width=24mm] (n1) at (0,0)   {1 neither};
+  \node[proc, minimum width=24mm] (n3) at (0,1.5) {3 necessary only};
+  \node[proc, minimum width=24mm] (n2) at (-2.3,3.0) {2 conjugate point};
+  \node[proc, minimum width=24mm] (n4) at (2.3,3.0)  {4 sufficient};
+  \draw[line width=0.6pt] (n1) -- (n3) -- (n2);
+  \draw[line width=0.6pt] (n3) -- (n4);
+  \node[lbl, text width=44mm, anchor=west] at (4.2,1.5) {$\mathrm{meet}(2,4)=3$\\$\mathrm{meet}(x,1)=1$};
+\end{tikzpicture}
+\caption{Evidence lattice $1<3<\{2,4\}$; higher means more was established.}
+\label{fig:lattice}
+\end{figure}
+
+\subsection{Data flow}
+
+Figure~\ref{fig:status} shows where statuses and alternatives are made.
+Every builder stamps through \code{certify\_root}; ribs keep their refusals
+(\code{R.refused}, including the stop point) and may walk past a conjugate
+point (\code{walkPastConjugate}, off by default, recording status 2); the
+filler keeps every attempt above the floor. The packager
+(\code{sheet\_to\_catalog\_file}) writes the status fields for the primaries
+and builds the table with \code{make\_alternative} and
+\code{dedup\_alternatives} (a stamped row over an inferred one, then the
+higher status). \code{merge\_phase\_catalogs} turns a displaced primary into a
+status-4 alternative and unions the tables. The backfill reaches the same
+catalog for a library already built, without a rebuild.
+
+\begin{figure}[h]
+\centering
+\begin{adjustbox}{max width=\textwidth}
+\begin{tikzpicture}
+  \node[proc, text width=44mm] (b) at (0,0) {\textbf{builders}\\\scriptsize \code{certify\_root} (stamp), ribs (\code{refused}), filler};
+  \node[proc, text width=30mm] (pk) at (5.6,0) {\textbf{packager}\\\scriptsize status, junctions, alternatives};
+  \node[store, text width=30mm] (cat) at (10.4,0) {catalog\\\scriptsize + \code{status\_key}};
+  \node[proc, text width=30mm] (au) at (15.0,0) {\code{audit\_status\_layer}};
+  \draw[flow] (b) -- (pk); \draw[flow] (pk) -- (cat); \draw[flow] (cat) -- (au);
+  \node[proc, text width=19mm] (h) at (0,-3.2) {harvest\\\scriptsize disk, no solve};
+  \node[proc, text width=19mm] (rc) at (3.6,-3.2) {recert\\\scriptsize chunks};
+  \node[proc, text width=19mm] (as) at (7.2,-3.2) {assemble\\\scriptsize v2 catalog};
+  \node[proc, text width=19mm] (a1) at (10.8,-3.2) {audit\\\scriptsize chunks};
+  \node[proc, text width=19mm] (rl) at (14.4,-3.2) {relabel\\\scriptsize borderline};
+  \node[proc, text width=19mm] (a2) at (18.0,-3.2) {audit};
+  \node[ext, text width=19mm] (vd) at (21.6,-3.2) {verdict\\\scriptsize CLEAN?};
+  \foreach \u/\v in {h/rc, rc/as, as/a1, a1/rl, rl/a2, a2/vd} \draw[flow] (\u) -- (\v);
+  \draw[flow, dashed] (a1.south) -- ++(0,-1.0) -| node[lbl, pos=0.25, below]{no flips: skip} (a2.south);
+  \node[lbl, anchor=east] at (-1.3,-3.2) {backfill\\(\code{backfill\_v2\_job}):};
+\end{tikzpicture}
+\end{adjustbox}
+\caption{Top: forward flow of the builders into the catalog and its audit. Bottom: the backfill of a library of record (stages of \code{batch/backfill\_v2\_job.m}); \code{recert} runs the current certifier on every legacy candidate and rib stop point, and re-polishes primaries that no source gave junctions.}
+\label{fig:status}
+\end{figure}
+
+\subsection{The audit}
+
+\code{audit\_status\_layer} \emph{fails closed}: a throw, a timeout, a
+malformed or empty status, or a missing pool (the fence is never opened
+implicitly) is a BAD row, never a skipped one, and every tolerance test is
+written so that NaN fails. The audit is bound to its catalog by \textbf{two}
+content keys: \code{catalog\_content\_key} (the primaries, unchanged by the
+layer) and \code{alternatives\_content\_key} (phases, status and $z_8$ of
+every alternative). Rules:
+\begin{itemize}[itemsep=1pt]
+\item \textbf{Primaries:} status 4, and the junctions flown segment by segment
+  join up in position and velocity and reach the arrival orbit.
+\item \textbf{Alternatives:} first flown from their own junctions (junctions
+  join, arrival within the floor); then \emph{re-certified} from those
+  junctions, since \code{certify\_root} stops at the first failing gate and so
+  the re-run is itself the targeted check. The stored status must be
+  reproduced, and the root must not move (a re-certification landing on
+  another root is BAD, never relabelled). A ``not optimal'' label meets the
+  same bar as a ``certified'' one.
+\item \textbf{Borderline rows:} the lower-bound rule above.
+\end{itemize}
+
+\subsection{Result, 2026-10-05}
+
+The backfill took the 24$\times$48 record
+(\file{results/library\_70mN\_24x48\_merged}) to
+\file{results/library\_70mN\_24x48\_v2}. The 1,152 primaries are unchanged
+(content key equal; \code{compare\_phase\_catalogs} shows no change on any
+cell). The table holds 656 alternatives: 268 sufficient (4), 110 necessary
+only (3), 268 conjugate point found (2) and 10 neither (1); 5 of them
+borderline. The audit covers 1,808 rows, 1,808 ok, 0 bad, and the verdict is
+\textbf{CLEAN}. The v2 library is the library of record.
 
 % =========================================================================
 \section{Modules and their tests}

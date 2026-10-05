@@ -4,12 +4,14 @@ function [c, info] = relabel_borderline(c, altRows)
 %   Label CONSERVATIVELY the alternatives whose optimality status flipped
 %   between runs because a check sits at its threshold (a lift margin of
 %   9 against a gate of 10, a witness timing out under load). For every
-%   audit row (audit_status_layer .altRows) that is BAD, whose root did NOT
-%   move, and whose re-audit status is a finite code >= 1, the alternative
-%   takes status = min(stored, re-audit), borderline = true, and a
-%   status_reason naming both statuses, the audit's why and the old reason.
-%   A borderline status is a LOWER BOUND: the audit then accepts any
-%   re-certification of the same root at that status or higher.
+%   audit row (audit_status_layer .altRows) that is a status flip on the
+%   SAME root, the alternative takes status = status_meet(stored, re-audit)
+%   -- the claim BOTH runs support on the lattice ordered by what was
+%   established (1 < 3 < 2, 1 < 3 < 4; 2 and 4 incomparable), NOT the
+%   numeric minimum -- with borderline = true and a status_reason naming
+%   both statuses, the result, the audit's why and the old reason. A
+%   borderline status is a LOWER BOUND: the audit then accepts any
+%   re-certification of the same root whose meet with it is it.
 %
 %  ASSUMPTIONS / NOTES:
 %
@@ -50,6 +52,7 @@ function [c, info] = relabel_borderline(c, altRows)
 %  M. Casey                                                   (c) 10/05/2026
 %  M. Casey  fix round 1: same-root flips only (why prefix), codes
 %            1..4 for stored and re-audit status                     10/05/2026
+%  M. Casey  fix round 2: lattice meet (status_meet), not min    10/05/2026
 %  Copyright Coorbital Inc.
 %% ------------------------ Begin Code Sequence ---------------------------
 
@@ -85,8 +88,9 @@ for m = 1:numel(altRows)
         continue
     end
     stored = double(stored);  sNow = double(sNow);
-    newSt = min(stored, double(sNow));
-    A(k).status_reason = sprintf('borderline: stored %d, re-audit %d -- %s | earlier: %s', stored, sNow, why, A(k).status_reason);
+    newSt = status_meet(stored, sNow);                       % the common ground of the two runs (lattice, not min)
+    A(k).status_reason = sprintf('borderline: stored %d, re-audit %d -> %d (the common ground of the two runs) -- %s | earlier: %s', ...
+                                 stored, sNow, newSt, why, A(k).status_reason);
     A(k).status = newSt;
     A(k).borderline = true;
     rows(end+1, :) = [k, stored, sNow, newSt];
@@ -94,8 +98,9 @@ end
 c.alternatives = A;
 c.status_layer.nBorderline = nnz([A.borderline]);
 c.status_layer.borderlineNote = ['a borderline status (alternatives.borderline) is a lower bound: the status flipped ' ...
-                                 'between runs at a threshold, the lower one is kept, and the audit accepts the same ' ...
-                                 'root at that status or higher'];
+                                 'between runs at a threshold, the claim both runs support is kept (status_meet on ' ...
+                                 'the lattice 1 < 3 < 2, 1 < 3 < 4), and the audit accepts the same root at any status ' ...
+                                 'whose meet with it is it'];
 info = struct('rows', rows);
 info.notRelabelled = notRel;
 end

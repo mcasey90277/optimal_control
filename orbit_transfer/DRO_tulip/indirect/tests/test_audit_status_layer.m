@@ -3,7 +3,8 @@ function ok = test_audit_status_layer()
 % status passes; a different status, a root that moved, and corrupted
 % junctions are each a BAD row naming why; the content keys are bound. A
 % BORDERLINE row (stored status a lower bound) passes iff the same root is
-% re-certified at a status >= the stored one; borderline = false is exact.
+% re-certified at a status s' with status_meet(stored, s') == stored (the
+% lattice 1 < 3 < 2, 1 < 3 < 4); borderline = false is exact.
 % The alternatives carry REAL junctions (seed_from_z8 of entry (1,1)) since
 % the audit flies them before re-certifying; without a pool and without
 % .allowUnfenced every alternative is BAD, not a crash.
@@ -72,18 +73,31 @@ A = audit_status_layer(tmp, struct('skipPrimaries', true, 'idxAlt', [1 2], 'cert
 ok = chk(ok, A.nBad == 2 && all(contains({A.altRows.why}, 'setup failed')), ...
          'a failed setup makes every pending row BAD; the audit returns');
 % BORDERLINE rows (relabel_borderline): the stored status is a LOWER BOUND --
-% OK iff the same root and re-certified status >= stored; others exact
+% OK iff the same root and status_meet(stored, now) == stored; others exact
 bl = setf(row, 'borderline', true);  nb = setf(row, 'borderline', false);
 catalog = setf(c, 'alternatives', [bl, nb]);  save(tmp, 'catalog');
 aud = @(idx, st, dz) audit_status_layer(tmp, struct('skipPrimaries', true, 'idxAlt', idx, 'certifier', fake(st, dz), ...
                                                     'pool', [], 'allowUnfenced', true));
 A = aud(1, 4, 0);
-ok = chk(ok, A.nBad == 0 && A.altRows(1).ok && A.altRows(1).statusNow == 4, 'borderline: re-certified HIGHER (4 >= 3) is OK');
+ok = chk(ok, A.nBad == 0 && A.altRows(1).ok && A.altRows(1).statusNow == 4, 'borderline 3: re-certified 4 is OK (meet(3,4) = 3)');
 A = aud(1, 3, 0);
-ok = chk(ok, A.nBad == 0 && A.altRows(1).ok, 'borderline: re-certified EQUAL is OK');
+ok = chk(ok, A.nBad == 0 && A.altRows(1).ok, 'borderline 3: re-certified 3 (equal) is OK');
 A = aud(1, 2, 0);
-ok = chk(ok, A.nBad == 1 && ~A.altRows(1).ok && contains(A.altRows(1).why, 'borderline status not reached: stored lower bound 3, now 2'), ...
-         sprintf('borderline: re-certified LOWER is BAD, naming the lower bound (%s)', A.altRows(1).why));
+ok = chk(ok, A.nBad == 0 && A.altRows(1).ok, 'LATTICE: borderline 3, re-certified 2 is OK (2 establishes everything 3 does)');
+A = aud(1, 1, 0);
+ok = chk(ok, A.nBad == 1 && ~A.altRows(1).ok && contains(A.altRows(1).why, 'borderline status not reached: stored lower bound 3, now 1'), ...
+         sprintf('borderline 3, re-certified 1 is BAD, naming the lower bound (%s)', A.altRows(1).why));
+lat = @(st) setf(bl, 'status', st);
+catalog = setf(c, 'alternatives', [lat(2), lat(4), lat(1)]);  save(tmp, 'catalog');
+A = aud(1, 3, 0);
+ok = chk(ok, A.nBad == 1 && contains(A.altRows(1).why, 'stored lower bound 2, now 3'), 'LATTICE: borderline 2, re-certified 3 is BAD');
+A = aud(1, 4, 0);
+ok = chk(ok, A.nBad == 1 && contains(A.altRows(1).why, 'stored lower bound 2, now 4'), 'LATTICE: borderline 2, re-certified 4 is BAD (incomparable)');
+A = aud(2, 3, 0);
+ok = chk(ok, A.nBad == 1 && contains(A.altRows(1).why, 'stored lower bound 4, now 3'), 'LATTICE: borderline 4, re-certified 3 is BAD');
+A = aud(3, 2, 0);
+ok = chk(ok, A.nBad == 0, 'LATTICE: borderline 1 is reached by anything (re-certified 2)');
+catalog = setf(c, 'alternatives', [bl, nb]);  save(tmp, 'catalog');
 A = aud(1, 4, [0.01; zeros(7, 1)]);
 ok = chk(ok, A.nBad == 1 && A.altRows(1).moved && contains(A.altRows(1).why, 'moved'), 'borderline: a moved root is still BAD');
 A = aud(2, 4, 0);

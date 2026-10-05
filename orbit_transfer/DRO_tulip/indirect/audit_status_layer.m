@@ -39,7 +39,9 @@ function A_ = audit_status_layer(catMat, opts)
 % • BORDERLINE rows (.borderline == true, set by relabel_borderline after a
 %   status flipped between runs at a threshold): the stored status is a
 %   LOWER BOUND. Such a row is OK iff the re-certification lands on the SAME
-%   root (same_root) AND its status >= the stored one; otherwise BAD
+%   root (same_root) AND status_meet(stored, now) == stored on the status
+%   lattice (1 < 3 < 2, 1 < 3 < 4; 2 and 4 incomparable): stored 3 is
+%   reached by 3, 2 or 4; 1 by anything; 2 only by 2; 4 only by 4. Otherwise BAD
 %   ("borderline status not reached: stored lower bound X, now Y"). Rows
 %   without the field, or with it false, keep the exact-match rule.
 % • .statusNow is reported ONLY when the same root was re-established; it is
@@ -86,6 +88,7 @@ function A_ = audit_status_layer(catMat, opts)
 %            (C2); failed re-polish named below the floor (M4)       10/04/2026
 %  M. Casey  borderline rows: stored status a lower bound          10/05/2026
 %  M. Casey  fix round 1: statusNow NaN unless the same root      10/05/2026
+%  M. Casey  fix round 2: lower bound on the lattice (status_meet) 10/05/2026
 %  Copyright Coorbital Inc.
 %% ------------------------ Begin Code Sequence ---------------------------
 
@@ -171,8 +174,9 @@ for k = idx
                     why = 'the re-certification moved to another root';
                     sNow = NaN;                                                 % another root's status is not this row's
                 elseif isBorderline(a)
-                    % the stored status is a LOWER BOUND: reached or exceeded (NaN fails)
-                    if ~(sNow >= double(a.status))
+                    % the stored status is a LOWER BOUND on the lattice: reached iff
+                    % meet(stored, now) == stored (a non-code now, e.g. NaN, fails)
+                    if ~reaches(double(a.status), sNow)
                         why = sprintf('borderline status not reached: stored lower bound %d, now %g (%s)', a.status, sNow, rNow);
                     end
                 elseif ~isequal(sNow, double(a.status))
@@ -223,6 +227,17 @@ function [B, phys] = setupAt(c, sD)
 [B, ~] = arclength_arrival('setup', catalog_setup_request(c, sD));
 phys = struct('Tnd', B.Tnd, 'cnd', B.cnd, 'mu', B.mu, 'lStar', c.constants.lStar_km, ...
               'tStar', c.constants.tStar_s, 'm0kg', c.thruster.m0_kg);
+end
+
+function tf = reaches(stored, now)
+% REACHES  A re-certified status reaches a stored lower bound on the status
+% lattice: status_meet(stored, now) == stored; false for anything that is
+% not a code 1..4.  INPUTS: stored, now [scalar].  OUTPUTS: tf [logical].
+try
+    tf = status_meet(stored, now) == stored;
+catch
+    tf = false;
+end
 end
 
 function tf = isBorderline(a)

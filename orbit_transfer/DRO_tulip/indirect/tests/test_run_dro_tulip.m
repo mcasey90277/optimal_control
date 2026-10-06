@@ -34,8 +34,10 @@ T2 = run_dro_tulip(11/12, 0.0754, struct('quiet', true));
 ok = chk(ok, T2.ok && abs(T2.tfDays - 17.8775) < 2e-3, ...
          sprintf('departure 11/12: t_f = %.4f d (library 17.8775)', T2.tfDays));
 
-% a pair off the library must be WALKED to, and the walk reported
-T3 = run_dro_tulip(0, 0.0754 + 1/24, struct('quiet', true, 'wallSec', 300));
+% a pair off the library must be WALKED to, and the walk reported. The record
+% covers the 24x48 grid, so 0.0754 + 1/24 is now a library pair; half a column
+% off it (1/96) is not.
+T3 = run_dro_tulip(0, 0.0754 + 1/96, struct('quiet', true, 'wallSec', 300));
 ok = chk(ok, ~strcmp(T3.source, 'library') && ~isempty(T3.reason), ...
          sprintf('an off-library pair is walked: source %s, %s, t_f = %.4f d', T3.source, T3.reason, T3.tfDays));
 ok = chk(ok, ~T3.ok || (T3.conj == 1 && T3.dz <= 1e-6), ...

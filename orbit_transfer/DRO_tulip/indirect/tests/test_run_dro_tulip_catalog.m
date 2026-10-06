@@ -33,7 +33,8 @@ ot   = fileparts(fileparts(fileparts(fileparts(mfilename('fullpath')))));  % orb
 here = fullfile(ot, 'costate_common');
 ind = fullfile(fileparts(here), 'DRO_tulip', 'indirect');
 addpath(here, ind);
-catMat = fullfile(ind, 'results', 'costate_catalog_dro_tulip_70mN.mat');
+% the library of record (the older results/ catalog predates the 2026-09-12 endpoint rule)
+catMat = fullfile(ind, 'results', 'library_70mN_24x48_v2', 'costate_catalog_dro_tulip_70mN.mat');
 if ~isfile(catMat), fprintf('  SKIP  no 70 mN catalog on disk\n'); return, end
 L = load(catMat);  fn = fieldnames(L);  s = L.(fn{1}).sheets(1);
 tS = 382981.289129055/86400;

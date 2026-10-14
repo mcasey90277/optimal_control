@@ -30,10 +30,17 @@ function D = costate_lib_describe(libIn)
 %                                                   .sheets (per-sheet
 %                                                   coverage, catalog only),
 %                                                   .best / .worst sheet
-%                                                   labels
+%                                                   labels; with the
+%                                                   status layer also
+%                                                   .statusCounts [4x2
+%                                                   primaries/alternatives,
+%                                                   codes 4 3 2 1],
+%                                                   .nAlternatives,
+%                                                   .nBorderline, .K, .nJunctions [primaries alternatives with junctions]
 %
 %% Revision History:
 %  M. Casey                                                   (c) 08/06/2026
+%  M. Casey  status block when the catalog carries the layer   (c) 10/13/2026
 %  Copyright Coorbital Inc.
 %% ------------------------ Begin Code Sequence ---------------------------
 
@@ -157,8 +164,59 @@ case 'catalog'
                'coveragePct',mean(covPct), ...
                'sheets',struct('label',{lab},'coveragePct',covPct,'entries',nEnt), ...
                'best',lab{kBest}, 'worst',lab{kWorst});
+    if isfield(lib, 'status_key') && isfield(sh, 'status')
+        D = printStatusBlock(lib, D);
+    end
 end
 fprintf('=========================================================\n\n');
+end
+
+% ------------------------------------------------------------------------
+function D = printStatusBlock(lib, D)
+% PRINTSTATUSBLOCK  Print the optimality-status counts and add them to D.
+% INPUTS: lib struct catalog with status_key; D struct summary so far.
+% OUTPUTS: D struct with .statusCounts [4x2], .nAlternatives, .nBorderline, .K.
+codes = [4 3 2 1];
+prim = cell2mat(arrayfun(@(q) q.status(:), lib.sheets(:), 'UniformOutput', false));
+alt = [];  bord = [];
+if isfield(lib, 'alternatives') && ~isempty(lib.alternatives)
+    alt  = [lib.alternatives.status];
+    bord = find([lib.alternatives.borderline]);
+end
+cnt = zeros(4, 2);
+fprintf('\noptimality status (status_key):\n');
+for kc = 1:4
+    cnt(kc, 1) = nnz(prim == codes(kc));
+    cnt(kc, 2) = nnz(alt == codes(kc));
+    kn = find(lib.status_key.codes == codes(kc), 1);
+    fprintf('  %d %-22s  primaries %4d   alternatives %3d\n', codes(kc), ...
+            lib.status_key.names{kn}, cnt(kc, 1), cnt(kc, 2));
+end
+has14 = @(x) ~isempty(x) && size(x, 1) == 14;
+nPrim = 0;  nJp = 0;  K = 0;
+for ks = 1:numel(lib.sheets)
+    jc = lib.sheets(ks).junctions;
+    ok14 = cellfun(has14, jc);
+    nPrim = nPrim + numel(jc);
+    nJp   = nJp + nnz(ok14);
+    if K == 0 && any(ok14), K = size(jc{find(ok14, 1)}, 2); end
+end
+nAlt = numel(alt);
+nJa  = 0;
+if nAlt > 0, nJa = nnz(arrayfun(@(q) has14(q.junctions), lib.alternatives)); end
+if nJp == nPrim && nJa == nAlt
+    jtxt = sprintf('junctions on every entry (K = %d)', K);
+else
+    jtxt = sprintf('junctions on %d/%d primaries and %d/%d alternatives (K = %d)', ...
+                   nJp, nPrim, nJa, nAlt, K);
+end
+fprintf('alternatives: %d (%d borderline: %s); %s\n', ...
+        nAlt, numel(bord), strjoin(compose('k%d', bord), ', '), jtxt);
+D.statusCounts  = cnt;
+D.nAlternatives = numel(alt);
+D.nBorderline   = numel(bord);
+D.K             = K;
+D.nJunctions    = [nJp nJa];
 end
 
 % ------------------------------------------------------------------------

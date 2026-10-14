@@ -18,21 +18,24 @@ function out = build_dro_deliverable(cfg)
 %   Two paths, chosen by the catalog:
 %
 %   * A catalog WITH .alternatives (the status-layer library, deliverable 8,
-%     the default): 1 export (export_deliverable_catalog), 2 audit gate by
-%     CONTENT KEY, 3 copy every file of deliverable_file_list, 4 the sample
-%     movie (cfg.movies), 5 the status torus PNG, 6 the README from computed
+%     the default): 1 audit gate by CONTENT KEY (the record's keys, which
+%     the export keeps), 2 export (export_deliverable_catalog, stamped
+%     CLEAN only after the gate passed), 3 copy every file of
+%     deliverable_file_list, 4 the sample movie (cfg.movies), 5 the status torus PNG, 6 the README from computed
 %     facts, 7 the recipient self-test (deliverable_selftest, cfg.selftest),
 %     8 the zip, only after a passed self-test (cfg.zip).
 %   * A catalog WITHOUT .alternatives (deliverables 3 and the earlier 70 mN
 %     catalog): the original path, its audit gate by path equality, its
-%     five helpers and its README, unchanged.
+%     five helpers plus their dependency closure inside indirect/ and
+%     costate_common/ (the movies helper now flies through
+%     catalog_endpoints + fly_catalog_entry), and its README.
 %
 %  ASSUMPTIONS / NOTES:
 %
 % • The key-bound gate refuses (error id build_dro_deliverable:audit) unless
-%   the primaries audit (variable A) reports nBad = 0 for the export's
+%   the primaries audit (variable A) reports nBad = 0 for the record's
 %   catalog_content_key, and every audit_alt_*.mat chunk carries the
-%   export's catalog_content_key AND alternatives_content_key, reports
+%   record's catalog_content_key AND alternatives_content_key, reports
 %   audit.nBad = 0 with every altRows(k).ok true, and the union of the
 %   chunks' [altRows.k] is 1..nAlternatives exactly once (coverage).
 % • Helper sources are the MAINTAINED copies listed by deliverable_file_list
@@ -77,6 +80,10 @@ function out = build_dro_deliverable(cfg)
 %  M. Casey  deliverable 8: export, key-bound audit gate, file list, movie,
 %            torus PNG, README from computed facts, recipient self-test,
 %            zip from the parent; status-less path kept     (c) 10/13/2026
+%  M. Casey  audit gate runs on the record's keys BEFORE the export
+%            stamps auditVerdict / auditNote (passed in, from the audit
+%            counts); legacy path ships the helpers' dependency
+%            closure                                        (c) 10/13/2026
 %  Copyright Coorbital Inc.
 %% ------------------------ Begin Code Sequence ---------------------------
 
@@ -95,13 +102,14 @@ if ~isfield(c0, 'alternatives')
     out = buildLegacy(cfg, c0, catMat, here);
     return
 end
-out = buildStatus(cfg, catMat, here, ind);
+out = buildStatus(cfg, c0, catMat, here, ind);
 end
 
 % ========================================================================
-function out = buildStatus(cfg, catMat, here, ind)
+function out = buildStatus(cfg, rec, catMat, here, ind)
 % BUILDSTATUS  The deliverable-8 path (catalog with the status layer).
-% INPUTS: cfg; catMat (char); here, ind (folders).  OUTPUTS: out.
+% INPUTS: cfg; rec (the loaded record); catMat (char); here, ind (folders).
+% OUTPUTS: out.
 name     = getf(cfg, 'name', 'costate_catalog_70mN_status_deliverable8');
 outDir   = getf(cfg, 'outDir', fullfile(here, 'deliverables', name));
 doMov    = getf(cfg, 'movies', true);
@@ -116,21 +124,28 @@ assert(~doZip || doSelf, 'build_dro_deliverable:selftest', ...
 staleZip = [outDir '.zip'];
 if isfile(staleZip), delete(staleZip); end           % never leave a zip of an older build
 
-%% 1. Export (into a scratch folder: outDir is not touched until the gate passes)
+%% 1. Audit gate by content key, on the RECORD's keys (the export keeps both
+%     keys equal, asserted below), BEFORE anything is stamped CLEAN
+keys    = struct('primKey', catalog_content_key(rec), 'altKey', alternatives_content_key(rec));
+nSolved = sum(arrayfun(@(s) nnz(s.has_solution), rec.sheets));
+aud = auditGate(primMat, altDir, keys, numel(rec.alternatives), nSolved);
+fprintf('[build] 1 audit gate: primaries %d ok / %d bad, alternatives %d ok / %d bad over %d chunks, coverage 1..%d, keys bound\n', ...
+        aud.primOk, aud.primBad, aud.altOk, aud.altBad, aud.nChunks, numel(rec.alternatives));
+
+%% 2. Export (into a scratch folder: outDir is not touched until it is written)
 catFile = 'costate_catalog_dro_tulip_70mN.mat';
 scratch = tempname;  mkdir(scratch);
 cleanScratch = onCleanup(@() rmdir(scratch, 's'));
-[c, info] = export_deliverable_catalog(catMat, fullfile(scratch, catFile));
-fprintf('[build] 1 export: %s (keys %s / %s; %d sources rewritten; removed %s)\n', ...
+xo = struct('auditVerdict', 'CLEAN', 'auditNote', sprintf(['Every alternative was re-certified under the ' ...
+     'shipped certifier and audited fail-closed (%d ok / %d bad over the primaries audit and %d ' ...
+     'alternatives chunks); see README.'], aud.primOk + aud.altOk, aud.primBad + aud.altBad, aud.nChunks));
+[c, info] = export_deliverable_catalog(catMat, fullfile(scratch, catFile), xo);
+assert(strcmp(info.primKey, keys.primKey) && strcmp(info.altKey, keys.altKey), 'build_dro_deliverable:audit', ...
+       'the export''s content keys differ from the audited record''s');
+fprintf('[build] 2 export: %s (keys %s / %s; %d sources rewritten; removed %s)\n', ...
         catFile, info.primKey, info.altKey, info.nSourceRewritten, strjoin(info.removed, ', '));
-
-%% 2. Audit gate by content key
-nSolved = sum(arrayfun(@(s) nnz(s.has_solution), c.sheets));
-aud = auditGate(primMat, altDir, info, numel(c.alternatives), nSolved);
 prepareOutDir(outDir);
 movefile(fullfile(scratch, catFile), fullfile(outDir, catFile));
-fprintf('[build] 2 audit gate: primaries %d ok / %d bad, alternatives %d ok / %d bad over %d chunks, coverage 1..%d, keys bound\n', ...
-        aud.primOk, aud.primBad, aud.altOk, aud.altBad, aud.nChunks, numel(c.alternatives));
 
 %% 3. Copy the listed files
 [L, roots] = deliverable_file_list();
@@ -223,7 +238,7 @@ end
 function aud = auditGate(primMat, altDir, info, nAlt, nSolved)
 % AUDITGATE  The key-bound audit gate (see the header). Every refusal is
 % error id build_dro_deliverable:audit.
-% INPUTS: primMat (char); altDir (char); info (export info: .primKey
+% INPUTS: primMat (char); altDir (char); info (the record's keys: .primKey
 % .altKey); nAlt [scalar]; nSolved [scalar] solved cells.  OUTPUTS: aud (.primOk .primBad .primWhen .altOk
 % .altBad .nChunks .chunkFiles).
 id = 'build_dro_deliverable:audit';
@@ -236,7 +251,7 @@ if P.A.nBad ~= 0
     error(id, 'the primaries audit reports %d bad entries -- not shipping', P.A.nBad);
 end
 if ~strcmp(P.A.contentKey, info.primKey)
-    error(id, 'the primaries audit is for content key %s, the export is %s', P.A.contentKey, info.primKey);
+    error(id, 'the primaries audit is for content key %s, the record is %s', P.A.contentKey, info.primKey);
 end
 if P.A.nOk ~= nSolved
     error(id, 'the primaries audit covers %d entries, the catalog solves %d cells', P.A.nOk, nSolved);
@@ -250,10 +265,10 @@ for k = 1:numel(D)
         error(id, '%s is not an audit_alt chunk (contentKey altContentKey audit altRows)', D(k).name);
     end
     if ~strcmp(X.contentKey, info.primKey)
-        error(id, '%s: primaries key %s, the export is %s', D(k).name, X.contentKey, info.primKey);
+        error(id, '%s: primaries key %s, the record is %s', D(k).name, X.contentKey, info.primKey);
     end
     if ~strcmp(X.altContentKey, info.altKey)
-        error(id, '%s: alternatives key %s, the export is %s', D(k).name, X.altContentKey, info.altKey);
+        error(id, '%s: alternatives key %s, the record is %s', D(k).name, X.altContentKey, info.altKey);
     end
     if ~isstruct(X.audit) || ~isfield(X.audit, 'nBad') || ~isstruct(X.altRows) || ...
             ~all(isfield(X.altRows, {'ok', 'k'}))
@@ -521,7 +536,8 @@ p(['- **%d of the %d alternatives are OFF-GRID** (`iD = 0` or `iA = 0`: %d off t
    'grid, %d off the arrival grid, %d off both): found by ribs and sheet candidates at ' ...
    'non-grid phases. `transfers_at` finds them only at their own phases; the torus map ' ...
    'draws them as markers.\n'], f.nOffGrid, f.nAlt, f.nOffD, f.nOffA, f.nOffBoth);
-p(['- **`source` wording is kind-only** (`sheet candidate, column n (re-certified)`, ' ...
+p(['- **`source` wording is kind-only** (`sheet candidate, column n (re-certified)` on the ' ...
+   '48-phase grid, `96-phase sheet candidate, column n (re-certified)` from the 96-phase sheet, ' ...
    '`rib ... point`, ...): machine paths were stripped at export; the content keys are ' ...
    'unchanged because `source` is not hashed.\n']);
 p('- **Phases: fractions vs DAYS** (see Phase conventions): the picker alone takes DAYS.\n');
@@ -671,7 +687,8 @@ end
 % ========================================================================
 function out = buildLegacy(cfg, c, catMat, here)
 % BUILDLEGACY  The status-less path (deliverable 3 and the earlier 70 mN
-% catalog): path-equality audit gate, five helpers, the original README.
+% catalog): path-equality audit gate, five helpers + their dependency
+% closure inside indirect/ and costate_common/, the original README.
 % INPUTS: cfg; c (catalog); catMat (char); here (DRO_tulip).  OUTPUTS: out.
 outDir = getf(cfg, 'outDir', fullfile(here, 'deliverables', 'costate_catalog_deliverable3'));
 doMov  = getf(cfg, 'movies', false);
@@ -768,8 +785,21 @@ for k = 1:numel(helpers)
     assert(exist(src, 'file') == 2, 'missing maintained helper %s', src);
     copyfile(src, fullfile(outDir, helpers{k}));
 end
+% The helpers' own dependencies (since 2026-10-13 the movies helper flies
+% through catalog_endpoints + fly_catalog_entry): their closure, restricted
+% to the maintained folders indirect/ and costate_common/, ships beside them.
+ccDir = fullfile(fileparts(here), 'costate_common');
+need  = matlab.codetools.requiredFilesAndProducts(fullfile(srcDir, helpers));
+deps  = {};
+for k = 1:numel(need)
+    [fd, nm, ex] = fileparts(need{k});
+    if ~(strcmp(fd, srcDir) || strcmp(fd, ccDir)), continue, end
+    if any(strcmp([nm ex], helpers)), continue, end
+    copyfile(need{k}, fullfile(outDir, [nm ex]));
+    deps{end+1} = [nm ex];
+end
 writeReadme(fullfile(outDir, 'README.md'), f, c);
-files = [{catFile}, helpers, {'README.md'}];
+files = [{catFile}, helpers, deps, {'README.md'}];
 
 if doMov
     costate_catalog_extremes_movies(fullfile(outDir, catFile), ...

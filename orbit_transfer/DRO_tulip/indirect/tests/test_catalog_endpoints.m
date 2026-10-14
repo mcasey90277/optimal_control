@@ -2,7 +2,9 @@ function ok = test_catalog_endpoints()
 % TEST_CATALOG_ENDPOINTS  The shipped endpoint rule is the certified one: on
 % the library of record its departure and arrival closures equal
 % arclength_arrival's (via catalog_setup_request) bitwise at every grid
-% phase and at the wrap, and Tnd / cnd agree to 1e-15.
+% phase and at the wrap, and Tnd / cnd agree to 1e-15. On the deliverable-3
+% catalog (sheets without dep_family / arr_family) the pack fallback runs and
+% rebuilds orbits with the periods the sheet implies.
 %
 % INPUTS:  none
 % OUTPUTS: ok [logical]  every check passed (prints PASS/FAIL per check)
@@ -26,6 +28,17 @@ ok = chk(ok, isequal(size(B.stateA(0.3)), [6 1]) && all(isfield(B.problem, {'lSt
 ok = chk(ok, size(orb.rvD, 2) >= 6 && orb.tD(1) == 0 && size(orb.rvT, 2) >= 6, 'orbit samples returned for plotting');
 B2 = catalog_endpoints(c, 1, 2*c.rungs_N(1));
 ok = chk(ok, abs(B2.Tnd - 2*B.Tnd) <= 1e-15*B2.Tnd && B2.problem.thrustN == 2*c.rungs_N(1) && B.problem.thrustN == c.rungs_N(1), 'optional thrustN: Tnd doubles with the thrust, B.problem.thrustN carried, default unchanged');
+D3 = load(fullfile(fileparts(here), 'direct', 'results', 'costate_catalog_dro_tulip.mat'));  d3 = D3.(char(fieldnames(D3)));
+s3 = d3.sheets(1);
+try
+    [B3, o3] = catalog_endpoints(d3, 1);
+    ePD = abs(o3.tD(end) - s3.tauDRO);  ePA = abs(o3.tT(end) - s3.period_tulip_nd);
+    ok3 = isequal(size(B3.stateD(0.2)), [6 1]) && isequal(size(B3.stateA(0.7)), [6 1]) && ePD <= 1e-12 && ePA <= 1e-12;
+    msg3 = sprintf('deliverable-3 catalog (no dep_family): runs, 6 x 1 states, periods match tauDRO / period_tulip_nd (errors %.1e, %.1e)', ePD, ePA);
+catch err
+    ok3 = false;  msg3 = sprintf('deliverable-3 catalog (no dep_family): %s', err.message);
+end
+ok = chk(ok, ~isfield(s3, 'dep_family') && ok3, msg3);
 if ok, fprintf('test_catalog_endpoints: ALL PASS\n'); else, fprintf('test_catalog_endpoints: FAIL\n'); end
 end
 

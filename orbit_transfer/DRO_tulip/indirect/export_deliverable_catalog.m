@@ -14,6 +14,15 @@ function [c, info] = export_deliverable_catalog(recordMat, outMat, opts)
 %   the rewrite keeps the key; the assert proves it on every export.
 % • The catalog is saved under its variable name (opts.varName), so a bare
 %   load gives the struct back.
+% • build.auditVerdict / build.note are what the CALLER passes
+%   (opts.auditVerdict / opts.auditNote): this function sees no audit, so
+%   it stamps 'not audited at export' unless told otherwise. The builder
+%   gates first and passes 'CLEAN' with a note built from the audit counts.
+% • Source rewriting keeps the sheet kind: a source naming
+%   sheet96_resolution_test reads '96-phase sheet candidate, column N
+%   (...)', the 48-phase sheet's 'sheet candidate, column N (...)'.
+% • export_deliverable_catalog('cleanSource', s) returns the rewritten
+%   source string s (char or cellstr) without exporting (the test seam).
 %
 %% Inputs:
 %
@@ -23,6 +32,9 @@ function [c, info] = export_deliverable_catalog(recordMat, outMat, opts)
 %
 %  opts                     struct   (optional)     .varName
 %                                                   ['costate_catalog_dro_tulip_70mN']
+%                                                   .auditVerdict (char)
+%                                                   ['not audited at export']
+%                                                   .auditNote (char) ['']
 %
 %% Outputs:
 %
@@ -40,10 +52,21 @@ function [c, info] = export_deliverable_catalog(recordMat, outMat, opts)
 %            char/cellstr outside sheets/alternatives) cut to their last
 %            component; conj_test counts recomputed from the per-cell
 %            verdict grid                                   (c) 10/13/2026
+%  M. Casey  opts.auditVerdict / opts.auditNote (no CLEAN stamp without
+%            an audit); 96-phase sheet sources keep their kind; the
+%            'cleanSource' mode                             (c) 10/13/2026
 %  Copyright Coorbital Inc.
 %% ------------------------ Begin Code Sequence ---------------------------
+if ischar(recordMat) && strcmp(recordMat, 'cleanSource')   % test seam
+    if iscell(outMat), c = cellfun(@cleanSource, outMat, 'UniformOutput', false);
+    else, c = cleanSource(outMat); end
+    info = struct();
+    return
+end
 if nargin < 3, opts = struct(); end
 varName = fieldd(opts, 'varName', 'costate_catalog_dro_tulip_70mN');
+verdict = fieldd(opts, 'auditVerdict', 'not audited at export');
+aNote   = fieldd(opts, 'auditNote', '');
 R = load(recordMat);  c = R.(char(fieldnames(R)));
 primKey = catalog_content_key(c);  altKey = alternatives_content_key(c);
 removed = {};
@@ -56,12 +79,12 @@ c.build = struct( ...
     'nCandidates', fieldd(sl, 'nCandidates', NaN), 'nRecert', fieldd(sl, 'nRecert', NaN), 'nMoved', fieldd(sl, 'nMoved', NaN), ...
     'nBorderline', nnz(arrayfun(@(a) isfield(a, 'borderline') && isequal(a.borderline, true), c.alternatives)), ...
     'borderlineNote', fieldd(sl, 'borderlineNote', ''), ...
-    'auditVerdict', 'CLEAN', ...
-    'note', 'Every alternative was re-certified under the shipped certifier and audited fail-closed (1,808 ok / 0 bad); see README.');
+    'auditVerdict', verdict, ...
+    'note', aNote);
 c.provenance = sprintf(['%s Status layer (FINDINGS 98): candidates harvested from the builds, every inferred one ' ...
     're-certified, primaries matched to their junctions by root, assembled beside the unchanged primaries, ' ...
-    'audited fail-closed (CLEAN), borderline statuses relabelled to the meet of two runs. Exported for deliverable 8 on %s.'], ...
-    c.provenance, char(datetime('now', 'Format', 'yyyy-MM-dd')));
+    'audited fail-closed (verdict at export: %s), borderline statuses relabelled to the meet of two runs. Exported for deliverable 8 on %s.'], ...
+    c.provenance, verdict, char(datetime('now', 'Format', 'yyyy-MM-dd')));
 n = 0;
 for k = 1:numel(c.alternatives)
     s0 = c.alternatives(k).source;  s1 = cleanSource(s0);
@@ -112,12 +135,15 @@ end
 
 function s = cleanSource(s)
 % CLEANSOURCE  Drop file paths and file names from a source string, keep the
-% kind words.  INPUTS: s [char].  OUTPUTS: s [char], never empty.
+% kind words and the sheet kind (96-phase sheet vs the 48-phase grid).
+% INPUTS: s [char].  OUTPUTS: s [char], never empty.
+is96 = contains(s, 'sheet96_resolution_test');
 s = regexprep(s, '[\w./-]*\.mat', '');
 s = regexprep(s, '(reproduce_|sheet96_resolution_test|departure_rib96_test|round_\d+)\S*', '');
 s = regexprep(s, '^\s*cand(?=\W|$)', 'sheet candidate');
 s = strtrim(regexprep(s, '\s+', ' '));
 s = regexprep(s, '^\s*,\s*', '');
+if is96, s = regexprep(s, '^sheet candidate', '96-phase sheet candidate'); end
 if isempty(s), s = 'build candidate'; end
 end
 

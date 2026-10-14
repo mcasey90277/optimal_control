@@ -2,7 +2,9 @@ function ok = test_export_deliverable_catalog()
 % TEST_EXPORT_DELIVERABLE_CATALOG  The deliverable export keeps every datum
 % (both content keys equal, schema valid), removes the internal records
 % (merge, status_layer), rewrites alternative sources without file paths,
-% and loads with a bare load.
+% and loads with a bare load. cleanSource maps the brief's examples (and the
+% 96-phase sheet keeps its kind); with no audit opts the build is stamped
+% 'not audited at export', with opts it carries the caller's verdict.
 %
 % INPUTS:  none
 % OUTPUTS: ok [logical]  every check passed (prints PASS/FAIL per check)
@@ -22,13 +24,30 @@ ok = chk(ok, isequal(c.sheets, r.sheets) && isequal(c.status_key, r.status_key) 
 src = {c.alternatives.source};
 ok = chk(ok, ~any(contains(src, '.mat')) && ~any(contains(src, 'reproduce_')) && ~any(contains(src, '/')), 'no file paths in any alternative source');
 ok = chk(ok, any(strcmp(src, 'displaced primary (merge)')) || any(startsWith(src, 'rib refusal')) || any(startsWith(src, 'sheet candidate')), 'the kind words survive');
-ok = chk(ok, c.build.nBorderline == nnz([c.alternatives.borderline]) && strcmp(c.build.auditVerdict, 'CLEAN'), 'build counts come from the data');
+ok = chk(ok, c.build.nBorderline == nnz([c.alternatives.borderline]), 'build counts come from the data');
+ok = chk(ok, strcmp(c.build.auditVerdict, 'not audited at export') && isempty(c.build.note), ...
+         'a bare export does not claim an audit (verdict ''not audited at export'', empty note)');
 hits = pathHits(c, 'c');
 ok = chk(ok, isempty(hits), sprintf('no char anywhere in the export holds /Users/ or /Volumes/ (%d found%s)', ...
          numel(hits), strjoin(strcat({' '}, hits(1:min(3, end))), '')));
 s1 = c.sheets(1);  vv = s1.conj_pass(logical(s1.has_solution));
 ok = chk(ok, c.conj_test.nPass + c.conj_test.nFail == nnz(vv == 1 | vv == 0) && contains(c.conj_test.note, 'recomputed'), ...
          sprintf('conj_test nPass + nFail (%d + %d) = cells with a verdict (%d)', c.conj_test.nPass, c.conj_test.nFail, nnz(vv == 1 | vv == 0)));
+tmp2 = [tempname '.mat'];
+c2 = export_deliverable_catalog(recordMat, tmp2, struct('auditVerdict', 'CLEAN', 'auditNote', '7 ok / 0 bad'));
+delete(tmp2);
+ok = chk(ok, strcmp(c2.build.auditVerdict, 'CLEAN') && strcmp(c2.build.note, '7 ok / 0 bad') && contains(c2.provenance, 'CLEAN'), ...
+         'opts.auditVerdict / opts.auditNote fill build.auditVerdict / build.note and the provenance verdict');
+tbl = {'reproduce_70mN_24x48/round_01/arrival_sheet_70mN_nA48 cand, column 7 (re-certified)', 'sheet candidate, column 7 (re-certified)'
+       'rib refusal at sA 0.2837 (walked 0)',                                          'rib refusal at sA 0.2837 (walked 0)'
+       'displaced primary (merge)',                                                    'displaced primary (merge)'
+       'sheet96_resolution_test/arrival_sheet_70mN_nA96 cand, column 61 (re-certified)', '96-phase sheet candidate, column 61 (re-certified)'};
+got = export_deliverable_catalog('cleanSource', tbl(:, 1));
+for k = 1:size(tbl, 1)
+    ok = chk(ok, strcmp(got{k}, tbl{k, 2}), sprintf('cleanSource: ''%s'' -> ''%s''', tbl{k, 1}, got{k}));
+end
+ok = chk(ok, nnz(startsWith(src, '96-phase sheet candidate')) == nnz(contains({r.alternatives.source}, 'sheet96_resolution_test')), ...
+         'every 96-phase sheet source keeps its kind in the export');
 L = load(tmp);
 ok = chk(ok, isfield(L, 'costate_catalog_dro_tulip_70mN') && isequal(L.costate_catalog_dro_tulip_70mN.sheets(1).z8, r.sheets(1).z8), 'saved under the catalog''s variable name; loads with load alone');
 delete(tmp);

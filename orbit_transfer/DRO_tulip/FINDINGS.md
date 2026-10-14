@@ -6419,3 +6419,30 @@ stays as the developer kit; its folder is frozen as shipped.
 three files and the README shows the raw call instead). The cost if wrong:
 no one-line "tfMin accepts it" proof in the kit, which the example's section
 3 supplies for the picked entry.
+
+**Review and the README (2026-10-14, later).** The whole-branch review
+(opus) returned "mergeable after fixes": two Important findings, both README
+claims -- the "no toolbox beyond base MATLAB" line was false because
+`pumpkyn.cr3bp.tfMin` uses `fsolve` (Optimization Toolbox, a pumpkyn
+dependency the example's section 3 inherits), and the opening sentence
+over-claimed "converged extremal" for the 10 status-1 alternatives -- plus 14
+minor ones, all fixed in one wave: the export's provenance label is passed per
+deliverable (the first build's `.mat` said "deliverable 8"), the example
+derives units at the thrust the picker DELIVERED and seeds tfMin at the seed's
+rung, the movie test checks the time base and every stored junction
+(continuity 1.8e-7 / 2.2e-7 km, the old engine's defects reproduced) with
+1 km thresholds and a repo-wide closure filter, orbits are drawn at the
+catalog's own muStar. The scoped re-review left two wording residuals (a false
+Linux recovery clause, a typed 1e-9 ND); both fixed, the second by measuring:
+the plain `interp1` spline in the tfMin recipe differs from the certified
+periodic spline by at most 1.9e-10 ND (7 cm) at this library's grid phases,
+computed in `statusFacts` and printed by the README.
+
+Mike then streamlined the README by hand: title without the deliverable
+number, no "how it was made / audits" section, no gotchas, no build prose.
+The generator now writes that shape (nine sections) so a rebuild reproduces
+his edit rather than overwriting it; the two review corrections live inside
+the kept sections (Dependencies; the tfMin paragraph). One thing his cut
+removed that the developer kit's README still says: interpolation between
+grid points is not included. Final build 76 s, self-test OK 46 s, zip 20.8 MB
+/ 14 files, unpacked zip run on a clean path (|dz| = 0 at the pick, 14 s).

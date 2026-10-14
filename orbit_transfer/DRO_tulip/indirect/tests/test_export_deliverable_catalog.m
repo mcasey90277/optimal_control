@@ -23,10 +23,36 @@ src = {c.alternatives.source};
 ok = chk(ok, ~any(contains(src, '.mat')) && ~any(contains(src, 'reproduce_')) && ~any(contains(src, '/')), 'no file paths in any alternative source');
 ok = chk(ok, any(strcmp(src, 'displaced primary (merge)')) || any(startsWith(src, 'rib refusal')) || any(startsWith(src, 'sheet candidate')), 'the kind words survive');
 ok = chk(ok, c.build.nBorderline == nnz([c.alternatives.borderline]) && strcmp(c.build.auditVerdict, 'CLEAN'), 'build counts come from the data');
+hits = pathHits(c, 'c');
+ok = chk(ok, isempty(hits), sprintf('no char anywhere in the export holds /Users/ or /Volumes/ (%d found%s)', ...
+         numel(hits), strjoin(strcat({' '}, hits(1:min(3, end))), '')));
+s1 = c.sheets(1);  vv = s1.conj_pass(logical(s1.has_solution));
+ok = chk(ok, c.conj_test.nPass + c.conj_test.nFail == nnz(vv == 1 | vv == 0) && contains(c.conj_test.note, 'recomputed'), ...
+         sprintf('conj_test nPass + nFail (%d + %d) = cells with a verdict (%d)', c.conj_test.nPass, c.conj_test.nFail, nnz(vv == 1 | vv == 0)));
 L = load(tmp);
 ok = chk(ok, isfield(L, 'costate_catalog_dro_tulip_70mN') && isequal(L.costate_catalog_dro_tulip_70mN.sheets(1).z8, r.sheets(1).z8), 'saved under the catalog''s variable name; loads with load alone');
 delete(tmp);
 if ok, fprintf('test_export_deliverable_catalog: ALL PASS\n'); else, fprintf('test_export_deliverable_catalog: FAIL\n'); end
+end
+
+function h = pathHits(x, nm)
+% PATHHITS  Names of every char/string inside x (recursive through structs
+% and cells) that contains '/Users/' or '/Volumes/'.
+% INPUTS: x (any); nm (char, its name).  OUTPUTS: h {cellstr}.
+h = {};
+if ischar(x) || isstring(x)
+    if any(contains(x, {'/Users/', '/Volumes/'})), h = {nm}; end
+elseif iscell(x)
+    parts = cell(1, numel(x));
+    for k = 1:numel(x), parts{k} = pathHits(x{k}, sprintf('%s{%d}', nm, k)); end
+    h = [h, parts{:}];
+elseif isstruct(x)
+    fn = fieldnames(x);  parts = cell(numel(x), numel(fn));
+    for e = 1:numel(x)
+        for q = 1:numel(fn), parts{e, q} = pathHits(x(e).(fn{q}), sprintf('%s(%d).%s', nm, e, fn{q})); end
+    end
+    h = [h, parts{:}];
+end
 end
 
 function ok = chk(ok, c, msg)

@@ -72,6 +72,10 @@ function [outStem, info] = costate_catalog_extremes_movies(cat_, filt, metric, o
 %  M. Casey  per-panel B (own sheet and thrust), full titles, guards (c) 10/13/2026
 %  M. Casey  flights through fly_catalog_entry; opts.pair/.labels/
 %            .nFrames/.fly; second output info                (c) 10/13/2026
+%  M. Casey  self-demo uses the catalog's rung nearest 5 N (a
+%            one-rung 70 mN catalog has no 5 N entries)   (c) 10/13/2026
+%  M. Casey  ephemeris guard hides/restores only a folder under
+%            matlabroot (ruling R11)                         (c) 10/13/2026
 %  Copyright Coorbital Inc.
 %% ------------------------ Begin Code Sequence ---------------------------
 
@@ -86,10 +90,11 @@ if nargin == 0
     cat_ = L.(fn{1});
    fprintf('demo catalog: %s\n', F(1).name);
       sh = cat_.sheets(ceil(numel(cat_.sheets)/2));
+   [~,kDemo] = min(abs(cat_.rungs_N - 5));  tDemo = cat_.rungs_N(kDemo);  % 5 N when stored
    if isnan(sh.Np)
-       fl = struct('tauDRO',sh.tauDRO,'tauArr',sh.tau_arr,'thrustN',5);
+       fl = struct('tauDRO',sh.tauDRO,'tauArr',sh.tau_arr,'thrustN',tDemo);
    else
-       fl = struct('tauDRO',sh.tauDRO,'Np',sh.Np,'thrustN',5);
+       fl = struct('tauDRO',sh.tauDRO,'Np',sh.Np,'thrustN',tDemo);
    end
  outStem = costate_catalog_extremes_movies(cat_, fl);
      return;
@@ -119,10 +124,12 @@ if exist('planetEphemeris', 'file')
         planetEphemeris(juliandate(datetime(2030,1,1)), 'Earth', 'Moon');
     catch
         aeroDir = fileparts(which('planetEphemeris'));
-        rmpath(aeroDir);
-        cleanupPath = onCleanup(@() addpath(aeroDir));
-        warning('costate_catalog_extremes_movies:noEphemData', ...
-            'planetEphemeris found but its data package is missing; using pumpkyn''s analytic Earth-Moon model for this render.');
+        if startsWith(aeroDir, matlabroot)   % only a MathWorks toolbox folder is ever hidden
+            rmpath(aeroDir);
+            cleanupPath = onCleanup(@() addpath(aeroDir));
+            warning('costate_catalog_extremes_movies:noEphemData', ...
+                'planetEphemeris found but its data package is missing; using pumpkyn''s analytic Earth-Moon model for this render.');
+        end
     end
 end
 

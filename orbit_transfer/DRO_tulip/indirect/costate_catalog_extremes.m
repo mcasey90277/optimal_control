@@ -65,6 +65,8 @@ function [eMin, eMax] = costate_catalog_extremes(cat_, filt, doPlot, metric)
 %  M. Casey                                                   (c) 08/06/2026
 %  M. Casey  alternatives and status filters, defaults unchanged
 %                                                              (c) 10/13/2026
+%  M. Casey  self-demo uses the catalog's rung nearest 5 N (a
+%            one-rung 70 mN catalog has no 5 N entries)   (c) 10/13/2026
 %  Copyright Coorbital Inc.
 %% ------------------------ Begin Code Sequence ---------------------------
 
@@ -79,10 +81,11 @@ if nargin == 0
     cat_ = L.(fn{1});
    fprintf('demo catalog: %s\n', F(1).name);
       sh = cat_.sheets(ceil(numel(cat_.sheets)/2));
+   [~,kDemo] = min(abs(cat_.rungs_N - 5));  tDemo = cat_.rungs_N(kDemo);  % 5 N when stored
    if isnan(sh.Np)
-       fl = struct('tauDRO',sh.tauDRO,'tauArr',sh.tau_arr,'thrustN',5);
+       fl = struct('tauDRO',sh.tauDRO,'tauArr',sh.tau_arr,'thrustN',tDemo);
    else
-       fl = struct('tauDRO',sh.tauDRO,'Np',sh.Np,'thrustN',5);
+       fl = struct('tauDRO',sh.tauDRO,'Np',sh.Np,'thrustN',tDemo);
    end
 [eMin,eMax] = costate_catalog_extremes(cat_, fl, true);
      return;

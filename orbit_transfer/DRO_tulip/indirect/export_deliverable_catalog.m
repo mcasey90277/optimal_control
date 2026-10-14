@@ -36,6 +36,10 @@ function [c, info] = export_deliverable_catalog(recordMat, outMat, opts)
 %
 %% Revision History:
 %  M. Casey                                                   (c) 10/13/2026
+%  M. Casey  absolute paths in top-level text (families.arcDir, any
+%            char/cellstr outside sheets/alternatives) cut to their last
+%            component; conj_test counts recomputed from the per-cell
+%            verdict grid                                   (c) 10/13/2026
 %  Copyright Coorbital Inc.
 %% ------------------------ Begin Code Sequence ---------------------------
 if nargin < 3, opts = struct(); end
@@ -64,11 +68,46 @@ for k = 1:numel(c.alternatives)
     if ~strcmp(s0, s1), n = n + 1; end
     c.alternatives(k).source = s1;
 end
+top = setdiff(fieldnames(c), {'sheets', 'alternatives'}, 'stable');
+for k = 1:numel(top), c.(top{k}) = stripPaths(c.(top{k})); end
+if isfield(c, 'conj_test') && isfield(c.sheets, 'conj_pass')
+    vc = cell(numel(c.sheets), 1);
+    for k = 1:numel(c.sheets)          % the verdict of every solved cell
+        h = logical(c.sheets(k).has_solution);  g = c.sheets(k).conj_pass;
+        vc{k} = g(h);
+    end
+    v = vertcat(vc{:});
+    cnt = struct('nPass', nnz(v == 1), 'nFail', nnz(v == 0), 'nNotrun', nnz(v == -1), ...
+                 'nUndecided', nnz(~ismember(v, [1 0 -1])));
+    fc = fieldnames(cnt);
+    for k = 1:numel(fc)
+        if k <= 2 || isfield(c.conj_test, fc{k}), c.conj_test.(fc{k}) = cnt.(fc{k}); end
+    end
+    c.conj_test.note = 'counts recomputed from the per-cell verdicts at export';
+end
 assert(strcmp(catalog_content_key(c), primKey) && strcmp(alternatives_content_key(c), altKey), 'export_deliverable_catalog:keys', 'the export changed a content key');
 p = catalog_schema('validate', c);
 assert(isempty(p), 'export_deliverable_catalog:schema', 'the export does not validate: %s', strjoin(p, '; '));
 S.(varName) = c;  save(outMat, '-struct', 'S');
 info = struct('primKey', primKey, 'altKey', altKey, 'removed', {removed}, 'nSourceRewritten', n);
+end
+
+function x = stripPaths(x)
+% STRIPPATHS  Recursively replace every absolute path inside char / string
+% values of a struct or cell with its bare last path component.
+% INPUTS:  x (any).  OUTPUTS: x (same class and size).
+if ischar(x)
+    x = regexprep(x, '(?<![\w.])/(?:[\w.\-]+/)+([\w.\-]+)/?', '$1');
+elseif isstring(x)
+    for k = 1:numel(x), x(k) = string(stripPaths(char(x(k)))); end
+elseif iscell(x)
+    for k = 1:numel(x), x{k} = stripPaths(x{k}); end
+elseif isstruct(x)
+    fn = fieldnames(x);
+    for e = 1:numel(x)
+        for q = 1:numel(fn), x(e).(fn{q}) = stripPaths(x(e).(fn{q})); end
+    end
+end
 end
 
 function s = cleanSource(s)

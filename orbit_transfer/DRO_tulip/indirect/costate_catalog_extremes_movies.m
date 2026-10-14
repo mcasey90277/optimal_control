@@ -1,4 +1,4 @@
-function outStem = costate_catalog_extremes_movies(cat_, filt, metric, outStem)
+function [outStem, info] = costate_catalog_extremes_movies(cat_, filt, metric, outStem, opts)
 %% Purpose:
 %
 %   Renders the two EXTREME transfers found by costate_catalog_extremes as a
@@ -16,11 +16,15 @@ function outStem = costate_catalog_extremes_movies(cat_, filt, metric, outStem)
 %
 %  ASSUMPTIONS / NOTES:
 %
+% • Aero-toolbox guard (ShowEarth trap): planetEphemeris without its data
+%   pack is hidden from the path for this render only.
 % • Each output frame is EXACTLY 1280 x 720 (two 637-px panels + a 6-px
 %   divider), enforced by index resampling -- the known cure for the H.264
 %   diagonal-shear artifact. The .gif is written at the same size.
-% • The trajectories are FLOWN from the stored costates (tfMinProp): what
-%   you watch is the actual PMP solution.
+% • The trajectories are FLOWN by fly_catalog_entry (from the stored
+%   junction states when the row has them, else from z8): what you watch is
+%   the actual PMP solution, an alternative's included. Single-sheet
+%   catalogs (sheet 1's orbits and endpoint rule).
 % • Needs pumpkynPie.plot.SatelliteAnimator; if it is not on the path the
 %   function warns and returns '' (same graceful degradation as
 %   dro_scene_movie).
@@ -44,14 +48,29 @@ function outStem = costate_catalog_extremes_movies(cat_, filt, metric, outStem)
 %                                                   '<stem>.gif'  [default
 %                                                   'catalog_extremes_movie']
 %
+%  opts                     struct (optional)       .pair [] 2-element cell
+%                                                   of transfers_at rows to
+%                                                   film INSTEAD of the
+%                                                   extremes; .labels []
+%                                                   2 chars (panel labels);
+%                                                   .nFrames [240] frame
+%                                                   cap; .fly ['auto']
+%                                                   fly_catalog_entry method
+%
 %% Outputs:
 %
 %  outStem                  char                    The stem written, or ''
 %                                                   if the animator was
 %                                                   unavailable
 %
+%  info                     struct                  .F {1x2} the two flights
+%                                                   .methods {F1.method,
+%                                                   F2.method} .nFrames
+%
 %% Revision History:
 %  M. Casey                                                   (c) 08/06/2026
+%  M. Casey  flights through fly_catalog_entry; opts.pair/.labels/
+%            .nFrames/.fly; second output info                (c) 10/13/2026
 %  Copyright Coorbital Inc.
 %% ------------------------ Begin Code Sequence ---------------------------
 
@@ -77,6 +96,12 @@ end
 if ~exist('filt','var'),    filt = struct(); end
 if ~exist('metric','var') || isempty(metric), metric = 'deltaV'; end
 if ~exist('outStem','var'), outStem = 'catalog_extremes_movie'; end
+if ~exist('opts','var') || isempty(opts), opts = struct(); end
+if ~isfield(opts,'pair'),     opts.pair = [];      end
+if ~isfield(opts,'labels'),   opts.labels = [];    end
+if ~isfield(opts,'nFrames'),  opts.nFrames = [];   end
+if ~isfield(opts,'fly') || isempty(opts.fly), opts.fly = 'auto'; end
+info = struct('F', {{}}, 'methods', {{}}, 'nFrames', 0);
 
 if isempty(which('pumpkynPie.plot.SatelliteAnimator'))
     warning('costate_catalog_extremes_movies:noAnimator', ...
@@ -84,28 +109,56 @@ if isempty(which('pumpkynPie.plot.SatelliteAnimator'))
     outStem = '';  return
 end
 
-%% The two extremes, and their flown trajectories:
-[eMin, eMax] = costate_catalog_extremes(cat_, filt, false, metric);
+%% Ephemeris guard: if planetEphemeris is on the path but its data package
+%  is not installed, hide the toolbox folder for this render so pumpkyn's
+%  analytic Earth-Moon model takes over (restored on exit; the Aerospace
+%  Toolbox folder is not a repo folder):
+if exist('planetEphemeris', 'file')
+    try
+        planetEphemeris(juliandate(datetime(2030,1,1)), 'Earth', 'Moon');
+    catch
+        aeroDir = fileparts(which('planetEphemeris'));
+        rmpath(aeroDir);
+        cleanupPath = onCleanup(@() addpath(aeroDir));
+        warning('costate_catalog_extremes_movies:noEphemData', ...
+            'planetEphemeris found but its data package is missing; using pumpkyn''s analytic Earth-Moon model for this render.');
+    end
+end
+
+%% The two rows to film (the extremes, or opts.pair), and their flights:
       mu = cat_.constants.muStar;
    tStar = cat_.constants.tStar_s;
-   lStar = cat_.constants.lStar_km;
-     cnd = cat_.thruster.c_nd;
-    m0kg = cat_.thruster.m0_kg;
-     ndT = @(TN) (TN/m0kg)*tStar^2/(lStar*1000);
-  params = struct('muStar',mu, 'lStar',lStar, 'tStar',tStar);
+  params = struct('muStar',mu, 'lStar',cat_.constants.lStar_km, 'tStar',tStar);
    epoch = juliandate(datetime(2030,1,1,0,0,0));
-if strncmpi(metric,'t',1), lab = {'FASTEST','SLOWEST'};
-else,                      lab = {'MIN \DeltaV','MAX \DeltaV'}; end
-
-E = {eMin, eMax};
+if ~isempty(opts.pair)
+    assert(iscell(opts.pair) && numel(opts.pair) == 2, ...
+           'costate_catalog_extremes_movies:pair', 'opts.pair must be a 2-element cell of transfers_at rows');
+    R = opts.pair;
+    if ~isempty(opts.labels), lab = {opts.labels(1), opts.labels(2)};
+    else,                     lab = {'A','B'}; end
+else
+    [eMin, eMax] = costate_catalog_extremes(cat_, filt, false, metric);
+    if strncmpi(metric,'t',1), lab = {'FASTEST','SLOWEST'};
+    else,                      lab = {'MIN \DeltaV','MAX \DeltaV'}; end
+    R = cell(1,2);
+    for k = 1:2
+        e = {eMin, eMax};  e = e{k};
+        R{k} = struct('z8',e.z8, 'sD',e.dep_frac, 'sA',e.arr_frac, 'junctions',e.junctions, ...
+                      'status',e.status, 'statusName',e.statusName, 'reason',e.reason);
+    end
+end
+[B, orb] = catalog_endpoints(cat_);
+tauD = orb.tD;  rvD = orb.rvD;  tauT = orb.tT;  rvT = orb.rvT;
+fo = struct('method', opts.fly, 'B', B);
+Fl = cell(1,2);
 for k = 1:2
-    e = E{k};
-    [tauD, rvD] = get_family_orbit(e.dep_family, e.dep_params);
-    [tauT, rvT] = get_family_orbit(e.arr_family, e.arr_params);
-    rv0 = interp1(tauD/tauD(end), rvD, e.dep_frac, 'spline');
-    [tj, yj] = pumpkyn.cr3bp.tfMinProp(e.z8(8), [rv0(1:6)'; 1; e.z8(1:7)], ...
-                   ndT(e.thrustN), cnd, mu);
-    [tu, iu] = unique(tj);
+    Fl{k} = fly_catalog_entry(cat_, R{k}, fo);
+end
+
+for k = 1:2
+    F = Fl{k};
+    [tu, iu] = unique(F.t);
+    yj = F.Y;
 
     %% One pumpkyn-style lit scene per panel:
     S(k).fig = figure('Color','k', 'Position',[60 60 640 720], ...
@@ -133,20 +186,19 @@ for k = 1:2
     S(k).anim.initialize();
     camzoom(1.4);
     annotation(S(k).fig, 'textbox', [0.02 0.90 0.96 0.09], 'String', ...
-        {sprintf('%s:  %s \\tau=%.2f, %s, %.2f N', ...
-                 lab{k}, upper(e.dep_family), e.tauDRO, e.arrLab, e.thrustN), ...
-         sprintf('\\DeltaV %.3f km/s,  t_f %.3f d', e.deltaV_kms, e.tf_days)}, ...
+        {sprintf('%s:  %s  (%s flight)', lab{k}, F.statusName, F.method), ...
+         sprintf('\\DeltaV %.3f km/s,  t_f %.3f d', F.dvKms, F.tfDays)}, ...
         'Color','w', 'EdgeColor','none', 'FontSize',11, ...
         'HorizontalAlignment','center');
     S(k).clock = annotation(S(k).fig, 'textbox', [0.02 0.02 0.96 0.05], ...
         'String','', 'Color',[1 0.92 0.55], 'EdgeColor','none', ...
         'FontSize',13, 'FontWeight','bold', 'HorizontalAlignment','center');
-    S(k).tf = e.z8(8);
+    S(k).tf = F.tfNd;
 end
 tEnd = max(S(1).tf, S(2).tf);            % the shared clock's last tick
 
 %% Frames: shared clock; shorter panel freezes at its final pose:
- nFrames = 240;
+ nFrames = 240;  if ~isempty(opts.nFrames), nFrames = opts.nFrames; end
      fps = 30;
       pw = 637;                          % panel width; 2*637 + 6 = 1280
  divider = uint8(90*ones(720, 1280-2*pw, 3));
@@ -173,6 +225,7 @@ for kf = 1:nFrames
     end
 end
 close(S(1).fig);  close(S(2).fig);
+info.F = Fl;  info.methods = {Fl{1}.method, Fl{2}.method};  info.nFrames = nFrames;
 fprintf('  movies -> %s.mp4 / .gif  (%d frames, 1280x720, shared clock to %.2f d)\n', ...
         outStem, nFrames, tEnd*tStar/86400);
 end

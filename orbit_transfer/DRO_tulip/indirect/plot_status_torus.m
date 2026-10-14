@@ -31,7 +31,8 @@ function H = plot_status_torus(cat, opts)
 %
 %% Outputs:
 %
-%  H                        struct                  .fig .nAltPerCell [nD x nA]
+%  H                        struct                  .fig .tfDays [nD x nA, days, NaN
+%                                                   where no solution] .nAltPerCell [nD x nA]
 %                                                   .conjCell [nD x nA logical]
 %                                                   .nOffGrid .nOffGridConj
 %
@@ -54,9 +55,12 @@ tf = nan(nD, nA);
 has = logical(S.has_solution);
 tf(has) = S.z8(8, S.entry_index(has)) * cat.constants.tStar_s / 86400;
 
-% alternatives:
+% alternatives and primaries' own status:
 nAlt   = zeros(nD, nA);
 conj   = false(nD, nA);
+if isfield(S, 'status') && isequal(size(S.status), [nD nA])
+    conj = has & (S.status == 2);
+end
 offD   = [];  offA = [];  offSt = [];
 hasAlt = isfield(cat, 'alternatives') && ~isempty(cat.alternatives);
 if hasAlt
@@ -72,7 +76,14 @@ end
 nOff     = numel(offD);
 nOffConj = nnz(offSt == 2);
 
-H = struct('fig', [], 'nAltPerCell', nAlt, 'conjCell', conj, 'nOffGrid', nOff, 'nOffGridConj', nOffConj);
+okPanels = {'tf', 'nalt', 'conj'};
+for kp = 1:numel(opts.panels)
+    if ~any(strcmp(opts.panels{kp}, okPanels))
+        error('plot_status_torus:panel', 'unknown panel %s', opts.panels{kp});
+    end
+end
+
+H = struct('fig', [], 'tfDays', tf, 'nAltPerCell', nAlt, 'conjCell', conj, 'nOffGrid', nOff, 'nOffGridConj', nOffConj);
 
 if opts.visible, vis = 'on'; else, vis = 'off'; end
 H.fig = figure('Position', [100 100 1280 720], 'Color', 'w', 'Visible', vis);
@@ -92,10 +103,8 @@ for kp = 1:np
         case 'conj'
             imagesc(ax, sA, sD, double(conj));  colormap(ax, [1 1 1; 0.85 0.15 0.15]);  clim(ax, [0 1]);  hold(ax, 'on');
             if nOffConj > 0, plot(ax, offA(offSt == 2), offD(offSt == 2), 'k.', 'MarkerSize', 10); end
-            title(ax, sprintf('status 2: %d cells, %d off grid (black)', nnz(conj), nOffConj));
+            title(ax, sprintf('status 2 (primary or alternative): %d cells, %d off grid (black)', nnz(conj), nOffConj));
             if ~hasAlt, text(ax, 0.5, 0.5, 'no alternatives in this catalog', 'HorizontalAlignment', 'center'); end
-        otherwise
-            error('plot_status_torus:panel', 'unknown panel %s', opts.panels{kp});
     end
     set(ax, 'YDir', 'normal', 'XLim', [-0.5/nA 1-0.5/nA], 'YLim', [-0.5/nD 1-0.5/nD], 'Box', 'on', 'Color', 'w', 'XColor', 'k', 'YColor', 'k');
     set([ax.Title ax.XLabel ax.YLabel], 'Color', 'k');
@@ -103,6 +112,7 @@ for kp = 1:np
 end
 drawnow;
 if ~isempty(opts.out)
-    exportgraphics(H.fig, opts.out, 'Resolution', 100);
+    set(H.fig, 'PaperPositionMode', 'auto');
+    print(H.fig, opts.out, '-dpng', '-r0');
 end
 end

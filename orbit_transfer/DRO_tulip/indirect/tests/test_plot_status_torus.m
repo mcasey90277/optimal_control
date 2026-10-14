@@ -19,6 +19,17 @@ ok = chk(ok, isequal(H.conjCell, logical([0 1 0; 0 0 1])), 'status-2 cells');
 ok = chk(ok, H.nOffGrid == 1 && H.nOffGridConj == 1, 'one off-grid row, one off-grid status 2');
 d = dir(png);
 ok = chk(ok, ~isempty(d) && d.bytes > 10e3, 'PNG written and larger than 10 kB');
+inf = imfinfo(png);
+ok = chk(ok, inf.Width == 1280 && inf.Height == 720, sprintf('PNG is 1280 x 720 (got %d x %d)', inf.Width, inf.Height));
+ok = chk(ok, isequaln(H.tfDays, reshape((5 + (1:6)) * 382981.289129055 / 86400, 2, 3)), 'tfDays equals z8(8)*tStar/86400');
+% a status-2 PRIMARY in a cell with no alternatives marks that cell
+cp = c;  cp.sheets.status = int8([4 4 4; 4 4 4]);  cp.sheets.status(2, 1) = 2;
+Hp = plot_status_torus(cp, struct('visible', false));  close(Hp.fig);
+ok = chk(ok, Hp.conjCell(2, 1) && Hp.nAltPerCell(2, 1) == 0 && isequal(Hp.conjCell, H.conjCell | logical([0 0 0; 1 0 0])), 'status-2 primary marks its cell');
+% a bad panel name leaks no figure
+nf = numel(findall(0, 'Type', 'figure'));
+try, plot_status_torus(c, struct('visible', false, 'panels', {{'bogus'}})); caught = false; catch, caught = true; end
+ok = chk(ok, caught && numel(findall(0, 'Type', 'figure')) == nf, 'bad panel name errors and leaves no figure');
 % a status-3 alternative alone in a cell is NOT a conjugate cell
 c3 = c;  c3.alternatives(end+1) = struct('sD', 0.5, 'sA', 0, 'iD', 2, 'iA', 1, 'status', 3);
 H3 = plot_status_torus(c3, struct('visible', false));  close(H3.fig);

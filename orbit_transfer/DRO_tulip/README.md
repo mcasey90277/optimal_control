@@ -66,7 +66,12 @@ grid points (`process/INTERPOLATION_STATUS.md`).
   (multi-orbit catalog, 3,936 entries, 16 sheets), and
   `costate_catalog_70mN_status_deliverable8` (2026-10-13: the 24 x 48
   70 mN library of record with the optimality-status layer, 1,152 primaries
-  + 656 alternatives, junction states, tools and two examples; 20.8 MB).
+  + 656 alternatives, junction states, tools and two examples; 20.8 MB --
+  the DEVELOPER kit, 25 functions), and
+  `costate_library_70mN_user_deliverable9` (2026-10-14: the same library as
+  the USER kit -- 8 functions that describe it, select a transfer and show
+  it, plus one example; no flight layer, no tfMin checker, no schema;
+  `build_dro_deliverable(struct('profile', 'user'))`; 20.8 MB, 14 files).
 - **`reviews/`** — external code/doc review artifacts.
 
 ## Key numbers
@@ -167,7 +172,9 @@ blocks; the front-door functions underneath stay the engine.
 | `fly_catalog_entry.m` | flies a `transfers_at` row, a cell or a z8, from junctions or z8, with the thrust direction checked against the equations of motion |
 | `tfmin_accepts.m` | runs `pumpkyn.cr3bp.tfMin` on an entry under `run_capped`, reports dz; status-1 rows skipped unless forced |
 | `plot_status_torus.m` / `sample_status_pair.m` | the status map on the torus (t_f, alternatives, status-2 cells) and the cell with the most status-2 alternatives |
-| `export_deliverable_catalog.m` / `deliverable_file_list.m` | the cleaned catalog export (paths and bookkeeping out, content keys unchanged) and the deliverable file list |
+| `export_deliverable_catalog.m` / `deliverable_file_list.m` | the cleaned catalog export (paths and bookkeeping out, content keys unchanged) and the deliverable file list: profile `'developer'` (deliverable 8, 25 files) or `'user'` (deliverable 9, 9 files) |
+| `costate_catalog_extremes_movies.m` | side-by-side movie of two transfers on one clock; since 2026-10-14 self-contained on pumpkyn (`tfMinProp` segment by segment from the stored junctions, orbits by `get_family_orbit`), so the user kit ships it without the flight layer |
+| `examples/costate_library_example.m` | the user kit's worked example: describe, pick by days, the raw `pumpkyn.cr3bp.tfMin` call, the cell's transfers, the legend, extremes, the torus map, a movie |
 | `examples/costate_catalog_example.m` / `status_layer_example.m` | Darin's two walk-throughs: pick -> derive -> fly -> tfMin check, and every transfer at a phase pair with its status |
 | `../deliverable_selftest.m` | the recipient's test in a child MATLAB: both examples, bare self-demos, dependency scan |
 

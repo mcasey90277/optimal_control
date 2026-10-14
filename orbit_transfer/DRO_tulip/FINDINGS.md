@@ -6349,3 +6349,73 @@ DAYS while the other tools take FRACTIONS; `source` is kind-only.
 
 **Next:** the junction-state interpolation experiment (section 97), which
 decides whether a later deliverable can add interpolation.
+
+## 100. Deliverable 9: the user kit (2026-10-14)
+
+Mike's reading of deliverable 8 (section 99): too many MATLAB functions for
+a user who picks a transfer, reads what was established about it, hands the
+costates to tfMin and watches a movie. The count was checked, not argued: a
+dependency scan of the shipped folder put 13 of its 25 functions in two
+groups a user never calls -- our own flight engine (`fly_catalog_entry`,
+`catalog_endpoints`, `fly_transfer`, `entry_thrust_program`,
+`validate_flight`, `scalar_verdict`, `phase_state`, `periodic_pp`, nine with
+`get_family_orbit`) and the tfMin acceptance check (`tfmin_accepts`,
+`run_capped`, `current_pool`) -- plus `catalog_schema` (a builder artifact
+nothing in the folder calls) and four example-only helpers. Nothing shipped
+creates entries; the bulk was plumbing for two capabilities, both of which
+exist because deliverable 8 routed the movie through our flight engine.
+
+**The user kit** is deliverable 3's shape with the status layer:
+`deliverables/costate_library_70mN_user_deliverable9/` and its `.zip`
+(20.8 MB, 14 files): the cleaned catalog export (same two content keys as
+the record), 8 functions, one example, README, `status_pair_movie.mp4/.gif`,
+`status_torus.png`.
+
+| function | role |
+|---|---|
+| `costate_lib_describe` | the fact sheet |
+| `costate_catalog_pick` | five-coordinate lookup, phases in DAYS, honesty contract |
+| `transfers_at` | every transfer at a phase pair (fractions), with status |
+| `status_key` | the legend |
+| `costate_catalog_extremes` | min/max over a slice, alternatives and status filter opt-in |
+| `plot_status_torus` | the status map |
+| `costate_catalog_extremes_movies` | the side-by-side movie |
+| `get_family_orbit` | the one orbit helper the extremes and the movie draw with |
+
+**What changed in the code.** `costate_catalog_extremes_movies` is
+self-contained on pumpkyn: it flies each row with `pumpkyn.cr3bp.tfMinProp`
+segment by segment from the stored junction states (the first junction IS
+the departure state, so no endpoint interpolation enters), else in one
+flight from z8 started on the departure orbit's spline; orbits by
+`get_family_orbit` from the sheet's own recipe. Its repo dependency closure
+is now exactly {`costate_catalog_extremes`, `status_key`,
+`get_family_orbit`}, asserted by the test, which also checks an oracle the
+movie code does not share: each flight lands on the arrival orbit at the
+row's phase (miss 0.000 km on both panels), and a forced z8 flight of the
+primary ends within 0.001 km of its junction flight.
+`deliverable_file_list` gained a `'user'` profile and `build_dro_deliverable`
+a `cfg.profile`: same key-bound audit gate, same export, a user README
+written from the same computed facts (the tfMin recipe is the raw six-line
+pumpkyn call, since no checker ships), the self-test on the one example.
+The builder test gained case (i): exactly the user list, none of the 17
+dropped files, the README's strings, the keys, and an unknown profile
+refused.
+
+**The example** (`costate_library_example`, 8 sections, 14 s standalone):
+describe; pick by days (delivered 0.554 d / 3.201 d for 0.5 / 3.0 asked);
+the raw tfMin call at the pick's endpoints, |dz| = 0 exactly in 0.4 s;
+every transfer at the cell; the legend and the fastest conjugate-point
+transfer in the library (17.25 d, an off-grid alternative at sD 0, sA
+0.6379); the library's extremes with alternatives (16.14 d .. 44.05 d);
+the torus (45 status-2 cells, 372 off-grid); a 60-frame movie of the cell
+with the most alternatives.
+
+**Build:** 74 s; self-test OK in 46 s on the clean child path (PATH CLEAN,
+the example and all five bare self-demos ran, dependency scan 9 files / 63
+required, all under the folder, matlabroot or pumpkyn). Deliverable 8
+stays as the developer kit; its folder is frozen as shipped.
+
+**Ruling.** `tfmin_accepts` is out (Mike did not ask for it back; it costs
+three files and the README shows the raw call instead). The cost if wrong:
+no one-line "tfMin accepts it" proof in the kit, which the example's section
+3 supplies for the picked entry.

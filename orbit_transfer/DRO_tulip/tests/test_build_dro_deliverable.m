@@ -7,8 +7,12 @@ function ok = test_build_dro_deliverable()
 % (c) an audit dir missing one chunk (coverage), (d) a primaries audit with
 % nBad = 1, (e) a primaries audit with another contentKey, (f) a chunk with
 % another contentKey, (g) a duplicated alternative index with the count
-% preserved -- each with error id build_dro_deliverable:audit -- and (h) a
-% refused build leaves an earlier outDir in place.
+% preserved -- each with error id build_dro_deliverable:audit -- (h) a
+% refused build leaves an earlier outDir in place, and (i) the USER profile
+% (deliverable 9) builds exactly the user file list (no flight-layer file,
+% no tfMin checker, no schema), a README that names every shipped file, the
+% user example and the statuses, mentions no dropped tool, and the same two
+% content keys; an unknown profile is refused.
 %
 % INPUTS:  none
 % OUTPUTS: ok [logical]  every check passed (prints PASS/FAIL per check)
@@ -129,6 +133,55 @@ fid = fopen(fullfile(keep, 'README.md'), 'w');  fprintf(fid, 'earlier build\n');
 cfgH = base;  cfgH.outDir = keep;  cfgH.auditAltDir = cDir;
 refusesAudit(cfgH);
 ok = chk(ok, isfile(fullfile(keep, 'README.md')), 'a refused audit leaves the earlier outDir in place');
+
+%% (i) the user profile (deliverable 9)
+cfgI = base;  cfgI.profile = 'user';  cfgI.outDir = fullfile(work, 'costate_library_70mN_user_deliverable9');
+try
+    outI = build_dro_deliverable(cfgI);
+    builtI = true;
+catch ME
+    builtI = false;
+    fprintf('  user build threw: %s (%s)\n', ME.message, ME.identifier);
+end
+ok = chk(ok, builtI, 'user-profile build (movies/zip/selftest off) completes');
+if builtI
+    LU = deliverable_file_list('user');
+    shipped = dir(fullfile(cfgI.outDir, '*.m'));  shipped = {shipped.name};
+    ok = chk(ok, isequal(sort(shipped(:)), sort({LU.file}.')), ...
+             sprintf('outDir holds exactly the %d user-list .m files (%d found)', numel(LU), numel(shipped)));
+    dropped = {'fly_catalog_entry.m', 'catalog_endpoints.m', 'fly_transfer.m', 'entry_thrust_program.m', ...
+               'validate_flight.m', 'scalar_verdict.m', 'phase_state.m', 'periodic_pp.m', 'tfmin_accepts.m', ...
+               'run_capped.m', 'current_pool.m', 'catalog_schema.m', 'sample_status_pair.m', ...
+               'print_transfer_summary.m', 'plot_transfer_3d.m', 'status_layer_example.m', 'costate_catalog_example.m'};
+    ok = chk(ok, ~any(ismember(dropped, shipped)), 'no flight-layer, tfMin-check, schema or developer-example file shipped');
+    ok = chk(ok, isfile(fullfile(cfgI.outDir, 'status_torus.png')), 'user build writes status_torus.png');
+    rdI = fullfile(cfgI.outDir, 'README.md');
+    txt = '';
+    if isfile(rdI), txt = fileread(rdI); end
+    mustI = {'User Kit', sprintf('%d alternatives', nAlt), 'conjugate point found', 'borderline', ...
+             'fractions of a period', 'DAYS', 'costate_library_example', 'pumpkyn.cr3bp.tfMin('};
+    for k = 1:numel(mustI)
+        ok = chk(ok, contains(txt, mustI{k}), sprintf('user README contains ''%s''', mustI{k}));
+    end
+    for k = 1:numel(LU)
+        ok = chk(ok, contains(txt, ['`' LU(k).file '`']), sprintf('user README contents table names %s', LU(k).file));
+    end
+    notI = {'fly_catalog_entry', 'tfmin_accepts', 'catalog_endpoints', 'status_layer_example', 'Parallel Computing'};
+    for k = 1:numel(notI)
+        ok = chk(ok, ~contains(txt, notI{k}), sprintf('user README does not mention the dropped %s', notI{k}));
+    end
+    ok = chk(ok, ~contains(txt, '/Users/') && ~contains(txt, 'addpath('), 'user README has no machine path and no addpath(');
+    EI = load(fullfile(cfgI.outDir, 'costate_catalog_dro_tulip_70mN.mat'));
+    feI = fieldnames(EI);  exI = EI.(feI{1});
+    ok = chk(ok, strcmp(catalog_content_key(exI), catalog_content_key(rec)) && ...
+             strcmp(alternatives_content_key(exI), alternatives_content_key(rec)), ...
+             'user build''s exported catalog carries the record''s two content keys');
+    ok = chk(ok, strcmp(outI.profile, 'user'), 'out.profile = user');
+end
+cfgJ = base;  cfgJ.profile = 'customer';  cfgJ.outDir = fullfile(work, 'deliv_j');
+refusedJ = false;
+try, build_dro_deliverable(cfgJ); catch ME, refusedJ = strcmp(ME.identifier, 'build_dro_deliverable:profile'); end
+ok = chk(ok, refusedJ, 'an unknown profile is refused (build_dro_deliverable:profile)');
 
 if ok, fprintf('test_build_dro_deliverable: ALL PASS\n'); else, fprintf('test_build_dro_deliverable: FAIL\n'); end
 end

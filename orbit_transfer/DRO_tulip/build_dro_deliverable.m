@@ -21,9 +21,14 @@ function out = build_dro_deliverable(cfg)
 %     the default): 1 audit gate by CONTENT KEY (the record's keys, which
 %     the export keeps), 2 export (export_deliverable_catalog, stamped
 %     CLEAN only after the gate passed), 3 copy every file of
-%     deliverable_file_list, 4 the sample movie (cfg.movies), 5 the status torus PNG, 6 the README from computed
-%     facts, 7 the recipient self-test (deliverable_selftest, cfg.selftest),
-%     8 the zip, only after a passed self-test (cfg.zip).
+%     deliverable_file_list(cfg.profile), 4 the sample movie (cfg.movies),
+%     5 the status torus PNG, 6 the README from computed facts, 7 the
+%     recipient self-test (deliverable_selftest, cfg.selftest), 8 the zip,
+%     only after a passed self-test (cfg.zip). cfg.profile picks the file
+%     list and the README: 'developer' (deliverable 8: the tools with the
+%     flight layer and the tfMin check) or 'user' (deliverable 9: describe,
+%     pick, list, extremes, torus, movie, one example -- nothing that
+%     builds, flies with our engine or re-checks an entry).
 %   * A catalog WITHOUT .alternatives (deliverables 3 and the earlier 70 mN
 %     catalog): the original path, its audit gate by path equality, its
 %     five helpers plus their dependency closure inside indirect/ and
@@ -51,8 +56,10 @@ function out = build_dro_deliverable(cfg)
 %                                                   record, indirect/results/
 %                                                   library_70mN_24x48_v2/
 %                                                   costate_catalog_dro_tulip_70mN.mat]
+%   .profile                char                    'developer' [default] | 'user'
 %   .name                   char                    deliverable name
-%                                                   ['costate_catalog_70mN_status_deliverable8']
+%                                                   ['costate_catalog_70mN_status_deliverable8'
+%                                                   | 'costate_library_70mN_user_deliverable9']
 %   .outDir                 char                    [deliverables/<name>]
 %   .movies                 logical                 render the sample movie [true]
 %   .zip                    logical                 write and verify the .zip [true]
@@ -74,6 +81,7 @@ function out = build_dro_deliverable(cfg)
 %                                                   (deliverable_selftest
 %                                                   result, [] when off)
 %                                                   .keys (.primKey .altKey)
+%                                                   .profile
 %
 %% Revision History:
 %  M. Casey                                                   (c) 09/08/2026
@@ -84,6 +92,8 @@ function out = build_dro_deliverable(cfg)
 %            stamps auditVerdict / auditNote (passed in, from the audit
 %            counts); legacy path ships the helpers' dependency
 %            closure                                        (c) 10/13/2026
+%  M. Casey  cfg.profile 'user' (deliverable 9): the user kit's file
+%            list, README and example                      (c) 10/14/2026
 %  Copyright Coorbital Inc.
 %% ------------------------ Begin Code Sequence ---------------------------
 
@@ -110,7 +120,12 @@ function out = buildStatus(cfg, rec, catMat, here, ind)
 % BUILDSTATUS  The deliverable-8 path (catalog with the status layer).
 % INPUTS: cfg; rec (the loaded record); catMat (char); here, ind (folders).
 % OUTPUTS: out.
-name     = getf(cfg, 'name', 'costate_catalog_70mN_status_deliverable8');
+profile  = getf(cfg, 'profile', 'developer');
+assert(any(strcmp(profile, {'developer', 'user'})), 'build_dro_deliverable:profile', ...
+       'cfg.profile must be developer or user, got %s', profile);
+if strcmp(profile, 'user'), defName = 'costate_library_70mN_user_deliverable9';
+else,                       defName = 'costate_catalog_70mN_status_deliverable8'; end
+name     = getf(cfg, 'name', defName);
 outDir   = getf(cfg, 'outDir', fullfile(here, 'deliverables', name));
 doMov    = getf(cfg, 'movies', true);
 doZip    = getf(cfg, 'zip', true);
@@ -148,7 +163,7 @@ prepareOutDir(outDir);
 movefile(fullfile(scratch, catFile), fullfile(outDir, catFile));
 
 %% 3. Copy the listed files
-[L, roots] = deliverable_file_list();
+[L, roots] = deliverable_file_list(profile);
 for k = 1:numel(L)
     src = fullfile(roots.(L(k).from), L(k).file);
     assert(isfile(src), 'build_dro_deliverable:copy', 'missing maintained file %s', src);
@@ -184,14 +199,20 @@ fprintf('[build] 5 torus: %s (%d conjugate cells, %d off-grid alternatives)\n', 
 %% 6. README
 f = statusFacts(c, aud, H, info);
 f.movieStem = movieStem;  f.pngFile = pngFile;  f.catFile = catFile;
-writeReadmeStatus(fullfile(outDir, 'README.md'), f, c, L);
-fprintf('[build] 6 README: %d primaries, %d alternatives, %d borderline rows\n', ...
-        f.nPrim, f.nAlt, numel(f.bl));
+if strcmp(profile, 'user')
+    writeReadmeUser(fullfile(outDir, 'README.md'), f, c, L);
+    exs = {'costate_library_example.m'};
+else
+    writeReadmeStatus(fullfile(outDir, 'README.md'), f, c, L);
+    exs = {'costate_catalog_example.m', 'status_layer_example.m'};
+end
+fprintf('[build] 6 README (%s profile): %d primaries, %d alternatives, %d borderline rows\n', ...
+        profile, f.nPrim, f.nAlt, numel(f.bl));
 
 %% 7. Self-test
 R = [];
 if doSelf
-    R = deliverable_selftest(outDir);
+    R = deliverable_selftest(outDir, struct('examples', {exs}));
     if ~R.ok
         error('build_dro_deliverable:selftest', 'recipient self-test FAILED (log %s):\n  %s', ...
               R.log, strjoin(R.reasons, '\n  '));
@@ -214,7 +235,8 @@ else
 end
 
 out = struct('dir', outDir, 'zip', zipPath, 'facts', f, 'files', {files}, ...
-             'selftest', R, 'keys', struct('primKey', info.primKey, 'altKey', info.altKey));
+             'selftest', R, 'keys', struct('primKey', info.primKey, 'altKey', info.altKey), ...
+             'profile', profile);
 fprintf('[build] done: %s (%d files)\n', outDir, numel(files));
 end
 
@@ -547,6 +569,214 @@ p('M. Casey / D. Koblick, Coorbital Inc.\n');
 end
 
 % ------------------------------------------------------------------------
+function writeReadmeUser(path, f, c, L)
+% WRITEREADMEUSER  The deliverable-9 (user kit) README: what the library
+% holds and how to use it, every number from f, the legends from the
+% catalog, the contents table from the file list. No flight layer, no tfMin
+% checker: the tfMin recipe is given as the raw pumpkyn call.
+% INPUTS: path (char); f (statusFacts); c (catalog); L (deliverable_file_list).
+% OUTPUTS: none.
+role = fileRoles();
+K = c.status_key;  s = c.sheets(1);
+fid = fopen(path, 'w');
+cleaner = onCleanup(@() fclose(fid));
+p = @(varargin) fprintf(fid, varargin{:});
+d2 = @(x) sprintf('%.2f', x);
+
+p('# DRO -> Tulip 70 mN Minimum-Time Costate Library: User Kit (deliverable 9)\n\n');
+p(['Every entry here is a **converged minimum-time PMP extremal**, not a hint: hand its `z8` ' ...
+   'to `pumpkyn.cr3bp.tfMin` at the entry''s own endpoints and it comes back unchanged. ' ...
+   'The library holds **%s primary transfers** (the fastest found in each cell of a %d x %d ' ...
+   'departure x arrival phase grid) and **%d alternatives** (every other transfer the builds ' ...
+   'found at a phase pair), each with an optimality **status** saying what was established ' ...
+   'about it, and the multiple-shooting **junction states** that fly a %s-%s day arc accurately.\n\n'], ...
+   commas(f.nPrim), f.nD, f.nA, f.nAlt, d2(min([f.tfPrimDays f.tfAltDays])), d2(max([f.tfPrimDays f.tfAltDays])));
+p(['This is the **user kit**: the library and the %d functions that describe it, select a transfer, ' ...
+   'and show it. Nothing here builds, re-certifies or flies entries with our own engine; the ' ...
+   'movie flies with pumpkyn''s propagator from the stored junctions. (The developer kit, ' ...
+   'deliverable 8, adds the flight layer and the tfMin acceptance check.)\n\n'], numel(L));
+p(['Catalog `%s` built %s; this package generated %s by `build_dro_deliverable.m` (profile user). ' ...
+   'Every number below is computed from the shipped catalog and the audits bound to it by ' ...
+   'content key, not transcribed.\n\n'], f.name, string(f.created), char(datetime('now', 'Format', 'yyyy-MM-dd')));
+
+%% Contents
+p('## Contents\n\n| file | role |\n|---|---|\n');
+p('| `%s` | the catalog (cleaned export; content keys `%s` / `%s`) |\n', f.catFile, f.keys.primKey, f.keys.altKey);
+for k = 1:numel(L)
+    assert(isKey(role, L(k).file), 'build_dro_deliverable:role', 'no README role for %s', L(k).file);
+    p('| `%s` | %s |\n', L(k).file, role(L(k).file));
+end
+if ~isempty(f.movieStem)
+    p('| `%s.mp4`, `%s.gif` | the sample movie (see below) |\n', f.movieStem, f.movieStem);
+end
+p('| `%s` | the status map of the phase torus (see below) |\n', f.pngFile);
+p('| `README.md` | this file |\n\n');
+p('Every function with a bare self-demo runs it on whichever `costate_catalog_*.mat` sits in the current folder (type e.g. `costate_lib_describe` with no arguments).\n\n');
+
+%% Dependencies
+p('## Dependencies\n\n');
+p(['- **pumpkyn + pumpkynPie** on the MATLAB path (run pumpkynPie''s `startup.m`): the CR3BP ' ...
+   'dynamics and propagator, `pumpkyn.cr3bp.tfMin`, the orbit families, and the movie scene ' ...
+   '(`pumpkynPie.plot.SatelliteAnimator`).\n']);
+p('- Nothing else: no toolbox beyond base MATLAB, and every other function the example calls is in this folder. The `.mat` itself loads with `load` alone.\n\n');
+
+%% Quick start
+p('## Quick start\n\n');
+p('Run the worked example from this folder (about 15 seconds):\n\n');
+p('```matlab\ncostate_library_example   %% describe, pick by days, tfMin accepts it, the cell''s transfers, extremes, torus, movie\n```\n\n');
+p('Or by hand:\n\n```matlab\n');
+p('L = load(''%s'');\ncat_ = L.%s;\n', f.catFile, f.name);
+p('costate_lib_describe(cat_);                          %% the fact sheet\n');
+p('[tf, z8, info] = costate_catalog_pick(cat_, %g, %g, 0.5, 3.0, %g);   %% phases in DAYS; info.delivered says what you got\n', ...
+  s.tauDRO, s.Np, f.thrustN);
+p('T = transfers_at(cat_, %.4f, %.4f);               %% every transfer at a phase pair (FRACTIONS), with status\n', s.sD_frac(1), s.sA_frac(1));
+p('[eMin, eMax] = costate_catalog_extremes(cat_, struct(''includeAlternatives'', true), true, ''time'');\n');
+p('plot_status_torus(cat_);                             %% the status map\n');
+p('costate_catalog_extremes_movies(cat_, [], ''time'', ''my_movie'', struct(''pair'', {{T(1), T(end)}}));\n```\n\n');
+
+%% tfMin recipe
+p('## Handing an entry to pumpkyn tfMin\n\n');
+p(['The endpoints are states on the two periodic orbits at the entry''s phases (fractions of each ' ...
+   'period), rebuilt from the catalog''s own recipe; `z8 = [lambda_r; lambda_v; lambda_m; t_f]` is ' ...
+   'the initial guess. For a certified entry tfMin''s first residual is already at machine level ' ...
+   'and the vector comes back unchanged (`|dz| = 0`); the example prints it.\n\n']);
+p('```matlab\n');
+p('sh = cat_.sheets(1);\n');
+p('[tD, rvD] = get_family_orbit(sh.dep_family, sh.dep_params);   %% one period of the DRO\n');
+p('[tT, rvT] = get_family_orbit(sh.arr_family, sh.arr_params);   %% one period of the tulip\n');
+p('rv0 = interp1(tD/tD(end), rvD, sD, ''spline'');                %% sD, sA = phase fractions of the entry\n');
+p('rvf = interp1(tT/tT(end), rvT, sA, ''spline'');\n');
+p('Tnd = (%g/%g)*cat_.constants.tStar_s^2/(cat_.constants.lStar_km*1000);   %% thrust acceleration, ND\n', f.thrustN, f.m0);
+p('z = pumpkyn.cr3bp.tfMin(rv0, rvf, z8, Tnd, cat_.thruster.c_nd, cat_.constants.muStar);\n');
+p('```\n\n');
+p(['A status-1 entry (see the statuses) flies to the target but its necessary conditions were not ' ...
+   'established, so tfMin is not expected to accept it and can grind for minutes: there are %d such ' ...
+   'primaries and %d such alternatives.\n\n'], f.statusCounts(4, 1), f.statusCounts(4, 2));
+
+%% Coverage
+p('## What it covers\n\n| axis | values |\n|---|---|\n');
+p('| departure orbit | `%s`, recipe `get_family_orbit(''%s'', %s)`, period %.6g ND |\n', ...
+  s.dep_family, s.dep_family, recipe(s.dep_params), s.tau_dep);
+p('| arrival orbit | `%s`, recipe `get_family_orbit(''%s'', %s)`, period %.6g ND |\n', ...
+  s.arr_family, s.arr_family, recipe(s.arr_params), s.tau_arr);
+p('| thrust | %g N (one rung), Isp %g s, m0 %g kg |\n', f.thrustN, f.isp, f.m0);
+p('| phase grid | %d departure x %d arrival phases (fractions of each orbit''s period) |\n', f.nD, f.nA);
+p('| primaries | %s of %s cells (%.1f%%) |\n', commas(f.nPrim), commas(f.nSlots), 100*f.nPrim/f.nSlots);
+p('| alternatives | %d (%d off the grid; %d cells hold at least one, up to %d per cell) |\n', ...
+  f.nAlt, f.nOffGrid, f.nAltCells, f.maxAltPerCell);
+p('| junction states | %s of %s primaries, %d of %d alternatives |\n', commas(f.nJuncPrim), commas(f.nPrim), f.nJuncAlt, f.nAlt);
+p('| t_f, primaries | %s .. %s days |\n', d2(f.tfPrimDays(1)), d2(f.tfPrimDays(2)));
+p('| t_f, alternatives | %s .. %s days |\n', d2(f.tfAltDays(1)), d2(f.tfAltDays(2)));
+p('| Delta-V, primaries | %.4f .. %.4f km/s (final mass %.3f .. %.3f kg) |\n', f.dvPrim, f.mfPrim);
+p('| Delta-V, alternatives | %.4f .. %.4f km/s (final mass %.3f .. %.3f kg) |\n\n', f.dvAlt, f.mfAlt);
+p(['At fixed thrust the burn is continuous, so minimum time is minimum Delta-V: the ' ...
+   'ranges above order the same way. Delta-V and mass follow `cat.derive` ' ...
+   '(`mf = 1 - Tmax_nd*tf_nd/c_nd`, `dV = c_nd*log(1/mf)*lStar_km/tStar_s`).\n\n']);
+
+%% Statuses
+p('## The statuses\n\n');
+p('%s\n\n', K.note);
+p('| code | name | primaries | alternatives | what it establishes |\n|---|---|---|---|---|\n');
+for q = 1:numel(f.codes)
+    kk = find(K.codes == f.codes(q), 1);
+    p('| %d | %s | %s | %d | %s |\n', f.codes(q), K.names{kk}, commas(f.statusCounts(q, 1)), ...
+      f.statusCounts(q, 2), K.meaning{kk});
+end
+p('\nThe checks, in order: %s.\n\n', K.order);
+p(['A status-2 transfer (**conjugate point found**) is a converged extremal that tfMin accepts ' ...
+   'like any other; it is just not locally optimal. A faster status-2 alternative can still be ' ...
+   'the right choice for a mission, taken knowing exactly that. `transfers_at` lists every ' ...
+   'transfer at a cell with its status; `costate_catalog_extremes` takes `filt.status` and ' ...
+   '`filt.includeAlternatives`.\n\n']);
+p('### Borderline rows\n\n');
+p('%d alternatives are **borderline**: %s.\n\n', numel(f.bl), f.build.borderlineNote);
+p('| index | sD | sA | status | reason (first clause) |\n|---|---|---|---|---|\n');
+for k = 1:numel(f.blRows)
+    r = f.blRows(k);
+    p('| %d | %.4f | %.4f | %d | %s |\n', r.k, r.sD, r.sA, r.status, r.clause);
+end
+p('\n');
+
+%% Phase conventions
+p('## Phase conventions\n\n');
+p(['- `transfers_at`, `plot_status_torus` and the movie take phases as **fractions of a period** ' ...
+   'in [0, 1), wrapping (s = 1 - 1e-9 finds s = 0), matched with a circular tolerance.\n']);
+p(['- `costate_catalog_pick(cat, tauDep, Np, depDays, arrDays, thrustN)` takes phases in ' ...
+   '**DAYS** (unchanged from the earlier deliverables): fraction x period_nd x tStar_s / 86400.\n']);
+p('- Flight times are ND unless the field name says otherwise (`tfDays`, `dvKms`).\n\n');
+
+%% Field reference
+p('## Entry-field reference\n\n');
+p('Top level: `%s`.\n\n', strjoin(fieldnames(c), '`, `'));
+p('Per sheet `sheets(1)`:\n\n| field | meaning |\n|---|---|\n');
+sm = sheetFieldMeanings();  sf = fieldnames(s);
+for k = 1:numel(sf)
+    if isKey(sm, sf{k}), m = sm(sf{k}); else, m = '(see `notes_key` / `second_order.meaning`)'; end
+    p('| `%s` | %s |\n', sf{k}, m);
+end
+p('\nPer alternative `alternatives(k)`:\n\n| field | meaning |\n|---|---|\n');
+am = altFieldMeanings();  af = fieldnames(c.alternatives);
+for k = 1:numel(af)
+    if isKey(am, af{k}), m = am(af{k}); else, m = '(see `notes_key`)'; end
+    p('| `%s` | %s |\n', af{k}, m);
+end
+p(['\nLegends that ride in the catalog: `status_key` (codes, names, meanings, check order), ' ...
+   '`notes_key` (the `entry_notes` layout), `second_order.meaning`, `conj_test.meaning`, ' ...
+   '`hyp_gates.meaning`, `families.note`, `derive` (every derived-quantity formula).\n\n']);
+
+%% How it was made
+p('## How it was made, and how it was checked\n\n');
+p('%s\n\n', c.provenance);
+p('Build record: %s. %s candidates harvested, %d re-certified.\n\n', f.build.dates, commas(f.build.nCandidates), f.build.nRecert);
+p('Every transfer goes through the certifier''s stack in order (`status_key.order`); its status records how far it got: %s.\n\n', K.order);
+p('Primaries, from the sheet grids:\n\n');
+p('- free-time conjugate test passed: %s / %s (`conj_pass = 1`)\n', commas(f.conjPass), commas(f.nPrim));
+p('- hypothesis gates: min magnitude of lam_v > 0 on %s, Q_mt > 0 on %s, dim S = 1 on %s\n', commas(f.gLamv), commas(f.gQmt), commas(f.gDimS));
+p('- dense conjugate scan: %d with an interior sign change; smallest H6 margin %.3g, smallest lift margin %.3g\n\n', ...
+  f.conjInterior, f.h6Min, f.liftMin);
+p('**Audits, bound to this file by content key** (fail-closed re-derivation from the catalog''s own keys):\n\n');
+p('- primaries: %s ok / %d bad (audit of %s)\n', commas(f.aud.primOk), f.aud.primBad, string(f.aud.primWhen));
+p('- alternatives: %d ok / %d bad, over %d audit chunks covering every row exactly once\n', f.aud.altOk, f.aud.altBad, f.aud.nChunks);
+p('- total: **%s ok / %d bad**; catalog key `%s`, alternatives key `%s`\n\n', commas(f.nOkTotal), f.nBadTotal, f.keys.primKey, f.keys.altKey);
+p(['Worst flown miss recorded on the alternatives (`flyKm`/`flyVms`, %d of %d measured; ' ...
+   'the certifier''s flight gate is 100 km / 10 m/s): **%.3g km / %.3g m/s**.\n\n'], ...
+  f.nFlyMeasured, f.nAlt, f.flyKmMax, f.flyVmsMax);
+
+%% Figures
+p('## The movie and the map\n\n');
+if ~isempty(f.movieStem)
+    p(['`%s.mp4` / `%s.gif`: one cell''s primary beside its fastest status-2 alternative, ' ...
+       'same phases, one clock (1280 x 720), flown from their junctions with pumpkyn''s propagator.\n\n'], f.movieStem, f.movieStem);
+end
+p(['`%s`: per cell, the primary''s flight time, how many alternatives it holds, and which ' ...
+   'cells hold a status-2 transfer (%d cells); the %d off-grid alternatives are drawn at ' ...
+   'their own phases.\n\n'], f.pngFile, f.nConjCells, f.nTorusOffGrid);
+
+%% Gotchas
+p('## Gotchas, honestly\n\n');
+p(['- **Interpolation between grid points is NOT included.** The junction-interpolation ' ...
+   'experiment is pending; until its hit rate is measured on this library, interpolate at ' ...
+   'your own risk and use the result only as a tfMin seed. Neighbouring cells can sit on ' ...
+   'different solution families (`family_index`).\n']);
+p(['- **Status-1 rows and tfMin.** Status 1 means the transfer flies to the target but the ' ...
+   'necessary conditions were not established, so tfMin is not expected to accept it and can ' ...
+   'grind for minutes. There are %d such primaries and %d such alternatives.\n'], f.statusCounts(4, 1), f.statusCounts(4, 2));
+p(['- **%d of the %d alternatives are OFF-GRID** (`iD = 0` or `iA = 0`: %d off the departure ' ...
+   'grid, %d off the arrival grid, %d off both): found by ribs and sheet candidates at ' ...
+   'non-grid phases. `transfers_at` finds them only at their own phases; the torus map ' ...
+   'draws them as markers; `costate_catalog_extremes` with `includeAlternatives` ranks them.\n'], ...
+   f.nOffGrid, f.nAlt, f.nOffD, f.nOffA, f.nOffBoth);
+p(['- **`source` wording is kind-only** (`sheet candidate, column n (re-certified)` on the ' ...
+   '48-phase grid, `96-phase sheet candidate, column n (re-certified)` from the 96-phase sheet, ' ...
+   '`rib ... point`, ...): machine paths were stripped at export; the content keys are ' ...
+   'unchanged because `source` is not hashed.\n']);
+p('- **Phases: fractions vs DAYS** (see Phase conventions): the picker alone takes DAYS.\n');
+p(['- **Borderline statuses are lower bounds** (the %d rows above): the status flipped ' ...
+   'between two runs at a threshold and the claim both runs support is the one stored.\n\n'], numel(f.bl));
+p('M. Casey / D. Koblick, Coorbital Inc.\n');
+end
+
+% ------------------------------------------------------------------------
 function M = fileRoles()
 % FILEROLES  One-line README role per shipped file.  INPUTS: none.
 % OUTPUTS: M (containers.Map file -> role).
@@ -562,12 +792,13 @@ M('fly_transfer.m')                    = 'flight engine: one flight from z8, wit
 M('costate_lib_describe.m')            = 'fact sheet: grids in ND and days, coverage, status counts';
 M('costate_catalog_extremes.m')        = 'min/max Delta-V or flight time over a slice (alternatives opt-in)';
 M('plot_status_torus.m')               = 'the status map of the phase torus';
-M('costate_catalog_extremes_movies.m') = 'side-by-side movie of two transfers on one clock (pumpkynPie scene)';
+M('costate_catalog_extremes_movies.m') = 'side-by-side movie of two transfers on one clock (pumpkynPie scene, flown with pumpkyn''s own propagator from the stored junctions)';
 M('print_transfer_summary.m')          = 'prints a transfer''s time of flight, Delta-V, propellant, flight samples';
 M('plot_transfer_3d.m')                = 'the 3D transfer figure the examples draw';
 M('sample_status_pair.m')              = 'picks the cell with the most status-2 alternatives and its pair';
 M('costate_catalog_example.m')         = 'worked example: pick, derive units, rebuild orbits, fly, tfMin, plot';
 M('status_layer_example.m')            = 'worked example: every transfer at a cell, statuses, fly two, the torus map';
+M('costate_library_example.m')         = 'worked example: describe, pick by days, tfMin accepts the pick, every transfer at the cell, the legend, extremes, the torus map, a movie';
 M('get_family_orbit.m')                = 'family name + parameters -> periodic orbit (the DRO and tulip recipes)';
 M('phase_state.m')                     = 'state at a phase fraction of a periodic orbit';
 M('periodic_pp.m')                     = 'the periodic spline phase_state is built on';

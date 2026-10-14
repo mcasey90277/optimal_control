@@ -28,6 +28,13 @@ function [eMin, eMax] = costate_catalog_extremes(cat_, filt, doPlot, metric)
 %                                                   .tauDRO  DRO period (ND)
 %                                                   .Np      petal count
 %                                                   .thrustN rung (N)
+%                                                   .status  vector of
+%                                                   optimality-status codes
+%                                                   (primaries AND
+%                                                   alternatives)
+%                                                   .includeAlternatives
+%                                                   [false] also search
+%                                                   cat_.alternatives
 %                                                   [] or omitted = search
 %                                                   the whole catalog
 %
@@ -48,9 +55,16 @@ function [eMin, eMax] = costate_catalog_extremes(cat_, filt, doPlot, metric)
 %                                                   .deltaV_kms
 %                                                   .propellant_kg
 %                                                   .z8 [8x1] (tfMin-ready)
+%                                                   .kind 'primary' |
+%                                                   'alternative'
+%                                                   .status (NaN: no layer)
+%                                                   .statusName .reason
+%                                                   .junctions .altIndex
 %
 %% Revision History:
 %  M. Casey                                                   (c) 08/06/2026
+%  M. Casey  alternatives and status filters, defaults unchanged
+%                                                              (c) 10/13/2026
 %  Copyright Coorbital Inc.
 %% ------------------------ Begin Code Sequence ---------------------------
 
@@ -84,6 +98,8 @@ assert(any(strncmpi(metric, {'deltaV','time'}, 1)), ...
      cnd = cat_.thruster.c_nd;
     m0kg = cat_.thruster.m0_kg;
    d2day = tStar/86400;
+useAlt = isfield(filt,'includeAlternatives') && ~isempty(filt.includeAlternatives) && filt.includeAlternatives;
+useSt  = isfield(filt,'status') && ~isempty(filt.status);
      ndT = @(TN) (TN/m0kg)*tStar^2/(lStar*1000);
 
 %% Walk every stored entry, apply the filter, rank by the metric:
@@ -105,6 +121,9 @@ for ks = 1:numel(cat_.sheets)
         for iD = 1:numel(sh.sD_frac)
             for iA = 1:numel(sh.sA_frac)
                 if ~sh.has_solution(iD,iA,kr), continue, end
+                if useSt
+                    if ~isfield(sh,'status') || ~ismember(double(sh.status(iD,iA,kr)), filt.status), continue, end
+                end
                 tf = sh.tf_nd(iD,iA,kr);
                 mf = 1 - ndT(TN)*tf/cnd;
                 if ~(mf > 0 && mf <= 1), continue, end   % corrupt entry
@@ -113,11 +132,36 @@ for ks = 1:numel(cat_.sheets)
                 if v < vBest
                     vBest = v;  best  = pack(sh, iD, iA, TN, tf, dV, mf, m0kg, d2day, ...
                                              sh.z8(:,sh.entry_index(iD,iA,kr)));
+                    best = addStatus(best, sh, iD, iA, kr);
                 end
                 if v > vWorst
                     vWorst = v;  worst = pack(sh, iD, iA, TN, tf, dV, mf, m0kg, d2day, ...
                                               sh.z8(:,sh.entry_index(iD,iA,kr)));
+                    worst = addStatus(worst, sh, iD, iA, kr);
                 end
+            end
+        end
+    end
+    %% Alternatives of this sheet (same filter, same ranking):
+    if useAlt && isfield(cat_,'alternatives') && ~isempty(cat_.alternatives)
+        AL = cat_.alternatives;
+        for ka = find([AL.sheet] == ks)
+            if numel(cat_.rungs_N) ~= 1, continue, end   % alternatives are stored at the one library rung
+            TN = cat_.rungs_N(1);
+            if isfield(filt,'thrustN') && abs(TN - filt.thrustN) > 1e-9, continue, end
+            if useSt && ~ismember(double(AL(ka).status), filt.status), continue, end
+            tf = AL(ka).tf_nd;
+            mf = 1 - ndT(TN)*tf/cnd;
+            if ~(mf > 0 && mf <= 1), continue, end
+            dV = cnd*log(1/mf)*lStar/tStar;
+            if strncmpi(metric,'t',1), v = tf; else, v = dV; end
+            if v < vBest
+                vBest = v;
+                best = packAlt(sh, AL(ka), ka, TN, tf, dV, mf, m0kg, d2day);
+            end
+            if v > vWorst
+                vWorst = v;
+                worst = packAlt(sh, AL(ka), ka, TN, tf, dV, mf, m0kg, d2day);
             end
         end
     end
@@ -198,7 +242,45 @@ e = struct('tauDRO',sh.tauDRO, 'dep_family',df, 'dep_params',dp, ...
     'arr_frac',sh.sA_frac(iA), 'arr_nd',sh.sA_frac(iA)*Pa, ...
     'arr_days',sh.sA_frac(iA)*Pa*d2day, ...
     'tf_nd',tf, 'tf_days',tf*d2day, 'deltaV_kms',dV, ...
-    'propellant_kg',(1-mf)*m0kg, 'z8',z8);
+    'propellant_kg',(1-mf)*m0kg, 'z8',z8, ...
+    'kind','primary', 'status',NaN, 'statusName','', 'reason','', ...
+    'junctions',[], 'altIndex',0);
+end
+
+% ------------------------------------------------------------------------
+function e = addStatus(e, sh, iD, iA, kr)
+% ADDSTATUS  Fill a primary extreme's status fields when the sheet has the
+% layer.  INPUTS: e extreme; sh sheet; indices.  OUTPUTS: e.
+ie = sh.entry_index(iD,iA,kr);
+if isfield(sh,'status')
+    e.status = double(sh.status(iD,iA,kr));
+    e.statusName = statusName(e.status);
+end
+if isfield(sh,'status_reason') && ~isempty(sh.status_reason), e.reason = sh.status_reason{ie}; end
+if isfield(sh,'junctions') && ~isempty(sh.junctions), e.junctions = sh.junctions{ie}; end
+end
+
+% ------------------------------------------------------------------------
+function e = packAlt(sh, a, ka, TN, tf, dV, mf, m0kg, d2day)
+% PACKALT  Assemble an alternative's extreme struct (same fields as a
+% primary).  INPUTS: sheet; alternative row; its index; thrust; tf (ND);
+% dV (km/s); final mass fraction; m0 (kg); ND->days factor.  OUTPUTS: e.
+[~, iD] = min(abs(sh.sD_frac - a.sD));
+[~, iA] = min(abs(sh.sA_frac - a.sA));
+e = pack(sh, iD, iA, TN, tf, dV, mf, m0kg, d2day, a.z8);
+e.dep_frac = a.sD;  e.dep_nd = a.sD*sh.tauDRO;  e.dep_days = e.dep_nd*d2day;
+e.arr_frac = a.sA;  e.arr_nd = a.sA*sh.period_tulip_nd;  e.arr_days = e.arr_nd*d2day;
+e.kind = 'alternative';  e.status = double(a.status);
+e.statusName = statusName(e.status);  e.reason = a.status_reason;
+e.junctions = a.junctions;  e.altIndex = ka;
+end
+
+% ------------------------------------------------------------------------
+function n = statusName(code)
+% STATUSNAME  Name of a status code via status_key.  INPUTS: code.
+% OUTPUTS: n [char].
+K = status_key();
+n = K.names{K.codes == code};
 end
 
 % ------------------------------------------------------------------------
@@ -209,6 +291,10 @@ fprintf('  %s  dV = %.4f km/s,  t_f = %.5f ND = %.3f d   [%s tau=%.2f, %s, %.2f 
         tag, e.deltaV_kms, e.tf_nd, e.tf_days, upper(e.dep_family), ...
         e.tauDRO, strrep(e.arrLab,'\tau','tau'), e.thrustN, ...
         e.propellant_kg);
+if strcmp(e.kind,'alternative') || ~isnan(e.status)
+    fprintf('      status: %s -- %s%s\n', e.statusName, e.reason, ...
+            ternary(strcmp(e.kind,'alternative'), sprintf('  [alternative #%d]', e.altIndex), ''));
+end
 fprintf('      departure phase: %.6f ND = %.4f days  (fraction %.4f)\n', ...
         e.dep_nd, e.dep_days, e.dep_frac);
 fprintf('      arrival   phase: %.6f ND = %.4f days  (fraction %.4f)\n', ...
@@ -223,7 +309,17 @@ if isfield(filt,'tauDRO'), s = [s sprintf(' tau=%.2f', filt.tauDRO)]; end
 if isfield(filt,'Np'),     s = [s sprintf(' Np=%d', filt.Np)]; end
 if isfield(filt,'tauArr'), s = [s sprintf(' arr tau=%.2f', filt.tauArr)]; end
 if isfield(filt,'thrustN'),s = [s sprintf(' %.2g N', filt.thrustN)]; end
+if isfield(filt,'status') && ~isempty(filt.status), s = [s sprintf(' status=%s', mat2str(filt.status))]; end
+if isfield(filt,'includeAlternatives') && ~isempty(filt.includeAlternatives) && filt.includeAlternatives
+    s = [s ' +alternatives'];
+end
 if isempty(s), s = ' over the WHOLE catalog';
 else, s = [' (restricted to' s ')'];
 end
+end
+
+% ------------------------------------------------------------------------
+function r = ternary(c, a, b)
+% TERNARY  a if c else b.  INPUTS: c logical; a,b values.  OUTPUTS: r.
+if c, r = a; else, r = b; end
 end

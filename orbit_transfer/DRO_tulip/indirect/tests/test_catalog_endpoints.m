@@ -24,6 +24,8 @@ ok = chk(ok, gap < 1e-8, sprintf('REVIEW FOCUS 2: the wrap s = 1 - 1e-12 gives t
 ok = chk(ok, abs(B.Tnd - Bref.Tnd) <= 1e-15*Bref.Tnd && abs(B.cnd - Bref.cnd) <= 1e-15*Bref.cnd && B.mu == Bref.mu, 'Tnd, cnd, mu agree');
 ok = chk(ok, isequal(size(B.stateA(0.3)), [6 1]) && all(isfield(B.problem, {'lStar', 'tStar', 'muStar', 'Tnd', 'cnd', 'thrustN', 'NpTulip', 'tauDRO'})), 'closures return 6 x 1; B.problem has the consumers'' fields');
 ok = chk(ok, size(orb.rvD, 2) >= 6 && orb.tD(1) == 0 && size(orb.rvT, 2) >= 6, 'orbit samples returned for plotting');
+B2 = catalog_endpoints(c, 1, 2*c.rungs_N(1));
+ok = chk(ok, abs(B2.Tnd - 2*B.Tnd) <= 1e-15*B2.Tnd && B2.problem.thrustN == 2*c.rungs_N(1) && B.problem.thrustN == c.rungs_N(1), 'optional thrustN: Tnd doubles with the thrust, B.problem.thrustN carried, default unchanged');
 if ok, fprintf('test_catalog_endpoints: ALL PASS\n'); else, fprintf('test_catalog_endpoints: FAIL\n'); end
 end
 

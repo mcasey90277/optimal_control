@@ -69,6 +69,7 @@ function [outStem, info] = costate_catalog_extremes_movies(cat_, filt, metric, o
 %
 %% Revision History:
 %  M. Casey                                                   (c) 08/06/2026
+%  M. Casey  per-panel B (own sheet and thrust), full titles, guards (c) 10/13/2026
 %  M. Casey  flights through fly_catalog_entry; opts.pair/.labels/
 %            .nFrames/.fly; second output info                (c) 10/13/2026
 %  Copyright Coorbital Inc.
@@ -133,30 +134,42 @@ end
 if ~isempty(opts.pair)
     assert(iscell(opts.pair) && numel(opts.pair) == 2, ...
            'costate_catalog_extremes_movies:pair', 'opts.pair must be a 2-element cell of transfers_at rows');
-    R = opts.pair;
-    if ~isempty(opts.labels), lab = {opts.labels(1), opts.labels(2)};
+    R = opts.pair;  EX = {[], []};
+    if ~isempty(opts.labels)
+        assert((iscell(opts.labels) || isstring(opts.labels) || ischar(opts.labels)) && numel(opts.labels) == 2, ...
+               'costate_catalog_extremes_movies:labels', 'opts.labels must hold exactly 2 labels');
+        lab = {char(opts.labels(1)), char(opts.labels(2))};
+        if iscell(opts.labels), lab = {char(opts.labels{1}), char(opts.labels{2})}; end
     else,                     lab = {'A','B'}; end
 else
     [eMin, eMax] = costate_catalog_extremes(cat_, filt, false, metric);
     if strncmpi(metric,'t',1), lab = {'FASTEST','SLOWEST'};
     else,                      lab = {'MIN \DeltaV','MAX \DeltaV'}; end
-    R = cell(1,2);
+    R = cell(1,2);  EX = cell(1,2);
     for k = 1:2
         e = {eMin, eMax};  e = e{k};
+        EX{k} = e;
         R{k} = struct('z8',e.z8, 'sD',e.dep_frac, 'sA',e.arr_frac, 'junctions',e.junctions, ...
                       'status',e.status, 'statusName',e.statusName, 'reason',e.reason);
     end
 end
-[B, orb] = catalog_endpoints(cat_);
-tauD = orb.tD;  rvD = orb.rvD;  tauT = orb.tT;  rvT = orb.rvT;
-fo = struct('method', opts.fly, 'B', B);
-Fl = cell(1,2);
+Fl = cell(1,2);  orb = cell(1,2);  ttl = cell(1,2);
 for k = 1:2
-    Fl{k} = fly_catalog_entry(cat_, R{k}, fo);
+    if isempty(EX{k})                       % pair rows: library rung, sheet 1
+        [B, orb{k}] = catalog_endpoints(cat_);
+        ttl{k} = '';
+    else                                    % an extreme: its own sheet and thrust
+        e  = EX{k};
+        ks = find_sheet(cat_, e);
+        [B, orb{k}] = catalog_endpoints(cat_, ks, e.thrustN);
+        ttl{k} = sprintf('%s \\tau=%.2f, %s, %.2f N', upper(e.dep_family), e.tauDRO, e.arrLab, e.thrustN);
+    end
+    Fl{k} = fly_catalog_entry(cat_, R{k}, struct('method', opts.fly, 'B', B));
 end
 
 for k = 1:2
     F = Fl{k};
+    tauD = orb{k}.tD;  rvD = orb{k}.rvD;  tauT = orb{k}.tT;  rvT = orb{k}.rvT;
     [tu, iu] = unique(F.t);
     yj = F.Y;
 
@@ -186,7 +199,7 @@ for k = 1:2
     S(k).anim.initialize();
     camzoom(1.4);
     annotation(S(k).fig, 'textbox', [0.02 0.90 0.96 0.09], 'String', ...
-        {sprintf('%s:  %s  (%s flight)', lab{k}, F.statusName, F.method), ...
+        {sprintf('%s:  %s', lab{k}, strtrim([ttl{k} '  ' sprintf('[%s, %s flight]', F.statusName, F.method)])), ...
          sprintf('\\DeltaV %.3f km/s,  t_f %.3f d', F.dvKms, F.tfDays)}, ...
         'Color','w', 'EdgeColor','none', 'FontSize',11, ...
         'HorizontalAlignment','center');
@@ -207,7 +220,7 @@ vw.FrameRate = fps;  vw.Quality = 95;  open(vw);
 cleanupVW = onCleanup(@() close(vw)); %#ok<NASGU>
 gifFile = [outStem '.gif'];
 for kf = 1:nFrames
-    tNow = tEnd*(kf-1)/(nFrames-1);
+    tNow = tEnd*(kf-1)/max(nFrames-1, 1);
     for k = 1:2
         S(k).anim.update(epoch + min(tNow, S(k).tf)*tStar/86400);
         set(S(k).clock, 'String', sprintf('t = %.2f days', tNow*tStar/86400));
@@ -239,4 +252,20 @@ F = getframe(fig);
 ri = max(1, min(size(F.cdata,1), round(linspace(1, size(F.cdata,1), 720))));
 ci = max(1, min(size(F.cdata,2), round(linspace(1, size(F.cdata,2), w))));
 img = F.cdata(ri, ci, :);
+end
+
+% ---------------------------------------------------------------------------
+function ks = find_sheet(cat_, e)
+% FIND_SHEET  Index of the sheet an extreme came from (matched on tauDRO,
+% Np and the arrival family/period).
+% INPUTS: catalog; extreme struct.  OUTPUTS: ks [scalar] sheet index.
+ks = 0;
+for kk = 1:numel(cat_.sheets)
+    sh = cat_.sheets(kk);
+    if abs(sh.tauDRO - e.tauDRO) > 1e-9 || ~isequaln(sh.Np, e.Np), continue, end
+    if isfield(sh, 'arr_params') && isfield(sh.arr_params, 'tau') && isfield(e.arr_params, 'tau') ...
+            && abs(sh.arr_params.tau - e.arr_params.tau) > 1e-9, continue, end
+    ks = kk;  return
+end
+error('costate_catalog_extremes_movies:sheet', 'no sheet matches the extreme (tauDRO %.4f)', e.tauDRO);
 end

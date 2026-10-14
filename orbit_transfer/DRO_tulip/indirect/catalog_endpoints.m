@@ -1,4 +1,4 @@
-function [B, orbits] = catalog_endpoints(cat_, sheetIdx)
+function [B, orbits] = catalog_endpoints(cat_, sheetIdx, thrustN)
 %% Purpose:
 %
 %   The CERTIFIED endpoint rule rebuilt from a catalog's OWN keys: the
@@ -27,6 +27,8 @@ function [B, orbits] = catalog_endpoints(cat_, sheetIdx)
 %                                                   .thruster .rungs_N)
 %  sheetIdx                 double [1]              sheet to read the orbit
 %                                                   keys from [1]
+%  thrustN                  double [1]              thrust [N] for Tnd and
+%                                                   B.problem [rungs_N(1)]
 %
 %% Outputs:
 %
@@ -41,10 +43,12 @@ function [B, orbits] = catalog_endpoints(cat_, sheetIdx)
 %
 %% Revision History:
 %  M. Casey                                                   (c) 10/13/2026
+%  M. Casey  optional thrustN argument (default rungs_N(1))   (c) 10/13/2026
 %  Copyright Coorbital Inc.
 %% ------------------------ Begin Code Sequence ---------------------------
 
 if nargin < 2 || isempty(sheetIdx), sheetIdx = 1; end
+if nargin < 3 || isempty(thrustN), thrustN = cat_.rungs_N(1); end
 
 sh = cat_.sheets(sheetIdx);
 k  = cat_.constants;
@@ -61,7 +65,6 @@ ppo = struct('onMissing', 'notaknot');
 col6 = @(v) reshape(v(1:6), 6, 1);
 
 lStar = k.lStar_km;  tStar = k.tStar_s;
-thrustN = cat_.rungs_N(1);
 Tnd = (thrustN/cat_.thruster.m0_kg)*tStar^2/(lStar*1000);
 cnd = cat_.thruster.c_nd;
 

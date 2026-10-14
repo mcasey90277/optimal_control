@@ -76,7 +76,10 @@ fprintf('[5] verdict: flown arrival miss %.3f km and %.4f m/s (method %s)\n', ..
         F.flyKm, F.flyVms, F.method);
 
 %% 6. Does pumpkyn tfMin accept the seed unchanged? (|dz| = |z_tfMin - z8|):
+% |dz| = 0 exactly means tfMin's first residual was already at machine level,
+% so the solver did not move: the seed is accepted unchanged.
 [acc, dz, ~, tinfo] = tfmin_accepts(cat_, struct('z8', z8, 'sD', sD, 'sA', sA), struct('B', B));
+fprintf('    (|dz| = 0 exactly = tfMin''s first residual was already at machine level; the solver did not move)\n');
 fprintf('[6] verdict: |dz| = %.2e (tolerance %.0e) -> %s (tfMin took %.1f s)\n', ...
         dz, tinfo.tolDz, ternary(acc, 'ACCEPTED unchanged', 'NOT accepted'), tinfo.wallSec);
 

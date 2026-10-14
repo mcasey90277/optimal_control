@@ -113,15 +113,22 @@ altDir   = getf(cfg, 'auditAltDir', fileparts(catMat));
 assert(~doZip || doSelf, 'build_dro_deliverable:selftest', ...
        'a zip is written only after a passed self-test: set cfg.selftest = true, or cfg.zip = false');
 
-%% 1. Export
-prepareOutDir(outDir);
-[c, info] = export_deliverable_catalog(catMat, fullfile(outDir, 'costate_catalog_dro_tulip_70mN.mat'));
+staleZip = [outDir '.zip'];
+if isfile(staleZip), delete(staleZip); end           % never leave a zip of an older build
+
+%% 1. Export (into a scratch folder: outDir is not touched until the gate passes)
 catFile = 'costate_catalog_dro_tulip_70mN.mat';
+scratch = tempname;  mkdir(scratch);
+cleanScratch = onCleanup(@() rmdir(scratch, 's'));
+[c, info] = export_deliverable_catalog(catMat, fullfile(scratch, catFile));
 fprintf('[build] 1 export: %s (keys %s / %s; %d sources rewritten; removed %s)\n', ...
-        fullfile(outDir, catFile), info.primKey, info.altKey, info.nSourceRewritten, strjoin(info.removed, ', '));
+        catFile, info.primKey, info.altKey, info.nSourceRewritten, strjoin(info.removed, ', '));
 
 %% 2. Audit gate by content key
-aud = auditGate(primMat, altDir, info, numel(c.alternatives));
+nSolved = sum(arrayfun(@(s) nnz(s.has_solution), c.sheets));
+aud = auditGate(primMat, altDir, info, numel(c.alternatives), nSolved);
+prepareOutDir(outDir);
+movefile(fullfile(scratch, catFile), fullfile(outDir, catFile));
 fprintf('[build] 2 audit gate: primaries %d ok / %d bad, alternatives %d ok / %d bad over %d chunks, coverage 1..%d, keys bound\n', ...
         aud.primOk, aud.primBad, aud.altOk, aud.altBad, aud.nChunks, numel(c.alternatives));
 
@@ -213,11 +220,11 @@ mkdir(outDir);
 end
 
 % ------------------------------------------------------------------------
-function aud = auditGate(primMat, altDir, info, nAlt)
+function aud = auditGate(primMat, altDir, info, nAlt, nSolved)
 % AUDITGATE  The key-bound audit gate (see the header). Every refusal is
 % error id build_dro_deliverable:audit.
 % INPUTS: primMat (char); altDir (char); info (export info: .primKey
-% .altKey); nAlt [scalar].  OUTPUTS: aud (.primOk .primBad .primWhen .altOk
+% .altKey); nAlt [scalar]; nSolved [scalar] solved cells.  OUTPUTS: aud (.primOk .primBad .primWhen .altOk
 % .altBad .nChunks .chunkFiles).
 id = 'build_dro_deliverable:audit';
 if ~isfile(primMat), error(id, 'no primaries audit at %s', primMat); end
@@ -230,6 +237,9 @@ if P.A.nBad ~= 0
 end
 if ~strcmp(P.A.contentKey, info.primKey)
     error(id, 'the primaries audit is for content key %s, the export is %s', P.A.contentKey, info.primKey);
+end
+if P.A.nOk ~= nSolved
+    error(id, 'the primaries audit covers %d entries, the catalog solves %d cells', P.A.nOk, nSolved);
 end
 D = dir(fullfile(altDir, 'audit_alt_*.mat'));
 if isempty(D), error(id, 'no audit_alt_*.mat chunks in %s', altDir); end
@@ -244,6 +254,10 @@ for k = 1:numel(D)
     end
     if ~strcmp(X.altContentKey, info.altKey)
         error(id, '%s: alternatives key %s, the export is %s', D(k).name, X.altContentKey, info.altKey);
+    end
+    if ~isstruct(X.audit) || ~isfield(X.audit, 'nBad') || ~isstruct(X.altRows) || ...
+            ~all(isfield(X.altRows, {'ok', 'k'}))
+        error(id, '%s lacks audit.nBad or altRows.ok / altRows.k', D(k).name);
     end
     rowOk = [X.altRows.ok];
     if X.audit.nBad ~= 0 || ~all(rowOk)
@@ -467,7 +481,7 @@ p(['\nLegends that ride in the catalog: `status_key` (codes, names, meanings, ch
 p('## How it was made, and how it was checked\n\n');
 p('%s\n\n', c.provenance);
 p('Build record: %s. %s candidates harvested, %d re-certified.\n\n', f.build.dates, commas(f.build.nCandidates), f.build.nRecert);
-p('Every transfer passes the certifier''s stack in order (`status_key.order`): %s.\n\n', K.order);
+p('Every transfer goes through the certifier''s stack in order (`status_key.order`); its status records how far it got: %s.\n\n', K.order);
 p('Primaries, from the sheet grids:\n\n');
 p('- free-time conjugate test passed: %s / %s (`conj_pass = 1`)\n', commas(f.conjPass), commas(f.nPrim));
 p('- hypothesis gates: min magnitude of lam_v > 0 on %s, Q_mt > 0 on %s, dim S = 1 on %s\n', commas(f.gLamv), commas(f.gQmt), commas(f.gDimS));

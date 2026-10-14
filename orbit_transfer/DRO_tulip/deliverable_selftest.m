@@ -21,6 +21,15 @@ function R = deliverable_selftest(outDir, opts)
 %        assignment of v that calls toolboxdir( or matlabroot, or a guard
 %        startsWith(v, matlabroot). Every other addpath fails.
 %
+%   The child starts from restoredefaultpath, runs pumpkynPie's startup,
+%   adds movie2gifLite's folder (located by the parent) and cd's into the
+%   folder; it prints 'PATH CLEAN' only when no path entry mentions
+%   optimal_control, mlabTools or proj7 outside the pumpkyn / pumpkynPie
+%   roots and the movie2gifLite folder, and the parent requires that line.
+%   Check 3 also flags 'addpath (' , a call path( (no space, so prose such
+%   as "on the MATLAB path (run ..." is not one), '/Volumes/', a string starting
+%   '~/', and a missing README.
+%
 %   The child prints 'SELFTEST OK' or one 'SELFTEST FAIL: <reason>' line
 %   per finding; the parent parses them. Repo-only: NOT shipped.
 %
@@ -40,6 +49,8 @@ function R = deliverable_selftest(outDir, opts)
 %  outDir                   char                    the deliverable folder
 %
 %  opts                     struct   (optional)     .matlab [R2026a binary]
+%                                                   .movie2gifLite [its folder,
+%                                                   by which in the parent]
 %                                                   .pumpkynPie [proj7/external/
 %                                                   pumpkynPie]
 %                                                   .demos {cellstr} override
@@ -74,7 +85,11 @@ before = listFiles(outDir);
 work = tempname;  mkdir(work);
 child = fullfile(work, 'selftest_child_.m');
 logFile = fullfile(work, 'selftest.log');
-writeChild(child, outDir, pieDir, exs, demos);
+m2gDir = '';
+if isfield(opts, 'movie2gifLite'), m2gDir = opts.movie2gifLite;
+elseif ~isempty(which('movie2gifLite')), m2gDir = fileparts(which('movie2gifLite'));
+end
+writeChild(child, outDir, pieDir, exs, demos, m2gDir);
 
 fprintf('[selftest] child MATLAB on %s (%d self-demos: %s); log %s\n', ...
         outDir, numel(demos), strjoin(demos, ', '), logFile);
@@ -97,6 +112,9 @@ if status ~= 0 && isempty(reasons)
     reasons = {sprintf('child MATLAB exited %d without a verdict (see the log)', status)};
 end
 okLine = ~isempty(regexp(txt, '(^|\n)SELFTEST OK', 'once'));
+if ~contains(txt, 'PATH CLEAN') && status == 0
+    reasons{end+1} = 'the child never printed PATH CLEAN';
+end
 R = struct('ok', status == 0 && okLine && isempty(reasons), 'log', logFile, ...
            'reasons', {reasons}, 'demos', {demos}, 'removed', {removed}, ...
            'status', status, 'seconds', secs);
@@ -132,9 +150,10 @@ D = dir(d);  D = D(~[D.isdir]);  names = {D.name};
 end
 
 % ------------------------------------------------------------------------
-function writeChild(child, outDir, pieDir, exs, demos)
+function writeChild(child, outDir, pieDir, exs, demos, m2gDir)
 % WRITECHILD  Write the child function file the -batch MATLAB runs.
-% INPUTS: child (path); outDir; pieDir (char); exs, demos {cellstr}.
+% INPUTS: child (path); outDir; pieDir; m2gDir (char, '' = none); exs,
+% demos {cellstr}.
 % OUTPUTS: none.
 q = @(s) ['''' strrep(s, '''', '''''') ''''];
 cellLit = @(c) ['{' strjoin(cellfun(q, c, 'UniformOutput', false), ', ') '}'];
@@ -144,8 +163,23 @@ L = {
 '% INPUTS: none.  OUTPUTS: none (prints SELFTEST OK / SELFTEST FAIL lines).'
 'bad = {};'
 ['outDir = ' q(outDir) ';']
-['cd(' q(pieDir) ');  startup();  cd(outDir);']
+'restoredefaultpath;                       % only MATLAB, then pumpkyn + pumpkynPie + the folder'
+['cd(' q(pieDir) ');  startup();']
+['m2gDir = ' q(m2gDir) ';']
+'if ~isempty(m2gDir), addpath(m2gDir); end'
+'cd(outDir);'
 'od = pwd;'
+'pk = {pkgRoot(which(''pumpkyn.cr3bp.tfMin''), ''+pumpkyn''), pkgRoot(which(''pumpkynPie.plot.SatelliteAnimator''), ''+pumpkynPie'')};'
+'P = strsplit(path, pathsep);  dirty = {};'
+'for k = 1:numel(P)'
+'    e = P{k};'
+'    if ~any(contains(e, {''optimal_control'', ''mlabTools'', ''proj7''})), continue, end'
+'    okRoot = any(cellfun(@(r) ~isempty(r) && startsWith([e filesep], [r filesep]), pk)) || (~isempty(m2gDir) && strcmp(e, m2gDir));'
+'    if ~okRoot, dirty{end+1} = e; end'
+'end'
+'if any(cellfun(@isempty, pk)), bad{end+1} = ''pumpkyn or pumpkynPie not found after startup''; end'
+'if isempty(dirty), fprintf(''PATH CLEAN (pumpkyn: %s ; pumpkynPie: %s ; movie2gifLite: %s)\n'', pk{1}, pk{2}, m2gDir);'
+'else, bad{end+1} = sprintf(''path not clean: %s'', strjoin(dirty, '' ; '')); end'
 ['exs = ' cellLit(exs) ';']
 'for k = 1:numel(exs)'
 '    try, runIsolated(exs{k}); fprintf(''SELFTEST step: example %s ran\n'', exs{k});'
@@ -178,15 +212,17 @@ L = {
 '    end'
 '    fprintf(''SELFTEST step: dependency scan of %d files -> %d required files\n'', numel(files), numel(fl));'
 'catch e, bad{end+1} = sprintf(''dependency scan threw: %s'', e.message); end'
-'% 3. no addpath( and no /Users/ in shipped code or the README'
+'% 3. no path manipulation and no machine path in shipped code or the README'
 'G = [files, {fullfile(od, ''README.md'')}];'
 'for k = 1:numel(G)'
-'    if ~isfile(G{k}), continue, end'
+'    if ~isfile(G{k}), bad{end+1} = sprintf(''%s is missing'', G{k}); continue, end'
 '    t = splitlines(fileread(G{k}));'
 '    for n = 1:numel(t)'
 '        ln = t{n};'
-'        if contains(ln, ''addpath('') && ~mathworksRestore(ln, t), bad{end+1} = sprintf(''%s line %d has addpath( of a folder not bound to matlabroot'', G{k}, n); end'
-'        if contains(ln, ''/Users/''), bad{end+1} = sprintf(''%s line %d has /Users/'', G{k}, n); end'
+'        if ~isempty(regexp(ln, ''addpath\s*\('', ''once'')) && ~mathworksRestore(ln, t), bad{end+1} = sprintf(''%s line %d has addpath( of a folder not bound to matlabroot'', G{k}, n); end'
+'        if ~isempty(regexp(ln, ''(?<![\w.])path\('', ''once'')), bad{end+1} = sprintf(''%s line %d calls path('', G{k}, n); end'
+'        if contains(ln, {''/Users/'', ''/Volumes/''}), bad{end+1} = sprintf(''%s line %d has an absolute machine path'', G{k}, n); end'
+'        if ~isempty(regexp(ln, ''[''''"`]~/'', ''once'')), bad{end+1} = sprintf(''%s line %d has a string starting ~/'', G{k}, n); end'
 '    end'
 'end'
 'if isempty(bad)'
@@ -202,8 +238,8 @@ L = {
 '% same file binds to matlabroot (v = ...toolboxdir(/matlabroot..., or a guard'
 '% startsWith(v, matlabroot)).  INPUTS: ln (char); lines {cellstr}.  OUTPUTS: tf.'
 'tf = false;'
-'tk = regexp(ln, ''addpath\(\s*(\w+)\s*\)'', ''tokens'', ''once'');'
-'if isempty(tk) || numel(regexp(ln, ''addpath\('')) > 1, return, end'
+'tk = regexp(ln, ''addpath\s*\(\s*(\w+)\s*\)'', ''tokens'', ''once'');'
+'if isempty(tk) || numel(regexp(ln, ''addpath\s*\('')) > 1, return, end'
 'v = tk{1};  body = strjoin(lines, newline);'
 'assigned = ~isempty(regexp(body, [''(^|\n)\s*'' v ''\s*=[^\n]*(toolboxdir\(|matlabroot)''], ''once''));'
 'guarded = ~isempty(regexp(body, [''startsWith\(\s*'' v ''\s*,\s*matlabroot''], ''once''));'

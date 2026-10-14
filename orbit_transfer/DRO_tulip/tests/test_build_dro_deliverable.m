@@ -5,7 +5,10 @@ function ok = test_build_dro_deliverable()
 % catalog whose two content keys equal the library of record's; the
 % KEY-BOUND audit gate refuses (b) a chunk whose altContentKey differs,
 % (c) an audit dir missing one chunk (coverage), (d) a primaries audit with
-% nBad = 1 -- each with error id build_dro_deliverable:audit.
+% nBad = 1, (e) a primaries audit with another contentKey, (f) a chunk with
+% another contentKey, (g) a duplicated alternative index with the count
+% preserved -- each with error id build_dro_deliverable:audit -- and (h) a
+% refused build leaves an earlier outDir in place.
 %
 % INPUTS:  none
 % OUTPUTS: ok [logical]  every check passed (prints PASS/FAIL per check)
@@ -94,6 +97,38 @@ P.A.nBad = 1;
 pMat = fullfile(work, 'audit_70mN_bad.mat');  save(pMat, '-struct', 'P');
 cfgD = base;  cfgD.outDir = fullfile(work, 'deliv_d');  cfgD.auditPrimariesMat = pMat;
 ok = chk(ok, refusesAudit(cfgD), 'a primaries audit with nBad = 1: refused');
+
+% (e) primaries audit with an altered contentKey
+P = load(fullfile(fileparts(fileparts(record)), 'library_70mN_24x48_merged', 'audit_70mN.mat'));
+P.A.contentKey = repmat('f', 1, 32);
+eMat = fullfile(work, 'audit_70mN_key.mat');  save(eMat, '-struct', 'P');
+cfgE = base;  cfgE.outDir = fullfile(work, 'deliv_e');  cfgE.auditPrimariesMat = eMat;
+ok = chk(ok, refusesAudit(cfgE), 'a primaries audit with an altered contentKey: refused');
+
+% (f) one chunk's (primaries) contentKey altered, coverage intact
+fDir = fullfile(work, 'audit_f');  mkdir(fDir);
+for k = 1:numel(D), copyfile(fullfile(D(k).folder, D(k).name), fDir); end
+X = load(fullfile(fDir, D(2).name));
+X.contentKey = repmat('1', 1, 32);
+save(fullfile(fDir, D(2).name), '-struct', 'X');
+cfgF = base;  cfgF.outDir = fullfile(work, 'deliv_f');  cfgF.auditAltDir = fDir;
+ok = chk(ok, refusesAudit(cfgF), 'a chunk with an altered contentKey: refused');
+
+% (g) a duplicated k inside one chunk, row count preserved (one k missing, one twice)
+gDir = fullfile(work, 'audit_g');  mkdir(gDir);
+for k = 1:numel(D), copyfile(fullfile(D(k).folder, D(k).name), gDir); end
+X = load(fullfile(gDir, D(3).name));
+X.altRows(1).k = X.altRows(2).k;
+save(fullfile(gDir, D(3).name), '-struct', 'X');
+cfgG = base;  cfgG.outDir = fullfile(work, 'deliv_g');  cfgG.auditAltDir = gDir;
+ok = chk(ok, refusesAudit(cfgG), 'a duplicated alternative index (count preserved): refused');
+
+% (h) a refused build leaves an earlier deliverable folder untouched
+keep = fullfile(work, 'deliv_keep');  mkdir(keep);
+fid = fopen(fullfile(keep, 'README.md'), 'w');  fprintf(fid, 'earlier build\n');  fclose(fid);
+cfgH = base;  cfgH.outDir = keep;  cfgH.auditAltDir = cDir;
+refusesAudit(cfgH);
+ok = chk(ok, isfile(fullfile(keep, 'README.md')), 'a refused audit leaves the earlier outDir in place');
 
 if ok, fprintf('test_build_dro_deliverable: ALL PASS\n'); else, fprintf('test_build_dro_deliverable: FAIL\n'); end
 end

@@ -91,8 +91,9 @@ function [outStem, info] = costate_catalog_extremes_movies(cat_, filt, metric, o
 %  M. Casey  ephemeris guard hides/restores only a folder under
 %            matlabroot (ruling R11)                         (c) 10/13/2026
 %  M. Casey  self-contained on pumpkyn: flights by tfMinProp from the
-%            junctions (else z8), orbits by get_family_orbit; no
-%            flight-layer files (the user kit, deliverable 9) (c) 10/14/2026
+%            junctions (else z8), orbits by get_family_orbit at the
+%            catalog's muStar; no flight-layer files (the user
+%            kit, deliverable 9)                            (c) 10/14/2026
 %  Copyright Coorbital Inc.
 %% ------------------------ Begin Code Sequence ---------------------------
 
@@ -181,7 +182,7 @@ else
 end
 Fl = cell(1,2);  orb = cell(1,2);
 for k = 1:2
-    orb{k} = sheet_orbits(cat_.sheets(ks(k)));
+    orb{k} = sheet_orbits(cat_.sheets(ks(k)), cat_.constants.muStar);
     Fl{k}  = fly_row(cat_, R{k}, orb{k}, TN(k), opts.fly);
 end
 
@@ -262,15 +263,17 @@ fprintf('  movies -> %s.mp4 / .gif  (%d frames, 1280x720, shared clock to %.2f d
 end
 
 % ---------------------------------------------------------------------------
-function O = sheet_orbits(sh)
+function O = sheet_orbits(sh, muStar)
 % SHEET_ORBITS  One period of the sheet's departure and arrival orbits, by
 % the sheet's own recipe (dep_family / arr_family keys), else the DRO /
-% tulip rule of the deliverable-3 catalog.
-% INPUTS: sh (sheet struct).  OUTPUTS: O (.tD .rvD .tT .rvT; [M x 1], [M x 6]).
+% tulip rule of the deliverable-3 catalog, at the catalog's own mass ratio.
+% INPUTS: sh (sheet struct); muStar [scalar].  OUTPUTS: O (.tD .rvD .tT .rvT;
+% [M x 1], [M x 6]).
 if isfield(sh, 'dep_family'), df = sh.dep_family;  dp = sh.dep_params;
 else,                         df = 'dro';          dp = struct('tau', sh.tauDRO); end
 if isfield(sh, 'arr_family'), af = sh.arr_family;  ap = sh.arr_params;
 else,                         af = 'tulip';        ap = struct('Np', sh.Np, 'pm', -1); end
+dp.muStar = muStar;  ap.muStar = muStar;
 [O.tD, O.rvD] = get_family_orbit(df, dp);
 [O.tT, O.rvT] = get_family_orbit(af, ap);
 end

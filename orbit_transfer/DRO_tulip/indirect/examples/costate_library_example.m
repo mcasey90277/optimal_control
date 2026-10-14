@@ -47,27 +47,35 @@ fprintf('[1] verdict: %d primaries + %d alternatives, %.1f %% of the %d x %d pha
  arrDays = 3.0;       % arrival phase [days past the tulip reference]
  thrustN = 0.07;      % thrust [N]
 [tfNd, z8, info] = costate_catalog_pick(cat_, tauDep, Np, depDays, arrDays, thrustN);
-     Tnd = (thrustN/cat_.thruster.m0_kg)*tStar^2/(lStarKm*1000);   % thrust acceleration [ND]
+%  The units are derived at the thrust the picker DELIVERED (info.delivered),
+%  which is the library's rung whatever thrust was asked for:
+   ndOf  = @(TN) (TN/cat_.thruster.m0_kg)*tStar^2/(lStarKm*1000);   % thrust acceleration [ND]
+     Tnd = ndOf(info.delivered.tfThrustN);                         % the rung of the delivered t_f
      cnd = cat_.thruster.c_nd;                                     % exhaust velocity [ND]
       mf = 1 - Tnd*tfNd/cnd;                                       % final mass fraction [-]
    dvKms = cnd*log(1/mf)*lStarKm/tStar;                            % [km/s]
   propKg = (1 - mf)*cat_.thruster.m0_kg;                           % [kg]
-fprintf('[2] verdict: asked dep %.3f d / arr %.3f d, delivered dep %.3f d / arr %.3f d (warned = %d): t_f %.3f d, Delta-V %.4f km/s, %.3f kg propellant\n', ...
-        depDays, arrDays, info.delivered.depDays, info.delivered.arrDays, info.warned, ...
-        tfNd*tStar/86400, dvKms, propKg);
+fprintf('[2] verdict: asked dep %.3f d / arr %.3f d at %.3f N, delivered dep %.3f d / arr %.3f d at %.3f N (warned = %d): t_f %.3f d, Delta-V %.4f km/s, %.3f kg propellant\n', ...
+        depDays, arrDays, thrustN, info.delivered.depDays, info.delivered.arrDays, info.delivered.tfThrustN, ...
+        info.warned, tfNd*tStar/86400, dvKms, propKg);
 
 %% 3. Hand the costates to pumpkyn tfMin at the pick's endpoints:
 %  The endpoints are states on the two periodic orbits at the delivered
 %  phases (fractions of each period); the orbits come from the catalog's
-%  own recipe. tfMin starts from z8 and returns the root it converges to;
-%  |dz| = 0 means the first residual was already at machine level.
+%  own recipe at its mass ratio. tfMin starts from z8 at the thrust the
+%  seed belongs to and returns the root it converges to; |dz| = 0 means the
+%  first residual was already at machine level. (Needs the Optimization
+%  Toolbox through pumpkyn's fsolve; nothing else in this example does.)
       sD = info.delivered.depDays*86400/tStar/sh.tauDRO;           % phase FRACTION [-]
       sA = info.delivered.arrDays*86400/tStar/sh.period_tulip_nd;
-[tD, rvD] = get_family_orbit(sh.dep_family, sh.dep_params);
-[tT, rvT] = get_family_orbit(sh.arr_family, sh.arr_params);
+      pD = sh.dep_params;  pD.muStar = cat_.constants.muStar;
+      pA = sh.arr_params;  pA.muStar = cat_.constants.muStar;
+[tD, rvD] = get_family_orbit(sh.dep_family, pD);
+[tT, rvT] = get_family_orbit(sh.arr_family, pA);
      rv0 = interp1(tD/tD(end), rvD, sD, 'spline');                 % [1 x 6] ND
      rvf = interp1(tT/tT(end), rvT, sA, 'spline');
-  tic;  zTf = pumpkyn.cr3bp.tfMin(rv0, rvf, z8, Tnd, cnd, cat_.constants.muStar);  wall = toc;
+ TndSeed = ndOf(info.delivered.seedThrustN);                       % the rung the z8 seed belongs to
+  tic;  zTf = pumpkyn.cr3bp.tfMin(rv0, rvf, z8, TndSeed, cnd, cat_.constants.muStar);  wall = toc;
       dz = sqrt(sum((zTf(:) - z8(:)).^2));
 fprintf('[3] verdict: tfMin returned in %.1f s with |dz| = %.2e (t_f %.4f d -> %.4f d)\n', ...
         wall, dz, z8(8)*tStar/86400, zTf(8)*tStar/86400);
@@ -83,7 +91,7 @@ fprintf('[4] verdict: %d transfer(s) at sD = %.4f, sA = %.4f\n', numel(T), sD, s
 
 %% 5. The status legend, and the fastest conjugate-point transfer in the library:
  K = status_key();
-for k = 1:4
+for k = find(K.codes >= 1)                % the four statuses a shipped entry carries (0 and -1 are builder-internal)
     fprintf('  status %d = %-22s %s\n', K.codes(k), K.names{k}, K.meaning{k});
 end
  f2 = struct('includeAlternatives', true, 'status', 2);
@@ -105,11 +113,14 @@ fprintf('[7] verdict: torus drawn, %d cells with a status-2 transfer, %d off-gri
 %% 8. A movie: the cell with the most alternatives, its primary beside its fastest alternative
 %  (60 frames here; the shipped status_pair_movie has 240 -- pass
 %  struct('pair', ..., 'nFrames', 240) for the full length):
- [~, kCell] = max(H.nAltPerCell(:));
+ [nMost, kCell] = max(H.nAltPerCell(:));
+ assert(nMost > 0, 'costate_library_example:noAlternatives', 'no cell of this library holds an alternative');
  [iD, iA]   = ind2sub(size(H.nAltPerCell), kCell);
  Tc = transfers_at(cat_, sh.sD_frac(iD), sh.sA_frac(iA));
  ip = find(strcmp({Tc.kind}, 'primary'), 1);
  ia = find(strcmp({Tc.kind}, 'alternative'), 1);          % rows are ranked by t_f: the first is the fastest
+ assert(~isempty(ip) && ~isempty(ia), 'costate_library_example:cell', ...
+        'cell (%d, %d) holds %d alternatives by index but transfers_at found no primary/alternative pair at its phases', iD, iA, nMost);
  mo = struct('pair', {{Tc(ip), Tc(ia)}}, 'labels', {{'primary', 'fastest alternative'}}, 'nFrames', 60);
  stem = costate_catalog_extremes_movies(cat_, [], 'time', 'example_pair_movie', mo);
 fprintf('[8] verdict: movie %s.mp4 / .gif of cell (%d, %d): primary %.2f d (status %d) vs alternative %.2f d (status %d)\n', ...

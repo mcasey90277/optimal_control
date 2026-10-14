@@ -35,6 +35,9 @@ function [c, info] = export_deliverable_catalog(recordMat, outMat, opts)
 %                                                   .auditVerdict (char)
 %                                                   ['not audited at export']
 %                                                   .auditNote (char) ['']
+%                                                   .deliverable (char)
+%                                                   ['deliverable 8'] the
+%                                                   label in the provenance
 %
 %% Outputs:
 %
@@ -67,6 +70,7 @@ if nargin < 3, opts = struct(); end
 varName = fieldd(opts, 'varName', 'costate_catalog_dro_tulip_70mN');
 verdict = fieldd(opts, 'auditVerdict', 'not audited at export');
 aNote   = fieldd(opts, 'auditNote', '');
+delivLabel = fieldd(opts, 'deliverable', 'deliverable 8');
 R = load(recordMat);  c = R.(char(fieldnames(R)));
 primKey = catalog_content_key(c);  altKey = alternatives_content_key(c);
 removed = {};
@@ -83,8 +87,8 @@ c.build = struct( ...
     'note', aNote);
 c.provenance = sprintf(['%s Status layer (FINDINGS 98): candidates harvested from the builds, every inferred one ' ...
     're-certified, primaries matched to their junctions by root, assembled beside the unchanged primaries, ' ...
-    'audited fail-closed (verdict at export: %s), borderline statuses relabelled to the meet of two runs. Exported for deliverable 8 on %s.'], ...
-    c.provenance, verdict, char(datetime('now', 'Format', 'yyyy-MM-dd')));
+    'audited fail-closed (verdict at export: %s), borderline statuses relabelled to the meet of two runs. Exported for %s on %s.'], ...
+    c.provenance, verdict, delivLabel, char(datetime('now', 'Format', 'yyyy-MM-dd')));
 n = 0;
 for k = 1:numel(c.alternatives)
     s0 = c.alternatives(k).source;  s1 = cleanSource(s0);

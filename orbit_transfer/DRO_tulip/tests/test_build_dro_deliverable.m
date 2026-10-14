@@ -166,10 +166,12 @@ if builtI
     for k = 1:numel(LU)
         ok = chk(ok, contains(txt, ['`' LU(k).file '`']), sprintf('user README contents table names %s', LU(k).file));
     end
-    notI = {'fly_catalog_entry', 'tfmin_accepts', 'catalog_endpoints', 'status_layer_example', 'Parallel Computing'};
-    for k = 1:numel(notI)
-        ok = chk(ok, ~contains(txt, notI{k}), sprintf('user README does not mention the dropped %s', notI{k}));
-    end
+    notI = [erase(dropped, '.m'), {'Parallel Computing', 'deliverable 8 on'}];
+    hits = notI(cellfun(@(s) contains(txt, s), notI));
+    ok = chk(ok, isempty(hits), sprintf('user README mentions none of the %d dropped files nor Parallel Computing (hits: %s)', ...
+             numel(dropped), strjoin(hits, ', ')));
+    ok = chk(ok, contains(txt, 'Optimization Toolbox') && contains(txt, 'deliverable 9 (user kit) on'), ...
+             'user README names the Optimization Toolbox (tfMin) and the export is labelled deliverable 9');
     ok = chk(ok, ~contains(txt, '/Users/') && ~contains(txt, 'addpath('), 'user README has no machine path and no addpath(');
     EI = load(fullfile(cfgI.outDir, 'costate_catalog_dro_tulip_70mN.mat'));
     feI = fieldnames(EI);  exI = EI.(feI{1});

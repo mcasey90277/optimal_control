@@ -46,7 +46,14 @@ try, fly_catalog_entry(c, rowNoJ, struct('method', 'junctions'));  bad = false; 
 ok = chk(ok, bad, 'explicit ''junctions'' with none refuses by name');
 T1 = transfers_at(c, 0, sh.sA_frac(iA));  prim1 = T1(strcmp({T1.kind}, 'primary'));
 Fw = fly_catalog_entry(c, struct('z8', prim1.z8, 'sD', 1 - 1e-12, 'sA', prim1.sA), struct('method', 'z8'));
-ok = chk(ok, Fw.flyKm < 1, 'REVIEW FOCUS 2: a z8-with-phases entry at the wrap flies to the same arrival');
+ok = chk(ok, Fw.flyKm < 1 && Fw.flyVms < 0.1, 'REVIEW FOCUS 2: a z8-with-phases entry at the wrap flies to the same arrival');
+rowBad = prim;  rowBad.junctions = ones(13, 3);
+Fb = fly_catalog_entry(c, rowBad);
+ok = chk(ok, strcmp(Fb.method, 'z8') && contains(Fb.reasonMethod, 'unexpected size'), 'a junctions array of the wrong shape falls back to z8 and says so');
+try, fly_catalog_entry(c, rowBad, struct('method', 'junctions'));  bad = false; catch ME, bad = strcmp(ME.identifier, 'fly_catalog_entry:junctionsShape'); end
+ok = chk(ok, bad, 'explicit ''junctions'' with the wrong shape refuses by name');
+try, fly_catalog_entry(c, struct('z8', prim.z8));  bad = false; catch ME, bad = strcmp(ME.identifier, 'fly_catalog_entry:entry'); end
+ok = chk(ok, bad, 'a bare z8 (no sD/sA) refuses by name');
 if ok, fprintf('test_fly_catalog_entry: ALL PASS\n'); else, fprintf('test_fly_catalog_entry: FAIL\n'); end
 end
 

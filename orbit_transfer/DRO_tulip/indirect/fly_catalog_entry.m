@@ -51,8 +51,6 @@ function F = fly_catalog_entry(cat, entry, opts)
 if nargin < 3 || isempty(opts), opts = struct(); end
 method  = 'auto';  if isfield(opts, 'method') && ~isempty(opts.method), method = opts.method; end
 nSample = 50;      if isfield(opts, 'nSample') && ~isempty(opts.nSample), nSample = opts.nSample; end
-here = fileparts(mfilename('fullpath'));
-addpath(fullfile(fileparts(fileparts(here)), 'costate_common'));
 
 %% Resolve the entry form:
 if isfield(entry, 'iD') && isfield(entry, 'iA') && ~isfield(entry, 'z8')
@@ -68,13 +66,23 @@ end
 z8 = entry.z8(:);
 J  = [];  if isfield(entry, 'junctions'), J = entry.junctions; end
 hasJ = ~isempty(J) && size(J, 1) == 14;
+badShape = ~isempty(J) && size(J, 1) ~= 14;
+if ~isfield(entry, 'sD') || ~isfield(entry, 'sA')
+    error('fly_catalog_entry:entry', 'the entry needs phase fractions sD and sA');
+end
 
 switch method
     case 'auto'
         if hasJ, method = 'junctions';  reasonMethod = 'auto: junctions';
+        elseif badShape
+            method = 'z8';
+            reasonMethod = sprintf('auto: junctions of unexpected size [%d x %d], flown from z8', size(J, 1), size(J, 2));
         else,    method = 'z8';         reasonMethod = 'auto: no junctions stored, flown from z8';
         end
     case 'junctions'
+        if badShape
+            error('fly_catalog_entry:junctionsShape', 'junctions must be 14 x K, got [%d x %d]', size(J, 1), size(J, 2));
+        end
         if ~hasJ, error('fly_catalog_entry:noJunctions', 'the entry carries no junction states'); end
         reasonMethod = 'requested';
     case 'z8'

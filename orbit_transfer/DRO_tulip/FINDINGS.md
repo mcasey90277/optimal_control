@@ -6446,3 +6446,24 @@ the kept sections (Dependencies; the tfMin paragraph). One thing his cut
 removed that the developer kit's README still says: interpolation between
 grid points is not included. Final build 76 s, self-test OK 46 s, zip 20.8 MB
 / 14 files, unpacked zip run on a clean path (|dz| = 0 at the pick, 14 s).
+
+**Second pass (2026-10-14, Mike's two questions).** (1) Is the kit only
+what an end-user needs: describe, extract, plot, movie? It lacked a way to
+take ONE chosen transfer and get its trajectory or a 3D plot (the path lived
+only inside the movie; the 3D plot only for the two extremes). Added
+`catalog_transfer(cat_, entry, opts)`: flies an entry with
+`pumpkyn.cr3bp.tfMinProp` from its stored junctions (else from z8), returns
+the history in ND and in days / km / kg with the unit thrust direction and
+the mass, the arrival miss against the arrival orbit, and draws the 3D
+rotating-frame plot on request; accepts a `transfers_at` row, an extremes
+row, a grid cell `struct('iD', 'iA')` or a bare z8. The movie now flies
+through it (its own flight code went). Test: 17 checks, with the arrival
+oracle, the junction continuity (2.2e-7 km), u = -lam_v/|lam_v| from the
+state columns, monotone mass, the figure's line data equal to the flight,
+the refusal id, and the closure {get_family_orbit, status_key,
+transfers_at}. The kit is now 9 functions + 1 example (10 files). (2) The
+README is succinct by rule: no account of how the library was made, no audit
+story, no borderline-reason table, no future work; the field tables list
+only what a user reads; the generator enforces it (the builder test caps the
+README at 160 lines and refuses process words). Deliverable 8's README keeps
+the long form.

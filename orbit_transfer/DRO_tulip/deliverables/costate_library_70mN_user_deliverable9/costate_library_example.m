@@ -3,27 +3,29 @@
 %   Worked example for the USER KIT of costate_catalog_dro_tulip_70mN.mat,
 %   the 70 mN DRO -> tulip minimum-time costate library: what it holds, how
 %   to pick a transfer, how to read what the library established about it,
-%   how to hand it to pumpkyn's tfMin, and how to watch it.
+%   how to hand it to pumpkyn's tfMin, and how to plot and watch it.
 %
 %     1. describe the library (grids, coverage, status counts)
 %     2. pick by phases in DAYS (the honesty contract) and derive the units
 %     3. hand the costates to pumpkyn.cr3bp.tfMin at the pick's endpoints
 %     4. every transfer recorded at that cell, with its status
-%     5. the status legend, and the fastest conjugate-point transfer
-%     6. the extremes of the whole library, flight time, with alternatives
-%     7. the status map of the phase torus
-%     8. a side-by-side movie: a cell's primary and its fastest alternative
+%     5. the cell's primary, flown from its junctions and plotted in 3D
+%     6. the status legend, and the fastest conjugate-point transfer
+%     7. the extremes of the whole library, flight time, with alternatives
+%     8. the status map of the phase torus
+%     9. a side-by-side movie: a cell's primary and its fastest alternative
 %
 %   Every number is derived from the catalog's canonical nondimensional
-%   values with the formulas in cat_.derive; nothing here solves, flies with
-%   our own engine, or re-certifies an entry.
+%   values with the formulas in cat_.derive; flights use pumpkyn's own
+%   propagator from the stored junction states. Nothing here solves or
+%   re-certifies an entry.
 %
 %   FILES: the catalog is loaded BY BARE FILENAME, so run this from the
 %   folder that holds it; every function called is in that same folder (or
 %   is pumpkyn / pumpkynPie, which must be on the path). No absolute paths,
 %   no addpath.
 %
-%   Run time: about 15 seconds (the movie takes most of it).
+%   Run time: under a minute (the movie takes most of it).
 %
 %  M. Casey                                                     10/14/2026
 
@@ -89,42 +91,56 @@ for k = 1:numel(T)
 end
 fprintf('[4] verdict: %d transfer(s) at sD = %.4f, sA = %.4f\n', numel(T), sD, sA);
 
-%% 5. The status legend, and the fastest conjugate-point transfer in the library:
+%% 5. The cell's primary, flown from its junctions with pumpkyn's propagator and plotted:
+%  F holds the history in ND and in days / km / kg (F.tDays, F.rKm, F.vKms,
+%  F.u thrust direction, F.massKg) for use elsewhere.
+ ip = find(strcmp({T.kind}, 'primary'), 1);
+ assert(~isempty(ip), 'costate_library_example:noPrimary', 'no primary recorded at sD = %.4f, sA = %.4f', sD, sA);
+ [F, hF] = catalog_transfer(cat_, T(ip), struct('plot', true, 'visible', strcmp(figVis, 'on')));
+fprintf('[5] verdict: %s flight, %d samples over %.3f d, arrival miss %.3f km, final mass %.3f kg, figure %s\n', ...
+        F.method, numel(F.t), F.tfDays, F.flyKm, F.finalMassKg, ternary(isgraphics(hF), 'drawn', 'not drawn'));
+
+%% 6. The status legend, and the fastest conjugate-point transfer in the library:
  K = status_key();
 for k = find(K.codes >= 1)                % the four statuses a shipped entry carries (0 and -1 are builder-internal)
     fprintf('  status %d = %-22s %s\n', K.codes(k), K.names{k}, K.meaning{k});
 end
  f2 = struct('includeAlternatives', true, 'status', 2);
 [e2, ~] = costate_catalog_extremes(cat_, f2, false, 'time');
-fprintf('[5] verdict: fastest status-2 transfer: %.2f d at sD = %.4f, sA = %.4f (%s); its reason: %s\n', ...
+fprintf('[6] verdict: fastest status-2 transfer: %.2f d at sD = %.4f, sA = %.4f (%s); its reason: %s\n', ...
         e2.tf_days, e2.dep_frac, e2.arr_frac, e2.kind, e2.reason(1:min(80, numel(e2.reason))));
 
-%% 6. The extremes of the whole library (flight time), alternatives included:
+%% 7. The extremes of the whole library (flight time), alternatives included:
  fAll = struct('includeAlternatives', true);
 [eMin, eMax] = costate_catalog_extremes(cat_, fAll, strcmp(figVis, 'on'), 'time');
-fprintf('[6] verdict: fastest %.2f d (%s, status %d), slowest %.2f d (%s, status %d)\n', ...
+fprintf('[7] verdict: fastest %.2f d (%s, status %d), slowest %.2f d (%s, status %d)\n', ...
         eMin.tf_days, eMin.kind, eMin.status, eMax.tf_days, eMax.kind, eMax.status);
 
-%% 7. The status map of the phase torus:
+%% 8. The status map of the phase torus:
  H = plot_status_torus(cat_, struct('visible', strcmp(figVis, 'on')));
-fprintf('[7] verdict: torus drawn, %d cells with a status-2 transfer, %d off-grid alternatives (%d status 2)\n', ...
+fprintf('[8] verdict: torus drawn, %d cells with a status-2 transfer, %d off-grid alternatives (%d status 2)\n', ...
         sum(H.conjCell(:)), H.nOffGrid, H.nOffGridConj);
 
-%% 8. A movie: the cell with the most alternatives, its primary beside its fastest alternative
+%% 9. A movie: the cell with the most alternatives, its primary beside its fastest alternative
 %  (60 frames here; the shipped status_pair_movie has 240 -- pass
 %  struct('pair', ..., 'nFrames', 240) for the full length):
  [nMost, kCell] = max(H.nAltPerCell(:));
  assert(nMost > 0, 'costate_library_example:noAlternatives', 'no cell of this library holds an alternative');
  [iD, iA]   = ind2sub(size(H.nAltPerCell), kCell);
  Tc = transfers_at(cat_, sh.sD_frac(iD), sh.sA_frac(iA));
- ip = find(strcmp({Tc.kind}, 'primary'), 1);
- ia = find(strcmp({Tc.kind}, 'alternative'), 1);          % rows are ranked by t_f: the first is the fastest
- assert(~isempty(ip) && ~isempty(ia), 'costate_library_example:cell', ...
+ ipc = find(strcmp({Tc.kind}, 'primary'), 1);
+ iac = find(strcmp({Tc.kind}, 'alternative'), 1);         % rows are ranked by t_f: the first is the fastest
+ assert(~isempty(ipc) && ~isempty(iac), 'costate_library_example:cell', ...
         'cell (%d, %d) holds %d alternatives by index but transfers_at found no primary/alternative pair at its phases', iD, iA, nMost);
- mo = struct('pair', {{Tc(ip), Tc(ia)}}, 'labels', {{'primary', 'fastest alternative'}}, 'nFrames', 60);
+ mo = struct('pair', {{Tc(ipc), Tc(iac)}}, 'labels', {{'primary', 'fastest alternative'}}, 'nFrames', 60);
  stem = costate_catalog_extremes_movies(cat_, [], 'time', 'example_pair_movie', mo);
-fprintf('[8] verdict: movie %s.mp4 / .gif of cell (%d, %d): primary %.2f d (status %d) vs alternative %.2f d (status %d)\n', ...
-        stem, iD, iA, Tc(ip).tfDays, Tc(ip).status, Tc(ia).tfDays, Tc(ia).status);
+fprintf('[9] verdict: movie %s.mp4 / .gif of cell (%d, %d): primary %.2f d (status %d) vs alternative %.2f d (status %d)\n', ...
+        stem, iD, iA, Tc(ipc).tfDays, Tc(ipc).status, Tc(iac).tfDays, Tc(iac).status);
 
 fprintf('ALL SECTIONS DONE\n');
 if ~usejava('desktop'), close all; end
+
+function s = ternary(c, a, b)
+% TERNARY  a if c is true, b otherwise (local helper for the verdict line).
+if c, s = a; else, s = b; end
+end

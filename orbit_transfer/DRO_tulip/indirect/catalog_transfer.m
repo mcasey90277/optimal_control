@@ -20,6 +20,10 @@ function [F, hFig] = catalog_transfer(cat_, entry, opts)
 %   rule (deliverable-3 catalogs). The arrival miss F.flyKm is measured
 %   against a spline of the arrival orbit at the entry's arrival phase.
 % • Phases are FRACTIONS of a period, wrapping.
+% • The struct('iD', 'iA') form and the self-demo are for one-sheet
+%   catalogs (transfers_at is); a multi-sheet catalog refuses them.
+% • In 'auto', junctions that are not a finite 14 x K array are ignored
+%   with a warning and the entry is flown from z8.
 %
 %% Inputs:
 %
@@ -39,8 +43,15 @@ function [F, hFig] = catalog_transfer(cat_, entry, opts)
 %
 %  opts                     struct (optional)       .method ['auto'] |
 %                                                   'junctions' | 'z8';
-%                                                   .sheet [1]; .thrustN
-%                                                   [rungs_N(1)]; .plot
+%                                                   .sheet [the entry's own
+%                                                   sheet when the entry
+%                                                   names it (tauDRO, Np,
+%                                                   arr_params.tau), else 1
+%                                                   on a one-sheet catalog;
+%                                                   required otherwise];
+%                                                   .thrustN [entry.thrustN
+%                                                   when present, else
+%                                                   rungs_N(1)]; .plot
 %                                                   [false]; .visible [true]
 %                                                   figure visibility;
 %                                                   .title [''] extra title
@@ -66,6 +77,9 @@ function [F, hFig] = catalog_transfer(cat_, entry, opts)
 %
 %% Revision History:
 %  M. Casey                                                   (c) 10/14/2026
+%  M. Casey  sheet and thrust resolved from the entry (extremes rows)
+%            before the one-sheet / one-rung defaults; multi-sheet
+%            refusals named; malformed-junction fallback warns (c) 10/14/2026
 %  Copyright Coorbital Inc.
 %% ------------------------ Begin Code Sequence ---------------------------
 
@@ -86,12 +100,29 @@ if nargin == 0
 end
 if nargin < 3 || isempty(opts), opts = struct(); end
 method  = getf(opts, 'method', 'auto');
-ks      = getf(opts, 'sheet', 1);
-thrustN = getf(opts, 'thrustN', cat_.rungs_N(1));
 doPlot  = getf(opts, 'plot', false);
 visible = getf(opts, 'visible', true);
 assert(any(strcmp(method, {'auto', 'junctions', 'z8'})), 'catalog_transfer:method', ...
        'opts.method must be auto, junctions or z8');
+
+%% The sheet and the thrust: from opts, else from the entry, else the one-sheet / one-rung default:
+if isfield(entry, 'iD') && isfield(entry, 'iA') && ~isfield(entry, 'z8')
+    assert(numel(cat_.sheets) == 1, 'catalog_transfer:multiSheet', ...
+           'the struct(iD, iA) form is for one-sheet catalogs; pass a transfers_at or extremes row');
+end
+ks = getf(opts, 'sheet', []);
+if isempty(ks)
+    if isfield(entry, 'tauDRO'),        ks = find_sheet(cat_, entry);
+    elseif numel(cat_.sheets) == 1,     ks = 1;
+    else, error('catalog_transfer:sheet', 'a %d-sheet catalog needs opts.sheet (or an entry that names its sheet: tauDRO, Np, arr_params)', numel(cat_.sheets));
+    end
+end
+thrustN = getf(opts, 'thrustN', []);
+if isempty(thrustN)
+    if isfield(entry, 'thrustN') && ~isempty(entry.thrustN), thrustN = entry.thrustN;
+    else,                                                    thrustN = cat_.rungs_N(1);
+    end
+end
 sh = cat_.sheets(ks);
 
 %% Resolve the entry form:
@@ -114,6 +145,10 @@ J  = [];  if isfield(entry, 'junctions'), J = entry.junctions; end
 hasJ = ~isempty(J) && size(J, 1) == 14 && all(isfinite(J(:)));
 if strcmp(method, 'junctions') && ~hasJ
     error('catalog_transfer:noJunctions', 'the entry carries no 14 x K junction states');
+end
+if ~isempty(J) && ~hasJ && strcmp(method, 'auto')
+    warning('catalog_transfer:junctionsShape', ...
+            'junctions of size [%d x %d] are not a finite 14 x K array: flying from z8 instead', size(J, 1), size(J, 2));
 end
 useJ = hasJ && ~strcmp(method, 'z8');
 
@@ -188,6 +223,23 @@ if ~isempty(extra), ttl{end+1} = extra; end
 title(ttl);
 legend('departure orbit', 'arrival orbit', 'transfer', 'depart', 'arrive', 'Moon', 'Earth', 'Location', 'best');
 rotate3d on
+end
+
+% ------------------------------------------------------------------------
+function ks = find_sheet(cat_, e)
+% FIND_SHEET  Index of the sheet an entry names (tauDRO, Np and, when both
+% carry it, the arrival period arr_params.tau), as costate_catalog_extremes
+% rows do.  INPUTS: cat_ (catalog); e (entry struct).  OUTPUTS: ks [scalar].
+ks = 0;
+for kk = 1:numel(cat_.sheets)
+    sh = cat_.sheets(kk);
+    if abs(sh.tauDRO - e.tauDRO) > 1e-9, continue, end
+    if isfield(e, 'Np') && ~isequaln(sh.Np, e.Np), continue, end
+    if isfield(sh, 'arr_params') && isfield(sh.arr_params, 'tau') && isfield(e, 'arr_params') ...
+            && isfield(e.arr_params, 'tau') && abs(sh.arr_params.tau - e.arr_params.tau) > 1e-9, continue, end
+    ks = kk;  return
+end
+error('catalog_transfer:sheet', 'no sheet matches the entry (tauDRO %.4f)', e.tauDRO);
 end
 
 % ------------------------------------------------------------------------

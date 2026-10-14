@@ -632,12 +632,16 @@ p('costate_catalog_extremes_movies(cat_, [], ''time'', ''my_movie'', struct(''pa
 %% tfMin recipe
 p('## Handing an entry to pumpkyn tfMin\n\n');
 p(['`z8 = [lambda_r; lambda_v; lambda_m; t_f]` is the initial guess; the endpoints are the two ' ...
-   'periodic orbits at the entry''s phase fractions `sD`, `sA`. tfMin returns a certified entry ' ...
-   'unchanged (`|dz| = 0` at the example''s pick).\n\n']);
+   'periodic orbits at the entry''s phase fractions `sD`, `sA`. For a status-4 entry tfMin''s first ' ...
+   'residual is already at machine level: it returns z8 unchanged or polished within a step ' ...
+   '(`|dz| = 0` at the example''s pick). A status-1 entry is not expected to be accepted and can ' ...
+   'make tfMin grind for minutes.\n\n']);
 p('```matlab\n');
-p('sh = cat_.sheets(1);\n');
-p('[tD, rvD] = get_family_orbit(sh.dep_family, sh.dep_params);   %% one period of the DRO\n');
-p('[tT, rvT] = get_family_orbit(sh.arr_family, sh.arr_params);   %% one period of the tulip\n');
+p('sh = cat_.sheets(1);                                %% z8, sD, sA: a transfers_at row''s .z8 .sD .sA (days / period_days for the picker''s output)\n');
+p('pD = sh.dep_params;  pD.muStar = cat_.constants.muStar;\n');
+p('pA = sh.arr_params;  pA.muStar = cat_.constants.muStar;\n');
+p('[tD, rvD] = get_family_orbit(sh.dep_family, pD);   %% one period of the DRO\n');
+p('[tT, rvT] = get_family_orbit(sh.arr_family, pA);   %% one period of the tulip\n');
 p('rv0 = interp1(tD/tD(end), rvD, sD, ''spline'');\n');
 p('rvf = interp1(tT/tT(end), rvT, sA, ''spline'');\n');
 p('Tnd = (%g/%g)*cat_.constants.tStar_s^2/(cat_.constants.lStar_km*1000);   %% thrust acceleration, ND\n', f.thrustN, f.m0);
@@ -664,16 +668,21 @@ p(['At fixed thrust the burn is continuous, so minimum time is minimum Delta-V. 
 %% Statuses
 p('## The statuses\n\n');
 p('A status records what was established about a transfer, not what might be true.\n\n');
+userMeaning = containers.Map({4, 3, 2, 1}, { ...
+    'locally optimal: first- and second-order sufficient conditions hold', ...
+    'first-order necessary conditions hold; local optimality not established', ...
+    'a converged extremal with a conjugate point on the arc: not locally optimal', ...
+    'flies to the target; the necessary conditions are not established'});
 p('| code | name | primaries | alternatives | what it establishes |\n|---|---|---|---|---|\n');
 for q = 1:numel(f.codes)
     kk = find(K.codes == f.codes(q), 1);
     p('| %d | %s | %s | %d | %s |\n', f.codes(q), K.names{kk}, commas(f.statusCounts(q, 1)), ...
-      f.statusCounts(q, 2), K.meaning{kk});
+      f.statusCounts(q, 2), userMeaning(f.codes(q)));
 end
 p(['\nA status-2 transfer is a converged extremal that tfMin accepts; it is not locally optimal. ' ...
-   'A status-1 transfer flies to the target but tfMin is not expected to accept it. ' ...
-   '`transfers_at` lists every transfer at a cell with its status; `costate_catalog_extremes` ' ...
-   'takes `filt.status` and `filt.includeAlternatives`.']);
+   'A status-1 transfer flies to the target but tfMin is not expected to accept it and can grind ' ...
+   'for minutes. `transfers_at` lists every transfer at a cell with its status; ' ...
+   '`costate_catalog_extremes` takes `filt.status` and `filt.includeAlternatives`.']);
 if ~isempty(f.bl)
     p(' Alternatives %s carry a borderline status, a lower bound (`alternatives.borderline`).', ...
       strjoin(arrayfun(@(k) sprintf('%d', k), f.bl, 'UniformOutput', false), ', '));
@@ -685,7 +694,7 @@ p('## Phase conventions\n\n');
 p(['- `transfers_at`, `catalog_transfer`, `plot_status_torus` and the movie take phases as ' ...
    '**fractions of a period** in [0, 1), wrapping.\n']);
 p('- `costate_catalog_pick(cat, tauDep, Np, depDays, arrDays, thrustN)` takes phases in **DAYS**: fraction x period_nd x tStar_s / 86400.\n');
-p('- Times are ND unless the field name says otherwise (`tfDays`, `dvKms`).\n\n');
+p('- Quantities are ND unless the field name carries a unit (`tfDays`, `dvKms`; `catalog_transfer`''s `tDays`, `rKm`, `vKms`, `massKg`).\n\n');
 
 %% Field reference: the fields a user reads
 p('## Entry fields\n\n');
@@ -699,6 +708,7 @@ end
 p('\n`alternatives(k)`:\n\n| field | meaning |\n|---|---|\n');
 am = altFieldMeanings();
 userAlt = {'sD', 'sA', 'iD', 'iA', 'z8', 'junctions', 'tf_nd', 'status', 'status_reason', 'borderline'};
+am('borderline') = 'true when the status is a lower bound';
 for k = 1:numel(userAlt)
     if isfield(c.alternatives, userAlt{k}) && isKey(am, userAlt{k}), p('| `%s` | %s |\n', userAlt{k}, am(userAlt{k})); end
 end

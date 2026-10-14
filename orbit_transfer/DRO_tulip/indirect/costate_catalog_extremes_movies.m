@@ -54,7 +54,10 @@ function [outStem, info] = costate_catalog_extremes_movies(cat_, filt, metric, o
 %                                                   of transfers_at rows to
 %                                                   film INSTEAD of the
 %                                                   extremes (sheet 1, the
-%                                                   library rung); .labels
+%                                                   library rung; each row
+%                                                   needs z8, sD, sA and,
+%                                                   to fly from them,
+%                                                   junctions); .labels
 %                                                   [] 2 chars (panel
 %                                                   labels); .nFrames [240]
 %                                                   frame cap; .fly ['auto']
@@ -85,7 +88,8 @@ function [outStem, info] = costate_catalog_extremes_movies(cat_, filt, metric, o
 %            junctions (else z8), orbits by get_family_orbit at the
 %            catalog's muStar; no flight-layer files (the user
 %            kit, deliverable 9)                            (c) 10/14/2026
-%  M. Casey  flights and orbits through catalog_transfer     (c) 10/14/2026
+%  M. Casey  flights and orbits through catalog_transfer, which resolves
+%            an extremes row's sheet and thrust itself      (c) 10/14/2026
 %  Copyright Coorbital Inc.
 %% ------------------------ Begin Code Sequence ---------------------------
 
@@ -152,7 +156,7 @@ end
 if ~isempty(opts.pair)
     assert(iscell(opts.pair) && numel(opts.pair) == 2, ...
            'costate_catalog_extremes_movies:pair', 'opts.pair must be a 2-element cell of transfers_at rows');
-    R = opts.pair;  ks = [1 1];  TN = cat_.rungs_N([1 1]);  ttl = {'', ''};
+    R = opts.pair;  ttl = {'', ''};             % pair rows: sheet 1, the library rung
     if ~isempty(opts.labels)
         assert((iscell(opts.labels) || isstring(opts.labels) || ischar(opts.labels)) && numel(opts.labels) == 2, ...
                'costate_catalog_extremes_movies:labels', 'opts.labels must hold exactly 2 labels');
@@ -163,18 +167,15 @@ else
     [eMin, eMax] = costate_catalog_extremes(cat_, filt, false, metric);
     if strncmpi(metric,'t',1), lab = {'FASTEST','SLOWEST'};
     else,                      lab = {'MIN \DeltaV','MAX \DeltaV'}; end
-    R = cell(1,2);  ks = [0 0];  TN = [0 0];  ttl = cell(1,2);
+    R = {eMin, eMax};  ttl = cell(1,2);        % extremes rows name their sheet and thrust
     for k = 1:2
-        e = {eMin, eMax};  e = e{k};
-        R{k} = struct('z8',e.z8, 'sD',e.dep_frac, 'sA',e.arr_frac, 'junctions',e.junctions, ...
-                      'status',e.status, 'statusName',e.statusName, 'reason',e.reason);
-        ks(k) = find_sheet(cat_, e);  TN(k) = e.thrustN;
+        e = R{k};
         ttl{k} = sprintf('%s \\tau=%.2f, %s, %.2f N', upper(e.dep_family), e.tauDRO, e.arrLab, e.thrustN);
     end
 end
 Fl = cell(1,2);  orb = cell(1,2);
 for k = 1:2
-    Fl{k}  = catalog_transfer(cat_, R{k}, struct('method', opts.fly, 'sheet', ks(k), 'thrustN', TN(k)));
+    Fl{k}  = catalog_transfer(cat_, R{k}, struct('method', opts.fly));
     orb{k} = Fl{k}.orbits;
 end
 
@@ -263,20 +264,4 @@ F = getframe(fig);
 ri = max(1, min(size(F.cdata,1), round(linspace(1, size(F.cdata,1), 720))));
 ci = max(1, min(size(F.cdata,2), round(linspace(1, size(F.cdata,2), w))));
 img = F.cdata(ri, ci, :);
-end
-
-% ---------------------------------------------------------------------------
-function ks = find_sheet(cat_, e)
-% FIND_SHEET  Index of the sheet an extreme came from (matched on tauDRO,
-% Np and the arrival family/period).
-% INPUTS: catalog; extreme struct.  OUTPUTS: ks [scalar] sheet index.
-ks = 0;
-for kk = 1:numel(cat_.sheets)
-    sh = cat_.sheets(kk);
-    if abs(sh.tauDRO - e.tauDRO) > 1e-9 || ~isequaln(sh.Np, e.Np), continue, end
-    if isfield(sh, 'arr_params') && isfield(sh.arr_params, 'tau') && isfield(e.arr_params, 'tau') ...
-            && abs(sh.arr_params.tau - e.arr_params.tau) > 1e-9, continue, end
-    ks = kk;  return
-end
-error('costate_catalog_extremes_movies:sheet', 'no sheet matches the extreme (tauDRO %.4f)', e.tauDRO);
 end

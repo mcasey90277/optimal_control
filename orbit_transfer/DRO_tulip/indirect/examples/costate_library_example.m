@@ -95,6 +95,7 @@ fprintf('[4] verdict: %d transfer(s) at sD = %.4f, sA = %.4f\n', numel(T), sD, s
 %  F holds the history in ND and in days / km / kg (F.tDays, F.rKm, F.vKms,
 %  F.u thrust direction, F.massKg) for use elsewhere.
  ip = find(strcmp({T.kind}, 'primary'), 1);
+ assert(~isempty(ip), 'costate_library_example:noPrimary', 'no primary recorded at sD = %.4f, sA = %.4f', sD, sA);
  [F, hF] = catalog_transfer(cat_, T(ip), struct('plot', true, 'visible', strcmp(figVis, 'on')));
 fprintf('[5] verdict: %s flight, %d samples over %.3f d, arrival miss %.3f km, final mass %.3f kg, figure %s\n', ...
         F.method, numel(F.t), F.tfDays, F.flyKm, F.finalMassKg, ternary(isgraphics(hF), 'drawn', 'not drawn'));

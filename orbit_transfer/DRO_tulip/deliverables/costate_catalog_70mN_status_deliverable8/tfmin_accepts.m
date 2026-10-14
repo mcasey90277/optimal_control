@@ -23,6 +23,8 @@ function [ok, dz, z8out, info] = tfmin_accepts(cat, entry, opts)
 %   'sA',). Phases are FRACTIONS of a period.
 % • run_capped reports a worker error and a timeout alike as ok = false; the
 %   two are told apart by the elapsed time against the cap.
+% • The default B is catalog_endpoints(cat): sheet 1 at rungs_N(1) (this
+%   library has one sheet and one rung); pass opts.B for anything else.
 %
 %% Inputs:
 %
@@ -53,6 +55,8 @@ function [ok, dz, z8out, info] = tfmin_accepts(cat, entry, opts)
 %
 %% Revision History:
 %  M. Casey                                                   (c) 10/13/2026
+%  M. Casey  ASSUMPTIONS: the default B is sheet 1 at rungs_N(1)
+%                                                             (c) 10/13/2026
 %  Copyright Coorbital Inc.
 %% ------------------------ Begin Code Sequence ---------------------------
 

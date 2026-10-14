@@ -18,6 +18,11 @@ function [B, orbits] = catalog_endpoints(cat_, sheetIdx, thrustN)
 % • Tnd = (rungs_N(1)/m0_kg)*tStar^2/(lStar_km*1000) is the catalog's
 %   derive.thrust_nd formula at the first rung; cnd = thruster.c_nd.
 % • Phases are FRACTIONS of a period and wrap.
+% • Sheets without dep_family / arr_family (the deliverable-3 catalog
+%   predates them) fall back EXACTLY as costate_catalog_extremes's pack:
+%   departure 'dro' with struct('tau', sh.tauDRO), arrival 'tulip' with
+%   struct('Np', sh.Np, 'pm', -1); the periods are then sh.tauDRO and
+%   sh.period_tulip_nd.
 % • The wrap seam (s -> 1 vs s = 0, about 1.2e-9 ND) equals the orbit table's own
 %   closure error, shared bitwise with the reference rule.
 %
@@ -44,6 +49,8 @@ function [B, orbits] = catalog_endpoints(cat_, sheetIdx, thrustN)
 %% Revision History:
 %  M. Casey                                                   (c) 10/13/2026
 %  M. Casey  optional thrustN argument (default rungs_N(1))   (c) 10/13/2026
+%  M. Casey  fallback orbit keys for sheets without dep_family /
+%            arr_family (deliverable-3 catalog), as pack       (c) 10/13/2026
 %  Copyright Coorbital Inc.
 %% ------------------------ Begin Code Sequence ---------------------------
 
@@ -54,10 +61,19 @@ sh = cat_.sheets(sheetIdx);
 k  = cat_.constants;
 muStar = k.muStar;
 
-pD = sh.dep_params;  pD.muStar = muStar;
-pA = sh.arr_params;  pA.muStar = muStar;
-[tD, rvD] = get_family_orbit(sh.dep_family, pD);
-[tT, rvT] = get_family_orbit(sh.arr_family, pA);
+if isfield(sh, 'dep_family')            % multi-family catalogs carry the key
+    dFam = sh.dep_family;  pD = sh.dep_params;
+else                                    % deliverable 3: pack's fallback
+    dFam = 'dro';  pD = struct('tau', sh.tauDRO);
+end
+if isfield(sh, 'arr_family')
+    aFam = sh.arr_family;  pA = sh.arr_params;
+else
+    aFam = 'tulip';  pA = struct('Np', sh.Np, 'pm', -1);
+end
+pD.muStar = muStar;  pA.muStar = muStar;
+[tD, rvD] = get_family_orbit(dFam, pD);
+[tT, rvT] = get_family_orbit(aFam, pA);
 
 ppo = struct('onMissing', 'notaknot');
 [xD, ~]        = phase_state(tD, rvD, ppo);

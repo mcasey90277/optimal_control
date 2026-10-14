@@ -14,6 +14,8 @@ function F = fly_catalog_entry(cat, entry, opts)
 % • Thrust direction u = -lambda_v/|lambda_v| (all-burn min-time).
 % • entry.status / .statusName / .reason are carried from a transfers_at
 %   row; absent, status is NaN, statusName and reason 'not annotated'.
+% • The default B is catalog_endpoints(cat): sheet 1 at rungs_N(1) (this
+%   library has one sheet and one rung); pass opts.B for anything else.
 %
 %% Inputs:
 %
@@ -45,6 +47,8 @@ function F = fly_catalog_entry(cat, entry, opts)
 %
 %% Revision History:
 %  M. Casey                                                   (c) 10/13/2026
+%  M. Casey  ASSUMPTIONS: the default B is sheet 1 at rungs_N(1)
+%                                                             (c) 10/13/2026
 %  Copyright Coorbital Inc.
 %% ------------------------ Begin Code Sequence ---------------------------
 

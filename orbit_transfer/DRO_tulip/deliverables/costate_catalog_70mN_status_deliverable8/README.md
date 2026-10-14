@@ -191,7 +191,7 @@ Legends that ride in the catalog: `status_key` (codes, names, meanings, check or
 
 ## How it was made, and how it was checked
 
-Arrival axis by pseudo-arclength continuation (arclength_ms / arclength_arrival), departure axis by the bisecting walker (rib_from_crossing); assembled by sheet_from_arcs with the certified library as seeds; FINDINGS 37-38, 2026-09-09. Status layer (FINDINGS 98): candidates harvested from the builds, every inferred one re-certified, primaries matched to their junctions by root, assembled beside the unchanged primaries, audited fail-closed (CLEAN), borderline statuses relabelled to the meet of two runs. Exported for deliverable 8 on 2026-10-13.
+Arrival axis by pseudo-arclength continuation (arclength_ms / arclength_arrival), departure axis by the bisecting walker (rib_from_crossing); assembled by sheet_from_arcs with the certified library as seeds; FINDINGS 37-38, 2026-09-09. Status layer (FINDINGS 98): candidates harvested from the builds, every inferred one re-certified, primaries matched to their junctions by root, assembled beside the unchanged primaries, audited fail-closed (verdict at export: CLEAN), borderline statuses relabelled to the meet of two runs. Exported for deliverable 8 on 2026-10-13.
 
 Build record: 24 x 48 build 2026-09-20/21; refill 2026-10-02/03; merge with the 24 x 24 record 2026-10-03; status-layer backfill, re-certification and audit 2026-10-04/05. 2,944 candidates harvested, 653 re-certified.
 
@@ -222,7 +222,7 @@ Worst flown miss recorded on the alternatives (`flyKm`/`flyVms`, 656 of 656 meas
 - **Interpolation between grid points is NOT included.** The junction-interpolation experiment is pending; until its hit rate is measured on this library, interpolate at your own risk and use the result only as a tfMin seed. Neighbouring cells can sit on different solution families (`family_index`).
 - **Status-1 rows and tfMin.** Status 1 means the transfer flies to the target but the necessary conditions were not established, so tfMin is not expected to accept it: `tfmin_accepts` skips status-1 rows (ok = false, expected refusal) unless `opts.force` is set. There are 0 such primaries and 10 such alternatives.
 - **372 of the 656 alternatives are OFF-GRID** (`iD = 0` or `iA = 0`: 63 off the departure grid, 309 off the arrival grid, 0 off both): found by ribs and sheet candidates at non-grid phases. `transfers_at` finds them only at their own phases; the torus map draws them as markers.
-- **`source` wording is kind-only** (`sheet candidate, column n (re-certified)`, `rib ... point`, ...): machine paths were stripped at export; the content keys are unchanged because `source` is not hashed.
+- **`source` wording is kind-only** (`sheet candidate, column n (re-certified)` on the 48-phase grid, `96-phase sheet candidate, column n (re-certified)` from the 96-phase sheet, `rib ... point`, ...): machine paths were stripped at export; the content keys are unchanged because `source` is not hashed.
 - **Phases: fractions vs DAYS** (see Phase conventions): the picker alone takes DAYS.
 - **Borderline statuses are lower bounds** (the 5 rows above): the status flipped between two runs at a threshold and the claim both runs support is the one stored.
 

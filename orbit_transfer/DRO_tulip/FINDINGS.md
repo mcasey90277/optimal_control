@@ -6467,3 +6467,10 @@ story, no borderline-reason table, no future work; the field tables list
 only what a user reads; the generator enforces it (the builder test caps the
 README at 160 lines and refuses process words). Deliverable 8's README keeps
 the long form.
+
+**No formed movie in the user kit (Mike, 2026-10-14, later still):** "I don't
+see a reason to send formed movies." `cfg.movies` now defaults to false for
+the user profile, the README's last section is the map alone, and the kit is
+13 files / 5.1 MB (the catalog is 5.0 MB of it). The user films any two
+transfers with `costate_catalog_extremes_movies`; the example still renders a
+60-frame one. Deliverable 8 keeps its sample movie.

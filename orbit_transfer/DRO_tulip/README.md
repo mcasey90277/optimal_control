@@ -71,7 +71,7 @@ grid points (`process/INTERPOLATION_STATUS.md`).
   `costate_library_70mN_user_deliverable9` (2026-10-14: the same library as
   the USER kit -- 9 functions that describe it, select a transfer, plot and
   film it, plus one example; no flight layer, no tfMin checker, no schema;
-  `build_dro_deliverable(struct('profile', 'user'))`; 20.8 MB, 15 files).
+  `build_dro_deliverable(struct('profile', 'user'))`; no formed movie, 5.1 MB, 13 files).
 - **`reviews/`** — external code/doc review artifacts.
 
 ## Key numbers

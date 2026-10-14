@@ -61,7 +61,10 @@ function out = build_dro_deliverable(cfg)
 %                                                   ['costate_catalog_70mN_status_deliverable8'
 %                                                   | 'costate_library_70mN_user_deliverable9']
 %   .outDir                 char                    [deliverables/<name>]
-%   .movies                 logical                 render the sample movie [true]
+%   .movies                 logical                 render the sample movie [true
+%                                                   for 'developer', false for
+%                                                   'user': Mike 2026-10-14, no
+%                                                   formed movies in the user kit]
 %   .zip                    logical                 write and verify the .zip [true]
 %   .selftest               logical                 run deliverable_selftest [true]
 %   .auditPrimariesMat      char                    [indirect/results/
@@ -94,6 +97,8 @@ function out = build_dro_deliverable(cfg)
 %            closure                                        (c) 10/13/2026
 %  M. Casey  cfg.profile 'user' (deliverable 9): the user kit's file
 %            list, README and example                      (c) 10/14/2026
+%  M. Casey  the user kit ships no formed movie (cfg.movies defaults
+%            false there; README section 'The map')          (c) 10/14/2026
 %  Copyright Coorbital Inc.
 %% ------------------------ Begin Code Sequence ---------------------------
 
@@ -127,7 +132,7 @@ if strcmp(profile, 'user'), defName = 'costate_library_70mN_user_deliverable9';
 else,                       defName = 'costate_catalog_70mN_status_deliverable8'; end
 name     = getf(cfg, 'name', defName);
 outDir   = getf(cfg, 'outDir', fullfile(here, 'deliverables', name));
-doMov    = getf(cfg, 'movies', true);
+doMov    = getf(cfg, 'movies', ~strcmp(profile, 'user'));   % the user kit ships no formed movie
 doZip    = getf(cfg, 'zip', true);
 doSelf   = getf(cfg, 'selftest', true);
 primMat  = getf(cfg, 'auditPrimariesMat', fullfile(ind, 'results', ...
@@ -714,15 +719,18 @@ for k = 1:numel(userAlt)
 end
 p('\nEvery other field is explained by the legends inside the catalog: `status_key`, `notes_key`, `derive`, `second_order.meaning`, `conj_test.meaning`, `hyp_gates.meaning`, `families.note`.\n\n');
 
-%% Figures
-p('## The movie and the map\n\n');
+%% The map (and the movie only when one was rendered)
 if ~isempty(f.movieStem)
+    p('## The movie and the map\n\n');
     p(['`%s.mp4` / `%s.gif`: one cell''s primary beside its fastest status-2 alternative, ' ...
        'same phases, one clock.\n\n'], f.movieStem, f.movieStem);
+else
+    p('## The map\n\n');
 end
 p(['`%s`: per cell, the primary''s flight time, how many alternatives it holds, and which ' ...
    'cells hold a status-2 transfer (%d cells); the %d off-grid alternatives are drawn at ' ...
-   'their own phases.\n'], f.pngFile, f.nConjCells, f.nTorusOffGrid);
+   'their own phases. `costate_catalog_extremes_movies` films any two transfers.\n'], ...
+   f.pngFile, f.nConjCells, f.nTorusOffGrid);
 end
 
 % ------------------------------------------------------------------------

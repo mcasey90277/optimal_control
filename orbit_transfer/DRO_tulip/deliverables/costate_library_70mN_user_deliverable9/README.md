@@ -21,7 +21,6 @@ Catalog is `costate_catalog_dro_tulip_70mN`.
 | `plot_status_torus.m` | the status map of the phase torus |
 | `costate_catalog_extremes_movies.m` | side-by-side movie of two transfers on one clock (pumpkynPie scene) |
 | `costate_library_example.m` | worked example: describe, pick by days, tfMin accepts the pick, the cell's transfers, one plotted, the legend, extremes, the torus map, a movie |
-| `status_pair_movie.mp4`, `status_pair_movie.gif` | the sample movie |
 | `status_torus.png` | the status map of the phase torus |
 | `README.md` | this file |
 
@@ -145,8 +144,6 @@ A status-2 transfer is a converged extremal that tfMin accepts; it is not locall
 
 Every other field is explained by the legends inside the catalog: `status_key`, `notes_key`, `derive`, `second_order.meaning`, `conj_test.meaning`, `hyp_gates.meaning`, `families.note`.
 
-## The movie and the map
+## The map
 
-`status_pair_movie.mp4` / `status_pair_movie.gif`: one cell's primary beside its fastest status-2 alternative, same phases, one clock.
-
-`status_torus.png`: per cell, the primary's flight time, how many alternatives it holds, and which cells hold a status-2 transfer (45 cells); the 372 off-grid alternatives are drawn at their own phases.
+`status_torus.png`: per cell, the primary's flight time, how many alternatives it holds, and which cells hold a status-2 transfer (45 cells); the 372 off-grid alternatives are drawn at their own phases. `costate_catalog_extremes_movies` films any two transfers.

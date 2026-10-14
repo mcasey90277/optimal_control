@@ -14,8 +14,8 @@ function [L, roots] = deliverable_file_list(profile)
 %   * 'user' (deliverable 9): what a user of the library needs and nothing
 %     that builds, flies or re-checks entries -- describe, pick, list the
 %     transfers at a cell, the status legend, extremes, the status torus,
-%     the movie, the one orbit helper the extremes and the movie draw with,
-%     and one worked example (9 files).
+%     one transfer's history and 3D plot (catalog_transfer), the movie, the
+%     one orbit helper they draw with, and one worked example (10 files).
 %
 %  ASSUMPTIONS / NOTES:
 %
@@ -65,7 +65,8 @@ switch profile
     case 'user'
         cc  = {'get_family_orbit'};
         ind = {'costate_lib_describe', 'costate_catalog_pick', 'transfers_at', 'status_key', ...
-               'costate_catalog_extremes', 'plot_status_torus', 'costate_catalog_extremes_movies'};
+               'catalog_transfer', 'costate_catalog_extremes', 'plot_status_torus', ...
+               'costate_catalog_extremes_movies'};
         ex  = {'costate_library_example'};
     otherwise
         error('deliverable_file_list:profile', 'unknown profile %s (developer | user)', profile);

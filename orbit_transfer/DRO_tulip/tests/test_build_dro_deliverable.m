@@ -152,7 +152,7 @@ if builtI
     dropped = {'fly_catalog_entry.m', 'catalog_endpoints.m', 'fly_transfer.m', 'entry_thrust_program.m', ...
                'validate_flight.m', 'scalar_verdict.m', 'phase_state.m', 'periodic_pp.m', 'tfmin_accepts.m', ...
                'run_capped.m', 'current_pool.m', 'catalog_schema.m', 'sample_status_pair.m', ...
-               'print_transfer_summary.m', 'plot_transfer_3d.m', 'status_layer_example.m', 'costate_catalog_example.m'};
+               'print_transfer_summary.m', 'plot_transfer_3d.m', 'status_layer_example.m', 'costate_catalog_example.m'};   % catalog_transfer is NOT in this list: it ships
     ok = chk(ok, ~any(ismember(dropped, shipped)), 'no flight-layer, tfMin-check, schema or developer-example file shipped');
     ok = chk(ok, isfile(fullfile(cfgI.outDir, 'status_torus.png')), 'user build writes status_torus.png');
     rdI = fullfile(cfgI.outDir, 'README.md');
@@ -160,7 +160,7 @@ if builtI
     if isfile(rdI), txt = fileread(rdI); end
     mustI = {'user kit', sprintf('%d alternatives', nAlt), 'conjugate point found', 'borderline', ...
              'fractions of a period', 'DAYS', 'costate_library_example', 'pumpkyn.cr3bp.tfMin(', ...
-             'measured at build', 'The checks, in order'};
+             'catalog_transfer(cat_'};
     for k = 1:numel(mustI)
         ok = chk(ok, contains(txt, mustI{k}), sprintf('user README contains ''%s''', mustI{k}));
     end
@@ -173,11 +173,14 @@ if builtI
              numel(dropped), strjoin(hits, ', ')));
     ok = chk(ok, contains(txt, 'Optimization Toolbox'), 'user README names the Optimization Toolbox (tfMin)');
     sections = {'## Contents', '## Dependencies', '## Quick start', '## Handing an entry to pumpkyn tfMin', ...
-                '## What it covers', '## The statuses', '## Phase conventions', '## Entry-field reference', ...
+                '## What it covers', '## The statuses', '## Phase conventions', '## Entry fields', ...
                 '## The movie and the map'};
-    gone = {'## How it was made', '## Gotchas', 'build_dro_deliverable', 'Every number below'};
+    gone = {'## How it was made', '## Gotchas', '### Borderline', 'build_dro_deliverable', 'Every number below', ...
+            'The checks, in order', 'lattice', 'conj_near_miss', 're-audit', 'measured at build', 'Linux'};
     ok = chk(ok, all(cellfun(@(h) contains(txt, h), sections)) && ~any(cellfun(@(h) contains(txt, h), gone)), ...
-             'user README has the nine streamlined sections and no build-provenance, audit or gotchas section');
+             'user README has the nine succinct sections and no process, audit, borderline-table or scan-field text');
+    nLines = numel(splitlines(txt));
+    ok = chk(ok, nLines <= 160, sprintf('user README is succinct (%d lines, cap 160)', nLines));
     ok = chk(ok, ~contains(txt, '/Users/') && ~contains(txt, 'addpath('), 'user README has no machine path and no addpath(');
     EI = load(fullfile(cfgI.outDir, 'costate_catalog_dro_tulip_70mN.mat'));
     feI = fieldnames(EI);  exI = EI.(feI{1});

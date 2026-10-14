@@ -8,8 +8,8 @@ function ok = test_extremes_movies_short()
 % the movie code), a forced z8 flight of the primary lands where the
 % junction flight does, each flight's time base runs 0 .. z8(8) and passes
 % through every stored junction, and the function's dependency closure
-% anywhere in the repo is exactly {costate_catalog_extremes, status_key,
-% get_family_orbit} (no flight-layer file). Frame-capped (6) to stay short.
+% anywhere in the repo is exactly {costate_catalog_extremes, catalog_transfer,
+% get_family_orbit, status_key, transfers_at} (no flight-layer file). Frame-capped (6) to stay short.
 %
 % INPUTS:  none
 % OUTPUTS: ok [logical]  every check passed (prints PASS/FAIL per check)
@@ -71,7 +71,7 @@ req = matlab.codetools.requiredFilesAndProducts(fullfile(here, 'costate_catalog_
 inRepo = req(startsWith(req, repoRoot));
 [~, names] = cellfun(@fileparts, inRepo, 'UniformOutput', false);
 names = setdiff(names, 'costate_catalog_extremes_movies');
-want = {'costate_catalog_extremes', 'get_family_orbit', 'status_key'};
+want = {'costate_catalog_extremes', 'catalog_transfer', 'get_family_orbit', 'status_key', 'transfers_at'};
 ok = chk(ok, isequal(sort(names(:)), sort(want(:))), sprintf('repo dependencies are exactly {%s} (got {%s})', ...
     strjoin(want, ', '), strjoin(names, ', ')));
 if ok, fprintf('test_extremes_movies_short: ALL PASS\n'); else, fprintf('test_extremes_movies_short: FAIL\n'); end

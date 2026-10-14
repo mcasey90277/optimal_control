@@ -16,20 +16,12 @@ function [outStem, info] = costate_catalog_extremes_movies(cat_, filt, metric, o
 %
 %  ASSUMPTIONS / NOTES:
 %
-% • SELF-CONTAINED on pumpkyn: the only helpers it needs are
-%   costate_catalog_extremes (when no pair is given), status_key and
-%   get_family_orbit. The trajectories are FLOWN with pumpkyn's own
-%   propagator (pumpkyn.cr3bp.tfMinProp): from the stored multiple-shooting
-%   junction states, segment by segment, when the row has them (the first
-%   junction IS the departure state, so no endpoint interpolation enters);
-%   otherwise in one flight from z8, started at the departure phase of the
-%   departure orbit (spline on the orbit table). What you watch is the
-%   actual PMP solution, an alternative's included.
-% • Junctions sit on the uniform grid linspace(0, t_f, K+1): column k is the
-%   augmented state [r; v; m; lam_r; lam_v; lam_m] at the start of segment k.
-% • Orbits come from the sheet's own recipe (dep_family / dep_params,
-%   arr_family / arr_params); a sheet without those keys (the deliverable-3
-%   catalog) uses the DRO / tulip rule costate_catalog_extremes uses.
+% • SELF-CONTAINED on pumpkyn: the trajectories and the orbits come from
+%   catalog_transfer (pumpkyn.cr3bp.tfMinProp from the stored junctions,
+%   else from z8; orbits by the sheet's own recipe), so the only helpers
+%   needed are costate_catalog_extremes (when no pair is given),
+%   catalog_transfer and what it calls. What you watch is the actual PMP
+%   solution, an alternative's included.
 % • Aero-toolbox guard (ShowEarth trap): planetEphemeris without its data
 %   pack is hidden from the path for this render only.
 % • Each output frame is EXACTLY 1280 x 720 (two 637-px panels + a 6-px
@@ -75,9 +67,8 @@ function [outStem, info] = costate_catalog_extremes_movies(cat_, filt, metric, o
 %                                                   unavailable
 %
 %  info                     struct                  .F {1x2} the two flights
-%                                                   (.t .Y .tfNd .tfDays
-%                                                   .dvKms .method .status
-%                                                   .statusName) .methods
+%                                                   (catalog_transfer
+%                                                   structs) .methods
 %                                                   {F1.method, F2.method}
 %                                                   .nFrames
 %
@@ -94,6 +85,7 @@ function [outStem, info] = costate_catalog_extremes_movies(cat_, filt, metric, o
 %            junctions (else z8), orbits by get_family_orbit at the
 %            catalog's muStar; no flight-layer files (the user
 %            kit, deliverable 9)                            (c) 10/14/2026
+%  M. Casey  flights and orbits through catalog_transfer     (c) 10/14/2026
 %  Copyright Coorbital Inc.
 %% ------------------------ Begin Code Sequence ---------------------------
 
@@ -182,8 +174,8 @@ else
 end
 Fl = cell(1,2);  orb = cell(1,2);
 for k = 1:2
-    orb{k} = sheet_orbits(cat_.sheets(ks(k)), cat_.constants.muStar);
-    Fl{k}  = fly_row(cat_, R{k}, orb{k}, TN(k), opts.fly);
+    Fl{k}  = catalog_transfer(cat_, R{k}, struct('method', opts.fly, 'sheet', ks(k), 'thrustN', TN(k)));
+    orb{k} = Fl{k}.orbits;
 end
 
 for k = 1:2
@@ -260,70 +252,6 @@ close(S(1).fig);  close(S(2).fig);
 info.F = Fl;  info.methods = {Fl{1}.method, Fl{2}.method};  info.nFrames = nFrames;
 fprintf('  movies -> %s.mp4 / .gif  (%d frames, 1280x720, shared clock to %.2f d)\n', ...
         outStem, nFrames, tEnd*tStar/86400);
-end
-
-% ---------------------------------------------------------------------------
-function O = sheet_orbits(sh, muStar)
-% SHEET_ORBITS  One period of the sheet's departure and arrival orbits, by
-% the sheet's own recipe (dep_family / arr_family keys), else the DRO /
-% tulip rule of the deliverable-3 catalog, at the catalog's own mass ratio.
-% INPUTS: sh (sheet struct); muStar [scalar].  OUTPUTS: O (.tD .rvD .tT .rvT;
-% [M x 1], [M x 6]).
-if isfield(sh, 'dep_family'), df = sh.dep_family;  dp = sh.dep_params;
-else,                         df = 'dro';          dp = struct('tau', sh.tauDRO); end
-if isfield(sh, 'arr_family'), af = sh.arr_family;  ap = sh.arr_params;
-else,                         af = 'tulip';        ap = struct('Np', sh.Np, 'pm', -1); end
-dp.muStar = muStar;  ap.muStar = muStar;
-[O.tD, O.rvD] = get_family_orbit(df, dp);
-[O.tT, O.rvT] = get_family_orbit(af, ap);
-end
-
-% ---------------------------------------------------------------------------
-function F = fly_row(cat_, row, O, thrustN, method)
-% FLY_ROW  Fly one library row with pumpkyn.cr3bp.tfMinProp: segment by
-% segment from its junction states (14 x K on the uniform grid) when it has
-% them and the method allows, else in one flight from z8 started at the
-% departure phase of the departure orbit.
-% INPUTS: cat_ (catalog); row (z8, sD, junctions, status fields); O
-% (sheet_orbits); thrustN [scalar]; method 'auto' | 'junctions' | 'z8'.
-% OUTPUTS: F (.t .Y .tfNd .tfDays .dvKms .method .status .statusName).
-assert(isfield(row, 'z8') && numel(row.z8) == 8, 'costate_catalog_extremes_movies:row', ...
-       'a row needs a z8 of 8 elements');
-z8 = row.z8(:);
-J  = [];  if isfield(row, 'junctions'), J = row.junctions; end
-hasJ = ~isempty(J) && size(J, 1) == 14 && all(isfinite(J(:)));
-if strcmp(method, 'junctions') && ~hasJ
-    error('costate_catalog_extremes_movies:noJunctions', 'the row carries no 14 x K junction states');
-end
-useJ = hasJ && ~strcmp(method, 'z8');
-tStar = cat_.constants.tStar_s;  lStar = cat_.constants.lStar_km;
-m0kg  = cat_.thruster.m0_kg;     cnd   = cat_.thruster.c_nd;   mu = cat_.constants.muStar;
-Tnd   = (thrustN/m0kg)*tStar^2/(lStar*1000);
-tf    = z8(8);
-if useJ
-    K = size(J, 2);  h = tf/K;  t = [];  Y = [];
-    for k = 1:K
-        [tk, Yk] = pumpkyn.cr3bp.tfMinProp(h, J(:, k), Tnd, cnd, mu);
-        if k > 1, tk = tk(2:end);  Yk = Yk(2:end, :); end
-        t = [t; (k - 1)*h + tk];  Y = [Y; Yk];
-    end
-    F.method = 'junctions';
-else
-    assert(isfield(row, 'sD'), 'costate_catalog_extremes_movies:row', 'a z8 flight needs the departure phase sD');
-    rv0 = interp1(O.tD/O.tD(end), O.rvD, mod(row.sD, 1), 'spline');
-    [t, Y] = pumpkyn.cr3bp.tfMinProp(tf, [rv0(1:6).'; 1; z8(1:7)], Tnd, cnd, mu);
-    F.method = 'z8';
-end
-mf = Y(end, 7);
-F.t = t;  F.Y = Y;  F.tfNd = tf;  F.tfDays = tf*tStar/86400;
-F.dvKms = cnd*log(1/mf)*lStar/tStar;
-F.status = NaN;  F.statusName = 'not annotated';
-if isfield(row, 'status') && ~isempty(row.status) && isfinite(row.status)
-    F.status = double(row.status);
-    Kst = status_key();  kk = find(Kst.codes == F.status, 1);
-    if ~isempty(kk), F.statusName = Kst.names{kk}; end
-end
-if isfield(row, 'statusName') && ~isempty(row.statusName), F.statusName = row.statusName; end
 end
 
 % ---------------------------------------------------------------------------

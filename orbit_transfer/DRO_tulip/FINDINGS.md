@@ -6267,3 +6267,85 @@ data -- the conjugate-point question of 2026-10-04 (the s_D ~0.17 stop) has a
 population to map, and `walkPastConjugate` can trace those branches past the
 conjugate point. The junctions every entry now carries are the input the
 junction-state interpolation of section 97 needs.
+
+
+## 99. Deliverable 8: the status layer shipped with the tools to use it (2026-10-13)
+
+Spec: `docs/superpowers/specs/2026-10-13-costate-library-tools-deliverable8-design.md`.
+The library of record (section 98) is now a deliverable for Darin:
+`deliverables/costate_catalog_70mN_status_deliverable8/` and its `.zip`
+(20.8 MB, 30 files: the cleaned catalog export, 25 .m tools, dependencies and
+examples, a README, `status_pair_movie.mp4/.gif`, `status_torus.png`). Built
+by `build_dro_deliverable.m` in 68 s.
+
+**The tools** (`indirect/`, each written test-first with deliberate-failure
+checks in `indirect/tests/`):
+
+| tool | what it does |
+|---|---|
+| `catalog_endpoints(cat, sheetIdx, thrustN)` | the certified endpoint rule from the catalog's own keys; bitwise equal to `arclength_arrival`'s at every grid phase |
+| `fly_catalog_entry(cat, entry, opts)` | flies a `transfers_at` row, a cell or a z8: from its junctions (`entry_thrust_program`) or from z8 (`fly_transfer`); thrust direction checked against the equations of motion on both flights; output accepted by `print_transfer_summary` and `plot_transfer_3d` |
+| `tfmin_accepts(cat, entry, opts)` | `pumpkyn.cr3bp.tfMin` under `run_capped`; dz is the certifier's 2-norm; status-1 rows are expected refusals and are not run unless `opts.force`; a cap timeout is a named refusal |
+| `plot_status_torus(cat, opts)` | t_f, alternatives per cell and status-2 cells on the torus; off-grid rows as markers; 1280 x 720 PNG |
+| `sample_status_pair(cat)` | the on-grid cell with the most status-2 alternatives: iD 1, iA 45 (sD 0, sA 0.9296), 7 of 9 alternatives status 2; primary 18.06 d, fastest status-2 row 20.24 d |
+| `export_deliverable_catalog`, `deliverable_file_list` | the cleaned export; the file list (repo only) |
+
+Changed: `costate_lib_describe` prints the status block (primaries 1152/0/0/0,
+alternatives 268/110/268/10 by status 4/3/2/1, 5 borderline: k21 k219 k419
+k491 k544, junctions on every entry, K = 24) and is byte-identical without the
+layer; `costate_catalog_extremes` gains `filt.includeAlternatives` and
+`filt.status`, defaults unchanged; `costate_catalog_extremes_movies` films
+through `fly_catalog_entry` (an alternative is flown from its junctions) and
+takes `opts.pair/.labels/.nFrames/.fly`, with endpoints per panel from each
+extreme's sheet and thrust. Examples: `examples/costate_catalog_example.m`
+(pick by days, derive, endpoints, fly, `tfmin_accepts`, 3D plot) and
+`examples/status_layer_example.m` (`transfers_at` at the sample cell: 10
+transfers, ranked table, two flown from junctions, thrust programs, the
+status-2 reason, the torus).
+
+**The export.** `export_deliverable_catalog` removes `merge` and
+`status_layer`, adds a `build` struct and a provenance paragraph, strips file
+paths from the 656 alternative `source` strings and from `families.arcDir`,
+and recomputes the stale `conj_test.nPass` (1143 -> 1152) from the per-cell
+verdicts. Both content keys are unchanged (primaries
+6a775f714b4cdf302a505aa56a8198ad, alternatives
+3a1c997b6def0ebabc1bfe044cb2ccd3). The builder's audit gate binds the
+primaries audit (1,152 ok / 0 bad) and the 8 alternatives audit chunks (656
+ok / 0 bad, coverage 1..656 exactly once) to those keys and refuses to zip
+otherwise; tested with an altered key, a missing chunk, a duplicated chunk and
+nBad > 0.
+
+**The recipient's test.** `deliverable_selftest.m` runs in a child MATLAB:
+both examples, 7 bare self-demos, and a dependency scan of the 25 files
+(79 required files, all inside the folder, pumpkyn or matlabroot; no `addpath`
+of repo folders; no absolute paths): SELFTEST OK in 41 s. The controller's
+independent run of the unpacked zip: both examples end to end, |dz| = 0
+exactly on the picked primary and on the status-2 alternative, flown misses
+0.000 km / 0.0000 m/s, junction defects 1.8e-7 and 2.2e-7 km.
+
+**What the numbers say.**
+
+- 372 of the 656 alternatives are OFF-GRID (63 off the departure grid, 309
+  off the arrival grid, none off both): ribs and sheet candidates at
+  non-grid phases. The torus map draws them as markers, and `transfers_at`
+  finds them only with a tolerance.
+- 45 of the 1,152 cells hold a status-2 transfer, concentrated on the sD = 0
+  row and the column near sA 0.29, consistent with the conjugate locus of
+  section 96.
+- The certified orbit table's closure error is 1.2e-9 ND (about 0.5 m); this
+  is the wrap seam of the endpoint rule.
+- tfMin accepts a certified primary with |dz| = 0 exactly because its first
+  residual is already at machine level.
+- A status-1 row makes tfMin grind to the 300 s cap, hence the skip rule.
+
+**Rulings.** No `addpath` in any shipped file (the caller owns the path). The
+byte-identity regression tests compare against the pre-plan commit (a62a65e),
+not HEAD. Interpolation is NOT shipped: the junction-interpolation experiment
+of section 97 is still pending.
+
+**Caveats for Darin** (also in the deliverable README): no interpolation;
+status-1 rows are not tfMin-tested; `costate_catalog_pick` takes phases in
+DAYS while the other tools take FRACTIONS; `source` is kind-only.
+
+**Next:** the junction-state interpolation experiment (section 97), which
+decides whether a later deliverable can add interpolation.

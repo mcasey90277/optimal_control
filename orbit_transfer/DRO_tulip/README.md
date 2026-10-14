@@ -63,7 +63,10 @@ grid points (`process/INTERPOLATION_STATUS.md`).
   `costate_catalog_*.mat` sits in the current folder).
 - **`deliverables/`** — shipped zips: `costate_lib_and_helper_deliverable2`
   (thrust-axis library + pickers), `costate_catalog_deliverable3`
-  (multi-orbit catalog, 3,936 entries, 16 sheets).
+  (multi-orbit catalog, 3,936 entries, 16 sheets), and
+  `costate_catalog_70mN_status_deliverable8` (2026-10-13: the 24 x 48
+  70 mN library of record with the optimality-status layer, 1,152 primaries
+  + 656 alternatives, junction states, tools and two examples; 20.8 MB).
 - **`reviews/`** — external code/doc review artifacts.
 
 ## Key numbers
@@ -160,6 +163,13 @@ blocks; the front-door functions underneath stay the engine.
 | `audit_phase_catalog.m` | audits a SHIPPED catalog the way a recipient would: re-derives every entry from the catalog's own keys and flies it |
 | `package_phase_catalog.m` | sheet + ribs -> a shareable catalog |
 | `build_ribs.m` | departure ribs off every certified point of a sheet |
+| `catalog_endpoints.m` | the certified endpoint rule from a catalog's own keys (sheet, thrust), bitwise equal to `arclength_arrival`'s |
+| `fly_catalog_entry.m` | flies a `transfers_at` row, a cell or a z8, from junctions or z8, with the thrust direction checked against the equations of motion |
+| `tfmin_accepts.m` | runs `pumpkyn.cr3bp.tfMin` on an entry under `run_capped`, reports dz; status-1 rows skipped unless forced |
+| `plot_status_torus.m` / `sample_status_pair.m` | the status map on the torus (t_f, alternatives, status-2 cells) and the cell with the most status-2 alternatives |
+| `export_deliverable_catalog.m` / `deliverable_file_list.m` | the cleaned catalog export (paths and bookkeeping out, content keys unchanged) and the deliverable file list |
+| `examples/costate_catalog_example.m` / `status_layer_example.m` | Darin's two walk-throughs: pick -> derive -> fly -> tfMin check, and every transfer at a phase pair with its status |
+| `../deliverable_selftest.m` | the recipient's test in a child MATLAB: both examples, bare self-demos, dependency scan |
 
 **A deliverable does not ship until its audit is clean** --
 `build_dro_deliverable` enforces that rather than trusting a checklist. See

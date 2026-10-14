@@ -45,8 +45,6 @@ function [B, orbits] = catalog_endpoints(cat_, sheetIdx)
 %% ------------------------ Begin Code Sequence ---------------------------
 
 if nargin < 2 || isempty(sheetIdx), sheetIdx = 1; end
-here = fileparts(mfilename('fullpath'));
-addpath(fullfile(fileparts(fileparts(here)), 'costate_common'));
 
 sh = cat_.sheets(sheetIdx);
 k  = cat_.constants;

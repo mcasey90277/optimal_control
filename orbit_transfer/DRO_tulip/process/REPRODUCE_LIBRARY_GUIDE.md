@@ -128,12 +128,12 @@ Follow the `matlab-campaign` skill. Concretely:
 2. **Launch detached**, from a job file, with a verdict FILE:
    ```bash
    nohup /Applications/MATLAB_R2026a.app/bin/matlab -batch \
-       "run('.../DRO_tulip/indirect/batch/reproduce_library_job.m')" > ~/reproduce_job.out 2>&1 &
+       "run('.../DRO_tulip/indirect/batch/reproduce_library_job.m')" > .../DRO_tulip/indirect/results/batch_logs/reproduce_job.out 2>&1 &
    ```
    `indirect/batch/reproduce_library_job.m` is the job that ran on 2026-09-18,
    kept as a template: it builds the path, calls the script inside a
    `try/catch`, saves `out`, and writes a one-line verdict to
-   `~/REPRODUCE_VERDICT.txt` whether it succeeded or threw.
+   `indirect/results/batch_logs/REPRODUCE_VERDICT.txt` whether it succeeded or threw.
 3. **Watch three things**: `<outDir>/torus.log` (one line per stage — it is
    SILENT for hours during the sheet, the ribs and the filler, which is normal);
    the job's `.out` (the sheet's per-candidate lines and the audit rows land

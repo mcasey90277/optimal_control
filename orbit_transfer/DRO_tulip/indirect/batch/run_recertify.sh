@@ -5,8 +5,8 @@
 #   batch/run_recertify.sh N audit    -- backfill_v2_job BACKFILL_STAGE=audit
 # Optional 3rd argument: watchdog seconds per process [172800 = 48 h].
 # BACKFILL_OUT (environment) is passed through; default results/library_70mN_24x48_v2.
-# Completion is each chunk's ~/RECERT_<k>_VERDICT.txt (or
-# ~/BACKFILL_V2_AUDIT_<k>_VERDICT.txt), never the log. Every chunk resumes.
+# Completion is each chunk's results/batch_logs/RECERT_<k>_VERDICT.txt (or
+# results/batch_logs/BACKFILL_V2_AUDIT_<k>_VERDICT.txt), never the log. Every chunk resumes.
 # Usage: nohup batch/run_recertify.sh 4 &
 ROOT=${0:A:h:h}
 N=${1:?usage: run_recertify.sh N [recert|audit] [watchdog_sec]}

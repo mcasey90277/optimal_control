@@ -13,14 +13,14 @@
 %
 % Launch with nohup, never in the interactive session:
 %   nohup /Applications/MATLAB_R2026a.app/bin/matlab -batch \
-%       "run('<this file>')" > ~/departure_rib96.out 2>&1 &
+%       "run('<this file>')" > .../DRO_tulip/indirect/results/batch_logs/departure_rib96.out 2>&1 &
 % Progress: <outDir>/heartbeat.txt gets one line per solve; the checkpoint
 % is rewritten after every accepted point. It resumes from the checkpoint:
 % run it again.
 %
 % INPUTS:  none (edit the block below)
 % OUTPUTS: <verdictF> (one line); <outDir>/rib96_col28.mat (build_ribs R)
-verdictF = fullfile(getenv('HOME'), 'DEPARTURE_RIB96_VERDICT.txt');
+verdictF = fullfile(batch_log_dir(), 'DEPARTURE_RIB96_VERDICT.txt');
 res      = '/Users/msc/Desktop/optimal_control/orbit_transfer/DRO_tulip/indirect/results';
 sheetMat = fullfile(res, 'sheet96_resolution_test', 'arrival_sheet_70mN_nA96.mat');
 col      = 28;                                  % spine96 column: sA 0.2837

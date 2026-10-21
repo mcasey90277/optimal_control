@@ -9,10 +9,10 @@
 %
 % INPUTS:  none (environment: CHUNK, NCHUNK, BACKFILL_OUT [results/
 %          library_70mN_24x48_v2])
-% OUTPUTS: ~/RECERT_<CHUNK>_VERDICT.txt (one line); <outDir>/recert_<CHUNK>.mat
+% OUTPUTS: <batch_log_dir>/RECERT_<CHUNK>_VERDICT.txt (one line); <outDir>/recert_<CHUNK>.mat
 %          (+ .log)
 k = str2double(getenv('CHUNK'));  n = str2double(getenv('NCHUNK'));
-verdictF = fullfile(getenv('HOME'), sprintf('RECERT_%s_VERDICT.txt', getenv('CHUNK')));
+verdictF = fullfile(batch_log_dir(), sprintf('RECERT_%s_VERDICT.txt', getenv('CHUNK')));
 ind = fileparts(fileparts(mfilename('fullpath')));
 outDir = strtrim(getenv('BACKFILL_OUT'));
 if isempty(outDir), outDir = fullfile(ind, 'results', 'library_70mN_24x48_v2'); end

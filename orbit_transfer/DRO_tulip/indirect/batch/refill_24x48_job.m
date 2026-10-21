@@ -17,13 +17,13 @@
 %
 % Launch with nohup, never in the interactive session:
 %   nohup /Applications/MATLAB_R2026a.app/bin/matlab -batch \
-%       "run('<this file>')" > ~/refill_24x48.out 2>&1 &
+%       "run('<this file>')" > .../DRO_tulip/indirect/results/batch_logs/refill_24x48.out 2>&1 &
 % Watch <round_01>/fill_holes_direct.log and the verdict file. It resumes
 % (the filler keeps the cells an earlier run certified): run it again.
 %
 % INPUTS:  none (edit the paths below)
 % OUTPUTS: <verdictF> (one line); round_01 catalog re-packaged; final/ refreshed
-verdictF = fullfile(getenv('HOME'), 'REFILL_24x48_VERDICT.txt');
+verdictF = fullfile(batch_log_dir(), 'REFILL_24x48_VERDICT.txt');
 R = '/Users/msc/Desktop/optimal_control/orbit_transfer/DRO_tulip/indirect/results/reproduce_70mN_24x48';
 
 here = pwd; cd('/Users/msc/Desktop/proj7/external/pumpkynPie'); startup(); cd(here);

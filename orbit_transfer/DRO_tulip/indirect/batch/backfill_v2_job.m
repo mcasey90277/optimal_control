@@ -36,7 +36,7 @@
 %               relabelled one back (same file, same variable name), moves
 %               audit_*.mat, audit_*_batch.out and audit_driver.log into
 %               audit_round1/ (they no longer match the alternatives key),
-%               and writes ~/BACKFILL_V2_RELABEL_VERDICT.txt. Then re-run the
+%               and writes <batch_log_dir>/BACKFILL_V2_RELABEL_VERDICT.txt. Then re-run the
 %               audit (borderline rows: the stored status is a lower bound).
 %               NOT ATOMIC (save, then moves). RECOVERY / UNDO: copy
 %               costate_catalog_dro_tulip_70mN_prerelabel.mat back over
@@ -51,7 +51,7 @@
 %
 % Launch with nohup, never in the interactive session:
 %   BACKFILL_STAGE=harvest nohup /Applications/MATLAB_R2026a.app/bin/matlab \
-%       -batch "run('<this file>')" > ~/backfill_v2_harvest.out 2>&1 &
+%       -batch "run('<this file>')" > .../DRO_tulip/indirect/results/batch_logs/backfill_v2_harvest.out 2>&1 &
 %
 % INPUTS:  none (environment: BACKFILL_STAGE, BACKFILL_OUT, CHUNK, NCHUNK)
 % OUTPUTS: <verdictF> (one line); <outDir>/{harvest, recert_*, audit_*,
@@ -63,9 +63,9 @@ ind = fileparts(fileparts(mfilename('fullpath')));
 RES = fullfile(ind, 'results');
 recordMat = fullfile(RES, 'library_70mN_24x48_merged', 'costate_catalog_dro_tulip_70mN.mat');
 outDir = strtrim(getenv('BACKFILL_OUT'));  if isempty(outDir), outDir = fullfile(RES, 'library_70mN_24x48_v2'); end
-verdictF = fullfile(getenv('HOME'), 'BACKFILL_V2_VERDICT.txt');
-if strcmp(stage, 'audit'), verdictF = fullfile(getenv('HOME'), sprintf('BACKFILL_V2_AUDIT_%s_VERDICT.txt', getenv('CHUNK'))); end
-if strcmp(stage, 'relabel'), verdictF = fullfile(getenv('HOME'), 'BACKFILL_V2_RELABEL_VERDICT.txt'); end
+verdictF = fullfile(batch_log_dir(), 'BACKFILL_V2_VERDICT.txt');
+if strcmp(stage, 'audit'), verdictF = fullfile(batch_log_dir(), sprintf('BACKFILL_V2_AUDIT_%s_VERDICT.txt', getenv('CHUNK'))); end
+if strcmp(stage, 'relabel'), verdictF = fullfile(batch_log_dir(), 'BACKFILL_V2_RELABEL_VERDICT.txt'); end
 
 here = pwd; cd('/Users/msc/Desktop/proj7/external/pumpkynPie'); startup(); cd(here);
 addpath(ind, fullfile(fileparts(fileparts(ind)), 'costate_common'), fullfile(getenv('HOME'), 'casadi-3.7.0'));

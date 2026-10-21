@@ -6,13 +6,13 @@
 %
 % Run AFTER the rib's verdict file says RIB96 FINISHED. Launch with nohup:
 %   nohup /Applications/MATLAB_R2026a.app/bin/matlab -batch \
-%       "run('<this file>')" > ~/score_rib96.out 2>&1 &
+%       "run('<this file>')" > .../DRO_tulip/indirect/results/batch_logs/score_rib96.out 2>&1 &
 % About 3 h for 60 queries; it resumes. Verdict:
 % <outDir>/interp_score/SCORE_VERDICT.txt, and the one line below.
 %
 % INPUTS:  none (edit the block below)
 % OUTPUTS: <outDir>/rib96_col28_catalog.mat, <outDir>/interp_score/, <verdictF>
-verdictF = fullfile(getenv('HOME'), 'SCORE_RIB96_VERDICT.txt');
+verdictF = fullfile(batch_log_dir(), 'SCORE_RIB96_VERDICT.txt');
 res      = '/Users/msc/Desktop/optimal_control/orbit_transfer/DRO_tulip/indirect/results';
 sheetMat = fullfile(res, 'sheet96_resolution_test', 'arrival_sheet_70mN_nA96.mat');
 refMat   = fullfile(res, 'library_70mN_24x48_merged', 'costate_catalog_dro_tulip_70mN.mat');   % problem identity

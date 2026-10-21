@@ -10,12 +10,12 @@
 %
 % Launch with nohup, never in the interactive session:
 %   nohup /Applications/MATLAB_R2026a.app/bin/matlab -batch \
-%       "run('<this file>')" > ~/merge_24x48.out 2>&1 &
+%       "run('<this file>')" > .../DRO_tulip/indirect/results/batch_logs/merge_24x48.out 2>&1 &
 %
 % INPUTS:  none (edit the paths below)
 % OUTPUTS: <verdictF> (one line); <outDir>/{costate_catalog_dro_tulip_70mN,
 %          merge_info, audit_70mN, comparison_with_record}.mat
-verdictF = fullfile(getenv('HOME'), 'MERGE_24x48_VERDICT.txt');
+verdictF = fullfile(batch_log_dir(), 'MERGE_24x48_VERDICT.txt');
 R = '/Users/msc/Desktop/optimal_control/orbit_transfer/DRO_tulip/indirect/results/';
 baseMat  = fullfile(R, 'reproduce_70mN_24x48', 'final', 'costate_catalog_dro_tulip_70mN.mat');
 donorMat = fullfile(R, 'library_70mN_24x24_final', 'costate_catalog_dro_tulip_70mN.mat');

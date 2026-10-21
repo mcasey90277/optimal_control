@@ -3,7 +3,7 @@
 % A FILE. Launch it with nohup, never in the interactive session:
 %
 %   nohup /Applications/MATLAB_R2026a.app/bin/matlab -batch \
-%       "run('<this file>')" > ~/reproduce_job.out 2>&1 &
+%       "run('<this file>')" > .../DRO_tulip/indirect/results/batch_logs/reproduce_job.out 2>&1 &
 %
 % It takes about a DAY (process/REPRODUCE_LIBRARY_GUIDE.md, section 4). Watch
 % <outDir>/torus.log (one line per stage, silent for hours in between), this
@@ -11,7 +11,7 @@
 %
 % INPUTS:  none (edit the two paths below)
 % OUTPUTS: <verdictF> (one line), <outDir>/reproduce_result.mat
-verdictF = fullfile(getenv('HOME'), 'REPRODUCE_24x48_VERDICT.txt');
+verdictF = fullfile(batch_log_dir(), 'REPRODUCE_24x48_VERDICT.txt');
 opts = struct('go', true, 'nD', 24, 'nA', 48, 'nWorkers', 8);   % arrival axis refined (FINDINGS 86, 88)
 
 here = pwd; cd('/Users/msc/Desktop/proj7/external/pumpkynPie'); startup(); cd(here);

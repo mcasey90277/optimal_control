@@ -4,7 +4,7 @@
 % with nohup, never in the interactive session:
 %
 %   SCORE_LIBRARY=record nohup /Applications/MATLAB_R2026a.app/bin/matlab -batch \
-%       "run('<this file>')" > ~/score_record.out 2>&1 &
+%       "run('<this file>')" > .../DRO_tulip/indirect/results/batch_logs/score_record.out 2>&1 &
 %
 % SCORE_LIBRARY is 'record', 'spine96', or a catalog file's path; SCORE_NQUERY
 % [60]. The verdict is <catalog's folder>/interp_score/SCORE_VERDICT.txt, one

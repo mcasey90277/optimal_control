@@ -50,7 +50,7 @@ interp_study                      % edit `library` and (sD, sA) in sections 1-2
 % score a library (detached; ~3 h for 60 queries; resumes)
 SCORE_LIBRARY=<catalog .mat, or 'record' | 'spine96'> nohup \
   /Applications/MATLAB_R2026a.app/bin/matlab -batch \
-  "run('.../DRO_tulip/indirect/batch/score_interpolator_job.m')" > ~/score.out 2>&1 &
+  "run('.../DRO_tulip/indirect/batch/score_interpolator_job.m')" > .../DRO_tulip/indirect/results/batch_logs/score.out 2>&1 &
 % verdict: <catalog folder>/interp_score/SCORE_VERDICT.txt
 ```
 

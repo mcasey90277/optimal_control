@@ -33,7 +33,8 @@ addpath(here, fullfile(fileparts(here), 'oclib'));
 suites = { 'cartpole_common',   {'test_cartpole_params', 'test_cartpole_physics', ...
                                  'test_cartpole_field',  'test_cartpole_state_jac'}
            'ex3_cart_pole_pmp', {'run_tests'}
-           'conjugate_points',  {'run_conjugate_tests'} };
+           'conjugate_points',  {'run_conjugate_tests'}
+           'drone',             {'run_tests'} };
 
 nT      = sum(cellfun(@numel, suites(:,2)));
 names   = cell(1, nT);
@@ -42,25 +43,27 @@ secs    = zeros(1, nT);
 n       = 0;
 for k = 1:size(suites, 1)
     folder = suites{k,1};
-    addpath(fullfile(here, folder), fullfile(here, folder, 'tests'));
+    addpath(fullfile(here, folder));
+    if isfolder(fullfile(here, folder, 'tests'))     % not every suite has one (drone)
+        addpath(fullfile(here, folder, 'tests'));
+    end
     for m = 1:numel(suites{k,2})
         n = n + 1;
         names{n} = [folder '/' suites{k,2}{m}];
         fprintf('\n######## %s\n', names{n});
         t0 = tic;
         try
-            %% Name-collision guard: today there is exactly one run_tests in
-            %% the tree, so bare-name feval dispatch is unambiguous. It will
-            %% not stay that way -- once ex4/ex5 each ship their own
-            %% run_tests.m, feval resolution rests on path order, which
-            %% MATLAB's CURRENT-FOLDER precedence overrides regardless of
-            %% addpath order. The ex3 README teaches readers to cd into the
-            %% example folder first, so once a second run_tests exists,
-            %% running from inside ex4 (say) could silently re-resolve to
-            %% ex3's run_tests and report a false PASS in ex4's row. Nothing
-            %% is broken by this collision today; this assertion exists so
-            %% that when it does happen, it fails loudly here instead of
-            %% passing quietly:
+            %% Name-collision guard: more than one folder ships a run_tests.m
+            %% (ex3_cart_pole_pmp, drone), so bare-name feval dispatch rests on
+            %% path order, which MATLAB's CURRENT-FOLDER precedence overrides
+            %% regardless of addpath order (the example READMEs teach readers
+            %% to cd into the example folder first). So an entry named
+            %% run_tests is dispatched by cd-ing into its own suite folder
+            %% (restored by onCleanup even on a throw): the current folder
+            %% then IS the intended one, and the file is called with no
+            %% ambiguity. The assertion below stays as the backstop for every
+            %% entry -- a shadowing same-named function fails loudly here
+            %% instead of passing quietly in another suite's row:
             fn = suites{k,2}{m};
             cand1 = fullfile(here, folder, [fn '.m']);
             cand2 = fullfile(here, folder, 'tests', [fn '.m']);
@@ -71,6 +74,9 @@ for k = 1:size(suites, 1)
             else
                 error('run_all_tests:missingFile', ...
                       '%s: no source file found at %s or %s', fn, cand1, cand2);
+            end
+            if strcmp(fn, 'run_tests')
+                back = cd(fullfile(here, folder));  restoreDir = onCleanup(@() cd(back));
             end
             actual = which(fn);
             assert(strcmp(actual, expected), 'run_all_tests:nameCollision', ...
@@ -84,13 +90,19 @@ for k = 1:size(suites, 1)
             %% element-DELETION syntax, not an assignment -- it would shrink
             %% res instead of recording a failure, silently or (for the last
             %% suite) with an uncaught out-of-bounds error downstream:
-            v = feval(fn);
+            if strcmp(fn, 'run_tests')
+                v = run_tests();
+                clear restoreDir
+            else
+                v = feval(fn);
+            end
             if ~isscalar(v)
                 error('run_all_tests:badVerdict', ...
                       '%s did not return a scalar verdict', names{n});
             end
             res(n) = logical(v);
         catch err
+            clear restoreDir                  % restores the folder after a throw
             fprintf('  THREW  %s\n', err.message);
             res(n) = false;
         end

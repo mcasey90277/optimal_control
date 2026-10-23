@@ -9,6 +9,7 @@ Zhang, Liu, Darbon & Karniadakis, arXiv:2610.30388 (`papers/`).
 | folder | stage | status |
 |---|---|---|
 | `drone_dynamics/` | 0: the plant library and shared geometry | built |
+| `quad_flight/` | fly a quadrotor from a user-set ENU/NED state at an LLA origin under a user-set thrust sequence: movie, plots, georeferenced path (`fly_quad.m`) | built |
 | `route1_direct/` | 1: the paper's problem as a hard-clearance NLP (Table 1) | planned |
 | `route2_indirect/` | 2: the barrier form's PMP-BVP, seeded from Route 1, conjugate-tested | planned |
 | `quadrotor/` | 3: the same task on the rigid-body model | planned |

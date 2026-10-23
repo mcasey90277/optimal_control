@@ -38,6 +38,11 @@ end
 [x0, ~, geom] = drone_layouts('paper', 8, 0.05);
 ok = chk(ok, geom.r == 0.05 && abs(sqrt(sum(x0(:,1).^2)) - 0.5) < 1e-15, 'explicit r is honoured; circle radius 0.5');
 
+[a0, aT, ag] = drone_layouts('rings', 32);
+[b0, bT, bg] = drone_layouts('paper', 32);
+ok = chk(ok, isequal(a0, b0) && isequal(aT, bT) && isequal(ag.r, bg.r) && isequal(ag.M, bg.M), ...
+         'rings 32 equals the paper''s M = 32 layout');
+
 [x0, xT, geom] = drone_layouts('headon');
 ok = chk(ok, isequal(x0, [-0.4 0.4; 0 0; 0 0]) && isequal(xT, [0.4 -0.4; 0 0; 0 0]) && geom.M == 2 && geom.r == 0.02, ...
          'headon: the two-agent oracle layout');

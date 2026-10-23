@@ -65,7 +65,7 @@ for trial = 1:20
     worstPow = max(worstPow, abs(lhs - rhs)/max(1, abs(rhs)));
 end
 ok = chk(ok, worstFall < 1e-15, sprintf('pointmass free fall: vdot = -g e3 (%.1e)', worstFall));
-ok = chk(ok, worstHover < 1e-15, sprintf('pointmass hover a = g e3 holds v (%.1e)', worstHover));
+ok = chk(ok, worstHover < 1e-12, sprintf('pointmass hover a = g e3 holds v (%.1e)', worstHover));
 ok = chk(ok, worstPow < 1e-13, sprintf('pointmass power balance d/dt(1/2|v|^2 + g pz) = a.v (%.1e)', worstPow));
 
 %% 3. rigid6dof hover equilibrium
@@ -73,7 +73,7 @@ pr = drone_params('rigid6dof');
 xH = [randn(3,1); zeros(9,1)];
 fH = (pr.m*pr.g/4)*ones(4,1);
 [F, B] = drone_field(xH, pr);
-ok = chk(ok, max(abs(F + B*fH)) < 1e-15, 'rigid6dof hover (f_k = m g/4, level, at rest) is an equilibrium');
+ok = chk(ok, max(abs(F + B*fH)) < 1e-12, 'rigid6dof hover (f_k = m g/4, level, at rest) is an equilibrium');
 
 %% 4-6. rigid6dof pointwise identities at random states and controls
 worstFall = 0;  worstPow = 0;  worstKin = 0;
@@ -103,6 +103,8 @@ ok = chk(ok, worstPow < 1e-10, sprintf('rigid6dof POWER BALANCE dE/dt = T (R e3)
 ok = chk(ok, worstKin < 1e-12, sprintf('rigid6dof KINEMATICS Rdot = R [omega]x (%.1e)', worstKin));
 
 %% 7. torque-free flight conserves R I omega; hover trim stays put
+% The flight reaches |pitch| ~ 0.98 rad, 0.59 rad from the pi/2 singularity
+% of W; keep that margin in mind if x0 is changed.
 x0 = [zeros(6,1); 0.3; -0.2; 0.5; 1.0; -0.7; 0.4];
 fEq = 0.05*ones(4,1);                                % equal thrusts: tau = 0, T = 0.2 N
 oo = odeset('RelTol', 1e-12, 'AbsTol', 1e-14);

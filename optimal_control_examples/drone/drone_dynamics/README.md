@@ -14,7 +14,9 @@ knows a cost, a horizon, a boundary condition or a solver.
 | `pointmass` | `[p; v]` (6) | `a` (3) | `vdot = a - g e3` |
 | `rigid6dof` | `[p; v; Theta; omega]` (12) | `f` (4) rotor thrusts | rigid body, ZYX Euler, "+" mixer, Crazyflie-class constants (Luis & Le Ny 2016; Forster 2015) |
 
-World frame: local-level, z up (ENU-compatible: x east, y north, z up); gravity is −g e3. NED callers rotate at their boundary.
+World frame: local-level, z up (ENU-compatible: x east, y north, z up); gravity is -g e3. NED callers rotate at their boundary.
+
+Conventions: `Theta = [phi; theta; psi]` roll/pitch/yaw (rad), `R = Rz Ry Rx` body-to-world; `omega` is the BODY-frame angular rate (rad/s), not Euler rates or world rates; body x through rotor 1, y through rotor 2, z along thrust (up at hover); p in m, v in m/s, f in N, pointmass `a` in m/s^2, kinematic `u = v` in m/s.
 
 All three are control-affine, `xdot = F(x) + B(x) u`, and complex-step
 safe. `drone_state_jac` for `rigid6dof` is GENERATED (`gen_drone_jacs.m`,

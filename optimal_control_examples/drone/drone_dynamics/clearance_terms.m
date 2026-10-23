@@ -10,8 +10,9 @@ function [h, rho, n, hBall] = clearance_terms(X, pairs, geom)
 %  ASSUMPTIONS / NOTES:
 %
 % • rho = 0 (coincident agents) gives n = NaN; the barrier and the solver
-%   never evaluate there (the NLP uses the squared form, the barrier's
-%   quadratic branch is only reached at h <= l > -2r).
+%   never evaluate there (the NLP uses the squared form; the quadratic
+%   branch of the barrier is reached for h <= l, i.e. rho <= 2r + l, still
+%   far from rho = 0, where n would be undefined).
 %
 %% Inputs:
 %
@@ -30,7 +31,7 @@ function [h, rho, n, hBall] = clearance_terms(X, pairs, geom)
 %
 %  rho                      [P x N]                 Pair distances
 %
-%  n                        [3 x P x N]             Unit vectors a -> b
+%  n                        [3 x P x N]             (x_a - x_b)/rho, unit
 %
 %  hBall                    [M x N] or []           |x_i - c| - R
 %

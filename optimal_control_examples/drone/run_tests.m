@@ -24,6 +24,7 @@ function ok = run_tests()
 
 here = fileparts(mfilename('fullpath'));
 root = fileparts(fileparts(here));
+% oclib is not used by Stage 0; Stages 1-3 append their tests here and need oc.*
 addpath(fullfile(here, 'drone_dynamics'), fullfile(here, 'drone_dynamics', 'tests'), ...
         fullfile(root, 'oclib'));
 

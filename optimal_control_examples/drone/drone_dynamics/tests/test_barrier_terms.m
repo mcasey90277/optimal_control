@@ -94,7 +94,7 @@ ok = chk(ok, U1 == 0 && isequal(g1v, zeros(3,1)) && issparse(H1) && nnz(H1) == 0
 %% 7. assembly agrees with the pieces
 [h, ~, ~, hB] = clearance_terms(x, pairs, geom);
 Uplain = sum(barrier_shape(h, geom.eps, geom.l)) + sum(barrier_shape(hB, geom.eps, geom.l));
-ok = chk(ok, abs(U - Uplain) < 1e-15*max(1, abs(U)), 'U = plain sum of barrier_shape over clearance_terms');
+ok = chk(ok, abs(U - Uplain) < 1e-15*max(1, abs(U)), 'U = plain sum of barrier_shape over clearance_terms (regression guard: identity by construction)');
 
 if ok, fprintf('TEST_BARRIER_TERMS: ALL PASS\n'); else, fprintf('TEST_BARRIER_TERMS: FAILURE\n'); end
 end

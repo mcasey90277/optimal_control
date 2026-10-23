@@ -2,9 +2,13 @@ function [Xf, Vf, tf] = hermite_resample(X, V, tN, nSub)
 %% Purpose:
 %
 %   Cubic-Hermite reconstruction of a trajectory from node values X and
-%   node derivatives V (the trapezoid transcription's own interpolant: v
-%   linear on each interval makes x cubic), sampled nSub times per
-%   interval. Used by the clearance gate to look BETWEEN the nodes, where
+%   node derivatives V, sampled nSub times per interval. Under the
+%   trapezoid rule with xdot = v (the KINEMATIC model) v is linear and x
+%   is quadratic, and the cubic Hermite reproduces that solution exactly
+%   because the trapezoid defect kills the cubic coefficient
+%   (2(x_k - x_{k+1}) + h(v_k + v_{k+1}) = 0). For pointmass/rigid6dof
+%   position rows it is a plain cubic Hermite on node values and
+%   derivatives, NOT the transcription's own interpolant. Used by the clearance gate to look BETWEEN the nodes, where
 %   a nodal constraint says nothing.
 %
 %% Inputs:

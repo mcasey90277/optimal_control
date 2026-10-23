@@ -21,6 +21,12 @@ function [F, B] = drone_field(x, p)
 %
 % • World frame: local-level, z up (ENU-compatible: x east, y north, z up);
 %   gravity is -g e3. NED callers rotate at their boundary.
+% • Conventions: Theta = [phi; theta; psi] is roll/pitch/yaw (rad) with
+%   R = Rz(psi) Ry(theta) Rx(phi), body-to-world. omega is the BODY-frame
+%   angular rate (rad/s), not Euler rates and not world-frame rates. Body
+%   triad: x_b through rotor 1, y_b through rotor 2, z_b along thrust (up
+%   at hover). Units: p in m, v in m/s, f in N; pointmass u = a in m/s^2;
+%   kinematic u = v in m/s.
 % • Complex-step safe: sin/cos/tan, products and divisions only; the cross
 %   product is written out; no abs, norm, max, min, no branch on a value.
 % • W is singular at theta = +/- pi/2; p.thetaMax is the box the solvers

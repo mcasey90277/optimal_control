@@ -1,0 +1,5 @@
+results/*.log
+results/*.stdout
+results/*.png
+results/*.mp4
+results/drones_*

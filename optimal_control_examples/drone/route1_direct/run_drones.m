@@ -40,7 +40,16 @@ addpath(here, fullfile(fileparts(here), 'drone_dynamics'));
 fprintf('paths set (casadi + route1_direct + drone_dynamics)\n');
 [x0, xT, geom] = drone_layouts(which, M, r);
 M = geom.M;
-out = solve_drones_direct(x0, xT, geom, struct('mode', mode, 'N', N, 'T', T, 'sense', sense));
+Jhard = NaN;
+if strcmp(mode, 'barrier')
+    % the barrier is solved from the hard solution (the default guess has coincident agents on ring layouts)
+    oH = solve_drones_direct(x0, xT, geom, struct('mode', 'hard', 'N', N, 'T', T, 'sense', sense));
+    Jhard = oH.J;
+    fprintf('hard solve first: status %s, J = %.6f\n', oH.ipoptStatus, oH.J);
+    out = solve_drones_direct(x0, xT, geom, struct('mode', 'barrier', 'N', N, 'T', T, 'sense', sense, 'X0', oH.X, 'V0', oH.V));
+else
+    out = solve_drones_direct(x0, xT, geom, struct('mode', mode, 'N', N, 'T', T, 'sense', sense));
+end
 fprintf('solved: %s, status %s, %d iterations, %.1f s\n', out.mode, out.ipoptStatus, out.iterations, out.wall);
 
 %% 3. verify
@@ -53,6 +62,7 @@ paperTab = [4 0.2003 0.2001; 8 0.4036 0.4046; 16 0.8307 0.8345; 32 1.2531 1.4413
 kp = find(paperTab(:, 1) == M, 1);
 fprintf('\n%s: layout %s, M = %d, mode %s, N = %d\n', label, which, M, out.mode, out.N);
 fprintf('  J = %.6f   J_LB = %.6f   gap %.3f %%\n', out.J, out.JLB, 100*(out.J - out.JLB)/out.JLB);
+if ~isnan(Jhard), fprintf('  hard J = %.6f, barrier J = %.6f\n', Jhard, out.J); end
 fprintf('  rigorous antipodal-pair bound = %s\n', numOrNA(pb, '%.6f'));
 if strcmp(which, 'paper') && ~isempty(kp)
     fprintf('  paper Table 1: OCFormer %s   SympOCNet %s\n', numOrNA(paperTab(kp, 2), '%.4f'), numOrNA(paperTab(kp, 3), '%.4f'));
@@ -80,29 +90,6 @@ movie_drones(out, fullfile(outDir, label), movieOpts);
 fprintf('  wrote %s\n        %s\n', pngFile, fullfile(outDir, [label '.mp4']));
 
 %% -------------------------------------------------------------------------
-function pb = antipodal_pair_bound(x0, xT, T, r)
-%% Purpose:
-%
-%   Rigorous lower bound on the hard-clearance cost, as in drone_table1:
-%   each antipodal pair (agent i starts where agent j ends) is the
-%   two-agent head-on problem, costing at least ell^2/(4T) with ell = 2
-%   sqrt(D^2 - R^2) + R (pi - 2 acos(R/D)), D the pair distance, R = 2r.
-%   Each pair is counted once.
-%
-R  = 2*r;
-pb = 0;
-for ia = 1:size(x0, 2)
-    for ib = ia+1:size(x0, 2)
-        if max(abs(x0(:, ib) - xT(:, ia))) < 1e-12
-            D   = sqrt(sum((x0(:, ia) - x0(:, ib)).^2));
-            ell = 2*sqrt(D^2 - R^2) + R*(pi - 2*acos(R/D));
-            pb  = pb + ell^2/(4*T);
-        end
-    end
-end
-end
-
-% ------------------------------------------------------------------------
 function s = numOrNA(x, fmt)
 %% Purpose:
 %

@@ -152,6 +152,13 @@ opti.minimize(J);
 X0 = d('X0', []);  V0 = d('V0', []);
 if isempty(X0) || isempty(V0)
     [X0, V0] = bumped_lines(x0, xT, tN, bump, sense);
+    if strcmp(mode, 'barrier') && P > 0
+        [~, rhoG] = clearance_terms(X0, pairs, geom);
+        if min(rhoG(:)) < 1e-9
+            error('solve_drones_direct:guess', ['barrier mode: the default initial guess has coincident agents ' ...
+                  '(ring layouts); pass a warm start opts.X0/opts.V0, e.g. the hard-mode solution']);
+        end
+    end
 end
 opti.set_initial(X, X0);
 opti.set_initial(V, V0);

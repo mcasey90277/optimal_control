@@ -41,11 +41,18 @@ fprintf('paths set (casadi + route1_direct + drone_dynamics)\n');
 [x0, xT, geom] = drone_layouts(which, M, r);
 M = geom.M;
 Jhard = NaN;
+vopts = struct('mirror', true, 'mesh', mesh);
 if strcmp(mode, 'barrier')
-    % the barrier is solved from the hard solution (the default guess has coincident agents on ring layouts)
+    % the barrier is solved from the hard solution (the default guess has coincident agents on ring layouts),
+    % and its mirror from the hard MIRROR solution, so G5 compares two warm-started twins (drone_table1's rule)
     oH = solve_drones_direct(x0, xT, geom, struct('mode', 'hard', 'N', N, 'T', T, 'sense', sense));
     Jhard = oH.J;
     fprintf('hard solve first: status %s, J = %.6f\n', oH.ipoptStatus, oH.J);
+    repH = verify_drones_direct(oH, struct('mirror', true, 'mesh', false));
+    if repH.G5.ran && ~isempty(repH.G5.out)
+        vopts.mirrorX0 = repH.G5.out.X;  vopts.mirrorV0 = repH.G5.out.V;
+        fprintf('hard mirror solved (J = %.6f): the barrier mirror is warm-started from it\n', repH.G5.Jmirror);
+    end
     out = solve_drones_direct(x0, xT, geom, struct('mode', 'barrier', 'N', N, 'T', T, 'sense', sense, 'X0', oH.X, 'V0', oH.V));
 else
     out = solve_drones_direct(x0, xT, geom, struct('mode', mode, 'N', N, 'T', T, 'sense', sense));
@@ -53,7 +60,7 @@ end
 fprintf('solved: %s, status %s, %d iterations, %.1f s\n', out.mode, out.ipoptStatus, out.iterations, out.wall);
 
 %% 3. verify
-rep = verify_drones_direct(out, struct('mirror', true, 'mesh', mesh));
+rep = verify_drones_direct(out, vopts);
 fprintf('verified: ok = %s\n', mat2str(rep.ok));
 
 %% 4. summary
@@ -69,11 +76,16 @@ if strcmp(which, 'paper') && ~isempty(kp)
 else
     fprintf('  paper Table 1: n/a\n');
 end
-fprintf('  G1 fine-grid clearance  min h = %+.3e   %s\n', rep.G1.minHfine, verdict(rep.G1.ok));
+if strcmp(out.mode, 'barrier')
+    fprintf('  G1 fine-grid clearance  min h = %+.3e   reported (barrier mode: the barrier is the constraint)\n', rep.G1.minHfine);
+else
+    fprintf('  G1 fine-grid clearance  min h = %+.3e   %s\n', rep.G1.minHfine, verdict(rep.G1.ok));
+end
 fprintf('  G2 cost vs bound        J - J_LB = %+.3e   %s\n', rep.G2.gap, verdict(rep.G2.ok));
 fprintf('  G3 solver               status %s, maxDefect = %.3e   %s\n', rep.G3.status, rep.G3.maxDefect, verdict(rep.G3.ok));
 if rep.G4.ran, fprintf('  G4 mesh (2N)            relChange = %.3e   %s\n', rep.G4.relChange, verdict(rep.G4.ok));
-else,          fprintf('  G4 mesh (2N)            not run\n');
+elseif ~mesh,  fprintf('  G4 mesh (2N)            not run (mesh = false in section 1)\n');
+else,          fprintf('  G4 mesh (2N)            not run (the solve itself failed: %s)\n', out.ipoptStatus);
 end
 if rep.G5.ran, fprintf('  G5 mirror               relDiff = %.3e   %s\n', rep.G5.relDiff, verdict(rep.G5.ok));
 else,          fprintf('  G5 mirror               not run (%s)\n', rep.G5.note);

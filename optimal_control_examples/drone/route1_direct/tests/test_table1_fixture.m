@@ -9,7 +9,11 @@ function ok = test_table1_fixture()
 %   modes are present with the multipliers Route 2 needs, and the hard
 %   costs sit above both the Lagrangian bound J_LB and the rigorous
 %   antipodal-pair bound (recomputed here from the closed form). The
-%   paper's numbers are printed as NOTE lines, never gated. Fixture fields:
+%   paper's numbers are printed as NOTE lines, never gated. The CSV's
+%   gatesRun column matches its mesh column, every hard row ran the 4-seed
+%   multistart, and drone_table1's adoption decision (adopt_mesh_solution,
+%   via drone_table1('adopt_mesh_solution')) is exercised on synthetic
+%   reports. Fixture fields:
 %   out, outB, rep, repB, geom, x0, xT, paper (the paper's row: .OCFormer,
 %   .SympOCNet). An edited fixture cannot sit green.
 %
@@ -58,7 +62,7 @@ for M = [4 8]
         rep = verify_drones_direct(o, struct('mirror', false));
         ok = chk(ok, rep.ok, sprintf('M = %d %s: gates re-derived ok (%s)', M, o.mode, rep.why));
     end
-    ok = chk(ok, S.outB.J >= S.out.J - 1e-9, sprintf('M = %d: barrier cost is at or above the hard cost (a positive penalty on a feasible path)', M));
+    ok = chk(ok, S.outB.J >= S.out.J - 1e-9, sprintf('M = %d: barrier cost is at or above the hard cost (a positive penalty on a feasible path; gaps < 1 on these layouts, so the barrier is positive)', M));
     pb = pair_bound(S.x0, S.xT, S.out.T, S.geom.r);
     ok = chk(ok, S.out.J >= pb - 1e-9 && S.out.J >= S.out.JLB, ...
              sprintf('M = %d: hard J = %.6f >= pair bound %.6f and >= J_LB %.6f', M, S.out.J, pb, S.out.JLB));
@@ -84,11 +88,22 @@ if isfile(csvFile)
     ok = chk(ok, all(hard.J >= hard.pairBound - 1e-9), 'every hard row respects the pair bound');
     ok = chk(ok, all(hard.J >= hard.J_LB), 'every hard row respects J_LB');
     ok = chk(ok, all(tb.gatesOk), 'every row has gatesOk true');
+    ok = chk(ok, all(ismember({'gatesRun', 'seedsTried', 'bestSeed'}, tb.Properties.VariableNames)), ...
+             'table1.csv has gatesRun, seedsTried, bestSeed columns');
+    if ismember('gatesRun', tb.Properties.VariableNames)
+        g13 = strcmp(tb.gatesRun, 'G1-G3');  g14 = strcmp(tb.gatesRun, 'G1-G4');
+        ok = chk(ok, all(g13 | g14) && isequal(g13, isnan(tb.meshRel)), ...
+                 sprintf('gatesRun matches the mesh column (NaN meshRel <=> G1-G3): %d rows G1-G4, %d rows G1-G3', sum(g14), sum(g13)));
+    end
+    if ismember('seedsTried', tb.Properties.VariableNames)
+        ok = chk(ok, all(hard.seedsTried == 4) && all(ismember(hard.bestSeed, {'u+', 'u-', 'a+', 'a-'})), ...
+                 sprintf('every hard row ran the 4-seed multistart (best seeds: %s)', strjoin(hard.bestSeed', ' ')));
+    end
     ok = chk(ok, ismember('mirrorOk', tb.Properties.VariableNames) && all(tb.mirrorOk(tb.M <= 16)) && ~any(isnan(tb.mirrorRel(tb.M <= 16))), ...
              'mirror gate ran and holds for M <= 16 (mirrorOk true, mirrorRel not NaN)');
     for mm = unique(tb.M)'
         jh = tb.J(tb.M == mm & strcmp(tb.mode, 'hard'));  jb = tb.J(tb.M == mm & strcmp(tb.mode, 'barrier'));
-        ok = chk(ok, jb >= jh - 1e-9, sprintf('M = %d: barrier cost is at or above the hard cost (a positive penalty on a feasible path)', mm));
+        ok = chk(ok, jb >= jh - 1e-9, sprintf('M = %d: barrier cost is at or above the hard cost (a positive penalty on a feasible path; gaps < 1 on these layouts, so the barrier is positive)', mm));
     end
     for k = find(tb.M > 16)'
         notes{end+1} = sprintf('  NOTE  M = %3d %s: mirrorRel = %.2e, mirrorOk = %d\n', tb.M(k), tb.mode{k}, tb.mirrorRel(k), tb.mirrorOk(k));
@@ -98,6 +113,19 @@ if isfile(csvFile)
                                hard.M(k), hard.J(k), hard.OCFormer(k), hard.J(k) - hard.OCFormer(k), hard.pairBound(k));
     end
 end
+% the mesh loop's adoption decision on synthetic reports (no solve): a
+% cheaper successful 2N solution is adopted; an equal, dearer, failed or
+% absent one is not
+adopt = drone_table1('adopt_mesh_solution');
+oRow  = struct('J', 0.4043878, 'N', 100);
+mk = @(ran, J, succ) struct('G4', struct('ran', ran, 'out', struct('J', J, 'success', succ, 'N', 200)));
+noRun = struct('G4', struct('ran', false, 'out', []));
+ok = chk(ok, adopt(oRow, mk(true, 0.4038924, true)), 'adoption: a cheaper 2N solution (0.4038924 < 0.4043878) is adopted');
+ok = chk(ok, ~adopt(oRow, mk(true, 0.4043878, true)), 'adoption: an equal-cost 2N solution is not adopted');
+ok = chk(ok, ~adopt(oRow, mk(true, 0.4050000, true)), 'adoption: a dearer 2N solution is not adopted (escalation decides)');
+ok = chk(ok, ~adopt(oRow, mk(true, 0.3000000, false)), 'adoption: a FAILED 2N solve is never adopted, however cheap');
+ok = chk(ok, ~adopt(oRow, noRun), 'adoption: no adoption when G4 did not run');
+
 [a32, b32, g32] = drone_layouts('paper', 32);
 id32 = '';
 try
@@ -118,7 +146,8 @@ function pb = pair_bound(x0, xT, T, r)
 %   Independent copy of antipodal_pair_bound: lower bound sum ell^2/(4T),
 %   ell = 2 sqrt(D^2 - R^2) + R (pi - 2 acos(R/D)), R = 2r, over MUTUAL
 %   swap pairs (x0(:,b) == xT(:,a) and x0(:,a) == xT(:,b)), each agent in
-%   at most one pair.
+%   at most one pair; an unpaired agent adds its straight-line cost
+%   |dx|^2/(2T).
 %
 R    = 2*r;
 pb   = 0;
@@ -132,6 +161,9 @@ for ia = 1:size(x0, 2)
             used([ia ib]) = true;
         end
     end
+end
+for ia = find(~used)
+    pb = pb + sum((xT(:, ia) - x0(:, ia)).^2)/(2*T);
 end
 end
 

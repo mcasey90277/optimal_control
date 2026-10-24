@@ -211,7 +211,12 @@ interpolant cuts inside by up to `s²/(16r)` (the sagitta). That is `2e-4`
 at N = 100 on the head-on case and cannot be driven to 1e-8 by any nodal
 scheme, so the clearance gate REPORTS the fine-grid minimum against a
 mesh-aware bar and the cost accuracy is carried by the closed-form oracle
-and the mesh gate, where it belongs.
+and the mesh gate, where it belongs. With clearance enforced at the Hermite
+midpoints as well as the nodes, the sampled polygon must circumscribe the
+`2r` arc (a chord's midpoint lies inside the circle), so the discrete optimum
+sits ABOVE the closed-form `J*` by O(h²) (measured +2.31e-5 at N = 100,
++4.17e-6 at N = 400); the sagitta corner-cutting argument applies only to
+node-only sampling.
 
 Mode `'barrier'` drops the inequalities and adds
 `Σ_k (h/2)(U_k + U_{k+1})` with `U_k = barrier_terms(X(:,k))` to the cost.
@@ -243,7 +248,7 @@ campaign discipline, never inside the test suite.
 | G3 solver | IPOPT status in {Solve_Succeeded, Solved_To_Acceptable_Level}; defects re-evaluated from the returned numbers | status ok, max defect < 1e-9 |
 | G4 mesh | re-solve at 2N from the N solution | cost change < 1e-3 relative (M ≤ 16); reported above |
 | G5 mirror | mirrored swirl's cost | 1e-6 relative |
-| G6 oracle | two-agent head-on case vs the closed form below | 5e-4 relative at N = 100, 5e-5 at N = 400 (the discrete optimum cuts the arc's corner, so it sits BELOW J* by O(h²) and converges from below) |
+| G6 oracle | two-agent head-on case vs the closed form below | 5e-4 relative at N = 100, 5e-5 at N = 400 (with midpoint clearance the discrete optimum circumscribes the arc, so it sits ABOVE J* by O(h²) and converges from above; below J* by more than 1e-6 fails) |
 
 **The closed-form oracle (G6).** `x_1: (−a,0,0) → (a,0,0)`,
 `x_2: (a,0,0) → (−a,0,0)`, 2D. In centre-of-mass `c` and relative
@@ -291,8 +296,12 @@ Jacobian is the analytic `A` from `barrier_terms`, not a complex step.
 **Seed.** The direct barrier solve at the same `(ε, l)`. Two seeds, compared
 (a test of the covector rule on a new transcription, gate X1):
 - `λ(t) = −V(t)` from the direct solution (exact at the optimum);
-- `oc.duals_to_costates('trapezoid', mu = defect multipliers from
-  opti.lam_g on the defect rows)`, sign resolved by correlation with `−V`.
+- `oc.duals_to_costates('trapezoid-nodal', mu = defect multipliers from
+  opti.lam_g on the defect rows)`: column k of `lamDefect` is `+V` at the
+  MIDPOINT of interval k (measured on the Route 1 fixtures), so
+  `λ = −lamDefect` stationed at the interval midpoints and the
+  adjacent-interval average at the N+1 nodes is the map ('trapezoid',
+  left-node stationing, would inject a half-step phase error).
 The first seeds the engine.
 
 **ε ladder (fallback only).** If the engine fails from the ε = 1e-5 seed,

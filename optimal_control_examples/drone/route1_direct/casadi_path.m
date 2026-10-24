@@ -1,9 +1,8 @@
 function casadi_path()
 %% Purpose:
 %
-%   Put CasADi on the path if casadi.Opti is not already there, from the
-%   user's home (the cr3bp_minenergy_pmp convention). No absolute path is
-%   written down.
+%   Put CasADi on the path if casadi.Opti is not already there, from
+%   ~/casadi-3.7.0 under the user's home. No absolute path is written down.
 %
 %% Inputs:
 %

@@ -5,10 +5,16 @@ function ok = test_direct_small()
 %     1. hard mode: verify_drones_direct says ok, every gate's number is in
 %        range, J is above the rigorous two-pair bound 0.2003202 (relax to the
 %        two antipodal head-on pairs, each the two-agent closed form) and
-%        within 0.5 % of J_LB = 0.200. Finding: the hard optimum 0.2006465 is
-%        above the paper's OCFormer 0.2003 (which sits at the pair bound with
-%        no room for cross-pair avoidance) and SympOCNet's 0.2001 is infeasible
-%        under the stated clearance; the paper numbers are reported, not gated;
+%        within 0.5 % of J_LB = 0.200. Finding: the hard optimum 0.2006465
+%        (a gated local minimum; every seed tried lands on it) is 3.3e-4
+%        above the pair bound for the cross-pair avoidance it needs.
+%        OCFormer's 0.2003 is a 4-decimal rounding within 3e-5 of the bound
+%        0.2003202, so the rounding leaves at most 3e-5 for that avoidance.
+%        SympOCNet's 0.2001 is 2.2e-4 BELOW the rigorous bound: either its
+%        trajectory violates the clearance, or the paper's own trapezoid
+%        quadrature on its (unstated) grid under-evaluates the swirl -- the
+%        second likelier, given the paper's positive-clearance claim. The
+%        paper numbers are reported, not gated;
 %     2. the mirror solve (opposite swirl) agrees in cost to 1e-6;
 %     3. barrier mode: solves; out.Unodes equals barrier_terms at the
 %        solution nodes to 1e-12 (pins the CasADi copy of the barrier);
@@ -16,7 +22,9 @@ function ok = test_direct_small()
 %        optimum (the barrier can only add);
 %     4. a failed solve (max_iter = 2) is NOT verified, and .why names the
 %        IPOPT status;
-%     5. the sphere layout (not mirror-symmetric) skips G5 with a note.
+%     5. the sphere layout (not mirror-symmetric) skips G5 with a note;
+%     6. refusals: bumpScale <= 0 (solve_drones_direct:bump), a partial or
+%        misshapen warm start (solve_drones_direct:warm).
 %
 %% Inputs:
 %
@@ -79,10 +87,31 @@ repS = verify_drones_direct(oS, struct('mirror', true));
 ok = chk(ok, oS.success && repS.ok && ~repS.G5.ran && ~isempty(repS.G5.note), ...
          sprintf('sphere M = 6: ok, mirror skipped (%s), ball clearance %.2e', repS.G5.note, repS.G1.minHballFine));
 
+% refusals by identifier, no solve: a non-positive bumpScale, a partial or misshapen warm start
+ok = chk(ok, strcmp(throwId(@() solve_drones_direct(x0, xT, geom, struct('bumpScale', [1 1 0 1]))), 'solve_drones_direct:bump'), ...
+         'bumpScale with an entry <= 0 refused by solve_drones_direct:bump');
+ok = chk(ok, strcmp(throwId(@() solve_drones_direct(x0, xT, geom, struct('X0', oH.X))), 'solve_drones_direct:warm'), ...
+         'a partial warm start (X0 without V0) refused by solve_drones_direct:warm');
+ok = chk(ok, strcmp(throwId(@() solve_drones_direct(x0, xT, geom, struct('N', 50, 'X0', oH.X, 'V0', oH.V))), 'solve_drones_direct:warm'), ...
+         'a warm start of the wrong shape (N = 100 arrays at N = 50) refused by solve_drones_direct:warm');
+
 if ok, fprintf('TEST_DIRECT_SMALL: ALL PASS\n'); else, fprintf('TEST_DIRECT_SMALL: FAILURE\n'); end
 end
 
 % ------------------------------------------------------------------------
+function id = throwId(f)
+%% Purpose:
+%
+%   The identifier f() throws, or '' when it returns.
+%
+id = '';
+try
+    f();
+catch err
+    id = err.identifier;
+end
+end
+
 function s = tern(c, a, b)
 %% Purpose:
 %

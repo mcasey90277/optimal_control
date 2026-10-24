@@ -13,13 +13,23 @@ function rep = verify_drones_direct(out, opts)
 %                    defects, re-evaluated here from out.X, out.V (not read
 %                    from out.maxDefect), < 1e-9
 %     G4 mesh        (opts.mesh) re-solve at 2N warm-started from the
-%                    interpolant; relative cost change
-%     G5 mirror      (opts.mirror) re-solve with the opposite swirl; costs
-%                    agree -- only meaningful on a mirror-symmetric layout
-%                    (the paper's circles/rings and headon); skipped with
-%                    a note otherwise; a G5 that did not run has
-%                    .ran = false, .ok = false, .relDiff = NaN and does
-%                    not enter rep.ok (a G5 that ran and failed does)
+%                    interpolant (IPOPT's warm options apply); relative
+%                    cost change; the 2N solution is returned in
+%                    rep.G4.out so a caller can ADOPT it when it is
+%                    cheaper (a different basin, not discretisation
+%                    error: see drone_table1). A G4 that did not run has
+%                    .ran = false, .ok = NaN, .relChange = NaN, .out = []
+%                    and does not enter rep.ok
+%     G5 mirror      (opts.mirror) re-solve with the opposite swirl SENSE
+%                    (same bump and bumpScale); costs agree -- only
+%                    meaningful on a mirror-symmetric layout (the paper's
+%                    circles/rings and headon); skipped with a note
+%                    otherwise; a G5 that did not run has .ran = false,
+%                    .ok = false, .relDiff = NaN and does not enter rep.ok
+%                    (a G5 that ran and failed does). G5 is a swirl-sense
+%                    flip: it tests seed independence and the reflection
+%                    symmetry, and it CANNOT see a symmetry-broken basin
+%                    (the reflected seed lands in the reflected basin)
 %
 %% Inputs:
 %
@@ -37,11 +47,17 @@ function rep = verify_drones_direct(out, opts)
 %                                                   solve_drones_direct, at
 %                                                   the row's N); used only
 %                                                   when both are non-empty
+%                                                   .G4 [[]] a G4 block from
+%                                                   an earlier verify of the
+%                                                   SAME out: used as is, no
+%                                                   2N re-solve
 %
 %% Outputs:
 %
 %  rep                      struct                  .ok .why .G1 .G2 .G3
-%                                                   .G4 .G5 (.out = mirror solve) .notes
+%                                                   .G4 (.out = 2N solve)
+%                                                   .G5 (.out = mirror
+%                                                   solve) .notes
 %
 %% Revision History:
 %  M. Casey                                                   (c) 10/23/2026
@@ -74,6 +90,8 @@ tolMesh  = d('tolMesh', 1e-3);
 tolMir   = d('tolMirror', 1e-6);
 mirX0    = d('mirrorX0', []);
 mirV0    = d('mirrorV0', []);
+G4given  = d('G4', []);
+if isfield(out, 'bumpScale'), bScale = out.bumpScale; else, bScale = ones(1, geom.M); end
 rep = struct('ok', false, 'why', '', 'notes', {{}});
 
 %% G3 first: a failed solve has no gates worth reading; the defects are
@@ -104,14 +122,17 @@ end
 rep.G2 = struct('gap', out.J - out.JLB, 'ok', out.J >= out.JLB - 1e-12);
 
 %% G4: mesh
-rep.G4 = struct('ran', false, 'J2N', NaN, 'relChange', NaN, 'ok', true);
-if doMesh && out.success
+rep.G4 = struct('ran', false, 'J2N', NaN, 'relChange', NaN, 'ok', NaN, 'status', '', 'success', false, 'out', []);
+if ~isempty(G4given)
+    rep.G4 = G4given;
+elseif doMesh && out.success
     [X2, V2] = hermite_resample(out.X, out.V, out.tN, 2);
     o2 = solve_drones_direct(reshape(out.X(:,1), 3, geom.M), reshape(out.X(:,end), 3, geom.M), geom, ...
                              struct('N', 2*out.N, 'T', out.T, 'mode', out.mode, 'sense', out.sense, ...
-                                    'bump', out.bump, 'pairs', out.pairs, 'midpoints', out.midpoints, ...
-                                    'X0', X2, 'V0', V2));
-    rep.G4.ran = true;  rep.G4.J2N = o2.J;
+                                    'bump', out.bump, 'bumpScale', bScale, 'pairs', out.pairs, ...
+                                    'midpoints', out.midpoints, 'X0', X2, 'V0', V2));
+    rep.G4.ran = true;  rep.G4.J2N = o2.J;  rep.G4.out = o2;
+    rep.G4.status = o2.ipoptStatus;  rep.G4.success = o2.success;
     rep.G4.relChange = abs(o2.J - out.J)/abs(out.J);
     rep.G4.ok = o2.success && rep.G4.relChange < tolMesh;
 end
@@ -124,7 +145,7 @@ if doMirror && out.success
         % a warm-started row must be mirrored against a warm-started mirror:
         % with opts.mirrorX0/V0 the re-solve starts from them, else cold
         mopts = struct('N', out.N, 'T', out.T, 'mode', out.mode, 'sense', -out.sense, ...
-                       'bump', out.bump, 'pairs', out.pairs, 'midpoints', out.midpoints);
+                       'bump', out.bump, 'bumpScale', bScale, 'pairs', out.pairs, 'midpoints', out.midpoints);
         if ~isempty(mirX0) && ~isempty(mirV0)
             mopts.X0 = mirX0;  mopts.V0 = mirV0;
         end
@@ -151,7 +172,9 @@ elseif ~rep.G1.ok
     rep.why = sprintf('G1: fine-grid clearance %.2e below %.1e', min(minH, minHb), -tolG1);
 elseif ~rep.G2.ok
     rep.why = sprintf('G2: J = %.6f below J_LB = %.6f', out.J, out.JLB);
-elseif ~rep.G4.ok
+elseif rep.G4.ran && ~rep.G4.success
+    rep.why = sprintf('G4: the 2N re-solve failed (IPOPT %s)', rep.G4.status);
+elseif rep.G4.ran && ~rep.G4.ok
     rep.why = sprintf('G4: cost changed %.2e relative at 2N', rep.G4.relChange);
 elseif rep.G5.ran && ~rep.G5.ok && ~rep.G5.success
     rep.why = sprintf('G5: mirror re-solve failed (%s)', rep.G5.status);

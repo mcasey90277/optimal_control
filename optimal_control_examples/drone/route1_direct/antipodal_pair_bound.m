@@ -9,9 +9,11 @@ function pb = antipodal_pair_bound(x0, xT, T, r)
 %   two-agent head-on problem, whose cost is at least ell^2/(4T) with
 %       ell = 2 sqrt(D^2 - R^2) + R (pi - 2 acos(R/D)),
 %   D the pair distance and R = 2r (tests/test_direct_oracle.m checks the
-%   closed form against a solve). Agents in no pair contribute zero, so the
-%   bound is 0 on a layout without swaps. Used by drone_table1 and
-%   run_drones; tests/test_table1_fixture.m keeps its own copy.
+%   closed form against a solve). An agent in no pair contributes its own
+%   straight-line cost |xT_i - x0_i|^2/(2T) (its term of J_LB), so the bound
+%   never falls below J_LB, and equals J_LB on a layout without swaps. Used
+%   by drone_table1 and run_drones; tests/test_table1_fixture.m keeps its
+%   own copy.
 %
 %% Inputs:
 %
@@ -26,7 +28,9 @@ function pb = antipodal_pair_bound(x0, xT, T, r)
 %% Outputs:
 %
 %  pb                       double                  Sum over the pairs of
-%                                                   ell^2/(4T); errors with
+%                                                   ell^2/(4T) plus
+%                                                   |dx|^2/(2T) per unpaired
+%                                                   agent; errors with
 %                                                   antipodal_pair_bound:
 %                                                   geometry if a pair has
 %                                                   D <= R
@@ -69,5 +73,8 @@ for ia = 1:M
             break
         end
     end
+end
+for ia = find(~used)
+    pb = pb + sum((xT(:, ia) - x0(:, ia)).^2)/(2*T);   % unpaired: the straight line
 end
 end

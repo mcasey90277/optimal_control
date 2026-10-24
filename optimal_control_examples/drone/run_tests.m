@@ -27,6 +27,7 @@ root = fileparts(fileparts(here));
 % oclib is not used by Stage 0; Stages 1-3 append their tests here and need oc.*
 addpath(fullfile(here, 'drone_dynamics'), fullfile(here, 'drone_dynamics', 'tests'), ...
         fullfile(here, 'quad_flight'), fullfile(here, 'quad_flight', 'tests'), ...
+        fullfile(here, 'route1_direct'), fullfile(here, 'route1_direct', 'tests'), ...
         fullfile(root, 'oclib'));
 
 names = {'test_drone_params'          % the constants
@@ -37,7 +38,11 @@ names = {'test_drone_params'          % the constants
          'test_layouts'               % the paper's J_LB column, pair_list
          'test_clearance_terms'       % gaps, unit vectors, hermite_resample
          'test_barrier_terms'         % the barrier and its derivatives
-         'test_quad_flight'};         % flight script pieces: frames, ZOH flight, georef, plots, movie
+         'test_quad_flight'           % flight script pieces: frames, ZOH flight, georef, plots, movie
+         'test_direct_oracle'         % Route 1: the two-agent closed form (G6), N = 100 and 400
+         'test_direct_small'          % Route 1: M = 4 circle, all gates, barrier pinned, failure path, sphere
+         'test_table1_fixture'        % Route 1: the committed fixtures and the CSV
+         'test_plot_drones'};         % Route 1: headless plot + 1280x720 movie
 
 res = false(1, numel(names));
 secs = zeros(1, numel(names));

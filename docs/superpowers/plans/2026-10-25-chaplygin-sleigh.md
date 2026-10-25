@@ -1057,12 +1057,16 @@ for a = [0.2, -0.2, 0]
         if a ~= 0
             ok = check(ok, abs(Y(4, end) - out.asymptote) < 1e-3, ...
                        sprintf('%s: v(end) = %.6f -> sign(a) sqrt(C) = %.6f (|diff| < 1e-3)', tag, Y(4, end), out.asymptote));
-            nFlip = nnz(diff(sign(Y(4, :))) ~= 0);
+            vs = Y(4, Y(4, :) ~= 0);                  % ignore exact-zero samples: (-, 0, +) is ONE crossing
+            nFlip = nnz(diff(sign(vs)) ~= 0);
             if a*v0 > 0
                 ok = check(ok, nFlip == 0, sprintf('%s: center of mass leads, v keeps its sign (flips %d)', tag, nFlip));
             else
-                ok = check(ok, nFlip == 1, sprintf('%s: center of mass trails, v reverses exactly once (flips %d)', tag, nFlip));
+                ok = check(ok, nFlip == 1, sprintf('%s: center of mass trails, the signed speed crosses zero exactly once (flips %d)', tag, nFlip));
             end
+            dth = abs(Y(3, end) - out.thetaInf);
+            ok = check(ok, dth < 1e-4, sprintf('%s: total heading change %.6f vs exact sign(w0) (b/|a|) acos(sign(a) v0/S) = %.6f (|diff| %.1e < 1e-4)', ...
+                       tag, Y(3, end) - Y(3, 1), out.thetaInf - Y(3, 1), dth));
         else
             cv = max(abs(Y(4, :) - v0));  cw = max(abs(Y(5, :) - w0));
             ok = check(ok, cv < 1e-10 && cw < 1e-10, sprintf('%s: knife edge, v and w constant (%.1e, %.1e)', tag, cv, cw));
@@ -1084,6 +1088,21 @@ ok = check(ok, max(abs(outS.vExact - 1)) < 1e-15 && all(outS.wExact == 0) && all
 outR = sleigh_quantities(t, zeros(5, numel(t)), p);
 ok = check(ok, all(isfinite(outR.vExact)) && all(isfinite(outR.wExact)) && outR.C == 0 && all(outR.E == 0), ...
            'v0 = w0 = 0: C = 0, exact solution finite (rest), E = 0');
+
+% trailing launch with w0 = 0 is an (unstable) equilibrium: it never reverses
+[~, Yu] = ode113(@(tt, yy) sleigh_rhs(tt, yy, p), t, [0; 0; 0; -1; 0], odeOpts);
+ok = check(ok, max(abs(Yu(:, 4) + 1)) < 1e-12 && max(abs(Yu(:, 5))) < 1e-12, ...
+           'a = +0.2, v0 = -1, w0 = 0: the trailing straight ride is an exact (unstable) equilibrium, v stays -1');
+
+% tiny w0: the exact solution must stay finite (the atanh form would give NaN because C rounds to v0^2)
+tL = 0:0.05:25;
+[~, Yt] = ode113(@(tt, yy) sleigh_rhs(tt, yy, p), tL, [0; 0; 0; -1; 1e-10], odeOpts);
+outT = sleigh_quantities(tL, Yt.', p);
+ok = check(ok, all(isfinite(outT.vExact)) && all(isfinite(outT.wExact)) && abs(outT.wExact(1) - 1e-10) < 1e-25, ...
+           'w0 = 1e-10: exact solution finite, wExact(1) = w0');
+kz = find(Yt(:, 4) > 0, 1);
+ok = check(ok, ~isempty(kz) && abs(tL(kz) - 17.29) < 0.1 && max(abs(Yt(:, 4).' - outT.vExact)) < 1e-6, ...
+           sprintf('w0 = 1e-10: the trailing sleigh reverses near 17.29 s (first v > 0 at %.2f s), exact solution tracks it', tL(max(kz, 1))));
 
 ok = check(ok, throws(@() sleigh_params(0, 0.1, 0.2), 'sleigh_params:value') && ...
                throws(@() sleigh_params(1, -1, 0.2), 'sleigh_params:value') && ...
@@ -1219,10 +1238,10 @@ if nargin == 0
      disp(q.');  disp(qd.');  disp(L);  disp(A);
      return
 end
-syms xc yc th xcd ycd thd real
+syms xc yc th xcd ycd thdot real            % not `thd`: a Signal Processing Toolbox function shadows that name
 q  = [xc; yc; th];
-qd = [xcd; ycd; thd];
-L  = p.m/2*(xcd^2 + ycd^2) + p.J/2*thd^2;
+qd = [xcd; ycd; thdot];
+L  = p.m/2*(xcd^2 + ycd^2) + p.J/2*thdot^2;
 A  = [-sin(th), cos(th), -p.a];
 end
 ```
@@ -1289,11 +1308,13 @@ function out = sleigh_quantities(t, Y, p)
 %   Everything derived from a reduced solution: the blade and center-of-
 %   mass paths, the energy E = m/2 v^2 + Jb/2 w^2, the blade's constraint
 %   force lambda = m J v w / Jb, the invariant C = v^2 + (Jb/m) w^2, the
-%   exact solution v(t) = sqrt(C) tanh(k sqrt(C) (t - t0)) and w(t) = w0
-%   sech(k sqrt(C) (t - t0)) / sech(k sqrt(C) t0) (constants when a = 0 or
-%   w0 = 0), the asymptote sign(a) sqrt(C), and the full-state arrays
-%   [q; qd] and [qd; qdd] of the center-of-mass description that the
-%   symbolic builder is checked against.
+%   exact solution in its well-conditioned form (b = sqrt(Jb/m), S =
+%   sqrt(C), alpha = asinh(v0/(b |w0|)), z = alpha + k S t: v = S tanh z,
+%   w = sign(w0) (S/b) sech z; constants when a = 0 or w0 = 0), the
+%   asymptote sign(a) S (v0 when a = 0 or w0 = 0), the exact total heading
+%   change theta_inf = theta_0 + sign(w0) (b/|a|) acos(sign(a) v0/S), and
+%   the full-state arrays [q; qd] and [qd; qdd] of the center-of-mass
+%   description that the symbolic builder is checked against.
 %
 %% Inputs:
 %
@@ -1310,7 +1331,9 @@ function out = sleigh_quantities(t, Y, p)
 %  out                      struct                  .rb .rc [2 x N]; .E
 %                                                   .lambda .vExact
 %                                                   .wExact [1 x N]; .C;
-%                                                   .asymptote; .Yfull [6
+%                                                   .asymptote; .thetaInf
+%                                                   (NaN when a = 0 or
+%                                                   w0 = 0); .Yfull [6
 %                                                   x N] = [xc; yc; th;
 %                                                   xcd; ycd; thd];
 %                                                   .Yfulld [6 x N] =
@@ -1352,15 +1375,21 @@ out.Yfulld = [vc; w; ac; wd];
 
 s = t - t(1);
 if p.a ~= 0 && w(1) ~= 0
-    sC = sqrt(out.C);
-    t0 = -atanh(v(1)/sC)/(p.k*sC);
-    out.vExact    = sC*tanh(p.k*sC*(s - t0));
-    out.wExact    = w(1)*sech(p.k*sC*(s - t0))/sech(p.k*sC*t0);
-    out.asymptote = sign(p.a)*sC;
+    % the well-conditioned form: alpha = asinh(v0/(b |w0|)) never sees the
+    % rounded ratio v0/sqrt(C) = +-1 that the atanh form produces for tiny w0
+    b  = sqrt(p.Jb/p.m);
+    S  = sqrt(out.C);
+    al = asinh(v(1)/(b*abs(w(1))));
+    z  = al + p.k*S*s;
+    out.vExact    = S*tanh(z);
+    out.wExact    = sign(w(1))*(S/b)*sech(z);
+    out.asymptote = sign(p.a)*S;
+    out.thetaInf  = th(1) + sign(w(1))*(b/abs(p.a))*acos(sign(p.a)*v(1)/S);   % total heading change, exact
 else
     out.vExact    = v(1)*ones(size(s));              % knife edge or straight ride: constants
     out.wExact    = w(1)*ones(size(s));
     out.asymptote = v(1);
+    out.thetaInf  = NaN;                             % the heading keeps turning (a = 0) or never changes (w0 = 0)
 end
 end
 ```
@@ -1789,12 +1818,18 @@ leads = a*Y(4, end) > 0;
 settled = abs(Y(5, end)) <= 1e-3*max(abs(w0), eps);
 if a == 0
     fprintf('  NOTE  D5 a = 0: the knife edge; v and w stay constant, the blade runs a circle of radius %.4g m\n', abs(v0/max(abs(w0), eps)));
+elseif w0 == 0 && a*v0 > 0
+    fprintf('  NOTE  D5 w0 = 0: a straight ride at v = %.3g m/s; with the center of mass leading (a v > 0) it is stable to yaw perturbations\n', v0);
+elseif w0 == 0
+    fprintf('  NOTE  D5 w0 = 0: a straight ride at v = %.3g m/s with the center of mass TRAILING (a v < 0): an exact but unstable equilibrium, any yaw would grow and reverse it\n', v0);
 elseif leads && settled
-    fprintf('  PASS  D5 asymptotics: center of mass leads (a v > 0), |w(end)| = %.1e; straight motion is stable with the center of mass ahead of the blade\n', abs(Y(5, end)));
+    fprintf('  PASS  D5 asymptotics: v -> sign(a) sqrt(C) = %+.6f (v(end) %+.6f), |w(end)| = %.1e, heading change %.4f rad vs exact %.4f; straight motion with the center of mass leading is stable to yaw (one of a line of equilibria: it attracts transversely, on its energy ellipse)\n', ...
+            out.asymptote, Y(4, end), abs(Y(5, end)), Y(3, end) - Y(3, 1), out.thetaInf - Y(3, 1));
 elseif leads
     fprintf('  NOTE  D5 asymptotics: center of mass leads at the end but |w(end)| = %.1e has not settled below 1e-3 |w0| by t = %.3g s (lengthen tEnd)\n', abs(Y(5, end)), tEnd);
 else
-    fprintf('  NOTE  D5 asymptotics: the center of mass still trails (a v < 0) at t = %.3g s; this motion is unstable, the sleigh will turn around (lengthen tEnd to see it)\n', tEnd);
+    fprintf('  NOTE  D5 asymptotics: the center of mass still trails (a v < 0) at t = %.3g s; this is the unstable branch, |w| grows until the signed speed crosses zero (at t = %.3g s) and the sleigh then departs along sign(a) (lengthen tEnd to see it)\n', ...
+            tEnd, -atanh(v0/sqrt(C))/(p.k*sqrt(C)));
 end
 
 %% 6. PLOTS AND MOVIE
@@ -1851,18 +1886,27 @@ Open `run_sleigh.m`, edit section 1 (`m`, `J`, `a`, `v0`, `w0`, `tEnd`,
 writes `results/<label>_path.png`, `results/<label>_diag.png` and
 `results/<label>.mp4` (1280 x 720). `results/` is git-ignored.
 
-Try `a = -0.2` (or `v0 = -1`): the center of mass trails the blade,
-straight motion is unstable and the sleigh turns around.
+Try `a = -0.2` (or `v0 = -1`): the center of mass trails the blade, the
+straight ride is unstable to yaw, |w| grows until the signed speed crosses
+zero, and the sleigh departs the other way. With `w0 = 0` nothing happens
+in either case: a straight ride is an exact equilibrium, stable or not.
 
 ## What is checked, every run
 
 | line | what | reference |
 |---|---|---|
 | D1 | the hand-derived reduced equations (`sleigh_rhs`) against the symbolic Lagrange-d'Alembert builder (`mech.lagrange_dalembert` on `sleigh_lagrangian`) | independent derivation |
-| D2 | v(t) and w(t) against the exact solution v = sqrt(C) tanh(k sqrt(C) (t - t0)) | closed form |
+| D2 | v(t) and w(t) against the exact solution v = S tanh z, w = sign(w0) (S/b) sech z, z = asinh(v0/(b abs(w0))) + k S t | closed form |
 | D3 | energy E = m/2 v^2 + (J + m a^2)/2 w^2 | conserved |
-| D4 | constraint residual A qd at the blade | zero |
-| D5 | the asymptote sign(a) sqrt(C) and the decay of w | stability statement |
+| D4 | constraint residual A qd on the reconstructed center-of-mass state | a consistency check of the mapping (it is zero by construction); D1-D3 are the independent evidence |
+| D5 | the asymptote sign(a) sqrt(C), the decay of w, the total heading change sign(w0) (b/abs(a)) acos(sign(a) v0/S) | stability statement |
+
+Straight motion is a LINE of equilibria (v, 0): the one with the center of
+mass leading (a v > 0) is Lyapunov stable and attracts transversely (on its
+energy ellipse it is asymptotically stable); the trailing one (a v < 0) is
+unstable to yaw. No energy is dissipated: the constraint force does no
+work, yaw energy is traded into translation (and the other way first, on a
+trailing launch).
 
 ## Conventions (binding)
 
@@ -1939,7 +1983,7 @@ and paste the two strings into section 3 (edit them to the note's symbols: `\dot
 \maketitle
 
 \begin{abstract}
-A planar rigid body rides on a knife-edge blade offset from its center of mass. The blade cannot slip sideways: a constraint linear in velocity that is not the differential of any function, so the system is nonholonomic and the usual Lagrange equations do not apply. This note derives the equations of motion by the Lagrange--d'Alembert principle with a multiplier, reduces them to two first-order equations in the blade's forward speed and the yaw rate, solves those in closed form, and shows that straight motion is asymptotically stable exactly when the center of mass leads the blade. The MATLAB script \texttt{run\_sleigh.m} checks every step numerically.
+A planar rigid body rides on a knife-edge blade offset from its center of mass. The blade cannot slip sideways: a constraint linear in velocity that fails the Frobenius integrability condition, so the system is nonholonomic and the usual Lagrange equations do not apply. This note derives the equations of motion by the Lagrange--d'Alembert principle with a multiplier, reduces them to two first-order equations in the blade's forward speed and the yaw rate, solves those in closed form (speed, yaw rate and the total heading change), and shows that among the straight motions, which form a line of equilibria, those with the center of mass leading the blade are stable to yaw and attract their neighbours while those with it trailing are unstable. The MATLAB script \texttt{run\_sleigh.m} checks every step numerically.
 \end{abstract}
 
 \section{Setup and conventions}
@@ -1982,20 +2026,24 @@ The blade's velocity is $\dot\rv_b = \dot\rv_c - a\omega\,\e_2$, and the knife e
 A(q)\,\dot q = 0,\qquad A = \begin{bmatrix} -\sin\theta & \cos\theta & -a \end{bmatrix}.
 \label{eq:constraint}
 \end{equation}
-This one-form is not closed, so no coordinate change turns it into a holonomic constraint; the sleigh has three configuration degrees of freedom but only two velocity degrees of freedom. The Lagrange--d'Alembert principle states that the constraint force does no work on admissible velocities, which puts it in the row space of $A$:
+Is this constraint holonomic in disguise? A one-form $\alpha$ defines a holonomic constraint when some integrating factor makes it exact, and Frobenius' theorem says that happens if and only if $\alpha\wedge d\alpha = 0$. Here $\alpha = -\sin\theta\,dx_c + \cos\theta\,dy_c - a\,d\theta$, $d\alpha = -\cos\theta\,d\theta\wedge dx_c - \sin\theta\,d\theta\wedge dy_c$, and
+\[
+\alpha\wedge d\alpha = -\,dx_c\wedge dy_c\wedge d\theta \neq 0
+\]
+for every $a$, including $a = 0$. So no coordinate change turns \eqref{eq:constraint} into a condition on positions: the sleigh has three configuration degrees of freedom but only two velocity degrees of freedom. (Non-closedness alone would not prove this: $e^x\,dy$ is not closed, yet its zero set is $\dot y = 0$.) The Lagrange--d'Alembert principle states that the constraint force does no work on admissible velocities, which puts it in the row space of $A$:
 \begin{equation}
 \frac{d}{dt}\frac{\partial L}{\partial \dot q} - \frac{\partial L}{\partial q} = A^{\!\top}\lambda
 \quad\Longrightarrow\quad
 m\ddot x_c = -\lambda\sin\theta,\qquad m\ddot y_c = \lambda\cos\theta,\qquad J\ddot\theta = -a\lambda .
 \label{eq:LdA}
 \end{equation}
-$\lambda$ is the sideways force the ice exerts on the blade, along $\e_2$, and $-a\lambda$ is its moment about the center of mass. Together with the time derivative of \eqref{eq:constraint}, $A\ddot q + \dot A\dot q = 0$, the four unknowns $(\ddot q, \lambda)$ satisfy the block system
+$\lambda$ is the sideways force the ice exerts on the blade, along $\e_2$, and $-a\lambda$ is its moment about the center of mass. In general, with $p = \partial L/\partial\dot q$, $M = \partial p/\partial\dot q$ and $h = (\partial p/\partial q)\,\dot q - \partial L/\partial q$ (the Euler--Lagrange terms left after removing $M\ddot q$, for an autonomous $L$), and with generalized forces $Q$, the equations are $M\ddot q + h = Q + A^{\!\top}\lambda$. Together with the time derivative of the constraint, $A\ddot q + \dot A\dot q = 0$, the unknowns $(\ddot q, \lambda)$ satisfy the block system
 \[
 \begin{bmatrix} M & A^{\!\top} \\ A & 0 \end{bmatrix}
 \begin{bmatrix} \ddot q \\ -\lambda \end{bmatrix} =
-\begin{bmatrix} 0 \\ -\dot A\dot q \end{bmatrix},
+\begin{bmatrix} Q - h \\ -\dot A\dot q \end{bmatrix},
 \]
-which is exactly what \texttt{mech.lagrange\_dalembert} solves symbolically for any $L$, $A$ and generalized force $Q$.
+which is what \texttt{mech.lagrange\_dalembert} solves symbolically for any $L$, $A$ and $Q$ with $M$ nonsingular and $A$ of full row rank. For the sleigh $Q = 0$ and $h = 0$ (Cartesian coordinates, no potential), and the top block reduces to \eqref{eq:LdA}.
 
 \section{Reduction to the blade's speed and the yaw rate}
 Define the quasi-velocities $v = \dot\rv_b\cdot\e_1 = \dot x_c\cos\theta + \dot y_c\sin\theta$ (the forward speed, the same for blade and center of mass) and $\omega = \dot\theta$. The constraint gives $\dot\rv_c = v\,\e_1 + a\omega\,\e_2$, and differentiating,
@@ -2024,22 +2072,33 @@ and \eqref{eq:reduced} conserves it: $\dot E = m v\,a\omega^2 - (J + ma^2)\,k\,v
 \[
 v^2 + \frac{J + m a^2}{m}\,\omega^2 = C,\qquad C = v_0^2 + \frac{J + m a^2}{m}\,\omega_0^2 .
 \]
-Eliminating $\omega^2$ from $\dot v = a\omega^2$ gives $\dot v = k\,(C - v^2)$, a Riccati equation with the solution
+Eliminating $\omega^2$ from $\dot v = a\omega^2$ gives $\dot v = k\,(C - v^2)$, a Riccati equation. For $a \neq 0$ and $\omega_0 \neq 0$, write $b = \sqrt{(J + ma^2)/m}$, $S = \sqrt{C}$ and
 \begin{equation}
-v(t) = \sqrt{C}\,\tanh\!\big(k\sqrt{C}\,(t - t_0)\big),\qquad t_0 = -\frac{\operatorname{artanh}(v_0/\sqrt{C})}{k\sqrt{C}},\qquad
-\omega(t) = \omega_0\,\frac{\operatorname{sech}\!\big(k\sqrt{C}\,(t - t_0)\big)}{\operatorname{sech}\!\big(k\sqrt{C}\,t_0\big)} .
+z(t) = \alpha + kS\,t,\qquad \alpha = \operatorname{arsinh}\!\frac{v_0}{b\,|\omega_0|},\qquad
+v(t) = S\tanh z,\qquad \omega(t) = \operatorname{sign}(\omega_0)\,\frac{S}{b}\,\operatorname{sech} z .
 \label{eq:exact}
 \end{equation}
-$\omega$ never changes sign (its equation is linear in $\omega$), and $v \to \operatorname{sign}(a)\sqrt{C}$. Two special cases: $a = 0$ is the knife edge, $k = 0$, $v$ and $\omega$ constant and the blade runs a circle of radius $v_0/\omega_0$ with $\lambda = m v\omega$ the centripetal force; $\omega_0 = 0$ is the straight ride at constant $v_0$ for every $a$. Line D2 of the script measures the integrator against \eqref{eq:exact}, D3 against \eqref{eq:energy}, D4 against \eqref{eq:constraint}.
+At $t = 0$ this returns $v_0$ and $\omega_0$ (since $\tanh\alpha = v_0/S$ and $\cosh\alpha = S/(b|\omega_0|)$), and it is the form to evaluate numerically: the equivalent $v = S\tanh(kS(t - t_0))$ with $t_0 = -\operatorname{artanh}(v_0/S)/(kS)$ fails for tiny $\omega_0$, where $C$ rounds to $v_0^2$ and $\operatorname{artanh}(\pm 1)$ is infinite. $\omega$ never changes sign (its equation is linear in $\omega$; equivalently $\omega = \omega_0\exp(-k\int_0^t v)$), and $v \to \operatorname{sign}(a)\,S$. The heading also integrates exactly, since $\int\operatorname{sech} z\,dz$ is the Gudermannian:
+\begin{equation}
+\theta_\infty - \theta_0 = \operatorname{sign}(\omega_0)\,\frac{b}{|a|}\,\arccos\!\frac{\operatorname{sign}(a)\,v_0}{S},
+\label{eq:heading}
+\end{equation}
+which can exceed several revolutions when $|a|$ is small. Two special cases fall outside \eqref{eq:exact}: $a = 0$ is the knife edge, $k = 0$, $v$ and $\omega$ constant and the blade runs a circle of radius $|v_0/\omega_0|$ with $\lambda = m v\omega$ the centripetal force; $\omega_0 = 0$ is the straight ride at constant $v_0$ for every $a$, whether or not it is stable. Line D2 of the script measures the integrator against \eqref{eq:exact}, D3 against \eqref{eq:energy}, D5 against \eqref{eq:heading}; D4 evaluates \eqref{eq:constraint} on the reconstructed center-of-mass velocity $\dot\rv_c = v\e_1 + a\omega\e_2$, where it vanishes identically, so D4 is a consistency check of that mapping rather than independent evidence.
 
 \section{Stability of straight motion}
-Straight motion ($\omega = 0$, $v = v_\infty$) is a one-parameter family of equilibria of \eqref{eq:reduced}. Linearizing, $\delta\dot\omega = -k\,v_\infty\,\delta\omega$: perturbations in $\omega$ decay when $k v_\infty > 0$, i.e.\ when $a\,v_\infty > 0$, the center of mass ahead of the blade in the direction of travel, and grow when it trails. The exact solution says the same globally: whatever $v_0$ and $\omega_0$, the sleigh ends up moving at $\operatorname{sign}(a)\sqrt{C}$, so a sleigh launched backward with respect to its stable direction swings around once and departs forward (Figure~\ref{fig:paths}). The energy is conserved throughout; what is dissipated is the \emph{rotation}, traded into translation through the constraint force.
+Straight motion ($\omega = 0$, $v = V$) is a whole line of equilibria of \eqref{eq:reduced}, one for each speed. Linearizing at $(V, 0)$,
+\[
+\begin{bmatrix}\delta\dot v\\ \delta\dot\omega\end{bmatrix} = \begin{bmatrix} 0 & 0\\ 0 & -kV\end{bmatrix}\begin{bmatrix}\delta v\\ \delta\omega\end{bmatrix},
+\]
+and the zero eigenvalue is real: a perturbation $\delta v$ along the line is itself another equilibrium and never decays, so no single straight motion is asymptotically stable in the $(v, \omega)$ plane. The transverse eigenvalue $-kV$ is what the sign of $a$ decides. When $aV > 0$, the center of mass ahead of the blade in the direction of travel, a yaw perturbation decays and the motion converges to a nearby straight ride at the speed its energy allows: the equilibrium is Lyapunov stable and transversely attracting, and on its own energy ellipse it is asymptotically stable. When $aV < 0$ it is unstable to yaw. The exact solution says the same globally: for $a \neq 0$ and any $\omega_0 \neq 0$, however small, the sleigh ends up moving at $\operatorname{sign}(a)\,S$. A sleigh launched with the center of mass trailing therefore sees $|\omega|$ \emph{grow} (to $S/b$ at the moment $v = 0$), its signed speed cross zero exactly once, at $t_{\rm rev} = -\operatorname{artanh}(v_0/S)/(kS)$, and then departs along the stable direction, turning in total by \eqref{eq:heading} (Figure~\ref{fig:paths}). With $\omega_0 = 0$ exactly, nothing happens: the trailing straight ride is an exact, unstable equilibrium.
+
+No energy is dissipated in this model. The constraint force does no work in total, $\lambda\e_2\cdot\dot\rv_c + (-a\lambda)\omega = a\lambda\omega - a\lambda\omega = 0$, and the kinetic energy \eqref{eq:energy} is conserved. What changes is its split: the rotational part $\tfrac{J}{2}\omega^2$ obeys $\tfrac{d}{dt}\tfrac{J}{2}\omega^2 = -Jk\,v\,\omega^2$, so it decreases when $av > 0$ and increases when $av < 0$, the translational part changing by the opposite amount. Yaw is traded into forward motion through the constraint, reversibly, not dissipated.
 
 \begin{figure}[h]
 \centering
 \includegraphics[width=0.48\textwidth]{figures/sleigh_forward_path.png}\hfill
 \includegraphics[width=0.48\textwidth]{figures/sleigh_backward_path.png}
-\caption{Paths of the center of mass (orange) and the blade (blue) for $a = 0.2$~m, $\omega_0 = 2$~rad/s and $v_0 = +1$~m/s (left, stable: the sleigh curls once and straightens) and $v_0 = -1$~m/s (right, unstable: it turns around and departs the other way). Grey ticks mark the heading every 0.5~s.}
+\caption{Paths of the center of mass (orange) and the blade (blue) for $a = 0.2$~m, $\omega_0 = 2$~rad/s and $v_0 = +1$~m/s (left, the center of mass leads: the heading turns by $1.20$~rad in total and the ride straightens) and $v_0 = -1$~m/s (right, it trails: $|\omega|$ grows, the signed speed crosses zero at $0.617$~s, and the sleigh departs the other way after turning $4.68$~rad in total). Grey ticks mark the heading every 0.5~s.}
 \label{fig:paths}
 \end{figure}
 

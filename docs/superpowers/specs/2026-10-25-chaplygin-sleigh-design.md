@@ -103,16 +103,28 @@ description.
 Conserved energy E = m/2 v^2 + (J + m a^2)/2 w^2. Invariant ellipse in the
 (v, w) plane: v^2 + ((J + m a^2)/m) w^2 = C, C = 2E/m.
 
-Exact solution (w0 ~= 0): vd = k (C - v^2), so
+Exact solution (a ~= 0 and w0 ~= 0): vd = k (C - v^2), so with b =
+sqrt(Jb/m), S = sqrt(C) and the WELL-CONDITIONED parametrization
 
-    v(t) = sqrt(C) tanh(k sqrt(C) (t - t0)),  t0 = -atanh(v0/sqrt(C)) / (k sqrt(C)),
-    w(t) = w0 sech(k sqrt(C) (t - t0)) / sech(k sqrt(C) t0).
+    alpha = asinh(v0 / (b |w0|)),   z = alpha + k S t,
+    v(t) = S tanh z,                w(t) = sign(w0) (S/b) sech z,
+    theta_inf - theta_0 = sign(w0) (b/|a|) acos(sign(a) v0 / S).
 
-w never changes sign; v(t) -> sign(a) sqrt(C). Straight motion is
-asymptotically stable when the center of mass leads the blade (a v > 0) and
-unstable when it trails (a v < 0: the sleigh turns around). a = 0 is the
-knife edge: v, w constant, circular motion, lambda = m v w. With w0 = 0 the
-motion is straight at speed v0 for every a.
+(The equivalent t0 = -atanh(v0/S)/(k S) form is NOT to be evaluated: for
+tiny w0, C rounds to v0^2 and atanh(+-1) is infinite.) w never changes
+sign; v(t) -> sign(a) S. Straight motions (v, 0) form a LINE of equilibria:
+the one with the center of mass leading (a v > 0) is Lyapunov stable and
+transversely attracting (asymptotically stable on its energy ellipse; a
+perturbation along the line is another equilibrium and never decays); the
+trailing one (a v < 0) is unstable to yaw, and a trailing launch with
+w0 ~= 0 sees |w| grow, its signed speed cross zero exactly once at
+t = -atanh(v0/S)/(k S), and departs along sign(a). No energy is dissipated:
+the constraint force does no net work; yaw energy J w^2/2 is traded into
+translation (d/dt (J w^2/2) = -J k v w^2) and back. a = 0 is the knife
+edge: v, w constant, a circle of radius |v0/w0|, lambda = m v w. With
+w0 = 0 the motion is straight at speed v0 for every a (an exact equilibrium,
+stable or not); the asymptote is then v0, not sign(a) S. The constraint is
+nonholonomic by Frobenius: alpha ^ d alpha = -dx dy dth ~= 0 for every a.
 
 ## 4. Library modules
 
@@ -225,10 +237,14 @@ Pipeline, each step printing one line:
      (reported "n/a (w0 = 0)" when there is no tanh solution).
    - D3 energy drift and D4 constraint residual via mech.conservation_check,
      bars 1e-9.
-   - D5 asymptotics: `a * v(end) > 0` and |w(end)| <= 1e-3 |w0| when
-     tEnd is long enough (reported, with the statement "straight motion is
-     stable with the center of mass ahead of the blade"); printed as a
-     verdict, not a gate, since a short tEnd legitimately fails it.
+   - D5 asymptotics: `a * v(end) > 0`, |w(end)| <= 1e-3 |w0| and the total
+     heading change against theta_inf (sleigh_quantities.thetaInf) when
+     tEnd is long enough, with the statement that the leading straight ride
+     is stable to yaw (one of a line of equilibria, transversely
+     attracting); NOTE lines for a = 0, for w0 = 0 (stable or unstable
+     exact equilibrium) and for a trailing run that has not reversed yet
+     (with the exact reversal time); printed as a verdict, not a gate, since
+     a short tEnd legitimately fails it.
 5. `plot_sleigh` and `mech.animate_planar_body` with `sleigh_body`, arrows
    for the center-of-mass velocity and the blade constraint force lambda e2,
    traces for both points, subtitle `t, v, w, lambda, E drift`; outputs in

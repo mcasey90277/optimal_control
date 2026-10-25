@@ -166,8 +166,12 @@ body-coordinate endpoints, `.color`, `.width` (decorations such as a blade);
 [4 x 1] in WORLD coordinates at movie TIME tk (the caller does not know the
 movie grid), `.color`; `.subtitle` = @(tk) a char line. `opts`: `.fps`
 [30], `.seconds` [t(end)], `.traces` [2 x N x T] world paths to grow with
-time (default the reference point), `.title`. Fixed axis limits from the
-whole path plus the body size, equal aspect, dark theme as movie_quad,
+time (default the reference point), `.traceColors`, `.title`, `.follow`
+(window half-height in world units: each frame's limits are centred on the
+reference point at 16:9, traces stay in world coordinates so the moving
+grid reads as motion; default [] = the fixed camera below). Fixed axis
+limits from the whole path plus the body size, equal aspect, dark theme as
+movie_quad,
 frames forced to exact 1280 x 720 (H.264 shears other sizes), MPEG-4 at
 quality 95. Interpolates pose onto the movie's own grid with pchip. Returns
 the MP4 path. Self-demo: a rectangle sliding on a circle, written to
@@ -196,11 +200,16 @@ tempdir.
   the blade point), markers (center of mass, blade), reference point = the
   blade point.
 - `files = plot_sleigh(t, Y, out, p, info, outDir)`: two PNGs,
-  `<label>_path.png` (center-of-mass and blade traces, heading ticks every
-  0.5 s, start and end markers, equal aspect) and `<label>_diag.png`
-  (2 x 3: v(t) with the exact solution and the asymptote, w(t) with the
-  exact solution, th(t), energy drift, constraint residual |A qd|, and the
-  (v, w) phase portrait on the energy ellipse). lambda(t) is drawn on the
+  `<label>_path.png` (two panels: the whole path with center-of-mass and
+  blade traces, start and end markers, equal aspect; and a zoom over the
+  first 4/(|k| sqrt(C)) seconds -- the whole run when a = 0, w0 = 0 or that
+  exceeds tEnd -- with heading ticks every 0.5 s scaled to the zoom span and
+  the body outline from sleigh_body drawn at each tick instant) and
+  `<label>_diag.png` (2 x 3: v(t) with the exact solution and the
+  asymptote, w(t) with the exact solution, th(t), energy drift, the energy
+  split rotational J w^2/2 / translational m |vc|^2/2 / total over E0 with
+  the max constraint residual |A qd| in the title, and the (v, w) phase
+  portrait on the energy ellipse). lambda(t) is drawn on the
   v(t) panel's right axis. Returns the file list. `info.visible` false by
   default so tests run headless.
 
@@ -220,7 +229,7 @@ v0    = 1.0;     % initial forward speed along the blade (m/s)
 w0    = 2.0;     % initial yaw rate (rad/s)
 tEnd  = 10;      % final time (s)
 dtOut = 0.01;    % output step (s)
-movieOpts = struct('fps', 30, 'seconds', tEnd);
+movieOpts = struct('fps', 30, 'seconds', tEnd, 'follow', 1.0);   % follow = camera half-height (m) tracking the sleigh; [] = fixed whole-path camera
 ```
 Initial pose is the blade at the origin heading east (x_b = y_b = th = 0);
 not a user setting.
@@ -233,8 +242,9 @@ Pipeline, each step printing one line:
 4. Diagnostics, one PASS/FAIL line each:
    - D1 hand-derived vs builder: max |sleigh_rhs - sys.f| on the full-state
      solution, after mapping the reduced derivative to [qd; qdd]; bar 1e-9.
-   - D2 exact solution: max |v - vExact| and |w - wExact|; bar 1e-8
-     (reported "n/a (w0 = 0)" when there is no tanh solution).
+   - D2 exact solution: max |v - vExact| and |w - wExact|; bar 1e-8 (the
+     constant solutions at a = 0 or w0 = 0 are exact, so the line is always
+     numeric).
    - D3 energy drift and D4 constraint residual via mech.conservation_check,
      bars 1e-9.
    - D5 asymptotics: `a * v(end) > 0`, |w(end)| <= 1e-3 |w0| and the total
@@ -279,9 +289,11 @@ measured number and its bar, and runs from a fresh clone (no data files).
   (y_b = 0 to 1e-12, th constant). Also the mapping check: the center-of-
   mass velocity from sleigh_quantities satisfies the constraint to 1e-12.
 - `test_sleigh_pipeline`: `checkcode('run_sleigh.m', '-id')` has no
-  error-class messages; sleigh_params refusals; plot_sleigh writes its two
-  PNGs to a temp folder; the animator writes a 20-frame MP4 from
-  sleigh_body.
+  error-class messages; sleigh_body's outline, markers and blade segment;
+  plot_sleigh writes its two PNGs to a temp folder (also for the rest case);
+  the animator writes an MP4 from sleigh_body with the sleigh's arrows and
+  traces (sleigh_params' refusals live in the oracle test; the frame count
+  is asserted in the animator test).
 
 `lagrangianHamiltonianMechanics/run_tests.m` lists the five test functions
 and must print `5 of 5 passed`.

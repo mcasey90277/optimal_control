@@ -11,6 +11,9 @@ function file = animate_planar_body(t, pose, body, stem, opts)
 %   rescales reads as motion that is not there).
 %   Frames are forced to an exact 1280 x 720: H.264 shears a frame whose
 %   size is not a multiple of 16 into diagonal streaks. Knows no system.
+%   Frames are streamed to the VideoWriter (memory does not grow with
+%   fps*seconds). Dependency: imresize (Image Processing Toolbox) is used
+%   only if getframe returns a size other than 720 x 1280.
 %
 %% Inputs:
 %
@@ -131,9 +134,12 @@ half  = max((hi - lo)/2, 1.5*reach);
 if half(1)/half(2) < 16/9, half(1) = half(2)*16/9; else, half(2) = half(1)*9/16; end
 lim   = [mid - half, mid + half];                             % [2 x 2] rows x, y
 
-fig = figure('Color', 'k', 'Position', [100 100 1280 720], 'InvertHardcopy', 'off', 'Visible', 'off');
+fig = figure('Color', 'k', 'Position', [100 100 1280 720], 'Visible', 'off');
 ax  = axes(fig, 'Position', [0.06 0.08 0.88 0.80]);
-frames(nFrame) = struct('cdata', [], 'colormap', []);
+file = [stem '.mp4'];
+vw = VideoWriter(file, 'MPEG-4');
+vw.FrameRate = fps;  vw.Quality = 95;
+open(vw);
 closedOutline = [body.outline, body.outline(:, 1)];
 for kk = 1:nFrame
     cla(ax);  hold(ax, 'on');
@@ -171,22 +177,15 @@ for kk = 1:nFrame
     annotation(fig, 'textbox', [0 0.895 1 0.04], 'String', subtitle(tMov(kk)), 'Color', [0.72 0.72 0.72], ...
         'FontSize', 13, 'FontName', 'FixedWidth', 'HorizontalAlignment', 'center', 'EdgeColor', 'none', 'Interpreter', 'none');
     drawnow;
-    frames(kk) = getframe(fig);
+    fr = getframe(fig);
+    if ~isequal(size(fr.cdata, 1:2), [720 1280])
+        fr.cdata = imresize(fr.cdata, [720 1280]);   % Image Processing Toolbox; not reached when getframe already returns 720 x 1280
+    end
+    writeVideo(vw, fr);                               % streamed: no frame array is held
     delete(findall(fig, 'Type', 'textboxshape'));
 end
 close(fig);
-
-for kk = 1:nFrame
-    if ~isequal(size(frames(kk).cdata, 1:2), [720 1280])
-        frames(kk).cdata = imresize(frames(kk).cdata, [720 1280]);
-    end
-end
-file = [stem '.mp4'];
-v = VideoWriter(file, 'MPEG-4');
-v.FrameRate = fps;  v.Quality = 95;
-open(v);
-for kk = 1:nFrame, writeVideo(v, frames(kk)); end
-close(v);
+close(vw);
 end
 
 % ------------------------------------------------------------------------

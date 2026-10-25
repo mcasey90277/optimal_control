@@ -28,14 +28,13 @@ addpath(fileparts(here), fullfile(root, 'mechlib'));
 
 odeOpts = odeset('RelTol', 1e-12, 'AbsTol', 1e-12);
 t = 0:0.01:8;
-w0 = 2;
-
+for w0 = [2, -2]
 for a = [0.2, -0.2, 0]
     p = sleigh_params(1, 0.1, a);
     [q, qd, L, A] = sleigh_lagrangian(p);
     sys = mech.lagrange_dalembert(q, qd, L, A);
     for v0 = [1, -1]
-        tag = sprintf('a = %+.1f, v0 = %+.0f', a, v0);
+        tag = sprintf('a = %+.1f, v0 = %+.0f, w0 = %+.0f', a, v0, w0);
         [~, Yt] = ode113(@(tt, yy) sleigh_rhs(tt, yy, p), t, [0; 0; 0; v0; w0], odeOpts);
         Y = Yt.';
         out = sleigh_quantities(t, Y, p);
@@ -87,6 +86,7 @@ for a = [0.2, -0.2, 0]
         end
     end
 end
+end
 
 % w0 = 0: straight line at speed v0 for a ~= 0; rest when v0 = w0 = 0
 p = sleigh_params(1, 0.1, 0.2);
@@ -104,6 +104,23 @@ ok = check(ok, all(isfinite(outR.vExact)) && all(isfinite(outR.wExact)) && outR.
 [~, Yu] = ode113(@(tt, yy) sleigh_rhs(tt, yy, p), t, [0; 0; 0; -1; 0], odeOpts);
 ok = check(ok, max(abs(Yu(:, 4) + 1)) < 1e-12 && max(abs(Yu(:, 5))) < 1e-12, ...
            'a = +0.2, v0 = -1, w0 = 0: the trailing straight ride is an exact (unstable) equilibrium, v stays -1');
+
+% a < 0 with w0 = 0: an exact equilibrium for both signs of v0 (leading or trailing)
+pn = sleigh_params(1, 0.1, -0.2);
+[qn, qdn, Ln, An] = sleigh_lagrangian(pn);
+sysn = mech.lagrange_dalembert(qn, qdn, Ln, An);
+for v0 = [1, -1]
+    [~, Yn] = ode113(@(tt, yy) sleigh_rhs(tt, yy, pn), t, [0; 0; 0; v0; 0], odeOpts);
+    outn = sleigh_quantities(t, Yn.', pn);
+    d1 = 0;
+    for kk = 1:20:numel(t)
+        d1 = max(d1, max(abs(sysn.f(t(kk), outn.Yfull(:, kk)) - outn.Yfulld(:, kk))));
+    end
+    chkn = mech.conservation_check(t, outn.Yfull, sysn);
+    d2n = max([abs(Yn(:, 4).' - outn.vExact), abs(Yn(:, 5).' - outn.wExact)]);
+    ok = check(ok, d1 <= 1e-9 && d2n <= 1e-9 && chkn.ok && max(abs(Yn(:, 4) - v0)) < 1e-12 && max(abs(Yn(:, 3))) < 1e-12, ...
+               sprintf('a = -0.2, v0 = %+.0f, w0 = 0: exact equilibrium, D1 %.1e, D2 %.1e, D3 %.1e, D4 %.1e (<= 1e-9), v and th constant', v0, d1, d2n, chkn.driftRel, chkn.resid));
+end
 
 % tiny w0: the exact solution must stay finite (the atanh form would give NaN because C rounds to v0^2)
 tL = 0:0.05:25;

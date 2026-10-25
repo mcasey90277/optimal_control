@@ -92,10 +92,10 @@ with the kinematics $\dot x_b = v\cos\theta$, $\dot y_b = v\sin\theta$, $\dot\th
 \begin{bmatrix} -\sin\theta \\ \phantom{-}\cos\theta \\ -2 \end{bmatrix},\\
 \lambda &= \frac{5\,\dot\theta\,(\dot x_c\cos\theta + \dot y_c\sin\theta)}{7},
 \end{align*}
-(the builder prints the three components of $\ddot q$ separately, each with the factor $5\dot\theta(\dot x_c\cos\theta + \dot y_c\sin\theta)/7$ and the entries $-\sin\theta$, $\cos\theta$, $-2$; they are grouped here). Since $v = \dot x_c\cos\theta + \dot y_c\sin\theta$, the string is $\lambda = \tfrac{5}{7}v\omega$, matching \eqref{eq:reduced}, and the script compares the two pointwise along the solution (line D1).
+(the builder prints the three components of $\ddot q$ separately, each with the factor $5\dot\theta(\dot x_c\cos\theta + \dot y_c\sin\theta)/7$ and the entries $-\sin\theta$, $\cos\theta$, $-2$; they are grouped here). Since $v = \dot x_c\cos\theta + \dot y_c\sin\theta$, the printed expression is $\lambda = \tfrac{5}{7}v\omega$, matching \eqref{eq:reduced}, and the script compares the two pointwise along the solution (line D1).
 
 \section{Energy, the invariant ellipse, and the exact solution}
-The kinetic energy about the center of mass, with $|\dot\rv_c|^2 = v^2 + a^2\omega^2$, is
+The total kinetic energy (translation of the center of mass plus rotation about it), with $|\dot\rv_c|^2 = v^2 + a^2\omega^2$, is
 \begin{equation}
 E = \tfrac{m}{2}v^2 + \tfrac{1}{2}(J + m a^2)\,\omega^2 ,
 \label{eq:energy}

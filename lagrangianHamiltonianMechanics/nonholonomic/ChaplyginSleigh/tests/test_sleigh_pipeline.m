@@ -43,10 +43,15 @@ ok = check(ok, numel(body.segments) >= 1, 'sleigh_body: the blade segment is pre
 outDir = fullfile(tempdir, 'test_sleigh_pipeline');
 if ~exist(outDir, 'dir'), mkdir(outDir); end
 if ~isempty(dir(fullfile(outDir, 'tsp*'))), delete(fullfile(outDir, 'tsp*')); end
-files = plot_sleigh(t, Y, out, p, struct('label', 'tsp', 'visible', false), outDir);
+[qs, qds, Ls, As] = sleigh_lagrangian(p);
+sys = mech.lagrange_dalembert(qs, qds, Ls, As);
+chk = mech.conservation_check(t, out.Yfull, sys);
+files = plot_sleigh(t, Y, out, p, struct('label', 'tsp', 'visible', false, 'resid', chk.residSeries), outDir);
 ok = check(ok, numel(files) == 2 && all(cellfun(@(f) exist(f, 'file') == 2, files)), 'plot_sleigh writes its two PNGs');
 outR = sleigh_quantities(t, zeros(5, numel(t)), p);
-filesR = plot_sleigh(t, zeros(5, numel(t)), outR, p, struct('label', 'tsp_rest', 'visible', false), outDir);
+chkR = mech.conservation_check(t, outR.Yfull, sys);
+filesR = plot_sleigh(t, zeros(5, numel(t)), outR, p, struct('label', 'tsp_rest', 'visible', false, 'resid', chkR.residSeries), outDir);
+ok = check(ok, throws(@() plot_sleigh(t, Y, out, p, struct('label', 'x', 'visible', false), outDir), 'plot_sleigh:resid'), 'plot_sleigh refuses a missing info.resid with :resid');
 ok = check(ok, numel(filesR) == 2 && all(cellfun(@(f) exist(f, 'file') == 2, filesR)), 'plot_sleigh survives the rest case (C = 0, degenerate ellipse)');
 
 arrows = sleigh_arrows(t, Y, out, p);
@@ -71,4 +76,18 @@ function ok = check(ok, cond, msg)
 %
 if cond, fprintf('  PASS  %s\n', msg); else, fprintf('  FAIL  %s\n', msg); end
 ok = ok && logical(cond);
+end
+
+% ------------------------------------------------------------------------
+function tf = throws(fun, id)
+%% Purpose:
+%
+%   True when fun() throws an error with identifier id.
+%
+tf = false;
+try
+    fun();
+catch err
+    tf = strcmp(err.identifier, id);
+end
 end

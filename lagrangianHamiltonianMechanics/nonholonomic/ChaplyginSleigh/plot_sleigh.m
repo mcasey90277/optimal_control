@@ -24,9 +24,9 @@ function files = plot_sleigh(t, Y, out, p, info, outDir)
 %  info                     struct                  .label; .visible
 %                                                   [false]; .resid [1 x
 %                                                   N] constraint residual
-%                                                   (optional; computed
-%                                                   from out.Yfull when
-%                                                   absent)
+%                                                   (required, e.g. from
+%                                                   mech.conservation_check
+%                                                   .residSeries)
 %
 %  outDir                   char                    Folder for the PNGs
 %
@@ -44,19 +44,20 @@ if nargin == 0
      p = sleigh_params();  t = 0:0.01:3;
      [~, yy] = ode113(@(a, b) sleigh_rhs(a, b, p), t, [0; 0; 0; 1; 2], odeset('RelTol', 1e-12, 'AbsTol', 1e-12));
      out = sleigh_quantities(t, yy.', p);
-     files = plot_sleigh(t, yy.', out, p, struct('label', 'demo', 'visible', true), tempdir);
+     [q, qd, L, A] = sleigh_lagrangian(p);
+     sys = mech.lagrange_dalembert(q, qd, L, A);
+     chk = mech.conservation_check(t, out.Yfull, sys);
+     files = plot_sleigh(t, yy.', out, p, struct('label', 'demo', 'visible', true, 'resid', chk.residSeries), tempdir);
      fprintf('wrote %s and %s\n', files{1}, files{2});
      return
 end
 if ~isfield(info, 'visible') || isempty(info.visible), info.visible = false; end
 if info.visible, vis = 'on'; else, vis = 'off'; end
 th = Y(3, :);  v = Y(4, :);  w = Y(5, :);
-if isfield(info, 'resid') && ~isempty(info.resid)
-    resid = info.resid;
-else
-    vc = out.Yfull(4:5, :);
-    resid = abs(-vc(1, :).*sin(th) + vc(2, :).*cos(th) - p.a*w);
+if ~isfield(info, 'resid') || isempty(info.resid)
+    error('plot_sleigh:resid', 'info.resid is required (e.g. mech.conservation_check(...).residSeries)');
 end
+resid = info.resid;
 E0 = out.E(1);
 drift = (out.E - E0)/max(abs(E0), eps);
 
@@ -127,7 +128,7 @@ ax = nexttile(tl);
 plot(ax, t, drift, 'b-');
 xlabel(ax, 't  [s]');  ylabel(ax, '(E - E_0)/E_0');  grid(ax, 'on');  title(ax, sprintf('energy drift, max %.1e', max(abs(drift))));
 ax = nexttile(tl);  hold(ax, 'on');
-vc = out.Yfull(4:5, :);
+vc = out.vc;
 E0s = max(abs(E0), eps);
 rot = 0.5*p.J*w.^2/E0s;
 tra = 0.5*p.m*(vc(1, :).^2 + vc(2, :).^2)/E0s;

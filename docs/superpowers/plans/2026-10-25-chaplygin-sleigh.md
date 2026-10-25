@@ -1406,6 +1406,8 @@ Append `'test_sleigh_oracle'`; `run_tests` prints `4 of 4 passed`. Report; do no
 
 ### Task 5: body shape, plots, the front-door script, pipeline test, folder README
 
+> **Amended in execution (ruling R2, 2026-10-25):** the animator gained `opts.follow` (a following camera; the script exposes `movieOpts.follow = 1.0`), the path figure became two panels (whole path + a zoom over the first 4/(|k| sqrt(C)) seconds with the body drawn at each 0.5 s tick), and the constraint-residual panel became the energy split (rotational / translational / total over E0) with the max residual in its title; the output grid is `t = unique([0:dtOut:tEnd, tEnd])` with `dtOut <= tEnd/2`. The code blocks below predate those changes; the spec (sections 4.3, 5, 5.1) and the committed files are authoritative.
+
 **Files:**
 - Create: `lagrangianHamiltonianMechanics/nonholonomic/ChaplyginSleigh/sleigh_body.m`
 - Create: `lagrangianHamiltonianMechanics/nonholonomic/ChaplyginSleigh/plot_sleigh.m`

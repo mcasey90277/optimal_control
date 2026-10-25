@@ -40,7 +40,7 @@ end
 Lb = max(abs(p.a), 0.1);
 th = Y(3, :);
 e2 = [-sin(th); cos(th)];
-vc = out.Yfull(4:5, :);
+vc = out.vc;
 F  = out.lambda.*e2;
 sv = Lb/max(max(sqrt(sum(vc.^2, 1))), eps);
 sf = Lb/max(max(abs(out.lambda)), eps);

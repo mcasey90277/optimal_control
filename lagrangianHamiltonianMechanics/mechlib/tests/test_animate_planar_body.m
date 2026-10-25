@@ -41,8 +41,15 @@ ok = check(ok, isequal(size(fr, 1:2), [720 1280]), sprintf('frame is %d x %d (72
 ok = check(ok, abs(vr.NumFrames - 20) <= 1, sprintf('%d frames (20 asked)', vr.NumFrames));
 
 fileF = mech.animate_planar_body(t, pose, body, fullfile(tempdir, 'test_animate_follow'), struct('fps', 10, 'seconds', 1, 'follow', 0.5));
-frF = readFrame(VideoReader(fileF));
+vrF = VideoReader(fileF);
+frF = readFrame(vrF);
+frL = frF;
+while hasFrame(vrF), frL = readFrame(vrF); end
+cen = @(im) [mean(find(any(bodyMask(im), 1))), mean(find(any(bodyMask(im), 2)))];   % [x y] px centroid of the orange body (rows/cols with body pixels)
+cF = cen(frF);  cL = cen(frL);
+mv = max(abs(cL - cF));
 ok = check(ok, exist(fileF, 'file') == 2 && isequal(size(frF, 1:2), [720 1280]), 'following camera (opts.follow = 0.5): movie written, first frame 720 x 1280');
+ok = check(ok, mv < 30, sprintf('following camera: body centroid moves %.1f px between first and last frame (< 30; the fixed camera moves it by hundreds)', mv));
 
 file1 = mech.animate_planar_body([0 1], [0 0; 0 0; 0 0], struct('outline', body.outline), fullfile(tempdir, 'test_animate_point'), struct('fps', 5, 'seconds', 0.4));
 ok = check(ok, exist(file1, 'file') == 2, 'a single-point pose (zero path extent) still writes a movie with finite limits');
@@ -83,4 +90,14 @@ try
 catch err
     tf = strcmp(err.identifier, id);
 end
+end
+
+% ------------------------------------------------------------------------
+function m = bodyMask(im)
+%% Purpose:
+%
+%   Mask of the body-colour (orange) pixels of a uint8 RGB frame.
+%
+R = double(im(:, :, 1));  G = double(im(:, :, 2));  B = double(im(:, :, 3));
+m = R > 180 & G > 120 & G < 220 & B < 120;
 end

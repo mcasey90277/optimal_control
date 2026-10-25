@@ -59,6 +59,7 @@ e2 = [-sin(th); cos(th)];
 out.rb     = Y(1:2, :);
 out.rc     = out.rb + p.a*e1;
 vc         = v.*e1 + p.a*w.*e2;                      % center-of-mass velocity
+out.vc     = vc;                                     % [2 x N] center-of-mass velocity
 out.E      = p.m/2*v.^2 + p.Jb/2*w.^2;
 out.lambda = p.m*p.J*v.*w/p.Jb;
 out.C      = v(1)^2 + (p.Jb/p.m)*w(1)^2;

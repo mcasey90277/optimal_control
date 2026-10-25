@@ -25,7 +25,8 @@ addpath(fullfile(here, 'mechlib'), fullfile(here, 'mechlib', 'tests'), ...
         fullfile(here, 'nonholonomic', 'ChaplyginSleigh'), ...
         fullfile(here, 'nonholonomic', 'ChaplyginSleigh', 'tests'));
 
-names = {'test_lagrange_dalembert'};  % the builder on exact problems
+names = {'test_lagrange_dalembert', ...      % the builder on exact problems
+         'test_conservation_check'};     % energy drift + constraint residual verdict
 
 res  = false(1, numel(names));
 secs = zeros(1, numel(names));

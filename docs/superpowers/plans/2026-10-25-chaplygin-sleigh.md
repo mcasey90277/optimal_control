@@ -610,9 +610,9 @@ if nargin == 0
      Y = [cos(t); sin(t); -sin(t); cos(t)];
      chk = mech.conservation_check(t, Y, sys);
      fprintf('exact circle: drift %.1e, residual %.1e, ok = %d\n', chk.driftRel, chk.resid, chk.ok);
-     Y(3:4, :) = Y(3:4, :)*(1 + 1e-6);
+     Y(3:4, :) = Y(3:4, :).*(1 + 1e-6*t/t(end));          % a ramp: a uniform scale would rescale E(1) too and show nothing
      chk = mech.conservation_check(t, Y, sys);
-     fprintf('scaled velocity: drift %.1e, ok = %d, why = %s\n', chk.driftRel, chk.ok, chk.why);
+     fprintf('ramped velocity: drift %.1e, ok = %d, why = %s\n', chk.driftRel, chk.ok, chk.why);
      return
 end
 

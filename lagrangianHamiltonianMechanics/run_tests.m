@@ -26,7 +26,8 @@ addpath(fullfile(here, 'mechlib'), fullfile(here, 'mechlib', 'tests'), ...
         fullfile(here, 'nonholonomic', 'ChaplyginSleigh', 'tests'));
 
 names = {'test_lagrange_dalembert', ...      % the builder on exact problems
-         'test_conservation_check'};     % energy drift + constraint residual verdict
+         'test_conservation_check', ...      % energy drift + constraint residual verdict
+         'test_animate_planar_body'};    % 1280 x 720 MP4 frames, refusals
 
 res  = false(1, numel(names));
 secs = zeros(1, numel(names));

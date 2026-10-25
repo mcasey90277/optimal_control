@@ -148,9 +148,11 @@ a circle (exact), then an injected drift that fails.
 `pose` [3 x N] = (x, y, th) of the body's reference point in the world
 frame. `body` struct: `.outline` [2 x P] polygon in body coordinates
 (closed by the function); `.markers` struct array with `.name`, `.pos`
-[2 x 1] body coordinates, `.color`; `.arrows` struct array with `.name`,
-`.fun` = @(k) returning [base; vec] [4 x 1] in WORLD coordinates for frame
-index k, `.color`, `.scale`; `.subtitle` = @(k) a char line. `opts`: `.fps`
+[2 x 1] body coordinates, `.color`; `.segments` struct array with `.pts` [2 x 2]
+body-coordinate endpoints, `.color`, `.width` (decorations such as a blade);
+`.arrows` struct array with `.name`, `.fun` = @(tk) returning [base; vec]
+[4 x 1] in WORLD coordinates at movie TIME tk (the caller does not know the
+movie grid), `.color`; `.subtitle` = @(tk) a char line. `opts`: `.fps`
 [30], `.seconds` [t(end)], `.traces` [2 x N x T] world paths to grow with
 time (default the reference point), `.title`. Fixed axis limits from the
 whole path plus the body size, equal aspect, dark theme as movie_quad,
@@ -170,10 +172,13 @@ tempdir.
   y = [x_b; y_b; th; v; w]. Hand-written, no symbolic call, vectorized over
   columns of y so the oracle can evaluate a whole solution at once.
 - `out = sleigh_quantities(t, Y, p)`: from the reduced solution, `.E`,
-  `.lambda`, `.C`, the exact `.vExact`, `.wExact` (NaN when w0 = 0 except
-  the trivial constant), `.rc` center-of-mass path [2 x N], `.rb` blade
+  `.lambda`, `.C`, the exact `.vExact`, `.wExact` (constants when a = 0 or
+  w0 = 0, which are exact there), `.rc` center-of-mass path [2 x N], `.rb` blade
   path, `.Yfull` = [q; qd] for the builder's checks, and `.asymptote` =
   sign(a) sqrt(C). The script builds y0 directly; no inverse is needed.
+- `arrows = sleigh_arrows(t, Y, out, p)`: the movie's two arrows (center-of-
+  mass velocity, blade constraint force lambda e2) as functions of time,
+  scaled to one body length; shared by the script and the pipeline test.
 - `body = sleigh_body(p)`: outline polygon (a pointed sleigh shape whose
   length scales with max(|a|, 0.1), blade as a thick segment along e1 at
   the blade point), markers (center of mass, blade), reference point = the
@@ -262,8 +267,8 @@ measured number and its bar, and runs from a fresh clone (no data files).
   PNGs to a temp folder; the animator writes a 20-frame MP4 from
   sleigh_body.
 
-`lagrangianHamiltonianMechanics/run_tests.m` lists all seven and must print
-`7 of 7 passed`.
+`lagrangianHamiltonianMechanics/run_tests.m` lists the five test functions
+and must print `5 of 5 passed`.
 
 ### 5.3 The note `doc/chaplygin_sleigh_note.tex`
 

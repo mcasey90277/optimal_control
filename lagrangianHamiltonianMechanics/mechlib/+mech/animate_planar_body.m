@@ -49,7 +49,16 @@ function file = animate_planar_body(t, pose, body, stem, opts)
 %                                                   [default: the
 %                                                   reference point];
 %                                                   .traceColors [T x 3];
-%                                                   .title ['']
+%                                                   .title [''];
+%                                                   .follow [] window half-
+%                                                   height in world units:
+%                                                   when set, each frame's
+%                                                   limits are centred on
+%                                                   the reference point
+%                                                   (y +- follow, x +-
+%                                                   follow 16/9) instead of
+%                                                   the fixed whole-path
+%                                                   limits
 %
 %% Outputs:
 %
@@ -97,6 +106,7 @@ if ~isequal(size(traces, 1:2), [2 N])
 end
 nTr      = size(traces, 3);
 trColors = getf(opts, 'traceColors', repmat([0.45 0.70 1.00], nTr, 1));
+follow   = getf(opts, 'follow', []);
 
 nFrame = max(2, round(fps*seconds));
 tMov   = linspace(t(1), t(end), nFrame);
@@ -146,6 +156,9 @@ for kk = 1:nFrame
     for aa = 1:numel(arrows)
         bv = arrows(aa).fun(tMov(kk));
         quiver(ax, bv(1), bv(2), bv(3), bv(4), 0, 'Color', arrows(aa).color, 'LineWidth', 2, 'MaxHeadSize', 0.6);
+    end
+    if ~isempty(follow)
+        lim = [P(1, kk) + follow*16/9*[-1 1]; P(2, kk) + follow*[-1 1]];
     end
     set(ax, 'Color', 'k', 'XColor', [0.75 0.75 0.75], 'YColor', [0.75 0.75 0.75], ...
             'GridColor', [0.5 0.5 0.5], 'GridAlpha', 0.35, 'XLim', lim(1, :), 'YLim', lim(2, :), ...

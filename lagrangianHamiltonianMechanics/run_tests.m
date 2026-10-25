@@ -28,7 +28,8 @@ addpath(fullfile(here, 'mechlib'), fullfile(here, 'mechlib', 'tests'), ...
 names = {'test_lagrange_dalembert', ...      % the builder on exact problems
          'test_conservation_check', ...      % energy drift + constraint residual verdict
          'test_animate_planar_body', ...  % 1280 x 720 MP4 frames, refusals
-         'test_sleigh_oracle'};          % hand-derived sleigh vs builder, exact solution, energy, constraint
+         'test_sleigh_oracle', ...       % hand-derived sleigh vs builder, exact solution, energy, constraint
+         'test_sleigh_pipeline'};        % sleigh body, plots, movie and the script's parse
 
 res  = false(1, numel(names));
 secs = zeros(1, numel(names));

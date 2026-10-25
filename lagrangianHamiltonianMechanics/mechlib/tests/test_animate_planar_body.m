@@ -40,6 +40,10 @@ fr = readFrame(vr);
 ok = check(ok, isequal(size(fr, 1:2), [720 1280]), sprintf('frame is %d x %d (720 x 1280)', size(fr, 1), size(fr, 2)));
 ok = check(ok, abs(vr.NumFrames - 20) <= 1, sprintf('%d frames (20 asked)', vr.NumFrames));
 
+fileF = mech.animate_planar_body(t, pose, body, fullfile(tempdir, 'test_animate_follow'), struct('fps', 10, 'seconds', 1, 'follow', 0.5));
+frF = readFrame(VideoReader(fileF));
+ok = check(ok, exist(fileF, 'file') == 2 && isequal(size(frF, 1:2), [720 1280]), 'following camera (opts.follow = 0.5): movie written, first frame 720 x 1280');
+
 file1 = mech.animate_planar_body([0 1], [0 0; 0 0; 0 0], struct('outline', body.outline), fullfile(tempdir, 'test_animate_point'), struct('fps', 5, 'seconds', 0.4));
 ok = check(ok, exist(file1, 'file') == 2, 'a single-point pose (zero path extent) still writes a movie with finite limits');
 

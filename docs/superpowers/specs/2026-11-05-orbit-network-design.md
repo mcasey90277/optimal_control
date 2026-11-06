@@ -65,8 +65,13 @@ Sheet fields used: `has_solution`, `tf_nd`, `conj_pass` (each 6 x 6 x 11),
 
 Facts established 2026-11-05 that the gates pin:
 
-- Closure is monotone in thrust: zero cells closed at 0.5 N but open at 1 N,
-  in every catalog.
+- Closure is monotone between the two rungs the study uses: zero cells
+  closed at 0.5 N but open at 1 N, in every catalog. Across the WHOLE
+  ladder it is not: the 15 N starting rung closes fewer cells than 12 N
+  (462 vs 494 in DRO_tulip; 593 non-monotone adjacent-rung cells over all
+  four catalogs). That is solver coverage at the ladder's top, not a data
+  error; scripts print it as a fact and never gate on whole-ladder
+  monotonicity.
 - Every sheet has at least 9 cells closed at 1 N (range 9-34 of 36).
 - Node stability (|lambda|_max of the monodromy matrix, sigma in 1/ND):
   all four DROs, all four tulips, DPO tau 1 and L2 halo tau 2.2 are
@@ -164,9 +169,10 @@ Sections:
 1. **load and census**: `T`, `N`; print the 56-row table (catalog, dep,
    arr, cells closed at 1 N and 0.5 N, min t_f at 1 N in days).
    Gates: P1 numel(T) == 56; P2 identical rungs across catalogs (the loader
-   already refuses, the gate re-states it); P3 closure monotone in thrust
-   (zero cells with has_solution at rung r+1 and not at rung r, summed
-   over all sheets); P4 every sheet has at least one cell closed at 1 N.
+   already refuses, the gate re-states it); P3 every cell closed at 0.5 N
+   is closed at 1 N (so surv is a ratio of nested sets), with the
+   whole-ladder non-monotone count printed as a fact; P4 every sheet has
+   at least one cell closed at 1 N.
 2. **orbit properties**: for each node print period, C_J, |lambda|max,
    sigma, stable. Gates: P5 symplectic pairing lam_max*lam_min = 1 to 1e-6
    and |det M - 1| < 1e-6 for every node; P6 node periods match the
@@ -179,14 +185,19 @@ Sections:
 4. **regression**: for each response y in {tf1, surv}: model M0 y ~ 1 +
    dCJ; model M1 y ~ 1 + dCJ + sigma_dep + sigma_arr; least squares by
    backslash; partial F for M1 over M0 and its p-value from
-   `partial_f_test`; group means of y for stable-departure versus
-   unstable-departure sheets. Verdicts, printed as SUPPORTED / NOT
-   SUPPORTED (these are hypotheses, not code gates): H1 stability carries
-   information about tf1 beyond energy (p < 0.05 and the sigma_dep
-   coefficient has the paper's sign: negative, unstable departures are
-   faster); H2 the same for surv (sign positive, unstable departures
-   survive the thrust wall better). Both outcomes are results; the script
-   must not treat NOT SUPPORTED as a failure.
+   `partial_f_test`, which also returns per-coefficient standard errors,
+   t statistics and two-sided p-values for the larger model; group means
+   of y for stable-departure versus unstable-departure sheets. Verdicts,
+   printed as SUPPORTED / NOT SUPPORTED (these are hypotheses, not code
+   gates), rest on the sigma_dep coefficient's OWN t-test, because the
+   paper's claim is about departure stability beyond energy and sigma_arr
+   varies only on the 8 halo-to-halo sheets (confounded with catalog):
+   H1 the sigma_dep coefficient for tf1 has two-sided p < 0.05 and the
+   paper's sign (negative, unstable departures are faster); H2 the same
+   for surv (sign positive, unstable departures survive the thrust wall
+   better). The joint F p-value and the sigma_arr test are printed beside
+   each verdict. Both outcomes are results; the script must not treat NOT
+   SUPPORTED as a failure.
 5. **figure**: one PNG, two panels, each response against dCJ, markers
    colored by sigma_dep (stable group in one color), with the M0 fit line;
    written to `results/stability_cost.png`.
@@ -202,7 +213,8 @@ Sections:
    smallest closed t_f to the largest, in days), `useMirror = false`,
    figure folder.
 1. **load**: `T`, `N`; gates G1 (periods, 1e-9) and G2 (56 edges, zero
-   closure-monotonicity violations).
+   cells closed at 0.5 N but open at 1 N; the whole-ladder non-monotone
+   count printed as a fact, see section 2).
 2. **graph**: a `digraph` with 18 nodes (keys as names, node table columns
    as node variables) and 56 edges; per edge and per rung the edge tables
    `closed_frac` (of 36), `tf_min_days`, `tf_med_days` (over closed cells),
@@ -215,10 +227,11 @@ Sections:
    cells whose tf <= cap. Regimes overlaid: direct access (number of pairs
    closed), weak connectivity of the 18-node graph at that (rung, cap), and
    multileg closure (number of two-leg L1-halo-to-tulip routes closed, from
-   section 5). Gate G3: both arrays non-decreasing along the cap axis and
-   non-increasing from 15 N toward 0.5 N (rung axis), with ZERO violations
-   (closure monotone was established on the data; a violation here is a
-   coding error, not a finding).
+   section 5). Gate G3: both arrays non-decreasing along the cap axis with
+   ZERO violations (a violation here is a coding error, not a finding).
+   Along the rung axis the counts are NOT gated: the 15 N starting rung
+   closes fewer cells than 12 N (section 2), and the plane shows that as a
+   dip at the top, which the note explains as ladder coverage.
 4. **centrality**: in-strength and out-strength with weights 1/tf_min_days
    at 1 N, and betweenness on the directed graph; one table. The text
    states that only the L2 halos can have nonzero betweenness on this

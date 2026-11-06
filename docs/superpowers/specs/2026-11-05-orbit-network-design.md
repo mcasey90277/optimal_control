@@ -97,7 +97,7 @@ Facts established 2026-11-05 that the gates pin:
 - Accepted counts per rung over all 56 sheets are [1578 1688 1674 1640
   1622 1570 1512 1381 1118 1069 898] against solved [1579 1688 1674 1640
   1623 1572 1516 1384 1124 1090 940]: a few cells are refuted or gated at
-  every rung, most at 0.75 and 0.5 N. Four cells are accepted at 0.5 N
+  most rungs (none at 12, 10 and 7 N), most at 0.75 and 0.5 N. Four cells are accepted at 0.5 N
   but not at 1 N (refuted at the shallower rung), so the ACCEPTED sets are
   not nested between rungs even where the SOLVED sets are; retention is
   therefore defined as accepted-at-both over accepted-at-1 N, and the

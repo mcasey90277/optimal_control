@@ -58,7 +58,7 @@ corner everywhere is shortest-departure × longest-tulip; "blocky" tf maps
 2026 "orbital network" framing lifted onto the four catalogs with no new
 solves: `stability_cost_study` (56 sheets, Jacobi gap + instability rates
 against min t_f at 1 N and phasing-grid survival to 0.5 N; departure
-stability carries no information beyond energy on this data) and, next,
+stability carries no information beyond energy on this data) and
 the data-only low-thrust network with its (thrust, time-cap) accessibility
 plane. Spec: `docs/superpowers/specs/2026-11-05-orbit-network-design.md`.
 

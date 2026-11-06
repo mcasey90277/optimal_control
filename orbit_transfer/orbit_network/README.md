@@ -32,13 +32,13 @@ first. Scripts add `lib/` and `../costate_common` themselves. Outputs go to
 | `lib/partial_f_test.m` | nested OLS, partial F, p-values through betainc (no toolbox), per-coefficient t tests and CIs; refuses rank-deficient or non-nested designs; both-exact gives p = 1 |
 | `orbit_network_study.m` | topic 2: digraph of 18 orbits and 56 edges over ACCEPTED cells with per-rung accepted fraction, min/median t_f and the lowest accepted rung; raw-coverage and known-feasible-envelope planes over (thrust bound, time cap) with the directed-reachability overlay; in/out strengths at 1 N with the topology caveat; L1 halo -> L2 halo -> tulip relay closure with PHASE-COMPATIBLE assembled times; the hypothetical reverse graph (off by default, geometry only); G1-G5 gates; four figures and `results/network_summary.txt` |
 | `lib/edge_tables.m`, `lib/network_graph.m`, `lib/accessibility_plane.m`, `lib/relay_closure.m`, `lib/mirror_state.m`, `lib/symmetry_residual.m` | the network's computations, each with a demo and a hand-checked test in `tests/test_lib.m` |
-| `doc/orbit_network_note.tex` | the note (Task 10) |
+| `doc/orbit_network_note.tex` | the topic-2 note (pdflatex; the PDF is git-ignored) |
 | `reviews/` | the GPT-6 Astra review of the spec and plan (2026-11-05) and its dispositions: what was accepted and what it changed |
 | `tests/` | `test_load_catalog_sheets`, `test_orbit_node_table`, `test_lib`, `test_pipeline` (scripts headless, parse check), `run_tests` |
 
 Both scripts print every gate PASS/FAIL and throw on a failed code gate;
 hypothesis verdicts (H1-H2) are results either way. `results/network_summary.txt`
-holds every number the note cites.
+holds every network number the note cites; the stability numbers come from stability_cost_study's output.
 
 ## What it does not claim
 

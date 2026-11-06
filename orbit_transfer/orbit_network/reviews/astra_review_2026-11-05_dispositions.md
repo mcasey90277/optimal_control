@@ -27,7 +27,7 @@ the host reproduced the claim on our data or by its own derivation.
 | 15A | mirrored-dashed-edges figure promised, not planned | yes | ACCEPT. Promise removed; headline figures never carry hypothetical edges. |
 | 15B | contour at the integer maximum | yes | ACCEPT. Contours drawn on boolean masks at 0.5 with all-true/all-false handled. |
 | 15C | summary file lacks the tables the note cites | yes | ACCEPT. Strength table, relay table and relay-usage counts appended to the summary lines. |
-| 15D | missing tests | yes | ACCEPT. Added: scrambled edges (network_graph), mismatched relay phases and a route whose smallest sum is not its smallest assembled time (relay_closure), fastest cell refuted (edge_tables), no cap reaching full access (script), SCC vs reciprocal (script). |
+| 15D | missing tests | yes | ACCEPT. Added: scrambled edges (network_graph), mismatched relay phases and a route whose smallest sum is not its smallest assembled time (relay_closure), fastest cell refuted (edge_tables), no cap reaching full access (pipeline test, study_opts.capHi), SCC vs reciprocal (script). |
 
 Nothing was rejected. Two of Astra's remarks were already true of the built
 code and only wrong in the spec text (14A) or exposed a defect Astra did not

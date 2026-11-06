@@ -1,6 +1,6 @@
 \documentclass[11pt]{article}
 \usepackage[margin=1in]{geometry}
-\usepackage{amsmath,amssymb,amsthm,graphicx,booktabs,hyperref}
+\usepackage{amsmath,amssymb,amsthm,graphicx,booktabs,array,hyperref}
 \newtheorem{lemma}{Lemma}
 \renewcommand{\topfraction}{0.9}
 \renewcommand{\bottomfraction}{0.8}
@@ -21,8 +21,8 @@ half at each end. From that graph they read hubs (the orbit C32 among them), rel
 budget-dependent stages of connectivity. Their stability reading is that unstable orbits share a
 chaotic sea and connect cheaply, while stable ones sit inside tori and are hard to reach or leave.
 We care because the same question can be put to our DRO $\to$ tulip transfers, whose direct
-min-time branch we have continued down to 0.067~N (67~mN; the 70~mN phase library is its operating
-point): does the network view, and does orbit stability,
+min-time catalog continuation closes down to 0.09~N and stalls at a basin wall between 0.09 and
+0.067~N (the 70~mN phase library is certified on separately seeded branches): does the network view, and does orbit stability,
 say anything about the certified min-time transfers we already hold? This note lifts both ideas onto
 the four costate catalogs with no proxies and no new solves.
 
@@ -194,12 +194,12 @@ reports two planes over (thrust bound, time cap), with 11 rungs and 25 caps from
 days. Raw coverage (left) counts the pairs with an accepted cell at that rung under the cap: what
 the catalogs hold at that thrust. The known-feasible envelope (right) counts the pairs with an
 accepted cell at that rung or any lower-thrust rung under the cap, since a trajectory accepted at a
-lower thrust bound is feasible under a higher one. The two differ at only two rungs, by one pair
+lower thrust bound is feasible under a higher one, assuming throttleable thrust at the same specific impulse. The two differ at only two rungs, by one pair
 each: at 12~N (37 against 36, cap 0.471~d) and at 3~N (16 against 15, cap 0.725~d).
 
 \begin{figure}[tbp]
 \centering
-\includegraphics[width=0.8\textwidth]{figures/accessibility_plane.png}
+\includegraphics[width=0.7\textwidth]{figures/accessibility_plane.png}
 \caption{Raw coverage (left) and the known-feasible envelope (right): pairs with an accepted cell
 under the cap. Cyan: all 56 direct pairs covered; green dashed: the first relay route under the
 cap, by assembled time.}
@@ -250,14 +250,14 @@ coasts on $C$ from where leg 1 delivers it to where leg 2 starts. The optimistic
 $t_{\mathrm{sum}} = \min t_1 + \min t_2$ lies beneath it and is kept only as a labelled lower bound.
 Both legs use the same phase grid on the relay. All 32 routes find a zero-wait pairing at 1~N (and
 at every rung), so the assembled time exceeds the naive sum only through which cells get paired: at
-1~N, 7 of the 32 routes have $t_{\mathrm{route}} = t_{\mathrm{sum}}$. The mass composition of
+1~N, 7 of the 32 routes have $t_{\mathrm{route}} = t_{\mathrm{sum}}$ (counted over all 32 routes, not read from Table~\ref{tab:relay}). The mass composition of
 Section~2 makes every assembled route feasible without a new solve.
 
 \begin{table}[tbp]
 \centering\footnotesize
-\begin{tabular}{@{}llrrr@{}}
+\begin{tabular}{@{}llr>{\raggedleft\arraybackslash}p{4.2cm}r@{}}
 \toprule
-(L1 halo, tulip) & best relay at 1~N & $t_{\mathrm{route}}$ [d] & $t_{\mathrm{sum}}$ [d] & deepest rung \\
+(L1 halo, tulip) & best relay at 1~N & $t_{\mathrm{route}}$ [d] & smallest optimistic sum over the four relays (pair-level lower bound) [d] & deepest rung \\
 \midrule
 \texttt{halo\_L1\_tau1.8037}, \texttt{tulip\_Np5}  & \texttt{halo\_L2\_tau1.75} & 3.109 & 2.996 & 0.5~N \\
 \texttt{halo\_L1\_tau1.8037}, \texttt{tulip\_Np7}  & \texttt{halo\_L2\_tau1.75} & 3.074 & 3.074 & 0.5~N \\
@@ -270,7 +270,8 @@ Section~2 makes every assembled route feasible without a new solve.
 \bottomrule
 \end{tabular}
 \caption{Best relay per (L1 halo, tulip) pair at 1~N by assembled time, and the deepest rung with
-any accepted route.}
+any accepted route. The sum column is the smallest optimistic sum over the four relays (a pair-level
+lower bound), not the listed relay's own sum.}
 \label{tab:relay}
 \end{table}
 
@@ -309,12 +310,12 @@ halo-to-halo sheets. These results neither establish absence of a departure-stab
 test the mechanism in the substantially lower-thrust regime. There are 14 distinct departure orbits
 and 8 distinct arrivals; sheets share orbit nodes, and the reported OLS p-values are nominal
 model-based summaries. Nonsignificance is not equivalence, and 1~N and 0.5~N sit far above the
-70~mN library operating point and the 0.067~N (67~mN) level where the computed DRO branch
-terminates.
+70~mN library operating point and the wall between 0.09 and 0.067~N where the catalog's deep DRO
+continuation stalls.
 
 \begin{figure}[tbp]
 \centering
-\includegraphics[width=0.75\textwidth]{figures/stability_cost.png}
+\includegraphics[width=0.5\textwidth]{figures/stability_cost.png}
 \caption{Stability versus cost over accepted cells: $t_{f1}$ at 1~N (left) and retention to 0.5~N
 (right) against $\Delta C_J$, colored by $\sigma_{\mathrm{dep}}$, with the M0 fit.}
 \label{fig:stab}
@@ -338,16 +339,16 @@ pairs joined by a directed path. These numbers enter no other section or figure.
 
 \section{What the legs campaign would add}
 DRO $\to$ DPO and DRO $\to$ L2 halo legs, carried down toward the 70~mN operating point (the
-computed direct branch terminates at 0.067~N), would make DRO $\to$ tulip the
-first pair with both a direct edge and a relay route. A relay witness below the direct branch's
-termination would then be a new feasible unrestricted transfer (the lemma), and would say something
-about that branch or the search rather than about a global barrier. The present data supports
+catalog's deep continuation closes 0.09~N and stalls at the wall between 0.09 and 0.067~N), would make DRO $\to$ tulip the
+first pair with both a direct edge and a relay route. A relay witness below the direct continuation's
+wall would then be a new feasible unrestricted transfer (the lemma), and would say something
+about that continuation or the search rather than about a global barrier. The present data supports
 candidate prioritization among the L2 halos, from relay usage (Table~\ref{tab:relay}) and the
 strengths (Table~\ref{tab:nodes}), not identification of the best DRO relay: the existing
 L1 $\to$ L2 legs say nothing about the missing DRO $\to$ L2 leg costs.
 
-The Earth-departure question, how a spacecraft reaches the DRO at all, has an answer elsewhere in
-this repository: the GTO $\to$ tulip min-time catalog in \texttt{orbit\_transfer/GTO\_tulip}
+The Earth-departure question, how a spacecraft reaches the DRO at all, has no answer in these catalogs;
+the nearest existing piece is the GTO $\to$ tulip min-time catalog in \texttt{orbit\_transfer/GTO\_tulip}
 (deliverable 7, 16 orientation sheets, with the deep rungs between 3 and 1~N still open; source:
 \texttt{GTO\_tulip/catalog/README.md}). This note has not loaded that catalog and has not passed it
 through the accepted mask of Section~\ref{sec:data}. If a GTO $\to$ DRO leg were added, GTO

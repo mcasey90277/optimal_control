@@ -56,6 +56,9 @@ for ss = 1:size(scripts, 1)
     for gg = 1:numel(gates)
         ok = check(ok, ~isempty(regexp(txt, ['\n\s*' gates{gg} '\s+PASS'], 'once')), sprintf('%s: gate %s PASS', name, gates{gg}));
     end
+    if strcmp(name, 'orbit_network_study')
+        ok = check(ok, ~contains(txt, 'HYPOTHETICAL'), sprintf('%s: the default run carries no HYPOTHETICAL numbers', name));
+    end
     verd = scripts{ss, 3};
     for vv = 1:numel(verd)
         ok = check(ok, ~isempty(regexp(txt, ['\n\s*' verd{vv} '\s+(DETECTED|NOT DETECTED)'], 'once')), sprintf('%s: verdict %s present', name, verd{vv}));
@@ -79,6 +82,18 @@ ok = check(ok, ran, 'orbit_network_study ran with hypothetical = true');
 ok = check(ok, ran && ~isempty(regexp(txt, '\n\s*G5\s+PASS', 'once')), 'hypothetical run: G5 PASS');
 ok = check(ok, ran && contains(txt, 'HYPOTHETICAL'), 'hypothetical run labels its numbers HYPOTHETICAL');
 ok = check(ok, ran && contains(txt, '112 edges'), 'hypothetical run reports 112 edges (56 + 56 reversed)');
+
+%% a plane cut short at 1 day: no sampled cap covers all direct pairs
+assignin('base', 'study_opts', struct('outDir', outDir, 'visible', 'off', 'capHi', 1.0));
+try
+    txt = evalc(sprintf('evalin(''base'', ''run(''''%s'''')'')', fullfile(root, 'orbit_network_study.m')));
+    ran = true;
+catch err
+    txt = err.message;  ran = false;
+end
+evalin('base', 'clear study_opts');
+ok = check(ok, ran, 'orbit_network_study ran with capHi = 1 day');
+ok = check(ok, ran && contains(txt, 'no sampled cap gives all'), 'capHi run reaches the "no sampled cap gives all" branch');
 
 fprintf('test_pipeline: %s\n', verdict(ok));
 end

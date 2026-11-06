@@ -340,7 +340,7 @@ Sections:
 Summary block: G1-G5 PASS/FAIL, throws on a FAIL of G1-G4 (G5 only when
 `hypothetical`); `results/network_summary.txt` carries every printed
 fact, the strength table, the relay table and the usage counts, so the
-note cites one source.
+note cites one source for the network numbers.
 
 ## 8. `lib/`
 
@@ -367,8 +367,8 @@ note cites one source.
 
 - `test_load_catalog_sheets`: 56 rows; catalog order; v1 rows carry
   dep_family 'dro' and a tau in dep_params; every array 6 x 6 x 11; keys
-  unique per (dep, arr); `accepted` implies `has_solution`; accepted
-  differs from solved only at 0.75 and 0.5 N; a -1 in the raw conj_pass is
+  unique per (dep, arr); `accepted` implies `has_solution`; accepted <= solved at every rung,
+  strictly smaller at 0.75 and 0.5 N; a -1 in the raw conj_pass is
   not a pass; refusal on a bad root.
 - `test_orbit_node_table`: on a 2-row synthetic T: 3 nodes, periods equal
   T_dep/T_arr, symplectic pairing to 1e-6, DRO stable with sigma exactly

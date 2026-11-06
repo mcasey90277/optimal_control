@@ -36,7 +36,9 @@
 %
 %   A pipeline test runs this headless: if a struct `study_opts` exists in
 %   the base workspace, its .outDir, .visible and .hypothetical are
-%   honoured.
+%   honoured, and so is .capHi (days), which overrides the largest time cap
+%   so the plane can be cut short (the pipeline test uses it to reach the
+%   branch where no sampled cap covers all direct pairs).
 %
 %  M. Casey                                                   (c) 11/05/2026
 %  Copyright Coorbital Inc.
@@ -53,10 +55,12 @@ hypothetical = false;             % the reverse graph by the x-axis symmetry: ge
 relay        = struct('src', 'halo_L1', 'via', 'halo_L2', 'dst', 'tulip');   % key prefixes of the only multileg structure in the data
 outDir       = fullfile(here, 'results');
 visible      = 'on';
+capHiOpt     = NaN;               % days; NaN = the largest accepted cell time (study_opts.capHi overrides)
 if exist('study_opts', 'var')
     if isfield(study_opts, 'outDir'),       outDir       = study_opts.outDir;       end
     if isfield(study_opts, 'visible'),      visible      = study_opts.visible;      end
     if isfield(study_opts, 'hypothetical'), hypothetical = study_opts.hypothetical; end
+    if isfield(study_opts, 'capHi'),        capHiOpt     = study_opts.capHi;        end
 end
 if ~exist(outDir, 'dir'), mkdir(outDir); end
 gates = struct('id', {}, 'ok', {}, 'msg', {}, 'throws', {});
@@ -115,6 +119,7 @@ for kk = 1:nS
     tfCells = [tfCells; tf(:)];
 end
 capLo = min(tfCells);  capHi = max(tfCells);                % section 5 may extend capHi for the relay times
+if ~isnan(capHiOpt), capHi = capHiOpt; end                  % study_opts.capHi: cut the plane short
 caps  = linspace(capLo, capHi, nCaps);
 P     = accessibility_plane(T, caps);
 fprintf('\n== 3  planes: %d rungs x %d caps (%.3f .. %.3f days)\n', nR, nCaps, caps(1), caps(end));
@@ -130,7 +135,7 @@ else
 end
 lines{end+1} = sprintf('at %g N, raw coverage %d of %d pairs under the largest cap; envelope at the %g N bound %d of %d', F_deep, P.pairs(rD, end), nS, rungs(1), P.pairs_env(1, end), nS);
 fprintf('%s\n%s\n', lines{end-1}, lines{end});
-gates(end+1) = struct('id', 'G3', 'ok', monoCap && monoEnv, 'msg', 'raw and envelope counts non-decreasing along the cap; envelope non-increasing toward deeper rungs', 'throws', true);
+gates(end+1) = struct('id', 'G3', 'ok', monoCap && monoEnv, 'msg', 'raw and envelope counts non-decreasing along the cap; envelope non-increasing toward deeper rungs (a code-consistency check, true by construction)', 'throws', true);
 
 %% 4  strengths at the reference rung (descriptive; the between-family ranking is the catalog's topology)
 tfRef = G.Edges.tf_min_days(:, rC);
@@ -205,7 +210,47 @@ for kk = 1:numel(R)
             && isequal(R(kk).closed, legs) && all(isnan(R(kk).t_route_days(~legs))) && all(~isnan(R(kk).t_route_days(legs))) ...
             && all(R(kk).t_route_days(legs) >= R(kk).t_sum_days(legs) - 1e-9) && isequal(sort(L1.sA_frac), sort(L2.sD_frac));
 end
-gates(end+1) = struct('id', 'G4', 'ok', g4, 'msg', '32 routes over 8 pairs, legs share the relay key and its phase grid, closed iff both legs accepted, t_route >= t_sum and NaN exactly when open', 'throws', true);
+gates(end+1) = struct('id', 'G4', 'ok', g4, 'msg', '32 routes over 8 pairs, legs share the relay key and its phase grid, closed iff both legs accepted, t_route >= t_sum (a code-consistency check, true by construction) and NaN exactly when open', 'throws', true);
+
+% summary facts for the note: relay wait, family closure, relay-versus-direct caps, envelope excess
+nL0       = numel(lines);
+clR       = vertcat(R.closed);  waR = vertcat(R.wait_days);
+trAll     = vertcat(R.t_route_days);  tsAll = vertcat(R.t_sum_days);
+lines{end+1} = sprintf('closed (route, rung) pairs with zero wait: %d of %d closed (%d route-rung pairs in all)', nnz(clR & waR < 1e-9), nnz(clR), numel(clR));
+lines{end+1} = sprintf('routes with t_route == t_sum at %g N: %d of %d', F_ref, nnz(abs(trAll(:, rC) - tsAll(:, rC)) < 1e-9), numel(R));
+cfAll     = vertcat(E.closed_frac);
+depFamAll = regexprep({E.dep_key}, '_tau.*|_Np.*', '');
+r12       = find(rungs == 12, 1);
+for fam = {'dro', 'dpo', 'halo_L1', 'halo_L2'}
+    selF = strcmp(depFamAll, fam{1});
+    lines{end+1} = sprintf('mean accepted fraction, %s departures (%d edges): %.3f at 12 N, %.3f at %g N', fam{1}, nnz(selF), mean(cfAll(selF, r12)), mean(cfAll(selF, rD)), F_deep);
+end
+rEarly = [];  rSame = [];  rLate = [];  rNone = [];
+for rr = 1:nR
+    cRel = find(P.multileg(rr, :) >= 1, 1, 'first');
+    cDir = find(P.pairs(rr, :) == nS, 1, 'first');
+    if isempty(cRel), cRel = Inf; end
+    if isempty(cDir), cDir = Inf; end
+    if isinf(cRel) && isinf(cDir)
+        rNone = [rNone rungs(rr)];
+    elseif cRel < cDir
+        rEarly = [rEarly rungs(rr)];
+    elseif cRel == cDir
+        rSame = [rSame rungs(rr)];
+    else
+        rLate = [rLate rungs(rr)];
+    end
+end
+lines{end+1} = sprintf('first cap with any relay route closed vs first cap with all %d direct pairs: earlier at %s N; same at %s N; later at %s N; neither on the sampled caps at %s N', ...
+                       nS, mat2str(rEarly), mat2str(rSame), mat2str(rLate), mat2str(rNone));
+for rr = 1:nR
+    exc = P.pairs_env(rr, :) - P.pairs(rr, :);
+    if any(exc > 0)
+        cx = find(exc > 0, 1, 'first');
+        lines{end+1} = sprintf('envelope exceeds raw coverage at %g N: %d against %d pairs at cap %.3f d (largest excess %d)', rungs(rr), P.pairs_env(rr, cx), P.pairs(rr, cx), caps(cx), max(exc));
+    end
+end
+fprintf('%s\n', lines{nL0+1:end});
 
 %% 6  hypothetical reverse graph (x-axis symmetry: geometry only; the mirrored arc belongs to a mass-GAIN model)
 mu    = T(1).constants.muStar;
@@ -225,6 +270,8 @@ if hypothetical
     Eh.EndNodes = fliplr(Eh.EndNodes);
     Eh.hypothetical = true(height(Eh), 1);
     Eh.n_accepted   = zeros(size(Eh.n_accepted));          % no certificate travels with a mirrored arc
+    Eh.closed_frac  = zeros(size(Eh.closed_frac));         % ... nor any certificate-derived attribute
+    Eh.F_low_N      = NaN(size(Eh.F_low_N));
     Gh = digraph([G.Edges; Eh], G.Nodes);
     [~, sccSize] = conncomp(Gh, 'Type', 'strong');
     D  = distances(Gh);  D(logical(eye(nN))) = Inf;

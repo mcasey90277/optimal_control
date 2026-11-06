@@ -103,6 +103,24 @@ xn = x1;  xn(5) = xn(5)*1.02;                              % 2% faster: not on t
 resN = symmetry_residual(xn, Tp, mu);
 ok = check(ok, resN > 1e-6, sprintf('a non-periodic state is NOT mapped onto an orbit (residual %.1e): the gate can fail', resN));
 
+
+%% edge_tables: synthetic 2-sheet table; the fastest SOLVED cell is refuted and must not be selected
+tStar = 382981.289129055;  d = tStar/86400;
+S = struct('dep_key', 'a', 'arr_key', 'b', 'dep_family', 'dro', 'arr_family', 'tulip', 'rungs_N', [2 1 0.5], ...
+           'has_solution', false(2, 2, 3), 'accepted', false(2, 2, 3), 'tf_nd', nan(2, 2, 3), ...
+           'sD_frac', [0 0.5], 'sA_frac', [0 0.5], ...
+           'constants', struct('muStar', 0.012150585609624, 'lStar_km', 389703.264829278, 'tStar_s', tStar));
+S.has_solution(:, :, 1) = [true true; true false];  S.accepted(:, :, 1) = [false true; true false];  S.tf_nd(:, :, 1) = [1 2; 3 NaN];
+S.has_solution(:, :, 2) = [true false; false false]; S.accepted(:, :, 2) = [true false; false false]; S.tf_nd(:, :, 2) = [4 NaN; NaN NaN];
+S2 = S;  S2.arr_key = 'c';  S2.has_solution(:) = false;  S2.accepted(:) = false;  S2.has_solution(1, 1, 3) = true;  S2.accepted(1, 1, 3) = true;  S2.tf_nd(1, 1, 3) = 5;
+E = edge_tables([S; S2]);
+ok = check(ok, numel(E) == 2 && E(2).sheet_index == 2 && strcmp(E(2).arr_key, 'c'), 'edge_tables: one row per sheet, sheet_index and keys carried');
+ok = check(ok, isequal(E(1).n_solved, [3 1 0]) && isequal(E(1).n_accepted, [2 1 0]) && isequal(E(1).closed_frac, [2/4 1/4 0]), 'edge_tables: solved and accepted counts, closed_frac over accepted');
+ok = check(ok, abs(E(1).tf_min_days(1) - 2*d) < 1e-12, 'edge_tables: the refuted 1-day cell is NOT the minimum; min over ACCEPTED is 2 days');
+ok = check(ok, abs(E(1).tf_med_days(1) - 2.5*d) < 1e-12, 'edge_tables: median over accepted cells (2, 3 days -> 2.5)');
+ok = check(ok, isnan(E(1).tf_min_days(3)) && isnan(E(1).tf_med_days(3)), 'edge_tables: NaN on a rung with nothing accepted');
+ok = check(ok, E(1).F_low_N == 1 && strcmp(E(1).F_low_str, '1'), 'edge_tables: lowest accepted rung 1 N');
+ok = check(ok, E(2).F_low_N == 0.5 && strcmp(E(2).F_low_str, '0.5 (lowest tested)'), 'edge_tables: a sheet accepted at the last rung says so, not a bracket');
 fprintf('test_lib: %s\n', verdict(ok));
 end
 

@@ -30,7 +30,8 @@ outDir = fullfile(tempdir, 'test_orbit_network_pipeline');
 if ~exist(outDir, 'dir'), mkdir(outDir); end
 delete(fullfile(outDir, '*.png'));
 
-scripts = {'stability_cost_study', {'P1', 'P2', 'P3', 'P4', 'P5', 'P6', 'P7'}, {'H1', 'H2'}, {'stability_cost.png'}};
+scripts = {'stability_cost_study', {'P1', 'P2', 'P3', 'P4', 'P5', 'P6', 'P7'}, {'H1', 'H2'}, {'stability_cost.png'}
+           'orbit_network_study',  {'G1', 'G2', 'G3'},                         {},           {}};
 for ss = 1:size(scripts, 1)
     name = scripts{ss, 1};
     file = fullfile(root, [name '.m']);

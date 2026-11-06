@@ -145,9 +145,97 @@ for kk = 1:nN
     fprintf('%s\n', row);  lines{end+1} = row;
 end
 
-%% 5  relay closure
+%% 5  relay closure (L1 halo -> L2 halo -> tulip: the only multileg structure in the data)
+R = relay_closure(T, N, relay.src, relay.via, relay.dst);
+fprintf('\n== 5  relay closure: %d routes %s -> %s -> %s, phase-compatible assembled times\n', numel(R), relay.src, relay.via, relay.dst);
+pairKeys = unique(strcat({R.src_key}, ' -> ', {R.dst_key}), 'stable');
+best = struct('pair', pairKeys, 't_route_days', [], 't_sum_days', [], 'relay_key', [], 'deepest_N', []);
+for pp = 1:numel(pairKeys)
+    sel = find(strcmp(strcat({R.src_key}, ' -> ', {R.dst_key}), pairKeys{pp}));
+    tr  = vertcat(R(sel).t_route_days);                     % [nRelays x nR]
+    ts  = vertcat(R(sel).t_sum_days);
+    [tb, ib] = min(tr, [], 1, 'omitnan');                   % best relay per rung by the ASSEMBLED time
+    tb(all(isnan(tr), 1)) = NaN;
+    best(pp).t_route_days = tb;
+    best(pp).t_sum_days   = min(ts, [], 1, 'omitnan');
+    best(pp).relay_key    = arrayfun(@(rr) R(sel(ib(rr))).relay_key, 1:nR, 'UniformOutput', false);
+    best(pp).relay_key(isnan(tb)) = {''};                  % an open rung has no relay (min over all-NaN returns index 1)
+    deep = find(~isnan(tb), 1, 'last');
+    if isempty(deep), best(pp).deepest_N = NaN; else, best(pp).deepest_N = rungs(deep); end
+    if isnan(tb(rC)), rk = 'none'; else, rk = best(pp).relay_key{rC}; end
+    row = sprintf('  %-32s deepest rung closed %5g N | at %g N: best relay %-16s t_route %.3f d (t_sum %.3f d)', ...
+                  pairKeys{pp}, best(pp).deepest_N, F_ref, rk, tb(rC), best(pp).t_sum_days(rC));
+    fprintf('%s\n', row);  lines{end+1} = row;
+end
+% extend the caps if the relay times exceed the direct ones, then the directed-reachability overlay
+tRel = [best.t_route_days];
+if max(tRel, [], 'omitnan') > caps(end)
+    caps = linspace(capLo, max(tRel, [], 'omitnan'), nCaps);
+    P = accessibility_plane(T, caps);
+    lines{end+1} = sprintf('caps extended to %.3f days to cover the relay routes', caps(end));
+    fprintf('%s\n', lines{end});
+end
+P.multileg = zeros(nR, nCaps);
+for rr = 1:nR
+    for cc = 1:nCaps
+        P.multileg(rr, cc) = nnz(arrayfun(@(b) b.t_route_days(rr) <= caps(cc), best));
+    end
+end
+P.reach = P.pairs + P.multileg;                            % directed reachable ordered pairs under the cap (direct + two-leg)
+usage = zeros(nN, 1);
+for pp = 1:numel(best)
+    if ~isnan(best(pp).t_route_days(rC))
+        kU = find(strcmp(keyN, best(pp).relay_key{rC}), 1);
+        usage(kU) = usage(kU) + 1;
+    end
+end
+for kk = find(usage > 0).'
+    row = sprintf('  relay usage at %g N: %-16s serves %d of %d (L1 halo, tulip) pairs as the best assembled relay', F_ref, keyN{kk}, usage(kk), numel(best));
+    fprintf('%s\n', row);  lines{end+1} = row;
+end
+lines{end+1} = sprintf('%d relay routes over %d (src, dst) pairs; pairs reaching %g N by relay: %d of %d; directed reachable ordered pairs at %g N under the largest cap: %d (direct %d + two-leg %d) of %d candidate pairs (direct sheets + relay pairs)', ...
+                       numel(R), numel(best), F_deep, nnz([best.deepest_N] == F_deep), numel(best), F_ref, P.reach(rC, end), P.pairs(rC, end), P.multileg(rC, end), nS + numel(best));
+fprintf('%s\n', lines{end});
+% G4: enumeration and consistency with the sheets (not a physics check)
+g4 = numel(R) == 32 && numel(best) == 8;
+for kk = 1:numel(R)
+    L1 = T(R(kk).s1);  L2 = T(R(kk).s2);
+    legs = squeeze(any(any(L1.accepted, 1), 2)).' & squeeze(any(any(L2.accepted, 1), 2)).';
+    g4 = g4 && strcmp(L1.arr_key, L2.dep_key) && strncmp(L1.dep_key, relay.src, numel(relay.src)) && strncmp(L2.arr_key, relay.dst, numel(relay.dst)) ...
+            && isequal(R(kk).closed, legs) && all(isnan(R(kk).t_route_days(~legs))) && all(~isnan(R(kk).t_route_days(legs))) ...
+            && all(R(kk).t_route_days(legs) >= R(kk).t_sum_days(legs) - 1e-9) && isequal(sort(L1.sA_frac), sort(L2.sD_frac));
+end
+gates(end+1) = struct('id', 'G4', 'ok', g4, 'msg', '32 routes over 8 pairs, legs share the relay key and its phase grid, closed iff both legs accepted, t_route >= t_sum and NaN exactly when open', 'throws', true);
 
-%% 6  hypothetical reverse graph
+%% 6  hypothetical reverse graph (x-axis symmetry: geometry only; the mirrored arc belongs to a mass-GAIN model)
+mu    = T(1).constants.muStar;
+resP  = zeros(nN, 1);  resS = zeros(nN, 1);
+for kk = 1:nN
+    x0 = N(kk).x0;  Tp = N(kk).period_nd;
+    [~, X] = pumpkyn.cr3bp.prop([0 0.37*Tp Tp], x0.', mu);
+    resP(kk) = max(abs(X(end, 1:6).' - x0));                % periodic closure, independent of the symmetry
+    resS(kk) = symmetry_residual(X(2, 1:6).', Tp, mu);      % mirror image of an OFF-PLANE point lies on the orbit
+end
+fprintf('\n== 6  symmetry: periodic closure max %.1e; off-plane mirror residual max %.1e (every stored x0 is on the plane, so the check is made at phi(x0, 0.37 T))\n', max(resP), max(resS));
+barG5 = 1e-6;                                               % pumpkyn.cr3bp.prop runs at 1e-10 tolerances: the longest tulip closes to 8e-8; a non-symmetric state fails by 1e-3
+gates(end+1) = struct('id', 'G5', 'ok', all(resP < barG5) && all(resS < barG5), ...
+                      'msg', sprintf('every node closes (%.1e) and is x-axis symmetric at an off-plane point (%.1e), bar %.0e (propagator floor 8e-8 on tulip_Np12); throws only when the hypothetical graph is on', max(resP), max(resS), barG5), 'throws', hypothetical);
+if hypothetical
+    Eh = G.Edges;
+    Eh.EndNodes = fliplr(Eh.EndNodes);
+    Eh.hypothetical = true(height(Eh), 1);
+    Eh.n_accepted   = zeros(size(Eh.n_accepted));          % no certificate travels with a mirrored arc
+    Gh = digraph([G.Edges; Eh], G.Nodes);
+    [~, sccSize] = conncomp(Gh, 'Type', 'strong');
+    D  = distances(Gh);  D(logical(eye(nN))) = Inf;
+    nReach = nnz(isfinite(D));
+    row = sprintf('  HYPOTHETICAL: %d edges (%d + %d reversed); strongly connected components %d (largest %d nodes); ordered node pairs joined by a directed path %d of %d', ...
+                  numedges(Gh), nS, nS, numel(sccSize), max(sccSize), nReach, nN*(nN - 1));
+    fprintf('%s\n', row);  lines{end+1} = row;
+    lines{end+1} = 'HYPOTHETICAL numbers never enter sections 3-5 or the figures';
+else
+    fprintf('  hypothetical reverse graph off (hypothetical = false); G5 is still reported\n');
+end
 
 %% 7  figures
 

@@ -1112,8 +1112,9 @@ for kk = 1:nN
     resS(kk) = symmetry_residual(X(2, 1:6).', Tp, mu);      % mirror image of an OFF-PLANE point lies on the orbit
 end
 fprintf('\n== 6  symmetry: periodic closure max %.1e; off-plane mirror residual max %.1e (every stored x0 is on the plane, so the check is made at phi(x0, 0.37 T))\n', max(resP), max(resS));
-gates(end+1) = struct('id', 'G5', 'ok', all(resP < 1e-8) && all(resS < 1e-8), ...
-                      'msg', sprintf('every node closes (%.1e) and is x-axis symmetric at an off-plane point (%.1e), bars 1e-8; throws only when the hypothetical graph is on', max(resP), max(resS)), 'throws', hypothetical);
+barG5 = 1e-6;                                               % pumpkyn.cr3bp.prop runs at 1e-10 tolerances: the longest tulip closes to 8e-8; a non-symmetric state fails by 1e-3
+gates(end+1) = struct('id', 'G5', 'ok', all(resP < barG5) && all(resS < barG5), ...
+                      'msg', sprintf('every node closes (%.1e) and is x-axis symmetric at an off-plane point (%.1e), bar %.0e (propagator floor 8e-8 on tulip_Np12); throws only when the hypothetical graph is on', max(resP), max(resS), barG5), 'throws', hypothetical);
 if hypothetical
     Eh = G.Edges;
     Eh.EndNodes = fliplr(Eh.EndNodes);
@@ -1132,7 +1133,7 @@ else
 end
 ```
 
-- [ ] **Step 5: Run the script, then `test_pipeline`.** Expected: G4 and G5 PASS; the hypothetical run prints `112 edges` and `HYPOTHETICAL`; all checks PASS. If G5 fails on a node, print `resP` and `resS` with keys; a halo residual of order 1e-9 is normal, 1e-3 is a bug (check that `x0` is `rv(1, :)` of `get_family_orbit`).
+- [ ] **Step 5: Run the script, then `test_pipeline`.** Expected: G4 and G5 PASS; the hypothetical run prints `112 edges` and `HYPOTHETICAL`; all checks PASS. If G5 fails on a node, print `resP` and `resS` with keys; residuals up to 1e-7 are the propagator's floor on long orbits, 1e-3 is a bug (check that `x0` is `rv(1, :)` of `get_family_orbit`).
 - [ ] **Step 6: Code Analyzer clean (same tolerance as Task 6).**
 - [ ] **Step 7: Commit (controller, after review)**
 

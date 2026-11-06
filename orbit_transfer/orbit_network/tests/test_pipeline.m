@@ -31,7 +31,7 @@ if ~exist(outDir, 'dir'), mkdir(outDir); end
 delete(fullfile(outDir, '*.png'));
 
 scripts = {'stability_cost_study', {'P1', 'P2', 'P3', 'P4', 'P5', 'P6', 'P7'}, {'H1', 'H2'}, {'stability_cost.png'}
-           'orbit_network_study',  {'G1', 'G2', 'G3'},                         {},           {}};
+           'orbit_network_study',  {'G1', 'G2', 'G3', 'G4', 'G5'},                      {},           {}};
 for ss = 1:size(scripts, 1)
     name = scripts{ss, 1};
     file = fullfile(root, [name '.m']);
@@ -65,6 +65,20 @@ for ss = 1:size(scripts, 1)
         ok = check(ok, exist(fullfile(outDir, figs{ff}), 'file') == 2, sprintf('%s wrote %s', name, figs{ff}));
     end
 end
+
+%% the hypothetical reverse graph, which the default run never exercises
+assignin('base', 'study_opts', struct('outDir', outDir, 'visible', 'off', 'hypothetical', true));
+try
+    txt = evalc(sprintf('evalin(''base'', ''run(''''%s'''')'')', fullfile(root, 'orbit_network_study.m')));
+    ran = true;
+catch err
+    txt = err.message;  ran = false;
+end
+evalin('base', 'clear study_opts');
+ok = check(ok, ran, 'orbit_network_study ran with hypothetical = true');
+ok = check(ok, ran && ~isempty(regexp(txt, '\n\s*G5\s+PASS', 'once')), 'hypothetical run: G5 PASS');
+ok = check(ok, ran && contains(txt, 'HYPOTHETICAL'), 'hypothetical run labels its numbers HYPOTHETICAL');
+ok = check(ok, ran && contains(txt, '112 edges'), 'hypothetical run reports 112 edges (56 + 56 reversed)');
 
 fprintf('test_pipeline: %s\n', verdict(ok));
 end

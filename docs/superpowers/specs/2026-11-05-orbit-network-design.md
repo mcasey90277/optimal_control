@@ -314,8 +314,12 @@ Sections:
    arrival mass of the previous leg by scaling thrust and mass by q =
    m1/m0 <= 1 keeps the same path and satisfies the thrust bound).
 6. **hypothetical reverse graph**: G5 = for every node, periodic closure
-   |phi(x0, T) - x0| < 1e-8 AND the mirror image of the off-plane state
-   phi(x0, 0.37 T) lies on the orbit (`symmetry_residual` < 1e-8). G5 is
+   |phi(x0, T) - x0| < 1e-6 AND the mirror image of the off-plane state
+   phi(x0, 0.37 T) lies on the orbit (`symmetry_residual` < 1e-6). The bar
+   is 1e-6 because `pumpkyn.cr3bp.prop` integrates at 1e-10 tolerances and
+   over the longest tulip period (5.7 ND) its closure residual is already
+   8e-8; a non-symmetric or non-periodic state fails by three orders
+   (1e-3). G5 is
    printed always and throws only when `hypothetical` is on. When on, the
    56 reversed edges are added with `hypothetical = true`, `n_accepted =
    0`, the same `tf_*` numbers carried as geometry only; the script

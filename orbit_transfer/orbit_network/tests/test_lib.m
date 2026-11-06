@@ -42,6 +42,21 @@ ok = check(ok, abs(o.F - F) < 1e-12 && abs(o.p - p) < 1e-12, sprintf('hand-worke
 ok = check(ok, o.p > 0 && o.p < 1 && o.R2_1 >= o.R2_0, 'p in (0, 1) and R2 non-decreasing with the larger model');
 ok = check(ok, abs(o.pt1(3) - o.p) < 1e-12 && abs(o.t1(3)^2 - o.F) < 1e-9, 'one added column: its t-test p equals the partial-F p and t^2 = F');
 ok = check(ok, isequal(size(o.se1), [3 1]) && all(o.se1 > 0), 'standard errors are a positive [p1 x 1] column');
+ok = check(ok, isequal(size(o.ci1), [3 2]) && all(o.ci1(:, 1) < o.b1) && all(o.ci1(:, 2) > o.b1), '95% CI brackets each coefficient');
+tq = sqrt(3*(1/betaincinv(0.05, 1.5, 0.5) - 1));
+ok = check(ok, abs(tq - 3.1824) < 2e-4 && abs(o.ci1(3, 2) - o.ci1(3, 1) - 2*tq*o.se1(3)) < 1e-12, 'CI half-width is t_{0.975,3} = 3.182 standard errors');
+%% exact-fit policies and the rank refusal
+o2 = partial_f_test(y, [ones(6, 1), x, z, [1; 0; 0; 1; 0; 1]], [ones(6, 1), x, z, [1; 0; 0; 1; 0; 1], [0; 1; 0; 0; 1; 0]]);
+ok = check(ok, o2.F >= 0 && o2.p >= 0 && o2.p <= 1, 'four and five columns on six points: finite F, p in [0, 1]');
+yE = 1 + 2*x;
+o3 = partial_f_test(yE, [ones(6, 1), x], [ones(6, 1), x, z]);
+ok = check(ok, o3.F == 0 && o3.p == 1, 'both models exact (RSS0 = RSS1 = 0): no improvement claimed, p = 1');
+try
+    partial_f_test(y, [ones(6, 1), x], [ones(6, 1), x, 2*x]);
+    ok = check(ok, false, ':rank refusal');
+catch err
+    ok = check(ok, strcmp(err.identifier, 'orbit_network:partial_f_test:rank'), ':rank refusal on a rank-deficient X1');
+end
 
 %% the p-value against a tabulated point: F(1, 3) upper tail at F = 10.13 is 0.05
 o = struct('F', 10.128, 'df1', 1, 'df2', 3);

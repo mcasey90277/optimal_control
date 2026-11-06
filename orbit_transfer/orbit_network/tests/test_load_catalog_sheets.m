@@ -37,7 +37,20 @@ ok = check(ok, all(arrayfun(@(r) abs(r.T_arr - 2*pi*(r.arr_params.Np - 2)/(r.arr
 
 %% shapes, rungs, keys
 ok = check(ok, all(arrayfun(@(r) isequal(size(r.has_solution), [6 6 11]) && isequal(size(r.tf_nd), [6 6 11]) && isequal(size(r.conj_pass), [6 6 11]), T)), 'every grid is 6 x 6 x 11');
-ok = check(ok, all(arrayfun(@(r) islogical(r.has_solution) && islogical(r.conj_pass), T)), 'has_solution and conj_pass are logical');
+ok = check(ok, all(arrayfun(@(r) islogical(r.has_solution) && islogical(r.conj_pass) && islogical(r.accepted), T)), 'has_solution, conj_pass and accepted are logical');
+ok = check(ok, all(arrayfun(@(r) ~any(r.accepted(:) & ~r.has_solution(:)), T)), 'accepted implies has_solution');
+r1 = find(T(1).rungs_N == 1);
+nAcc = sum(cell2mat(arrayfun(@(r) reshape(sum(sum(r.accepted, 1), 2), 1, []), T, 'UniformOutput', false)), 1);
+nSol = sum(cell2mat(arrayfun(@(r) reshape(sum(sum(r.has_solution, 1), 2), 1, []), T, 'UniformOutput', false)), 1);
+ok = check(ok, all(nAcc <= nSol) && all(nAcc(r1+1:end) < nSol(r1+1:end)) && sum(nSol - nAcc) > 50, sprintf('accepted <= solved at every rung, strictly smaller at 0.75 and 0.5 N (%d refuted or gated cells in all)', sum(nSol - nAcc)));
+%% the raw conj_pass holds -1 for "not run": it must not be a pass
+S = load(fullfile(fileparts(fileparts(here)), 'HALO_HALO', 'direct', 'results', 'costate_catalog_halo_halo.mat'));
+raw = S.costate_catalog_halo_halo.sheets;
+nMinus = sum(arrayfun(@(s) nnz(s.conj_pass == -1), raw));
+hh = T(strcmp({T.catalog}, 'halo_halo'));
+nPassT = sum(arrayfun(@(s) nnz(s.conj_pass), hh));
+nPassRaw = sum(arrayfun(@(s) nnz(s.conj_pass == 1), raw));
+ok = check(ok, nMinus >= 1 && nPassT == nPassRaw, sprintf('conj_pass == 1 only (%d raw -1 entries are not passes)', nMinus));
 ok = check(ok, all(arrayfun(@(r) isequal(r.rungs_N, [15 12 10 7 5 3 2 1.5 1 0.75 0.5]), T)), 'rungs identical and as documented');
 keys = arrayfun(@(r) [r.dep_key ' -> ' r.arr_key], T, 'UniformOutput', false);
 ok = check(ok, numel(unique(keys)) == 56, 'the 56 (dep, arr) keys are unique');

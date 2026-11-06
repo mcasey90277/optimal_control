@@ -11,13 +11,14 @@
 %
 %   Each sheet is one point. Covariates: the Jacobi gap dCJ = C_J(arr) -
 %   C_J(dep) (the energy the transfer must buy), and the instability rates
-%   sigma_dep, sigma_arr = ln|lambda|max / T of the two orbits (0 when
-%   stable). Responses: tf1, the min-over-phases time of flight at the
-%   shared 1 N rung, and surv, the fraction of cells closed at 1 N that are
-%   still closed at the 0.5 N rung (the thrust-wall measure). The question
-%   is whether sigma carries information BEYOND energy: a nested regression
-%   per response, dCJ alone against dCJ + sigma_dep + sigma_arr, decided
-%   by the partial F test.
+%   sigma_dep, sigma_arr = ln|lambda|max / T of the two orbits (exactly 0
+%   when |lambda|max < 1 + 1e-3). Responses: tf1, the min-over-phases time
+%   of flight at the shared 1 N rung, and surv, the fraction of cells
+%   accepted at 1 N that are still accepted at the 0.5 N rung (catalog
+%   retention down the ladder). The question is whether sigma_dep carries
+%   information BEYOND energy: a nested regression per response, dCJ alone
+%   against dCJ + sigma_dep + sigma_arr, with the verdict on the sigma_dep
+%   coefficient's own t-test (the partial F and sigma_arr beside it).
 %
 %     0  settings                          (one place for every choice)
 %     1  load and census                   (P1-P4: the data is what we think)
@@ -26,9 +27,12 @@
 %     4  regression                        (H1-H2 verdicts)
 %     5  figure                            (results/stability_cost.png)
 %
+%   Every count and minimum is over ACCEPTED cells (solved, conjugate-pass,
+%   hypothesis gates); an unaccepted cell is unresolved, not infeasible.
 %   P gates are code gates: a FAIL means the data or the computation is
 %   not what this script assumes, and the summary throws. H verdicts are
-%   HYPOTHESES: SUPPORTED or NOT SUPPORTED are both results.
+%   HYPOTHESES: DETECTED or NOT DETECTED (nominal OLS) are both results,
+%   and NOT DETECTED is never "no effect".
 %
 %   A pipeline test runs this headless: if a struct `study_opts` exists in
 %   the base workspace, its .outDir and .visible are honoured.
@@ -62,36 +66,44 @@ rW = find(rungs == F_wall, 1);
 tStar = T(1).constants.tStar_s;
 days  = @(tnd) tnd*tStar/86400;
 
-fprintf('\n== 1  census: %d sheets, rungs %s N\n', nS, mat2str(rungs));
-fprintf('%-3s %-11s %-18s %-14s %6s %6s %9s\n', '#', 'catalog', 'departure', 'arrival', 'n(1N)', 'n(.5N)', 'tf1 [d]');
-nC = zeros(nS, 1);  nW = zeros(nS, 1);  tf1 = nan(nS, 1);
+fprintf('\n== 1  census: %d sheets, rungs %s N (counts are ACCEPTED cells: solved, conjugate-pass, hypothesis gates; solved beside)\n', nS, mat2str(rungs));
+fprintf('%-3s %-11s %-18s %-14s %6s %6s %6s %6s %9s\n', '#', 'catalog', 'departure', 'arrival', 'a(1N)', 's(1N)', 'a(.5N)', 's(.5N)', 'tf1 [d]');
+nC = zeros(nS, 1);  nW = zeros(nS, 1);  tf1 = nan(nS, 1);  sC = zeros(nS, 1);  sW = zeros(nS, 1);  nX = 0;
 for kk = 1:nS
-    hC = T(kk).has_solution(:, :, rC);
-    hW = T(kk).has_solution(:, :, rW);
+    aC = T(kk).accepted(:, :, rC);
+    aW = T(kk).accepted(:, :, rW);
     tC = T(kk).tf_nd(:, :, rC);
-    nC(kk) = nnz(hC);  nW(kk) = nnz(hW);
-    if nC(kk) > 0, tf1(kk) = days(min(tC(hC))); end
-    fprintf('%-3d %-11s %-18s %-14s %6d %6d %9.3f\n', kk, T(kk).catalog, T(kk).dep_key, T(kk).arr_key, nC(kk), nW(kk), tf1(kk));
+    nC(kk) = nnz(aC);  nW(kk) = nnz(aW & aC);                % retained = accepted at BOTH rungs (nested by construction)
+    nX = nX + nnz(aW & ~aC);                                  % accepted at the wall rung but refuted/gated at the cost rung: printed, not counted
+    sC(kk) = nnz(T(kk).has_solution(:, :, rC));  sW(kk) = nnz(T(kk).has_solution(:, :, rW));
+    if nC(kk) > 0, tf1(kk) = days(min(tC(aC))); end
+    fprintf('%-3d %-11s %-18s %-14s %6d %6d %6d %6d %9.3f\n', kk, T(kk).catalog, T(kk).dep_key, T(kk).arr_key, nC(kk), sC(kk), nW(kk), sW(kk), tf1(kk));
 end
 
 % P1 the sheet count; P2 one rung vector (the loader refuses otherwise; re-stated here);
-% P3 closure monotone between the two rungs used (a cell closed at the wall
-%    rung is closed at the cost rung, so surv is a ratio of nested sets);
-%    across the WHOLE ladder closure is not monotone -- the 15 N starting rung
-%    closes fewer cells than 12 N -- and that count is printed as a fact;
-% P4 every sheet closes at the cost rung
+% P3 the SOLVED sets are nested between the two rungs used (the ladder walks
+%    down from the cost rung, so a wall-rung solution descends from a cost-
+%    rung one); the ACCEPTED sets need not be, since certification can fail
+%    at the shallower rung and pass at the deeper one, so surv counts cells
+%    accepted at BOTH rungs over cells accepted at the cost rung and the
+%    exceptions are printed; across the WHOLE ladder closure is not
+%    monotone -- the 15 N starting rung closes fewer cells than 12 N --
+%    printed as a fact;
+% P4 every sheet has an accepted cell at the cost rung
 nViolPair = 0;  nViolAll = 0;
 for kk = 1:nS
     h = T(kk).has_solution;
     nViolPair = nViolPair + nnz(h(:, :, rW) & ~h(:, :, rC));
-    nViolAll  = nViolAll  + nnz(h(:, :, 2:end) & ~h(:, :, 1:end-1));   % closed deeper but open one rung shallower
+    nViolAll  = nViolAll  + nnz(h(:, :, 2:end) & ~h(:, :, 1:end-1));   % solved deeper but open one rung shallower
 end
-fprintf('closed cells per rung, summed over sheets: %s\n', mat2str(sum(cell2mat(arrayfun(@(r) reshape(sum(sum(r.has_solution, 1), 2), 1, []), T, 'UniformOutput', false)), 1)));
-fprintf('whole-ladder non-monotone cells (closed at a rung, open one rung shallower): %d -- solver coverage, not a data error\n', nViolAll);
+fprintf('solved cells per rung, summed over sheets:   %s\n', mat2str(sum(cell2mat(arrayfun(@(r) reshape(sum(sum(r.has_solution, 1), 2), 1, []), T, 'UniformOutput', false)), 1)));
+fprintf('accepted cells per rung, summed over sheets: %s\n', mat2str(sum(cell2mat(arrayfun(@(r) reshape(sum(sum(r.accepted, 1), 2), 1, []), T, 'UniformOutput', false)), 1)));
+fprintf('whole-ladder non-monotone solved cells (closed at a rung, open one rung shallower): %d -- solver coverage, not a data error; an unclosed cell is unresolved, not infeasible\n', nViolAll);
+fprintf('cells accepted at %g N but not at %g N (refuted or gated at the shallower rung): %d -- excluded from surv, which counts cells accepted at both rungs\n', F_wall, F_cost, nX);
 gates(end+1) = struct('id', 'P1', 'ok', nS == 56, 'msg', sprintf('56 sheets loaded (%d)', nS));
 gates(end+1) = struct('id', 'P2', 'ok', all(arrayfun(@(r) isequal(r.rungs_N, rungs), T)) && ~isempty(rC) && ~isempty(rW), 'msg', sprintf('one rung vector, holding %g N and %g N', F_cost, F_wall));
-gates(end+1) = struct('id', 'P3', 'ok', nViolPair == 0, 'msg', sprintf('every cell closed at %g N is closed at %g N (%d violations), so surv is a ratio of nested sets', F_wall, F_cost, nViolPair));
-gates(end+1) = struct('id', 'P4', 'ok', all(nC > 0), 'msg', sprintf('every sheet closes at %g N (min %d cells)', F_cost, min(nC)));
+gates(end+1) = struct('id', 'P3', 'ok', nViolPair == 0, 'msg', sprintf('every cell solved at %g N is solved at %g N (%d violations); surv is the nested ratio accepted-at-both / accepted-at-%g N', F_wall, F_cost, nViolPair, F_cost));
+gates(end+1) = struct('id', 'P4', 'ok', all(nC > 0), 'msg', sprintf('every sheet has an accepted cell at %g N (min %d cells)', F_cost, min(nC)));
 
 %% 2  orbit properties
 fprintf('\n== 2  orbit properties (sigma = ln|lambda|max / T, 0 when stable)\n');
@@ -123,13 +135,14 @@ fprintf('%-3s %-18s %-14s %8s %8s %8s %9s %7s\n', '#', 'departure', 'arrival', '
 for kk = 1:nS
     fprintf('%-3d %-18s %-14s %8.4f %8.4f %8.4f %9.3f %7.3f\n', kk, T(kk).dep_key, T(kk).arr_key, dCJ(kk), sDep(kk), sArr(kk), tf1(kk), surv(kk));
 end
-fprintf('stable-departure sheets: %d, unstable-departure sheets: %d\n', nnz(stDep), nnz(~stDep));
+fprintf('stable-departure sheets: %d, unstable-departure sheets: %d; distinct departure orbits %d, distinct arrivals %d (sheets share nodes and are not independent observations)\n', ...
+        nnz(stDep), nnz(~stDep), numel(unique({T.dep_key})), numel(unique({T.arr_key})));
 
 %% 4  regression
 fprintf('\n== 4  nested regression, M0: y ~ 1 + dCJ   M1: y ~ 1 + dCJ + sigma_dep + sigma_arr\n');
 X0 = [ones(nS, 1), dCJ];
 X1 = [ones(nS, 1), dCJ, sDep, sArr];
-resp = struct('name', {'tf1 [days] at 1 N', 'survival to 0.5 N'}, 'y', {tf1, surv}, 'sign', {-1, +1}, 'id', {'H1', 'H2'});
+resp = struct('name', {'tf1 [days] at 1 N', 'retention to 0.5 N'}, 'y', {tf1, surv}, 'sign', {-1, +1}, 'id', {'H1', 'H2'});
 verdict = struct('id', cell(1, numel(resp)), 'supported', [], 'msg', '');
 fits    = cell(1, numel(resp));
 for rr = 1:numel(resp)
@@ -139,17 +152,22 @@ for rr = 1:numel(resp)
     fprintf('    M0: b = [%.4f %.4f]              R2 = %.3f\n', o.b0, o.R2_0);
     fprintf('    M1: b = [%.4f %.4f %.4f %.4f]  R2 = %.3f\n', o.b1, o.R2_1);
     fprintf('    partial F(%d, %d) = %.3f, p = %.4f   (both sigma terms jointly)\n', o.df1, o.df2, o.F, o.p);
-    fprintf('    M1 coefficient t-tests: dCJ t = %6.2f p = %.4f | sigma_dep t = %6.2f p = %.4f | sigma_arr t = %6.2f p = %.4f\n', ...
-            o.t1(2), o.pt1(2), o.t1(3), o.pt1(3), o.t1(4), o.pt1(4));
-    fprintf('    group means: stable departure %.4f, unstable departure %.4f\n', gS, gU);
+    fprintf('    M1 coefficient t-tests (nominal OLS, %d dof): dCJ t = %6.2f p = %.4f | sigma_dep t = %6.2f p = %.4f | sigma_arr t = %6.2f p = %.4f\n', ...
+            o.df2, o.t1(2), o.pt1(2), o.t1(3), o.pt1(3), o.t1(4), o.pt1(4));
+    fprintf('    95%% CI: dCJ [%.4f, %.4f] | sigma_dep [%.4f, %.4f] | sigma_arr [%.4f, %.4f]\n', o.ci1(2, :), o.ci1(3, :), o.ci1(4, :));
+    fprintf('    group means (descriptive): stable departure %.4f, unstable departure %.4f\n', gS, gU);
     % the paper's claim is about DEPARTURE stability beyond energy, so the
     % verdict rests on the sigma_dep coefficient's own test and sign; the
     % joint F and the sigma_arr term are reported beside it (sigma_arr only
-    % varies on the 8 halo-to-halo sheets, so it is confounded with catalog)
+    % varies on the 8 halo-to-halo sheets, so it is confounded with catalog).
+    % NOT DETECTED means not detected by this analysis at the nominal
+    % threshold, never "no effect": the p-values are nominal (sheets share
+    % nodes) and 1 N / 0.5 N sit far above the 70 mN regime of the DRO wall.
     signOK = sign(o.b1(3)) == resp(rr).sign;
     sup = o.pt1(3) < alpha && signOK;
-    if resp(rr).sign < 0, want = 'negative (unstable departures faster)'; else, want = 'positive (unstable departures survive the wall better)'; end
-    verdict(rr) = struct('id', resp(rr).id, 'supported', sup, 'msg', sprintf('%s: sigma_dep coefficient %.4f, t-test p = %.4f (alpha %.2f; joint F p = %.4f), paper predicts %s', resp(rr).name, o.b1(3), o.pt1(3), alpha, o.p, want));
+    if resp(rr).sign < 0, want = 'negative (unstable departures faster)'; else, want = 'positive (unstable departures retained better down the ladder)'; end
+    verdict(rr) = struct('id', resp(rr).id, 'supported', sup, 'msg', sprintf('%s: sigma_dep coefficient %.4f, 95%% CI [%.4f, %.4f], t-test p = %.4f (nominal; alpha %.2f; joint F p = %.4f), paper predicts %s', ...
+                         resp(rr).name, o.b1(3), o.ci1(3, 1), o.ci1(3, 2), o.pt1(3), alpha, o.p, want));
     fits{rr}    = o;
 end
 
@@ -167,7 +185,7 @@ for rr = 1:numel(resp)
     plot(ax, xx, [ones(50, 1), xx]*fits{rr}.b0, 'k-', 'LineWidth', 1.2, 'DisplayName', 'M0 fit (dCJ only)');
     xlabel(ax, '\Delta C_J = C_J(arr) - C_J(dep)', 'Color', 'k');
     ylabel(ax, resp(rr).name, 'Color', 'k');
-    title(ax, sprintf('%s: sigma_{dep} t-test p = %.3f (joint F p = %.3f)', resp(rr).id, fits{rr}.pt1(3), fits{rr}.p), 'Color', 'k');
+    title(ax, sprintf('%s: sigma_{dep} t-test p = %.3f, nominal (joint F p = %.3f)', resp(rr).id, fits{rr}.pt1(3), fits{rr}.p), 'Color', 'k');
     legend(ax, 'Location', 'best', 'TextColor', 'k', 'Color', 'w');
 end
 figFile = fullfile(outDir, 'stability_cost.png');
@@ -182,7 +200,7 @@ for kk = 1:numel(gates)
     fprintf('  %s  %s  %s\n', gates(kk).id, s, gates(kk).msg);
 end
 for kk = 1:numel(verdict)
-    if verdict(kk).supported, s = 'SUPPORTED    '; else, s = 'NOT SUPPORTED'; end
+    if verdict(kk).supported, s = 'DETECTED    '; else, s = 'NOT DETECTED'; end
     fprintf('  %s  %s  %s\n', verdict(kk).id, s, verdict(kk).msg);
 end
 if ~all([gates.ok])

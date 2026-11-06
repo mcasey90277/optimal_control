@@ -7,7 +7,11 @@ function T = load_catalog_sheets(root)
 %   attached. The v1 DRO catalog is mapped onto the v2 field names here
 %   (dep_family 'dro', dep_params struct('tau', tauDRO), ...) so that no
 %   consumer ever branches on schema version. Catalog order is DRO_tulip,
-%   HALO_tulip, DPO_tulip, HALO_HALO; sheet order is as stored.
+%   HALO_tulip, DPO_tulip, HALO_HALO; sheet order is as stored. The
+%   `accepted` mask is the certified witness: has_solution & conj_pass ==
+%   1 & gate_min_lamv > 0 & gate_min_qmt > 0 & gate_dimS == 1 (conj_pass
+%   stores -1 for "not run", which is not a pass). Every consumer counts
+%   and minimizes over `accepted`; has_solution is reported beside it.
 %
 %   Refusals, by name: a missing catalog file (:missingCatalog, names the
 %   path), rung vectors that differ between catalogs (:rungs), a sheet
@@ -30,11 +34,15 @@ function T = load_catalog_sheets(root)
 %                                                   dep_key, arr_key,
 %                                                   T_dep, T_arr, rungs_N
 %                                                   [1 x 11], has_solution
-%                                                   / tf_nd / conj_pass
-%                                                   [6 x 6 x 11], sD_frac,
-%                                                   sA_frac [1 x 6],
-%                                                   constants (muStar,
-%                                                   lStar_km, tStar_s)
+%                                                   / conj_pass (== 1) /
+%                                                   accepted (solved,
+%                                                   conjugate-pass, three
+%                                                   hypothesis gates) /
+%                                                   tf_nd [6 x 6 x 11],
+%                                                   sD_frac, sA_frac
+%                                                   [1 x 6], constants
+%                                                   (muStar, lStar_km,
+%                                                   tStar_s)
 %
 %% Revision History:
 %  M. Casey                                                   (c) 11/05/2026
@@ -109,7 +117,7 @@ for cc = 1:nCat
         r.arr_key = node_key(r.arr_family, r.arr_params);
         r.rungs_N = rungs;
         nD = numel(sh.sD_frac);  nA = numel(sh.sA_frac);
-        for f = {'has_solution', 'tf_nd', 'conj_pass'}
+        for f = {'has_solution', 'tf_nd', 'conj_pass', 'gate_min_lamv', 'gate_min_qmt', 'gate_dimS'}
             v = sh.(f{1});
             if ~isequal(size(v), [nD nA nR])
                 error('orbit_network:load_catalog_sheets:shape', '%s sheet %d: %s is %s, expected [%d %d %d]', ...
@@ -118,7 +126,9 @@ for cc = 1:nCat
             r.(f{1}) = v;
         end
         r.has_solution = logical(r.has_solution);
-        r.conj_pass    = logical(r.conj_pass);
+        r.conj_pass    = (r.conj_pass == 1);              % the catalog stores -1 for "not run": logical(-1) would be a pass
+        r.accepted     = r.has_solution & r.conj_pass & (r.gate_min_lamv > 0) & (r.gate_min_qmt > 0) & (r.gate_dimS == 1);
+        r = rmfield(r, {'gate_min_lamv', 'gate_min_qmt', 'gate_dimS'});
         r.sD_frac      = sh.sD_frac(:).';
         r.sA_frac      = sh.sA_frac(:).';
         r.constants    = struct('muStar', C.constants.muStar, 'lStar_km', C.constants.lStar_km, 'tStar_s', C.constants.tStar_s);

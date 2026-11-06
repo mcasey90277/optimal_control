@@ -25,10 +25,11 @@ first. Scripts add `lib/` and `../costate_common` themselves. Outputs go to
 
 | file | role |
 |---|---|
-| `load_catalog_sheets.m` | the four catalogs -> one 56-row sheet table (v1 DRO catalog mapped onto the v2 names; refuses a missing file, mismatched rungs, a wrong grid shape) |
-| `orbit_node_table.m` | the 18 distinct orbits: period, Jacobi constant, monodromy spectrum, sigma = ln|lambda|max / T (0 when stable), degrees; cached |
-| `stability_cost_study.m` | topic 1: per sheet, dCJ, sigma_dep, sigma_arr against min t_f at 1 N and survival of the phasing grid to 0.5 N; nested regression with a partial F test and per-coefficient t tests; P1-P7 code gates, H1-H2 hypothesis verdicts; one figure |
-| `lib/partial_f_test.m` | nested OLS, partial F, p-values through betainc (no toolbox), per-coefficient t tests |
+| `load_catalog_sheets.m` | the four catalogs -> one 56-row sheet table (v1 DRO catalog mapped onto the v2 names; the `accepted` mask = solved, conjugate-pass (== 1; the stored -1 "not run" is not a pass) and the three hypothesis gates; refuses a missing file, mismatched rungs, a wrong grid shape) |
+| `orbit_node_table.m` | the 18 distinct orbits: period, Jacobi constant, monodromy spectrum, sigma = ln|lambda|max / T (exactly 0 when |lambda|max < 1 + 1e-3), degrees; cached with provenance (keys, muStar, parameters) |
+| `stability_cost_study.m` | topic 1: per sheet, dCJ, sigma_dep, sigma_arr against min t_f at 1 N and retention of the accepted phasing grid to 0.5 N; nested regression with a partial F test, per-coefficient t tests and 95% CIs; P1-P7 code gates, H1-H2 verdicts (DETECTED / NOT DETECTED, nominal OLS); one figure |
+| `lib/partial_f_test.m` | nested OLS, partial F, p-values through betainc (no toolbox), per-coefficient t tests and CIs; refuses rank-deficient or non-nested designs; both-exact gives p = 1 |
+| `reviews/` | the GPT-6 Astra review of the spec and plan (2026-11-05) and its dispositions: what was accepted and what it changed |
 | `tests/` | `test_load_catalog_sheets`, `test_orbit_node_table`, `test_lib`, `test_pipeline` (scripts headless, parse check), `run_tests` |
 
 Topic 2, the network itself (`orbit_network_study.m`, the accessibility
@@ -38,12 +39,20 @@ and is not yet built.
 ## What it does not claim
 
 - Relay-versus-direct cost is not testable on this data: no pair has both a
-  direct edge and a two-leg route. In a genuine optimal control problem the
-  direct feasible set contains every relay route, so direct never loses.
+  direct edge and a two-leg route. The lemma in the note is about global
+  infima: the feasible set of the unrestricted problem contains every relay
+  route with compatible full states (mass included), so its infimum is never
+  above the relay infimum. That says nothing about what a particular solver
+  returned, and it does not dismiss Braik and Ross's result, which is
+  relative to their restricted direct-maneuver class.
 - Closure is monotone between 1 N and 0.5 N (the two rungs the study uses)
   but not along the whole ladder: the 15 N starting rung closes fewer cells
-  than 12 N. That is solver coverage, printed as a fact, never gated.
+  than 12 N. That is solver coverage, printed as a fact, never gated. An
+  unaccepted cell or rung is unresolved, never a demonstrated infeasibility.
 - sigma_arr varies only on the 8 halo-to-halo sheets, so it is confounded
-  with catalog; the verdicts rest on the departure term.
+  with catalog; the verdicts rest on the departure term. There are 14
+  distinct departure orbits and 8 arrivals, so sheets share nodes and the
+  OLS p-values are nominal; NOT DETECTED is not "no effect", and 1 N and
+  0.5 N sit far above the 70 mN regime of the DRO wall.
 - pumpkynPie's `orbitProperties` errors on a stable orbit, so sigma is taken
   from `pumpkyn.cr3bp.monodromy` directly.

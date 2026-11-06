@@ -57,7 +57,7 @@ for ss = 1:size(scripts, 1)
     end
     verd = scripts{ss, 3};
     for vv = 1:numel(verd)
-        ok = check(ok, ~isempty(regexp(txt, ['\n\s*' verd{vv} '\s+(SUPPORTED|NOT SUPPORTED)'], 'once')), sprintf('%s: verdict %s present', name, verd{vv}));
+        ok = check(ok, ~isempty(regexp(txt, ['\n\s*' verd{vv} '\s+(DETECTED|NOT DETECTED)'], 'once')), sprintf('%s: verdict %s present', name, verd{vv}));
     end
     figs = scripts{ss, 4};
     for ff = 1:numel(figs)

@@ -11,9 +11,10 @@ function N = orbit_node_table(T, opts)
 %   errors on a stable orbit (empty unstable-eigenvalue list).
 %
 %   A cache (default results/orbit_nodes.mat beside this file) is used when
-%   its keys equal the requested keys; opts.rebuild forces a rebuild. The
-%   callers' gate G1 compares period_nd with the catalogs' own periods, so
-%   a stale cache cannot pass silently.
+%   its stored meta (keys, muStar, every parameter struct) equals the
+%   request; opts.rebuild forces a rebuild, and publication runs rebuild.
+%   The callers' gate G1 compares period_nd with the catalogs' own periods
+%   as a further check.
 %
 %% Inputs:
 %
@@ -75,10 +76,11 @@ pars  = [{T.dep_params}, {T.arr_params}];
 fams  = fams(first);
 pars  = pars(first);
 
-%% cache hit?
+%% cache hit? (keys, muStar and every parameter struct must match; periods are re-checked by the callers' G1)
+meta = struct('keys', {ukeys}, 'muStar', T(1).constants.muStar, 'params', {pars}, 'date', char(datetime('now', 'Format', 'yyyy-MM-dd')));
 if ~rebuild && exist(cache, 'file') == 2
     S = load(cache);
-    if isfield(S, 'N') && isequal({S.N.key}, ukeys)
+    if isfield(S, 'N') && isfield(S, 'meta') && isequal(S.meta.keys, ukeys) && isequal(S.meta.muStar, meta.muStar) && isequal(S.meta.params, pars)
         N = S.N;
         N = degrees(N, T);
         return
@@ -119,7 +121,7 @@ N = degrees(N, T);
 
 cdir = fileparts(cache);
 if ~isempty(cdir) && ~exist(cdir, 'dir'), mkdir(cdir); end
-save(cache, 'N');
+save(cache, 'N', 'meta');
 end
 
 % ------------------------------------------------------------------------

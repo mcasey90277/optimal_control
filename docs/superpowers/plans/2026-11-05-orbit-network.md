@@ -492,7 +492,7 @@ ok = check(ok, isequal(P.pairs(1, :), [0 1 1 1]) && isequal(P.cells(1, :), [0 1 
 ok = check(ok, isequal(P.pairs(3, :), [0 0 0 1]) && isequal(P.cells(3, :), [0 0 0 1]), 'accessibility_plane: raw at rung 3 only sheet 2 (5 days)');
 ok = check(ok, isequal(P.closed{1, 4}, 1) && isequal(P.closed{3, 4}, 2) && isempty(P.closed{1, 1}), 'accessibility_plane: closed sheet lists');
 ok = check(ok, isequal(P.pairs_env(1, :), [0 1 1 2]), 'accessibility_plane: the envelope at the 2 N bound includes sheet 2''s 0.5 N witness (feasible under a higher bound)');
-ok = check(ok, isequal(P.cells_env(1, :), [0 1 1 3]) && isequal(P.cells_env(3, :), P.cells(3, :)), 'accessibility_plane: envelope cells take the min over deeper rungs; the deepest row equals the raw row');
+ok = check(ok, isequal(P.cells_env(1, :), [0 1 1 4]) && isequal(P.cells_env(3, :), P.cells(3, :)), 'accessibility_plane: envelope cells take the min over deeper rungs (2, 3, 4 d of sheet 1 and 5 d of sheet 2 under the 10-day cap); the deepest row equals the raw row');
 ok = check(ok, all(all(diff(P.pairs, 1, 2) >= 0)) && all(all(diff(P.cells_env, 1, 2) >= 0)) && all(all(diff(P.pairs_env, 1, 1) <= 0)), 'accessibility_plane: non-decreasing in the cap; envelope non-increasing toward deeper rungs');
 P0 = accessibility_plane([S; S2], d*[0.1 0.2]);
 ok = check(ok, ~any(P0.pairs(:)) && ~any(P0.cells_env(:)), 'accessibility_plane: caps below the data give all zeros, no error');

@@ -151,6 +151,32 @@ ok = check(ok, all(all(diff(P.pairs, 1, 2) >= 0)) && all(all(diff(P.cells_env, 1
 P0 = accessibility_plane([S; S2], d*[0.1 0.2]);
 ok = check(ok, ~any(P0.pairs(:)) && ~any(P0.cells_env(:)), 'accessibility_plane: caps below the data give all zeros, no error');
 
+%% relay_closure: a toy a -> b -> c where the smallest SUM of leg minima is not the smallest ASSEMBLED time
+mk = @(dk, ak, A, tf) struct('dep_key', dk, 'arr_key', ak, 'dep_family', 'x', 'arr_family', 'x', 'rungs_N', [2 1], ...
+                           'has_solution', A, 'accepted', A, 'tf_nd', tf, 'sD_frac', [0 0.5], 'sA_frac', [0 0.5], ...
+                           'constants', struct('muStar', 0.012150585609624, 'lStar_km', 389703.264829278, 'tStar_s', tStar));
+% leg 1 (a -> b): at rung 1 two accepted cells: arrive at phase 0 in 3 days, or at phase 0.5 in 3.2 days; rung 2 open
+A1 = false(2, 2, 2);  A1(1, 1, 1) = true;  A1(1, 2, 1) = true;
+t1 = nan(2, 2, 2);    t1(1, 1, 1) = 3/d;   t1(1, 2, 1) = 3.2/d;
+% leg 2 (b -> c): at rung 1 one accepted cell departing at phase 0.5 in 2 days; at rung 2 one cell departing at phase 0 in 2.5 days
+A2 = false(2, 2, 2);  A2(2, 1, 1) = true;  A2(1, 1, 2) = true;
+t2 = nan(2, 2, 2);    t2(2, 1, 1) = 2/d;   t2(1, 1, 2) = 2.5/d;
+Tt = [mk('L1_a', 'L2_b', A1, t1); mk('L2_b', 'tulip_c', A2, t2); mk('L1_a', 'tulip_c', A1, t1)];   % the third is a direct edge, not a route
+Nt = struct('key', {'L1_a'; 'L2_b'; 'tulip_c'}, 'period_nd', {1; 4/d; 3});                        % relay period = 4 days
+R  = relay_closure(Tt, Nt, 'L1', 'L2', 'tulip');
+ok = check(ok, numel(R) == 1 && strcmp(R.relay_key, 'L2_b') && R.s1 == 1 && R.s2 == 2, 'relay_closure: one route a -> b -> c, sheets indexed into T');
+ok = check(ok, isequal(R.closed, [true false]), 'relay_closure: closed iff BOTH legs have an accepted cell (rung 2: leg 1 open)');
+ok = check(ok, abs(R.t_sum_days(1) - 5) < 1e-9, 'relay_closure: optimistic sum = 3 + 2 days');
+% assembled: arrive phase 0 (3 d) then wait to phase 0.5 = 2 d, +2 d = 7 d; or arrive phase 0.5 (3.2 d), no wait, +2 d = 5.2 d -> choose 5.2
+ok = check(ok, abs(R.t_route_days(1) - 5.2) < 1e-9 && abs(R.wait_days(1)) < 1e-9 && isequal(R.cells(:, 1), [1; 2; 2; 1]), 'relay_closure: the assembled minimizer is the phase-compatible 5.2-day pairing, not the 5-day sum');
+ok = check(ok, R.t_route_days(1) >= R.t_sum_days(1) && isnan(R.t_route_days(2)) && isnan(R.t_sum_days(2)) && all(R.cells(:, 2) == 0), 'relay_closure: t_route >= t_sum; NaN and zero cells when open');
+Tbad = Tt;  Tbad(2).sD_frac = [0.1 0.6];
+try
+    relay_closure(Tbad, Nt, 'L1', 'L2', 'tulip');
+    ok = check(ok, false, 'relay_closure :grid refusal');
+catch err
+    ok = check(ok, strcmp(err.identifier, 'orbit_network:relay_closure:grid'), 'relay_closure :grid refusal when the two legs'' phase grids on the relay differ');
+end
 fprintf('test_lib: %s\n', verdict(ok));
 end
 

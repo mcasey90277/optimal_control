@@ -121,6 +121,23 @@ ok = check(ok, abs(E(1).tf_med_days(1) - 2.5*d) < 1e-12, 'edge_tables: median ov
 ok = check(ok, isnan(E(1).tf_min_days(3)) && isnan(E(1).tf_med_days(3)), 'edge_tables: NaN on a rung with nothing accepted');
 ok = check(ok, E(1).F_low_N == 1 && strcmp(E(1).F_low_str, '1'), 'edge_tables: lowest accepted rung 1 N');
 ok = check(ok, E(2).F_low_N == 0.5 && strcmp(E(2).F_low_str, '0.5 (lowest tested)'), 'edge_tables: a sheet accepted at the last rung says so, not a bracket');
+
+%% network_graph: scrambled input order; attributes looked up by (dep, arr) are the right ones
+Nt = struct('key', {'b'; 'c'; 'a'}, 'family', {'tulip'; 'tulip'; 'dro'}, 'period_nd', {1; 2; 3}, 'CJ', {3; 3; 3}, 'sigma', {0; 0; 0}, 'stable', {true; true; true});
+G  = network_graph([E(2); E(1)], Nt);                       % scrambled: sheet 2 first
+ok = check(ok, numnodes(G) == 3 && numedges(G) == 2 && isequal(sort(G.Nodes.Name), {'a'; 'b'; 'c'}), 'network_graph: 3 named nodes, 2 edges');
+ia = findedge(G, 'a', 'b');  ic = findedge(G, 'a', 'c');
+ok = check(ok, G.Edges.sheet_index(ia) == 1 && G.Edges.sheet_index(ic) == 2, 'network_graph: sheet_index follows the edge, not the input order');
+ok = check(ok, abs(G.Edges.tf_min_days(ia, 1) - 2*d) < 1e-12 && isnan(G.Edges.tf_min_days(ic, 1)) && abs(G.Edges.tf_min_days(ic, 3) - 5*d) < 1e-12, 'network_graph: per-rung t_f rows belong to their edges');
+ok = check(ok, G.Edges.F_low_N(ia) == 1 && G.Edges.F_low_N(ic) == 0.5 && ~any(G.Edges.hypothetical), 'network_graph: scalar attributes follow too; hypothetical false');
+ok = check(ok, strcmp(G.Nodes.family{findnode(G, 'a')}, 'dro') && G.Nodes.period_nd(findnode(G, 'c')) == 2, 'network_graph: node variables by name');
+try
+    network_graph(E(1), Nt(1:2));
+    ok = check(ok, false, 'network_graph :node refusal');
+catch err
+    ok = check(ok, strcmp(err.identifier, 'orbit_network:network_graph:node'), 'network_graph :node refusal when an edge key is missing');
+end
+
 fprintf('test_lib: %s\n', verdict(ok));
 end
 

@@ -1,0 +1,34 @@
+# Dispositions of the Astra review (2026-11-05)
+
+Review: `astra_review_2026-11-05.md` (GPT-6 Astra, raw API, high effort, $1.28).
+Each finding was checked by the host before being applied. "Verified" means
+the host reproduced the claim on our data or by its own derivation.
+
+| # | finding | verified | disposition |
+|---|---|---|---|
+| 1 | Lemma needs full-state (incl. mass) compatibility; additivity is not a hypothesis; the "basin/topology wall" sentence contradicts the lemma; "artifact" overstated | yes (derivation) | ACCEPT. Lemma restated as set inclusion with compatible full states and no relay-only operations. Wall sentence replaced: a relay witness below the direct branch's termination would be another feasible unrestricted transfer and diagnoses the branch or the search, not a global barrier. "Artifact" replaced by "relative to their restricted direct-maneuver class". Astra's mass-rescaling composition (q = m1/m0 scales leg 2's thrust and mass, same path, q <= 1 keeps the bound) goes into the note as the no-new-solves relay feasibility construction. |
+| 2 | Sum of independent leg minima is not an achievable relay time; the wait is T_C mod(sD2 - sA1, 1) and is computable from the grids; choose the relay by the assembled time | yes (grids are 0:1/6:5/6 with the same origin in every catalog, confirmed in MATLAB; both legs' L2 halo comes from the same `get_family_orbit` call, periods equal to 1e-16) | ACCEPT. `relay_closure` now takes the sheet table and computes the phase-compatible assembled time over all closed cell pairs; the optimistic sum is kept as a labelled lower bound; the multileg overlay and the best relay use the assembled time. G4 strengthened (32 routes, 8 pairs, endpoints, grids identical). |
+| 3 | Reversed arcs are trajectories of a mass-GAIN model, not approximate reverse transfers; thrust direction reflects as (ux, -uy, uz); do not copy certificates | yes (derivation: v~(s) = -S v(tf - s) gives a~ = S a) | ACCEPT. Option renamed HYPOTHETICAL REVERSE GRAPH, `hypothetical = true`, `n_accepted` set to 0 on those edges, wording in spec, script and note. |
+| 4 | Primary selections use `has_solution`, not the certificate | yes; also found that `conj_pass` stores -1 for "not run" and `logical(-1)` is true | ACCEPT. Loader adds `accepted = has_solution & conj_pass == 1 & gate_min_lamv > 0 & gate_min_qmt > 0 & gate_dimS == 1`; every minimum, count, plane and route uses `accepted`; `n_solved` reported beside it. Topic 1 responses recomputed over `accepted`. Test: the fastest solved-but-refuted cell must not be selected. |
+| 5 | Formulas correct; verdict wording too strong; sheets share nodes; report CIs | yes | ACCEPT. Verdicts print DETECTED / NOT DETECTED (nominal OLS); 95% CIs added to `partial_f_test` and printed; note wording per the review; "14 distinct departure orbits" stated. |
+| 6 | "Thrust floor" is a lowest successful rung, not a bracket | yes (15 N non-monotonicity already shows it) | ACCEPT. Field renamed `F_low_N` / `F_low_str` ("lowest accepted rung"); "edge survival" renamed "catalog closure down the ladder". |
+| 7 | Thrust is a capability axis, not a budget; raw rung counts are coverage; add the known-feasible envelope (trajectories at lower thrust are feasible under a higher cap); "phase robustness" is not what cells - pairs measures | yes | ACCEPT. `accessibility_plane` adds `pairs_env`, `cells_env` (cumulative over rungs with F <= cap); wording changed; cells reported as covered fraction. |
+| 8 | Weak connectivity ignores direction; the diagnostics are not sequential regimes; only 64 ordered pairs are reachable at all | yes | ACCEPT. Weak connectivity dropped; the overlay is directed reachable ordered pairs under the cap (direct + phase-compatible two-leg). Called diagnostics, not regimes. |
+| 9 | Centrality rankings are imposed by catalog topology; betweenness with phase-relaxed costs is not mission betweenness | yes | ACCEPT. Betweenness dropped; in/out strength kept as descriptive with the caveat; replaced by the relay-usage count (how many (L1, tulip) pairs each L2 halo serves as the best assembled relay). |
+| 10 | `digraph` sorts edges; separately supplied costs/widths misalign | yes (reproduced: input 3->1, 1->2, 2->3 returned sorted) | ACCEPT. `lib/network_graph` builds the graph with a `sheet_index` edge variable; every attribute is read from `G.Edges`; filtered graphs are built from edge-table subsets; scrambled-order test. |
+| 11A | mutual-reachability count hard-coded to nS | yes | ACCEPT. Strongly-connected-component count and ordered reachable pairs via `conncomp(..., 'Type', 'strong')`. |
+| 11B | `[~, c] = max(mask)` returns 1 when all false | yes | ACCEPT. `find(mask, 1, 'first')` with the empty case printed. |
+| 11C | cap range from sheet minima truncates the plane; relay times may fall outside | yes | ACCEPT. Caps span all accepted cell times and the assembled relay times. |
+| 12A | G4 vacuous when no routes | yes | ACCEPT (see 2). |
+| 12B | G5 trivially passes at symmetry-plane initial states | yes (every stored x0 has y = vx = vz = 0) | ACCEPT. G5 = periodic closure of x0 to 1e-8 AND the mirror image of the off-plane state phi(x0, 0.37 T) lies on the orbit to 1e-8; G5 throws only when the hypothetical graph is on; deliberate-failure experiment on a non-periodic state. |
+| 13 | `partial_f_test`: rank, exact-fit policy, roundoff clamp, `inv` | yes | ACCEPT. Rank check (refusal `:rank`), RSS0 = RSS1 = 0 gives p = 1, tiny negative differences clamped and material ones refused, covariance from QR, CIs added. |
+| 14A | sigma = max(0, ...) leaves positive sigma on stable nodes | spec text only: the built code already sets sigma = 0 when stable | ACCEPT (spec text corrected to the built rule; tolerance 1e-3 stated; "no resolved exponential instability" wording for the note). |
+| 14B | period agreement does not validate a cache | yes | ACCEPT. Cache stores muStar and the parameter structs and compares them; Task 9 (the note) runs with `rebuild = true`. |
+| 15A | mirrored-dashed-edges figure promised, not planned | yes | ACCEPT. Promise removed; headline figures never carry hypothetical edges. |
+| 15B | contour at the integer maximum | yes | ACCEPT. Contours drawn on boolean masks at 0.5 with all-true/all-false handled. |
+| 15C | summary file lacks the tables the note cites | yes | ACCEPT. Strength table, relay table and relay-usage counts appended to the summary lines. |
+| 15D | missing tests | yes | ACCEPT. Added: scrambled edges (network_graph), mismatched relay phases and a route whose smallest sum is not its smallest assembled time (relay_closure), fastest cell refuted (edge_tables), no cap reaching full access (script), SCC vs reciprocal (script). |
+
+Nothing was rejected. Two of Astra's remarks were already true of the built
+code and only wrong in the spec text (14A) or exposed a defect Astra did not
+name (the `conj_pass = -1` trap, found while applying finding 4).

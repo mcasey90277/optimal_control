@@ -54,6 +54,14 @@ vs 0.98 DRO / 0.76 DPO); solvability improves with halo period; the hard
 corner everywhere is shortest-departure × longest-tulip; "blocky" tf maps
 = solution-family walls (`DRO_tulip/doc/note_blocky_behavior.md`).
 
+**Across the catalogs (2026-11-05): `orbit_network/`** — the Braik & Ross
+2026 "orbital network" framing lifted onto the four catalogs with no new
+solves: `stability_cost_study` (56 sheets, Jacobi gap + instability rates
+against min t_f at 1 N and phasing-grid survival to 0.5 N; departure
+stability carries no information beyond energy on this data) and, next,
+the data-only low-thrust network with its (thrust, time-cap) accessibility
+plane. Spec: `docs/superpowers/specs/2026-11-05-orbit-network-design.md`.
+
 ## Shared libraries
 
 | folder | what |

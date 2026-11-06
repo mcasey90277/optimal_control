@@ -76,6 +76,33 @@ catch err
     ok = check(ok, strcmp(err.identifier, 'orbit_network:partial_f_test:shape'), ':shape refusal on a row mismatch');
 end
 
+%% mirror_state: the hand vector, a matrix, and the refusal
+x  = [1; 2; 3; 4; 5; 6];
+ok = check(ok, isequal(mirror_state(x), [1; -2; 3; -4; 5; -6]), 'mirror_state flips y, vx, vz');
+ok = check(ok, isequal(mirror_state([x, 2*x]), [[1; -2; 3; -4; 5; -6], 2*[1; -2; 3; -4; 5; -6]]), 'mirror_state acts column-wise on [6 x n]');
+ok = check(ok, isequal(mirror_state(mirror_state(x)), x), 'mirror_state is an involution');
+try
+    mirror_state(x(1:5));
+    ok = check(ok, false, 'mirror_state :shape refusal');
+catch err
+    ok = check(ok, strcmp(err.identifier, 'orbit_network:mirror_state:shape'), 'mirror_state :shape refusal on a 5-vector');
+end
+
+%% symmetry_residual: at an OFF-PLANE point a symmetric orbit maps onto itself; a non-periodic state does not
+addpath(fullfile(fileparts(fileparts(here)), 'costate_common'));
+[~, ~, rv, info] = evalc('get_family_orbit(''dro'', struct(''tau'', 1))');
+x0 = rv(1, :).';  Tp = info.periodND;  mu = 0.012150585609624;
+ok = check(ok, max(abs(x0([2 4 6]))) < 1e-12, 'the stored initial state sits on the symmetry plane (so a check there would be vacuous)');
+[~, X] = pumpkyn.cr3bp.prop([0 0.37*Tp], x0.', mu);
+x1 = X(end, 1:6).';
+ok = check(ok, max(abs(x1([2 4 6]))) > 1e-3, 'phi(x0, 0.37 T) is off the plane');
+[res, tS] = symmetry_residual(x1, Tp, mu);
+ok = check(ok, res < 1e-8, sprintf('DRO tau 1: mirror image of the off-plane point lies on the orbit (residual %.1e at t = %.4f of T = %.4f)', res, tS, Tp));
+ok = check(ok, tS >= 0 && tS <= Tp, 'minimizing time inside [0, T]');
+xn = x1;  xn(5) = xn(5)*1.02;                              % 2% faster: not on the periodic orbit
+resN = symmetry_residual(xn, Tp, mu);
+ok = check(ok, resN > 1e-6, sprintf('a non-periodic state is NOT mapped onto an orbit (residual %.1e): the gate can fail', resN));
+
 fprintf('test_lib: %s\n', verdict(ok));
 end
 

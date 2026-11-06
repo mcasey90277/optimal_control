@@ -237,7 +237,75 @@ else
     fprintf('  hypothetical reverse graph off (hypothetical = false); G5 is still reported\n');
 end
 
-%% 7  figures
+%% 7  figures (never the hypothetical edges)
+axStyle = @(ax) set(ax, 'Color', 'w', 'XColor', 'k', 'YColor', 'k', 'GridColor', [0.15 0.15 0.15]);
+rungLab = arrayfun(@(r) sprintf('%g', r), rungs, 'UniformOutput', false);
+famOf   = @(k) regexprep(k, '_tau.*|_Np.*', '');          % dro, dpo, halo_L1, halo_L2, tulip
+famList = {'dro', 'dpo', 'halo_L1', 'halo_L2'};
+
+% F1: the graph at the reference rung and at the deepest rung; width = accepted fraction, color = t_f; built from the edge table
+fig = figure('Color', 'w', 'Position', [60 60 1400 620], 'Visible', visible);
+for pp = 1:2
+    rr = [rC rD];  rr = rr(pp);
+    Er = G.Edges(G.Edges.closed_frac(:, rr) > 0, :);        % accepted edges at this rung, attributes travel with the rows
+    Gr = digraph(Er, G.Nodes);
+    ax = subplot(1, 2, pp);  axStyle(ax);
+    h  = plot(ax, Gr, 'Layout', 'layered', 'Direction', 'right', 'NodeLabel', Gr.Nodes.Name, 'Interpreter', 'none', ...
+              'MarkerSize', 6, 'NodeColor', [0.1 0.3 0.7], 'ArrowSize', 8);
+    h.NodeLabelColor = 'k';
+    h.LineWidth = 0.5 + 4*Gr.Edges.closed_frac(:, rr);
+    h.EdgeCData = Gr.Edges.tf_min_days(:, rr);
+    axStyle(ax);  xl = xlim(ax);  xlim(ax, [xl(1) xl(2) + 0.2*(xl(2) - xl(1))]);       % plot() resets the axes colors; room for the right-hand labels
+    colormap(ax, 'parula');  cb = colorbar(ax);  cb.Color = 'k';  cb.Label.String = 'min t_f over accepted phases [days]';
+    title(ax, sprintf('%g N: %d edges, width = accepted fraction of the 6 x 6 grid', rungs(rr), numedges(Gr)), 'Color', 'k', 'Interpreter', 'none');
+end
+f1 = fullfile(outDir, 'network_graph.png');  exportgraphics(fig, f1, 'Resolution', 150);  if strcmp(visible, 'off'), close(fig); end
+
+% F2: raw coverage and the envelope, with boolean-mask contours (all direct pairs; first relay route)
+fig = figure('Color', 'w', 'Position', [60 60 1400 560], 'Visible', visible);
+planes = {P.pairs, 'raw coverage: pairs with an accepted cell AT this thrust under the cap'; P.pairs_env, 'known-feasible envelope: pairs with an accepted cell at this thrust OR LOWER under the cap'};
+for pp = 1:2
+    ax = subplot(1, 2, pp);  axStyle(ax);  hold(ax, 'on');
+    imagesc(ax, caps, 1:nR, planes{pp, 1});  axis(ax, 'tight');  set(ax, 'YDir', 'normal', 'YTick', 1:nR, 'YTickLabel', rungLab);
+    colormap(ax, 'hot');  cb = colorbar(ax);  cb.Color = 'k';  cb.Label.String = sprintf('pairs (of %d)', nS);
+    mAll = double(planes{pp, 1} == nS);
+    if any(mAll(:)) && ~all(mAll(:)), contour(ax, caps, 1:nR, mAll, [0.5 0.5], 'c-', 'LineWidth', 2); end
+    mRel = double(P.multileg >= 1);
+    if any(mRel(:)) && ~all(mRel(:)), contour(ax, caps, 1:nR, mRel, [0.5 0.5], 'g--', 'LineWidth', 2); end
+    xlabel(ax, 'time cap [days]', 'Color', 'k');  ylabel(ax, 'thrust bound [N]', 'Color', 'k');
+    title(ax, {planes{pp, 2}, 'cyan: all 56 direct pairs; green dashed: first relay route (assembled time)'}, 'Color', 'k', 'FontSize', 9);
+end
+f2 = fullfile(outDir, 'accessibility_plane.png');  exportgraphics(fig, f2, 'Resolution', 150);  if strcmp(visible, 'off'), close(fig); end
+
+% F3: catalog closure down the ladder, by departure family (accepted fraction; the 15 N dip is ladder coverage)
+fig = figure('Color', 'w', 'Position', [60 60 900 480], 'Visible', visible);
+ax  = axes(fig);  axStyle(ax);  hold(ax, 'on');  grid(ax, 'on');
+cf  = vertcat(E.closed_frac);  depFam = cellfun(famOf, {E.dep_key}, 'UniformOutput', false);
+for ff = 1:numel(famList)
+    sel = strcmp(depFam, famList{ff});
+    plot(ax, 1:nR, mean(cf(sel, :), 1), '-o', 'LineWidth', 1.8, 'DisplayName', sprintf('%s departures (%d edges)', famList{ff}, nnz(sel)));
+end
+set(ax, 'XTick', 1:nR, 'XTickLabel', rungLab);
+xlabel(ax, 'thrust rung [N] (shallow to deep)', 'Color', 'k');  ylabel(ax, 'mean accepted fraction of the phasing grid', 'Color', 'k');
+legend(ax, 'Location', 'southwest', 'Interpreter', 'none', 'TextColor', 'k', 'Color', 'w');
+title(ax, 'catalog closure down the ladder (an unaccepted cell is unresolved, not infeasible; the 15 N dip is ladder coverage)', 'Color', 'k', 'FontSize', 9);
+f3 = fullfile(outDir, 'ladder_closure.png');  exportgraphics(fig, f3, 'Resolution', 150);  if strcmp(visible, 'off'), close(fig); end
+
+% F4: relay closure, best route per (L1 halo, tulip) pair: assembled time (solid) and the optimistic sum (dotted)
+fig = figure('Color', 'w', 'Position', [60 60 900 520], 'Visible', visible);
+ax  = axes(fig);  axStyle(ax);  hold(ax, 'on');  grid(ax, 'on');
+cols = parula(numel(best));                                % NOT lines(): that name is the script's summary cellstr
+for pp = 1:numel(best)
+    plot(ax, 1:nR, best(pp).t_route_days, '-o', 'Color', cols(pp, :), 'LineWidth', 1.6, 'DisplayName', best(pp).pair);
+    plot(ax, 1:nR, best(pp).t_sum_days,   ':',  'Color', cols(pp, :), 'LineWidth', 1.0, 'HandleVisibility', 'off');
+end
+set(ax, 'XTick', 1:nR, 'XTickLabel', rungLab);
+xlabel(ax, 'thrust rung [N]', 'Color', 'k');  ylabel(ax, 'two-leg time [days] (solid assembled, dotted sum)', 'Color', 'k');
+legend(ax, 'Location', 'northwest', 'Interpreter', 'none', 'TextColor', 'k', 'Color', 'w', 'FontSize', 8);
+title(ax, 'relay closure L1 halo -> L2 halo -> tulip: best assembled relay per pair and rung', 'Color', 'k', 'Interpreter', 'none');
+f4 = fullfile(outDir, 'relay_closure.png');  exportgraphics(fig, f4, 'Resolution', 150);  if strcmp(visible, 'off'), close(fig); end
+lines{end+1} = sprintf('figures: %s, %s, %s, %s', f1, f2, f3, f4);
+fprintf('%s\n', lines{end});
 
 %% summary
 fprintf('\n== SUMMARY\n');

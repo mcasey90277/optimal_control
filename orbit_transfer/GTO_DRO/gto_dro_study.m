@@ -79,7 +79,7 @@ tol     = struct( ...
     'accDz',     1e-6, ...           % X1 pumpkyn tfMin must reproduce z8 to this
     'field',     1e-10);             % X2 pumpkyn field vs independent field, relative
 out     = struct( ...
-    'dir',       '', ...             % results folder ('' = results/study_o<orient>_tau<tau>_<thrust>N)
+    'dir',       '', ...             % results folder ('' = results/study_o<orient>_tau<tau>_sD<dep>_sA<arr>_<thrust>N)
     'visible',   'on', ...           % figure visibility
     'conjTest',  true, ...           % run the conjugate re-solve (S4); false = NOT APPLICABLE
     'reuse',     '', ...             % path of a saved gto_dro_study.mat to gate instead of solving
@@ -100,7 +100,7 @@ for f = fieldnames(study_opts).'
     end
 end
 if isempty(out.dir)
-    out.dir = fullfile(here, 'results', sprintf('study_o%03d_tau%g_%gN', gto.orientDeg, dro.tau, thrustN));
+    out.dir = fullfile(here, 'results', sprintf('study_o%g_tau%g_sD%.3f_sA%.3f_%gN', gto.orientDeg, dro.tau, gto.depFrac, dro.arrFrac, thrustN));
 end
 if ~isfolder(out.dir), mkdir(out.dir); end
 knobs = struct('thrustN', thrustN, 'm0kg', m0kg, 'ispS', ispS, 'gto', gto, 'dro', dro, ...
@@ -186,6 +186,12 @@ else
            S.knobs.gto.orientDeg == gto.orientDeg && S.knobs.gto.depFrac == gto.depFrac && ...
            S.knobs.gto.sma_km == gto.sma_km && S.knobs.gto.ecc == gto.ecc && ...
            S.knobs.dro.tau == dro.tau && S.knobs.dro.arrFrac == dro.arrFrac;
+    try
+        same = same && S.knobs.mesh.N == mesh.N && S.knobs.recipe.tf0 == recipe.tf0 && ...
+               S.knobs.recipe.thrLock == recipe.thrLock && S.knobs.recipe.floorEarthKm == recipe.floorEarthKm;
+    catch
+        same = false;
+    end
     assert(same, 'gto_dro_study:reuse', ...
            '%s was solved with different knobs (thrust, mass, Isp, GTO or DRO parameters); refusing to gate it as this case', out.reuse);
     entry = S.entry;  gates = S.gates;  P = S.P;  solveWall = NaN;
@@ -236,9 +242,209 @@ fprintf('   N7b Moon  altitude min %9.1f km at t/t_f = %.3f  (floor %4.0f)  %s\n
 verdicts = addv(verdicts, 'N7a Earth floor', pass3(pE), hEarth, tol.earthKm);
 verdicts = addv(verdicts, 'N7b Moon floor',  pass3(pM), hMoon,  tol.moonKm);
 
-%% ======================= sections 8-12 follow (Task 4) ===================
-save(fullfile(out.dir, 'gto_dro_study.mat'), 'entry', 'gates', 'P', 'knobs', 'verdicts', 'flight');
-fprintf('\n   (provisional) saved %s after %.0f s\n', fullfile(out.dir, 'gto_dro_study.mat'), toc(tStudy));
+%% ========================================================================
+%  8. NECESSARY CONDITIONS (the production instrument: pmp_pointwise_checks,
+%     the same call certify_root makes on every certified catalog entry)
+%% ========================================================================
+fprintf('\n8. NECESSARY CONDITIONS      (value / threshold)\n');
+PW = pmp_pointwise_checks(flight.t, flight.Y, Tnd, cnd, muStar);
+n1 = gates.msNormR < tol.msNormR;
+fprintf('   N1 BVP residual   |R|_inf   %9.2e / %-9.0e  %s   (ms_tfmin, the engine''s own)\n', gates.msNormR, tol.msNormR, pass3(n1));
+fprintf('   N2 Hamiltonian    max|H|    %9.2e / %-9.0e  %s\n', PW.Hmax, tol.H, pass3(PW.Hmax < tol.H));
+fprintf('   N4 transversality |lam_m(t_f)| %6.2e / %-9.0e  %s\n', PW.lamMf, tol.lamm, pass3(PW.lamMf < tol.lamm));
+fprintf('   N5 adjoint eqns   rel err   %9.2e / %-9.0e  %s   (%d samples; FD steps agree to %.1e)\n', ...
+        PW.adjErr, tol.adj, pass3(PW.adjErr < tol.adj), PW.nSample, PW.fdAgree);
+n6gap = max(PW.fullGap, PW.fieldGap);
+n6 = n6gap <= tol.gap && PW.throttleErr < tol.throttle && PW.minQmt >= 0;
+fprintf('   N6 min principle  |gap|     %9.2e / %-9.0e  %s   (signed %+.1e..%+.1e; throttle 1 to %.1e acc / %.1e mass; min Q = %.3f)\n', ...
+        n6gap, tol.gap, pass3(n6), PW.gapMin, PW.gapMax, PW.throttleAccErr, PW.throttleMassErr, PW.minQmt);
+for fv = {{'N1', gates.msNormR}, {'N2', PW.Hmax}, {'N4', PW.lamMf}, {'N5', PW.adjErr}, {'N6 gap', n6gap}, {'N6 throttle', PW.throttleErr}}
+    assert(isscalar(fv{1}{2}) && isreal(fv{1}{2}) && isfinite(fv{1}{2}) && fv{1}{2} >= 0, 'gto_dro_study:malformed', ...
+           '%s is not a real finite non-negative scalar (%g): the gate cannot be judged', fv{1}{1}, fv{1}{2});
+end
+verdicts = addv(verdicts, 'N1 BVP residual',   pass3(n1),                 gates.msNormR, tol.msNormR);
+verdicts = addv(verdicts, 'N2 Hamiltonian',    pass3(PW.Hmax < tol.H),    PW.Hmax,       tol.H);
+verdicts = addv(verdicts, 'N4 transversality', pass3(PW.lamMf < tol.lamm), PW.lamMf,     tol.lamm);
+verdicts = addv(verdicts, 'N5 adjoint eqs',    pass3(PW.adjErr < tol.adj), PW.adjErr,    tol.adj);
+verdicts = addv(verdicts, 'N6 min principle',  pass3(n6),                 n6gap,         tol.gap);
+
+%% ========================================================================
+%  9. SUFFICIENCY HYPOTHESES (Bonnard-Caillau-Trelat) and the physics check
+%% ========================================================================
+fprintf('\n9. SUFFICIENCY HYPOTHESES\n');
+G  = mintime_hypothesis_gates(entry.z8, rv0(1:6).', Tnd, cnd, muStar, struct('keepC', true, 'relTol', 1e-12));
+GL = mintime_hypothesis_gates(entry.z8, rv0(1:6).', Tnd, cnd, muStar, struct('keepC', true, 'relTol', 1e-9));
+LM = lift_margin(G.C, GL.C, entry.z8(1:7), struct('marginMin', tol.liftMargin, 'liftTol', tol.lift));
+s1 = G.minLamV > 0;   s2 = G.minQmt > 0;
+s3 = G.dimS == 1 && G.nullResidRel < tol.lift && G.Hresid < tol.H && LM.certified;
+fprintf('   S1 Legendre      min|lam_v| = %.4e at t/t_f = %.3f   %s\n', G.minLamV, G.tMinLamV/entry.z8(8), pass3(s1));
+fprintf('   S2 strict bang   min Q = %.4e at t/t_f = %.3f        %s\n', G.minQmt, G.tMinQmt/entry.z8(8), pass3(s2));
+fprintf('   S3 normality     dim S = %d (1 = no abnormal lift); lift backward error %.1e / %.0e; |lam.f + 1| %.1e; Eckart-Young margin %.0fx / %gx   %s\n', ...
+        G.dimS, G.nullResidRel, tol.lift, G.Hresid, LM.margin, tol.liftMargin, pass3(s3));
+% S4: the conjugate re-solve's verdict (gto_dro_entry, conjTest) AND the dense spectrum scan
+if ~out.conjTest
+    s4 = 'NOT APPLICABLE';  nScan = 0;
+    fprintf('   S4 conjugate     NOT APPLICABLE (out.conjTest = false)\n');
+else
+    CS = conj_spectrum(entry.z8, rv0(1:6).', Tnd, cnd, muStar, struct('K', recipe.K, 'nSub', 8));
+    nScan = numel(CS.t);
+    if isnan(gates.conjPass) || ~CS.testable || CS.nUnresolved > 0
+        s4 = 'UNRESOLVED';
+    elseif gates.conjPass == 1 && CS.clear && CS.nZero == 0 && CS.multiplicity == 0 && CS.nInterior == 0
+        s4 = 'PASS';
+    else
+        s4 = 'FAIL';
+    end
+    fprintf('   S4 conjugate     junction test pass = %g; dense scan (%d samples): %d zero, %d unresolved, %d interior sign change(s), clear = %d   %s\n', ...
+            gates.conjPass, nScan, CS.nZero, CS.nUnresolved, CS.nInterior, CS.clear, s4);
+end
+x2 = G.fieldErr < tol.field && G.adjErrRef < tol.field;
+fprintf('   X2 physics       pumpkyn vs independent field: state rows %.1e, adjoint rows %.1e / %-6.0e %s\n', G.fieldErr, G.adjErrRef, tol.field, pass3(x2));
+verdicts = addv(verdicts, 'S1 strong Legendre', pass3(s1), G.minLamV, 0);
+verdicts = addv(verdicts, 'S2 Q_mt > 0',        pass3(s2), G.minQmt,  0);
+verdicts = addv(verdicts, 'S3 dim S = 1',       pass3(s3), G.dimS,    1);
+verdicts = addv(verdicts, 'S4 conjugate',       s4,        gates.conjPass, 1);
+verdicts = addv(verdicts, 'X2 field agreement', pass3(x2), max(G.fieldErr, G.adjErrRef), tol.field);
+
+%% ========================================================================
+% 10. ACCEPTANCE BY PUMPKYN -- tfMin called at the accepted z8, in the open
+%% ========================================================================
+fprintf('\n10. ACCEPTANCE: pumpkyn.cr3bp.tfMin at the accepted z8 (%s)\n', out.solverType);
+x1 = 'NOT CHECKED';  dzAcc = NaN;
+try
+    sol   = pumpkyn.cr3bp.tfMin(rv0(1:6), rvf(1:6), entry.z8, Tnd, cnd, muStar, out.solverType);
+    dzAcc = max(abs(sol(:) - entry.z8));
+    x1    = pass3(dzAcc < tol.accDz);
+    fprintf('   X1 tfMin accept  |dz| %9.2e / %-9.0e  %s   (engine recorded %.1e)\n', dzAcc, tol.accDz, x1, gates.accDz);
+catch err
+    fprintf('   X1 tfMin accept  NOT CHECKED: tfMin threw "%s" (set out.solverType = ''lsqnonlin'' if fsolve is unlicensed)\n', err.message);
+end
+verdicts = addv(verdicts, 'X1 tfMin acceptance', x1, dzAcc, tol.accDz);
+
+%% ========================================================================
+% 11. FIGURES (light theme, explicit axes; saved at 150 dpi)
+%% ========================================================================
+fprintf('\n11. FIGURES -> %s\n', out.dir);
+FS = 13;
+mFrac = flight.Y(:, 7);
+Lp = pumpkyn.cr3bp.lagrangePts(muStar);
+[sx, sy, sz] = sphere(24);
+hf1 = figure('Theme', 'light', 'Color', 'w', 'Position', [60 60 1400 650], 'Visible', out.visible);
+tl1 = tiledlayout(hf1, 1, 2, 'TileSpacing', 'compact', 'Padding', 'compact');
+for view3 = [true false]
+    ax = nexttile(tl1);  hold(ax, 'on');
+    plot3(ax, rvD(:, 1), rvD(:, 2), rvD(:, 3), '-', 'Color', [0.1 0.3 0.8], 'LineWidth', 1.6, 'DisplayName', sprintf('GTO locus, %g deg', gto.orientDeg));
+    plot3(ax, rvA(:, 1), rvA(:, 2), rvA(:, 3), '-', 'Color', [0.1 0.6 0.2], 'LineWidth', 1.6, 'DisplayName', sprintf('DRO tau = %g', dro.tau));
+    scatter3(ax, flight.Y(:, 1), flight.Y(:, 2), flight.Y(:, 3), 9, mFrac, 'filled', 'DisplayName', 'transfer (colour = m/m_0)');
+    surf(ax, -muStar + rEarthKm/lStar*sx, rEarthKm/lStar*sy, rEarthKm/lStar*sz, 'FaceColor', [0.3 0.5 0.9], 'EdgeColor', 'none', 'HandleVisibility', 'off');
+    surf(ax, 1 - muStar + rMoonKm/lStar*sx, rMoonKm/lStar*sy, rMoonKm/lStar*sz, 'FaceColor', [0.5 0.5 0.5], 'EdgeColor', 'none', 'HandleVisibility', 'off');
+    plot3(ax, Lp(1:2, 1), Lp(1:2, 2), Lp(1:2, 3), '^k', 'MarkerFaceColor', 'k', 'MarkerSize', 7, 'DisplayName', 'L1, L2');
+    plot3(ax, rv0(1), rv0(2), rv0(3), 'o', 'Color', [0.1 0.3 0.8], 'MarkerFaceColor', 'w', 'MarkerSize', 8, 'LineWidth', 1.5, 'DisplayName', 'departure');
+    plot3(ax, rvf(1), rvf(2), rvf(3), 's', 'Color', [0.1 0.6 0.2], 'MarkerFaceColor', 'w', 'MarkerSize', 8, 'LineWidth', 1.5, 'DisplayName', 'arrival');
+    axis(ax, 'equal'); grid(ax, 'on');
+    set(ax, 'Color', 'w', 'XColor', 'k', 'YColor', 'k', 'ZColor', 'k', 'FontSize', FS);
+    xlabel(ax, 'x [ND]'); ylabel(ax, 'y [ND]');
+    if view3, zlabel(ax, 'z [ND]'); view(ax, [-35 22]); legend(ax, 'Location', 'northwest', 'FontSize', FS - 2);
+    else,     view(ax, 2); end
+    cb = colorbar(ax); cb.Label.String = 'm / m_0'; cb.Color = 'k';
+end
+title(tl1, sprintf('GTO (%g deg, phase %.2f) -> DRO (tau %g, phase %.2f) at %g N: t_f = %.3f d, dV = %.3f km/s', ...
+      gto.orientDeg, gto.depFrac, dro.tau, dro.arrFrac, thrustN, flight.tfDays, flight.dvKms), 'FontSize', FS + 1);
+print(hf1, fullfile(out.dir, 'transfer_3d.png'), '-dpng', '-r150');
+
+td = day(flight.t);
+lamV = sqrt(sum(flight.Y(:, 11:13).^2, 2));
+alphaDir = -flight.Y(:, 11:13)./lamV;
+Qmt = lamV./mFrac + flight.Y(:, 14)/cnd;
+Hres = nan(size(td));
+for kk = 1:numel(td)
+    % tfMinEoM's second output is the Hamiltonian; it takes one augmented state (a column).
+    [~, Hres(kk)] = pumpkyn.cr3bp.tfMinEoM(flight.t(kk), flight.Y(kk, :).', Tnd, cnd, muStar);
+end
+hf2 = figure('Theme', 'light', 'Color', 'w', 'Position', [80 40 1000 1100], 'Visible', out.visible);
+tl2 = tiledlayout(hf2, 5, 1, 'TileSpacing', 'compact', 'Padding', 'compact');
+ax = nexttile(tl2); hold(ax, 'on');
+plot(ax, td, alphaDir(:, 1), 'LineWidth', 1.4, 'DisplayName', '\alpha_x');
+plot(ax, td, alphaDir(:, 2), 'LineWidth', 1.4, 'DisplayName', '\alpha_y');
+plot(ax, td, alphaDir(:, 3), 'LineWidth', 1.4, 'DisplayName', '\alpha_z');
+ylabel(ax, 'thrust direction'); legend(ax, 'Location', 'eastoutside'); grid(ax, 'on');
+ax = nexttile(tl2); hold(ax, 'on');
+plot(ax, td, lamV, 'LineWidth', 1.4, 'DisplayName', '|\lambda_v|');
+plot(ax, td, Qmt, 'LineWidth', 1.4, 'DisplayName', 'Q_{mt}');
+ylabel(ax, 'switching quantities'); legend(ax, 'Location', 'eastoutside'); grid(ax, 'on');
+ax = nexttile(tl2);
+plot(ax, td, m0kg*mFrac, 'LineWidth', 1.4, 'DisplayName', 'mass'); ylabel(ax, 'mass [kg]'); grid(ax, 'on'); legend(ax, 'Location', 'eastoutside');
+ax = nexttile(tl2);
+semilogy(ax, td, max(abs(Hres), 1e-18), 'LineWidth', 1.4, 'DisplayName', '|H|'); ylabel(ax, 'Hamiltonian'); grid(ax, 'on'); legend(ax, 'Location', 'eastoutside');
+ax = nexttile(tl2); hold(ax, 'on');
+semilogy(ax, td, oE.hKm, 'LineWidth', 1.4, 'DisplayName', 'Earth altitude');
+semilogy(ax, td, oM.hKm, 'LineWidth', 1.4, 'DisplayName', 'Moon altitude');
+yline(ax, tol.earthKm, '--', 'HandleVisibility', 'off'); yline(ax, tol.moonKm, ':', 'HandleVisibility', 'off');
+ylabel(ax, 'altitude [km]'); xlabel(ax, 'time [d]'); legend(ax, 'Location', 'eastoutside'); grid(ax, 'on');
+for ax = findall(hf2, 'Type', 'axes').'
+    set(ax, 'Color', 'w', 'XColor', 'k', 'YColor', 'k', 'FontSize', FS);
+end
+title(tl2, sprintf('GTO -> DRO at %g N: the flight of the accepted costates', thrustN), 'FontSize', FS + 1);
+print(hf2, fullfile(out.dir, 'timeseries.png'), '-dpng', '-r150');
+
+hf3 = figure('Theme', 'light', 'Color', 'w', 'Position', [100 100 900 420], 'Visible', out.visible);
+tl3 = tiledlayout(hf3, 1, 2, 'TileSpacing', 'compact', 'Padding', 'compact');
+okR = entry.okPerRung;
+dVr = nan(size(P.rungs));
+for kr = 1:numel(P.rungs)
+    mfk = m0kg*(1 - nd_propulsion(P.rungs(kr), ispS, m0kg, lStar, tStar).Tnd*P.TF(1, 1, kr)/cnd);
+    dVr(kr) = cnd*log(m0kg/mfk)*lStar/tStar;
+end
+ax = nexttile(tl3); semilogx(ax, P.rungs(okR), day(entry.tfPerRung(okR)), 'o-', 'LineWidth', 1.6, 'MarkerFaceColor', 'w', 'DisplayName', 't_f');
+xlabel(ax, 'thrust [N]'); ylabel(ax, 't_f [d]'); grid(ax, 'on'); set(ax, 'XDir', 'reverse', 'Color', 'w', 'XColor', 'k', 'YColor', 'k', 'FontSize', FS);
+ax = nexttile(tl3); semilogx(ax, P.rungs(okR), dVr(okR), 's-', 'LineWidth', 1.6, 'MarkerFaceColor', 'w', 'DisplayName', 'dV');
+xlabel(ax, 'thrust [N]'); ylabel(ax, '\DeltaV [km/s]'); grid(ax, 'on'); set(ax, 'XDir', 'reverse', 'Color', 'w', 'XColor', 'k', 'YColor', 'k', 'FontSize', FS);
+xr = [min(P.rungs(okR))/1.5, max(P.rungs(okR))*1.5];
+for ax = findall(hf3, 'Type', 'axes').'
+    set(ax, 'XLim', xr);
+end
+title(tl3, 'the ladder walked (accepted rungs)', 'FontSize', FS + 1);
+print(hf3, fullfile(out.dir, 'ladder.png'), '-dpng', '-r150');
+fprintf('   transfer_3d.png, timeseries.png, ladder.png written\n');
+
+%% ========================================================================
+% 12. SAVE AND THE VERDICT TABLE
+%% ========================================================================
+[~, gitOC] = system('/Library/Developer/CommandLineTools/usr/bin/git -C /Users/msc/Desktop/optimal_control rev-parse --short HEAD');
+[~, gitPk] = system('/Library/Developer/CommandLineTools/usr/bin/git -C /Users/msc/Desktop/proj7/external/pumpkyn rev-parse --short HEAD');
+[~, gitPP] = system('/Library/Developer/CommandLineTools/usr/bin/git -C /Users/msc/Desktop/proj7/external/pumpkynPie rev-parse --short HEAD');
+[~, hostName] = system('hostname');
+run_meta = struct('date', char(datetime('now', 'Format', 'yyyy-MM-dd HH:mm')), 'matlab', version, 'host', strtrim(hostName), ...
+    'optimal_control', strtrim(gitOC), 'pumpkyn', strtrim(gitPk), 'pumpkynPie', strtrim(gitPP), ...
+    'solveWallS', solveWall, 'studyWallS', toc(tStudy), 'reused', out.reuse);
+save(fullfile(out.dir, 'gto_dro_study.mat'), 'entry', 'gates', 'P', 'knobs', 'verdicts', 'flight', 'PW', 'G', 'run_meta');
+
+fprintf('\n== SUMMARY  GTO (%g deg, phase %.3f) -> DRO (tau %g, phase %.3f), %g N, %g kg, Isp %g s\n', ...
+        gto.orientDeg, gto.depFrac, dro.tau, dro.arrFrac, thrustN, m0kg, ispS);
+fprintf('   t_f = %.4f ND = %.3f d; m_f = %.2f kg; dV = %.3f km/s (energy bound %.3f)\n', ...
+        entry.z8(8), flight.tfDays, flight.finalMassKg, flight.dvKms, dVlb);
+fprintf('   %-22s %-15s %12s %12s\n', 'gate', 'status', 'value', 'threshold');
+for kk = 1:size(verdicts, 1)
+    fprintf('   %-22s %-15s %12.4g %12.4g\n', verdicts{kk, :});
+end
+isCode  = ~cellfun(@isempty, regexp(verdicts(:, 1), '^(V|N|X)', 'once'));
+codeOK  = all(strcmp(verdicts(isCode, 2), 'PASS') | strcmp(verdicts(isCode, 2), 'NOT APPLICABLE'));
+allOK   = all(strcmp(verdicts(:, 2), 'PASS') | strcmp(verdicts(:, 2), 'NOT APPLICABLE'));
+failedIds = verdicts(~(strcmp(verdicts(:, 2), 'PASS') | strcmp(verdicts(:, 2), 'NOT APPLICABLE')), 1);
+fprintf('   code gates (V, N, X): %s; all gates: %s; %.0f s\n', pass3(codeOK), pass3(allOK), toc(tStudy));
+if allOK
+    fprintf(['   VERDICT: a certified local minimum-time extremal that pumpkyn''s tfMin accepts unchanged;\n' ...
+             '            the sufficiency hypotheses hold on the sampled arc (numerical evidence, not a certificate).\n']);
+elseif codeOK
+    fprintf('   VERDICT: an extremal; sufficiency not claimed (%s).\n', strjoin(failedIds.', ', '));
+else
+    fprintf('   VERDICT: the root or an instrument is in doubt (%s); no claim.\n', strjoin(failedIds.', ', '));
+end
+assert(codeOK, 'gto_dro_study:brokenRoot', 'code gates did not pass: %s', strjoin(failedIds.', ', '));
+if selfCheck.strict
+    assert(allOK, 'gto_dro_study:notClaimed', 'strict self-check: %s', strjoin(failedIds.', ', '));
+end
+
 
 %% ------------------------------------------------------------------------
 function v = fieldd(s, f, d_)

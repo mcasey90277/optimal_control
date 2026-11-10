@@ -20,7 +20,10 @@ function ok = test_mintime_earth_floor()
 %        floor is not binding, and t_f is a sane transfer time (0.20-0.35 ND).
 %        It does NOT establish which benign basin is reached.
 %     f. default-off identity: the unfloored t_f is the engine's known value.
-%   Two direct solves, about 20 s each.
+%   Two direct solves: the floored one takes ~100 s (the whole test ~2
+%   min). The bitwise default-path regression (floor off: X, U, Um, t_f and
+%   lamDef identical, trapezoid and Hermite-Simpson) is
+%   DRO_tulip/direct/certify/tests/test_minenergy_objective.
 %
 %% Inputs:
 %

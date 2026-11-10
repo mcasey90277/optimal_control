@@ -3,8 +3,8 @@ function ok = run_tests()
 %
 %   Every test in this folder, in dependency order, with ONE logical
 %   verdict and a throw on failure so a scripted run returns a real exit
-%   code. The study-script test solves one transfer at 15 N and takes
-%   several minutes; the others are seconds.
+%   code. The study-script test solves one transfer walking the ladder
+%   15 -> 12 N and takes ~2.5 minutes; the others are seconds.
 %
 %% Inputs:
 %

@@ -10,8 +10,10 @@ function ok = test_gto_dro_study()
 %   VERDICT line, and three PNGs plus the .mat must be written; (2) a REUSE
 %   run on that .mat with tol.earthKm = 1e6 must print N7a FAIL and throw
 %   gto_dro_study:brokenRoot (the gate can fail, and the script fails when
-%   it should); (3) a REUSE run with a different DRO period must be refused
-%   (gto_dro_study:reuse). The script parses clean (checkcode, parse errors
+%   it should) and must save to gto_dro_study_reuse.mat, leaving the
+%   original .mat in place with a finite run_meta.solveWallS; (3) a REUSE
+%   run with a different DRO period must be refused (gto_dro_study:reuse).
+%   Figures created by each run are closed. The script parses clean (checkcode, parse errors
 %   only). Scripts run in the base workspace, so they are driven with evalin.
 %
 %% Inputs:
@@ -24,6 +26,7 @@ function ok = test_gto_dro_study()
 %
 %% Revision History:
 %  M. Casey                                                   (c) 11/09/2026
+%  M. Casey  reuse provenance checks; close figures           (c) 11/09/2026
 %  Copyright Coorbital Inc.
 %% ------------------------ Begin Code Sequence ---------------------------
 
@@ -34,7 +37,7 @@ run(fullfile(root, 'setup_gto_dro_paths.m'));
 file   = fullfile(root, 'gto_dro_study.m');
 outDir = fullfile(tempdir, 'test_gto_dro_study');
 if ~isfolder(outDir), mkdir(outDir); end
-for f = {'transfer_3d.png', 'timeseries.png', 'ladder.png', 'gto_dro_study.mat'}
+for f = {'transfer_3d.png', 'timeseries.png', 'ladder.png', 'gto_dro_study.mat', 'gto_dro_study_reuse.mat'}
     if isfile(fullfile(outDir, f{1})), delete(fullfile(outDir, f{1})); end
 end
 
@@ -51,6 +54,7 @@ catch err
     txt = err.message;  ran = false;
 end
 evalin('base', 'clear study_opts');
+close all;                                                   % figures are invisible; drop them
 ok = check(ok, ran, sprintf('full run at 12 N completed (%.0f s)', toc(t0)));
 if ~ran, fprintf('      %s\n', strrep(txt, newline, [newline '      '])); ok = false; return; end
 fprintf('%s\n', txt);
@@ -82,8 +86,10 @@ catch err
     threw = err.identifier;  txt2 = err.message;
 end
 evalin('base', 'clear study_opts');
+close all;
 ok = check(ok, strcmp(threw, 'gto_dro_study:brokenRoot'), sprintf('impossible Earth floor throws gto_dro_study:brokenRoot (got ''%s'')', threw));
 ok = check(ok, contains(txt2, 'N7a'), 'the failure names N7a');
+ok = check(ok, isfile(fullfile(outDir, 'gto_dro_study_reuse.mat')), 'the reuse run saved to gto_dro_study_reuse.mat');
 
 % (3) reuse with a different DRO period is refused
 assignin('base', 'study_opts', struct('thrustN', 12, 'dro', struct('tau', 2), 'out', struct('dir', outDir, 'visible', 'off', 'reuse', matFile)));
@@ -94,7 +100,12 @@ catch err
     threw = err.identifier;
 end
 evalin('base', 'clear study_opts');
+close all;
 ok = check(ok, strcmp(threw, 'gto_dro_study:reuse'), sprintf('reuse with tau = 2 refused with gto_dro_study:reuse (got ''%s'')', threw));
+
+% the original (solved) .mat survives both reuse runs with its solve provenance
+R = load(matFile, 'run_meta');
+ok = check(ok, isfinite(R.run_meta.solveWallS), sprintf('original .mat unchanged after reuse (run_meta.solveWallS = %.0f s)', R.run_meta.solveWallS));
 
 fprintf('test_gto_dro_study: %s\n', tern(ok, 'PASS', 'FAIL'));
 end

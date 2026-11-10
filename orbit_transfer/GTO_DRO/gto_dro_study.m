@@ -52,7 +52,7 @@ gto     = struct( ...
     'orientDeg', 0, ...              % Earth->Moon line to perigee [deg], rotating sense
     'sma_km',    24446, ...          % semi-major axis [km] (350 x 35786 km GTO)
     'ecc',       0.724781150290436, ...
-    'depFrac',   0.10);              % departure phase, TIME fraction since perigee (0.5 = apogee). 0.10 by measurement: the perigee cell (0) at 15 N hits the iteration cap with ~5% mass left (diag 2026-11-09); 0.10 converges in ~20 s
+    'depFrac',   0.10);              % departure phase, TIME fraction since perigee (0.5 = apogee). 0.10 by measurement: the perigee cell (0) at 15 N hits the iteration cap with ~5% mass left (diag 2026-11-09); 0.10 converges in ~100 s with the floor
 dro     = struct( ...
     'tau',       1, ...              % DRO period [ND]; 0.5 1 2 3 are the catalog periods (1 = 4.43 d)
     'arrFrac',   0);                 % arrival phase: time fraction along the DRO from its +x crossing
@@ -86,7 +86,14 @@ out     = struct( ...
     'solverType', 'fsolve');         % X1: pumpkyn tfMin solver ('fsolve' | 'lsqnonlin')
 selfCheck = struct('strict', false); % true: any FAIL or UNRESOLVED gate throws (tests); false: code gates only
 
-% study_opts overrides (struct knobs merge field by field)
+% study_opts overrides (struct knobs merge field by field); unknown top-level
+% fields are refused BEFORE anything is assigned
+knobNames = {'thrustN', 'm0kg', 'ispS', 'gto', 'dro', 'mesh', 'recipe', 'tol', 'out', 'selfCheck'};
+for f = fieldnames(study_opts).'
+    if ~any(strcmp(f{1}, knobNames))
+        error('gto_dro_study:knob', 'unknown study_opts field ''%s''', f{1});
+    end
+end
 for f = fieldnames(study_opts).'
     name = f{1};
     if exist(name, 'var') && isstruct(study_opts.(name)) && isstruct(eval(name))
@@ -188,7 +195,7 @@ else
                S.knobs.gto.sma_km == gto.sma_km && S.knobs.gto.ecc == gto.ecc && ...
                S.knobs.dro.tau == dro.tau && S.knobs.dro.arrFrac == dro.arrFrac && ...
                S.knobs.mesh.N == mesh.N && S.knobs.recipe.tf0 == recipe.tf0 && ...
-               S.knobs.recipe.thrLock == recipe.thrLock && S.knobs.recipe.floorEarthKm == recipe.floorEarthKm && ...
+               S.knobs.recipe.thrLock == recipe.thrLock && isequal(S.knobs.recipe.floorEarthKm, recipe.floorEarthKm) && ...
                S.knobs.recipe.K == recipe.K;
     catch
         same = false;
@@ -281,6 +288,9 @@ LM = lift_margin(G.C, GL.C, entry.z8(1:7), struct('marginMin', tol.liftMargin, '
 s1 = G.minLamV > 0;   s2 = G.minQmt > 0;
 s3 = G.dimS == 1 && G.nullResidRel < tol.lift && G.Hresid < tol.H && LM.certified;
 fprintf('   S1 Legendre      min|lam_v| = %.4e at t/t_f = %.3f   %s\n', G.minLamV, G.tMinLamV/entry.z8(8), pass3(s1));
+if isfield(G, 'minLamVEstimate')
+    fprintf('                    between-sample estimate %.3e\n', G.minLamVEstimate);
+end
 fprintf('   S2 strict bang   min Q = %.4e at t/t_f = %.3f        %s\n', G.minQmt, G.tMinQmt/entry.z8(8), pass3(s2));
 fprintf('   S3 normality     dim S = %d (1 = no abnormal lift); lift backward error %.1e / %.0e; |lam.f + 1| %.1e; Eckart-Young margin %.0fx / %gx   %s\n', ...
         G.dimS, G.nullResidRel, tol.lift, G.Hresid, LM.margin, tol.liftMargin, pass3(s3));
@@ -291,15 +301,28 @@ if ~out.conjTest
 else
     CS = conj_spectrum(entry.z8, rv0(1:6).', Tnd, cnd, muStar, struct('K', recipe.K, 'nSub', 8));
     nScan = numel(CS.t);
+    scanClear = CS.clear && CS.nZero == 0 && CS.multiplicity == 0 && CS.nInterior == 0;
+    s4why = '';
     if isnan(gates.conjPass) || ~CS.testable || CS.nUnresolved > 0
         s4 = 'UNRESOLVED';
-    elseif gates.conjPass == 1 && CS.clear && CS.nZero == 0 && CS.multiplicity == 0 && CS.nInterior == 0
+        s4why = sprintf('junction test %s, scan testable = %d, %d unresolved sample(s)', gates.conjReason, CS.testable, CS.nUnresolved);
+    elseif gates.conjPass == 1 && scanClear
         s4 = 'PASS';
+    elseif gates.conjPass == 0 && ~scanClear
+        s4 = 'FAIL';                                          % FAIL only when BOTH instruments refute
     else
-        s4 = 'FAIL';
+        s4 = 'UNRESOLVED';
+        if gates.conjPass == 1
+            s4why = 'junction test passes but the dense scan finds a zero / sign change';
+        else
+            s4why = 'junction test refutes but the dense scan is clear';
+        end
     end
     fprintf('   S4 conjugate     junction test pass = %g; dense scan (%d samples): %d zero, %d unresolved, %d interior sign change(s), clear = %d   %s\n', ...
             gates.conjPass, nScan, CS.nZero, CS.nUnresolved, CS.nInterior, CS.clear, s4);
+    if ~isempty(s4why)
+        fprintf('                    S4 UNRESOLVED because: %s\n', s4why);
+    end
 end
 x2 = G.fieldErr < tol.field && G.adjErrRef < tol.field;
 fprintf('   X2 physics       pumpkyn vs independent field: state rows %.1e, adjoint rows %.1e / %-6.0e %s\n', G.fieldErr, G.adjErrRef, tol.field, pass3(x2));
@@ -382,6 +405,7 @@ semilogy(ax, td, max(abs(Hres), 1e-18), 'LineWidth', 1.4, 'DisplayName', '|H|');
 ax = nexttile(tl2); hold(ax, 'on');
 semilogy(ax, td, oE.hKm, 'LineWidth', 1.4, 'DisplayName', 'Earth altitude');
 semilogy(ax, td, oM.hKm, 'LineWidth', 1.4, 'DisplayName', 'Moon altitude');
+set(ax, 'YScale', 'log');                                    % hold before semilogy keeps the axis linear
 yline(ax, tol.earthKm, '--', 'HandleVisibility', 'off'); yline(ax, tol.moonKm, ':', 'HandleVisibility', 'off');
 ylabel(ax, 'altitude [km]'); xlabel(ax, 'time [d]'); legend(ax, 'Location', 'eastoutside', 'FontSize', FS); grid(ax, 'on');
 for ax = findall(hf2, 'Type', 'axes').'
@@ -420,7 +444,18 @@ fprintf('   transfer_3d.png, timeseries.png, ladder.png written\n');
 run_meta = struct('date', char(datetime('now', 'Format', 'yyyy-MM-dd HH:mm')), 'matlab', version, 'host', strtrim(hostName), ...
     'optimal_control', strtrim(gitOC), 'pumpkyn', strtrim(gitPk), 'pumpkynPie', strtrim(gitPP), ...
     'solveWallS', solveWall, 'studyWallS', toc(tStudy), 'reused', out.reuse);
-save(fullfile(out.dir, 'gto_dro_study.mat'), 'entry', 'gates', 'P', 'knobs', 'verdicts', 'flight', 'PW', 'G', 'run_meta');
+if isempty(out.reuse)
+    saveTarget = fullfile(out.dir, 'gto_dro_study.mat');
+else
+    saveTarget = fullfile(out.dir, 'gto_dro_study_reuse.mat');   % never overwrite the solved run's provenance
+    rd = dir(out.reuse);   reuseFull = out.reuse;
+    if isscalar(rd), reuseFull = fullfile(rd.folder, rd.name); end
+    wd = what(out.dir);    tgtFull = saveTarget;
+    if ~isempty(wd), tgtFull = fullfile(wd(1).path, 'gto_dro_study_reuse.mat'); end
+    assert(~strcmp(tgtFull, reuseFull), 'gto_dro_study:reuseTarget', ...
+           'save target %s is the reused file; refusing to overwrite it', saveTarget);
+end
+save(saveTarget, 'entry', 'gates', 'P', 'knobs', 'verdicts', 'flight', 'PW', 'G', 'run_meta');
 
 fprintf('\n== SUMMARY  GTO (%g deg, phase %.3f) -> DRO (tau %g, phase %.3f), %g N, %g kg, Isp %g s\n', ...
         gto.orientDeg, gto.depFrac, dro.tau, dro.arrFrac, thrustN, m0kg, ispS);
@@ -435,6 +470,7 @@ codeOK  = all(strcmp(verdicts(isCode, 2), 'PASS') | strcmp(verdicts(isCode, 2), 
 allOK   = all(strcmp(verdicts(:, 2), 'PASS') | strcmp(verdicts(:, 2), 'NOT APPLICABLE'));
 failedIds = verdicts(~(strcmp(verdicts(:, 2), 'PASS') | strcmp(verdicts(:, 2), 'NOT APPLICABLE')), 1);
 fprintf('   code gates (V, N, X): %s; all gates: %s; %.0f s\n', pass3(codeOK), pass3(allOK), toc(tStudy));
+fprintf('   wrote %s\n', saveTarget);
 if allOK
     fprintf(['   VERDICT: a certified local minimum-time extremal that pumpkyn''s tfMin accepts unchanged;\n' ...
              '            the sufficiency hypotheses hold on the sampled arc (numerical evidence, not a certificate).\n']);
@@ -450,11 +486,6 @@ end
 
 
 %% ------------------------------------------------------------------------
-function v = fieldd(s, f, d_)
-% FIELDD  s.(f) if present else d_.  INPUTS: s; f; d_.  OUTPUTS: v.
-if isfield(s, f), v = s.(f); else, v = d_; end
-end
-
 function s = pass3(c)
 % PASS3  PASS / FAIL from a logical.  INPUTS: c.  OUTPUTS: s.
 if c, s = 'PASS'; else, s = 'FAIL'; end

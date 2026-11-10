@@ -23,10 +23,21 @@ function [entry, gates, P] = gto_dro_entry(orientDeg, tauDRO, depFrac, arrFrac, 
 %   throttle, tf0 = 4.0) measured 67/72 GTO cells unreachable; this driver
 %   never falls back to them.
 %
-%   Self-demo (nargin == 0): orient 0 deg, tau 1, PERIGEE departure
-%   (phase 0), arrival phase 0, 15 N -- one solve. Perigee, not apogee:
-%   the GTO campaign measured an apogee cold start at 15 N landing in a
-%   bad local minimum (11.95e6 km flown miss).
+%   Self-demo (nargin == 0): orient 0 deg, tau 1, departure phase 0.10,
+%   arrival phase 0, 15 N -- one solve. Not apogee: the GTO campaign
+%   measured an apogee cold start at 15 N landing in a bad local minimum
+%   (11.95e6 km flown miss). Not perigee either: perigee (phase 0) at
+%   15 N did not converge (iteration cap, mass nearly exhausted) in the
+%   pre-floor diagnosis of 2026-11-09, and WITH the 200 km Earth floor
+%   it still did not (measured 2026-11-09: Maximum_Iterations_Exceeded
+%   at 6000 iterations, defect 1.1e-08, t_f 0.41701 ND, Earth altitude
+%   riding the 200 km floor, m_f/m0 0.0476, 516 s). Phase 0.10 is the
+%   demo.
+%
+%   PREFLIGHT REFUSAL: the GTO perigee altitude sma*(1-ecc) - 6378.137 km
+%   (from the possibly overridden .gtoParams) below floorEarthKm makes
+%   the first node infeasible; the driver refuses it by name
+%   (gto_dro_entry:earthFloor) before any solve, planOnly included.
 %
 %% Inputs:
 %
@@ -109,17 +120,18 @@ function [entry, gates, P] = gto_dro_entry(orientDeg, tauDRO, depFrac, arrFrac, 
 %
 %  P                        struct                  thrust_ladder_library's
 %                                                   output for the cell
-%                                                   (every rung); empty when
-%                                                   .planOnly
+%                                                   (every rung); struct()
+%                                                   when .planOnly
 %
 %% Revision History:
 %  M. Casey                                                   (c) 11/09/2026
 %  M. Casey  floorEarthKm option (default 200 km)             (c) 11/09/2026
+%  M. Casey  demo phase 0.10; perigee-floor preflight refusal (c) 11/09/2026
 %  Copyright Coorbital Inc.
 %% ------------------------ Begin Code Sequence ---------------------------
 
 if nargin == 0
-    orientDeg = 0;  tauDRO = 1;  depFrac = 0;  arrFrac = 0;  thrustN = 15;
+    orientDeg = 0;  tauDRO = 1;  depFrac = 0.10;  arrFrac = 0;  thrustN = 15;
 end
 if nargin < 6, opts = struct(); end
 m0kg       = fdef(opts, 'm0kg',       150);
@@ -160,6 +172,17 @@ tStar  = 382981.289129055;
 depParams = struct('orientDeg', orientDeg);
 for f = {'sma_km', 'ecc'}
     if isfield(gtoParams, f{1}), depParams.(f{1}) = gtoParams.(f{1}); end
+end
+
+% Preflight: GTO perigee altitude against the Earth floor (before any solve,
+% planOnly included). Defaults mirror get_family_orbit's GTO (350 x 35786 km).
+smaChk = fdef(gtoParams, 'sma_km', (6378+350 + 6378+35786)/2);
+eccChk = fdef(gtoParams, 'ecc', (35786-350)/(2*((6378+350+6378+35786)/2)));
+hPeri  = smaChk*(1 - eccChk) - 6378.137;
+if ~isempty(floorEarthKm) && hPeri < floorEarthKm
+    error('gto_dro_entry:earthFloor', ...
+          'GTO perigee altitude %.0f km is below floorEarthKm = %.0f km: the first node would be infeasible', ...
+          hPeri, floorEarthKm);
 end
 
 scratchDir = fullfile(here, 'results', 'scratch');

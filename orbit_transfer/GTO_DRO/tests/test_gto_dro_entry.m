@@ -7,7 +7,8 @@ function ok = test_gto_dro_entry()
 %   [15 12 10 7 5 4] for 4 N (a non-standard rung is appended, never
 %   cold-solved); (3) the GTO parameter passthrough and the DRO period
 %   land in the engine options the driver builds (planOnly returns them in
-%   entry.engineOpts). The solve itself is exercised end to end by
+%   entry.engineOpts); (3b) a GTO perigee altitude below floorEarthKm is
+%   refused by name before any solve. The solve itself is exercised end to end by
 %   test_gto_dro_study.
 %
 %% Inputs:
@@ -61,6 +62,15 @@ ok = check(ok, isequal(eo.rungs, [15 12 10]), 'planned rungs are the engine rung
 ok = check(ok, eo.floorEarthKm == 200, 'Earth floor default 200 km reaches the engine');
 eE = gto_dro_entry(0, 1, 0, 0, 15, struct('planOnly', true, 'floorEarthKm', 300));
 ok = check(ok, eE.engineOpts.floorEarthKm == 300, 'Earth floor override 300 km reaches the engine');
+
+% (3b) preflight: a GTO perigee below the Earth floor is refused by name, planOnly included
+threw = false;
+try
+    gto_dro_entry(0, 1, 0, 0, 15, struct('planOnly', true, 'gtoParams', struct('sma_km', 6500, 'ecc', 0)));
+catch err
+    threw = strcmp(err.identifier, 'gto_dro_entry:earthFloor');
+end
+ok = check(ok, threw, 'GTO perigee 122 km < floorEarthKm 200 km refused with gto_dro_entry:earthFloor');
 
 % (4) scratch name carries the phases (parallel cells must not collide); fractional orient is not mangled
 e1 = gto_dro_entry(22.5, 1, 0.1, 0.2, 10, po);

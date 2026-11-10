@@ -182,18 +182,19 @@ if isempty(out.reuse)
     fprintf('   solved in %.0f s wall\n', solveWall);
 else
     S = load(out.reuse, 'entry', 'gates', 'P', 'knobs');
-    same = S.knobs.thrustN == thrustN && S.knobs.m0kg == m0kg && S.knobs.ispS == ispS && ...
-           S.knobs.gto.orientDeg == gto.orientDeg && S.knobs.gto.depFrac == gto.depFrac && ...
-           S.knobs.gto.sma_km == gto.sma_km && S.knobs.gto.ecc == gto.ecc && ...
-           S.knobs.dro.tau == dro.tau && S.knobs.dro.arrFrac == dro.arrFrac;
     try
-        same = same && S.knobs.mesh.N == mesh.N && S.knobs.recipe.tf0 == recipe.tf0 && ...
-               S.knobs.recipe.thrLock == recipe.thrLock && S.knobs.recipe.floorEarthKm == recipe.floorEarthKm;
+        same = S.knobs.thrustN == thrustN && S.knobs.m0kg == m0kg && S.knobs.ispS == ispS && ...
+               S.knobs.gto.orientDeg == gto.orientDeg && S.knobs.gto.depFrac == gto.depFrac && ...
+               S.knobs.gto.sma_km == gto.sma_km && S.knobs.gto.ecc == gto.ecc && ...
+               S.knobs.dro.tau == dro.tau && S.knobs.dro.arrFrac == dro.arrFrac && ...
+               S.knobs.mesh.N == mesh.N && S.knobs.recipe.tf0 == recipe.tf0 && ...
+               S.knobs.recipe.thrLock == recipe.thrLock && S.knobs.recipe.floorEarthKm == recipe.floorEarthKm && ...
+               S.knobs.recipe.K == recipe.K;
     catch
         same = false;
     end
     assert(same, 'gto_dro_study:reuse', ...
-           '%s was solved with different knobs (thrust, mass, Isp, GTO or DRO parameters); refusing to gate it as this case', out.reuse);
+           '%s was solved with different knobs (thrust, mass, Isp, GTO or DRO parameters, mesh or recipe); refusing to gate it as this case', out.reuse);
     entry = S.entry;  gates = S.gates;  P = S.P;  solveWall = NaN;
     fprintf('   REUSED %s (no solve)\n', out.reuse);
 end
@@ -255,13 +256,15 @@ fprintf('   N4 transversality |lam_m(t_f)| %6.2e / %-9.0e  %s\n', PW.lamMf, tol.
 fprintf('   N5 adjoint eqns   rel err   %9.2e / %-9.0e  %s   (%d samples; FD steps agree to %.1e)\n', ...
         PW.adjErr, tol.adj, pass3(PW.adjErr < tol.adj), PW.nSample, PW.fdAgree);
 n6gap = max(PW.fullGap, PW.fieldGap);
-n6 = n6gap <= tol.gap && PW.throttleErr < tol.throttle && PW.minQmt >= 0;
+n6 = PW.fullGap <= tol.gap && PW.fieldGap <= tol.gap && PW.throttleErr < tol.throttle && PW.minQmt >= 0;
 fprintf('   N6 min principle  |gap|     %9.2e / %-9.0e  %s   (signed %+.1e..%+.1e; throttle 1 to %.1e acc / %.1e mass; min Q = %.3f)\n', ...
         n6gap, tol.gap, pass3(n6), PW.gapMin, PW.gapMax, PW.throttleAccErr, PW.throttleMassErr, PW.minQmt);
-for fv = {{'N1', gates.msNormR}, {'N2', PW.Hmax}, {'N4', PW.lamMf}, {'N5', PW.adjErr}, {'N6 gap', n6gap}, {'N6 throttle', PW.throttleErr}}
+for fv = {{'N1', gates.msNormR}, {'N2', PW.Hmax}, {'N4', PW.lamMf}, {'N5', PW.adjErr}, {'N6 gap', n6gap}, {'N6 full gap', PW.fullGap}, {'N6 field gap', PW.fieldGap}, {'N6 throttle', PW.throttleErr}}
     assert(isscalar(fv{1}{2}) && isreal(fv{1}{2}) && isfinite(fv{1}{2}) && fv{1}{2} >= 0, 'gto_dro_study:malformed', ...
            '%s is not a real finite non-negative scalar (%g): the gate cannot be judged', fv{1}{1}, fv{1}{2});
 end
+assert(isscalar(PW.minQmt) && isreal(PW.minQmt) && isfinite(PW.minQmt), 'gto_dro_study:malformed', ...
+       'N6 min Q is not a real finite scalar (%g): the gate cannot be judged', PW.minQmt);
 verdicts = addv(verdicts, 'N1 BVP residual',   pass3(n1),                 gates.msNormR, tol.msNormR);
 verdicts = addv(verdicts, 'N2 Hamiltonian',    pass3(PW.Hmax < tol.H),    PW.Hmax,       tol.H);
 verdicts = addv(verdicts, 'N4 transversality', pass3(PW.lamMf < tol.lamm), PW.lamMf,     tol.lamm);
@@ -344,9 +347,9 @@ for view3 = [true false]
     axis(ax, 'equal'); grid(ax, 'on');
     set(ax, 'Color', 'w', 'XColor', 'k', 'YColor', 'k', 'ZColor', 'k', 'FontSize', FS);
     xlabel(ax, 'x [ND]'); ylabel(ax, 'y [ND]');
-    if view3, zlabel(ax, 'z [ND]'); view(ax, [-35 22]); legend(ax, 'Location', 'northwest', 'FontSize', FS - 2);
+    if view3, zlabel(ax, 'z [ND]'); view(ax, [-35 22]); legend(ax, 'Location', 'northwest', 'FontSize', FS);
     else,     view(ax, 2); end
-    cb = colorbar(ax); cb.Label.String = 'm / m_0'; cb.Color = 'k';
+    cb = colorbar(ax); cb.Label.String = 'm / m_0'; cb.Color = 'k'; cb.FontSize = FS; cb.Label.FontSize = FS;
 end
 title(tl1, sprintf('GTO (%g deg, phase %.2f) -> DRO (tau %g, phase %.2f) at %g N: t_f = %.3f d, dV = %.3f km/s', ...
       gto.orientDeg, gto.depFrac, dro.tau, dro.arrFrac, thrustN, flight.tfDays, flight.dvKms), 'FontSize', FS + 1);
@@ -367,20 +370,20 @@ ax = nexttile(tl2); hold(ax, 'on');
 plot(ax, td, alphaDir(:, 1), 'LineWidth', 1.4, 'DisplayName', '\alpha_x');
 plot(ax, td, alphaDir(:, 2), 'LineWidth', 1.4, 'DisplayName', '\alpha_y');
 plot(ax, td, alphaDir(:, 3), 'LineWidth', 1.4, 'DisplayName', '\alpha_z');
-ylabel(ax, 'thrust direction'); legend(ax, 'Location', 'eastoutside'); grid(ax, 'on');
+ylabel(ax, 'thrust direction'); legend(ax, 'Location', 'eastoutside', 'FontSize', FS); grid(ax, 'on');
 ax = nexttile(tl2); hold(ax, 'on');
 plot(ax, td, lamV, 'LineWidth', 1.4, 'DisplayName', '|\lambda_v|');
 plot(ax, td, Qmt, 'LineWidth', 1.4, 'DisplayName', 'Q_{mt}');
-ylabel(ax, 'switching quantities'); legend(ax, 'Location', 'eastoutside'); grid(ax, 'on');
+ylabel(ax, 'switching quantities'); legend(ax, 'Location', 'eastoutside', 'FontSize', FS); grid(ax, 'on');
 ax = nexttile(tl2);
-plot(ax, td, m0kg*mFrac, 'LineWidth', 1.4, 'DisplayName', 'mass'); ylabel(ax, 'mass [kg]'); grid(ax, 'on'); legend(ax, 'Location', 'eastoutside');
+plot(ax, td, m0kg*mFrac, 'LineWidth', 1.4, 'DisplayName', 'mass'); ylabel(ax, 'mass [kg]'); grid(ax, 'on'); legend(ax, 'Location', 'eastoutside', 'FontSize', FS);
 ax = nexttile(tl2);
-semilogy(ax, td, max(abs(Hres), 1e-18), 'LineWidth', 1.4, 'DisplayName', '|H|'); ylabel(ax, 'Hamiltonian'); grid(ax, 'on'); legend(ax, 'Location', 'eastoutside');
+semilogy(ax, td, max(abs(Hres), 1e-18), 'LineWidth', 1.4, 'DisplayName', '|H|'); ylabel(ax, 'Hamiltonian'); grid(ax, 'on'); legend(ax, 'Location', 'eastoutside', 'FontSize', FS);
 ax = nexttile(tl2); hold(ax, 'on');
 semilogy(ax, td, oE.hKm, 'LineWidth', 1.4, 'DisplayName', 'Earth altitude');
 semilogy(ax, td, oM.hKm, 'LineWidth', 1.4, 'DisplayName', 'Moon altitude');
 yline(ax, tol.earthKm, '--', 'HandleVisibility', 'off'); yline(ax, tol.moonKm, ':', 'HandleVisibility', 'off');
-ylabel(ax, 'altitude [km]'); xlabel(ax, 'time [d]'); legend(ax, 'Location', 'eastoutside'); grid(ax, 'on');
+ylabel(ax, 'altitude [km]'); xlabel(ax, 'time [d]'); legend(ax, 'Location', 'eastoutside', 'FontSize', FS); grid(ax, 'on');
 for ax = findall(hf2, 'Type', 'axes').'
     set(ax, 'Color', 'w', 'XColor', 'k', 'YColor', 'k', 'FontSize', FS);
 end

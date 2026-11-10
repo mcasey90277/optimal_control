@@ -137,7 +137,11 @@ for kf = 1:numel(files)
         sheets(nS,1).pm          = ob.pmTulip;
     else
         sheets(nS,1).Np          = NaN;           % petal count: tulip-only
-        sheets(nS,1).pm          = ob.arrParams.pm;
+        % halo-type arrivals carry a branch sign pm; a DRO arrival (GTO -> DRO
+        % catalog, 2026-11-10) has none: NaN, like Np
+        if isfield(ob.arrParams, 'pm'), sheets(nS,1).pm = ob.arrParams.pm;
+        else,                           sheets(nS,1).pm = NaN;
+        end
     end
     sheets(nS,1).period_tulip_nd = ob.periodTulip;% LEGACY alias of tau_arr
     sheets(nS,1).sD_frac         = Q.sD(:)';

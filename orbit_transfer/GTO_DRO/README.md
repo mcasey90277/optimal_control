@@ -85,3 +85,42 @@ results and are reported either way (strict mode throws on them too).
 - The GTO is an algebraic Kepler locus frozen at epoch zero in the
   rotating frame: a set of departure states keyed by orientation and
   time-since-perigee, not a trajectory.
+
+## Stage 2: the catalog (built 2026-11-10; pilot and fleet status below)
+
+| file | role |
+|---|---|
+| `catalog/run_gto_dro_catalog.m` | fleet front door: 16 sheets (orientDeg {0,90,180,270} x DRO tau {0.5,1,2,3}), 12 x 6 phasing, rungs [15 12 10 7 5], Earth floor 200 km, two-point top-rung multistart; `planOnly` returns the engine options without solving |
+| `catalog/run_gto_dro_batched.sh` | nohup'd OS-timeout driver (matlab-campaign discipline) |
+| `lib/earth_clearance_sweep.m` | flown Earth altitude of every accepted entry, sidecar + writeback (demotes below the floor) |
+| `lib/seed_top_from_entry.m` | a flown entry as the engine's top-rung seed (reverse warm start, phase continuation) |
+| `lib/repair_gto_dro_cells.m` | 'unsolved' (phase continuation from the nearest solved departure phase) and 'basin' (S4 junction test on every top rung; refuted ones re-solved from their 12 N entry; backup + restore) |
+| `catalog/build_gto_dro_catalog.m` | the post-fleet chain: census, earth, repairs, earth re-sweep of repaired sheets, package (clean staging copy of the official sheets), conj, gates, audit, pictures, deliverable (refused on blockers; `allowConjBlockers` waives only refuted-entry blockers) |
+| `catalog/audit_gto_dro_entries.m` | up to 3-entry replay: flown miss, tfMin acceptance, Earth floor (gated); the tulip pick rule when the sheets allow it, a reduced rule otherwise |
+| `catalog/costate_catalog_pick.m`, `costate_lib_describe.m` | vendored pickers (deliverable convention); the describe copy prints a DRO arrival key instead of Np |
+
+Run the pilot (sheet 2), then the chain on it, then the fleet:
+
+    cd orbit_transfer/GTO_DRO/catalog
+    nohup ./run_gto_dro_batched.sh 2 6 1800 > /dev/null 2>&1 &
+    # MATLAB, after the pilot's completion marker:
+    build_gto_dro_catalog(struct('expectSheets', 1, 'deliverable', false))
+    nohup ./run_gto_dro_batched.sh "[1 3:16]" 6 1800 "" <tf0 from the pilot> > /dev/null 2>&1 &
+
+Chain safeguards (fix round 1): a call with a sheet-writing stage on takes the
+fleet driver lock (`results/.gtodrocat_driver.lock`) and refuses with
+`build_gto_dro_catalog:fleetRunning` if it exists (`ignoreLock` skips it). The
+deliverable stage runs a preflight on what is on disk whatever stages ran:
+catalog present, packaged entries equal to the sheets' (`stale:`), conj and
+hypothesis-gate records complete and a current Earth sweep (`unverified:`),
+and an audit file whose fingerprint still matches the sheets; none of these
+can be waived. `allowConjBlockers` and `allowEarthDemotions` waive refuted
+entries (`conj:`) and Earth demotions (`earth-demoted:`) from the ship
+decision only; both stay in the returned blocker list.
+
+Chain notes: the packager is fed `results/package_stage/` (the official
+sheets only), because the catalog folder also holds `_earth`, `_repairs`,
+`_repair_backup_*` and `_deep` files that match the sheet glob. Re-packaging
+deletes the conj and gates sidecars (their entry indices go stale).
+Engine options added for this stage (costate_common, default off): `seedTop`,
+`redo`, `directGateKm`.

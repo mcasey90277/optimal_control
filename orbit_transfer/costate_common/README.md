@@ -170,6 +170,19 @@ on their path to reach it)
 | `certify_dro_mintime.m` | The certifier composing a direct solution's gates: continuous residual (`dro_residual`), flown control end to end (`flown_control_error`), propagated lunar clearance (`true_min_altitude`), plus the discrete checks. Name likewise legacy. | the ladder + 5 DRO scripts |
 | `dro_residual.m` | The G1 continuous-residual gate for a CR3BP Cartesian solution: per-interval re-integration through `oc.local_residual`, with the control reconstruction and the position/velocity/mass split that belong to this layout. Its MEE sibling `mee_residual` lives in `../verify_common`; unifying the two is a TODO, not done here. | `certify_dro_mintime`; `tests/test_dro_residual` |
 
+`opts.seedTop` (struct .X [7 x N+1], .U [4 x N+1], .tf) seeds the TOP rung of
+every cell the call solves from an external direct solution (a repair tool's
+reverse warm start or phase continuation); `opts.redo` (with `opts.cells`)
+re-solves cells that already hold OK rungs, resetting their attempts and
+clearing their slices first -- the caller keeps the backup. Both default off
+and leave every other call byte-identical (tests/test_ladder_seedtop). An external
+seed may land on a basin whose direct control misses the flown gate before
+refinement (measured on the GTO -> DRO demo cell: 193.6 km at N = 400), so a
+repair call may raise `.directGateKm` (the first gate only; `.gateKm`, the
+refined gate and `meta.gateKm` are untouched) and must then enforce its own
+gate on the recorded FLYKM. `redo` also refuses unless a size-matched sheet
+is loaded (`thrust_ladder_library:redoSheet`).
+
 **Shooting solvers and continuation**
 
 | file | what | used by |

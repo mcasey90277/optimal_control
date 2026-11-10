@@ -31,6 +31,15 @@ function P = thrust_ladder_library(outMat, opts)
 %                         passed to casadi_mintime_dro as minAltEarthKm
 %                         on every rung (Earth departures)   [[]]
 %              .gateKm    flown-arrival gate, km           [100]
+%              .directGateKm  gate on the DIRECT control's flown miss
+%                         only (the first gate, before ms_tfmin refines).
+%                         The refined-arrival gate, the msSeg loop and
+%                         meta.gateKm keep using .gateKm. A repair call
+%                         may raise it: on the GTO -> DRO demo cell the
+%                         direct control of the reverse-warm-started 15 N
+%                         basin flies 193.6 km off at N = 400 and
+%                         refinement closes it to 7e-5 km. Not stored in
+%                         meta                            [.gateKm]
 %              .cells     [k x 2] (iD,iA) subset           [all 12x12]
 %              .nD,.nA    torus resolution                 [12 12]
 %              .sD0,.sA0  phase-grid origins; defaults MATCH the
@@ -47,6 +56,28 @@ function P = thrust_ladder_library(outMat, opts)
 %                                                                    [[]]
 %              .maxCpuSec IPOPT max_cpu_time per rung (s), passed straight
 %                         through to casadi_mintime_dro               [300]
+%              .seedTop   struct .X [7 x N+1] [r;v;m], .U [4 x N+1]
+%                         [alpha;thr], .tf (ND): an EXTERNAL warm start
+%                         for the TOP rung of every cell this call
+%                         solves (a campaign repair tool's reverse warm
+%                         start or phase continuation); [] = the cold
+%                         tf0 path, byte-identical to before. An
+%                         external seed may land on a basin whose direct
+%                         control misses the flown gate before refinement
+%                         (measured on the GTO -> DRO demo cell: 193.6 km
+%                         at N = 400), so a repair call may raise
+%                         .directGateKm and must then enforce its own
+%                         gate on the recorded FLYKM              [[]]
+%              .redo      true = re-solve every cell in .cells even if
+%                         it already holds OK rungs: its ATT is reset to
+%                         0 and its TF/FLYKM/ACCDZ/RES/WALL/OK/Z8 slices
+%                         are cleared before the ladder runs. Refuses
+%                         without .cells (thrust_ladder_library:redoCells)
+%                         and unless a size-matched sheet is loaded
+%                         (needs resume = true and an existing sheet of
+%                         the call's size: thrust_ladder_library:redoSheet)
+%                         The caller owns the backup of what it clears
+%                                                                 [false]
 %
 %% Outputs:
 %
@@ -63,6 +94,7 @@ function P = thrust_ladder_library(outMat, opts)
 %  M. Casey                                                   (c) 08/05/2026
 %  M. Casey  moved into costate_common (cleanup step 12)      (c) 09/16/2026
 %  M. Casey  floorEarthKm option (default off)                (c) 11/09/2026
+%  M. Casey  seedTop and redo options (default off)           (c) 11/10/2026
 %  Copyright Coorbital Inc.
 %% ------------------------ Begin Code Sequence ---------------------------
 
@@ -75,6 +107,7 @@ N       = d('N', 400);
 floorKm = d('floorKm', 500);
 floorEarthKm = d('floorEarthKm', []);   % Earth floor, km; [] = none (2026-11-09)
 gateKm  = d('gateKm', 100);
+directGateKm = d('directGateKm', gateKm);   % first (direct-control) gate only
 nD      = d('nD', 12);
 nA      = d('nA', 12);
 % Phase-grid ORIGINS. These must match the low-thrust library exactly or the
@@ -136,9 +169,25 @@ depAt = phase_state(tD, rvD);   arrAt = phase_state(tT, rvT);
 
 sD = mod(sD0 + (0:nD-1)/nD, 1);  sA = mod(sA0 + (0:nA-1)/nA, 1);
 todo = d('cells', []);
+redo = d('redo', false);
+if redo && isempty(todo)
+    error('thrust_ladder_library:redoCells', ...
+          'opts.redo requires opts.cells (the cells to re-solve)');
+end
 if isempty(todo)
     [gA, gD] = meshgrid(1:nA, 1:nD);
     todo = [gD(:), gA(:)];
+end
+seedTop = d('seedTop', []);
+if ~isempty(seedTop)
+    okSeed = isstruct(seedTop) && all(isfield(seedTop, {'X', 'U', 'tf'})) && ...
+             isequal(size(seedTop.X), [7 N+1]) && isequal(size(seedTop.U), [4 N+1]) && ...
+             isscalar(seedTop.tf) && seedTop.tf > 0 && ...
+             all(isfinite(seedTop.X(:))) && all(isfinite(seedTop.U(:))) && isfinite(seedTop.tf);
+    if ~okSeed
+        error('thrust_ladder_library:seedTop', ...
+              'opts.seedTop must carry .X [7 x %d], .U [4 x %d] and a positive .tf', N+1, N+1);
+    end
 end
 
 nR = numel(rungs);
@@ -149,26 +198,44 @@ OK = false(nD,nA,nR);  Z8 = nan(8,nD,nA,nR);
 % it a hung cell has no verified rung, resume would not skip it, and a
 % batched driver would retry it forever.
 ATT = zeros(nD,nA);
+sheetLoaded = false;
 maxAtt = d('maxAtt', 2);
 % RESUME: a prior run's products are data -- reload them and skip cells that
-% already produced verified rungs (opts.resume, default true).
+% already produced verified rungs (opts.resume, default true). A redo call
+% keeps every cell it names, resets its attempts and clears its slices.
 if d('resume', true) && isfile(outMat)
     Q = load(outMat);
     if isequal(size(Q.OK), [nD nA nR])
         TF=Q.TF; FLYKM=Q.FLYKM; ACCDZ=Q.ACCDZ; RES=Q.RES; WALL=Q.WALL;
         OK=Q.OK; Z8=Q.Z8;
         if isfield(Q,'ATT'), ATT = Q.ATT; end
-        keep = false(size(todo,1),1);
-        for kq = 1:size(todo,1)
-            iq = todo(kq,1);  jq = todo(kq,2);
-            keep(kq) = ~any(OK(iq,jq,:)) && ATT(iq,jq) < maxAtt;
+        sheetLoaded = true;
+        if redo
+            for kq = 1:size(todo,1)
+                iq = todo(kq,1);  jq = todo(kq,2);
+                ATT(iq,jq) = 0;
+                TF(iq,jq,:) = NaN;  FLYKM(iq,jq,:) = NaN;  ACCDZ(iq,jq,:) = NaN;
+                RES(iq,jq,:) = NaN; WALL(iq,jq,:) = NaN;   OK(iq,jq,:) = false;
+                Z8(:,iq,jq,:) = NaN;
+            end
+            nSkip = 0;
+        else
+            keep = false(size(todo,1),1);
+            for kq = 1:size(todo,1)
+                iq = todo(kq,1);  jq = todo(kq,2);
+                keep(kq) = ~any(OK(iq,jq,:)) && ATT(iq,jq) < maxAtt;
+            end
+            nSkip = nnz(~keep);  todo = todo(keep,:);
         end
-        nSkip = nnz(~keep);  todo = todo(keep,:);
     else
         nSkip = 0;
     end
 else
     nSkip = 0;
+end
+if redo && ~sheetLoaded
+    error('thrust_ladder_library:redoSheet', ...
+          'opts.redo needs resume = true and an existing sheet of the same size');
 end
 meta = struct('muStar',muStar,'lStar',lStar,'tStar',tStar, ...
     'tauDRO',tauDRO,'NpTulip',NpT,'tauTulip',tauT,'pmTulip',pmT, ...
@@ -183,6 +250,8 @@ meta = struct('muStar',muStar,'lStar',lStar,'tStar',tStar, ...
 
 lg('THRUST LADDER: %d cells x %d rungs [%s] N, Isp=%d s, m0=%d kg, N=%d (%d cells resumed/skipped)', ...
    size(todo,1), nR, num2str(rungs), ispS, m0kg, N, nSkip);
+if ~isempty(seedTop), lg('  top rung seeded externally (opts.seedTop, tf %.5f)', seedTop.tf); end
+if redo, lg('  redo: %d cell(s) cleared and re-solved', size(todo,1)); end
 tAll = tic;
 for kc = 1:min(size(todo,1), maxCells)
     if toc(tAll) > batchSec
@@ -193,6 +262,9 @@ for kc = 1:min(size(todo,1), maxCells)
     rv0 = depAt(sD(iD)).';          % row, as before
     rvf = arrAt(sA(iA)).';
     seedX = [];  seedU = [];  seedTf = tf0Top;  Tprev = [];
+    if ~isempty(seedTop)
+        seedX = seedTop.X;  seedU = seedTop.U;  seedTf = seedTop.tf;
+    end
     ATT(iD,iA) = ATT(iD,iA) + 1;      % record BEFORE solving (hang-proof)
     save(outMat, 'TF','FLYKM','ACCDZ','RES','WALL','OK','Z8','ATT', ...
          'rungs','sD','sA','meta');
@@ -232,7 +304,7 @@ for kc = 1:min(size(todo,1), maxCells)
                 Tnd, cnd, struct('tfRef',[],'verbose',false,'posTolKm',inf));
         flyKm = C.globKm;
         TF(iD,iA,kr) = o.tf;  FLYKM(iD,iA,kr) = flyKm;  WALL(iD,iA,kr) = toc(t0);
-        if flyKm > gateKm
+        if flyKm > directGateKm
             lg('  (%2d,%2d) T=%5.1f  tf=%.5f flown %.1f km > gate -- ladder stops', ...
                iD, iA, TN, o.tf, flyKm);
             break

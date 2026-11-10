@@ -19,7 +19,9 @@ function plan = run_gto_dro_catalog(sheetSel, maxCellsIn, batchSecIn, rungsIn, o
 %   perigee column at 15 N. Both are repaired AFTER the fleet by
 %   lib/repair_gto_dro_cells (reverse warm start, phase continuation)
 %   through the engine's seedTop/redo options, on the sheets this front
-%   door writes.
+%   door writes. The fleet relaxes ONLY the first flown gate (directGateKm =
+%   1000 km, on the direct control at N = 400, too coarse for 100 km open
+%   loop); the refined gate (gateKm = 100) and tfMin acceptance stay.
 %
 %% Inputs:
 %
@@ -44,7 +46,10 @@ function plan = run_gto_dro_catalog(sheetSel, maxCellsIn, batchSecIn, rungsIn, o
 %                                                   pass A top-rung seed;
 %                                                   .catDir [results/
 %                                                   catalog next to this
-%                                                   folder's parent]
+%                                                   folder's parent];
+%                                                   .directGateKm [1000]
+%                                                   first flown gate on the
+%                                                   direct control (km)
 %
 %% Outputs:
 %
@@ -100,7 +105,8 @@ if ~isempty(rungsIn), rungs = rungsIn; end
  floorEarthKm = 200;                 % Earth altitude floor (km), nodes + midpoints
       maxIter = 6000;                % IPOPT iteration cap
     maxCpuSec = 600;                 % IPOPT CPU cap per rung (s)
-       gateKm = 100;                 % flown-arrival gate (km)
+       gateKm = 100;                 % refined flown-arrival gate (km)
+ directGateKm = fdef(optsIn, 'directGateKm', 1000);   % first flown gate on the DIRECT control (km); the refined gate stays gateKm. Pilot attempt 1 (2026-11-10): the 100 km default stopped 3 of 6 ladders at 126-488 km on rungs refinement can close
        accTol = 1e-6;                % tfMin acceptance
       thrLock = true;                % pin thr == 1 (classical min-time form)
      tf0Fleet = fdef(optsIn, 'tf0', 0.30);   % pass A top-rung seed (ND); the pilot re-bases it
@@ -145,7 +151,7 @@ for ks = sheetSel
     optsCommon = struct('rungs',rungs, 'ispS',ispS, 'm0kg',m0kg, ...
         'N',N, 'floorKm',floorKm, 'floorEarthKm',floorEarthKm, ...
         'maxIter',maxIter, 'maxCpuSec',maxCpuSec, ...
-        'gateKm',gateKm, 'nD',nD, 'nA',nA, 'sD0',sD0, 'sA0',sA0, ...
+        'gateKm',gateKm, 'directGateKm',directGateKm, 'nD',nD, 'nA',nA, 'sD0',sD0, 'sA0',sA0, ...
         'depFamily','gto', 'depParams',struct('orientDeg',s.orientDeg), ...
         'arrFamily','dro', 'arrParams',struct('tau',s.tau), ...
         'tauDRO',s.orientDeg, ...          % SHEET KEY RULE: orientDeg, never the DRO period

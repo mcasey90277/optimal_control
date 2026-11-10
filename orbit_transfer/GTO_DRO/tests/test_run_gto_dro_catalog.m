@@ -24,6 +24,7 @@ for k = 1:16
     assert(oA.ispS == 1710 && oA.m0kg == 150 && oA.N == 400 && oA.maxIter == 6000 && oA.maxCpuSec == 600, 'regime + solver');
     assert(oA.nD == 12 && oA.nA == 6 && oA.sD0 == 0 && oA.sA0 == 0, 'grid');
     assert(isequal(oA.rungs, [15 12 10 7 5]), 'default rungs');
+    assert(oA.directGateKm == 1000 && plan(k).optsB.directGateKm == 1000 && oA.gateKm == 100 && plan(k).optsB.gateKm == 100, 'gates');
     oB = plan(k).optsB;
     assert(strcmp(oB.depFamily, 'gto') && strcmp(oB.arrFamily, 'dro'), 'B families');
     assert(oB.arrParams.tau == plan(k).tau && oB.depParams.orientDeg == plan(k).orientDeg, 'B params');
@@ -32,8 +33,9 @@ for k = 1:16
     assert(~isfield(plan(k).optsB, 'tf0') || isempty(plan(k).optsB.tf0), 'pass B is the cold tf0');
     assert(isempty(plan(k).optsB.cells), 'pass B cells are scoped at run time, empty in the plan');
 end
-plan9 = run_gto_dro_catalog(2, [], [], [15 12 10 7 5 3 2 1.5 1], struct('planOnly', true, 'tf0', 0.27));
+plan9 = run_gto_dro_catalog(2, [], [], [15 12 10 7 5 3 2 1.5 1], struct('planOnly', true, 'tf0', 0.27, 'directGateKm', 250));
 assert(numel(plan9) == 1 && isequal(plan9.optsA.rungs, [15 12 10 7 5 3 2 1.5 1]) && abs(plan9.optsA.tf0 - 0.27) < 1e-12, 'overrides');
+assert(plan9.optsA.directGateKm == 250 && plan9.optsB.directGateKm == 250, 'directGateKm override lands in A and B');
 
 % planOnly touches no disk: an absent catDir stays absent
 wd = fullfile(tempdir, 'test_run_gto_dro_catalog');

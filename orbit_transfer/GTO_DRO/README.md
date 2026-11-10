@@ -99,6 +99,8 @@ results and are reported either way (strict mode throws on them too).
 | `catalog/audit_gto_dro_entries.m` | up to 3-entry replay: flown miss, tfMin acceptance, Earth floor (gated); the tulip pick rule when the sheets allow it, a reduced rule otherwise |
 | `catalog/costate_catalog_pick.m`, `costate_lib_describe.m` | vendored pickers (deliverable convention); the describe copy prints a DRO arrival key instead of Np |
 
+The fleet front door runs with `directGateKm = 1000` (direct gate only; the refined gate stays 100 km) because pilot attempt 1 (2026-11-10) had the 100 km default stop 3 of 6 ladders on rungs whose direct solve succeeded (flown 149.1 km at 12 N, 487.7 km at 10 N, 126.5 km at 15 N).
+
 Run the pilot (sheet 2), then the chain on it, then the fleet:
 
     cd orbit_transfer/GTO_DRO/catalog

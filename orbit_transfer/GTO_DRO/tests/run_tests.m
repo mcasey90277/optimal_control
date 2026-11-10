@@ -25,7 +25,7 @@ here = fileparts(mfilename('fullpath'));
 run(fullfile(fileparts(here), 'setup_gto_dro_paths.m'));
 addpath(here);
 
-names = {'test_earth_clearance', 'test_gto_dro_entry'};
+names = {'test_earth_clearance', 'test_gto_dro_entry', 'test_gto_dro_study'};
 res   = false(size(names));
 secs  = zeros(size(names));
 for kk = 1:numel(names)

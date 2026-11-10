@@ -210,7 +210,7 @@ verdicts = addv(verdicts, 'N0 ladder', pass3(all(entry.okPerRung)), nnz(entry.ok
 if numel(P.rungs) > 1
     rs = gates.ratioScreen;
     fprintf('   step ratios t_f(k+1)/t_f(k): %s\n', sprintf('%.3f ', rs));
-    verdicts = addv(verdicts, 'V3 ratio screen', pass3(all(rs > tol.ratioLo & rs < tol.ratioHi)), max(abs(log(rs))), log(tol.ratioHi));
+    verdicts = addv(verdicts, 'V3 ratio screen', pass3(all(rs > tol.ratioLo & rs < tol.ratioHi)), max(rs), tol.ratioHi);
 else
     verdicts = addv(verdicts, 'V3 ratio screen', 'NOT APPLICABLE', NaN, NaN);
 end
@@ -315,7 +315,7 @@ verdicts = addv(verdicts, 'X2 field agreement', pass3(x2), max(G.fieldErr, G.adj
 fprintf('\n10. ACCEPTANCE: pumpkyn.cr3bp.tfMin at the accepted z8 (%s)\n', out.solverType);
 x1 = 'NOT CHECKED';  dzAcc = NaN;
 try
-    sol   = pumpkyn.cr3bp.tfMin(rv0(1:6), rvf(1:6), entry.z8, Tnd, cnd, muStar, out.solverType);
+    evalc('sol = pumpkyn.cr3bp.tfMin(rv0(1:6), rvf(1:6), entry.z8, Tnd, cnd, muStar, out.solverType);');
     dzAcc = max(abs(sol(:) - entry.z8));
     x1    = pass3(dzAcc < tol.accDz);
     fprintf('   X1 tfMin accept  |dz| %9.2e / %-9.0e  %s   (engine recorded %.1e)\n', dzAcc, tol.accDz, x1, gates.accDz);

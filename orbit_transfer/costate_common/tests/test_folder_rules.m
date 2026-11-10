@@ -35,6 +35,8 @@ function ok = test_folder_rules()
 %
 %% Revision History:
 %  M. Casey                                                   (c) 09/16/2026
+%  M. Casey  casadi_mintime_dro exemption dropped: tested by
+%            tests/test_mintime_earth_floor (rule 7)          (c) 11/09/2026
 %  Copyright Coorbital Inc.
 %% ------------------------ Begin Code Sequence ---------------------------
 
@@ -54,7 +56,6 @@ EX = { ...
  'conj_catalog_pass',    'entry',     'entry point: the catalog-scale conjugate sweep, run by hand over a shipped catalog';
  'gates_catalog_pass',   'entry',     'entry point: the catalog-scale hypothesis gates, run by hand';
  'golden_cells',         'entry',     'entry point: it IS the regression others are run against';
- 'casadi_mintime_dro',   'elsewhere', 'DRO_tulip/direct/certify/tests/test_minenergy_objective -- a bitwise regression against a stored campaign fixture';
  'assert_periodic_orbit','indirect',  'driven by tests/test_survey_family_bounds (the survey refuses a non-closing orbit)';
  'current_pool',         'indirect',  'driven by tests/test_run_capped and the second-order parallel test';
  'certify_dro_mintime',  'gap',       'NO test of its own; arrived 2026-09-16 with the ladder engine and is covered only through campaign re-solves (TODO.md)';

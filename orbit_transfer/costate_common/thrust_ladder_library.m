@@ -27,6 +27,9 @@ function P = thrust_ladder_library(outMat, opts)
 %              .m0kg      initial mass, kg                 [150]
 %              .N         collocation intervals            [400]
 %              .floorKm   lunar altitude floor, km         [500]
+%              .floorEarthKm Earth altitude floor, km; [] = none,
+%                         passed to casadi_mintime_dro as minAltEarthKm
+%                         on every rung (Earth departures)   [[]]
 %              .gateKm    flown-arrival gate, km           [100]
 %              .cells     [k x 2] (iD,iA) subset           [all 12x12]
 %              .nD,.nA    torus resolution                 [12 12]
@@ -59,6 +62,7 @@ function P = thrust_ladder_library(outMat, opts)
 %% Revision History:
 %  M. Casey                                                   (c) 08/05/2026
 %  M. Casey  moved into costate_common (cleanup step 12)      (c) 09/16/2026
+%  M. Casey  floorEarthKm option (default off)                (c) 11/09/2026
 %  Copyright Coorbital Inc.
 %% ------------------------ Begin Code Sequence ---------------------------
 
@@ -69,6 +73,7 @@ ispS    = d('ispS', 1710);
 m0kg    = d('m0kg', 150);
 N       = d('N', 400);
 floorKm = d('floorKm', 500);
+floorEarthKm = d('floorEarthKm', []);   % Earth floor, km; [] = none (2026-11-09)
 gateKm  = d('gateKm', 100);
 nD      = d('nD', 12);
 nA      = d('nA', 12);
@@ -172,7 +177,8 @@ meta = struct('muStar',muStar,'lStar',lStar,'tStar',tStar, ...
     'periodDRO',tD(end),'periodTulip',tT(end), ...
     'tauDep',tD(end),'tauArr',tT(end), ...     % schema-v2 canonical names
     'sheetSchema',2, 'env',env_pin(), ...
-    'ispS',ispS,'m0kg',m0kg,'N',N,'floorKm',floorKm,'gateKm',gateKm, ...
+    'ispS',ispS,'m0kg',m0kg,'N',N,'floorKm',floorKm, ...
+    'floorEarthKm',floorEarthKm,'gateKm',gateKm, ...
     'sD0',sD0,'sA0',sA0);
 
 lg('THRUST LADDER: %d cells x %d rungs [%s] N, Isp=%d s, m0=%d kg, N=%d (%d cells resumed/skipped)', ...
@@ -202,7 +208,8 @@ for kc = 1:min(size(todo,1), maxCells)
                     seedX, seedU, seedTf, ...
                     struct('maxIter',maxIter,'scheme','hermite-simpson', ...
                            'sundman',false,'returnModel',true, ...
-                           'minAltKm',floorKm,'maxCpuSec',maxCpuSec, ...
+                           'minAltKm',floorKm,'minAltEarthKm',floorEarthKm, ...
+                           'maxCpuSec',maxCpuSec, ...
                            'thrLock',thrLock));
         catch ME
             lg('  (%2d,%2d) T=%5.1f  direct ERROR: %s', iD, iA, TN, ME.message);

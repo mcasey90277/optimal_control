@@ -58,6 +58,9 @@ ok = check(ok, eo.sD0 == 0.25 && eo.sA0 == 0.5 && eo.nD == 1 && eo.nA == 1, 'pha
 ok = check(ok, eo.tf0 == 0.4 && eo.m0kg == 120 && eo.ispS == 2000 && eo.thrLock, 'recipe, mass and Isp reach the engine');
 ok = check(ok, eo.tauDRO == 90, 'sheet key carries orientDeg (the GTO catalog rule)');
 ok = check(ok, isequal(eo.rungs, [15 12 10]), 'planned rungs are the engine rungs');
+ok = check(ok, eo.floorEarthKm == 200, 'Earth floor default 200 km reaches the engine');
+eE = gto_dro_entry(0, 1, 0, 0, 15, struct('planOnly', true, 'floorEarthKm', 300));
+ok = check(ok, eE.engineOpts.floorEarthKm == 300, 'Earth floor override 300 km reaches the engine');
 
 % (4) scratch name carries the phases (parallel cells must not collide); fractional orient is not mangled
 e1 = gto_dro_entry(22.5, 1, 0.1, 0.2, 10, po);

@@ -69,6 +69,15 @@ function out = casadi_mintime_dro(rv0, rvf, Tmax, c, muStar, N, X0, U0, tf0, opt
 %              .lStarKm [389703.264829278] characteristic length, for the km
 %                       conversion
 %              .rMoonKm [1737.4] lunar radius
+%              .minAltEarthKm [] minimum altitude above the EARTH SURFACE, km.
+%                       Empty (default) adds no constraint, so every caller
+%                       that does not pass it solves the identical NLP. Any
+%                       finite value adds the same squared-distance path
+%                       constraint as the lunar floor, about the Earth centre
+%                       (-mu, 0, 0), at the nodes and (Hermite-Simpson) the
+%                       midpoints. Like the lunar floor it binds AT THE NODES
+%                       ONLY. For Earth departures (GTO).
+%              .rEarthKm [6378.137] Earth radius
 %              .sundman [false] Sundman regularization: independent variable
 %                       tau with dt/dtau = S*kappa, kappa = rho^p, rho the
 %                       LUNAR distance. Physical time becomes an 8th state,
@@ -106,6 +115,10 @@ function out = casadi_mintime_dro(rv0, rvf, Tmax, c, muStar, N, X0, U0, tf0, opt
 %         .minAltKm (the constraint applied, NaN if none)
 %         .altMinKm (the ACHIEVED minimum altitude at the nodes)
 %         .altActive (true if the constraint is within 1 km of binding)
+%         .altEarthMinKm (the ACHIEVED minimum altitude above the Earth's
+%         surface at the nodes; always computed, negative = inside the Earth)
+%         .minAltEarthKm (the Earth constraint applied, NaN if none)
+%         .altEarthActive (true if the Earth floor is within 1 km of binding)
 %         .ipoptStatus .maxDefect .maxUnit .termErr .thrMin (lowest throttle --
 %         the saturation check) .mf .lamDef [7xN] defect multipliers
 %         .lamBCf [6x1] TERMINAL boundary multipliers -- the Hager terminal
@@ -121,6 +134,10 @@ function out = casadi_mintime_dro(rv0, rvf, Tmax, c, muStar, N, X0, U0, tf0, opt
 %% Revision History:
 %  M. Casey                                                   (c) 07/31/2026
 %  M. Casey  moved into costate_common (cleanup step 12)      (c) 09/16/2026
+%  M. Casey  Earth floor option (default off)                 (c) 11/09/2026
+%            The floor removes the Earth-grazing basin; it does not pick
+%            among the remaining basins (two measured on the GTO -> DRO
+%            pilot cell).
 %  Copyright Coorbital Inc.
 %% ------------------------ Begin Code Sequence ---------------------------
 
@@ -136,6 +153,8 @@ sundP    = g('sundmanP', 1.5);
 minAltKm = g('minAltKm', []);
 lStarKm  = g('lStarKm', 389703.264829278);
 rMoonKm  = g('rMoonKm', 1737.4);
+minAltEarthKm = g('minAltEarthKm', []);
+rEarthKm      = g('rEarthKm', 6378.137);
 muInit   = g('muInit', []);
 maxCpuSec= g('maxCpuSec', []);
 objective= lower(g('objective', 'time'));
@@ -324,6 +343,26 @@ if ~isempty(minAltKm)
         opti.subject_to(dMid2 >= rhoMinND^2);
     end
     if retModel, creg(end+1) = struct('label','minAlt','rows',r0:size(opti.g,1)); end
+end
+
+% EARTH floor, same construction as the lunar one above (nodes, plus the
+% Hermite-Simpson midpoints when available). Added 2026-11-09 for Earth
+% departures (GTO): without it the cold solve can return a defect-clean
+% "solution" that passes inside the Earth (measured: 1722 km from the
+% centre on a GTO -> DRO cell), which then fails every flown gate.
+% Registered in creg as 'minAltEarth', parallel to the lunar 'minAlt'.
+% The floor removes the Earth-grazing basin; it does not pick among the
+% remaining basins (two measured on the GTO -> DRO pilot cell).
+if ~isempty(minAltEarthKm)
+    rhoEarthND = (rEarthKm + minAltEarthKm) / lStarKm;
+    dEarth2 = sum((X(1:3,:) - [-muStar; 0; 0]).^2, 1).';
+    r0 = size(opti.g,1)+1;
+    opti.subject_to(dEarth2 >= rhoEarthND^2);
+    if ~isempty(Xm)
+        dEarth2m = sum((Xm(1:3,:) - [-muStar; 0; 0]).^2, 1).';
+        opti.subject_to(dEarth2m >= rhoEarthND^2);
+    end
+    if retModel, creg(end+1) = struct('label','minAltEarth','rows',r0:size(opti.g,1)); end
 end
 
 % --- fixed final time (energy mode, or a pinned min-time re-solve) ---------
@@ -533,6 +572,13 @@ out.minAltKm  = NaN;  out.altActive = false;
 if ~isempty(minAltKm)
     out.minAltKm  = minAltKm;
     out.altActive = (out.altMinKm - minAltKm) < 1;   % within 1 km of binding
+end
+r1n = vecnorm(out.X(1:3,:) - [-muStar;0;0], 2, 1);
+out.altEarthMinKm  = min(r1n)*lStarKm - rEarthKm;
+out.minAltEarthKm  = NaN;  out.altEarthActive = false;
+if ~isempty(minAltEarthKm)
+    out.minAltEarthKm  = minAltEarthKm;
+    out.altEarthActive = (out.altEarthMinKm - minAltEarthKm) < 1;
 end
 out.mf        = out.X(7,end);
 try

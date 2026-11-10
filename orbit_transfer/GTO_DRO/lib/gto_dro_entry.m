@@ -57,6 +57,9 @@ function [entry, gates, P] = gto_dro_entry(orientDeg, tauDRO, depFrac, arrFrac, 
 %                                                   [0.30], .maxCpuSec [600],
 %                                                   .maxIter [6000], .N [400],
 %                                                   .floorKm [500] lunar,
+%                                                   .floorEarthKm [200] Earth
+%                                                   altitude floor, km (engine
+%                                                   minAltEarthKm; [] = none),
 %                                                   .gateKm [100], .accTol
 %                                                   [1e-6], .gtoParams
 %                                                   (struct, .sma_km .ecc;
@@ -111,6 +114,7 @@ function [entry, gates, P] = gto_dro_entry(orientDeg, tauDRO, depFrac, arrFrac, 
 %
 %% Revision History:
 %  M. Casey                                                   (c) 11/09/2026
+%  M. Casey  floorEarthKm option (default 200 km)             (c) 11/09/2026
 %  Copyright Coorbital Inc.
 %% ------------------------ Begin Code Sequence ---------------------------
 
@@ -125,7 +129,8 @@ tf0Warm    = fdef(opts, 'tf0',        0.30);    % warm recipe (top rung only)
 maxCpuSec  = fdef(opts, 'maxCpuSec',  600);     % warm recipe
 maxIterOpt = fdef(opts, 'maxIter',    6000);    % warm recipe (engine default 3000 fell short)
 N          = fdef(opts, 'N',          400);
-floorKm    = fdef(opts, 'floorKm',    500);     % LUNAR floor (the engine's only one)
+floorKm    = fdef(opts, 'floorKm',    500);     % LUNAR floor
+floorEarthKm = fdef(opts, 'floorEarthKm', 200);  % EARTH floor (engine option added 2026-11-09)
 gateKm     = fdef(opts, 'gateKm',     100);
 accTol     = fdef(opts, 'accTol',     1e-6);
 gtoParams  = fdef(opts, 'gtoParams',  struct());
@@ -167,6 +172,7 @@ optsEngine = struct( ...
     'm0kg',      m0kg, ...
     'N',         N, ...
     'floorKm',   floorKm, ...
+    'floorEarthKm', floorEarthKm, ...
     'maxIter',   maxIterOpt, ...
     'gateKm',    gateKm, ...
     'accTol',    accTol, ...

@@ -68,7 +68,9 @@ function [entry, gates, P] = gto_dro_entry(orientDeg, tauDRO, depFrac, arrFrac, 
 %                                                   [24] segments for it,
 %                                                   .outMat scratch path
 %                                                   [results/scratch/...],
-%                                                   .keepScratch [false],
+%                                                   .keepScratch [false] (the
+%                                                   .log is kept whenever the
+%                                                   solve fails),
 %                                                   .planOnly [false] return
 %                                                   the plan, no solve
 %
@@ -83,12 +85,22 @@ function [entry, gates, P] = gto_dro_entry(orientDeg, tauDRO, depFrac, arrFrac, 
 %                                                   .arrFrac, .orientDeg,
 %                                                   .tauDRO, .m0kg, .ispS,
 %                                                   .engineOpts (the options
-%                                                   handed to the engine)
+%                                                   handed to the engine),
+%                                                   .scratchMat (default
+%                                                   scratch path; carries
+%                                                   orient, tau, both phases
+%                                                   and thrust so parallel
+%                                                   cells never collide)
 %
 %  gates                    struct                  .msNormR, .flownKm,
 %                                                   .accDz, .wallS, .conjPass
 %                                                   (NaN unless .conjTest
 %                                                   reproduced z8),
+%                                                   .conjReason (char: 'not run'
+%                                                   | 'reproduced' | 'not
+%                                                   reproduced, |dz| = abs and
+%                                                   rel to max(1,max|z8|)' |
+%                                                   'error: <msg>'),
 %                                                   .ratioScreen [1 x nR-1],
 %                                                   .ratioPass
 %
@@ -146,7 +158,7 @@ for f = {'sma_km', 'ecc'}
 end
 
 scratchDir = fullfile(here, 'results', 'scratch');
-outMat  = fdef(opts, 'outMat', fullfile(scratchDir, sprintf('gto_dro_o%03d_tau%g_%gN.mat', orientDeg, tauDRO, thrustN)));
+outMat  = fdef(opts, 'outMat', fullfile(scratchDir, sprintf('gto_dro_o%g_tau%g_sD%.4f_sA%.4f_%gN.mat', orientDeg, tauDRO, depFrac, arrFrac, thrustN)));
 logFile = [outMat(1:end-4) '.log'];
 
 optsEngine = struct( ...
@@ -175,8 +187,8 @@ optsEngine = struct( ...
 entry = struct('ok', false, 'z8', nan(8, 1), 'tf_nd', NaN, 'tf_d', NaN, 'mf_kg', NaN, 'dV_kms', NaN, ...
     'thrustN', thrustN, 'rungsWalked', rungs, 'tfPerRung', nan(1, numel(rungs)), 'okPerRung', false(1, numel(rungs)), ...
     'rv0', nan(1, 6), 'rvf', nan(1, 6), 'depFrac', depFrac, 'arrFrac', arrFrac, ...
-    'orientDeg', orientDeg, 'tauDRO', tauDRO, 'm0kg', m0kg, 'ispS', ispS, 'engineOpts', optsEngine);
-gates = struct('msNormR', NaN, 'flownKm', NaN, 'accDz', NaN, 'wallS', NaN, 'conjPass', NaN, ...
+    'orientDeg', orientDeg, 'tauDRO', tauDRO, 'm0kg', m0kg, 'ispS', ispS, 'engineOpts', optsEngine, 'scratchMat', outMat);
+gates = struct('msNormR', NaN, 'flownKm', NaN, 'accDz', NaN, 'wallS', NaN, 'conjPass', NaN, 'conjReason', 'not run', ...
     'ratioScreen', nan(1, max(numel(rungs) - 1, 0)), 'ratioPass', true);
 P = struct();
 if planOnly, return; end
@@ -192,6 +204,7 @@ entry.rvf = arrAt(arrFrac).';
 if ~isfolder(fileparts(outMat)), mkdir(fileparts(outMat)); end
 if isfile(outMat),  delete(outMat);  end
 if isfile(logFile), delete(logFile); end
+cleanMat = onCleanup(@() dropFile(outMat, keepScratch));   % .mat goes on every path; the .log only on success
 thrust_ladder_library(outMat, optsEngine);
 P = load(outMat);
 assert(isequal(P.rungs(krEntry), thrustN), 'gto_dro_entry:rungIndex', ...
@@ -222,21 +235,30 @@ if entry.ok
     entry.dV_kms = cnd*log(1/mfFrac)*lStar/tStar;
 
     if conjTest
-        seed = seed_from_z8(entry.z8, entry.rv0(1:6), Kseg, Tnd, cnd, muStar);
-        [z, info] = ms_tfmin(entry.rv0(1:6), entry.rvf(1:6), seed, Tnd, cnd, muStar, ...
-                             struct('conjTest', true, 'wallSec', 120));
-        dz = max(abs(z - entry.z8));
-        if info.converged && dz < 1e-6
-            gates.conjPass = double(info.conj.pass);
-        else
-            fprintf('gto_dro_entry: conjTest re-solve did not reproduce z8 (|dz| = %.1e) -- conjPass left NaN\n', dz);
+        try
+            seed = seed_from_z8(entry.z8, entry.rv0(1:6), Kseg, Tnd, cnd, muStar);
+            [z, info] = ms_tfmin(entry.rv0(1:6), entry.rvf(1:6), seed, Tnd, cnd, muStar, ...
+                                 struct('conjTest', true, 'wallSec', 120));
+            dzAbs = max(abs(z - entry.z8));
+            dzRel = dzAbs/max(1, max(abs(entry.z8)));
+            if info.converged && dzAbs < 1e-6
+                gates.conjPass   = double(info.conj.pass);
+                gates.conjReason = 'reproduced';
+            else
+                gates.conjReason = sprintf('not reproduced, |dz| = %.1e abs, %.1e rel', dzAbs, dzRel);
+                fprintf('gto_dro_entry: conjTest %s -- conjPass left NaN\n', gates.conjReason);
+            end
+        catch cerr
+            gates.conjReason = sprintf('error: %s', cerr.message);
+            fprintf('gto_dro_entry: conjTest %s -- conjPass left NaN\n', gates.conjReason);
         end
     end
 end
 
-if ~keepScratch
-    if isfile(outMat),  delete(outMat);  end
-    if isfile(logFile), delete(logFile); end
+if entry.ok && ~keepScratch
+    dropFile(logFile, false);
+elseif ~entry.ok
+    fprintf('gto_dro_entry: solve failed -- engine log kept at %s\n', logFile);
 end
 
 if nargin == 0 || nargout == 0
@@ -251,4 +273,10 @@ end
 function v = fdef(s, f, v0)
 % FDEF  s.(f) if present else v0.  INPUTS: s; f; v0.  OUTPUTS: v.
 if isfield(s, f), v = s.(f); else, v = v0; end
+end
+
+% ------------------------------------------------------------------------
+function dropFile(f, keep)
+% DROPFILE  Delete file f unless keep.  INPUTS: f (char); keep (logical).  OUTPUTS: none.
+if ~keep && isfile(f), delete(f); end
 end

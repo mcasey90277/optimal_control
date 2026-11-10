@@ -59,6 +59,15 @@ ok = check(ok, eo.tf0 == 0.4 && eo.m0kg == 120 && eo.ispS == 2000 && eo.thrLock,
 ok = check(ok, eo.tauDRO == 90, 'sheet key carries orientDeg (the GTO catalog rule)');
 ok = check(ok, isequal(eo.rungs, [15 12 10]), 'planned rungs are the engine rungs');
 
+% (4) scratch name carries the phases (parallel cells must not collide); fractional orient is not mangled
+e1 = gto_dro_entry(22.5, 1, 0.1, 0.2, 10, po);
+e2 = gto_dro_entry(22.5, 1, 0.1, 0.3, 10, po);
+[~, n1] = fileparts(e1.scratchMat);
+ok = check(ok, ~isempty(strfind(n1, 'sD0.1000')) && ~isempty(strfind(n1, 'sA0.2000')) && ~isempty(strfind(n1, 'o22.5_')), ...
+           sprintf('scratch name %s carries orient and both phases', n1));
+ok = check(ok, ~strcmp(e1.scratchMat, e2.scratchMat), 'cells differing only in arrival phase get distinct scratch files');
+ok = check(ok, strcmp([e1.scratchMat(1:end-4) '.log'], e1.engineOpts.logFile), 'log path is the scratch name with .log');
+
 fprintf('test_gto_dro_entry: %s\n', tern(ok, 'PASS', 'FAIL'));
 end
 

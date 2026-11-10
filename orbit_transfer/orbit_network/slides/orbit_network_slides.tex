@@ -17,7 +17,14 @@
 \setbeamercolor{block body}{bg=blue!5}
 \setlength{\leftmargini}{1.2em}
 \usepackage{booktabs,amsmath,amssymb}
+\usepackage{tikz}
+\usetikzlibrary{arrows.meta,positioning,calc,decorations.pathmorphing}
 \newcommand{\key}[1]{\texttt{#1}}
+\tikzset{
+  station/.style={draw=blue!55!black,fill=blue!8,rounded corners=3pt,minimum width=2.1cm,minimum height=0.8cm,align=center,font=\small},
+  trip/.style={-{Stealth[length=6pt]},line width=1.1pt,draw=black!70},
+  tripgreen/.style={-{Stealth[length=6pt]},line width=1.6pt,draw=green!50!black},
+  note/.style={font=\footnotesize,align=center}}
 \graphicspath{{figures/}}
 
 \title{A Low-Thrust Orbital Network over the Costate Catalogs}
@@ -30,6 +37,222 @@
 \begin{frame}
   \titlepage
 \end{frame}
+
+% ================================================================== ELI5 section
+% Six plain-language slides. Same facts as the technical slides that
+% follow, told with one analogy throughout: a train timetable. Stations are
+% orbits, trips are transfers, the engine is the thruster, changing trains
+% is a relay, and the wait on the platform is the phasing.
+
+% ------------------------------------------------------------------ E1
+\begin{frame}{In plain words: we own a big timetable of trips between Moon orbits, and we asked what it looks like as a map}
+  \begin{columns}[T]
+    \begin{column}{0.5\textwidth}
+      \centering
+      \resizebox{0.92\textwidth}{!}{%
+      \begin{tikzpicture}[node distance=1.0cm and 1.4cm]
+        \node[station] (dro)  {DRO\\ {\scriptsize 4 orbits}};
+        \node[station, below=of dro] (dpo) {DPO\\ {\scriptsize 4 orbits}};
+        \node[station, below=of dpo] (l1)  {L1 halo\\ {\scriptsize 2 orbits}};
+        \node[station, right=2.2cm of l1] (l2) {L2 halo\\ {\scriptsize 4 orbits}};
+        \node[station, right=2.2cm of dpo, xshift=2.2cm, fill=green!12, draw=green!40!black] (tul) {tulip\\ {\scriptsize 4 orbits}};
+        \draw[trip] (dro) -- node[note, above, sloped] {16 trips} (tul);
+        \draw[trip] (dpo) -- node[note, above, sloped, pos=0.45] {16 trips} (tul);
+        \draw[trip] (l2)  -- node[note, below, sloped, pos=0.55] {16 trips} (tul);
+        \draw[trip] (l1)  -- node[note, below] {8 trips} (l2);
+      \end{tikzpicture}}
+
+      \vspace{4pt}
+      {\footnotesize Five kinds of station, 18 stations in all, 56 direct trips.\\ Arrows point the way the trips were solved.}
+    \end{column}
+    \begin{column}{0.5\textwidth}
+      \small
+      \begin{itemize}
+        \setlength\itemsep{6pt}
+        \item A \textbf{station} is a parking orbit near the Moon. We have 18 of them in five kinds.
+        \item A \textbf{trip} is the fastest way to fly from one station to another with a small electric engine. We solved 56 of these over the past months and checked each one carefully.
+        \item A recent paper (Braik and Ross, 2026) drew such orbits as a \textbf{map}: which stations connect, which are good places to change trains, and whether ``wobbly'' orbits are easier to leave.
+        \item We asked the same questions of our own timetable. We did \textbf{not} compute any new trips. Everything here is read off the table we already had.
+      \end{itemize}
+    \end{column}
+  \end{columns}
+\end{frame}
+
+% ------------------------------------------------------------------ E2
+\begin{frame}{One row of the timetable: a start station, an end station, where on each you are, how strong the engine is, how long it takes}
+  \begin{columns}[T]
+    \begin{column}{0.48\textwidth}
+      \centering
+      \resizebox{\textwidth}{!}{%
+      \begin{tikzpicture}
+        % departure orbit
+        \draw[line width=1.2pt, blue!55!black] (0,0) circle (1.1);
+        \node[note, below=2pt] at (0,-1.1) {start orbit};
+        \fill[blue!55!black] (1.1,0) circle (3pt);
+        \node[note, anchor=north west] at (1.15,-0.2) {you leave\\ from here};
+        \foreach \a in {60,120,180,240,300} \fill[black!40] (\a:1.1) circle (1.6pt);
+        % arrival orbit
+        \draw[line width=1.2pt, green!40!black] (5,0) circle (1.1);
+        \node[note, below=2pt] at (5,-1.1) {end orbit};
+        \fill[green!40!black] (5,1.1) circle (3pt);
+        \node[note, anchor=south west] at (4.7,1.2) {you arrive here};
+        \foreach \a in {30,150,210,270,330} \fill[black!40] ($(5,0)+(\a:1.1)$) circle (1.6pt);
+        % the trip
+        \draw[tripgreen, decorate, decoration={snake, amplitude=1.2pt, segment length=8pt, post length=5pt}]
+              (1.25,0.1) .. controls (2.6,0.7) and (3.4,-0.7) .. (4.2,0.75);
+        \node[note] at (1.9,1.15) {engine on the whole way,\\ one to six days};
+      \end{tikzpicture}}
+
+      \vspace{4pt}
+      {\footnotesize Six marked spots on each orbit: $6\times6 = 36$ rows per station pair,\\[-1pt] repeated for 11 engine strengths.}
+    \end{column}
+    \begin{column}{0.52\textwidth}
+      \small
+      \begin{itemize}
+        \setlength\itemsep{5pt}
+        \item The engine is tiny: from 0.5 to 15 newtons. One newton is about the weight of an apple, pushing a whole spacecraft. So the engine stays on for days and the path is a long curve, not a straight shot.
+        \item It matters \emph{where} on the orbit you leave and \emph{where} you arrive, so each station pair gets 36 rows, one per combination of spots.
+        \item Each row stores the fastest trip we found and the time it takes.
+        \item A row is \textbf{accepted} only if it passed three independent checks that it really is a local best, like confirming you stand at the bottom of a valley and not on a ledge.
+        \item A blank row means \textbf{we did not find a trip}, not that none exists.
+      \end{itemize}
+    \end{column}
+  \end{columns}
+\end{frame}
+
+% ------------------------------------------------------------------ E3
+\begin{frame}{Question 1 in plain words: are wobbly orbits easier to leave? Not that we can see, once you account for the energy gap}
+  \begin{columns}[T]
+    \begin{column}{0.46\textwidth}
+      \centering
+      \resizebox{\textwidth}{!}{%
+      \begin{tikzpicture}
+        % stable: ball in a bowl
+        \draw[line width=1.2pt, black!70] (-1.4,1.2) .. controls (-1.0,-0.4) and (1.0,-0.4) .. (1.4,1.2);
+        \fill[blue!55!black] (0,0.03) circle (5pt);
+        \node[note] at (0,-0.8) {\textbf{stable} orbit\\ a nudge and you roll back\\ (DRO, tulip)};
+        % unstable: ball on a hill
+        \begin{scope}[xshift=4.6cm]
+          \draw[line width=1.2pt, black!70] (-1.4,-0.6) .. controls (-1.0,1.0) and (1.0,1.0) .. (1.4,-0.6);
+          \fill[red!65!black] (0,0.77) circle (5pt);
+          \draw[-{Stealth[length=5pt]}, red!65!black, line width=1pt] (0.25,0.8) -- (0.9,0.55);
+          \node[note] at (0,-0.8) {\textbf{wobbly} orbit\\ a nudge and you are gone\\ (most halos, most DPOs)};
+        \end{scope}
+      \end{tikzpicture}}
+
+      \vspace{4pt}
+      {\footnotesize The paper's hunch: a wobbly orbit is cheap to leave because a tiny push carries you far.}
+    \end{column}
+    \begin{column}{0.54\textwidth}
+      \small
+      \begin{itemize}
+        \setlength\itemsep{4pt}
+        \item We measured how wobbly each of the 18 orbits is and compared it with trip time and with how many rows survive as the engine weakens.
+        \item Trips between orbits of very different energy take longer. That is expected, so we take it out first.
+        \item After that, \textbf{wobbliness adds nothing we can detect}. The effect, if any, is smaller than the scatter in 56 trips.
+        \item There is a pattern by \emph{kind} of station, though: from 12 to 0.5 N the stable DRO and DPO pairs keep fewer than half their rows, the wobbly L1 halo pairs about two thirds.
+        \item Honest limits: 56 trips, 14 start stations, 8 end stations. ``Not detected'' is not ``no effect''.
+      \end{itemize}
+    \end{column}
+  \end{columns}
+\end{frame}
+
+% ------------------------------------------------------------------ E4
+\begin{frame}{Question 2 in plain words: at 1 N every trip on the map is open in under three days, and changing trains always connects}
+  \begin{columns}[T]
+    \begin{column}{0.5\textwidth}
+      \centering
+      \resizebox{0.95\textwidth}{!}{%
+      \begin{tikzpicture}[node distance=0.9cm and 1.4cm]
+        \node[station] (l1)  {L1 halo};
+        \node[station, right=1.6cm of l1] (l2) {L2 halo};
+        \node[station, right=1.6cm of l2, fill=green!12, draw=green!40!black] (tul) {tulip};
+        \draw[tripgreen] (l1) -- node[note, above] {trip 1} (l2);
+        \draw[tripgreen] (l2) -- node[note, above] {trip 2} (tul);
+        \node[note, below=0.2cm of l2, text width=4.6cm] {change trains here: wait until the orbit\\ brings you round to the right spot};
+      \end{tikzpicture}}
+
+      \vspace{8pt}
+      \begin{tikzpicture}[scale=0.9]
+        \draw[line width=1.2pt, black!60] (0,0) circle (0.75);
+        \fill[green!40!black] (0.75,0) circle (3pt);
+        \node[note, anchor=west] at (0.85,0.0) {trip 1 drops you here};
+        \fill[blue!55!black] (120:0.75) circle (3pt);
+        \node[note, anchor=east] at (-0.5,0.75) {trip 2 leaves\\ from here};
+        \draw[-{Stealth[length=5pt]}, line width=1pt, black!70] (0.75,0) arc (0:115:0.75);
+        \node[note] at (0,-1.05) {the wait is this arc};
+      \end{tikzpicture}
+    \end{column}
+    \begin{column}{0.5\textwidth}
+      \small
+      \begin{itemize}
+        \setlength\itemsep{5pt}
+        \item With a 1~N engine \textbf{all 56 direct trips} are in the table; the slowest takes 2.75 days. All 56 still exist at 0.5~N.
+        \item The map has one place to change trains: L1 halo to L2 halo, then on to a tulip. No direct L1 halo to tulip trip exists in the table.
+        \item Adding the two trip times is cheating: you wait on the platform until the orbit brings you round to the departure spot. We computed the \textbf{true} connection time, wait included.
+        \item Wherever both legs exist, some combination of spots has \textbf{no wait at all}. All 8 pairs connect down to 0.5~N, in 3.1 to 4.1 days at 1~N. Two of the four L2 halos do all the connecting.
+      \end{itemize}
+    \end{column}
+  \end{columns}
+\end{frame}
+
+% ------------------------------------------------------------------ E5
+\begin{frame}{Why changing trains can never beat the best direct trip, and what we therefore did not claim}
+  \begin{columns}[T]
+    \begin{column}{0.5\textwidth}
+      \small
+      \begin{block}{The one-line argument}
+        If you may fly \emph{any} path from A to B, then ``A to C, then C to B'' is one of them. The best over all paths cannot be worse than the best over that smaller set.
+      \end{block}
+      \vspace{2pt}
+      \begin{itemize}
+        \setlength\itemsep{3pt}
+        \item The paper found that changing trains helps. That holds \emph{within the restricted moves it allowed}, not against the true fastest trip.
+        \item A two-leg journey where our direct search gave up would mean the search missed something, not that the direct trip is impossible.
+        \item So the table can say \textbf{where connections exist}, never that a connection is cheaper than going direct.
+      \end{itemize}
+    \end{column}
+    \begin{column}{0.5\textwidth}
+      \small
+      \textbf{Other things the table does not tell us}
+      \begin{itemize}
+        \setlength\itemsep{3pt}
+        \item \textbf{No ``minimum engine''.} The weakest engine with a trip is where we stopped looking, not where physics stops.
+        \item \textbf{No ``hub'' orbits.} Only L2 halos have trips both in and out, because that is how we built the table. Traffic rankings would only describe our choices.
+        \item \textbf{No reverse trips.} A trip run backwards is a spacecraft that \emph{gains} fuel. That map exists, labelled hypothetical, off by default.
+        \item \textbf{No new trips.} Every number comes from rows that already existed and passed the checks.
+      \end{itemize}
+    \end{column}
+  \end{columns}
+\end{frame}
+
+% ------------------------------------------------------------------ E6
+\begin{frame}{The same story in the words the next slides use}
+  \footnotesize
+  \setlength\tabcolsep{6pt}
+  \renewcommand{\arraystretch}{1.2}
+  \begin{tabular}{@{}p{0.30\textwidth}p{0.64\textwidth}@{}}
+    \toprule
+    plain words & on the following slides \\
+    \midrule
+    station, parking orbit & node; a periodic orbit of the Earth--Moon circular restricted three-body problem (DRO, DPO, L1 halo, L2 halo, tulip) \\
+    trip & edge; a certified minimum-time low-thrust transfer from one of the four costate catalogs \\
+    the timetable & the 56 sheets, one per (departure, arrival) pair, each a $6\times6$ phasing grid on 11 thrust rungs \\
+    a row that passed the checks & an accepted cell: solved, conjugate-point test passed, three hypothesis gates positive \\
+    how wobbly an orbit is & $\sigma = \ln|\lambda|_{\max}/T$ from the monodromy matrix, 0 for a stable orbit \\
+    the energy gap & $\Delta C_J$, the difference in Jacobi constant between the two orbits \\
+    change trains & relay route; L1 halo $\to$ L2 halo $\to$ tulip \\
+    waiting on the platform & phase-compatible assembled time, $T_C\,\mathrm{mod}(s_{D2}-s_{A1},1)$ \\
+    which trips are open for a given engine and time limit & the accessibility plane over (thrust bound, time cap) \\
+    rows surviving as the engine weakens & catalog closure down the ladder \\
+    \bottomrule
+  \end{tabular}
+  \vspace{4pt}
+
+  \small Everything after this slide is the same material with the numbers, the figures and the exact definitions.
+\end{frame}
+
+% ================================================================== technical section
 
 % ------------------------------------------------------------------ 1
 \begin{frame}{The question: does the network view, or orbit stability, say anything about transfers we already hold?}

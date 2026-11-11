@@ -5,10 +5,14 @@ function ok = test_polish_gto_dro()
 %   (iD 1, iA 1) of the first sheet: (1) identity -- the sheet orientation
 %   and the cell's own arrival phase return the catalog t_f (1e-8) and z8
 %   (1e-6); (2) +10 deg and a slot 0.03 of a period past the cell's
-%   arrival phase -- accepted, flown miss < 1 km and < 1 cm/s, departure
+%   arrival phase -- accepted, flown miss < 0.5 km and < 1 cm/s, departure
 %   state exactly L.gtoState(orientDeg, sD), arrival phase
 %   mod(slotPhaseAtDep + tf/tauD, 1), the arrival state checked against an
-%   INDEPENDENT tight propagation of the DRO from its phase-0 state;
+%   INDEPENDENT tight propagation of the DRO from its phase-0 state, and
+%   the SLIDE CONVENTION checked independently (the slot coasted
+%   ballistically from slotPhaseAtDep for P.tf on this test's own CR3BP
+%   right-hand side lands on P.rvf, 1e-6 ND); familyChanged equals
+%   |tf - tfCell|/tfCell > familyFrac;
 %   (3) Review Focus 1 -- a 60 deg target in ONE step with no halvings
 %   (measured 2026-11-11: ms_tfmin hits 100 iterations at residual 1.5)
 %   returns ok = false, a reason, orientReached at the sheet orientation
@@ -28,6 +32,8 @@ function ok = test_polish_gto_dro()
 %
 %% Revision History:
 %  M. Casey                                                   (c) 11/11/2026
+%  M. Casey  final fix wave: miss < 0.5 km, independent slide
+%            convention, familyChanged                        (c) 11/11/2026
 %  Copyright Coorbital Inc.
 %% ------------------------ Begin Code Sequence ---------------------------
 
@@ -68,7 +74,7 @@ fprintf(['  +10 deg / +0.03: ok %d (%s)  tf %.9f (cell %.9f)  arrPhase %.6f  ' .
         P2.ok, P2.reason, P2.tf, tfCell, P2.arrPhase, P2.missKm, P2.missMps, P2.res, ...
         P2.nEval, numel(P2.walk.orientDeg) - 1, P2.wallS);
 assert(P2.ok, '+10 deg not ok: %s', P2.reason);
-assert(P2.missKm < 1 && P2.missMps < 0.01, 'flown miss %.3g km %.3g m/s', P2.missKm, P2.missMps);
+assert(P2.missKm < 0.5 && P2.missMps < 0.01, 'flown miss %.3g km %.3g m/s', P2.missKm, P2.missMps);
 assert(P2.res < 1e-8, 'residual %.3g', P2.res);
 assert(max(abs(P2.rv0 - L.gtoState(c2.orientDeg, sD))) < 1e-12, 'departure state');
 assert(P2.orientDeg == c2.orientDeg && P2.orientReached == c2.orientDeg && ...
@@ -86,6 +92,38 @@ dArr = max(abs(P2.rvf - Yd(end, :).'));
 fprintf('  arrival state vs direct DRO propagation (%.4f ND): %.2e ND (%.3f km)\n', ...
         tProp, dArr, dArr*L.lStar);
 assert(dArr < 1e-7, 'arrival state differs from the propagated DRO by %.3g ND', dArr);
+% INDEPENDENT SLIDE CONVENTION: the slot, at DRO phase slotPhaseAtDep at the
+% departure, coasted ballistically for P.tf ND on this test's OWN CR3BP
+% right-hand side, is where the polished transfer arrives.
+% Measured 2026-11-11: started from L.slotState(slotPhaseAtDep) the coast
+% lands 1.41e-6 ND (0.55 km) from rvf -- the floor of the DRO phase_state
+% handle, which is 9.2e-8 ND off the true orbit at phase 0.4846 (105
+% stored points; 3.8e-6 ND after one period from phase 0.5, 2e-12 from
+% phase 0) and that start error grows over 0.545 ND. That number is
+% PRINTED. The ASSERTION (1e-6 ND) starts the slot where the handle is
+% exact, at phase 0, and coasts it slotPhaseAtDep*tauD to the departure
+% (the slot's departure-epoch state, by propagation) and then P.tf more:
+% every phase advance is done by the ODE, none by the library's phase
+% arithmetic. A wrong convention (slot pinned at its departure phase, or
+% the phase counted from the arrival epoch) misses by 0.03 to 0.5 of a
+% period.
+op13 = odeset('RelTol', 1e-13, 'AbsTol', 1e-13);
+[~, Ys] = ode113(@(t, x) cr3bp_rhs(x, L.muStar), [0 0.5*P2.tf P2.tf], L.slotState(c2.slotPhaseAtDep), op13);
+dSlideH = max(abs(P2.rvf - Ys(end, :).'));
+tDepSlot = c2.slotPhaseAtDep*L.tauD;
+[~, Yc] = ode113(@(t, x) cr3bp_rhs(x, L.muStar), [0 tDepSlot tDepSlot + P2.tf], L.slotState(0), op13);
+dSlide = max(abs(P2.rvf - Yc(end, :).'));
+fprintf(['  slide convention: slot coasted %.6f ND from its departure phase %.6f lands %.2e ND (%.3f km) ' ...
+         'from rvf when started from the handle (its interpolation floor), %.2e ND (%.2g km) when the ' ...
+         'departure state is itself propagated from phase 0\n'], P2.tf, c2.slotPhaseAtDep, dSlideH, ...
+        dSlideH*L.lStar, dSlide, dSlide*L.lStar);
+assert(dSlide < 1e-6, 'slide convention: the coasted slot misses rvf by %.3g ND', dSlide);
+% family flag: |tf - tfCell|/tfCell > familyFrac (0.02 by default)
+assert(islogical(P2.familyChanged) && P2.familyChanged == (abs(P2.tf - P2.tfCell)/P2.tfCell > 0.02) && ...
+       ~P1.familyChanged, 'familyChanged: P1 %d, P2 %d (rel %.3g)', P1.familyChanged, P2.familyChanged, ...
+       abs(P2.tf - P2.tfCell)/P2.tfCell);
+fprintf('  familyChanged: identity %d, +10 deg %d (|tf - tfCell|/tfCell = %.3g)\n', P1.familyChanged, ...
+        P2.familyChanged, abs(P2.tf - P2.tfCell)/P2.tfCell);
 
 % ---- 3. Review Focus 1: the walk loses the solution ----
 c3 = base;
@@ -121,4 +159,17 @@ assert(threw, 'unknown override name not refused');
 
 fprintf('  PASS\n');
 ok = true;
+end
+
+% ------------------------------------------------------------------------
+function dx = cr3bp_rhs(x, mu)
+% CR3BP_RHS  Ballistic CR3BP, barycentric rotating frame (Earth at -mu, Moon
+%   at 1 - mu), written here independently of pumpkyn and the library.
+%   INPUTS: x [6 x 1] ND; mu scalar.  OUTPUTS: dx [6 x 1].
+r1 = sqrt((x(1) + mu)^2 + x(2)^2 + x(3)^2);
+r2 = sqrt((x(1) - 1 + mu)^2 + x(2)^2 + x(3)^2);
+dx = [x(4:6);
+      2*x(5) + x(1) - (1 - mu)*(x(1) + mu)/r1^3 - mu*(x(1) - 1 + mu)/r2^3;
+      -2*x(4) + x(2) - (1 - mu)*x(2)/r1^3 - mu*x(2)/r2^3;
+      -(1 - mu)*x(3)/r1^3 - mu*x(3)/r2^3];
 end

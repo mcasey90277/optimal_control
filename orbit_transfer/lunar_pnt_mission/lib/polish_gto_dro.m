@@ -102,11 +102,15 @@ function P = polish_gto_dro(L, cand, opts)
 %                                                   of the root, or struct())
 %                                                   .history [nEval x 4]
 %                                                   [tf T g iters] .tfCell
-%                                                   .thresholds .wallS
+%                                                   .familyChanged (logical:
+%                                                   |tf - tfCell|/tfCell >
+%                                                   familyFrac; false unless
+%                                                   ok) .thresholds .wallS
 %                                                   .wallWalkS .wallRootS
 %
 %% Revision History:
 %  M. Casey                                                   (c) 11/11/2026
+%  M. Casey  final fix wave: P.familyChanged                  (c) 11/11/2026
 %  Copyright Coorbital Inc.
 %% ------------------------ Begin Code Sequence ---------------------------
 
@@ -145,7 +149,7 @@ P = struct('ok', false, 'reason', '', 'z8', zeros(0, 1), 'tf', NaN, ...
            'missKm', NaN, 'missMps', NaN, 'res', NaN, 'nEval', 0, ...
            'walk', struct('orientDeg', o0, 'tf', tfCell, 'attempts', zeros(0, 6)), ...
            'orientReached', o0, 'flight', struct(), 'history', zeros(0, 4), ...
-           'tfCell', tfCell, 'thresholds', thr, 'wallS', NaN, ...
+           'tfCell', tfCell, 'familyChanged', false, 'thresholds', thr, 'wallS', NaN, ...
            'wallWalkS', NaN, 'wallRootS', NaN);
 if ~L.clean(cand.iD, cand.iA, cand.iS)
     P.reason = sprintf('cell (%d,%d) of sheet %d is not clean', cand.iD, cand.iA, cand.iS);
@@ -304,6 +308,7 @@ if isempty(failed)
     P.z8   = zr;
     P.tf   = x;
     P.tArr = cand.tDep + x;
+    P.familyChanged = abs(x - tfCell)/tfCell > familyFrac;
 else
     P.reason = ['gate failed: ' strjoin(failed, ', ')];
     P.arrPhase = NaN;

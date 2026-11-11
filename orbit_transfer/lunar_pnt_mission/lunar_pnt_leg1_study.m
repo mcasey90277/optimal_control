@@ -11,7 +11,8 @@
 %   library function (lib/); nothing is reimplemented here.
 %
 %     0  knobs                              (one source; leg1_opts overrides)
-%     1  inputs and identity                I1 leg1_inputs checks
+%     1  inputs and identity                I1 leg1_inputs checks; package
+%                                           snapshot in <outDir>/inputs
 %     2  schedule                           C1 a complete assignment exists
 %     3  polish each satellite: polish ->   per attempt: polish, flight, arrival,
 %        gates -> exclude -> re-schedule    one GTO, Earth, Moon, mass (blocking);
@@ -80,7 +81,20 @@
 %   the default results/ folder (outDir must point elsewhere), skips the
 %   sidecar export, and names the seams in the VERDICT.
 %
+%   PACKAGE SNAPSHOT. The package at the default path will be replaced by
+%   the fleet's; section 1 keeps the one this run used: a file in
+%   <outDir>/inputs whose own SHA-256 equals the package's IS the snapshot
+%   (any name), else the package is copied there as
+%   costate_catalog_gto_dro_<first 8 hex>.mat (never overwriting;
+%   leg1_snapshot_package). run_meta.packageSnapshot and
+%   .packageSnapshotStatus record it; leg1_package_for finds it by hash.
+%
+%   SCOPE. The second-order verdict and "minimum-time" refer to the
+%   fixed-endpoint problem to the slot's arrival point (a local test at the
+%   root); the moving-target rendezvous condition is not checked.
+%
 %  M. Casey                                                   (c) 11/11/2026
+%  M. Casey  final fix wave: package snapshot, scope line     (c) 11/11/2026
 %  Copyright Coorbital Inc.
 
 clearvars -except leg1_opts
@@ -165,6 +179,11 @@ fprintf('   regime %g N, Isp %g s, m0 %g kg; GTO period %.6f ND (%.4f h), DRO pe
         L.thrustN, L.ispS, L.m0kg, L.tauG, L.tauG*L.tStar/3600, L.tauD, L.tauD*dayNd, L.sgn);
 fprintf('   clean 5 N cells per sheet: [%s]; propellant %.4f kg per ND of burn at 150 kg\n', ...
         num2str(squeeze(sum(sum(L.clean, 1), 2)).'), propKgPerNd);
+% keep the package this run used: any file in <outDir>/inputs with its SHA-256
+% is the snapshot; else copy it there as costate_catalog_gto_dro_<sha8>.mat
+% (never overwriting)
+[pkgSnapshot, pkgSnapshotStatus, snapMsg] = leg1_snapshot_package(L.identity, fullfile(outDir, 'inputs'));
+fprintf('   %s\n', snapMsg);
 nCk = numel(L.checks);
 gates = addg(gates, 'I1', pass3(all([L.checks.pass])), nCk, sprintf('%d of %d leg1_inputs checks', ...
              nnz([L.checks.pass]), nCk));
@@ -517,7 +536,8 @@ if isa(knobsSave.offgridSolver, 'function_handle'), knobsSave.offgridSolver = fu
 run_meta = struct('date', char(datetime('now', 'Format', 'yyyy-MM-dd HH:mm')), 'matlab', version, ...
                   'host', strtrim(hostName), 'optimal_control', gitOC.head, ...
                   'optimal_controlDirty', gitOC.dirty, 'git', gitOC, 'knobs', knobsSave, ...
-                  'identity', L.identity, 'droMd5', md5_of(L.slotState(s64)), 'droPhase0', (0:5)/6, ...
+                  'identity', L.identity, 'packageSnapshot', pkgSnapshot, ...
+                  'packageSnapshotStatus', pkgSnapshotStatus, 'droMd5', md5_of(L.slotState(s64)), 'droPhase0', (0:5)/6, ...
                   'tauD', L.tauD, 'tauG', L.tauG, 'sgn', L.sgn, ...
                   'regime', struct('thrustN', L.thrustN, 'ispS', L.ispS, 'm0kg', L.m0kg, 'muStar', L.muStar, ...
                                    'lStar', L.lStar, 'tStar', L.tStar, 'Tnd', L.phys.Tnd, 'cnd', L.phys.cnd), ...
@@ -686,6 +706,8 @@ save(saveTarget, 'run_meta', '-append');
 fprintf('\n== SUMMARY  lunar PNT leg 1: six 5 N stages, one GTO -> the DRO slots\n');
 fprintf('   T0 %.4f d; %d of 6 closed; total stage propellant %.2f kg; VERDICT %s\n', T0*dayNd, nnz(acc), ...
         gfield(massTot, 'stagePropKg'), verdict);
+fprintf(['   SCOPE: the second-order verdict and "minimum-time" refer to the fixed-endpoint problem to the ' ...
+         'slot''s arrival point (a local test at the root); the moving-target rendezvous condition is not checked.\n']);
 fprintf('   wall per section [s]:');
 for ks = 1:numel(secName), fprintf('  %s %.1f', secName{ks}, secWall(ks)); end
 fprintf('  (total %.0f)\n', toc(tStudy));

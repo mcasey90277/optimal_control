@@ -74,6 +74,17 @@ function info = leg1_movie(leg1Mat, opts)
 %   rotation rate relative to the rotating frame. Moon: mission_movie's
 %   textured globe (pumpkyn Moon_2k.jpg).
 %
+%   VETTING: the results are rendered only if run_meta.verdict is exactly
+%   'PASS', six transfers are accepted with G.pass true and every test seam
+%   recorded in run_meta.knobs (seamRefuse, seamRefute, seamFinalT0) is
+%   empty / zero; else leg1_movie:verdict, unless opts.allowUnvetted (then
+%   "UNVETTED RESULTS" is stamped above the regime statement).
+%
+%   PROTECTED FILE: results/lunar_pnt_mission.mp4 (the owner's leg-2 movie)
+%   is never written: an outFile (or its partial file) that resolves to it,
+%   relative paths taken against MATLAB's pwd and '..' resolved
+%   (canon_path), throws leg1_movie:protected before anything is loaded.
+%
 %   Modes: MP4 (default; written to <name>.partial.mp4, moved onto outFile
 %   after VideoReader confirms frame count and size); PREVIEW MP4
 %   (preview = true: the whole time map subsampled to previewSec*fps
@@ -97,10 +108,14 @@ function info = leg1_movie(leg1Mat, opts)
 %                                                   [results/lunar_pnt_mission_study.mat]
 %    .catalogMat            char ['']               GTO -> DRO package for
 %                                                   leg1_inputs ('' = the file
-%                                                   named in run_meta, else
-%                                                   the snapshot in
-%                                                   results/inputs; SHA-256
-%                                                   must match run_meta)
+%                                                   named in run_meta); found
+%                                                   by SHA-256 BEFORE loading
+%                                                   (leg1_package_for), else
+%                                                   run_meta.packageSnapshot,
+%                                                   else a snapshot in inputs/
+%                                                   beside the results or in
+%                                                   results/inputs; none ->
+%                                                   leg1_movie:identity
 %    .fps                   scalar [30]             Frame rate [1/s]
 %    .durationSec           scalar [30]             Total length [s]
 %    .holdS                 [1 x 2] [1.5 2.5]       Opening / closing hold [s]
@@ -142,6 +157,10 @@ function info = leg1_movie(leg1Mat, opts)
 %                                                   containment check (< 1
 %                                                   forces
 %                                                   leg1_movie:containment)
+%    .allowUnvetted         logical [false]         Render results that fail
+%                                                   the vetting below, with
+%                                                   UNVETTED RESULTS stamped
+%                                                   in the regime text
 %
 %% Outputs:
 %
@@ -204,9 +223,23 @@ function info = leg1_movie(leg1Mat, opts)
 %  info.gtoRotationErr      scalar                  Rotation check [ND]
 %  info.junctionKm          [6 x 2]                 Departure, arrival
 %                                                   continuity [km]
+%  info.dayText             {n x 1} cell            The day counter's String
+%                                                   as DISPLAYED (read back
+%                                                   from the text object)
+%  info.regimeText          {1 x m} cell            Regime statement lines
+%                                                   (first 'UNVETTED RESULTS'
+%                                                   when unvetted)
+%  info.unvetted            logical                 Rendered under
+%                                                   allowUnvetted
+%  info.vetting             char                    '' or why the results are
+%                                                   not vetted
+%  info.packageFile         char                    Package file used
 %
 %% Revision History:
 %  M. Casey                                                   (c) 11/11/2026
+%  M. Casey  final fix wave: vetting (allowUnvetted), protected
+%            owner's movie, package by SHA-256 before loading,
+%            info.dayText                                     (c) 11/11/2026
 %  Copyright Coorbital Inc.
 %% ------------------------ Begin Code Sequence ---------------------------
 
@@ -253,7 +286,8 @@ def = struct('outFile',       fullfile(here, 'results', 'lunar_pnt_leg1.mp4'), .
              'moonTexture',   fullfile(utilDir, 'Moon_2k.jpg'), ...
              'earthTexture',  fullfile(utilDir, 'earth-clouds-4k.jpg'), ...
              'quality',       95, ...
-             'zoomScale',     1);
+             'zoomScale',     1, ...
+             'allowUnvetted', false);
 for f = fieldnames(opts).'
     if ~isfield(def, f{1})
         error('leg1_movie:opts', 'unknown option ''%s''', f{1});
@@ -265,6 +299,12 @@ fullOut    = fullfile(here, 'results', 'lunar_pnt_leg1.mp4');
 previewOut = fullfile(here, 'results', 'lunar_pnt_leg1_preview.mp4');
 if o.preview && ~isfield(opts, 'outFile')
     o.outFile = previewOut;
+end
+% the owner's leg-2 movie is never an output (paths resolved against MATLAB's pwd)
+protectedMp4 = canon_path(fullfile(here, 'results', 'lunar_pnt_mission.mp4'));
+[pDir0, pName0] = fileparts(canon_path(o.outFile));
+if any(strcmp(protectedMp4, {canon_path(o.outFile), fullfile(pDir0, [pName0 '.partial.mp4'])}))
+    error('leg1_movie:protected', 'refusing to write %s (the owner''s movie): outFile resolves to it', protectedMp4);
 end
 if numel(o.frameSize) ~= 2 || any(mod(o.frameSize, 2))
     error('leg1_movie:frameSize', 'frameSize must be two even integers');
@@ -293,6 +333,11 @@ for nm = {'P1', 'T0', 'run_meta'}
     end
 end
 P1 = D.P1;  T0 = double(D.T0);  rm = D.run_meta;
+vetWhy = vet_results(P1, rm);
+unvetted = ~isempty(vetWhy);
+if unvetted && ~o.allowUnvetted
+    error('leg1_movie:verdict', 'refusing to render unvetted leg-1 results (%s); opts.allowUnvetted overrides', vetWhy);
+end
 nSc = numel(P1);
 if nSc ~= 6 || ~all([P1.accepted])
     error('leg1_movie:results', 'leg-1 results need six accepted transfers (%d, %d accepted)', ...
@@ -303,7 +348,7 @@ if ~isequal(sort([P1.k]), 1:6)
 end
 [~, ordK] = sort([P1.k]);
 P1 = P1(ordK);                                           % index = leg-2 number k
-L  = load_inputs(o.catalogMat, rm, here);
+L  = load_inputs(o.catalogMat, rm, here, leg1Mat);
 mu = L.muStar;  lStar = L.lStar;  tStar = L.tStar;
 dayNd = tStar/86400;
 orient0 = P1(1).orient0;  ph0 = P1(1).gtoPhase0;
@@ -553,7 +598,7 @@ if pngMode
     fDay = [fDay; dq];
     if ~isfolder(o.previewDir), mkdir(o.previewDir); end
 elseif o.preview
-    if strcmp(full_path(o.outFile), full_path(fullOut))
+    if strcmp(canon_path(o.outFile), canon_path(fullOut))
         error('leg1_movie:partialOutFile', 'a preview may not be written onto the full movie %s', fullOut);
     end
     nP   = round(o.previewSec*o.fps);
@@ -569,7 +614,7 @@ fig = figure('Visible', onoff(o.visible), 'Units', 'pixels', 'Position', [20 20 
              'Color', [0 0 0], 'MenuBar', 'none', 'ToolBar', 'none', 'Resize', 'off');
 cleanFig = onCleanup(@() close_if(fig));
 G = build_graphics(fig, scnPos, stripPos, clipBox, droKm, rMoonKm, rEarthKm, xEarth, ...
-                   tArrD, tDepD, dEnd, nSc, o.moonTexture, o.earthTexture, rm.regime);
+                   tArrD, tDepD, dEnd, nSc, o.moonTexture, o.earthTexture, rm.regime, unvetted);
 
 vw = [];  partFile = '';
 if ~pngMode
@@ -601,7 +646,9 @@ info = struct('outFile', '', 'nFrames', nR, 'nFramesMap', nF, 'frameSize', o.fra
               'outlineDrawn', false(nR, 2), 'outlineInBox', false(nR, 2), ...
               'moonTextured', G.moonTextured, 'earthTextured', G.earthTextured, ...
               'T0Days', T0d, 'tDepDays', tDepD, 'tArrDays', tArrD, 'sgn', S.sgn, ...
-              'orient0', orient0, 'gtoRotationErr', gtoRotErr, 'junctionKm', jKm);
+              'orient0', orient0, 'gtoRotationErr', gtoRotErr, 'junctionKm', jKm, ...
+              'dayText', {cell(nR, 1)}, 'regimeText', {G.regimeText}, 'unvetted', unvetted, ...
+              'vetting', vetWhy, 'packageFile', L.identity.file);
 inBox = @(Sx) Sx(:, 1) >= clipBox(1) & Sx(:, 1) <= clipBox(2) & ...
               Sx(:, 2) >= clipBox(3) & Sx(:, 2) <= clipBox(4);
 spin = omegaE*tStar - 1;                    % Earth rotation in this frame [rad per ND]
@@ -716,6 +763,7 @@ for rr = 1:nR
                                           G.ax.CameraViewAngleMode, G.ax.CameraUpVectorMode}, 'manual'));
     % text
     set(G.txtDay, 'String', sprintf('Day %5.2f', d0));
+    info.dayText{rr} = char(G.txtDay.String);          % what the counter DISPLAYS
     set(G.txtGto, 'String', sprintf('On the GTO  %d', nG));
     set(G.txtThr, 'String', sprintf('Thrusting   %d', nT));
     set(G.txtDro, 'String', sprintf('In the DRO  %d / %d', nD, nSc));
@@ -765,26 +813,57 @@ info.wallS = toc(tWall);
 end
 
 %% ------------------------------------------------------------------------
-function L = load_inputs(catalogMat, rm, here)
-% LOAD_INPUTS  leg1_inputs on the package the leg-1 run used: opts value,
-%   else the file named in run_meta, else the snapshot in results/inputs;
-%   the SHA-256 must equal run_meta's (leg1_movie:identity).
-%   INPUTS:  catalogMat char ('' = search); rm run_meta struct; here char.
+function L = load_inputs(catalogMat, rm, here, leg1Mat)
+% LOAD_INPUTS  leg1_inputs on the package the leg-1 run used, found by its
+%   SHA-256 BEFORE anything is loaded (leg1_package_for): the opts value
+%   (else the file named in run_meta), else run_meta.packageSnapshot, else a
+%   snapshot in inputs/ beside the results or in results/inputs
+%   (leg1_movie:identity when none matches).
+%   INPUTS:  catalogMat char ('' = run_meta's file); rm run_meta struct;
+%            here char; leg1Mat char.
 %   OUTPUTS: L leg1_inputs struct.
-want = rm.identity.sha256;
-if ~isempty(catalogMat)
-    cand = {catalogMat};
+snapX = {};
+if isfield(rm, 'packageSnapshot') && ~isempty(rm.packageSnapshot), snapX = {char(rm.packageSnapshot)}; end
+inDirs = unique({fullfile(fileparts(canon_path(leg1Mat)), 'inputs'), fullfile(here, 'results', 'inputs')}, 'stable');
+[pkg, why] = leg1_package_for(rm.identity, struct('primary', catalogMat, 'extra', {snapX}, 'inputsDirs', {inDirs}));
+if isempty(pkg)
+    error('leg1_movie:identity', '%s', why);
+end
+L = leg1_inputs(struct('catalogMat', pkg));
+if ~strcmp(L.identity.sha256, rm.identity.sha256)
+    error('leg1_movie:identity', 'package %s changed while it was being loaded', pkg);
+end
+end
+
+function why = vet_results(P1, rm)
+% VET_RESULTS  '' when the leg-1 results may be rendered: run_meta.verdict
+%   exactly 'PASS', six transfers all accepted with G.pass true, and every
+%   test seam recorded in run_meta.knobs empty / zero; else the reasons.
+%   INPUTS:  P1 struct array; rm run_meta struct.
+%   OUTPUTS: why char.
+r = {};
+v = '';
+if isfield(rm, 'verdict'), v = char(rm.verdict); end
+if ~strcmp(v, 'PASS'), r{end+1} = sprintf('verdict "%s", not PASS', v); end
+nAcc = 0;  nPass = 0;
+if isfield(P1, 'accepted'), nAcc = nnz([P1.accepted]); end
+if isfield(P1, 'G')
+    nPass = nnz(arrayfun(@(q) isstruct(q.G) && isfield(q.G, 'pass') && isequal(q.G.pass, true), P1));
+end
+if ~(numel(P1) == 6 && nAcc == 6 && nPass == 6)
+    r{end+1} = sprintf('%d transfers, %d accepted, %d with G.pass', numel(P1), nAcc, nPass);
+end
+if ~isfield(rm, 'knobs')
+    r{end+1} = 'no knobs recorded in run_meta (test seams unknown)';
 else
-    cand = {};
-    if isfield(rm.identity, 'file') && isfile(rm.identity.file), cand = {rm.identity.file}; end
-    snap = dir(fullfile(here, 'results', 'inputs', sprintf('*%s*.mat', want(1:8))));
-    cand = [cand, fullfile({snap.folder}, {snap.name})];
+    kn = rm.knobs;
+    seamNm  = {'seamRefuse', 'seamRefute', 'seamFinalT0'};
+    seamOn  = [isfield(kn, 'seamRefuse') && ~isempty(kn.seamRefuse), ...
+               isfield(kn, 'seamRefute') && ~isempty(kn.seamRefute), ...
+               isfield(kn, 'seamFinalT0') && ~isequal(kn.seamFinalT0, 0)];
+    if any(seamOn), r{end+1} = sprintf('test seams set: %s', strjoin(seamNm(seamOn), ', ')); end
 end
-for kk = 1:numel(cand)
-    L = leg1_inputs(struct('catalogMat', cand{kk}));
-    if strcmp(L.identity.sha256, want), return; end
-end
-error('leg1_movie:identity', 'no package with SHA-256 %s (the leg-1 run''s) found', want);
+why = strjoin(r, '; ');
 end
 
 function EF = end_framing(leg2Mat)
@@ -864,12 +943,13 @@ end
 
 %% ------------------------------------------------------------------------
 function G = build_graphics(fig, scnPos, stripPos, clipBox, droKm, rMoonKm, rEarthKm, xEarth, ...
-                            tArrD, tDepD, dEnd, nSc, moonTex, earthTex, regime)
+                            tArrD, tDepD, dEnd, nSc, moonTex, earthTex, regime, unvetted)
 % BUILD_GRAPHICS  Create every graphics object once; the loop only updates.
 %   INPUTS:  fig figure; scnPos, stripPos [1 x 4] px; clipBox [1 x 4] px;
 %            droKm [m x 3] km; rMoonKm, rEarthKm scalars; xEarth [1 x 3] km;
 %            tArrD, tDepD [1 x 6] d; dEnd scalar d; nSc scalar; moonTex,
-%            earthTex char texture files; regime struct (thrustN ispS m0kg).
+%            earthTex char texture files; regime struct (thrustN ispS m0kg);
+%            unvetted logical (stamp UNVETTED RESULTS in the regime text).
 %   OUTPUTS: G struct of handles and styles.
 fg   = [0.93 0.94 0.97];
 fg2  = [0.70 0.73 0.80];
@@ -1010,8 +1090,14 @@ G.txtGto  = text(ov, 28, 580, '', 'Color', fg, 'FontName', mono, 'FontSize', 14)
 G.txtThr  = text(ov, 28, 556, '', 'Color', fg, 'FontName', mono, 'FontSize', 14);
 G.txtDro  = text(ov, 28, 532, '', 'Color', fg, 'FontName', mono, 'FontSize', 14);
 G.txtRate = text(ov, 28, 506, '', 'Color', [0.55 0.58 0.65], 'FontName', mono, 'FontSize', 11);
-text(ov, 28, 420, {sprintf('%g N per %g kg, Isp %g s,', regime.thrustN, regime.m0kg, regime.ispS), ...
-     'engine on throughout:', 'catalog regime,', 'not a vehicle design'}, ...
+G.regimeText = {sprintf('%g N per %g kg, Isp %g s,', regime.thrustN, regime.m0kg, regime.ispS), ...
+                'engine on throughout:', 'catalog regime,', 'not a vehicle design'};
+if unvetted
+    G.regimeText = [{'UNVETTED RESULTS'}, G.regimeText];
+    text(ov, 28, 438, 'UNVETTED RESULTS', 'Color', [1 0.35 0.35], 'FontName', sans, 'FontSize', 13, ...
+         'FontWeight', 'bold', 'VerticalAlignment', 'top');
+end
+text(ov, 28, 420, G.regimeText(1 + unvetted:end), ...
      'Color', [0.62 0.64 0.70], 'FontName', sans, 'FontSize', 11, 'VerticalAlignment', 'top');
 % state legend (right)
 x0 = 1062;  y0 = 612;  dy = 25;
@@ -1117,12 +1203,6 @@ k  = 0.5*(1 + cos(pi*(-h:h).'/(h + 1)));
 k  = k/sum(k);
 xp = [repmat(x(1), h, 1); x(:); repmat(x(end), h, 1)];
 y  = conv(xp, k, 'valid');
-end
-
-function f = full_path(f)
-% FULL_PATH  Absolute, normalised path for comparisons.  INPUTS/OUTPUTS: char.
-jf = java.io.File(f);
-f  = char(jf.getCanonicalPath());
 end
 
 function s = thousands(n)

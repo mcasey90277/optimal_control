@@ -1,4 +1,4 @@
-function [ok, skipped] = test_lunar_pnt_leg1_study(resultsFile)
+function [ok, skipped, note] = test_lunar_pnt_leg1_study(resultsFile)
 %% Purpose:
 %
 %   Verifies the SAVED results of lunar_pnt_leg1_study (it does not re-run
@@ -26,8 +26,18 @@ function [ok, skipped] = test_lunar_pnt_leg1_study(resultsFile)
 %   the final gates every satellite fails 'handoff at final T0', none is
 %   accepted, failed lists six reasons, the verdict is not PASS, the
 %   summary does not claim six closed, no sidecar is exported, and the
-%   checks of (1) refuse the file (verdict not PASS). Skipped when the
-%   function is given a resultsFile.
+%   checks of (1) refuse the file (verdict not PASS); the run copied its
+%   package to <outDir>/inputs/costate_catalog_gto_dro_<sha8>.mat (SHA-256
+%   verified, recorded in run_meta) and printed the scope line. Skipped
+%   when the function is given a resultsFile. (7) A copy of the results
+%   claiming another package (the pilot package re-saved: same content,
+%   other SHA-256) passes every structural check and returns the pins-
+%   skipped note.
+%   PACKAGE: the package is found by its SHA-256 through leg1_package_for
+%   (default path, else a snapshot), never by file name. The headline pins
+%   (5) apply only when the saved results' package is the pilot package
+%   (SHA-256 e57d9236...); otherwise they are SKIPPED WITH A NOTE (third
+%   output; run_tests reports PASS*) and every other assertion still runs.
 %   Returns skipped = true (and ok = true) when the results file does not
 %   exist.
 %
@@ -44,11 +54,15 @@ function [ok, skipped] = test_lunar_pnt_leg1_study(resultsFile)
 %  ok                       logical                 true if every assertion
 %                                                   held (else it throws)
 %  skipped                  logical                 true if no results file
+%  note                     char                    '' or why the pins were
+%                                                   skipped
 %
 %% Revision History:
 %  M. Casey                                                   (c) 11/11/2026
 %  M. Casey  fix round 1: seams empty, verdict PASS, alpha check,
 %            miss pins 1e-4 km / 1e-6 m/s                        (c) 11/11/2026
+%  M. Casey  final fix wave: tempname, package by SHA-256, pins
+%            only on the pilot package, snapshot asserted        (c) 11/11/2026
 %  Copyright Coorbital Inc.
 %% ------------------------ Begin Code Sequence ---------------------------
 
@@ -60,6 +74,7 @@ if nargin < 1 || isempty(resultsFile)
 end
 f = resultsFile;
 skipped = false;
+note = '';
 if ~isfile(f)
     fprintf('  SKIPPED: no results file (%s); run lunar_pnt_leg1_study first\n', f);
     ok = true;  skipped = true;
@@ -98,7 +113,16 @@ else
 end
 
 % ---- 3. per accepted transfer ----
-L = leg1_inputs(struct('catalogMat', rm.identity.file));
+% the package the results came from, found by its SHA-256 (the default path,
+% else run_meta.packageSnapshot, else a snapshot in inputs/ beside the
+% results or in results/inputs): the default package may have been replaced
+snapX = {};
+if isfield(rm, 'packageSnapshot') && ~isempty(rm.packageSnapshot), snapX = {rm.packageSnapshot}; end
+inDirs = unique({fullfile(fileparts(f), 'inputs'), fullfile(root, 'results', 'inputs')}, 'stable');
+[pkg, whyPkg, pkgInfo] = leg1_package_for(rm.identity, struct('extra', {snapX}, 'inputsDirs', {inDirs}));
+assert(~isempty(pkg), 'no package file matches the saved results: %s', whyPkg);
+fprintf('  package %s... found: %s (%s)\n', rm.identity.sha256(1:8), pkg, pkgInfo.source);
+L = leg1_inputs(struct('catalogMat', pkg));
 tol = R.P1(find(acc, 1)).G.opts.handoffTolPhase;
 for k = find(acc)
     q = R.P1(k);
@@ -141,19 +165,26 @@ pin = struct('T0Days', 2.647279358370, ...
              'propKg', 760.417943043, 'wetKg', 1774.480634499, 'maxJetKW', 86.837324822, ...
              'minEarthKm', 349.863000, 'minMoonKm', 841.342778, ...
              'maxMissKm', 0.0473016831, 'maxMissMps', 0.000663426206, 'nRefuted', 0);
-assert(all(acc), 'the pins are for a run with six accepted transfers');
-G = [R.P1.G];  ms = [G.mass];  ea = [G.earth];  mo = [G.moon];  ar = [G.arrival];
-got = struct('T0Days', R.T0*dayNd, 'tfDays', [R.P1.tf]*dayNd, 'propKg', sum([ms.stagePropKg]), ...
-             'wetKg', sum([ms.wetKg]), 'maxJetKW', max([ms.jetKW]), 'minEarthKm', min([ea.hMinKm]), ...
-             'minMoonKm', min([mo.hMinKm]), 'maxMissKm', max([ar.missKm]), 'maxMissMps', max([ar.missMps]), ...
-             'nRefuted', nnz([G.refuted]));
-tolP = struct('T0Days', 1e-9, 'tfDays', 1e-6, 'propKg', 1e-3, 'wetKg', 1e-3, 'maxJetKW', 1e-4, ...
-              'minEarthKm', 0.01, 'minMoonKm', 0.01, 'maxMissKm', 1e-4, 'maxMissMps', 1e-6, 'nRefuted', 0);
-for f = fieldnames(pin).'
-    e = max(abs(got.(f{1}) - pin.(f{1})));
-    assert(e <= tolP.(f{1}), 'pin %s: measured %s, pinned %s (tol %g)', f{1}, mat2str(got.(f{1}), 10), ...
-           mat2str(pin.(f{1}), 10), tolP.(f{1}));
-    fprintf('  pin %-11s %s  (|diff| %.2g, tol %g)\n', f{1}, mat2str(got.(f{1}), 10), e, tolP.(f{1}));
+sha8 = rm.identity.sha256(1:8);
+if ~strcmp(sha8, 'e57d9236')
+    note = sprintf(['SKIP headline pins: the saved results come from package %s..., not the pilot package ' ...
+                    'e57d9236 the pins were measured on; every structural assertion ran'], sha8);
+    fprintf('  %s\n', note);
+else
+    assert(all(acc), 'the pins are for a run with six accepted transfers');
+    G = [R.P1.G];  ms = [G.mass];  ea = [G.earth];  mo = [G.moon];  ar = [G.arrival];
+    got = struct('T0Days', R.T0*dayNd, 'tfDays', [R.P1.tf]*dayNd, 'propKg', sum([ms.stagePropKg]), ...
+                 'wetKg', sum([ms.wetKg]), 'maxJetKW', max([ms.jetKW]), 'minEarthKm', min([ea.hMinKm]), ...
+                 'minMoonKm', min([mo.hMinKm]), 'maxMissKm', max([ar.missKm]), 'maxMissMps', max([ar.missMps]), ...
+                 'nRefuted', nnz([G.refuted]));
+    tolP = struct('T0Days', 1e-9, 'tfDays', 1e-6, 'propKg', 1e-3, 'wetKg', 1e-3, 'maxJetKW', 1e-4, ...
+                  'minEarthKm', 0.01, 'minMoonKm', 0.01, 'maxMissKm', 1e-4, 'maxMissMps', 1e-6, 'nRefuted', 0);
+    for fp = fieldnames(pin).'
+        e = max(abs(got.(fp{1}) - pin.(fp{1})));
+        assert(e <= tolP.(fp{1}), 'pin %s: measured %s, pinned %s (tol %g)', fp{1}, mat2str(got.(fp{1}), 10), ...
+               mat2str(pin.(fp{1}), 10), tolP.(fp{1}));
+        fprintf('  pin %-11s %s  (|diff| %.2g, tol %g)\n', fp{1}, mat2str(got.(fp{1}), 10), e, tolP.(fp{1}));
+    end
 end
 
 % ---- 6. forced final-gate failure (seamFinalT0) ----
@@ -167,15 +198,21 @@ if nargin < 1 || strcmp(resultsFile, fullfile(root, 'results', 'lunar_pnt_leg1_s
     end
     assert(strcmp(id, 'lunar_pnt_leg1_study:seam'), 'seams with default outDir: expected a refusal, got "%s"', id);
     fprintf('  seams set, outDir default: refused (%s)\n', id);
-    scratch = '/private/tmp/claude-501/-Users-msc-Desktop-optimal-control/70650963-d331-4c2e-9b00-6156c2bd5033/scratchpad/leg1';
-    if ~isfolder(scratch), mkdir(scratch); end
-    tmp = tempname(scratch);
+    tmp = tempname;
     mkdir(tmp);
     cleanTmp = onCleanup(@() rmdir(tmp, 's'));
     t0 = tic;
     txt = exec_study(study, struct('headless', true, 'seamFinalT0', 0.01, 'doSecond', false, ...
-                                   'makeFigures', false, 'outDir', tmp));
+                                   'makeFigures', false, 'outDir', tmp, 'catalogMat', pkg));
     Ff = load(fullfile(tmp, 'lunar_pnt_leg1_study.mat'), 'P1', 'failed', 'run_meta');
+    % the run kept its package: a verified copy in <outDir>/inputs, recorded in run_meta
+    snapWant = fullfile(tmp, 'inputs', sprintf('costate_catalog_gto_dro_%s.mat', sha8));
+    assert(strcmp(Ff.run_meta.packageSnapshotStatus, 'copied') && strcmp(Ff.run_meta.packageSnapshot, snapWant) && ...
+           strcmp(file_sha256(snapWant), rm.identity.sha256), 'forced run: package snapshot %s (%s)', ...
+           Ff.run_meta.packageSnapshot, Ff.run_meta.packageSnapshotStatus);
+    assert(contains(txt, 'package snapshot: copied') && contains(txt, 'moving-target rendezvous condition is not checked'), ...
+           'forced run: snapshot or scope line not printed');
+    fprintf('  forced run kept its package: %s (copied, SHA-256 verified); scope line printed\n', snapWant);
     reasons = {Ff.failed.reason};
     assert(~any([Ff.P1.accepted]) && numel(Ff.failed) == 6 && ...
            all(contains(reasons, 'handoff at final T0')), 'forced: acceptance did not follow the final gates');
@@ -193,6 +230,27 @@ if nargin < 1 || strcmp(resultsFile, fullfile(root, 'results', 'lunar_pnt_leg1_s
     assert(contains(id, 'test seams') || contains(id, 'not PASS'), 'forced results were not refused by the checks');
     fprintf('  forced (T0 + 0.01 ND at the final gates, %.0f s): 0 of 6 accepted, reasons "%s", verdict "%s", no sidecar; checks refuse it: %s\n', ...
             toc(t0), reasons{1}, Ff.run_meta.verdict, id);
+
+    % ---- 7. results from ANOTHER package: pins skipped with a note, the rest runs ----
+    % the pilot package re-saved (same content, other bytes, other SHA-256)
+    % stands in for a fleet package; a copy of the results claims it
+    other = fullfile(tmp, 'other_inputs');
+    mkdir(other);
+    Pk = load(pkg);
+    otherPkg = fullfile(other, 'resaved_package.mat');
+    save(otherPkg, '-struct', 'Pk');
+    shaO = file_sha256(otherPkg);
+    assert(~strcmp(shaO(1:8), 'e57d9236'), 'the re-saved package kept the pilot hash');
+    T = load(f);
+    T.run_meta.identity.sha256 = shaO;
+    T.run_meta.identity.file = otherPkg;
+    T.run_meta.packageSnapshot = '';
+    tamp = fullfile(other, 'lunar_pnt_leg1_study.mat');
+    save(tamp, '-struct', 'T', '-v7.3');
+    [okO, skO, noteO] = test_lunar_pnt_leg1_study(tamp);
+    assert(okO && ~skO && contains(noteO, 'SKIP headline pins') && contains(noteO, shaO(1:8)), ...
+           'other package: pins not skipped with a note ("%s")', noteO);
+    fprintf('  results from another package (%s...): structural checks pass, pins skipped: "%s"\n', shaO(1:8), noteO);
 end
 fprintf('  PASS\n');
 ok = true;

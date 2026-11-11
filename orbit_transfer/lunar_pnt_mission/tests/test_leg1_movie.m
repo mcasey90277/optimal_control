@@ -1,4 +1,4 @@
-function [ok, skipped] = test_leg1_movie()
+function [ok, skipped, note] = test_leg1_movie()
 %% Purpose:
 %
 %   Verifies leg1_movie, mission_movie's dayOffset and full_mission_movie on
@@ -18,12 +18,31 @@ function [ok, skipped] = test_leg1_movie()
 %   thrusting; its direction is -alpha/|alpha| of the saved flight at a node
 %   (1e-12) and the drawn plume points along the projected exhaust;
 %   (6) CAMERA: all modes manual; the LAST frame equals mission_movie's
-%   FIRST frame (target, position, view angle to 1e-9); (7) dayOffset: a
-%   mission_movie still with dayOffset = 3 reports a first displayed day 3
-%   greater than its mission day, the default reports it unchanged;
+%   FIRST frame (target, position, view angle to 1e-9); (7) dayOffset, on
+%   what is DISPLAYED: the day counter's String (info.dayText, read back
+%   from the text object) of the same map frame reads the mission day with
+%   the default and the mission day + 3 with dayOffset = 3; the default
+%   dayFormat leaves the frame pixel-identical to the explicit 'Day %4.1f';
+%   (7b) the counter does not step back at the join: leg 1's T0 still vs
+%   leg 2's first still with dayOffset = T0 and the two-decimal format
+%   (the default one-decimal format WOULD step back: asserted, so the
+%   check can fail);
 %   (8) JOIN: full_mission_movie on two short movies writes n1 + n2 - fade
 %   frames at 1280 x 720, and refuses a second movie of another frame size
-%   (full_mission_movie:mismatch); (9) DELIBERATE FAILURES: zoom forced to
+%   (full_mission_movie:mismatch); (8b) full_mission_movie rendering both
+%   legs short (leg-1 preview, leg-2 20 frames): leg 2 in 'Day %5.2f', its
+%   first displayed day >= leg 1's last, leg 1's end framing from the
+%   joined leg2Mat; (8c) full_mission_movie refusals before any render:
+%   a leg-1 MP4 older than its results with render = false (stale), leg-1
+%   results not PASS (combined_timeline:verdict), leg1Opts.leg2Mat not the
+%   joined one (leg2Mat), the owner's results/lunar_pnt_mission.mp4 as
+%   outFile by a relative path and as leg2Mp4 by a '..' path (protected);
+%   (8d) leg1_movie: the owner's movie by a relative and a '..' path
+%   (leg1_movie:protected, the file untouched); results with verdict not
+%   PASS, a G.pass false, a seam knob set -> leg1_movie:verdict; with
+%   allowUnvetted the frame's regime text is stamped UNVETTED RESULTS (and
+%   the vetted results' is not). The package is found by SHA-256
+%   (leg1_package_for), never by file name. (9) DELIBERATE FAILURES: zoom forced to
 %   half (zoomScale seam) -> leg1_movie:containment; GTO turned the wrong
 %   way would put a pre-departure stage off its GTO (checked as a number);
 %   a missing results file -> leg1_movie:noResults; dayList beyond T0 ->
@@ -40,9 +59,14 @@ function [ok, skipped] = test_leg1_movie()
 %                                                   held (else it throws)
 %  skipped                  logical                 true if a results file
 %                                                   is missing
+%  note                     char                    '' or which package
+%                                                   snapshot was used
 %
 %% Revision History:
 %  M. Casey                                                   (c) 11/11/2026
+%  M. Casey  final fix wave: displayed-day checks, join counter,
+%            vetting, protected paths, full_mission_movie
+%            refusals, package by SHA-256                     (c) 11/11/2026
 %  Copyright Coorbital Inc.
 %% ------------------------ Begin Code Sequence ---------------------------
 
@@ -52,6 +76,7 @@ resDir  = fullfile(fileparts(here), 'results');
 leg1Mat = fullfile(resDir, 'lunar_pnt_leg1_study.mat');
 leg2Mat = fullfile(resDir, 'lunar_pnt_mission_study.mat');
 skipped = false;
+note = '';
 if ~isfile(leg1Mat) || ~isfile(leg2Mat)
     fprintf('  SKIPPED: leg-1 or leg-2 results missing; run both studies first\n');
     ok = true;  skipped = true;
@@ -104,8 +129,16 @@ C  = I.camera;
 nF = I.nFramesMap;
 D  = load(leg1Mat, 'P1', 'T0');
 P1 = D.P1;  [~, ord] = sort([P1.k]);  P1 = P1(ord);
-L  = leg1_inputs(struct('catalogMat', fullfile(resDir, 'inputs', ...
-                 'costate_catalog_gto_dro_pilot_e57d9236.mat')));
+Rm = load(leg1Mat, 'run_meta');
+[pkg, whyPkg, pkgInfo] = leg1_package_for(Rm.run_meta.identity);      % by SHA-256, never by file name
+assert(~isempty(pkg), 'no package matches the saved leg-1 results: %s', whyPkg);
+assert(strcmp(I.packageFile, pkg) || strcmp(file_sha256(I.packageFile), Rm.run_meta.identity.sha256), ...
+       'leg1_movie used a package that is not the results''');
+fprintf('  package %s... found by hash: %s (%s)\n', Rm.run_meta.identity.sha256(1:8), pkg, pkgInfo.source);
+if ~strcmp(pkgInfo.source, 'primary')
+    note = sprintf('the default package is not the saved results''; used %s', pkg);
+end
+L  = leg1_inputs(struct('catalogMat', pkg));
 mu = L.muStar;  lStar = L.lStar;  dayNd = L.tStar/86400;
 ff20 = round(linspace(1, nF, 20));
 J = leg1_movie(leg1Mat, struct('frameList', ff20, 'previewDir', tmp, 'pngPrefix', 't'));
@@ -176,12 +209,31 @@ fprintf('  last frame vs mission_movie first frame: target %.2e km, position %.2
         dT, dP, dV);
 assert(dT < 1e-9 && dP < 1e-6 && dV < 1e-9, 'last frame does not match mission_movie''s first');
 
-% ---- 7. dayOffset ----
-assert(isequal(M.displayDay, M.frameDay), 'default dayOffset changes the displayed day');
-M3 = mission_movie(leg2Mat, struct('dayList', 0, 'previewDir', tmp, 'dayOffset', 3));
-fprintf('  mission_movie displayed first day: default %.3f, dayOffset 3 -> %.3f\n', M.displayDay(1), ...
-        M3.displayDay(1));
-assert(abs(M3.displayDay(1) - M.displayDay(1) - 3) < 1e-12 && M3.dayOffset == 3, 'dayOffset not applied');
+% ---- 7. dayOffset and dayFormat, on what is DISPLAYED (the counter's String) ----
+M3 = mission_movie(leg2Mat, struct('dayList', 0, 'previewDir', fullfile(tmp, 'off3'), 'dayOffset', 3));
+fprintf('  mission_movie day counter at map frame %d (day %.3f): default "%s", dayOffset 3 "%s"\n', ...
+        M.frameIdx(1), M.frameDay(1), M.dayText{1}, M3.dayText{1});
+assert(strcmp(M.dayText{1}, sprintf('Day %4.1f', M.frameDay(1))), 'default counter shows "%s"', M.dayText{1});
+assert(strcmp(M3.dayText{1}, sprintf('Day %4.1f', M3.frameDay(1) + 3)) && M3.frameIdx(1) == M.frameIdx(1), ...
+       'dayOffset 3: counter shows "%s"', M3.dayText{1});
+assert(abs(day_of(M3.dayText{1}) - day_of(M.dayText{1}) - 3) < 1e-9, 'dayOffset not in the DISPLAYED day');
+% the default format leaves frames pixel-identical: default vs the default
+% format passed explicitly (and, measured once at the fix, vs the pre-fix code)
+Mx = mission_movie(leg2Mat, struct('dayList', 0, 'previewDir', fullfile(tmp, 'fmt'), 'dayFormat', 'Day %4.1f'));
+assert(isequal(imread(M.previewPngs{1}), imread(Mx.previewPngs{1})), 'default dayFormat changes the frame');
+fprintf('  default dayFormat: frame pixel-identical to the explicit ''Day %%4.1f''\n');
+
+% ---- 7b. the counter does not step back at the join ----
+dLeg1 = day_of(Q.dayText{3});                          % leg 1's last frame (T0)
+M2f = mission_movie(leg2Mat, struct('dayList', 0, 'previewDir', fullfile(tmp, 'join2'), 'dayOffset', I.T0Days, ...
+                                    'dayFormat', 'Day %5.2f'));
+M1f = mission_movie(leg2Mat, struct('dayList', 0, 'previewDir', fullfile(tmp, 'join1'), 'dayOffset', I.T0Days));
+fprintf(['  join stills: leg 1 last "%s"; leg 2 first with the two-decimal format "%s" (with the default ' ...
+         'format it would read "%s")\n'], Q.dayText{3}, M2f.dayText{1}, M1f.dayText{1});
+assert(day_of(M2f.dayText{1}) >= dLeg1, 'the day counter steps back at the join: %s -> %s', ...
+       Q.dayText{3}, M2f.dayText{1});
+assert(day_of(M1f.dayText{1}) < dLeg1, ['deliberate failure: the default one-decimal format no longer ' ...
+       'steps back (%s -> %s); this check would not catch a regression'], Q.dayText{3}, M1f.dayText{1});
 
 % ---- 8. join ----
 mp42 = fullfile(tmp, 'leg2_short.mp4');
@@ -210,6 +262,108 @@ assert(strcmp(thrown, 'full_mission_movie:mismatch') && ~isfile(fullfile(tmp, 'b
        'frame-size mismatch not refused (%s)', thrown);
 fprintf('  join of a 640 x 360 movie refused (full_mission_movie:mismatch), nothing written\n');
 
+% ---- 8b. full_mission_movie renders both legs (short): end framing, counter ----
+jr = fullfile(tmp, 'joined_render.mp4');
+Jr = full_mission_movie(leg1Mat, leg2Mat, struct('outFile', jr, 'leg1Mp4', fullfile(tmp, 'r1.mp4'), ...
+                        'leg2Mp4', fullfile(tmp, 'r2.mp4'), 'fadeFrames', 5, ...
+                        'leg1Opts', struct('preview', true), 'leg2Opts', struct('maxFrames', 20)));
+dEnd1 = day_of(Jr.leg1.dayText{end});  dBeg2 = day_of(Jr.leg2.dayText{1});
+fprintf('  rendered join: leg 1 ends "%s", leg 2 starts "%s" (format %s); %d frames\n', Jr.leg1.dayText{end}, ...
+        Jr.leg2.dayText{1}, Jr.leg2.dayFormat, Jr.nFrames);
+assert(dBeg2 >= dEnd1 && strcmp(Jr.leg2.dayFormat, 'Day %5.2f'), 'rendered join: counter steps back');
+assert(max(abs(Jr.leg1.camera.targetEnd - M.camTarget(1, :))) < 1e-9, 'rendered join: end framing not from leg2Mat');
+assert(Jr.nFrames == 60 + 20 - 5 && ~isempty(Jr.checks), 'rendered join: frames %d', Jr.nFrames);
+
+% ---- 8c. full_mission_movie refusals (cheap: all before any rendering) ----
+protMp4 = fullfile(resDir, 'lunar_pnt_mission.mp4');
+protInfo = dir(protMp4);
+oldMp4 = fullfile(tmp, 'old_leg1.mp4');
+copyfile(mp4, oldMp4);
+java.io.File(oldMp4).setLastModified(int64(946684800000));             % 2000-01-01: older than the results
+T = load(leg1Mat);
+T.run_meta.verdict = 'not passed: GH';
+badLeg1 = fullfile(tmp, 'leg1_not_passed.mat');
+save(badLeg1, '-struct', 'T', '-v7.3');
+% relative paths are resolved against MATLAB's pwd; the JVM's user.dir
+% does not follow cd, so work from a folder that is NOT user.dir (the old
+% java-only resolution missed the protected file from there)
+here0 = pwd;
+cleanCd = onCleanup(@() cd(here0));
+jvmDir = char(java.lang.System.getProperty('user.dir'));
+if ~strcmp(canon_path(jvmDir), canon_path(resDir))
+    cd(resDir);
+    relProt = 'lunar_pnt_mission.mp4';
+    dotProt = fullfile('inputs', '..', 'lunar_pnt_mission.mp4');
+else
+    cd(fullfile(resDir, 'inputs'));
+    relProt = fullfile('..', 'lunar_pnt_mission.mp4');
+    dotProt = fullfile('..', 'inputs', '..', 'lunar_pnt_mission.mp4');
+end
+fprintf('  protected-path checks from pwd %s (JVM user.dir %s): "%s", "%s"\n', pwd, jvmDir, relProt, dotProt);
+fm = {{leg1Mat, leg2Mat, struct('render', false, 'leg1Mp4', oldMp4, 'leg2Mp4', mp42, ...
+                                'outFile', fullfile(tmp, 'x1.mp4'))}, 'full_mission_movie:stale'; ...
+      {badLeg1, leg2Mat, struct('render', false, 'leg1Mp4', mp4, 'leg2Mp4', mp42, ...
+                                'outFile', fullfile(tmp, 'x2.mp4'))}, 'combined_timeline:verdict'; ...
+      {leg1Mat, leg2Mat, struct('leg1Opts', struct('leg2Mat', badLeg1), ...
+                                'outFile', fullfile(tmp, 'x3.mp4'))}, 'full_mission_movie:leg2Mat'; ...
+      {leg1Mat, leg2Mat, struct('render', false, 'leg1Mp4', mp4, 'leg2Mp4', mp42, ...
+                                'outFile', relProt)}, 'full_mission_movie:protected'; ...
+      {leg1Mat, leg2Mat, struct('render', false, 'leg1Mp4', mp4, ...
+                                'leg2Mp4', dotProt, ...
+                                'outFile', fullfile(tmp, 'x5.mp4'))}, 'full_mission_movie:protected'};
+for kf = 1:size(fm, 1)
+    id = '';
+    try
+        full_mission_movie(fm{kf, 1}{:});
+    catch err
+        id = err.identifier;
+        msg = err.message;
+    end
+    assert(strcmp(id, fm{kf, 2}), 'full_mission_movie refusal %d: expected %s, got "%s"', kf, fm{kf, 2}, id);
+    fprintf('  full_mission_movie refused (%s): %s\n', id, msg(1:min(150, end)));
+end
+assert(~isfile(fullfile(tmp, 'x1.mp4')) && ~isfile(fullfile(tmp, 'x2.mp4')) && ~isfile(fullfile(tmp, 'x5.mp4')), ...
+       'a refused join wrote its output');
+
+% ---- 8d. leg1_movie: the protected file (relative and '..' paths) and vetting ----
+lm = {struct('dayList', 0, 'previewDir', tmp, 'outFile', relProt), ...
+      struct('preview', true, 'outFile', dotProt)};
+for kl = 1:numel(lm)
+    id = '';
+    try
+        leg1_movie(leg1Mat, lm{kl});
+    catch err
+        id = err.identifier;
+    end
+    assert(strcmp(id, 'leg1_movie:protected'), 'leg1_movie protected path %d: got "%s"', kl, id);
+end
+fprintf('  leg1_movie refused the owner''s movie by a relative and a ''..'' path (leg1_movie:protected)\n');
+if ~isempty(protInfo)
+    nowP = dir(protMp4);
+    assert(nowP.datenum == protInfo.datenum && nowP.bytes == protInfo.bytes, 'the owner''s movie was touched');
+end
+clear cleanCd
+T2 = load(leg1Mat);  T2.P1(3).G.pass = false;
+badG = fullfile(tmp, 'leg1_gpass.mat');  save(badG, '-struct', 'T2', '-v7.3');
+T3 = load(leg1Mat);  T3.run_meta.knobs.seamFinalT0 = 0.01;
+badS = fullfile(tmp, 'leg1_seam.mat');  save(badS, '-struct', 'T3', '-v7.3');
+bads = {badLeg1, badG, badS};
+for kv = 1:numel(bads)
+    id = '';
+    try
+        leg1_movie(bads{kv}, struct('dayList', 0, 'previewDir', tmp));
+    catch err
+        id = err.identifier;
+        msg = err.message;
+    end
+    assert(strcmp(id, 'leg1_movie:verdict'), 'unvetted results %d rendered (got "%s")', kv, id);
+    fprintf('  leg1_movie refused: %s\n', msg);
+end
+U = leg1_movie(badLeg1, struct('dayList', 0, 'previewDir', tmp, 'pngPrefix', 'unvetted', 'allowUnvetted', true));
+assert(U.unvetted && strcmp(U.regimeText{1}, 'UNVETTED RESULTS') && ~Q.unvetted && ...
+       ~any(contains(Q.regimeText, 'UNVETTED')), 'allowUnvetted: stamp missing (or on vetted results)');
+fprintf('  allowUnvetted: rendered with "%s" stamped (%s); vetted results carry no stamp\n', U.regimeText{1}, U.vetting);
+
 % ---- 9. deliberate failures and refusals ----
 ids = cell(1, 3);
 calls = {{leg1Mat, struct('dayList', 0, 'previewDir', tmp, 'zoomScale', 0.5)}, ...
@@ -227,4 +381,12 @@ assert(isequal(ids, {'leg1_movie:containment', 'leg1_movie:noResults', 'leg1_mov
        'refusal ids: %s', strjoin(ids, ' '));
 ok = true;
 fprintf('  PASS\n');
+end
+
+% ------------------------------------------------------------------------
+function d = day_of(txt)
+% DAY_OF  The number a day counter displays ('Day  2.65' -> 2.65).
+%   INPUTS: txt char.  OUTPUTS: d scalar.
+d = sscanf(regexprep(txt, '^\D*', ''), '%f', 1);
+assert(isscalar(d) && isfinite(d), 'no day number in "%s"', txt);
 end

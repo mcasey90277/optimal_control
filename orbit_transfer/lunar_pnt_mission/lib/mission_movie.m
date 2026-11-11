@@ -117,6 +117,14 @@ function info = mission_movie(resultsMat, opts)
 %                                                   day (counter, caption,
 %                                                   strip tick labels) [d];
 %                                                   0 leaves frames unchanged
+%    .dayFormat             char ['Day %4.1f']      sprintf format of the day
+%                                                   counter (one number);
+%                                                   full_mission_movie asks
+%                                                   for 'Day %5.2f' (leg 1's)
+%                                                   so the counter never steps
+%                                                   back at the join; the
+%                                                   default leaves frames
+%                                                   unchanged
 %
 %% Outputs:
 %
@@ -188,6 +196,10 @@ function info = mission_movie(resultsMat, opts)
 %  info.displayDay          [n x 1]                 Day shown on screen per
 %                                                   render (frameDay +
 %                                                   dayOffset)
+%  info.dayFormat           char                    opts.dayFormat
+%  info.dayText             {n x 1} cell            The day counter's String
+%                                                   as DISPLAYED, read back
+%                                                   from the text object
 %
 %% Revision History:
 %  M. Casey                                                   (c) 11/10/2026
@@ -200,6 +212,7 @@ function info = mission_movie(resultsMat, opts)
 %  M. Casey  units from the results fingerprint, provenance in info,
 %            zoomScale test seam                              (c) 11/10/2026
 %  M. Casey  opts.dayOffset for the full-mission join         (c) 11/11/2026
+%  M. Casey  final fix wave: opts.dayFormat, info.dayText     (c) 11/11/2026
 %% ------------------------ Begin Code Sequence ---------------------------
 
 here = fileparts(fileparts(mfilename('fullpath')));        % lunar_pnt_mission/
@@ -233,7 +246,8 @@ def = struct('outFile',     fullfile(here, 'results', 'lunar_pnt_mission.mp4'), 
              'probeKm',     zeros(0, 3), ...
              'quality',     95, ...
              'zoomScale',   1, ...
-             'dayOffset',   0);
+             'dayOffset',   0, ...
+             'dayFormat',   'Day %4.1f');
 for f = fieldnames(opts).'
     if ~isfield(def, f{1})
         error('mission_movie:opts', 'unknown option ''%s''', f{1});
@@ -244,6 +258,9 @@ o = def;
 def0 = struct('outFile', fullfile(here, 'results', 'lunar_pnt_mission.mp4'));
 if any(mod(o.frameSize, 2)) || numel(o.frameSize) ~= 2
     error('mission_movie:frameSize', 'frameSize must be two even integers');
+end
+if ~(ischar(o.dayFormat) && isscalar(regexp(o.dayFormat, '%[-+ 0#]*\d*(\.\d+)?[fgde]')))
+    error('mission_movie:dayFormat', 'dayFormat must be a char sprintf format with one numeric conversion');
 end
 
 % ---- layout constants (the CR3BP units muStar, lStar, tStar are read
@@ -543,7 +560,8 @@ info = struct('outFile', '', 'nFrames', nR, 'nFramesMap', nF, 'frameSize', o.fra
               'phase', zeros(nR, nSc), ...
               'outlineVisible', false(nR, 2), 'moonTextured', G.moonTextured, ...
               'moonTexture', G.moonTexFile, 'provenance', prov, ...
-              'dayOffset', o.dayOffset, 'displayDay', fDay + o.dayOffset);
+              'dayOffset', o.dayOffset, 'displayDay', fDay + o.dayOffset, ...
+              'dayFormat', o.dayFormat, 'dayText', {cell(nR, 1)});
 gFirst = pole.tDays(find(isfinite(pole.gdop), 1));
 if isempty(gFirst), gFirst = inf; end
 
@@ -645,7 +663,8 @@ for rr = 1:nR
     gNow = NaN;
     kp = find(pole.tDays <= d0 + 1e-9, 1, 'last');
     if ~isempty(kp), gNow = pole.gdop(kp); end
-    set(G.txtDay, 'String', sprintf('Day %4.1f', d0 + o.dayOffset));
+    set(G.txtDay, 'String', sprintf(o.dayFormat, d0 + o.dayOffset));
+    info.dayText{rr} = char(G.txtDay.String);          % what the counter DISPLAYS
     set(G.txtOn,  'String', sprintf('On station %d / %d', nOn, nSc));
     if isinf(gNow)
         set(G.txtG, 'String', sprintf('South-pole GDOP %5s', 'inf'), 'Color', [1 0.45 0.45]);

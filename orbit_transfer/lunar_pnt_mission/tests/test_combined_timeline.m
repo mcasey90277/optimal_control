@@ -1,4 +1,4 @@
-function ok = test_combined_timeline()
+function [ok, skipped, note] = test_combined_timeline()
 %% Purpose:
 %
 %   Verifies combined_timeline on SYNTHETIC leg-1 and leg-2 results files
@@ -17,9 +17,14 @@ function ok = test_combined_timeline()
 %   (incomplete), T0 before the last leg-1 arrival (epoch), a leg-1
 %   verdict other than PASS (verdict), a leg-1 transfer accepted with
 %   G.pass false (incomplete), a leg-2 gate table with G0 FAIL or without
-%   G0 (leg2); (4) then,
-%   when both real results files exist, one run on them (compatibility
-%   passes, six rows, leg-2 bars shifted by T0).
+%   G0 (leg2); (3b) the package at the primary path replaced and a
+%   snapshot (any name) in inputs/ beside the leg-1 results: built from the
+%   snapshot (packageSource 'snapshot'); no snapshot: refused (identity);
+%   (4) then, when both real results files exist and leg1_package_for
+%   finds their package (default path or snapshot), one run on them
+%   (compatibility passes, six rows, leg-2 bars shifted by T0); when no
+%   package matches, that section is skipped WITH A NOTE (run_tests
+%   reports PASS*), never failed.
 %
 %% Inputs:
 %
@@ -29,19 +34,22 @@ function ok = test_combined_timeline()
 %
 %  ok                       logical                 true if every assertion
 %                                                   held (else it throws)
+%  skipped                  logical                 false (never skipped as
+%                                                   a whole)
+%  note                     char                    '' or why the real-file
+%                                                   section was skipped
 %
 %% Revision History:
 %  M. Casey                                                   (c) 11/11/2026
 %  M. Casey  fix round 1: verdict, G.pass, leg-2 gate refusals  (c) 11/11/2026
+%  M. Casey  final fix wave: tempname, snapshot fallback      (c) 11/11/2026
 %  Copyright Coorbital Inc.
 %% ------------------------ Begin Code Sequence ---------------------------
 
 here = fileparts(mfilename('fullpath'));
 root = fileparts(here);
 run(fullfile(root, 'setup_lunar_pnt_paths.m'));
-scratch = '/private/tmp/claude-501/-Users-msc-Desktop-optimal-control/70650963-d331-4c2e-9b00-6156c2bd5033/scratchpad/leg1';
-if ~isfolder(scratch), mkdir(scratch); end
-tmp = tempname(scratch);
+tmp = tempname;
 mkdir(tmp);
 cleanTmp = onCleanup(@() rmdir(tmp, 's'));
 nFig0 = numel(findall(groot, 'Type', 'figure'));
@@ -125,11 +133,44 @@ g1 = fullfile(tmp, 'stale_leg1.mat');  save_leg1(g1, x1);
 assert(height(Ts) == 6 && ~infoS.packageMatch, 'allowStalePackage should build and report the mismatch');
 fprintf('  allowStalePackage: built, packageMatch = %d\n', infoS.packageMatch);
 
+% ---- 3b. package replaced at the primary path, snapshot beside the results ----
+other = fullfile(tmp, 'fleet_pkg.mat');
+pkgVar = magic(6);
+save(other, 'pkgVar');
+mkdir(fullfile(tmp, 'inputs'));
+snap = fullfile(tmp, 'inputs', 'any_name.mat');
+copyfile(pkg, snap);
+[Tb, infoB] = combined_timeline(f1, f2, struct('catalogMat', other));
+assert(height(Tb) == 6 && infoB.packageMatch && strcmp(infoB.packageFile, snap) && ...
+       strcmp(infoB.packageSource, 'snapshot'), 'replaced package: snapshot fallback not used (%s)', infoB.packageFile);
+fprintf('  package replaced at the primary path: fell back to the snapshot %s\n', infoB.packageFile);
+delete(snap);
+id = '';
+try
+    combined_timeline(f1, f2, struct('catalogMat', other));
+catch err
+    id = err.identifier;
+end
+assert(strcmp(id, 'combined_timeline:identity'), 'replaced package, no snapshot: expected identity, got "%s"', id);
+fprintf('  package replaced and no snapshot: refused (%s)\n', id);
+
 % ---- 4. the real files, when present ----
 r1 = fullfile(root, 'results', 'lunar_pnt_leg1_study.mat');
 r2 = fullfile(root, 'results', 'lunar_pnt_mission_study.mat');
+note = '';  pkgR = '';  whyR = '';
 if isfile(r1) && isfile(r2)
+    Rm = load(r1, 'run_meta');
+    [pkgR, whyR] = leg1_package_for(Rm.run_meta.identity);
+end
+if isfile(r1) && isfile(r2) && isempty(pkgR)
+    note = sprintf('real files: SKIPPED, no package matches the saved leg-1 results (%s)', whyR);
+    fprintf('  %s\n', note);
+elseif isfile(r1) && isfile(r2)
     [Tr, infoR] = combined_timeline(r1, r2, struct());
+    fprintf('  real files: package %s (%s)\n', infoR.packageFile, infoR.packageSource);
+    if ~strcmp(infoR.packageSource, 'primary')
+        note = sprintf('real files: the default package is not the saved results''; used %s', infoR.packageFile);
+    end
     R1 = load(r1, 'T0', 'P1');
     R2 = load(r2, 'P');
     dayNd = infoR.tStar/86400;
@@ -143,6 +184,7 @@ else
 end
 fprintf('  PASS\n');
 ok = true;
+skipped = false;
 end
 
 % ------------------------------------------------------------------------

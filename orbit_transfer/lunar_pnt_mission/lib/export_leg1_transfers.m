@@ -21,7 +21,11 @@ function E = export_leg1_transfers(leg1Mat, opts)
 %   did NOT: no catalog acceptance by pumpkyn tfMin beyond the polish's own
 %   ms_tfmin solve, no Earth-floor constraint inside the optimisation (the
 %   clearance is checked after the fact), no pointwise PMP checks on a
-%   tight flight, no admission to any library or package.
+%   tight flight, no admission to any library or package. SCOPE: the
+%   second-order verdict and "minimum-time" refer to the fixed-endpoint
+%   problem to the slot's arrival point (a local test at the root); the
+%   moving-target rendezvous condition is not checked (said in the note
+%   and first in every notChecked list).
 %
 %   Transfers with P1(k).accepted false are not exported; results with
 %   none accepted throw export_leg1_transfers:noTransfers. An ACCEPTED
@@ -65,6 +69,7 @@ function E = export_leg1_transfers(leg1Mat, opts)
 %% Revision History:
 %  M. Casey                                                   (c) 11/11/2026
 %  M. Casey  fix round 1: refuse G.pass false, note from verdicts (c) 11/11/2026
+%  M. Casey  final fix wave: scope sentence, canon_path         (c) 11/11/2026
 %  Copyright Coorbital Inc.
 %% ------------------------ Begin Code Sequence ---------------------------
 
@@ -86,9 +91,9 @@ verbose = fdef(opts, 'verbose', true);
 tExport = tic;
 
 %% Output path: inside results/ only
-outFile = canon(outFile);
-if ~startsWith(outFile, [canon(resDir) filesep])
-    error('export_leg1_transfers:outFile', 'refusing to write outside %s: %s', canon(resDir), outFile);
+outFile = canon_path(outFile);
+if ~startsWith(outFile, [canon_path(resDir) filesep])
+    error('export_leg1_transfers:outFile', 'refusing to write outside %s: %s', canon_path(resDir), outFile);
 end
 [outDir, outName] = fileparts(outFile);
 
@@ -148,7 +153,9 @@ for ka = 1:numel(acc)
                         'and mintime_hypothesis_gates (minLamV %.3g, minQmt %.3g, dimS %g): status %s'], ...
                        char(string(sec.conjVerdict)), sec.conjPass, sec.conjCovered, sec.minLamV, ...
                        sec.minQmt, sec.dimS, sec.status)};
-    notChecked = {'catalog acceptance by pumpkyn tfMin (only the polish''s own ms_tfmin solve and the second-order re-solve)', ...
+    notChecked = {['the moving-target rendezvous condition: the second-order verdict and "minimum-time" refer to ' ...
+                   'the fixed-endpoint problem to the slot''s arrival point (a local test at the root)'], ...
+                  'catalog acceptance by pumpkyn tfMin (only the polish''s own ms_tfmin solve and the second-order re-solve)', ...
                   'an Earth floor (or any path constraint) inside the optimisation: clearance is checked after the fact', ...
                   'pmp_pointwise_checks on a tight-tolerance flight, lift_margin, the H6 margin gate, a dense conjugate scan', ...
                   'admission to any library or package: this sidecar is not part of the GTO -> DRO package'};
@@ -173,6 +180,8 @@ provenance = struct('run_meta', R.run_meta, 'resultsFile', leg1Mat, ...
                     'exportWallS', NaN);
 V = [entries.verdicts];
 nE = numel(entries);
+scope = ['The second-order verdict and "minimum-time" refer to the fixed-endpoint problem to the slot''s ' ...
+         'arrival point (a local test at the root); the moving-target rendezvous condition is not checked.'];
 cnt = @(f) nnz(arrayfun(@(v) isequal(v.(f), true), V));
 st = {V.secondStatus};
 note = sprintf(['%d OFF-GRID minimum-time GTO -> DRO transfers (5 N per %g kg, Isp %g s) captured from the ' ...
@@ -181,7 +190,7 @@ note = sprintf(['%d OFF-GRID minimum-time GTO -> DRO transfers (5 N per %g kg, I
                 'true GTO orientation and onto its exact DRO slot. Stored verdicts: flight admissible %d of %d, ' ...
                 'arrival %d of %d (max miss %.3g km), one GTO %d of %d, hand-off at T0 %d of %d, Earth floor %d ' ...
                 'of %d (min located %.1f km), Moon floor %d of %d (min located %.1f km), all gates %d of %d. ' ...
-                'Second-order statuses: %s. NOT checked: catalog acceptance by pumpkyn tfMin, an Earth floor ' ...
+                'Second-order statuses: %s. %s NOT checked: catalog acceptance by pumpkyn tfMin, an Earth floor ' ...
                 'inside the optimisation, tight-flight pointwise checks, lift_margin, H6, a dense conjugate ' ...
                 'scan. Not admitted to any library; the package is not modified.'], ...
                nE, rg.m0kg, rg.ispS, R.run_meta.date, R.run_meta.optimal_control, ...
@@ -189,7 +198,7 @@ note = sprintf(['%d OFF-GRID minimum-time GTO -> DRO transfers (5 N per %g kg, I
                idn.sha256(1:12), idn.created, idn.n_entries, cnt('flightAdmissible'), nE, cnt('arrivalPass'), nE, ...
                max([V.arrivalMissKm]), cnt('oneGtoPass'), nE, cnt('handoffPass'), nE, cnt('earthPass'), nE, ...
                min([V.earthMinKm]), cnt('moonPass'), nE, min([V.moonMinKm]), cnt('gatesPass'), nE, ...
-               strjoin(st, ', '));
+               strjoin(st, ', '), scope);
 usage = {'load(''leg1_transfers_gto_dro_5N.mat'');   % one variable: leg1_transfers'; ...
          'e  = leg1_transfers.entries(1);  r = leg1_transfers.regime;'; ...
          'pr = nd_propulsion(r.thrustN, r.ispS, r.m0kg, r.lStar, r.tStar);'; ...
@@ -219,16 +228,6 @@ if verbose
                 e.verdicts.earthMinKm, e.verdicts.moonMinKm, e.verdicts.secondStatus);
     end
 end
-end
-
-% ------------------------------------------------------------------------
-function c = canon(p)
-% CANON  Canonical absolute path of a file or folder that need not exist
-%   (relative to pwd, '.', '..' and links resolved).  INPUTS: p char.
-%   OUTPUTS: c char.
-p = char(p);
-if ~java.io.File(p).isAbsolute(), p = fullfile(pwd, p); end
-c = char(java.io.File(p).getCanonicalPath());
 end
 
 % ------------------------------------------------------------------------

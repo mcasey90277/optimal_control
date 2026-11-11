@@ -10,9 +10,13 @@ function [T, info] = combined_timeline(leg1Mat, leg2Mat, opts)
 %
 %   COMPATIBILITY FIRST (Review Focus 4); nothing is drawn or returned
 %   unless every check holds:
-%     identity    the leg-1 package identity stored in the leg-1 results
-%                 (run_meta.identity.sha256) equals the SHA-256 of the
-%                 package file now at opts.catalogMat, unless
+%     identity    a package file whose SHA-256 equals the leg-1 package
+%                 identity stored in the leg-1 results (run_meta.identity.
+%                 sha256) is found by leg1_package_for, HASH ONLY: the file
+%                 at opts.catalogMat (default: the GTO_DRO package path),
+%                 else run_meta.packageSnapshot, else a snapshot in
+%                 inputs/ beside the leg-1 results or in this campaign's
+%                 results/inputs; none -> refused unless
 %                 opts.allowStalePackage (then info.packageMatch says so)
 %     dro         the leg-1 DRO has period 1 (run_meta.tauD, 1e-9) and its
 %                 MD5 at 64 phases (run_meta.droMd5) equals the leg-2
@@ -67,7 +71,11 @@ function [T, info] = combined_timeline(leg1Mat, leg2Mat, opts)
 %                                                   .droWait .leg2 .onStation
 %
 %  info                     struct                  .T0Days .endDays .tStar
-%                                                   .packageMatch .checks
+%                                                   .packageMatch
+%                                                   .packageFile ('' if none)
+%                                                   .packageSource ('primary'
+%                                                   | 'extra' | 'snapshot' |
+%                                                   '') .checks
 %                                                   (char, one line each)
 %                                                   .fig (handle when
 %                                                   keepOpen, else [])
@@ -75,6 +83,8 @@ function [T, info] = combined_timeline(leg1Mat, leg2Mat, opts)
 %% Revision History:
 %  M. Casey                                                   (c) 11/11/2026
 %  M. Casey  fix round 1: verdict, G.pass and leg-2 gate checks (c) 11/11/2026
+%  M. Casey  final fix wave: package found by SHA-256 with a
+%            snapshot fallback (leg1_package_for)             (c) 11/11/2026
 %  Copyright Coorbital Inc.
 %% ------------------------ Begin Code Sequence ---------------------------
 
@@ -106,15 +116,25 @@ rm = A.run_meta;  fp = B.fingerprint;
 chk = {};
 
 %% Compatibility:
-shaNow = file_sha(catalogMat);
-packageMatch = strcmp(rm.identity.sha256, shaNow);
+snapX = {};
+if isfield(rm, 'packageSnapshot') && ~isempty(rm.packageSnapshot), snapX = {char(rm.packageSnapshot)}; end
+inDirs = unique({fullfile(fileparts(canon_path(leg1Mat)), 'inputs'), fullfile(here, 'results', 'inputs')}, 'stable');
+[pkgFile, pkgWhy, pkgInfo] = leg1_package_for(rm.identity, struct('primary', catalogMat, 'extra', {snapX}, ...
+                                                                  'inputsDirs', {inDirs}));
+packageMatch = ~isempty(pkgFile);
+if isfile(catalogMat), shaNow = file_sha256(catalogMat); else, shaNow = 'missing'; end
 if ~packageMatch && ~allowStale
     error('combined_timeline:identity', ['the leg-1 results were seeded from package %s... but the file ' ...
-          'now at %s is %s...; refusing (opts.allowStalePackage to override)'], ...
-          rm.identity.sha256(1:12), catalogMat, shaNow(1:12));
+          'now at %s is %s... and no snapshot matches (%s); refusing (opts.allowStalePackage to override)'], ...
+          rm.identity.sha256(1:12), catalogMat, shaNow(1:min(12, end)), pkgWhy);
 end
-chk{end+1} = sprintf('identity: package SHA-256 %s... %s', shaNow(1:12), ...
-                     tern(packageMatch, 'matches', 'DIFFERS (allowStalePackage)'));
+if packageMatch
+    chk{end+1} = sprintf('identity: package SHA-256 %s... matches (%s: %s)', rm.identity.sha256(1:12), ...
+                         pkgInfo.source, pkgFile);
+else
+    chk{end+1} = sprintf('identity: package SHA-256 %s... NOT FOUND (allowStalePackage; %s is %s...)', ...
+                         rm.identity.sha256(1:12), catalogMat, shaNow(1:min(12, end)));
+end
 if ~(abs(rm.tauD - 1) < 1e-9)
     error('combined_timeline:dro', 'the leg-1 DRO period is %.12g ND, not 1', rm.tauD);
 end
@@ -170,7 +190,8 @@ T = table((1:6).', [z6, td1]*dayNd, [td1, ta1]*dayNd, [ta1, T0 + z6]*dayNd, ...
           [T0 + z6, td2]*dayNd, [td2, ta2]*dayNd, [ta2, tEnd + z6]*dayNd, ...
           'VariableNames', {'sat', 'gtoWait', 'leg1', 'droCoast', 'droWait', 'leg2', 'onStation'});
 info = struct('T0Days', T0*dayNd, 'endDays', tEnd*dayNd, 'tStar', tStar, ...
-              'packageMatch', packageMatch, 'checks', {chk}, 'fig', []);
+              'packageMatch', packageMatch, 'packageFile', pkgFile, 'packageSource', pkgInfo.source, ...
+              'checks', {chk}, 'fig', []);
 
 %% Figure:
 if ~isempty(outPng) || keepOpen
@@ -214,21 +235,6 @@ function close_unless(fig, keep)
 % CLOSE_UNLESS  Close the figure this function opened unless kept.
 %   INPUTS: fig handle; keep logical.  OUTPUTS: none.
 if ~keep && isgraphics(fig), close(fig); end
-end
-
-% ------------------------------------------------------------------------
-function h = file_sha(f)
-% FILE_SHA  Hex SHA-256 of a file's bytes (leg1_inputs' recipe).
-%   INPUTS: f char.  OUTPUTS: h char [1 x 64].
-if ~isfile(f)
-    error('combined_timeline:identity', 'package file not found: %s', f);
-end
-md  = java.security.MessageDigest.getInstance('SHA-256');
-fid = fopen(f, 'r');
-raw = fread(fid, Inf, '*uint8');
-fclose(fid);
-md.update(raw);
-h = lower(reshape(dec2hex(typecast(md.digest(), 'uint8'), 2).', 1, []));
 end
 
 % ------------------------------------------------------------------------

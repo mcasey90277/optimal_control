@@ -382,9 +382,9 @@ full_mission_movie(leg1Mat, leg2Mat, struct());   % results/lunar_pnt_full_missi
 | call | needs | writes (all under `results/`, git-ignored) |
 |---|---|---|
 | `lunar_pnt_leg1_study` (edit the knobs block, or set `leg1_opts`) | the GTO -> DRO package, the leg-2 results for the timeline | `lunar_pnt_leg1_study.mat` (`S S0 P1 T0 T0sched knobs run_meta failed gates exclude massTot slotOutcome`), `leg1_transfers_gto_dro_5N.mat` (sidecar), `leg1_schedule.png`, `leg1_3d.png`, `leg1_mass.png`, `mission_timeline.png` |
-| `[T, info] = combined_timeline(leg1Mat, leg2Mat, opts)` | the two results files, the package on the path in `opts.catalogMat` | the figure when `opts.outPng` is set; `T` is a six-row table of [start end] pairs in days on the leg-1 clock (`gtoWait leg1 droCoast droWait leg2 onStation`); `info.T0Days`, `info.endDays`, `info.packageMatch`, `info.checks` |
-| `info = leg1_movie(leg1Mat, opts)` (`''` = default results file) | `lunar_pnt_leg1_study.mat` | `lunar_pnt_leg1.mp4` (1280 x 720, 30 fps, 30 s); `opts.preview = true` writes `lunar_pnt_leg1_preview.mp4`, `opts.dayList` / `opts.frameList` write PNG stills to `movie_preview/` |
-| `info = full_mission_movie(leg1Mat, leg2Mat, opts)` (`''` = default files) | both results files | `lunar_pnt_mission_dayoffset.mp4` (leg 2 re-rendered with its day counter continuing from T0; `lunar_pnt_mission.mp4` is never overwritten) and `lunar_pnt_full_mission.mp4` (leg 1 + leg 2, 15-frame cross-fade, 2,985 frames, 99.5 s) |
+| `[T, info] = combined_timeline(leg1Mat, leg2Mat, opts)` | the two results files, a package file with the leg-1 run's SHA-256 (`opts.catalogMat`, else a snapshot; `leg1_package_for`) | the figure when `opts.outPng` is set; `T` is a six-row table of [start end] pairs in days on the leg-1 clock (`gtoWait leg1 droCoast droWait leg2 onStation`); `info.T0Days`, `info.endDays`, `info.packageMatch`, `info.packageFile`, `info.packageSource`, `info.checks` |
+| `info = leg1_movie(leg1Mat, opts)` (`''` = default results file) | `lunar_pnt_leg1_study.mat` with verdict PASS, six accepted with `G.pass`, no test seam (else `leg1_movie:verdict`; `opts.allowUnvetted` stamps UNVETTED RESULTS) | `lunar_pnt_leg1.mp4` (1280 x 720, 30 fps, 30 s); `opts.preview = true` writes `lunar_pnt_leg1_preview.mp4`, `opts.dayList` / `opts.frameList` write PNG stills to `movie_preview/`; never `lunar_pnt_mission.mp4` (`leg1_movie:protected`) |
+| `info = full_mission_movie(leg1Mat, leg2Mat, opts)` (`''` = default files) | both results files, compatible by `combined_timeline`'s checks (run first); with `render = false`, both MP4s newer than their results (else `full_mission_movie:stale`) | `lunar_pnt_mission_dayoffset.mp4` (leg 2 re-rendered with its day counter continuing from T0 in leg 1's two-decimal format, so it never steps back at the join; leg 1's end framing from the same `leg2Mat`) and `lunar_pnt_full_mission.mp4` (leg 1 + leg 2, 15-frame cross-fade, 2,985 frames, 99.5 s); no output may resolve to `lunar_pnt_mission.mp4` (`full_mission_movie:protected`) |
 
 `leg1Mat` and `leg2Mat` are the paths of `results/lunar_pnt_leg1_study.mat` and
 `results/lunar_pnt_mission_study.mat`. The leg-1 study is a numbered script like
@@ -490,6 +490,9 @@ candidate is tried first.
 
 NOT covered:
 
+- The second-order verdict and "minimum-time" refer to the fixed-endpoint
+  problem to the slot's arrival point (a local test at the root); the
+  moving-target rendezvous condition is not checked.
 - The refined solutions carry no path constraint in the optimisation: Earth and
   Moon clearance is checked after the fact, on the located minimum.
 - The GTO wait is Keplerian, not propagated in the CR3BP.
@@ -571,12 +574,21 @@ The PILOT package `orbit_transfer/GTO_DRO/results/costate_catalog_gto_dro.mat`
 clean 5 N cells (`has_solution` and `conj_pass == 1` at rung 5), SHA-256 beginning
 `e57d9236` (full `e57d9236f8264d026f3f5a7bcd1fb6ce9e3c698958d04ed0b78cbbb0669574d3`),
 created 2026-11-11. A snapshot is kept at
-`results/inputs/costate_catalog_gto_dro_pilot_e57d9236.mat`; the movie code falls
-back to it when the package path now holds a different file. When the fleet's
-package replaces the pilot, the leg-1 study must be re-run (and its test pins
-re-set): `combined_timeline` compares the package's SHA-256 recorded in
-`run_meta.identity` with the file now on the path and refuses with
-`combined_timeline:identity`. In this package `sheets(k).tauDRO` holds the
+`results/inputs/costate_catalog_gto_dro_pilot_e57d9236.mat`. Every leg-1 run now
+keeps its package automatically (`leg1_snapshot_package`): any file in
+`<outDir>/inputs` whose own SHA-256 equals the package's is the snapshot (the name
+is not used), else the package is copied there as
+`costate_catalog_gto_dro_<first 8 hex>.mat`, never overwriting; the path is
+recorded in `run_meta.packageSnapshot`. Everything that reads saved leg-1 results
+(`leg1_movie`, `combined_timeline`, the tests) finds the package with
+`leg1_package_for`: the default path if its SHA-256 matches, else the recorded
+snapshot, else a matching file in `inputs/`, HASHED BEFORE anything loads it.
+When the fleet's package replaces the pilot, the saved results keep working
+from the snapshot; `combined_timeline` refuses with `combined_timeline:identity`
+only when no file anywhere matches (unless `allowStalePackage`), and the study
+test applies its headline pins only to results from the pilot package (SHA-256
+`e57d9236`), otherwise it reports PASS* with a SKIP note and still runs every
+structural check. In this package `sheets(k).tauDRO` holds the
 GTO orientation in degrees, not a DRO period; sheets are selected by
 `arr_params.tau == 1`.
 
@@ -606,16 +618,19 @@ the GTO -> DRO package or the shipped library.
 
 ### Leg-1 tests
 
-Eight tests belong to leg 1 (`run_tests` now runs 18 in all, about 17 min):
-`test_leg1_inputs`, `test_polish_gto_dro`, `test_schedule_gto_dro`,
-`test_leg1_gates`, `test_lunar_pnt_leg1_study`, `test_export_leg1_transfers`,
-`test_combined_timeline`, `test_leg1_movie`. The study, export and timeline
-tests read the saved results (and skip, passing, when no results file exists)
-and pin the headline numbers above.
+Nine tests belong to leg 1 (`run_tests` now runs 19 in all, about 17 min):
+`test_leg1_inputs`, `test_leg1_package_for`, `test_polish_gto_dro`,
+`test_schedule_gto_dro`, `test_leg1_gates`, `test_lunar_pnt_leg1_study`,
+`test_export_leg1_transfers`, `test_combined_timeline`, `test_leg1_movie`. The
+study, export and timeline tests read the saved results (and skip, passing, when
+no results file exists) and pin the headline numbers above when the results come
+from the pilot package. A test may return a third output, a note: `run_tests`
+then reports PASS* (passed, a section degraded, the note printed), never a
+failure; a false result or an error is always FAIL.
 
 ## Tests
 
-`tests/run_tests.m` runs all 18 tests, ten of leg 2 listed here and eight of
+`tests/run_tests.m` runs all 19 tests, ten of leg 2 listed here and nine of
 leg 1 (see Leg-1 tests; about 17 min in all). The ten leg-2 tests (about 15 min; measured 923 s
 on 2026-11-10, the six transfers certified ONCE, in the export test; the
 study test's export runs with `exportFullStatus = false`): `test_mission_inputs`,

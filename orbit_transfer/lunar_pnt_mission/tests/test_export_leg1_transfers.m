@@ -17,7 +17,10 @@ function [ok, skipped] = test_export_leg1_transfers()
 %   exported; results with none accepted are refused (noTransfers); an
 %   ACCEPTED transfer whose stored G.pass is false is refused (notPassed);
 %   the note is built from the stored verdicts (its gate counts and
-%   minimum clearances equal the entries');
+%   minimum clearances equal the entries') and carries the scope sentence
+%   (second order and "minimum-time" are the fixed-endpoint problem; the
+%   moving-target rendezvous condition is not checked), which also heads
+%   every notChecked list;
 %   (3) REFUSALS to write outside results/: an absolute path in a temporary
 %   folder, a path that leaves results/ through '..', and a sibling folder
 %   whose name starts with "results" -- each throws
@@ -38,6 +41,7 @@ function [ok, skipped] = test_export_leg1_transfers()
 %% Revision History:
 %  M. Casey                                                   (c) 11/11/2026
 %  M. Casey  fix round 1: notPassed refusal, note from verdicts  (c) 11/11/2026
+%  M. Casey  final fix wave: tempname, scope sentence          (c) 11/11/2026
 %  Copyright Coorbital Inc.
 %% ------------------------ Begin Code Sequence ---------------------------
 
@@ -52,9 +56,7 @@ if ~isfile(resultsMat)
     ok = true;  skipped = true;
     return
 end
-scratch = '/private/tmp/claude-501/-Users-msc-Desktop-optimal-control/70650963-d331-4c2e-9b00-6156c2bd5033/scratchpad/leg1';
-if ~isfolder(scratch), mkdir(scratch); end
-tmp = tempname(scratch);
+tmp = tempname;
 mkdir(tmp);
 cleanTmp = onCleanup(@() rmdir(tmp, 's'));
 outTest = fullfile(resDir, sprintf('.leg1_export_test_%s.mat', char(java.util.UUID.randomUUID())));
@@ -104,9 +106,14 @@ want = {sprintf('all gates %d of %d', nnz([V.gatesPass]), nE), ...
         sprintf('hand-off at T0 %d of %d', nnz([V.handoffPass]), nE), ...
         sprintf('min located %.1f km), Moon', min([V.earthMinKm])), ...
         sprintf('study verdict "%s"', R.run_meta.verdict)};
+want{end+1} = ['The second-order verdict and "minimum-time" refer to the fixed-endpoint problem to the ' ...
+               'slot''s arrival point (a local test at the root); the moving-target rendezvous condition ' ...
+               'is not checked.'];
 for kw = 1:numel(want)
     assert(contains(X.note, want{kw}), 'note does not carry "%s"', want{kw});
 end
+assert(all(arrayfun(@(e) contains(e.notChecked{1}, 'moving-target rendezvous'), X.entries)), ...
+       'notChecked does not name the moving-target rendezvous condition first');
 fprintf('  note built from the verdicts: %s\n', strjoin(want, '; '));
 
 % ---- 2. not-accepted transfers are not exported ----

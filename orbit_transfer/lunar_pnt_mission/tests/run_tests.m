@@ -23,6 +23,7 @@ function ok = run_tests()
 %  M. Casey  test_schedule_gto_dro added                      (c) 11/11/2026
 %  M. Casey  test_leg1_gates added                            (c) 11/11/2026
 %  M. Casey  leg-1 study, export, combined timeline tests     (c) 11/11/2026
+%  M. Casey  test_leg1_movie added                           (c) 11/11/2026
 %  Copyright Coorbital Inc.
 %% ------------------------ Begin Code Sequence ---------------------------
 
@@ -34,7 +35,8 @@ names = {'test_mission_inputs', 'test_leg1_inputs', 'test_polish_gto_dro', 'test
          'test_assemble_histories', 'test_mission_gdop', 'test_validate_pole_series', ...
          'test_pole_series_stats', ...
          'test_lunar_pnt_mission_study', 'test_mission_movie', 'test_export_mission_transfers', ...
-         'test_lunar_pnt_leg1_study', 'test_export_leg1_transfers', 'test_combined_timeline'};
+         'test_lunar_pnt_leg1_study', 'test_export_leg1_transfers', 'test_combined_timeline', ...
+         'test_leg1_movie'};
 res   = false(size(names));
 skp   = false(size(names));                % a test that returns a second output true was SKIPPED
 secs  = zeros(size(names));

@@ -113,6 +113,10 @@ function info = mission_movie(resultsMat, opts)
 %                                                   deliberate-failure
 %                                                   experiment of
 %                                                   mission_movie:containment)
+%    .dayOffset             scalar [0]              Added to every DISPLAYED
+%                                                   day (counter, caption,
+%                                                   strip tick labels) [d];
+%                                                   0 leaves frames unchanged
 %
 %% Outputs:
 %
@@ -180,6 +184,10 @@ function info = mission_movie(resultsMat, opts)
 %                                                   ('fingerprint' |
 %                                                   'mission_inputs'); NOT
 %                                                   drawn on screen
+%  info.dayOffset           scalar                  opts.dayOffset [d]
+%  info.displayDay          [n x 1]                 Day shown on screen per
+%                                                   render (frameDay +
+%                                                   dayOffset)
 %
 %% Revision History:
 %  M. Casey                                                   (c) 11/10/2026
@@ -191,6 +199,7 @@ function info = mission_movie(resultsMat, opts)
 %  periods, plume screen direction and probes for tests, review fixes.
 %  M. Casey  units from the results fingerprint, provenance in info,
 %            zoomScale test seam                              (c) 11/10/2026
+%  M. Casey  opts.dayOffset for the full-mission join         (c) 11/11/2026
 %% ------------------------ Begin Code Sequence ---------------------------
 
 here = fileparts(fileparts(mfilename('fullpath')));        % lunar_pnt_mission/
@@ -223,7 +232,8 @@ def = struct('outFile',     fullfile(here, 'results', 'lunar_pnt_mission.mp4'), 
              'plumePx',     62, ...
              'probeKm',     zeros(0, 3), ...
              'quality',     95, ...
-             'zoomScale',   1);
+             'zoomScale',   1, ...
+             'dayOffset',   0);
 for f = fieldnames(opts).'
     if ~isfield(def, f{1})
         error('mission_movie:opts', 'unknown option ''%s''', f{1});
@@ -484,6 +494,10 @@ cleanFig = onCleanup(@() close_if(fig));
 % wider zoom: drawn unclipped
 G = build_graphics(fig, scnPos, stripPos, droKm, tulKm, rMoonKm, pole, tArrD, dEnd, gLim, nSc, ...
                    o.moonTexture);
+if o.dayOffset ~= 0                       % strip ticks at round DISPLAYED days
+    xt = 5*ceil(o.dayOffset/5):5:o.dayOffset + dEnd;
+    set(G.axG, 'XTick', xt - o.dayOffset, 'XTickLabel', compose('%g', xt));
+end
 set(G.ax, 'CameraTarget', CAM.target, 'CameraPosition', CAM.position, ...
           'CameraViewAngle', CAM.viewAngleEnd);
 pd = droKm*[eh; ev].';
@@ -513,7 +527,7 @@ cleanVw = onCleanup(@() close_vw(vw, partFile));
 trDays = tArrD - tDepD;
 caps = {'Six spacecraft parked in a distant retrograde orbit', ...
         sprintf('Continuous-thrust transfers (%d-%d days each)', floor(min(trDays)), ceil(max(trDays))), ...
-        sprintf('Constellation complete: day %.1f', dLast), ...
+        sprintf('Constellation complete: day %.1f', dLast + o.dayOffset), ...
         sprintf('South-pole navigation geometry over %.0f days', dEnd - dLast)};
 capD = [-inf dFirstDep dLast dLast + 4 inf];        % hard cuts at these days (the
                                                      % parked caption ends at the FIRST departure)
@@ -528,7 +542,8 @@ info = struct('outFile', '', 'nFrames', nR, 'nFramesMap', nF, 'frameSize', o.fra
               'camModesManual', false(nR, 1), 'tauDND', tauD, 'tauTND', tauT, ...
               'phase', zeros(nR, nSc), ...
               'outlineVisible', false(nR, 2), 'moonTextured', G.moonTextured, ...
-              'moonTexture', G.moonTexFile, 'provenance', prov);
+              'moonTexture', G.moonTexFile, 'provenance', prov, ...
+              'dayOffset', o.dayOffset, 'displayDay', fDay + o.dayOffset);
 gFirst = pole.tDays(find(isfinite(pole.gdop), 1));
 if isempty(gFirst), gFirst = inf; end
 
@@ -630,7 +645,7 @@ for rr = 1:nR
     gNow = NaN;
     kp = find(pole.tDays <= d0 + 1e-9, 1, 'last');
     if ~isempty(kp), gNow = pole.gdop(kp); end
-    set(G.txtDay, 'String', sprintf('Day %4.1f', d0));
+    set(G.txtDay, 'String', sprintf('Day %4.1f', d0 + o.dayOffset));
     set(G.txtOn,  'String', sprintf('On station %d / %d', nOn, nSc));
     if isinf(gNow)
         set(G.txtG, 'String', sprintf('South-pole GDOP %5s', 'inf'), 'Color', [1 0.45 0.45]);
@@ -863,6 +878,7 @@ G.eaHead = patch(ov, 'XData', [0 0 0], 'YData', [0 0 0], 'FaceColor', [0.55 0.75
 G.eaTxt  = text(ov, 0, 0, 'to Earth', 'Color', [0.55 0.75 1.0], 'FontName', sans, 'FontSize', 11, ...
                 'HorizontalAlignment', 'center');
 G.ov = ov;
+G.axG = axG;
 end
 
 %% ------------------------------------------------------------------------

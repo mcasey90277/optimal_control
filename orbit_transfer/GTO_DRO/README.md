@@ -107,7 +107,7 @@ Run the pilot (sheet 2), then the chain on it, then the fleet:
     nohup ./run_gto_dro_batched.sh 2 6 1800 > /dev/null 2>&1 &
     # MATLAB, after the pilot's completion marker:
     build_gto_dro_catalog(struct('expectSheets', 1, 'deliverable', false))
-    nohup ./run_gto_dro_batched.sh "[1 3:16]" 6 1800 "" <tf0 from the pilot> > /dev/null 2>&1 &
+    nohup ./run_gto_dro_batched.sh "[9:12 1 3:8 13:16]" 6 1800 > /dev/null 2>&1 &
 
 Chain safeguards (fix round 1): a call with a sheet-writing stage on takes the
 fleet driver lock (`results/.gtodrocat_driver.lock`) and refuses with
@@ -139,3 +139,62 @@ source (`massDepleted`): reproduced with the guard and a 60 s cap as safety net,
 direct solve included; the cap never fired), and the 12 N rung is accepted
 (t_f 0.36518 ND, flown 4e-4 km). The batch driver trims `gtodrocat_matlab.log`
 to its first and last 2 MB whenever a pass leaves it above 200 MB.
+
+## Pilot findings (stage 2, 2026-11-11; sheet 0 deg / tau 1, `gto_dro_o000_tau1`)
+
+Recipe: no direct gate, refined flown gate 100 km, tfMin acceptance 1e-6, ms
+hard cap 300 s. 13 batch passes, 4 h 54 min, no hang, the cap never fired.
+Each line names the stage that measured it.
+
+- **Fleet engine (raw sheet, kept in `results/pilot_attempt3_raw/`).** Cells
+  solved per rung [15 12 10 7 5] N: 56 / 58 / 55 / 57 / 54 of 72 (280
+  entries; the 1000 km direct gate gave 57 / 50 / 33 / 26 / 10). 34 cells hold
+  the full ladder; 8 cells hold nothing (both attempts spent), four of them
+  at arrival phase 1. A failed rung no longer ends a ladder.
+- **tf0 calibration (raw sheet).** Accepted 15 N t_f: median 0.3098 ND, range
+  0.2589 to 0.3238 (n = 56). Within 0.02 of 0.30, so the fleet keeps
+  `tf0 = 0.30`.
+- **Earth sweep (chain stage 2).** 46 of the 280 entries fly below the 200 km
+  Earth floor and are demoted; 41 of them pass below the surface (deepest
+  -3,855 km). Per rung: 5 / 5 / 12 / 17 / 7. The plan expected none. 43 of
+  the 46 lie in a band of departure phases that moves with thrust (phases
+  11-12 of 12 at 15 and 12 N, 10-11 at 10 N, 8-10 at 7 N, 3-5 at 5 N), and the
+  dip is at the first perigee pass (t / t_f 0.03 to 0.12). Re-flown and
+  sampled at the 401 uniform node times, 45 of the 46 are below the floor at
+  a node, and 43 stay below it longer than one node spacing (up to 3.8): the
+  refined trajectory is not the direct solution, which holds the floor at
+  its nodes. The refinement (`ms_tfmin`) carries no Earth constraint. NOT
+  measured: whether the floor is active in the direct solution of those
+  cells (the sheet does not keep it); if it is, an unconstrained costate
+  entry cannot represent the optimum there and demotion is the final
+  verdict. The same sweep on the 1000 km-gate sheet finds 6 of 176 below
+  the floor, including the same two 15 N entries at -1,540 and -1,564 km, so
+  the 15 N violations do not come from dropping the direct gate.
+- **Unsolved cells (chain stage 3, phase continuation).** 8 of 8 repaired
+  (15 N t_f 0.2616 to 0.3274). The perigee row (departure phase 0), where the
+  engine had retired 2 of 6 cells, is solved at every rung afterwards (30 of
+  30 entries).
+- **Top-rung basin census (chain stage 4).** 18 refuted 15 N entries
+  re-solved from their 12 N entry: 10 landed on a faster branch (t_f shorter
+  by 0.034 to 0.040 ND, about 12 percent) and all 10 pass the conjugate test
+  afterwards; 5 returned the same solution and stay refuted; 3 were restored
+  (2 not faster, 1 faster but lost lower rungs). 15 N t_f after repairs:
+  median 0.3024, range 0.2589 to 0.3274 (n = 59).
+- **After the chain.** 59 / 60 / 51 / 47 / 54 of 72 per rung, 271 entries,
+  minimum flown Earth altitude 240 km.
+- **Conjugate sweep (stage 6).** 211 pass, 60 refuted; per rung 10 of 59, 7
+  of 60, 11 of 51, 12 of 47, 20 of 54. Only top rungs are repaired, so the
+  lower-rung refutations are a census, not a repair queue.
+- **Hypothesis gates (stage 7).** 271 of 271 (H2, H3, no abnormal lift).
+  **Audit (stage 8, reduced rule).** fly 3 / 3, accept 3 / 3, Earth 3 / 3.
+- **Blockers returned.** `earth-demoted` (46) and `conj` (60), both of the
+  waivable kind; nothing stale or unverified.
+- **Deep probe (six full-ladder cells, 9 rungs, separate sheet in
+  `results/deep_probe/`, cold start, not Earth-swept).** Solved per rung
+  [15 12 10 7 5 3 2 1.5 1] N: 5 5 5 5 5 5 1 0 0 of 6. One cell failed its
+  15 N cold start although the pilot had solved it. All five others reach
+  3 N; one reaches 2 N (t_f 1.027 ND); below that the refined flight misses
+  by 300,000 to 425,000 km or the direct solve fails. The wall on this sheet
+  is between 3 N and 2 N.
+- **Not answered here.** The 180-degree orientation; the fleet runs those
+  sheets first (`"[9:12 1 3:8 13:16]"`).

@@ -14,10 +14,14 @@ function g = mission_grid(name)
 %              cadence 348.1 s.
 %   'coarse' : a pole chunk [-89.9 -89.9] plus [-89.5 -75.5] at lat_res 2,
 %              lon 0:2:358 (9 x 180 = 1,620 points), cadence 300 s.
+%   'pole'   : ONE point, the lunar south pole: latitude -90 exactly,
+%              longitude 0, cadence 300 s (pumpkyn fromLLA puts it at
+%              1737.1 km straight below the Moon's centre; checked in
+%              test_validate_pole_series).
 %
 %% Inputs:
 %
-%  name                     char                    'paper' | 'coarse'
+%  name                     char                    'paper' | 'coarse' | 'pole'
 %
 %% Outputs:
 %
@@ -31,12 +35,13 @@ function g = mission_grid(name)
 %
 %% Revision History:
 %  M. Casey                                                   (c) 11/10/2026
+%  M. Casey  'pole' grid (one point at -90, 0)                (c) 11/10/2026
 %  Copyright Coorbital Inc.
 %% ------------------------ Begin Code Sequence ---------------------------
 
 %% Self-demo:
 if nargin == 0
-    for nm = {'paper', 'coarse'}
+    for nm = {'paper', 'coarse', 'pole'}
         gg = mission_grid(nm{1});
         nP = 0;
         for cc = 1:numel(gg.chunks)
@@ -66,7 +71,15 @@ switch lower(char(name))
         g.lon_res   = 2;
         g.dtSec     = 300;
         g.mask      = 0;
+    case 'pole'
+        g.name      = 'pole';
+        g.chunks    = {[-90 -90]};
+        g.lat_res   = 1;
+        g.lon_range = [0 0];
+        g.lon_res   = 1;
+        g.dtSec     = 300;
+        g.mask      = 0;
     otherwise
-        error('mission_grid:name', 'unknown grid "%s" (paper | coarse)', char(name));
+        error('mission_grid:name', 'unknown grid "%s" (paper | coarse | pole)', char(name));
 end
 end

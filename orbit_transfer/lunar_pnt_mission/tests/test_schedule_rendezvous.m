@@ -5,7 +5,11 @@ function ok = test_schedule_rendezvous()
 %   (2) agreement with a brute-force oracle written here with plain nested
 %   loops (no shared helper), (3) tolerance respected and admissible counts
 %   per pair, (4) refusal with schedule_rendezvous:noAssignment, (5) the
-%   six-column ranked matrices and the tDep matrix.
+%   six-column ranked matrices and the tDep matrix, (8) opts.exclude:
+%   empty reproduces the result bit for bit (random case and real
+%   catalog), the brute-force oracle with the same exclusions, a malformed
+%   list refused, and on the real catalog excluding spacecraft 1's chosen
+%   candidate moves that pair's best arrival to its next-ranked one.
 %
 %% Inputs:
 %
@@ -18,6 +22,7 @@ function ok = test_schedule_rendezvous()
 %
 %% Revision History:
 %  M. Casey                                                   (c) 11/10/2026
+%  M. Casey  exclusion checks (8)                             (c) 11/10/2026
 %  Copyright Coorbital Inc.
 %% ------------------------ Begin Code Sequence ---------------------------
 
@@ -150,6 +155,108 @@ S7 = schedule_rendezvous(2, a7, 0.5, 1, 4, b7, 0, ...
                          struct('tol', 0.01, 'nMaxRevs', 0, 'propKgPerNd', 1));
 assert(S7.tDep == 0 && S7.tArr == 2, 'snap: tDep %g', S7.tDep);
 fprintf('  snap: sD - droPhase0 = %.3g, tDep = %g\n', a7 - b7, S7.tDep);
+
+% ---- 8. exclusion list (opts.exclude rows [k j iD iA nRev]) ----
+% 8a. an empty exclude reproduces the result without the field, bit for bit
+o8 = o2;  o8.exclude = zeros(0, 5);
+S8 = schedule_rendezvous(tf, sD2, sA2, tauD, tauT, dp0, sp0, o8);
+assert(isequal(rmfield(S8, 'opts'), rmfield(S2, 'opts')), 'empty exclude changes the result');
+% 8b. brute-force oracle with exclusions: every chosen candidate of S2 plus
+% the second-ranked candidate of pair (1,1) are excluded
+ex = [(1:K).', S2.assign.', S2.iD.', S2.iA.', S2.nRev.'];
+if size(S2.ranked{1, 1}, 1) >= 2
+    ex = [ex; 1 1 S2.ranked{1, 1}(2, 2:4)];
+end
+o8b = o2;  o8b.exclude = ex;
+S8b = schedule_rendezvous(tf, sD2, sA2, tauD, tauT, dp0, sp0, o8b);
+bfArr = inf(K, K);  bfCnt = zeros(K, K);  bfProp = inf(K, K);
+for kk = 1:K
+    for jj = 1:K
+        for id = 1:nD
+            for ia = 1:nA
+                for nn = 0:nMax
+                    if any(ex(:, 1) == kk & ex(:, 2) == jj & ex(:, 3) == id & ...
+                           ex(:, 4) == ia & ex(:, 5) == nn)
+                        continue
+                    end
+                    d = mod(sD2(id) - dp0(kk), 1);
+                    if d > 1 - 1e-9, d = 0; end
+                    tdep = tauD*d + nn*tauD;
+                    tarr = tdep + tf(id, ia);
+                    r = mod(sA2(ia) - mod(sp0(jj) + tarr/tauT, 1), 1);
+                    if r > 0.5, r = r - 1; end
+                    if abs(r) <= tol
+                        bfCnt(kk, jj) = bfCnt(kk, jj) + 1;
+                        pk = 1.7*tf(id, ia);
+                        if tarr < bfArr(kk, jj) - 1e-12 || ...
+                           (abs(tarr - bfArr(kk, jj)) <= 1e-12 && pk < bfProp(kk, jj))
+                            bfArr(kk, jj) = tarr;  bfProp(kk, jj) = pk;
+                        end
+                    end
+                end
+            end
+        end
+    end
+end
+bfLast = inf;  bfAssign = [];  bfTot = inf;
+for kp = 1:6
+    p = allP(kp, :);
+    tl = 0;  tp = 0;
+    for kk = 1:K
+        tl = max(tl, bfArr(kk, p(kk)));
+        tp = tp + bfProp(kk, p(kk));
+    end
+    if tl < bfLast - 1e-12 || (abs(tl - bfLast) <= 1e-12 && tp < bfTot - 1e-12)
+        bfLast = tl;  bfAssign = p;  bfTot = tp;
+    end
+end
+assert(isfinite(bfLast), 'oracle with exclusions found no assignment (bad test seed)');
+assert(abs(S8b.tLast - bfLast) <= 1e-12, 'excluded brute tLast %g vs %g', S8b.tLast, bfLast);
+assert(isequal(S8b.assign, bfAssign), 'excluded brute assign');
+assert(isequal(S8b.nAdmissible, bfCnt), 'excluded nAdmissible vs brute');
+bt = S8b.best.tArr;  bt(isnan(bt)) = inf;
+assert(isequal(isfinite(bt), isfinite(bfArr)) && ...
+       max(abs(bt(isfinite(bfArr)) - bfArr(isfinite(bfArr)))) <= 1e-12, 'excluded best.tArr');
+for kk = 1:K
+    for jj = 1:K
+        R = S8b.ranked{kk, jj};
+        hit = ex(ex(:, 1) == kk & ex(:, 2) == jj, 3:5);
+        assert(~any(ismember(R(:, 2:4), hit, 'rows')), 'excluded row survives in pair (%d,%d)', kk, jj);
+    end
+end
+fprintf('  exclude (oracle): %d rows, tLast %.6f -> %.6f, assign [%d %d %d]\n', ...
+        size(ex, 1), S2.tLast, S8b.tLast, S8b.assign);
+% 8c. malformed exclude is refused
+msgId = '';
+o8c = o2;  o8c.exclude = [1 2 3];
+try
+    schedule_rendezvous(tf, sD2, sA2, tauD, tauT, dp0, sp0, o8c);
+catch err
+    msgId = err.identifier;
+end
+assert(strcmp(msgId, 'schedule_rendezvous:exclude'), 'malformed exclude id "%s"', msgId);
+% 8d. REAL catalog: excluding spacecraft 1's chosen candidate for its slot
+% moves that pair's best arrival to its next-ranked candidate; an empty
+% exclude reproduces the committed result bit for bit
+M = mission_inputs();
+oR = struct('tol', 0.005, 'nMaxRevs', 10, 'propKgPerNd', M.propKgPerNd);
+SR = schedule_rendezvous(M.tf, M.sD, M.sA, M.tauD, M.tauT, M.droPhase0, M.slotPhase0, oR);
+oRe = oR;  oRe.exclude = zeros(0, 5);
+SRe = schedule_rendezvous(M.tf, M.sD, M.sA, M.tauD, M.tauT, M.droPhase0, M.slotPhase0, oRe);
+assert(isequal(rmfield(SRe, 'opts'), rmfield(SR, 'opts')), 'real catalog: empty exclude changes the result');
+j1 = SR.assign(1);
+R1 = SR.ranked{1, j1};
+oRx = oR;  oRx.exclude = [1 j1 SR.iD(1) SR.iA(1) SR.nRev(1)];
+SRx = schedule_rendezvous(M.tf, M.sD, M.sA, M.tauD, M.tauT, M.droPhase0, M.slotPhase0, oRx);
+assert(size(R1, 1) >= 2, 'real catalog: pair (1,%d) has a single candidate', j1);
+assert(isequal(SRx.ranked{1, j1}, R1(2:end, :)), 'real catalog: ranked list not shifted by one');
+assert(SRx.best.tArr(1, j1) == R1(2, 1) && SRx.best.iD(1, j1) == R1(2, 2) && ...
+       SRx.best.iA(1, j1) == R1(2, 3) && SRx.best.nRev(1, j1) == R1(2, 4), ...
+       'real catalog: best of pair (1,%d) is not the next-ranked candidate', j1);
+assert(SRx.nAdmissible(1, j1) == SR.nAdmissible(1, j1) - 1, 'real catalog: count');
+d = M.tStar/86400;
+fprintf('  exclude (real): pair (1,%d) best %.4f d -> %.4f d; last arrival %.4f d -> %.4f d\n', ...
+        j1, SR.best.tArr(1, j1)*d, SRx.best.tArr(1, j1)*d, SR.tLast*d, SRx.tLast*d);
 ok = true;
 fprintf('  PASS\n');
 end

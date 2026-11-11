@@ -25,14 +25,20 @@ run(fullfile(fileparts(here), 'setup_lunar_pnt_paths.m'));
 addpath(here);
 
 names = {'test_mission_inputs', 'test_schedule_rendezvous', 'test_polish_rendezvous', ...
-         'test_assemble_histories', 'test_mission_gdop'};
+         'test_assemble_histories', 'test_mission_gdop', 'test_validate_pole_series', ...
+         'test_lunar_pnt_mission_study', 'test_mission_movie'};
 res   = false(size(names));
+skp   = false(size(names));                % a test that returns a second output true was SKIPPED
 secs  = zeros(size(names));
 for kk = 1:numel(names)
     fprintf('\n######## %s\n', names{kk});
     t0 = tic;
     try
-        res(kk) = feval(names{kk});
+        if nargout(names{kk}) >= 2
+            [res(kk), skp(kk)] = feval(names{kk});
+        else
+            res(kk) = feval(names{kk});
+        end
     catch err
         fprintf('  ERROR %s\n', err.message);
         res(kk) = false;
@@ -40,13 +46,15 @@ for kk = 1:numel(names)
     secs(kk) = toc(t0);
 end
 
-fprintf('\n%-28s %-6s %8s\n', 'test', 'result', 'seconds');
+fprintf('\n%-30s %-6s %8s\n', 'test', 'result', 'seconds');
 for kk = 1:numel(names)
-    if res(kk), s = 'PASS'; else, s = 'FAIL'; end
-    fprintf('%-28s %-6s %8.1f\n', names{kk}, s, secs(kk));
+    if skp(kk), s = 'SKIP'; elseif res(kk), s = 'PASS'; else, s = 'FAIL'; end
+    fprintf('%-30s %-6s %8.1f\n', names{kk}, s, secs(kk));
 end
 ok = all(res);
-fprintf('\nlunar_pnt_mission: %d of %d passed\n', nnz(res), numel(res));
+fprintf('\nlunar_pnt_mission: %d of %d passed', nnz(res & ~skp), numel(res));
+if any(skp), fprintf(', %d SKIPPED (%s)', nnz(skp), strjoin(names(skp), ', ')); end
+fprintf('\n');
 if ~ok
     error('lunar_pnt_mission:run_tests:fail', '%d test(s) failed', nnz(~res));
 end

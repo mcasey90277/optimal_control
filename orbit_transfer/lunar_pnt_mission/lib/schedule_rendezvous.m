@@ -46,6 +46,13 @@ function S = schedule_rendezvous(tf, sD, sA, tauD, tauT, droPhase0, slotPhase0, 
 %    .tol          scalar  Arrival phase tolerance [0.005 of a tulip period]
 %    .nMaxRevs     scalar  Largest wait, whole DRO revolutions [10]
 %    .propKgPerNd  scalar  Propellant per ND of burn [kg/ND] [1]
+%    .exclude      m x 5   Rows [k j iD iA nRev]: candidates made
+%                          INADMISSIBLE (refused polishes; the study's
+%                          schedule -> polish -> exclude loop) [zeros(0,5)];
+%                          empty = no exclusion, bit for bit. Excluded
+%                          candidates are absent from ranked and
+%                          nAdmissible. Not m x 5 numeric:
+%                          schedule_rendezvous:exclude
 %
 %% Outputs:
 %
@@ -64,6 +71,7 @@ function S = schedule_rendezvous(tf, sD, sA, tauD, tauT, droPhase0, slotPhase0, 
 %
 %% Revision History:
 %  M. Casey                                                   (c) 11/10/2026
+%  M. Casey  opts.exclude (refused-polish exclusion list)     (c) 11/10/2026
 %  Copyright Coorbital Inc.
 %% ------------------------ Begin Code Sequence ---------------------------
 
@@ -97,6 +105,13 @@ if nargin < 8, opts = struct(); end
 if ~isfield(opts, 'tol'),         opts.tol = 0.005;     end
 if ~isfield(opts, 'nMaxRevs'),    opts.nMaxRevs = 10;   end
 if ~isfield(opts, 'propKgPerNd'), opts.propKgPerNd = 1; end
+if ~isfield(opts, 'exclude'),     opts.exclude = zeros(0, 5); end
+ex = opts.exclude;
+if isempty(ex), ex = zeros(0, 5); end
+if ~isnumeric(ex) || size(ex, 2) ~= 5
+    error('schedule_rendezvous:exclude', ...
+          'opts.exclude must be m x 5 rows [k j iD iA nRev] (got %s)', mat2str(size(ex)));
+end
 
 K  = numel(droPhase0);
 assert(numel(slotPhase0) == K, 'schedule_rendezvous:size', 'K mismatch');
@@ -121,6 +136,11 @@ for kk = 1:K
         r   = mod(sA - ph, 1);                         % [0, 1)
         r(r > 0.5) = r(r > 0.5) - 1;                   % (-0.5, 0.5]
         adm = find(abs(r) <= opts.tol);                % linear, iD fastest
+        exk = ex(ex(:, 1) == kk & ex(:, 2) == jj, 3:5);
+        if ~isempty(exk) && ~isempty(adm)
+            [id, ia, iw] = ind2sub([nD nA W], adm);
+            adm = adm(~ismember([id, ia, iw - 1], exk, 'rows'));
+        end
         nAdm(kk, jj) = numel(adm);
         if isempty(adm)
             ranked{kk, jj} = zeros(0, 6);

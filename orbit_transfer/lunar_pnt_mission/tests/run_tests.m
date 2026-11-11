@@ -24,7 +24,7 @@ here = fileparts(mfilename('fullpath'));
 run(fullfile(fileparts(here), 'setup_lunar_pnt_paths.m'));
 addpath(here);
 
-names = {'test_mission_inputs', 'test_schedule_rendezvous'};
+names = {'test_mission_inputs', 'test_schedule_rendezvous', 'test_polish_rendezvous'};
 res   = false(size(names));
 secs  = zeros(size(names));
 for kk = 1:numel(names)

@@ -18,6 +18,7 @@ function ok = run_tests()
 %% Revision History:
 %  M. Casey                                                   (c) 11/10/2026
 %  M. Casey  test_export_mission_transfers added              (c) 11/10/2026
+%  M. Casey  test_leg1_inputs added                           (c) 11/11/2026
 %  Copyright Coorbital Inc.
 %% ------------------------ Begin Code Sequence ---------------------------
 
@@ -25,7 +26,7 @@ here = fileparts(mfilename('fullpath'));
 run(fullfile(fileparts(here), 'setup_lunar_pnt_paths.m'));
 addpath(here);
 
-names = {'test_mission_inputs', 'test_schedule_rendezvous', 'test_polish_rendezvous', ...
+names = {'test_mission_inputs', 'test_leg1_inputs', 'test_schedule_rendezvous', 'test_polish_rendezvous', ...
          'test_assemble_histories', 'test_mission_gdop', 'test_validate_pole_series', ...
          'test_pole_series_stats', ...
          'test_lunar_pnt_mission_study', 'test_mission_movie', 'test_export_mission_transfers'};

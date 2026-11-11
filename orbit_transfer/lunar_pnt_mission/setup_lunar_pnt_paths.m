@@ -13,7 +13,7 @@ function setup_lunar_pnt_paths(extraChecks)
 %   undone by an onCleanup, even on error).
 %
 %   SHADOW POLICY (exact): the folders are RE-FRONTED with addpath -begin
-%   in the order gdop, kit, costate_common, lib, this dir, so the final
+%   in the order gdop, GTO_DRO/lib, kit, costate_common, lib, this dir, so the final
 %   path front is: this dir, lib, costate_common, kit, gdop. The kit is
 %   fronted before costate_common so the kit's byte-identical
 %   get_family_orbit copy cannot beat costate_common's. After re-fronting,
@@ -44,6 +44,7 @@ function setup_lunar_pnt_paths(extraChecks)
 %  M. Casey  pole_series_stats in the which-list               (c) 11/10/2026
 %  M. Casey  export_mission_transfers, catalog_identity in the
 %            which-list                                       (c) 11/10/2026
+%  M. Casey  GTO_DRO/lib (earth_clearance) added for leg 1    (c) 11/11/2026
 %  Copyright Coorbital Inc.
 %% ------------------------ Begin Code Sequence ---------------------------
 
@@ -57,6 +58,7 @@ kit  = fullfile(ot, 'DRO_tulip', 'deliverables', ...
 cc   = fullfile(ot, 'costate_common');
 gd   = fullfile(proj7Root, 'pipelines', 'gdop');
 ps   = fullfile(proj7Root, 'pumpkyn_style');       % +coorbital (losVis)
+gl   = fullfile(ot, 'GTO_DRO', 'lib');             % earth_clearance (leg 1)
 
 addpath(fullfile(fileparts(ot), 'oclib'), fullfile(getenv('HOME'), 'casadi-3.7.0'));
 if isempty(which('pumpkyn.cr3bp.tfMin'))
@@ -70,6 +72,7 @@ if isempty(which('coorbital.cr3bp.losVis'))
     addpath(ps);                               % only if startup did not
 end
 addpath(gd,  '-begin');
+addpath(gl,  '-begin');
 addpath(kit, '-begin');
 addpath(cc,  '-begin');
 addpath(lib, '-begin');
@@ -81,6 +84,7 @@ want = {'mission_inputs', lib; ...
         'phase_state', cc; 'gdop_grid_from_states', gd; ...
         'tulip_phasing', gd; 'max_min_access_bounds', gd; ...
         'max_min_access_block_bounds', gd; ...
+        'earth_clearance', gl; ...
         'schedule_rendezvous', lib; 'polish_rendezvous', lib; ...
         'assemble_histories', lib; 'mission_grid', lib; ...
         'mission_gdop', lib; 'validate_pole_series', lib; ...

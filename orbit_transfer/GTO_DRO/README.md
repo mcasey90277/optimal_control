@@ -122,7 +122,7 @@ decision only; both stay in the returned blocker list.
 
 Chain notes: the packager is fed `results/package_stage/` (the official
 sheets only), because the catalog folder also holds `_earth`, `_repairs`,
-`_repair_backup_*` and `_deep` files that match the sheet glob. Re-packaging
+`_repair_backup_*`, `_deep` and `_direct` files that match the sheet glob. Re-packaging
 deletes the conj and gates sidecars (their entry indices go stale).
 Engine options added for this stage (costate_common, default off): `seedTop`,
 `redo`, `directGateKm`, `msHardCapSec`. The front door passes `msHardCapSec =
@@ -139,6 +139,12 @@ source (`massDepleted`): reproduced with the guard and a 60 s cap as safety net,
 direct solve included; the cap never fired), and the 12 N rung is accepted
 (t_f 0.36518 ND, flown 4e-4 km). The batch driver trims `gtodrocat_matlab.log`
 to its first and last 2 MB whenever a pass leaves it above 200 MB.
+The fleet also keeps each rung's direct solution in `<tag>_direct.mat` next
+to the sheet (engine `keepDirect`, front-door knob default true, about 12 MB
+per sheet), because 46 of the pilot's 280 refined entries fly below the Earth
+floor while the direct solution measured on cell (11,5) holds it, and the
+sheets alone cannot answer that question without re-solving; a repair that
+restores a cell marks its sidecar slices not recorded.
 
 ## Pilot findings (stage 2, 2026-11-11; sheet 0 deg / tau 1, `gto_dro_o000_tau1`)
 
@@ -152,8 +158,8 @@ Each line names the stage that measured it.
   the full ladder; 8 cells hold nothing (both attempts spent), four of them
   at arrival phase 1. A failed rung no longer ends a ladder.
 - **tf0 calibration (raw sheet).** Accepted 15 N t_f: median 0.3098 ND, range
-  0.2589 to 0.3238 (n = 56). Within 0.02 of 0.30, so the fleet keeps
-  `tf0 = 0.30`.
+  0.2589 to 0.3238 (n = 56). The median is within 0.02 of 0.30 (the plan's
+  rule), so the fleet keeps `tf0 = 0.30`.
 - **Earth sweep (chain stage 2).** 46 of the 280 entries fly below the 200 km
   Earth floor and are demoted; 41 of them pass below the surface (deepest
   -3,855 km). Per rung: 5 / 5 / 12 / 17 / 7. The plan expected none. 43 of
@@ -163,11 +169,17 @@ Each line names the stage that measured it.
   sampled at the 401 uniform node times, 45 of the 46 are below the floor at
   a node, and 43 stay below it longer than one node spacing (up to 3.8): the
   refined trajectory is not the direct solution, which holds the floor at
-  its nodes. The refinement (`ms_tfmin`) carries no Earth constraint. NOT
-  measured: whether the floor is active in the direct solution of those
-  cells (the sheet does not keep it); if it is, an unconstrained costate
-  entry cannot represent the optimum there and demotion is the final
-  verdict. The same sweep on the 1000 km-gate sheet finds 6 of 176 below
+  its nodes. The refinement (`ms_tfmin`) carries no Earth constraint.
+  Measured on one demoted cell, (11,5) at 15 N, re-solved cold: the direct
+  solution touches the floor (243.9 km at the nodes, 199.9 km at a
+  Hermite-Simpson midpoint), its control flown open loop stays within 7 km
+  of the node states through perigee and bottoms at 195.5 km, and the
+  refined entry of the same cell bottoms at -1,541 km for a t_f shorter by
+  0.3 percent. So there the floor constrains the optimum and the
+  unconstrained refinement leaves it. A demotion condemns that trajectory,
+  not the cell: the fleet keeps every direct solution (`<tag>_direct.mat`)
+  so floor-active cells can be re-seeded or shipped as constrained direct
+  solutions afterwards. The same sweep on the 1000 km-gate sheet finds 6 of 176 below
   the floor, including the same two 15 N entries at -1,540 and -1,564 km, so
   the 15 N violations do not come from dropping the direct gate.
 - **Unsolved cells (chain stage 3, phase continuation).** 8 of 8 repaired
@@ -196,5 +208,12 @@ Each line names the stage that measured it.
   3 N; one reaches 2 N (t_f 1.027 ND); below that the refined flight misses
   by 300,000 to 425,000 km or the direct solve fails. The wall on this sheet
   is between 3 N and 2 N.
+- **Margins on the accepted entries (sheet after the chain, 271).** Flown
+  miss at most 0.23 km (gate 100 km), tfMin |dz| at most 7.7e-9 (gate 1e-6),
+  refinement residual at most 8.0e-11. Earth and Moon clearance re-measured
+  on a dense spline of every flight: Earth 240.4 km, within 0.1 km of the
+  sample minimum on every entry; Moon 533.5 km, none below the 500 km floor
+  (the chain does not sweep the Moon yet).
+- **Review.** `reviews/astra_stage2_2026-11-11.md` and its dispositions.
 - **Not answered here.** The 180-degree orientation; the fleet runs those
   sheets first (`"[9:12 1 3:8 13:16]"`).

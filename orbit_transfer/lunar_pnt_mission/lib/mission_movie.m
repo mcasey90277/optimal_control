@@ -65,7 +65,7 @@ function info = mission_movie(resultsMat, opts)
 %   maxFrames render needs an explicit outFile other than the default,
 %   mission_movie:partialOutFile), or PREVIEW
 %   PNGs when frameList or dayList is non-empty or preview is true (with
-%   both lists empty, preview renders ten story frames). The layout is
+%   both lists empty, preview renders 14 story frames). The layout is
 %   designed at 1280 x 720; another frameSize is a resample of that render.
 %
 %% Inputs:
@@ -73,7 +73,11 @@ function info = mission_movie(resultsMat, opts)
 %  resultsMat               char                    lunar_pnt_mission_study.mat
 %                                                   ('' = results/ beside
 %                                                   this campaign); needs H,
-%                                                   P, pole
+%                                                   P, pole; reads
+%                                                   fingerprint (muStar,
+%                                                   lStar, tStar; else
+%                                                   mission_inputs()) and
+%                                                   run_meta when present
 %  opts                     struct (optional)
 %    .outFile               char                    MP4 path
 %                                                   [results/lunar_pnt_mission.mp4]
@@ -102,6 +106,13 @@ function info = mission_movie(resultsMat, opts)
 %                                                   markers at these Moon-
 %                                                   centred points [km]
 %    .quality               scalar [95]             VideoWriter quality
+%    .zoomScale             scalar [1]              TEST SEAM: multiplies the
+%                                                   zoom envelope before the
+%                                                   containment check (< 1
+%                                                   forces it too small: the
+%                                                   deliberate-failure
+%                                                   experiment of
+%                                                   mission_movie:containment)
 %
 %% Outputs:
 %
@@ -161,6 +172,14 @@ function info = mission_movie(resultsMat, opts)
 %  info.extentKm            struct                  .dro .transfer .tulip
 %                                                   [3 x 2] Moon-centred
 %                                                   min/max [km]
+%  info.provenance          struct                  .fresh (logical: a fresh,
+%                                                   full-knob run), .note
+%                                                   (char: '' when fresh,
+%                                                   else REUSED / reduced /
+%                                                   no run_meta), .units
+%                                                   ('fingerprint' |
+%                                                   'mission_inputs'); NOT
+%                                                   drawn on screen
 %
 %% Revision History:
 %  M. Casey                                                   (c) 11/10/2026
@@ -170,6 +189,8 @@ function info = mission_movie(resultsMat, opts)
 %  Revision 3: data-driven unimodal zoom (fixed direction and target),
 %  containment assertion, safe partial-file MP4 writing, outlines from CR3BP
 %  periods, plume screen direction and probes for tests, review fixes.
+%  M. Casey  units from the results fingerprint, provenance in info,
+%            zoomScale test seam                              (c) 11/10/2026
 %% ------------------------ Begin Code Sequence ---------------------------
 
 here = fileparts(fileparts(mfilename('fullpath')));        % lunar_pnt_mission/
@@ -201,7 +222,8 @@ def = struct('outFile',     fullfile(here, 'results', 'lunar_pnt_mission.mp4'), 
                                      'src', '+pumpkyn', '+util', 'Moon_2k.jpg'), ...
              'plumePx',     62, ...
              'probeKm',     zeros(0, 3), ...
-             'quality',     95);
+             'quality',     95, ...
+             'zoomScale',   1);
 for f = fieldnames(opts).'
     if ~isfield(def, f{1})
         error('mission_movie:opts', 'unknown option ''%s''', f{1});
@@ -214,13 +236,10 @@ if any(mod(o.frameSize, 2)) || numel(o.frameSize) ~= 2
     error('mission_movie:frameSize', 'frameSize must be two even integers');
 end
 
-% ---- constants (mission_inputs regime; the DRO closure below checks muStar) ----
-muStar  = 0.012150585609624;
-lStar   = 389703.264829278;                % [km]
-tStar   = 382981.289129055;                % [s]
+% ---- layout constants (the CR3BP units muStar, lStar, tStar are read
+%      with the data below: the results file's fingerprint, else mission_inputs) ----
 rMoonKm = 1737.4;
-dayNd   = tStar/86400;                     % days per ND time unit
-W       = 1280;                            % layout width  [px]
+W       = 1280;                          % layout width  [px]
 Hh      = 720;                             % layout height [px]
 scnPos  = [0 194 1280 450];                % scene axes [px]
 stripPos = [96 62 1088 106];               % GDOP strip axes [px]
@@ -244,6 +263,11 @@ for nm = {'H', 'P', 'pole'}
     end
 end
 Hs = L.H;  P = L.P;  pole = L.pole;
+% CR3BP units from ONE place (the catalog, via the study's fingerprint;
+% mission_inputs when the file has none; the DRO closure below checks
+% muStar), and the run's provenance for info (not drawn on screen)
+[muStar, lStar, tStar, prov] = results_units(resultsMat);
+dayNd   = tStar/86400;                     % days per ND time unit
 if ~isfield(pole, 'tDays') || ~isfield(pole, 'gdop')
     error('mission_movie:pole', 'pole needs tDays and gdop (%s)', resultsMat);
 end
@@ -393,6 +417,7 @@ Lz(abs(Lz - LEnd) < 1e-12) = LEnd;
 Lz   = max(Lz, LEnd);
 RvF  = exp(Lz);
 RvF(Lz == LEnd) = RvEnd;
+RvF  = RvF*o.zoomScale;                   % TEST SEAM (1 in every real render)
 % containment over EVERY map frame: all six markers inside by >= 4 px
 mPx = zeros(nF, 1);
 for ff = 1:nF
@@ -503,7 +528,7 @@ info = struct('outFile', '', 'nFrames', nR, 'nFramesMap', nF, 'frameSize', o.fra
               'camModesManual', false(nR, 1), 'tauDND', tauD, 'tauTND', tauT, ...
               'phase', zeros(nR, nSc), ...
               'outlineVisible', false(nR, 2), 'moonTextured', G.moonTextured, ...
-              'moonTexture', G.moonTexFile);
+              'moonTexture', G.moonTexFile, 'provenance', prov);
 gFirst = pole.tDays(find(isfinite(pole.gdop), 1));
 if isempty(gFirst), gFirst = inf; end
 
@@ -1076,4 +1101,47 @@ function close_vw(vw, partFile)
 %   INPUTS: vw VideoWriter or []; partFile char ('' = nothing to delete).
 if ~isempty(vw) && isvalid(vw), close(vw); end
 if ~isempty(partFile) && isfile(partFile), delete(partFile); end
+end
+
+function [muStar, lStar, tStar, prov] = results_units(resultsMat)
+% RESULTS_UNITS  The CR3BP units and the run's provenance of a results file.
+%   Units come from its fingerprint (written by the study from the
+%   catalog); a file without one falls back to mission_inputs(). The
+%   provenance note is run_meta.verdictSuffix when present (the text the
+%   study appended to its VERDICT), else rebuilt from run_meta.reduced and
+%   run_meta.polishSource; '' marks a fresh, full-knob run.
+%   INPUTS:  resultsMat char.
+%   OUTPUTS: muStar [ND], lStar [km], tStar [s] scalars; prov struct
+%            (.fresh logical, .note char, .units char).
+w  = whos('-file', resultsMat);
+nm = {w.name};
+if any(strcmp(nm, 'fingerprint'))
+    F = load(resultsMat, 'fingerprint');
+    muStar = F.fingerprint.muStar;  lStar = F.fingerprint.lStar;  tStar = F.fingerprint.tStar;
+    src = 'fingerprint';
+else
+    Mi = mission_inputs();
+    muStar = Mi.muStar;  lStar = Mi.lStar;  tStar = Mi.tStar;
+    src = 'mission_inputs';
+end
+if ~any(strcmp(nm, 'run_meta'))
+    prov = struct('fresh', false, 'note', 'no run_meta in the results file (provenance unknown)', ...
+                  'units', src);
+    return
+end
+R  = load(resultsMat, 'run_meta');
+rm = R.run_meta;
+if isfield(rm, 'verdictSuffix')
+    note = strtrim(rm.verdictSuffix);
+else
+    parts = {};
+    if isfield(rm, 'polishSource') && any(strcmp({rm.polishSource.origin}, 'reused'))
+        parts{end+1} = 'REUSED polishes (not re-certified in that run)';
+    end
+    if isfield(rm, 'reduced') && ~isempty(rm.reduced)
+        parts{end+1} = ['reduced: ' strjoin(rm.reduced(:).', ', ')];
+    end
+    note = strjoin(parts, '; ');
+end
+prov = struct('fresh', isempty(note), 'note', note, 'units', src);
 end

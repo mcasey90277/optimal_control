@@ -11,7 +11,9 @@ function ok = test_mission_gdop()
 %   the visibility count of the three, no error; runs with 0, 1 and 2 on
 %   station (NaN GDOP, the subset's visibility, R1's vis >= 2 flag); a
 %   scored window shorter than a day is refused; a phase/tArr
-%   inconsistency is refused; (5) the validation seam on paper chunk 5
+%   inconsistency is refused; an H whose on-station position is moved
+%   1e-6 ND off its slot is refused (mission_gdop:slot, the deliberate
+%   failure of that check); (5) the validation seam on paper chunk 5
 %   against the saved Table 1 column; (6) UNRESOLVED for a missing
 %   reference file, one without S2, a reference phasing (refPhasing seam)
 %   or an M.dtau6 that differs from the pinned identity; (7) deliberate failure: one
@@ -28,6 +30,7 @@ function ok = test_mission_gdop()
 %
 %% Revision History:
 %  M. Casey                                                   (c) 11/10/2026
+%  M. Casey  mission_gdop:slot deliberate failure              (c) 11/10/2026
 %  Copyright Coorbital Inc.
 %% ------------------------ Begin Code Sequence ---------------------------
 
@@ -193,6 +196,16 @@ try
     error('test:noRefusal', 'phase/tArr inconsistency accepted');
 catch err
     assert(strcmp(err.identifier, 'mission_gdop:phase'), 'phase id: %s', err.identifier);
+end
+% deliberate failure of the slot check: one on-station position of H.r
+% moved 1e-6 ND (0.39 km), 1000x the 1e-9 ND tolerance, is refused
+H7 = H0;  H7.r(25, 1, 3) = H7.r(25, 1, 3) + 1e-6;
+try
+    mission_gdop(H7, M, [0 0.2*day], gc, struct('score', false, 'quiet', true));
+    error('test:noRefusal', 'a perturbed on-station position was accepted');
+catch err
+    assert(strcmp(err.identifier, 'mission_gdop:slot'), 'slot id: %s', err.identifier);
+    fprintf('  perturbed on-station position refused: %s\n', err.message);
 end
 
 % ---- 5. validation seam, paper chunk 5 ----

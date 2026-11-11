@@ -12,7 +12,12 @@ function ok = test_lunar_pnt_mission_study()
 %       nOn rises from 0 to 6 exactly at the arrival days, GDOP is NaN
 %       wherever fewer than four are on station, nVis <= nOn; the four
 %       PNGs exist (no service_map.png); the VERDICT names the reduced knob;
-%       no figure left open.
+%       no figure left open. HEADLINE PINS: last arrival day 18.799 (1e-3),
+%       assignment [2 5 6 1 3 4], total propellant 71.261 kg (1e-3), exactly
+%       three rounds, no accepted polish with familyChanged. The saved H is
+%       double and passes mission_gdop's slot check again; the fingerprint
+%       carries droPhase0 and the orbit-handle MD5s; run header and run_meta
+%       carry the git dirty flags; no reused exclusions are named.
 %   (B) validate = false (polishes reused from A): STOPPED AT VALIDATION
 %       (G0 NOT RUN), no pole series saved.
 %   (C) maxRounds = 1 (polishes reused from A): STOPPED AT POLISH, the
@@ -24,11 +29,16 @@ function ok = test_lunar_pnt_mission_study()
 %       service_map.png written.
 %   (F) reuse from a file with a different catalog fingerprint, and from a
 %       file without one, is refused (lunar_pnt_mission_study:reuse).
-%   (G) a tampered cached entry (sc 3's tArr shifted 1e-6 ND) is IGNORED and
-%       re-polished fresh; the other five are reused.
+%   (G) tampered cached entries (sc 3's tArr shifted 1e-6 ND; sc 4's rv0
+%       moved 1e-9 ND) are IGNORED and re-polished fresh; the other four
+%       are reused.
 %   (I) the G0-FAIL stop: G0's own series given a slot moved 0.3 ND
 %       (g0SlotOverride seam) -> STOPPED AT VALIDATION (G0 FAIL), saved.
-%   (E) also checks the REUSED disclosure: VERDICT text, row tags,
+%   (J) gate I2 deliberate failures: i2Km = 1e-6, then i2Mps = 1e-6 (the
+%       velocity part alone) -> I2 FAIL, STOPPED AT INPUTS, the knob named
+%       in the VERDICT.
+%   (E) also checks the REUSED disclosure: VERDICT text (incl. the three
+%       reused refusals that decide the exclusions), row tags,
 %       run_meta.polishSource.
 %   The script parses clean (checkcode).
 %
@@ -44,6 +54,7 @@ function ok = test_lunar_pnt_mission_study()
 %  M. Casey                                                   (c) 11/10/2026
 %  M. Casey  rescope: pole series default, stops, reuse         (c) 11/10/2026
 %  M. Casey  guarded reuse (F, G), G0-FAIL stop (I)            (c) 11/10/2026
+%  M. Casey  headline pins, I2 failures (J), rv0 entry check    (c) 11/10/2026
 %  Copyright Coorbital Inc.
 %% ------------------------ Begin Code Sequence ---------------------------
 
@@ -56,7 +67,7 @@ base = fullfile(tempdir, 'lunar_pnt_test');
 if isfolder(base), rmdir(base, 's'); end
 dirs = struct('A', fullfile(base, 'A'), 'B', fullfile(base, 'B'), 'C', fullfile(base, 'C'), ...
               'D', fullfile(base, 'D'), 'E', fullfile(base, 'E'), 'F', fullfile(base, 'F'), ...
-              'G', fullfile(base, 'G'), 'I', fullfile(base, 'I'));
+              'G', fullfile(base, 'G'), 'I', fullfile(base, 'I'), 'J', fullfile(base, 'J'));
 for f = fieldnames(dirs).', mkdir(dirs.(f{1})); end
 cleanup = onCleanup(@() rmdir_if(base));
 
@@ -91,7 +102,36 @@ matA = fullfile(dirs.A, 'lunar_pnt_mission_study.mat');
 R = load(matA);
 ok = check(ok, isfield(R.run_meta, 'date') && numel(R.rounds) >= 1, ...
            sprintf('(A) run_meta and %d round(s) saved', numel(R.rounds)));
-ok = check(ok, numel(R.P) == 6 && all([R.P.ok]) && isa(R.H.r, 'single'), '(A) six accepted polishes, single positions');
+ok = check(ok, numel(R.P) == 6 && all([R.P.ok]) && isa(R.H.r, 'double'), '(A) six accepted polishes, double positions');
+% the headline numbers (README, Measured results), pinned
+dayNd  = R.fingerprint.tStar/86400;
+tLastA = max([R.P.tArr])*dayNd;
+propA  = sum([R.P.propKg]);
+ok = check(ok, abs(tLastA - 18.799) < 1e-3, sprintf('(A) last arrival day %.6f (pin 18.799)', tLastA));
+ok = check(ok, isequal(R.S.assign, [2 5 6 1 3 4]), sprintf('(A) assignment [%s] (pin [2 5 6 1 3 4])', ...
+                                                          sprintf('%d ', R.S.assign)));
+ok = check(ok, abs(propA - 71.261) < 1e-3, sprintf('(A) total propellant %.6f kg (pin 71.261)', propA));
+ok = check(ok, numel(R.rounds) == 3, sprintf('(A) %d schedule rounds (pin 3)', numel(R.rounds)));
+ok = check(ok, ~any([R.P.familyChanged]), '(A) no accepted polish changed family');
+% the saved history goes back into mission_gdop (its slot check is 1e-9 ND)
+Ma = mission_inputs();
+try
+    Gr = mission_gdop(R.H, Ma, [0 R.H.tEnd], mission_grid('pole'), struct('score', false, 'quiet', true));
+    reOk = numel(Gr.t) == numel(R.pole.tDays);
+catch err
+    reOk = false;
+    fprintf('      %s\n', err.message);
+end
+ok = check(ok, reOk, '(A) the saved H passes mission_gdop''s slot check (usable for a re-run)');
+fpNew = {'droPhase0', 'droMd5', 'tulipMd5'};
+ok = check(ok, all(isfield(R.fingerprint, fpNew)) && numel(R.fingerprint.droMd5) == 32 && ...
+           numel(R.fingerprint.tulipMd5) == 32, '(A) fingerprint carries droPhase0 and the orbit-handle MD5s');
+ok = check(ok, islogical(R.run_meta.optimal_controlDirty) && islogical(R.run_meta.proj7Dirty) && ...
+           ~isempty(regexp(txt, 'optimal_control \S+ \((clean|DIRTY: \d+ tracked path)', 'once')), ...
+           sprintf('(A) run header and run_meta carry the git dirty flags (optimal_control dirty %d)', ...
+                   R.run_meta.optimal_controlDirty));
+ok = check(ok, ~contains(txt, 'exclusions reused') && isempty(R.run_meta.reusedRefusals), ...
+           '(A) a fresh run names no reused exclusions');
 pl = R.pole;
 n  = numel(pl.tDays);
 ok = check(ok, numel(pl.gdop) == n && numel(pl.nOn) == n && numel(pl.nVis) == n && numel(pl.arrDays) == 6, ...
@@ -149,6 +189,8 @@ ok = check(ok, isfinite(RE.Gservice.r3Floor), sprintf('(E) R3 floor finite (%.3f
 ok = check(ok, isfile(fullfile(dirs.E, 'service_map.png')), '(E) service_map.png written');
 ok = check(ok, ~isempty(regexp(txt, 'VERDICT: PASS \(REUSED polishes for sc 1 2 3 4 5 6 from [^\n]*certified [^\n]* at [^\n]*; not re-certified in this run\)', 'once')), ...
            '(E) a clean reuse run''s VERDICT carries the REUSED disclosure');
+ok = check(ok, ~isempty(regexp(txt, 'VERDICT: [^\n]*\(exclusions reused: 3 refused polish\(es\) from [^\n]*; not re-polished in this run\)', 'once')), ...
+           '(E) the VERDICT names the three reused refusals (exclusions)');
 tags = cellfun(@(id) ~isempty(regexp(txt, ['\n\s+' id '\s+\S+\s+\S+\s+REUSED'], 'once')), ...
                {'P1', 'P2', 'P3', 'P4', 'P5', 'P6', 'PF', 'PR', 'PP', 'PH', 'PC', 'PA'});
 ok = check(ok, all(tags), sprintf('(E) P1..P6, PF, PR, PP, PH, PC, PA rows tagged REUSED (%d of 12)', nnz(tags)));
@@ -178,15 +220,22 @@ polishCache = R.polishCache;
 key3 = sprintf('%d_%d_%d_%d_%d', 3, R.S.assign(3), R.S.iD(3), R.S.iA(3), R.S.nRev(3));
 ik = find(strcmp(polishCache.key, key3));
 polishCache.P{ik}.tArr = polishCache.P{ik}.tArr + 1e-6;
+% and sc 4's departure state moved 1e-9 ND: the rv0 entry check must catch it
+key4 = sprintf('%d_%d_%d_%d_%d', 4, R.S.assign(4), R.S.iD(4), R.S.iA(4), R.S.nRev(4));
+ik4 = find(strcmp(polishCache.key, key4));
+polishCache.P{ik4}.rv0(1) = polishCache.P{ik4}.rv0(1) + 1e-9;
 save(matG, 'polishCache', '-append');
 [txt, ran, wG] = run_study(file, struct('headless', true, 'outDir', dirs.G, 'serviceDays', 3, ...
                                         'makeFigures', false, 'reuse', matG));
 ok = check(ok, ran && contains(txt, 'IGNORED cached sc 3') && contains(txt, 'polish sc 3 ->') && ...
            has_gate(txt, 'P3', 'PASS') && isempty(regexp(txt, '\n\s+P3\s+PASS\s+\S+\s+REUSED', 'once')), ...
            sprintf('(G) tampered entry ignored, sc 3 re-polished fresh, P3 not tagged (%.0f s)', wG));
+ok = check(ok, ~isempty(regexp(txt, 'IGNORED cached sc 4[^\n]*cached rv0 differs', 'once')) && ...
+           contains(txt, 'polish sc 4 ->') && isempty(regexp(txt, '\n\s+P4\s+PASS\s+\S+\s+REUSED', 'once')), ...
+           '(G) a cached rv0 off the current DRO state is ignored, sc 4 re-polished fresh');
 RG = load(fullfile(dirs.G, 'lunar_pnt_mission_study.mat'), 'run_meta');
-ok = check(ok, strcmp(RG.run_meta.polishSource(3).origin, 'fresh') && ...
-           all(strcmp({RG.run_meta.polishSource([1 2 4 5 6]).origin}, 'reused')), '(G) polishSource: sc 3 fresh, the rest reused');
+ok = check(ok, all(strcmp({RG.run_meta.polishSource([3 4]).origin}, 'fresh')) && ...
+           all(strcmp({RG.run_meta.polishSource([1 2 5 6]).origin}, 'reused')), '(G) polishSource: sc 3, 4 fresh, the rest reused');
 
 %% (I) G0 FAIL stops the study (seam: G0's own series with slot 6 moved 0.3 ND)
 d6 = tulip_phasing();  d6(6) = d6(6) + 0.3;
@@ -196,6 +245,16 @@ RI = load(fullfile(dirs.I, 'lunar_pnt_mission_study.mat'), 'pole', 'Vpole');
 ok = check(ok, ran && has_gate(txt, 'G0', 'FAIL') && contains(txt, 'VERDICT: STOPPED AT VALIDATION (G0 FAIL)') && ...
            isempty(RI.pole) && strcmp(RI.Vpole.status, 'FAIL'), ...
            sprintf('(I) G0 FAIL -> STOPPED AT VALIDATION, saved, no pole series (%.0f s)', wI));
+
+%% (J) gate I2 deliberate failures: a position limit, then a velocity limit, too tight
+[txt, ran, wJ] = run_study(file, struct('headless', true, 'outDir', dirs.J, 'i2Km', 1e-6));
+ok = check(ok, ran && has_gate(txt, 'I2', 'FAIL') && ...
+           ~isempty(regexp(txt, 'VERDICT: STOPPED AT INPUTS \(I2[^\n]*\(reduced: i2Km 1e-06\)', 'once')) && ...
+           ~contains(txt, '2. SCHEDULE'), sprintf('(J) i2Km 1e-6: I2 FAIL, STOPPED AT INPUTS, knob named (%.0f s)', wJ));
+[txt, ran, wJ2] = run_study(file, struct('headless', true, 'outDir', dirs.J, 'i2Mps', 1e-6));
+ok = check(ok, ran && has_gate(txt, 'I2', 'FAIL') && ...
+           ~isempty(regexp(txt, 'VERDICT: STOPPED AT INPUTS \(I2[^\n]*\(reduced: i2Mps 1e-06\)', 'once')), ...
+           sprintf('(J) i2Mps 1e-6: I2 FAIL on velocity alone, STOPPED AT INPUTS (%.0f s)', wJ2));
 
 fprintf('test_lunar_pnt_mission_study: %s\n', tern(ok, 'PASS', 'FAIL'));
 end

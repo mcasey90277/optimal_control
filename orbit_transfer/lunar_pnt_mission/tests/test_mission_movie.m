@@ -24,7 +24,13 @@ function [ok, skipped] = test_mission_movie()
 %   the texture when the texture file exists; (6) refusals: a missing
 %   results file and dayList entries outside [0, end] throw their ids; a
 %   spacecraft with NaN tDep (on station from t = 0, no P entry) is drawn on
-%   station with no plume. Returns skipped = true (and
+%   station with no plume; (7) PROVENANCE: units read from the results
+%   file's fingerprint (from mission_inputs for a file without one, whose
+%   note then says the provenance is unknown), the fresh flag consistent
+%   with run_meta; (8) DELIBERATE FAILURE of the containment assertion: a
+%   zoom envelope forced to half (zoomScale seam) throws
+%   mission_movie:containment. Plain MATLAB only (no Image Processing
+%   Toolbox: the probe blobs are found with find and mean). Returns skipped = true (and
 %   ok = true) with a message when the results file does not exist, so the
 %   runner can show SKIP.
 %
@@ -41,6 +47,8 @@ function [ok, skipped] = test_mission_movie()
 %
 %% Revision History:
 %  M. Casey                                                   (c) 11/10/2026
+%  M. Casey  units from the fingerprint, provenance, containment
+%            failure, no regionprops                          (c) 11/10/2026
 %  Copyright Coorbital Inc.
 %% ------------------------ Begin Code Sequence ---------------------------
 
@@ -56,7 +64,8 @@ end
 tmp = tempname;
 mkdir(tmp);
 cleanTmp = onCleanup(@() rmdir(tmp, 's'));
-dayNd = 382981.289129055/86400;
+Lfp = load(resultsMat, 'fingerprint');           % the units live in ONE place
+dayNd = Lfp.fingerprint.tStar/86400;
 defMp4 = fullfile(fileparts(here), 'results', 'lunar_pnt_mission.mp4');
 defInfo = dir(defMp4);
 
@@ -157,10 +166,7 @@ J = mission_movie(resultsMat, struct('dayList', [0 C.zoomMaxDay], 'previewDir', 
 for kk = 1:2
     img = double(imread(J.previewPngs{kk}));
     mag = img(:, :, 1) > 200 & img(:, :, 2) < 70 & img(:, :, 3) > 200;
-    st  = regionprops(bwconncomp(mag), 'Centroid', 'Area');   % one region per blob
-    st  = st([st.Area] >= 6);
-    assert(numel(st) == 2, 'frame %d: expected 2 probe blobs, found %d', kk, numel(st));
-    found = cat(1, st.Centroid);
+    found = probe_centroids(mag, kk);                            % [2 x 2] image (x, y) [px]
     found = [found(:, 1) - 0.5, 720 - (found(:, 2) - 0.5)];      % figure px, origin bottom-left
     want  = reshape(J.probePx(kk, :, :), 2, []).';
     dErr  = zeros(2, 1);
@@ -173,9 +179,15 @@ end
 assert(J.Rv(2) > J.Rv(1)*1.2, 'probe frames not at two different zoom levels');
 % ---- refusals and the on-station-from-t0 path ----
 ids = cell(1, 3);
-try, mission_movie(fullfile(tmp, 'nope.mat')); catch err, ids{1} = err.identifier; end
-try, mission_movie(resultsMat, struct('dayList', -1, 'previewDir', tmp)); catch err, ids{2} = err.identifier; end
-try, mission_movie(resultsMat, struct('dayList', dEnd + 1, 'previewDir', tmp)); catch err, ids{3} = err.identifier; end
+badCalls = {{fullfile(tmp, 'nope.mat'), struct()}, {resultsMat, struct('dayList', -1, 'previewDir', tmp)}, ...
+            {resultsMat, struct('dayList', dEnd + 1, 'previewDir', tmp)}};
+for kb = 1:3
+    try
+        mission_movie(badCalls{kb}{:});
+    catch err
+        ids{kb} = err.identifier;
+    end
+end
 assert(isequal(ids, {'mission_movie:noResults', 'mission_movie:dayList', 'mission_movie:dayList'}), ...
        'refusal ids: %s', strjoin(ids, ' '));
 M = load(resultsMat, 'H', 'P', 'pole');
@@ -187,6 +199,48 @@ K = mission_movie(fullfile(tmp, 'onstation.mat'), struct('dayList', [0 5], 'prev
 assert(all(K.phase(:, 6) == 3) && all(isnan(K.plumeDir(:, :, 6)), 'all'), ...
        'spacecraft with NaN tDep not drawn on station');
 fprintf('  refusals: %s; NaN-tDep spacecraft drawn on station, no plume\n', strjoin(unique(ids), ', '));
+% the file without fingerprint / run_meta: units from mission_inputs, and
+% the provenance says it is unknown
+assert(strcmp(K.provenance.units, 'mission_inputs') && ~K.provenance.fresh && ...
+       contains(K.provenance.note, 'no run_meta'), 'provenance of a file without run_meta');
+% provenance of the saved results (info only, never on screen)
+fprintf('  provenance of the saved results: units from %s, fresh %d, note "%s"\n', ...
+        I.provenance.units, I.provenance.fresh, I.provenance.note);
+assert(strcmp(I.provenance.units, 'fingerprint'), 'units not read from the fingerprint');
+Lrm = load(resultsMat, 'run_meta');
+assert(I.provenance.fresh == (isempty(Lrm.run_meta.reduced) && ...
+       ~any(strcmp({Lrm.run_meta.polishSource.origin}, 'reused'))), 'provenance flag vs run_meta');
+
+% ---- deliberate failure of the containment assertion (zoomScale seam) ----
+thrown = '';  msgC = '';
+try
+    mission_movie(resultsMat, struct('dayList', 0, 'previewDir', tmp, 'zoomScale', 0.5));
+catch err
+    thrown = err.identifier;  msgC = err.message;
+end
+fprintf('  zoom envelope forced to half: %s (%s)\n', thrown, msgC);
+assert(strcmp(thrown, 'mission_movie:containment'), 'a too-small zoom was not refused (%s)', thrown);
 ok = true;
 fprintf('  PASS\n');
+end
+
+function c = probe_centroids(mag, kk)
+% PROBE_CENTROIDS  Centroids of the two magenta probe blobs (plain MATLAB,
+%   no toolbox): the pixels within 25 px of the first magenta pixel form
+%   blob 1, the rest blob 2; each blob must hold >= 6 pixels and lie within
+%   25 px of its own centroid (two compact, separate blobs).
+%   INPUTS:  mag [720 x 1280] logical mask; kk frame number (messages).
+%   OUTPUTS: c [2 x 2] centroids [x y] in image pixels (column, row).
+[rr, cc] = find(mag);
+assert(numel(rr) >= 12, 'frame %d: only %d magenta pixels', kk, numel(rr));
+d1 = sqrt((cc - cc(1)).^2 + (rr - rr(1)).^2);
+in1 = d1 <= 25;
+c = zeros(2, 2);
+for bb = 1:2
+    if bb == 1, sel = in1; else, sel = ~in1; end
+    assert(nnz(sel) >= 6, 'frame %d: probe blob %d has %d pixels', kk, bb, nnz(sel));
+    c(bb, :) = [mean(cc(sel)), mean(rr(sel))];
+    spread = max(sqrt((cc(sel) - c(bb, 1)).^2 + (rr(sel) - c(bb, 2)).^2));
+    assert(spread <= 25, 'frame %d: probe blob %d spreads %.1f px (not two blobs)', kk, bb, spread);
+end
 end

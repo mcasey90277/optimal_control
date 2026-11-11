@@ -9,7 +9,10 @@ function ok = test_schedule_rendezvous()
 %   empty reproduces the result bit for bit (random case and real
 %   catalog), the brute-force oracle with the same exclusions, a malformed
 %   list refused, and on the real catalog excluding spacecraft 1's chosen
-%   candidate moves that pair's best arrival to its next-ranked one.
+%   candidate moves that pair's best arrival to its next-ranked one;
+%   (9) HEADLINE PINS on the real catalog: last arrival 18.537 d and
+%   assignment [2 4 6 1 5 3] unpolished; with the study's three refused
+%   candidates excluded, 18.799 d and [2 5 6 1 3 4].
 %
 %% Inputs:
 %
@@ -23,6 +26,7 @@ function ok = test_schedule_rendezvous()
 %% Revision History:
 %  M. Casey                                                   (c) 11/10/2026
 %  M. Casey  exclusion checks (8)                             (c) 11/10/2026
+%  M. Casey  headline pins (9)                                (c) 11/10/2026
 %  Copyright Coorbital Inc.
 %% ------------------------ Begin Code Sequence ---------------------------
 
@@ -257,6 +261,29 @@ assert(SRx.nAdmissible(1, j1) == SR.nAdmissible(1, j1) - 1, 'real catalog: count
 d = M.tStar/86400;
 fprintf('  exclude (real): pair (1,%d) best %.4f d -> %.4f d; last arrival %.4f d -> %.4f d\n', ...
         j1, SR.best.tArr(1, j1)*d, SRx.best.tArr(1, j1)*d, SR.tLast*d, SRx.tLast*d);
+
+% ---- 9. HEADLINE PINS on the real catalog (README, Measured results) ----
+% 9a. the unpolished optimum
+assert(abs(SR.tLast*d - 18.537) < 1e-3, 'real catalog: last arrival %.6f d (pin 18.537)', SR.tLast*d);
+assert(isequal(SR.assign, [2 4 6 1 5 3]), 'real catalog: assignment [%s] (pin [2 4 6 1 5 3])', ...
+       sprintf('%d ', SR.assign));
+% 9b. with the study's three refused candidates excluded (rows [k j iD iA
+% nRev] read from the saved full run's rounds: sc 1 slot 2 cell (1,1)
+% and sc 2 slot 4 cell (5,15) refused in round 1, sc 6 slot 4 cell
+% (21,16) in round 2; all zero-wait)
+exStudy = [1 2 1 1 0; 2 4 5 15 0; 6 4 21 16 0];
+oRs = oR;  oRs.exclude = exStudy;
+SRs = schedule_rendezvous(M.tf, M.sD, M.sA, M.tauD, M.tauT, M.droPhase0, M.slotPhase0, oRs);
+for kx = 1:2                                   % the round-1 refusals are round-1 choices
+    kc = exStudy(kx, 1);
+    assert(isequal(exStudy(kx, :), [kc SR.assign(kc) SR.iD(kc) SR.iA(kc) SR.nRev(kc)]), ...
+           'exclusion row %d is not spacecraft %d''s round-1 choice', kx, kc);
+end
+assert(abs(SRs.tLast*d - 18.799) < 1e-3, 'excluded: last arrival %.6f d (pin 18.799)', SRs.tLast*d);
+assert(isequal(SRs.assign, [2 5 6 1 3 4]), 'excluded: assignment [%s] (pin [2 5 6 1 3 4])', ...
+       sprintf('%d ', SRs.assign));
+fprintf('  pins: unpolished %.4f d [%s]; three refusals excluded %.4f d [%s]\n', SR.tLast*d, ...
+        sprintf('%d ', SR.assign), SRs.tLast*d, sprintf('%d ', SRs.assign));
 ok = true;
 fprintf('  PASS\n');
 end

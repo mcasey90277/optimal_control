@@ -25,7 +25,9 @@ function V = validate_pole_series(M, opts)
 %                       vacuous PASS)
 %   PASS iff all four hold; FAIL otherwise. UNRESOLVED when the phasing in
 %   M differs from tulip_phasing() (the reference would be a different
-%   constellation).
+%   constellation). tulipConstellation's own muStar, lStar and tStar must
+%   equal M's to 1e-12 relative (validate_pole_series:constants otherwise),
+%   so the reference states are in the mission's units.
 %   Tolerance choice: tol.rel = 1e-3 sits about an order of magnitude
 %   above the nominal relative difference (the two orbit constructions
 %   differ by a few km) and several orders below what moving one slot by
@@ -60,6 +62,7 @@ function V = validate_pole_series(M, opts)
 %% Revision History:
 %  M. Casey                                                   (c) 11/10/2026
 %  M. Casey  header: no run-specific counts                   (c) 11/10/2026
+%  M. Casey  reference constants asserted; override phase wrap (c) 11/10/2026
 %  Copyright Coorbital Inc.
 %% ------------------------ Begin Code Sequence ---------------------------
 
@@ -94,14 +97,20 @@ end
 Mo = M;
 if isfield(opts, 'dtauOverride') && ~isempty(opts.dtauOverride)
     Mo.dtau6      = opts.dtauOverride(:).';
-    Mo.slotPhase0 = Mo.dtau6/M.tauT;
+    Mo.slotPhase0 = mod(Mo.dtau6, M.tauT)/M.tauT;   % same wrap as mission_gdop's validate mode
 end
 H = assemble_histories(Mo, [], 1:6, struct('onSlots', true, 'tEnd', M.tauT));
 G = mission_gdop(H, Mo, [0 M.tauT], g, struct('score', false, 'keepSeries', true, ...
                  'quiet', true, 'Nt', Nt));
 
 %% Reference: tulipConstellation states straight into the engine
-[tauC, rC] = pumpkyn.cr3bp.tulipConstellation(M.sh.Np, M.tauT, 1, M.sh.pm, dtauRef);
+[tauC, rC, ~, muC, lStarC, tStarC] = pumpkyn.cr3bp.tulipConstellation(M.sh.Np, M.tauT, 1, ...
+                                                                      M.sh.pm, dtauRef);
+cst = [muC lStarC tStarC];  cstM = [M.muStar M.lStar M.tStar];
+if any(abs(cst - cstM) > 1e-12*abs(cstM))
+    error('validate_pole_series:constants', ['tulipConstellation constants [%.15g %.15g %.15g] ' ...
+          'differ from the mission''s [%.15g %.15g %.15g] (muStar, lStar, tStar)'], cst, cstM);
+end
 [tauC, iu] = unique(tauC(:));
 rC = rC(iu, :, :);
 if abs(tauC(1)) > 1e-12 || abs(tauC(end) - M.tauT) > 1e-9

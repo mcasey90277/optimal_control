@@ -1,4 +1,4 @@
-function P = polish_rendezvous(M, k, j, cand, opts)
+function P = polish_rendezvous(M, k, jSlot, cand, opts)
 %% Purpose:
 %
 %   EXACT-SLOT POLISH of one scheduled rendezvous. The scheduler picked a
@@ -9,7 +9,7 @@ function P = polish_rendezvous(M, k, j, cand, opts)
 %
 %   For a trial duration tf the departure epoch is tDep = tArr - tf, so
 %   the departure state slides along spacecraft k's DRO as tf changes:
-%     rvf    = arrState(mod(slotPhase0(j) + tArr/tauT, 1))      (fixed)
+%     rvf    = arrState(mod(slotPhase0(jSlot) + tArr/tauT, 1))      (fixed)
 %     rv0(tf)= depState(mod(droPhase0(k) + tDep/tauD, 1))
 %     T(tf)  = minimum time from rv0(tf) to rvf (eighth component of z8),
 %              warm-started from the evaluated point nearest in tf (first
@@ -78,7 +78,7 @@ function P = polish_rendezvous(M, k, j, cand, opts)
 %
 %  k                        scalar                  spacecraft index (1..6)
 %
-%  j                        scalar                  slot index (1..6)
+%  jSlot                    scalar                  slot index (1..6)
 %
 %  cand                     struct                  .iD .iA .nRev .tDep .tArr
 %                                                   (a schedule_rendezvous
@@ -121,6 +121,7 @@ function P = polish_rendezvous(M, k, j, cand, opts)
 %
 %% Revision History:
 %  M. Casey                                                   (c) 11/10/2026
+%  M. Casey  slot index renamed jSlot (house rule)            (c) 11/10/2026
 %  Copyright Coorbital Inc.
 %% ------------------------ Begin Code Sequence ---------------------------
 
@@ -131,20 +132,20 @@ if nargin == 0
     S = schedule_rendezvous(M.tf, M.sD, M.sA, M.tauD, M.tauT, M.droPhase0, ...
                             M.slotPhase0, struct('propKgPerNd', M.propKgPerNd));
     k = 3;
-    j = S.assign(k);
+    jSlot = S.assign(k);
     cand = struct('iD', S.iD(k), 'iA', S.iA(k), 'nRev', S.nRev(k), ...
                   'tDep', S.tDep(k), 'tArr', S.tArr(k));
     opts = struct('gates', true, 'verbose', true);
 end
 if nargin > 0 && nargin < 5, opts = struct(); end
-P = polish_core(M, k, j, cand, opts);
+P = polish_core(M, k, jSlot, cand, opts);
 if nargin == 0 || fdef(opts, 'verbose', false)
-    print_row(M, k, j, cand, P);
+    print_row(M, k, jSlot, cand, P);
 end
 end
 
 % ------------------------------------------------------------------------
-function P = polish_core(M, k, j, cand, opts)
+function P = polish_core(M, k, jSlot, cand, opts)
 % POLISH_CORE  The root-find and certification (see the main header).
 %   INPUTS: as polish_rendezvous.  OUTPUTS: P as polish_rendezvous.
 tolG       = fdef(opts, 'tolG',       1e-9);
@@ -165,7 +166,7 @@ tArr   = cand.tArr;
 tfCell = M.tf(cand.iD, cand.iA);
 maxStep = familyFrac*tfCell;   % ND cap on an unbracketed secant step
 z8Cell = M.sh.z8(:, M.sh.entry_index(cand.iD, cand.iA));
-rvf    = M.arrState(mod(M.slotPhase0(j) + tArr/M.tauT, 1));
+rvf    = M.arrState(mod(M.slotPhase0(jSlot) + tArr/M.tauT, 1));
 depAt  = @(tf) M.depState(mod(M.droPhase0(k) + (tArr - tf)/M.tauD, 1));
 
 P = struct('ok', false, 'reason', '', 'z8', nan(8, 1), 'tf', NaN, ...
@@ -354,16 +355,16 @@ P.wallS = toc(tStart);
 end
 
 % ------------------------------------------------------------------------
-function print_row(M, k, j, cand, P)
+function print_row(M, k, jSlot, cand, P)
 % PRINT_ROW  One summary block of a polish (any outcome).
-%   INPUTS: M; k; j; cand; P (polish_rendezvous output).  OUTPUTS: none.
+%   INPUTS: M; k; jSlot; cand; P (polish_rendezvous output).  OUTPUTS: none.
 dayNd = M.tStar/86400;
-gapH  = mod(M.slotPhase0(j) + cand.tArr/M.tauT, 1) - M.sA(cand.iA);
+gapH  = mod(M.slotPhase0(jSlot) + cand.tArr/M.tauT, 1) - M.sA(cand.iA);
 gapH  = (gapH - round(gapH))*M.tauT*M.tStar/3600;
 fprintf(['sc %d slot %d cell (%d,%d): ok %d, %s\n  tf cell %.6f d -> polished %.6f d ' ...
          '(%+.3f h), arrival phase gap closed %.3f h, tDep %.6f d, nEval %d, ' ...
          'g %.2e\n  familyChanged %d, wall %.1f s (root %.1f, cert %.1f)\n'], ...
-        k, j, cand.iD, cand.iA, P.ok, P.reason, P.tfCell*dayNd, P.tf*dayNd, ...
+        k, jSlot, cand.iD, cand.iA, P.ok, P.reason, P.tfCell*dayNd, P.tf*dayNd, ...
         (P.tf - P.tfCell)*dayNd*24, gapH, P.tDep*dayNd, P.nEval, P.gResid, ...
         P.familyChanged, P.wallS, P.wallRootS, P.wallCertS);
 if isfield(P.flight, 'flyKm')

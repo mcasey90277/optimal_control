@@ -6,8 +6,10 @@ function ok = test_assemble_histories()
 %   real polished transfer (spacecraft 3, gates off; the other five marked
 %   onStation) -- phase sequence 1 -> 2 -> 3 with the switches at tDep and
 %   tArr to one sample, hand-over jumps, no teleport; (3) deliberate
-%   failure: tArr shifted by +0.05 ND breaks the arrival continuity number;
-%   (4) refusals: an unaccepted P that is not onStation, and the periodic
+%   failure: tArr shifted by +0.05 ND breaks the arrival continuity number
+%   (gate H2), tDep shifted by +0.05 ND breaks the departure continuity
+%   number (gate H1); (4) refusals: an unaccepted P that is not onStation,
+%   flight times with a NaN or Inf (flightGrid), and the periodic
 %   interpolants against the phase_state handles; wall time of a 50-day,
 %   300 s, six-spacecraft history is printed.
 %
@@ -25,6 +27,7 @@ function ok = test_assemble_histories()
 %
 %% Revision History:
 %  M. Casey                                                   (c) 11/10/2026
+%  M. Casey  H1 deliberate failure, non-finite flight times     (c) 11/10/2026
 %  Copyright Coorbital Inc.
 %% ------------------------ Begin Code Sequence ---------------------------
 
@@ -79,10 +82,10 @@ assert(isequal(size(rvH), [6 200]) && max(abs(rvH(:) - rvS(:))) < 1e-14, ...
 S = schedule_rendezvous(M.tf, M.sD, M.sA, M.tauD, M.tauT, M.droPhase0, ...
                         M.slotPhase0, struct('propKgPerNd', M.propKgPerNd));
 k = 3;
-j = S.assign(k);
+jSlot = S.assign(k);
 cand = struct('iD', S.iD(k), 'iA', S.iA(k), 'nRev', S.nRev(k), ...
               'tDep', S.tDep(k), 'tArr', S.tArr(k));
-P3 = polish_rendezvous(M, k, j, cand, struct('gates', false));
+P3 = polish_rendezvous(M, k, jSlot, cand, struct('gates', false));
 assert(P3.ok, 'polish not ok: %s', P3.reason);
 Pc = cell(1, 6);  Pc{k} = P3;
 onSt = true(1, 6);  onSt(k) = false;
@@ -135,6 +138,13 @@ optsInf = opts;  optsInf.epochTol = inf;
 Hb = assemble_histories(M, Pcb, asg, optsInf);
 fprintf('  shifted tArr: arr jump %.1f km\n', Hb.jumpKm.arr(k));
 assert(Hb.jumpKm.arr(k) > 100, 'the continuity number must be able to fail');
+% deliberate failure of gate H1: tDep shifted +0.05 ND (tArr kept), so the
+% DRO state at the new tDep no longer matches the flight's first sample
+Pdp = P3;  Pdp.tDep = P3.tDep + 0.05;
+Pcdp = cell(1, 6);  Pcdp{k} = Pdp;
+Hdp = assemble_histories(M, Pcdp, asg, optsInf);
+fprintf('  shifted tDep: dep jump %.1f km (gate H1 limit 1 km)\n', Hdp.jumpKm.dep(k));
+assert(Hdp.jumpKm.dep(k) > 1000, 'the departure continuity number must be able to fail');
 
 % ---- 4. refusals and the struct-array form ----
 Pbad = P3;  Pbad.ok = false;
@@ -174,6 +184,22 @@ catch err
     assert(strcmp(err.identifier, 'assemble_histories:flightGrid'), ...
            'flightGrid id: %s', err.identifier);
 end
+% a NaN or Inf inside the flight time vector: flightGrid (a NaN in the
+% middle would otherwise pass the monotonicity test, NaN comparisons
+% being false)
+for badT = [NaN Inf]
+    Pn = P3;
+    Pn.flight.t(round(numel(Pn.flight.t)/2)) = badT;
+    Pcn = cell(1, 6);  Pcn{k} = Pn;
+    try
+        assemble_histories(M, Pcn, asg, opts);
+        error('test:noRefusal', 'flight time %g accepted', badT);
+    catch err
+        assert(strcmp(err.identifier, 'assemble_histories:flightGrid'), ...
+               'flight time %g id: %s', badT, err.identifier);
+    end
+end
+fprintf('  flight times with NaN / Inf refused (assemble_histories:flightGrid)\n');
 
 % ---- 4b. phase boundaries exactly on grid nodes (synthetic straight flight)
 dt0 = 300/M.tStar;

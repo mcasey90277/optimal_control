@@ -136,6 +136,7 @@ function G = mission_gdop(H, M, window, grid, opts)
 %
 %% Revision History:
 %  M. Casey                                                   (c) 11/10/2026
+%  M. Casey  local-function headers                           (c) 11/10/2026
 %  Copyright Coorbital Inc.
 %% ------------------------ Begin Code Sequence ---------------------------
 
@@ -164,6 +165,12 @@ end
 
 %% ======================================================================
 function G = core(H, M, window, grid, opts)
+% CORE  The mission-window computation (see the main header: epochs,
+%   on-station set, positions, stitch, scores).
+%   INPUTS:  H assemble_histories struct; M mission inputs; window [1 x 2]
+%            [t0 t1] ND; grid mission_grid struct; opts struct (as the
+%            main header).
+%   OUTPUTS: G struct (the main header's G fields).
 wall0     = tic;
 doScore   = getopt(opts, 'score', true);
 chunkSel  = getopt(opts, 'chunkSel', 1:numel(grid.chunks));
@@ -327,7 +334,13 @@ end
 
 %% ======================================================================
 function [S, tm] = score_points(gd, vis, tSec, doG7)
-% run_requirements_table's verdict recipe, per grid point.
+% SCORE_POINTS  run_requirements_table's verdict recipe, per grid point.
+%   INPUTS:  gd [Nt x Npts] GDOP (NaN: fewer than four in view); vis
+%            [Nt x Npts] visibility count; tSec [Nt x 1] epochs [s]; doG7
+%            logical (also R3 on GDOP < 7).
+%   OUTPUTS: S struct .r1 .r2 [1 x Npts] fractions, .r3 .r3g7 [1 x Npts]
+%            [h] (r3g7 NaN when ~doG7); tm [1 x 3] wall time of R1+R2, R3,
+%            R3g7 [s].
 rak  = struct('dt', median(diff(tSec)), 'bin_duration', 86400);
 req  = struct('min_block_duration', 4*3600, 'total_duration', 9*3600);
 cov6 = gd < 6;
@@ -358,13 +371,21 @@ end
 
 %% ======================================================================
 function r = slot_positions(M, slot, tt)
-% Exact slot position [n x 3] ND at clock times tt [n x 1].
+% SLOT_POSITIONS  Exact slot position from the slot definition.
+%   INPUTS:  M mission inputs; slot scalar (1..6); tt [n x 1] clock times
+%            [ND].
+%   OUTPUTS: r [n x 3] barycentric rotating positions [ND].
 rv = M.arrState(mod(M.slotPhase0(slot) + tt(:).'/M.tauT, 1));
 r  = rv(1:3, :).';
 end
 
 %% ======================================================================
 function V = validate_mode(M, opts)
+% VALIDATE_MODE  The validation gate against the saved Table 1 column (see
+%   the main header: VALIDATION).
+%   INPUTS:  M mission inputs; opts struct (.refFile .chunkSel
+%            .dtauOverride .refPhasing .quiet .logFile .maxBaseBytes).
+%   OUTPUTS: V struct (the main header's V fields).
 wall0   = tic;
 refFile = getopt(opts, 'refFile', fullfile(getenv('HOME'), 'Desktop', 'proj7', ...
                  'figures', 'requirements_table_results.mat'));
@@ -470,5 +491,8 @@ V.wallS = toc(wall0);
 end
 
 function v = getopt(s, name, default)
+% GETOPT  s.(name) when present and non-empty, else default.
+%   INPUTS:  s struct; name char; default any.
+%   OUTPUTS: v the option value.
 if isfield(s, name) && ~isempty(s.(name)), v = s.(name); else, v = default; end
 end

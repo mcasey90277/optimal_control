@@ -1,7 +1,8 @@
 # lunar_pnt_mission -- six spacecraft DRO -> tulip slots, then the south-pole GDOP time series
 
 Six spacecraft parked in one 4.43 d distant retrograde orbit each fly a
-certified 70 mN minimum-time low-thrust transfer onto one of the six slots of
+certified 70 mN minimum-time low-thrust transfer (Measured results says what
+"certified" covers) onto one of the six slots of
 the 7-petal tulip constellation (the paper's phasing), timed so that each
 lands on its exact slot state at a pinned arrival epoch. The product is ONE
 time series: GDOP at the lunar south pole (latitude -90, 0 deg mask) from
@@ -18,7 +19,7 @@ behind `scoreRequirements = true` and is not run by default. Design:
 ```matlab
 cd orbit_transfer/lunar_pnt_mission
 lunar_pnt_mission_study    % edit the knobs block, press Run (CLEARS the workspace it runs in)
-cd tests; run_tests        % every test, one verdict, throws on failure (~10 min)
+cd tests; run_tests        % every test, one verdict, throws on failure (~11 min)
 ```
 
 The script clears its workspace (`clearvars -except study_opts`). Run it
@@ -29,8 +30,15 @@ with `which` that every function resolves in the folder it is meant to.
 Outputs go to `results/` (git-ignored): four PNGs (five with
 `scoreRequirements`) and `lunar_pnt_mission_study.mat`:
 `pole` (tDays, gdop, nOn, nVis, arrDays, stats), `S S0 P Pattempted
-polishCache H Vpole V Gservice gates rounds I2 run_meta`; positions are
-stored as single.
+polishCache H Vpole V Gservice gates rounds I2 fingerprint run_meta`.
+`H.r` is saved in double precision (18.0 MB file, about 1 MB more than
+single), so the saved history passes `mission_gdop`'s 1e-9 ND slot check
+and can be fed back into it. `run_meta` records the date, MATLAB version,
+knobs, the git HEAD of this repository (found from the script's folder) and
+of proj7, each with a dirty flag (`optimal_controlDirty`, `proj7Dirty`:
+tracked files modified), and `verdictSuffix`, the VERDICT's disclosure
+text. The run header prints the same git state, e.g. `optimal_control
+1d43572 (DIRTY: 105 tracked path(s) modified)`.
 
 ## Knobs (section 0 of the study script)
 
@@ -38,12 +46,13 @@ stored as single.
 |---|---|---|
 | `tol` | 0.005 | arrival phase tolerance [fraction of a tulip period] |
 | `nMaxRevs` | 10 | longest DRO wait [whole revolutions] |
-| `dtSec` | 300 | history grid step [s] |
+| `dtSec` | 300 | history grid step and south-pole series cadence [s] (G0's own one-period comparison keeps its 300 s grid) |
 | `serviceDays` | 30 | service window after the last arrival [d] |
 | `validate` | true | run the validation gate(s); false gives STOPPED AT VALIDATION (G0 NOT RUN) |
 | `maxRounds` | 12 | schedule -> polish -> exclude rounds before giving up |
 | `polishGates` | true | full certification on every polish (false: fly gate only) |
-| `i2Km` | 1 | I2 limit: orbit handle vs direct propagation [km] |
+| `i2Km` | 1 | I2 limit: orbit handle vs direct propagation, position [km] |
+| `i2Mps` | 0.1 | I2 limit: the same, velocity [m/s] (measured max 0.0016 m/s) |
 | `i2Phases` | 2400 | I2 uniform phases (plus 200 around the tulip perilune) |
 | `scoreRequirements` | false | also score R1-R3 on the paper grid (G0R validation vs Table 1, R gates, service_map.png) |
 | `scoreGrid` | 'paper' | grid R1-R3 are scored on (scoreRequirements only) |
@@ -61,10 +70,11 @@ line, e.g. `VERDICT: PASS (reduced: serviceDays 3)`.
 
 ## How the schedule is found
 
-`schedule_rendezvous` assigns spacecraft to slots so the last arrival is as
-early as possible, each (spacecraft, slot) pair represented by its earliest
-catalog cell whose arrival phase lies within `tol` of the slot at the arrival
-epoch (whole-revolution DRO waits allowed). `polish_rendezvous` then moves
+`schedule_rendezvous` assigns spacecraft to slots so as to minimise the last
+arrival OVER ITS CANDIDATE SET: each (spacecraft, slot) pair is represented by
+its earliest primary catalog cell whose arrival phase lies within `tol` of the
+slot at the arrival epoch (whole-revolution DRO waits allowed), and that
+cell's arrival epoch is then PINNED. `polish_rendezvous` moves
 each transfer onto the slot's exact state at that pinned epoch, sliding the
 departure along the DRO; it can refuse (a root that needs a departure before
 clock 0, a root not found, a failed or erroring certification gate). A refusal
@@ -81,23 +91,38 @@ labelled as such.
 
 ## Gates
 
-| id | condition |
-|---|---|
-| I1 | every `mission_inputs` check (catalog, periods, phasing, regime, two flown catalog cells land on the tulip) |
-| I2 | the periodic phase_state handles (tulip and DRO) agree with a direct ode113 propagation (tol 1e-13) to < 1 km at >= 2,400 phases incl. the perilune neighbourhood |
-| C1 | a complete assignment exists (in every round) |
-| P1-P6 | spacecraft k's final candidate accepted by the polish |
-| PF | flown miss < 100 km and < 10 m/s on all six |
-| PR | ms_tfmin reproduces the polished root, residual < 1e-8 |
-| PP | pmp_pointwise_checks (H, lambda_m, adjoint, minimum principle, throttle, Q_mt) on all six |
-| PH | hypothesis gates: min abs(lambda_v) > 0, min Q_mt > 0, dim S = 1 |
-| PC | conjugate test passed and covered the arc (PASS / FAIL / UNRESOLVED) |
-| PA | pumpkyn tfMin reproduces each polished z8 to 1e-6 |
-| H1 | DRO -> transfer position jump < 1 km on all six |
-| H2 | transfer -> slot position jump < 100 km on all six |
-| G0 | `validate_pole_series`: on-slots pole series over one tulip period vs a direct engine call on `tulipConstellation` states; relative GDOP difference < 1e-3 (GDOP < 20, same visibility count), visibility and finite/NaN mismatches only next to a visibility edge |
-| G0R | scoreRequirements only: R1-R3 floors within 0.005 / 0.005 / 0.10 h of the paper's Table 1 column on the same points |
-| R1-R3 | scoreRequirements only: the LunaNet floors over the service window on the paper grid |
+Every gate has a deliberate-failure experiment (spec section 8): a test that
+makes it fail on purpose, so the quantity behind each gate is known to move. For I1, H1 and H2 the
+experiment shows the measured quantity crossing the threshold (the oracle or
+the jump is sensitive); it does not run the study's own gate row to FAIL, so
+those three tests would not notice the gate row being deleted. For PC the
+experiment exercises the reproduction prerequisite, not a conjugate FAIL.
+
+| id | condition | shown to fail by |
+|---|---|---|
+| I1 | every `mission_inputs` check (catalog, periods, phasing, regime, two flown catalog cells land on the tulip) | `test_mission_inputs` (quantity only): the same cell flown with 1.01 x Tnd misses by 1.37e4 km |
+| I2 | the periodic phase_state handles (tulip and DRO) agree with a direct ode113 propagation (tol 1e-13) to < 1 km and < 0.1 m/s at >= 2,400 phases incl. the perilune neighbourhood | `test_lunar_pnt_mission_study` (J): `i2Km = 1e-6`, then `i2Mps = 1e-6` -> I2 FAIL, STOPPED AT INPUTS |
+| C1 | a complete assignment exists (in every round) | `test_lunar_pnt_mission_study` (D): `tol = 1e-7`; `test_schedule_rendezvous` (4, 6): `noAssignment` |
+| P1-P6 | spacecraft k's final candidate accepted by the polish | `test_polish_rendezvous` (3a, 3b, 4-8): refusals, failed and erroring gates give ok = false |
+| PF | flown miss < 100 km and < 10 m/s on all six | `test_polish_rendezvous` (4): `flyKmMax = 1e-9` |
+| PR | ms_tfmin reproduces the polished root, residual < 1e-8 | `test_polish_rendezvous` (7): `residMax = 0` |
+| PP | pmp_pointwise_checks (H, lambda_m, adjoint, minimum principle, throttle, Q_mt) on all six | `test_polish_rendezvous` (7): `HmaxMax = 0` |
+| PH | hypothesis gates: min abs(lambda_v) > 0, min Q_mt > 0, dim S = 1 | `test_polish_rendezvous` (6): `dimS = 2` |
+| PC | conjugate test passed and covered the arc on a reproduced root (PASS / FAIL / UNRESOLVED) | `test_polish_rendezvous` (8): `reproTol = 0` (the verdict only counts for a reproduced root) |
+| PA | pumpkyn tfMin reproduces each polished z8 to 1e-6 | `test_polish_rendezvous` (7): `accDzMax = 0` |
+| H1 | DRO -> transfer position jump < 1 km on all six | `test_assemble_histories` (3) (quantity only): tDep shifted 0.05 ND -> 9,090 km |
+| H2 | transfer -> slot position jump < 100 km on all six | `test_assemble_histories` (3) (quantity only): tArr shifted 0.05 ND -> 16,354 km |
+| G0 | `validate_pole_series`: on-slots pole series over one tulip period vs a direct engine call on `tulipConstellation` states; relative GDOP difference < 1e-3 (GDOP < 20, same visibility count), visibility and finite/NaN mismatches only next to a visibility edge | `test_validate_pole_series` (3) and `test_lunar_pnt_mission_study` (I): slot 6 moved 0.3 ND -> FAIL, STOPPED AT VALIDATION |
+| G0R | scoreRequirements only: R1-R3 floors within 0.005 / 0.005 / 0.10 h of the paper's Table 1 column on the same points | `test_mission_gdop` (7): satellite 6 moved 0.3 ND -> FAIL |
+| R1-R3 | scoreRequirements only: the LunaNet floors over the service window on the paper grid | covered by the G0R experiment (the same scorers) |
+
+Checks inside the library have their own experiments: `mission_gdop:slot`
+(an on-station position moved 1e-6 ND, `test_mission_gdop`),
+`mission_gdop:phase`, `assemble_histories:flightGrid` (NaN / Inf / reversed
+flight times, `test_assemble_histories`), `mission_movie:containment` (zoom
+envelope forced to half through the `zoomScale` test seam,
+`test_mission_movie`) and the reuse guards (`test_lunar_pnt_mission_study`
+F, G).
 
 Anything but PASS from G0 (or G0R), including NOT RUN, stops the study
 before the GDOP section. `VERDICT: PASS` only when every gate is PASS;
@@ -124,17 +149,28 @@ the GDOP part can be re-run without re-solving. It is guarded:
 - The whole reuse is refused (`lunar_pnt_mission_study:reuse`) unless the
   file's `fingerprint` equals this run's: catalog name and created date,
   MD5 of `sh.z8` and `sh.tf_nd`, thrust, Isp, m0, muStar, lStar, tStar,
-  `dtau6`, the polish thresholds and `polishGates`. A file without a
-  fingerprint (made before this guard) is refused.
+  `dtau6`, the spacecraft DRO phases `droPhase0`, MD5 of the DRO and tulip
+  orbit handles sampled at 64 phases (`droMd5`, `tulipMd5`), the polish
+  thresholds and `polishGates`. A file without a fingerprint, or whose
+  fingerprint lacks one of these fields, is refused: every results file
+  written before 2026-11-10 21:00 (no `droPhase0` / `droMd5` / `tulipMd5`)
+  is therefore no longer reusable.
 - Each cached entry, when taken for the current candidate, must have the
   candidate's arrival epoch (1e-12 ND), `tDep + tf = tArr` (1e-12), the
-  current slot state as its target (1e-12) and the current thresholds; an
-  entry that fails is ignored, printed as IGNORED, and polished afresh.
+  current slot state as its target (1e-12), the spacecraft's current DRO
+  state at its cached `tDep` as its departure state `rv0` (1e-12) and the
+  current thresholds; an entry that fails is ignored, printed as IGNORED,
+  and polished afresh.
 - Reused polishes are NOT re-certified in the run that reuses them:
   `run_meta.polishSource` records fresh / reused per spacecraft with the
-  certifying file, date and git HEAD, the P1..P6 / PF / PR / PP / PH / PC /
-  PA rows are tagged REUSED, and the VERDICT reads `PASS (REUSED polishes
-  ... certified <date> at <HEAD>; not re-certified in this run)`.
+  certifying file, date and git HEAD (with `-dirty` appended when that run's
+  working tree had modified tracked files), the P1..P6 / PF / PR / PP / PH /
+  PC / PA rows are tagged REUSED, and the VERDICT reads `PASS (REUSED
+  polishes ... certified <date> at <HEAD>; not re-certified in this run)`.
+- Reused REFUSALS decide the exclusions, so they are disclosed too, even
+  when all six final polishes are fresh: `(exclusions reused: 3 refused
+  polish(es) from <file>, certified <date> at <HEAD>; not re-polished in
+  this run)`.
 
 ## Movie
 
@@ -145,7 +181,11 @@ info = mission_movie('', struct('dayList', [0 10 30])); % PNGs at chosen mission
 ```
 
 `lib/mission_movie.m` reads `results/lunar_pnt_mission_study.mat` (H, P, pole)
-and re-solves nothing. 1280 x 720, 30 fps, 70 s, dark background. Top: the
+and re-solves nothing. It takes muStar, lStar and tStar from the file's
+`fingerprint` (the catalog's values; `mission_inputs()` when a file has none)
+and reports in `info.provenance` (never on screen) whether the run was a fresh
+full-knob run or carried a REUSED / reduced note (`run_meta.verdictSuffix`).
+1280 x 720, 30 fps, 70 s, dark background. Top: the
 Earth-Moon rotating frame (orthographic camera, no axes; a km scale bar and an
 Earth-direction pointer, since Earth is 389,703 km away), the textured Moon,
 the DRO and tulip outlines with labels (one CR3BP period each, closure
@@ -206,25 +246,59 @@ Options (`opts`): `outFile`, `fps` [30], `durationSec` [70], `frameSize`
 [1280 720], `visible` [false], `maxFrames` [inf], `frameList` / `dayList`
 (PNG previews; days must lie in the mission), `preview` [false],
 `previewDir`, `tailDays` [2], `plumePx` [62], `moonTexture`, `probeKm` (test
-markers), `quality` [95]. `info` returns the frame days and drawn states,
-plume counts and directions (3-D and on screen), the camera and zoom per
-frame with the containment margins, outline visibility, the Moon texture
-state and the time map.
+markers), `quality` [95], `zoomScale` [1] (test seam: scales the zoom
+envelope before the containment check). `info` returns the frame days and
+drawn states, plume counts and directions (3-D and on screen), the camera and
+zoom per frame with the containment margins, outline visibility, the Moon
+texture state, the time map and the provenance.
 
 ## Tests
 
-`tests/run_tests.m` runs all eight tests. `test_lunar_pnt_mission_study`
-runs the script in throwaway function workspaces: the default pole-series
-path (3 service days, the polish loop for real), `validate = false`,
-`maxRounds = 1`, `tol = 1e-7`, a reduced `scoreRequirements = true` run
-(chunk 5, 3 days, checking the REUSED disclosure), reuse refused for a
-different fingerprint and for a file without one, a tampered cached entry
-ignored and re-polished, and the G0-FAIL stop through `g0SlotOverride`;
-the later runs reuse the first run's polishes.
-`test_mission_movie` renders 12 frames to a temporary MP4 and three preview
-PNGs from the saved results (it skips, passing, when no results file exists)
-and checks the size, the frame count, plume on mid-transfer and off after the
-last arrival, and the drawn plume direction against `+lam_v/|lam_v|`.
+`tests/run_tests.m` runs all nine tests (about 11 min; measured 657 s on
+2026-11-10, 455 s of it the study test): `test_mission_inputs`,
+`test_schedule_rendezvous`, `test_polish_rendezvous`,
+`test_assemble_histories`, `test_mission_gdop`, `test_validate_pole_series`,
+`test_pole_series_stats`, `test_lunar_pnt_mission_study`,
+`test_mission_movie`. Each gate's deliberate-failure test is in the Gates
+table.
+
+The headline numbers are pinned: `test_schedule_rendezvous` (9) asserts the
+unpolished optimum 18.537 d with assignment `[2 4 6 1 5 3]` and, with the
+three refused candidates excluded (`[1 2 1 1 0; 2 4 5 15 0; 6 4 21 16 0]`,
+rows `[k j iD iA nRev]` from the saved run's `rounds`), 18.799 d with
+`[2 5 6 1 3 4]`; `test_lunar_pnt_mission_study` (A) asserts on the real
+polish loop the last arrival day 18.799, the assignment `[2 5 6 1 3 4]`,
+71.261 kg, exactly three rounds and no family change.
+`test_pole_series_stats` checks the service statistics on hand-built series
+(all NaN, an outage of known length at the start / middle / end, values
+exactly 6, an Inf).
+
+`test_lunar_pnt_mission_study` runs the script in throwaway function
+workspaces: (A) the default pole-series path (3 service days, the polish
+loop for real, the pins, the saved double-precision H fed back into
+`mission_gdop`, the new fingerprint fields and git dirty flags), (B)
+`validate = false`, (C) `maxRounds = 1`, (D) `tol = 1e-7`, (E) a reduced
+`scoreRequirements = true` run (chunk 5, 3 days, checking the REUSED and
+reused-exclusions disclosure), (F) reuse refused for a different
+fingerprint and for a file without one, (G) two tampered cached entries
+(an arrival epoch, a departure state) ignored and re-polished, (I) the
+G0-FAIL stop through `g0SlotOverride`, (J) the I2 failures; the later runs
+reuse (A)'s polishes. A run that reuses ONLY refusals (all six final
+polishes fresh) goes through the same disclosure code as (E) but is not run
+on its own (six fresh polishes, about 5 min).
+
+`test_mission_movie` reads the saved results (it skips, passing, when no
+results file exists) and writes only to a temporary folder: a 12-frame MP4
+(size, frame count, no partial file left, partial renders aimed at the
+default movie refused, the default movie untouched), six preview PNGs (camera
+fixed in direction and target, end framing first and last, containment
+margins, plume on mid-transfer and off after the last arrival, plume
+direction against `+lam_v/|lam_v|` at a node and between nodes, the drawn
+plume on screen), two probe PNGs at two zoom levels (the km -> pixel map
+against where MATLAB draws), two PNGs of a file with a spacecraft on station
+from t = 0, the provenance, and the containment failure through `zoomScale`.
+It uses plain MATLAB only (the probe blobs are found with `find` and `mean`;
+no Image Processing Toolbox).
 
 ## Refusals
 
@@ -242,14 +316,45 @@ last arrival, and the drawn plume direction against `+lam_v/|lam_v|`.
 
 ## Measured results
 
-Full default run, 2026-11-10 (commit a20d563 for the certification, results
-file fingerprint z8 MD5 1cbd1390...; 330 s, of which 325 s is the six
-certified polishes). Every gate PASS.
+Full default run, 2026-11-10 21:23 (342 s, of which 337 s is the certified
+polishes; results file fingerprint z8 MD5 1cbd1390...). Every gate PASS.
+Provenance: the run was made from a working tree with UNCOMMITTED changes
+(this fix wave) on top of 1d43572; `run_meta` records `optimal_control
+1d43572` with `optimal_controlDirty = true` (105 modified tracked paths in
+the repository, most of them unrelated) and `proj7 3a7f898` with
+`proj7Dirty = true`. The first run that produced these numbers (20:06) was
+likewise made from uncommitted changes on top of a20d563, not from commit
+a20d563 itself. Both runs give identical numbers.
+
+**What "certified" covers for a polished transfer.** Each accepted transfer
+passed, on its final z8 and departure state: the flown miss (< 100 km,
+< 10 m/s, admissible flight); a separate multiple-shooting `ms_tfmin` solve (24 segments,
+tolR 3e-11) that REPRODUCES the root (max |dz| < 1e-6) with residual
+< 1e-8; the pointwise PMP checks (`pmp_pointwise_checks`: H, lambda_m,
+adjoint, minimum principle, throttle, Q_mt >= 0); the three hypothesis gates
+(min |lambda_v| > 0, min Q_mt > 0, dim S = 1); the conjugate-point junction
+test of `ms_tfmin` (pass and covered, on the reproduced root); and the
+pumpkyn `tfMin` acceptance (tfMin from the polished z8 returns it to 1e-6).
+It does NOT include, relative to the library's own study script
+(`DRO_tulip/indirect/transfer_study.m`): the lift margin, the null-residual
+and H-residual thresholds, the H6 margin, or the dense conjugate-spectrum
+scan. Every gate integrates through pumpkyn's `tfMinProp` (the same
+integrator as the solve): the checks are integrator-consistent, not an
+independent re-flight in a different integrator.
 
 **Schedule.** Three rounds. Round 1 (unpolished optimum, last arrival day
 18.537): spacecraft 1 and 2 refused, their exact-slot solution needs a
 departure before clock 0. Round 2: spacecraft 6 refused for the same reason.
 Round 3: all six accepted. Constellation complete on day 18.799.
+
+Pinned-epoch caveat. Each candidate's arrival epoch is pinned to its catalog
+cell's value and is never searched. All three refusals were "departure
+before clock 0", which a slightly later arrival epoch could cure. So day
+18.799 is the optimum of THIS formulation (primary catalog cells, whole-
+revolution waits, pinned arrival epochs, refused candidates excluded), and
+an UPPER bound on what a free-epoch polish could reach; the unpolished
+18.537 is not a proven lower bound (a polish moves t_f, and cells off the
+primary set were not searched).
 
 | sc | slot | cell (iD,iA) | departs (d) | arrives (d) | t_f cell (d) | t_f polished (d) | flown miss (km) | propellant (kg) | dV (km/s) |
 |---|---|---|---|---|---|---|---|---|---|
@@ -261,13 +366,20 @@ Round 3: all six accepted. Constellation complete on day 18.799.
 | 6 | 4 | (22,17) | 0.227 | 18.327 | 18.14271 | 18.09995 | 4.0e-04 | 12.403 | 0.7617 |
 
 No spacecraft waits a DRO revolution; total propellant 71.261 kg. Each
-polished transfer passes the flown-miss, residual, pointwise, hypothesis,
-conjugate and pumpkyn tfMin acceptance gates; none changed family.
+polished transfer passes every gate listed above under What "certified" covers;
+none changed family.
 
 **Orbit handles (I2).** Against a direct propagation at 2,582 phases: tulip
-handle max 0.015 km, DRO handle max 0.006 km. Against pumpkyn's
-`tulipConstellation` at its own samples the slot states differ by a median
-of 0.48 km and at most 2.96 km.
+handle max 0.015 km and 0.0016 m/s, DRO handle max 0.006 km and 0.00015 m/s.
+Against pumpkyn's `tulipConstellation` at its own samples the slot states
+differ by a median of 0.48 km and at most 2.96 km (it applies no
+continuation). A 33.8 km figure seen during development is not a slot-state
+error: the slot states agree with direct propagation to 0.015 km and with
+`tulipConstellation` at its own samples to 2.96 km; the larger difference
+appeared only when `tulipConstellation`'s non-uniform samples were
+spline-resampled near perilune (the likely explanation, not proven), and
+gate G0 bounds its effect on the pole GDOP (max relative difference
+1.5e-4).
 
 **Validation (G0).** On-slots south-pole series against a direct engine call
 on `tulipConstellation` states over one tulip period: max relative
@@ -292,8 +404,13 @@ with exactly four it is at least 16.7 (measured, this constellation).
 
 **Requirement scoring** (`scoreRequirements = true`, not the default; the run
 of 2026-11-10 before the default changed): validation against the saved
-Table 1 column identical (floors 1.000000 / 0.754032 / 17.987224 h); 30-day
-service floors R1 1.000, R2 0.754, R3 17.695 h.
+Table 1 column, full paper grid, on slots, one period: the three FLOORS are
+identical (1.000000 / 0.754032 / 17.987224 h). Per point the results are not
+identical: 74 R2 points and 75 R3 points differ (R3 by at most 1.35 h, far
+from the floor), and those per-point differences vanish when the
+reference's own orbit construction (`tulipConstellation`) supplies the
+states, i.e. they come from the two orbit constructions, not from the
+scoring. 30-day service floors R1 1.000, R2 0.754, R3 17.695 h.
 
 **Movie.** `results/lunar_pnt_mission.mp4`, 70 s, 1280 x 720 (revision 3:
 zoom widens to 1.75 times the end framing at day 12.5 so all six spacecraft
@@ -302,5 +419,8 @@ stay in view; smallest margin to the scene edge 16.5 px).
 **What these numbers do not show.** The validation shares proj7's GDOP
 engine with what it checks (it catches wiring on this side, not an engine
 error). The schedule optimum is over primary catalog cells with whole-
-revolution waits and the exclusions made by refused polishes; alternatives
-were not searched.
+revolution waits, pinned arrival epochs and the exclusions made by refused
+polishes; alternative cells and free arrival epochs were not searched (see
+the pinned-epoch caveat). The certification is integrator-consistent
+(pumpkyn `tfMinProp` throughout) and omits the study script's lift, null-
+and H-residual, H6 and dense conjugate-spectrum checks.

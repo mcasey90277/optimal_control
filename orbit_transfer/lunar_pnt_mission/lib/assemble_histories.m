@@ -59,6 +59,8 @@ function H = assemble_histories(M, P, assign, opts)
 %                                                   |tDep + flight.t(end) -
 %                                                   tArr| [ND]; larger throws
 %                                                   (inf disables the check)
+%   Flight times must all be finite (a NaN or Inf throws
+%   assemble_histories:flightGrid before the monotonicity test).
 %
 %% Outputs:
 %
@@ -87,6 +89,7 @@ function H = assemble_histories(M, P, assign, opts)
 %
 %% Revision History:
 %  M. Casey                                                   (c) 11/10/2026
+%  M. Casey  non-finite flight times refused                  (c) 11/10/2026
 %  Copyright Coorbital Inc.
 %% ------------------------ Begin Code Sequence ---------------------------
 
@@ -138,6 +141,11 @@ for kk = 1:nSc
     end
     tf0 = Pk{kk}.flight.t(:);
     Yf0 = Pk{kk}.flight.Y(:, 1:3);
+    if ~all(isfinite(tf0))
+        error('assemble_histories:flightGrid', ...
+              'spacecraft %d: flight times contain %d non-finite value(s)', ...
+              kk, nnz(~isfinite(tf0)));
+    end
     keep = [true; diff(tf0) ~= 0];
     tf0 = tf0(keep);  Yf0 = Yf0(keep, :);
     if numel(tf0) < 2 || any(diff(tf0) <= 0)
@@ -227,5 +235,8 @@ H.dtSec  = dtSec;
 end
 
 function v = getopt(s, name, default)
+% GETOPT  s.(name) when present and non-empty, else default.
+%   INPUTS:  s struct; name char; default any.
+%   OUTPUTS: v the option value.
 if isfield(s, name) && ~isempty(s.(name)), v = s.(name); else, v = default; end
 end

@@ -13,6 +13,7 @@
 %
 %     0  knobs                              (one source; study_opts overrides)
 %     1  inputs and the orbit handles       I1 inputs, I2 interpolation vs propagation
+%                                           (position and velocity)
 %     2  schedule                           C1 a complete assignment exists
 %     3  polish: schedule -> polish ->      P1..P6 accepted, PF flown, PR residual,
 %        exclude -> re-schedule loop        PP pointwise, PH hypotheses, PC conjugate,
@@ -47,18 +48,32 @@
 %
 %   REUSE (knob reuse): polishes from an earlier results file seed the
 %   cache only if (1) the file's fingerprint (catalog name, created date,
-%   MD5 of sh.z8 and sh.tf_nd, regime constants, dtau6, polish thresholds,
-%   polishGates) equals this run's -- otherwise the whole reuse is refused
-%   (lunar_pnt_mission_study:reuse) -- and (2) each entry, when taken for
-%   a candidate, has the candidate's tArr (1e-12), tDep + tf = tArr
-%   (1e-12), the current slot state as its rvf (1e-12) and the current
-%   thresholds; an entry failing any of these is ignored and re-polished
-%   (printed). Reused polishes are NOT re-certified: the P rows are tagged
-%   REUSED, run_meta.polishSource names their source, and the VERDICT says so.
+%   MD5 of sh.z8 and sh.tf_nd, regime constants, dtau6, the spacecraft DRO
+%   phases droPhase0, MD5 of the DRO and tulip handles at 64 phases,
+%   polish thresholds, polishGates) equals this run's -- otherwise the
+%   whole reuse is refused (lunar_pnt_mission_study:reuse; a file written
+%   before a fingerprint field existed is refused too) -- and (2) each
+%   entry, when taken for a candidate, has the candidate's tArr (1e-12),
+%   tDep + tf = tArr (1e-12), the current slot state as its rvf (1e-12),
+%   the spacecraft's current DRO state at its tDep as its rv0 (1e-12) and
+%   the current thresholds; an entry failing any of these is ignored and
+%   re-polished (printed). Reused polishes are NOT re-certified: the P rows
+%   are tagged REUSED, run_meta.polishSource names their source, and the
+%   VERDICT says so; reused REFUSALS (which decide the exclusions) are
+%   named in the VERDICT too, even when all six final polishes are fresh.
+%
+%   PROVENANCE: run_meta records the HEAD of this repository (found from
+%   the script's folder) and of proj7, each with a dirty flag (tracked
+%   files modified); a fresh polish's "certified at" head carries -dirty
+%   when the working tree was dirty. run_meta.verdictSuffix keeps the
+%   VERDICT's disclosure text.
 %
 %  M. Casey                                                   (c) 11/10/2026
 %  M. Casey  rescope: south-pole GDOP series by default        (c) 11/10/2026
 %  M. Casey  guarded reuse (fingerprint, per-entry checks)      (c) 11/10/2026
+%  M. Casey  final-review fixes: git dirty flags, I2 velocity, orbit
+%            fingerprint + rv0 entry check, pole_series_stats, dtSec
+%            sets the pole cadence, H.r saved as double       (c) 11/10/2026
 %  Copyright Coorbital Inc.
 
 clearvars -except study_opts
@@ -70,12 +85,13 @@ here = fileparts(mfilename('fullpath'));
 %% ========================================================================
 tol         = 0.005;                 % arrival phase tolerance [fraction of a tulip period]
 nMaxRevs    = 10;                    % longest DRO wait [whole revolutions]
-dtSec       = 300;                   % history grid step [s]
+dtSec       = 300;                   % history grid step AND pole-series cadence [s]
 serviceDays = 30;                    % service window after the last arrival [d]
 validate    = true;                  % run the validation gate(s); false = STOPPED AT VALIDATION
 maxRounds   = 12;                    % schedule -> polish -> exclude rounds before giving up
 polishGates = true;                  % full certification on every polish (false: fly gate only)
-i2Km        = 1;                     % I2 limit: orbit handle vs direct propagation [km]
+i2Km        = 1;                     % I2 limit: orbit handle vs direct propagation, position [km]
+i2Mps       = 0.1;                   % I2 limit: the same, velocity [m/s] (measured max 0.0016)
 i2Phases    = 2400;                  % I2 uniform phases (plus 200 around the tulip perilune)
 scoreRequirements = false;           % also score R1-R3 on the paper grid (validated vs Table 1)
 scoreGrid   = 'paper';               % grid R1-R3 are scored on (scoreRequirements only)
@@ -90,7 +106,7 @@ g0SlotOverride = [];                 % TEST SEAM: [1 x 6] slot offsets [ND] for 
 % study_opts overrides; unknown names are refused BEFORE anything is assigned
 knobs = struct('tol', tol, 'nMaxRevs', nMaxRevs, 'dtSec', dtSec, 'serviceDays', serviceDays, ...
                'validate', validate, 'maxRounds', maxRounds, 'polishGates', polishGates, ...
-               'i2Km', i2Km, 'i2Phases', i2Phases, 'scoreRequirements', scoreRequirements, ...
+               'i2Km', i2Km, 'i2Mps', i2Mps, 'i2Phases', i2Phases, 'scoreRequirements', scoreRequirements, ...
                'scoreGrid', scoreGrid, 'chunkSel', chunkSel, 'reuse', reuse, ...
                'makeFigures', makeFigures, 'makeMovie', makeMovie, 'headless', headless, ...
                'outDir', outDir, 'g0SlotOverride', g0SlotOverride);
@@ -108,6 +124,7 @@ tol         = knobs.tol;          nMaxRevs    = knobs.nMaxRevs;
 dtSec       = knobs.dtSec;        serviceDays = knobs.serviceDays;
 validate    = knobs.validate;     maxRounds   = knobs.maxRounds;
 polishGates = knobs.polishGates;  i2Km        = knobs.i2Km;
+i2Mps       = knobs.i2Mps;
 i2Phases    = knobs.i2Phases;     scoreRequirements = knobs.scoreRequirements;
 scoreGrid   = knobs.scoreGrid;    chunkSel    = knobs.chunkSel;
 reuse       = knobs.reuse;        makeFigures = knobs.makeFigures;
@@ -133,6 +150,18 @@ secName = {'1 inputs', '2 schedule', '3 polish', '4 histories', '5 validation', 
            '6 GDOP', '7 figures', '8 movie'};
 secWall = nan(1, numel(secName));
 tStudy  = tic;
+reusedRefusals = cell(0, 2);                           % {key, source file} of reused REFUSED polishes
+nRefLog = 0;                                           % rows used in refLog (section 3)
+
+% provenance (read-only git through the Command Line Tools binary): the
+% repository holding this script, located from the script's own folder,
+% and proj7, located as setup_lunar_pnt_paths does; each with its HEAD and
+% a dirty flag (tracked files modified, untracked files ignored)
+gitBin = '/Library/Developer/CommandLineTools/usr/bin/git';
+gitOC  = git_state(gitBin, here);
+gitP7  = git_state(gitBin, fullfile(getenv('HOME'), 'Desktop', 'proj7'));
+fprintf('lunar_pnt_mission_study: optimal_control %s; proj7 %s; MATLAB %s\n', ...
+        gitOC.text, gitP7.text, version);
 
 %% ========================================================================
 %  1. INPUTS AND THE ORBIT HANDLES
@@ -164,12 +193,15 @@ for kh = 1:2
     [~, Yp] = ode113(@pumpkyn.cr3bp.eom, sI2*hand{kh, 3}, hand{kh, 2}(0).', odeTight, M.muStar, 1);
     Xh  = hand{kh, 2}(sI2).';
     eKm = M.lStar*sqrt(sum((Xh(:, 1:3) - Yp(:, 1:3)).^2, 2));
+    eMs = 1000*M.lStar/M.tStar*sqrt(sum((Xh(:, 4:6) - Yp(:, 4:6)).^2, 2));
     [eMax, iMax] = max(eKm);
+    [vMax, iVmx] = max(eMs);
     rMoon = M.lStar*sqrt(sum((Xh(iMax, 1:3) - [1 - M.muStar 0 0]).^2, 2));
     I2.(lower(hand{kh, 1})) = struct('maxKm', eMax, 'atPhase', sI2(iMax), 'rMoonKm', rMoon, ...
-                                     'medianKm', median(eKm), 'p99Km', prctile(eKm, 99), 'nPhases', numel(sI2));
-    fprintf('   I2 %-5s handle vs propagation (%d phases): max %.4f km at phase %.4f (%.0f km from the Moon), median %.4f km, p99 %.4f km\n', ...
-            hand{kh, 1}, numel(sI2), eMax, sI2(iMax), rMoon, median(eKm), prctile(eKm, 99));
+                                     'medianKm', median(eKm), 'p99Km', prctile(eKm, 99), 'nPhases', numel(sI2), ...
+                                     'maxMps', vMax, 'atPhaseV', sI2(iVmx), 'medianMps', median(eMs));
+    fprintf('   I2 %-5s handle vs propagation (%d phases): max %.4f km at phase %.4f (%.0f km from the Moon), median %.4f km, p99 %.4f km; velocity max %.2e m/s at phase %.4f\n', ...
+            hand{kh, 1}, numel(sI2), eMax, sI2(iMax), rMoon, median(eKm), prctile(eKm, 99), vMax, sI2(iVmx));
 end
 % for information: the slot states vs pumpkyn's tulipConstellation (no
 % continuation; the GDOP reference's own construction)
@@ -189,12 +221,15 @@ fprintf('   (info) slot states vs tulipConstellation at its own samples: median 
 if I2.tulip.maxKm < 0.1*dMax
     fprintf('          the tight propagation agrees with the phase_state handles, not with tulipConstellation (no continuation)\n');
 end
-i2Max = max(I2.tulip.maxKm, I2.dro.maxKm);
-gates = addg(gates, 'I2', pass3(i2Max < i2Km), i2Max, ...
-             sprintf('tulip max %.4f km @ phase %.4f, DRO max %.4f km @ phase %.4f (limit %g km)', ...
-                     I2.tulip.maxKm, I2.tulip.atPhase, I2.dro.maxKm, I2.dro.atPhase, i2Km));
-if i2Max >= i2Km
-    stopped = sprintf('STOPPED AT INPUTS (I2: orbit handle error %.3f km)', i2Max);
+i2Max  = max(I2.tulip.maxKm, I2.dro.maxKm);
+i2VMax = max(I2.tulip.maxMps, I2.dro.maxMps);
+i2Ok   = i2Max < i2Km && i2VMax < i2Mps;
+gates = addg(gates, 'I2', pass3(i2Ok), i2Max, ...
+             sprintf(['tulip max %.4f km @ phase %.4f, DRO max %.4f km @ phase %.4f (limit %g km); ' ...
+                      'velocity max %.2e m/s (limit %g m/s); value = max km'], ...
+                     I2.tulip.maxKm, I2.tulip.atPhase, I2.dro.maxKm, I2.dro.atPhase, i2Km, i2VMax, i2Mps));
+if ~i2Ok
+    stopped = sprintf('STOPPED AT INPUTS (I2: orbit handle error %.3g km, %.3g m/s)', i2Max, i2VMax);
 end
 secWall(1) = toc(tSec);
 
@@ -259,6 +294,7 @@ if isempty(stopped)
     cacheOrig = containers.Map('KeyType', 'char', 'ValueType', 'any');   % key -> origin struct
     unchecked = containers.Map('KeyType', 'char', 'ValueType', 'logical'); % reused, not yet entry-checked
     freshOrig = struct('file', '', 'date', '', 'head', '');               % filled at save time
+    refLog    = cell(6*maxRounds, 2);                                     % reused refusals {key, source}
     if ~isempty(reuse)
         L = load_reuse(reuse, fingerprint);                 % refuses on any identity mismatch
         for kc = 1:numel(L.polishCache.key)
@@ -294,12 +330,17 @@ if isempty(stopped)
             key = sprintf('%d_%d_%d_%d_%d', kk, jj, S.iD(kk), S.iA(kk), S.nRev(kk));
             if isKey(unchecked, key)
                 rvfNow = M.arrState(mod(M.slotPhase0(jj) + S.tArr(kk)/M.tauT, 1));
-                why = reuse_entry_problem(cache(key), S.tArr(kk), rvfNow, thrNow);
+                rv0Now = M.depState(mod(M.droPhase0(kk) + cache(key).tDep/M.tauD, 1));
+                why = reuse_entry_problem(cache(key), S.tArr(kk), rvfNow, rv0Now, thrNow);
                 remove(unchecked, key);
                 if isempty(why)
                     o = cacheOrig(key);
                     fprintf('      reused sc %d -> slot %d, cell (%d,%d), wait %d: %s (certified %s at %s)\n', ...
                             kk, jj, S.iD(kk), S.iA(kk), S.nRev(kk), cache(key).reason, o.date, o.head);
+                    if ~cache(key).ok
+                        nRefLog = nRefLog + 1;
+                        refLog(nRefLog, :) = {key, sprintf('%s, certified %s at %s', o.file, o.date, o.head)};
+                    end
                 else
                     fprintf('      IGNORED cached sc %d -> slot %d, cell (%d,%d), wait %d: %s; re-polishing\n', ...
                             kk, jj, S.iD(kk), S.iA(kk), S.nRev(kk), why);
@@ -347,6 +388,7 @@ if isempty(stopped)
         nEx = nEx + size(refRows, 1);
     end
     rounds = [roundsC{:}];
+    reusedRefusals = refLog(1:nRefLog, :);
     ck = keys(cache);
     polishCache = struct('key', {ck}, 'P', {values(cache, ck)}, 'origin', {values(cacheOrig, ck)});
     Pattempted = Pc;
@@ -470,27 +512,17 @@ if isempty(stopped)
     tSvcEnd = H.tLast + serviceDays*86400/M.tStar;
     assert(abs(tSvcEnd - H.tEnd) <= 1e-9, 'lunar_pnt_mission_study:window', ...
            'history ends at %.12g ND, the service window at %.12g ND', H.tEnd, tSvcEnd);
-    Gp = mission_gdop(H, M, [0 tSvcEnd], mission_grid('pole'), ...
+    gPole = mission_grid('pole');
+    gPole.dtSec = dtSec;                               % the pole series shares the history's cadence
+    Gp = mission_gdop(H, M, [0 tSvcEnd], gPole, ...
                       struct('score', false, 'keepSeries', true, 'quiet', true));
     pole = struct('tDays', Gp.t*dayNd, 'gdop', Gp.gdop(:, 1), 'nOn', Gp.nOn, ...
                   'nVis', double(Gp.vis(:, 1)), 'arrDays', [P.tArr]*dayNd, ...
                   'tLastDays', H.tLast*dayNd, 'latLon', Gp.poleLatLon, 'dtSec', Gp.grid.dtSec, ...
                   'wallS', Gp.wallS);
     gd  = pole.gdop;
-    svc = pole.tDays >= pole.tLastDays;
-    gs  = gd(svc);
-    ok6 = gs < 6;                                      % NaN counts as an outage
-    st.firstFiniteDay = first_day(pole.tDays, isfinite(gd));
-    st.firstLt6Day    = first_day(pole.tDays, gd < 6);
-    st.svcSamples     = numel(gs);
-    st.svcDays        = numel(gs)*pole.dtSec/86400;
-    st.fracLt6        = mean(ok6);
-    st.fracFinite     = mean(isfinite(gs));
-    st.medianGdop     = median(gs(isfinite(gs)));
-    st.p95Gdop        = prctile(gs(isfinite(gs)), 95);
-    st.longestOutageH = longest_run(~ok6)*pole.dtSec/3600;
-    st.n6to7          = nnz(gs >= 6 & gs < 7);
-    st.nLt6           = nnz(ok6);
+    svc = pole.tDays >= pole.tLastDays;                % the service window (figures)
+    st  = pole_series_stats(pole.tDays, gd, pole.tLastDays, pole.dtSec);   % NaN, Inf, >= 6: outages
     pole.stats = st;
     fprintf('   %d epochs at %g s from clock 0 to %.3f d (point %.1f, %g deg; %.2f s, %d engine calls)\n', ...
             numel(gd), pole.dtSec, tSvcEnd*dayNd, pole.latLon, Gp.wallS, Gp.nCalls);
@@ -688,17 +720,17 @@ secWall(8) = toc(tSec);
 %% ========================================================================
 %  9. GATE TABLE, VERDICT, SAVE
 %% ========================================================================
-[~, gitOC] = system('/Library/Developer/CommandLineTools/usr/bin/git -C /Users/msc/Desktop/optimal_control rev-parse --short HEAD');
-[~, gitP7] = system('/Library/Developer/CommandLineTools/usr/bin/git -C /Users/msc/Desktop/proj7 rev-parse --short HEAD');
 [~, hostName] = system('hostname');
 run_meta = struct('date', char(datetime('now', 'Format', 'yyyy-MM-dd HH:mm')), 'matlab', version, ...
-                  'host', strtrim(hostName), 'optimal_control', strtrim(gitOC), 'proj7', strtrim(gitP7), ...
+                  'host', strtrim(hostName), 'optimal_control', gitOC.head, ...
+                  'optimal_controlDirty', gitOC.dirty, 'proj7', gitP7.head, 'proj7Dirty', gitP7.dirty, ...
+                  'git', struct('optimal_control', gitOC, 'proj7', gitP7), ...
                   'knobs', knobs, 'reduced', {reduced}, 'sectionNames', {secName}, ...
                   'sectionWallS', secWall, 'studyWallS', toc(tStudy));
-if ~isempty(H), H.r = single(H.r); end
 saveTarget = fullfile(outDir, 'lunar_pnt_mission_study.mat');
-% fresh polishes are certified by THIS run: stamp their origin
-here0 = struct('file', saveTarget, 'date', run_meta.date, 'head', run_meta.optimal_control);
+% fresh polishes are certified by THIS run: stamp their origin (the head
+% carries '-dirty' when the working tree had modified tracked files)
+here0 = struct('file', saveTarget, 'date', run_meta.date, 'head', gitOC.tag);
 for kc = 1:numel(polishCache.origin)
     if isempty(polishCache.origin{kc}.file), polishCache.origin{kc} = here0; end
 end
@@ -708,6 +740,23 @@ for kk = 1:6
     end
 end
 run_meta.polishSource = polishSource;
+% the VERDICT's disclosure suffix (reduced knobs, reused polishes, reused
+% refusals), saved with the run so the movie and later readers see it
+redTxt = '';
+reu = polishSource(strcmp({polishSource.origin}, 'reused'));
+if ~isempty(reu)
+    srcs = unique(arrayfun(@(q) sprintf('%s, certified %s at %s', q.file, q.date, q.head), reu, ...
+                           'UniformOutput', false), 'stable');
+    redTxt = sprintf(' (REUSED polishes for sc %s from %s; not re-certified in this run)', ...
+                     strtrim(sprintf('%d ', [reu.sc])), strjoin(srcs, ' and '));
+end
+if ~isempty(reusedRefusals)                           % said even when all six final polishes are fresh
+    redTxt = sprintf('%s (exclusions reused: %d refused polish(es) from %s; not re-polished in this run)', ...
+                     redTxt, size(reusedRefusals, 1), strjoin(unique(reusedRefusals(:, 2), 'stable').', ' and '));
+end
+if ~isempty(reduced), redTxt = sprintf('%s (reduced: %s)', redTxt, strjoin(reduced, ', ')); end
+run_meta.verdictSuffix = redTxt;
+run_meta.reusedRefusals = reusedRefusals;
 save(saveTarget, 'S', 'S0', 'P', 'Pattempted', 'polishCache', 'H', 'Vpole', 'V', 'pole', 'Gservice', ...
      'gates', 'rounds', 'I2', 'fingerprint', 'run_meta', '-v7.3');
 
@@ -725,15 +774,6 @@ for kg = 1:size(gates, 1)
 end
 failedIds = gates(~strcmp(gates(:, 2), 'PASS'), 1);
 fprintf('   wrote %s\n', saveTarget);
-redTxt = '';
-if ~isempty(reduced), redTxt = sprintf(' (reduced: %s)', strjoin(reduced, ', ')); end
-reu = polishSource(strcmp({polishSource.origin}, 'reused'));
-if ~isempty(reu)
-    srcs = unique(arrayfun(@(q) sprintf('%s, certified %s at %s', q.file, q.date, q.head), reu, ...
-                           'UniformOutput', false), 'stable');
-    redTxt = sprintf(' (REUSED polishes for sc %s from %s; not re-certified in this run)%s', ...
-                     strtrim(sprintf('%d ', [reu.sc])), strjoin(srcs, ' and '), redTxt);
-end
 if ~isempty(stopped)
     fprintf('   VERDICT: %s; not passed: %s%s\n', stopped, strjoin(failedIds.', ', '), redTxt);
 elseif isempty(failedIds)
@@ -800,14 +840,47 @@ end
 function fp = catalog_fingerprint(M, thr, polishGates)
 % CATALOG_FINGERPRINT  The identity a reused results file must match:
 %   catalog name and created date, MD5 of sh.z8 and sh.tf_nd, the regime
-%   constants, the slot phasing, the polish thresholds and polishGates.
+%   constants, the slot phasing, the spacecraft DRO phases, MD5 of the DRO
+%   and tulip orbit handles sampled at 64 phases (droMd5, tulipMd5), the
+%   polish thresholds and polishGates.
 %   INPUTS: M mission inputs; thr polish thresholds struct; polishGates
 %   logical.  OUTPUTS: fp struct.
+s64 = (0:63)/64;
 fp = struct('catalogName', char(string(M.cat.name)), 'catalogCreated', char(string(M.cat.created)), ...
             'z8md5', md5_of(M.sh.z8), 'tfmd5', md5_of(M.sh.tf_nd), ...
             'thrustN', M.thrustN, 'ispS', M.ispS, 'm0kg', M.m0kg, 'muStar', M.muStar, ...
             'lStar', M.lStar, 'tStar', M.tStar, 'dtau6', M.dtau6, ...
+            'droPhase0', M.droPhase0, 'droMd5', md5_of(M.depState(s64)), ...
+            'tulipMd5', md5_of(M.arrState(s64)), ...
             'thresholds', thr, 'polishGates', logical(polishGates));
+end
+
+function g = git_state(gitBin, folder)
+% GIT_STATE  Read-only git state of the repository holding a folder.
+%   INPUTS:  gitBin char (git executable); folder char.
+%   OUTPUTS: g struct .head (short HEAD, 'unknown' on failure) .root
+%            (top-level folder) .dirty (logical: tracked files modified)
+%            .nDirty (count of modified tracked paths) .tag (head, with
+%            '-dirty' appended when dirty) .text (one line for the log).
+[s1, h]   = system(sprintf('"%s" -C "%s" rev-parse --short HEAD', gitBin, folder));
+[~,  top] = system(sprintf('"%s" -C "%s" rev-parse --show-toplevel', gitBin, folder));
+[s3, st]  = system(sprintf('"%s" -C "%s" status --porcelain --untracked-files=no', gitBin, folder));
+g = struct('head', 'unknown', 'root', strtrim(top), 'dirty', false, 'nDirty', NaN, ...
+           'tag', 'unknown', 'text', '');
+if s1 == 0, g.head = strtrim(h); end
+if s3 == 0
+    ln = strsplit(strtrim(st), newline);
+    g.nDirty = nnz(~cellfun(@isempty, strtrim(ln)));
+    g.dirty  = g.nDirty > 0;
+end
+g.tag = [g.head tern(g.dirty, '-dirty', '')];
+if s3 ~= 0
+    g.text = sprintf('%s (status unknown)', g.head);
+elseif g.dirty
+    g.text = sprintf('%s (DIRTY: %d tracked path(s) modified)', g.head, g.nDirty);
+else
+    g.text = sprintf('%s (clean)', g.head);
+end
 end
 
 function h = md5_of(x)
@@ -842,11 +915,13 @@ if ~isempty(bad)
 end
 end
 
-function why = reuse_entry_problem(Pk, tArr, rvf, thr)
+function why = reuse_entry_problem(Pk, tArr, rvf, rv0, thr)
 % REUSE_ENTRY_PROBLEM  Why a cached polish cannot stand for the current
 %   candidate ('' when it can): arrival epoch, epoch consistency, the
-%   current slot state, the current thresholds.
-%   INPUTS: Pk polish struct; tArr scalar [ND]; rvf [6 x 1]; thr struct.
+%   current slot state, the current DRO state at the cached departure
+%   epoch, the current thresholds.
+%   INPUTS: Pk polish struct; tArr scalar [ND]; rvf [6 x 1] slot state at
+%   tArr; rv0 [6 x 1] the spacecraft's DRO state at Pk.tDep; thr struct.
 %   OUTPUTS: why char.
 why = '';
 if ~(abs(Pk.tArr - tArr) < 1e-12)
@@ -855,6 +930,9 @@ elseif ~(abs(Pk.tDep + Pk.tf - Pk.tArr) < 1e-12)
     why = sprintf('cached tDep + tf - tArr = %.3g ND', Pk.tDep + Pk.tf - Pk.tArr);
 elseif ~(max(abs(Pk.rvf(:) - rvf(:))) < 1e-12)
     why = sprintf('cached rvf differs from the current slot state by %.3g ND', max(abs(Pk.rvf(:) - rvf(:))));
+elseif ~(max(abs(Pk.rv0(:) - rv0(:))) < 1e-12)
+    why = sprintf('cached rv0 differs from the current DRO state at its tDep by %.3g ND', ...
+                  max(abs(Pk.rv0(:) - rv0(:))));
 elseif ~isequal(Pk.thresholds, thr)
     why = 'cached thresholds differ';
 end
@@ -875,18 +953,4 @@ elseif islogical(v)
 else
     s = mat2str(v, 6);
 end
-end
-
-function d = first_day(tDays, mask)
-% FIRST_DAY  First time where mask holds, NaN if never.
-%   INPUTS: tDays [N x 1]; mask [N x 1] logical.  OUTPUTS: d scalar [d].
-k = find(mask, 1);
-if isempty(k), d = NaN; else, d = tDays(k); end
-end
-
-function n = longest_run(mask)
-% LONGEST_RUN  Length of the longest run of true samples.
-%   INPUTS: mask [N x 1] logical.  OUTPUTS: n scalar (samples).
-dm = diff([false; mask(:); false]);
-n  = max([0; find(dm == -1) - find(dm == 1)]);
 end

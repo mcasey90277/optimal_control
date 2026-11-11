@@ -3,7 +3,9 @@ function ok = test_mission_inputs()
 %
 %   Verifies mission_inputs (catalog regime, grids, periods, slot phases,
 %   state handles, cell (3,5) flown through fly_transfer from the
-%   phase_state endpoints, propellant rate, recorded checks) and the path
+%   phase_state endpoints, propellant rate, recorded checks), the
+%   deliberate failure of gate I1's oracle (1.01 x Tnd misses the tulip by
+%   thousands of km), and the path
 %   setup (re-fronting over a shadowing DRO_tulip/indirect, and the
 %   setup_lunar_pnt_paths:shadow throw through the extraChecks seam). The
 %   session path is restored exactly afterwards.
@@ -19,6 +21,7 @@ function ok = test_mission_inputs()
 %
 %% Revision History:
 %  M. Casey                                                   (c) 11/10/2026
+%  M. Casey  I1 deliberate failure (1.01 x Tnd)               (c) 11/10/2026
 %  Copyright Coorbital Inc.
 %% ------------------------ Begin Code Sequence ---------------------------
 
@@ -38,6 +41,13 @@ assert(F.flyKm < 100 && F.flyVms < 10, 'cell (3,5) flown miss %.3g km', F.flyKm)
 assert(abs(M.propKgPerNd*M.tf(3,5) - F.propellantKg) < 1e-6, 'propellant rate');
 assert(all([M.checks.pass]), 'input checks');
 fprintf('  cell (3,5): flyKm %.4g  flyVms %.4g  propKg %.6f\n', F.flyKm, F.flyVms, F.propellantKg);
+% deliberate failure of gate I1's oracle: the same flight with Tnd scaled
+% by 1.01 (a copy of M.phys) must miss by thousands of km, so a 1 percent
+% thrust-scaling error cannot pass the < 100 km check
+physBad = M.phys;  physBad.Tnd = 1.01*M.phys.Tnd;
+Fb = fly_transfer(z8, M.depState(M.sD(3)), M.arrState(M.sA(5)), physBad);
+fprintf('  cell (3,5) with 1.01 x Tnd: flyKm %.4g  flyVms %.4g (check limit 100 km)\n', Fb.flyKm, Fb.flyVms);
+assert(Fb.flyKm > 1000, 'a 1 percent Tnd error passes the flown-arrival oracle (%.3g km)', Fb.flyKm);
 
 % shadow experiment: put the DRO_tulip/indirect copies at the FRONT; the
 % setup must re-front the kit so the kit copy wins

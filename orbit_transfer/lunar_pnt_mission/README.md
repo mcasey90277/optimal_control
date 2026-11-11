@@ -241,3 +241,66 @@ last arrival, and the drawn plume direction against `+lam_v/|lam_v|`.
 - No propellant-optimal schedule: propellant is reported, not optimised.
 
 ## Measured results
+
+Full default run, 2026-11-10 (commit a20d563 for the certification, results
+file fingerprint z8 MD5 1cbd1390...; 330 s, of which 325 s is the six
+certified polishes). Every gate PASS.
+
+**Schedule.** Three rounds. Round 1 (unpolished optimum, last arrival day
+18.537): spacecraft 1 and 2 refused, their exact-slot solution needs a
+departure before clock 0. Round 2: spacecraft 6 refused for the same reason.
+Round 3: all six accepted. Constellation complete on day 18.799.
+
+| sc | slot | cell (iD,iA) | departs (d) | arrives (d) | t_f cell (d) | t_f polished (d) | flown miss (km) | propellant (kg) | dV (km/s) |
+|---|---|---|---|---|---|---|---|---|---|
+| 1 | 2 | (6,2)   | 0.931 | 18.799 | 17.87558 | 17.86760 | 8.4e-05 | 12.244 | 0.7515 |
+| 2 | 5 | (6,29)  | 0.112 | 18.036 | 17.85087 | 17.92312 | 9.0e-05 | 12.282 | 0.7540 |
+| 3 | 6 | (16,31) | 1.293 | 17.496 | 16.20336 | 16.20276 | 6.6e-05 | 11.103 | 0.6787 |
+| 4 | 1 | (15,43) | 0.366 | 17.161 | 16.79148 | 16.79444 | 2.2e-03 | 11.508 | 0.7045 |
+| 5 | 3 | (17,11) | 0.035 | 17.140 | 17.13972 | 17.10510 | 2.5e-04 | 11.721 | 0.7181 |
+| 6 | 4 | (22,17) | 0.227 | 18.327 | 18.14271 | 18.09995 | 4.0e-04 | 12.403 | 0.7617 |
+
+No spacecraft waits a DRO revolution; total propellant 71.261 kg. Each
+polished transfer passes the flown-miss, residual, pointwise, hypothesis,
+conjugate and pumpkyn tfMin acceptance gates; none changed family.
+
+**Orbit handles (I2).** Against a direct propagation at 2,582 phases: tulip
+handle max 0.015 km, DRO handle max 0.006 km. Against pumpkyn's
+`tulipConstellation` at its own samples the slot states differ by a median
+of 0.48 km and at most 2.96 km.
+
+**Validation (G0).** On-slots south-pole series against a direct engine call
+on `tulipConstellation` states over one tulip period: max relative
+difference 1.5e-04 (tolerance 1e-03), no visibility mismatch away from an
+edge. Moving slot 6 by 0.3 ND fails it.
+
+**South-pole GDOP series** (300 s samples from day 0).
+
+| measure | value |
+|---|---|
+| first finite GDOP (four on station) | day 18.247 |
+| first GDOP < 6 | day 18.247 |
+| service window | day 18.799 to 48.799 |
+| time with GDOP < 6 | 99.41 percent |
+| time with a fix | 100 percent |
+| median / 95th percentile GDOP | 4.514 / 5.593 |
+| longest stretch at GDOP >= 6 | 0.67 h |
+| samples with 6 <= GDOP < 7 | 0 |
+
+With five or six satellites above the horizon the pole GDOP is at most 5.81;
+with exactly four it is at least 16.7 (measured, this constellation).
+
+**Requirement scoring** (`scoreRequirements = true`, not the default; the run
+of 2026-11-10 before the default changed): validation against the saved
+Table 1 column identical (floors 1.000000 / 0.754032 / 17.987224 h); 30-day
+service floors R1 1.000, R2 0.754, R3 17.695 h.
+
+**Movie.** `results/lunar_pnt_mission.mp4`, 70 s, 1280 x 720 (revision 3:
+zoom widens to 1.75 times the end framing at day 12.5 so all six spacecraft
+stay in view; smallest margin to the scene edge 16.5 px).
+
+**What these numbers do not show.** The validation shares proj7's GDOP
+engine with what it checks (it catches wiring on this side, not an engine
+error). The schedule optimum is over primary catalog cells with whole-
+revolution waits and the exclusions made by refused polishes; alternatives
+were not searched.

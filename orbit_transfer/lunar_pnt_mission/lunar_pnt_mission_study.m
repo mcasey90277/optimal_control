@@ -27,7 +27,8 @@
 %     7  figures
 %     8  movie                              mission_movie on the SAVED results,
 %                                           rendered after the save in 9
-%     9  gate table, VERDICT, save
+%     9  gate table, VERDICT, save,        the sidecar results/mission_transfers_70mN.mat
+%        sidecar export (exportTransfers)   (the six transfers as costate-library entries)
 %
 %   HOW THE SCHEDULE IS FOUND. A polish can refuse its candidate (a root
 %   that needs a departure before clock 0, a root not found, a failed or
@@ -74,6 +75,7 @@
 %  M. Casey  final-review fixes: git dirty flags, I2 velocity, orbit
 %            fingerprint + rv0 entry check, pole_series_stats, dtSec
 %            sets the pole cadence, H.r saved as double       (c) 11/10/2026
+%  M. Casey  exportTransfers: sidecar of costate-library entries (c) 11/10/2026
 %  Copyright Coorbital Inc.
 
 clearvars -except study_opts
@@ -99,6 +101,8 @@ chunkSel    = [];                    % score-grid chunks ([] = all five; scoreRe
 reuse       = '';                    % an earlier lunar_pnt_mission_study.mat whose polishes seed the cache
 makeFigures = true;                  % section 7
 makeMovie   = false;                 % section 8: render results/lunar_pnt_mission.mp4 (~5 min)
+exportTransfers = true;              % section 9: the six transfers as costate-library entries (sidecar, ~4 min)
+exportFullStatus = true;             % section 9: the library's certifier on each (false: fallback status, seconds)
 headless    = false;                 % figures invisible and closed after export
 outDir      = '';                    % results folder ('' = results/ beside this script)
 g0SlotOverride = [];                 % TEST SEAM: [1 x 6] slot offsets [ND] for G0's own series (deliberate failure); [] = none
@@ -108,8 +112,9 @@ knobs = struct('tol', tol, 'nMaxRevs', nMaxRevs, 'dtSec', dtSec, 'serviceDays', 
                'validate', validate, 'maxRounds', maxRounds, 'polishGates', polishGates, ...
                'i2Km', i2Km, 'i2Mps', i2Mps, 'i2Phases', i2Phases, 'scoreRequirements', scoreRequirements, ...
                'scoreGrid', scoreGrid, 'chunkSel', chunkSel, 'reuse', reuse, ...
-               'makeFigures', makeFigures, 'makeMovie', makeMovie, 'headless', headless, ...
-               'outDir', outDir, 'g0SlotOverride', g0SlotOverride);
+               'makeFigures', makeFigures, 'makeMovie', makeMovie, 'exportTransfers', exportTransfers, ...
+               'exportFullStatus', exportFullStatus, ...
+               'headless', headless, 'outDir', outDir, 'g0SlotOverride', g0SlotOverride);
 knobs0 = knobs;
 for f = fieldnames(study_opts).'
     if ~isfield(knobs, f{1})
@@ -130,11 +135,12 @@ scoreGrid   = knobs.scoreGrid;    chunkSel    = knobs.chunkSel;
 reuse       = knobs.reuse;        makeFigures = knobs.makeFigures;
 makeMovie   = knobs.makeMovie;    headless    = knobs.headless;
 outDir      = knobs.outDir;       g0SlotOverride = knobs.g0SlotOverride;
+exportTransfers = knobs.exportTransfers;  exportFullStatus = knobs.exportFullStatus;
 if ~isfolder(outDir), mkdir(outDir); end
 figVis = 'on';
 if headless, figVis = 'off'; end
 % knobs that change the result (display knobs excluded) and differ from the defaults
-knNames = setdiff(fieldnames(knobs0), {'headless', 'outDir', 'makeFigures', 'makeMovie', 'reuse'}, 'stable');
+knNames = setdiff(fieldnames(knobs0), {'headless', 'outDir', 'makeFigures', 'makeMovie', 'exportTransfers', 'exportFullStatus', 'reuse'}, 'stable');
 isRed   = cellfun(@(n) ~isequal(knobs.(n), knobs0.(n)), knNames);
 reduced = cellfun(@(n) sprintf('%s %s', n, knob_text(knobs.(n))), knNames(isRed), 'UniformOutput', false);
 
@@ -781,6 +787,45 @@ elseif isempty(failedIds)
 else
     fprintf('   VERDICT: not passed: %s%s\n', strjoin(failedIds.', ', '), redTxt);
 end
+% the six new transfers as costate-library entries, in a SIDECAR beside the
+% results (the library of record is not modified); written only for a run
+% that accepted all six AND passed validation (stopped is empty); a reused
+% polish is exported too and marked reused. An export error is printed and
+% recorded in run_meta.export (appended to the results file); the run goes on.
+sidecar = fullfile(outDir, 'mission_transfers_70mN.mat');
+exportRec = struct('status', 'skipped', 'file', '', 'fullStatus', exportFullStatus, 'reason', '');
+if ~exportTransfers
+    exportRec.reason = 'exportTransfers = false';
+    fprintf('   SIDECAR: skipped (exportTransfers = false)\n');
+elseif isempty(P) || ~isempty(stopped)
+    exportRec.reason = 'the run stopped before six accepted, validated transfers';
+    fprintf('   SIDECAR: not written (the run stopped before six accepted transfers and a PASSED validation)\n');
+else
+    fprintf('   SIDECAR: exporting the six transfers as costate-library entries (%s)\n', ...
+            tern(isequal(exportFullStatus, true), 'the library''s certifier on each', 'fallback status, no certifier'));
+    try
+        Ex = export_mission_transfers(saveTarget, struct('outFile', sidecar, 'verbose', false, ...
+                                                         'fullStatus', exportFullStatus));
+        isFull = strcmp({Ex.mission.statusRun}, 'certify_root (full)');
+        fprintf('   %-5s %10s %10s %9s %6s %s\n', 'entry', 'sD', 'sA', 't_f d', 'status', 'source');
+        for kk = 1:numel(Ex.entries)
+            fprintf('   %-5d %10.6f %10.6f %9.4f %6d %s\n', kk, Ex.entries(kk).sD, Ex.entries(kk).sA, ...
+                    Ex.entries(kk).tf_nd*dayNd, Ex.entries(kk).status, Ex.entries(kk).source);
+        end
+        fprintf('   status run: %d certified by the library''s certifier, %d fallback; certifier %s\n', ...
+                nnz(isFull), nnz(~isFull), tern(Ex.provenance.fenced, 'fenced', 'UNFENCED'));
+        fprintf('   wrote %s (%.0f s; NOT part of the library of record)\n', sidecar, Ex.provenance.exportWallS);
+        exportRec = struct('status', 'written', 'file', sidecar, 'fullStatus', exportFullStatus, ...
+                           'reason', sprintf('%d certified, %d fallback', nnz(isFull), nnz(~isFull)));
+    catch xerr
+        fprintf('\n   *** EXPORT FAILED: %s: %s ***\n   (results saved; the run continues)\n\n', ...
+                xerr.identifier, xerr.message);
+        exportRec = struct('status', 'failed', 'file', '', 'fullStatus', exportFullStatus, ...
+                           'reason', sprintf('%s: %s', xerr.identifier, xerr.message));
+    end
+end
+run_meta.export = exportRec;
+save(saveTarget, 'run_meta', '-append');
 if movieDue
     movInfo = mission_movie(saveTarget, struct('outFile', fullfile(outDir, 'lunar_pnt_mission.mp4')));
     fprintf('   MOVIE: %s (%d frames, %d x %d, %.0f s wall)\n', movInfo.outFile, movInfo.nFrames, ...
@@ -838,21 +883,16 @@ end
 end
 
 function fp = catalog_fingerprint(M, thr, polishGates)
-% CATALOG_FINGERPRINT  The identity a reused results file must match:
-%   catalog name and created date, MD5 of sh.z8 and sh.tf_nd, the regime
-%   constants, the slot phasing, the spacecraft DRO phases, MD5 of the DRO
-%   and tulip orbit handles sampled at 64 phases (droMd5, tulipMd5), the
-%   polish thresholds and polishGates.
+% CATALOG_FINGERPRINT  The identity a reused results file must match: the
+%   catalog identity (catalog_identity: catalog name and created date, MD5
+%   of sh.z8 and sh.tf_nd, the regime constants, the slot phasing, the
+%   spacecraft DRO phases, MD5 of the DRO and tulip handles at 64 phases),
+%   then the polish thresholds and polishGates.
 %   INPUTS: M mission inputs; thr polish thresholds struct; polishGates
 %   logical.  OUTPUTS: fp struct.
-s64 = (0:63)/64;
-fp = struct('catalogName', char(string(M.cat.name)), 'catalogCreated', char(string(M.cat.created)), ...
-            'z8md5', md5_of(M.sh.z8), 'tfmd5', md5_of(M.sh.tf_nd), ...
-            'thrustN', M.thrustN, 'ispS', M.ispS, 'm0kg', M.m0kg, 'muStar', M.muStar, ...
-            'lStar', M.lStar, 'tStar', M.tStar, 'dtau6', M.dtau6, ...
-            'droPhase0', M.droPhase0, 'droMd5', md5_of(M.depState(s64)), ...
-            'tulipMd5', md5_of(M.arrState(s64)), ...
-            'thresholds', thr, 'polishGates', logical(polishGates));
+fp = catalog_identity(M);
+fp.thresholds  = thr;
+fp.polishGates = logical(polishGates);
 end
 
 function g = git_state(gitBin, folder)
@@ -881,14 +921,6 @@ elseif g.dirty
 else
     g.text = sprintf('%s (clean)', g.head);
 end
-end
-
-function h = md5_of(x)
-% MD5_OF  Hex MD5 of a numeric array's bytes (size included).
-%   INPUTS: x numeric array.  OUTPUTS: h char [1 x 32].
-md = java.security.MessageDigest.getInstance('MD5');
-md.update(typecast([double(size(x)), double(x(:)).'], 'uint8'));
-h = lower(reshape(dec2hex(typecast(md.digest(), 'uint8'), 2).', 1, []));
 end
 
 function L = load_reuse(file, fpNow)

@@ -40,6 +40,16 @@ function ok = test_lunar_pnt_mission_study()
 %   (E) also checks the REUSED disclosure: VERDICT text (incl. the three
 %       reused refusals that decide the exclusions), row tags,
 %       run_meta.polishSource.
+%   SIDECAR: (E) writes it with exportFullStatus = false (the suite
+%       certifies the six once, in test_export_mission_transfers): six
+%       fallback entries with the library's alternatives fields, all marked
+%       reused with A's results as their origin, six printed rows, the
+%       status-run line and the path, run_meta.export written; (B), (C),
+%       (I) print the skip line (stopped or unvalidated) and write none;
+%       (G) gets an export error (exportFullStatus = 'bad', refused by the
+%       export): EXPORT FAILED printed after the VERDICT, recorded in
+%       run_meta.export, the run completes. (A) runs with exportTransfers
+%       = false.
 %   The script parses clean (checkcode).
 %
 %% Inputs:
@@ -55,6 +65,9 @@ function ok = test_lunar_pnt_mission_study()
 %  M. Casey  rescope: pole series default, stops, reuse         (c) 11/10/2026
 %  M. Casey  guarded reuse (F, G), G0-FAIL stop (I)            (c) 11/10/2026
 %  M. Casey  headline pins, I2 failures (J), rv0 entry check    (c) 11/10/2026
+%  M. Casey  sidecar export: (E) written + reused, (C) skipped  (c) 11/10/2026
+%  M. Casey  fix round 1: (E) fallback export, (B)/(I) skipped,
+%            (G) export failure survives                      (c) 11/10/2026
 %  Copyright Coorbital Inc.
 %% ------------------------ Begin Code Sequence ---------------------------
 
@@ -79,7 +92,8 @@ ok = check(ok, isempty(bad), sprintf('study parses clean (%d analyzer messages, 
 
 %% (A) default path, 3 service days
 figsBefore = numel(findall(groot, 'Type', 'figure'));
-[txt, ran, wA] = run_study(file, struct('headless', true, 'outDir', dirs.A, 'serviceDays', 3));
+[txt, ran, wA] = run_study(file, struct('headless', true, 'outDir', dirs.A, 'serviceDays', 3, ...
+                                        'exportTransfers', false));
 ok = check(ok, ran, sprintf('(A) default-path run completed (%.0f s)', wA));
 if ~ran, ok = false; return; end
 ok = check(ok, numel(findall(groot, 'Type', 'figure')) == figsBefore, '(A) no figure left open');
@@ -155,6 +169,9 @@ ok = check(ok, has_gate(txt, 'G0', 'NOT RUN') && contains(txt, 'VERDICT: STOPPED
            '(B) STOPPED AT VALIDATION (G0 NOT RUN)');
 RB = load(fullfile(dirs.B, 'lunar_pnt_mission_study.mat'), 'pole');
 ok = check(ok, isempty(RB.pole) && ~contains(txt, 'SOUTH-POLE GDOP SERIES'), '(B) no pole series computed');
+RBm = load(fullfile(dirs.B, 'lunar_pnt_mission_study.mat'), 'run_meta');
+ok = check(ok, contains(txt, 'SIDECAR: not written (the run stopped before six accepted transfers and a PASSED validation)') && ~isfile(fullfile(dirs.B, 'mission_transfers_70mN.mat')) && ...
+           strcmp(RBm.run_meta.export.status, 'skipped'), '(B) no sidecar from an unvalidated run (skip line, run_meta.export skipped)');
 
 %% (C) maxRounds = 1: stop with the attempted polishes saved
 [txt, ran, wC] = run_study(file, struct('headless', true, 'outDir', dirs.C, 'serviceDays', 3, ...
@@ -166,6 +183,8 @@ RC = load(fullfile(dirs.C, 'lunar_pnt_mission_study.mat'), 'Pattempted', 'P');
 ok = check(ok, numel(RC.Pattempted) == 6 && ~all(cellfun(@(p) p.ok, RC.Pattempted)) && isempty(RC.P), ...
            sprintf('(C) six attempted polishes saved (%d accepted), no realised P', ...
                    nnz(cellfun(@(p) p.ok, RC.Pattempted))));
+ok = check(ok, contains(txt, 'SIDECAR: not written (the run stopped before six accepted transfers and a PASSED validation)') && ...
+           ~isfile(fullfile(dirs.C, 'mission_transfers_70mN.mat')), '(C) sidecar skipped with a printed line, no file');
 
 %% (D) impossible tolerance: C1 FAIL, quick, nothing polished
 [txt, ran, wD] = run_study(file, struct('headless', true, 'outDir', dirs.D, 'tol', 1e-7));
@@ -176,7 +195,8 @@ ok = check(ok, ~contains(txt, 'polish sc') && wD < 60, sprintf('(D) nothing poli
 
 %% (E) requirements path, reduced: chunk 5, 3 service days
 [txt, ran, wE] = run_study(file, struct('headless', true, 'outDir', dirs.E, 'serviceDays', 3, ...
-                                        'scoreRequirements', true, 'chunkSel', 5, 'reuse', matA));
+                                        'scoreRequirements', true, 'chunkSel', 5, 'reuse', matA, ...
+                                        'exportFullStatus', false));
 ok = check(ok, ran, sprintf('(E) scoreRequirements run completed (%.0f s)', wE));
 for id = {'G0', 'G0R'}
     ok = check(ok, has_gate(txt, id{1}, 'PASS'), sprintf('(E) gate %s PASS', id{1}));
@@ -197,6 +217,27 @@ ok = check(ok, all(tags), sprintf('(E) P1..P6, PF, PR, PP, PH, PC, PA rows tagge
 RE = load(fullfile(dirs.E, 'lunar_pnt_mission_study.mat'), 'run_meta');
 ok = check(ok, all(strcmp({RE.run_meta.polishSource.origin}, 'reused')) && ...
            all(strcmp({RE.run_meta.polishSource.file}, matA)), '(E) run_meta.polishSource names the source file');
+% the sidecar of a REUSED run, fallback status (exportFullStatus = false: the
+% suite certifies the six once, in test_export_mission_transfers)
+sideE = fullfile(dirs.E, 'mission_transfers_70mN.mat');
+okSide = isfile(sideE);
+mt = struct('entries', struct('status', {}));
+if okSide
+    SE = load(sideE);
+    mt = SE.mission_transfers;
+    okSide = numel(mt.entries) == 6 && all([mt.mission.reused]) && ...
+             all(arrayfun(@(q) strcmp(q.polishOrigin.file, matA), mt.mission)) && ...
+             all(contains({mt.entries.source}, '(polish reused)')) && ...
+             all(startsWith({mt.mission.statusRun}, 'fallback')) && all([mt.entries.status] == 1) && ...
+             isequal(fieldnames(mt.entries), fieldnames(Ma.cat.alternatives));
+end
+rowsE = regexp(txt, '\n\s+\d\s+0\.\d{6}\s+0\.\d{6}\s+\d+\.\d{4}\s+[1-4]\s+lunar_pnt_mission', 'match');
+REx = load(fullfile(dirs.E, 'lunar_pnt_mission_study.mat'), 'run_meta');
+ok = check(ok, okSide && numel(rowsE) == 6 && contains(txt, ['wrote ' sideE]) && ...
+           contains(txt, 'status run: 0 certified by the library''s certifier, 6 fallback; certifier UNFENCED') && ...
+           strcmp(REx.run_meta.export.status, 'written'), ...
+           sprintf('(E) sidecar of a REUSED run: 6 fallback entries marked reused, rows, status-run line, path (statuses [%s])', ...
+                   sprintf('%d ', [mt.entries.status])));
 
 %% (F) reuse refused: a different catalog fingerprint, and a file without one
 matF = fullfile(dirs.F, 'other.mat');
@@ -226,7 +267,7 @@ ik4 = find(strcmp(polishCache.key, key4));
 polishCache.P{ik4}.rv0(1) = polishCache.P{ik4}.rv0(1) + 1e-9;
 save(matG, 'polishCache', '-append');
 [txt, ran, wG] = run_study(file, struct('headless', true, 'outDir', dirs.G, 'serviceDays', 3, ...
-                                        'makeFigures', false, 'reuse', matG));
+                                        'makeFigures', false, 'reuse', matG, 'exportFullStatus', 'bad'));
 ok = check(ok, ran && contains(txt, 'IGNORED cached sc 3') && contains(txt, 'polish sc 3 ->') && ...
            has_gate(txt, 'P3', 'PASS') && isempty(regexp(txt, '\n\s+P3\s+PASS\s+\S+\s+REUSED', 'once')), ...
            sprintf('(G) tampered entry ignored, sc 3 re-polished fresh, P3 not tagged (%.0f s)', wG));
@@ -236,6 +277,14 @@ ok = check(ok, ~isempty(regexp(txt, 'IGNORED cached sc 4[^\n]*cached rv0 differs
 RG = load(fullfile(dirs.G, 'lunar_pnt_mission_study.mat'), 'run_meta');
 ok = check(ok, all(strcmp({RG.run_meta.polishSource([3 4]).origin}, 'fresh')) && ...
            all(strcmp({RG.run_meta.polishSource([1 2 5 6]).origin}, 'reused')), '(G) polishSource: sc 3, 4 fresh, the rest reused');
+% an export error (exportFullStatus = 'bad' is refused by the export) is
+% printed, recorded, and does not stop the run or lose the VERDICT
+RGm = load(fullfile(dirs.G, 'lunar_pnt_mission_study.mat'), 'run_meta');
+iV = strfind(txt, 'VERDICT: PASS');  iX = strfind(txt, 'EXPORT FAILED: export_mission_transfers:opts');
+ok = check(ok, ran && ~isempty(iV) && ~isempty(iX) && iX(1) > iV(1) && strcmp(RGm.run_meta.export.status, 'failed') && ...
+           contains(RGm.run_meta.export.reason, 'export_mission_transfers:opts') && ...
+           ~isfile(fullfile(dirs.G, 'mission_transfers_70mN.mat')), ...
+           '(G) EXPORT FAILED printed after the VERDICT, recorded in run_meta.export, run completed, no sidecar');
 
 %% (I) G0 FAIL stops the study (seam: G0's own series with slot 6 moved 0.3 ND)
 d6 = tulip_phasing();  d6(6) = d6(6) + 0.3;
@@ -245,6 +294,8 @@ RI = load(fullfile(dirs.I, 'lunar_pnt_mission_study.mat'), 'pole', 'Vpole');
 ok = check(ok, ran && has_gate(txt, 'G0', 'FAIL') && contains(txt, 'VERDICT: STOPPED AT VALIDATION (G0 FAIL)') && ...
            isempty(RI.pole) && strcmp(RI.Vpole.status, 'FAIL'), ...
            sprintf('(I) G0 FAIL -> STOPPED AT VALIDATION, saved, no pole series (%.0f s)', wI));
+ok = check(ok, contains(txt, 'SIDECAR: not written (the run stopped before six accepted transfers and a PASSED validation)') && ~isfile(fullfile(dirs.I, 'mission_transfers_70mN.mat')), ...
+           '(I) no sidecar from a run whose validation FAILED');
 
 %% (J) gate I2 deliberate failures: a position limit, then a velocity limit, too tight
 [txt, ran, wJ] = run_study(file, struct('headless', true, 'outDir', dirs.J, 'i2Km', 1e-6));

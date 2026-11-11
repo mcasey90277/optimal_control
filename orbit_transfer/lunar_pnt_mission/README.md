@@ -19,7 +19,7 @@ behind `scoreRequirements = true` and is not run by default. Design:
 ```matlab
 cd orbit_transfer/lunar_pnt_mission
 lunar_pnt_mission_study    % edit the knobs block, press Run (CLEARS the workspace it runs in)
-cd tests; run_tests        % every test, one verdict, throws on failure (~11 min)
+cd tests; run_tests        % every test, one verdict, throws on failure (~15 min)
 ```
 
 The script clears its workspace (`clearvars -except study_opts`). Run it
@@ -30,7 +30,9 @@ with `which` that every function resolves in the folder it is meant to.
 Outputs go to `results/` (git-ignored): four PNGs (five with
 `scoreRequirements`) and `lunar_pnt_mission_study.mat`:
 `pole` (tDays, gdop, nOn, nVis, arrDays, stats), `S S0 P Pattempted
-polishCache H Vpole V Gservice gates rounds I2 fingerprint run_meta`.
+polishCache H Vpole V Gservice gates rounds I2 fingerprint run_meta`,
+and (with `exportTransfers`) the sidecar `mission_transfers_70mN.mat` (see
+"Captured transfers (sidecar)").
 `H.r` is saved in double precision (18.0 MB file, about 1 MB more than
 single), so the saved history passes `mission_gdop`'s 1e-9 ND slot check
 and can be fed back into it. `run_meta` records the date, MATLAB version,
@@ -61,6 +63,8 @@ text. The run header prints the same git state, e.g. `optimal_control
 | `g0SlotOverride` | [] | TEST SEAM: slot offsets for G0's own series (the deliberate-failure experiment); [] = none |
 | `makeFigures` | true | section 7 |
 | `makeMovie` | false | section 8: after the save, `mission_movie` renders `results/lunar_pnt_mission.mp4` from the saved results |
+| `exportTransfers` | true | section 9: after the save, `export_mission_transfers` writes the six transfers as costate-library entries to `mission_transfers_70mN.mat` beside the results; NOT written (printed line) when the run stopped, i.e. before six accepted transfers or without a PASSED validation; an export error is printed as `EXPORT FAILED: <id>: <message>`, recorded in `run_meta.export` (appended to the results file) and the run goes on (movie included) |
+| `exportFullStatus` | true | the library's certifier on each exported transfer (about 4 min for six); false: the fallback status (status 1, seconds) |
 | `headless` | false | figures invisible and closed after export |
 | `outDir` | '' | results folder ('' = results/) |
 
@@ -252,14 +256,92 @@ drawn states, plume counts and directions (3-D and on screen), the camera and
 zoom per frame with the containment margins, outline visibility, the Moon
 texture state, the time map and the provenance.
 
+## Captured transfers (sidecar)
+
+Every run that accepts all six transfers AND passes validation (a REUSED
+run too) writes `mission_transfers_70mN.mat` beside its results: ONE
+variable, `mission_transfers`, holding the six new transfers as
+costate-library entries. A stopped or unvalidated run writes none. New
+transfers are an opportunity to add to the library for free, but the shipped
+library of record
+(`DRO_tulip/deliverables/costate_library_70mN_user_deliverable9/costate_catalog_dro_tulip_70mN.mat`)
+is NOT modified: `export_mission_transfers` refuses an output inside the kit
+folder (the target is resolved to a canonical absolute path first, so a
+relative path, a `..` or a not-yet-existing subfolder cannot slip through),
+and its test checks the library file's MD5 before and after.
+
+- `.entries` [1 x 6]: EXACTLY the fields of the library's
+  `cat_.alternatives` (same names, order, class and shape), off grid
+  (`iD = iA = 0`): `sD` = the DRO phase at departure, `sA` = the tulip phase
+  at arrival, `source` = e.g. `lunar_pnt_mission 2026-11-10: sc 3 -> slot 6,
+  polished from primary (16,31)`. A CERTIFIED entry stores what the library
+  itself would store (`make_alternative`: `z8 = C.z`, `junctions = C.Y`,
+  `flyKm = C.flyKm`): the certifier's root, its [14 x 24] multiple-shooting
+  junctions (column 1 = `[rv0; 1; z8(1:7)]`) and its flown miss. z8 and
+  junctions come from the same solve because the kit flies the junctions
+  over `h = z8(8)/24` (`catalog_transfer.m` 171-184). The root the mission
+  flew (the polish's) is `.mission.polishZ8`; the two differ by
+  `.mission.certifyDz` (at most 4.8e-11 here; more than 1e-6 means the
+  status is not attributed and the entry falls back). A FALLBACK entry
+  stores the polish's z8, the K = 24 cut of its single flight as junctions
+  (matching library primary (16,31)'s stored junctions in column 1 exactly
+  and elsewhere to 3.3e-7 relative) and the polish's flown miss.
+- `.mission`: spacecraft, slot, seed cell, wait, departure and arrival
+  epochs (ND and days), propellant, dV, the polish's gates and thresholds,
+  nEval, `reused` and the polish's origin, `statusRun` ('certify_root
+  (full)' or 'fallback: <why>'), `polishZ8`, `certifyDz`, and the
+  certifier's numbers.
+- `.catalog`: the results file's catalog fingerprint (checked against the
+  catalog on the path with the same recipe, `lib/catalog_identity.m`; a
+  mismatch is refused), the regime, the orbit families. `.provenance`: the
+  results' `run_meta`, the export date, `fenced`, and a disclosure note.
+  `.usage`: how to fly one.
+
+Fly an entry with the kit:
+
+```matlab
+L = load('costate_catalog_dro_tulip_70mN.mat');  cat_ = L.costate_catalog_dro_tulip_70mN;
+load('results/mission_transfers_70mN.mat');      % mission_transfers
+F = catalog_transfer(cat_, mission_transfers.entries(1));                         % junctions
+F = catalog_transfer(cat_, mission_transfers.entries(1), struct('method', 'z8')); % one flight
+```
+
+**Status.** Each entry is run through the library's OWN certifier,
+`certify_root` (`DRO_tulip/indirect`; appended to the path with `-end` only
+when it does not already resolve, so nothing the campaign asserts can be
+shadowed; the session path is restored exactly afterwards), and the
+library's own packager `make_alternative` stamps the status with the
+library's rule, `optimality_status`: 4 only when `C.ok` is true, i.e. every
+certify_root stage passed (polish, flight, tight-flight pointwise checks,
+tfMin witness and its flight, conjugate test, hypothesis gates with X2 and
+lift_margin, H6, dense conjugate scan); 3 or 2 for a stack stopped at or
+after the witness stage (2 only for a definite conjugate refutation with
+gates and H6 held); 1 before it. The certifier re-polishes; its root must
+reproduce the stored z8 to 1e-6 or the status is not attributed (tested: a
+z8 costate moved by 1e-5 comes back as a fallback entry, status 1, "certify_root
+converged to a root 1.0e-05 from the stored z8"). Measured cost 19-63 s per
+entry (mean 40 s, about 4 min for six), so `fullStatus` defaults to true.
+With `fullStatus = false` the polish's own evidence reaches certify_root's
+stage 2 only (its pointwise checks run on the loose flight and it does not
+fly the witness's solution), so by the same rule every entry is status 1 and
+its `status_reason` lists the checks not run. All six 2026-11-10 transfers
+are status 4, "full stack passed".
+
+**Unfenced.** The certifier runs without a worker pool (`opts.pool = []`,
+recorded as `provenance.fenced = false`), as the polish does: an unattended
+run can hang inside it, the same exposure as the library's own unfenced
+certification. Pass a connected `parallel.Pool` as `opts.pool` to fence it
+(`fenced = true`; the workers need the campaign's paths).
+
 ## Tests
 
-`tests/run_tests.m` runs all nine tests (about 11 min; measured 657 s on
-2026-11-10, 455 s of it the study test): `test_mission_inputs`,
+`tests/run_tests.m` runs all ten tests (about 15 min; measured 923 s
+on 2026-11-10, the six transfers certified ONCE, in the export test; the
+study test's export runs with `exportFullStatus = false`): `test_mission_inputs`,
 `test_schedule_rendezvous`, `test_polish_rendezvous`,
 `test_assemble_histories`, `test_mission_gdop`, `test_validate_pole_series`,
 `test_pole_series_stats`, `test_lunar_pnt_mission_study`,
-`test_mission_movie`. Each gate's deliberate-failure test is in the Gates
+`test_mission_movie`, `test_export_mission_transfers`. Each gate's deliberate-failure test is in the Gates
 table.
 
 The headline numbers are pinned: `test_schedule_rendezvous` (9) asserts the
@@ -299,6 +381,25 @@ against where MATLAB draws), two PNGs of a file with a spacecraft on station
 from t = 0, the provenance, and the containment failure through `zoomScale`.
 It uses plain MATLAB only (the probe blobs are found with `find` and `mean`;
 no Image Processing Toolbox).
+
+`test_export_mission_transfers` reads the saved results (it skips, passing,
+when no results file exists) and writes only to a temporary folder:
+`catalog_identity` reproduces the saved fingerprint; the refusals of a
+non-accepted transfer, a catalog-fingerprint mismatch (tampered copies) and
+four output paths inside the kit (absolute new subfolder, relative, `..`);
+one variable with the library's alternatives fields matched by name, class
+and shape; the HEADLINE PIN: all six certified by the library's certifier
+(`certifyDz` < 1e-6) and status 4, with the certifier's z8, junctions and
+miss stored; `sD` / `sA` give back the polish's `rv0` / `rvf` (1e-9); the
+fallback cut against a library primary; the `fullStatus = false` statuses
+with the session path restored exactly; the deliberate failure of the
+root-reproduction gate (one certifier run, `only = 3`); the kit round trip
+by both methods below 0.05 km (the library's gate is 100 km; measured max
+2.2e-3 km); the library file's MD5 unchanged.
+`test_lunar_pnt_mission_study` (E) checks the fallback sidecar of a REUSED
+run (entries marked reused, six printed rows, the status-run line), (B),
+(C) and (I) the skip line, and (G) an export error that is printed after
+the VERDICT, recorded in `run_meta.export`, and does not stop the run.
 
 ## Refusals
 
@@ -368,6 +469,25 @@ primary set were not searched).
 No spacecraft waits a DRO revolution; total propellant 71.261 kg. Each
 polished transfer passes every gate listed above under What "certified" covers;
 none changed family.
+
+**Captured transfers (sidecar), export of 2026-11-10.** The library's own
+certifier, run on each polished transfer by `export_mission_transfers`,
+gives all six status 4 (so the checks listed above as NOT included in the
+polish -- lift margin, null and H residual thresholds, H6, dense conjugate
+scan -- were run on these six by the export, and passed); its roots match
+the polished ones to at most 4.8e-11. The kit's own flight
+(`catalog_transfer`, endpoints from the kit's spline at `sD`, `sA`) lands on
+the tulip by both methods; the junction flights fly the certifier's
+multiple-shooting junctions and land to below 0.1 mm.
+
+| entry (sc) | slot | seed cell | sD | sA | t_f (d) | status | certifyDz | H6 margin | lift margin | kit miss z8 (km) | kit miss junctions (km) |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| 1 | 2 | (6,2)   | 0.210133 | 0.028763 | 17.8676 | 4 | 4.8e-11 | 9.05  | 1412  | 8.3e-05 | 2.1e-08 |
+| 2 | 5 | (6,29)  | 0.192034 | 0.591976 | 17.9231 | 4 | 3.8e-11 | 9.74  | 4602  | 9.0e-05 | 4.2e-08 |
+| 3 | 6 | (16,31) | 0.625135 | 0.638424 | 16.2028 | 4 | 3.4e-12 | 9.69  | 7041  | 6.6e-05 | 4.3e-08 |
+| 4 | 1 | (15,43) | 0.582667 | 0.888043 | 16.7944 | 4 | 2.3e-13 | 25.42 | 40491 | 2.2e-03 | 1.9e-08 |
+| 5 | 3 | (17,11) | 0.674476 | 0.219276 | 17.1051 | 4 | 2.1e-11 | 13.20 | 829   | 2.4e-04 | 5.4e-08 |
+| 6 | 4 | (22,17) | 0.884647 | 0.342178 | 18.0999 | 4 | 6.2e-12 | 18.39 | 646   | 3.2e-04 | 3.4e-08 |
 
 **Orbit handles (I2).** Against a direct propagation at 2,582 phases: tulip
 handle max 0.015 km and 0.0016 m/s, DRO handle max 0.006 km and 0.00015 m/s.

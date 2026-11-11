@@ -32,6 +32,16 @@ function R = repair_gto_dro_cells(sheetMat, mode, opts)
 %   loaded for the restore the backup is left in place and the call throws
 %   repair_gto_dro_cells:sheetUnreadable.
 %
+%   DIRECT SIDECAR. With engine option keepDirect (the fleet's default) the
+%   engine's redo rewrites the cell's slices of <sheet>_direct.mat with the
+%   RE-SOLVE's direct solutions. When the cell is then RESTORED (rejected
+%   re-solve, engine error, or an interrupted repair recovered at the start
+%   of a call) those slices describe a solve the restored sheet does not
+%   hold, and the original direct solutions are gone: the cell's slices are
+%   marked not recorded (NaN, DDONE false; temp file + movefile). No
+%   sidecar on disk: nothing is done. keepDirect is not physics and is not
+%   in the sheet's meta, so the physics guard passes it through.
+%
 %   PHYSICS GUARD. opts.engineOpts must agree with the sheet's meta on
 %   ispS, m0kg, N, floorKm, floorEarthKm, gateKm, depFamily, arrFamily,
 %   tauDRO and every field of depParams / arrParams the sheet records;
@@ -113,6 +123,7 @@ function R = repair_gto_dro_cells(sheetMat, mode, opts)
 %
 %% Revision History:
 %  M. Casey                                                   (c) 11/10/2026
+%  M. Casey  restore clears the cell's _direct.mat slices      (c) 11/11/2026
 %  Copyright Coorbital Inc.
 %% ------------------------ Begin Code Sequence ---------------------------
 
@@ -195,6 +206,7 @@ for kp = 1:numel(pending)
     Qr = load_sheet_or_throw(sheetMat, bfile, snapMat, lg);
     Qr = restore_cell(Qr, B.bk, B.iD, B.iA);
     save_atomic(sheetMat, Qr);
+    clear_direct_cell(sheetMat, B.iD, B.iA, lg);
     row = B.row;  row.outcome = 'restored (interrupted)';  row.tfBefore = B.bk.TF(1);
     row.tfAfter = NaN;  row.okAfter = false;
     rows(end+1) = row;
@@ -315,12 +327,14 @@ for kc = 1:min(size(cand, 1), maxCells)
             end
             Qn = restore_cell(Qn, bk, iD, iA);
             save_atomic(sheetMat, Qn);  Q = Qn;
+            clear_direct_cell(sheetMat, iD, iA, lg);
             R.nRestored = R.nRestored + 1;
         end
     catch ME
         Qn = load_sheet_or_throw(sheetMat, bfile, snapMat, lg);
         Qn = restore_cell(Qn, bk, iD, iA);
         save_atomic(sheetMat, Qn);  Q = Qn;
+        clear_direct_cell(sheetMat, iD, iA, lg);
         row.outcome = ['restored (error: ' ME.message ')'];
         R.nFailed = R.nFailed + 1;  R.nRestored = R.nRestored + 1;
     end
@@ -446,6 +460,29 @@ Q.WALL(iD, iA, :)  = reshape(bk.WALL, 1, 1, nR);
 Q.OK(iD, iA, :)    = reshape(bk.OK, 1, 1, nR);
 Q.Z8(:, iD, iA, :) = reshape(bk.Z8, 8, 1, 1, nR);
 Q.ATT(iD, iA)      = bk.ATT;
+end
+
+function clear_direct_cell(sheetMat, iD, iA, lg)
+% CLEAR_DIRECT_CELL  Mark one cell of <sheet>_direct.mat not recorded (NaN,
+% DDONE false) after a restore; no sidecar = nothing to do. A sidecar that
+% cannot be read or written is logged, never thrown (the restored sheet
+% stands).  INPUTS: sheetMat char; iD, iA int; lg logger.  OUTPUTS: none.
+dirMat = [sheetMat(1:end-4) '_direct.mat'];
+if ~isfile(dirMat), return, end
+try
+    D = load(dirMat);
+    if size(D.DDONE, 1) < iD || size(D.DDONE, 2) < iA
+        lg('  (%2d,%2d) restored; direct sidecar %s is smaller than the sheet, left as is', iD, iA, dirMat);
+        return
+    end
+    D.DX(:, :, iD, iA, :) = NaN;   D.DU(:, :, iD, iA, :) = NaN;
+    D.DTF(iD, iA, :) = NaN;        D.DEARTHKM(iD, iA, :) = NaN;
+    D.DMOONKM(iD, iA, :) = NaN;    D.DDONE(iD, iA, :) = false;
+    save_atomic(dirMat, D);
+    lg('  (%2d,%2d) restored: its direct-sidecar slices marked not recorded', iD, iA);
+catch ME
+    lg('  (%2d,%2d) restored, but the direct sidecar %s could not be cleared: %s', iD, iA, dirMat, ME.message);
+end
 end
 
 function v = fdef(s, f, v0)

@@ -214,6 +214,24 @@ guard is `mintime_prop_seg:massDepleted` (below), which rejects such iterates
 in-process in milliseconds; the fence is the backstop for anything else that
 stalls inside one evaluation.
 
+`opts.keepDirect` (default `false` = no sidecar, no extra work, sheet
+unchanged: `tests/test_ladder_keepdirect` pins every sheet variable but WALL
+`isequaln` to a call without the field) keeps every rung's DIRECT solution in
+`<outMat minus .mat>_direct.mat`: `DX` [7 x N+1 x nD x nA x nR] node states,
+`DU` [3 x N+1 x ...] thrust directions, `DTF`, `DEARTHKM` / `DMOONKM` (minimum
+altitude over the nodes and the Hermite-Simpson midpoints, km), `DDONE`, plus
+`rungs`, `sD`, `sA`, `N`, `sheetFile`. A rung is recorded whenever its direct
+solve passes the engine's direct gate (success, defect < 1e-9), whatever
+happens after it. The sidecar is written (temp file + `movefile`) after the
+sheet; a cell's slices are cleared and saved before its attempt counter is,
+and `redo` cells up front, so a kill cannot leave it claiming a solve the
+sheet does not hold. On resume it is reused only alongside a resumed sheet
+with matching sizes, rungs, N, grid and sheet name, else replaced by a fresh
+one (logged). A failed sidecar write is logged and never stops the sheet. It
+exists because the sheet keeps only refined costates: GTO -> DRO pilot
+2026-11-11, 46 of 280 refined entries fly below the Earth floor while the one
+direct solution measured holds it. About 12 MB per 12 x 6 x 5 sheet.
+
 **Shooting solvers and continuation**
 
 | file | what | used by |

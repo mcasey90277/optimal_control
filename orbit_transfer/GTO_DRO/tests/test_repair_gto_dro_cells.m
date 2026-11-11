@@ -17,6 +17,13 @@ function ok = test_repair_gto_dro_cells()
 %   left), 8 interrupted-repair recovery from a hand-made backup + cleared
 %   cell, 9 fleet-lock refusal, 10 conjOnly on mode unsolved refuses
 %
+%   keepDirect (2026-11-11): the engine options of plan.optsA carry
+%   keepDirect = true, so the repairs write <sheet>_direct.mat. 4 checks
+%   that a rejected repair leaves no recorded slice; 7 and 8 plant a
+%   sidecar claiming the cell (DDONE true) and check the restore marks it
+%   not recorded (7: engine throw, 8: interrupted-repair recovery); 2
+%   checks the accepted repair's slices are recorded
+%
 % INPUTS:  none
 % OUTPUTS: ok - logical
 %
@@ -54,6 +61,10 @@ assert(Q.OK(1, 1, 2), 'the 12 N rung re-walked and OK');
 S = load(R1.sideMat, 'rows');
 assert(numel(S.rows) == 1 && strcmp(S.rows(1).outcome, 'repaired') && S.rows(1).conjBefore == 0, 'sidecar row');
 assert(isinf(S.rows(1).directGateKm), 'sidecar records directGateKm');
+assert(eo.keepDirect, 'plan.optsA carries keepDirect = true');
+D1 = load([sheetMat(1:end-4) '_direct.mat']);
+assert(all(D1.DDONE(1, 1, :)) && abs(D1.DTF(1, 1, 1) - Q.TF(1, 1, 1)) < 1e-3, ...
+       'an accepted repair keeps its direct slices (DDONE %s)', mat2str(squeeze(D1.DDONE).'));
 fprintf('  basin repair: tf 15 N %.5f -> %.5f (12 N %.5f), conjBefore %g, conjAfter %g, %.0f s\n', ...
         tfOld, Q.TF(1, 1, 1), Q.TF(1, 1, 2), S.rows(1).conjBefore, S.rows(1).conjAfter, S.rows(1).wallS);
 
@@ -83,7 +94,13 @@ assert(~isfolder(fullfile(tempdir, '.gtodrocat_driver.lock')), 'the tool release
 snap = load([freshMat '.bak_repair'], '-mat');
 assert(isequal(snap.OK, Qb.OK) && isequaln(snap.TF, Qb.TF) && isequaln(snap.Z8, Qb.Z8) && isequal(snap.ATT, Qb.ATT), ...
        'snapshot loads and equals the pre-call sheet');
-fprintf('  failed repair: outcome "%s", cell restored\n', S3.rows(end).outcome);
+dir4 = [freshMat(1:end-4) '_direct.mat'];
+if isfile(dir4)
+    D4 = load(dir4);
+    assert(~any(D4.DDONE(1, 1, :)) && all(isnan(D4.DX(:))), 'a rejected repair left recorded direct slices');
+end
+fprintf('  failed repair: outcome "%s", cell restored (direct sidecar present: %d, no slice recorded)\n', ...
+        S3.rows(end).outcome, isfile(dir4));
 
 % 6. physics guard: engineOpts.ispS differs from the sheet -> refuse, sheet untouched
 Qpre = load(freshMat);
@@ -117,6 +134,7 @@ assert(isequaln(load(freshMat), Qpre), 'refused calls must leave the sheet untou
 % 7. the engine throws (wrong-shape seed): restored (error ...), nFailed 1
 errMat = fullfile(wd, 'err_sheet.mat');  copyfile(src, errMat);
 Qe0 = load(errMat);
+plant_direct_sidecar([errMat(1:end-4) '_direct.mat']);
 seedShape = struct('X', ones(7, 10), 'U', ones(4, 10), 'tf', 0.3);
 R5 = repair_gto_dro_cells(errMat, 'basin', struct('engineOpts', eo, 'seedOverride', seedShape));
 assert(R5.nCandidates == 1 && R5.nFailed == 1 && R5.nRestored == 1, 'engine throw counted');
@@ -126,6 +144,9 @@ assert(isequal(Qe1.OK, Qe0.OK) && isequaln(Qe1.TF, Qe0.TF) && isequaln(Qe1.Z8, Q
 S5 = load(R5.sideMat, 'rows');
 assert(strncmp(S5.rows(end).outcome, 'restored (error', 15), 'outcome %s', S5.rows(end).outcome);
 assert(isempty(dir([errMat(1:end-4) '_repair_backup_*.mat'])), 'no backup left after an engine throw');
+De = load([errMat(1:end-4) '_direct.mat']);
+assert(~any(De.DDONE(:)) && all(isnan(De.DX(:))) && all(isnan(De.DU(:))) && all(isnan(De.DTF(:))) && ...
+       all(isnan(De.DEARTHKM(:))) && all(isnan(De.DMOONKM(:))), 'restore after an engine throw must clear the direct slices');
 fprintf('  engine throw: outcome "%s"\n', S5.rows(end).outcome);
 
 % 8. interrupted-repair recovery: cleared cell + pending backup, conjOnly call
@@ -148,6 +169,7 @@ Qc.TF(1, 1, :) = NaN;  Qc.FLYKM(1, 1, :) = NaN;  Qc.ACCDZ(1, 1, :) = NaN;
 Qc.RES(1, 1, :) = NaN;  Qc.WALL(1, 1, :) = NaN;  Qc.OK(1, 1, :) = false;
 Qc.Z8(:, 1, 1, :) = NaN;  Qc.ATT(1, 1) = 1;
 save(recMat, '-struct', 'Qc');
+plant_direct_sidecar([recMat(1:end-4) '_direct.mat']);
 
 % 9. fleet lock: refuses while a pending backup needs recovery (even conjOnly) ...
 lockDir = fullfile(wd, '.gtodrocat_driver.lock');  mkdir(lockDir);
@@ -178,6 +200,8 @@ assert(isequal(Qd.OK, Qr.OK) && isequaln(Qd.TF, Qr.TF) && isequaln(Qd.Z8, Qr.Z8)
 S6 = load(R6.sideMat, 'rows');
 assert(strcmp(S6.rows(1).outcome, 'restored (interrupted)') && S6.rows(1).tfBefore == bkR.TF(1), 'interrupted row');
 assert(~isfile(bfileR), 'backup deleted after recovery');
+Dr = load([recMat(1:end-4) '_direct.mat']);
+assert(~any(Dr.DDONE(:)) && all(isnan(Dr.DX(:))), 'interrupted-repair recovery must clear the direct slices');
 fprintf('  recovery: nRecovered %d, tf restored %.5f\n', R6.nRecovered, Qd.TF(1, 1, 1));
 
 % conjOnly under the lock is allowed once nothing is pending
@@ -217,4 +241,15 @@ assert(Q2.OK(2, 1, 1), 'phase continuation solved the neighbour cell at 15 N');
 rmdir(wd, 's');
 ok = true;
 fprintf('test_repair_gto_dro_cells: PASS\n');
+end
+
+% ------------------------------------------------------------------------
+function plant_direct_sidecar(dirMat)
+% PLANT_DIRECT_SIDECAR  A 1 x 1 x 2 keepDirect sidecar that CLAIMS the cell
+% (DDONE true, finite slices), as the engine would leave it after a re-solve.
+% INPUTS: dirMat char.  OUTPUTS: none (file written).
+S = struct('DX', ones(7, 401, 1, 1, 2), 'DU', ones(3, 401, 1, 1, 2), 'DTF', 0.3*ones(1, 1, 2), ...
+           'DEARTHKM', 300*ones(1, 1, 2), 'DMOONKM', 9e4*ones(1, 1, 2), 'DDONE', true(1, 1, 2), ...
+           'rungs', [15 12], 'sD', 0.10, 'sA', 0, 'N', 400, 'sheetFile', 'planted.mat');
+save(dirMat, '-struct', 'S');
 end

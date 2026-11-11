@@ -123,6 +123,43 @@ function P = thrust_ladder_library(outMat, opts)
 %                         the call's size: thrust_ladder_library:redoSheet)
 %                         The caller owns the backup of what it clears
 %                                                                 [false]
+%              .keepDirect  true = keep every rung's DIRECT solution in a
+%                         sidecar <outMat minus .mat>_direct.mat (the sheet
+%                         keeps only refined costates, so a question about
+%                         the direct solutions -- e.g. the GTO -> DRO pilot's
+%                         46 refined entries flying below an Earth floor the
+%                         direct solution holds -- needs a re-solve without
+%                         it). Recorded for every rung whose direct solve
+%                         passes the engine's direct gate (success and
+%                         defect < 1e-9), whatever happens after: pre-flight
+%                         rejection, flown-gate stop, refinement or
+%                         acceptance failure, cap, or OK. Variables:
+%                           DX  [7 x N+1 x nD x nA x nR] node states
+%                           DU  [3 x N+1 x nD x nA x nR] node thrust
+%                               directions (rows 1:3 of the solver's U)
+%                           DTF [nD x nA x nR] direct t_f (ND)
+%                           DEARTHKM, DMOONKM [nD x nA x nR] minimum Earth
+%                               (centre [-muStar 0 0], 6378.137 km) and Moon
+%                               (centre [1-muStar 0 0], 1737.4 km) altitude
+%                               over the nodes AND the Hermite-Simpson
+%                               midpoints o.Xm when present, km
+%                           DDONE [nD x nA x nR] logical, slice recorded
+%                           rungs, sD, sA, N, sheetFile (sheet file NAME)
+%                         NaN / false where not recorded. Saved (temp file +
+%                         movefile) after the sheet at every sheet save and
+%                         at the end of every cell; a cell's slices are
+%                         cleared and saved BEFORE its attempt-counter
+%                         save, and redo cells are cleared up front, so a
+%                         kill never leaves the sidecar claiming a solve the
+%                         sheet does not hold. On resume the sidecar is
+%                         loaded only when the sheet was loaded and its
+%                         sizes, rungs, N, sD, sA and sheetFile match, else a
+%                         fresh one starts (one log line). A failed sidecar
+%                         write is logged and the run goes on (the sheet is
+%                         never lost to it). About 12 MB per 12 x 6 x 5
+%                         sheet. false = no sidecar, no extra work, sheet
+%                         byte-identical (tests/test_ladder_keepdirect)
+%                                                                 [false]
 %
 %% Outputs:
 %
@@ -141,6 +178,7 @@ function P = thrust_ladder_library(outMat, opts)
 %  M. Casey  floorEarthKm option (default off)                (c) 11/09/2026
 %  M. Casey  seedTop and redo options (default off)           (c) 11/10/2026
 %  M. Casey  msHardCapSec hard fence on ms_tfmin (default off) (c) 11/10/2026
+%  M. Casey  keepDirect direct-solution sidecar (default off)  (c) 11/11/2026
 %  Copyright Coorbital Inc.
 %% ------------------------ Begin Code Sequence ---------------------------
 
@@ -255,6 +293,14 @@ if ~isempty(seedTop)
     end
 end
 
+keepDirect = d('keepDirect', false);
+if ~(isscalar(keepDirect) && (islogical(keepDirect) || isnumeric(keepDirect)) && ...
+        any(keepDirect == [0 1]))
+    error('thrust_ladder_library:keepDirect', 'opts.keepDirect must be a logical scalar');
+end
+keepDirect = logical(keepDirect);
+dsDirty = false;                       % sidecar holds a record not yet on disk
+
 nR = numel(rungs);
 TF = nan(nD,nA,nR); FLYKM = TF; ACCDZ = TF; RES = TF; WALL = TF;
 OK = false(nD,nA,nR);  Z8 = nan(8,nD,nA,nR);
@@ -302,6 +348,20 @@ if redo && ~sheetLoaded
     error('thrust_ladder_library:redoSheet', ...
           'opts.redo needs resume = true and an existing sheet of the same size');
 end
+% DIRECT SIDECAR (opts.keepDirect): loaded only alongside a loaded sheet,
+% else fresh; redo cells cleared up front like their sheet slices
+if keepDirect
+    [~, sheetName, sheetExt] = fileparts(outMat);
+    dirMat = [outMat(1:end-4) '_direct.mat'];
+    [DS, dsReplaced] = direct_sidecar_load(dirMat, sheetLoaded, [sheetName sheetExt], ...
+                                           rungs, sD, sA, N, nD, nA, lg);
+    if dsReplaced || redo
+        for kq = 1:size(todo,1)
+            DS = direct_clear_cell(DS, todo(kq,1), todo(kq,2));
+        end
+        direct_sidecar_save(dirMat, DS, lg);
+    end
+end
 meta = struct('muStar',muStar,'lStar',lStar,'tStar',tStar, ...
     'tauDRO',tauDRO,'NpTulip',NpT,'tauTulip',tauT,'pmTulip',pmT, ...
     'depFamily',depFamily,'depParams',depParams, ...
@@ -331,6 +391,10 @@ for kc = 1:min(size(todo,1), maxCells)
         seedX = seedTop.X;  seedU = seedTop.U;  seedTf = seedTop.tf;
     end
     ATT(iD,iA) = ATT(iD,iA) + 1;      % record BEFORE solving (hang-proof)
+    if keepDirect                     % sidecar cleared BEFORE the attempt is recorded
+        DS = direct_clear_cell(DS, iD, iA);
+        direct_sidecar_save(dirMat, DS, lg);  dsDirty = false;
+    end
     save(outMat, 'TF','FLYKM','ACCDZ','RES','WALL','OK','Z8','ATT', ...
          'rungs','sD','sA','meta');
     for kr = 1:nR
@@ -356,6 +420,13 @@ for kc = 1:min(size(todo,1), maxCells)
             lg('  (%2d,%2d) T=%5.1f  direct fail (defect %.1e) -- ladder stops', ...
                iD, iA, TN, o.maxDefect);
             break
+        end
+        if keepDirect                 % every direct success, whatever follows
+            try                       % a diagnostic must never cost a cell
+                DS = direct_record(DS, o, iD, iA, kr, muStar, lStar);  dsDirty = true;
+            catch MEds
+                lg('  (%2d,%2d) T=%5.1f  direct sidecar record FAILED: %s', iD, iA, TN, MEds.message);
+            end
         end
         % Cheap sanity pre-check before any integrator touches the solve
         % (preflight_screen, this folder).
@@ -458,6 +529,12 @@ for kc = 1:min(size(todo,1), maxCells)
         seedTf = o.tf;  Tprev = TN;
         save(outMat, 'TF','FLYKM','ACCDZ','RES','WALL','OK','Z8','ATT', ...
              'rungs','sD','sA','meta');                        % EVERY rung
+        if keepDirect                 % after the sheet
+            direct_sidecar_save(dirMat, DS, lg);  dsDirty = false;
+        end
+    end
+    if keepDirect && dsDirty          % a rung recorded, then the ladder broke out
+        direct_sidecar_save(dirMat, DS, lg);  dsDirty = false;
     end
     if mod(kc,10) == 0
         lg('--- %d/%d cells, %d (cell,rung) entries verified, %.1f min elapsed', ...
@@ -590,6 +667,117 @@ function delete_pool(pool)
 % INPUTS: pool parallel.Pool or [].  OUTPUTS: none.
 if ~isempty(pool) && isvalid(pool)
     try delete(pool); catch, end
+end
+end
+
+% ------------------------------------------------------------------------
+function [DS, replaced] = direct_sidecar_load(dirMat, sheetLoaded, sheetFile, rungs, sD, sA, N, nD, nA, lg)
+% DIRECT_SIDECAR_LOAD  The keepDirect sidecar: the one on disk when the
+% sheet was loaded and the sidecar matches the call, else a fresh one (a
+% line is logged when a file on disk is set aside; the caller then writes
+% the fresh one over it at once, so no stale record outlives the call).
+% INPUTS:  dirMat char; sheetLoaded logical; sheetFile char (name only);
+%          rungs [1 x nR]; sD [1 x nD]; sA [1 x nA]; N, nD, nA int; lg
+%          logger handle.
+% OUTPUTS: DS struct (sidecar variables, see the header's .keepDirect);
+%          replaced logical, a file on disk was set aside.
+replaced = false;
+nR = numel(rungs);
+DS = struct('DX', nan(7, N+1, nD, nA, nR), 'DU', nan(3, N+1, nD, nA, nR), ...
+            'DTF', nan(nD, nA, nR), 'DEARTHKM', nan(nD, nA, nR), ...
+            'DMOONKM', nan(nD, nA, nR), 'DDONE', false(nD, nA, nR), ...
+            'rungs', rungs, 'sD', sD, 'sA', sA, 'N', N, 'sheetFile', sheetFile);
+if ~isfile(dirMat), return, end
+why = '';
+if ~sheetLoaded
+    why = 'no sheet was resumed';
+else
+    try
+        Q = load(dirMat);
+        fOK = all(isfield(Q, fieldnames(DS)));
+        if ~fOK
+            why = 'variables missing';
+        elseif ~(isequal(size(Q.DX, 1:5), [7 N+1 nD nA nR]) && ...
+                 isequal(size(Q.DU, 1:5), [3 N+1 nD nA nR]) && ndims(Q.DX) <= 5 && ...
+                 isequal(size(Q.DTF, 1:3), [nD nA nR]) && isequal(size(Q.DEARTHKM, 1:3), [nD nA nR]) && ...
+                 isequal(size(Q.DMOONKM, 1:3), [nD nA nR]) && isequal(size(Q.DDONE, 1:3), [nD nA nR]) && ...
+                 ndims(Q.DTF) <= 3)
+            why = 'sizes differ';
+        elseif ~(isequal(Q.rungs(:).', rungs(:).') && isequal(Q.N, N) && ...
+                 isequal(Q.sD(:).', sD(:).') && isequal(Q.sA(:).', sA(:).') && ...
+                 strcmp(Q.sheetFile, sheetFile))
+            why = 'rungs / N / grid / sheetFile differ';
+        end
+    catch ME
+        why = ['unreadable: ' ME.message];
+    end
+end
+if isempty(why)
+    try
+        Q.DDONE = logical(Q.DDONE);
+        DS = Q;
+    catch ME
+        why = ['DDONE not logical: ' ME.message];
+    end
+end
+if ~isempty(why)
+    lg('  direct sidecar %s does not match this call (%s): starting a fresh one', dirMat, why);
+    replaced = true;
+    if isfile(dirMat)                 % keep the old data: set it aside, never overwrite
+        aside = [dirMat(1:end-4) '_setaside_' char(datetime('now', 'Format', 'yyyyMMdd_HHmmss')) '.mat'];
+        try
+            movefile(dirMat, aside);
+            lg('  old direct sidecar set aside as %s', aside);
+        catch ME
+            lg('  old direct sidecar could not be set aside (%s)', ME.message);
+        end
+    end
+end
+end
+
+function DS = direct_clear_cell(DS, iD, iA)
+% DIRECT_CLEAR_CELL  Mark one cell's sidecar slices not recorded.
+% INPUTS: DS struct; iD, iA int.  OUTPUTS: DS.
+DS.DX(:,:,iD,iA,:) = NaN;   DS.DU(:,:,iD,iA,:) = NaN;
+DS.DTF(iD,iA,:) = NaN;      DS.DEARTHKM(iD,iA,:) = NaN;
+DS.DMOONKM(iD,iA,:) = NaN;  DS.DDONE(iD,iA,:) = false;
+end
+
+function DS = direct_record(DS, o, iD, iA, kr, muStar, lStar)
+% DIRECT_RECORD  Record one rung's direct solution into the sidecar.
+% Altitudes are minima over the nodes and, when the solver returns them,
+% the Hermite-Simpson midpoints o.Xm.
+% INPUTS:  DS struct; o casadi_mintime_dro output (.X [7 x N+1], .U
+%          [4 x N+1], .Xm [7 x N] or [], .tf); iD, iA, kr int; muStar,
+%          lStar double.
+% OUTPUTS: DS.
+R = o.X(1:3,:);
+if isfield(o, 'Xm') && ~isempty(o.Xm), R = [R, o.Xm(1:3,:)]; end
+dE = sqrt(sum((R - [-muStar; 0; 0]).^2, 1));
+dM = sqrt(sum((R - [1-muStar; 0; 0]).^2, 1));
+DS.DX(:,:,iD,iA,kr) = o.X;
+DS.DU(:,:,iD,iA,kr) = o.U(1:3,:);
+DS.DTF(iD,iA,kr) = o.tf;
+DS.DEARTHKM(iD,iA,kr) = min(dE)*lStar - 6378.137;
+DS.DMOONKM(iD,iA,kr)  = min(dM)*lStar - 1737.4;
+DS.DDONE(iD,iA,kr) = true;
+end
+
+function direct_sidecar_save(dirMat, DS, lg)
+% DIRECT_SIDECAR_SAVE  Write the sidecar via a temp file in the same folder
+% + movefile; a failure is logged, never thrown (the sheet must survive).
+% INPUTS: dirMat char; DS struct; lg logger handle.  OUTPUTS: none.
+fold = fileparts(dirMat);
+if isempty(fold), fold = pwd; end
+tmp = [tempname(fold) '.mat'];
+try
+    save(tmp, '-struct', 'DS');
+    movefile(tmp, dirMat, 'f');
+catch ME
+    lg('  direct sidecar write FAILED (%s): %s -- the sheet is unaffected', dirMat, ME.message);
+    if isfile(tmp)
+        try delete(tmp); catch, end
+    end
 end
 end
 

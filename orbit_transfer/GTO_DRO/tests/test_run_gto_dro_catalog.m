@@ -27,6 +27,8 @@ for k = 1:16
     assert(isequal(oA.rungs, [15 12 10 7 5]), 'default rungs');
     assert(isinf(oA.directGateKm) && isinf(plan(k).optsB.directGateKm) && oA.gateKm == 100 && plan(k).optsB.gateKm == 100, 'gates');
     assert(oA.msHardCapSec == 300 && plan(k).optsB.msHardCapSec == 300, 'ms hard cap default 300 s in A and B');
+    assert(isfield(oA, 'keepDirect') && oA.keepDirect == true && plan(k).optsB.keepDirect == true, ...
+           'keepDirect default true in A and B');
     oB = plan(k).optsB;
     assert(strcmp(oB.depFamily, 'gto') && strcmp(oB.arrFamily, 'dro'), 'B families');
     assert(oB.arrParams.tau == plan(k).tau && oB.depParams.orientDeg == plan(k).orientDeg, 'B params');
@@ -40,6 +42,8 @@ assert(numel(plan9) == 1 && isequal(plan9.optsA.rungs, [15 12 10 7 5 3 2 1.5 1])
 assert(plan9.optsA.directGateKm == 250 && plan9.optsB.directGateKm == 250, 'directGateKm override lands in A and B');
 planOff = run_gto_dro_catalog(2, [], [], [], struct('planOnly', true, 'msHardCapSec', 0));
 assert(planOff.optsA.msHardCapSec == 0 && planOff.optsB.msHardCapSec == 0, 'msHardCapSec override (0 = off) lands in A and B');
+planKD = run_gto_dro_catalog(2, [], [], [], struct('planOnly', true, 'keepDirect', false));
+assert(planKD.optsA.keepDirect == false && planKD.optsB.keepDirect == false, 'keepDirect override (false) lands in A and B');
 
 % planOnly touches no disk: an absent catDir stays absent
 wd = fullfile(tempdir, 'test_run_gto_dro_catalog');
@@ -71,6 +75,7 @@ comb = fileread(fullfile(wd, 'combined_progress.txt'));
 assert(contains(comb, 'ms fence ACTIVE (pool of 1)'), 'fence line missing from combined_progress.txt:\n%s', comb);
 assert(strcmp(planRun.fence, 'ms fence ACTIVE (pool of 1)'), 'plan.fence = %s', planRun.fence);
 assert(~isempty(current_pool()) == hadPool, 'the front door left the pool state changed');
+assert(~isfile(fullfile(wd, 'gto_dro_o000_tau1_direct.mat')), 'zero cells solved must write no direct sidecar');
 rmdir(wd, 's');
 ok = true;
 fprintf('test_run_gto_dro_catalog: PASS\n');

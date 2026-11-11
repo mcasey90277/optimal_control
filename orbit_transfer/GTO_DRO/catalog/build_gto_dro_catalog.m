@@ -32,10 +32,11 @@ function chainBlockers = build_gto_dro_catalog(runIn)
 %
 %   PACKAGE STAGING. The packager globs its folder, and the catalog folder
 %   also holds <tag>_earth.mat, <tag>_repairs.mat, the repair tool's
-%   <tag>_repair_backup_iDD_aDD.mat and the pilot's <tag>_deep.mat, all of
-%   which match the sheet glob. The stage therefore copies only the
-%   official sheets (explicit names, after complete_dep_params patched them
-%   in place) into <outDir>/package_stage/ (emptied first) and packages
+%   <tag>_repair_backup_iDD_aDD.mat, the pilot's <tag>_deep.mat and the
+%   fleet's <tag>_direct.mat (engine keepDirect: each rung's direct
+%   solution), all of which match the sheet glob. The stage therefore
+%   copies only the official sheets (explicit names, after
+%   complete_dep_params patched them in place) into <outDir>/package_stage/ (emptied first) and packages
 %   THAT folder. The packager records no source path in the catalog.
 %
 %   WAIVERS (deliberate decisions, off by default). A blocker is dropped from
@@ -101,6 +102,7 @@ function chainBlockers = build_gto_dro_catalog(runIn)
 %  M. Casey                                                   (c) 11/10/2026
 %  fix round 1: deliverable preflight, fleet lock, earth waiver, dated
 %  sweep-backup rename, staging cleanup
+%  M. Casey  _direct.mat listed among the catalog-folder files (c) 11/11/2026
 %  Copyright Coorbital Inc.
 %% ------------------------ Begin Code Sequence ---------------------------
 
@@ -139,7 +141,7 @@ files = struct('catalog', fullfile(outDir, 'costate_catalog_gto_dro.mat'), ...
 blockers = {};
 
 % the sheets, by their official names (never a bare glob: _deep, _earth,
-% _repairs, _repair_backup_* and .bak_* must not enter)
+% _repairs, _repair_backup_*, _direct and .bak_* must not enter)
 sheetMats = {};
 for od = orients
     for ta = taus

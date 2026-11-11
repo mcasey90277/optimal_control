@@ -77,7 +77,23 @@ function plan = run_gto_dro_catalog(sheetSel, maxCellsIn, batchSecIn, rungsIn, o
 %                                                   (run_gto_dro_catalog:
 %                                                   noFence) rather than
 %                                                   run a fleet unfenced;
-%                                                   false = run UNFENCED
+%                                                   false = run UNFENCED;
+%                                                   .keepDirect [true] the
+%                                                   engine keeps every
+%                                                   rung's direct solution
+%                                                   in <tag>_direct.mat
+%                                                   next to the sheet
+%                                                   (engine opts.keepDirect,
+%                                                   about 12 MB per sheet):
+%                                                   46 of the pilot's 280
+%                                                   refined entries fly
+%                                                   below the Earth floor
+%                                                   (one measured direct
+%                                                   solution holds it), so
+%                                                   the direct solutions
+%                                                   are kept for study
+%                                                   without re-solving;
+%                                                   false = no sidecar
 %
 %% Outputs:
 %
@@ -94,11 +110,14 @@ function plan = run_gto_dro_catalog(sheetSel, maxCellsIn, batchSecIn, rungsIn, o
 %                                                   plan; files under
 %                                                   catDir: <tag>.mat +
 %                                                   <tag>_progress.txt,
+%                                                   <tag>_direct.mat (when
+%                                                   keepDirect),
 %                                                   combined_progress.txt
 %
 %% Revision History:
 %  M. Casey                                                   (c) 11/10/2026
 %  M. Casey  msHardCapSec knob + ode45 warning silenced        (c) 11/10/2026
+%  M. Casey  keepDirect knob (direct-solution sidecar, on)     (c) 11/11/2026
 %  Copyright Coorbital Inc.
 %% ------------------------ Begin Code Sequence ---------------------------
 
@@ -143,6 +162,7 @@ if ~isempty(rungsIn), rungs = rungsIn; end
  requireFence = fdef(optsIn, 'requireFence', true);  % msHardCapSec > 0 but no pool: refuse (true) or run UNFENCED (false)
  msHardCapSec = fdef(optsIn, 'msHardCapSec', 300);    % hard cap (s) per ms_tfmin attempt, run on a parallel worker (engine opts.msHardCapSec); 0 = off. msWallS (120 s) is soft and cannot stop a stuck residual evaluation
       thrLock = true;                % pin thr == 1 (classical min-time form)
+   keepDirect = fdef(optsIn, 'keepDirect', true);    % keep each rung's direct solution in <tag>_direct.mat (engine opts.keepDirect, ~12 MB per sheet): 46 of 280 pilot entries fly below the Earth floor, so keep the direct solutions for study
      tf0Fleet = fdef(optsIn, 'tf0', 0.30);   % pass A top-rung seed (ND); the pilot re-bases it
 
 %% ======================= END ADJUSTABLE PARAMETERS ======================
@@ -229,7 +249,7 @@ for ks = sheetSel
         'arrFamily','dro', 'arrParams',struct('tau',s.tau), ...
         'tauDRO',s.orientDeg, ...          % SHEET KEY RULE: orientDeg, never the DRO period
         'accTol',accTol, 'maxCells',maxCells, ...
-        'thrLock',thrLock, 'logFile',logFile);
+        'thrLock',thrLock, 'keepDirect',keepDirect, 'logFile',logFile);
     optsA = optsCommon;  optsA.tf0 = tf0Fleet;
     optsB = optsCommon;  optsB.cells = zeros(0,2);
     plan(end+1,1) = struct('tag', s.tag, 'orientDeg', s.orientDeg, 'tau', s.tau, 'fence', fenceLine, ...

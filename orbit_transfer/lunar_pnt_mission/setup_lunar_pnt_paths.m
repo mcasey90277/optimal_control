@@ -6,8 +6,10 @@ function setup_lunar_pnt_paths(extraChecks)
 %   costate_common (get_family_orbit, phase_state, fly_transfer, ms_tfmin,
 %   the verification instruments) + the top-level oclib/ + casadi under
 %   $HOME + proj7/pipelines/gdop (gdop_grid_from_states, tulip_phasing,
-%   the access scorers). pumpkyn/pumpkynPie come through pumpkynPie's own
-%   startup only if pumpkyn.cr3bp.tfMin is not found (the cd around it is
+%   the access scorers) + proj7/pumpkyn_style (the +coorbital package with
+%   coorbital.cr3bp.losVis, which the GDOP engine calls; added only when
+%   it does not already resolve, since the user's startup puts it there).
+%   pumpkyn/pumpkynPie come through pumpkynPie's own startup only if pumpkyn.cr3bp.tfMin is not found (the cd around it is
 %   undone by an onCleanup, even on error).
 %
 %   SHADOW POLICY (exact): the folders are RE-FRONTED with addpath -begin
@@ -51,6 +53,7 @@ kit  = fullfile(ot, 'DRO_tulip', 'deliverables', ...
                 'costate_library_70mN_user_deliverable9');
 cc   = fullfile(ot, 'costate_common');
 gd   = fullfile(proj7Root, 'pipelines', 'gdop');
+ps   = fullfile(proj7Root, 'pumpkyn_style');       % +coorbital (losVis)
 
 addpath(fullfile(fileparts(ot), 'oclib'), fullfile(getenv('HOME'), 'casadi-3.7.0'));
 if isempty(which('pumpkyn.cr3bp.tfMin'))
@@ -59,6 +62,9 @@ if isempty(which('pumpkyn.cr3bp.tfMin'))
     back = onCleanup(@() cd(od));
     startup();
     clear back;
+end
+if isempty(which('coorbital.cr3bp.losVis'))
+    addpath(ps);                               % only if startup did not
 end
 addpath(gd,  '-begin');
 addpath(kit, '-begin');
@@ -73,7 +79,11 @@ want = {'mission_inputs', lib; ...
         'tulip_phasing', gd; 'max_min_access_bounds', gd; ...
         'max_min_access_block_bounds', gd; ...
         'schedule_rendezvous', lib; 'polish_rendezvous', lib; ...
-        'assemble_histories', lib};
+        'assemble_histories', lib; 'mission_grid', lib; ...
+        'mission_gdop', lib; ...
+        'coorbital.cr3bp.losVis', fullfile(ps, '+coorbital', '+cr3bp'); ...
+        'pumpkyn.cr3bp.dop', fullfile(proj7Root, 'external', 'pumpkyn', ...
+                                      'src', '+pumpkyn', '+cr3bp')};
 want = [want; extraChecks];
 for kk = 1:size(want, 1)
     got = fileparts(which(want{kk, 1}));

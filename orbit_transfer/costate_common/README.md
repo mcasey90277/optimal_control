@@ -154,7 +154,7 @@ folders, *internal* means called only from within this folder.
 |---|---|---|
 | `cr3bp_thrust_rhs.m` | CR3BP dynamics with thrust and mass flow: the shared right-hand side behind `flown_control_error` and `true_min_altitude`. | internal |
 | `mintime_rhs_point.m` | The 14-state minimum-time PMP field at a point (pumpkyn `tfMinEoM`, state and costate rows). Shared by `ms_tfmin` and `ms_tfmin_hom`; extracted 2026-09-08 on its second consumer. | internal |
-| `mintime_prop_seg.m` | One multiple-shooting segment of the minimum-time PMP flow via pumpkyn `tfMinProp`, with the 14 × 14 STM on request. The propagator closure of `ms_tfmin` and `ms_tfmin_hom`, and the flow `conj_spectrum` samples; extracted 2026-09-08. | internal |
+| `mintime_prop_seg.m` | One multiple-shooting segment of the minimum-time PMP flow via pumpkyn `tfMinProp`, with the 14 × 14 STM on request. The propagator closure of `ms_tfmin` and `ms_tfmin_hom`, and the flow `conj_spectrum` samples; extracted 2026-09-08. MASS-DEPLETION GUARD (2026-11-10): `mDot = -u Tmax/c`, u in {0,1}, so `m0 - (Tmax/c) dt` is an exact lower bound on the segment end mass; at <= 0 the segment is refused (`mintime_prop_seg:massDepleted`) before `tfMinProp`, whose restart loop would otherwise spin forever at m = 0, and `oc.ms_bvp`'s residual rejects the iterate. On any trajectory from m = 1 the bound is >= 1 - (Tmax/c) t_f, so it cannot fire at a root whenever (Tmax/c) t_f < 1 (every catalog regime); `golden_cells` 20/20 unchanged. | internal |
 | `cr3bp_minenergy_pmp.m` + `cr3bp_minenergy_prop.m` | **Min-energy PMP field** (J = ∫s² dt, Bertrand–Epenoy ε = 1 — GTO_tulip's convention; s* = clip((T/2)(‖λ_v‖/m + λ_m/c), 0, 1)) with exact AD Jacobian (CasADi SX, built once) and an STM propagator in `tfMinProp`'s shape/tolerances. Unit-tested to equal `pumpkyn.cr3bp.tfMinEoM` at saturation to 1e-13. The one pipeline dynamics that cannot be a pumpkyn call (pumpkyn has no min-energy EoM). | DRO |
 | `cr3bp_minfuel_pmp.m` + `cr3bp_minfuel_prop.m` | **Smoothed energy→fuel PMP field**, THREE families selected by `smooth = {family, p[, delta]}`: `'eps'` Bertrand–Epenoy L = (1−p)s + ps² (ε = 1 is the min-energy field exactly; always arrives, slow at the floor); `'huber'` (PLQ core s = pQ below Q = 1, JUMP to 1 above — propagated **event-split with the saltation matrix** Φ⁺ = [I + (F⁺−F⁻)nᵀ/(nᵀF⁻)]Φ⁻ since 2026-09-05; the 09-02 "refuted" verdict was our missing saltation — with it Huber is 5× faster than ε and failure-free where it works, and walls at grazing-risk switch-structure changes on ~30% of cells, FINDINGS §22–24); `'huberc'` (2026-09-06: Huber core + CONTINUOUS ramp p→1 over Q ∈ [1, 1+δ], exact argmin of a convex H; passes Huber's walls, and at fixed δ ≈ 0.03 the p-walk is failure-free, FINDINGS §25–26; the only family to reach the floor at γ = 2, §28). Q̇ is throttle-independent and continuous across the switch (`cr3bp_minfuel_qdot`). Smoothing parameters are CasADi Function inputs. `ms_minfuel` (DRO_tulip/indirect) is the fixed-tf binding; `run_minfuel_race` walks (p, δ) rungs with loose/tight gates and a family per arm. | DRO |
 | `cr3bp_minfuel_qdot.m` | Closed-form dQ/dt = −T λ_vᵀλ_r/(m\|λ_v\|) along the min-fuel flow (2026-09-06, Astra review #2): the throttle drops out exactly, so nᵀ(F⁺−F⁻) = 0 at every switch (measured 9e-16) — the exact transversality of a crossing, used by the Huber propagator's branch/grazing logic and by `DRO_tulip/indirect/huber_switch_diag`. | DRO |
@@ -182,6 +182,37 @@ repair call may raise `.directGateKm` (the first gate only; `.gateKm`, the
 refined gate and `meta.gateKm` are untouched) and must then enforce its own
 gate on the recorded FLYKM. `redo` also refuses unless a size-matched sheet
 is loaded (`thrust_ladder_library:redoSheet`).
+
+`opts.msHardCapSec` (default `[]` = off, byte-identical to before: measured
+against the pre-change engine on the GTO -> DRO demo cell, rungs [15 12],
+TF/FLYKM/ACCDZ/RES/OK/Z8 all `isequaln`) runs each refinement attempt --
+one `ms_tfmin` call plus the flight of its result -- on a parallel worker
+under `run_capped`, which cancels the worker at the cap. It exists because
+`.msWallS` is SOFT (fsolve's OutputFcn, between iterations) and
+`pumpkyn.cr3bp.tfMinProp` restarts `ode45` in a `while tau(end) < tf` loop
+with no progress check: a trust-region iterate whose junction mass runs to
+zero inside a segment collapses the step size, every restart fails at the
+same instant, and the one residual evaluation never returns (GTO -> DRO
+pilot 2026-11-10: 55 min, 2.5 million warnings, killed by the OS). The
+tfMin acceptance (same `tfMinProp`) runs under the same fence. A capped
+attempt is logged (`ms capped after %g s -- no further K on this rung`),
+recorded as not refined, and ends the msSeg loop for that rung (on the
+pilot's cell every K hung). A worker ERROR is logged WITH its cause (the
+fenced functions catch and return it; a failure outside them comes through
+`run_capped`'s opt-in cause output) and tries the next K; a second
+consecutive worker error throws `thrust_ladder_library:fenceBroken`, because
+that is infrastructure (a worker path), not a numerical wall. The fence pool
+is the open pool if any (kept), else `capped_pool(1)` opened lazily at the
+first attempt and deleted when the call returns; with no pool obtainable the
+engine logs once and runs UNFENCED (the `current_pool` contract; the GTO ->
+DRO front door refuses instead, `requireFence`). With the option on the ode45
+tolerance warning is silenced on the client and on the worker.
+`tests/test_ladder_ms_hardcap` (cap fires through the `opts.msFcn` seam;
+worker errors carry their cause and the second throws; option off pinned to
+the pre-change t_f at 1e-12 and bitwise equal to a 600 s cap). The SOURCE
+guard is `mintime_prop_seg:massDepleted` (below), which rejects such iterates
+in-process in milliseconds; the fence is the backstop for anything else that
+stalls inside one evaluation.
 
 **Shooting solvers and continuation**
 
@@ -235,7 +266,7 @@ is loaded (`thrust_ladder_library:redoSheet`).
 
 | file | what | used by |
 |---|---|---|
-| `run_capped.m` | **Parfeval hard per-call timeout** (promoted 2026-09-01 on its second consumer): the only fence that bounds a CRAWLING integration — in-process wall checks fire between iterations, but one CR3BP segment propagation with a near-primary iterate can grind for hours inside a single function evaluation (measured twice). Worker killed + restarted on timeout. Returns `ok = false` for a timeout OR a worker error; the caller cannot tell which. Without a pool it cannot run at all -- consumers branch on `current_pool`/`capped_pool` returning `[]`. | DRO |
+| `run_capped.m` | **Parfeval hard per-call timeout** (promoted 2026-09-01 on its second consumer): the only fence that bounds a CRAWLING integration — in-process wall checks fire between iterations, but one CR3BP segment propagation with a near-primary iterate can grind for hours inside a single function evaluation (measured twice). Worker killed + restarted on timeout. Returns `ok = false` for a timeout OR a worker error; a caller that requests ONE extra output (nout + 2) gets the cause (`''`, `'capped'`, or the worker's `identifier: message` from `fut.Error`), older callers are unchanged (2026-11-10). Without a pool it cannot run at all -- consumers branch on `current_pool`/`capped_pool` returning `[]`. | DRO |
 | `capped_pool.m` | The pool `run_capped`'s hard fence needs, with a PRIVATE JobStorageLocation so concurrent `-batch` sessions do not collide. Must be called AFTER startup has set the path -- workers inherit it at pool creation. Returns `[]` instead of throwing when no pool can be opened (no Parallel Computing Toolbox, or its licence held by another session); R2025b has no PCT licence here, R2026a does. | DRO |
 | `current_pool.m` | The open parallel pool, or `[]` -- without THROWING when the Parallel Computing Toolbox is absent or its licence is held by another MATLAB session. `certify_root`, `verify_with_pumpkyn` and `second_order_pass` read the pool through it; it never creates one (that is `capped_pool`). | DRO (+ internal) |
 

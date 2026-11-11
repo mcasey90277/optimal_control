@@ -57,7 +57,6 @@ EX = { ...
  'gates_catalog_pass',   'entry',     'entry point: the catalog-scale hypothesis gates, run by hand';
  'golden_cells',         'entry',     'entry point: it IS the regression others are run against';
  'assert_periodic_orbit','indirect',  'driven by tests/test_survey_family_bounds (the survey refuses a non-closing orbit)';
- 'current_pool',         'indirect',  'driven by tests/test_run_capped and the second-order parallel test';
  'certify_dro_mintime',  'gap',       'NO test of its own; arrived 2026-09-16 with the ladder engine and is covered only through campaign re-solves (TODO.md)';
  'ladder_endpoints',     'data',      'its nargin==0 demo rebuilds the DRO fine sheet endpoints from that campaign results file' };
 

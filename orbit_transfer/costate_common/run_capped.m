@@ -36,8 +36,20 @@ function [ok, varargout] = run_capped(pool, fcn, nout, capSec, varargin)
 %  varargout                any                     fcn's nout outputs
 %                                                   ([] each when ~ok)
 %
+%  cause (opt-in)           char                    ONLY when the caller
+%                                                   requests nout + 2
+%                                                   outputs: '' when ok,
+%                                                   'capped' on timeout,
+%                                                   else the worker error
+%                                                   'identifier: message'
+%                                                   (fut.Error, otherwise
+%                                                   discarded). Callers
+%                                                   asking for nout + 1
+%                                                   outputs are unchanged
+%
 %% Revision History:
 %  M. Casey                                                   (c) 09/01/2026
+%  M. Casey  opt-in cause output (worker error text)           (c) 11/10/2026
 %  Copyright Coorbital Inc.
 %% ------------------------ Begin Code Sequence ---------------------------
 
@@ -59,10 +71,27 @@ if ~done
               ['a capped call did not stop within 30 s of cancellation (cap %g s); the pool was ' ...
                'deleted so that a fresh attempt starts with a fresh worker'], capSec);
     end
-    ok = false;  varargout = repmat({[]}, 1, nout);
+    ok = false;  varargout = repmat({[]}, 1, nout);  cause = 'capped';
 elseif ~isempty(fut.Error)
     ok = false;  varargout = repmat({[]}, 1, nout);
+    cause = error_text(fut.Error);
 else
-    ok = true;   [varargout{1:nout}] = fetchOutputs(fut);
+    ok = true;   [varargout{1:nout}] = fetchOutputs(fut);  cause = '';
+end
+if nargout > nout + 1, varargout{nout + 1} = cause; end
+end
+
+% ------------------------------------------------------------------------
+function t = error_text(E)
+% ERROR_TEXT  'identifier: message' of a future's error, innermost remote
+% cause first when parfeval wrapped it.  INPUTS: E MException.  OUTPUTS: t char.
+try
+    if ~isempty(E.remotecause), E = E.remotecause{1}; end
+catch
+end
+try
+    t = sprintf('%s: %s', E.identifier, E.message);
+catch
+    t = 'worker error (no MException available)';
 end
 end

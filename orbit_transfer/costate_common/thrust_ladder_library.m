@@ -68,6 +68,51 @@ function P = thrust_ladder_library(outMat, opts)
 %                         at N = 400), so a repair call may raise
 %                         .directGateKm and must then enforce its own
 %                         gate on the recorded FLYKM              [[]]
+%              .msSeg     multiple-shooting segment counts tried in
+%                         order; the first refinement that converges
+%                         within the flown gate ends the loop     [[12 24]]
+%              .msWallS   ms_tfmin SOFT wall budget per attempt (s). Soft:
+%                         checked between fsolve iterations only, so it
+%                         cannot stop a single residual evaluation that
+%                         never returns                             [120]
+%              .msHardCapSec  HARD wall-clock cap (s) on each refinement
+%                         attempt (one ms_tfmin call plus the flight of
+%                         its result), enforced by running the attempt on
+%                         a parallel worker under run_capped, which
+%                         cancels the worker at the cap. [] or 0 = off:
+%                         the attempt runs in-process exactly as before
+%                         (byte-identical). WHY: pumpkyn.cr3bp.tfMinProp
+%                         restarts ode45 in a while loop with no progress
+%                         check; an iterate whose segment flow hits an
+%                         ode45 step-size collapse restarts at the same
+%                         time forever, inside ONE residual evaluation,
+%                         where .msWallS never fires (GTO -> DRO pilot,
+%                         2026-11-10: 55 min, 2.5 million warnings). A
+%                         capped or worker-failed attempt is logged
+%                         ('ms capped after %g s' / 'ms worker error
+%                         after %g s') and treated as a non-converged
+%                         refinement for that msSeg entry. A CAPPED
+%                         attempt also ends the msSeg loop for that rung
+%                         (the rung is recorded as not refined and the
+%                         ladder goes on): on the pilot's hung cell both
+%                         K = 12 and K = 24 stuck (an iterate's junction
+%                         mass runs to zero mid-segment), so trying the
+%                         next K costs another full cap for nothing. A
+%                         fast worker ERROR still tries the next K. Pool: the open
+%                         pool if any (kept), else capped_pool(1) opened
+%                         at the first attempt and deleted when this call
+%                         returns. No pool obtainable (no PCT, licence
+%                         held elsewhere): logged once, attempts run
+%                         UNFENCED (the current_pool contract). Workers
+%                         inherit the client path at pool creation. With
+%                         the option on, MATLAB:ode45:IntegrationTolNotMet
+%                         is silenced on the worker inside the fenced call
+%                         AND on the client for the whole call (restored
+%                         on return), which covers the no-pool fallback
+%                         and the unfenced tfMin acceptance          [[]]
+%              (.msFcn    TEST SEAM, not for campaigns: the refinement
+%                         function, same signature as ms_tfmin
+%                                                           [@ms_tfmin])
 %              .redo      true = re-solve every cell in .cells even if
 %                         it already holds OK rungs: its ATT is reset to
 %                         0 and its TF/FLYKM/ACCDZ/RES/WALL/OK/Z8 slices
@@ -95,6 +140,7 @@ function P = thrust_ladder_library(outMat, opts)
 %  M. Casey  moved into costate_common (cleanup step 12)      (c) 09/16/2026
 %  M. Casey  floorEarthKm option (default off)                (c) 11/09/2026
 %  M. Casey  seedTop and redo options (default off)           (c) 11/10/2026
+%  M. Casey  msHardCapSec hard fence on ms_tfmin (default off) (c) 11/10/2026
 %  Copyright Coorbital Inc.
 %% ------------------------ Begin Code Sequence ---------------------------
 
@@ -158,6 +204,25 @@ arrParams = d('arrParams', struct('Np', NpT, 'pm', pmT));
 msSeg  = d('msSeg', [12 24]);      % multiple-shooting segment ladder
 msWallS= d('msWallS', 120);        % ms_tfmin budget per attempt (s)
 accTol = d('accTol', 1e-6);        % tfMin acceptance tolerance
+msHardCapSec = d('msHardCapSec', []);   % hard fence per refinement (s); []/0 = off
+msFcn  = d('msFcn', @ms_tfmin);    % test seam (header)
+if ~isempty(msHardCapSec) && ~(isscalar(msHardCapSec) && isnumeric(msHardCapSec) && ...
+        isreal(msHardCapSec) && isfinite(msHardCapSec) && msHardCapSec >= 0)
+    error('thrust_ladder_library:msHardCapSec', ...
+          'opts.msHardCapSec must be [] or a finite non-negative scalar (s)');
+end
+if ~isa(msFcn, 'function_handle')
+    error('thrust_ladder_library:msFcn', 'opts.msFcn must be a function handle');
+end
+msCapOn = ~isempty(msHardCapSec) && msHardCapSec > 0;
+capPool = [];  capNoPool = false;  capCleanup = [];   % fence pool state (msCapOn only)
+nWorkerErr = 0;                    % CONSECUTIVE fenced worker errors (2 = fenceBroken)
+if msCapOn
+    % a stuck flight warns once per ode45 restart (2.5 million lines on the
+    % pilot); option on only, so the default path's output is untouched
+    odeWarn = warning('off', 'MATLAB:ode45:IntegrationTolNotMet');
+    restoreOdeWarn = onCleanup(@() warning(odeWarn));
+end
 % THE shared propulsion conversion (costate_common/nd_propulsion)
 ndp = nd_propulsion([], ispS, m0kg, lStar, tStar);
 cnd = ndp.cnd;   ndT = ndp.ndT;
@@ -318,13 +383,57 @@ for kc = 1:min(size(todo,1), maxCells)
             % are enforced there (harvest_ms_seed, this folder).
             for K = msSeg
                 seed = harvest_ms_seed(o, K);
-                [z, info] = ms_tfmin(rv0(1:6), rvf(1:6), seed, Tnd, cnd, muStar, ...
-                        struct('wallSec', msWallS));
-                [~, rvFly] = pumpkyn.cr3bp.tfMinProp(z(8), ...
-                        [rv0(1:6)'; 1; z(1:7)], Tnd, cnd, muStar);
-                msKm = norm(rvFly(end,1:3) - rvf(1:3))*lStar;
+                if msCapOn
+                    % HARD FENCE (opts.msHardCapSec): refinement + flight on
+                    % a worker. Acquire (or re-acquire, after an idle or
+                    % deleted pool) lazily, so a call that never refines
+                    % never pays for a pool.
+                    if ~capNoPool && (isempty(capPool) || ~isvalid(capPool))
+                        capPool = current_pool();
+                        if isempty(capPool) || ~isvalid(capPool)
+                            capPool = capped_pool(1);
+                            if ~isempty(capPool)
+                                capCleanup = onCleanup(@() delete_pool(capPool));
+                            end
+                        end
+                        if ~isempty(capPool)
+                            lg('  ms hard cap %g s ACTIVE (pool of %d worker(s))', ...
+                               msHardCapSec, capPool.NumWorkers);
+                        else
+                            capNoPool = true;
+                            lg(['  ms hard cap %g s requested but no parallel pool could be ' ...
+                                'obtained: ms_tfmin runs UNFENCED for the rest of this call'], msHardCapSec);
+                        end
+                    end
+                end
+                if msCapOn && ~capNoPool
+                    [stMs, outMs, capPool] = fenced_call(capPool, msHardCapSec, ...
+                        @ms_refine_fenced, 3, msFcn, rv0(1:6), rvf(1:6), seed, Tnd, cnd, ...
+                        muStar, msWallS, lStar);
+                    [nWorkerErr, stopK] = fence_outcome(stMs, nWorkerErr, lg, ...
+                        sprintf('(%2d,%2d) T=%5.1f  K=%d  ms', iD, iA, TN, K));
+                    if stopK, break, end
+                    if ~strcmp(stMs.status, 'ok'), continue, end
+                    [z, info, msKm] = outMs{:};
+                else
+                    [z, info] = msFcn(rv0(1:6), rvf(1:6), seed, Tnd, cnd, muStar, ...
+                            struct('wallSec', msWallS));
+                    [~, rvFly] = pumpkyn.cr3bp.tfMinProp(z(8), ...
+                            [rv0(1:6)'; 1; z(1:7)], Tnd, cnd, muStar);
+                    msKm = norm(rvFly(end,1:3) - rvf(1:3))*lStar;
+                end
                 if info.converged && msKm < gateKm
-                    evalc('zA = pumpkyn.cr3bp.tfMin(rv0(1:6), rvf(1:6), z, Tnd, cnd, muStar);');
+                    if msCapOn && ~capNoPool
+                        % the acceptance flight runs tfMinProp too: same fence
+                        [stA, outA, capPool] = fenced_call(capPool, msHardCapSec, ...
+                            @tfmin_accept_fenced, 1, rv0(1:6), rvf(1:6), z, Tnd, cnd, muStar);
+                        nWorkerErr = fence_outcome(stA, nWorkerErr, lg, ...
+                            sprintf('(%2d,%2d) T=%5.1f  K=%d  tfMin acceptance', iD, iA, TN, K));
+                        if ~strcmp(stA.status, 'ok'), break, end   % not accepted
+                        zA = outA{1};
+                    else
+                        evalc('zA = pumpkyn.cr3bp.tfMin(rv0(1:6), rvf(1:6), z, Tnd, cnd, muStar);');
+                    end
                     accDz = norm(zA - z);
                     if accDz < accTol
                         okCell = true;  Z8(:,iD,iA,kr) = z;
@@ -359,6 +468,129 @@ P = struct('TF',TF,'FLYKM',FLYKM,'ACCDZ',ACCDZ,'RES',RES,'WALL',WALL, ...
            'OK',OK,'Z8',Z8,'ATT',ATT,'rungs',rungs,'sD',sD,'sA',sA,'meta',meta);
 lg('THRUST LADDER DONE: %d verified entries over %d cells, %.1f min', ...
    nnz(OK), size(todo,1), toc(tAll)/60);
+end
+
+% ------------------------------------------------------------------------
+function [st, out, pool] = fenced_call(pool, capSec, fcn, nout, varargin)
+% FENCED_CALL  One call under run_capped. fcn catches its own errors on
+% the worker and returns them as two trailing outputs (errId, errMsg); a
+% failure outside fcn (unresolvable on the worker) arrives through
+% run_capped's opt-in cause output. Either way the CAUSE is logged.
+% INPUTS:  pool parallel.Pool; capSec double; fcn fhandle returning
+%          nout + 2 outputs; nout int; varargin fcn's arguments.
+% OUTPUTS: st struct .status ('ok' | 'capped' | 'error' | 'poolLost'),
+%          .sec wall time, .msg cause text; out {1 x nout} fcn's outputs
+%          when ok; pool (emptied when run_capped deleted it).
+out = cell(1, nout);
+t0 = tic;
+try
+    res = cell(1, nout + 3);       % fcn's nout + errId + errMsg, then run_capped's cause
+    [okRun, res{:}] = run_capped(pool, fcn, nout + 2, capSec, varargin{:});
+catch ME
+    % run_capped:poolUnusable -- the pool was deleted; the next fenced
+    % call opens a fresh one
+    pool = [];
+    st = struct('status', 'poolLost', 'sec', toc(t0), 'msg', [ME.identifier ': ' ME.message]);
+    return
+end
+sec = toc(t0);
+if ~okRun
+    if sec >= capSec
+        st = struct('status', 'capped', 'sec', sec, 'msg', '');
+    else
+        % fcn catches everything inside itself, so this is a failure
+        % OUTSIDE it -- typically the worker cannot resolve the function
+        % (path): run_capped's opt-in cause carries fut.Error
+        st = struct('status', 'error', 'sec', sec, 'msg', res{nout + 3});
+    end
+elseif ~isempty(res{nout + 1})
+    st = struct('status', 'error', 'sec', sec, 'msg', [res{nout + 1} ': ' res{nout + 2}]);
+else
+    st = struct('status', 'ok', 'sec', sec, 'msg', '');
+    out = res(1:nout);
+end
+end
+
+function [nErr, stopK] = fence_outcome(st, nErr, lg, what)
+% FENCE_OUTCOME  Log a fenced call's outcome and keep the CONSECUTIVE
+% worker-error count. A capped call or a lost pool stops further K on the
+% rung; a second consecutive worker error is infrastructure, not a
+% numerical wall (CAMPAIGN_DISCIPLINE section 12), and throws
+% thrust_ladder_library:fenceBroken.
+% INPUTS:  st struct (fenced_call); nErr int; lg logger handle; what char
+%          (cell / rung / K prefix).
+% OUTPUTS: nErr updated count; stopK logical, end the msSeg loop.
+stopK = false;
+switch st.status
+    case 'ok'
+        nErr = 0;
+    case 'capped'
+        nErr = 0;  stopK = true;
+        lg('  %s capped after %g s -- no further K on this rung', what, round(st.sec));
+    case 'poolLost'
+        nErr = 0;  stopK = true;
+        lg('  %s fence pool lost after %g s (%s) -- no further K on this rung; next call opens a fresh pool', ...
+           what, round(st.sec), st.msg);
+    otherwise
+        nErr = nErr + 1;
+        lg('  %s worker error after %g s: %s', what, round(st.sec), st.msg);
+        if nErr >= 2
+            error('thrust_ladder_library:fenceBroken', ...
+                  ['two consecutive fenced calls failed on the worker (last: %s) -- infrastructure, ' ...
+                   'not a numerical wall; check the pool workers'' path (pumpkyn, costate_common, oclib)'], st.msg);
+        end
+end
+end
+
+function [z, info, msKm, errId, errMsg] = ms_refine_fenced(msFcn, rv0, rvf, seed, Tnd, cnd, muStar, msWallS, lStar)
+% MS_REFINE_FENCED  One refinement attempt as run on a run_capped worker:
+% the same ms_tfmin call and flight of its result as the in-process path,
+% with the ode45 tolerance warning silenced on the worker (a stuck
+% tfMinProp emits one per restart into the future's diary). Errors are
+% caught here and returned, so the client logs their cause.
+% INPUTS:  msFcn fhandle (ms_tfmin signature); rv0, rvf [1 x 6]; seed
+%          struct (harvest_ms_seed); Tnd, cnd, muStar, msWallS, lStar double.
+% OUTPUTS: z [8 x 1]; info struct (ms_tfmin); msKm double, flown arrival
+%          miss of z (km); errId, errMsg char ('' when no error).
+ws = warning('off', 'MATLAB:ode45:IntegrationTolNotMet');
+restoreWarn = onCleanup(@() warning(ws));
+z = [];  info = [];  msKm = NaN;  errId = '';  errMsg = '';
+try
+    [z, info] = msFcn(rv0, rvf, seed, Tnd, cnd, muStar, struct('wallSec', msWallS));
+    [~, rvFly] = pumpkyn.cr3bp.tfMinProp(z(8), [rv0(:); 1; z(1:7)], Tnd, cnd, muStar);
+    dr = rvFly(end,1:3) - rvf(1:3);
+    msKm = sqrt(sum(dr.^2))*lStar;
+catch ME
+    errId = ME.identifier;  errMsg = ME.message;
+    if isempty(errId), errId = 'unidentified'; end
+end
+clear restoreWarn
+end
+
+function [zA, errId, errMsg] = tfmin_accept_fenced(rv0, rvf, z, Tnd, cnd, muStar)
+% TFMIN_ACCEPT_FENCED  The tfMin acceptance solve as run on a run_capped
+% worker (same call as the in-process path), ode45 warning silenced,
+% errors returned rather than thrown.
+% INPUTS:  rv0, rvf [1 x 6]; z [8 x 1]; Tnd, cnd, muStar double.
+% OUTPUTS: zA [8 x 1]; errId, errMsg char ('' when no error).
+ws = warning('off', 'MATLAB:ode45:IntegrationTolNotMet');
+restoreWarn = onCleanup(@() warning(ws));
+zA = [];  errId = '';  errMsg = '';
+try
+    evalc('zA = pumpkyn.cr3bp.tfMin(rv0, rvf, z, Tnd, cnd, muStar);');
+catch ME
+    errId = ME.identifier;  errMsg = ME.message;
+    if isempty(errId), errId = 'unidentified'; end
+end
+clear restoreWarn
+end
+
+function delete_pool(pool)
+% DELETE_POOL  Delete a fence pool this call opened, if still valid.
+% INPUTS: pool parallel.Pool or [].  OUTPUTS: none.
+if ~isempty(pool) && isvalid(pool)
+    try delete(pool); catch, end
+end
 end
 
 % ------------------------------------------------------------------------

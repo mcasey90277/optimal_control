@@ -125,4 +125,17 @@ sheets only), because the catalog folder also holds `_earth`, `_repairs`,
 `_repair_backup_*` and `_deep` files that match the sheet glob. Re-packaging
 deletes the conj and gates sidecars (their entry indices go stale).
 Engine options added for this stage (costate_common, default off): `seedTop`,
-`redo`, `directGateKm`.
+`redo`, `directGateKm`, `msHardCapSec`. The front door passes `msHardCapSec =
+300` (override `optsIn.msHardCapSec`, 0 = off), opens the fence pool once per
+call, writes `ms fence ACTIVE (pool of N)` (or `UNAVAILABLE`) to
+`combined_progress.txt`, refuses to run unfenced unless `optsIn.requireFence
+= false` (`run_gto_dro_catalog:noFence`), and silences the ode45 tolerance
+warning while the cap is on, because the pilot's cell (8,4) of
+`gto_dro_o000_tau1` hung 55 min inside `ms_tfmin` at 15 N (an iterate's
+junction mass runs to zero mid-segment and pumpkyn's `tfMinProp` restarts the
+failed `ode45` forever). `mintime_prop_seg` now refuses such a segment at the
+source (`massDepleted`): reproduced with the guard and a 60 s cap as safety net, the
+15 N rung of that cell now fails refinement in-process (37 s for the whole rung,
+direct solve included; the cap never fired), and the 12 N rung is accepted
+(t_f 0.36518 ND, flown 4e-4 km). The batch driver trims `gtodrocat_matlab.log`
+to its first and last 2 MB whenever a pass leaves it above 200 MB.

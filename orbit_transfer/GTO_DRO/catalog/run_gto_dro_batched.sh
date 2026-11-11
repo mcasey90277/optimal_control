@@ -90,6 +90,15 @@ for pass in $(seq 1 600); do
   WPID=$!
   wait $MPID 2>/dev/null; MSTATUS=$?
   pkill -P $WPID 2>/dev/null; kill $WPID 2>/dev/null
+  # LAST LINE OF DEFENCE against a warning flood (pilot 2026-11-10: 1.96 GB
+  # of ode45 tolerance warnings): above 200 MB keep the first and last 2 MB.
+  MSIZE=$(wc -c < "$MLOG" 2>/dev/null | tr -d ' '); MSIZE=${MSIZE:-0}
+  if [ "$MSIZE" -gt 209715200 ]; then
+    { head -c 2097152 "$MLOG"; \
+      printf '\n..... [trimmed %s by run_gto_dro_batched.sh: %s bytes, kept first and last 2 MB] .....\n' "$(date)" "$MSIZE"; \
+      tail -c 2097152 "$MLOG"; } > "$MLOG.trim" && mv "$MLOG.trim" "$MLOG"
+    echo "  [pass $pass: MATLAB log was $MSIZE bytes -- trimmed to first/last 2 MB]" >> "$LOG"
+  fi
   if [ $MSTATUS -ne 0 ] && [ $MSTATUS -ne 137 ]; then
     echo "=== MATLAB exited with status $MSTATUS in pass $pass -- ABORTING" >> "$LOG"
     exit 1

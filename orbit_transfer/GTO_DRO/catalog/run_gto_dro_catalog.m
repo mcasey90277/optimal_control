@@ -49,12 +49,42 @@ function plan = run_gto_dro_catalog(sheetSel, maxCellsIn, batchSecIn, rungsIn, o
 %                                                   folder's parent];
 %                                                   .directGateKm [1000]
 %                                                   first flown gate on the
-%                                                   direct control (km)
+%                                                   direct control (km);
+%                                                   .msHardCapSec [300]
+%                                                   hard wall-clock cap (s)
+%                                                   on each ms_tfmin
+%                                                   refinement attempt,
+%                                                   passed to the engine
+%                                                   (0 = off). Pilot
+%                                                   2026-11-10: one cell
+%                                                   hung 55 min inside
+%                                                   ms_tfmin (pumpkyn
+%                                                   tfMinProp restarting a
+%                                                   failed ode45 forever)
+%                                                   and the tfMin
+%                                                   acceptance. The fence
+%                                                   pool is opened ONCE per
+%                                                   call (capped_pool(1))
+%                                                   and reused by every
+%                                                   engine call, deleted on
+%                                                   return if this call
+%                                                   opened it;
+%                                                   .requireFence [true]
+%                                                   when msHardCapSec > 0
+%                                                   and no pool can be
+%                                                   opened, REFUSE
+%                                                   (run_gto_dro_catalog:
+%                                                   noFence) rather than
+%                                                   run a fleet unfenced;
+%                                                   false = run UNFENCED
 %
 %% Outputs:
 %
 %  plan                     [k x 1] struct          .tag .orientDeg .tau
 %                                                   .outMat .logFile .optsA
+%                                                   .fence (fence status
+%                                                   line, also written to
+%                                                   combined_progress.txt)
 %                                                   .optsB (pass B .cells
 %                                                   empty); optsA.batchSec,
 %                                                   optsB.batchSec and
@@ -67,6 +97,7 @@ function plan = run_gto_dro_catalog(sheetSel, maxCellsIn, batchSecIn, rungsIn, o
 %
 %% Revision History:
 %  M. Casey                                                   (c) 11/10/2026
+%  M. Casey  msHardCapSec knob + ode45 warning silenced        (c) 11/10/2026
 %  Copyright Coorbital Inc.
 %% ------------------------ Begin Code Sequence ---------------------------
 
@@ -108,6 +139,8 @@ if ~isempty(rungsIn), rungs = rungsIn; end
        gateKm = 100;                 % refined flown-arrival gate (km)
  directGateKm = fdef(optsIn, 'directGateKm', 1000);   % first flown gate on the DIRECT control (km); the refined gate stays gateKm. Pilot attempt 1 (2026-11-10): the 100 km default stopped 3 of 6 ladders at 126-488 km on rungs refinement can close
        accTol = 1e-6;                % tfMin acceptance
+ requireFence = fdef(optsIn, 'requireFence', true);  % msHardCapSec > 0 but no pool: refuse (true) or run UNFENCED (false)
+ msHardCapSec = fdef(optsIn, 'msHardCapSec', 300);    % hard cap (s) per ms_tfmin attempt, run on a parallel worker (engine opts.msHardCapSec); 0 = off. msWallS (120 s) is soft and cannot stop a stuck residual evaluation
       thrLock = true;                % pin thr == 1 (classical min-time form)
      tf0Fleet = fdef(optsIn, 'tf0', 0.30);   % pass A top-rung seed (ND); the pilot re-bases it
 
@@ -139,10 +172,49 @@ sheetSel = sheetSel(sheetSel >= 1 & sheetSel <= nSheets);
 assert(~isempty(sheetSel), 'run_gto_dro_catalog:sheetSel', ...
     'sheetSel selects no valid sheet (1..%d)', nSheets);
 
-plan = struct('tag',{},'orientDeg',{},'tau',{},'outMat',{},'logFile',{},'optsA',{},'optsB',{});
+logComb = fullfile(catDir, 'combined_progress.txt');
+% THE FENCE (msHardCapSec > 0): one pool for the whole call, opened AFTER
+% setup_gto_dro_paths so the workers inherit pumpkyn, costate_common,
+% oclib and CasADi; every engine call finds it through current_pool and
+% keeps it. A fleet must not run unfenced by accident: with requireFence
+% (default) an unavailable pool is a refusal, not a fallback.
+fenceLine = 'ms fence OFF (msHardCapSec = 0)';
+if planOnly
+    fenceLine = 'ms fence not opened (planOnly)';
+elseif msHardCapSec > 0
+    % WARNING FLOOD: a stuck flight emits one ode45 tolerance warning per
+    % restart (2.5 million lines, 1.29 GB of log in 55 min on the pilot).
+    % Off for this call when the cap is on, restored on exit; fenced
+    % workers silence it themselves.
+    odeWarn = warning('off', 'MATLAB:ode45:IntegrationTolNotMet');
+    restoreOdeWarn = onCleanup(@() warning(odeWarn));
+    hadPool = ~isempty(current_pool());
+    fenceWhy = '';
+    try
+        fencePool = capped_pool(1);
+    catch ME
+        fencePool = [];  fenceWhy = ME.message;
+    end
+    if isempty(fencePool)
+        if isempty(fenceWhy), [fenceWhy, ~] = lastwarn; end
+        fenceLine = sprintf('ms fence UNAVAILABLE -- running UNFENCED: %s', fenceWhy);
+    else
+        fenceLine = sprintf('ms fence ACTIVE (pool of %d)', fencePool.NumWorkers);
+        if ~hadPool, closeFence = onCleanup(@() delete_pool(fencePool)); end
+    end
+    fidF = fopen(logComb, 'a');
+    if fidF > 0, fprintf(fidF, '=== %s  %s\n', char(datetime('now', 'Format', 'yyyy-MM-dd HH:mm:ss')), fenceLine); fclose(fidF); end
+    fprintf('%s\n', fenceLine);
+    if isempty(fencePool) && requireFence
+        error('run_gto_dro_catalog:noFence', ...
+              ['msHardCapSec = %g requested but no parallel pool could be opened (%s); refusing to run ' ...
+               'unfenced (pass optsIn.requireFence = false to allow it)'], msHardCapSec, fenceWhy);
+    end
+end
+
+plan = struct('tag',{},'orientDeg',{},'tau',{},'fence',{},'outMat',{},'logFile',{},'optsA',{},'optsB',{});
 tAll = tic;
 allDone = true;
-logComb = fullfile(catDir, 'combined_progress.txt');
 for ks = sheetSel
     if ~planOnly && toc(tAll) > batchSec, allDone = false; break, end
     s = sheets{ks};
@@ -151,7 +223,7 @@ for ks = sheetSel
     optsCommon = struct('rungs',rungs, 'ispS',ispS, 'm0kg',m0kg, ...
         'N',N, 'floorKm',floorKm, 'floorEarthKm',floorEarthKm, ...
         'maxIter',maxIter, 'maxCpuSec',maxCpuSec, ...
-        'gateKm',gateKm, 'directGateKm',directGateKm, 'nD',nD, 'nA',nA, 'sD0',sD0, 'sA0',sA0, ...
+        'gateKm',gateKm, 'directGateKm',directGateKm, 'msHardCapSec',msHardCapSec, 'nD',nD, 'nA',nA, 'sD0',sD0, 'sA0',sA0, ...
         'depFamily','gto', 'depParams',struct('orientDeg',s.orientDeg), ...
         'arrFamily','dro', 'arrParams',struct('tau',s.tau), ...
         'tauDRO',s.orientDeg, ...          % SHEET KEY RULE: orientDeg, never the DRO period
@@ -159,7 +231,7 @@ for ks = sheetSel
         'thrLock',thrLock, 'logFile',logFile);
     optsA = optsCommon;  optsA.tf0 = tf0Fleet;
     optsB = optsCommon;  optsB.cells = zeros(0,2);
-    plan(end+1,1) = struct('tag', s.tag, 'orientDeg', s.orientDeg, 'tau', s.tau, ...
+    plan(end+1,1) = struct('tag', s.tag, 'orientDeg', s.orientDeg, 'tau', s.tau, 'fence', fenceLine, ...
         'outMat', outMat, 'logFile', logFile, 'optsA', optsA, 'optsB', optsB);
     if planOnly, continue, end
     fprintf('\n=== GTO -> DRO sheet %d/%d: %s (orient=%d deg, tau=%g) ===\n', ...
@@ -252,6 +324,15 @@ elseif allDone
     fid = fopen(logComb, 'a');
     fprintf(fid, 'SELECTED SHEETS COMPLETE (%s)\n', mat2str(sheetSel));
     fclose(fid);
+end
+end
+
+% ------------------------------------------------------------------------
+function delete_pool(pool)
+% DELETE_POOL  Delete the fence pool this call opened, if still valid.
+% INPUTS: pool parallel.Pool.  OUTPUTS: none.
+if ~isempty(pool) && isvalid(pool)
+    try delete(pool); catch, end
 end
 end
 

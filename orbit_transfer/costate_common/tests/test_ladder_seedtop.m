@@ -16,9 +16,10 @@ function ok = test_ladder_seedtop()
 %       leaves gateKm at the campaign 100 km; the CALLER enforces gate and
 %       acceptance on the refined entries, and meta.gateKm stays 100
 %   Also: NaN seedTop refuses; redo on a missing sheet refuses (redoSheet)
-% The option-off identity is covered by the existing bitwise regression
-% DRO_tulip/direct/certify/tests/test_minenergy_objective (no seedTop,
-% no redo -> same code path as before this change).
+% Option-off identity: check (c) runs the default path (no seedTop, no redo)
+% but only to 0.005 ND. The tight pin of the default path against the
+% pre-change engine's measured t_f (1e-12 ND) is test_ladder_ms_hardcap (c).
+% (test_minenergy_objective pins casadi_mintime_dro, not this engine.)
 %
 % INPUTS:  none
 % OUTPUTS: ok - logical

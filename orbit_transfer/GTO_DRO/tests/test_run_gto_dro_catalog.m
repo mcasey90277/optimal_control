@@ -9,6 +9,7 @@ addpath(fullfile(fileparts(here), 'catalog'));
 
 plan = run_gto_dro_catalog([], [], [], [], struct('planOnly', true));
 assert(numel(plan) == 16, '16 sheets');
+assert(strcmp(plan(1).fence, 'ms fence not opened (planOnly)'), 'planOnly opens no fence');
 tags = {plan.tag};
 assert(numel(unique(tags)) == 16, 'distinct tags');
 assert(strcmp(plan(2).tag, 'gto_dro_o000_tau1') && plan(2).orientDeg == 0 && plan(2).tau == 1, 'sheet 2 is the pilot');
@@ -25,6 +26,7 @@ for k = 1:16
     assert(oA.nD == 12 && oA.nA == 6 && oA.sD0 == 0 && oA.sA0 == 0, 'grid');
     assert(isequal(oA.rungs, [15 12 10 7 5]), 'default rungs');
     assert(oA.directGateKm == 1000 && plan(k).optsB.directGateKm == 1000 && oA.gateKm == 100 && plan(k).optsB.gateKm == 100, 'gates');
+    assert(oA.msHardCapSec == 300 && plan(k).optsB.msHardCapSec == 300, 'ms hard cap default 300 s in A and B');
     oB = plan(k).optsB;
     assert(strcmp(oB.depFamily, 'gto') && strcmp(oB.arrFamily, 'dro'), 'B families');
     assert(oB.arrParams.tau == plan(k).tau && oB.depParams.orientDeg == plan(k).orientDeg, 'B params');
@@ -36,6 +38,8 @@ end
 plan9 = run_gto_dro_catalog(2, [], [], [15 12 10 7 5 3 2 1.5 1], struct('planOnly', true, 'tf0', 0.27, 'directGateKm', 250));
 assert(numel(plan9) == 1 && isequal(plan9.optsA.rungs, [15 12 10 7 5 3 2 1.5 1]) && abs(plan9.optsA.tf0 - 0.27) < 1e-12, 'overrides');
 assert(plan9.optsA.directGateKm == 250 && plan9.optsB.directGateKm == 250, 'directGateKm override lands in A and B');
+planOff = run_gto_dro_catalog(2, [], [], [], struct('planOnly', true, 'msHardCapSec', 0));
+assert(planOff.optsA.msHardCapSec == 0 && planOff.optsB.msHardCapSec == 0, 'msHardCapSec override (0 = off) lands in A and B');
 
 % planOnly touches no disk: an absent catDir stays absent
 wd = fullfile(tempdir, 'test_run_gto_dro_catalog');
@@ -49,7 +53,7 @@ mkdir(wd);
 rungs = [15 12];
 save(fullfile(wd, 'gto_dro_o000_tau1.mat'), 'rungs');
 try
-    run_gto_dro_catalog(2, 0, 1, [], struct('catDir', wd));
+    run_gto_dro_catalog(2, 0, 1, [], struct('catDir', wd, 'msHardCapSec', 0));
     error('test:noThrow', 'rung mismatch did not refuse');
 catch err
     assert(strcmp(err.identifier, 'run_gto_dro_catalog:rungMismatch'), 'wrong error: %s', err.identifier);
@@ -58,8 +62,15 @@ delete(fullfile(wd, 'gto_dro_o000_tau1.mat'));
 % a matching call with maxCells = 0 runs the engine on zero cells and returns
 % (no sheet on disk: the engine's resume path needs an engine-valid sheet,
 % which a rungs-only file is not)
-run_gto_dro_catalog(2, 0, 1, [15 12], struct('catDir', wd));
+% ... with the default 300 s cap: the fence opens ONCE, is announced in the
+% combined log and the plan, and a pool this call opened is gone afterwards
+hadPool = ~isempty(current_pool());
+planRun = run_gto_dro_catalog(2, 0, 1, [15 12], struct('catDir', wd));
 assert(isfile(fullfile(wd, 'gto_dro_o000_tau1_progress.txt')), 'engine log written');
+comb = fileread(fullfile(wd, 'combined_progress.txt'));
+assert(contains(comb, 'ms fence ACTIVE (pool of 1)'), 'fence line missing from combined_progress.txt:\n%s', comb);
+assert(strcmp(planRun.fence, 'ms fence ACTIVE (pool of 1)'), 'plan.fence = %s', planRun.fence);
+assert(~isempty(current_pool()) == hadPool, 'the front door left the pool state changed');
 rmdir(wd, 's');
 ok = true;
 fprintf('test_run_gto_dro_catalog: PASS\n');

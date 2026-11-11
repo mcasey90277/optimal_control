@@ -7,6 +7,22 @@ function [yh, PHI] = mintime_prop_seg(dt, y0, needSTM, Tmax, c, muStar)
 %   ms_tfmin_hom): extracted 2026-09-08 on its second consumer, per the
 %   library rule that code reused twice moves to costate_common.
 %
+%   MASS-DEPLETION GUARD (2026-11-10). The min-time mass flow is
+%   mDot = -u*Tmax/c with u in {0, 1}, so
+%
+%       m(dt) >= y0(7) - (Tmax/c)*dt
+%
+%   is an exact lower bound on the segment's end mass. When that bound is
+%   <= 0 the segment MAY reach m = 0, where the thrust acceleration T/m
+%   blows up, ode45's step collapses, and pumpkyn.cr3bp.tfMinProp restarts
+%   the failed integration at the same instant forever (its while loop has
+%   no progress check; GTO -> DRO pilot 2026-11-10: one residual evaluation
+%   ran 55 min). Such a propagation is REFUSED with
+%   mintime_prop_seg:massDepleted before tfMinProp is called; oc.ms_bvp's
+%   residual catches the throw and rejects the iterate. At a root the bound
+%   is at most the next junction's mass (or the final mass), which is
+%   positive in every catalog regime, so a converged solution never trips it.
+%
 %% Inputs:
 %
 %  dt                       double                  segment duration, ND
@@ -21,11 +37,17 @@ function [yh, PHI] = mintime_prop_seg(dt, y0, needSTM, Tmax, c, muStar)
 %
 %% Revision History:
 %  M. Casey                                                   (c) 09/08/2026
+%  M. Casey  mass-depletion guard (massDepleted)               (c) 11/10/2026
 %  Copyright Coorbital Inc.
 %% ------------------------ Begin Code Sequence ---------------------------
 
 if ~(isscalar(dt) && isreal(dt) && isfinite(dt) && dt > 0)
     error('mintime_prop_seg:duration', 'segment duration must be a positive finite real scalar');
+end
+mFloor = y0(7) - Tmax/c*dt;                     % exact end-mass lower bound (header)
+if ~(mFloor > 0)
+    error('mintime_prop_seg:massDepleted', ...
+          'segment may deplete the mass: m0 %.6g - (Tmax/c) dt = %.6g <= 0', y0(7), mFloor);
 end
 if needSTM, y0 = [y0; reshape(eye(14), [], 1)]; end
 [tau, Yout] = pumpkyn.cr3bp.tfMinProp(dt, y0, Tmax, c, muStar);

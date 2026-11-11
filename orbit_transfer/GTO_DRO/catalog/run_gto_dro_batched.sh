@@ -8,7 +8,7 @@
 # script forwards a MATLAB index-vector expression instead of a stage word.
 #
 # Usage:   ./run_gto_dro_batched.sh [sheetSel] [cells_per_batch] [batch_seconds] [rungs] [tf0]
-# The front door's directGateKm default (1000 km, direct gate only) is used.
+# The front door's directGateKm default (inf: no direct gate) is used.
 # Pilot (sheet 2 = orient 0, tau 1):      ./run_gto_dro_batched.sh 2 6 1800
 # Deep probe (6 cells, 9 rungs): not made by this driver. planOnly never
 #   solves, so run it by hand: a direct thrust_ladder_library call using the

@@ -61,8 +61,9 @@ function R = repair_gto_dro_cells(sheetMat, mode, opts)
 %   cells, so this snapshot is the recovery source for an unreadable
 %   sheet (repair_gto_dro_cells:sheetUnreadable names it).
 %
-%   Every engine call passes directGateKm = 1000 (the direct control of
-%   the faster basin flies ~194 km off at N = 400; refinement closes it)
+%   Every engine call passes directGateKm = inf, no direct gate (the open-
+%   loop flight of the N = 400 direct control is not a filter: probe
+%   2026-11-10, misses up to 42,964 km closed by refinement)
 %   and leaves gateKm at the sheet's own value; this tool then enforces the
 %   campaign gate itself. A refused or throwing engine call ends in a
 %   restored cell and a sidecar row. A cell is not touched twice in the
@@ -92,7 +93,7 @@ function R = repair_gto_dro_cells(sheetMat, mode, opts)
 %                                                   every repair; tests),
 %                                                   .maxCells [inf],
 %                                                   .logFile [''],
-%                                                   .directGateKm [1000],
+%                                                   .directGateKm [inf],
 %                                                   .ignoreLock [false]
 %
 %% Outputs:
@@ -133,7 +134,7 @@ force      = fdef(opts, 'force', false);
 seedOvr    = fdef(opts, 'seedOverride', []);
 maxCells   = fdef(opts, 'maxCells', inf);
 logFile    = fdef(opts, 'logFile', '');
-dirGate    = fdef(opts, 'directGateKm', 1000);
+dirGate    = fdef(opts, 'directGateKm', inf);
 ignoreLock = fdef(opts, 'ignoreLock', false);
 assert(~(conjOnly && strcmp(mode, 'unsolved')), 'repair_gto_dro_cells:mode', ...
        'conjOnly applies to mode basin only');

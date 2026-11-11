@@ -99,7 +99,7 @@ results and are reported either way (strict mode throws on them too).
 | `catalog/audit_gto_dro_entries.m` | up to 3-entry replay: flown miss, tfMin acceptance, Earth floor (gated); the tulip pick rule when the sheets allow it, a reduced rule otherwise |
 | `catalog/costate_catalog_pick.m`, `costate_lib_describe.m` | vendored pickers (deliverable convention); the describe copy prints a DRO arrival key instead of Np |
 
-The fleet front door runs with `directGateKm = 1000` (direct gate only; the refined gate stays 100 km) because pilot attempt 1 (2026-11-10) had the 100 km default stop 3 of 6 ladders on rungs whose direct solve succeeded (flown 149.1 km at 12 N, 487.7 km at 10 N, 126.5 km at 15 N).
+The fleet front door and the repair tool run with `directGateKm = inf` (no direct gate; the refined gate stays 100 km, with tfMin acceptance and the ms hard timeout) because the open-loop flight of the N = 400 direct control is not a filter on these transfers. Measured 2026-11-10: with `directGateKm = 1000` the pilot sheet solved, per rung [15 12 10 7 5] N, only 57 / 50 / 33 / 26 / 10 of 72 cells, with 54 ladders stopped at the direct gate; a probe re-solving six gate-stopped cells with no direct gate went from 14 to 26 of 30 OK rungs, refinement closing direct misses of 1,778 km and 42,964 km to under 0.1 km, and a failed rung no longer stops the ladder. Four rungs stayed open (126, 488, 1,082, 30,285 km): the size of the direct miss does not predict whether refinement succeeds.
 
 Run the pilot (sheet 2), then the chain on it, then the fleet:
 

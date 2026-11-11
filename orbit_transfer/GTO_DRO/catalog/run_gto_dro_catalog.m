@@ -19,9 +19,10 @@ function plan = run_gto_dro_catalog(sheetSel, maxCellsIn, batchSecIn, rungsIn, o
 %   perigee column at 15 N. Both are repaired AFTER the fleet by
 %   lib/repair_gto_dro_cells (reverse warm start, phase continuation)
 %   through the engine's seedTop/redo options, on the sheets this front
-%   door writes. The fleet relaxes ONLY the first flown gate (directGateKm =
-%   1000 km, on the direct control at N = 400, too coarse for 100 km open
-%   loop); the refined gate (gateKm = 100) and tfMin acceptance stay.
+%   door writes. The fleet removes ONLY the first flown gate (directGateKm =
+%   inf: the open-loop flight of the N = 400 direct control is not a filter
+%   on these transfers); the refined gate (gateKm = 100), tfMin acceptance
+%   and the ms hard timeout stay.
 %
 %% Inputs:
 %
@@ -47,7 +48,7 @@ function plan = run_gto_dro_catalog(sheetSel, maxCellsIn, batchSecIn, rungsIn, o
 %                                                   .catDir [results/
 %                                                   catalog next to this
 %                                                   folder's parent];
-%                                                   .directGateKm [1000]
+%                                                   .directGateKm [inf]
 %                                                   first flown gate on the
 %                                                   direct control (km);
 %                                                   .msHardCapSec [300]
@@ -137,7 +138,7 @@ if ~isempty(rungsIn), rungs = rungsIn; end
       maxIter = 6000;                % IPOPT iteration cap
     maxCpuSec = 600;                 % IPOPT CPU cap per rung (s)
        gateKm = 100;                 % refined flown-arrival gate (km)
- directGateKm = fdef(optsIn, 'directGateKm', 1000);   % first flown gate on the DIRECT control (km); the refined gate stays gateKm. Pilot attempt 1 (2026-11-10): the 100 km default stopped 3 of 6 ladders at 126-488 km on rungs refinement can close
+ directGateKm = fdef(optsIn, 'directGateKm', inf);   % first flown gate on the DIRECT control (km); inf = none. The open-loop flight of the N = 400 direct control is not a filter on these transfers (pilot 2026-11-10: 54 ladders stopped at 1000 km; probe with no direct gate: 14 -> 26 of 30 rungs, misses up to 42,964 km closed by refinement); the refined gate, tfMin acceptance and the ms fence are the gates
        accTol = 1e-6;                % tfMin acceptance
  requireFence = fdef(optsIn, 'requireFence', true);  % msHardCapSec > 0 but no pool: refuse (true) or run UNFENCED (false)
  msHardCapSec = fdef(optsIn, 'msHardCapSec', 300);    % hard cap (s) per ms_tfmin attempt, run on a parallel worker (engine opts.msHardCapSec); 0 = off. msWallS (120 s) is soft and cannot stop a stuck residual evaluation

@@ -53,7 +53,7 @@ assert(Q.OK(1, 1, 1) && Q.TF(1, 1, 1) < 0.29 && Q.TF(1, 1, 1) < tfOld, 'repaired
 assert(Q.OK(1, 1, 2), 'the 12 N rung re-walked and OK');
 S = load(R1.sideMat, 'rows');
 assert(numel(S.rows) == 1 && strcmp(S.rows(1).outcome, 'repaired') && S.rows(1).conjBefore == 0, 'sidecar row');
-assert(S.rows(1).directGateKm == 1000, 'sidecar records directGateKm');
+assert(isinf(S.rows(1).directGateKm), 'sidecar records directGateKm');
 fprintf('  basin repair: tf 15 N %.5f -> %.5f (12 N %.5f), conjBefore %g, conjAfter %g, %.0f s\n', ...
         tfOld, Q.TF(1, 1, 1), Q.TF(1, 1, 2), S.rows(1).conjBefore, S.rows(1).conjAfter, S.rows(1).wallS);
 

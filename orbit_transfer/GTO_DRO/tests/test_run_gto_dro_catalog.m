@@ -25,7 +25,7 @@ for k = 1:16
     assert(oA.ispS == 1710 && oA.m0kg == 150 && oA.N == 400 && oA.maxIter == 6000 && oA.maxCpuSec == 600, 'regime + solver');
     assert(oA.nD == 12 && oA.nA == 6 && oA.sD0 == 0 && oA.sA0 == 0, 'grid');
     assert(isequal(oA.rungs, [15 12 10 7 5]), 'default rungs');
-    assert(oA.directGateKm == 1000 && plan(k).optsB.directGateKm == 1000 && oA.gateKm == 100 && plan(k).optsB.gateKm == 100, 'gates');
+    assert(isinf(oA.directGateKm) && isinf(plan(k).optsB.directGateKm) && oA.gateKm == 100 && plan(k).optsB.gateKm == 100, 'gates');
     assert(oA.msHardCapSec == 300 && plan(k).optsB.msHardCapSec == 300, 'ms hard cap default 300 s in A and B');
     oB = plan(k).optsB;
     assert(strcmp(oB.depFamily, 'gto') && strcmp(oB.arrFamily, 'dro'), 'B families');

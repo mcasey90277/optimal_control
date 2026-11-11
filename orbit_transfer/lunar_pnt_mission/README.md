@@ -14,6 +14,11 @@ constellation construction. The LunaNet R1-R3 requirement scoring
 behind `scoreRequirements = true` and is not run by default. Design:
 `docs/superpowers/specs/2026-11-10-lunar-pnt-mission-design.md`.
 
+The study has two legs. Leg 1 (section "Leg 1: GTO to DRO", `lunar_pnt_leg1_study`)
+flies six 5 N transfers from one inertial GTO onto the six DRO slots and hands
+over at epoch T0; leg 2 (everything else below, `lunar_pnt_mission_study`)
+starts there. Leg 1's regime is a catalog regime, not a vehicle design.
+
 ## Run
 
 ```matlab
@@ -333,9 +338,285 @@ run can hang inside it, the same exposure as the library's own unfenced
 certification. Pass a connected `parallel.Pool` as `opts.pool` to fence it
 (`fenced = true`; the workers need the campaign's paths).
 
+## Leg 1: GTO to DRO
+
+Leg 1 puts the six spacecraft into the DRO that leg 2 starts from. One launch
+leaves six stacks on ONE geostationary transfer orbit (350 x 35,786 km) that is
+fixed in inertial space (in the Earth-Moon rotating frame its orientation turns
+at the frame rate, sgn = -1, measured). Each stack leaves the GTO at a catalog
+departure phase and flies a 5 N per 150 kg, Isp 1710 s minimum-time transfer
+with the engine on throughout, landing exactly on its DRO slot. Every departure
+is polished: the GTO -> DRO catalog cell's costates are walked to the GTO's
+true orientation at that departure, then the arrival is root-found onto the
+exact slot. The six slots are 1/6 of a DRO period apart, and the hand-off epoch
+T0 is the first instant after the last arrival at which the satellites sit at
+the DRO phases (k-1)/6 leg 2 starts from; leg 2 then runs unchanged from T0.
+Design: `docs/superpowers/specs/2026-11-11-lunar-pnt-leg1-gto-dro-design.md`.
+
+**THE CAVEAT. These are minimum-time, engine-always-on transfers in the
+catalog's numerical regime (5 N per 150 kg, Isp 1710 s), not a vehicle
+design.** The numbers that make this plain: each transfer burns 41.8 to 45.0 %
+of the stack's launch mass (mf/m0 = 0.550 to 0.582), the six stacks total
+1,774 kg wet and 760 kg of stage propellant to deliver 900 kg, the delta-V is
+8.64 to 10.02 km/s, and each stack needs 9.3 to 10.4 N and 78 to 87 kW of jet
+power. A propellant-realistic leg 1 would be a minimum-fuel or much lower-thrust
+transfer, and this catalog does not contain one. The stage dry fraction 0.15
+(dry mass per kg of stage propellant) is an assumption, a knob (`dryFrac`), not
+a design value. Stack mass, thrust and power are scaled from the catalog
+trajectory by the closed form below and say only what the catalog regime would
+cost.
+
+### Run leg 1
+
+```matlab
+cd orbit_transfer/lunar_pnt_mission
+lunar_pnt_leg1_study                        % CLEARS its workspace (clearvars -except leg1_opts); ~100 s
+% optional, BEFORE the run: leg1_opts = struct('doSecond', false);  overrides any knob
+leg1Mat = fullfile(pwd, 'results', 'lunar_pnt_leg1_study.mat');
+leg2Mat = fullfile(pwd, 'results', 'lunar_pnt_mission_study.mat');
+[T, info] = combined_timeline(leg1Mat, leg2Mat, struct('outPng', fullfile(pwd, 'results', 'mission_timeline.png')));
+leg1_movie(leg1Mat, struct());              % results/lunar_pnt_leg1.mp4
+full_mission_movie(leg1Mat, leg2Mat, struct());   % results/lunar_pnt_full_mission.mp4
+```
+
+| call | needs | writes (all under `results/`, git-ignored) |
+|---|---|---|
+| `lunar_pnt_leg1_study` (edit the knobs block, or set `leg1_opts`) | the GTO -> DRO package, the leg-2 results for the timeline | `lunar_pnt_leg1_study.mat` (`S S0 P1 T0 T0sched knobs run_meta failed gates exclude massTot slotOutcome`), `leg1_transfers_gto_dro_5N.mat` (sidecar), `leg1_schedule.png`, `leg1_3d.png`, `leg1_mass.png`, `mission_timeline.png` |
+| `[T, info] = combined_timeline(leg1Mat, leg2Mat, opts)` | the two results files, the package on the path in `opts.catalogMat` | the figure when `opts.outPng` is set; `T` is a six-row table of [start end] pairs in days on the leg-1 clock (`gtoWait leg1 droCoast droWait leg2 onStation`); `info.T0Days`, `info.endDays`, `info.packageMatch`, `info.checks` |
+| `info = leg1_movie(leg1Mat, opts)` (`''` = default results file) | `lunar_pnt_leg1_study.mat` | `lunar_pnt_leg1.mp4` (1280 x 720, 30 fps, 30 s); `opts.preview = true` writes `lunar_pnt_leg1_preview.mp4`, `opts.dayList` / `opts.frameList` write PNG stills to `movie_preview/` |
+| `info = full_mission_movie(leg1Mat, leg2Mat, opts)` (`''` = default files) | both results files | `lunar_pnt_mission_dayoffset.mp4` (leg 2 re-rendered with its day counter continuing from T0; `lunar_pnt_mission.mp4` is never overwritten) and `lunar_pnt_full_mission.mp4` (leg 1 + leg 2, 15-frame cross-fade, 2,985 frames, 99.5 s) |
+
+`leg1Mat` and `leg2Mat` are the paths of `results/lunar_pnt_leg1_study.mat` and
+`results/lunar_pnt_mission_study.mat`. The leg-1 study is a numbered script like
+the leg-2 one: 0 knobs, 1 inputs and identity, 2 schedule, 3 polish loop, 4
+gates table and VERDICT, 5 mass and power, 6 save, 7 capture, 8 figures. Run it
+from a function to keep the base workspace.
+
+### Measured results
+
+Run on 2026-11-11 (97 s, of which 91.8 s is the six polishes; every blocking
+gate PASS, VERDICT PASS). The same inputs rerun bit-identically (three runs
+compared field by field: dT0 = 0, max |dtf| = 0, max |dz8| = 0, identical
+propellant, clearances and misses). Provenance: run from a working tree with
+uncommitted changes on top of 1f02bf6 (`run_meta` records `1f02bf6` with the
+dirty flag set).
+
+Schedule: orient0 0 deg, GTO phase at t = 0 of 5/12, DRO slot offset
+delta = 5/72, chosen from 2,974 feasible triples; maximum orientation offset
+from the catalog sheet 3.319 deg. All six closed on their FIRST candidate (0
+exclusions, 6 polishes). Satellites are in leg-2 numbering k; slot j is the DRO
+slot the stage lands on.
+
+| k | slot | cell (iD,iA,iS) n | departs (d) | flight (d) | arrives (d) | GTO orientation at departure (deg) | arrival miss (km, m/s) |
+|---|---|---|---|---|---|---|---|
+| 1 | 3 | (11,1,1) 0 | 0.1834 | 2.4342 | 2.6176 | -2.371 | 0.000413, 6.2e-06 |
+| 2 | 4 | (1,2,1) 0  | 0.2568 | 2.3434 | 2.6002 | -3.319 | 0.0473, 0.000663 |
+| 3 | 5 | (12,3,1) 0 | 0.2201 | 2.3869 | 2.6070 | -2.845 | 0.00196, 3.6e-05 |
+| 4 | 6 | (6,4,1) 0  | 0.0000 | 2.5717 | 2.5717 | 0.000 | 0.000616, 1.2e-05 |
+| 5 | 1 | (6,5,1) 0  | 0.0000 | 2.5898 | 2.5898 | 0.000 | 0.00398, 5.9e-05 |
+| 6 | 2 | (6,6,1) 0  | 0.0000 | 2.6188 | 2.6188 | 0.000 | 0.000884, 1.4e-05 |
+
+| k | min Earth (km) | min Moon (km) | second order | stage prop (kg) | stack wet (kg) | thrust (N) | jet power (kW) | dV (km/s) |
+|---|---|---|---|---|---|---|---|---|
+| 1 | 1068.0 | 26839.7 | pass | 120.765 | 288.879 | 9.629 | 80.74 | 9.078 |
+| 2 | 349.9  | 27803.2 | pass | 112.381 | 279.238 | 9.308 | 78.04 | 8.635 |
+| 3 | 520.2  | 27931.0 | pass | 116.329 | 283.779 | 9.459 | 79.31 | 8.846 |
+| 4 | 6306.7 | 15837.0 | pass | 134.628 | 304.822 | 10.161 | 85.19 | 9.773 |
+| 5 | 6427.6 | 841.3   | pass | 136.577 | 307.063 | 10.235 | 85.82 | 9.867 |
+| 6 | 6630.5 | 27936.6 | pass | 139.739 | 310.700 | 10.357 | 86.84 | 10.018 |
+
+Totals: stage propellant 760.418 kg, stage dry 114.063 kg, stack wet (launch
+mass of the six stacks) 1,774.481 kg, largest thrust 10.357 N, largest jet power
+86.84 kW. Minimum Earth altitude 349.9 km is satellite 2 at its own perigee
+departure (the GTO's perigee, floor 200 km); minimum Moon altitude 841.3 km is
+satellite 5 (floor 500 km). The three satellites with departure day 0.0000 leave
+at the GTO phase the schedule starts on; the others wait 0.18 to 0.26 d on the
+GTO. Min Earth and Moon are LOCATED minima (see Gates).
+
+Hand-off: T0 = 2.6473 d (last polished arrival 2.6188 d, 0.0285 d earlier; the
+polished T0 equals the table schedule's T0 to the printed digits, gate T1).
+The flown arrival states sit on the DRO phases (k-1)/6 at T0 to within
+2.04e-07 of a period (gate GH, tolerance 1e-5). Combined mission, on the
+leg-1 clock: leg-2 departures 2.682 to 3.941 d, last tulip arrival day 21.446,
+end of the 30-day service window day 51.446 (leg 2's own clock is shifted by
+T0).
+
+Mass and power bookkeeping (closed form, `leg1_gates` mode `'mass'`), with
+f = 1 - mf/m0 of the transfer:
+
+    mp = 150 f / (1 - f - dryFrac f),   dry = dryFrac mp,   wet = 150 + dry + mp
+    thrust = 5 N wet / 150,             jet power = thrust Isp g0 / 2   (g0 = 9.80665 m/s^2)
+
+The catalog trajectory holds for any vehicle with the same thrust-to-mass ratio
+and Isp, so each stack is sized to arrive at the 150 kg leg 2 assumes. The jet
+power is the ideal thrust power; no efficiency is applied.
+
+Jacobi constants (CR3BP, same frame as the mission): DRO (size 1, period 1 ND =
+4.4327 d) 3.0576; the tulip 3.1866; for reference L1 3.1883 and L2 3.1722 (the
+tulip's constant lies between those two).
+
+### Gates
+
+The gate ids printed by the study are I1 C1 T1 P6 GA GF GO GH GE GM GW G2 GT
+GD. Every gate is computed on an INDEPENDENT re-flight of the polished costates
+(`fly_transfer`) and on the scheduler's context; none reads the polish's own
+bookkeeping of the quantity it checks. A satellite is accepted only if the
+final gates pass at the final T0 and its label k.
+
+BLOCKING (a failure excludes the candidate, re-schedules that satellite alone
+with the triple locked, and tries the next cell):
+
+- arrival: flown miss < 100 km and < 10 m/s (GA; measured max 0.0473 km, 0.000663 m/s);
+- flight admissibility (`validate_flight`) (GF);
+- one GTO: the departure state recomputed from orient0, the GTO phase and tDep
+  alone equals the stage's departure state to < 1e-9 ND (GO; measured 0);
+- hand-off phase: the DRO phase of the flown arrival state, advanced to T0,
+  equals (k-1)/6 within 1e-5 of a period, about 1.9 km along track (GH; the gate
+  exists to catch a clock or a 1/6 relabelling error, and the arrival gate
+  bounds the miss itself), and the flown arrival epoch matches the schedule's to 1e-9 ND;
+- clearance on the LOCATED minimum: Earth altitude >= 200 km (GE), Moon altitude
+  >= 500 km (GM); the range-rate roots are refined on the true dynamics, so a
+  perigee that falls between samples is caught;
+- stage feasibility: the closed-form mass relation has a solution (GW);
+- the stored thrust direction alpha = -lambda_v/|lambda_v| re-flies the flight
+  below 1 km, and the opposite sign misses (GD).
+
+REPORTED, not blocking: second-order status (G2; pass, refuted, notReproduced or
+error: `ms_tfmin` reproduces the root to 1e-6, conjugate-point test passed and
+covered, min |lambda_v| > 0, min Q_mt > 0, dim S = 1; all six pass); T1 (the
+hand-off epoch from the polished arrivals equals the table's); GT (T0 is >= every
+arrival and a slot instant). A refuted transfer is not blocking but the next
+candidate is tried first.
+
+NOT covered:
+
+- The refined solutions carry no path constraint in the optimisation: Earth and
+  Moon clearance is checked after the fact, on the located minimum.
+- The GTO wait is Keplerian, not propagated in the CR3BP.
+- No launch windows, eclipses, navigation or dispersions.
+- The off-grid fallback solver (`lib/solve_gto_dro_offgrid.m`) is not built; the
+  study has an empty hook (`offgridSolver`) because no satellite needed it. The
+  exclusion and failed-satellite branches ran only through the test seams.
+- The second-order check omits the pumpkyn `tfMin` acceptance, the lift margin,
+  the H6 margin and the dense conjugate scan; the leg-2 polish also runs
+  `pmp_pointwise_checks`, which leg 1 does not.
+- No spacecraft-to-spacecraft proximity check.
+
+Deliberate-failure experiment per gate (each prints and asserts; measured
+values):
+
+| gate | experiment | what happens |
+|---|---|---|
+| GA arrival | `z8(8)` (t_f) + 0.01 ND | miss 2017.2 km, 189.4 m/s: FAIL |
+| GF flight | flight truncated at half its time, re-validated by `validate_flight` | not admissible ("did not reach t_f"), mass block infeasible, G.pass 0 |
+| GO one GTO | `orient0` + 1 deg | departure state differs by 0.17 ND: FAIL (arrival and hand-off still pass) |
+| GH hand-off | T0 + 0.01 ND | phase error +0.01 of a period: FAIL (oneGto still passes) |
+| GH relabelling | spacecraft number 2 -> 3 | phase error -1/6 of a period: FAIL |
+| GH epoch | `P.tArr` + 1e-8 ND | "flown arrival epoch differs from P.tArr by -1e-08 ND": FAIL |
+| GE Earth, located | synthetic CR3BP arc through a 150 km perigee between samples 226.20 km apart | sample minimum 226.199 km PASSES the 200 km floor; located minimum 150.0000 km FAILS |
+| GE / GM, re-integration stops early | propagator stopped at half | "minimum ... not located": both FAIL |
+| GM Moon | floor set to measured + 1 km / - 1 km (26,886.7 / 26,884.7) | FAIL / pass |
+| GW mass | `dryFrac` 1.5 (> 1.41 allowed) | denominator -0.03687, stage cannot exist: FAIL; arrival and hand-off still pass |
+| G2 second order | injected error | status error, secondUnknown 1, G.pass 1 (reported, not blocking) |
+| GD thrust direction | -alpha used for the re-flight (every run) | misses by 391,955 km |
+| C1 schedule | a table with a slot no cell can fill | `schedule_gto_dro:noAssignment`, per-slot candidate counts, no partial assignment |
+| P6 closure | seam: every candidate of slot 4 refused | "SLOT 4 FAILED: candidates exhausted (3 tried of 3; no off-grid solver configured)", P6 FAIL 5 of 6, no export, no timeline |
+| final T0 | seam: T0 + 0.01 ND at the final gates | 0 of 6 accepted ("final gates failed: handoff at final T0"), no sidecar |
+| exclusion | seam: slot 1 refused | locked re-schedule to another cell; T0 jumped 2.647 -> 3.386 d and every label changed, the other five transfers unchanged |
+| timeline refusals | package replaced; leg-2 DRO differs; leg-2 phases differ; DRO period 0.5; time units; satellite not accepted; T0 before the last arrival; leg-1 verdict not PASS; G.pass false; leg-2 gate table failed | each throws its own `combined_timeline:<check>` identifier |
+| export refusals | outFile outside `results/`; accepted entry with G.pass false; none accepted | `export_leg1_transfers:outFile` / `:notPassed` / `:noTransfers`, nothing written |
+
+The test seams (`seamRefuse`, `seamRefute`, `seamFinalT0`) are refused when
+`outDir` is the default `results/`; with a seam set the export is skipped and the
+VERDICT names the seam.
+
+### Method notes
+
+- The GTO orientation drift sign is MEASURED, not assumed: the inertial GTO's
+  orientation at leg-1 time t is `orient0 + sgn (180/pi) t` deg with sgn = -1
+  (rotating-frame residual 8.9e-16 ND with sgn, 0.699 with -sgn).
+  GTO period 0.0993132465 ND (10.5653 h).
+- Departure pinned, arrival sliding. For a trial duration t_f the target is the
+  slot's state at tDep + t_f, which slides slowly along the DRO, so the root of
+  t_f - T(t_f) is well conditioned. Pinning the arrival instead would slide the
+  departure around the GTO, a tenth of a revolution per 0.01 time units. This is
+  the reverse of leg 2.
+- Orientation walk (probe on a perigee cell and an apogee cell): 2 deg steps with
+  step halving reach +10 and -25 deg at both ends of the GTO with no halving ever
+  needed, about 0.3 s per degree; a perigee cell walks to +60 deg in 30 accepted
+  steps (t_f +10.7 %, miss <= 0.515 km). A single 25 deg leap also converges (36
+  iterations); a single +60 deg leap on the perigee cell does not. A failed or
+  branch-jumping step returns `ok = false` with the orientation reached, never a
+  transfer from a different departure. The real schedule needs at most 3.3 deg.
+- The scheduler's tie-break: after earliest T0 and least propellant, the smallest
+  maximum orientation offset from the catalog sheet. Without it the lexicographic
+  rule chose orient0 = -20 deg and pushed departures to -23.3 deg against the
+  25 deg bound for no benefit; with it the maximum offset is 3.3 deg and the T0
+  and propellant (385.27 kg on the unpolished table) are unchanged.
+- Results are deterministic: the study reproduced to the last printed digit
+  across runs, so the test pins allow only cross-session solver noise (T0 1e-9 d,
+  t_f 1e-6 d, propellant and wet 1e-3 kg, jet power 1e-4 kW, clearances 0.01 km,
+  maximum miss 1e-4 km and 1e-6 m/s).
+- Closest margins: the satellite-2 perigee departure at 349.9 km (floor 200 km)
+  and the satellite-5 Moon pass at 841.3 km (floor 500 km).
+- In the leg-1 movie the plume points opposite the thrust, which from about day
+  1.4 (the stages brake) is ahead of the motion in the rotating frame; that is the
+  physics, not a sign error. The GTO is drawn rotating about the Earth, not the
+  barycentre (a barycentre rotation misses `gtoState` by 2,370 km).
+
+### Which catalog the numbers come from
+
+The PILOT package `orbit_transfer/GTO_DRO/results/costate_catalog_gto_dro.mat`
+(git-ignored): one sheet, GTO orientation 0 deg, DRO size 1, 271 entries, 34
+clean 5 N cells (`has_solution` and `conj_pass == 1` at rung 5), SHA-256 beginning
+`e57d9236` (full `e57d9236f8264d026f3f5a7bcd1fb6ce9e3c698958d04ed0b78cbbb0669574d3`),
+created 2026-11-11. A snapshot is kept at
+`results/inputs/costate_catalog_gto_dro_pilot_e57d9236.mat`; the movie code falls
+back to it when the package path now holds a different file. When the fleet's
+package replaces the pilot, the leg-1 study must be re-run (and its test pins
+re-set): `combined_timeline` compares the package's SHA-256 recorded in
+`run_meta.identity` with the file now on the path and refuses with
+`combined_timeline:identity`. In this package `sheets(k).tauDRO` holds the
+GTO orientation in degrees, not a DRO period; sheets are selected by
+`arr_params.tau == 1`.
+
+### Captured transfers (leg-1 sidecar)
+
+`results/leg1_transfers_gto_dro_5N.mat` holds ONE variable,
+`leg1_transfers` (six entries, one per ACCEPTED transfer), written by
+`export_leg1_transfers` (atomic, refused outside this folder's `results/`).
+Each entry stores: the satellite and slot, the costates `z8` = [lambda0(7); t_f],
+`tf_nd`, the endpoint states `rv0`, `rvf` (the orientation and arrival phase are
+off the package grid, so the phases alone do not rebuild them), the regime
+(`thrustN ispS m0kg`), `orientDeg`, `sD`, `arrPhase`, the epochs (`tDep tArr`, ND
+and days), `seededFrom` [iD iA iS], `nWait`, `route`, `flyKm flyVms`, and
+`verdicts` and `notChecked` below. Top level: `regime package provenance note
+usage`; the note is built from the stored verdicts.
+
+CHECKED (stored in `verdicts`): the flown arrival miss, flight admissibility, one
+GTO, hand-off error, LOCATED Earth and Moon minima with epochs and floors, the
+second-order status with conjugate verdict, minLamV, minQmt, dimS and the
+reproduction dz. The test re-flies every entry and recovers the stored
+misses (0.0004133 / 0.0473 / 0.001959 / 0.0006155 / 0.003984 / 0.0008843 km).
+NOT CHECKED (listed in `notChecked`): the pumpkyn `tfMin` catalog acceptance
+beyond the polish's own `ms_tfmin` solve; an Earth floor inside the
+optimisation; tight-flight pointwise checks, lift margin, H6 and the dense
+conjugate scan; admission to any library or package. Nothing is written into
+the GTO -> DRO package or the shipped library.
+
+### Leg-1 tests
+
+Eight tests belong to leg 1 (`run_tests` now runs 18 in all, about 17 min):
+`test_leg1_inputs`, `test_polish_gto_dro`, `test_schedule_gto_dro`,
+`test_leg1_gates`, `test_lunar_pnt_leg1_study`, `test_export_leg1_transfers`,
+`test_combined_timeline`, `test_leg1_movie`. The study, export and timeline
+tests read the saved results (and skip, passing, when no results file exists)
+and pin the headline numbers above.
+
 ## Tests
 
-`tests/run_tests.m` runs all ten tests (about 15 min; measured 923 s
+`tests/run_tests.m` runs all 18 tests, ten of leg 2 listed here and eight of
+leg 1 (see Leg-1 tests; about 17 min in all). The ten leg-2 tests (about 15 min; measured 923 s
 on 2026-11-10, the six transfers certified ONCE, in the export test; the
 study test's export runs with `exportFullStatus = false`): `test_mission_inputs`,
 `test_schedule_rendezvous`, `test_polish_rendezvous`,
@@ -409,8 +690,9 @@ the VERDICT, recorded in `run_meta.export`, and does not stop the run.
 - By default no requirement verdicts (R1-R3): the product is the south-pole
   GDOP series. The scoring exists behind `scoreRequirements`.
 - The transfers use the 70 mN / 900 s / 150 kg regime, which is NOT the
-  GTO -> DRO catalog's regime, so this is not a continuous GTO -> DRO -> tulip
-  mission.
+  GTO -> DRO catalog's regime, so leg 2 alone is not a continuous GTO -> DRO
+  -> tulip mission; leg 1 (below) flies the GTO -> DRO part in its own 5 N /
+  1710 s regime and hands over at T0.
 - All six spacecraft share one DRO and one clock.
 - Collision and proximity between spacecraft are not checked.
 - No propellant-optimal schedule: propellant is reported, not optimised.

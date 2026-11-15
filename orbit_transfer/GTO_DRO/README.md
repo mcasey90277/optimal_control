@@ -217,3 +217,108 @@ Each line names the stage that measured it.
 - **Review.** `reviews/astra_stage2_2026-11-11.md` and its dispositions.
 - **Not answered here.** The 180-degree orientation; the fleet runs those
   sheets first (`"[9:12 1 3:8 13:16]"`).
+
+## Fleet findings (stage 2, 2026-11-15; all 16 sheets)
+
+Fleet: 141 batch passes, 78.5 h (2026-11-11 04:16 to 2026-11-14 10:49), the
+solver fence fired 5 times, nothing hung. Chain on the 16 sheets: 13 h 47 min.
+The raw sheets are kept in `results/fleet_raw/`. The four counts Astra asked
+to be kept apart are reported apart: direct solutions on record, accepted by
+the fleet, accepted after the chain (floor-clear), and not refuted. Each cell
+of the table is out of 360 (72 cells x 5 rungs).
+
+| GTO orientation | DRO size | direct on record | accepted (fleet) | after the chain | not refuted | refuted | primer flag |
+|---|---|---|---|---|---|---|---|
+| 0 | 0.5 | 323 | 240 | 262 | 189 | 73 | 3 |
+| 0 | 1 (pilot) | not kept | 280 | 271 | 211 | 60 | 0 |
+| 0 | 2 | 321 | 262 | 275 | 209 | 66 | 1 |
+| 0 | 3 | 343 | 280 | 289 | 260 | 29 | 0 |
+| 90 | 0.5 | 343 | 221 | 187 | 185 | 2 | 1 |
+| 90 | 1 | 337 | 229 | 199 | 193 | 6 | 4 |
+| 90 | 2 | 313 | 222 | 180 | 174 | 6 | 2 |
+| 90 | 3 | 344 | 249 | 214 | 209 | 5 | 2 |
+| 180 | 0.5 | 252 | 116 | 130 | 130 | 0 | 4 |
+| 180 | 1 | 273 | 114 | 126 | 126 | 0 | 1 |
+| 180 | 2 | 271 | 131 | 128 | 127 | 1 | 1 |
+| 180 | 3 | 268 | 137 | 131 | 131 | 0 | 1 |
+| 270 | 0.5 | 347 | 251 | 215 | 199 | 16 | 0 |
+| 270 | 1 | 344 | 255 | 210 | 194 | 16 | 1 |
+| 270 | 2 | 353 | 268 | 225 | 207 | 18 | 1 |
+| 270 | 3 | 336 | 243 | 223 | 210 | 13 | 1 |
+| all | | 4,768 of 5,400 | 3,498 | 3,265 | 2,954 | 311 | 23 |
+
+"Direct on record" is the sidecar after the chain (a restored repair marks
+its slices not recorded), so it slightly undercounts what the fleet solved.
+
+- **The catalog.** 3,265 entries of 5,760 possible (57 percent); per rung
+  [15 12 10 7 5] N: 706 / 681 / 625 / 612 / 641. 2,954 are not refuted by the
+  conjugate test. Coverage is by orientation, not by DRO size: the four DRO
+  sizes of one orientation differ by at most 34 entries.
+- **Coverage by orientation.** Cells holding at least one entry, of 72 per
+  sheet: 0 deg 69 to 72, 90 deg 62 to 68, 270 deg 68 to 70, 180 deg 48 to 50.
+  Cells holding the full ladder: 0 deg 18 to 27, 270 deg 8 to 14, 90 deg 4
+  to 11, 180 deg 1 to 5.
+- **The 180-degree corner.** The fleet accepted about a third of the
+  entries there (114 to 137 of 360) and the repairs did not change that:
+  phase continuation recovered 25 of 98 unsolved cells on these four sheets
+  (73 of 99 on the other eleven fleet sheets). The entries that exist are
+  the cleanest in the catalog: 1 refuted of 515. So the 180-degree
+  orientation is hard to solve from this recipe, not poor in good
+  extremals. The fastest transfers of the whole catalog are there (15 N
+  t_f 0.2210 ND, 0.96 d, on the size-3 sheet).
+- **Earth floor (chain stages 2 and 2b).** 707 entries fly below 200 km
+  after refinement and are demoted, on every sheet (16 to 64 per sheet); the
+  deepest passes 5,760 km below the surface. By orientation and rung:
+
+  | orientation | 15 N | 12 N | 10 N | 7 N | 5 N |
+  |---|---|---|---|---|---|
+  | 0 | 21 | 20 | 34 | 63 | 26 |
+  | 90 | 33 | 46 | 56 | 49 | 29 |
+  | 180 | 3 | 16 | 23 | 23 | 20 |
+  | 270 | 68 | 66 | 60 | 45 | 6 |
+
+  The pilot's one-cell measurement holds at fleet scale. Of the 661 demoted
+  entries on the 15 sheets that kept their direct solutions, 640 (97
+  percent) have a direct solution whose minimum altitude is within 1 km of
+  the 200 km floor; 12 have no direct solution on record and 9 have one
+  clear of the floor. So nearly every demotion is a cell where the floor
+  constrains the optimum and the unconstrained refinement leaves it. Those
+  640 direct solutions are on disk (`<tag>_direct.mat`). Lowest accepted
+  entry: 201.4 km.
+- **Unsolved cells (stage 3, phase continuation).** 98 of 197 repaired.
+- **Top-rung basin census (stage 4).** 54 refuted 15 N entries had a 12 N
+  entry to re-solve from: 41 landed on a faster branch, 13 were restored (11
+  not faster, 2 faster but lost lower rungs, the case of disposition C5).
+  All 54 are at orientation 0 or 90. 60 top-rung entries remain refuted (35
+  at 0 deg, 2 at 90, 23 at 270).
+- **Conjugate sweep (stage 6).** 2,954 pass, 311 refuted, none undecided.
+  Refuted share per rung: 8 / 10 / 8 / 10 / 12 percent. 228 of the 311 are
+  at orientation 0 and 63 at 270; orientations 90 and 180 hold 20 between
+  them. These are different populations per rung, so no trend down the
+  ladder is claimed.
+- **Hypothesis gates (stage 7).** 3,265 gated; no abnormal lift, no H3
+  failure; 23 entries fail H2 (minimum |lambda_v| on the arc below 1e-6;
+  values 8e-8 to 9.8e-7). The minimum is a continuous quantity across the
+  catalog (median 2.2e-4, 98 more entries between 1e-6 and 1e-5), so the 23
+  are the tail under a fixed threshold: arcs where the thrust direction is
+  close to a reversal. None of the 23 is refuted by the conjugate test. The
+  chain treats this blocker as never waivable.
+- **Margins on the 3,265.** Refinement residual at most 1.0e-10 (median
+  6.3e-14); tfMin |dz| at most 1.5e-7 (gate 1e-6); flown miss median 0.0014
+  km, 28 entries above 1 km, largest 33.1 km (90 deg / size 3, cell (1,4),
+  5 N; gate 100 km).
+- **Perigee row (departure phase 0), entries of 24 per orientation and
+  rung.** 0 deg 20 to 21; 90 deg 23 to 24 down to 7 N and 20 at 5 N; 180
+  deg 18 to 19 down to 7 N and 8 at 5 N; 270 deg 23 down to 7 N and none at
+  5 N.
+- **15 N t_f per sheet.** Medians 0.273 to 0.303 ND (1.19 to 1.32 d);
+  catalog range 0.2210 to 0.3548 ND (0.96 to 1.54 d).
+- **Audit (stage 8, reduced rule).** fly 3 / 3, accept 3 / 3, Earth 3 / 3.
+- **Blockers returned.** `earth-demoted` (16, one per sheet, waivable),
+  `conj` (311 refuted, waivable), `gates` (23, not waivable). The
+  deliverable is not built.
+- **Not done yet.** The Moon floor is not swept at catalog scale (the pilot
+  measurement found none below 500 km); lower-rung refutations are a census,
+  not a repair queue; the floor-active cells have no admissible entry; the
+  package field `tauDRO` holds the GTO orientation (the DRO size is
+  `arr_params.tau`).

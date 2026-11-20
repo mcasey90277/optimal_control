@@ -4,9 +4,10 @@ function ok = run_tests()
 %   Every test of the DRO_ELFO user layer, with ONE logical verdict and a
 %   throw on failure so a scripted run returns a real exit code. It runs
 %   the generic plot test (costate_common/tests/test_plot_pair_transfer)
-%   and the user-script test; both solve once through tempdir caches
-%   (cold about 3.5 min each, seconds when cached), so a cold run belongs
-%   in the background.
+%   the user-script test and the fleet front-door test; the first two
+%   solve once through tempdir caches (cold about 3.5 min each, seconds
+%   when cached), the front-door test solves a 1 x 1 two-rung sheet
+%   uncached (about 4 min), so a run belongs in the background.
 %
 %% Inputs:
 %
@@ -20,6 +21,7 @@ function ok = run_tests()
 %
 %% Revision History:
 %  M. Casey                                                   (c) 11/19/2026
+%  M. Casey  test_run_dro_elfo_torus added                    (c) 11/19/2026
 %  Copyright Coorbital Inc.
 %% ------------------------ Begin Code Sequence ---------------------------
 
@@ -30,7 +32,7 @@ addpath(fileparts(here));
 setup_dro_elfo_paths();
 addpath(here, fullfile(fileparts(fileparts(here)), 'costate_common', 'tests'));
 
-names = {'test_plot_pair_transfer', 'test_dro_elfo_transfer'};
+names = {'test_plot_pair_transfer', 'test_dro_elfo_transfer', 'test_run_dro_elfo_torus'};
 res   = false(size(names));
 secs  = zeros(size(names));
 for kk = 1:numel(names)

@@ -189,6 +189,9 @@ else
     for kd = 1:numel(deep)
         mask = deep_D{kd}.perRung.thrustN < 0.5;
         fprintf('%s\n%s\n', deep(kd).label, strjoin(table_lines(deep(kd).label, deep_D(kd), mask), newline));
+        % the probe runs a few cells only: state the counts, since acc above is a share of the whole grid
+        fprintf('  probed cells: %d; accepted per rung [%s] N: %s\n', deep_D{kd}.ladder.nAttempted, ...
+                strjoin(compose('%g', deep(kd).thrustN(:).'), ' '), mat2str(deep(kd).perRung.nAccepted(:).'));
     end
 end
 

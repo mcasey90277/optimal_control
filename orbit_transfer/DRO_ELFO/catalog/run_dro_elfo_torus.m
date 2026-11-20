@@ -18,13 +18,15 @@ function plan = run_dro_elfo_torus(sel, opts)
 %   completion marker in combined_progress.txt that the shell driver
 %   (run_dro_elfo_batched.sh) stops on.
 %
-%   PASS B SEED (differs from the GTO model, whose pass B falls back to the
-%   engine's cold default tf0 = 4.0 ND): with thrust pinned at 15 N the
-%   150 kg vehicle reaches the 5 percent mass floor at 0.416 ND, so a
-%   4.0 ND seed is outside the feasible flight-time range and the retry is
-%   nearly hopeless. Pass B seeds tf0B = 0.15 ND instead, the other side
-%   of pass A's 0.3 ND around the 15 N reference flight (0.090 ND on the
-%   stage 0 cell): a seed below and a seed above the expected t_f.
+%   SEEDS (measured on the matched experiment of 2026-11-19): pass A seeds
+%   tf0 = 0.15 ND, because the engine's pre-flight screen accepts t_f only
+%   in [0.3, 3] x seed and 15 N flights are as short as 0.089 ND (a 0.3 ND
+%   seed rejected a converged tulip cell); 0.15 ND solved 97 to 100 percent
+%   of the 15 N cells on three 6 x 6 sheets. Pass B seeds tf0B = 0.3 ND,
+%   the other side of the expected t_f. Both lie inside the mass bound:
+%   with thrust pinned at 15 N the 150 kg vehicle reaches the 5 percent
+%   mass floor at 0.416 ND, so the GTO model's cold 4.0 ND retry seed is
+%   outside the feasible flight-time range here.
 %
 %   COMPLETION MARKER: written only when every selected sheet has no open
 %   cell, and it names the sheet tags it covers --
@@ -98,10 +100,9 @@ function plan = run_dro_elfo_torus(sel, opts)
 %   .planOnly               logical                 Return the plan, no
 %                                                   solve, no disk [false]
 %   .tf0                    double                  Pass A top-rung seed
-%                                                   (ND) [0.3]
+%                                                   (ND), see SEEDS [0.15]
 %   .tf0B                   double                  Pass B top-rung seed
-%                                                   (ND), see PASS B SEED
-%                                                   [0.15]
+%                                                   (ND), see SEEDS [0.3]
 %   .runId                  char                    Run label carried in
 %                                                   the SELECTED and
 %                                                   COMPLETE log lines
@@ -157,6 +158,7 @@ function plan = run_dro_elfo_torus(sel, opts)
 %% Revision History:
 %  M. Casey                                                   (c) 11/19/2026
 %  M. Casey  tf0B pass B seed, tagged marker, corruptSheet    (c) 11/19/2026
+%  M. Casey  seeds 0.15 / 0.3 ND after the matched experiment (c) 11/19/2026
 %  Copyright Coorbital Inc.
 %% ------------------------ Begin Code Sequence ---------------------------
 
@@ -204,8 +206,8 @@ planOnly = fdef(opts, 'planOnly', false);
  msHardCapSec = fdef(opts, 'msHardCapSec', 300);   % hard cap (s) per ms_tfmin attempt; 0 = off
       thrLock = true;                              % pin thr == 1 (classical min-time form)
    keepDirect = fdef(opts, 'keepDirect', true);    % keep each rung's direct solution (sidecar)
-     tf0Fleet = fdef(opts, 'tf0', 0.3);            % pass A top-rung seed (ND)
-      tf0Mop  = fdef(opts, 'tf0B', 0.15);          % pass B top-rung seed (ND), header PASS B SEED
+     tf0Fleet = fdef(opts, 'tf0', 0.15);           % pass A top-rung seed (ND)
+      tf0Mop  = fdef(opts, 'tf0B', 0.3);           % pass B top-rung seed (ND), header SEEDS
         runId = char(fdef(opts, 'runId', ''));     % run label in the SELECTED / COMPLETE lines
      maxCells = fdef(opts, 'maxCells', inf);       % fresh cells per sheet per pass
      batchSec = fdef(opts, 'batchSec', inf);       % clean-exit wall budget (s)

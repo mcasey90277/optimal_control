@@ -15,7 +15,7 @@
 #   rungs  MATLAB vector, e.g. "[15 12 10 7 5]"; empty = the front door's
 #          default [15 12 10 7 5 3 2 1.5 1 0.75 0.5]; its rung guard refuses
 #          any sheet on disk with other rungs
-#   tf0    pass A top-rung seed (ND); empty = the front door's 0.3
+#   tf0    pass A top-rung seed (ND); empty = the front door's 0.15
 # Environment:
 #   OUTDIR       sheet folder [DRO_ELFO/results/catalog]; the driver lock,
 #                the MATLAB log and combined_progress.txt (with the

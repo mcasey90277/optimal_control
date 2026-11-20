@@ -6,7 +6,7 @@ function ok = test_run_dro_elfo_torus(topts)
 %     1  planOnly contract: 12 default ELFO sheets (tau 1, raanDeg 0:30:330),
 %        tags, families, arrParams (raanDeg, IM oe), recipe, default grid
 %        and rungs in pass A and pass B; a tulip sheet; option overrides;
-%        selection strings; pass B seed tf0B 0.15; planOnly touches no disk
+%        selection strings; seeds tf0 0.15, tf0B 0.3; planOnly touches no disk
 %     2  refusals by name: sel out of range, non-integer raanDeg, a tulip
 %        sheet with a raanDeg, two sheets with one tag, a malformed sel
 %        string, '3:1' / '1:0:3' / ';' (empty lists), an unknown target, a misspelt option, a one-rung or
@@ -86,8 +86,8 @@ for k = 1:12
         assert(isinf(o.directGateKm) && o.gateKm == 100, 'gates');
         assert(o.ispS == 1710 && o.m0kg == 150, 'catalog regime');
     end
-    assert(abs(P(k).optsA.tf0 - 0.3) < 1e-12, 'pass A tf0 0.3');
-    assert(abs(P(k).optsB.tf0 - 0.15) < 1e-12, 'pass B tf0B 0.15 (not the engine''s cold 4.0 ND)');
+    assert(abs(P(k).optsA.tf0 - 0.15) < 1e-12, 'pass A tf0 0.15');
+    assert(abs(P(k).optsB.tf0 - 0.3) < 1e-12, 'pass B tf0B 0.3 (not the engine''s cold 4.0 ND)');
     assert(isempty(P(k).optsB.cells), 'pass B cells are scoped at run time');
     sk = P(k).sheet_key;
     assert(strcmp(sk.target, 'elfo') && sk.depSize == 1 && sk.raanDeg == 30*(k-1), 'sheet_key');

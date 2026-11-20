@@ -31,11 +31,12 @@ solver       = @pair_transfer;        % test seam, leave as is
 knob_names = {'dro_tau', 'elfo', 'raan_deg', 'sD', 'sA', 'target', 'thrust_N', 'm0_kg', 'isp_s', ...
               'floor_km', 'max_iter', 'make_plot', 'make_movie', 'out_dir', 'solver'};
 if exist('dro_elfo_opts', 'var')
-    for ff = fieldnames(dro_elfo_opts).'
+    knob_over = dro_elfo_opts; clear dro_elfo_opts            % read once: a refused field does not linger either
+    for ff = fieldnames(knob_over).'
         if ~ismember(ff{1}, knob_names), error('dro_elfo_transfer:knob', 'unknown dro_elfo_opts field ''%s''', ff{1}); end
-        eval([ff{1} ' = dro_elfo_opts.(ff{1});']);
+        eval([ff{1} ' = knob_over.(ff{1});']);
     end
-    clear dro_elfo_opts ff
+    clear knob_over ff
 end
 here = fileparts(mfilename('fullpath'));
 if isempty(out_dir), out_dir = fullfile(here, 'results'); end

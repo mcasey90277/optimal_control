@@ -4,7 +4,7 @@ function ok = run_tests()
 %   Every test of the DRO_ELFO user layer, with ONE logical verdict and a
 %   throw on failure so a scripted run returns a real exit code. It runs
 %   the generic plot test (costate_common/tests/test_plot_pair_transfer)
-%   the user-script test and the fleet front-door test; the first two
+%   the user-script test, the fleet front-door test and the comparison-script test (synthetic sheets, seconds); the first two
 %   solve once through tempdir caches (cold about 3.5 min each, seconds
 %   when cached), the front-door test solves a 1 x 1 two-rung sheet
 %   uncached (about 4 min), so a run belongs in the background.
@@ -32,7 +32,8 @@ addpath(fileparts(here));
 setup_dro_elfo_paths();
 addpath(here, fullfile(fileparts(fileparts(here)), 'costate_common', 'tests'));
 
-names = {'test_plot_pair_transfer', 'test_dro_elfo_transfer', 'test_run_dro_elfo_torus'};
+names = {'test_plot_pair_transfer', 'test_dro_elfo_transfer', 'test_run_dro_elfo_torus', ...
+         'test_compare_dro_targets'};
 res   = false(size(names));
 secs  = zeros(size(names));
 for kk = 1:numel(names)

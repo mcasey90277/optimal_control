@@ -19,6 +19,13 @@ function [tau, rv, info] = get_family_orbit(family, p)
 %                                     pm = +1 north / -1 south
 %     'dpo'    [.tau]                 distant prograde orbit, period tau
 %     'lyapunov' [.tau, .Lpt]         planar Lyapunov about L1-L3
+%     'elfo'   [.oe, .raanDeg]        PSEUDO-family: an algebraic lunar
+%                                     elliptical frozen orbit, oe = [sma_km
+%                                     ecc inc_deg argp_deg] default
+%                                     [12000 0.69 56.5 90], raanDeg default
+%                                     0 (wrapped mod 360); sampled uniform
+%                                     in eccentric anomaly; tau = time since
+%                                     perilune, a LOCUS PARAMETER [M x 1]
 %     'gto'    [.orientDeg, .sma_km, .ecc]   PSEUDO-family: an algebraic
 %                                     (unpropagated) GTO departure locus at
 %                                     fixed orientation, sampled uniform in
@@ -86,6 +93,34 @@ switch lower(family)
         [tau0, rv0] = pumpkynPie.cr3bp.getDPO(p.tau);
     case 'lyapunov'
         [tau0, rv0] = pumpkynPie.cr3bp.getLyapunov(p.tau, p.Lpt);
+    case 'elfo'
+        % ELFO arrival locus (DRO->ELFO plan, 2026-11-19): a Keplerian
+        % elliptical lunar frozen orbit about the Moon at FIXED plane
+        % orientation (raanDeg, rotating frame), algebraic like 'gto'.
+        % Sampled uniform in ECCENTRIC anomaly (perilune resolved at
+        % e = 0.69); tau = time since perilune from Kepler's equation, a
+        % LOCUS PARAMETER, not an epoch offset. fromOrb takes element 6 as
+        % TRUE anomaly in radians (checked against im_elfo_states).
+        oeElfo = fieldd(p, 'oe', [12000 0.69 56.5 90]);
+        raanE  = mod(fieldd(p, 'raanDeg', 0), 360);
+        lStar  = 389703.264829278;
+        tStar  = 382981.289129055;
+        Mmass  = 5.9736e24 + 7.35e22;
+        muMoon = 6.67384e-20*muStar*Mmass;
+        M  = 2001;                                  % odd: sample lands on apolune
+        E_ = linspace(0, 2*pi, M);
+        mAnom  = E_ - oeElfo(2)*sin(E_);             % Kepler: M(E), monotone
+        nuAnom = 2*atan2(sqrt(1+oeElfo(2))*sin(E_/2), sqrt(1-oeElfo(2))*cos(E_/2));
+        Tkep   = 2*pi*sqrt(oeElfo(1)^3/muMoon);      % s
+        oev    = [repmat([oeElfo(1), oeElfo(2), oeElfo(3)*pi/180, ...
+                          oeElfo(4)*pi/180, raanE*pi/180], M, 1), nuAnom(:)];
+        rv     = pumpkyn.cr3bp.fromOrb(zeros(M,1), oev, Mmass, muStar, ...
+                                       tStar, lStar, 2);
+        tau    = (mAnom.'/(2*pi)) * (Tkep/tStar);
+        rv(end,:) = rv(1,:);                         % close the seam exactly
+        info   = struct('family', 'elfo', 'periodND', tau(end), 'params', p, ...
+                        'oe', oeElfo, 'raanDeg', raanE);
+        return;                                     % algebraic -- no cont_np/prop
     case 'gto'
         % GTO pseudo-family (Stage B spec 2026-08-26): the locus of departure
         % states at FIXED orientation, parametrized by TIME fraction (mean

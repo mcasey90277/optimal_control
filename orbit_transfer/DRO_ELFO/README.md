@@ -121,8 +121,44 @@ orientations, one recipe (top-rung seed 0.15 ND, 400 intervals, 500 km Moon
 floor, no Earth floor), and cold basin selection is not reproducible to the
 cell. The tulip control is a fresh solve, not the shipped catalog.
 
+## Pilot sheet (2026-11-20)
+
+One 12 x 12 sheet at `raanDeg` 0 (144 cells, 1,584 possible entries; 6.6 h on
+one process), then the chain on a copy of it (14 min).
+
+| thrust N | 15 | 12 | 10 | 7 | 5 | 3 | 2 | 1.5 | 1 | 0.75 | 0.5 |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| direct solution found (of 144) | 142 | 141 | 140 | 140 | 140 | 139 | 138 | 127 | 115 | 96 | 67 |
+| accepted | 141 | 140 | 139 | 140 | 137 | 137 | 136 | 124 | 112 | 93 | 58 |
+| median t_f (ND) | 0.091 | 0.104 | 0.114 | 0.138 | 0.166 | 0.221 | 0.284 | 0.344 | 0.474 | 0.593 | 0.829 |
+
+- 1,357 entries accepted by the solve; 54 cells carry a full ladder. Most of
+  the loss at low thrust is inherited: a ladder that stopped higher up never
+  attempts the rungs below, so the 0.5 N row is a delivery count for this
+  recipe, not a measure of what is solvable there.
+- 13 entries in 9 cells are holes above an accepted rung (the ladder goes on
+  past a rung whose refinement failed).
+- Clearance: 27 accepted entries (2 percent, in 21 cells) pass below the
+  500 km Moon floor after refinement, 11 of them through the Moon (lowest
+  -1,035 km). 19 of the 27 arrive at ELFO phase 1/12 to 3/12 after perilune.
+  No surviving entry lies between 500 and 550 km: entries either clear the
+  floor or leave it outright. The chain demotes the 27.
+- Repair solved both cells that had no accepted rung (20 entries).
+- Packaged: 1,350 entries. Conjugate test 1,346 pass, 4 refuted, 0 undecided.
+  Hypothesis gates 1,350 of 1,350. Audit through the picker clean.
+- The independent re-flight misses the target by at most 9e-5 km (median
+  4e-7 km), so the 100 km acceptance gate does not bind.
+
+An outside review of the recipe (GPT-6.2 Astra, 2026-11-20) accepted it for a
+seed library and asked that the comparison above be read as "this recipe
+delivered fewer low-thrust ELFO entries", which is what it measures. Its
+suggested follow-ups, not done: re-seed the first missing rung of a stopped
+ladder from a phase neighbour at that rung; repeat the lowest-clearance cases
+at 800 intervals; a half-step node angle on a paired subset.
+
 ## Status
 
 Built: user script, shared functions, front door and driver, comparison,
-chain and picker. Not yet run: the 12 x 12 pilot sheet through the chain, and
-the 12-sheet fleet (`raanDeg` every 30 deg). No deliverable is packaged.
+chain and picker; pilot sheet solved and run through the chain. Running: the
+other 11 sheets (`raanDeg` 30 to 330), four processes in parallel. No
+deliverable is packaged.

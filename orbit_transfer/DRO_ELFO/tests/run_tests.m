@@ -7,7 +7,10 @@ function ok = run_tests()
 %   the user-script test, the fleet front-door test and the comparison-script test (synthetic sheets, seconds); the first two
 %   solve once through tempdir caches (cold about 3.5 min each, seconds
 %   when cached), the front-door test solves a 1 x 1 two-rung sheet
-%   uncached (about 4 min), so a run belongs in the background.
+%   uncached (about 4 min), so a run belongs in the background. The
+%   Task 7 tests (picker, clearance sweep, repair tool, chain) cut their
+%   real fixture sheets from results/compare (seconds to a minute; a fresh
+%   clone without that folder solves the fixtures instead, slower).
 %
 %% Inputs:
 %
@@ -22,6 +25,7 @@ function ok = run_tests()
 %% Revision History:
 %  M. Casey                                                   (c) 11/19/2026
 %  M. Casey  test_run_dro_elfo_torus added                    (c) 11/19/2026
+%  M. Casey  Task 7 tests (pick, clearance, repair, chain)    (c) 11/19/2026
 %  Copyright Coorbital Inc.
 %% ------------------------ Begin Code Sequence ---------------------------
 
@@ -33,7 +37,8 @@ setup_dro_elfo_paths();
 addpath(here, fullfile(fileparts(fileparts(here)), 'costate_common', 'tests'));
 
 names = {'test_plot_pair_transfer', 'test_dro_elfo_transfer', 'test_run_dro_elfo_torus', ...
-         'test_compare_dro_targets'};
+         'test_compare_dro_targets', 'test_dro_elfo_pick', 'test_body_clearance_sweep', ...
+         'test_repair_dro_elfo_cells', 'test_build_dro_elfo_catalog'};
 res   = false(size(names));
 secs  = zeros(size(names));
 for kk = 1:numel(names)

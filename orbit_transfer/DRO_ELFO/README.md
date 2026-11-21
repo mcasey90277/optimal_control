@@ -156,6 +156,47 @@ suggested follow-ups, not done: re-seed the first missing rung of a stopped
 ladder from a phase neighbour at that rung; repeat the lowest-clearance cases
 at 800 intervals; a half-step node angle on a paired subset.
 
+## Library functions
+
+Functions for reading the packaged catalog (`results/costate_catalog_dro_elfo.mat`,
+one sheet per `raanDeg`), the ELFO counterpart of the DRO to tulip user kit
+(deliverable 9). They read the catalog and fly entries with pumpkyn's
+propagator; nothing is solved or re-certified. Sheets are matched exactly on
+(DRO size, `raanDeg`), as by the picker, never to the nearest sheet. All in
+`catalog/` unless noted.
+
+| function | what it does |
+|---|---|
+| `dro_elfo_describe` | fact sheet: orbits, sheets, rungs, Isp, mass, phase grid; entries, full ladders and lowest-rung cells per sheet; t_f and delta-V per rung; conjugate-test counts |
+| `dro_elfo_pick` | one entry by (DRO size, `raanDeg`, phases, thrust): the nearest cell holding an entry at that rung |
+| `dro_elfo_transfers_at` | every rung recorded at the nearest phase cell of one sheet, high thrust first |
+| `dro_elfo_fly` | flies one entry from its z8: history in ND and days / km / kg, arrival miss, located minimum Moon altitude, revolutions; optional 3D plot (rotating frame, Moon-centred) |
+| `dro_elfo_extremes` | fastest and slowest (or least and most delta-V) entries under a filter on `raanDeg`, DRO size, thrust and conjugate verdict |
+| `dro_elfo_torus_plot` | phase torus of one sheet at one rung (flight time and verdict map), or every sheet side by side on one colour scale (`'all'`) |
+| `dro_elfo_movie` | movie (.mp4 and .gif, 1280 x 720) of one entry, or two side by side on one clock, in the pumpkynPie scene |
+| `dro_elfo_entry`, `dro_elfo_find_sheet` | helpers: one catalog row with derived units; the exact sheet match |
+| `dro_elfo_library_example.m` (top folder) | worked example of all of the above; outputs to `results/library_demo/` |
+| `tests/test_dro_elfo_library.m` | test of the functions on the pilot catalog and a 2-sheet copy of it |
+
+By hand:
+
+```matlab
+cd orbit_transfer/DRO_ELFO
+setup_dro_elfo_paths
+C = load('results/costate_catalog_dro_elfo.mat').costate_catalog_dro_elfo;
+dro_elfo_describe(C);
+e = dro_elfo_pick(C, 1, 90, 0.3, 0.6, 1);          % DRO 1 ND, raanDeg 90, phases, 1 N
+F = dro_elfo_fly(C, e, struct('plot', true));       % F.tDays, F.rMoonKm, F.massKg, F.flyKm
+T = dro_elfo_transfers_at(C, 1, 90, 0.3, 0.6);      % the thrust ladder at that cell
+[eMin, eMax] = dro_elfo_extremes(C, struct('thrustN', 1));
+dro_elfo_torus_plot(C, 'all', 1);
+dro_elfo_movie(C, {eMin, eMax}, 'results/library_demo/fast_vs_slow');
+```
+
+The stored z8 belongs to its cell's phases (`e.sD`, `e.sA`); for other phases
+it is a starting guess for `pumpkyn.cr3bp.tfMin`, as section 3 of the example
+shows.
+
 ## Status
 
 Built: user script, shared functions, front door and driver, comparison,
